@@ -327,6 +327,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     /** The lines on screen, for a [subtitleTwin] that comes up while one is showing. */
     private var shownCues: List<Cue> = emptyList()
 
+    /** A bundled font the subtitles needed because the system has none for their script. */
+    private var subtitleScriptFace: android.graphics.Typeface? = null
+
     /** A track picker, or the online subtitle list above one, is open. */
     private var pickerOpen = false
 
@@ -2853,6 +2856,12 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     /** Puts [cues] on screen, in both copies while a headset has two. */
     private fun showCues(cues: List<Cue>) {
         shownCues = cues
+        SubtitleScripts.typefaceFor(this, cues)?.let { face ->
+            if (face !== subtitleScriptFace) {
+                subtitleScriptFace = face
+                applySubtitleStyle()
+            }
+        }
         subtitleView.setCues(cues)
         subtitleTwin?.setCues(cues)
     }
@@ -5190,7 +5199,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         for (view in listOfNotNull(subtitleView, subtitleTwin)) {
             view.setFractionalTextSize(subtitleTextFraction())
             view.setBottomPaddingFraction(subtitleBottomFraction())
-            view.setStyle(SubtitleLook.captionStyle(subtitleStyle))
+            view.setStyle(SubtitleLook.captionStyle(subtitleStyle, subtitleScriptFace))
         }
     }
 
