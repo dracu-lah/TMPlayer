@@ -180,6 +180,14 @@ class GarbageInputTest {
                         "PRIVATE" in text.uppercase() || "FORBIDDEN" in text.uppercase() || "ACCESS" in text.uppercase() || "BANNED" in text.uppercase())
                 }
             }
+            survive("SessionCheck.isAuthError", text) {
+                for (code in listOf(Int.MIN_VALUE, -1, 0, 400, 420, 500, Int.MAX_VALUE)) {
+                    // Random text with an ordinary code never reads as signed out unless it names a refusal.
+                    val signedOut = SessionCheck.isAuthError(code, text)
+                    check(!signedOut || text.trimStart().startsWith("Unauthorized", ignoreCase = true) || "AUTH_KEY" in text || "SESSION_" in text || "USER_DEACTIVATED" in text)
+                }
+                SessionCheck.isAuthError(401, text)
+            }
             survive("MsoneApi.parse", text) {
                 MsoneApi.parseHealth(text, 0)
                 MsoneApi.parseHits(text)

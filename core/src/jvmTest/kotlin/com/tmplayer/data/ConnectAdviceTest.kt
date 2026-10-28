@@ -58,12 +58,14 @@ class ConnectAdviceTest {
         assertEquals(ConnectHint.ProxyNotAnswering, ConnectAdvice.hint(TelegramLink.ConnectingToProxy, wifi, proxyOn = false))
         assertEquals(ConnectHint.ProxyNotAnswering, ConnectAdvice.hint(TelegramLink.Connecting, wifi.copy(vpn = true), proxyOn = true))
         assertEquals(ConnectHint.Vpn, ConnectAdvice.hint(TelegramLink.Connecting, wifi.copy(vpn = true), proxyOn = false))
-        assertEquals(ConnectHint.MaybeBlocked, ConnectAdvice.hint(TelegramLink.Connecting, wifi, proxyOn = false))
+        // A wait with nothing found out about it is not a block (HX23).
+        assertEquals(ConnectHint.NotAnswering, ConnectAdvice.hint(TelegramLink.Connecting, wifi, proxyOn = false))
+        assertEquals(ConnectHint.MaybeBlocked, ConnectAdvice.hint(TelegramLink.Connecting, wifi, proxyOn = false, evidence = LineEvidence(telegram = false)))
     }
 
     @Test
     fun `a desktop that reports nothing is never told it is offline`() {
-        assertEquals(ConnectHint.MaybeBlocked, ConnectAdvice.hint(TelegramLink.Connecting, NetworkFacts(), proxyOn = false))
+        assertEquals(ConnectHint.NotAnswering, ConnectAdvice.hint(TelegramLink.Connecting, NetworkFacts(), proxyOn = false))
         assertEquals(NetworkStatus.Unknown, NetworkFacts().status)
         assertTrue(ConnectAdvice.networkNotes(NetworkFacts()).isEmpty())
     }

@@ -81,6 +81,7 @@ fun connectHintLabel(hint: ConnectHint, s: Messages): String = when (hint) {
     ConnectHint.ProxyNotAnswering -> s.connectHintProxy
     ConnectHint.Vpn -> s.connectHintVpn
     ConnectHint.MaybeBlocked -> s.connectHintBlocked
+    ConnectHint.NotAnswering -> s.connectHintNotAnswering
 }
 
 /** "This device reports: Wi-Fi, VPN on", or null where the platform reports nothing. */
@@ -128,19 +129,24 @@ fun ConnectingHelp(onOpenProxies: () -> Unit, sendLogs: @Composable () -> Unit) 
     val stalled by Td.signInStalled.collectAsState()
     val network by Td.network.collectAsState()
     val proxyOn by Td.proxyOn.collectAsState()
-    val ending by Td.endingSession.collectAsState()
+    val ended by Td.sessionEnded.collectAsState()
+    val evidence by Td.lineEvidence.collectAsState()
     val retry = rememberRetry()
+    val hint = ConnectAdvice.hint(link, network, proxyOn, evidence)
     ConnectingHelpView(
         status = when {
             retry.busy -> s.connectRetrying
             // Telegram ended the saved sign in: not a network problem, and the sign in comes next.
-            ending -> s.connectSessionEnded
+            // Only when Telegram ended it (HX23): the viewer's own Sign out and a client being
+            // replaced pass through the same logout states, and neither is that.
+            ended -> s.connectSessionEnded
             else -> connectStepLabel(ConnectAdvice.step(link), s)
         },
         stalled = stalled && !retry.busy,
-        hint = connectHintLabel(ConnectAdvice.hint(link, network, proxyOn), s),
+        hint = connectHintLabel(hint, s),
         network = networkLine(network, s),
-        proxyOn = proxyOn,
+        // "Use a proxy" only with a sign of a block; otherwise the button reads "Proxy settings".
+        proxyOn = !ConnectAdvice.suggestsProxy(hint, proxyOn),
         onRetry = retry.run,
         onOpenProxies = onOpenProxies,
         sendLogs = sendLogs,
@@ -216,10 +222,14 @@ fun ConnectBanner(onOpenProxies: () -> Unit, modifier: Modifier = Modifier) {
     val link by Td.link.collectAsState()
     val network by Td.network.collectAsState()
     val proxyOn by Td.proxyOn.collectAsState()
+    val evidence by Td.lineEvidence.collectAsState()
     val retry = rememberRetry()
+    // A block is said, and a proxy suggested, only with a sign of one (HX23): on the Mi TV this
+    // banner told a session Telegram had ended to try a proxy, on a network that was fine.
+    val hint = ConnectAdvice.hint(link, network, proxyOn, evidence)
     ConnectBannerView(
-        text = if (retry.busy) s.connectRetrying else connectHintLabel(ConnectAdvice.hint(link, network, proxyOn), s),
-        proxyOn = proxyOn,
+        text = if (retry.busy) s.connectRetrying else connectHintLabel(hint, s),
+        proxyOn = !ConnectAdvice.suggestsProxy(hint, proxyOn),
         onRetry = retry.run,
         onOpenProxies = onOpenProxies,
         modifier = modifier,

@@ -84,8 +84,17 @@ enum class ConnectHint {
     /** A VPN is on, and may be the thing in the way. */
     Vpn,
 
-    /** The network is up and Telegram is not answering: blocked, most likely. A proxy helps. */
+    /**
+     * Other sites answer and Telegram does not ([SessionCheck.blocked]): blocked, most likely. The
+     * only hint that suggests a proxy.
+     */
     MaybeBlocked,
+
+    /**
+     * Telegram is not answering and nothing says why: no sign of a block, so no proxy is
+     * suggested, only that the app keeps trying (HX23). A wait that merely went on is not a block.
+     */
+    NotAnswering,
 }
 
 /**
@@ -138,14 +147,31 @@ object ConnectAdvice {
         return notes
     }
 
-    fun hint(link: TelegramLink, network: NetworkFacts, proxyOn: Boolean): ConnectHint = when {
+    /**
+     * The likeliest reason, checked in order. A block is said only with [evidence] of one
+     * ([SessionCheck.blocked]); before the line is checked, or when Telegram's data centres answer,
+     * the hint says Telegram is not answering and suggests nothing.
+     */
+    fun hint(
+        link: TelegramLink,
+        network: NetworkFacts,
+        proxyOn: Boolean,
+        evidence: LineEvidence = LineEvidence(),
+    ): ConnectHint = when {
         link == TelegramLink.WaitingForNetwork -> ConnectHint.Offline
         network.known && network.status == NetworkStatus.Offline -> ConnectHint.Offline
         network.known && network.captivePortal -> ConnectHint.CaptivePortal
         proxyOn || link == TelegramLink.ConnectingToProxy -> ConnectHint.ProxyNotAnswering
         network.known && network.vpn -> ConnectHint.Vpn
-        else -> ConnectHint.MaybeBlocked
+        SessionCheck.blocked(network.status == NetworkStatus.Online, evidence) -> ConnectHint.MaybeBlocked
+        else -> ConnectHint.NotAnswering
     }
+
+    /**
+     * Whether the proxy button says "Use a proxy" (a suggestion) rather than the neutral "Proxy
+     * settings": only for a block with evidence behind it, and never once a proxy is on.
+     */
+    fun suggestsProxy(hint: ConnectHint, proxyOn: Boolean): Boolean = !proxyOn && hint == ConnectHint.MaybeBlocked
 }
 
 /** One thing the platform says about its network, for the help's "This device reports" line. */

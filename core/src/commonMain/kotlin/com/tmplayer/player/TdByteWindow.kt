@@ -219,8 +219,17 @@ class TdByteWindow(private val td: TdlClient) {
 
     /** Asks TDLib about the file, records what it says, and returns its size. */
     suspend fun lookUp(): Long {
-        val file = td.getFile(fileId).valueOrNull
-            ?: throw IOException("Telegram lost track of file $fileId")
+        val result = td.getFile(fileId)
+        val file = result.valueOrNull ?: run {
+            // Refused as signed out: the session ended (HX23), and asking for the message again,
+            // which the player does for a lost file, is refused the same way.
+            val failure = result as? dev.g000sha256.tdl.TdlResult.Failure
+            if (failure != null && com.tmplayer.data.SessionCheck.isAuthError(failure.code, failure.message)) {
+                throw com.tmplayer.data.SessionLostException()
+            }
+            Logger.w(TAG, "getFile($fileId) failed: ${failure?.code} ${failure?.message}")
+            throw IOException("Telegram lost track of file $fileId")
+        }
         size = if (file.size > 0) file.size else file.expectedSize
         if (size <= 0) throw IOException("Unknown size for file $fileId")
         absorb(file)

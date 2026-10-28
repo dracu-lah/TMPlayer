@@ -147,6 +147,14 @@ fun DesktopShell(
                 val signedIn = shownAuth == AuthState.Ready
                 // A sign in screen arms the setup that follows it (CP67, see Setup).
                 LaunchedEffect(auth) {
+                    // First a session Telegram ended (HX23): what was the account's goes as Sign
+                    // out clears it, downloads kept, before the setup below is armed.
+                    com.tmplayer.ui.connect.handleSessionEnd(auth, state.settings) {
+                        // The video the old session was playing goes with it, not back on screen
+                        // after the next sign in.
+                        state.closePlayer()
+                        signOut(state.settings, deleteDownloads = false, watched = state.watched, bookmarks = state.bookmarks)
+                    }
                     if (Setup.isSignInStep(auth)) {
                         runCatching { state.settings.armSetup() }
                         // The account is gone, however it went (signed out from Telegram's
@@ -179,6 +187,12 @@ fun DesktopShell(
                     Browse(state, player)
                 } else {
                     SignInScreen(shownAuth)
+                    // Telegram ended the session (HX23): why the sign in is back.
+                    if (!com.tmplayer.ui.connect.signInBannerShown()) {
+                        com.tmplayer.ui.connect.SessionEndedNote(
+                            Modifier.align(Alignment.TopCenter).padding(top = 56.dp, start = 24.dp, end = 24.dp),
+                        )
+                    }
                 }
                 // Telegram out of reach on a screen already drawn: a sign in pane with no line yet,
                 // or a session whose network is up and Telegram is not answering (blocked, most

@@ -879,6 +879,11 @@ private fun Root() {
 
     // A sign in screen arms the setup that follows it (CP67, see Setup).
     LaunchedEffect(auth) {
+        // First a session Telegram ended (HX23): what was the account's goes as Sign out clears
+        // it, downloads kept, before the setup below is armed, since clearing takes that flag too.
+        com.tmplayer.ui.connect.handleSessionEnd(auth, settings) {
+            com.tmplayer.ui.settings.forgetAccount(context, settings, watchedStore, deleteDownloads = false)
+        }
         if (Setup.isSignInStep(auth)) {
             runCatching { settings.armSetup() }
             // A sign in screen means the account is gone, however it went: signed out here, or
@@ -1516,6 +1521,17 @@ private fun Root() {
                         )
                     }
                 }
+            }
+            // Telegram ended the session (HX23): why the sign in is back, where a banner about the
+            // line would otherwise go.
+            if (!com.tmplayer.ui.connect.signInBannerShown()) {
+                com.tmplayer.ui.connect.SessionEndedNote(
+                    Modifier
+                        .align(Alignment.TopCenter)
+                        .zIndex(2f)
+                        .windowInsetsPadding(WindowInsets.statusBars)
+                        .padding(top = 8.dp, start = 16.dp, end = 16.dp),
+                )
             }
             ConnectionStatus(
                 notice = connectionNotice,

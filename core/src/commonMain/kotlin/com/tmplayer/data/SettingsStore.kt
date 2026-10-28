@@ -236,6 +236,9 @@ private val DOWNLOAD_QUEUE = stringPreferencesKey("download_queue")
 
 /** Set once the downloads recorded before they had a folder of their own have been moved into it. */
 private val DOWNLOADS_MIGRATED = booleanPreferencesKey("downloads_migrated")
+
+/** Set on every sign in, wiped by Sign out with the rest ([SettingsStore.wasSignedIn], HX23). */
+private val SIGNED_IN = booleanPreferencesKey("signed_in")
 private val SCREEN_ORIENTATION = stringPreferencesKey("screen_orientation")
 
 // The phone player's touch settings. See [TouchPrefs].
@@ -1995,6 +1998,23 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
      * including one after signing out, is. True while it waits to be shown or is on screen.
      */
     val setupPending: Flow<Boolean> = read { it[SETUP] == SETUP_PENDING }
+
+    /**
+     * An account is signed in on this device. Kept until Sign out clears the preferences, so a
+     * sign in screen that finds it set follows a session that ended elsewhere (HX23).
+     */
+    suspend fun markSignedIn() {
+        if (prefs.data.first()[SIGNED_IN] == true) return
+        prefs.edit { it[SIGNED_IN] = true }
+    }
+
+    /** Whether [markSignedIn] was set and not yet cleared by Sign out or [forgetSignedIn]. */
+    suspend fun wasSignedIn(): Boolean = prefs.data.first()[SIGNED_IN] == true
+
+    /** The session that ended elsewhere has been dealt with. */
+    suspend fun forgetSignedIn() {
+        prefs.edit { it.remove(SIGNED_IN) }
+    }
 
     /** A sign in screen is up: the setup comes once the account is in. */
     suspend fun armSetup() {

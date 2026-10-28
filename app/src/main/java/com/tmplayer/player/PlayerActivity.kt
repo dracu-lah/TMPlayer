@@ -1525,6 +1525,12 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 }
             }
         }
+        // Telegram ended the session (HX23): every request is refused from here on and the sign in
+        // waits behind this window, so a video streamed from Telegram gives way to it rather than
+        // ending on "Can't play this". A downloaded file plays on: it needs no session.
+        lifecycleScope.launch {
+            runCatching { Td.sessionEnded.collect { ended -> if (ended && downloadedFile == null) leaveForSignIn() } }
+        }
         // On a television too: the controls timeout and the remaining time readout apply there.
         lifecycleScope.launch {
             touchPrefs = runCatching { settings.touchPrefsNow() }.getOrDefault(TouchPrefs())
@@ -4032,6 +4038,11 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             // only when the other decoder can take this format.
             decoderPlan = DecoderSwitch.planFor(player, error)
             lastPlaybackError = error
+            // Refused as signed out: no retry or new id helps, and the sign in comes next (HX23).
+            if (sessionLost(error)) {
+                leaveForSignIn()
+                return
+            }
             if (switchDecoderByItself(error)) return
             // A file TDLib cannot size is a stale id, not a slow network: retrying the same id
             // only spins for a minute, while asking for the message again fixes it in a second.
@@ -4362,6 +4373,24 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             val message = cause.message.orEmpty()
             message.startsWith("Unknown size for file") || message.startsWith("Telegram lost track of file")
         }
+
+    /**
+     * Whether the failure is the session ending rather than the video (HX23): a read refused as
+     * signed out ([com.tmplayer.data.SessionLostException]), or Telegram ending the session while
+     * it played. On the Mi TV this was "Telegram lost track of file", then "Can't play this".
+     */
+    private fun sessionLost(error: PlaybackException): Boolean =
+        downloadedFile == null && (
+            Td.sessionEnded.value ||
+                generateSequence(error.cause) { it.cause }.take(MAX_CAUSE_HOPS).any { it is com.tmplayer.data.SessionLostException }
+            )
+
+    /** Closes the player for the sign in screen behind it, which says why (SessionEndedNote). */
+    private fun leaveForSignIn() {
+        if (isFinishing) return
+        Log.i("TMPlayer", "the Telegram session ended; closing the player for the sign in")
+        finish()
+    }
 
     private fun isRecoverable(error: PlaybackException): Boolean = when (error.errorCode) {
         PlaybackException.ERROR_CODE_IO_UNSPECIFIED,

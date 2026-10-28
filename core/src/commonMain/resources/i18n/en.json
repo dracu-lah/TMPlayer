@@ -402,6 +402,7 @@
     "banner": "Can't reach Telegram right now",
     "help": "Connection help",
     "hint_blocked": "Telegram may be blocked on this network. A proxy can get you through.",
+    "hint_not_answering": "Telegram isn't answering yet. TMPlayer keeps trying by itself.",
     "hint_offline": "This device isn't connected. Turn on Wi-Fi or mobile data.",
     "hint_portal": "This Wi-Fi wants you to sign in first. Open a web page to do that, then retry.",
     "hint_proxy": "Your proxy isn't answering. Try another one, or turn it off.",

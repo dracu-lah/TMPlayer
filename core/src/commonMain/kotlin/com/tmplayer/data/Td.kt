@@ -11,6 +11,8 @@ import dev.g000sha256.tdl.dto.AuthorizationState
 import dev.g000sha256.tdl.dto.AuthorizationStateClosed
 import dev.g000sha256.tdl.dto.AuthorizationStateClosing
 import dev.g000sha256.tdl.dto.AuthorizationStateLoggingOut
+import dev.g000sha256.tdl.dto.AuthorizationStateReady
+import dev.g000sha256.tdl.dto.AuthorizationStateWaitPhoneNumber
 import dev.g000sha256.tdl.dto.CountryInfo
 import dev.g000sha256.tdl.dto.EmailAddressAuthenticationCode
 import dev.g000sha256.tdl.dto.FileType
@@ -46,6 +48,7 @@ import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
@@ -116,6 +119,37 @@ object Td {
      */
     private val _endingSession = MutableStateFlow(false)
     val endingSession: StateFlow<Boolean> = _endingSession.asStateFlow()
+
+    /**
+     * Telegram ended this session without the viewer signing out (HX23): ended from Telegram's
+     * Devices list or by Telegram itself, noticed while the app ran ([apply]) or, for a session
+     * that ended while it was closed, by the sign in screen ([markSessionEnded]). The sign in
+     * screens say so, and a player open on the old session closes. Cleared by the next sign in.
+     */
+    private val _sessionEnded = MutableStateFlow(false)
+    val sessionEnded: StateFlow<Boolean> = _sessionEnded.asStateFlow()
+
+    /**
+     * Set by [logOut] and [restartSignIn], so the logout that follows is the viewer's own and not
+     * Telegram's. Kept until the next sign in question, past any client a hung logout replaces.
+     */
+    @Volatile
+    private var logOutAsked = false
+
+    /** When a refused request last had the session checked ([noteRequestFailure]). */
+    private val lastAuthCheckAt = AtomicLong(0)
+
+    /** When a refused request last had a new client started over a session TDLib still called signed in. */
+    @Volatile
+    private var lastAuthFreshClientAt = 0L
+
+    /**
+     * What was found out about a line that will not come up ([onLineStuck]): the only grounds for
+     * saying Telegram is blocked ([ConnectAdvice.hint]). Emptied when the line comes up or the
+     * network changes.
+     */
+    private val _lineEvidence = MutableStateFlow(LineEvidence())
+    val lineEvidence: StateFlow<LineEvidence> = _lineEvidence.asStateFlow()
 
     /**
      * True once a signed in session has had no line to Telegram for [UNREACHABLE_MS] while the
@@ -297,6 +331,23 @@ object Td {
             }.distinctUntilChanged().map { it.first }
             AuthStall.watchWaiting(held, _unreachable, UNREACHABLE_MS)
         }
+        scope.launch {
+            // A wait that went on too long is looked into rather than guessed at (HX23): TDLib is
+            // asked whether the session is still signed in, and the line is checked for a sign of a
+            // block. A sign in that stalls gets the same check, for its hint.
+            combine(_unreachable, _signInStalled) { unreachable, stalled -> unreachable || stalled }
+                .distinctUntilChanged()
+                .collectLatest { stuck ->
+                    if (!stuck) return@collectLatest
+                    try {
+                        onLineStuck()
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Logger.w(TAG, "checking a line that will not come up failed", e)
+                    }
+                }
+        }
     }
 
     /**
@@ -453,6 +504,8 @@ object Td {
                     if (now != _link.value) Logger.i(TAG, "connection: $now")
                     _link.value = now
                     _connected.value = now.isUp
+                    // A line is the end of any wait: what was found out about it is history.
+                    if (now.isUp && _lineEvidence.value != LineEvidence()) _lineEvidence.value = LineEvidence()
                 }
             }
             // The first update may already have been emitted before we subscribed, so ask
@@ -506,7 +559,97 @@ object Td {
         val ending = state is AuthorizationStateLoggingOut || state is AuthorizationStateClosing || state is AuthorizationStateClosed
         if (state is AuthorizationStateLoggingOut && !_endingSession.value) scope.launch { watchLogOut(td) }
         _endingSession.value = ending
+        // A logout nobody here asked for is Telegram ending the session (HX23), whether it happened
+        // while the app ran or before it opened (TDLib then resumes the logout at start).
+        if (SessionCheck.endedByTelegram(AuthReducer.neutral(state), logOutAsked) && !_sessionEnded.value) {
+            Logger.i(TAG, "Telegram ended this session")
+            _sessionEnded.value = true
+        }
+        when (state) {
+            is AuthorizationStateReady -> {
+                _sessionEnded.value = false
+                logOutAsked = false
+            }
+            // The logout is over, whoever asked for it: the next one is news again.
+            is AuthorizationStateWaitPhoneNumber -> logOutAsked = false
+            else -> Unit
+        }
         perform(td, step)
+    }
+
+    /**
+     * The sign in screen came after an account this device had signed in, with no Sign out in
+     * between ([SessionCheck.endedElsewhere]): the session ended while the app was closed. The
+     * sign in screens say so until the next sign in.
+     */
+    fun markSessionEnded() {
+        if (_auth.value !is AuthState.Ready) _sessionEnded.value = true
+    }
+
+    /**
+     * A request came back refused as signed out ([SessionCheck.isAuthError]) while the app shows a
+     * signed in session (HX23): a file the player asked for on the TV failed this way for minutes
+     * while Home sat on its cached rows. TDLib is asked its state at once; if it still says signed
+     * in, a new client is started, which hears from Telegram straight away. At most once per
+     * [AUTH_CHECK_GAP_MS], however many requests fail.
+     */
+    fun noteRequestFailure(code: Int, message: String?) {
+        if (!SessionCheck.isAuthError(code, message)) return
+        if (_auth.value !is AuthState.Ready) return
+        val now = System.currentTimeMillis()
+        val last = lastAuthCheckAt.get()
+        if (now - last < AUTH_CHECK_GAP_MS || !lastAuthCheckAt.compareAndSet(last, now)) return
+        Logger.i(TAG, "a request was refused as signed out ($code); checking the session")
+        scope.launch {
+            val td = current ?: return@launch
+            if (!confirmSignedIn(td)) return@launch
+            if (td !== current || now - lastAuthFreshClientAt < AUTH_FRESH_CLIENT_GAP_MS) return@launch
+            lastAuthFreshClientAt = now
+            Logger.i(TAG, "TDLib calls the session signed in and Telegram refused it; starting a new client")
+            replaceClient(td)
+        }
+    }
+
+    /**
+     * Asks TDLib for its state directly, for an update the app may have missed. True when it is
+     * still signed in (or did not answer); false when it is not, after handing the state to [apply].
+     */
+    private suspend fun confirmSignedIn(td: TdlClient): Boolean {
+        val result = withTimeoutOrNull(AUTH_CHECK_MS) { td.getAuthorizationState() } ?: return true
+        val state = result.valueOrNull ?: return true
+        if (state is AuthorizationStateReady) return true
+        Logger.i(TAG, "TDLib is ${state::class.simpleName} while the app shows Ready; catching up")
+        apply(td, state)
+        return false
+    }
+
+    /**
+     * A sign in or a signed in session that has waited too long for a line ([unreachable],
+     * [signInStalled]). TDLib is asked whether the session is still signed in, then the line is
+     * checked ([LineProbe]) and what it shows kept as [lineEvidence]. When Telegram's data centres
+     * answer and a signed in session still has no line, a new client is started once per wait: on
+     * the Mi TV a session Telegram had ended sat on Connecting for many minutes, and only a restart
+     * of the app brought the sign in up (HX23).
+     */
+    private suspend fun onLineStuck() {
+        val td = current ?: return
+        if (_auth.value is AuthState.Ready && !confirmSignedIn(td)) return
+        // Through a proxy the direct line says nothing; its own hint covers it.
+        if (_proxyOn.value) return
+        val probe = LineProbe.run()
+        if (td !== current || _link.value.isUp) return
+        val evidence = _lineEvidence.value.copy(internet = probe.internet, telegram = probe.telegram)
+        _lineEvidence.value = evidence
+        Logger.i(TAG, "no line: other sites answer ${probe.internet}, Telegram answers ${probe.telegram}")
+        when (SessionCheck.afterProbe(_auth.value is AuthState.Ready, foreground.value, _proxyOn.value, evidence)) {
+            LineAction.FreshClient -> {
+                _lineEvidence.value = evidence.copy(freshClientTried = true)
+                Logger.i(TAG, "Telegram answers and this session has no line; starting a new client")
+                // Apart from this wait, which the new client's Connecting ends and would cancel.
+                scope.launch { replaceClient(td) }
+            }
+            LineAction.Wait -> Unit
+        }
     }
 
     /**
@@ -884,6 +1027,7 @@ object Td {
     }
 
     suspend fun logOut() {
+        logOutAsked = true
         _auth.value = AuthState.Connecting
         runCatching { current?.logOut() }
     }
@@ -905,6 +1049,7 @@ object Td {
     suspend fun restartSignIn(next: SignInMethod = SignInMethod.Undecided) {
         method = next
         methodAfterRestart = next
+        logOutAsked = true
         _auth.value = AuthState.Connecting
         // No client to log out of: the last one could not start, and this is the Try again.
         clientRetry?.let {
@@ -996,6 +1141,8 @@ object Td {
         val before = _network.value
         _network.value = facts
         if (!facts.isSwitchFrom(before)) return
+        // Another network: what the last one showed says nothing about this one.
+        _lineEvidence.value = LineEvidence()
         val td = current ?: return
         scope.launch { tellNetworkType(td) }
     }
@@ -1492,6 +1639,15 @@ object Td {
 
     /** How much longer it runs after that before the client is replaced. */
     private const val LOG_OUT_GIVE_UP_MS = 6_000L
+
+    /** How long TDLib is given to say its authorization state when asked directly ([confirmSignedIn]). */
+    private const val AUTH_CHECK_MS = 5_000L
+
+    /** How often a refused request may have the session checked ([noteRequestFailure]). */
+    private const val AUTH_CHECK_GAP_MS = 30_000L
+
+    /** How often a refused request may have a new client started over a session TDLib calls signed in. */
+    private const val AUTH_FRESH_CLIENT_GAP_MS = 10 * 60_000L
 
     /** How long a signed in session goes without a line before [unreachable] says so. */
     private const val UNREACHABLE_MS = 20_000L
