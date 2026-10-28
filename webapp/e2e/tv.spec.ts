@@ -225,10 +225,10 @@ for (const size of [
             await expect.poll(() => focused(page)).toBe(card)
         })
 
-        test('Player: the error card takes the remote, Left and Right walk its buttons, Back closes it, the player gets nothing', async ({ page }) => {
-            await watch(page, '-1001')
-            await page.locator('video').evaluate((v: HTMLVideoElement) => (v.loop = true))
-            // A failure nobody caught, as on the Mi TV (HX19): the card came up and the remote stayed with the player.
+        test('An uncaught failure: on a page the card takes the remote; in the player, its own sheet, and only if the video is stuck', async ({ page }) => {
+            // On a page: the card, Left and Right walk its buttons, Back closes it (HX19).
+            await page.goto('/chat/-1001')
+            await expect.poll(() => focused(page)).toContain('card|/video/')
             await page.evaluate(() => setTimeout(() => { throw new Error('e2e uncaught') }))
             await expect(page.locator('.crash-card')).toBeVisible()
             await expect.poll(() => page.evaluate(() => document.activeElement?.textContent)).toBe('Reload')
@@ -236,15 +236,25 @@ for (const size of [
             expect(await page.evaluate(() => document.activeElement?.textContent)).toBe('Close')
             await press(page, 'ArrowLeft')
             expect(await page.evaluate(() => document.activeElement?.textContent)).toBe('Reload')
-            // None of it reached the player: still playing, row still down.
-            expect(await paused(page)).toBe(false)
-            expect(await controlsUp(page)).toBe(false)
             await press(page, 'Backspace')
             await expect(page.locator('.crash-card')).toHaveCount(0)
-            await expect(page).toHaveURL(/\/watch\//)
-            // With the card gone the remote is the player's again.
-            await press(page, 'Enter')
-            await expect.poll(() => paused(page)).toBe(true)
+            await expect(page).toHaveURL(/\/chat\/-1001$/)
+
+            // In the player, while the picture moves on: nothing over it, as the Mi TV's 3D video that played fine.
+            await watch(page, '-1001')
+            await page.locator('video').evaluate((v: HTMLVideoElement) => (v.loop = true))
+            await page.evaluate(() => setTimeout(() => { throw new Error('e2e uncaught') }))
+            await page.waitForTimeout(9_000)
+            await expect(page.locator('.crash-card')).toHaveCount(0)
+            await expect(page.locator('.pc-status')).toHaveCount(0)
+            expect(await paused(page)).toBe(false)
+
+            // Stuck (the picture does not move): the player's own status sheet, never the card.
+            await page.locator('video').evaluate((v: HTMLVideoElement) => (v.playbackRate = 0))
+            await page.evaluate(() => setTimeout(() => { throw new Error('e2e uncaught') }))
+            await expect(page.locator('.pc-status')).toBeVisible({ timeout: 12_000 })
+            await expect(page.locator('.crash-card')).toHaveCount(0)
+            await expect.poll(() => page.evaluate(() => !!document.activeElement?.closest('.pc-status'))).toBe(true)
         })
 
         test('Player: OK pauses with the remote on the disc, arrows walk disc, bar and buttons, menus close back onto their button', async ({ page }) => {

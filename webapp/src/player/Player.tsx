@@ -17,6 +17,7 @@ import { loadThumb } from '../screens/thumbs'
 import { readSubtitle, SUBTITLE_EXTENSIONS, SubtitleError } from './subtitles'
 import { api } from '../tg/rpc'
 import { t } from '../i18n'
+import { routeCrashes } from '../crash'
 import { form } from '../form'
 import { Icon } from '../ui/Icon'
 import { dropResume, getResume, isWatched, saveResume as storeResume, setWatched, settings } from '../store'
@@ -35,6 +36,8 @@ interface Source {
 const NEXT_AHEAD = 30
 /** Waiting this long with nothing arriving says so, as the app's OpeningStall. */
 const STALL_MS = 15_000
+/** How long the picture has to move on after a failure nobody caught, before the player says it broke. */
+const CRASH_GRACE_MS = 8_000
 
 /** Local testing only: start and seek times, in the console and in `window.playerTimes`. */
 const timing =
@@ -613,7 +616,34 @@ export function Player(props: {
         }
     }
 
+    // A failure nobody caught while the video is open comes here, not to the page's card (HX19). On the
+    // Mi TV one came while a 3D video opened and the video then played on fine, so the player waits:
+    // if the picture moves on within a few seconds it was not the video's, and only the log keeps it;
+    // if not, the status sheet says so, with Reload (this video again, where it was) and Go back.
+    let crashCheck: ReturnType<typeof setTimeout> | undefined
+    const unroute = routeCrashes(() => {
+        if (crashCheck !== undefined || closed) return
+        // Moved on: the picture's clock ticked forward (a looping or seeking video can come back below
+        // where it was, so the ticks are counted rather than the times compared).
+        let last = video.currentTime
+        let moved = 0
+        const tick = () => {
+            if (video.currentTime !== last && !video.paused) moved++
+            last = video.currentTime
+        }
+        video.addEventListener('timeupdate', tick)
+        crashCheck = setTimeout(() => {
+            crashCheck = undefined
+            video.removeEventListener('timeupdate', tick)
+            // Paused by the viewer after it played: still is not stuck.
+            if (closed || error() || moved >= 2 || (video.paused && opening() === null)) return
+            setError(t('player.error_other'))
+        }, CRASH_GRACE_MS)
+    })
+
     onCleanup(() => {
+        unroute()
+        clearTimeout(crashCheck)
         closed = true
         savePosition(video.currentTime)
         clearInterval(saveTimer)

@@ -22,8 +22,32 @@ function harmless(reason: unknown, message: string): boolean {
 
 let card: HTMLElement | null = null
 
+/**
+ * The card's keys while it is up, or null. The remote's keys come to the card first (HX19): the
+ * screens' own key handling listens on the window too and kept the focus, so on a TV neither button
+ * could be reached. Left and Right move between the two, OK presses one, Back closes the card, and
+ * nothing reaches the screen behind. Read by a listener [watchCrashes] puts on the window before
+ * any screen's, so it runs first.
+ */
+let cardKeys: ((ev: KeyboardEvent) => void) | null = null
+
+/**
+ * Who takes a failure instead of the card: the player while a video is open, which says so in its
+ * own status sheet with the remote already in it, rather than a card over the picture (HX19).
+ */
+let sink: (() => void) | null = null
+
+/** The player's way in: returns the way out, for its cleanup. */
+export function routeCrashes(to: () => void): () => void {
+    sink = to
+    return () => {
+        if (sink === to) sink = null
+    }
+}
+
 /** Shows the card, once: later failures while it is up add nothing. Exported for the tests. */
 export function showCrashCard() {
+    if (sink) return sink()
     if (card?.isConnected) return
     const box = document.createElement('div')
     box.className = 'crash-card'
@@ -41,10 +65,7 @@ export function showCrashCard() {
     const row = document.createElement('div')
     row.append(reload, close)
     box.append(text, row)
-    // The remote's keys come to the card first while it is up (HX19): the player behind it listens
-    // on the window and kept the focus, so on a TV neither button could be reached. Left and Right
-    // move between the two, OK presses one, Back closes the card, and nothing reaches the screen behind.
-    const keys = (ev: KeyboardEvent) => {
+    cardKeys = (ev: KeyboardEvent) => {
         const buttons = [reload, close]
         const at = buttons.indexOf(document.activeElement as HTMLButtonElement)
         const typing = /^(INPUT|TEXTAREA)$/.test((document.activeElement as HTMLElement | null)?.tagName ?? '')
@@ -65,11 +86,10 @@ export function showCrashCard() {
         ev.stopImmediatePropagation()
     }
     const dismiss = () => {
-        window.removeEventListener('keydown', keys, true)
+        cardKeys = null
         box.remove()
     }
     close.onclick = dismiss
-    window.addEventListener('keydown', keys, true)
     document.body.append(box)
     card = box
     reload.focus()
@@ -86,6 +106,7 @@ function label(key: Parameters<typeof t>[0], fallback: string): string {
 
 /** Installs the two listeners; called first thing in main.tsx. */
 export function watchCrashes() {
+    window.addEventListener('keydown', (ev) => cardKeys?.(ev), true)
     window.addEventListener('error', (ev) => {
         const message = ev.message ?? ''
         if (harmless(ev.error, message)) return
