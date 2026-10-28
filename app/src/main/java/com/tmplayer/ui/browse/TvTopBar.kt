@@ -45,6 +45,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
+import com.tmplayer.ui.components.tvReturnPoint
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -196,6 +197,7 @@ internal fun TvTopBar(
                 open = profileOpen,
                 modifier = Modifier
                     .focusRequester(profileRequester)
+                    .tvReturnPoint(profileRequester)
                     .then(if (profileFocus != null) Modifier.focusRequester(profileFocus) else Modifier),
             )
             Spacer(Modifier.width(18.dp))
@@ -204,9 +206,9 @@ internal fun TvTopBar(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                BarTab(s.commonSearch, TmIcons.Search, searchOpen, onSearch, Modifier.focusRequester(searchRequester))
-                BarTab(s.browseTabHome, TmIcons.Home, current == TvBarTab.Home && !searchOpen, onHome, Modifier.focusRequester(focusOf(TvBarTab.Home, homeFocus)))
-                BarTab(s.browseTabChats, TmIcons.Chats, current == TvBarTab.Chats && !searchOpen, onChats, Modifier.focusRequester(focusOf(TvBarTab.Chats, chatsFocus)))
+                BarTab(s.commonSearch, TmIcons.Search, searchOpen, onSearch, Modifier.focusRequester(searchRequester).tvReturnPoint(searchRequester))
+                BarTab(s.browseTabHome, TmIcons.Home, current == TvBarTab.Home && !searchOpen, onHome, Modifier.focusRequester(focusOf(TvBarTab.Home, homeFocus)).tvReturnPoint(focusOf(TvBarTab.Home, homeFocus)))
+                BarTab(s.browseTabChats, TmIcons.Chats, current == TvBarTab.Chats && !searchOpen, onChats, Modifier.focusRequester(focusOf(TvBarTab.Chats, chatsFocus)).tvReturnPoint(focusOf(TvBarTab.Chats, chatsFocus)))
             }
             Spacer(Modifier.width(18.dp))
             // The app's own mark and its name, the way a television's home screen signs itself:
@@ -466,6 +468,8 @@ internal fun Modifier.underTvBar(content: FocusRequester, bar: FocusRequester, o
                 if (requestedFocusDirection == FocusDirection.Down) cancelFocusChange()
             }
         }
+        // Where the remote goes back to from a banner it reached from here (HX22).
+        .tvReturnPoint(content)
         .focusRestorer()
         .focusGroup()
 }

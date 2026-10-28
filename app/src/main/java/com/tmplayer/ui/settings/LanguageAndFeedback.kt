@@ -59,6 +59,7 @@ import com.tmplayer.ui.components.PhonePad
 import com.tmplayer.ui.components.TmButton
 import com.tmplayer.ui.components.TmSecondaryButton
 import com.tmplayer.ui.components.isTouch
+import com.tmplayer.ui.components.tvHoldsFocus
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.icons.TmIcons
 import com.tmplayer.ui.onboarding.LanguageList
@@ -105,6 +106,9 @@ fun LanguageNoticeCard(language: String, onKeep: () -> Unit, onChange: () -> Uni
     if (!touch) BackHandler(onBack = onKeep)
     Column(
         modifier
+            // On a TV it takes the remote on Keep, keeps it until answered (Back keeps), and gives
+            // it back where it was (HX22).
+            .tvHoldsFocus(keep)
             .widthIn(max = if (touch) 520.dp else 560.dp)
             .floatingSurface()
             .padding(if (touch) 16.dp else 24.dp),
@@ -126,7 +130,6 @@ fun LanguageNoticeCard(language: String, onKeep: () -> Unit, onChange: () -> Uni
             }
         }
     }
-    if (!touch) LaunchedEffect(Unit) { runCatching { keep.requestFocus() } }
 }
 
 /**

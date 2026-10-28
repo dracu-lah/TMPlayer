@@ -52,7 +52,9 @@ import com.tmplayer.data.NetworkFacts
 import com.tmplayer.data.NetworkNote
 import com.tmplayer.data.Td
 import com.tmplayer.i18n.Messages
+import com.tmplayer.ui.components.TvReach
 import com.tmplayer.ui.components.deviceForm
+import com.tmplayer.ui.components.tvReachable
 import com.tmplayer.ui.components.rememberLessMotion
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.icons.TmIcons
@@ -233,6 +235,9 @@ fun ConnectBannerView(text: String, proxyOn: Boolean, onRetry: () -> Unit, onOpe
     val phone = deviceForm() == DeviceForm.Phone
     Column(
         modifier
+            // On a TV it never takes the remote from the page, but Up from the top reaches its
+            // buttons, and Back or Down goes back (HX22).
+            .tvReachable(TvReach.Edge.Top)
             .widthIn(max = 560.dp)
             .clip(RoundedCornerShape(20.dp))
             .background(Tone.surfaceHigh)
