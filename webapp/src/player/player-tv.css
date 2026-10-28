@@ -109,6 +109,10 @@
 .pc[data-variant="tv"] .pc-notice { top: calc(var(--u) * 48); font-size: calc(var(--u) * 15); }
 
 /* Menus and lists: a room's sizes, the line under the remote filled white. */
+.pc[data-variant="tv"] .pc-panel { width: min(calc(var(--u) * 400), 100%); }
+.pc[data-variant="tv"] .pc-panel-head { min-height: calc(var(--u) * 64); }
+.pc[data-variant="tv"] .pc-panel-head h2 { font-size: calc(var(--u) * 22); line-height: calc(var(--u) * 30); }
+.pc[data-variant="tv"] .pc-panel-back:focus { background: #fff; color: var(--on-focus); }
 .pc[data-variant="tv"] .pc-menu { min-width: calc(var(--u) * 280); max-width: calc(var(--u) * 460); padding: calc(var(--u) * 8) 0; border-radius: calc(var(--u) * 8); }
 .pc[data-variant="tv"] .pc-entry { min-height: calc(var(--u) * 52); padding: 0 calc(var(--u) * 16); gap: calc(var(--u) * 14); font-size: calc(var(--u) * 17); line-height: calc(var(--u) * 24); }
 .pc[data-variant="tv"] .pc-entry-lead { width: calc(var(--u) * 22); height: calc(var(--u) * 22); }

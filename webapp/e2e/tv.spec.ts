@@ -282,7 +282,7 @@ for (const size of [
             await expect(page.locator('.pc-menu')).toHaveCount(0)
             expect(await page.locator('video').evaluate((v: HTMLVideoElement) => v.playbackRate)).toBe(1.5)
             expect(await onControl(page)).toBe('Playback speed')
-            // Shape steps with a press and More opens its menu, both reached with the arrows.
+            // Shape steps with a press and More opens its side panel, both reached with the arrows.
             await press(page, 'ArrowRight')
             expect(await onControl(page)).toContain('Picture shape')
             await press(page, 'Enter')
@@ -290,7 +290,8 @@ for (const size of [
             await press(page, 'ArrowRight')
             expect(await onControl(page)).toBe('More')
             await press(page, 'Enter')
-            await expect(page.locator('.pc-menu')).toHaveCount(1)
+            await expect(page.locator('.pc-panel')).toHaveCount(1)
+            expect(await page.evaluate(() => !!document.activeElement?.closest('.pc-panel'))).toBe(true)
             await press(page, 'Backspace')
             expect(await onControl(page)).toBe('More')
             // Up from the buttons is the bar, Up again the disc; Back puts the row away.
