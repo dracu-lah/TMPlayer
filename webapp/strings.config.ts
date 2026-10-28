@@ -141,6 +141,7 @@ export const PAGE_STRINGS = [
     'home.first_more',
     'home.first_open_saved',
     'home.first_title',
+    'home.recent_capped',
     'home.row_continue',
     'home.row_recent',
     'home.row_recent_all',

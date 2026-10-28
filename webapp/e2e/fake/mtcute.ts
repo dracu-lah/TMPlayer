@@ -162,6 +162,12 @@ const messages = new Map<number, Msg[]>([
     [copies.id, ['2160p.HDR.HEVC', '1080p.BluRay.x264', '720p.WEB-DL.x264'].map((q) => msg(copies, `Big.Buck.Bunny.2008.${q}.mkv`, { file: 'h264-aac.mkv' }))],
 ])
 
+// `manyrecent`: four hundred more videos in Test Clips, for Recently added's See all to page through.
+if (flags.has('manyrecent')) {
+    const letters = (n: number) => [0, 1, 2].map((k) => String.fromCharCode(97 + (Math.floor(n / 26 ** k) % 26))).join('')
+    for (let i = 0; i < 400; i++) messages.get(clips.id)!.push(msg(clips, `Reel ${letters(i)}.mp4`, { file: 'h264-aac.mp4' }))
+}
+
 // A chat of its own at the very end (opened by its address, /chat/-1006), made last so no other id moves: 20 s,
 // chaptered, two episodes of one show, for the chapter, skip and autoplay tests.
 const lighthouse = peer(-1006, 'Lighthouse Show', 'chat')
@@ -173,6 +179,8 @@ messages.set(
 const dialogs: Peer[] = [me, clips, shows, locked, quiet, copies]
 for (let i = 0; i < 1500; i++) dialogs.push(peer(-5000 - i, `Group ${i}`, 'chat'))
 dialogs.push(lighthouse)
+
+let globalFailsLeft = 2
 
 /** The raw calls made, readable in the worker as `fakeCalls`. */
 const calls: string[] = []
@@ -246,14 +254,21 @@ export class TelegramClient {
         const page = Object.assign(all.slice(from, from + p.limit), { total: all.length, next: from + p.limit < all.length ? from + p.limit : undefined })
         return page
     }
-    async searchGlobal(p: { filter: { _: string }; query?: string; limit: number }) {
+    /** Newest first, in pages: `offset.rate` is where the next page starts (Telegram's is its own cursor). */
+    async searchGlobal(p: { filter: { _: string }; query?: string; limit: number; offset?: { rate: number } }) {
         await delay(flags.has('slow') ? 3000 : 50)
+        calls.push(`searchGlobal ${p.filter._} ${p.offset?.rate ?? 0}`)
+        // `recentfails`: the first ask across chats (both its feeds) fails, the next ones answer.
+        if (flags.has('recentfails') && globalFailsLeft-- > 0) throw rpcError('INTERNAL_SERVER_ERROR', 500)
         const wantVideo = p.filter._ === 'inputMessagesFilterVideo'
         const q = p.query?.toLowerCase() ?? ''
-        return [...messages.values()]
+        const all = [...messages.values()]
             .flat()
             .filter((m) => m.isVideo === wantVideo && m.media.fileName.toLowerCase().includes(q))
-            .slice(0, p.limit)
+            .sort((a, b) => b.date.getTime() - a.date.getTime())
+        const from = p.offset?.rate ?? 0
+        const next = from + p.limit < all.length ? { rate: from + p.limit, id: from + p.limit, peer: { _: 'inputPeerEmpty' } } : undefined
+        return Object.assign(all.slice(from, from + p.limit), { next })
     }
     async getMessages(chatId: number, ids: number | number[]) {
         if (!peers.has(chatId)) throw rpcError('PEER_ID_INVALID')

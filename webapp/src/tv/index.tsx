@@ -24,6 +24,8 @@ const isTop = (p: string) => p === '/' || p === '/chats' || p === '/search' || p
 function placeOf(path: string): string | null {
     if (path === '/' || path === '/search' || path === '/settings') return path
     if (path === '/chats' || path.startsWith('/chat/')) return '/chats'
+    // Recently added's See all is Home's.
+    if (path === '/recent') return '/'
     return null
 }
 

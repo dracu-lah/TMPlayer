@@ -5,7 +5,7 @@
 // a moment after they stop arriving, as the app builds it (ROWS_SETTLE_MS).
 import type { Message, TelegramClient } from '@mtcute/web'
 import { rules, type Video, type WebResume } from '../rules'
-import { across, chatItem, chatList, knownChats, newestOf, tilesOf } from './library'
+import { across, chatItem, chatList, knownChats, newestOf, rememberHomeChats, tilesOf } from './library'
 import { chatProtects, itemOf, rawOf } from './media'
 import type { ChatItem, HomePage, HomeRow, HomeView, Tile, VideoItem } from './types'
 
@@ -88,7 +88,9 @@ export async function homePage(tg: TelegramClient, view: HomeView, signal: Abort
             queue.push(id)
         }
         pump()
-        const built = r.home(resumes ?? [], picked.map((id) => byId.get(id)!), view.starred, [...loaded.values()], recent, !listEnough())
+        // An id the rules picked that the chats here do not carry is left out, never passed on as undefined.
+        const pickedChats = picked.flatMap((id) => byId.get(id) ?? [])
+        const built = r.home(resumes ?? [], pickedChats, view.starred, [...loaded.values()], recent, !listEnough())
         const rows: HomeRow[] = built.map((row) => ({
             key: row.key,
             kind: row.kind as HomeRow['kind'],
@@ -106,6 +108,8 @@ export async function homePage(tg: TelegramClient, view: HomeView, signal: Abort
                       })
                     : tilesOf(row, items, view),
         }))
+        // Recently added's See all reads on through the same chats, and says "in starred chats" as the row does.
+        if (listEnough() && recent !== null) rememberHomeChats(pickedChats.map((c) => c.id), rows.find((row) => row.kind === 'recent')?.starredOnly ?? false)
         const settled = resumes !== null && recent !== null && listEnough() && picked.every((id) => loaded.has(id))
         return { rows, gone, selfId, settled }
     }

@@ -21,7 +21,7 @@ interface Place {
 }
 
 const PLACES: Place[] = [
-    { href: '/', label: () => t('browse.tab_home'), icon: Home03Icon, on: (p) => p === '/' },
+    { href: '/', label: () => t('browse.tab_home'), icon: Home03Icon, on: (p) => p === '/' || p === '/recent' },
     { href: '/chats', label: () => t('nav.chats'), icon: Message01Icon, on: (p) => p === '/chats' || p.startsWith('/chat/') },
     { href: '/search', label: () => t('common.search'), icon: Search01Icon, on: (p) => p === '/search' },
 ]

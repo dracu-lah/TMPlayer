@@ -1040,6 +1040,7 @@
     "off_body": "Every row of Home is turned off in Settings.",
     "off_title": "Home is empty",
     "open_settings": "Home settings",
+    "recent_capped": "The list stops here. Older videos are in their own chats.",
     "row_chat_movies": "Movies in {chat}",
     "row_chat_shows": "Shows in {chat}",
     "row_continue": "Continue watching",

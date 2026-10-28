@@ -177,6 +177,20 @@ export interface Found {
     hiddenBySize: number
 }
 
+/**
+ * Recently added's See all: the newest videos across Home's chats, read on a page at a time, and
+ * grouped as a chat's are. `done` once Telegram has no more, or the page holds as many as it keeps.
+ */
+export interface RecentPage {
+    tiles: Tile[]
+    hiddenBySize: number
+    done: boolean
+    /** It reads starred chats only, which its heading says, as the row's does. */
+    starredOnly: boolean
+    /** It stopped reading on at the most it keeps, with more still in Telegram. */
+    capped: boolean
+}
+
 /** Where a video was left, as the page keeps it (store.ts Resume). */
 export interface ResumeMark {
     chatId: number

@@ -614,6 +614,45 @@ for (const size of [
             await expect(page.locator('.tv-hero-art.cover')).toHaveCount(0)
         })
 
+        test('Recently added: Right past the last card lands on See all, a card of the row\'s size, and OK opens the page, which reads on', async ({ page, context }) => {
+            test.setTimeout(60_000)
+            await fakeCase(context, 'manyrecent')
+            await tv(page)
+            await page.goto('/')
+            await expect.poll(() => focused(page)).toContain('card|/video/')
+            // The heading keeps no See all of its own on a TV.
+            await expect(page.locator('.row-head .see-all')).toHaveCount(0)
+            const end = page.locator('.home-row').first().locator('.see-all-card')
+            await expect(end).toHaveAttribute('href', '/recent')
+            // Sizes as laid out: the focused first card is grown by the focus.
+            const dims = (el: Element) => [(el as HTMLElement).offsetWidth, (el as HTMLElement).offsetHeight]
+            const art = await end.locator('.card-art').evaluate(dims)
+            const other = await page.locator('.home-row').first().locator('.card:not(.see-all-card) .card-art').last().evaluate(dims)
+            expect(art).toEqual(other)
+            for (let i = 0; i < 12 && !(await focused(page)).startsWith('card|/recent'); i++) await press(page, 'ArrowRight')
+            expect(await focused(page)).toBe('card|/recent')
+            // In sight once the remote is on it: the strip scrolled to it.
+            const box = (await end.boundingBox())!
+            expect(box.x + box.width).toBeLessThanOrEqual(size.width)
+            await press(page, 'Enter')
+            await expect(page).toHaveURL(/\/recent$/)
+            await expect(page.locator('.title-pill')).toContainText('Recently added')
+            await expect.poll(() => focused(page)).toContain('card|/video/')
+            // Down a few rows moves through the grid; scrolled to its foot, it reads on to the oldest video.
+            await press(page, 'ArrowDown', 3)
+            expect(await focused(page)).toContain('card|/video/')
+            await expect
+                .poll(
+                    async () => {
+                        await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
+                        await page.waitForTimeout(200)
+                        return page.locator('.vgrid .card', { hasText: 'Native Clip' }).count()
+                    },
+                    { timeout: 25_000 },
+                )
+                .toBeGreaterThan(0)
+        })
+
         test('a chat whose cards take seconds to come still opens on its first card, not on Back', async ({ page, context }) => {
             await fakeCase(context, 'slow')
             await tv(page)

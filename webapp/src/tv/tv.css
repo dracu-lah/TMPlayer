@@ -167,6 +167,12 @@ html[data-form=tv] .card:hover .card-facts { color: var(--muted); }
 html[data-form=tv][data-tv-keys] .card:focus { outline: none; }
 html[data-form=tv][data-tv-keys] .card:focus .card-art { transform: scale(var(--focus-scale)); outline: calc(var(--dp) * 2) solid var(--accent); outline-offset: calc(var(--dp) * 2); }
 html[data-form=tv][data-tv-keys] .card:focus .card-facts { color: var(--fg); }
+/* A row's See all, its last card (SeeAllTile): the row's poster size and focus, a chevron over "See all" in the accent on the surface tinted with it. */
+html[data-form=tv] .see-all-art {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: calc(var(--dp) * 8);
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface)); color: var(--accent);
+}
+html[data-form=tv] .see-all-label { font-size: calc(var(--dp) * 16); line-height: calc(var(--dp) * 24); font-weight: 600; }
 
 /* ---- Chats: rows that fill under the remote, as the app's TV lists do ---- */
 html[data-form=tv] .vrow.chats { column-gap: calc(var(--dp) * 12); }

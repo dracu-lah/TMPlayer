@@ -101,6 +101,14 @@ function rowTitle(row: HomeRow, selfId: number | null): string {
     return row.chatId === selfId ? t('chats.saved_messages') : (row.title ?? '')
 }
 
+/** Where a row's See all goes: a starred chat's own page, or Recently added's; null for a row without one. */
+function seeAllOf(row: HomeRow): string | null {
+    if (!row.hasMore) return null
+    if (row.kind === 'chat' && row.chatId != null) return `/chat/${row.chatId}`
+    if (row.kind === 'recent') return '/recent'
+    return null
+}
+
 function cardsOf(row: HomeRow): CardData[] {
     if (row.kind === 'continue') return row.tiles.map((tile) => videoCard(tile.item))
     return row.tiles.map((tile) => tileCard(tile, row.kind === 'recent'))
@@ -123,6 +131,9 @@ function Row(props: { row: HomeRow; selfId: number | null }) {
     createEffect(on(cards, () => queueMicrotask(edges)))
     const scroll = (dir: 1 | -1) => strip?.scrollBy({ left: dir * strip.clientWidth * 0.9, behavior: 'smooth' })
     const id = `row-${props.row.key}`
+    const seeAll = () => seeAllOf(props.row)
+    // Recently added's page says "in starred chats" as the row does, from its first frame.
+    const seeAllState = () => (props.row.kind === 'recent' ? { starredOnly: props.row.starredOnly } : undefined)
     return (
         <section class="home-row" aria-labelledby={id}>
             <div class="row-head">
@@ -141,8 +152,9 @@ function Row(props: { row: HomeRow; selfId: number | null }) {
                         </button>
                     </div>
                 </Show>
-                <Show when={props.row.hasMore && props.row.chatId != null}>
-                    <A class="link see-all" href={`/chat/${props.row.chatId}`}>{t('home.see_all')}</A>
+                {/* On a TV See all is the strip's last card instead (SeeAllCard), where Right past the last video lands. */}
+                <Show when={form() !== 'tv' && seeAll()}>
+                    <A class="link see-all" href={seeAll()!} state={seeAllState()}>{t('home.see_all')}</A>
                 </Show>
             </div>
             <Show when={props.row.loaded} fallback={<Strip continues={props.row.kind === 'continue' && form() !== 'tv'} />}>
@@ -157,9 +169,29 @@ function Row(props: { row: HomeRow; selfId: number | null }) {
                             </li>
                         )}
                     </For>
+                    <Show when={form() === 'tv' && seeAll()}>
+                        <li>
+                            <SeeAllCard href={seeAll()!} state={seeAllState()} />
+                        </li>
+                    </Show>
                 </ul>
             </Show>
         </section>
+    )
+}
+
+/**
+ * A TV row's last card (the app's SeeAllTile): art the size of the row's posters, focused as they
+ * are, a chevron over "See all" in the accent on the surface tinted with it. No line under it.
+ */
+function SeeAllCard(props: { href: string; state?: { starredOnly: boolean } }) {
+    return (
+        <A class="card see-all-card" href={props.href} state={props.state}>
+            <div class="card-art see-all-art">
+                <Icon icon={ArrowRight01Icon} size={32} />
+                <span class="see-all-label">{t('home.see_all')}</span>
+            </div>
+        </A>
     )
 }
 

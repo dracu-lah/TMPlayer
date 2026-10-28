@@ -23,6 +23,7 @@ const loadDetail = () => import('./screens/Detail').then((m) => ({ default: m.De
 const loadChats = () => import('./screens/Chats').then((m) => ({ default: m.Chats }))
 const loadChat = () => import('./screens/Chat').then((m) => ({ default: m.Chat }))
 const loadChatInfo = () => import('./screens/ChatInfo').then((m) => ({ default: m.ChatInfo }))
+const loadRecent = () => import('./screens/Recent').then((m) => ({ default: m.Recent }))
 const loadSearch = () => import('./screens/Search').then((m) => ({ default: m.Search }))
 const loadSettingsPage = () => import('./screens/Settings').then((m) => ({ default: m.Settings }))
 const loadLibrary = () => import('./screens/Library')
@@ -30,11 +31,12 @@ const Chats = lazy(loadChats)
 const Chat = lazy(loadChat)
 const ChatInfo = lazy(loadChatInfo)
 const Search = lazy(loadSearch)
+const Recent = lazy(loadRecent)
 const Settings = lazy(loadSettingsPage)
 const Detail = lazy(loadDetail)
 const Favourites = lazy(() => loadLibrary().then((m) => ({ default: m.Favourites })))
 const HistoryPage = lazy(() => loadLibrary().then((m) => ({ default: m.HistoryPage })))
-const later = [loadChats, loadChat, loadChatInfo, loadSearch, loadSettingsPage, loadDetail, loadWatch]
+const later = [loadChats, loadChat, loadChatInfo, loadSearch, loadRecent, loadSettingsPage, loadDetail, loadWatch]
 // The TV layout's remote, bar and carousel (plan 8.5): only fetched in the TV form.
 const loadTv = () => import('./tv')
 const TvKeys = lazy(() => loadTv().then((m) => ({ default: m.TvKeys })))
@@ -148,6 +150,7 @@ export function App() {
             <Route path="/chat/:chatId" component={Chat} />
             <Route path="/chat/:chatId/info" component={ChatInfo} />
             <Route path="/search" component={Search} />
+            <Route path="/recent" component={Recent} />
             <Route path="/video/:chatId/:messageId" component={Detail} />
             <Route path="/watch/:chatId/:messageId" component={Watch} />
             <Route path="/settings/:page?" component={Settings} />

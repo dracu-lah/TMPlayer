@@ -5,10 +5,10 @@ import { BaseTelegramClient, SentCode as MtSentCode, TelegramClient, User, type 
 import { rules } from '../rules'
 import { cryptoProvider } from './crypto'
 import { homePage } from './home'
-import { chatList, chatPage, forgetAll, rankChats, searchAll, watchInfo } from './library'
+import { chatList, chatPage, forgetAll, rankChats, recentPage, searchAll, watchInfo } from './library'
 import { clickSponsored, reportSponsored, viewSponsored } from './sponsored'
 import { chatProtects, files, itemOf, rawOf, thumbnails, toItem } from './media'
-import type { ChatInfo, ChatItem, ChatPage, ChatsEvent, ChatView, Country, Found, HomePage, HomeView, ListView, Me, QrEvent, RpcError, SentCode, SponsoredReport, VideoItem, WatchInfo } from './types'
+import type { ChatInfo, ChatItem, ChatPage, ChatsEvent, ChatView, Country, Found, HomePage, HomeView, ListView, Me, RecentPage, QrEvent, RpcError, SentCode, SponsoredReport, VideoItem, WatchInfo } from './types'
 
 // `VITE_TG_TEST=1 pnpm dev` signs in on Telegram's test servers (numbers 99966XYYYY, the code
 // is X five times), with its own storage, to try the sign in steps without a real account.
@@ -259,6 +259,11 @@ export const api = {
     /** Videos across every chat within the size limits, grouped as a chat's are, newest first. */
     async search(_: Ctx, query: string, view: ListView): Promise<Found> {
         return searchAll(tg, query, view)
+    },
+
+    /** Recently added's See all, read on a page at a time (see library.ts recentPage for the modes). */
+    async recent(ctx: Ctx, view: ListView, mode: 'open' | 'more' | 'view'): Promise<RecentPage> {
+        return recentPage(tg, view, mode, ctx.signal)
     },
 
     /** Home's rows as the app builds them; Home so far arrives as `HomePage` events while the chats answer. */
