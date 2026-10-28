@@ -64,12 +64,15 @@ function CardArt(props: { thumb: string | null; title: string; poster: PosterAsk
     const [src, setSrc] = createSignal<string | null>(null)
     const [seen, setSeen] = createSignal(false)
     const [picture, setPicture] = createSignal<string | null>(null)
+    let gone = false
+    onCleanup(() => (gone = true))
     onMount(() => {
         const io = new IntersectionObserver((entries) => {
             if (!entries.some((e) => e.isIntersecting)) return
             io.disconnect()
             setSeen(true)
-            if (props.thumb) loadThumb(props.thumb).then(setSrc, () => {})
+            const thumb = props.thumb
+            if (thumb) againOnce(() => loadThumb(thumb), (url) => !gone && setSrc(url), () => gone)
         })
         io.observe(el)
         onCleanup(() => io.disconnect())
@@ -79,10 +82,8 @@ function CardArt(props: { thumb: string | null; title: string; poster: PosterAsk
         if (!seen() || !ask || !settings().posters) return void setPicture(null)
         let live = true
         // The size the card is drawn at, so a phone's small cards take the lighter file.
-        loadPoster(ask, posterSizeFor(el.clientWidth)).then(
-            (url) => live && setPicture(url),
-            () => {},
-        )
+        const size = posterSizeFor(el.clientWidth)
+        againOnce(() => loadPoster(ask, size), (url) => live && setPicture(url), () => !live)
         onCleanup(() => (live = false))
     })
     // The title's one score, only once its poster is up and only from what this browser keeps.
@@ -120,6 +121,20 @@ function CardArt(props: { thumb: string | null; title: string; poster: PosterAsk
             </Show>
         </div>
     )
+}
+
+/**
+ * A card's picture asked again once, a few seconds after a failed ask: the first cards on Home are
+ * asked while the connection is still coming up, and one lost answer then left them on their cover
+ * for good (HX18). A second failure leaves the cover, as a missing picture does.
+ */
+const AGAIN_MS = 4_000
+function againOnce<T>(ask: () => Promise<T>, done: (value: T) => void, stopped: () => boolean) {
+    ask().then(done, () => {
+        window.setTimeout(() => {
+            if (!stopped()) ask().then((v) => !stopped() && done(v), () => {})
+        }, AGAIN_MS)
+    })
 }
 
 /** One portrait card: what it is called, what it plays and its line of facts. */

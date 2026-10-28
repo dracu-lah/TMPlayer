@@ -11,6 +11,9 @@ import { initialOf } from '../ui/initial'
 import { me, back } from '../session'
 import { t } from '../i18n'
 import { loadThumb } from '../screens/thumbs'
+import { loadBackdropLightFirst } from '../screens/posters'
+import { coverBackground } from '../screens/cover'
+import { settings } from '../store'
 import { tileCard, useProgress, watchPath } from '../screens/VideoList'
 import { createFocusMap, resting } from './focus'
 import type { HomeRow } from '../tg/types'
@@ -160,17 +163,31 @@ export function TvHero(props: { rows: HomeRow[] | undefined }) {
         onCleanup(() => clearTimeout(timer))
     })
 
-    const [src, setSrc] = createSignal<string | null>(null)
+    // The page's picture as the app's TvFeaturedArt picks it (BackdropSource): the title's wide
+    // picture from TMDB (every page has one, the carousel takes no page without), its light copy
+    // first; the video's own frame from Telegram until then, or with posters off; and the title's
+    // cover gradient under both, so a page is never a blank dark area while they come or when
+    // neither does.
+    const [wide, setWide] = createSignal<string | null>(null)
+    createEffect(() => {
+        const ask = pick()?.item.poster
+        setWide(null)
+        if (!ask || !settings().posters) return
+        onCleanup(loadBackdropLightFirst(ask, setWide))
+    })
+    const [frame, setFrame] = createSignal<string | null>(null)
     createEffect(() => {
         const thumb = pick()?.item.thumb
         let live = true
-        if (!thumb) return setSrc(null)
+        setFrame(null)
+        if (!thumb) return
         loadThumb(thumb).then(
-            (url) => live && setSrc(url),
-            () => live && setSrc(null),
+            (url) => live && setFrame(url),
+            () => live && setFrame(null),
         )
         onCleanup(() => (live = false))
     })
+    const src = () => wide() ?? frame()
 
     const progressOf = useProgress()
     const card = () => (pick() ? tileCard(pick()!, true) : null)
@@ -190,7 +207,7 @@ export function TvHero(props: { rows: HomeRow[] | undefined }) {
         <Show when={picks()?.length !== 0}>
             <section class="tv-hero" data-tv-top aria-roledescription="carousel" aria-label={t('home.row_recent')}>
                 <Show when={pick()} fallback={<div class="tv-hero-wait" aria-hidden="true"><span /><span /><span /></div>}>
-                    <div class="tv-hero-art" aria-hidden="true">
+                    <div class="tv-hero-art" classList={{ cover: !src() }} aria-hidden="true" style={src() ? undefined : { background: coverBackground(card()!.title) }}>
                         <Show when={src()}>
                             {/* Keyed by address: a new page's picture comes in on its own. */}
                             <For each={[src()!]}>{(url) => <img src={url} alt="" decoding="async" />}</For>

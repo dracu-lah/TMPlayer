@@ -2,7 +2,8 @@
 // real Telegram worker so its paging, the app's rules and the player run unchanged: one signed in
 // account, a few chats, and the small files in e2e/media served as Telegram's file chunks.
 // A test picks a case with the `e2e` cookie, which /__e2e/flags hands back to the worker:
-// `signedout`, `revoked` (Telegram says the session ended), `slow` (lists answer after 3 s).
+// `signedout`, `revoked` (Telegram says the session ended), `slow` (lists answer after 3 s),
+// `password` (signed out, the QR code is taken at once and the account asks its two-step password).
 
 // Read synchronously (a worker may): a top-level await would hold back the worker's message
 // handler, and the page's first call would be lost.
@@ -185,7 +186,17 @@ export class TelegramClient {
         return new User({})
     }
     async getPasswordHint() {
-        return null
+        return flags.has('password') ? 'harbour' : null
+    }
+    /** The QR sign in: a code that never gets scanned, or with `password`, one scanned at once that asks the password. */
+    async signInQr(p: { abortSignal?: AbortSignal; onUrlUpdated: (url: string, expires: Date) => void; password: () => Promise<string> }) {
+        p.onUrlUpdated('tg://login?token=e2e', new Date(Date.now() + 30_000))
+        if (flags.has('password')) {
+            await delay(50)
+            await p.password()
+            return new User({})
+        }
+        return new Promise<never>((_, reject) => p.abortSignal?.addEventListener('abort', () => reject(new Error('aborted'))))
     }
     async logOut() {}
     async resolvePeer(id: number) {
