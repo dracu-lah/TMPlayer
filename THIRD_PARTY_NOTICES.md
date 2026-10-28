@@ -204,6 +204,21 @@ characters of each script; nothing else in them is changed. The full licence tex
 copyright line travels beside the fonts as `fonts/OFL.txt` inside the app and as `OFL-Noto.txt`
 next to these notices in every desktop package.
 
+### Fonts for subtitles
+
+So a subtitle in any script draws where the system has no font for it, the players bundle Noto Sans
+cut to one script each by `ui/fonts/subtitle-fonts.py` (the Regular instance, only that script's
+Unicode blocks; nothing else changed). SIL Open Font License 1.1, Copyright 2022-2025 The Noto
+Project Authors: <https://github.com/notofonts>. The licence text with each font's copyright line is
+`OFL.txt` beside the fonts.
+
+- Desktop (`subfonts/` inside the app): Tamil, Telugu, Kannada, Sinhala, Gujarati, Gurmukhi, Oriya,
+  Thai, Lao, Myanmar, Khmer, Ethiopic, Georgian, Armenian and Hebrew, given to mpv on Linux next to
+  the subsets above.
+- Android (`assets/fonts/`): Malayalam, used only on a device whose system has no Malayalam font.
+- Web player: all of the above plus Malayalam, Devanagari, Bengali and Arabic, as WOFF2 files a
+  browser fetches only for a line that needs them (listed in its `/licenses.txt` too).
+
 ## Web player (webapp/)
 
 The SolidJS web player (web.tmplayer.org) writes its own complete list at build

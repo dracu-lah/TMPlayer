@@ -44,6 +44,7 @@ object MpvNatives {
 
     fun prepare() {
         if (!prepared.compareAndSet(false, true)) return
+        SubtitleFonts.prepare()
         runCatching { MpvMediampPlayer.prepareLibraries(DesktopPaths.nativeDir.absolutePath) }
             .onFailure { Logger.w("MpvNatives", "Falling back to mediamp's temp folder", it) }
     }
