@@ -57,9 +57,9 @@ import com.tmplayer.ui.theme.Tone
  * The player's speed, picture shape, sleep timer and playback details, drawn as the language picker's modal
  * ([ChoiceSheet]) over the dimmed video, as the subtitle and audio pickers are.
  *
- * The television's More menu shows the speed and sleep timer as pages of its own ([PlayerTvMenu]),
- * so Back steps back to the menu; this host opens them on their own, from the phone's overflow,
- * and the details on both. Like the More menu it is a [ComposeView] laid over the player that
+ * More options shows the same pickers as pages of its own panel ([PlayerMorePanel]), so Back
+ * steps back to its list; this host opens them on their own, from the row's buttons (speed) and
+ * the player's questions. It is a [ComposeView] laid over the player that
  * draws nothing in the player's window: each sheet is a dialog window of its own, which takes the
  * remote's keys and the touches away from the player while it is up.
  */
@@ -123,7 +123,7 @@ class PlayerSheets(
 
     init {
         val view = ComposeView(activity).apply {
-            // Not named Content: inside apply that resolves to ComposeView.Content (see PlayerTvMenu).
+            // Not named Content: inside apply that resolves to ComposeView.Content (see PlayerMorePanel).
             setContent { TMPlayerTheme { SheetContent() } }
         }
         root.addView(view, ViewGroup.LayoutParams(0, 0))

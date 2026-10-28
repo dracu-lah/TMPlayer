@@ -287,8 +287,11 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     /** The transport overlay, one design on every device. Built in [onCreate], lives as long. */
     private var controls: PlayerControls? = null
 
-    /** The television's More menu, the phone's overflow in its own form. Null on a phone. */
-    private var tvMenu: PlayerTvMenu? = null
+    /** More options, the side panel ⋮ opens on the phone and the television (HX16). */
+    private var morePanel: PlayerMorePanel? = null
+
+    /** The ⋮ that opened [morePanel], which the remote goes back to when it closes. */
+    private var moreAnchor: View? = null
 
     /** The speed, sleep timer and playback details sheets, on a phone and a television alike. */
     private var sheets: PlayerSheets? = null
@@ -1463,40 +1466,11 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         // The text answers (and the resume offer) on both devices; the touch feedback around them
         // only ever fires from the phone's gestures.
         feedback = PlayerFeedback(findViewById(R.id.player_root), findViewById(R.id.overlay_container))
-        if (FormFactor.isTv(this)) {
-            tvMenu = PlayerTvMenu(
-                activity = this,
-                root = findViewById(R.id.player_root),
-                title = { mediaTitle },
-                pictureInPicture = { hasPictureInPicture() },
-                saveToDownloads = ::canSaveToDownloads,
-                markWatched = ::hasMessage,
-                watched = { onWatchedList },
-                bookmarks = ::hasMessage,
-                bookmarkCount = { bookmarkList.value.size },
-                openInAnotherApp = { savable == true },
-                stereoOffered = ::stereoOffered,
-                stereo = { stereo.detailText() },
-                volumeBoost = { volumeBoostOn },
-                nightMode = { nightModeOn },
-                evenVolume = { evenVolumeOn },
-                sleepTimer = ::sleepTimerDetail,
-                onSleepTimer = ::setSleepTimer,
-                sleepChoice = ::sleepChoice,
-                loop = { abLoop },
-                paused = ::isPaused,
-                chapter = {
-                    if (chapters.isEmpty()) null
-                    else Chapters.labelAt(chapters, player?.currentPosition ?: 0L) ?: L.playerBeforeFirstChapter
-                },
-                onEntry = ::onTvMenuEntry,
-                onClosed = { menuOpen = false; holdControls(); controls?.show(); controls?.focusRow() },
-            )
-        }
+        morePanel = PlayerMorePanel(this, findViewById(R.id.player_root), moreHost)
         sheets = PlayerSheets(this, findViewById(R.id.player_root)) {
             detailsOpen = false
             holdControls()
-            if (tvMenu != null) {
+            if (FormFactor.isTv(this)) {
                 controls?.show()
                 controls?.focusRow()
             }
@@ -2667,7 +2641,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             // The shield over everything takes the touch; it offers the way out and nothing else.
             return super.dispatchTouchEvent(event)
         }
-        if (surface == null || inPictureInPicture || pickerOpen || statusOverlay.visibility == View.VISIBLE) {
+        if (surface == null || inPictureInPicture || pickerOpen || morePanel?.isOpen == true ||
+            statusOverlay.visibility == View.VISIBLE
+        ) {
             // A hold or a scrub that was under way when the sheet came up still has to end.
             if (event.actionMasked == android.view.MotionEvent.ACTION_UP ||
                 event.actionMasked == android.view.MotionEvent.ACTION_CANCEL
@@ -5259,6 +5235,15 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             }
             return super.dispatchKeyEvent(event)
         }
+        // More options up: every key is the panel's, and nothing behind it seeks or pauses. Fire
+        // TV's Menu key closes it, as ⋮ again does.
+        morePanel?.takeIf { it.isOpen }?.let { panel ->
+            if (event.keyCode == KeyEvent.KEYCODE_MENU && remoteQuirks.menuOpensPlayerMenu) {
+                if (event.action == KeyEvent.ACTION_UP && !event.isCanceled) panel.close()
+                return true
+            }
+            return super.dispatchKeyEvent(event)
+        }
         // Fire TV's Menu key is the player's options, as Amazon's guidelines have it: on release,
         // so that holding it still reaches the long press below and hands the video over.
         if (event.keyCode == KeyEvent.KEYCODE_MENU && remoteQuirks.menuOpensPlayerMenu &&
@@ -5898,6 +5883,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         // At thumbnail size there is room for the picture and nothing else. The system draws its
         // own play and pause over the window, fed by the media session.
         if (isInPictureInPictureMode) {
+            morePanel?.closeNow()
             controls?.hideNow()
             feedback?.clear()
             hideNextUp()
@@ -5928,17 +5914,28 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     }
 
     /**
-     * The phone's overflow: everything that does not earn a seat on the row, and the handover
-     * to another app, which used to be reachable only through a held key. See
-     * [PlayerMenu.phoneEntries] for what is in it and why Speed and Start over are not.
+     * More options: everything that does not earn a seat on the row, as a panel at the screen's
+     * end edge (a sheet on a phone held upright), opened at once ([PlayerMorePanel]). ⋮ again, or
+     * Fire TV's Menu key, closes it. See [PlayerMenu.phoneEntries] for what is in it.
      */
     private fun showOverflow(anchor: View) {
+        val panel = morePanel ?: return
+        if (panel.isOpen) {
+            panel.close()
+            return
+        }
+        moreAnchor = anchor
         menuOpen = true
         holdControls()
-        tvMenu?.let { it.open(); return }
-        val menu = android.widget.PopupMenu(this, anchor, Gravity.END)
-        val items = menu.menu
-        val entries = PlayerMenu.phoneEntries(
+        panel.open()
+    }
+
+    /** What the panel reads and does: the player's own state, nothing fetched on open. */
+    private val moreHost = object : PlayerMoreHost {
+        override val tv: Boolean get() = FormFactor.isTv(this@PlayerActivity)
+        override fun title() = mediaTitle
+        override fun sideways() = sheetGoesSideways()
+        override fun phoneEntries() = PlayerMenu.phoneEntries(
             pictureInPicture = hasPictureInPicture(),
             openInAnotherApp = savable == true,
             saveToDownloads = canSaveToDownloads(),
@@ -5948,63 +5945,80 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             chapters = chapters.isNotEmpty(),
             // Only once the chat is known to allow saving: a protected chat's frames stay in it.
             saveFrame = savable == true,
-            // Only while the row has no button for it: a phone held upright.
-            pictureShape = controls?.shapeOnRow != true,
+            // A picture to shape, as for 3D: not sound alone, not while a cast plays it.
+            pictureShape = stereoOffered(),
             stereo = stereoOffered(),
         )
-        // Speed and the sleep timer open the pickers' sheet rather than a submenu, so a choice
-        // of one of several looks the same here as the subtitle and audio pickers.
-        entries.forEachIndexed { order, entry ->
-            val label = entry.label(
-                sleepDetail = sleepTimerDetail(),
-                watched = onWatchedList,
-                loop = abLoop,
-                bookmarks = bookmarkList.value.size,
-                shape = videoScale,
-                stereo = stereo.detailText(),
-            )
-            // Lock the screen heads the menu in a group of its own, under a divider, with the
-            // lock the television's and the desktop's menus draw beside the same words.
-            val lock = entry == PhoneMenuEntry.LockScreen
-            val item = items.add(if (lock) LOCK_GROUP else 0, entry.ordinal, order, label)
-            if (lock) item.setIcon(R.drawable.ic_lock)
-            if (entry == PhoneMenuEntry.VolumeBoost) item.setCheckable(true).setChecked(volumeBoostOn)
-            if (entry == PhoneMenuEntry.NightMode) item.setCheckable(true).setChecked(nightModeOn)
-            if (entry == PhoneMenuEntry.EvenVolume) item.setCheckable(true).setChecked(evenVolumeOn)
-        }
-        androidx.core.view.MenuCompat.setGroupDividerEnabled(items, true)
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) menu.setForceShowIcon(true)
-        menu.setOnMenuItemClickListener { item ->
-            when (PhoneMenuEntry.entries[item.itemId]) {
-                PhoneMenuEntry.LockScreen -> lockScreen()
-                PhoneMenuEntry.PictureInPicture -> enterPictureInPictureNow()
-                PhoneMenuEntry.PictureShape -> showSheet { it.showShape(videoScale, ::applyScale) }
-                PhoneMenuEntry.Stereo -> showStereo()
-                PhoneMenuEntry.VolumeBoost -> toggleVolumeBoost()
-                PhoneMenuEntry.NightMode -> toggleNightMode()
-                PhoneMenuEntry.EvenVolume -> toggleEvenVolume()
-                PhoneMenuEntry.SleepTimer -> showSheet { it.showSleep(sleepTimerDetail(), sleepChoice(), ::setSleepTimer) }
-                PhoneMenuEntry.AbLoop -> pressLoop()
-                PhoneMenuEntry.NextChapter -> stepChapter(forward = true)
-                PhoneMenuEntry.PreviousChapter -> stepChapter(forward = false)
-                PhoneMenuEntry.NextFrame -> frameStep(forward = true)
-                PhoneMenuEntry.PreviousFrame -> frameStep(forward = false)
-                PhoneMenuEntry.SaveFrame -> saveFrame()
-                PhoneMenuEntry.OpenInAnotherApp -> openInAnotherApp()
-                PhoneMenuEntry.LoadSubtitleFile -> subtitleFiles.pick()
-                PhoneMenuEntry.SaveToDownloads -> saveToDownloads()
-                PhoneMenuEntry.MarkWatched -> toggleWatched()
-                PhoneMenuEntry.AddBookmark -> {
-                    val at = player?.currentPosition ?: 0L
-                    showSheet { it.showNewBookmark(at, bookmarkActions()) }
-                }
-                PhoneMenuEntry.Bookmarks -> showSheet { it.showBookmarks(bookmarkActions()) }
-                PhoneMenuEntry.PlaybackDetails -> showPlaybackDetails()
+        override fun tvEntries() = PlayerMenu.tvEntries(
+            pictureInPicture = hasPictureInPicture(),
+            saveToDownloads = canSaveToDownloads(),
+            markWatched = hasMessage(),
+            openInAnotherApp = savable == true,
+            paused = isPaused(),
+            bookmarks = hasMessage(),
+            chapters = chapters.isNotEmpty(),
+            stereo = stereoOffered(),
+            pictureShape = stereoOffered(),
+        )
+        override fun shape() = videoScale
+        override fun speed() = playbackSpeed
+        override fun skipSilence() = skipSilence
+        override fun stereo() = stereo
+        override fun stereoTagged() = stereoTagged
+        override fun stereoDetail() = stereo.detailText()
+        override fun volumeBoost() = volumeBoostOn
+        override fun nightMode() = nightModeOn
+        override fun evenVolume() = evenVolumeOn
+        override fun sleepDetail() = sleepTimerDetail()
+        override fun sleepChoice() = this@PlayerActivity.sleepChoice()
+        override fun loop() = abLoop
+        override fun chapter(): String? =
+            if (chapters.isEmpty()) null
+            else Chapters.labelAt(chapters, player?.currentPosition ?: 0L) ?: L.playerBeforeFirstChapter
+        override fun watched() = onWatchedList
+        override fun bookmarks() = if (hasMessage()) bookmarkActions() else null
+        override fun playbackDetails() = this@PlayerActivity.playbackDetails()
+        override fun onPhoneEntry(entry: PhoneMenuEntry) = onPhoneMenuEntry(entry)
+        override fun onTvEntry(entry: PlayerMenuEntry) = onTvMenuEntry(entry)
+        override fun setShape(scale: VideoScale) = applyScale(scale)
+        override fun setSpeed(speed: Float) = this@PlayerActivity.setSpeed(speed)
+        override fun setSkipSilence(on: Boolean) = this@PlayerActivity.setSkipSilence(on)
+        override fun setStereo(next: Stereo3d) = applyStereo(next) to stereo
+        override fun setSleep(minutes: Int?) = setSleepTimer(minutes)
+        override fun closed() {
+            menuOpen = false
+            holdControls()
+            if (tv) {
+                controls?.show()
+                val anchor = moreAnchor?.takeIf { it.isShown }
+                if (anchor != null) anchor.requestFocus() else controls?.focusRow()
             }
-            true
         }
-        menu.setOnDismissListener { menuOpen = false; holdControls() }
-        menu.show()
+    }
+
+    /** What a line of the phone's panel does; its pages (shape, speed, 3D...) open in the panel. */
+    private fun onPhoneMenuEntry(entry: PhoneMenuEntry) {
+        when (entry) {
+            PhoneMenuEntry.LockScreen -> lockScreen()
+            PhoneMenuEntry.PictureInPicture -> enterPictureInPictureNow()
+            PhoneMenuEntry.VolumeBoost -> toggleVolumeBoost()
+            PhoneMenuEntry.NightMode -> toggleNightMode()
+            PhoneMenuEntry.EvenVolume -> toggleEvenVolume()
+            PhoneMenuEntry.AbLoop -> pressLoop()
+            PhoneMenuEntry.NextChapter -> stepChapter(forward = true)
+            PhoneMenuEntry.PreviousChapter -> stepChapter(forward = false)
+            PhoneMenuEntry.NextFrame -> frameStep(forward = true)
+            PhoneMenuEntry.PreviousFrame -> frameStep(forward = false)
+            PhoneMenuEntry.SaveFrame -> saveFrame()
+            PhoneMenuEntry.OpenInAnotherApp -> openInAnotherApp()
+            PhoneMenuEntry.LoadSubtitleFile -> subtitleFiles.pick()
+            PhoneMenuEntry.SaveToDownloads -> saveToDownloads()
+            PhoneMenuEntry.MarkWatched -> toggleWatched()
+            // Pages of the panel itself, opened there.
+            PhoneMenuEntry.PictureShape, PhoneMenuEntry.Stereo, PhoneMenuEntry.Speed, PhoneMenuEntry.SleepTimer,
+            PhoneMenuEntry.AddBookmark, PhoneMenuEntry.Bookmarks, PhoneMenuEntry.PlaybackDetails,
+            -> Unit
+        }
     }
 
     /** What a line of the television's More menu does. */
@@ -6028,8 +6042,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             PlayerMenuEntry.PreviousFrame -> frameStep(forward = false)
             PlayerMenuEntry.AddBookmark -> addBookmark(player?.currentPosition ?: 0L, "")
             PlayerMenuEntry.Bookmarks -> showSheet { it.showBookmarks(bookmarkActions()) }
-            // Pages of the menu itself, opened there.
-            PlayerMenuEntry.SleepTimer, PlayerMenuEntry.RemoteKeys -> Unit
+            // Pages of the panel itself, opened there.
+            PlayerMenuEntry.SleepTimer, PlayerMenuEntry.RemoteKeys, PlayerMenuEntry.Speed, PlayerMenuEntry.PictureShape -> Unit
         }
     }
 
@@ -6265,7 +6279,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         val message = messageId
         App.backgroundScope.launch { runCatching { store.add(chat, message, positionMs, note) } }
         val at = Translator.messages.formatter.clock(positionMs)
-        showGestureFeedback(if (tvMenu != null && note.isEmpty()) L.playerBookmarkSavedTv(at) else L.playerBookmarkSaved(at))
+        showGestureFeedback(if (FormFactor.isTv(this) && note.isEmpty()) L.playerBookmarkSavedTv(at) else L.playerBookmarkSaved(at))
     }
 
     /** What the bookmark sheets do with a choice: all of it lands here, on this video. */
@@ -6683,7 +6697,13 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
     /** What is actually playing: the figures a bug report needs, in words a viewer can read. */
     private fun showPlaybackDetails() {
-        val exo = player ?: return
+        val (title, lines) = playbackDetails() ?: return
+        showSheet { it.showDetails(title, lines) }
+    }
+
+    /** The details' heading and lines, for the sheet or the More panel's page. */
+    private fun playbackDetails(): Pair<String, List<String>>? {
+        val exo = player ?: return null
         val video = exo.videoFormat
         val audio = exo.audioFormat
         val lines = buildList {
@@ -6706,7 +6726,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             add(if (isRealDownload()) L.playerDetailsDownloaded(here) else L.playerDetailsCached(here))
             add(L.playerDetailsSpeed(PlaybackSpeed.label(playbackSpeed)))
         }
-        showSheet { it.showDetails(mediaTitle.ifBlank { L.playerPlaybackDetails }, lines) }
+        return mediaTitle.ifBlank { L.playerPlaybackDetails } to lines
     }
 
     /**
@@ -8657,9 +8677,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
         /** How long the unlock pill stays up after a tap on the locked screen. */
         private const val UNLOCK_PILL_MS = 2_500L
-
-        /** The overflow's group for Lock the screen, so a divider sets it apart. */
-        private const val LOCK_GROUP = 1
 
         private const val RESUME_TICK_MS = 10_000L
 

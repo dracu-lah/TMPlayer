@@ -206,7 +206,7 @@ class PlayerCast(
 
     private val composeView = ComposeView(activity).apply {
         visibility = View.GONE
-        // Not named Content: inside apply that resolves to ComposeView.Content (see PlayerTvMenu).
+        // Not named Content: inside apply that resolves to ComposeView.Content (see PlayerMorePanel).
         setContent { TMPlayerTheme { CastRemoteScreen(this@PlayerCast) } }
     }
     private val pickerView = ComposeView(activity).apply {

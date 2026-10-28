@@ -97,6 +97,12 @@ fun ChoiceSheet(
     fullScreen: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    // Inside a panel that shows pickers as pages of its own (the player's More), the page is
+    // drawn there, under its Back line, rather than in a window of its own.
+    LocalChoicePageHost.current?.let { host ->
+        host(ChoicePage(title, note, onDismiss, closeFocus, content))
+        return
+    }
     val touch = isTouch()
     val scrolls = remember { mutableStateOf(false) }
     // A tablet has the room for the floating panel; only a phone's short side goes full screen.
@@ -144,6 +150,26 @@ fun ChoiceSheet(
         }
     }
 }
+
+/**
+ * A [ChoiceSheet] handed to a [LocalChoicePageHost] to draw as one of its pages: [onBack] is the
+ * sheet's onDismiss (a step back, or shut), [closeFocus] the requester the sheet hangs on Close,
+ * which the page hangs on its Back line instead.
+ */
+class ChoicePage(
+    val title: String,
+    val note: String?,
+    val onBack: () -> Unit,
+    val closeFocus: FocusRequester?,
+    val content: @Composable ColumnScope.() -> Unit,
+)
+
+/**
+ * Set by a panel that shows the pickers as pages of its own rather than as windows over it: the
+ * player's More options (HX16), where Picture shape, Speed or Sleep timer open in the same panel.
+ * Null everywhere else, where a [ChoiceSheet] is a window.
+ */
+val LocalChoicePageHost = compositionLocalOf<(@Composable (ChoicePage) -> Unit)?> { null }
 
 /**
  * A [ChoiceSheet] that fills a phone's screen: the title and an X that closes at the top, the way

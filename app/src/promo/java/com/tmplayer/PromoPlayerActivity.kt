@@ -28,7 +28,6 @@ import com.tmplayer.player.PlayerControls
 import com.tmplayer.player.PlayerEpisodes
 import com.tmplayer.player.NextUpCard
 import com.tmplayer.player.PlayerFeedback
-import com.tmplayer.player.PlayerTvMenu
 import com.tmplayer.player.label
 import com.tmplayer.player.TapZone
 import com.tmplayer.player.SubtitleStyle
@@ -55,7 +54,7 @@ import androidx.media3.common.C
  * opens on (S01E04 otherwise). The Episodes button is on the row either way; a hold or long press
  * on a row really marks it, in memory.
  *
- * `nextup` raises the next-up card over the bare picture, `menu` the television's More menu,
+ * `nextup` raises the next-up card over the bare picture, `menu` More options (the side panel),
  * `jump` the remote's side figure for a ten second jump. The stand-in player really plays and
  * pauses, so on a television OK on the focused bar and the play key show the paused cue.
  *
@@ -239,26 +238,10 @@ class PromoPlayerActivity : FragmentActivity(), TrackPickerHost {
                 if (tv) card.play.requestFocus()
             }
             if (intent.getBooleanExtra("episodes", false)) openPromoEpisodes()
-            if (intent.getBooleanExtra("menu", false)) {
-                PlayerTvMenu(
-                    activity = this,
-                    root = findViewById(R.id.player_root),
-                    title = { "The Coast S01E04" },
-                    pictureInPicture = { true },
-                    onEntry = {},
-                    onClosed = {},
-                ).open()
-            }
-            // `--ez overflow true`: the phone's overflow, built from the same entries as the player's.
-            if (intent.getBooleanExtra("overflow", false) && !tv) {
-                val popup = android.widget.PopupMenu(this, findViewById(R.id.control_more), android.view.Gravity.END)
-                com.tmplayer.player.PlayerMenu.phoneEntries(
-                    pictureInPicture = true,
-                    openInAnotherApp = true,
-                    saveToDownloads = true,
-                    markWatched = true,
-                ).forEachIndexed { order, entry -> popup.menu.add(0, entry.ordinal, order, entry.label()) }
-                popup.show()
+            // `--ez menu true` (or `overflow`, its old name on the phone): More options, the panel
+            // the player's ⋮ opens, over a stand-in for the player's state.
+            if (intent.getBooleanExtra("menu", false) || intent.getBooleanExtra("overflow", false)) {
+                com.tmplayer.player.PlayerMorePanel(this, findViewById(R.id.player_root), PromoMoreHost(tv)).open()
             }
             // `--es picker subtitles` opens the subtitle picker, `online` its "Search online" list.
             when (intent.getStringExtra("picker")) {
@@ -464,4 +447,59 @@ class PromoPlayerActivity : FragmentActivity(), TrackPickerHost {
             return Futures.immediateVoidFuture()
         }
     }
+}
+
+/** The More panel's stand-in for the player: a video playing, nothing marked yet. */
+private class PromoMoreHost(override val tv: Boolean) : com.tmplayer.player.PlayerMoreHost {
+    private var shape = com.tmplayer.player.VideoScale.Fit
+    private var speed = 1f
+    private var boost = false
+    override fun title() = "The Coast S01E04"
+    override fun sideways() = true
+    override fun phoneEntries() = com.tmplayer.player.PlayerMenu.phoneEntries(
+        pictureInPicture = true,
+        openInAnotherApp = true,
+        saveToDownloads = true,
+        markWatched = true,
+        saveFrame = true,
+        pictureShape = true,
+    )
+    override fun tvEntries() = com.tmplayer.player.PlayerMenu.tvEntries(
+        pictureInPicture = true,
+        saveToDownloads = true,
+        markWatched = true,
+        pictureShape = true,
+    )
+    override fun shape() = shape
+    override fun speed() = speed
+    override fun skipSilence() = false
+    override fun stereo() = com.tmplayer.player.Stereo3d.OFF
+    override fun stereoTagged(): com.tmplayer.player.Stereo3d.Layout? = null
+    override fun stereoDetail(): String? = null
+    override fun volumeBoost() = boost
+    override fun nightMode() = false
+    override fun evenVolume() = true
+    override fun sleepDetail(): String? = null
+    override fun sleepChoice(): Int? = null
+    override fun loop(): com.tmplayer.player.AbLoop? = null
+    override fun chapter(): String? = null
+    override fun watched() = false
+    override fun bookmarks(): com.tmplayer.player.BookmarkSheetActions? = null
+    override fun playbackDetails() = "The Coast S01E04" to listOf("1920 x 1080, 23.976 fps", "Video codec: avc")
+    override fun onPhoneEntry(entry: com.tmplayer.player.PhoneMenuEntry) {
+        if (entry == com.tmplayer.player.PhoneMenuEntry.VolumeBoost) boost = !boost
+    }
+    override fun onTvEntry(entry: com.tmplayer.player.PlayerMenuEntry) {
+        if (entry == com.tmplayer.player.PlayerMenuEntry.VolumeBoost) boost = !boost
+    }
+    override fun setShape(scale: com.tmplayer.player.VideoScale) {
+        shape = scale
+    }
+    override fun setSpeed(speed: Float) {
+        this.speed = speed
+    }
+    override fun setSkipSilence(on: Boolean) = Unit
+    override fun setStereo(next: com.tmplayer.player.Stereo3d) = null to next
+    override fun setSleep(minutes: Int?) = Unit
+    override fun closed() = Unit
 }

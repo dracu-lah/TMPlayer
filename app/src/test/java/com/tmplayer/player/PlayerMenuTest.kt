@@ -15,6 +15,7 @@ class PlayerMenuTest {
                 PlayerMenuEntry.LockScreen,
                 PlayerMenuEntry.PlaybackDetails,
                 PlayerMenuEntry.StartOver,
+                PlayerMenuEntry.Speed,
                 PlayerMenuEntry.VolumeBoost,
                 PlayerMenuEntry.NightMode,
                 PlayerMenuEntry.EvenVolume,
@@ -118,6 +119,7 @@ class PlayerMenuTest {
             bookmarks = true,
             chapters = true,
             stereo = true,
+            pictureShape = true,
         )
         assertFalse(PlayerMenuEntry.PictureInPicture in entries)
         assertEquals(PlayerMenuEntry.entries.size - 1, entries.size)
@@ -135,6 +137,7 @@ class PlayerMenuTest {
                 bookmarks = true,
                 chapters = true,
                 stereo = true,
+                pictureShape = true,
             ).toSet(),
         )
     }
@@ -144,17 +147,20 @@ class PlayerMenuTest {
         assertFalse(PlayerMenuEntry.Stereo in PlayerMenu.tvEntries(pictureInPicture = true))
         val tv = PlayerMenu.tvEntries(pictureInPicture = true, stereo = true)
         assertEquals(tv.indexOf(PlayerMenuEntry.StartOver) + 1, tv.indexOf(PlayerMenuEntry.Stereo))
+        val shaped = PlayerMenu.tvEntries(pictureInPicture = true, stereo = true, pictureShape = true)
+        assertEquals(shaped.indexOf(PlayerMenuEntry.PictureShape) + 1, shaped.indexOf(PlayerMenuEntry.Stereo))
         val phone = PlayerMenu.phoneEntries(true, true, true, true, pictureShape = true, stereo = true)
         assertEquals(phone.indexOf(PhoneMenuEntry.PictureShape) + 1, phone.indexOf(PhoneMenuEntry.Stereo))
         assertFalse(PhoneMenuEntry.Stereo in PlayerMenu.phoneEntries(true, true, true, true))
     }
 
     @Test
-    fun `the phone overflow reads in a fixed order and carries neither speed nor start over`() {
+    fun `the phone's panel reads in a fixed order and carries no start over`() {
         assertEquals(
             listOf(
                 PhoneMenuEntry.LockScreen,
                 PhoneMenuEntry.PictureInPicture,
+                PhoneMenuEntry.Speed,
                 PhoneMenuEntry.VolumeBoost,
                 PhoneMenuEntry.NightMode,
                 PhoneMenuEntry.EvenVolume,
@@ -188,18 +194,29 @@ class PlayerMenuTest {
     }
 
     @Test
-    fun `picture shape is in the phone's menu only while the row has no button for it`() {
+    fun `picture shape is in the phone's panel for any picture, before the speed`() {
         assertFalse(PhoneMenuEntry.PictureShape in PlayerMenu.phoneEntries(true, true, true, true))
-        val upright = PlayerMenu.phoneEntries(true, true, true, true, pictureShape = true)
+        val picture = PlayerMenu.phoneEntries(true, true, true, true, pictureShape = true)
         // After the lock and picture in picture, the other lines about the screen itself.
-        assertEquals(2, upright.indexOf(PhoneMenuEntry.PictureShape))
-        assertEquals("Picture shape (Crop)", PhoneMenuEntry.PictureShape.label(shape = VideoScale.Crop))
+        assertEquals(2, picture.indexOf(PhoneMenuEntry.PictureShape))
+        assertEquals(3, picture.indexOf(PhoneMenuEntry.Speed))
+        assertEquals("Picture shape (Fill)", PhoneMenuEntry.PictureShape.label(shape = VideoScale.Crop))
     }
 
     @Test
-    fun `the television's More has no picture shape line, the row's button steps it`() {
+    fun `the television's panel offers every shape as a page, for a picture only`() {
         val all = PlayerMenu.tvEntries(pictureInPicture = true, saveToDownloads = true, markWatched = true, paused = true, bookmarks = true, chapters = true)
-        assertFalse(all.any { it.name == "PictureShape" })
+        assertFalse(PlayerMenuEntry.PictureShape in all)
+        val shaped = PlayerMenu.tvEntries(pictureInPicture = true, pictureShape = true)
+        assertEquals(shaped.indexOf(PlayerMenuEntry.StartOver) + 1, shaped.indexOf(PlayerMenuEntry.PictureShape))
+        assertTrue(PlayerMenuEntry.Speed in all)
+    }
+
+    @Test
+    fun `the phone's and the television's lines share the panel's names`() {
+        // The panel maps both by name onto one set of lines, so a new entry needs a line there.
+        val names = (PhoneMenuEntry.entries.map { it.name } + PlayerMenuEntry.entries.map { it.name }).toSet()
+        assertTrue(names.containsAll(listOf("LockScreen", "PictureShape", "Speed", "Stereo", "SleepTimer", "Bookmarks")))
     }
 
     @Test
@@ -220,6 +237,7 @@ class PlayerMenuTest {
         assertEquals(
             listOf(
                 PhoneMenuEntry.LockScreen,
+                PhoneMenuEntry.Speed,
                 PhoneMenuEntry.VolumeBoost,
                 PhoneMenuEntry.NightMode,
                 PhoneMenuEntry.EvenVolume,

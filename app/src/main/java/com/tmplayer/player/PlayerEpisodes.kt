@@ -67,7 +67,7 @@ class PlayerEpisodes(
 
     init {
         val view = ComposeView(activity).apply {
-            // Not named Content: inside apply that resolves to ComposeView.Content (see PlayerTvMenu).
+            // Not named Content: inside apply that resolves to ComposeView.Content (see PlayerMorePanel).
             setContent { TMPlayerTheme { ListContent() } }
         }
         root.addView(view, ViewGroup.LayoutParams(0, 0))

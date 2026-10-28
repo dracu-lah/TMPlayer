@@ -20,11 +20,18 @@ enum class PlayerMenuEntry {
     PlaybackDetails,
     StartOver,
     /**
+     * Every shape as a page of the panel (HX16), the eight at a glance: the row's own button steps
+     * them one press at a time, which is long way round to 1:1. Only for a picture, not a cast.
+     */
+    PictureShape,
+    /**
      * 3D video: a page of how the file keeps its two pictures and which glasses are on
      * ([Stereo3d]). Not for sound alone, nor while the video plays on a cast.
      */
     Stereo,
-    /** Louder: quiet dialogue lifted, the peaks kept from clipping. On or off, and the menu closes. */
+    /** The speeds as a page, the one playing on the line; the row's button opens the same page. */
+    Speed,
+    /** Louder: quiet dialogue lifted, the peaks kept from clipping. On or off, and the panel stays. */
     VolumeBoost,
     /** Night mode: the range squeezed, so loud scenes are quieter and dialogue clearer. */
     NightMode,
@@ -50,30 +57,30 @@ enum class PlayerMenuEntry {
     SaveToDownloads,
     /** "Mark as watched", or "Mark as unwatched" once it is on the list. */
     MarkWatched,
-    // Picture shape is not here: the row's own button steps it (2026-10-18), a press per shape
-    // rather than More, a line and a page.
     PictureInPicture,
     OpenInAnotherApp,
     RemoteKeys,
 }
 
 /**
- * One line of the phone's overflow menu.
+ * One line of the phone's More options panel.
  *
- * Speed is not here: the bottom row's button opens the same sheet. Start over is not here either:
- * the resume notice carries it for the first seconds, and the bar reaches zero.
+ * Start over is not here: the resume notice carries it for the first seconds, and the bar
+ * reaches zero.
  */
 enum class PhoneMenuEntry {
     /** First and set apart with its icon: the line people come to the menu for (user, 2026-10-18). */
     LockScreen,
     PictureInPicture,
     /**
-     * Fit, crop or stretch, as a page of the three: only while the row has no room for its
-     * button (a phone held upright), so the pinch is not the only way there.
+     * Every shape as a page (HX16): the row's button (on a phone held sideways) steps them a press
+     * at a time and the pinch only the first three, so this is where any one is a tap away.
      */
     PictureShape,
     /** 3D video, as on the television: a page of the layout, the glasses and the eye swap. */
     Stereo,
+    /** The speeds as a page, the one playing on the line, as the row's button opens them. */
+    Speed,
     VolumeBoost,
     NightMode,
     EvenVolume,
@@ -119,6 +126,7 @@ fun PhoneMenuEntry.label(
     PhoneMenuEntry.PictureInPicture -> L.playerPictureInPicture
     PhoneMenuEntry.PictureShape -> shape?.let { L.commonWithDetail(L.playerPictureShape, it.label) } ?: L.playerPictureShape
     PhoneMenuEntry.Stereo -> stereo?.let { L.commonWithDetail(L.playerStereo, it) } ?: L.playerStereo
+    PhoneMenuEntry.Speed -> L.playerSpeed
     PhoneMenuEntry.VolumeBoost -> L.playerVolumeBoost
     PhoneMenuEntry.NightMode -> L.playerNightMode
     PhoneMenuEntry.EvenVolume -> L.playerEvenVolume
@@ -173,7 +181,8 @@ object PlayerMenu {
      *
      * [chapters] is whether the file has chapter marks, which adds the chapter steps.
      *
-     * [stereo] is whether 3D video is offered: a picture to draw, not sound alone.
+     * [stereo] is whether 3D video is offered: a picture to draw, not sound alone, and
+     * [pictureShape] the same for the shapes' page.
      */
     fun tvEntries(
         pictureInPicture: Boolean,
@@ -184,11 +193,14 @@ object PlayerMenu {
         bookmarks: Boolean = false,
         chapters: Boolean = false,
         stereo: Boolean = false,
+        pictureShape: Boolean = false,
     ): List<PlayerMenuEntry> = buildList {
         add(PlayerMenuEntry.LockScreen)
         add(PlayerMenuEntry.PlaybackDetails)
         add(PlayerMenuEntry.StartOver)
+        if (pictureShape) add(PlayerMenuEntry.PictureShape)
         if (stereo) add(PlayerMenuEntry.Stereo)
+        add(PlayerMenuEntry.Speed)
         add(PlayerMenuEntry.VolumeBoost)
         add(PlayerMenuEntry.NightMode)
         add(PlayerMenuEntry.EvenVolume)
@@ -220,9 +232,9 @@ object PlayerMenu {
      * can still become one; [paused] adds the frame steps. Lines rather than buttons, so the row
      * CP37 cleared stays clear. [chapters] adds the chapter steps. [saveFrame] is false for a
      * chat that restricts saving (or while that is still being asked), whose frames stay in it.
-     * [pictureShape] is whether the row has no picture shape button right now, which puts its
-     * page here instead. The lock stays first either way: the line people come here for.
-     * [stereo] offers 3D video, beside the picture's shape.
+     * [pictureShape] is whether there is a picture to shape (not sound alone, not a cast), and
+     * [stereo] offers 3D video beside it; Speed follows them. The lock stays first: the line
+     * people come here for.
      */
     fun phoneEntries(
         pictureInPicture: Boolean,
@@ -240,6 +252,7 @@ object PlayerMenu {
         if (pictureInPicture) add(PhoneMenuEntry.PictureInPicture)
         if (pictureShape) add(PhoneMenuEntry.PictureShape)
         if (stereo) add(PhoneMenuEntry.Stereo)
+        add(PhoneMenuEntry.Speed)
         add(PhoneMenuEntry.VolumeBoost)
         add(PhoneMenuEntry.NightMode)
         add(PhoneMenuEntry.EvenVolume)
