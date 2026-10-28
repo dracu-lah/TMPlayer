@@ -113,6 +113,9 @@ class PlayerControls(
     private val timesPosition: TextView = root.findViewById(R.id.times_position)
     private val timesDuration: TextView = root.findViewById(R.id.times_duration)
     private val cluster: View = root.findViewById(R.id.controls_cluster)
+
+    /** The row's buttons, without the bar and the readout. */
+    private val buttons: View = root.findViewById(R.id.controls_buttons)
     private val episodesButton: TextView = root.findViewById(R.id.control_episodes)
     private val copyButton: TextView = root.findViewById(R.id.control_copy)
 
@@ -258,7 +261,10 @@ class PlayerControls(
         wire(root.findViewById(R.id.control_audio)) { onPickAudio() }
         wire(root.findViewById(R.id.control_speed)) { onPickSpeed() }
         wire(rotate) { onCycleOrientation() }
-        wire(shapeButton) { onCycleShape() }
+        wire(shapeButton) {
+            onCycleShape()
+            holdFocus(shapeButton)
+        }
         wire(lockButton) { onLock() }
         wire(episodesButton) { onEpisodes() }
         wire(copyButton) { onCopies() }
@@ -1023,7 +1029,26 @@ class PlayerControls(
     fun paused() {
         resumeHideMs = null
         show()
-        if (isTv) centerPlay.requestFocus()
+        // Not off a row button the viewer is on (HX22): a pause that came from elsewhere while
+        // they work the row leaves them there, so their next OK is that button's again.
+        if (isTv && !buttons.hasFocus()) centerPlay.requestFocus()
+    }
+
+    /**
+     * On a television, a press that stays on the row (picture shape) keeps the remote on its
+     * button. On the Mi TV a shape change in a 3D video redrew the picture under the row and the
+     * focus fell to the play disc, so the next OK paused the video (HX22): taken back here if it
+     * falls to the disc, the bar or nowhere in the moments after the press.
+     */
+    private fun holdFocus(button: View) {
+        if (!isTv) return
+        for (after in HOLD_FOCUS_CHECKS_MS) {
+            container.postDelayed({
+                if (!visible || !button.isShown || button.isFocused) return@postDelayed
+                val now = container.rootView.findFocus()
+                if (now == null || now === centerPlay || now === timeBar) button.requestFocus()
+            }, after)
+        }
     }
 
     /**
@@ -1114,6 +1139,9 @@ class PlayerControls(
             .format(java.util.Date(atMillis))
 
     private companion object {
+        /** When, after a press that stays on the row, the remote is checked to still be on its button. */
+        val HOLD_FOCUS_CHECKS_MS = longArrayOf(0L, 150L, 400L, 900L)
+
         /** Nuvio's figure, and Netflix's: long enough to read as calm, short enough to feel live. */
         const val FADE_MS = 200L
 
