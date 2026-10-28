@@ -334,7 +334,9 @@ class DesktopDownloadRunner(
                 fail(
                     request,
                     Td.localDownloadedBytes(request.fileId),
-                    error?.let(Failures::humanise) ?: FAILED_TEXT,
+                    // Gone from its chat (HX21): that, not TDLib's word for a file it lost.
+                    com.tmplayer.data.GoneVideos.failureText(request.chatId, request.messageId)
+                        ?: error?.let(Failures::humanise) ?: FAILED_TEXT,
                 )
             }
         }

@@ -362,10 +362,34 @@ class ChatRepository(private val td: TdlClient) {
      * One message as a video, for a Continue watching tile's picture: a resume record keeps no
      * artwork, and TDLib answers this from its own database for anything already seen.
      */
-    suspend fun mediaItem(chatId: Long, messageId: Long): MediaItem? = withContext(Dispatchers.IO) {
-        val message = td.getMessage(chatId, messageId).valueOrNull ?: return@withContext null
-        val chatProtected = td.getChat(chatId).valueOrNull?.hasProtectedContent ?: false
-        MediaMapper.fromMessage(message, chatProtected)
+    suspend fun mediaItem(chatId: Long, messageId: Long): MediaItem? =
+        (lookupMedia(chatId, messageId) as? MessageLookup.Found)?.item
+
+    /**
+     * One message as a video, or a plain answer about why it cannot be had ([StaleEntries]): gone
+     * for good (deleted, its chat closed, edited into something else) or simply not answered. A
+     * gone one is reported to [GoneVideos], which takes it out of what the viewer kept (HX21);
+     * anything else leaves the kept entry alone. A message that is there but not playable here
+     * (withheld on this platform, a timer, a post still locked) is not gone either: its place is
+     * kept, as the web does.
+     */
+    suspend fun lookupMedia(chatId: Long, messageId: Long): MessageLookup = withContext(Dispatchers.IO) {
+        if (chatId == 0L || messageId <= 0L) return@withContext MessageLookup.Unreachable
+        val lookup = when (val answer = td.getMessage(chatId, messageId)) {
+            is TdlResult.Failure -> StaleEntries.classify(answer.code, answer.message)
+            is TdlResult.Success -> {
+                val message = answer.result
+                val chatProtected = td.getChat(chatId).valueOrNull?.hasProtectedContent ?: false
+                val heldBack = MediaMapper.isVideoContent(message.content) ||
+                    MediaMapper.selfDestructs(message) ||
+                    !message.restrictionInfo?.restrictionReason.isNullOrEmpty() ||
+                    message.schedulingState != null || message.sendingState != null
+                MediaMapper.fromMessage(message, chatProtected)?.let { MessageLookup.Found(it) }
+                    ?: if (heldBack) MessageLookup.Unreachable else MessageLookup.Gone(GoneReason.NotVideo)
+            }
+        }
+        if (lookup is MessageLookup.Gone) GoneVideos.report(chatId, messageId, lookup.reason)
+        lookup
     }
 
     /**

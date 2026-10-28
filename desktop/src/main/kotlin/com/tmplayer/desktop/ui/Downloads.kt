@@ -388,6 +388,21 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
                 // own edge: up here they stood at the window's edge, far past a capped list.
             },
         )
+        // Download again on a row whose file went (HX21): the message as it is now, so a gone one
+        // says so and an unanswered one says Telegram could not be reached, rather than queueing a
+        // fetch of a stale id that fails a minute later. The row stays until the new file lands.
+        suspend fun downloadAgain(record: ResumeRecord) {
+            when (val lookup = Td.lookupMedia(record.chatId, record.messageId)) {
+                is com.tmplayer.data.MessageLookup.Found ->
+                    if (!lookup.item.canBeSaved) {
+                        toast(ContentProtection.NOT_SAVABLE)
+                    } else {
+                        OfflineDownloads.start(state.downloads, lookup.item, record.chatTitle)
+                    }
+                is com.tmplayer.data.MessageLookup.Gone -> toast(com.tmplayer.data.GoneVideos.openMessage(lookup.reason))
+                com.tmplayer.data.MessageLookup.Unreachable -> toast(s.errorsOffline)
+            }
+        }
         val keptRow: @Composable (ResumeRecord) -> Unit = { record ->
             KeptRow(
                 record = record,
@@ -421,6 +436,8 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
                 },
                 onRemove = { confirm = listOf(record) },
                 onSaveToFolder = { saveToFolder(listOf(record)) },
+                onDownloadAgain = { scope.launch { downloadAgain(record) } },
+                folderGone = remember(record) { DownloadIndex.folderGone(record) },
             )
         }
         BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -1042,6 +1059,10 @@ private fun KeptRow(
     onResume: () -> Unit,
     onRemove: () -> Unit,
     onSaveToFolder: () -> Unit,
+    /** Gone from the folder: fetched from Telegram again into the Downloads folder (HX21). */
+    onDownloadAgain: () -> Unit = {},
+    /** The folder is gone as well, as an unplugged drive looks ([DownloadIndex.folderGone]). */
+    folderGone: Boolean = false,
 ) {
     val s = LocalStrings.current
     val missing = fileState == DownloadIndex.FileState.Missing ||
@@ -1053,7 +1074,7 @@ private fun KeptRow(
         if (record.durationSec > 0) append("  ·  ").append(MediaMapper.formatDuration(record.durationSec))
         if (record.chatTitle.isNotBlank()) append("  ·  ").append(record.chatTitle)
         when {
-            missing -> append("  ·  ").append(s.downloadsFileMissing)
+            missing -> append("  ·  ").append(if (folderGone) s.downloadsFolderGone else s.downloadsFileMissing)
             partial -> append("  ·  ").append(s.downloadsPartDownloaded)
             fileState == DownloadIndex.FileState.Legacy && legacy == LocalFileAvailability.Complete -> append("  ·  ").append(s.downloadsMovingSoon)
         }
@@ -1062,7 +1083,10 @@ private fun KeptRow(
     val menu = buildList {
         if (!picked) add(RowMenuEntry(s.downloadsSelect, TmIcons.Checklist) { onPick(true) })
         when {
-            missing -> add(RowMenuEntry(s.commonRemove, TmIcons.Delete, danger = true, action = onRemove))
+            missing -> {
+                add(RowMenuEntry(s.downloadsDownloadAgain, TmIcons.Download, action = onDownloadAgain))
+                add(RowMenuEntry(s.commonRemove, TmIcons.Delete, danger = true, action = onRemove))
+            }
             partial -> add(RowMenuEntry(s.downloadsResume, TmIcons.Download, action = onResume))
             else -> {
                 add(RowMenuEntry(s.navWatch, TmIcons.Play, action = onPlay))
@@ -1096,7 +1120,10 @@ private fun KeptRow(
             detailColor = if (missing) Tone.danger else Tone.muted,
         ) { fileName?.let { FileNameLine(it) } }
         when {
-            missing -> TextButton(onClick = onRemove) { Text(s.commonRemove) }
+            missing -> {
+                TextButton(onClick = onDownloadAgain) { Text(s.downloadsDownloadAgain) }
+                TextButton(onClick = onRemove) { Text(s.commonRemove) }
+            }
             partial -> TextButton(onClick = onResume) { Text(s.downloadsResume) }
             else -> Unit
         }

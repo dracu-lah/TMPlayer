@@ -73,6 +73,8 @@ class DownloadsRenderTest {
         keep(24, "Coast walk at dawn, a long and slow video from the north shore 2160p", "Travel clips", 3_400)
         keep(25, "Lecture 7, sorting algorithms", "Old lectures", 420)
         settings.noteDownload(item(26, "Birthday at the lake", 640L * 1024 * 1024), "Family", folder.resolve("gone.mkv").absolutePath)
+        // On a drive that is not plugged in: the folder is gone with the file (HX21).
+        settings.noteDownload(item(27, "School concert", 520L * 1024 * 1024), "Family", dir.resolve("Unplugged/TMPlayer/concert.mkv").absolutePath)
         settings.rememberCachedVideo(item(31, "Night market walk 1080p", 900L * 1024 * 1024), "Travel clips")
         settings.rememberCachedVideo(item(32, "Lecture 8, graphs", 380L * 1024 * 1024), "Old lectures")
         OfflineDownloads.note(

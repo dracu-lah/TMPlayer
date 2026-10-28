@@ -85,6 +85,7 @@ object PageQueries {
     fun clear() {
         cache.clear()
         topics.value = emptyMap()
+        GoneVideos.clear()
         val disk = store ?: return
         Background.scope.launch { runCatching { disk.clear() } }
     }

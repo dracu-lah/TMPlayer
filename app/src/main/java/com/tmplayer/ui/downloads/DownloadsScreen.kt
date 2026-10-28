@@ -766,6 +766,28 @@ fun DownloadsScreen(
     }
 
     /** A row whose file is gone: there is nothing to confirm deleting, only a record to drop. */
+    /**
+     * Download again on a row whose file went (HX21): the message as Telegram has it now, through
+     * the same plan as any Download (room first, saving allowed). A message gone for good says so
+     * and keeps the row for Remove; no answer says Telegram could not be reached. The row stays
+     * until the new file lands, which writes the record again.
+     */
+    fun downloadAgain(row: DownloadRow) {
+        scope.launch {
+            when (val lookup = Td.lookupMedia(row.record.chatId, row.record.messageId)) {
+                is com.tmplayer.data.MessageLookup.Found -> {
+                    if (!lookup.item.canBeSaved) {
+                        toast(ContentProtection.NOT_SAVABLE)
+                        return@launch
+                    }
+                    com.tmplayer.ui.browse.queueDownloads(context, settings, listOf(lookup.item)) { row.chatTitle }?.let(toast)
+                }
+                is com.tmplayer.data.MessageLookup.Gone -> toast(com.tmplayer.data.GoneVideos.openMessage(lookup.reason))
+                com.tmplayer.data.MessageLookup.Unreachable -> toast(L.errorsOffline)
+            }
+        }
+    }
+
     fun removeMissing(row: DownloadRow, done: () -> Unit = {}) {
         scope.launch {
             withContext(Dispatchers.IO) { settings.forgetDownload(row.record.chatId, row.record.messageId) }
@@ -920,6 +942,7 @@ fun DownloadsScreen(
             // Watch, Share and Delete, and its heading's Save to folder says why it cannot.
             onSaveToFolder = if (canSaveToFolder) ({ saveToFolder(listOf(row)) }) else null,
             onSaveToGallery = if (canSaveToGallery) ({ saveToGallery(listOf(row)) }) else null,
+            onDownloadAgain = { downloadAgain(row) },
             onDelete = {
                 if (row.missing) {
                     val before = keptOrder
@@ -1856,6 +1879,8 @@ private fun DownloadCard(
     onSaveToFolder: (() -> Unit)? = null,
     /** Save to gallery, for a finished download; null where there is no gallery. */
     onSaveToGallery: (() -> Unit)? = null,
+    /** A download whose file went: fetched from Telegram again (HX21); null where not offered. */
+    onDownloadAgain: (() -> Unit)? = null,
 ) {
     val touch = isTouch()
     // The phone's card plays on a tap and keeps the rest behind More: a whole download only.
@@ -1996,7 +2021,10 @@ private fun DownloadCard(
             CardActions {
                 when {
                     // Something took the file. The record is all that is left to deal with.
-                    row.missing -> SecondaryAction(s.commonRemove, TmIcons.Delete, onDelete ?: {}, danger = true)
+                    row.missing -> {
+                        onDownloadAgain?.let { PrimaryAction(s.downloadsDownloadAgain, TmIcons.Download, it) }
+                        SecondaryAction(s.commonRemove, TmIcons.Delete, onDelete ?: {}, danger = true)
+                    }
                     row.cached -> {
                         // A phone's card plays on a tap; a television's needs the button.
                         if (!tapToPlay) PrimaryAction(s.navWatch, TmIcons.Play, onPlay)

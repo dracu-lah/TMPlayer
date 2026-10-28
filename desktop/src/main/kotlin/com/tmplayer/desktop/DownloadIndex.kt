@@ -54,6 +54,23 @@ object DownloadIndex {
         return FileState.Present
     }
 
+    /**
+     * Whether a missing download's folder is gone too ([com.tmplayer.data.DownloadPlace.FolderGone]):
+     * what an unplugged drive or a folder moved elsewhere looks like, said as such rather than as
+     * a file taken (HX21). False for a record with no path, or whose file is there.
+     */
+    fun folderGone(record: ResumeRecord, exists: (File) -> Boolean = File::exists): Boolean {
+        val file = File(record.localPath ?: return false)
+        if (exists(file)) return false
+        val folder = file.parentFile ?: return false
+        return com.tmplayer.data.StaleEntries.downloadPlace(
+            fileThere = false,
+            length = 0,
+            recordedSize = record.sizeBytes,
+            folderThere = exists(folder),
+        ) == com.tmplayer.data.DownloadPlace.FolderGone
+    }
+
     /** The file of the download for this message, if there is one and it is whole. */
     suspend fun fileFor(settings: SettingsStore, chatId: Long, messageId: Long): File? = withContext(Dispatchers.IO) {
         val record = runCatching { settings.downloadRecord(chatId, messageId) }.getOrNull() ?: return@withContext null

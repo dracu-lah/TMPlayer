@@ -1172,9 +1172,25 @@ object Td {
      */
     suspend fun refreshMedia(chatId: Long, messageId: Long): MediaItem? {
         val td = current ?: return null
-        val message = td.getMessage(chatId, messageId).valueOrNull ?: return null
-        val chatProtected = td.getChat(chatId).valueOrNull?.hasProtectedContent ?: false
-        return MediaMapper.fromMessage(message, chatProtected)
+        return (ChatRepository(td).lookupMedia(chatId, messageId) as? MessageLookup.Found)?.item
+    }
+
+    /**
+     * [refreshMedia] with the reason when there is no video: gone for good (reported to
+     * [GoneVideos]) or not answered within [timeoutMs], which a caller treats as "keep what is
+     * stored and carry on" (HX21). For a kept video being opened, where a wait without end would be
+     * a spinner without end.
+     */
+    suspend fun lookupMedia(chatId: Long, messageId: Long, timeoutMs: Long = LOOKUP_TIMEOUT_MS): MessageLookup {
+        val td = current ?: return MessageLookup.Unreachable
+        return try {
+            withTimeoutOrNull(timeoutMs) { ChatRepository(td).lookupMedia(chatId, messageId) } ?: MessageLookup.Unreachable
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            Logger.w(TAG, "Looking up $chatId/$messageId failed", failure)
+            MessageLookup.Unreachable
+        }
     }
 
     /**
@@ -1461,6 +1477,9 @@ object Td {
 
     /** Long enough for a slow stick on a cold morning, short enough not to read as a hang. */
     private const val CONNECT_TIMEOUT_MS = 30_000L
+
+    /** How long [lookupMedia] waits for Telegram before the caller carries on with what it stored. */
+    const val LOOKUP_TIMEOUT_MS = 6_000L
 
     /**
      * How long the sign in waits on Telegram before it says so and offers help. A first launch

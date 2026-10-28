@@ -322,6 +322,16 @@ private fun Browse(state: ShellState, player: PlayerContent) {
             )
         }
     }
+    // A kept video Telegram says is gone for good leaves Continue watching, Watched and Watch
+    // later, unless its download still plays, and the window says so (HX21), as on the phone.
+    LaunchedEffect(Unit) {
+        com.tmplayer.data.GoneVideos.follow(
+            settings = state.settings,
+            watched = state.watched,
+            keptOnDevice = { chatId, messageId -> com.tmplayer.desktop.DownloadIndex.fileFor(state.settings, chatId, messageId) != null },
+        ) { forgotten -> toast(com.tmplayer.data.GoneVideos.message(forgotten)) }
+    }
+    LaunchedEffect(Unit) { state.notices.collect { toast(it) } }
 
     // The offline pill, and the refresh once both the network and Telegram are back.
     val browseScope = rememberCoroutineScope()

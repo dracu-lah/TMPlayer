@@ -587,7 +587,9 @@ class DownloadService : Service() {
                             failure = if (waitingInstead != null) {
                                 null
                             } else {
-                                error?.let(Failures::humanise) ?: FAILED_TEXT
+                                // Gone from its chat (HX21): that, not TDLib's word for a file it lost.
+                                com.tmplayer.data.GoneVideos.failureText(request.chatId, request.messageId)
+                                    ?: error?.let(Failures::humanise) ?: FAILED_TEXT
                             },
                             bytesPerSecond = 0,
                         ),

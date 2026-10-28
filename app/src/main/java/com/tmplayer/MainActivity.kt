@@ -379,6 +379,17 @@ class MainActivity : ComponentActivity() {
         // lock leaves out opens the app instead of the video.
         lifecycleScope.launch {
             if (!com.tmplayer.data.KidsLock.allows(com.tmplayer.data.ChatGate.awaitReady(), video.chatId)) return@launch
+            // Known gone from Telegram this session (HX21) and not downloaded: the app says so
+            // rather than opening a player that can only fail. The row itself goes with the entry.
+            com.tmplayer.data.GoneVideos.reasonFor(video.chatId, video.messageId)?.let { reason ->
+                val downloaded = withContext(Dispatchers.IO) {
+                    runCatching { LocalDownloads.fileFor(SettingsStore(this@MainActivity), video.chatId, video.messageId) }.getOrNull()
+                } != null
+                if (!downloaded) {
+                    com.tmplayer.ui.components.showMessage(this@MainActivity, com.tmplayer.data.GoneVideos.openMessage(reason))
+                    return@launch
+                }
+            }
             startActivity(PlayerActivity.intent(this@MainActivity, video.toMediaItem(), video.chatTitle))
         }
     }
@@ -785,6 +796,18 @@ private fun Root() {
         }
     }
 
+    // A kept video Telegram says is gone for good (deleted, its chat closed to this account, the
+    // post edited into something else) leaves Continue watching, Watched and Watch later, unless
+    // a download of it still plays, and the viewer is told (HX21). The answers come from TDLib's
+    // deletes and from the lookups Home and History make anyway: nothing is checked at start.
+    LaunchedEffect(Unit) {
+        com.tmplayer.data.GoneVideos.follow(
+            settings = settings,
+            watched = watchedStore,
+            keptOnDevice = { chatId, messageId -> LocalDownloads.fileFor(settings, chatId, messageId) != null },
+        ) { forgotten -> withContext(Dispatchers.Main) { toast(com.tmplayer.data.GoneVideos.message(forgotten)) } }
+    }
+
     // Given the settings store so the chat list can paint from the last sync's snapshot before
     // TDLib has finished opening its database. Held by the process rather than the activity, as is
     // Home below: the system destroys this activity behind the player whenever it is short of
@@ -1095,15 +1118,25 @@ private fun Root() {
         // A stored row's file id may name another file in this session ([Td.fileIdFits]): the
         // message is asked for again, which gives the current id. A video in the Downloads
         // folder plays from its own file and never needs the id.
+        // A video this session already knows is gone from Telegram ([com.tmplayer.data.GoneVideos],
+        // HX21) and not downloaded says so instead of opening a player that can only fail.
+        var gone: com.tmplayer.data.GoneReason? = null
         val item = withContext(Dispatchers.Default) {
-            if (LocalDownloads.fileFor(settings, chosen.chatId, chosen.messageId) == null &&
+            val downloaded = LocalDownloads.fileFor(settings, chosen.chatId, chosen.messageId) != null
+            if (!downloaded) gone = com.tmplayer.data.GoneVideos.reasonFor(chosen.chatId, chosen.messageId)
+            if (!downloaded && gone == null &&
                 !runCatching { Td.fileIdFits(chosen.fileId, chosen.sizeBytes) }.getOrDefault(true)
             ) {
-                runCatching { Td.refreshMedia(chosen.chatId, chosen.messageId) }.getOrNull()
-                    ?.let { fresh -> chosen.copy(fileId = fresh.fileId, sizeBytes = fresh.sizeBytes) } ?: chosen
+                val fresh = runCatching { Td.refreshMedia(chosen.chatId, chosen.messageId) }.getOrNull()
+                if (fresh == null) gone = com.tmplayer.data.GoneVideos.reasonFor(chosen.chatId, chosen.messageId)
+                fresh?.let { chosen.copy(fileId = it.fileId, sizeBytes = it.sizeBytes) } ?: chosen
             } else {
                 chosen
             }
+        }
+        gone?.let { reason ->
+            toast(com.tmplayer.data.GoneVideos.openMessage(reason))
+            return
         }
         val chatTitle = if (item.chatId == requested.chatId) requestedChat else CopyHandoff.chatTitleOf(item) ?: requestedChat
         // Off the main thread for the whole of the decision. Everything between here and the plan
@@ -1302,9 +1335,14 @@ private fun Root() {
         // not a number this one can necessarily use. Asking Telegram for the message again
         // returns a current id and tells TDLib where the file came from, without which it
         // will not download it. The stored row is the fallback, and it is enough whenever the
-        // video is already on the device.
-        val fresh = Td.refreshMedia(stored.chatId, stored.messageId)
-        play(fresh ?: stored, chatTitle = chatTitle)
+        // video is already on the device. Gone for good (HX21): said here, and the lists let it
+        // go ([com.tmplayer.data.GoneVideos]); not answered in time: the stored row plays, and
+        // the player asks again itself, rather than the press spinning until Telegram answers.
+        when (val lookup = Td.lookupMedia(stored.chatId, stored.messageId)) {
+            is com.tmplayer.data.MessageLookup.Found -> play(lookup.item, chatTitle = chatTitle)
+            is com.tmplayer.data.MessageLookup.Gone -> toast(com.tmplayer.data.GoneVideos.openMessage(lookup.reason))
+            com.tmplayer.data.MessageLookup.Unreachable -> play(stored, chatTitle = chatTitle)
+        }
     }
 
     /**
