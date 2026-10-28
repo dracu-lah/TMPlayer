@@ -34,6 +34,8 @@ class VideoAspectTest {
         assertEquals(VideoAspect.override(VideoScale.Fit, sbs, 1920, 1080), VideoAspect.override(VideoScale.Crop, sbs, 1920, 1080))
         assertEquals(VideoAspect.override(VideoScale.Fit, sbs, 1920, 1080), VideoAspect.override(VideoScale.Stretch, sbs, 1920, 1080))
         assertEquals("1.333333", VideoAspect.override(VideoScale.Ratio4x3, sbs, 1920, 1080))
+        // In the VR view the shape is each eye's, as on Android: two 4:3 eyes side by side.
+        assertEquals("2.666667", VideoAspect.override(VideoScale.Ratio4x3, sbs.copy(view = Stereo3d.View.Vr), 1920, 1080))
     }
 
     @Test
@@ -64,7 +66,8 @@ class VideoAspectTest {
                 for (stereo in listOf(Stereo3d.OFF) + Stereo3d.View.entries.map { Stereo3d(layout).copy(view = it) }) {
                     val got = if (stereo.on) owner.stereo(stereo, size.first, size.second) else owner.stereoOff()
                     val want = when {
-                        scale.ratio != null -> String.format(java.util.Locale.ROOT, "%.6f", scale.ratio)
+                        // In VR a fixed shape is each eye's: the pair is twice as wide.
+                        scale.ratio != null -> String.format(java.util.Locale.ROOT, "%.6f", scale.ratio!! * if (stereo.on && stereo.view == Stereo3d.View.Vr) 2 else 1)
                         stereo.on -> String.format(java.util.Locale.ROOT, "%.6f", Stereo3d.aspect(size.first, size.second, stereo)!!)
                         else -> VideoAspect.NONE
                     }

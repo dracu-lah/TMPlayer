@@ -8,6 +8,7 @@ import com.tmplayer.player.VideoScale
  * (16:9, 4:3...) and 3D, whose shader keeps the frame's size and draws one eye (or the VR pair) at
  * that frame's shape. A fixed shape wins, else 3D's eye aspect, else "no", the file's own; so
  * turning 3D on or off never wipes a chosen ratio, and choosing Original gives 3D its shape back.
+ * In the VR view a fixed shape is each eye's, as on Android: the pair is two of them side by side.
  *
  * Fill and Stretch need nothing here: mpv's panscan and keepaspect act on the picture after this
  * aspect, so they crop or stretch a 3D eye as they would a flat frame.
@@ -22,7 +23,7 @@ internal object VideoAspect {
      * [height] frame (0 while it is not known yet, which leaves 3D's shape out until it is).
      */
     fun override(scale: VideoScale, stereo: Stereo3d, width: Int, height: Int): String {
-        scale.ratio?.let { return format(it) }
+        scale.ratio?.let { return format(if (stereo.on && stereo.view == Stereo3d.View.Vr) it * 2 else it) }
         return Stereo3d.aspect(width, height, stereo)?.let(::format) ?: NONE
     }
 
