@@ -286,7 +286,7 @@ for (const size of [
             await press(page, 'ArrowRight')
             expect(await onControl(page)).toContain('Picture shape')
             await press(page, 'Enter')
-            expect(await onControl(page)).toContain('Picture shape: Crop')
+            expect(await onControl(page)).toContain('Picture shape: Fill')
             await press(page, 'ArrowRight')
             expect(await onControl(page)).toBe('More')
             await press(page, 'Enter')
@@ -507,6 +507,13 @@ for (const size of [
             // The page's picture is drawn, never a blank dark area.
             await expect(page.locator('.tv-hero-art img')).toHaveCount(1)
             await expect(page.locator('.tv-hero-art.cover')).toHaveCount(0)
+        })
+
+        test('a chat whose cards take seconds to come still opens on its first card, not on Back', async ({ page, context }) => {
+            await fakeCase(context, 'slow')
+            await tv(page)
+            await page.goto('/chat/-1001')
+            await expect.poll(() => focused(page), { timeout: 15_000 }).toContain('card|/video/')
         })
 
         test('Sign in: the two-step password column is in the middle of the screen', async ({ page, context }) => {
