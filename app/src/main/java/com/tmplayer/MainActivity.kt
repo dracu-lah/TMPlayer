@@ -882,13 +882,15 @@ private fun Root() {
 
     // A sign in screen arms the setup that follows it (CP67, see Setup).
     LaunchedEffect(auth) {
-        // First a session Telegram ended (HX23): what was the account's goes as Sign out clears
-        // it, downloads kept, before the setup below is armed, since clearing takes that flag too.
+        // First a session Telegram ended (HX23): unlike Sign out, the viewer chose nothing, so
+        // what they watched, Watch later, bookmarks and preferences stay; only the old session's
+        // cache and cold start snapshot go ([forgetSession]).
         com.tmplayer.ui.connect.handleSessionEnd(auth, settings) {
-            com.tmplayer.ui.settings.forgetAccount(context, settings, watchedStore, deleteDownloads = false)
+            com.tmplayer.ui.settings.forgetSession(settings)
         }
         if (Setup.isSignInStep(auth)) {
-            runCatching { settings.armSetup() }
+            // The setup is for a new start: after an ended session the preferences are still there.
+            if (!com.tmplayer.data.Td.sessionEnded.value) runCatching { settings.armSetup() }
             // A sign in screen means the account is gone, however it went: signed out here, or
             // from Telegram's Devices list, which is the way back from a forgotten PIN. The lock
             // was that account's.

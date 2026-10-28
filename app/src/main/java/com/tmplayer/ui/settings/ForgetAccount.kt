@@ -14,7 +14,7 @@ import kotlinx.coroutines.withContext
  * Everything this app knows about the account that is leaving goes: the cache and every
  * preference. TDLib clears its own database as it logs out. The downloads are files in their own
  * folder and stay, with their records, unless [deleteDownloads]: they are the viewer's, not the
- * account's. Sign out runs it, and so does a session Telegram ended (HX23), which keeps them.
+ * account's. Sign out runs it; a session Telegram ended runs [forgetSession] instead.
  */
 suspend fun forgetAccount(context: Context, settings: SettingsStore, watchedStore: WatchedStore, deleteDownloads: Boolean) {
     runCatching { Td.clearMediaCache() }
@@ -33,4 +33,14 @@ suspend fun forgetAccount(context: Context, settings: SettingsStore, watchedStor
     runCatching { watchedStore.watchLater.clear() }
     // The bookmarks go with it, for the same reason.
     runCatching { BookmarkStore(context).clear() }
+}
+
+/**
+ * A session Telegram ended (HX23): the viewer chose nothing, so their watched list, Watch later,
+ * bookmarks and preferences stay for when they sign in again (user, 2026-10-28). Only what was
+ * the old session's own goes: TDLib's media cache, and the cold start snapshot of its chats.
+ */
+suspend fun forgetSession(settings: SettingsStore) {
+    runCatching { Td.clearMediaCache() }
+    runCatching { settings.clearColdStartSnapshots() }
 }

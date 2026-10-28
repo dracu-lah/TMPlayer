@@ -147,16 +147,19 @@ fun DesktopShell(
                 val signedIn = shownAuth == AuthState.Ready
                 // A sign in screen arms the setup that follows it (CP67, see Setup).
                 LaunchedEffect(auth) {
-                    // First a session Telegram ended (HX23): what was the account's goes as Sign
-                    // out clears it, downloads kept, before the setup below is armed.
+                    // First a session Telegram ended (HX23): unlike Sign out, the viewer chose
+                    // nothing, so watched, Watch later, bookmarks and preferences stay; only the
+                    // old session's cache and cold start snapshot go.
                     com.tmplayer.ui.connect.handleSessionEnd(auth, state.settings) {
                         // The video the old session was playing goes with it, not back on screen
                         // after the next sign in.
                         state.closePlayer()
-                        signOut(state.settings, deleteDownloads = false, watched = state.watched, bookmarks = state.bookmarks)
+                        runCatching { Td.clearMediaCache() }
+                        runCatching { state.settings.clearColdStartSnapshots() }
                     }
                     if (Setup.isSignInStep(auth)) {
-                        runCatching { state.settings.armSetup() }
+                        // The setup is for a new start: after an ended session the preferences stay.
+                        if (!Td.sessionEnded.value) runCatching { state.settings.armSetup() }
                         // The account is gone, however it went (signed out from Telegram's
                         // Devices list is the way back from a forgotten PIN): so is its lock.
                         runCatching { state.settings.clearAppLock() }

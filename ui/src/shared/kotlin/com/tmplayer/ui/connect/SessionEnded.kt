@@ -39,8 +39,8 @@ import kotlinx.coroutines.withContext
  *
  * Signed in, the device is marked as having an account ([SettingsStore.markSignedIn]). On a sign
  * in screen, an account still marked, or a logout Telegram started while the app ran
- * ([Td.sessionEnded]), means the session ended elsewhere: what belonged to it goes as Sign out
- * clears it ([forget], the platform's own, downloads kept), and the sign in screens say why
+ * ([Td.sessionEnded]), means the session ended elsewhere: the old session's cache and snapshots
+ * go ([forget], the platform's own; the viewer's history and preferences stay), and the sign in screens say why
  * ([SessionEndedNote]). A Sign out clears the mark first, so it is never taken for this.
  */
 suspend fun handleSessionEnd(auth: AuthState, settings: SettingsStore, forget: suspend () -> Unit) {
@@ -58,7 +58,7 @@ suspend fun handleSessionEnd(auth: AuthState, settings: SettingsStore, forget: s
             val marked = runCatching { settings.wasSignedIn() }.getOrDefault(false)
             if (!SessionCheck.endedElsewhere(signInStep, marked) && !Td.sessionEnded.value) return@withLock
             if (!marked && cleared) return@withLock
-            Logger.i("SessionEnd", "the session ended elsewhere; clearing what was the account's")
+            Logger.i("SessionEnd", "the session ended elsewhere; clearing its cache, keeping the viewer's history")
             Td.markSessionEnded()
             runCatching { forget() }.onFailure { Logger.w("SessionEnd", "clearing the ended session failed", it) }
             runCatching { settings.forgetSignedIn() }

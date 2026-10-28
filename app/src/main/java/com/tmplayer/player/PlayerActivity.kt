@@ -5370,6 +5370,28 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         }
 
         when (event.keyCode) {
+            // A remote's own Aspect (zoom) key steps the picture shape, as the row's button does,
+            // with nothing to reach first (HX16). Not for sound alone.
+            KeyEvent.KEYCODE_TV_ZOOM_MODE -> {
+                if (event.repeatCount == 0 && !isAudio) applyScale(videoScale.next())
+                return true
+            }
+            // A remote's 3D key steps 3D: off, one eye, both eyes for a headset or a 3D TV, red and
+            // cyan glasses, off again. The layout is the one in force, else the file's name's, else
+            // side by side (HX16).
+            KeyEvent.KEYCODE_3D_MODE -> {
+                if (event.repeatCount == 0 && stereoOffered()) {
+                    val layout = stereo.layout.takeIf { stereo.on } ?: stereoTagged ?: Stereo3d.Layout.SideBySide
+                    val next = when {
+                        !stereo.on -> Stereo3d(layout, Stereo3d.View.OneEye, stereo.swapEyes)
+                        stereo.view == Stereo3d.View.OneEye -> stereo.copy(view = Stereo3d.View.Vr)
+                        stereo.view == Stereo3d.View.Vr -> stereo.copy(view = Stereo3d.View.RedCyan)
+                        else -> Stereo3d.OFF.copy(view = stereo.view, swapEyes = stereo.swapEyes)
+                    }
+                    applyStereo(next)?.let { why -> showGestureFeedback(why) }
+                }
+                return true
+            }
             // Every key that changes playback shows that it did: the jumps their side figure, play
             // and pause the centre disc or glyph. With no buttons for them on a television's row,
             // the cue is the only sign the press landed.
