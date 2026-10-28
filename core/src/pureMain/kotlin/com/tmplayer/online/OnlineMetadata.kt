@@ -584,6 +584,18 @@ class OnlineMetadata(
         return withScores(extrasKey(info, tmdbLanguage(), region()), info, found)
     }
 
+    /**
+     * [item]'s TMDB and IMDb ids, for a subtitle search that takes them (MSone): the match the
+     * details found, and the IMDb id from its extras (kept like a detail page's). Nulls when the
+     * details are off or found nothing; never throws.
+     */
+    suspend fun idsFor(item: MediaItem): VideoIds = runCatching {
+        val query = item.metaQuery ?: return VideoIds()
+        val info = (lookup(query) as? MetaResult.Found)?.info ?: return VideoIds()
+        val imdb = providerExtras(info)?.imdbId?.trim()?.lowercase()?.takeIf { IMDB_ID.matches(it) }
+        VideoIds(tmdb = info.id.takeIf { info.provider == MetaProvider.Tmdb && it.all(Char::isDigit) }, imdb = imdb)
+    }.getOrDefault(VideoIds())
+
     /** The provider's extras alone, from memory, the disk cache or the provider. */
     private suspend fun providerExtras(info: MetaInfo): MetaExtras? {
         if (!store.now.enabled) return null
@@ -1073,3 +1085,8 @@ internal fun hostOf(url: String): String? {
     val authority = rest.substringBefore('/').substringBefore('?').substringBefore('#').substringAfterLast('@')
     return authority.substringBefore(':').lowercase().takeIf { it.isNotEmpty() }
 }
+
+/** A video's ids on TMDB and IMDb, either unknown. */
+data class VideoIds(val tmdb: String? = null, val imdb: String? = null)
+
+private val IMDB_ID = Regex("""tt\d{5,10}""")

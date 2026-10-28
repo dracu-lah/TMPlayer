@@ -24,6 +24,8 @@ data class SubtitleTarget(
     val languages: List<String> = listOf("en"),
     /** The video's IMDb id when the online details found one, which MSone searches by first. */
     val imdb: String? = null,
+    /** Its TMDB id, which MSone's gateway turns into the IMDb id when that is not known here. */
+    val tmdb: String? = null,
 )
 
 /** One subtitle a provider offers. [id] is OpenSubtitles' file id, or SubDL's download path. */
@@ -47,8 +49,6 @@ data class SubtitleHit(
     val featureSeason: Int? = null,
     val featureEpisode: Int? = null,
     val featureYear: Int? = null,
-    /** MSone: a zip of a season's episodes rather than one subtitle. */
-    val pack: Boolean = false,
     /** MSone: who translated it, and their page (https only, blank when none). */
     val translator: String = "",
     val translatorUrl: String = "",
@@ -72,7 +72,6 @@ data class SubtitleHit(
             featureSeason?.let { put("feature_season", it) }
             featureEpisode?.let { put("feature_episode", it) }
             featureYear?.let { put("feature_year", it) }
-            if (pack) put("pack", true)
             if (translator.isNotEmpty()) put("translator", translator)
             if (translatorUrl.isNotEmpty()) put("translator_url", translatorUrl)
             if (pageUrl.isNotEmpty()) put("page", pageUrl)
@@ -95,7 +94,6 @@ data class SubtitleHit(
                 featureSeason = o.optInt("feature_season", 0).takeIf { it > 0 },
                 featureEpisode = o.optInt("feature_episode", 0).takeIf { it > 0 },
                 featureYear = o.optInt("feature_year", 0).takeIf { it > 0 },
-                pack = o.optBoolean("pack"),
                 translator = o.optString("translator"),
                 translatorUrl = MsoneApi.https(o.optString("translator_url")).orEmpty(),
                 pageUrl = MsoneApi.https(o.optString("page")).orEmpty(),
@@ -154,6 +152,9 @@ sealed interface SubtitleNotice {
      * not checked yet ([MsoneState]). [message] is the gateway's own text, shown as is under ours.
      */
     data class MsoneOff(val state: MsoneState, val message: String? = null) : SubtitleNotice
+
+    /** MSone no longer offers the file behind a hit (an expired link, a removed file): search again. */
+    data object MsoneGone : SubtitleNotice
 
     /** MSone's gateway asked for a minute's rest. */
     data object MsoneBusy : SubtitleNotice

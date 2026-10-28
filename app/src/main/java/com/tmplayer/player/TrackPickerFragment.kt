@@ -259,11 +259,11 @@ class TrackPickerFragment : Fragment() {
     }
 
     /**
-     * MSone's search, only on a device where it was switched on by hand (`msone` as the SubDL
-     * key) while MSone is being set up. It needs no OpenSubtitles key.
+     * MSone's search, in a build with the gateway key and unless hidden on this device (`msone`
+     * as the SubDL key). It needs no OpenSubtitles key.
      */
     private fun msoneLine(onMsone: () -> Unit): Line? {
-        if (OnlineSubtitles.current?.store?.now?.msoneShown != true) return null
+        if (OnlineSubtitles.current?.msoneShown != true) return null
         return Line("msone", L.msoneSearch, L.msoneSearchDetail, icon = TmIcons.Search, group = Group.Online, onClick = onMsone)
     }
 

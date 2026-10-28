@@ -137,6 +137,13 @@ android {
             ?: System.getenv("OPENSUBTITLES_API_KEY")
             ?: ""
         buildConfigField("String", "OPENSUBTITLES_API_KEY", "\"$openSubtitlesKey\"")
+        // The key for TMPlayer's subtitle gateway (subs.tmplayer.org), which finds MSone's Malayalam
+        // subtitles. Optional: a build without it does not offer MSone. Set MSONE_GATEWAY_KEY in
+        // local.properties or the environment; CI takes it from the repository secret.
+        val msoneKey = localProps.getProperty("MSONE_GATEWAY_KEY")
+            ?: System.getenv("MSONE_GATEWAY_KEY")
+            ?: ""
+        buildConfigField("String", "MSONE_GATEWAY_KEY", "\"$msoneKey\"")
         // The TMDB key for posters and overviews. Optional: a build without it still finds shows on
         // TVmaze and anime on AniList, and Settings asks for a key of the viewer's own for films.
         // Set TMDB_API_KEY in local.properties or the environment; CI takes it from the secret.

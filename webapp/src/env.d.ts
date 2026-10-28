@@ -1,5 +1,7 @@
 declare const __TG_API_ID__: number
 declare const __TG_API_HASH__: string
+/** The key for TMPlayer's subtitle gateway; empty and MSone is not offered. */
+declare const __MSONE_GATEWAY_KEY__: string
 
 interface Window {
     ManagedMediaSource?: typeof MediaSource

@@ -123,6 +123,7 @@ fun main(argv: Array<String>) {
     // Online subtitles with this build's key, its account kept with the harness's settings.
     com.tmplayer.online.OnlineSubtitles.current = com.tmplayer.online.OnlineSubtitles(
         apiKey = com.tmplayer.desktop.BuildInfo.OPENSUBTITLES_API_KEY,
+        msoneKey = com.tmplayer.desktop.BuildInfo.MSONE_GATEWAY_KEY,
         store = com.tmplayer.online.OnlineSubtitlesStore(File(settingsDir, "online-subtitles.properties")),
         cache = com.tmplayer.online.SubtitleCache(File(settingsDir, "online-subtitles")),
         appVersion = com.tmplayer.desktop.BuildInfo.VERSION,

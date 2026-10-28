@@ -85,6 +85,8 @@ jobs:
         env:
           TG_API_ID: ${{ secrets.TG_API_ID }}
           TG_API_HASH: ${{ secrets.TG_API_HASH }}
+          # The web's own gateway key, so it can be revoked apart from the apps'.
+          MSONE_GATEWAY_KEY: ${{ secrets.MSONE_GATEWAY_KEY_WEB }}
         run: |
           pnpm -C webapp exec vite build
           test -s webapp/dist/licenses.txt

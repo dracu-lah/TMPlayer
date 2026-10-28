@@ -67,6 +67,9 @@ val generateBuildInfo = tasks.register("generateBuildInfo") {
     inputs.property("apiId", apiId)
     inputs.property("apiHash", apiHash)
     inputs.property("openSubtitlesKey", openSubtitlesKey)
+    // Optional: without it the desktop does not offer MSone's subtitles, as on Android.
+    val msoneKey = localProps.getProperty("MSONE_GATEWAY_KEY") ?: System.getenv("MSONE_GATEWAY_KEY") ?: ""
+    inputs.property("msoneKey", msoneKey)
     // Optional: without it films get no posters, as on Android; shows still come from TVmaze.
     val tmdbKey = localProps.getProperty("TMDB_API_KEY") ?: System.getenv("TMDB_API_KEY") ?: ""
     inputs.property("tmdbKey", tmdbKey)
@@ -96,6 +99,7 @@ val generateBuildInfo = tasks.register("generateBuildInfo") {
             |    const val TG_API_ID = $apiId
             |    const val TG_API_HASH = "$apiHash"
             |    const val OPENSUBTITLES_API_KEY = "$openSubtitlesKey"
+            |    const val MSONE_GATEWAY_KEY = "$msoneKey"
             |    const val TMDB_API_KEY = "$tmdbKey"
             |    const val OMDB_API_KEY = "$omdbKey"
             |    const val SENTRY_DSN = "$sentryDsn"

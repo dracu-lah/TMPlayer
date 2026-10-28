@@ -41,6 +41,12 @@ class SubtitleCache(
         return SubtitleHit.listFromJson(json.optJSONArray("hits") ?: JSONArray())
     }
 
+    /** Forgets one kept search, so the next one asks the service again. */
+    @Synchronized
+    fun removeSearch(key: String) {
+        File(searches, name(key) + ".json").delete()
+    }
+
     @Synchronized
     fun putSearch(key: String, hits: List<SubtitleHit>) {
         searches.mkdirs()

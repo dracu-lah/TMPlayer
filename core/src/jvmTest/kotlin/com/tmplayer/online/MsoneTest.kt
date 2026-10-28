@@ -7,11 +7,8 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.file.Files
-import java.util.zip.ZipEntry
-import java.util.zip.ZipOutputStream
 
 /**
  * MSone through TMPlayer's gateway, against a fake HTTP layer: the state check and what each
@@ -46,7 +43,7 @@ class MsoneTest {
     private val http = FakeHttp()
     private val store = OnlineSubtitlesStore(File(dir, "online.properties"))
     private val cache = SubtitleCache(File(dir, "cache"), now = { clock })
-    private val online = OnlineSubtitles("k", store, cache, "1.0.0", http, now = { clock }, sleep = { clock += it })
+    private val online = OnlineSubtitles("k", store, cache, "1.0.0", http, now = { clock }, sleep = { clock += it }, msoneKey = "gateway-key")
 
     private fun json(code: Int, body: String, headers: Map<String, String> = emptyMap()) =
         HttpResponse(code, headers, body.toByteArray())
@@ -56,7 +53,7 @@ class MsoneTest {
 
     private val searchAnswer = """
         {"hits":[
-          {"id":"100","title":"Night Sky","year":2022,"kind":"pack","season":1,"episode":null,
+          {"id":"100","title":"Night Sky","year":2022,"season":1,"episode":null,
            "translator":{"name":"Anu","url":"https://example.org/anu"},
            "downloadUrl":"https://malayalamsubtitles.org/download/100","pageUrl":"https://malayalamsubtitles.org/night-sky","credit":"Subtitles by MSone"},
           {"id":"101","title":"Night Sky","year":2022,"kind":"single","season":1,"episode":2,
@@ -76,12 +73,6 @@ class MsoneTest {
     }
 
     private fun srt(text: String) = "1\n00:00:01,000 --> 00:00:02,000\n$text\n".toByteArray()
-
-    private fun zip(vararg entries: Pair<String, ByteArray>): ByteArray {
-        val out = ByteArrayOutputStream()
-        ZipOutputStream(out).use { z -> entries.forEach { (name, data) -> z.putNextEntry(ZipEntry(name)); z.write(data); z.closeEntry() } }
-        return out.toByteArray()
-    }
 
     // ---- state -----------------------------------------------------------------------------
 
@@ -153,12 +144,11 @@ class MsoneTest {
         assertEquals("", single.translatorUrl)
         assertEquals("", single.pageUrl)
         assertEquals("https://elsewhere.example/101.srt", single.link)
-        val pack = result.hits[1]
-        assertTrue(pack.pack)
-        assertEquals("Anu", pack.translator)
-        assertEquals("https://example.org/anu", pack.translatorUrl)
-        assertEquals(1, pack.featureSeason)
-        assertNull(pack.featureEpisode)
+        val credited = result.hits[1]
+        assertEquals("Anu", credited.translator)
+        assertEquals("https://example.org/anu", credited.translatorUrl)
+        assertEquals(1, credited.featureSeason)
+        assertNull(credited.featureEpisode)
         val asked = http.requests.last { "/msone/search" in it.url }.url
         assertTrue(asked, "q=Night+Sky" in asked && "season=1" in asked && "episode=2" in asked)
 
@@ -217,7 +207,7 @@ class MsoneTest {
     fun `stopped mid search turns the state and deletes kept MSone files`() = runBlocking {
         turnOn()
         http.on("/msone/search", json(200, searchAnswer))
-        val hit = online.searchMsone(episode).hits.first { !it.pack }
+        val hit = online.searchMsone(episode).hits.first { it.id == "101" }
         http.on("/msone/download/101", HttpResponse(200, body = srt("Hello")))
         assertTrue(online.download(hit, episode) is DownloadResult.Done)
         cache.putFile(SubtitleProvider.OpenSubtitles, "os-1", SubtitleText.Text("srt", "1\n00:00:01,000 --> 00:00:02,000\nx\n"))
@@ -237,7 +227,7 @@ class MsoneTest {
         http.on("/msone/search", json(200, searchAnswer))
         val hits = online.searchMsone(episode).hits
         http.on("/msone/download/101", HttpResponse(200, body = srt("Hello")))
-        assertTrue(online.download(hits.first { !it.pack }, episode) is DownloadResult.Done)
+        assertTrue(online.download(hits.first { it.id == "101" }, episode) is DownloadResult.Done)
 
         clock += OnlineSubtitles.MSONE_CHECK_MS
         http.on("/health", health("paused", "Taking a break"))
@@ -245,7 +235,7 @@ class MsoneTest {
         assertEquals(SubtitleNotice.MsoneOff(MsoneState.Paused, "Taking a break"), result.notice)
         assertEquals(listOf("101"), result.hits.map { it.id })
         assertNull("a kept file is not blocked", online.blockedFor(result.hits.single()))
-        assertNotNull("a file not kept is", online.blockedFor(hits.first { it.pack }))
+        assertNotNull("a file not kept is", online.blockedFor(hits.first { it.id == "100" }))
         val again = online.download(result.hits.single(), episode)
         assertTrue(again is DownloadResult.Done && again.fromCache)
     }
@@ -257,45 +247,22 @@ class MsoneTest {
         turnOn()
         http.on("/msone/search", json(200, searchAnswer))
         val hits = online.searchMsone(episode).hits
-        http.on("malayalamsubtitles.org/download/100", HttpResponse(200, body = zip("Night.Sky.S01E01.srt" to srt("one"), "Night.Sky.S01E02.srt" to srt("two"))))
-        val pack = online.download(hits.first { it.pack }, episode)
-        assertTrue(pack is DownloadResult.Done)
-        assertTrue("the video's episode out of the pack", (pack as DownloadResult.Done).file.readText().contains("two"))
-        assertEquals("Malayalam · MSone", pack.label)
+        http.on("malayalamsubtitles.org/download/100", HttpResponse(200, body = srt("two")))
+        val direct = online.download(hits.first { it.id == "100" }, episode)
+        assertTrue(direct is DownloadResult.Done)
+        assertTrue((direct as DownloadResult.Done).file.readText().contains("two"))
+        assertEquals("Malayalam · MSone", direct.label)
 
         http.on("/msone/download/101", HttpResponse(200, body = srt("single")))
-        assertTrue(online.download(hits.first { !it.pack }, episode) is DownloadResult.Done)
+        assertTrue(online.download(hits.first { it.id == "101" }, episode) is DownloadResult.Done)
         assertEquals("the untrusted host is never asked", 0, http.count("elsewhere.example"))
-    }
-
-    @Test
-    fun `each episode of one pack is kept apart`() = runBlocking {
-        turnOn()
-        http.on("/msone/search", json(200, searchAnswer))
-        val pack = online.searchMsone(episode).hits.first { it.pack }
-        val body = zip("Night.Sky.S01E01.srt" to srt("one"), "Night.Sky.S01E02.srt" to srt("two"))
-        http.on("malayalamsubtitles.org/download/100", HttpResponse(200, body = body), HttpResponse(200, body = body))
-        val two = online.download(pack, episode) as DownloadResult.Done
-        val one = online.download(pack, episode.copy(fileName = "Night.Sky.S01E01.mkv")) as DownloadResult.Done
-        assertTrue(two.file.readText().contains("two"))
-        assertTrue(one.file.readText().contains("one"))
-        assertTrue((online.download(pack, episode) as DownloadResult.Done).fromCache)
-    }
-
-    @Test
-    fun `a pack without this episode gives nothing rather than another episode`() = runBlocking {
-        turnOn()
-        http.on("/msone/search", json(200, searchAnswer))
-        val pack = online.searchMsone(episode).hits.first { it.pack }
-        http.on("malayalamsubtitles.org/download/100", HttpResponse(200, body = zip("Night.Sky.S01E01.srt" to srt("one"), "Night.Sky.S01E03.srt" to srt("three"))))
-        assertEquals(DownloadResult.Failed(SubtitleNotice.Unreadable), online.download(pack, episode))
     }
 
     @Test
     fun `an oversized or unreadable file fails with a line, not an exception`() = runBlocking {
         turnOn()
         http.on("/msone/search", json(200, searchAnswer))
-        val single = online.searchMsone(episode).hits.first { !it.pack }
+        val single = online.searchMsone(episode).hits.first { it.id == "101" }
         http.on(
             "/msone/download/101",
             HttpResponse(200, body = ByteArray(SubtitleText.MAX_BYTES + 1)),
@@ -311,16 +278,94 @@ class MsoneTest {
     // ---- the hidden switch -----------------------------------------------------------------
 
     @Test
-    fun `msone typed as the SubDL key shows and hides MSone and keeps the key`() {
+    fun `msone typed as the SubDL key hides and shows MSone and keeps the key`() {
         online.setSubdlKey("real-key")
-        assertFalse(store.now.msoneShown)
-        assertEquals(true, online.setSubdlKey(" MSone "))
-        assertTrue(store.now.msoneShown)
+        assertTrue("shown by default in a build with the key", online.msoneShown)
+        assertEquals(false, online.setSubdlKey(" MSone "))
+        assertFalse(online.msoneShown)
         assertEquals("real-key", store.now.subdlKey)
-        assertEquals(false, online.setSubdlKey("msone"))
-        assertFalse(store.now.msoneShown)
+        // Hidden survives a restart.
+        assertFalse(OnlineSubtitlesStore(File(dir, "online.properties")).now.msoneShown)
+        assertEquals(true, online.setSubdlKey("msone"))
+        assertTrue(online.msoneShown)
         assertNull(online.setSubdlKey("other"))
         assertEquals("other", store.now.subdlKey)
+    }
+
+    @Test
+    fun `a build without the gateway key never offers MSone`() {
+        val bare = OnlineSubtitles("k", store, cache, "1.0.0", http, now = { clock }, sleep = { clock += it })
+        assertFalse(bare.msoneInBuild)
+        assertFalse(bare.msoneShown)
+    }
+
+    @Test
+    fun `the key goes to the gateway, never to MSone's own links`() = runBlocking {
+        turnOn()
+        http.on("/msone/search", json(200, searchAnswer))
+        val hits = online.searchMsone(episode).hits
+        assertEquals("gateway-key", http.requests.last().headers["X-Api-Key"])
+        assertNull("health needs no key", http.requests.first { "/health" in it.url }.headers["X-Api-Key"])
+        http.on("malayalamsubtitles.org/download/100", HttpResponse(200, body = srt("two")))
+        online.download(hits.first { it.id == "100" }, episode)
+        assertNull(http.requests.last().headers["X-Api-Key"])
+        http.on("/msone/download/101", HttpResponse(200, body = srt("single")))
+        online.download(hits.first { it.id == "101" }, episode)
+        assertEquals("gateway-key", http.requests.last().headers["X-Api-Key"])
+    }
+
+    @Test
+    fun `a TMDB id is sent with the title beside it`() = runBlocking {
+        turnOn()
+        http.on("/msone/search", json(200, """{"hits":[]}"""))
+        online.searchMsone(episode.copy(tmdb = "1396"))
+        val asked = http.requests.last().url
+        assertTrue(asked, "tmdb=1396" in asked && "q=Night" in asked && "season=1" in asked)
+        http.on("/msone/search", json(200, """{"hits":[]}"""))
+        online.searchMsone(episode.copy(imdb = "tt0903747", tmdb = "1396"))
+        assertTrue("an IMDb id wins", "tmdb=" !in http.requests.last().url)
+    }
+
+    @Test
+    fun `the gateway's long ids and file names are kept`() = runBlocking {
+        turnOn()
+        val id = "aHR0cHM6Ly9hZGRvbi5tYWxheWFsYW1zdWJ0aXRsZXMub3JnL3N1YmZpbGVz" + "x".repeat(300)
+        val link = "https://addon.malayalamsubtitles.org/subfiles/tt1/s1/Night.Sky.s01e02.srt?e=2&sig=abc"
+        http.on("/msone/search", json(200, """{"hits":[{"id":"$id","title":"Night.Sky.s01e02","kind":"single","season":1,"episode":2,
+            "fileName":"Night.Sky.s01e02.srt","downloadUrl":"$link"}]}"""))
+        val hit = online.searchMsone(episode).hits.single()
+        assertEquals(id, hit.id)
+        assertEquals("Night.Sky.s01e02.srt", hit.fileName)
+        http.on("subfiles/tt1", HttpResponse(200, body = srt("രണ്ട്")))
+        val done = online.download(hit, episode)
+        assertTrue(done.toString(), done is DownloadResult.Done)
+        assertEquals("one MSone download for the episode", 1, http.count("subfiles/tt1"))
+        // Picked again: from the device, MSone is not asked (or counted) twice.
+        online.download(hit, episode)
+        assertEquals(1, http.count("subfiles/tt1"))
+    }
+
+    @Test
+    fun `an expired MSone link says search again and forgets the kept search`() = runBlocking {
+        turnOn()
+        http.on("/msone/search", json(200, searchAnswer))
+        val hits = online.searchMsone(episode).hits
+        http.on("malayalamsubtitles.org/download/100", json(403, "Forbidden"))
+        val failed = online.download(hits.first { it.id == "100" }, episode)
+        assertEquals(DownloadResult.Failed(SubtitleNotice.MsoneGone), failed)
+        assertEquals("not an outage", MsoneState.On, store.now.msoneState)
+        http.on("/msone/search", json(200, searchAnswer))
+        online.searchMsone(episode)
+        assertEquals("asked afresh", 2, http.count("/msone/search"))
+    }
+
+    @Test
+    fun `a refused key reads as off without changing the kept state`() = runBlocking {
+        turnOn()
+        http.on("/msone/search", json(401, """{"error":"unauthorized","message":"A valid API key is needed."}"""))
+        val result = online.searchMsone(episode)
+        assertEquals(SubtitleNotice.MsoneOff(MsoneState.Off), result.notice)
+        assertEquals(MsoneState.On, store.now.msoneState)
     }
 
     @Test

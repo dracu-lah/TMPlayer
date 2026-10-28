@@ -1,24 +1,25 @@
-// MSone search stays hidden until it is ready (plan CP33): `?msone=1` in the address turns it on
-// for this device and `?msone=0` off, with a toast when that changes it. Without it nothing about MSone
-// shows anywhere: not the player's subtitle menu, not Settings. Also the words for its states,
-// shared by the player's sheet and Settings.
+// MSone search is shown in a build with the gateway key: `?msone=0` in the address hides it on this
+// device and `?msone=1` brings it back, with a toast when that changes it. Hidden, or in a build
+// without the key, nothing about MSone shows anywhere: not the player's subtitle menu, not
+// Settings. Also the words for its states, shared by the player's sheet and Settings.
 import { createSignal } from 'solid-js'
 import { showToast } from './ui/Toast'
 import { t } from './i18n'
-import type { State } from './player/msone'
+import { GATEWAY_KEY, type State } from './player/msone'
 
 const KEY = 'tmplayer-msone'
 
 function stored(): boolean {
     try {
-        return localStorage.getItem(KEY) === '1'
+        return localStorage.getItem(KEY) !== '0'
     } catch {
-        return false
+        return true
     }
 }
 
-const [msoneOn, setMsoneOn] = createSignal(stored())
-export { msoneOn }
+const [shown, setMsoneOn] = createSignal(stored())
+/** Whether MSone is offered: a build with the key, and not hidden on this device. */
+export const msoneOn = () => GATEWAY_KEY !== '' && shown()
 
 /** Reads and drops `?msone=` from the address, before the router starts. Without storage it holds for this page only. */
 export function takeMsoneParam() {
@@ -33,10 +34,10 @@ export function takeMsoneParam() {
     const on = asked === '1'
     // Said only when it changes: the TV app opens every launch with `?msone=1`, and a toast on
     // Home each time over a setting that was already on reads as noise.
-    const changed = on !== msoneOn()
+    const changed = on !== shown()
     try {
-        if (on) localStorage.setItem(KEY, '1')
-        else localStorage.removeItem(KEY)
+        if (on) localStorage.removeItem(KEY)
+        else localStorage.setItem(KEY, '0')
     } catch {}
     setMsoneOn(on)
     url.searchParams.delete('msone')

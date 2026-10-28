@@ -128,15 +128,15 @@ internal fun OnlineSubtitlesGroup() {
 }
 
 /**
- * MSone's state at the gateway, on a device where its search was switched on by hand (`msone`
- * typed as the SubDL key): the picker's line, the gateway's own words after it, and Check again.
+ * MSone's state at the gateway, in a build with the gateway key and unless hidden on this device
+ * (`msone` typed as the SubDL key): the picker's line, the gateway's own words after it, and Check again.
  */
 @Composable
 private fun MsoneSetting() {
     val s = LocalStrings.current
     val online = OnlineSubtitles.current ?: return
     val account by online.account.collectAsState()
-    if (!account.msoneShown) return
+    if (!online.msoneInBuild || !account.msoneShown) return
     val scope = rememberCoroutineScope()
     val toast = rememberToast()
     var checking by remember { mutableStateOf(false) }

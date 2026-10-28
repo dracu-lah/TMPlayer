@@ -24,6 +24,7 @@ object OnlineWords {
         is SubtitleNotice.MsoneOff -> msoneState(notice.state)
         SubtitleNotice.MsoneBusy -> L.msoneBusy
         SubtitleNotice.MsoneTooShort -> L.msoneTooShort
+        SubtitleNotice.MsoneGone -> L.msoneGone
     }
 
     /** The gateway's own words under ours, shown as is, or null. */
@@ -72,7 +73,6 @@ object OnlineWords {
         add(OnlineSubtitles.languageName(hit.language))
         if (hit.provider == SubtitleProvider.Msone) {
             hit.featureYear?.let { add(it.toString()) }
-            if (hit.pack) add(L.msonePack)
             if (hit.translator.isNotEmpty()) add(L.msoneTranslator(hit.translator))
             add(L.msoneCredit)
             return@buildList

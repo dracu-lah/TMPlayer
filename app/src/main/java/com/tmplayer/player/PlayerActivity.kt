@@ -5217,11 +5217,17 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 }
             }.getOrNull()
         }
+        // The details' ids let MSone be searched exactly; a slow lookup only leaves the title.
+        val ids = withTimeoutOrNull(3_000) {
+            withContext(Dispatchers.IO) { OnlineMetadata.current?.idsFor(currentItem()) }
+        } ?: com.tmplayer.online.VideoIds()
         return SubtitleTarget(
             fileName = mediaTitle,
             sizeBytes = size,
             hash = hash,
             languages = OnlineSubtitles.languagesFor(tracks.textLanguage),
+            imdb = ids.imdb,
+            tmdb = ids.tmdb,
         )
     }
 

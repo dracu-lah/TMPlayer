@@ -30,6 +30,7 @@ object PromoOnline {
             // device is checked end to end without a Telegram account.
             OnlineSubtitles.current = OnlineSubtitles(
                 apiKey = BuildConfig.OPENSUBTITLES_API_KEY,
+                msoneKey = BuildConfig.MSONE_GATEWAY_KEY,
                 store = store,
                 cache = SubtitleCache(File(dir, "cache")),
                 appVersion = BuildConfig.VERSION_NAME,

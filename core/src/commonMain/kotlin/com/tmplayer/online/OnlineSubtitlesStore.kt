@@ -33,10 +33,10 @@ data class OnlineAccount(
     val anonRemaining: Int = -1,
     val anonResetAt: Long = 0,
     /**
-     * MSone's search shown on this device. Hidden until MSone's key is set at the gateway: turned
-     * on by typing `msone` as the SubDL key (see [OnlineSubtitles.setSubdlKey]).
+     * MSone's search shown on this device (in a build with the gateway key). Typing `msone` as the
+     * SubDL key hides it again, or brings it back (see [OnlineSubtitles.setSubdlKey]).
      */
-    val msoneShown: Boolean = false,
+    val msoneShown: Boolean = true,
     /** The gateway's last answer about MSone ([MsoneStatus]), kept so a failed check changes nothing. */
     val msoneState: MsoneState = MsoneState.Unknown,
     val msoneMessage: String = "",
@@ -91,7 +91,8 @@ class OnlineSubtitlesStore(private val file: File) {
             rejectedAt = l("rejected_at"),
             anonRemaining = i("anon_remaining", -1),
             anonResetAt = l("anon_reset_at"),
-            msoneShown = s("msone_shown") == "true",
+            // Shown unless hidden on this device; the old opt-in key is not read.
+            msoneShown = s("msone_hidden") != "true",
             msoneState = MsoneState.of(s("msone_state")),
             msoneMessage = s("msone_message").take(500),
             msoneCheckedAt = l("msone_checked_at"),
@@ -114,7 +115,7 @@ class OnlineSubtitlesStore(private val file: File) {
         p["rejected_at"] = a.rejectedAt.toString()
         p["anon_remaining"] = a.anonRemaining.toString()
         p["anon_reset_at"] = a.anonResetAt.toString()
-        p["msone_shown"] = a.msoneShown.toString()
+        p["msone_hidden"] = (!a.msoneShown).toString()
         p["msone_state"] = a.msoneState.name
         p["msone_message"] = a.msoneMessage
         p["msone_checked_at"] = a.msoneCheckedAt.toString()

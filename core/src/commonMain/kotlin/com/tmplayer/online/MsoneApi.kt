@@ -30,14 +30,15 @@ data class MsoneStatus(val state: MsoneState, val message: String?, val checkedA
 /**
  * The MSone half of TMPlayer's subtitle gateway: `/health`, and `/msone/search`, which answers
  * with metadata only (the apps download each file from MSone themselves, which is what MSone
- * counts). The shape is the gateway repo's `API.md`, version 0, a draft until MSone's own search
- * contract is known, so every field is read as optional and a hit without what it needs is
- * dropped rather than failing the list.
+ * counts). The shape is the gateway repo's `API.md`, version 1, read from MSone's subtitle addon;
+ * every field is read as optional and a hit without what it needs is dropped rather than failing
+ * the list. Every gateway call but `/health` carries the build's [key]; MSone's own links never do.
  */
 class MsoneApi(
     private val http: HttpTransport,
     private val limiter: RateLimiter,
     private val userAgent: String,
+    private val key: String = "",
     private val base: String = BASE,
 ) {
     /** Why a call gave no hits: the gateway's own error codes, sorted into what the screens tell apart. */
@@ -51,6 +52,12 @@ class MsoneApi(
 
         /** 400 `bad_query`: nothing usable to search with. */
         data object BadQuery : Failure
+
+        /** 401 or 403: the gateway does not take this build's key (revoked, or a build without one). */
+        data object Refused : Failure
+
+        /** 403, 404 or 410 from MSone's own link, or 404 from the gateway's download: search again. */
+        data object Gone : Failure
 
         /** 429 `rate_limited`, with the wait it asked for. */
         data class Busy(val retryAfterMs: Long) : Failure
@@ -67,6 +74,7 @@ class MsoneApi(
     /** What to search for: the IMDb id when known, else the title with its year. */
     data class Query(
         val imdb: String? = null,
+        val tmdb: String? = null,
         val title: String? = null,
         val year: Int? = null,
         val season: Int? = null,
@@ -88,14 +96,18 @@ class MsoneApi(
         if (imdb != null) {
             params["imdb"] = imdb
         } else {
-            val title = query.title?.trim()?.take(MAX_QUERY)?.takeIf { it.isNotEmpty() } ?: return Answer.Failed(Failure.BadQuery)
-            params["q"] = title
+            // A TMDB id first, with the title beside it for when the gateway cannot turn it into an IMDb id.
+            val tmdb = query.tmdb?.trim()?.takeIf { it.length in 1..10 && it.all(Char::isDigit) }
+            val title = query.title?.trim()?.take(MAX_QUERY)?.takeIf { it.isNotEmpty() }
+            if (tmdb == null && title == null) return Answer.Failed(Failure.BadQuery)
+            tmdb?.let { params["tmdb"] = it }
+            title?.let { params["q"] = it }
             query.year?.takeIf { it in 1870..2100 }?.let { params["year"] = it.toString() }
         }
         query.season?.takeIf { it in 0..999 }?.let { params["season"] = it.toString() }
         query.episode?.takeIf { it in 0..9999 }?.let { params["episode"] = it.toString() }
         val url = "$base/msone/search?" + params.entries.joinToString("&") { (k, v) -> "$k=${URLEncoder.encode(v, "UTF-8")}" }
-        val response = get(url) ?: return Answer.Failed(Failure.Offline)
+        val response = get(url, gateway = true) ?: return Answer.Failed(Failure.Offline)
         if (response.code == 404) return Answer.Ok(emptyList())
         if (response.code !in 200..299) {
             ProviderLog.status(PROVIDER, "GET", url, response)
@@ -109,11 +121,14 @@ class MsoneApi(
      * else through the gateway, which fetches only from MSone. At most [maxBytes].
      */
     suspend fun fetch(hit: SubtitleHit, maxBytes: Int): Answer<ByteArray> {
-        val url = hit.link.takeIf { trustedDownload(it) }
-            ?: "$base/msone/download/${URLEncoder.encode(hit.id, "UTF-8")}"
-        val response = get(url) ?: return Answer.Failed(Failure.Offline)
+        val direct = hit.link.takeIf { trustedDownload(it) }
+        val url = direct ?: "$base/msone/download/${URLEncoder.encode(hit.id, "UTF-8")}"
+        val response = get(url, gateway = direct == null) ?: return Answer.Failed(Failure.Offline)
         if (response.code !in 200..299) {
             ProviderLog.status(PROVIDER, "GET", url, response)
+            // A link MSone no longer honours (an expired signature, a removed file) is not an outage.
+            if (direct != null && response.code in setOf(403, 404, 410)) return Answer.Failed(Failure.Gone)
+            if (direct == null && response.code == 404) return Answer.Failed(Failure.Gone)
             return Answer.Failed(failureOf(response))
         }
         if (response.body.size > maxBytes) {
@@ -123,9 +138,14 @@ class MsoneApi(
         return Answer.Ok(response.body)
     }
 
-    private suspend fun get(url: String): HttpResponse? {
+    private suspend fun get(url: String, gateway: Boolean = false): HttpResponse? {
         limiter.acquire()
-        return http.sendLogged(PROVIDER, HttpRequest("GET", url, mapOf("User-Agent" to userAgent, "Accept" to "application/json")))
+        val headers = buildMap {
+            put("User-Agent", userAgent)
+            put("Accept", "application/json")
+            if (gateway && key.isNotBlank()) put("X-Api-Key", key)
+        }
+        return http.sendLogged(PROVIDER, HttpRequest("GET", url, headers))
     }
 
     private fun failureOf(response: HttpResponse): Failure {
@@ -135,6 +155,7 @@ class MsoneApi(
         return when {
             response.code == 410 || error == "stopped" -> Failure.State(MsoneState.Stopped, message)
             error == "paused" -> Failure.State(MsoneState.Paused, message)
+            response.code == 401 || response.code == 403 || error == "unauthorized" || error == "forbidden" -> Failure.Refused
             response.code == 429 || error == "rate_limited" -> Failure.Busy(retryAfter(response.header("Retry-After")))
             response.code == 400 || error == "bad_query" -> Failure.BadQuery
             else -> Failure.Offline
@@ -151,6 +172,7 @@ class MsoneApi(
         /** The most hits read from one answer, and the longest text kept from any field. */
         private const val MAX_HITS = 100
         private const val MAX_TEXT = 500
+        private const val MAX_ID = 4_096
 
         private val IMDB = Regex("""tt\d{5,10}""")
 
@@ -174,7 +196,8 @@ class MsoneApi(
         private fun hit(o: JSONObject?): SubtitleHit? {
             o ?: return null
             val id = (o.opt("id") as? String ?: (o.opt("id") as? Number)?.toLong()?.toString())
-                ?.trim()?.take(64)?.takeIf { it.isNotEmpty() } ?: return null
+                // The gateway's ids are the download link coded, a few hundred characters long.
+                ?.trim()?.takeIf { it.isNotEmpty() && it.length <= MAX_ID } ?: return null
             val title = text(o.opt("title")) ?: return null
             val translator = o.optJSONObject("translator")
             val season = number(o.opt("season"))?.takeIf { it in 0..999 }
@@ -186,10 +209,10 @@ class MsoneApi(
                 // The title the list shows, with the episode code that tells a show's hits apart.
                 release = title + (season?.let { " S%02d".format(it) + (episode?.let { e -> "E%02d".format(e) } ?: "") } ?: ""),
                 featureTitle = title,
+                fileName = text(o.opt("fileName")).orEmpty(),
                 featureYear = number(o.opt("year"))?.takeIf { it in 1870..2100 },
                 featureSeason = season,
                 featureEpisode = episode,
-                pack = o.opt("kind") == "pack",
                 translator = translator?.let { text(it.opt("name")) }.orEmpty(),
                 translatorUrl = translator?.let { https(it.opt("url")) }.orEmpty(),
                 pageUrl = https(o.opt("pageUrl")).orEmpty(),

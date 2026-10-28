@@ -1945,12 +1945,18 @@ fun PlayerScreen(
             if (showOnline) {
                 OnlineSubtitlesPanel(
                     target = {
+                        // The details' ids let MSone be searched exactly; a slow lookup only leaves the title.
+                        val ids = kotlinx.coroutines.withTimeoutOrNull(3_000) {
+                            kotlinx.coroutines.withContext(Dispatchers.IO) { OnlineMetadata.current?.idsFor(item) }
+                        } ?: com.tmplayer.online.VideoIds()
                         SubtitleTarget(
                             fileName = item.fileName.ifBlank { item.title },
                             sizeBytes = item.sizeBytes,
                             hash = current.onlineHash(),
                             caption = item.caption.ifBlank { null },
                             languages = OnlineSubtitles.languagesFor(null),
+                            imdb = ids.imdb,
+                            tmdb = ids.tmdb,
                         )
                     },
                     onLoaded = { file, label ->

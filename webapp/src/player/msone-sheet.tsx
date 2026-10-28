@@ -32,7 +32,6 @@ function failureLine(f: Failure): string | null {
         case 'offline':
             return t('msone.offline')
         case 'unreadable':
-        case 'no_unzip':
             return t('msone.unreadable')
         case 'state':
             return stateLine(f.state)
@@ -56,7 +55,7 @@ function trackLabel(): string {
 /** "2020  ·  Season pack  ·  S1 E3": what a hit says of itself under its title. */
 function facts(hit: Hit): string {
     const ep = hit.season !== null && hit.episode !== null ? `S${hit.season} E${hit.episode}` : hit.season !== null ? `S${hit.season}` : hit.episode !== null ? `E${hit.episode}` : ''
-    return [hit.year !== null ? String(hit.year) : '', hit.kind === 'pack' ? t('msone.pack') : '', ep].filter((p) => p).join('  ·  ')
+    return [hit.year !== null ? String(hit.year) : '', ep].filter((p) => p).join('  ·  ')
 }
 
 export function MsoneSheet(props: {

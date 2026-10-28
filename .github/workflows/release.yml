@@ -107,6 +107,7 @@ jobs:
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           # Optional too: without it online subtitles are hidden in that build.
           OPENSUBTITLES_API_KEY: ${{ secrets.OPENSUBTITLES_API_KEY }}
+          MSONE_GATEWAY_KEY: ${{ secrets.MSONE_GATEWAY_KEY }}
           # Optional too: without it films get no posters in that build.
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
           # Optional: without it a detail page shows the provider's own score alone.
@@ -130,6 +131,7 @@ jobs:
           TG_API_HASH=$TG_API_HASH
           SENTRY_DSN=$SENTRY_DSN
           OPENSUBTITLES_API_KEY=$OPENSUBTITLES_API_KEY
+          MSONE_GATEWAY_KEY=$MSONE_GATEWAY_KEY
           TMDB_API_KEY=$TMDB_API_KEY
           OMDB_API_KEY=$OMDB_API_KEY
           EOF
@@ -275,6 +277,7 @@ jobs:
           TG_API_ID: ${{ secrets.TG_API_ID }}
           TG_API_HASH: ${{ secrets.TG_API_HASH }}
           OPENSUBTITLES_API_KEY: ${{ secrets.OPENSUBTITLES_API_KEY }}
+          MSONE_GATEWAY_KEY: ${{ secrets.MSONE_GATEWAY_KEY }}
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
           # Optional: without it a detail page shows the provider's own score alone.
           OMDB_API_KEY: ${{ secrets.OMDB_API_KEY }}
@@ -296,6 +299,7 @@ jobs:
           TG_API_ID=$TG_API_ID
           TG_API_HASH=$TG_API_HASH
           OPENSUBTITLES_API_KEY=$OPENSUBTITLES_API_KEY
+          MSONE_GATEWAY_KEY=$MSONE_GATEWAY_KEY
           TMDB_API_KEY=$TMDB_API_KEY
           OMDB_API_KEY=$OMDB_API_KEY
           SENTRY_DSN_DESKTOP=$SENTRY_DSN_DESKTOP
@@ -343,6 +347,7 @@ jobs:
           TG_API_ID: ${{ secrets.TG_API_ID }}
           TG_API_HASH: ${{ secrets.TG_API_HASH }}
           OPENSUBTITLES_API_KEY: ${{ secrets.OPENSUBTITLES_API_KEY }}
+          MSONE_GATEWAY_KEY: ${{ secrets.MSONE_GATEWAY_KEY }}
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
           # Optional: without it a detail page shows the provider's own score alone.
           OMDB_API_KEY: ${{ secrets.OMDB_API_KEY }}
@@ -362,8 +367,8 @@ jobs:
           fi
           # One printf for every line: two used to write the file in turn, and the second left
           # the Windows build without its OpenSubtitles key.
-          printf 'TG_API_ID=%s\nTG_API_HASH=%s\nOPENSUBTITLES_API_KEY=%s\nTMDB_API_KEY=%s\nOMDB_API_KEY=%s\nSENTRY_DSN_DESKTOP=%s\nSENTRY_DSN=%s\n' \
-            "$TG_API_ID" "$TG_API_HASH" "$OPENSUBTITLES_API_KEY" "$TMDB_API_KEY" "$OMDB_API_KEY" "$SENTRY_DSN_DESKTOP" "$SENTRY_DSN" > local.properties
+          printf 'TG_API_ID=%s\nTG_API_HASH=%s\nOPENSUBTITLES_API_KEY=%s\nMSONE_GATEWAY_KEY=%s\nTMDB_API_KEY=%s\nOMDB_API_KEY=%s\nSENTRY_DSN_DESKTOP=%s\nSENTRY_DSN=%s\n' \
+            "$TG_API_ID" "$TG_API_HASH" "$OPENSUBTITLES_API_KEY" "$MSONE_GATEWAY_KEY" "$TMDB_API_KEY" "$OMDB_API_KEY" "$SENTRY_DSN_DESKTOP" "$SENTRY_DSN" > local.properties
 
       - name: Package and self-test
         uses: ./.github/actions/desktop-windows
@@ -406,6 +411,7 @@ jobs:
           TG_API_ID: ${{ secrets.TG_API_ID }}
           TG_API_HASH: ${{ secrets.TG_API_HASH }}
           OPENSUBTITLES_API_KEY: ${{ secrets.OPENSUBTITLES_API_KEY }}
+          MSONE_GATEWAY_KEY: ${{ secrets.MSONE_GATEWAY_KEY }}
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
           # Optional: without it a detail page shows the provider's own score alone.
           OMDB_API_KEY: ${{ secrets.OMDB_API_KEY }}
@@ -427,6 +433,7 @@ jobs:
           TG_API_ID=$TG_API_ID
           TG_API_HASH=$TG_API_HASH
           OPENSUBTITLES_API_KEY=$OPENSUBTITLES_API_KEY
+          MSONE_GATEWAY_KEY=$MSONE_GATEWAY_KEY
           TMDB_API_KEY=$TMDB_API_KEY
           OMDB_API_KEY=$OMDB_API_KEY
           SENTRY_DSN_DESKTOP=$SENTRY_DSN_DESKTOP

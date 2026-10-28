@@ -524,6 +524,7 @@ fun DesktopTheme(settings: SettingsStore, content: @Composable () -> Unit) {
  */
 internal fun desktopOnlineSubtitles(): OnlineSubtitles = OnlineSubtitles(
     apiKey = BuildInfo.OPENSUBTITLES_API_KEY,
+    msoneKey = BuildInfo.MSONE_GATEWAY_KEY,
     store = OnlineSubtitlesStore(java.io.File(DesktopPaths.dataDir, "online-subtitles.properties")),
     cache = SubtitleCache(java.io.File(DesktopPaths.cacheDir, "online-subtitles")),
     appVersion = BuildInfo.VERSION,

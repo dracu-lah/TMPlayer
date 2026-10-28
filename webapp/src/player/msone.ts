@@ -11,6 +11,10 @@ import { createStore, delMany, get, keys as storeKeys, set, type UseStore } from
 
 export const GATEWAY = 'https://subs.tmplayer.org'
 
+/** This build's gateway key, sent on every /msone call (not /health). Empty: MSone is not offered. */
+export const GATEWAY_KEY: string = typeof __MSONE_GATEWAY_KEY__ === 'string' ? __MSONE_GATEWAY_KEY__ : ''
+const keyHeaders = (): Record<string, string> => (GATEWAY_KEY ? { 'X-Api-Key': GATEWAY_KEY } : {})
+
 /** `on`, `off` (no key set), `paused` (for now), `stopped` (for good, at MSone's request); `unknown` when never checked or not understood. */
 export type State = 'on' | 'off' | 'paused' | 'stopped' | 'unknown'
 
@@ -26,7 +30,6 @@ export interface Hit {
     id: string
     title: string
     year: number | null
-    kind: 'single' | 'pack'
     season: number | null
     episode: number | null
     translator: { name: string; url: string | null } | null
@@ -50,8 +53,6 @@ export type Failure =
     | { kind: 'state'; state: 'paused' | 'stopped'; message: string | null }
     | { kind: 'offline' }
     | { kind: 'unreadable' }
-    /** A zip this browser cannot open (no DecompressionStream): pick a file instead. */
-    | { kind: 'no_unzip' }
     /** The sheet closed: nothing to say. */
     | { kind: 'aborted' }
 
@@ -74,7 +75,6 @@ const MAX_URL = 2048
 const MAX_HITS = 100
 /** Answers are JSON of a few KB; far more is not an answer. */
 const MAX_JSON = 1024 * 1024
-export const PACK_MAX = 20 * 1024 * 1024
 /** As subtitles.ts: a feature's subtitles are tens of kilobytes. */
 export const FILE_MAX = 4 * 1024 * 1024
 /** subtitles.ts's SUBTITLE_EXTENSIONS (not imported: that file is not plain enough for `node --test`). */
@@ -240,7 +240,8 @@ export function failureOf(status: number, body: unknown, retryAfter: string | nu
 export function parseHit(v: unknown): Hit | null {
     if (!isRecord(v)) return null
     const rawId = typeof v.id === 'number' && Number.isInteger(v.id) && v.id >= 0 ? String(v.id) : v.id
-    const id = typeof rawId === 'string' && /^[\w.-]{1,64}$/.test(rawId) ? rawId : null
+    // The gateway's ids are the download link base64url coded, a few hundred characters long.
+    const id = typeof rawId === 'string' && /^[\w.-]{1,4096}$/.test(rawId) ? rawId : null
     const title = text(v.title, MAX_TITLE)
     const downloadUrl = httpsUrl(v.downloadUrl)
     if (!id || !title || !downloadUrl) return null
@@ -250,7 +251,6 @@ export function parseHit(v: unknown): Hit | null {
         id,
         title,
         year: whole(v.year, 1870, 2100),
-        kind: v.kind === 'pack' ? 'pack' : 'single',
         season: whole(v.season, 0, 999),
         episode: whole(v.episode, 0, 9999),
         translator: trName ? { name: trName, url: isRecord(tr) ? httpsUrl(tr.url) : null } : null,
@@ -296,7 +296,7 @@ export async function search(ask: Ask, signal?: AbortSignal, fetcher: Fetch = fe
     if (now < busyUntil) return { ok: false, failure: { kind: 'busy', retryAfter: Math.ceil((busyUntil - now) / 1000) } }
     try {
         return await deadline(SEARCH_MS, signal, async (inner) => {
-            const res = await fetcher(url, { signal: inner, credentials: 'omit' })
+            const res = await fetcher(url, { signal: inner, credentials: 'omit', headers: keyHeaders() })
             const body = await readJson(res)
             if (!res.ok) {
                 const failure = failureOf(res.status, body, res.headers.get('Retry-After'))
@@ -321,32 +321,26 @@ function noteFailure(f: Failure) {
 
 // ---- download ----------------------------------------------------------------------------
 
-/** Whether this browser can open a deflated zip (Chromium 80, Safari 16.4, Firefox 113). */
-export const canUnzip = () => typeof DecompressionStream === 'function'
-
 /**
  * A hit's file through the gateway (the browser gets CORS there; MSone's own address is never
- * fetched from the page), as a File readSubtitle() takes: the file itself, or from a zip (a
- * season's pack, or one file zipped) the entry for this episode. `signal` is the sheet's: closing
- * it cancels the download.
+ * fetched from the page), as a File readSubtitle() takes: MSone serves one subtitle file per video
+ * or episode. `signal` is the sheet's: closing it cancels the download.
  */
 export async function download(hit: Hit, where: { season: number | null; episode: number | null }, signal?: AbortSignal, fetcher: Fetch = fetch): Promise<DownloadResult> {
     // Kept on the device: no download, whatever MSone's state.
     const key = fileKey(hit, where)
     const kept = await keptFile(key)
     if (kept) return { ok: true, file: kept }
-    if (hit.kind === 'pack' && !canUnzip()) return { ok: false, failure: { kind: 'no_unzip' } }
-    const cap = hit.kind === 'pack' ? PACK_MAX : FILE_MAX
     try {
         return await deadline(DOWNLOAD_MS, signal, async (inner): Promise<DownloadResult> => {
-            const res = await fetcher(`${GATEWAY}/msone/download/${encodeURIComponent(hit.id)}`, { signal: inner, credentials: 'omit' })
+            const res = await fetcher(`${GATEWAY}/msone/download/${encodeURIComponent(hit.id)}`, { signal: inner, credentials: 'omit', headers: keyHeaders() })
             if (!res.ok) {
                 const f = failureOf(res.status, await readJson(res), res.headers.get('Retry-After'))
                 noteFailure(f)
                 // No such release (404) or a refused id (400): this hit cannot be had.
                 return { ok: false, failure: f.kind === 'no_results' || f.kind === 'too_short' ? { kind: 'unreadable' } : f }
             }
-            const bytes = await readCapped(res, cap)
+            const bytes = await readCapped(res, FILE_MAX)
             if (!bytes) return { ok: false, failure: { kind: 'unreadable' } }
             const out = await fileOf(bytes, hit, where, dispositionName(res.headers.get('Content-Disposition')))
             if (out.ok) await keepFile(key, out.file)
@@ -357,17 +351,9 @@ export async function download(hit: Hit, where: { season: number | null; episode
     }
 }
 
-/** The bytes as a subtitle File: a zip's entry for this episode, or the file as it came. */
+/** The bytes as a subtitle File, named as MSone sent it; an archive is not a subtitle. */
 export async function fileOf(bytes: Uint8Array, hit: Hit, where: { season: number | null; episode: number | null }, sent: string | null): Promise<DownloadResult> {
-    if (isZip(bytes)) {
-        const entry = pickEntry(listZip(bytes), where.season, where.episode)
-        if (!entry) return { ok: false, failure: { kind: 'unreadable' } }
-        if (entry.method === 8 && !canUnzip()) return { ok: false, failure: { kind: 'no_unzip' } }
-        const data = await unzipEntry(bytes, entry, FILE_MAX)
-        if (!data) return { ok: false, failure: { kind: 'unreadable' } }
-        return { ok: true, file: new File([data as BlobPart], baseName(entry.name)) }
-    }
-    if (bytes.length > FILE_MAX || isOtherArchive(bytes)) return { ok: false, failure: { kind: 'unreadable' } }
+    if (bytes.length > FILE_MAX || isZip(bytes) || isOtherArchive(bytes)) return { ok: false, failure: { kind: 'unreadable' } }
     const ext = sent ? extensionOf(sent) : ''
     const name = sent && SUBTITLE_EXT.includes(ext) ? sent : `${hit.title.replace(/[\\/:*?"<>|]+/g, ' ').trim() || 'MSone'}.srt`
     return { ok: true, file: new File([bytes as BlobPart], name) }
@@ -391,60 +377,11 @@ export function dispositionName(header: string | null): string | null {
 const baseName = (path: string) => path.slice(Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\')) + 1)
 const extensionOf = (name: string) => (name.includes('.') ? name.slice(name.lastIndexOf('.') + 1).toLowerCase() : '')
 
-/** RAR and 7z: archives this reader does not open, which readSubtitle would only call unreadable later. */
+/** RAR and 7z: archives, which readSubtitle would only call unreadable later. */
 const isOtherArchive = (b: Uint8Array) => (b[0] === 0x52 && b[1] === 0x61 && b[2] === 0x72 && b[3] === 0x21) || (b[0] === 0x37 && b[1] === 0x7a && b[2] === 0xbc && b[3] === 0xaf)
 export const isZip = (b: Uint8Array) => b.length >= 4 && b[0] === 0x50 && b[1] === 0x4b && b[2] === 0x03 && b[3] === 0x04
 
-// ---- a small zip reader ------------------------------------------------------------------
-
-export interface ZipEntry {
-    name: string
-    /** 0 stored, 8 deflated; nothing else is read. */
-    method: number
-    flags: number
-    compressed: number
-    size: number
-    /** Where its local header starts. */
-    offset: number
-}
-
-/** The zip's entries from its central directory; empty for anything that is not a zip this reader can walk. */
-export function listZip(bytes: Uint8Array): ZipEntry[] {
-    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
-    const len = bytes.length
-    if (len < 22) return []
-    // The end record: its signature, 22 bytes from the end or further back by a comment of up to 64 KB.
-    let end = -1
-    for (let i = len - 22; i >= Math.max(0, len - 22 - 0xffff); i--) {
-        if (view.getUint32(i, true) === 0x06054b50) {
-            end = i
-            break
-        }
-    }
-    if (end < 0) return []
-    const count = view.getUint16(end + 10, true)
-    let at = view.getUint32(end + 16, true)
-    const out: ZipEntry[] = []
-    for (let n = 0; n < Math.min(count, 5000); n++) {
-        if (at + 46 > len || view.getUint32(at, true) !== 0x02014b50) break
-        const nameLen = view.getUint16(at + 28, true)
-        const extraLen = view.getUint16(at + 30, true)
-        const commentLen = view.getUint16(at + 32, true)
-        if (at + 46 + nameLen > len) break
-        out.push({
-            name: new TextDecoder('utf-8').decode(bytes.subarray(at + 46, at + 46 + nameLen)),
-            method: view.getUint16(at + 10, true),
-            flags: view.getUint16(at + 8, true),
-            compressed: view.getUint32(at + 20, true),
-            size: view.getUint32(at + 24, true),
-            offset: view.getUint32(at + 42, true),
-        })
-        at += 46 + nameLen + extraLen + commentLen
-    }
-    return out
-}
-
-/** The season and episode a file name gives ("S02E05", "2x05", "E05", "Episode 5"), or null. */
+/** The season and episode a name gives (S01E02, 1x02, E02), or null; the sheet reads the video's with it. */
 export function episodeOf(name: string): { season: number | null; episode: number } | null {
     const se = /S(\d{1,2})[\s._-]*E[Pp]?(\d{1,4})/i.exec(name)
     if (se) return { season: Number(se[1]), episode: Number(se[2]) }
@@ -453,42 +390,6 @@ export function episodeOf(name: string): { season: number | null; episode: numbe
     const e = /(?:^|[^A-Za-z])(?:E|EP|Episode)[\s._-]*(\d{1,4})(?!\d)/i.exec(name)
     if (e) return { season: null, episode: Number(e[1]) }
     return null
-}
-
-/**
- * The subtitle entry for this episode: of several, the one whose name gives its number (and
- * season, when both say one), else the first by name when the names give no numbers. Of several
- * numbered ones where none is this episode, none: another episode's subtitles would be wrong.
- */
-export function pickEntry(entries: ZipEntry[], season: number | null, episode: number | null): ZipEntry | null {
-    const subs = entries
-        .filter((e) => !e.name.endsWith('/') && !(e.flags & 1) && (e.method === 0 || e.method === 8))
-        .filter((e) => !/(^|\/)(__MACOSX\/|\.)/.test(e.name) && SUBTITLE_EXT.includes(extensionOf(e.name)))
-        .filter((e) => e.size <= FILE_MAX && e.compressed <= FILE_MAX)
-        .sort((a, b) => a.name.localeCompare(b.name, 'en', { numeric: true }))
-    if (subs.length <= 1 || episode === null) return subs[0] ?? null
-    const tagged = subs.map((e) => ({ e, ep: episodeOf(baseName(e.name)) }))
-    const hit = tagged.find(({ ep }) => ep && ep.episode === episode && (ep.season === null || season === null || ep.season === season))
-    if (hit) return hit.e
-    return tagged.some(({ ep }) => ep) ? null : subs[0]
-}
-
-/** An entry's bytes, inflated where it was deflated; null when it is damaged or comes out larger than `cap`. */
-export async function unzipEntry(bytes: Uint8Array, entry: ZipEntry, cap: number): Promise<Uint8Array | null> {
-    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
-    const at = entry.offset
-    if (at + 30 > bytes.length || view.getUint32(at, true) !== 0x04034b50) return null
-    const start = at + 30 + view.getUint16(at + 26, true) + view.getUint16(at + 28, true)
-    const data = bytes.subarray(start, start + entry.compressed)
-    if (data.length !== entry.compressed) return null
-    if (entry.method === 0) return data.length <= cap ? data : null
-    if (entry.method !== 8 || !canUnzip()) return null
-    try {
-        const stream = new Blob([data as BlobPart]).stream().pipeThrough(new DecompressionStream('deflate-raw'))
-        return await readStream(stream, cap)
-    } catch {
-        return null
-    }
 }
 
 // ---- reading answers ---------------------------------------------------------------------
@@ -632,9 +533,9 @@ function write(work: () => Promise<void>): Promise<void> {
     return next
 }
 
-/** The kept file's key: the release, and for a pack the episode taken out of it. */
-export function fileKey(hit: Hit, where: { season: number | null; episode: number | null }): string {
-    return hit.kind === 'pack' && where.episode !== null ? `msone:${hit.id}:S${where.season ?? 0}E${where.episode}` : `msone:${hit.id}`
+/** The kept file's key: the hit, which is one video's or episode's own file. */
+export function fileKey(hit: Hit, _where?: { season: number | null; episode: number | null }): string {
+    return `msone:${hit.id}`
 }
 
 /** A kept subtitle as a File, or null when none is kept (or the store cannot say). */

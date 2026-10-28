@@ -1094,7 +1094,7 @@ internal fun PlayerMenu(
                 Entry(s.commonOff, checked = list.none { it.selected }) { pick(MenuAction.Track(TrackType.Subtitle, null)) }
                 list.forEach { t -> Entry(t.label, checked = t.selected) { pick(MenuAction.Track(TrackType.Subtitle, t)) } }
                 if (com.tmplayer.online.OnlineSubtitles.available) Entry(s.onlineSearchOnline) { pick(MenuAction.SearchOnline) }
-                if (com.tmplayer.online.OnlineSubtitles.current?.store?.now?.msoneShown == true) Entry(s.msoneSearch) { pick(MenuAction.SearchMsone) }
+                if (com.tmplayer.online.OnlineSubtitles.current?.msoneShown == true) Entry(s.msoneSearch) { pick(MenuAction.SearchMsone) }
                 Entry(s.playerLoadSubtitleFile) { pick(MenuAction.LoadSubtitleFile) }
                 HorizontalDivider()
                 Entry(s.playerSubtitleStyleAndTiming) { page(MenuPage.SubtitleStyle) }

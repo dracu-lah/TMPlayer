@@ -1,12 +1,11 @@
-// MSone's gateway answers, the zip reader and what is kept on the device, good and garbage (AGENTS.md: parsers of outside
+// MSone's gateway answers and what is kept on the device, good and garbage (AGENTS.md: parsers of outside
 // data get garbage tests). `node --test "src/player/*.test.ts"` (pnpm test:player).
 import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
 import { test, beforeEach } from 'node:test'
-import { deflateRawSync } from 'node:zlib'
 import {
-    download, episodeOf, failureOf, FILE_MAX, health, KEEP_FILES, keptBytes, keptHits, knownHealth, listZip, parseHealth, parseHit, parseHits, pickEntry, resetMemory,
-    retryAfterSeconds, search, searchUrl, setKeepStore, unzipEntry, type Hit, type KeepStore,
+    download, episodeOf, failureOf, FILE_MAX, health, KEEP_FILES, keptBytes, keptHits, knownHealth, parseHealth, parseHit, parseHits, resetMemory,
+    retryAfterSeconds, search, searchUrl, setKeepStore, type Hit, type KeepStore,
 } from './msone.ts'
 
 const json = (body: unknown, status = 200, headers: Record<string, string> = {}) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', ...headers } })
@@ -89,19 +88,18 @@ test('a failed check keeps stopped; never checked and failed is unknown', async 
 // ---- search ----
 
 test('a good answer of the draft shape', () => {
-    const hits = parseHits({ hits: [GOOD_HIT, { ...GOOD_HIT, id: 9, kind: 'pack', season: 1, episode: 3, translator: { name: 'A', url: null } }] })!
+    const hits = parseHits({ hits: [GOOD_HIT, { ...GOOD_HIT, id: 9, season: 1, episode: 3, translator: { name: 'A', url: null } }] })!
     assert.deepEqual(hits[0], {
         id: '21763',
         title: 'Harbour Notes',
         year: 2020,
-        kind: 'single',
         season: null,
         episode: null,
         translator: { name: 'Translator name', url: 'https://example.org/profile' },
         pageUrl: 'https://malayalamsubtitles.org/x',
         downloadUrl: 'https://malayalamsubtitles.org/download/x',
     } satisfies Hit)
-    assert.deepEqual([hits[1].id, hits[1].kind, hits[1].season, hits[1].episode, hits[1].translator], ['9', 'pack', 1, 3, { name: 'A', url: null }])
+    assert.deepEqual([hits[1].id, hits[1].season, hits[1].episode, hits[1].translator], ['9', 1, 3, { name: 'A', url: null }])
 })
 
 test('search garbage: bad hits are skipped, wrong types become null, addresses must be https', () => {
@@ -111,7 +109,7 @@ test('search garbage: bad hits are skipped, wrong types become null, addresses m
     assert.equal(parseHit({ ...GOOD_HIT, downloadUrl: 'http://malayalamsubtitles.org/x' }), null)
     assert.equal(parseHit({ ...GOOD_HIT, downloadUrl: 42 }), null)
     const odd = parseHit({ ...GOOD_HIT, year: '2020', kind: 'zip', season: '1', episode: 1.5, translator: { name: 'B', url: 'javascript:alert(1)' }, pageUrl: 'ftp://x' })!
-    assert.deepEqual([odd.year, odd.kind, odd.season, odd.episode, odd.translator, odd.pageUrl], [null, 'single', null, null, { name: 'B', url: null }, null])
+    assert.deepEqual([odd.year, odd.season, odd.episode, odd.translator, odd.pageUrl], [null, null, null, { name: 'B', url: null }, null])
     assert.equal(parseHit({ ...GOOD_HIT, translator: 5 })!.translator, null)
     const huge = parseHit({ ...GOOD_HIT, title: 'x'.repeat(1_000_000), translator: { name: 'y'.repeat(100_000) } })!
     assert.equal(huge.title.length, 300)
@@ -182,50 +180,7 @@ test('a closed sheet aborts quietly', async () => {
 
 // ---- the zip reader and downloads ----
 
-/** A zip of these entries, deflated or stored. */
-function zip(entries: { name: string; data: string | Uint8Array; store?: boolean }[]): Uint8Array {
-    const locals: Buffer[] = []
-    const central: Buffer[] = []
-    let offset = 0
-    for (const e of entries) {
-        const raw = typeof e.data === 'string' ? Buffer.from(e.data) : Buffer.from(e.data)
-        const body = e.store ? raw : deflateRawSync(raw)
-        const name = Buffer.from(e.name)
-        const local = Buffer.alloc(30)
-        local.writeUInt32LE(0x04034b50, 0)
-        local.writeUInt16LE(e.store ? 0 : 8, 8)
-        local.writeUInt32LE(body.length, 18)
-        local.writeUInt32LE(raw.length, 22)
-        local.writeUInt16LE(name.length, 26)
-        locals.push(local, name, body)
-        const cd = Buffer.alloc(46)
-        cd.writeUInt32LE(0x02014b50, 0)
-        cd.writeUInt16LE(e.store ? 0 : 8, 10)
-        cd.writeUInt32LE(body.length, 20)
-        cd.writeUInt32LE(raw.length, 24)
-        cd.writeUInt16LE(name.length, 28)
-        cd.writeUInt32LE(offset, 42)
-        central.push(cd, name)
-        offset += 30 + name.length + body.length
-    }
-    const cdBytes = Buffer.concat(central)
-    const end = Buffer.alloc(22)
-    end.writeUInt32LE(0x06054b50, 0)
-    end.writeUInt16LE(entries.length, 8)
-    end.writeUInt16LE(entries.length, 10)
-    end.writeUInt32LE(cdBytes.length, 12)
-    end.writeUInt32LE(offset, 16)
-    return new Uint8Array(Buffer.concat([...locals, cdBytes, end]))
-}
-
 const SRT = '1\n00:00:01,000 --> 00:00:02,000\nHello\n'
-const PACK = zip([
-    { name: '__MACOSX/._Show.S01E02.srt', data: 'junk' },
-    { name: 'Show/readme.txt', data: 'hi' },
-    { name: 'Show/Show.S01E01.srt', data: `${SRT}one` },
-    { name: 'Show/Show.S01E02.srt', data: `${SRT}two` },
-    { name: 'Show/Show.S01E03.srt', data: `${SRT}three`, store: true },
-])
 
 test('episode numbers from names', () => {
     assert.deepEqual(episodeOf('Show.S01E02.srt'), { season: 1, episode: 2 })
@@ -233,36 +188,6 @@ test('episode numbers from names', () => {
     assert.deepEqual(episodeOf('show_2x05.ass'), { season: 2, episode: 5 })
     assert.deepEqual(episodeOf('Show Episode 7.srt'), { season: null, episode: 7 })
     assert.equal(episodeOf('Harbour.Notes.2020.1080p.x265.srt'), null)
-})
-
-test('the pack entry for the episode, else the first, never another episode', async () => {
-    const entries = listZip(PACK)
-    assert.equal(entries.length, 5)
-    assert.equal(pickEntry(entries, 1, 2)!.name, 'Show/Show.S01E02.srt')
-    assert.equal(pickEntry(entries, null, null)!.name, 'Show/Show.S01E01.srt')
-    assert.equal(pickEntry(entries, 1, 9), null)
-    assert.equal(pickEntry(entries, 2, 2), null)
-    const plain = listZip(zip([{ name: 'b.srt', data: SRT }, { name: 'a.srt', data: SRT }]))
-    assert.equal(pickEntry(plain, 1, 4)!.name, 'a.srt')
-    const two = await unzipEntry(PACK, pickEntry(entries, 1, 2)!, FILE_MAX)
-    assert.equal(new TextDecoder().decode(two!), `${SRT}two`)
-    const three = await unzipEntry(PACK, pickEntry(entries, 1, 3)!, FILE_MAX)
-    assert.equal(new TextDecoder().decode(three!), `${SRT}three`)
-})
-
-test('zip garbage: random bytes, a cut file and a bomb give nothing', async () => {
-    assert.deepEqual(listZip(new Uint8Array(randomBytes(70_000))), [])
-    assert.deepEqual(listZip(new Uint8Array(0)), [])
-    assert.deepEqual(listZip(PACK.subarray(0, PACK.length - 10)), [])
-    const cut = PACK.slice(0, 120)
-    const entry = listZip(PACK)[2]
-    assert.equal(await unzipEntry(cut, entry, FILE_MAX), null)
-    const bomb = zip([{ name: 'big.srt', data: new Uint8Array(FILE_MAX + 10) }])
-    const [big] = listZip(bomb)
-    assert.equal(pickEntry([big], null, null), null, 'a stated size over the cap is not picked')
-    assert.equal(await unzipEntry(bomb, big, FILE_MAX), null, 'and inflating stops at the cap')
-    const lying = { ...big, size: 10 }
-    assert.equal(await unzipEntry(bomb, lying, FILE_MAX), null)
 })
 
 const hit = (o: Partial<Hit> = {}): Hit => ({ ...parseHit(GOOD_HIT)!, ...o })
@@ -276,10 +201,8 @@ test('a download comes through the gateway as a File for readSubtitle', async ()
     assert.equal(single.calls[0], 'https://subs.tmplayer.org/msone/download/21763')
     const named = await download(hit(), { season: null, episode: null }, undefined, fake(new Response(SRT, { headers: { 'Content-Disposition': 'attachment; filename=x.exe' } })).f)
     assert.ok(named.ok && named.file.name === 'Harbour Notes.srt')
-    const pack = await download(hit({ kind: 'pack' }), { season: 1, episode: 2 }, undefined, fake(new Response(PACK as BodyInit)).f)
-    assert.ok(pack.ok)
-    assert.equal(pack.file.name, 'Show.S01E02.srt')
-    assert.equal(await pack.file.text(), `${SRT}two`)
+    assert.equal(hit({ id: 'aHR0cHM6Ly9hZGRvbi5' + 'x'.repeat(300) }).id.length, 319, 'the gateway long ids are kept')
+    assert.ok(parseHit({ ...GOOD_HIT, id: 'aHR0cHM6Ly9hZGRvbi5' + 'x'.repeat(300) }), 'and parsed')
 })
 
 test('download garbage: too large, another archive, a missing release, a state', async () => {
@@ -292,7 +215,7 @@ test('download garbage: too large, another archive, a missing release, a state',
     assert.deepEqual(rar, { ok: false, failure: { kind: 'unreadable' } })
     const gone = await download(hit(), where, undefined, fake(json({ error: 'not_found' }, 404)).f)
     assert.deepEqual(gone, { ok: false, failure: { kind: 'unreadable' } })
-    const random = await download(hit({ kind: 'pack' }), { season: 1, episode: 1 }, undefined, fake(new Response(new Uint8Array([0x50, 0x4b, 3, 4, ...randomBytes(2000)]) as BodyInit)).f)
+    const random = await download(hit(), { season: 1, episode: 1 }, undefined, fake(new Response(new Uint8Array([0x50, 0x4b, 3, 4, ...randomBytes(2000)]) as BodyInit)).f)
     assert.deepEqual(random, { ok: false, failure: { kind: 'unreadable' } })
     const stopped = await download(hit(), where, undefined, fake(json({ error: 'stopped', message: 'Done.' }, 410)).f)
     assert.deepEqual(stopped, { ok: false, failure: { kind: 'state', state: 'stopped', message: 'Done.' } })
@@ -330,28 +253,15 @@ test('a kept file loads again with no network, whatever the state', async () => 
     assert.ok((await keptBytes()) > 0)
 })
 
-test('a pack keeps the episode taken out of it, under its own key', async () => {
-    setKeepStore(mapStore().store)
-    assert.ok((await download(hit({ kind: 'pack' }), EP, undefined, fake(new Response(PACK as BodyInit)).f)).ok)
-    const net = offline()
-    const two = await download(hit({ kind: 'pack' }), EP, undefined, net.f)
-    assert.ok(two.ok && (await two.file.text()) === `${SRT}two`)
-    assert.equal(net.calls.length, 0)
-    const three = await download(hit({ kind: 'pack' }), { season: 1, episode: 3 }, undefined, net.f)
-    assert.equal(net.calls.length, 1, 'another episode is not kept yet')
-    assert.equal(three.ok, false)
-})
-
 test('paused: the last search lists its hits whose file is kept', async () => {
     setKeepStore(mapStore().store)
-    const pack = { ...GOOD_HIT, id: '7', kind: 'pack', season: 1 }
+    const pack = { ...GOOD_HIT, id: '7', season: 1 }
     const other = { ...GOOD_HIT, id: '8' }
     assert.ok((await search(ASK, undefined, fake(json({ hits: [pack, other] })).f)).ok)
-    await download(parseHit(pack)!, EP, undefined, fake(new Response(PACK as BodyInit)).f)
+    await download(parseHit(pack)!, EP, undefined, fake(new Response(SRT)).f)
     await search(ASK, undefined, fake(json({ error: 'paused', message: 'Paused.' }, 503)).f)
     assert.equal(knownHealth().state, 'paused')
     assert.deepEqual((await keptHits(ASK, EP)).map((h) => h.id), ['7'])
-    assert.deepEqual(await keptHits(ASK, { season: 1, episode: 5 }), [], 'that episode is not kept')
     assert.deepEqual(await keptHits({ q: 'Another' }, EP), [])
 })
 
