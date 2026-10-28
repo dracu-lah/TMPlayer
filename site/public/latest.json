@@ -1,53 +1,52 @@
 {
   "schema": 1,
-  "version": "1.28.1",
-  "versionCode": 12801,
-  "published": "2026-10-23T19:20:41Z",
-  "releaseUrl": "https://github.com/dracu-lah/TMPlayer/releases/tag/v1.28.1",
-  "notes": "A new Home on phone, TV and desktop: a carousel with title logos, ratings from several sites and a short overview, then Continue watching, Recently added and a row for each starred chat, ready at once from your last visit. Android TV speed first: no more freezes on the TV sticks, videos start sooner, even on a slow line, and the remote moves at once. Older TVs: installs on Android 6 and 7, so sticks such as the Fire TV Stick 4K on Fire OS 6 run TMPlayer. Fire TV: Dolby Vision videos that also carry HDR10+ play instead of a black screen, Dolby Vision plays as HDR10 where the TV has none, and DTS-HD MA passthrough works. 3D video: side by side and top and bottom videos as anaglyph, one eye in 2D, or both eyes for a VR headset or a 3D TV. Back always returns where you were: to a video's page after playing, to the row or tile you opened it from, and through \"More like this\". Free up space as one review on every device: what TMPlayer uses, what is free, and one button that asks first before removing a download. Save to folder or to the gallery for one video or a selection, with Select all, a check against free space and progress you can cancel. Search keeps up with typing and shows a title once, however often it was posted. Pictures arrive smoothly: a soft preview first, then the sharp picture fades in. Appearance: your own accent colour, high contrast, a choice of typeface and a live preview. Subtitles: colour, edge, typeface, weight and box darkness, remembered languages per series. Hide a chat from TMPlayer, and one Sort and filter menu in every chat. Player: Even out volume on by default, clearer dialogue when surround is folded to stereo, scrub pictures while streaming, Start over on a show's page, and a clear message when a 4K video is too much for the TV. Android: XviD, DivX, VC-1 and Motion JPEG videos play, and the other decoder takes over by itself when one will not. Haptics on phones, quieter messages, trailers in your YouTube app, a lighter copy on TVs that struggle, and opt-in crash reports on every platform.",
+  "version": "1.28.2",
+  "versionCode": 1280299,
+  "published": "2026-10-28T15:15:54Z",
+  "releaseUrl": "https://github.com/dracu-lah/TMPlayer/releases/tag/v1.28.2",
+  "notes": "Home settings: turn rows on or off, choose the chats Recently added reads, and a See all page for each row. TV Home: every row fits under the bar, Left and Right move across the tiles, Up and Down one press a row, See all at a row's end. Remove from history on any card, select several, or Clear history in one press, with Undo. Shows: Watch later, mark a season or the whole show as watched, and Go to the chat, as a single video has them. More options in the player as a side panel, with picture shapes 16:9, 4:3, 21:9, 2.35:1 and 1:1. A chat says how many videos its size limits hide, and the smallest size changes on the spot; the default is 400 MB again. One layout per page: a chat is always the poster grid, and TV Chats show in two columns. Malayalam subtitles from MSone, and subtitles in any script draw even where the system has no font for it. Kept videos gone from Telegram leave Continue watching, Watched and Watch later, and a download whose file went offers Download again. A session Telegram ended goes back to sign in and keeps your watched list, Watch later, bookmarks and settings. Desktop: Settings and Downloads open as a panel, the player's keys work without clicking first, and a Desktop or TV layout setting. TV: every button on banners, cards and the player is reached with the remote. Picture in picture when leaving the app can be turned off. Updates on Android 12 and later install without Android asking first. Home opens quickly on large accounts, smoother playback on slow devices, and many crash fixes.",
   "changes": [
-    "A new Home on phone, TV and desktop: a carousel with title logos, ratings from several sites and a short overview, then Continue watching, Recently added and a row for each starred chat, ready at once from your last visit",
-    "Android TV speed first: no more freezes on the TV sticks, videos start sooner, even on a slow line, and the remote moves at once",
-    "Older TVs: installs on Android 6 and 7, so sticks such as the Fire TV Stick 4K on Fire OS 6 run TMPlayer",
-    "Fire TV: Dolby Vision videos that also carry HDR10+ play instead of a black screen, Dolby Vision plays as HDR10 where the TV has none, and DTS-HD MA passthrough works",
-    "3D video: side by side and top and bottom videos as anaglyph, one eye in 2D, or both eyes for a VR headset or a 3D TV",
-    "Back always returns where you were: to a video's page after playing, to the row or tile you opened it from, and through \"More like this\"",
-    "Free up space as one review on every device: what TMPlayer uses, what is free, and one button that asks first before removing a download",
-    "Save to folder or to the gallery for one video or a selection, with Select all, a check against free space and progress you can cancel",
-    "Search keeps up with typing and shows a title once, however often it was posted",
-    "Pictures arrive smoothly: a soft preview first, then the sharp picture fades in",
-    "Appearance: your own accent colour, high contrast, a choice of typeface and a live preview",
-    "Subtitles: colour, edge, typeface, weight and box darkness, remembered languages per series",
-    "Hide a chat from TMPlayer, and one Sort and filter menu in every chat",
-    "Player: Even out volume on by default, clearer dialogue when surround is folded to stereo, scrub pictures while streaming, Start over on a show's page, and a clear message when a 4K video is too much for the TV",
-    "Android: XviD, DivX, VC-1 and Motion JPEG videos play, and the other decoder takes over by itself when one will not",
-    "Haptics on phones, quieter messages, trailers in your YouTube app, a lighter copy on TVs that struggle, and opt-in crash reports on every platform"
+    "Home settings: turn rows on or off, choose the chats Recently added reads, and a See all page for each row",
+    "TV Home: every row fits under the bar, Left and Right move across the tiles, Up and Down one press a row, See all at a row's end",
+    "Remove from history on any card, select several, or Clear history in one press, with Undo",
+    "Shows: Watch later, mark a season or the whole show as watched, and Go to the chat, as a single video has them",
+    "More options in the player as a side panel, with picture shapes 16:9, 4:3, 21:9, 2.35:1 and 1:1",
+    "A chat says how many videos its size limits hide, and the smallest size changes on the spot; the default is 400 MB again",
+    "One layout per page: a chat is always the poster grid, and TV Chats show in two columns",
+    "Malayalam subtitles from MSone, and subtitles in any script draw even where the system has no font for it",
+    "Kept videos gone from Telegram leave Continue watching, Watched and Watch later, and a download whose file went offers Download again",
+    "A session Telegram ended goes back to sign in and keeps your watched list, Watch later, bookmarks and settings",
+    "Desktop: Settings and Downloads open as a panel, the player's keys work without clicking first, and a Desktop or TV layout setting",
+    "TV: every button on banners, cards and the player is reached with the remote",
+    "Picture in picture when leaving the app can be turned off",
+    "Updates on Android 12 and later install without Android asking first",
+    "Home opens quickly on large accounts, smoother playback on slow devices, and many crash fixes"
   ],
   "assets": {
     "android-universal": {
-      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.28.1/TMPlayer-1.28.1-universal.apk",
-      "sha256": "7414c764a58fef7a7ee2625174e3787d91c4a7b3967b221359ca7fefbcb1119c",
-      "size": 33835273
+      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.28.2/TMPlayer-1.28.2-universal.apk",
+      "sha256": "dfa6edfbf5cafecc1ffd5e9a60965b34746da0c17a7fef1d74210d9978a1a013",
+      "size": 34081575
     },
     "windows-x64-msi-v2": {
-      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.28.1/TMPlayer-1.28.1-windows-x64.msi",
-      "sha256": "3c2fce2cf41d8f8eea47695ddcba967210681c4db005bb5d5dfca288005d10d1",
-      "size": 109372560
+      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.28.2/TMPlayer-1.28.2-windows-x64.msi",
+      "sha256": "b5628b64a07c7f1ce4b53462c2942eccec597e32288a6072c9679475d5a8a41f",
+      "size": 110642320
     },
     "macos-arm64-dmg": {
-      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.28.1/TMPlayer-1.28.1-macos-arm64.dmg",
-      "sha256": "c9f8ba3d0a83181a967c8c9b1b729e6b33bf328ce455528819abf79bfee3eeda",
-      "size": 116753358
+      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.28.2/TMPlayer-1.28.2-macos-arm64.dmg",
+      "sha256": "c8212d2996722508630aff5c7b08a6ab04a4d1ddfa4def3aec498cb69a8c4d4b",
+      "size": 118244111
     },
     "linux-x64-appimage": {
-      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.28.1/TMPlayer-1.28.1-x86_64.AppImage",
-      "sha256": "4f6d14683ce8d242a1d9c0e52c65b6aeec5c51fc27a0fb034101ad42038c4a55",
-      "size": 102844920
+      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.28.2/TMPlayer-1.28.2-x86_64.AppImage",
+      "sha256": "811cf7652787843b52c0a24e620f6dedc053cee6aa48aa85883eaeaa5bc144fa",
+      "size": 103893496
     },
     "linux-x64-tarball": {
-      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.28.1/TMPlayer-1.28.1-linux-x64.tar.xz",
-      "sha256": "c95ab6268b2de2ae637ec19e98865b72fc001e0cba19a79699ec4498aa4b54bb",
-      "size": 73547324
+      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.28.2/TMPlayer-1.28.2-linux-x64.tar.xz",
+      "sha256": "df649bcd1f255a4fe099b65ca7a3f098a77a32aa228379d5dea795ae35b46248",
+      "size": 74331168
     }
   }
 }
