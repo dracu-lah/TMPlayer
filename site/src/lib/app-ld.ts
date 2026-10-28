@@ -18,7 +18,7 @@ export function appLd(): Record<string, unknown> {
     applicationCategory: 'MultimediaApplication',
     applicationSubCategory: 'Video player',
     operatingSystem:
-      'Android 6.0 and above (phones, Android TV, Google TV and Fire TV), Windows 10 and 11 (64-bit), Linux (x86_64), macOS 26 and newer on Apple Silicon (a preview), a web browser (web.tmplayer.org, a beta)',
+      'Android 6.0 and above (phones, Android TV, Google TV and Fire TV), Windows 10 and 11 (64-bit), Linux (x86_64), macOS 26 and newer on Apple Silicon, a web browser (web.tmplayer.org, a beta)',
     ...(LATEST_VERSION ? { softwareVersion: LATEST_VERSION } : {}),
     downloadUrl: 'https://tmplayer.org/download/',
     installUrl: 'https://tmplayer.org/install/',

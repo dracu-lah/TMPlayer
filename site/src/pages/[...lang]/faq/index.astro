@@ -55,6 +55,7 @@ const groups: { id: string; title: string; questions: Question[] }[] = [
       { ld: 'Is TMPlayer safe? Can it read my messages?', more: { k: 'faq.neither_the_app_talks_to__a1', href: '/security/' } },
       { q: 'faq.is_there_a_server_or', a: 'faq.neither_the_app_talks_to', href: '/security/' },
       { ld: 'Do I need a phone to sign in?' },
+      { ld: 'Does TMPlayer work where Telegram is blocked?' },
       { ld: 'Is it the same as the official Telegram app?' },
       { q: 'faq.is_tmplayer_affiliated_with_telegram', a: 'faq.no_it_is_an_unofficial' },
     ],
@@ -72,11 +73,15 @@ const groups: { id: string; title: string; questions: Question[] }[] = [
       { ld: 'Does it play music and audio files?', more: { k: 'faq.mkv_mp4_avi_and_ts__a1', href: l('/formats/') } },
       { ld: 'How much storage does it need?' },
       { ld: 'Can I use an external player for Telegram videos, such as VLC?' },
+      { ld: 'Can I search for a video across all my chats?' },
+      { ld: 'Can I open a t.me link in TMPlayer?' },
+      { ld: 'Can I stop on one device and carry on watching on another?' },
     ],
   },
   {
     id: 'faq-more', title: 'faq.group_more', questions: [
       { q: 'faq.how_does_it_update_if', a: 'faq.it_checks_github_and_asks' },
+      { ld: 'Can TMPlayer tell me when a new episode is posted?' },
       { q: 'faq.is_tmplayer_the_same_as_tmp', a: 'faq.no_tmp_is_a_different_app', href: l('/alternatives/') },
     ],
   },

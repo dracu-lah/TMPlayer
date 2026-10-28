@@ -13,8 +13,8 @@ Astro.locals.lang = ENGLISH;
 <Base path="/privacy/" title="Privacy policy - TMPlayer" description="What TMPlayer keeps on your phone, TV or computer, which services it contacts, what an opt-in crash report contains, and how to delete your data.">
   <JsonLd slot="head" data={breadcrumb(['Privacy', '/privacy/'])} />
   <HeaderPlain />
-  <PolicyPage eyebrow="Effective 28 October 2026" title="Privacy">
-    <p class="policy-lede">TMPlayer is an unofficial Telegram video player for Android phones, Android TV, Windows and Linux, with a macOS preview for Apple Silicon. It talks directly to Telegram from your device, using your own Telegram account. There is no TMPlayer account and no developer-operated backend.</p>
+  <PolicyPage eyebrow="Effective 29 October 2026" title="Privacy">
+    <p class="policy-lede">TMPlayer is an unofficial Telegram video player for Android phones, Android TV, Windows and Linux, with a macOS preview for Apple Silicon, and a web player at web.tmplayer.org that Samsung and LG TVs open as a beta. It talks directly to Telegram from your device, using your own Telegram account. There is no TMPlayer account and no developer-operated backend.</p>
 
     <PolicySection title="Who runs TMPlayer">
       <p>TMPlayer is free, open source software written and published by one developer, Nevil (<a href="https://github.com/dracu-lah" rel="noopener">dracu-lah</a> on GitHub). For the little personal data this page describes, that developer is the controller. Contact: <a href="mailto:hello@tmplayer.org?subject=TMPlayer%20privacy">hello@tmplayer.org</a>.</p>
@@ -26,11 +26,40 @@ Astro.locals.lang = ENGLISH;
         <li><strong>Android phones and Android TV:</strong> everything, downloads included, is in TMPlayer's private app storage. Other apps cannot read it, and uninstalling TMPlayer removes all of it.</li>
         <li><strong>Windows:</strong> the session and settings are in <code>%LOCALAPPDATA%\TMPlayer</code>, the watch cache in <code>%LOCALAPPDATA%\TMPlayer\Cache</code>, and downloads in <code>Downloads\TMPlayer</code>.</li>
         <li><strong>Linux:</strong> the session is in <code>~/.local/share/TMPlayer</code>, settings in <code>~/.config/TMPlayer</code>, the watch cache in <code>~/.cache/TMPlayer</code>, and downloads in <code>~/Downloads/TMPlayer</code> (or your language's Downloads folder).</li>
-        <li><strong>macOS (a preview):</strong> the session and settings are in <code>~/Library/Application Support/TMPlayer</code>, the watch cache in <code>~/Library/Caches/TMPlayer</code>, and downloads in <code>~/Downloads/TMPlayer</code>.</li>
+        <li><strong>macOS:</strong> the session and settings are in <code>~/Library/Application Support/TMPlayer</code>, the watch cache in <code>~/Library/Caches/TMPlayer</code>, and downloads in <code>~/Downloads/TMPlayer</code>.</li>
         <li><strong>A storage location you chose (desktop):</strong> the cache, downloads and update packages move to <code>TMPlayer</code> inside that folder. The session and settings stay where they were.</li>
       </ul>
       <p>On Windows, macOS and Linux, uninstalling TMPlayer leaves these folders in place. Anyone who controls the device, or a rooted device, may be able to read them, so treat the device as a signed-in Telegram device.</p>
       <p>While a video plays, its title appears in your system's media controls (MediaSession on Android, MPRIS on Linux, the media overlay on Windows), so the lock screen, notification shade, taskbar or a paired device may show it.</p>
+    </PolicySection>
+
+    <PolicySection title="Resume on your other devices (opt in)">
+      <p>Off until you turn on <em>Resume on your other devices</em> in Settings, on Android phones, Android TV, Windows, Linux and macOS. With it on, TMPlayer keeps your Continue watching places in one text message in your own Telegram Saved Messages, so a TV, phone or computer signed in to the same account can pick up where another stopped. Nothing goes to TMPlayer or any server of the developer: the message is yours, in your Telegram account, under <a href="https://telegram.org/privacy" rel="noopener">Telegram's privacy policy</a>.</p>
+      <ul>
+        <li><strong>What it holds:</strong> for each of up to 40 recent videos, the chat and message it came from, where you stopped, its length, when you last watched it, and its title, its chat's name, its file name and size. It begins with the tag <code>#TMPlayerSync</code> and a sentence saying what it is. Videos you finished or removed are noted for 30 days so another device does not bring them back.</li>
+        <li><strong>When:</strong> the message is sent once, silently, and after that edited in place, never sent again while it can be found, and only when what it says changes. TMPlayer reads and updates it a few seconds after it starts, when a video opens, and shortly after the player saves a place. Edits to Saved Messages notify nobody.</li>
+        <li><strong>Turning it off:</strong> switch it off in Settings and TMPlayer stops reading and writing at once and forgets which message it was. It does not delete the message from Saved Messages: delete it there yourself if you like.</li>
+      </ul>
+    </PolicySection>
+
+    <PolicySection title="Casting to a Chromecast or Google TV">
+      <p>On Android phones (not Android TV, and not the F-Droid build) and on Windows, Linux and macOS, you can cast a video to a Chromecast, Google TV or a TV with Cast built in. TMPlayer then runs a small web server on your device that only your local network can reach, under a random address made for that cast and closed when it ends. The TV fetches the video from it directly, so the video, its subtitles as WebVTT, and any audio TMPlayer rewraps or converts for the TV travel from your device to the TV over your local network, and are not sent to TMPlayer or the developer. The video is read through Telegram as for normal playback.</p>
+      <p>The TV itself runs Google's Default Media Receiver, which it gets from Google as any Cast device does, so Google's Cast and your TV's own terms apply to what the TV and Google see. On Android, finding and controlling the TV goes through Google's Cast framework from Google Play services. On computers, TMPlayer finds TVs itself by asking the local network (mDNS) and talks to them directly.</p>
+    </PolicySection>
+
+    <PolicySection title="Proxies">
+      <p>If Telegram is blocked where you are, you can add a proxy under Settings (MTProto, SOCKS5 or HTTP, typed in or from a link). It is stored in Telegram's TDLib database on your device and used for the connection to Telegram. TMPlayer runs no proxy and ships no list of them: the server, port and any secret, username or password go only to the proxy you chose, which sees your IP address and that you connect to Telegram. Choose one you trust. Signing out clears TDLib's database along with it.</p>
+    </PolicySection>
+
+    <PolicySection title="The web player and TVs (Samsung and LG beta)">
+      <p>The web player at <strong>web.tmplayer.org</strong> runs in your browser and talks to Telegram directly from it, with your own account; there is no TMPlayer account. The site is hosted by <a href="https://www.cloudflare.com/privacypolicy/" rel="noopener">Cloudflare</a> (Cloudflare Pages), which keeps ordinary connection logs.</p>
+      <ul>
+        <li><strong>Kept in your browser:</strong> your Telegram session, settings, favourites and Continue watching places (IndexedDB), thumbnails and poster pictures (the browser's Cache API), and a few choices such as the theme and layout (local storage). None of it is sent to TMPlayer. Sign out in the web player clears it, as does clearing the site's data in your browser.</li>
+        <li><strong>Posters and details:</strong> asked through TMPlayer's own helper on web.tmplayer.org, which asks TMDB with TMPlayer's key. A lookup sends the video's cleaned-up title, and the year, season and episode read from its name, never the file or your account. The helper and Cloudflare may cache the answer.</li>
+        <li><strong>MSone Malayalam subtitles:</strong> as described above, through subs.tmplayer.org.</li>
+        <li><strong>No crash reporting.</strong> A failure in the web player shows a card with Reload, and nothing is sent. The web player does not do Resume on your other devices or casting.</li>
+      </ul>
+      <p>The Samsung (<code>.wgt</code>) and LG (<code>.ipk</code>) TV packages from the release page are thin wrappers: they check that web.tmplayer.org answers and then open it in the TV, so the TV's browser engine runs the web player and everything above applies. The wrapper adds no data collection of its own. The TV's maker has its own policies for the TV.</p>
     </PolicySection>
 
     <PolicySection title="Services TMPlayer contacts">
@@ -38,6 +67,7 @@ Astro.locals.lang = ENGLISH;
         <li><strong>Telegram</strong> handles sign-in, chat and channel lists, file metadata and media downloads, under <a href="https://telegram.org/privacy" rel="noopener">Telegram's privacy policy</a>. Where Telegram shows sponsored messages, TMPlayer reports to Telegram when one is seen and when it is clicked, as every Telegram app must.</li>
         <li><strong>tmplayer.org</strong>, hosted by Vercel, is asked for one small file, <code>latest.json</code>, that names the newest release, when the app starts and every six hours while it runs. <strong>GitHub</strong> is asked instead when the site cannot be reached. Like any web request, it reveals your IP address, and it names the TMPlayer version you run. It carries nothing about your account. Settings can turn it off. An update is downloaded from GitHub only after you choose to update.</li>
         <li><strong>Your device's speech-recognition provider (Android TV only)</strong> receives audio only when you deliberately start voice search.</li>
+        <li><strong>Google Play services (Android, not the F-Droid build)</strong> offers to fill the sign-in code from the text Telegram sends. TMPlayer holds no SMS permission: Android asks "Allow TMPlayer to read this message?" and nothing is read unless you allow it. Casting also goes through Google, see above.</li>
         <li><strong>Sentry</strong> receives a crash report, and only if you have switched crash reporting on (in the setup or in Settings) or agreed to send that one report. See below.</li>
         <li><strong>OpenSubtitles.com</strong> is asked only when you choose Search online in the subtitle picker. A search sends the video's file name (or the parsed title, season and episode), its OpenSubtitles hash (a number made from its size and its first and last 64 KB, never the file itself) and the languages wanted. Signing in under Settings, Online subtitles sends your OpenSubtitles username and password to OpenSubtitles once; the password is not kept, only the session OpenSubtitles returns, and downloads count against your own OpenSubtitles account. Their <a href="https://www.opensubtitles.com/en/privacy" rel="noopener">privacy policy</a> applies. Searches and subtitles are cached on your device for at most six months, and Settings can clear them.</li>
         <li><strong>SubDL</strong> is asked the same kind of search, with your own SubDL key, only if you have entered one under Settings, Online subtitles.</li>
@@ -86,13 +116,14 @@ Astro.locals.lang = ENGLISH;
     </PolicySection>
 
     <PolicySection title="Processors and your rights">
-      <p>The services that handle data for TMPlayer are <a href="https://sentry.io/privacy/" rel="noopener">Sentry</a> (crash reports, only if you opt in), <a href="https://vercel.com/legal/privacy-policy" rel="noopener">Vercel</a> (the website and the update file) and <a href="https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement" rel="noopener">GitHub</a> (downloads, the update fallback and release information). Telegram acts under its own policy, not on the developer's behalf, and so do OpenSubtitles and SubDL when you use online subtitles.</p>
+      <p>The services that handle data for TMPlayer are <a href="https://sentry.io/privacy/" rel="noopener">Sentry</a> (crash reports, only if you opt in), <a href="https://vercel.com/legal/privacy-policy" rel="noopener">Vercel</a> (the website and the update file) and <a href="https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement" rel="noopener">GitHub</a> (downloads, the update fallback and release information) and <a href="https://www.cloudflare.com/privacypolicy/" rel="noopener">Cloudflare</a> (the web player, its poster helper and the MSone gateway). Telegram acts under its own policy, not on the developer's behalf, and so do OpenSubtitles and SubDL when you use online subtitles.</p>
       <p>Where data protection law such as the GDPR applies to you, you can ask for access to, correction of or deletion of personal data the developer holds, withdraw consent at any time, and complain to the data protection authority where you live. Since the developer holds no account data, in practice this means crash reports; write to <a href="mailto:hello@tmplayer.org?subject=TMPlayer%20privacy">hello@tmplayer.org</a>.</p>
     </PolicySection>
 
     <PolicySection title="Changes">
       <p>Material changes update the effective date above and are listed here.</p>
       <ul>
+        <li><strong>29 October 2026:</strong> adds Resume on your other devices (opt in), which keeps Continue watching places in one message in your own Saved Messages; casting to a Chromecast or Google TV and what goes where; proxies; the web player at web.tmplayer.org and the Samsung and LG TV beta, which opens it; and the Google sign-in code prompt on Android.</li>
         <li><strong>28 October 2026:</strong> adds MSone's Malayalam subtitles, searched through TMPlayer's gateway at subs.tmplayer.org.</li>
         <li><strong>26 October 2026:</strong> with crash reporting on, the app also reports when a video could not play smoothly: its format and the device model, never what the video is.</li>
         <li><strong>22 October 2026:</strong> adds OMDb, asked by IMDb id for a title's IMDb, Rotten Tomatoes and Metacritic scores when its detail page opens, with TMPlayer's key or your own, and Wikidata, asked by the same IMDb id for Rotten Tomatoes and Metacritic scores when OMDb cannot answer.</li>

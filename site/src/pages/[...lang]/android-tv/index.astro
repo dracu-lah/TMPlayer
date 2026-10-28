@@ -39,7 +39,8 @@ const shot = (name: string, alt: string, light = true) => ({
   height: 480,
 });
 
-// What changes on a television. The next-episode shot has no light twin and a smaller frame.
+// What changes on a television. The next-episode shot has no light twin and a smaller frame. The
+// last row is text only, so the headings of each row line up.
 const features = [
   { title: 'android_tv.a_rail_not_a_menu', body: 'android_tv.every_category_down_the_left', shot: shot('tv-rail', 'android_tv.rail_shot_alt') },
   { title: 'android_tv.sign_in_without_typing', body: 'android_tv.scan_a_qr_code_with', shot: shot('tv-sign-in', 'android_tv.sign_in_shot_alt') },
@@ -47,6 +48,9 @@ const features = [
   { title: 'android_tv.runs_on_a_1_gb', body: 'android_tv.built_on_a_mi_tv', icon: 'chip-large' },
   { title: 'android_tv.light_on_storage', body: 'android_tv.only_the_video_playing_is', icon: 'sd-card-large' },
   { title: 'android_tv.next_episode_on_its_own', body: 'android_tv.plays_the_next_episode_after', shot: { ...shot('tv-next-episode', 'android_tv.next_episode_shot_alt', false), width: 840, height: 420 } },
+  { title: 'android_tv.home_rows_title', body: 'android_tv.home_rows_body' },
+  { title: 'android_tv.heavy_title', body: 'android_tv.heavy_body' },
+  { title: 'android_tv.stereo_title', body: 'android_tv.stereo_body' },
 ];
 ---
 <Base page="android_tv" title={t('android_tv.tmplayer_a_telegram_video_player')} description={t('android_tv.a_free_open_source_telegram')}>

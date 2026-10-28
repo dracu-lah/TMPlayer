@@ -36,7 +36,7 @@ const t = (k: string) => text(lang, k);
 const l = (href: string) => link(lang, href);
 
 
-// What it does, for the apps: one tile per line, in two groups. Some carry a cropped screenshot
+// What it does, for the apps: one tile per line, in three groups. Some carry a cropped screenshot
 // of the thing they describe; the first few of each group are what a phone shows before its
 // "Show the other" button, the rest are `extra`.
 const pic = (name: string, alt: string, width: number, height: number, light = true) => ({
@@ -48,6 +48,10 @@ const watching: { k: string; shot?: ReturnType<typeof pic> }[] = [
   { k: 'features.mkv_mp4_avi_and_ts', shot: pic('desktop-grid-badges', 'features.alt_badges', 800, 500) },
   { k: 'features.with_a_continue_watching_row', shot: pic('tv-continue', 'features.alt_continue_row', 1920, 460) },
   { k: 'features.subtitles_found_online', shot: pic('desktop-subtitles-online', 'features.alt_subtitles_online', 960, 541, false) },
+  { k: 'features.cast_from_phone' },
+  { k: 'features.lighter_copies' },
+  { k: 'features.player_tools' },
+  { k: 'features.subtitle_style' },
   { k: 'features.only_the_video_playing_is_kept' },
   { k: 'features.downloads_you_choose' },
   { k: 'features.skips_intros_and_credits' },
@@ -55,21 +59,34 @@ const watching: { k: string; shot?: ReturnType<typeof pic> }[] = [
   { k: 'features.the_same_library_drawn_for', shot: pic('phone-grid-top', 'features.alt_phone_grid', 1080, 1440) },
 ];
 const browsing: { k: string; shot?: ReturnType<typeof pic> }[] = [
-  { k: 'features.chats_filter_down_to_playable' },
+  { k: 'features.new_home' },
+  { k: 'features.search_all_chats' },
   { k: 'features.home_and_series_pages', shot: pic('phone-show-season', 'features.alt_show_season', 1080, 1380) },
   { k: 'features.with_your_remote_s_microphone', shot: pic('tv-search', 'android_tv.search_shot_alt', 960, 480) },
+  { k: 'features.chats_filter_down_to_playable' },
   { k: 'features.tv_home_channels', shot: pic('tv-home-screen', 'features.tv_home_screen_alt', 1440, 420, false) },
   { k: 'features.topics_tabs_one_tile', shot: pic('phone-grid-posters', 'features.alt_grid_posters', 1080, 660) },
+  { k: 'features.tme_links' },
   { k: 'features.watch_later_new_episodes' },
   { k: 'features.posters_and_overviews' },
   { k: 'features.the_next_one_starts_after', shot: pic('tv-next-episode', 'android_tv.next_episode_shot_alt', 840, 420, false) },
   { k: 'features.typos_missing_accents_and_one' },
+];
+const setup: { k: string; shot?: ReturnType<typeof pic> }[] = [
+  { k: 'features.proxies' },
+  { k: 'features.resume_sync' },
+  { k: 'features.notifications' },
+  { k: 'features.appearance' },
+  { k: 'features.storage_review' },
+  { k: 'features.connected_devices' },
+  { k: 'features.hide_chat' },
   { k: 'features.pin_kids_lock_backup' },
   { k: 'features.from_github_on_android_windows' },
 ];
 const groups = [
   { id: 'watching', icon: 'play-card', tone: 'play', title: 'features.watching', items: watching },
   { id: 'browsing', icon: 'search-panel', tone: 'browse', title: 'features.browsing', items: browsing },
+  { id: 'setup', icon: 'laptop-panel', tone: 'yes', title: 'features.setup', items: setup },
 ];
 const desktopWindow = [
   'features.or_with_a_phone_number', 'features.home_history_favourites_downloads_sidebar',

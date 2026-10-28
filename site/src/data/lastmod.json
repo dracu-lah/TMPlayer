@@ -243,7 +243,7 @@
   },
   {
     "path": "/android/",
-    "lastmod": "2026-10-24",
+    "lastmod": "2026-10-29",
     "changefreq": "monthly",
     "priority": "0.8",
     "images": [
@@ -275,7 +275,7 @@
   },
   {
     "path": "/desktop/",
-    "lastmod": "2026-10-22",
+    "lastmod": "2026-10-29",
     "changefreq": "monthly",
     "priority": "0.8",
     "images": [
@@ -301,7 +301,7 @@
   },
   {
     "path": "/privacy/",
-    "lastmod": "2026-10-26",
+    "lastmod": "2026-10-29",
     "changefreq": "monthly",
     "priority": "0.5"
   },
@@ -331,7 +331,7 @@
   },
   {
     "path": "/fire-tv/",
-    "lastmod": "2026-10-24",
+    "lastmod": "2026-10-29",
     "changefreq": "monthly",
     "priority": "0.8"
   },
@@ -361,7 +361,7 @@
   },
   {
     "path": "/guides/telegram-videos-on-fire-tv/",
-    "lastmod": "2026-10-24",
+    "lastmod": "2026-10-29",
     "changefreq": "monthly",
     "priority": "0.7"
   },
@@ -425,7 +425,7 @@
   },
   {
     "path": "/alternatives/",
-    "lastmod": "2026-10-24",
+    "lastmod": "2026-10-29",
     "changefreq": "monthly",
     "priority": "0.7",
     "images": [
@@ -465,7 +465,7 @@
   },
   {
     "path": "/alternatives/tmp-telegram-media-player/",
-    "lastmod": "2026-10-24",
+    "lastmod": "2026-10-29",
     "changefreq": "monthly",
     "priority": "0.6",
     "images": [
@@ -477,7 +477,7 @@
   },
   {
     "path": "/alternatives/tvgramplayer/",
-    "lastmod": "2026-10-24",
+    "lastmod": "2026-10-29",
     "changefreq": "monthly",
     "priority": "0.6",
     "images": [

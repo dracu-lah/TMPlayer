@@ -27,6 +27,7 @@ import { langPaths } from '../../../i18n/paths';
 import { english, format, text } from '../../../i18n/t';
 import { l as link } from '../../../i18n/links';
 import { formatDay, lastmod } from '../../../lib/lastmod';
+import { releases } from '../../../lib/releases';
 
 export const getStaticPaths = langPaths;
 const { lang } = Astro.props;
@@ -52,7 +53,10 @@ interface App {
   stats?: Fact;
   checked: string;
 }
-const apps = data.apps as App[];
+// TMPlayer's own row names its latest release, so it never goes stale between checks.
+const apps = (data.apps as App[]).map((x) =>
+  x.self && releases[0] ? { ...x, updated: { ...x.updated, version: releases[0].version, day: releases[0].day } } : x,
+);
 const checked = day(data.checked);
 
 // A fact cell: its catalog string with the row's values, dates in the page's language.
@@ -63,7 +67,7 @@ function fact(f: Fact): string {
   return format(lang, a(f.k), vars);
 }
 // Platform names stay as they are; only the phones are words.
-const platform = (p: string) => (p === 'android_phones' || p === 'phones' ? t(a(`platform_${p}`)) : p);
+const platform = (p: string) => (['android_phones', 'phones', 'samsung_lg'].includes(p) ? t(a(`platform_${p}`)) : p);
 
 const tevegram = data.apps.find((x) => x.name === 'Tevegram')!;
 const tvForTelegram = data.apps.find((x) => x.name === 'tv for Telegram')!;

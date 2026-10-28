@@ -33,12 +33,12 @@ const l = (href: string) => link(lang, href);
 const desktopWindow = [
   'features.or_with_a_phone_number', 'features.home_history_favourites_downloads_sidebar',
   'features.to_play_restart_download_or', 'features.your_downloads_folder_unless_you',
-  'features.size_and_position_a_second',
+  'features.size_and_position_a_second', 'desktop.window_panel', 'desktop.window_layout',
 ];
 const desktopPlayer = [
   'features.mkv_mp4_avi_ts_image', 'features.and_seeks_without_waiting',
   'features.offers_the_next_episode_and', 'features.while_a_video_plays',
-  'features.the_linux_desktop_s_media',
+  'features.the_linux_desktop_s_media', 'desktop.player_cast', 'desktop.player_keys',
 ];
 ---
 <Base page="desktop" title={t('desktop.title')} description={t('desktop.description')}>
@@ -106,7 +106,7 @@ const desktopPlayer = [
         <p><a class="inline-link" href={l('/install/#windows')} aria-label={`${t('desktop.every_step')}: Windows`}>{t('desktop.every_step')}</a></p>
       </Panel>
       <Panel id="macos" title="macOS">
-        <p>{t('install.macos_sub')}</p>
+        <p>{t('desktop.mac_body')}</p>
         <p><T k="download.mac_dmg_note"><em slot="em1">{t('download.mac_dmg_note__em1')}</em><em slot="em2">{t('download.mac_dmg_note__em2')}</em><em slot="em3">{t('download.mac_dmg_note__em3')}</em><em slot="em4">{t('download.mac_dmg_note__em4')}</em></T></p>
         <p><a class="inline-link" href={l('/install/#macos')} aria-label={`${t('desktop.every_step')}: macOS`}>{t('desktop.every_step')}</a></p>
       </Panel>

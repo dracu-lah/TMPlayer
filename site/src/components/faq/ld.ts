@@ -86,6 +86,14 @@ export const faqLd = {
     },
     {
       "@type": "Question",
+      "name": "Does TMPlayer work where Telegram is blocked?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes, through a proxy. On a phone, a TV or a computer, TMPlayer takes an MTProto, SOCKS5 or HTTP proxy, typed in or added from a t.me/proxy or tg://proxy link, before you sign in or later from Settings, and it shows whether each proxy answers. When connecting takes too long, TMPlayer says what the likely reason is and offers Use a proxy, Retry and Send logs. Use only a proxy you trust: it can see that you use Telegram, but not your messages or videos. The web app in a browser cannot go through a Telegram proxy, so there a proxy or VPN is set up in the device's or browser's network settings."
+      }
+    },
+    {
+      "@type": "Question",
       "name": "Is it the same as the official Telegram app?",
       "acceptedAnswer": {
         "@type": "Answer",
@@ -158,10 +166,42 @@ export const faqLd = {
     },
     {
       "@type": "Question",
+      "name": "Can I search for a video across all my chats?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. Search looks through every chat at once and shows each video once, however often it was posted, with filters for quality, small clips and archived chats, and sorting by best match, newest, largest or best quality. Typos and missing accents still find the video. It also finds a person, group or channel by its @username, including public ones you have not joined. On a TV you can search by voice with the remote's microphone, and inside a chat its search box looks through that chat alone."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Can I open a t.me link in TMPlayer?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. On Android, open a t.me link and pick TMPlayer when Android asks which app should open it; on a phone, a TV or a computer, you can also paste the link into Search. A link to a post plays its video, from the time in the link when it has one. A public channel or group can be browsed before you join it, and an invite link shows the chat's name, picture and description first. TMPlayer joins a chat only when you press Join, and a post in a private chat you have not joined stays closed."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Can I stop on one device and carry on watching on another?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes, once you turn on Resume on your other devices in Settings on each device, on a phone, a TV or a computer signed in to the same account. TMPlayer then keeps your Continue watching places in one message in your own Saved Messages, edited in place and never sent again, and your other devices read it, so a video picks up where you stopped. Nothing goes through a TMPlayer server. It is off until you turn it on; to stop, turn it off, then delete that message if you like."
+      }
+    },
+    {
+      "@type": "Question",
       "name": "How does it update if it is not in the Play Store?",
       "acceptedAnswer": {
         "@type": "Answer",
         "text": "It checks tmplayer.org, with GitHub as the fallback, and asks before installing a newer release, on Android, Windows and Linux. On Android 12 and later the update then installs without Android asking again. On a Mac it tells you and opens the release page."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Can TMPlayer tell me when a new episode is posted?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. In Settings, Notifications has a switch for each kind: a new episode of a show you are watching, new videos in the chats you starred, finished downloads, a missing part of a video you played, low storage and a new version of TMPlayer. A phone or TV checks every few hours while it is online; a computer checks about every 45 minutes while TMPlayer is open, minimised too. The web app shows them while it is open in a browser tab."
       }
     },
     {

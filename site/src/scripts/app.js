@@ -208,7 +208,7 @@ var tmT = (function () {
 
   function macNote(has) {
     el.osNote.textContent = has
-      ? tmT('os_note_mac_preview', 'The macOS version is a preview for Macs with Apple Silicon (M1 and later) and macOS 26 or newer. It does not run on Intel Macs.')
+      ? tmT('os_note_mac_preview', 'The macOS version is for Macs with Apple Silicon (M1 and later) and macOS 26 or newer. It does not run on Intel Macs.')
       : tmT('os_note_mac', 'There is no macOS version. Everything below is for Android, Windows and Linux.');
     el.osNote.hidden = false;
   }
@@ -393,7 +393,7 @@ var tmT = (function () {
         // The hero has room for a short label only. It opens the macOS card rather than the file,
         // so the requirement is read before anything is downloaded.
         el.heroBtn.href = page + '#macos';
-        el.heroBtn.title = tmT('os_note_mac_preview', 'The macOS version is a preview for Macs with Apple Silicon (M1 and later) and macOS 26 or newer. It does not run on Intel Macs.');
+        el.heroBtn.title = tmT('os_note_mac_preview', 'The macOS version is for Macs with Apple Silicon (M1 and later) and macOS 26 or newer. It does not run on Intel Macs.');
         el.heroLabel.textContent = tmT('download_version_for', 'Download {version} for {os}', { version: tag, os: NAMES[os] });
       } else {
         el.heroBtn.href = page;

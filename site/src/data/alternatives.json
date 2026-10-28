@@ -7,10 +7,10 @@
       "url": "https://github.com/dracu-lah/TMPlayer",
       "self": true,
       "kind": "player",
-      "platforms": ["android_phones", "Android TV", "Google TV", "Fire TV", "Windows", "Linux", "macOS"],
+      "platforms": ["android_phones", "Android TV", "Google TV", "Fire TV", "Windows", "Linux", "macOS", "samsung_lg"],
       "price": { "k": "price_free_nothing" },
       "open": { "k": "open_licence", "licence": "GPL-3.0" },
-      "updated": { "k": "updated_release", "day": "2026-10-19", "version": "1.27.1" },
+      "updated": { "k": "updated_release", "day": "2026-10-28", "version": "1.28.2" },
       "checked": "2026-10-19"
     },
     {
