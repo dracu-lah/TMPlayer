@@ -19,15 +19,32 @@ import androidx.media3.effect.GlShaderProgram
  * pays one texture pass a frame, and only while 3D is on: the player builds the effects pipeline
  * only for a video that asks for it ([PlayerActivity]). The subtitles are drawn by their own view
  * over the picture, so they stay sharp and readable through the glasses.
+ *
+ * For a headset the pair is drawn at the screen's own size, [boxWidth] by [boxHeight], with
+ * each eye given the picture shape ([shape]) inside its half: Media3's last stage fits whatever
+ * it is handed into the surface with its aspect kept, so a shape chosen on the view alone came
+ * back letterboxed (HX16). Zero for either keeps the pair at its eyes' own shape.
  */
 @UnstableApi
-class Stereo3dEffect(private val stereo: Stereo3d) : GlEffect {
+class Stereo3dEffect(
+    private val stereo: Stereo3d,
+    private val shape: VideoScale = VideoScale.Fit,
+    private val boxWidth: Int = 0,
+    private val boxHeight: Int = 0,
+) : GlEffect {
 
-    override fun toGlShaderProgram(context: Context, useHdr: Boolean): GlShaderProgram = Program(stereo, useHdr)
+    override fun toGlShaderProgram(context: Context, useHdr: Boolean): GlShaderProgram =
+        Program(stereo, shape, boxWidth, boxHeight, useHdr)
 
     override fun isNoOp(inputWidth: Int, inputHeight: Int): Boolean = !stereo.on
 
-    private class Program(private val stereo: Stereo3d, useHdr: Boolean) :
+    private class Program(
+        private val stereo: Stereo3d,
+        private val shape: VideoScale,
+        private val boxWidth: Int,
+        private val boxHeight: Int,
+        useHdr: Boolean,
+    ) :
         BaseGlShaderProgram(/* useHighPrecisionColorComponents = */ useHdr, /* texturePoolCapacity = */ 1) {
 
         private var program: GlProgram? = null
@@ -35,6 +52,20 @@ class Stereo3dEffect(private val stereo: Stereo3d) : GlEffect {
         override fun configure(inputWidth: Int, inputHeight: Int): Size {
             // The shader is written for this frame size: the seam guard is one source pixel.
             program?.delete()
+            // A headset's pair shaped for the screen: each eye placed in its own half.
+            val boxed = stereo.view == Stereo3d.View.Vr && boxWidth > 0 && boxHeight > 0
+            val (outWidth, outHeight) = if (boxed) {
+                Stereo3d.boxedSize(boxWidth, boxHeight)
+            } else {
+                Stereo3d.outputSize(inputWidth, inputHeight, stereo)
+            }
+            val eyeShare = if (boxed) {
+                val (eyeWidth, eyeHeight) = Stereo3d.outputSize(inputWidth, inputHeight, stereo.layout)
+                val eye = if (eyeHeight > 0) eyeWidth.toDouble() / eyeHeight else 0.0
+                shape.boxShare(outWidth / 2, outHeight, eye).let { (x, y) -> x.toFloat() to y.toFloat() }
+            } else {
+                null
+            }
             val fragment = buildString {
                 append("precision mediump float;\n")
                 append("uniform sampler2D uTexSampler;\n")
@@ -48,6 +79,7 @@ class Stereo3dEffect(private val stereo: Stereo3d) : GlEffect {
                         yDown = false,
                         texelX = 1f / inputWidth.coerceAtLeast(1),
                         texelY = 1f / inputHeight.coerceAtLeast(1),
+                        eyeShare = eyeShare,
                     ).replace("texture2D(", "texture2D(uTexSampler, ").prependIndent("    "),
                 )
                 append("\n}\n")
@@ -60,8 +92,7 @@ class Stereo3dEffect(private val stereo: Stereo3d) : GlEffect {
             } catch (e: GlUtil.GlException) {
                 throw VideoFrameProcessingException(e)
             }
-            val (width, height) = Stereo3d.outputSize(inputWidth, inputHeight, stereo)
-            return Size(width, height)
+            return Size(outWidth.coerceAtLeast(1), outHeight.coerceAtLeast(1))
         }
 
         override fun drawFrame(inputTexId: Int, presentationTimeUs: Long) {

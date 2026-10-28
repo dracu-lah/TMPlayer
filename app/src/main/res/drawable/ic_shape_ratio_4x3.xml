@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The row's picture shape button on 4:3: a box of that shape, drawn with ic_shape_fit's stroke (HX16). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="36dp"
+    android:height="36dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="#FFFFFFFF">
+    <path
+        android:pathData="M4 4.5H20C21 4.5 22 5.5 22 6.5V17.5C22 18.5 21 19.5 20 19.5H4C3 19.5 2 18.5 2 17.5V6.5C2 5.5 3 4.5 4 4.5Z"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>
