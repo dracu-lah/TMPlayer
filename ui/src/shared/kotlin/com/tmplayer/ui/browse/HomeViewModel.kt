@@ -321,8 +321,12 @@ class HomeViewModel(
     /** Continue watching and Watch later videos as Telegram describes them, by progress key, for their pictures. */
     val art: StateFlow<Map<String, MediaItem>> = _art.asStateFlow()
 
-    /** The See all pages opened, by row key, kept while Home lives so going back and in again keeps their pages. */
-    private val feeds = com.tmplayer.platform.LruMap<String, RowFeed>(FEEDS_KEPT)
+    /**
+     * The See all pages opened, by row key, kept while Home lives so going back and in again keeps
+     * their pages. One pushed out stops reading: left mid read, it kept asking Telegram for pages
+     * no page shows.
+     */
+    private val feeds = com.tmplayer.platform.LruMap<String, RowFeed>(FEEDS_KEPT) { it.close() }
 
     /** The starred chats held open in TDLib for their new posts, as their rows were fetched. */
     private val following = LinkedHashMap<Long, AutoCloseable>()
