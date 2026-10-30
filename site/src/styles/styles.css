@@ -2193,6 +2193,8 @@ kbd {
 .footer-policy { display: flex; flex-wrap: wrap; gap: 6px 18px; }
 .footer-policy a { color: var(--on-surface-variant); font-size: 0.82rem; }
 .footer-policy a:hover { color: var(--on-surface); text-decoration: none; }
+.footer-policy a.footer-sibling { display: inline-flex; align-items: center; gap: 5px; }
+.footer-sibling svg { flex: none; }
 
 /* Two links the bar does not have room for on a desktop, and the menu does. Hiding a page
    behind a button is worse than four names being the sensible limit of a header row. */
