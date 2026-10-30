@@ -1,0 +1,149 @@
+---
+// /web/: the web app at web.tmplayer.org (a beta), for the iPhone and iPad searches, which have no
+// native app to land on, and for anyone who wants nothing installed. English only, with its words
+// written here as the policy pages do: a localized copy would need every catalog translated first.
+//
+// Facts only, each checked against webapp/: MP4 plays as it is; MKV and WebM are repacked to MP4 in
+// the browser (player/engines.ts, which needs Media Source, so iOS 17.1 or newer for anything but
+// MP4); HEVC the browser cannot decode is turned into H.264 on the way (player/hevc.ts); AVI goes
+// through libav.js (player/libav.ts); AC3 and DTS sound is converted (@mediabunny/ac3, /dts);
+// subtitle files are SRT, ASS and SSA (as plain text), WebVTT and MicroDVD (player/subtitles.ts);
+// sign in is a QR code or the phone number, code and two-step password (screens/SignIn.tsx);
+// install.ts adds it to the home screen. It has no downloads to keep. Update it with the code.
+import Base from '../../layouts/Base.astro';
+import BgArt from '../../components/BgArt.astro';
+import Header from '../../components/Header.astro';
+import Footer from '../../components/Footer.astro';
+import ToTop from '../../components/ToTop.astro';
+import Icon from '../../components/Icon.astro';
+import PageHead from '../../components/PageHead.astro';
+import JsonLd from '../../components/JsonLd.astro';
+import { breadcrumb } from '../../components/breadcrumb';
+import Band from '../../components/Band.astro';
+import Panel from '../../components/Panel.astro';
+import Steps from '../../components/Steps.astro';
+import Step from '../../components/Step.astro';
+import FaqItem from '../../components/FaqItem.astro';
+import StarBand from '../../components/StarBand.astro';
+import GiveBand from '../../components/GiveBand.astro';
+import { ENGLISH } from '../../i18n/langs';
+
+Astro.locals.lang = ENGLISH;
+
+const APP = 'https://web.tmplayer.org/';
+
+// The questions on the page, in the same order, as plain text for the FAQPage JSON-LD.
+const faq: [string, string][] = [
+  ['Is there a TMPlayer app for iPhone or iPad?',
+    'Not in the App Store. On an iPhone or iPad, open web.tmplayer.org in Safari: it is TMPlayer\'s web app, a beta, and it plays the videos in your own Telegram chats in the browser. Add it to the Home Screen and it opens like an app, full screen and with its own icon.'],
+  ['Can I play MKV videos from Telegram on an iPhone?',
+    'Yes, on iOS 17.1 or newer. Safari cannot open an MKV file itself, so the web app repacks the video into MP4 as it loads, without converting the picture, and sound Safari cannot play, such as AC3 or DTS, is converted. MP4 videos play on older iPhones too. A video whose picture the browser cannot decode at all shows a message that says so.'],
+  ['Is it safe to sign in to Telegram in the web app?',
+    'It signs in to your own Telegram account and talks to Telegram directly from your browser. There is no TMPlayer account and no server of ours between you and Telegram. The privacy policy at tmplayer.org/privacy lists what else it asks for, such as posters, and the source code is on GitHub.'],
+  ['Can I download Telegram videos to watch offline in the web app?',
+    'No. The web app plays a video while it loads and keeps no downloads. To keep videos for later, use TMPlayer on an Android phone, an Android TV or a computer.'],
+  ['Does the web app work on a Samsung or LG TV?',
+    'As a beta. Open web.tmplayer.org in the TV\'s own browser on a Samsung TV from 2020 or later or an LG TV on webOS 5 or newer: it opens a version made for the remote, with sign in by QR code. It plays what the TV\'s browser can decode.'],
+];
+const faqLd = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  mainEntity: faq.map(([q, a]) => ({ '@type': 'Question', name: q, acceptedAnswer: { '@type': 'Answer', text: a } })),
+};
+const webAppLd = {
+  '@context': 'https://schema.org',
+  '@type': 'WebApplication',
+  name: 'TMPlayer web app',
+  url: APP,
+  description: 'A beta of TMPlayer in the browser: an unofficial player for the videos in your own Telegram chats, made first for the iPhone and iPad.',
+  applicationCategory: 'MultimediaApplication',
+  operatingSystem: 'Any current web browser; iOS 17.1 or newer for MKV on an iPhone or iPad',
+  browserRequirements: 'Requires JavaScript and Media Source Extensions',
+  isAccessibleForFree: true,
+  offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+  isPartOf: { '@type': 'SoftwareApplication', name: 'TMPlayer', url: 'https://tmplayer.org/' },
+};
+---
+<Base path="/web/" title="TMPlayer web: a Telegram video player for iPhone and iPad" description="TMPlayer's web app, a beta, plays the videos in your own Telegram chats in Safari or any browser, with nothing to install. MKV and subtitles on an iPhone." getBar>
+  <Fragment slot="head">
+    <JsonLd data={breadcrumb(['Web', '/web/'])} />
+    <JsonLd data={webAppLd} />
+    <JsonLd data={faqLd} />
+  </Fragment>
+<BgArt />
+<Header />
+
+<main id="main">
+
+  <PageHead lede="There is no TMPlayer app in the App Store. Its web app, a beta at web.tmplayer.org, signs in to your own Telegram account and plays the videos already in your chats right in the browser. On an iPhone or iPad, add it to the Home Screen and it opens like an app." updated="/web/">
+    <Fragment slot="crumbs"><a href="/">Home</a><span aria-hidden="true">/</span>Web</Fragment>
+    <Fragment slot="title">Telegram videos on an <em>iPhone, an iPad</em> or any browser</Fragment>
+    <Fragment slot="actions">
+      <a class="btn btn-filled" href={APP} rel="noopener"><Icon name="play-card" /> Open web.tmplayer.org</a>
+      <a class="btn btn-outline" href="/download/">Apps for other devices <Icon name="arrow-right-sm" /></a>
+    </Fragment>
+    <nav class="platform-jump" aria-label="On this page">
+      <a href="#does">What it does</a>
+      <a href="#home-screen">Add to Home Screen</a>
+      <a href="#fit">Will it play yours</a>
+      <a href="#questions">Questions</a>
+    </nav>
+  </PageHead>
+
+  <Band wave tonal id="does" title="What it does" sub="The same account and the same chats as TMPlayer on a TV, a phone or a computer, in a browser tab.">
+    <div class="two-col" data-reveal>
+      <Panel icon="search-panel" tone="browse" list="ticks" title="Your chats">
+        <li>Sign in with a QR code scanned by Telegram on another device, or with your phone number, the code Telegram sends and your two-step password if you have one.</li>
+        <li>Your chats and channels with their videos as posters, a Home with Continue watching, and search.</li>
+        <li>Only what is already in your chats: there is no catalogue and nothing to browse that you have not joined.</li>
+      </Panel>
+      <Panel icon="play-card" tone="play" list="ticks" title="The player">
+        <li>A video starts while it is still loading, with no download first.</li>
+        <li>MP4 plays as it is. MKV and WebM are repacked for the browser on the way, and HEVC the browser cannot decode is converted.</li>
+        <li>AC3 and DTS sound, which Safari does not play, is converted, and you can switch between a video's audio tracks.</li>
+        <li>Your own subtitle files: SRT, ASS and SSA (shown as plain text), WebVTT and MicroDVD.</li>
+        <li>Picture in picture and AirPlay, where the browser offers them.</li>
+      </Panel>
+    </div>
+    <p class="muted small section-note" data-reveal>Need every format, downloads or casting to a Chromecast? See <a href="/formats/">what the apps play</a> and <a href="/features/">every feature</a>.</p>
+  </Band>
+
+  <Band wave id="home-screen" title="Add it to the Home Screen" sub="It then opens full screen, with its own icon, like any other app.">
+    <Steps>
+      <Step id="web-1" title="Open web.tmplayer.org" p>On an iPhone or iPad use Safari; on an Android phone or a computer, any current browser.</Step>
+      <Step id="web-2" title="Add it" p>In Safari, tap Share, then Add to Home Screen. In Chrome or Edge, take the Install offer in the address bar or the menu.</Step>
+      <Step id="web-3" title="Sign in" p>Open it from the new icon and sign in to your own Telegram account. Your chats with videos appear, and a tap plays one.</Step>
+    </Steps>
+  </Band>
+
+  <StarBand lede="TMPlayer is free and open source. A star on GitHub helps the next person find it." />
+
+  <Band wave tonal id="fit" title="Will it play yours?">
+    <div class="two-col" data-reveal>
+      <Panel kind="yes" title="Yes">
+        <li>An iPhone or iPad on iOS 17.1 or newer. On older ones, MP4 videos still play.</li>
+        <li>A current browser on an Android phone or a computer.</li>
+        <li>A Samsung TV from 2020 or later, or an LG TV on webOS 5 or newer, in the TV's browser (a beta): <a href="/guides/telegram-on-samsung-or-lg-tv/">how</a>.</li>
+      </Panel>
+      <Panel kind="no" title="Not yet">
+        <li>No downloads to keep for offline: the apps for <a href="/android/">Android</a>, <a href="/android-tv/">Android TV</a> and <a href="/desktop/">computers</a> have them.</li>
+        <li>A video whose picture the browser cannot decode, even after repacking, does not play; the page says why.</li>
+        <li>It is a beta: not tried on every device yet.</li>
+      </Panel>
+    </div>
+  </Band>
+
+  <Band wave id="questions" title="Questions">
+    <div class="faq" data-reveal>
+      {faq.map(([q, a]) => <FaqItem q={q} name="faq">{a}</FaqItem>)}
+    </div>
+    <p class="muted small section-note" data-reveal>More in <a href="/faq/">the questions</a>, <a href="/privacy/">the privacy policy</a> and <a href="/security/">how to check it is safe</a>. TMPlayer is unofficial and not affiliated with Telegram; it is for videos you have the right to watch (<a href="/legal/">lawful use</a>).</p>
+  </Band>
+
+  <GiveBand wave tonal />
+
+</main>
+
+<Footer />
+<ToTop />
+</Base>

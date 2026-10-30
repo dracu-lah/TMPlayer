@@ -342,6 +342,12 @@
     "priority": "0.6"
   },
   {
+    "path": "/web/",
+    "lastmod": "2026-10-30",
+    "changefreq": "monthly",
+    "priority": "0.8"
+  },
+  {
     "path": "/security/",
     "lastmod": "2026-10-29",
     "changefreq": "monthly",

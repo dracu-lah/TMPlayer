@@ -13,6 +13,11 @@ import { l } from '../i18n/links';
 const lang = Astro.locals.lang;
 const t = (k: string) => text(lang, k);
 const cup = versioned('/brand/bmc-cup-on-yellow.svg');
+
+// TMPlayer Music, the sibling app for the audio files in your own Telegram chats, by the same
+// author. OFF until music.tmplayer.org is more than its coming soon page: then set this to true and
+// the bottom row names it beside nevil.dev, the name alone, with no claim about what it does.
+const SHOW_MUSIC_LINK = false;
 ---
 <footer class="site-footer">
   <div class="wrap">
@@ -46,7 +51,7 @@ const cup = versioned('/brand/bmc-cup-on-yellow.svg');
             <li><a href={l(lang, '/fire-tv/')}>Fire TV</a></li>
             <li><a href={l(lang, '/android/')}><T k="download.android_phone" /></a></li>
             <li><a href={l(lang, '/desktop/')}><T k="features.jump_windows_and_linux" /></a></li>
-            <li><a href="https://web.tmplayer.org/" rel="noopener"><T k="home.platform_web" /></a></li>
+            <li><a href="/web/"><T k="home.platform_web" /></a></li>
           </ul>
         </div>
         <div>
@@ -81,6 +86,7 @@ const cup = versioned('/brand/bmc-cup-on-yellow.svg');
         <a href="/signing/"><T k="common.code_signing" /></a>
         <a href="https://github.com/dracu-lah/TMPlayer" rel="noopener"><T k="common.source" /></a>
         <a href="https://nevil.dev" rel="noopener">nevil.dev</a>
+        {SHOW_MUSIC_LINK && <a href="https://music.tmplayer.org/" rel="noopener">TMPlayer Music</a>}
       </nav>
     </div>
   </div>
