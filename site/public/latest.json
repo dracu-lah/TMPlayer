@@ -1,52 +1,39 @@
 {
   "schema": 1,
-  "version": "1.28.2",
-  "versionCode": 1280299,
-  "published": "2026-10-28T15:15:54Z",
-  "releaseUrl": "https://github.com/dracu-lah/TMPlayer/releases/tag/v1.28.2",
-  "notes": "Home settings: turn rows on or off, choose the chats Recently added reads, and a See all page for each row. TV Home: every row fits under the bar, Left and Right move across the tiles, Up and Down one press a row, See all at a row's end. Remove from history on any card, select several, or Clear history in one press, with Undo. Shows: Watch later, mark a season or the whole show as watched, and Go to the chat, as a single video has them. More options in the player as a side panel, with picture shapes 16:9, 4:3, 21:9, 2.35:1 and 1:1. A chat says how many videos its size limits hide, and the smallest size changes on the spot; the default is 400 MB again. One layout per page: a chat is always the poster grid, and TV Chats show in two columns. Malayalam subtitles from MSone, and subtitles in any script draw even where the system has no font for it. Kept videos gone from Telegram leave Continue watching, Watched and Watch later, and a download whose file went offers Download again. A session Telegram ended goes back to sign in and keeps your watched list, Watch later, bookmarks and settings. Desktop: Settings and Downloads open as a panel, the player's keys work without clicking first, and a Desktop or TV layout setting. TV: every button on banners, cards and the player is reached with the remote. Picture in picture when leaving the app can be turned off. Updates on Android 12 and later install without Android asking first. Home opens quickly on large accounts, smoother playback on slow devices, and many crash fixes.",
+  "version": "1.28.3",
+  "versionCode": 1280399,
+  "published": "2026-10-30T17:27:37Z",
+  "releaseUrl": "https://github.com/dracu-lah/TMPlayer/releases/tag/v1.28.3",
+  "notes": "Hotfix: Google Play Protect no longer warns that the Android app may be harmful. Updates on Android ask before installing again, as they did before 1.28.2.",
   "changes": [
-    "Home settings: turn rows on or off, choose the chats Recently added reads, and a See all page for each row",
-    "TV Home: every row fits under the bar, Left and Right move across the tiles, Up and Down one press a row, See all at a row's end",
-    "Remove from history on any card, select several, or Clear history in one press, with Undo",
-    "Shows: Watch later, mark a season or the whole show as watched, and Go to the chat, as a single video has them",
-    "More options in the player as a side panel, with picture shapes 16:9, 4:3, 21:9, 2.35:1 and 1:1",
-    "A chat says how many videos its size limits hide, and the smallest size changes on the spot; the default is 400 MB again",
-    "One layout per page: a chat is always the poster grid, and TV Chats show in two columns",
-    "Malayalam subtitles from MSone, and subtitles in any script draw even where the system has no font for it",
-    "Kept videos gone from Telegram leave Continue watching, Watched and Watch later, and a download whose file went offers Download again",
-    "A session Telegram ended goes back to sign in and keeps your watched list, Watch later, bookmarks and settings",
-    "Desktop: Settings and Downloads open as a panel, the player's keys work without clicking first, and a Desktop or TV layout setting",
-    "TV: every button on banners, cards and the player is reached with the remote",
-    "Picture in picture when leaving the app can be turned off",
-    "Updates on Android 12 and later install without Android asking first",
-    "Home opens quickly on large accounts, smoother playback on slow devices, and many crash fixes"
+    "Hotfix: Google Play Protect no longer warns that the Android app may be harmful",
+    "Updates on Android ask before installing again, as they did before 1.28.2"
   ],
   "assets": {
     "android-universal": {
-      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.28.2/TMPlayer-1.28.2-universal.apk",
-      "sha256": "dfa6edfbf5cafecc1ffd5e9a60965b34746da0c17a7fef1d74210d9978a1a013",
-      "size": 34081575
+      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.28.3/TMPlayer-1.28.3-universal.apk",
+      "sha256": "2c69a989e3287f32e9fbfc695e95d0c1cc226fbaac0f00110a4379620324813a",
+      "size": 34081817
     },
     "windows-x64-msi-v2": {
-      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.28.2/TMPlayer-1.28.2-windows-x64.msi",
-      "sha256": "b5628b64a07c7f1ce4b53462c2942eccec597e32288a6072c9679475d5a8a41f",
+      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.28.3/TMPlayer-1.28.3-windows-x64.msi",
+      "sha256": "5c1257d400ec0d5f3da53790745f553184030f8e36cec7f5083d28b4880c952f",
       "size": 110642320
     },
     "macos-arm64-dmg": {
-      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.28.2/TMPlayer-1.28.2-macos-arm64.dmg",
-      "sha256": "c8212d2996722508630aff5c7b08a6ab04a4d1ddfa4def3aec498cb69a8c4d4b",
-      "size": 118244111
+      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.28.3/TMPlayer-1.28.3-macos-arm64.dmg",
+      "sha256": "aa3c6e7367193060764b02eae36de0f5deef61a5ed6b3ce700372b7d8c857666",
+      "size": 118279959
     },
     "linux-x64-appimage": {
-      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.28.2/TMPlayer-1.28.2-x86_64.AppImage",
-      "sha256": "811cf7652787843b52c0a24e620f6dedc053cee6aa48aa85883eaeaa5bc144fa",
-      "size": 103893496
+      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.28.3/TMPlayer-1.28.3-x86_64.AppImage",
+      "sha256": "ed6d60d8b5f979ad6fac033ba74f52e3bd0e2cb44093f919a8aadd2bfe7349a6",
+      "size": 103975416
     },
     "linux-x64-tarball": {
-      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.28.2/TMPlayer-1.28.2-linux-x64.tar.xz",
-      "sha256": "df649bcd1f255a4fe099b65ca7a3f098a77a32aa228379d5dea795ae35b46248",
-      "size": 74331168
+      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.28.3/TMPlayer-1.28.3-linux-x64.tar.xz",
+      "sha256": "d74291bab03039aa9615cdd8279af5c85bd131a9e18e75ffe450965f1efc5cf0",
+      "size": 74412972
     }
   }
 }

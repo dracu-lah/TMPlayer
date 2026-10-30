@@ -236,12 +236,12 @@
   "redirects": [
     {
       "source": "/apk",
-      "destination": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.28.2/TMPlayer-1.28.2-universal.apk",
+      "destination": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.28.3/TMPlayer-1.28.3-universal.apk",
       "permanent": false
     },
     {
       "source": "/apk/",
-      "destination": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.28.2/TMPlayer-1.28.2-universal.apk",
+      "destination": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.28.3/TMPlayer-1.28.3-universal.apk",
       "permanent": false
     },
     {

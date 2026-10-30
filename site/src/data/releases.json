@@ -1,52 +1,59 @@
 [
   {
+    "version": "1.28.3",
+    "published": "2026-10-30T17:27:50Z",
+    "url": "https://github.com/dracu-lah/TMPlayer/releases/tag/v1.28.3",
+    "notes": "- Hotfix: Google Play Protect no longer warns that the Android app may be harmful\n- Updates on Android ask before installing again, as they did before 1.28.2",
+    "downloads": 0
+  },
+  {
     "version": "1.28.2",
     "published": "2026-10-28T15:16:08Z",
     "url": "https://github.com/dracu-lah/TMPlayer/releases/tag/v1.28.2",
     "notes": "- Home settings: turn rows on or off, choose the chats Recently added reads, and a See all page for each row\n- TV Home: every row fits under the bar, Left and Right move across the tiles, Up and Down one press a row, See all at a row's end\n- Remove from history on any card, select several, or Clear history in one press, with Undo\n- Shows: Watch later, mark a season or the whole show as watched, and Go to the chat, as a single video has them\n- More options in the player as a side panel, with picture shapes 16:9, 4:3, 21:9, 2.35:1 and 1:1\n- A chat says how many videos its size limits hide, and the smallest size changes on the spot; the default is 400 MB again\n- One layout per page: a chat is always the poster grid, and TV Chats show in two columns\n- Malayalam subtitles from MSone, and subtitles in any script draw even where the system has no font for it\n- Kept videos gone from Telegram leave Continue watching, Watched and Watch later, and a download whose file went offers Download again\n- A session Telegram ended goes back to sign in and keeps your watched list, Watch later, bookmarks and settings\n- Desktop: Settings and Downloads open as a panel, the player's keys work without clicking first, and a Desktop or TV layout setting\n- TV: every button on banners, cards and the player is reached with the remote\n- Picture in picture when leaving the app can be turned off\n- Updates on Android 12 and later install without Android asking first\n- Home opens quickly on large accounts, smoother playback on slow devices, and many crash fixes",
-    "downloads": 0
+    "downloads": 1426
   },
   {
     "version": "1.28.1",
     "published": "2026-10-23T19:20:50Z",
     "url": "https://github.com/dracu-lah/TMPlayer/releases/tag/v1.28.1",
     "notes": "- A new Home on phone, TV and desktop: a carousel with title logos, ratings from several sites and a short overview, then Continue watching, Recently added and a row for each starred chat, ready at once from your last visit\n- Android TV speed first: no more freezes on the TV sticks, videos start sooner, even on a slow line, and the remote moves at once\n- Older TVs: installs on Android 6 and 7, so sticks such as the Fire TV Stick 4K on Fire OS 6 run TMPlayer\n- Fire TV: Dolby Vision videos that also carry HDR10+ play instead of a black screen, Dolby Vision plays as HDR10 where the TV has none, and DTS-HD MA passthrough works\n- 3D video: side by side and top and bottom videos as anaglyph, one eye in 2D, or both eyes for a VR headset or a 3D TV\n- Back always returns where you were: to a video's page after playing, to the row or tile you opened it from, and through \"More like this\"\n- Free up space as one review on every device: what TMPlayer uses, what is free, and one button that asks first before removing a download\n- Save to folder or to the gallery for one video or a selection, with Select all, a check against free space and progress you can cancel\n- Search keeps up with typing and shows a title once, however often it was posted\n- Pictures arrive smoothly: a soft preview first, then the sharp picture fades in\n- Appearance: your own accent colour, high contrast, a choice of typeface and a live preview\n- Subtitles: colour, edge, typeface, weight and box darkness, remembered languages per series\n- Hide a chat from TMPlayer, and one Sort and filter menu in every chat\n- Player: Even out volume on by default, clearer dialogue when surround is folded to stereo, scrub pictures while streaming, Start over on a show's page, and a clear message when a 4K video is too much for the TV\n- Android: XviD, DivX, VC-1 and Motion JPEG videos play, and the other decoder takes over by itself when one will not\n- Haptics on phones, quieter messages, trailers in your YouTube app, a lighter copy on TVs that struggle, and opt-in crash reports on every platform",
-    "downloads": 1106
+    "downloads": 1162
   },
   {
     "version": "1.27.1",
     "published": "2026-10-19T11:43:51Z",
     "url": "https://github.com/dracu-lah/TMPlayer/releases/tag/v1.27.1",
     "notes": "- Windows: TMPlayer starts again on computers where it closed at once with \"failedChats must not be null\"\n- Desktop Home: one starred chat is enough for the carousel, and the rows no longer jump while Home fills in\n- Casting: subtitles show on the TV, and a soundtrack the TV cannot play is converted on the phone so it is heard, with its audio and subtitle choices kept\n- Casting: the device list stays open and says it is connecting until the TV is ready, and a 4K video on a 1080p TV says so instead of failing\n- Casting: if the connection to the TV drops, the video waits with Reconnect and Play here instead of starting on the phone, and a short pause from Telegram is retried\n- The update window shows what changed as a list, on phone, TV and desktop\n- On a phone, the screen shown when a video stops arriving fits sideways and upright",
-    "downloads": 1163
+    "downloads": 1165
   },
   {
     "version": "1.27.0",
     "published": "2026-10-19T03:23:46Z",
     "url": "https://github.com/dracu-lah/TMPlayer/releases/tag/v1.27.0",
     "notes": "- Android TV: a new top bar in place of the side rail. Your profile, Search, Home, Chats and Settings along the top, the pages at full width, Up and Down between the bar and the page, and Back to reach the bar from anywhere\n- Cast to a Chromecast or Google TV from the phone and the desktop, with the controls staying on your device: MKV videos play without stalling, audio tracks switch on the TV, and your place follows you back to the phone\n- Connecting to Telegram never waits in silence: a live status line, and when it takes too long the likely reason with Retry, Use a proxy and Send logs, on phone, TV and desktop\n- Proxies (MTProto, SOCKS5, HTTP or a t.me/proxy link), before sign in and from Settings, for networks where Telegram is blocked; sign in with an email code works too\n- Search across all your chats, with one result per video and filters, and find a person, group or channel by @username; tap a chat's name for its picture, username, description and link\n- t.me links open in TMPlayer: a post plays from its start time, a public chat or an invite shows before you join\n- Telegram's own lighter copies of a big video (720p, 480p) to pick from, picked for you on a slow line, with Telegram's seek previews and the uploader's cover\n- A video posted more than once is one card: pick the copy and quality, and your place follows it. A video cut into .part001 pieces plays as one\n- Home opens on a calmer carousel of the newest videos, and Home appears ready rather than filling in\n- Player: chapters, picture shape on the bar, finer speed steps, Night mode for quieter loud scenes, a way back after a long jump, and subtitles at the same height on every video\n- Appearance: a Pure black switch for OLED screens that also follows the system's dark mode, and nine accent colours\n- Connected devices: where TMPlayer is signed in, and ending those sessions without signing out Telegram's own apps\n- Storage at a glance in a chart, everything on the device listed, Free up space with Low storage mode, and Low storage mode keeping to its limit\n- Notifications for new episodes of shows you watch, finished downloads, low storage and updates, each with its own switch\n- Videos in a post's comments, round videos, Forward to a chat, Save to the gallery, an Audio list per chat, and resume on your other devices through your Saved Messages (opt in)\n- macOS: sign in works on Macs without Homebrew, and a new installer window. Windows: an update keeps TMPlayer and your sign in\n- Many fixes on phone, TV and desktop, in all 21 languages",
-    "downloads": 172
+    "downloads": 175
   },
   {
     "version": "1.26.0",
     "published": "2026-10-14T20:45:18Z",
     "url": "https://github.com/dracu-lah/TMPlayer/releases/tag/v1.26.0",
     "notes": "- A new Home with posters, overviews and episode names for films and shows, and TMPlayer rows on the Android TV home screen\n- A setup and a quick tour after sign in, in every language, with Performance and Mobile data steps; existing users are offered the tour once\n- Low storage mode streams videos larger than the free space, and Save mobile data fetches only a few minutes ahead on mobile data\n- Skip intro, recap and credits, speed remembered per series, preferred audio and subtitle language, watch later, season downloads, bookmarks, A-B repeat and skip silence\n- Backups of settings and lists, an app PIN and a kids lock with allowed chats\n- After a crash, TMPlayer asks before sending a report, once or always\n- A macOS preview for Apple Silicon Macs with macOS 26 or newer\n- New icons, the desktop's own window buttons, and many fixes for right-to-left languages, TV focus and long translations",
-    "downloads": 419
+    "downloads": 423
   },
   {
     "version": "1.25.0",
     "published": "2026-10-09T22:03:12Z",
     "url": "https://github.com/dracu-lah/TMPlayer/releases/tag/v1.25.0",
     "notes": "Series now have an Episodes list in the player on phone, TV and desktop, with autoplay to the next episode and marking episodes watched right from the list. The side bar is simpler: Home, History, Favourites, Chats, Downloads and Settings, and Only my folders hides Telegram's own Chats and Saved groups. There is a shorter welcome tour, and Home says how to get a first video in. TMPlayer now asks before forgetting progress, clearing caches or deleting downloads. On desktop, Chinese, Japanese, Korean, Hindi, Bengali, Malayalam, Arabic and Persian show even without system fonts, and the AppImage updates only what changed. On TV, OK pauses in one press and See all sits on each Home row. Labels that were cut short in German, Russian and Malayalam fit, and buttons in the light theme are readable again.",
-    "downloads": 305
+    "downloads": 306
   },
   {
     "version": "1.24.0",
     "published": "2026-10-06T20:48:44Z",
     "url": "https://github.com/dracu-lah/TMPlayer/releases/tag/v1.24.0",
     "notes": "TMPlayer now speaks 21 languages (machine translated for now, corrections welcome on GitHub). Home has rows, series get their own page, and search covers all your chats. Optional posters and overviews come from TMDB, TVmaze and AniList, and subtitles can be found online through OpenSubtitles. The player adds volume boost, a sleep timer, a \"still watching?\" check, subtitle and audio delay, subtitle size and position, and simpler controls on phone, TV and desktop. Downloads can be removed after watching. On TV: Fire TV remotes, Watch Next and seek previews. On desktop the QR sign in works in release builds, and there is a new About screen everywhere.",
-    "downloads": 122
+    "downloads": 124
   },
   {
     "version": "1.22.1",
@@ -67,20 +74,20 @@
     "published": "2026-10-04T12:11:11Z",
     "url": "https://github.com/dracu-lah/TMPlayer/releases/tag/v1.21.0",
     "notes": "Finished episodes now get a tick, and any video can be marked as watched or unwatched by hand. A new Watched tab lists what you have finished. Searching a chat now finds videos outside the size limits, and the grid says how many videos the limits are hiding. On a TV, the release page opens as a QR code. On Windows, the media keys and the media flyout control the player.",
-    "downloads": 57
+    "downloads": 59
   },
   {
     "version": "1.20.0",
     "published": "2026-10-04T11:29:18Z",
     "url": "https://github.com/dracu-lah/TMPlayer/releases/tag/v1.20.0",
     "notes": "The first release with a desktop app for Windows and Linux. It signs in with the same Telegram account and plays the same chats, with the keyboard, the mouse and your media keys.",
-    "downloads": 18
+    "downloads": 19
   },
   {
     "version": "1.16.0",
     "published": "2026-08-29T18:59:59Z",
     "url": "https://github.com/dracu-lah/TMPlayer/releases/tag/v1.16.0",
     "notes": "",
-    "downloads": 391
+    "downloads": 392
   }
 ]
