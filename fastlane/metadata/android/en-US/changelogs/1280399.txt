@@ -1,0 +1,1 @@
+Hotfix: Google Play Protect no longer calls the Android app harmful. Updates ask before installing again, as they did before 1.28.2.

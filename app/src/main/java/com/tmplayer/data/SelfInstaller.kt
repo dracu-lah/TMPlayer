@@ -1,5 +1,6 @@
 package com.tmplayer.data
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
@@ -109,6 +110,9 @@ object SelfInstaller {
     private suspend fun silentAllowed(context: Context, apkPackage: String, apkTargetSdk: Int): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return false
         val app = context.applicationContext
+        // Not declared in the manifest since 1.28.3 (Play Protect flagged the pair with
+        // REQUEST_INSTALL_PACKAGES), so Android would only ask: do not try a silent session.
+        if (app.checkSelfPermission(Manifest.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION) != PackageManager.PERMISSION_GRANTED) return false
         val refused = runCatching { SettingsStore(app).updateSilentRefusedNow() }.getOrDefault(0L)
         return SilentUpdateRule.allows(
             sdkInt = Build.VERSION.SDK_INT,
