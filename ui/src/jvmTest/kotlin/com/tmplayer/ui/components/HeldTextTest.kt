@@ -76,6 +76,23 @@ class HeldTextTest {
     }
 
     @Test
+    fun `externalChange tells a text from elsewhere apart from the field's own typing`() {
+        // HX49: a caller reacts to a text from elsewhere (Clear) differently from ordinary typing,
+        // since only the former can leave a focus-rect query stale against a shorter text.
+        val field = Wired("")
+        field.key('a')
+        assertEquals("typing is not external", false, field.held.externalChange)
+        field.owner = "a recent search"
+        field.held.sync(field.owner)
+        assertEquals("a text from elsewhere is external", true, field.held.externalChange)
+        field.key('!')
+        assertEquals("typing after a text from elsewhere is not external", false, field.held.externalChange)
+        // An owner echo that changes nothing is not a change at all.
+        field.held.sync(field.owner)
+        assertEquals(false, field.held.externalChange)
+    }
+
+    @Test
     fun `a grouped phone number keeps the caret after the last digit typed`() {
         // The field holds bare digits; the grouping is drawn over them, the caret mapped through it.
         val field = Wired("", keep = { raw -> raw.filter(Char::isDigit) })

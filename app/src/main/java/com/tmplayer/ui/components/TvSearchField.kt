@@ -84,6 +84,9 @@ fun TvSearchField(
     // makes the row impossible to move past. Editing begins on a deliberate press.
     var editing by remember { mutableStateOf(false) }
     var everFocused by remember { mutableStateOf(false) }
+    // Set around the deliberate clear-and-reclaim focus dance below (HX49), so the field's own
+    // onFocusChanged does not read that blip as the viewer leaving and close editing.
+    var reclaimingFocus by remember { mutableStateOf(false) }
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
     val field = remember { FocusRequester() }
@@ -133,6 +136,18 @@ fun TvSearchField(
         Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
             if (editing) {
                 val held = com.tmplayer.ui.components.rememberHeldText(value)
+                // HX49: a text from elsewhere (Clear, a recent search tapped) can shrink the field
+                // while the IME still holds a focus-rect query built for the old, longer text, a
+                // known class of Compose foundation crash. Dropping focus and taking it back gives
+                // the IME a fresh layout to ask about instead of a stale one.
+                LaunchedEffect(held.value.text) {
+                    if (held.externalChange && focused) {
+                        reclaimingFocus = true
+                        focusManager.clearFocus(force = true)
+                        runCatching { field.requestFocus() }
+                        reclaimingFocus = false
+                    }
+                }
                 BasicTextField(
                     value = held.value,
                     onValueChange = { held.edit(it, onValueChange) },
@@ -187,7 +202,7 @@ fun TvSearchField(
                             // would close editing again and the keyboard would never appear.
                             if (state.isFocused) {
                                 everFocused = true
-                            } else if (everFocused) {
+                            } else if (everFocused && !reclaimingFocus) {
                                 editing = false
                             }
                         },

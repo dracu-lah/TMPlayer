@@ -33,12 +33,26 @@ class HeldText(initial: String) {
     /** Set by the field's own edit, until the owner's answer to it has been read. */
     private var justEdited = false
 
+    /**
+     * Whether the last [sync] that changed [value] was a text from elsewhere rather than the
+     * field's own typing (HX49): a field that shrinks this way while it still holds the IME's
+     * focus can race a focus-rect callback still built for the old, longer text (a known class of
+     * Compose foundation crash, `requireIndexInRange`, seen on a Haier TV on 1.28.3); a caller that
+     * clears and reclaims focus on this flag gives the IME a fresh layout to ask about instead.
+     */
+    var externalChange: Boolean = false
+        private set
+
     /** The text the owner holds now, read on every composition. */
     fun sync(text: String) {
         // Right after an edit the owner's text is what it made of that edit.
         val edited = justEdited
         justEdited = false
-        if (text == value.text) return
+        if (text == value.text) {
+            externalChange = false
+            return
+        }
+        externalChange = !edited
         val caret = if (edited) {
             (value.selection.end - (value.text.length - text.length).coerceAtLeast(0)).coerceIn(0, text.length)
         } else {
