@@ -8385,7 +8385,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     private fun downloadFirst() {
         if (!canSaveToDownloads()) return
         OfflineDownloads.start(this, mediaItemForCache().copy(fileId = uploadId(), sizeBytes = uploadSize()), chatTitle)
-        android.widget.Toast.makeText(applicationContext, L.playerDownloadFirstStarted, android.widget.Toast.LENGTH_LONG).show()
+        runOnUiThread {
+            android.widget.Toast.makeText(applicationContext, L.playerDownloadFirstStarted, android.widget.Toast.LENGTH_LONG).show()
+        }
         finish()
     }
 
