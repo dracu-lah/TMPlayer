@@ -1227,9 +1227,14 @@ html:not(.js) .js-only { display: none; }
 .platform-title { min-width: 0; flex: 1 1 14rem; }
 /* Samsung and LG's own marks, the brand itself rather than a generic tone: larger, squircled and
    on the end side, so each card reads at a glance which TV it is for (user, 2026-11-01). */
-#samsung-tv .platform-head, #lg-tv .platform-head { flex-direction: row-reverse; justify-content: flex-end; }
-#samsung-tv .panel-icon, #lg-tv .panel-icon { width: 64px; height: 64px; border-radius: 26%; }
-#samsung-tv .panel-icon svg, #lg-tv .panel-icon svg { width: 30px; height: 30px; }
+#samsung-tv .platform-head, #lg-tv .platform-head { flex-direction: row-reverse; justify-content: flex-end; align-items: center; }
+/* The brand's own wordmark, not a tone-coloured badge: a flat logo reads oddly boxed into a
+   circle (user, 2026-11-01, "only show icon remove the bg card"). Sized individually since
+   Samsung's mark is a thin wide wordmark and LG's a squarer lockup; a shared box made one of
+   them too small. */
+#samsung-tv .panel-icon, #lg-tv .panel-icon { width: auto; height: auto; min-height: 0; background: none; border-radius: 0; }
+#samsung-tv .panel-icon svg { width: 118px; height: auto; }
+#lg-tv .panel-icon svg { width: 64px; height: auto; }
 .platform-title h3 {
   margin: 0;
   font-size: 1.4rem;

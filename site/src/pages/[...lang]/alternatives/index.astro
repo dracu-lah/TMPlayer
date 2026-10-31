@@ -200,7 +200,7 @@ const itemList = {
   {/* One page per app people search for by name (src/pages/alternatives/[slug].astro), in English. */}
   <StarBand lede={t('android_tv.a_tv_app_outside_the')} />
 
-  <Band wave id="one-by-one" title={t(a('one_h'))} sub={t(a('one_sub'))}>
+  <Band id="one-by-one" title={t(a('one_h'))} sub={t(a('one_sub'))}>
     <Cards>
       {vs.pages.map((x) => <LinkCard href={`/alternatives/${x.slug}/`} icon="tv-card" title={x.id === 'telegram' ? t(a('one_telegram_h')) : x.name} body={t(a(`one_${x.id}`))} go={t(a('one_go'))} />)}
     </Cards>
