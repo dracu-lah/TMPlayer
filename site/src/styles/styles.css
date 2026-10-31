@@ -2096,6 +2096,9 @@ kbd {
   border-radius: var(--shape-xl);
 }
 .policy-wrap h2 { margin: 0 0 12px; font-size: clamp(1.3rem, 3vw, 1.8rem); }
+/* The support page's own cards: a round icon above the heading, its own ground and centred glyph
+   (reuses .panel-icon's tone colours), with room below before the words start (user, 2026-11-01). */
+.support-section-icon { margin-bottom: 14px; }
 .policy-wrap p, .policy-wrap li { color: var(--on-surface-variant); line-height: 1.7; }
 .policy-wrap p:last-child { margin-bottom: 0; }
 .policy-wrap ul { margin: 14px 0; padding-left: 22px; }
