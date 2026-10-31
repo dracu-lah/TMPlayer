@@ -6,9 +6,9 @@
 import Icon from './Icon.astro';
 import { text } from '../i18n/t';
 
-interface Props { title: string; lede: string; fork?: boolean }
+interface Props { title: string; lede: string }
 const t = (k: string) => text(Astro.locals.lang, k);
-const { title, lede, fork = false } = Astro.props;
+const { title, lede } = Astro.props;
 ---
 <div class="lcard lcard-star" data-reveal>
   <div class="lcard-text">
@@ -22,6 +22,5 @@ const { title, lede, fork = false } = Astro.props;
       <span data-count-wrap hidden><b data-count="forks"></b> {t('home.forks')}</span>
     </p>
     <a class="btn btn-filled" href="https://github.com/dracu-lah/TMPlayer" rel="noopener"><Icon name="star-btn" /> {t('home.star_on_github')}</a>
-    {fork && <a class="support-alt" href="https://github.com/dracu-lah/TMPlayer/fork" rel="noopener"><Icon name="fork-btn" /> {t('home.fork_the_repository')}</a>}
   </div>
 </div>

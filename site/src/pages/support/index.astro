@@ -7,7 +7,6 @@ import JsonLd from '../../components/JsonLd.astro';
 import { breadcrumb } from '../../components/breadcrumb';
 import HeaderPlain from '../../components/plain/HeaderPlain.astro';
 import FooterPlain from '../../components/plain/FooterPlain.astro';
-import QrCode from '../../components/QrCode.astro';
 import CoffeeButton from '../../components/CoffeeButton.astro';
 import { SPONSORS_URL } from '../../lib/support';
 import ShareLinks from '../../components/support/ShareLinks.astro';
@@ -27,7 +26,7 @@ Astro.locals.lang = ENGLISH;
   <div class="wrap policy-wrap">
     <p class="eyebrow">Support the project</p>
     <h1>Support TMPlayer</h1>
-    <p class="policy-lede">TMPlayer is free and open source, with no ads of its own, no paid tier and no account of ours. Everything here is voluntary and unlocks nothing: every feature is free for everyone, whether or not you ever do any of it.</p>
+    <p class="policy-lede">TMPlayer is free and open source: no ads, no paid tier, no account of ours. Everything here is voluntary and unlocks nothing.</p>
 
     <section id="chip-in">
       <h2>Chip in</h2>
@@ -36,16 +35,12 @@ Astro.locals.lang = ENGLISH;
         <CoffeeButton label="Buy me a coffee" large />
         <a class="support-alt" href={SPONSORS_URL} rel="noopener"><Icon name="heart-btn" /> Sponsor on GitHub</a>
       </div>
-      <div class="support-codes">
-        <QrCode icon="qr-coffee" caption="Scan for Buy Me a Coffee" />
-        <QrCode icon="qr-sponsors" caption="Scan for GitHub Sponsors" minor />
-      </div>
     </section>
 
     <section id="star">
       <h2>Star it on GitHub</h2>
       <p>A star costs nothing and takes one click. It is how the next person, reading a GitHub page cold, learns that somebody else already trusted this app.</p>
-      <div class="support-actions support-give">
+      <div class="support-coffee support-coffee-start">
         <a class="btn btn-filled" href="https://github.com/dracu-lah/TMPlayer" rel="noopener">
           <Icon name="star-btn" />
           Star on GitHub
@@ -61,7 +56,7 @@ Astro.locals.lang = ENGLISH;
 
     <section>
       <h2>Already supporting?</h2>
-      <p>Thank you. You do not need to do anything here, and the app will not ask again once you tell it (Settings, or the card that asks). TMPlayer asks at most three times, ever.</p>
+      <p>Thank you. Nothing more to do here: the app will not ask again once you tell it, in Settings or on the card that asks.</p>
     </section>
   </div>
 </main>

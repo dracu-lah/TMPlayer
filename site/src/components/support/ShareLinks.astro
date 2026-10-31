@@ -1,5 +1,6 @@
 ---
 // "Tell a friend": the same sentence goes out by Telegram and by mail, URL encoded from one place.
+import Icon from '../Icon.astro';
 const url = 'https://tmplayer.org/';
 const pitch = 'TMPlayer plays your Telegram videos on a big screen. Free, no ads';
 const enc = encodeURIComponent;
@@ -7,7 +8,7 @@ const telegram = `https://t.me/share/url?url=${enc(url)}&text=${enc(`${pitch}.`)
 const mail = `mailto:?subject=TMPlayer&body=${enc(`${pitch}: ${url}`)}`;
 ---
 <div class="support-actions">
-  <a class="btn btn-filled" href={telegram} rel="noopener">Share on Telegram</a>
-  <a class="btn btn-outline" href={mail}>Share by email</a>
-  <button type="button" class="btn btn-outline js-only" data-copy={url}>Copy the link</button>
+  <a class="btn btn-filled" href={telegram} rel="noopener"><Icon name="telegram-btn" /> Share on Telegram</a>
+  <a class="btn btn-outline" href={mail}><Icon name="mail-btn" /> Share by email</a>
+  <button type="button" class="btn btn-outline js-only" data-copy={url}><Icon name="copy-btn" /> Copy the link</button>
 </div>

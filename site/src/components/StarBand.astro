@@ -3,24 +3,26 @@
 // page's own lede, placed apart from the support offer, which closes the page (GiveBand). It sits
 // on the page's plain ground, so it goes after a plain band; the band after it draws its own wave.
 // The home page uses the same band between its own sections: `between` evens out the gap above
-// and below it there, `id` names it, `fork` can be turned off and the "links" slot goes under the
-// lede (the home page's Telegram and issue links). `inset` draws the card alone, without a band
-// of its own, for a place inside another band (the changelog's list of releases).
+// and below it there, `id` names it, and the "links" slot goes under the lede (the home page's
+// Telegram and issue links). `inset` draws the card alone, without a band of its own, for a place
+// inside another band (the changelog's list of releases). No Fork action here: that is a
+// developer's move, not a visitor's (user, 2026-11-01, "remove fork the repository" from a
+// content page's star card).
 import StarLCard from './StarLCard.astro';
 import { text } from '../i18n/t';
 
-interface Props { title?: string; lede: string; id?: string; between?: boolean; fork?: boolean; inset?: boolean }
+interface Props { title?: string; lede: string; id?: string; between?: boolean; inset?: boolean }
 const t = (k: string) => text(Astro.locals.lang, k);
-const { title = t('features.star_it_if_it_helped'), lede, id, between = false, fork = true, inset = false } = Astro.props;
+const { title = t('features.star_it_if_it_helped'), lede, id, between = false, inset = false } = Astro.props;
 ---
 {inset ? (
   <div class="star-inset" id={id}>
-    <StarLCard title={title} lede={lede} fork={fork}><slot name="links" slot="links" /></StarLCard>
+    <StarLCard title={title} lede={lede}><slot name="links" slot="links" /></StarLCard>
   </div>
 ) : (
 <section class:list={['band', 'lband', { 'lband-between': between }]} id={id} aria-labelledby="support-h">
   <div class="wrap">
-    <StarLCard title={title} lede={lede} fork={fork}><slot name="links" slot="links" /></StarLCard>
+    <StarLCard title={title} lede={lede}><slot name="links" slot="links" /></StarLCard>
   </div>
 </section>
 )}

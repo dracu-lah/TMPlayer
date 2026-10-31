@@ -82,8 +82,10 @@ numbered HTML markers matched by a numbered list.
   `buymeacoffee.com/nevil.dev` (`/nevil` is somebody else).
 - Every page but download, install, support and the 404 has the floating `CoffeeCard` (a pill on a
   phone, a card wider up, bottom of the start edge), shown shortly after load and then always on
-  screen, above the phone's download bar (user, 2026-10-20). No scan code on it; the QR codes stay
-  on the support page and the star cards. Its x hides it for that page view only, nothing stored.
+  screen, above the phone's download bar (user, 2026-10-20). No scan code on it. The support page
+  dropped its own QR codes too (user, 2026-11-01, "remove the scan option": two buttons already
+  say where to go); `GiveBand`'s star card is the only place they still show. Its x hides it for
+  that page view only, nothing stored.
 - Every Buy Me a Coffee link (`data-bmc`) opens their widget in `CoffeeDialog`, a native
   `<dialog>` whose iframe app.js loads ahead of the click on the visitor's first scroll, touch, key
   or pointing at a support link (never for a runner that does not touch the page, nor with

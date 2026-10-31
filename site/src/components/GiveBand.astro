@@ -1,30 +1,22 @@
 ---
 // The band that closes a content page: the "Support TMPlayer" offer as a landscape card
-// (GiveLCard), apart from the star, which sits partway down the page (StarBand). `codes` adds the
-// QR codes, for a reader on a computer who would rather pay from their phone (hidden on a phone,
-// since nobody scans their own screen); `talk` adds the Telegram and discussion links after it.
-// `wave` and `tonal` work as on a Band; `between` is for the home page, where the offer sits
-// between two sections rather than closing the page.
+// (GiveLCard), apart from the star, which sits partway down the page (StarBand). `talk` adds the
+// Telegram and discussion links after it. `wave` and `tonal` work as on a Band; `between` is for
+// the home page, where the offer sits between two sections rather than closing the page.
+// QR codes used to show here (`codes`) and on the support page; dropped everywhere (user,
+// 2026-11-01, "it is looking uneven and does not look good"): two buttons already say where to go.
 import Icon from './Icon.astro';
 import GiveLCard from './GiveLCard.astro';
-import QrCode from './QrCode.astro';
 import { text } from '../i18n/t';
 
-interface Props { tonal?: boolean; wave?: boolean; codes?: boolean; talk?: boolean; between?: boolean }
+interface Props { tonal?: boolean; wave?: boolean; talk?: boolean; between?: boolean }
 const t = (k: string) => text(Astro.locals.lang, k);
-const { tonal = false, wave = false, codes = false, talk = false, between = false } = Astro.props;
+const { tonal = false, wave = false, talk = false, between = false } = Astro.props;
 ---
 {wave && <Icon name={tonal ? 'wave' : 'wave-flip'} />}
 <section class:list={['band', { 'band-tonal': tonal, 'lband lband-between': between }]} aria-label={t('home.support_tmplayer')}>
   <div class="wrap lcards">
-    <GiveLCard heading2>
-      {codes && (
-        <div class="support-codes">
-          <QrCode icon="qr-coffee" caption={t('home.scan_for_buy_me_a_coffee')} />
-          <QrCode icon="qr-sponsors" caption={t('home.scan_for_github_sponsors')} minor />
-        </div>
-      )}
-    </GiveLCard>
+    <GiveLCard heading2 />
     {talk && (
       <div class="lcard lcard-talk" data-reveal>
         <div class="lcard-text">
