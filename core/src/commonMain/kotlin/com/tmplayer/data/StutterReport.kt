@@ -1,5 +1,7 @@
 package com.tmplayer.data
 
+import com.tmplayer.player.FrameRates
+import com.tmplayer.player.PlaybackWatch
 import io.sentry.Sentry
 import io.sentry.SentryEvent
 import io.sentry.SentryLevel
@@ -12,7 +14,8 @@ import java.io.File
  * The opt-in "could not keep up" report (HX2b): one small event when PlaybackWatch decides a
  * video could not play smoothly on this device, so the budget table in [DecodeJudge] can be tuned
  * from real devices. Sent only with crash reporting on, through the same scrubber and the same
- * Sentry client as a crash.
+ * Sentry client as a crash. It is sent only for a stutter the viewer would have seen
+ * ([isReal], HX37): a clock that ran true with no frame lost and no sound dropped is not one.
  *
  * What it holds is [Facts] and nothing else: the picture's format, the decoder, what the judge
  * predicted and the watch measured, and the device. No title, file name, chat, message or user id
@@ -54,6 +57,10 @@ object StutterReport {
         val appVersion: String,
         /** [DecodeJudge.Picture.sizeBucket]. */
         val sizeBucket: Int,
+        /** What showed the stutter ([PlaybackWatch.symptomOf]): `slow`, `dropped`, `underruns` or `late`. */
+        val symptom: String = "",
+        /** Where [fps] came from ([FrameRates.source]): `container`, `derived` or `unknown`. */
+        val fpsSource: String = "unknown",
     ) {
         /** What the daily limit counts: codec, bit depth and size bucket. */
         val kind: String get() = "${clean(codec)}:${if (bitDepth > 8) 10 else 8}:$sizeBucket"
@@ -63,7 +70,7 @@ object StutterReport {
     val ALLOWED_TAGS = setOf(
         "codec", "profile", "bit_depth", "width", "height", "fps", "bitrate_kbps", "container",
         "decoder", "decoder_type", "prediction", "speed_percent", "dropped_frames", "frames", "underruns",
-        "manufacturer", "model", "android", "cores", "abi", "app_version",
+        "manufacturer", "model", "android", "cores", "abi", "app_version", "symptom", "fps_source",
     )
 
     /** The event, with the facts as tags. The SDK adds the device, OS and app contexts when it captures. */
@@ -82,7 +89,7 @@ object StutterReport {
         "bit_depth" to facts.bitDepth.toString(),
         "width" to facts.width.toString(),
         "height" to facts.height.toString(),
-        "fps" to ((facts.fps * 10).toInt() / 10.0).toString(),
+        "fps" to (FrameRates.plausible(facts.fps) * 10).toInt().div(10.0).toString(),
         "bitrate_kbps" to facts.bitrateKbps.toString(),
         "container" to clean(facts.container),
         "decoder" to clean(facts.decoder),
@@ -98,7 +105,22 @@ object StutterReport {
         "cores" to facts.cores.toString(),
         "abi" to clean(facts.abi),
         "app_version" to clean(facts.appVersion),
+        "symptom" to clean(facts.symptom),
+        "fps_source" to clean(facts.fpsSource),
     )
+
+    /**
+     * Whether the facts show a stutter the viewer would see (HX37): the same definition the watch
+     * answers by ([PlaybackWatch.symptomOf]). A report without one (a clock that ran true, no
+     * frame lost, no sound dropped out) is a false alarm and is not sent, whoever asked.
+     */
+    fun isReal(facts: Facts): Boolean = PlaybackWatch.symptomOf(
+        speed = facts.speedPercent / 100.0,
+        dropped = facts.dropped,
+        frames = facts.frames,
+        underruns = facts.underruns,
+        late = facts.symptom == PlaybackWatch.LATE,
+    ) != null
 
     fun isStutter(event: SentryEvent): Boolean = event.logger == LOGGER
 
@@ -181,6 +203,8 @@ class StutterReporter(
     /** True when the event was handed on. */
     fun report(facts: StutterReport.Facts): Boolean {
         if (!enabled()) return false
+        // Before the daily limit: a false alarm must not use up the day's one report of its kind.
+        if (!StutterReport.isReal(facts)) return false
         if (!limits.admit(facts.kind)) return false
         send(StutterReport.build(facts))
         return true

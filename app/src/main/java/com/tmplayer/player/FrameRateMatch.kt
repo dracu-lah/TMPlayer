@@ -32,15 +32,17 @@ object FrameRateMatch {
     }
 
     /**
-     * Asks the display for the film's own rate. A rate of zero is a format that never said, and
-     * clears the request rather than pinning the panel to nothing.
+     * Asks the display for the film's own rate. A rate of zero is a format that never said (a
+     * Matroska without a default duration says -1; see [FrameRates]), and clears the request
+     * rather than pinning the panel to nothing. A figure that is not a number, negative or absurd
+     * is the same as none, so the display is never asked for a mode that cannot exist.
      */
     fun apply(surface: Surface?, frameRate: Float) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
         val target = surface?.takeIf { it.isValid } ?: return
         runCatching {
             target.setFrameRate(
-                frameRate.coerceAtLeast(0f),
+                FrameRates.forDisplay(frameRate),
                 Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE,
                 Surface.CHANGE_FRAME_RATE_ALWAYS,
             )

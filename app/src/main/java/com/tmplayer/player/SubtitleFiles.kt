@@ -118,7 +118,7 @@ class SubtitleFiles(
                 return@launch
             }
             // Read on the main thread before the copy: the player belongs to it.
-            val fps = player()?.videoFormat?.frameRate?.toDouble()?.takeIf { it > 0 } ?: ExternalSubtitle.DEFAULT_FPS
+            val fps = player()?.videoFormat?.frameRate?.let { FrameRates.plausible(it).toDouble() }?.takeIf { it > 0 } ?: ExternalSubtitle.DEFAULT_FPS
             val copied = withContext(Dispatchers.IO) { runCatching { copy(uri, name, extension, fps) }.getOrNull() }
             when (copied) {
                 null -> say(L.tracksFileUnreadable(name))

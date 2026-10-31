@@ -33,13 +33,19 @@ object DecodeJudge {
         /** The size, either side known, filled out to 16:9 where one is missing. */
         private val area: Long
             get() {
-                val w = if (width > 0) width else height * 16 / 9
-                val h = if (height > 0) height else width * 9 / 16
-                return w.toLong() * h
+                val w = if (width > 0) width.toLong() else height.toLong() * 16 / 9
+                val h = if (height > 0) height.toLong() else width.toLong() * 9 / 16
+                return w * h
             }
 
-        /** Pixels a second at the frame rate, or [ASSUMED_FPS] when that is not known. */
-        val pixelRate: Double get() = area * (if (fps > 1f) fps.toDouble() else ASSUMED_FPS)
+        /**
+         * Pixels a second at the frame rate, or [ASSUMED_FPS] when that is not known: a rate that
+         * is 0 or -1 (a Matroska without a default duration), not a number, infinite or absurd
+         * counts as not known ([com.tmplayer.player.FrameRates.plausible]), so it can neither
+         * divide by nothing nor make a picture look impossibly heavy (HX11, HX37).
+         */
+        val pixelRate: Double
+            get() = area * (com.tmplayer.player.FrameRates.plausible(fps).takeIf { it > 0f }?.toDouble() ?: ASSUMED_FPS)
 
         /** The short side snapped to the usual heights, for [DecodeMemory]: 480, 720, 1080, 1440, 2160. */
         val sizeBucket: Int

@@ -501,6 +501,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         if (picture == null || !com.tmplayer.data.CrashReports.available) return
         val format = watchFormat
         val figures = watch.figures()
+        // The rate the container gave, else the one measured from the frames ([FrameRateEstimator]).
+        val containerFps = format?.frameRate ?: 0f
         val prediction = format?.let { DeviceDecode.verdictOf(it) }?.name ?: "UNKNOWN"
         val facts = com.tmplayer.data.StutterReport.Facts(
             codec = picture.family,
@@ -508,8 +510,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             bitDepth = picture.bitDepth,
             width = picture.width,
             height = picture.height,
-            fps = picture.fps,
-            bitrateKbps = (format?.let { maxOf(it.averageBitrate, it.bitrate) } ?: 0).coerceAtLeast(0) / 1000,
+            fps = FrameRates.pick(containerFps, derivedFps),
+            // A Matroska states no bit rate: the file's size over its length stands in for it.
+            bitrateKbps = FrameRates.bitrateKbps(format?.let { maxOf(it.averageBitrate, it.bitrate) } ?: 0, fileSizeBytes, durationSec),
             container = format?.containerMimeType.orEmpty(),
             decoder = watchDecoder,
             hardware = !watchSoftware,
@@ -525,6 +528,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             abi = android.os.Build.SUPPORTED_ABIS.firstOrNull().orEmpty(),
             appVersion = com.tmplayer.BuildConfig.VERSION_NAME,
             sizeBucket = picture.sizeBucket,
+            symptom = figures.symptom,
+            fpsSource = FrameRates.source(containerFps, derivedFps),
         )
         Thread { runCatching { com.tmplayer.data.CrashReports.reportStutter(facts) } }.start()
     }
@@ -549,6 +554,51 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
     /** Whether this video got its "Stuttering?" offer or line: once per video. */
     private var stutterOffered = false
+
+    /**
+     * The frame rate measured from the frames' own times for a video whose container states none
+     * (a Matroska without a default duration, HX11 and HX37), or 0 while unknown. Read it through
+     * [videoFps]. [fpsEstimator] is fed on the playback thread and swapped on the main thread, so
+     * a new video's estimator is a new object, never a reset one.
+     */
+    @Volatile private var derivedFps = 0f
+    @Volatile private var fpsEstimator: FrameRateEstimator? = null
+
+    /** Feeds [fpsEstimator] each frame's time until it settles, then lets go of the player's hook. */
+    private val fpsListener = androidx.media3.exoplayer.video.VideoFrameMetadataListener { presentationTimeUs, _, _, _ ->
+        val estimator = fpsEstimator
+        if (estimator != null) {
+            val found = estimator.add(presentationTimeUs)
+            if (found != null || estimator.finished) {
+                fpsEstimator = null
+                if (found != null) derivedFps = found
+                loopHandler.post { onFrameRateMeasured(found ?: 0f) }
+            }
+        }
+    }
+
+    /** A new video format reached the decoder: measure its rate only when the container gave none. */
+    private fun watchFrameRate(format: androidx.media3.common.Format) {
+        derivedFps = 0f
+        val exo = player ?: return
+        if (FrameRates.plausible(format.frameRate) > 0f) {
+            fpsEstimator = null
+            exo.clearVideoFrameMetadataListener(fpsListener)
+        } else {
+            fpsEstimator = FrameRateEstimator()
+            exo.setVideoFrameMetadataListener(fpsListener)
+        }
+    }
+
+    /** The rate found (0 for none), on the main thread: the hook is let go, the display is asked if it is to be. */
+    private fun onFrameRateMeasured(fps: Float) {
+        player?.clearVideoFrameMetadataListener(fpsListener)
+        Log.i("TMPlayer", "Frame rate: container said none, measured ${if (fps > 0f) "$fps fps" else "nothing steady"}")
+        if (fps > 0f && FrameRateMatch.shouldTakeOver(this)) FrameRateMatch.apply(videoSurface(), fps)
+    }
+
+    /** The video's frame rate: the container's, else the measured one, else 0 for not known. */
+    private fun videoFps(): Float = FrameRates.pick(player?.videoFormat?.frameRate ?: 0f, derivedFps)
 
     /** One sample a second while the video plays, and none while it does not; done after the answer. */
     private val watchTick = Runnable { sampleWatch() }
@@ -939,6 +989,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             exo.videoDecoderCounters?.renderedOutputBufferCount ?: 0,
             watchDropped,
             watchUnderruns,
+            exo.playbackParameters.speed,
         )
         when {
             answer != null -> onWatchAnswer(answer)
@@ -948,7 +999,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     }
 
     private fun onWatchAnswer(answer: PlaybackWatch.Answer) {
-        val picture = watchPicture
+        // With the rate measured when the container gave none, so the remembered kind is the right bucket.
+        val picture = watchPicture?.let { it.copy(fps = FrameRates.pick(it.fps, derivedFps)) }
         Log.i(
             "TMPlayer",
             "Watch: ${answer.name.lowercase()}, ${watch.summary()}, ${picture?.label ?: "?"} " +
@@ -1705,6 +1757,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         softwareNote = null
         softwareNoteUp = false
         watch.restart()
+        derivedFps = 0f
+        fpsEstimator = null
         loopHandler.removeCallbacks(watchTick)
         watchPicture = null
         watchSoftware = false
@@ -3496,6 +3550,16 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                         watchDecoder = decoderName
                     }
 
+                    override fun onVideoInputFormatChanged(
+                        eventTime: AnalyticsListener.EventTime,
+                        format: androidx.media3.common.Format,
+                        decoderReuseEvaluation: androidx.media3.exoplayer.DecoderReuseEvaluation?,
+                    ) {
+                        // A decoder made again or a track changed: the stretch in hand is not playback.
+                        watch.interrupted()
+                        watchFrameRate(format)
+                    }
+
                     override fun onVideoFrameProcessingOffset(
                         eventTime: AnalyticsListener.EventTime,
                         totalProcessingOffsetUs: Long,
@@ -3920,7 +3984,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             touchSurface?.post { renderShape() }
             updatePictureInPictureParams()
             if (FrameRateMatch.shouldTakeOver(this@PlayerActivity)) {
-                FrameRateMatch.apply(videoSurface(), player?.videoFormat?.frameRate ?: 0f)
+                FrameRateMatch.apply(videoSurface(), videoFps())
             }
         }
 
@@ -3933,6 +3997,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             wakeEndWatch()
+            // A pause and play inside one sample interval would read as a slow clock (HX37).
+            if (!isPlaying) watch.interrupted()
             if (isPlaying) startWatch()
             loopHandler.removeCallbacks(loopWatch)
             if (isPlaying && abLoop?.complete == true) loopHandler.post(loopWatch)
@@ -3954,6 +4020,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         }
 
         override fun onPlaybackStateChanged(state: Int) {
+            // Waiting for the stream between two samples is not slow decoding (HX37).
+            if (state == Player.STATE_BUFFERING) watch.interrupted()
             when (state) {
                 // Only the very first wait earns the full screen; later stalls get the chip.
                 Player.STATE_BUFFERING -> {
@@ -4025,7 +4093,11 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             // A paused playhead moved by a seek may have left the skip pill's stretch or the
             // next-up card's last half minute, or come into them.
             wakeEndWatch()
-            if (reason != Player.DISCONTINUITY_REASON_SEEK) return
+            if (reason != Player.DISCONTINUITY_REASON_SEEK) {
+                // A skip, a transition or an internal jump moved the position: not playback either.
+                watch.interrupted()
+                return
+            }
             if (!watch.done) watch.reset()
             seekStartedAt = SystemClock.elapsedRealtime()
             noteSeek(oldPosition.positionMs, newPosition.positionMs)
@@ -6151,7 +6223,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     private fun frameStep(forward: Boolean) {
         val exo = player ?: return
         if (exo.playWhenReady) return
-        val fps = exo.videoFormat?.frameRate ?: 0f
+        val fps = videoFps()
         exactSeekTo(exo, FrameStep.target(exo.currentPosition, exo.duration.coerceAtLeast(0L), fps, forward))
     }
 
@@ -6778,7 +6850,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 val width = video.width.toString()
                 val height = video.height.toString()
                 add(
-                    video.frameRate.takeIf { it > 0 }
+                    videoFps().takeIf { it > 0 }
                         ?.let { L.playerDetailsPictureFps(width, height, "%.3g".format(it)) }
                         ?: L.playerDetailsPicture(width, height),
                 )

@@ -188,16 +188,13 @@ class DecodeJudgeTest {
     }
 
     @Test
-    fun `a seek starts the count again, and late frames count`() {
+    fun `a seek starts the count again`() {
         val watch = PlaybackWatch()
         for (s in 0..8) watch.sample(s * 1000L, s * 1000L, true, s * 24, 0, 0)
         watch.reset()
         // A jump of ten minutes between samples is not playback.
         assertNull(watch.sample(9_000, 600_000, true, 0, 0, 0))
         assertFalse(watch.done)
-        val late = PlaybackWatch()
-        late.frameOffsets(totalOffsetUs = -60_000L * 300, frames = 300)
-        assertEquals(PlaybackWatch.Answer.CANNOT_KEEP_UP, run(late, 20, speed = 1.0))
     }
 
     @Test

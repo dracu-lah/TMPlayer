@@ -74,7 +74,7 @@ object DeviceDecode {
             bitDepth = depth,
             width = format.width.coerceAtLeast(0),
             height = format.height.coerceAtLeast(0),
-            fps = format.frameRate.takeIf { it > 0f } ?: 0f,
+            fps = FrameRates.plausible(format.frameRate),
         )
     }
 
