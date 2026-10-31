@@ -1944,10 +1944,9 @@ private fun Root() {
                     onHomeLaterArtWanted = homeViewModel::requestArt,
                     onPlayMedia = { item, chatTitle -> play(item, chatTitle = chatTitle) },
                     homeRefreshing = homeViewModel.refreshing.collectAsStateWithLifecycle().value,
-                    onRefreshHome = {
-                        homeViewModel.refreshInPlace()
-                        chatsViewModel.refreshUnlessRateLimited()
-                    },
+                    // Home's own rows alone (HX44): the chat list no longer needs a manual sync
+                    // piggybacked on this, since TDLib's own updates already keep it live.
+                    onRefreshHome = { homeViewModel.refreshInPlace() },
                     onSetMediaWatched = { item, chatTitle, watched -> setWatched(item, chatTitle, watched) },
                     onMessage = toast,
                     onSearched = { settings.addRecentSearch(it) },

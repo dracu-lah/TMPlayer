@@ -129,6 +129,7 @@ internal fun TvTopBar(
     onSearch: () -> Unit,
     /** Called before any item of the account's menu goes anywhere (closes the search, say). */
     beforeProfile: () -> Unit = {},
+    /** Null on every page but Home (HX44): the chat list keeps itself live on its own now. */
     onRefresh: (() -> Unit)?,
     /** On the item for the page shown: Up from the page, and Back, land there. */
     currentFocus: FocusRequester,

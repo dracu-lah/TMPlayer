@@ -209,8 +209,10 @@ internal fun BrowseScreen(
     continueWatching: List<ResumeRecord>,
     onRetry: () -> Unit,
     /**
-     * Fetches the chat list again without clearing the screen first. Telegram reorders chats as
-     * messages arrive, so a list left open goes stale; this is the button that catches it up.
+     * Fetches the chat list again without clearing the screen first. The list keeps itself live
+     * on its own now (HX44), so this is no longer a button anywhere: only the phone's pull to
+     * refresh still reaches it, for the viewer who pulls out of habit even though nothing is
+     * actually stuck.
      */
     onRefresh: () -> Unit = onRetry,
     onOpenChat: (ChatSummary) -> Unit,
@@ -1122,10 +1124,13 @@ internal fun BrowseScreen(
                     query = ""
                 },
                 onRefresh = when {
+                    // The chat list keeps itself live on its own (HX44): titles, photos, order,
+                    // unread counts, mutes and a newly appeared chat all arrive through TDLib's
+                    // own updates, so the menu's Refresh is only Home's own (its rows, not the
+                    // chat list); the chats, favourites and history tabs offer none any more.
                     tvSearchOpen -> null
                     tab.isHome -> onRefreshHome
-                    tab.listsVideos -> null
-                    else -> onRefresh
+                    else -> null
                 },
                 currentFocus = barFocus,
                 contentFocus = pageFocus,
