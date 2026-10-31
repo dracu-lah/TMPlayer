@@ -3509,6 +3509,11 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             // of a core, with the UI idle. A renderer that cannot say keeps the 10 ms. Left as it
             // was on phones and tablets, where nothing measured asked for it.
             .experimentalSetDynamicSchedulingEnabled(FormFactor.isTv(this))
+            // Spelt out because [letGoOfPlayer] counts on it: a release is the one wait the way
+            // out of a video still makes on the main thread, and a decoder that has not answered
+            // in half a second is wedged, not slow. Media3's own default, held here so a later
+            // version raising it cannot bring the television's ANR back (HX35).
+            .setReleaseTimeoutMs(RELEASE_TIMEOUT_MS)
             .build()
             .apply {
                 setAudioAttributes(movieAudioAttributes, /* handleAudioFocus = */ true)
@@ -4374,24 +4379,57 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     }
 
     /**
+     * Lets go of the player without the main thread waiting on a decoder that has stopped
+     * answering (HX35).
+     *
+     * Two ANRs on a Changhong television (Android 11, four 32 bit cores) caught the main thread on
+     * the way out of a video while `OMX.MS.HEVC.Decoder` was wedged: one inside `ExoPlayer.release`
+     * waiting on the playback thread, one in [finish]. Media3 caps each wait it makes by itself
+     * (half a second for a release, two seconds for handing a surface back), but the old order
+     * paid several of them in a row. Handing the surface back first asks every video renderer to
+     * answer and waits out the cap for each, and with the FFmpeg renderers beside the hardware
+     * ones there is more than one; the release then waited on the same stuck playback thread
+     * again.
+     *
+     * So the player goes first and the view lets go afterwards. A released player has already
+     * taken its callbacks off the surface view and marks a message to the playback thread as
+     * handled instead of sending it, so the view's own detach asks nothing of that thread and no
+     * later `surfaceDestroyed` reaches the player either. Nothing sees the released instance in
+     * between, since this is one turn of the main thread. [ExoPlayer.stop] goes before both, so
+     * the renderers are told to hand the decoder back before anything waits for them.
+     *
+     * Never twice: the field is cleared before the release, and a player Media3 has already let go
+     * of is left alone. Only [releasePlayerAndSurface] and [onDestroy] come here; picture in
+     * picture and background audio keep the player playing and go nowhere near it.
+     */
+    private fun letGoOfPlayer() {
+        val exo = player ?: return
+        player = null
+        runCatching { exo.removeListener(playerListener) }
+        if (!exo.isReleased) {
+            runCatching { exo.stop() }
+            runCatching { exo.release() }
+        }
+        // After the release, which is what makes this cost nothing: see above.
+        runCatching { touchSurface?.player = null }
+    }
+
+    /**
      * Takes down the player and its surface, for the callers that cannot re-prepare.
      *
      * Both [reloadFromScratch] and [resourceAgain] change the bytes underneath a media source that
      * has already been built over them, and preparing over that reads the file the press was meant
-     * to get away from; [continueUnseen] moves on to another file. The order matters: the view
-     * lets go of the player before the player is released, so no view is ever holding a released
-     * one. The session alone does, for the moment until [startPlayback] hands it the new player.
+     * to get away from; [continueUnseen] moves on to another file. The player and the view let go
+     * of each other in [letGoOfPlayer]; no view is left holding a released player when this
+     * returns. The session alone does, for the moment until [startPlayback] hands it the new one.
      */
     private fun releasePlayerAndSurface() {
         // The media session stays and takes the next player ([attachMediaSession]), so a rebuild
         // out of sight keeps [PlaybackService] and its notification; meanwhile it holds a player
         // that is idle and still meaning to play, which keeps the foreground through the gap.
-        touchSurface?.player = null
+        letGoOfPlayer()
         touchSurface?.let { findViewById<FrameLayout>(R.id.playback_container).removeView(it) }
         touchSurface = null
-        player?.removeListener(playerListener)
-        player?.release()
-        player = null
         // The listener is gone before the release, so the player's own "no cues" never arrives:
         // the line on screen would stay frozen over the next video's opening.
         showCues(emptyList())
@@ -6719,10 +6757,17 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * Lets the queued downloads "Still watching?" paused carry on. Any answer counts, not only Keep
      * watching: play from a headset, and Back or Go back, which otherwise left them paused in
      * Downloads with nothing to say why.
+     *
+     * Off the main thread, because each of these starts a foreground service, a call into the
+     * system that an ANR caught a Back press waiting on (HX35). Handed over at once rather than
+     * later, so the app is still the one in front and Android still allows the service.
      */
     private fun resumeHeldDownloads() {
-        downloadsHeldForTheCard.forEach { OfflineDownloads.resume(this, it) }
+        val held = downloadsHeldForTheCard
         downloadsHeldForTheCard = emptyList()
+        if (held.isEmpty()) return
+        val context = applicationContext
+        App.backgroundScope.launch { held.forEach { OfflineDownloads.resume(context, it) } }
     }
 
     /**
@@ -8455,12 +8500,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         // Released before the player it wraps, or it is left holding a released instance.
         mediaSession?.release()
         mediaSession = null
-        // Dropped before the player is released so the view never holds a released instance.
-        touchSurface?.player = null
+        // The player first and the view after it, so the main thread waits on neither (HX35).
+        letGoOfPlayer()
         touchSurface = null
-        player?.removeListener(playerListener)
-        player?.release()
-        player = null
         // Only once the player, and the reads it had waiting, are gone: a read that asked TDLib
         // again after [stopDownload] would otherwise have asked for the rest of the film unbounded,
         // and went on fetching with nobody watching. Asked again whatever the stream's bounds (it
@@ -8696,6 +8738,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
          * to be left alone. A seek restarts TDLib's download, so a near agreement is not worth one.
          */
         private const val RESUME_SYNC_SLACK_MS = 10_000L
+
+        /** The longest a release may hold the main thread: see [letGoOfPlayer] (HX35). */
+        private const val RELEASE_TIMEOUT_MS = 500L
         private const val EXTRA_CHAT_ID = "chat_id"
         private const val EXTRA_MESSAGE_ID = "message_id"
         private const val EXTRA_TITLE = "title"
