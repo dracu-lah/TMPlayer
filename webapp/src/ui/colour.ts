@@ -2,16 +2,21 @@
 // The same eight pairs and the same hash as the apps' core/NameColour.kt; keep the two alike, or
 // a chat is one colour here and another in the apps, which reads as a bug.
 
-/** Eight hand-tuned dark pairs, the lighter stop first. White on either stop is 6.9:1 or better. */
+/**
+ * Eight hand-tuned dark pairs, the lighter stop first. White on either stop is 6.9:1 or better.
+ * The dark stop sits 65% of the way back toward the light one rather than near black (2026-10-31:
+ * a fallback gradient read as plain black on an OLED screen); keep this list and the Kotlin one
+ * in `core/src/pureMain/kotlin/com/tmplayer/data/NameColour.kt` alike.
+ */
 export const PAIRS: readonly (readonly [string, string])[] = [
-    ['#34397A', '#15173A'],
-    ['#145A5A', '#082A2C'],
-    ['#6A2A5E', '#2A1028'],
-    ['#7A3524', '#30140D'],
-    ['#245C34', '#0D2716'],
-    ['#1F4A7E', '#0C1D38'],
-    ['#4A3680', '#1C1438'],
-    ['#6B5719', '#2B230A'],
+    ['#34397A', '#292D64'],
+    ['#145A5A', '#10494A'],
+    ['#6A2A5E', '#54214B'],
+    ['#7A3524', '#60291C'],
+    ['#245C34', '#1C492A'],
+    ['#1F4A7E', '#183A66'],
+    ['#4A3680', '#3A2A67'],
+    ['#6B5719', '#554514'],
 ]
 
 /**

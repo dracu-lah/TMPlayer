@@ -20,17 +20,19 @@ object NameColour {
     /**
      * Eight hand-tuned dark pairs, the lighter stop first, as 0xAARRGGBB: indigo, teal, plum,
      * rust, forest, sea blue, violet and olive. Every stop keeps white text at 6.9:1 or better,
-     * so the letter on the colour is readable with no scrim at all.
+     * so the letter on the colour is readable with no scrim at all. The dark stop sits 65% of the
+     * way back toward the light one rather than near black (user, 2026-10-31: a video card's
+     * fallback gradient read as plain black on an OLED screen, especially with "Pure black" on).
      */
     val Pairs: List<Pair<Int, Int>> = listOf(
-        0xFF34397A.toInt() to 0xFF15173A.toInt(),
-        0xFF145A5A.toInt() to 0xFF082A2C.toInt(),
-        0xFF6A2A5E.toInt() to 0xFF2A1028.toInt(),
-        0xFF7A3524.toInt() to 0xFF30140D.toInt(),
-        0xFF245C34.toInt() to 0xFF0D2716.toInt(),
-        0xFF1F4A7E.toInt() to 0xFF0C1D38.toInt(),
-        0xFF4A3680.toInt() to 0xFF1C1438.toInt(),
-        0xFF6B5719.toInt() to 0xFF2B230A.toInt(),
+        0xFF34397A.toInt() to 0xFF292D64.toInt(),
+        0xFF145A5A.toInt() to 0xFF10494A.toInt(),
+        0xFF6A2A5E.toInt() to 0xFF54214B.toInt(),
+        0xFF7A3524.toInt() to 0xFF60291C.toInt(),
+        0xFF245C34.toInt() to 0xFF1C492A.toInt(),
+        0xFF1F4A7E.toInt() to 0xFF183A66.toInt(),
+        0xFF4A3680.toInt() to 0xFF3A2A67.toInt(),
+        0xFF6B5719.toInt() to 0xFF554514.toInt(),
     )
 
     /** The pair [name] wears, the lighter stop first. A blank or missing name has one too. */

@@ -3,11 +3,7 @@ package com.tmplayer.ui.components
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
@@ -17,21 +13,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.unit.dp
 import com.tmplayer.data.PerfLog
 import kotlinx.coroutines.launch
-import androidx.compose.ui.graphics.BlendMode
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.unit.LayoutDirection
 import com.tmplayer.data.Thumbnails
 import com.tmplayer.data.decodesFullSize
 import androidx.compose.runtime.mutableIntStateOf
@@ -54,9 +42,8 @@ import kotlinx.coroutines.withContext
  * Telegram's thumbnails are 320 pixels wide at best, and one stretched across a television is a
  * smear of blocks. So a picture under [SHARP_MIN_WIDTH] is not stretched sharp: the frame gets
  * [Thumbnails.backdrop], a 32 pixel shrink of it drawn across the whole frame with bilinear
- * filtering, which is a soft field of its colours, and the picture itself sits over it at its own
- * shape, at the top end of the frame, fading into the field at its start and its foot. The art
- * reads as art rather than as a blur of pixels, and there is no `blur()` anywhere in it.
+ * filtering, blurred too, so the whole frame reads as a soft loading placeholder rather than a
+ * small sharp picture sitting oddly on a blurred field (user, 2026-10-31).
  *
  * [alignment] places a picture cropped to a frame wider than its own shape: a frame much wider
  * than tall keeps the picture's top, where the people usually are, with [Alignment.TopCenter].
@@ -87,16 +74,16 @@ fun ArtBackdrop(
                     filterQuality = Thumbnails.drawFilter,
                     modifier = Modifier.fillMaxSize(),
                 )
-                step.field != null -> Box(Modifier.fillMaxSize()) {
-                    Image(
-                        bitmap = step.field,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        filterQuality = FilterQuality.Low,
-                        modifier = Modifier.fillMaxSize().then(if (step.blurred && !com.tmplayer.ui.theme.Motion.television) Modifier.blur(STAND_IN_BLUR) else Modifier),
-                    )
-                    step.picture?.let { SmallPicture(it, Modifier.align(Alignment.TopEnd)) }
-                }
+                // The field alone, full size: a low-res picture reads as a loading placeholder
+                // blurred whole, not as a small sharp inset over a blurred field (user, 2026-10-31:
+                // the inset read as its own, oddly small picture rather than part of the backdrop).
+                step.field != null -> Image(
+                    bitmap = step.field,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    filterQuality = FilterQuality.Low,
+                    modifier = Modifier.fillMaxSize().then(if (!com.tmplayer.ui.theme.Motion.television) Modifier.blur(STAND_IN_BLUR) else Modifier),
+                )
                 // The colours alone: the cover's big number and chat initial sit in its top
                 // corners, where a page's Close or Back floats, and the page already says both.
                 else -> GeneratedCover(
@@ -182,7 +169,7 @@ internal fun rememberBackdropArt(source: BackdropSource, drawn: Int): BackdropAr
                             }
                             if (onDisk) return@launch
                             Thumbnails.online(tiny, TINY_WIDTH) { provider.image(tiny) }?.let {
-                                art = BackdropArt(field = it, blurred = true)
+                                art = BackdropArt(field = it)
                                 PerfLog.mark("backdrop small", started)
                             }
                         }
@@ -227,8 +214,6 @@ internal fun rememberBackdropArt(source: BackdropSource, drawn: Int): BackdropAr
 internal class BackdropArt(
     val picture: ImageBitmap? = null,
     val field: ImageBitmap? = null,
-    /** True for the provider's small copy standing in for the sharp one: drawn blurred, so it reads as the picture coming into focus. */
-    val blurred: Boolean = false,
 )
 
 /** The blur on a small stand-in; Android draws it from API 31, and earlier the stretched copy is soft enough. */
@@ -272,47 +257,6 @@ private fun peek(source: BackdropSource, pixels: Int): BackdropArt? {
 }
 
 /**
- * A small picture over its own soft field: at its own shape, [SMALL_PICTURE_SHARE] of the frame's
- * width or [SMALL_PICTURE_SCALE] times its own pixels, whichever is less (and less again where
- * the frame is too short for that), against the top end, faded out towards the
- * start and the foot so it has no edge against the field. The start of the frame, where a hero
- * sets its text, is the field alone.
- */
-@Composable
-private fun SmallPicture(picture: ImageBitmap, modifier: Modifier) {
-    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
-    // Never more than [SMALL_PICTURE_SCALE] times its own pixels: Telegram's 320 pixel thumbnail
-    // at 65 per cent of a television's carousel was blown up three times and read as a blur.
-    val widest = with(LocalDensity.current) { (picture.width * SMALL_PICTURE_SCALE).toDp() }
-    Image(
-        bitmap = picture,
-        contentDescription = null,
-        contentScale = ContentScale.Crop,
-        filterQuality = FilterQuality.Low,
-        modifier = modifier
-            .widthIn(max = widest)
-            .fillMaxWidth(SMALL_PICTURE_SHARE)
-            .aspectRatio(picture.width.toFloat() / picture.height.coerceAtLeast(1))
-            // Drawn into its own layer, so the fades below cut the picture away rather than
-            // painting black over it.
-            .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)
-            .drawWithContent {
-                drawContent()
-                val across = if (rtl) {
-                    arrayOf(0f to Color.Black, 1f - PICTURE_FADE to Color.Black, 1f to Color.Transparent)
-                } else {
-                    arrayOf(0f to Color.Transparent, PICTURE_FADE to Color.Black, 1f to Color.Black)
-                }
-                drawRect(Brush.horizontalGradient(*across), blendMode = BlendMode.DstIn)
-                drawRect(
-                    Brush.verticalGradient(0f to Color.Black, 1f - PICTURE_FADE to Color.Black, 1f to Color.Transparent),
-                    blendMode = BlendMode.DstIn,
-                )
-            },
-    )
-}
-
-/**
  * How wide the online picture is decoded for a backdrop on Android, a hero's width on a 1080p
  * screen, and the least the desktop fetches.
  */
@@ -329,12 +273,3 @@ private const val WIDTH_STEP = 320
  * sits over its own soft field instead.
  */
 internal const val SHARP_MIN_WIDTH = 480
-
-/** How much of the frame's width a small picture takes, at most. */
-private const val SMALL_PICTURE_SHARE = 0.65f
-
-/** How many times its own width a small picture may be drawn, at most, before it reads as a blur. */
-private const val SMALL_PICTURE_SCALE = 2f
-
-/** The share of a small picture's width and height that fades into the field. */
-private const val PICTURE_FADE = 0.35f

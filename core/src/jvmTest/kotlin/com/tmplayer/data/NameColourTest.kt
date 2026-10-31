@@ -73,7 +73,7 @@ class NameColourTest {
     @Test
     fun thePaletteIsTheEightPairsTheCoversWear() {
         assertEquals(8, NameColour.Pairs.size)
-        assertEquals(0xFF34397A.toInt() to 0xFF15173A.toInt(), NameColour.Pairs.first())
+        assertEquals(0xFF34397A.toInt() to 0xFF292D64.toInt(), NameColour.Pairs.first())
         // Every stop opaque: the colour stands in for a picture, never lets the surface through.
         for ((light, deep) in NameColour.Pairs) {
             assertEquals(0xFF, (light ushr 24) and 0xFF)

@@ -3,14 +3,14 @@
 // alone: every episode of a show shares it, and so does the same video posted in two chats.
 
 const PAIRS: [string, string][] = [
-    ['#34397A', '#15173A'],
-    ['#145A5A', '#082A2C'],
-    ['#6A2A5E', '#2A1028'],
-    ['#7A3524', '#30140D'],
-    ['#245C34', '#0D2716'],
-    ['#1F4A7E', '#0C1D38'],
-    ['#4A3680', '#1C1438'],
-    ['#6B5719', '#2B230A'],
+    ['#34397A', '#292D64'],
+    ['#145A5A', '#10494A'],
+    ['#6A2A5E', '#54214B'],
+    ['#7A3524', '#60291C'],
+    ['#245C34', '#1C492A'],
+    ['#1F4A7E', '#183A66'],
+    ['#4A3680', '#3A2A67'],
+    ['#6B5719', '#554514'],
 ]
 
 /** Kotlin's String.hashCode, over UTF-16 units as the JVM counts them. */
