@@ -195,6 +195,7 @@ fun ResultPoster(item: MediaItem, modifier: Modifier = Modifier, fraction: Float
             posterUrl = meta?.posterUrl,
             modifier = Modifier.fillMaxSize(),
             compactCover = true,
+            showCoverTitle = false,
         )
         if (fraction != null && fraction > 0f) {
             ProgressLine(fraction, Modifier.align(Alignment.BottomCenter).fillMaxWidth())

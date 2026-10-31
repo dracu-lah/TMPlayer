@@ -54,6 +54,11 @@ fun MediaArt(
     modifier: Modifier = Modifier,
     cover: Cover? = null,
     compactCover: Boolean = false,
+    /**
+     * False when the caller writes the name beside or under the art, so the [GeneratedCover] keeps
+     * only its colour, number and chat initial rather than the same words twice.
+     */
+    showCoverTitle: Boolean = true,
     fallback: (@Composable () -> Unit)? = null,
 ) {
     // Decoded off the composition thread. One ~40 px JPEG is nothing, but a grid row scrolling into
@@ -127,7 +132,7 @@ fun MediaArt(
                 Missing -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     when {
                         fallback != null -> fallback()
-                        cover != null -> GeneratedCover(cover, Modifier.fillMaxSize(), compact = compactCover)
+                        cover != null -> GeneratedCover(cover, Modifier.fillMaxSize(), compact = compactCover, showTitle = showCoverTitle)
                     }
                 }
             }

@@ -25,9 +25,11 @@ fun MediaPreview(
     fallbackLabel: String,
     modifier: Modifier = Modifier,
     cover: Cover? = null,
+    /** False when the name is written beside or under the art: see [MediaArt]. */
+    showCoverTitle: Boolean = true,
 ) {
     if (cover != null) {
-        MediaArt(miniThumbnail, thumbnailFileId, modifier, cover = cover, compactCover = isTouch())
+        MediaArt(miniThumbnail, thumbnailFileId, modifier, cover = cover, compactCover = isTouch(), showCoverTitle = showCoverTitle)
         return
     }
     MediaArt(miniThumbnail, thumbnailFileId, modifier) {

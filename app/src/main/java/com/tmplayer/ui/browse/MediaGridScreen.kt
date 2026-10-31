@@ -2530,9 +2530,9 @@ private fun MediaArt(
 ) {
     val s = LocalStrings.current
     val named = rememberCover(item)
-    // The phone's small card writes the name under the art, and a name on the cover as well
+    // Every tile and row writes its name beside or under the art, and a name on the cover as well
     // would be the same words twice a few dp apart, cut short in both places.
-    val cover = if ((compact && !poster) || thumb) remember(named) { named.copy(title = "") } else named
+    val cover = named
     val inset = if (compact) 4.dp else TileBadgeInset
     // Whether the answer is still on its way too: a television holds the thumbnail back for it.
     val meta = com.tmplayer.ui.online.rememberMetaState(item, showOnly = true)
@@ -2545,6 +2545,7 @@ private fun MediaArt(
                 meta.value?.posterUrl,
                 Modifier.fillMaxSize(),
                 compactCover = compact,
+                showCoverTitle = false,
                 posterPending = meta.pending,
             )
         } else {
@@ -2556,6 +2557,7 @@ private fun MediaArt(
                     fallbackLabel = item.title,
                     modifier = Modifier.fillMaxSize(),
                     cover = cover,
+                    showCoverTitle = false,
                 )
             }
         }

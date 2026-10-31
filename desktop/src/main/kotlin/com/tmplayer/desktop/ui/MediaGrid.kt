@@ -795,7 +795,7 @@ private fun ContinueArt(item: MediaItem) {
  */
 @Composable
 internal fun RecordArt(item: MediaItem) {
-    MediaArt(item.miniThumbnail, item.thumbnailFileId, Modifier.fillMaxSize(), cover = rememberCover(item))
+    MediaArt(item.miniThumbnail, item.thumbnailFileId, Modifier.fillMaxSize(), cover = rememberCover(item), showCoverTitle = false)
 }
 
 /** A video in a chat's grid. */
@@ -848,11 +848,11 @@ internal fun MediaTile(
             val meta = com.tmplayer.ui.online.rememberMeta(item, showOnly = true)
             Box(Modifier.fillMaxSize()) {
                 if (poster) {
-                    PosterArt(item.miniThumbnail, item.thumbnailFileId, rememberCover(item), meta?.posterUrl, Modifier.fillMaxSize())
+                    PosterArt(item.miniThumbnail, item.thumbnailFileId, rememberCover(item), meta?.posterUrl, Modifier.fillMaxSize(), showCoverTitle = false)
                 } else {
                     // On Home, the show's or the film's own picture over the frame once a match arrives.
                     com.tmplayer.ui.online.OnlineArt(item, Modifier.fillMaxSize()) {
-                        MediaArt(item.miniThumbnail, item.thumbnailFileId, Modifier.fillMaxSize(), cover = rememberCover(item))
+                        MediaArt(item.miniThumbnail, item.thumbnailFileId, Modifier.fillMaxSize(), cover = rememberCover(item), showCoverTitle = false)
                     }
                 }
                 // The title's one score at the bottom end, only when it is already on the device;

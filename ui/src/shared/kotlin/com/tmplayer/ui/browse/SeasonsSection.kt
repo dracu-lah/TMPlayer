@@ -306,7 +306,7 @@ private fun GuideRow(
             // The episode's own still from the show's season listing, else the episode file's own
             // match, which is the same show and episode. Never the show's backdrop: a column of one
             // picture tells the episodes apart less than Telegram's frames, which stay underneath.
-            if (inChat != null) MediaArt(inChat.item.miniThumbnail, inChat.item.thumbnailFileId, Modifier.fillMaxSize(), cover = rememberCover(inChat.item), compactCover = true)
+            if (inChat != null) MediaArt(inChat.item.miniThumbnail, inChat.item.thumbnailFileId, Modifier.fillMaxSize(), cover = rememberCover(inChat.item), compactCover = true, showCoverTitle = false)
             val own = inChat?.takeIf { episode.meta?.stillUrl == null }?.let { rememberMeta(it.item) }
             EpisodeStill(episode.meta?.stillUrl ?: own?.episode?.stillUrl, Modifier.fillMaxSize())
             val fraction = if (finished) 1f else point?.fraction ?: 0f

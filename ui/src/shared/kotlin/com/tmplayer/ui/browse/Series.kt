@@ -508,7 +508,7 @@ private fun EpisodeLine(
                 .aspectRatio(16f / 9f)
                 .clip(RoundedCornerShape(Corner.Small)),
         ) {
-            MediaArt(item.miniThumbnail, item.thumbnailFileId, Modifier.fillMaxSize(), cover = cover, compactCover = true)
+            MediaArt(item.miniThumbnail, item.thumbnailFileId, Modifier.fillMaxSize(), cover = cover, compactCover = true, showCoverTitle = false)
             // The provider's still for the episode, over the frame once it is decoded, at the
             // copy the card's width needs (EpisodeStill).
             EpisodeStill(still, Modifier.fillMaxSize())

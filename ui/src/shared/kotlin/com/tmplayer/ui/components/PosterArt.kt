@@ -60,6 +60,8 @@ fun PosterArt(
     posterUrl: String?,
     modifier: Modifier = Modifier,
     compactCover: Boolean = false,
+    /** False when the caller writes the name beside or under the poster: see [MediaArt]. */
+    showCoverTitle: Boolean = true,
     /**
      * True while the lookup that may give [posterUrl] is still on its way. A television waits for
      * it before fetching the thumbnail, which a poster would only hide.
@@ -115,7 +117,7 @@ fun PosterArt(
         // Each better picture fades in over the one before ([FadeOver]), never through the surface.
         if (picture != null && !covered) FadeOver(picture, Modifier.fillMaxSize()) { shown ->
             when {
-                shown !is ImageBitmap -> GeneratedCover(cover, Modifier.fillMaxSize(), compact = compactCover)
+                shown !is ImageBitmap -> GeneratedCover(cover, Modifier.fillMaxSize(), compact = compactCover, showTitle = showCoverTitle)
                 shown.height >= shown.width -> Image(
                     shown,
                     contentDescription = null,
