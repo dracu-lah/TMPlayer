@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -24,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.MediaName
 import com.tmplayer.data.NameColour
+import com.tmplayer.ui.icons.TmIcons
 import com.tmplayer.ui.theme.OnArt
 import com.tmplayer.ui.theme.Scrims
 import java.util.Locale
@@ -48,8 +50,9 @@ data class Cover(
  *
  * A diagonal gradient in one of eight dark pairs, chosen by the title alone so a file keeps its
  * colour, every part of one course shares it, and the same film posted in two chats wears the same
- * one; a soft light in the top start corner, so the cover has depth rather than a flat fill; the
- * title at the bottom start, white,
+ * one; a soft light in the top start corner, so the cover has depth rather than a flat fill; a
+ * faint Hugeicons PlayCircle in the middle, so the tile reads as a video waiting for its poster
+ * rather than an empty one; the title at the bottom start, white,
  * over [Scrims.tileFoot]; and where the name carries an episode, a part, a lecture or a chapter
  * number, that number set large and faint at the top end, so a course reads as a numbered set.
  *
@@ -84,6 +87,14 @@ fun GeneratedCover(
                 )
             },
     ) {
+        // A faint play mark in the middle, so the cover reads as a video waiting for its poster
+        // rather than a blank tile (user, 2026-11-01).
+        Icon(
+            TmIcons.PlayCircle,
+            contentDescription = null,
+            tint = OnArt.copy(alpha = PLAY_MARK_ALPHA),
+            modifier = Modifier.align(Alignment.Center).size(if (compact) 40.dp else 56.dp),
+        )
         cover.number?.let { number ->
             Text(
                 number.toString(),
@@ -213,6 +224,9 @@ private const val NUMERAL_ALPHA = 0.22f
 
 /** The light in the top start corner: enough to give the colour depth, never a bright spot. */
 private const val GLOW_ALPHA = 0.10f
+
+/** The centre play mark: a hint the tile is a video, not a competitor to the title or number. */
+private const val PLAY_MARK_ALPHA = 0.20f
 
 /** The chat's initial sits on a disc of white at this alpha. */
 private const val INITIAL_FILL_ALPHA = 0.18f

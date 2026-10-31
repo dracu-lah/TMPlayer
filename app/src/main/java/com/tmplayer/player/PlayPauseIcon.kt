@@ -97,9 +97,11 @@ class PlayPauseIcon @JvmOverloads constructor(
         const val MORPH_MS = 250L
         const val VIEWPORT = 24f
 
-        // Corners clockwise from the top left, in a 24 by 24 box.
-        val PAUSE_LEFT = floatArrayOf(6f, 5f, 10f, 5f, 10f, 19f, 6f, 19f)
-        val PAUSE_RIGHT = floatArrayOf(14f, 5f, 18f, 5f, 18f, 19f, 14f, 19f)
+        // Corners clockwise from the top left, in a 24 by 24 box: the same bounds as Hugeicons'
+        // own Pause glyph (TmIcons.Pause/PauseSolid), narrower and shorter before (user, 2026-11-01,
+        // the player's big centre pause read as off-brand next to the rest of the Hugeicons set).
+        val PAUSE_LEFT = floatArrayOf(4f, 4f, 10f, 4f, 10f, 20f, 4f, 20f)
+        val PAUSE_RIGHT = floatArrayOf(14f, 4f, 20f, 4f, 20f, 20f, 14f, 20f)
 
         // The triangle 7,4 to 20,12 to 7,20, cut down the middle at x = 13.5.
         val PLAY_LEFT = floatArrayOf(7f, 4f, 13.5f, 8f, 13.5f, 16f, 7f, 20f)
