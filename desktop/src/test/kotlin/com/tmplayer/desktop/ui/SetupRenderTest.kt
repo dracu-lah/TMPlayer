@@ -302,6 +302,75 @@ class SetupRenderTest {
         assertTrue("chosen, not a stale default", online.settings.value.offByChoice)
     }
 
+    /**
+     * HX28's Chats step. "Browse everything" writes an explicit answer (AddedMode.All) rather than
+     * leaving it unanswered, even though nothing changed. "Choose chats" opens the real picker at
+     * once rather than waiting for Next; the picker's own close (Done or an unchanged Back, both
+     * resolved either way) moves the setup on to the next step, exactly like skipping it would.
+     */
+    @Test
+    fun chatsStepBrowseAllOrOpensThePicker() = runComposeUiTest {
+        MetaFixture.install("on")
+        var pickerShown = false
+        var done = false
+        var pickerClose: (() -> Unit)? = null
+        setContent {
+            TmMaterialTheme(dark = true) {
+                Box(Modifier.size(1280.dp, 800.dp)) {
+                    SetupScreen(
+                        settings,
+                        remember { SetupState(listOf(SetupStep.Chats)) },
+                        onDone = { done = true },
+                        chatsPicker = { onClose ->
+                            pickerShown = true
+                            pickerClose = onClose
+                        },
+                    )
+                }
+            }
+        }
+        // A single-step setup's primary button says Done, not Next.
+        onNode(hasText("Done") and hasClickAction()).performClick()
+        waitForIdle()
+        waitUntil(timeoutMillis = WRITE_MS) {
+            runBlocking { settings.addedChats.first().mode == com.tmplayer.data.AddedMode.All }
+        }
+        assertFalse("the picker never opened for Browse everything", pickerShown)
+        assertTrue("last step: Next already finished it", done)
+    }
+
+    @Test
+    fun chooseChatsOpensThePickerAtOnce() = runComposeUiTest {
+        MetaFixture.install("on")
+        var pickerShown = false
+        var done = false
+        var pickerClose: (() -> Unit)? = null
+        setContent {
+            TmMaterialTheme(dark = true) {
+                Box(Modifier.size(1280.dp, 800.dp)) {
+                    SetupScreen(
+                        settings,
+                        remember { SetupState(listOf(SetupStep.Chats)) },
+                        onDone = { done = true },
+                        chatsPicker = { onClose ->
+                            pickerShown = true
+                            pickerClose = onClose
+                        },
+                    )
+                }
+            }
+        }
+        onNode(hasText("Choose chats") and hasClickAction()).performClick()
+        waitForIdle()
+        assertTrue("tapping it opens the real picker, not a wait for Next", pickerShown)
+        assertFalse("the picker, not the two-answer card, decides when this step is done", done)
+        // The picker closing (Done, or an unchanged Back) resolves the step either way, same as
+        // skipping it: nothing left half set, and the setup moves on by itself.
+        pickerClose?.invoke()
+        waitForIdle()
+        assertTrue("the setup moved on once the picker was done with it", done)
+    }
+
     /** CP69: Lighter turns the three lighter rows on together, Save mobile data turns on both its settings. */
     @Test
     fun performanceAndMobileDataApply() = runComposeUiTest {

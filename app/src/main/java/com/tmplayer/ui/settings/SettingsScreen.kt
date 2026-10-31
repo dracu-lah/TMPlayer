@@ -683,6 +683,10 @@ fun SettingsScreen(
                                 SetupStep.Device -> null
                                 // Never listed here: its switch is on the privacy rows already.
                                 SetupStep.CrashReports -> null
+                                // Never in this list at all (Setup.stepsFor needs a chat list this
+                                // page does not hand it): "Recently added comes from" and "Add
+                                // more chats" already live on their own rows above.
+                                SetupStep.Chats -> null
                             }
                             target?.let {
                                 SetupPlace(titleOf(it)) {

@@ -72,6 +72,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
+import com.tmplayer.data.AddedChats
+import com.tmplayer.data.AddedMode
 import com.tmplayer.data.DeviceFit
 import com.tmplayer.data.DeviceForm
 import com.tmplayer.data.Recommendation
@@ -122,6 +124,13 @@ fun SetupScreen(
     onBackFromFirst: (() -> Unit)? = null,
     /** What the crash report step starts or stops once its answer is written (CP102f). */
     crashReporting: CrashReporting = CrashReporting.Unavailable,
+    /**
+     * The real "Add chats" picker (HX27/HX28), over the host's own chat list, drawn full screen
+     * in place of this one while it is up. Null leaves [SetupStep.Chats] unable to open anything;
+     * the host that offers the step is the one that must supply this (see [Setup.stepsFor]'s
+     * `chatsAvailable`).
+     */
+    chatsPicker: (@Composable (onClose: () -> Unit) -> Unit)? = null,
 ) {
     val s = LocalStrings.current
     val scope = rememberCoroutineScope()
@@ -130,6 +139,7 @@ fun SetupScreen(
     val lighter by settings.lighterPictures.collectAsState(initial = false)
     val saveData by settings.saveMobileData.collectAsState(initial = false)
     val crashReports by settings.crashReports.collectAsState(initial = false)
+    val addedChats by AddedChats.choice.collectAsState()
     val posters = online?.settings?.collectAsState()?.value?.enabled ?: true
     val values = SetupValues(
         posters = posters,
@@ -137,6 +147,7 @@ fun SetupScreen(
         lighter = lighter,
         saveData = saveData,
         crashReports = crashReports,
+        addedChatsPicked = addedChats.mode == AddedMode.Picked,
     )
     val form = deviceForm()
     val remote = form != DeviceForm.Phone
@@ -147,12 +158,39 @@ fun SetupScreen(
     val selected = picked ?: values.current(step)
     val primaryFocus = remember { FocusRequester() }
     var focusedOn by remember { mutableStateOf<SetupStep?>(null) }
+    // The real picker, over this whole screen rather than inside it: a list of chats has its own
+    // chrome (search, Select all, a total at the foot) and drawing both at once would double it.
+    var showChatsPicker by remember(step) { mutableStateOf(false) }
+
+    if (step == SetupStep.Chats && showChatsPicker) {
+        val picker = chatsPicker
+        if (picker == null) {
+            // Should not happen (the host only offers the step with a picker to open), but nothing
+            // here may be a dead end: fall back to the two-answer card instead of a blank screen.
+            showChatsPicker = false
+        } else {
+            picker {
+                // The picker already wrote the answer itself (Done) or changed nothing (Back,
+                // discarded): either way it is resolved, so this step is done either way, exactly
+                // like skipping it would be.
+                showChatsPicker = false
+                if (!state.next()) onDone()
+            }
+            return
+        }
+    }
 
     fun next() {
+        // The Chats step's real answer takes a screen, not a setting: Next opens it rather than
+        // writing anything, whether this is a fresh pick or a returning viewer reviewing theirs.
+        if (step == SetupStep.Chats && selected == SetupChoice.ChooseChats) {
+            showChatsPicker = true
+            return
+        }
         val choice = selected
         // Only a change is written: Next on an untouched step leaves every setting as it was, even
         // one changed on its own in Settings since. Mobile data suggests saving although it is off,
-        // and the Device step's Apply is an action, so both compare with what is really set.
+        // and the Device and Chats steps' answers are actions, so both compare with what is really set.
         if (choice != values.chosen(step)) {
             scope.launch {
                 runCatching {
@@ -170,8 +208,14 @@ fun SetupScreen(
 
     fun mark(choice: SetupChoice) {
         picked = choice
-        // A remote goes back to Next, one press from moving on with what it marked.
-        if (remote) runCatching { primaryFocus.requestFocus() }
+        // A remote goes back to Next, one press from moving on with what it marked. The Chats
+        // step's "Choose chats" instead opens the picker at once, both for a tap and for a remote's
+        // OK on the row, so marking it never leaves a dangling answer nothing will ever write.
+        if (step == SetupStep.Chats && choice == SetupChoice.ChooseChats) {
+            showChatsPicker = true
+        } else if (remote) {
+            runCatching { primaryFocus.requestFocus() }
+        }
     }
 
     val back: (() -> Unit)? = if (!state.isFirst) ({ state.back() }) else onBackFromFirst
@@ -215,6 +259,10 @@ fun SetupScreen(
                         Column(Modifier.verticalScroll(rememberScrollState())) {
                             CrashChoice(selected, ::mark)
                         }
+                    } else if (step == SetupStep.Chats) {
+                        Column(Modifier.verticalScroll(rememberScrollState())) {
+                            ChatsChoice(selected, addedChats.chats.size, ::mark)
+                        }
                     } else {
                         Choices(step, selected, side, ::mark)
                     }
@@ -230,6 +278,8 @@ fun SetupScreen(
                     DeviceChoices(recommendations, selected, ::mark)
                 } else if (step == SetupStep.CrashReports) {
                     CrashChoice(selected, ::mark)
+                } else if (step == SetupStep.Chats) {
+                    ChatsChoice(selected, addedChats.chats.size, ::mark)
                 } else {
                     Choices(step, selected, side = null, onPick = ::mark)
                 }
@@ -297,6 +347,43 @@ private fun CrashChoice(selected: SetupChoice, onPick: (SetupChoice) -> Unit) {
         on = on,
         onToggle = { onPick(if (on) SetupChoice.CrashReportsOff else SetupChoice.CrashReportsOn) },
     )
+}
+
+/**
+ * The Chats step's two rows ([SetupStep.Chats], HX28): Browse everything, the recommended default,
+ * and Choose chats, which opens the real "Add chats" picker (HX27) at once rather than waiting for
+ * Next, since there is nothing to mark here that a tap on it should not already act on. Once
+ * chosen, the count under the row is the same words Settings' own "Choose chats" row uses, so
+ * reopening it to change a mind reads as the same feature in both places.
+ */
+@Composable
+private fun ChatsChoice(selected: SetupChoice, chosenCount: Int, onPick: (SetupChoice) -> Unit) {
+    val s = LocalStrings.current
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        OptionRow(
+            title = s.setupChatsAll,
+            detail = s.setupChatsAllDetail,
+            selected = selected == SetupChoice.BrowseAllChats,
+            recommended = true,
+            modifier = Modifier.arrowsMoveFocus(),
+        ) { onPick(SetupChoice.BrowseAllChats) }
+        OptionRow(
+            title = s.setupChatsChoose,
+            detail = s.setupChatsChooseDetail,
+            selected = selected == SetupChoice.ChooseChats,
+            modifier = Modifier.arrowsMoveFocus(),
+        ) { onPick(SetupChoice.ChooseChats) }
+        if (selected == SetupChoice.ChooseChats) {
+            Text(
+                s.settingsHomeSourceChosenDetail(count = chosenCount),
+                style = MaterialTheme.typography.bodySmall,
+                color = Tone.muted,
+                // Lines up under the row's own title: its 16 dp padding, then the mark and the
+                // gap before the words (OptionRow's own 22 dp mark, 12 dp spacing).
+                modifier = Modifier.padding(start = 16.dp + 22.dp + 12.dp, top = 2.dp),
+            )
+        }
+    }
 }
 
 /**

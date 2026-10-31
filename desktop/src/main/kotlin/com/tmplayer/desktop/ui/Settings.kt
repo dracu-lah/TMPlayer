@@ -126,7 +126,7 @@ enum class SettingsCategory {
         fun holding(step: SetupStep): SettingsCategory? = when (step) {
             SetupStep.Posters -> Library
             SetupStep.Storage -> Storage
-            SetupStep.Performance, SetupStep.MobileData, SetupStep.Device, SetupStep.CrashReports -> null
+            SetupStep.Performance, SetupStep.MobileData, SetupStep.Device, SetupStep.CrashReports, SetupStep.Chats -> null
         }
     }
 }

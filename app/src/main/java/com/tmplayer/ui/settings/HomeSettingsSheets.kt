@@ -1,12 +1,21 @@
 package com.tmplayer.ui.settings
 
+import com.tmplayer.ui.theme.collectIsFocusVisibleAsState
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -20,13 +29,22 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.tmplayer.data.ChatBrief
 import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.RecentSource
 import com.tmplayer.data.SettingsStore
+import com.tmplayer.ui.browse.ChatAvatar
 import com.tmplayer.ui.components.ChoiceLine
 import com.tmplayer.ui.components.ChoiceList
 import com.tmplayer.ui.components.ChoiceSheet
@@ -35,7 +53,9 @@ import com.tmplayer.ui.components.TvSearchField
 import com.tmplayer.ui.components.isTouch
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.icons.TmIcons
+import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Tone
+import com.tmplayer.ui.theme.focusRing
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -172,13 +192,62 @@ private fun ColumnScope.ChatLines(shown: List<ChatSummary>, chosen: Set<Long>, t
     ) {
         items(shown, key = { it.id }) { chat ->
             val ticked = chat.id in chosen
-            ChoiceLine(
-                title = chat.title,
-                // A tick on a remote, as the kids lock's picker; a phone's radio would read as
-                // "one of these", so a check stands in its place there.
-                selected = if (touch) null else ticked,
-                icon = if (ticked) TmIcons.Check else null,
-            ) { onToggle(chat.id) }
+            // The same row the "Add chats" picker draws (HX27): a real photo or the chat's own
+            // colour initials, never a bare row of names, so this reads as the same feature rather
+            // than a second, plainer one beside it.
+            ChatTickRow(chat = chat, ticked = ticked, touch = touch, onToggle = { onToggle(chat.id) })
+        }
+    }
+}
+
+/**
+ * One chat with its avatar, for a sheet that ticks chats rather than adding them: [HomeChatsSheet]
+ * here, and the kids lock's own picker. A tick on a remote, as every multi-select list in the app
+ * draws one; a phone gets a checkbox, since a radio there would read as "one of these" rather than
+ * "some of these".
+ */
+@Composable
+internal fun ChatTickRow(chat: ChatSummary, ticked: Boolean, touch: Boolean, onToggle: () -> Unit) {
+    val interactions = remember { MutableInteractionSource() }
+    val focused by interactions.collectIsFocusVisibleAsState()
+    val shape = RoundedCornerShape(Corner.Medium)
+    val ink = if (focused) Tone.onFocusFill else Tone.text
+    val brief = remember(chat) { ChatBrief.of(chat) }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(if (focused) Tone.focusFill else Color.Transparent)
+            .focusRing(focused, shape)
+            .semantics(mergeDescendants = true) { toggleableState = ToggleableState(ticked) }
+            .combinedClickable(
+                interactionSource = interactions,
+                indication = if (touch) LocalIndication.current else null,
+                role = Role.Checkbox,
+                onClick = onToggle,
+            )
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        ChatAvatar(brief, if (touch) 40.dp else 48.dp)
+        Text(
+            chat.title,
+            style = MaterialTheme.typography.titleSmall,
+            color = ink,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        if (touch) {
+            Checkbox(checked = ticked, onCheckedChange = null)
+        } else if (ticked) {
+            Icon(
+                TmIcons.Check,
+                contentDescription = null,
+                tint = if (focused) Tone.onFocusFill else Tone.accent,
+                modifier = Modifier.size(20.dp),
+            )
         }
     }
 }

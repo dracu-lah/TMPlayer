@@ -330,7 +330,8 @@ private fun setupDrawable(choice: SetupChoice, tv: Boolean, dark: Boolean): Int 
         else -> R.drawable.setup_posters_off
     }
     SetupChoice.KeepWhilePlaying, SetupChoice.LowStorage, SetupChoice.SaveData, SetupChoice.NoLimits,
-    SetupChoice.ApplyRecommended, SetupChoice.NotNow, SetupChoice.CrashReportsOff, SetupChoice.CrashReportsOn -> 0
+    SetupChoice.ApplyRecommended, SetupChoice.NotNow, SetupChoice.CrashReportsOff, SetupChoice.CrashReportsOn,
+    SetupChoice.BrowseAllChats, SetupChoice.ChooseChats -> 0
     SetupChoice.FullQuality -> when {
         tv -> R.drawable.setup_performance_full_tv
         dark -> R.drawable.setup_performance_full_dark

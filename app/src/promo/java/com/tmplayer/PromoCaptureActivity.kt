@@ -343,7 +343,10 @@ class PromoCaptureActivity : ComponentActivity() {
                             val recommendations = com.tmplayer.ui.onboarding.rememberRecommendations(store, fit)
                             val lowEnd = com.tmplayer.data.DeviceFitOverride.forced != null
                             val steps = remember(lowEnd) {
-                                SetupStep.entries.filter { if (lowEnd) it != SetupStep.Storage else it != SetupStep.Device }
+                                // Chats needs a real chat list and a picker the capture tool does
+                                // not wire up; left out here as Mobile data already is for a form
+                                // that does not offer it.
+                                SetupStep.entries.filter { (if (lowEnd) it != SetupStep.Storage else it != SetupStep.Device) && it != SetupStep.Chats }
                             }
                             val setup = remember(steps) {
                                 SetupState(
@@ -360,7 +363,9 @@ class PromoCaptureActivity : ComponentActivity() {
                             val store = remember { SettingsStore(applicationContext) }
                             val phone = com.tmplayer.ui.components.deviceForm() == com.tmplayer.data.DeviceForm.Phone
                             val steps = remember(phone) {
-                                SetupStep.entries.filter { it != SetupStep.Device && (phone || it != SetupStep.MobileData) }
+                                SetupStep.entries.filter {
+                                    it != SetupStep.Device && it != SetupStep.Chats && (phone || it != SetupStep.MobileData)
+                                }
                             }
                             com.tmplayer.ui.onboarding.SetupAndTour(store, steps, onDone = { screen = "chats" })
                         }

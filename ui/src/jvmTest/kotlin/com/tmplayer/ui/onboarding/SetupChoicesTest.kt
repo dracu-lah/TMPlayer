@@ -57,7 +57,9 @@ class SetupChoicesTest {
     fun `every answer writes its settings and reads back as chosen`() = runBlocking {
         val settings = store()
         var posters = true
-        for (choice in SetupChoice.entries.filter { it.step != SetupStep.Device }) {
+        // Device and Chats are both actions rather than plain settings (chosen() is null for
+        // either), so their answers do not read back as "chosen" the way every other one does.
+        for (choice in SetupChoice.entries.filter { it.step != SetupStep.Device && it.step != SetupStep.Chats }) {
             choice.applyTo(settings, posters = { posters = it })
             val now = values(settings, posters)
             assertEquals(choice.name, choice, now.chosen(choice.step))

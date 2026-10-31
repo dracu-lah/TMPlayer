@@ -34,6 +34,8 @@ fun SetupAndTour(
      * reports crashes.
      */
     crashReporting: CrashReporting = CrashReporting.Unavailable,
+    /** The real "Add chats" picker for [SetupStep.Chats] (HX27/HX28); see [SetupScreen]'s own doc. */
+    chatsPicker: (@Composable (onClose: () -> Unit) -> Unit)? = null,
 ) {
     val form = deviceForm()
     val pages = remember(form) { Tour.pages(form) }
@@ -64,6 +66,7 @@ fun SetupAndTour(
             onSkipAll = onDone,
             onBackFromFirst = { phase = SetupPhase.Appearance },
             crashReporting = crashReporting,
+            chatsPicker = chatsPicker,
         )
         else -> TourScreen(
             tour,

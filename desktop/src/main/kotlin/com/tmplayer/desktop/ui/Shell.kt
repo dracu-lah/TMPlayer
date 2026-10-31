@@ -490,7 +490,7 @@ private fun Browse(state: ShellState, player: PlayerContent) {
             ShellNotices(state, Modifier.align(Alignment.BottomEnd).padding(start = 24.dp, top = 24.dp, end = 24.dp, bottom = foot))
         }
         if (setupPending) {
-            SetupOverlay(state, chatsUi is UiState.Content)
+            SetupOverlay(state, chatsUi is UiState.Content, chats)
         }
         // The quick tour on its own (CP69): taken from the offer, or opened from Settings.
         val tour by state.settings.tourState.collectAsState(initial = com.tmplayer.data.SettingsStore.TourState.Done)
@@ -526,7 +526,7 @@ private const val HOUSEKEEPING_DELAY_MS = 20_000L
  * for one that is slow to come. Browse is drawn under it, so the list is ready when the setup ends.
  */
 @Composable
-private fun SetupOverlay(state: ShellState, chatsLoaded: Boolean) {
+private fun SetupOverlay(state: ShellState, chatsLoaded: Boolean, chats: com.tmplayer.ui.browse.ChatListViewModel) {
     val scope = rememberCoroutineScope()
     var waitedOut by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
@@ -547,13 +547,18 @@ private fun SetupOverlay(state: ShellState, chatsLoaded: Boolean) {
         val recommendations = remember {
             com.tmplayer.data.DeviceFitRules.recommendations(fit, now, seekThumbnailsShown = false, pictures = false)
         }
+        // The list is already known whole by the time this can show (chatsLoaded), read once as
+        // every other "as the setup opens" value here is.
+        val chatsSnapshot = (chats.state.value as? UiState.Content)?.value?.chats.orEmpty()
         // The same steps Settings' Setup choices lists (Setup.stepsFor): the desktop is only ever
-        // offered Low storage mode there, so Performance stays.
-        val steps = remember {
+        // offered Low storage mode there, so Performance stays. Plus the Chats step (HX28) once
+        // the list is really in and worth narrowing.
+        val steps = remember(chatsSnapshot.isNotEmpty()) {
             Setup.stepsFor(
                 com.tmplayer.data.DeviceForm.Desktop,
                 posters = com.tmplayer.online.OnlineMetadata.current != null,
                 recommendations = recommendations,
+                chatsAvailable = Setup.worthChoosingChats(chatsSnapshot.size),
             )
         }
         // The choices, then the quick tour (CP69); with no choices to make, the tour alone.
@@ -570,6 +575,19 @@ private fun SetupOverlay(state: ShellState, chatsLoaded: Boolean) {
                         if (on) com.tmplayer.desktop.DesktopCrashReports.start(true) else com.tmplayer.desktop.DesktopCrashReports.stop()
                     }
                 }
+            },
+            // The real "Add chats" picker (HX27), over the window's own chat list rather than the
+            // global AddChatsState overlay: that one draws earlier in this same window (under this
+            // overlay, which would hide it), so this step gets its own view model instead.
+            chatsPicker = { onPickerClose ->
+                val model = remember { com.tmplayer.ui.browse.newAddChatsViewModel(state.settings) }
+                com.tmplayer.ui.browse.AddChatsFed(
+                    settings = state.settings,
+                    chatsViewModel = chats,
+                    model = model,
+                    onClose = onPickerClose,
+                    sendLogs = { SendLogsActions() },
+                )
             },
         )
     }

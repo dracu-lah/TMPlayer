@@ -1637,12 +1637,17 @@ private fun Root() {
             val recommendations = remember {
                 com.tmplayer.data.DeviceFitRules.recommendations(fit, light!!, seekThumbnails)
             }
-            // The same steps Settings' Setup choices lists (Setup.stepsFor).
-            val steps = remember {
+            // The same steps Settings' Setup choices lists (Setup.stepsFor), plus the Chats step
+            // (HX28) once the list is really in and worth narrowing; read once, as every other
+            // "read once as the setup opens" value here is, so a chat added mid-setup does not
+            // move the step count under the viewer.
+            val chatsReady = chatsLoaded && chats.isNotEmpty()
+            val steps = remember(chatsReady) {
                 Setup.stepsFor(
                     FormFactor.form(context),
                     posters = com.tmplayer.online.OnlineMetadata.current != null,
                     recommendations = recommendations,
+                    chatsAvailable = chatsReady && Setup.worthChoosingChats(chats.size),
                 )
             }
             // The choices, then the quick tour (CP69); with no choices to make, the tour alone.
@@ -1657,6 +1662,24 @@ private fun Root() {
                     com.tmplayer.ui.onboarding.CrashReporting(CrashReports.available) { on ->
                         if (on) CrashReports.start(context, true) else CrashReports.stop()
                     }
+                },
+                // The real "Add chats" picker (HX27), over the same chat list the shell already
+                // has: a view model of its own so leaving and reopening the step starts from the
+                // store, same as the picker does everywhere else it opens.
+                chatsPicker = { onPickerClose ->
+                    val model = remember {
+                        com.tmplayer.ui.browse.newAddChatsViewModel(settings)
+                    }
+                    com.tmplayer.ui.browse.AddChatsFed(
+                        settings = settings,
+                        chatsViewModel = chatsViewModel,
+                        model = model,
+                        onClose = onPickerClose,
+                        sendLogs = { com.tmplayer.ui.settings.SendLogsButton() },
+                        searchField = if (com.tmplayer.ui.components.isTouch()) null else { value, onValueChange, placeholder, modifier ->
+                            com.tmplayer.ui.components.TvSearchField(value = value, onValueChange = onValueChange, placeholder = placeholder, modifier = modifier)
+                        },
+                    )
                 },
             )
             return@Box

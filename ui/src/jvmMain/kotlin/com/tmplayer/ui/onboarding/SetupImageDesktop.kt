@@ -35,7 +35,8 @@ fun setupImageName(choice: SetupChoice, dark: Boolean): String? {
         SetupChoice.FullQuality -> "performance-full"
         SetupChoice.Lighter -> "performance-lighter"
         SetupChoice.KeepWhilePlaying, SetupChoice.LowStorage, SetupChoice.SaveData, SetupChoice.NoLimits,
-        SetupChoice.ApplyRecommended, SetupChoice.NotNow, SetupChoice.CrashReportsOff, SetupChoice.CrashReportsOn -> return null
+        SetupChoice.ApplyRecommended, SetupChoice.NotNow, SetupChoice.CrashReportsOff, SetupChoice.CrashReportsOn,
+        SetupChoice.BrowseAllChats, SetupChoice.ChooseChats -> return null
     }
     return "$shot-${if (dark) "dark" else "light"}.webp"
 }
