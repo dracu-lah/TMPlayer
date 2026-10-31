@@ -3787,7 +3787,11 @@ button.btn { font: inherit; font-weight: 600; font-size: 0.98rem; cursor: pointe
   .lcard-give > .support-more > :is(h2, h3, .support-head) { grid-column: 1; grid-row: 1; align-self: end; margin: 0 0 6px; }
   .lcard-give > .support-more > p { grid-column: 1; grid-row: 2; align-self: start; }
   .lcard-give .support-coffee { grid-column: 2; grid-row: 1 / span 2; margin: 0; }
-  .lcard-talk .support-links { margin: 0; justify-content: flex-end; max-width: 360px; }
+  /* The talk card's links read as a single row under the text, not squeezed into the card's
+     narrow side column (that wrapped ragged with four links): its own single-column layout. */
+  .lcard-talk { grid-template-columns: 1fr; }
+  .lcard-talk .lcard-side { grid-column: 1; grid-row: 2; justify-items: start; }
+  .lcard-talk .support-links { margin: 0; justify-content: flex-start; max-width: none; }
 }
 
 /* ==== Home page sections (2026-10-20 revamp) ==== */
