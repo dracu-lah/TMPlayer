@@ -77,6 +77,17 @@ html[data-tv-keys] .tv-picture:focus {
 .tv-picture .nav-picture-blank { width: calc(var(--dp) * 14); height: calc(var(--dp) * 14); }
 .tv-brand { flex: none; display: flex; align-items: center; gap: calc(var(--dp) * 12); font-size: calc(var(--dp) * 22); line-height: 1; font-weight: 600; }
 .tv-brand img { width: calc(var(--dp) * 40); height: calc(var(--dp) * 40); border-radius: calc(var(--dp) * 10); }
+/* The whole-page fullscreen toggle (until CP105's wrapper exists): as a .tv-tab, flush before the brand. */
+.tv-fullscreen {
+  flex: none; display: inline-flex; align-items: center; gap: calc(var(--dp) * 8); height: calc(var(--dp) * 40);
+  padding: 0 calc(var(--dp) * 14); border: 0; border-radius: 999px; white-space: nowrap;
+  font: inherit; font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 20); font-weight: 500;
+  background: none; color: var(--muted); cursor: pointer;
+  transition: transform var(--fast) var(--ease), background-color var(--fast), color var(--fast);
+}
+.tv-fullscreen .icon { width: calc(var(--dp) * 20); height: calc(var(--dp) * 20); }
+html[data-tv-keys] .tv-fullscreen:focus { outline: none; background: var(--focus-fill); color: var(--on-focus-fill); font-weight: 600; transform: scale(var(--focus-scale)); }
+html[data-theme=light][data-tv-keys] .tv-fullscreen:focus { box-shadow: 0 0 0 calc(var(--dp) * 2) var(--accent); }
 
 /* ---- Home's carousel (TvHomeCarousel): 284 dp under the bar, its picture up behind it ---- */
 /* Home has no heading on a TV: the carousel, or the rows, start under the bar. */

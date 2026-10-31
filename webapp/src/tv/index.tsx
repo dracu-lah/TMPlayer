@@ -5,7 +5,7 @@
 import { useFeatured } from '../screens/featured'
 import { createEffect, createSignal, For, on, onCleanup, onMount, Show } from 'solid-js'
 import { A, useLocation, useNavigate } from '@solidjs/router'
-import { Home03Icon, Message01Icon, PlayIcon, Search01Icon } from '@hugeicons/core-free-icons'
+import { ArrowExpandIcon, ArrowShrinkIcon, Home03Icon, Message01Icon, PlayIcon, Search01Icon } from '@hugeicons/core-free-icons'
 import { Icon, type IconData } from '../ui/Icon'
 import { initialOf } from '../ui/initial'
 import { nameArt } from '../ui/colour'
@@ -81,6 +81,39 @@ const TABS: Tab[] = [
 const [heroUp, setHeroUp] = createSignal(false)
 
 /**
+ * Until CP105's thin wrapper exists, a TV reaches this page through the TV's own browser, chrome
+ * and all, so the bar carries its own fullscreen toggle (not the player's, which already has one
+ * for playback): the Fullscreen API on the whole page, reflecting the real state back
+ * (fullscreenchange fires on a remote's Back too, not only this button) rather than just flipping
+ * a local flag. Hidden outright where the browser has no Fullscreen API, or blocks it, so there is
+ * never a dead button on screen.
+ */
+function TvFullscreenToggle() {
+    const supported = typeof document !== 'undefined' && document.fullscreenEnabled
+    const [on, setOn] = createSignal(!!document.fullscreenElement)
+    const sync = () => setOn(!!document.fullscreenElement)
+    onMount(() => {
+        document.addEventListener('fullscreenchange', sync)
+        onCleanup(() => document.removeEventListener('fullscreenchange', sync))
+    })
+    const toggle = () => {
+        if (document.fullscreenElement) {
+            document.exitFullscreen().catch(() => {})
+        } else {
+            document.documentElement.requestFullscreen?.({ navigationUI: 'hide' }).catch(() => {})
+        }
+    }
+    return (
+        <Show when={supported}>
+            <button type="button" class="tv-fullscreen" onClick={toggle}>
+                <Icon icon={on() ? ArrowShrinkIcon : ArrowExpandIcon} size={20} />
+                <span>{on() ? t('player.exit_fullscreen') : t('player.fullscreen')}</span>
+            </button>
+        </Show>
+    )
+}
+
+/**
  * The bar, as TvTopBar draws it: the account's picture at the start (Settings, as the web's "You"
  * opens), then Search, Home and Chats, and the app's mark and name at the end, which take no
  * focus. The page shown is marked by its filled icon, or the picture by a thin ring.
@@ -124,6 +157,7 @@ export function TvBar() {
                         )}
                     </For>
                 </nav>
+                <TvFullscreenToggle />
                 <div class="tv-brand" aria-hidden="true">
                     <img src="/icon.svg" alt="" width="40" height="40" />
                     <span>TMPlayer</span>
