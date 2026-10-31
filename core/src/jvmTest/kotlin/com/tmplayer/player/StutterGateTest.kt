@@ -227,6 +227,33 @@ class StutterGateTest {
         assertEquals("80", sent.single().tags!!["speed_percent"])
     }
 
+    /**
+     * HX50 (Fire TV Stick, speed 99%, 50 of 312 frames dropped, 0 underruns): checked whether the
+     * drop-fraction branch ([PlaybackWatch.symptomOf]'s `DROPPED`) needs the same "measured over
+     * more than an instant" treatment HX37 gave seeks, pauses and buffering, or whether it already
+     * has it by summing over the whole [PlaybackWatch.WINDOW_MS].
+     *
+     * It does not, fully: the window is cumulative from the first counted sample, so one bad
+     * second amid an otherwise flawless watch (not a seek or a pause, which [interrupted] already
+     * drops, but a GC pause or a brief decoder hiccup while still playing) can alone push the share
+     * over [MAX_DROPPED_SHARE][PlaybackWatch]'s 10 per cent for the rest of the window, same as a
+     * genuinely struggling device would. HX50's own figures (16 per cent over the window) read the
+     * same whether they came from one bad second or were spread across all twelve, so the report
+     * cannot by itself tell a Fire Stick that is really behind from a Fire Stick that had one hiccup
+     * and was otherwise fine; a narrower fix (a floor under one-off spikes) would need its own
+     * tuning and its own false-negative risk, so it is left here as a documented gap, not changed.
+     */
+    @Test
+    fun `one bad second amid an otherwise clean window still trips the drop-fraction gate`() {
+        val play = Play()
+        play.tick(3)
+        // One second with half its frames dropped, no seek and no pause around it.
+        play.tick(1, dropsPerSecond = 50)
+        play.tick(30)
+        assertEquals(PlaybackWatch.Answer.CANNOT_KEEP_UP, play.answer)
+        assertEquals(PlaybackWatch.DROPPED, play.watch.figures().symptom)
+    }
+
     @Test
     fun `the report carries the symptom and where the frame rate came from`() {
         val tags = StutterReport.tagsOf(facts(speed = 50, symptom = PlaybackWatch.SLOW).copy(fpsSource = "unknown"))
