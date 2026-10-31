@@ -168,41 +168,25 @@ const trust = ['download.trust_free', 'download.trust_source', 'download.trust_a
             Developer Mode, a Samsung certificate for that one TV) the browser skips entirely.
           */}
           <Platform id="samsung-tv" icon="samsung" tone="browse" title={t('download.tvpk_samsung_title')} req={t('download.tvpk_samsung_req')}>
-            <Fragment slot="before">
-              <p>{t('download.tvpk_browser_note')}</p>
-              <p class="platform-note">{t('download.tvpk_beta_note')}</p>
-            </Fragment>
+            <Fragment slot="before"><p>{t('download.tvpk_browser_note')}</p></Fragment>
+            <AbiRow asset="tv-tizen">
+              <Fragment slot="name">{t('download.tvpk_samsung')}</Fragment>
+              <Fragment slot="note">{t('download.tvpk_samsung_note')}</Fragment>
+              <p slot="file" class="abi-file" data-file>TMPlayer-&lt;version&gt;-samsung-tizen.wgt</p>
+            </AbiRow>
             <Fragment slot="foot"><a href={l('/guides/telegram-on-samsung-or-lg-tv/#tmplayer-on-the-tv')}>{t('download.tvpk_guide')}</a></Fragment>
-            <details slot="after" class="code-fold dl-more">
-              <summary>{t('download.tvpk_more')}<Icon name="faq-chevron" /></summary>
-              <p class="platform-note">{t('download.tvpk_more_note')}</p>
-              <ul class="abi-list">
-                <AbiRow asset="tv-tizen">
-                  <Fragment slot="name">{t('download.tvpk_samsung')}</Fragment>
-                  <Fragment slot="note">{t('download.tvpk_samsung_note')}</Fragment>
-                  <p slot="file" class="abi-file" data-file>TMPlayer-&lt;version&gt;-samsung-tizen.wgt</p>
-                </AbiRow>
-              </ul>
-            </details>
+            <Fragment slot="after"><p class="platform-note">{t('download.tvpk_more_note')}</p></Fragment>
           </Platform>
 
           <Platform id="lg-tv" icon="lg" tone="no" title={t('download.tvpk_lg_title')} req={t('download.tvpk_lg_req')}>
-            <Fragment slot="before">
-              <p>{t('download.tvpk_browser_note')}</p>
-              <p class="platform-note">{t('download.tvpk_beta_note')}</p>
-            </Fragment>
+            <Fragment slot="before"><p>{t('download.tvpk_browser_note')}</p></Fragment>
+            <AbiRow asset="tv-webos">
+              <Fragment slot="name">{t('download.tvpk_lg')}</Fragment>
+              <Fragment slot="note">{t('download.tvpk_lg_note')}</Fragment>
+              <p slot="file" class="abi-file" data-file>TMPlayer-&lt;version&gt;-lg-webos.ipk</p>
+            </AbiRow>
             <Fragment slot="foot"><a href={l('/guides/telegram-on-samsung-or-lg-tv/#tmplayer-on-the-tv')}>{t('download.tvpk_guide')}</a></Fragment>
-            <details slot="after" class="code-fold dl-more">
-              <summary>{t('download.tvpk_more')}<Icon name="faq-chevron" /></summary>
-              <p class="platform-note">{t('download.tvpk_more_note')}</p>
-              <ul class="abi-list">
-                <AbiRow asset="tv-webos">
-                  <Fragment slot="name">{t('download.tvpk_lg')}</Fragment>
-                  <Fragment slot="note">{t('download.tvpk_lg_note')}</Fragment>
-                  <p slot="file" class="abi-file" data-file>TMPlayer-&lt;version&gt;-lg-webos.ipk</p>
-                </AbiRow>
-              </ul>
-            </details>
+            <Fragment slot="after"><p class="platform-note">{t('download.tvpk_more_note')}</p></Fragment>
           </Platform>
 
           <Platform id="android" icon="android" tone="yes" title={t('download.android_phone')} req={t('download.android_8_0_and_above')}>
@@ -277,7 +261,7 @@ const trust = ['download.trust_free', 'download.trust_source', 'download.trust_a
             </ol>
             <Fragment slot="foot"><a href={l('/install/#linux')}>{t('download.full_steps')}</a></Fragment>
             <details slot="after" class="code-fold dl-more">
-              <summary>{t('download.arch_linux')}<Icon name="faq-chevron" /></summary>
+              <summary><Icon name="archlinux" />{t('download.arch_linux')}<Icon name="faq-chevron" /></summary>
               <ul class="abi-list">
                 <AbiRow href="https://github.com/dracu-lah/TMPlayer/tree/main/desktop/packaging/aur" label={t('download.arch_pkgbuild_link')}>
                   <Fragment slot="name">{t('download.arch_linux')}</Fragment>

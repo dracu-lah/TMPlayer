@@ -626,7 +626,6 @@
     "open_the_installer": "Ouvrez le programme d'installation",
     "what_comes_next": "Et ensuite",
     "join_the_telegram_channel_for_updates": "Rejoignez la chaîne Telegram pour suivre les mises à jour",
-    "tvpk_more": "Paquets pour la liste d'applis de la TV (avancé)",
     "tvpk_more_note": "Chaque version contient aussi un paquet qui ouvre la même page depuis la liste d'applis de la TV. Ils sont pour ceux qui développent déjà pour ces TV ; le navigateur est plus simple.",
     "tvpk_lg": "Paquet LG webOS",
     "tvpk_lg_note": "Installé avec l'appli Developer Mode de LG et les outils ares. Developer Mode se coupe de lui-même au bout d'un moment, sauf prolongation.",

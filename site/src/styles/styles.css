@@ -1225,6 +1225,11 @@ html:not(.js) .js-only { display: none; }
 
 .platform-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .platform-title { min-width: 0; flex: 1 1 14rem; }
+/* Samsung and LG's own marks, the brand itself rather than a generic tone: larger, squircled and
+   on the end side, so each card reads at a glance which TV it is for (user, 2026-11-01). */
+#samsung-tv .platform-head, #lg-tv .platform-head { flex-direction: row-reverse; justify-content: flex-end; }
+#samsung-tv .panel-icon, #lg-tv .panel-icon { width: 64px; height: 64px; border-radius: 26%; }
+#samsung-tv .panel-icon svg, #lg-tv .panel-icon svg { width: 30px; height: 30px; }
 .platform-title h3 {
   margin: 0;
   font-size: 1.4rem;
@@ -4916,8 +4921,9 @@ html.dl-tabs-live[data-dl-tab] .platforms > .platform { animation: dl-tab-in 0.2
 }
 .code-fold > summary::-webkit-details-marker { display: none; }
 .code-fold > summary:hover { border-color: var(--outline); }
-.code-fold > summary svg { width: 18px; height: 18px; transition: transform 0.25s var(--ease-standard); }
-.code-fold[open] > summary svg { transform: rotate(-180deg); }
+.code-fold > summary svg { width: 18px; height: 18px; }
+.code-fold > summary svg:last-child { transition: transform 0.25s var(--ease-standard); }
+.code-fold[open] > summary svg:last-child { transform: rotate(-180deg); }
 .code-fold[open] > summary { margin-bottom: 12px; }
 
 /* ---------- FAQ page ---------- */
