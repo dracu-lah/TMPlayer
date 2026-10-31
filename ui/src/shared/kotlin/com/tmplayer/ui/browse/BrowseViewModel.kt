@@ -38,6 +38,8 @@ import com.tmplayer.ui.icons.TmIcons
 import dev.g000sha256.tdl.dto.ChatListArchive
 import dev.g000sha256.tdl.dto.ChatListMain
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Job
@@ -206,18 +208,35 @@ class ChatListViewModel(
                                     // freshly pinned chat while its row still said unpinned.
                                     val archived = update.position.list is ChatListArchive
                                     if (update.position.order != 0L) {
-                                        edit(update.chatId) {
+                                        val known = edit(update.chatId) {
                                             it.copy(
                                                 isPinned = update.position.isPinned,
                                                 isArchived = archived,
                                             )
                                         }
+                                        // A chat this screen has never shown (HX44): queued for
+                                        // fetchNewChats, bounded so a burst of them (a first sign
+                                        // in still filling TDLib's database) costs at most
+                                        // NEW_CHAT_FETCH_CAP round trips rather than a fan-out.
+                                        // Anything this settle window could not take is caught by
+                                        // the next one, or by the next full sync.
+                                        if (!known && chats != null) {
+                                            if (pendingNewChats.size < NEW_CHAT_FETCH_CAP) pendingNewChats += update.chatId
+                                        } else {
+                                            pendingNewChats -= update.chatId
+                                        }
+                                    } else {
+                                        // Out of the list again before its first fetch: nothing to
+                                        // chase, so it never flickers in.
+                                        pendingNewChats -= update.chatId
                                     }
                                 }
                                 .conflate()
                                 .collect {
                                     delay(REORDER_SETTLE_MS)
-                                    reorder(ChatRepository(client))
+                                    val repository = ChatRepository(client)
+                                    fetchNewChats(repository)
+                                    reorder(repository)
                                 }
                         }
                         launch {
@@ -252,10 +271,10 @@ class ChatListViewModel(
     /**
      * Puts the rows already in hand into the order TDLib now holds them in.
      *
-     * Ids TDLib knows and this screen does not are skipped rather than fetched: a chat that has
-     * only just appeared arrives with the next sync, and chasing it here would put a `getChat`
-     * fan-out behind an update that fires on every incoming message. Rows TDLib no longer lists
-     * are dropped, which is what leaving a chat looks like from here.
+     * By the time this runs, [fetchNewChats] has already caught up on the ids this screen did not
+     * know (HX44); what is left unknown here is whatever that could not fit in its cap, and it is
+     * skipped rather than fetched again, so one settle window never doubles the round trips. Rows
+     * TDLib no longer lists are dropped, which is what leaving a chat looks like from here.
      */
     private suspend fun reorder(repository: ChatRepository) {
         val current = chats ?: return
@@ -273,15 +292,53 @@ class ChatListViewModel(
         publish()
     }
 
-    /** Applies a change to one row, if that row is on screen. Publishes only when it moved. */
-    private fun edit(chatId: Long, change: (ChatSummary) -> ChatSummary) {
+    /**
+     * A chat whose position update named an id this screen had never shown, waiting for
+     * [fetchNewChats] to read it with one `getChat` each (HX44). Bounded at insertion
+     * ([NEW_CHAT_FETCH_CAP]), and cleared of an id that left the list again before it was fetched.
+     */
+    private val pendingNewChats = LinkedHashSet<Long>()
+
+    /**
+     * Reads the chats [pendingNewChats] is holding, one `getChat` each, so a newly joined channel
+     * or a brand new private chat shows up on its own rather than waiting for the Refresh button
+     * this task took away (HX44). This is the one gap `watchChatChanges` used to leave on purpose
+     * (a position update fires on every incoming message, and chasing every unknown id behind
+     * that would be a `getChat` fan-out); it is safe now because the ids are bounded per settle
+     * window by [NEW_CHAT_FETCH_CAP] rather than unbounded.
+     */
+    private suspend fun fetchNewChats(repository: ChatRepository) {
+        if (pendingNewChats.isEmpty()) return
+        val ids = pendingNewChats.toList()
+        pendingNewChats.clear()
         val current = chats ?: return
+        val known = current.mapTo(HashSet()) { it.id }
+        val fresh = ids.filterNot { it in known }
+        if (fresh.isEmpty()) return
+        val fetched = coroutineScope {
+            fresh.map { id -> async { runCatching { repository.summary(id) }.getOrNull() } }.awaitAll()
+        }.filterNotNull()
+        if (fetched.isEmpty()) return
+        // Read again rather than reused: the settle delay and the fetch itself both give a sign
+        // out, or another collector, time to change what `chats` holds.
+        val stillCurrent = chats ?: return
+        val stillKnown = stillCurrent.mapTo(HashSet()) { it.id }
+        val added = fetched.filterNot { it.id in stillKnown }
+        if (added.isEmpty()) return
+        chats = foldered(stillCurrent + added)
+        publish()
+    }
+
+    /** Applies a change to one row, if that row is on screen. Publishes only when it moved. Returns whether the row was found. */
+    private fun edit(chatId: Long, change: (ChatSummary) -> ChatSummary): Boolean {
+        val current = chats ?: return false
         val at = current.indexOfFirst { it.id == chatId }
-        if (at < 0) return
+        if (at < 0) return false
         val updated = change(current[at])
-        if (updated == current[at]) return
+        if (updated == current[at]) return true
         chats = current.toMutableList().also { it[at] = updated }
         publish()
+        return true
     }
 
     private var loadJob: Job? = null
@@ -313,6 +370,17 @@ class ChatListViewModel(
      * Every chat read, before the kids lock, the added chats and the hidden chats narrow it: what
      * the picker lists (HX27). It is the one screen that must see a chat the viewer has not added,
      * since otherwise there would be no way to add it; every other screen reads [state].
+     *
+     * TODO(HX44 step 3): this is why [load] still pages the main list and the 4000-deep archive
+     * every sync even under [com.tmplayer.data.AddedMode.Picked], instead of asking TDLib for only
+     * the added ids: the picker ([AddChatsViewModel]) reads this flow rather than doing its own
+     * full-account fetch, so narrowing [load] to the added chats would starve it of everything it
+     * has not already been shown. Giving the picker its own [ChatRepository]-backed sync (its own
+     * loading state, used only while it is open) would let [load] sync just [AddedChats.ids] under
+     * Picked, and leave the deep archive walk to the picker alone, which is the one screen that
+     * needs it. Left as a TODO rather than built now: it is a bigger change than this task's
+     * (HX44's) one-sync-call swap, and getting the picker's own fetch wrong risks regressing the
+     * already-shipped, scale-tested HX27/HX30 picker.
      */
     val everything: StateFlow<List<ChatSummary>> = _everything.asStateFlow()
 
@@ -612,6 +680,7 @@ class ChatListViewModel(
         foldersJob?.cancel()
         membership = null
         foldersGaveUp = false
+        pendingNewChats.clear()
         account = null
         chats = null
         syncedAt = 0L
@@ -639,6 +708,14 @@ class ChatListViewModel(
          * Telegram sends one per message, and a chat that is being typed in sends a run of them.
          */
         const val REORDER_SETTLE_MS = 400L
+
+        /**
+         * The most new chats [fetchNewChats] reads in one settle window (HX44): a first sign in
+         * still filling TDLib's database fires a position update per chat, and without a cap that
+         * would be a `getChat` for every one of them behind a single burst. Whatever does not fit
+         * is caught by a later burst (another message in it) or by the next full sync.
+         */
+        const val NEW_CHAT_FETCH_CAP = 20
 
         val LOADING_CHATS: String get() = L.browseLoadingChats
     }

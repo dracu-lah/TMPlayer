@@ -139,15 +139,14 @@ fun ChatsPage(
     }
 
     Column(Modifier.fillMaxSize()) {
-        // The phone pulls the list down to refresh it; here F5, Ctrl+R and the small button do.
-        val spin = com.tmplayer.ui.components.rememberRefreshSpin()
-        val refreshing by model.refreshing.collectAsState()
-        val refresh = {
-            spin.kick()
+        // The chat list keeps itself live on its own (HX44): titles, photos, order, unread counts,
+        // mutes and a newly appeared chat all arrive through TDLib's own updates, so there is no
+        // button for this any more. F5 and Ctrl+R still work, as Home's do, for anyone who reaches
+        // for them, and the flood-wait toast stays behind them.
+        RegisterRefresh(state) {
             val waiting = model.refreshUnlessRateLimited()
             if (waiting > 0) toast(s.chatsRefreshWait(waiting))
         }
-        RegisterRefresh(state, refresh)
         // The page's name alone, at the start like every other page's: the chips under it
         // already say which slice of the list this is, and a line under the name said it again.
         PageHeader(
@@ -161,11 +160,6 @@ fun ChatsPage(
                     modifier = Modifier.widthIn(min = 160.dp, max = 280.dp),
                     onDown = { nav.focus(0) },
                 )
-                BarTooltip(s.commonRefresh, if (OsInfo.isMac) "⌘R" else "F5", below = true) {
-                    androidx.compose.material3.IconButton(onClick = refresh) {
-                        com.tmplayer.ui.components.RefreshGlyph(spin, s.commonRefresh, spinning = refreshing)
-                    }
-                }
             },
         )
         if (!favouritesOnly) {
