@@ -1,0 +1,51 @@
+name: Download mirror
+
+# The Cloudflare Worker at workers/download-mirror that caches TMPlayer's own GitHub release
+# assets at the edge, so a slow route to GitHub's asset CDN doesn't make every download slow.
+# GitHub still sees the first request for each file, so its download_count stays accurate.
+# Nothing deploys by itself: a deploy is a manual run (Actions, Download mirror, Run workflow),
+# and it is the user's call.
+on:
+  workflow_dispatch: {}
+  pull_request:
+    branches: [main]
+    paths:
+      - "workers/download-mirror/**"
+      - ".github/workflows/download-mirror.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    defaults:
+      run:
+        working-directory: workers/download-mirror
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Deploy to Cloudflare Workers
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx --yes wrangler@4.149.0 deploy | tee "$RUNNER_TEMP/deploy.log"
+
+  dry-run:
+    name: Dry run
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    defaults:
+      run:
+        working-directory: workers/download-mirror
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Check the worker builds
+        run: npx --yes wrangler@4.149.0 deploy --dry-run
