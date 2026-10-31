@@ -37,32 +37,35 @@ export interface Lang {
   /** the language's name for itself */
   name: string;
   dir?: 'rtl';
+  /** A representative country's flag, decoration only (a language is not one country: this is a
+      scanning aid beside the name, never the only label). */
+  flag?: string;
 }
 
 /** The languages besides English, in the order the picker lists them. */
 export const LANGS: Lang[] = [
-  { tag: 'es-419', path: 'es', hreflang: 'es', og: 'es_LA', name: 'Español' },
-  { tag: 'pt-BR', path: 'pt', hreflang: 'pt', og: 'pt_BR', name: 'Português' },
-  { tag: 'fr', path: 'fr', hreflang: 'fr', og: 'fr_FR', name: 'Français' },
-  { tag: 'de', path: 'de', hreflang: 'de', og: 'de_DE', name: 'Deutsch' },
-  { tag: 'it', path: 'it', hreflang: 'it', og: 'it_IT', name: 'Italiano' },
-  { tag: 'pl', path: 'pl', hreflang: 'pl', og: 'pl_PL', name: 'Polski' },
-  { tag: 'ru', path: 'ru', hreflang: 'ru', og: 'ru_RU', name: 'Русский' },
-  { tag: 'uk', path: 'uk', hreflang: 'uk', og: 'uk_UA', name: 'Українська' },
-  { tag: 'tr', path: 'tr', hreflang: 'tr', og: 'tr_TR', name: 'Türkçe' },
-  { tag: 'id', path: 'id', hreflang: 'id', og: 'id_ID', name: 'Bahasa Indonesia' },
-  { tag: 'vi', path: 'vi', hreflang: 'vi', og: 'vi_VN', name: 'Tiếng Việt' },
-  { tag: 'ar', path: 'ar', hreflang: 'ar', og: 'ar_AR', name: 'العربية', dir: 'rtl' },
-  { tag: 'fa', path: 'fa', hreflang: 'fa', og: 'fa_IR', name: 'فارسی', dir: 'rtl' },
-  { tag: 'zh-CN', path: 'zh', hreflang: 'zh-Hans', og: 'zh_CN', name: '简体中文' },
-  { tag: 'zh-TW', path: 'zh-tw', hreflang: 'zh-Hant', og: 'zh_TW', name: '繁體中文' },
-  { tag: 'ja', path: 'ja', hreflang: 'ja', og: 'ja_JP', name: '日本語' },
-  { tag: 'ko', path: 'ko', hreflang: 'ko', og: 'ko_KR', name: '한국어' },
-  { tag: 'hi', path: 'hi', hreflang: 'hi', og: 'hi_IN', name: 'हिन्दी' },
-  { tag: 'bn', path: 'bn', hreflang: 'bn', og: 'bn_BD', name: 'বাংলা' },
-  { tag: 'ml', path: 'ml', hreflang: 'ml', og: 'ml_IN', name: 'മലയാളം' },
+  { tag: 'es-419', path: 'es', hreflang: 'es', og: 'es_LA', name: 'Español', flag: '🌎' },
+  { tag: 'pt-BR', path: 'pt', hreflang: 'pt', og: 'pt_BR', name: 'Português', flag: '🇧🇷' },
+  { tag: 'fr', path: 'fr', hreflang: 'fr', og: 'fr_FR', name: 'Français', flag: '🇫🇷' },
+  { tag: 'de', path: 'de', hreflang: 'de', og: 'de_DE', name: 'Deutsch', flag: '🇩🇪' },
+  { tag: 'it', path: 'it', hreflang: 'it', og: 'it_IT', name: 'Italiano', flag: '🇮🇹' },
+  { tag: 'pl', path: 'pl', hreflang: 'pl', og: 'pl_PL', name: 'Polski', flag: '🇵🇱' },
+  { tag: 'ru', path: 'ru', hreflang: 'ru', og: 'ru_RU', name: 'Русский', flag: '🇷🇺' },
+  { tag: 'uk', path: 'uk', hreflang: 'uk', og: 'uk_UA', name: 'Українська', flag: '🇺🇦' },
+  { tag: 'tr', path: 'tr', hreflang: 'tr', og: 'tr_TR', name: 'Türkçe', flag: '🇹🇷' },
+  { tag: 'id', path: 'id', hreflang: 'id', og: 'id_ID', name: 'Bahasa Indonesia', flag: '🇮🇩' },
+  { tag: 'vi', path: 'vi', hreflang: 'vi', og: 'vi_VN', name: 'Tiếng Việt', flag: '🇻🇳' },
+  { tag: 'ar', path: 'ar', hreflang: 'ar', og: 'ar_AR', name: 'العربية', dir: 'rtl', flag: '🇸🇦' },
+  { tag: 'fa', path: 'fa', hreflang: 'fa', og: 'fa_IR', name: 'فارسی', dir: 'rtl', flag: '🇮🇷' },
+  { tag: 'zh-CN', path: 'zh', hreflang: 'zh-Hans', og: 'zh_CN', name: '简体中文', flag: '🇨🇳' },
+  { tag: 'zh-TW', path: 'zh-tw', hreflang: 'zh-Hant', og: 'zh_TW', name: '繁體中文', flag: '🇹🇼' },
+  { tag: 'ja', path: 'ja', hreflang: 'ja', og: 'ja_JP', name: '日本語', flag: '🇯🇵' },
+  { tag: 'ko', path: 'ko', hreflang: 'ko', og: 'ko_KR', name: '한국어', flag: '🇰🇷' },
+  { tag: 'hi', path: 'hi', hreflang: 'hi', og: 'hi_IN', name: 'हिन्दी', flag: '🇮🇳' },
+  { tag: 'bn', path: 'bn', hreflang: 'bn', og: 'bn_BD', name: 'বাংলা', flag: '🇧🇩' },
+  { tag: 'ml', path: 'ml', hreflang: 'ml', og: 'ml_IN', name: 'മലയാളം', flag: '🇮🇳' },
 ];
-export const ENGLISH: Lang = { tag: 'en', path: '', hreflang: 'en', og: 'en_GB', name: 'English' };
+export const ENGLISH: Lang = { tag: 'en', path: '', hreflang: 'en', og: 'en_GB', name: 'English', flag: '🇬🇧' };
 
 /** A language is published only once its catalog covers this share of the keys. Until then it
  * is not generated at all, so a half-translated catalog never puts English pages under /es/. */

@@ -10,6 +10,7 @@ import Steps from '../../../../components/Steps.astro';
 import Step from '../../../../components/Step.astro';
 import Cards from '../../../../components/Cards.astro';
 import Card from '../../../../components/Card.astro';
+import DeviceShot from '../../../../components/DeviceShot.astro';
 import FaqItem from '../../../../components/FaqItem.astro';
 import MoreHelp from '../../../../components/guides/MoreHelp.astro';
 import T from '../../../../components/T.astro';
@@ -78,6 +79,11 @@ const ld: Guide = {
       </Step>
       <Step id="tv-3" title={t('guide_android_tv.sign_in_with_a_qr')}>
         <p><T k="guide_android_tv.open_tmplayer_it_shows_a"><em slot="em1">{t('guide_android_tv.open_tmplayer_it_shows_a__em1')}</em><em slot="em2">{t('guide_android_tv.open_tmplayer_it_shows_a__em2')}</em><em slot="em3">{t('guide_android_tv.open_tmplayer_it_shows_a__em3')}</em></T></p>
+        <div class="shots alt-shots step-shot">
+          <DeviceShot device="tv" shot={{ src: '/screenshots/tv-sign-in.webp', alt: t('android_tv.sign_in_shot_alt'), width: 960, height: 480 }}>
+            <T k="guide_android_tv.sign_in_shot_caption"><b slot="b1">{t('guide_android_tv.sign_in_shot_caption__b1')}</b></T>
+          </DeviceShot>
+        </div>
       </Step>
       <Step id="tv-4" title={t('install.pick_a_chat_and_press')}>
         <p>{t('guide_android_tv.your_chats_channels_and_saved')}</p>

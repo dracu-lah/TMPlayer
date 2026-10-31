@@ -15,6 +15,7 @@ import { appLd } from '../../../lib/app-ld';
 import Band from '../../../components/Band.astro';
 import Shot from '../../../components/Shot.astro';
 import Device from '../../../components/Device.astro';
+import DeviceShot from '../../../components/DeviceShot.astro';
 import { SHOT_DL_TV, SHOT_DL_PHONE } from '../../../components/shot-sizes';
 import Platform from '../../../components/download/Platform.astro';
 import AbiRow from '../../../components/download/AbiRow.astro';
@@ -142,6 +143,11 @@ const trust = ['download.trust_free', 'download.trust_source', 'download.trust_a
                 <li><T k="download.tv_s3"><em slot="em1">{t('install.tv_step2__em1')}</em><em slot="em2">{t('install.tv_step3__em1')}</em></T></li>
               </ol>
               <p class="dl-sign-in">{t('download.sign_in_qr')}</p>
+              <div class="shots alt-shots dl-sign-in-shot">
+                <DeviceShot device="tv" shot={{ src: '/screenshots/tv-sign-in.webp', alt: t('android_tv.sign_in_shot_alt'), width: 960, height: 480 }}>
+                  <T k="download.sign_in_shot_caption"><b slot="b1">{t('download.sign_in_shot_caption__b1')}</b></T>
+                </DeviceShot>
+              </div>
               <p class="dl-or-file">{t('download.tv_or_apk')}</p>
             </Fragment>
             <AbiRow asset="apk-universal">

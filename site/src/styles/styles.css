@@ -3182,6 +3182,8 @@ a[lang="ar"] { font-family: "Noto Sans Arabic", "Segoe UI", Tahoma, sans-serif; 
 .lang-list .lang-name { color: var(--on-surface); font-weight: 600; font-size: 1.04rem; }
 .lang-list .muted { font-size: 0.9rem; }
 .lang-list code { font-size: 0.8rem; opacity: 0.75; }
+.lang-flag { font-size: 1.15em; line-height: 1; }
+.lang-picker-menu a .lang-flag { margin-inline-end: 8px; }
 /* The skip link waits off the start edge. Parked at left: -9999px on a right to left page it would
    sit past the far end of the line, which is overflow the page can scroll to, so it moves right. */
 [dir="rtl"] .skip { left: auto; right: -9999px; border-radius: 0 0 0 var(--shape-l); }
@@ -4574,6 +4576,20 @@ html.dl-tabs-live[data-dl-tab] .platforms > .platform { animation: dl-tab-in 0.2
   .code-note { margin-inline-start: calc(50% + 18px); }
 }
 .dl-sign-in { margin: 14px 0 0; padding-inline-start: 44px; color: var(--on-surface-variant); font-size: 0.95rem; }
+/* The real sign-in screen, right under the step that mentions it: a small TV mockup, not the
+   full-width showcase rows the feature pages use. */
+.dl-sign-in-shot { max-width: 560px; margin: 16px 0 0 44px; }
+.dl-sign-in-shot .shot { gap: 16px; }
+.dl-sign-in-shot .device-tv { max-width: 320px; }
+.dl-sign-in-shot figcaption { font-size: 0.9rem; }
+@media (max-width: 600px) {
+  .dl-sign-in-shot { margin-inline-start: 0; max-width: none; }
+}
+/* The same small TV mockup, inside a numbered step rather than a download card. */
+.step-shot { max-width: 560px; margin-top: 16px; }
+.step-shot .shot { gap: 16px; }
+.step-shot .device-tv { max-width: 320px; }
+.step-shot figcaption { font-size: 0.9rem; }
 .dl-more { margin-top: 18px; }
 .dl-more .callout { margin-top: 4px; }
 .dl-files { margin-top: 20px; }

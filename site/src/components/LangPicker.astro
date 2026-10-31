@@ -15,7 +15,7 @@ const label = `${buildString(lang, 'build.language')}: ${lang.name} (${lang.href
   <summary class="lang-picker-btn" aria-label={label} title={label}><Icon name="globe" /><span class="lang-picker-code" aria-hidden="true">{lang.hreflang.toUpperCase()}</span></summary>
   <ul class="lang-picker-menu">
     {published.map((other) => (
-    <li><a href={pageUrl(other, Astro.props.page)} hreflang={other.hreflang} lang={other.tag} data-lang-pick={other.hreflang} aria-current={other === lang ? 'true' : undefined}>{other.name}</a></li>
+    <li><a href={pageUrl(other, Astro.props.page)} hreflang={other.hreflang} lang={other.tag} data-lang-pick={other.hreflang} aria-current={other === lang ? 'true' : undefined}>{other.flag && <span class="lang-flag" aria-hidden="true">{other.flag}</span>}{other.name}</a></li>
     ))}
   </ul>
 </details>

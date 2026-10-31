@@ -5,31 +5,31 @@ import { text } from '../../i18n/t';
 
 const t = (k: string) => text(Astro.locals.lang, k);
 
-const langs: { tag: string; name: string; key: string }[] = [
-  { tag: 'es-419', name: 'Español', key: 'translate.spanish_latin_america' },
-  { tag: 'pt-BR', name: 'Português', key: 'translate.portuguese_brazil' },
-  { tag: 'fr', name: 'Français', key: 'translate.french' },
-  { tag: 'de', name: 'Deutsch', key: 'translate.german' },
-  { tag: 'it', name: 'Italiano', key: 'translate.italian' },
-  { tag: 'pl', name: 'Polski', key: 'translate.polish' },
-  { tag: 'ru', name: 'Русский', key: 'translate.russian' },
-  { tag: 'uk', name: 'Українська', key: 'translate.ukrainian' },
-  { tag: 'tr', name: 'Türkçe', key: 'translate.turkish' },
-  { tag: 'id', name: 'Bahasa Indonesia', key: 'translate.indonesian' },
-  { tag: 'vi', name: 'Tiếng Việt', key: 'translate.vietnamese' },
-  { tag: 'ar', name: 'العربية', key: 'translate.arabic' },
-  { tag: 'fa', name: 'فارسی', key: 'translate.persian' },
-  { tag: 'zh-CN', name: '简体中文', key: 'translate.chinese_simplified' },
-  { tag: 'zh-TW', name: '繁體中文', key: 'translate.chinese_traditional' },
-  { tag: 'ja', name: '日本語', key: 'translate.japanese' },
-  { tag: 'ko', name: '한국어', key: 'translate.korean' },
-  { tag: 'hi', name: 'हिन्दी', key: 'translate.hindi' },
-  { tag: 'bn', name: 'বাংলা', key: 'translate.bengali' },
-  { tag: 'ml', name: 'മലയാളം', key: 'translate.malayalam' },
+const langs: { tag: string; name: string; key: string; flag: string }[] = [
+  { tag: 'es-419', name: 'Español', key: 'translate.spanish_latin_america', flag: '🌎' },
+  { tag: 'pt-BR', name: 'Português', key: 'translate.portuguese_brazil', flag: '🇧🇷' },
+  { tag: 'fr', name: 'Français', key: 'translate.french', flag: '🇫🇷' },
+  { tag: 'de', name: 'Deutsch', key: 'translate.german', flag: '🇩🇪' },
+  { tag: 'it', name: 'Italiano', key: 'translate.italian', flag: '🇮🇹' },
+  { tag: 'pl', name: 'Polski', key: 'translate.polish', flag: '🇵🇱' },
+  { tag: 'ru', name: 'Русский', key: 'translate.russian', flag: '🇷🇺' },
+  { tag: 'uk', name: 'Українська', key: 'translate.ukrainian', flag: '🇺🇦' },
+  { tag: 'tr', name: 'Türkçe', key: 'translate.turkish', flag: '🇹🇷' },
+  { tag: 'id', name: 'Bahasa Indonesia', key: 'translate.indonesian', flag: '🇮🇩' },
+  { tag: 'vi', name: 'Tiếng Việt', key: 'translate.vietnamese', flag: '🇻🇳' },
+  { tag: 'ar', name: 'العربية', key: 'translate.arabic', flag: '🇸🇦' },
+  { tag: 'fa', name: 'فارسی', key: 'translate.persian', flag: '🇮🇷' },
+  { tag: 'zh-CN', name: '简体中文', key: 'translate.chinese_simplified', flag: '🇨🇳' },
+  { tag: 'zh-TW', name: '繁體中文', key: 'translate.chinese_traditional', flag: '🇹🇼' },
+  { tag: 'ja', name: '日本語', key: 'translate.japanese', flag: '🇯🇵' },
+  { tag: 'ko', name: '한국어', key: 'translate.korean', flag: '🇰🇷' },
+  { tag: 'hi', name: 'हिन्दी', key: 'translate.hindi', flag: '🇮🇳' },
+  { tag: 'bn', name: 'বাংলা', key: 'translate.bengali', flag: '🇧🇩' },
+  { tag: 'ml', name: 'മലയാളം', key: 'translate.malayalam', flag: '🇮🇳' },
 ];
 ---
 <ul class="lang-list">
-  {langs.map(({ tag, name, key }) => (
-    <li><span class="lang-name" lang={tag}>{name}</span> <span class="muted">{t(key)}</span> <code>{tag}</code></li>
+  {langs.map(({ tag, name, key, flag }) => (
+    <li><span class="lang-flag" aria-hidden="true">{flag}</span><span class="lang-name" lang={tag}>{name}</span> <span class="muted">{t(key)}</span> <code>{tag}</code></li>
   ))}
 </ul>
