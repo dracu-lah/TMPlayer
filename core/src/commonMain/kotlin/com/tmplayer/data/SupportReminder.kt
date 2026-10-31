@@ -19,7 +19,7 @@ import kotlinx.coroutines.flow.StateFlow
  *   run of the app. "Maybe later" and closing it both count as asked.
  * - The notification, on a phone and the desktop only, at most once every [NUDGE_GAP_DAYS] days,
  *   never within [NUDGE_AFTER_ASK_DAYS] days of the window, and only while the "Sponsor
- *   reminders" switch is on (off until the viewer turns it on, CP76). Its first rung asks only
+ *   reminders" switch is on (on from the start, CP76; the viewer can turn it off). Its first rung asks only
  *   for a star on GitHub ([NudgeRung.Star]), which costs nothing; the ones after it are "Don't
  *   forget to sponsor" ([NudgeRung.Coffee]). Once Star on GitHub has been pressed, here or on
  *   the window, no star is asked for again. Its buttons are Buy me a coffee, Star on GitHub (until
