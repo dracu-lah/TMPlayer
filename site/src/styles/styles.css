@@ -3926,8 +3926,8 @@ body:has(.hstage) .bg-blob { animation: none; }
 .runs-group {
   display: flex;
   align-items: center;
-  gap: 0 18px;
-  padding-inline: 22px;
+  gap: 0 10px;
+  padding-inline: 16px;
 }
 .runs-group + .runs-group { border-inline-start: 1px solid var(--outline-variant); }
 .runs-icon { display: grid; place-items: center; color: var(--on-surface-variant); opacity: 0.8; }
@@ -4217,9 +4217,12 @@ body:has(.hstage) .bg-blob { animation: none; }
   transform: none;
   transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1), transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
 }
-.runs-in.reveal-wait.is-in .runs-group:nth-child(2) { transition-delay: 70ms; }
-.runs-in.reveal-wait.is-in .runs-group:nth-child(3) { transition-delay: 140ms; }
-.runs-in.reveal-wait.is-in .runs-group:nth-child(4) { transition-delay: 210ms; }
+.runs-in.reveal-wait.is-in .runs-group:nth-child(2) { transition-delay: 50ms; }
+.runs-in.reveal-wait.is-in .runs-group:nth-child(3) { transition-delay: 100ms; }
+.runs-in.reveal-wait.is-in .runs-group:nth-child(4) { transition-delay: 150ms; }
+.runs-in.reveal-wait.is-in .runs-group:nth-child(5) { transition-delay: 200ms; }
+.runs-in.reveal-wait.is-in .runs-group:nth-child(6) { transition-delay: 250ms; }
+.runs-in.reveal-wait.is-in .runs-group:nth-child(7) { transition-delay: 300ms; }
 
 /* The heading is simply there; the Chats screen slides in from the end side and the four answers
    follow, each icon settling as its line lands. At rest the screen still runs past the panel's
@@ -4516,6 +4519,8 @@ html[data-dl-tab="linux"] .dl-tabs a[data-tab="linux"] {
 }
 html[data-dl-tab] .platforms > .platform { display: none; }
 html[data-dl-tab="android-tv"] .platforms > #android-tv,
+html[data-dl-tab="android-tv"] .platforms > #samsung-tv,
+html[data-dl-tab="android-tv"] .platforms > #lg-tv,
 html[data-dl-tab="android"] .platforms > #android,
 html[data-dl-tab="windows"] .platforms > #windows,
 html[data-dl-tab="macos"] .platforms > #macos,

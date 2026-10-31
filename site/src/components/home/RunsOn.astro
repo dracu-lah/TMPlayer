@@ -1,8 +1,14 @@
 ---
 // Where it runs, in one quiet line under the hero: the first thing a visitor checks is whether
-// their own television, phone or computer is on the list. The platforms are grouped by the kind of
-// screen, an icon for each group and thin rules between them, and each name leads to the page
-// written for it. On a phone the groups stack as short centred rows.
+// their own television, phone or computer is on the list. Each platform gets its own real mark
+// (nominative "works with" use, the same fair-use category as the GitHub mark in the header: never
+// redrawn or recoloured) rather than one generic device icon shared by several names, so Android
+// TV reads apart from Fire TV and Windows apart from macOS. Two names stay on a plain device shape:
+// Fire TV (Amazon's own mark is excluded on purpose, see below) and Windows (Microsoft is one of
+// the few brands even Simple Icons, built for exactly this "works with" use, refuses to carry,
+// because Amazon and Microsoft are both named on its own forbidden-brands list for how
+// aggressively they enforce their marks; TMPlayer follows that same caution here). On a phone the
+// list stacks as short centred rows.
 import Icon from '../Icon.astro';
 import { text } from '../../i18n/t';
 import { l as link } from '../../i18n/links';
@@ -10,11 +16,14 @@ import { l as link } from '../../i18n/links';
 const lang = Astro.locals.lang;
 const t = (k: string) => text(lang, k);
 const l = (href: string) => link(lang, href);
-const groups = [
-  { icon: 'tv-card', items: [{ name: t('home.platform_tv'), href: '/android-tv/', title: t('home.platform_tv_title') }, { name: t('home.platform_fire'), href: '/fire-tv/' }] },
-  { icon: 'phone-panel', items: [{ name: t('home.platform_phone'), href: '/android/' }] },
-  { icon: 'laptop-panel', items: [{ name: t('home.platform_windows'), href: '/desktop/' }, { name: t('home.platform_mac'), href: '/desktop/' }, { name: t('home.platform_linux'), href: '/desktop/' }] },
-  { icon: 'globe', items: [{ name: t('home.platform_web'), href: '/web/' }] },
+const platforms = [
+  { icon: 'tv-card', name: t('home.platform_tv'), href: '/android-tv/', title: t('home.platform_tv_title') },
+  { icon: 'firetv-stick', name: t('home.platform_fire'), href: '/fire-tv/' },
+  { icon: 'android', name: t('home.platform_phone'), href: '/android/' },
+  { icon: 'windows-panel', name: t('home.platform_windows'), href: '/desktop/' },
+  { icon: 'apple', name: t('home.platform_mac'), href: '/desktop/' },
+  { icon: 'linux', name: t('home.platform_linux'), href: '/desktop/' },
+  { icon: 'globe', name: t('home.platform_web'), href: '/web/' },
 ];
 ---
 <section class="runs" aria-labelledby="runs-h">
@@ -22,10 +31,10 @@ const groups = [
     <div class="runs-in" data-reveal>
       <h2 id="runs-h" class="runs-h">{t('home.runs_on')}</h2>
       <ul class="runs-list">
-        {groups.map((g) => (
+        {platforms.map((p) => (
           <li class="runs-group">
-            <span class="runs-icon" aria-hidden="true"><Icon name={g.icon} /></span>
-            {g.items.map((it) => <a class="runs-link" href={l(it.href)} title={it.title}>{it.name}</a>)}
+            <span class="runs-icon" aria-hidden="true"><Icon name={p.icon} /></span>
+            <a class="runs-link" href={l(p.href)} title={p.title}>{p.name}</a>
           </li>
         ))}
       </ul>

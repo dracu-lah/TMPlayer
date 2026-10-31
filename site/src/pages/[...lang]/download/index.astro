@@ -152,6 +152,53 @@ const trust = ['download.trust_free', 'download.trust_source', 'download.trust_a
             <Fragment slot="foot"><a href={l('/install/#android-tv')}>{t('download.full_steps')}</a><span class="sep" aria-hidden="true">&middot;</span><a href={l('/fire-tv/')}>{t('download.fire_tv_guide')}</a><span class="sep" aria-hidden="true">&middot;</span><a href={l('/android-tv/')}>{t('download.made_for_the_tv')}</a></Fragment>
           </Platform>
 
+          {/*
+            Samsung and LG (both a beta): the TV's own browser is the way most people should take,
+            since web.tmplayer.org answers either brand's browser with the TV build already. Shown
+            with the android-tv tab, right after the native APK, since that is who lands here with
+            scripting off (a Samsung or LG TV matches none of the five detected platforms). Each
+            brand gets its own card instead of one combined block, and the .ipk/.wgt package for the
+            TV's own app list stays folded under "advanced": both need a developer setup (LG's
+            Developer Mode, a Samsung certificate for that one TV) the browser skips entirely.
+          */}
+          <Platform id="samsung-tv" icon="samsung" tone="browse" title={t('download.tvpk_samsung_title')} req={t('download.tvpk_samsung_req')}>
+            <Fragment slot="before">
+              <p>{t('download.tvpk_browser_note')}</p>
+              <p class="platform-note">{t('download.tvpk_beta_note')}</p>
+            </Fragment>
+            <Fragment slot="foot"><a href={l('/guides/telegram-on-samsung-or-lg-tv/#tmplayer-on-the-tv')}>{t('download.tvpk_guide')}</a></Fragment>
+            <details slot="after" class="code-fold dl-more">
+              <summary>{t('download.tvpk_more')}<Icon name="faq-chevron" /></summary>
+              <p class="platform-note">{t('download.tvpk_more_note')}</p>
+              <ul class="abi-list">
+                <AbiRow asset="tv-tizen">
+                  <Fragment slot="name">{t('download.tvpk_samsung')}</Fragment>
+                  <Fragment slot="note">{t('download.tvpk_samsung_note')}</Fragment>
+                  <p slot="file" class="abi-file" data-file>TMPlayer-&lt;version&gt;-samsung-tizen.wgt</p>
+                </AbiRow>
+              </ul>
+            </details>
+          </Platform>
+
+          <Platform id="lg-tv" icon="lg" tone="no" title={t('download.tvpk_lg_title')} req={t('download.tvpk_lg_req')}>
+            <Fragment slot="before">
+              <p>{t('download.tvpk_browser_note')}</p>
+              <p class="platform-note">{t('download.tvpk_beta_note')}</p>
+            </Fragment>
+            <Fragment slot="foot"><a href={l('/guides/telegram-on-samsung-or-lg-tv/#tmplayer-on-the-tv')}>{t('download.tvpk_guide')}</a></Fragment>
+            <details slot="after" class="code-fold dl-more">
+              <summary>{t('download.tvpk_more')}<Icon name="faq-chevron" /></summary>
+              <p class="platform-note">{t('download.tvpk_more_note')}</p>
+              <ul class="abi-list">
+                <AbiRow asset="tv-webos">
+                  <Fragment slot="name">{t('download.tvpk_lg')}</Fragment>
+                  <Fragment slot="note">{t('download.tvpk_lg_note')}</Fragment>
+                  <p slot="file" class="abi-file" data-file>TMPlayer-&lt;version&gt;-lg-webos.ipk</p>
+                </AbiRow>
+              </ul>
+            </details>
+          </Platform>
+
           <Platform id="android" icon="phone-panel" tone="yes" title={t('download.android_phone')} req={t('download.android_8_0_and_above')}>
             <AbiRow asset="apk-universal">
               <T slot="name" k="download.universal_apk"><span class="badge badge-quiet" slot="span1">{t('download.universal_apk__span1')}</span></T>
@@ -272,40 +319,6 @@ const trust = ['download.trust_free', 'download.trust_source', 'download.trust_a
           </div>
           <p>{t('download.web_note')}</p>
           <p class="web-app-go"><a class="btn btn-outline" href="https://web.tmplayer.org/" rel="noopener">{t('download.web_open')}</a></p>
-        </section>
-
-        {/*
-          Samsung and LG (a beta): the TV's own browser is the way most people should take, since
-          web.tmplayer.org answers an LG or Samsung browser with the TV build. The release's .ipk and
-          .wgt only open that page from the TV's app list, and both need a developer's setup (LG's
-          Developer Mode, a Samsung certificate for that one TV), so they stay folded.
-        */}
-        <section class="later web-app" id="tv-packages" aria-labelledby="tvpk-h">
-          <div class="platform-head">
-            <span class="panel-icon icon-play" aria-hidden="true"><Icon name="tv-card" /></span>
-            <div class="platform-title">
-              <h3 id="tvpk-h">{t('download.tvpk_title')}</h3>
-              <p class="platform-req">{t('download.tvpk_req')}</p>
-            </div>
-          </div>
-          <p>{t('download.tvpk_note')}</p>
-          <details class="code-fold dl-more">
-            <summary>{t('download.tvpk_more')}<Icon name="faq-chevron" /></summary>
-            <p class="platform-note">{t('download.tvpk_more_note')}</p>
-            <ul class="abi-list">
-              <AbiRow asset="tv-webos">
-                <Fragment slot="name">{t('download.tvpk_lg')}</Fragment>
-                <Fragment slot="note">{t('download.tvpk_lg_note')}</Fragment>
-                <p slot="file" class="abi-file" data-file>TMPlayer-&lt;version&gt;-lg-webos.ipk</p>
-              </AbiRow>
-              <AbiRow asset="tv-tizen">
-                <Fragment slot="name">{t('download.tvpk_samsung')}</Fragment>
-                <Fragment slot="note">{t('download.tvpk_samsung_note')}</Fragment>
-                <p slot="file" class="abi-file" data-file>TMPlayer-&lt;version&gt;-samsung-tizen.wgt</p>
-              </AbiRow>
-            </ul>
-          </details>
-          <p class="platform-foot"><a href={l('/guides/telegram-on-samsung-or-lg-tv/#tmplayer-on-the-tv')}>{t('download.tvpk_guide')}</a></p>
         </section>
 
         {/* The technical part, folded: checksums, the release notes and the older releases. */}
