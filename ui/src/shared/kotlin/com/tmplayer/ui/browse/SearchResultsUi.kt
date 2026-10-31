@@ -29,6 +29,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import com.tmplayer.data.ChatBrief
 import com.tmplayer.data.GlobalSearch
@@ -69,10 +70,14 @@ fun ChatAvatar(chat: ChatBrief?, size: Dp, modifier: Modifier = Modifier) {
         modifier = modifier.size(size).clip(CircleShape),
     ) {
         // No photo: the chat's own colour with its letter on it, never a grey disc (HX30 a).
+        // One glyph only (NameInitial.of never returns two), so the circle can take a letter
+        // close to its own height: scaled off the circle's size rather than a fixed style, or an
+        // 80dp avatar (the search chat-matches row) was left with the same small letter as a
+        // 20dp one (user, 2026-11-01).
         NameArtTile(chat?.title) {
             Text(
                 NameInitial.of(chat?.title).orEmpty(),
-                style = if (size >= 40.dp) MaterialTheme.typography.titleMedium else MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.titleMedium.copy(fontSize = (size.value * 0.4f).coerceIn(11f, 40f).sp),
                 color = NameArt.onLetter,
             )
         }

@@ -55,6 +55,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.tmplayer.ui.components.EmptyArt
 import com.tmplayer.ui.components.MediaArt
 import com.tmplayer.ui.components.NameArt
@@ -435,7 +436,13 @@ fun ChatAvatar(miniThumbnail: ByteArray?, photoFileId: Int, title: String, size:
     MediaArt(miniThumbnail, photoFileId, Modifier.size(size).clip(CircleShape)) {
         NameArtTile(title) {
             val letter = NameInitial.of(title) ?: return@NameArtTile
-            Text(letter, style = MaterialTheme.typography.titleMedium, color = NameArt.onLetter)
+            // One glyph only: scaled off the circle's size, or a 104dp avatar (ChatInfoPanel) was
+            // left with the same small letter as a 34dp one (user, 2026-11-01).
+            Text(
+                letter,
+                style = MaterialTheme.typography.titleMedium.copy(fontSize = (size.value * 0.4f).coerceIn(11f, 40f).sp),
+                color = NameArt.onLetter,
+            )
         }
     }
 }
