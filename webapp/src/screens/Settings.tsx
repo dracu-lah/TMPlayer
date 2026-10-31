@@ -13,11 +13,12 @@ import {
     InformationCircleIcon,
     LegalDocument01Icon,
     Logout05Icon,
+    Message01Icon,
     PaintBoardIcon,
     PlayIcon,
     TranslateIcon,
 } from '@hugeicons/core-free-icons'
-import { settings, setSetting, SIZE_DEFAULTS, storageWorks, type Theme } from '../store'
+import { addedIds, addedMode, settings, setSetting, SIZE_DEFAULTS, storageWorks, type Theme } from '../store'
 import { back, me, signOut } from '../session'
 import { api } from '../tg/rpc'
 import { t } from '../i18n'
@@ -333,6 +334,10 @@ function Library() {
     return (
         <>
             <div class="set-card">
+                <A class="set-row" href="/added-chats">
+                    <RowBody icon={Message01Icon} title={t('browse.add_chats')} subtitle={addedMode() === 'picked' ? t('picker.total', { chats: addedIds()?.size ?? 0 }) : t('picker.blurb')} />
+                    <Icon icon={ArrowRight01Icon} size={20} class="set-chevron" />
+                </A>
                 <ToggleRow
                     icon={Home03Icon}
                     title={t('settings.home_carousel')}
@@ -641,6 +646,10 @@ function TvSettings() {
     return (
         <section class="settings">
             <h1 class="page-title">{t('nav.settings')}</h1>
+            <TvPanel title={t('browse.add_chats')} id="add-chats-label">
+                <p class="muted small">{addedMode() === 'picked' ? t('picker.total', { chats: addedIds()?.size ?? 0 }) : t('picker.blurb')}</p>
+                <A class="outline-button" style={{ 'align-self': 'start' }} href="/added-chats">{t('browse.add_chats')}</A>
+            </TvPanel>
             <TvPanel title={t('settings.theme')} id="theme-label">
                 <Choices
                     label="theme-label"

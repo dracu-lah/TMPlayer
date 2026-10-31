@@ -3,7 +3,7 @@ import { useLocation } from '@solidjs/router'
 import { call, errorText } from '../tg/rpc'
 import { onBackOnline } from '../net'
 import { t } from '../i18n'
-import { progress as readProgress, settings, watchedTick } from '../store'
+import { addedView, progress as readProgress, settings, watchedTick } from '../store'
 import { PageBar } from '../ui/PageBar'
 import { noVideosWithin } from './sizes'
 import { HiddenBySize, tileCard, VideoList } from './VideoList'
@@ -32,6 +32,7 @@ export function Recent() {
         maxBytes: settings().sizeMax,
         watched: progress()?.watched ?? [],
         started: progress()?.started ?? [],
+        added: addedView(),
     })
 
     // One ask at a time: a newer one (another view) stops the one before, and leaving stops both.

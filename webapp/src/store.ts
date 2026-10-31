@@ -504,6 +504,12 @@ export function addedShows(chatId: number): boolean {
     return gate === null || gate.has(chatId)
 }
 
+/** `addedGate()`, as a plain array for a `ListView`/`HomeView` sent to the worker (it cannot read this store itself). */
+export function addedView(): number[] | null {
+    const gate = addedGate()
+    return gate ? [...gate] : null
+}
+
 /** The whole choice, as the picker's Done writes it: the ids with the names they had. */
 export function setAddedChats(chats: readonly { chatId: number; title: string }[]) {
     const now = Date.now()

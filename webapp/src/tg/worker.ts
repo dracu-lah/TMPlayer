@@ -5,7 +5,7 @@ import { BaseTelegramClient, SentCode as MtSentCode, TelegramClient, User, type 
 import { rules } from '../rules'
 import { cryptoProvider } from './crypto'
 import { homePage } from './home'
-import { chatList, chatPage, forgetAll, rankChats, recentPage, searchAll, watchInfo } from './library'
+import { chatList, chatPage, forgetAll, rankChats, recentPage, searchAll, videoCounts, watchInfo } from './library'
 import { clickSponsored, reportSponsored, viewSponsored } from './sponsored'
 import { chatProtects, files, itemOf, rawOf, thumbnails, toItem } from './media'
 import type { ChatInfo, ChatItem, ChatPage, ChatsEvent, ChatView, Country, Found, HomePage, HomeView, ListView, Me, RecentPage, QrEvent, RpcError, SentCode, SponsoredReport, VideoItem, WatchInfo } from './types'
@@ -249,6 +249,11 @@ export const api = {
     /** Ids of the chats whose names answer `query`, best first. */
     async rankChats(_: Ctx, query: string): Promise<number[]> {
         return rankChats(query)
+    },
+
+    /** The Add chats picker's rough video count for each listed chat, three at a time (see library.ts videoCounts). */
+    async videoCounts(_: Ctx, chatIds: number[]): Promise<Record<number, number>> {
+        return videoCounts(tg, chatIds)
     },
 
     /** A chat's grid as the app arranges it (see library.ts for the modes). */

@@ -4,7 +4,7 @@ import { PinIcon, Search01Icon, StarIcon } from '@hugeicons/core-free-icons'
 import { api, call, errorText } from '../tg/rpc'
 import { onBackOnline } from '../net'
 import { t } from '../i18n'
-import { setStarred, starredIds } from '../store'
+import { addedShows, setStarred, starredIds } from '../store'
 import { Icon } from '../ui/Icon'
 import { tvDp, VirtualGrid, type GridLayout } from '../ui/VirtualGrid'
 import { form } from '../form'
@@ -34,7 +34,9 @@ export function Chats() {
     const [partial, setPartial] = createSignal<ChatItem[]>([])
     const [chats, { refetch }] = createResource(() => call('chats', [false], { onEvent: (e) => void setPartial((e as ChatsEvent).chats) }))
     onBackOnline(() => chats.error && refetch())
-    const list = () => (chats.error ? partial() : (chats() ?? partial()))
+    // Chats browses the viewer's own choice (HX27): a chat left out of it never shows here, though
+    // it still answers a link, a notification or an address typed by hand.
+    const list = () => (chats.error ? partial() : (chats() ?? partial())).filter((c) => addedShows(c.id))
     const [text, setText] = createSignal(params.q ?? '')
     const query = () => params.q?.trim() ?? ''
     // The ranking reads the whole list, so it waits for it.
@@ -65,7 +67,10 @@ export function Chats() {
     createEffect(on(() => params.q, (q) => !typing && setText(q ?? ''), { defer: true }))
     return (
         <>
-            <h1 class="page-title">{t('nav.chats')}</h1>
+            <div class="list-head">
+                <h1 class="page-title">{t('nav.chats')}</h1>
+                <A class="link" href="/added-chats">{t('browse.add_chats')}</A>
+            </div>
             <label class="search-field">
                 <Icon icon={Search01Icon} size={20} />
                 <input type="search" placeholder={t('chats.search')} aria-label={t('chats.search')} value={text()} onInput={(e) => onType(e.currentTarget.value)} />

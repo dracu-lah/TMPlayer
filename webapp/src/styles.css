@@ -746,6 +746,17 @@ a.detail-round { text-decoration: none; }
 .caution-text { color: var(--caution); }
 .star .icon .icon-fill { fill: currentColor; }
 
+/* Add chats (HX27): a tick box before each row's picture, and its rough video count under the name. */
+.pick-chat { display: flex; align-items: center; gap: 16px; flex: 1; min-width: 0; padding: 8px; cursor: pointer; border-radius: var(--r-m); }
+.chat-tick { flex: none; width: 22px; height: 22px; margin: 0; accent-color: var(--accent); cursor: pointer; }
+.chat-text { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
+.chat-count { font-size: 13px; line-height: 16px; min-height: 16px; }
+.picker-actions { display: flex; align-items: center; gap: 16px; margin-bottom: 8px; }
+.picker-blurb { margin: 0 0 16px; }
+.picker-gone-head { margin: 24px 0 8px; font-size: 14px; color: var(--muted); }
+.picker-gone-row { display: flex; align-items: center; gap: 16px; padding: 8px; }
+.picker-gone-row .chat-name { flex: 1; }
+
 /* The chat's own buttons at the far end of its bar. */
 .page-bar .title-pill { flex: 0 1 auto; }
 .bar-actions { margin-left: auto; display: flex; gap: 8px; flex: none; }
@@ -929,6 +940,10 @@ button.nav-cell { border: 0; background: none; padding: 0; font: inherit; cursor
 /* Favourites and History: the heading and its line, History's tabs as chips, each day under its date. */
 .library-head { margin: 0 0 12px; }
 .library-head .page-title { margin-bottom: 0; }
+
+/* Chats: its title with the way to the Add chats picker beside it. */
+.list-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+.list-head .page-title { margin-bottom: 8px; }
 .history-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 20px; }
 .history-tab {
   display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border: 1px solid var(--line); border-radius: var(--r-s);

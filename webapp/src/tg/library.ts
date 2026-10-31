@@ -14,6 +14,13 @@ const DOC_FILTER = { _: 'inputMessagesFilterDocument' } as const
 /** Chats kept arranged at once; the oldest opened goes first. */
 const KEEP_CHATS = 6
 
+/**
+ * The chats a list may draw from, as the page's view carries it (HX27, `ListView.added`): the
+ * worker holds no settings of its own, so every cross-chat list reads this out of its own call's
+ * view rather than asking the page again.
+ */
+const addedSetOf = (view: Pick<ListView, 'added'>): Set<number> | null => (view.added ? new Set(view.added) : null)
+
 interface Feed {
     filter: typeof VIDEO_FILTER | typeof DOC_FILTER
     next: number | undefined
@@ -55,6 +62,7 @@ export function forgetAll() {
     watchKept.clear()
     recentState = null
     homeChatsKnown = null
+    videoCountCache.clear()
     forgetSponsored()
 }
 
@@ -318,8 +326,12 @@ export async function rankChats(query: string): Promise<number[]> {
 /** Kept for two minutes, so a change of size limits arranges again without asking Telegram. */
 const searches = new Map<string, { time: number; messages: Promise<Message[]> }>()
 
-/** The newest videos across every chat for [query] (all of them for a blank one), through the rules, with their items. */
-export async function across(tg: TelegramClient, query: string): Promise<{ videos: Video[]; items: Map<string, VideoItem> }> {
+/**
+ * The newest videos across every chat for [query] (all of them for a blank one), through the
+ * rules, with their items. `added` leaves out chats not in the viewer's choice (HX27), null for
+ * every chat.
+ */
+export async function across(tg: TelegramClient, query: string, added: Set<number> | null = null): Promise<{ videos: Video[]; items: Map<string, VideoItem> }> {
     const r = await rules()
     let hit = searches.get(query)
     if (!hit || Date.now() - hit.time > 120_000) {
@@ -339,6 +351,7 @@ export async function across(tg: TelegramClient, query: string): Promise<{ video
     const byId = new Map<string, Message>()
     const raws = []
     for (const msg of messages) {
+        if (added && !added.has(msg.chat?.id)) continue
         const raw = rawOf(msg, chatProtects(msg))
         if (!raw) continue
         byId.set(videoId(raw), msg)
@@ -358,9 +371,52 @@ export async function across(tg: TelegramClient, query: string): Promise<{ video
 /** Videos across every chat within the size limits, grouped into shows, copies and pieces as a chat's are, newest first. */
 export async function searchAll(tg: TelegramClient, query: string, view: ListView): Promise<Found> {
     const r = await rules()
-    const { videos, items } = await across(tg, query)
+    const { videos, items } = await across(tg, query, addedSetOf(view))
     const shelf = r.shelf(videos, 'Newest', view.minBytes, view.maxBytes, view.watched, view.started)
     return { tiles: tilesOf(shelf, items, view), hiddenBySize: shelf.hiddenBySize }
+}
+
+// The chats the viewer added (HX27): a rough video count, without reading or screening any of
+// them, three chats at a time so the picker never floods Telegram; kept for a while and never for
+// a failure, as the apps' ChatVideoCount does.
+const VIDEO_COUNT_BATCH = 3
+const VIDEO_COUNT_CACHE_MS = 10 * 60_000
+const videoCountCache = new Map<number, { count: number; time: number }>()
+
+/** A chat's rough video count: the two filters' totals Telegram's search already carries, summed; -1 when it could not be read, never cached. */
+async function oneVideoCount(tg: TelegramClient, chatId: number): Promise<number> {
+    const [videos, docs] = await Promise.all([
+        tg.searchMessages({ chatId, filter: VIDEO_FILTER, limit: 1 }),
+        tg.searchMessages({ chatId, filter: DOC_FILTER, limit: 1 }),
+    ])
+    return videos.total + docs.total
+}
+
+/** `chatIds`' rough video counts, by id; -1 for one Telegram could not answer. */
+export async function videoCounts(tg: TelegramClient, chatIds: readonly number[]): Promise<Record<number, number>> {
+    const now = Date.now()
+    const out: Record<number, number> = {}
+    const need: number[] = []
+    for (const id of chatIds) {
+        const hit = videoCountCache.get(id)
+        if (hit && now - hit.time < VIDEO_COUNT_CACHE_MS) out[id] = hit.count
+        else need.push(id)
+    }
+    for (let i = 0; i < need.length; i += VIDEO_COUNT_BATCH) {
+        const batch = need.slice(i, i + VIDEO_COUNT_BATCH)
+        await Promise.all(
+            batch.map(async (chatId) => {
+                try {
+                    const count = await oneVideoCount(tg, chatId)
+                    videoCountCache.set(chatId, { count, time: now })
+                    out[chatId] = count
+                } catch {
+                    out[chatId] = -1
+                }
+            }),
+        )
+    }
+    return out
 }
 
 // Recently added's See all
@@ -420,8 +476,13 @@ function horizon(s: RecentState): number {
     return Math.max(...s.feeds.filter((f) => !f.done).map((f) => f.oldest))
 }
 
-/** Reads on until enough new videos came, the rounds are spent, Telegram has no more or the page holds its most. */
-async function loadRecent(tg: TelegramClient, s: RecentState, signal: AbortSignal): Promise<void> {
+/**
+ * Reads on until enough new videos came, the rounds are spent, Telegram has no more or the page
+ * holds its most. `gate` is the viewer's own added chats (HX27), null for every chat; it narrows
+ * `s.chats` (Home's own chats for this run) further still, since a chat Home picked may since
+ * have been taken out of the choice.
+ */
+async function loadRecent(tg: TelegramClient, s: RecentState, signal: AbortSignal, gate: Set<number> | null): Promise<void> {
     const r = await rules()
     let added = 0
     for (let round = 0; round < RECENT_ROUNDS && added < RECENT_ENOUGH && !recentDone(s) && !signal.aborted; round++) {
@@ -450,6 +511,7 @@ async function loadRecent(tg: TelegramClient, s: RecentState, signal: AbortSigna
         const raws = []
         for (const msg of pages.flat()) {
             if (s.chats && !s.chats.has(msg.chat?.id)) continue
+            if (gate && !gate.has(msg.chat?.id)) continue
             const raw = rawOf(msg, chatProtects(msg))
             if (!raw) continue
             const id = videoId(raw)
@@ -476,6 +538,7 @@ async function loadRecent(tg: TelegramClient, s: RecentState, signal: AbortSigna
  */
 export async function recentPage(tg: TelegramClient, view: ListView, mode: 'open' | 'more' | 'view', signal: AbortSignal): Promise<RecentPage> {
     const r = await rules()
+    const gate = addedSetOf(view)
     const known = homeChatsKnown?.ids.length ? homeChatsKnown : null
     const key = known ? known.ids.join() : '*'
     let s = recentState
@@ -496,13 +559,16 @@ export async function recentPage(tg: TelegramClient, view: ListView, mode: 'open
     // Left before its first page came: opened again, it reads that page now.
     if (mode === 'open' && !st.loading && !st.videos.size) mode = 'more'
     if (mode === 'more' && !recentDone(st)) {
-        st.loading ??= loadRecent(tg, st, signal).finally(() => (st.loading = null))
+        st.loading ??= loadRecent(tg, st, signal, gate).finally(() => (st.loading = null))
         await st.loading
     } else if (st.loading) await st.loading
     st.time = Date.now()
     const edge = horizon(st)
     // The shelf keeps the order it is given for Newest (a chat's own), so the two feeds are merged by date here.
-    const shown = [...st.videos.values()].filter((v) => v.date >= edge).sort((a, b) => b.date - a.date || b.messageId - a.messageId)
+    // A chat taken out of the choice since this was read leaves its videos out here too, without losing what was already kept.
+    const shown = [...st.videos.values()]
+        .filter((v) => v.date >= edge && (!gate || gate.has(v.chatId)))
+        .sort((a, b) => b.date - a.date || b.messageId - a.messageId)
     const shelf = r.shelf(shown, 'Newest', view.minBytes, view.maxBytes, view.watched, view.started)
     return {
         tiles: tilesOf(shelf, st.items, view),

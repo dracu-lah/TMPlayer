@@ -4,7 +4,7 @@ import { ArrowLeft01Icon, ArrowRight01Icon } from '@hugeicons/core-free-icons'
 import { call, errorText } from '../tg/rpc'
 import { onBackOnline } from '../net'
 import { t } from '../i18n'
-import { progress, resumes, settings, starredIds, watchedTick } from '../store'
+import { addedIds, addedMode, addedView, progress, resumes, settings, starredIds, watchedTick } from '../store'
 import { forgetGone } from '../goneVideos'
 import { Icon } from '../ui/Icon'
 import { Card, ContinueCard, tileCard, useLeft, useProgress, useWarmDataCentres, videoCard, type CardData } from './VideoList'
@@ -42,7 +42,7 @@ export function Home() {
         setBusy(true)
         try {
             const [left, seen] = await Promise.all([resumes(), progress()])
-            const view = { minBytes: settings().sizeMin, maxBytes: settings().sizeMax, ...seen, resumes: left, starred: [...starredIds()] }
+            const view = { minBytes: settings().sizeMin, maxBytes: settings().sizeMax, ...seen, resumes: left, starred: [...starredIds()], added: addedView() }
             apply(await call('home', [view], { signal: mine.signal, onEvent: (p) => void apply(p as HomePage) }))
         } catch (e) {
             if (!mine.signal.aborted) setError(e)
@@ -50,8 +50,8 @@ export function Home() {
             if (abort === mine) setBusy(false)
         }
     }
-    // Asked again when the size limits or the stars change, as every list is.
-    createEffect(on(() => [settings().sizeMin, settings().sizeMax, [...starredIds()].join(), watchedTick()], load))
+    // Asked again when the size limits, the stars or the added chats change, as every list is.
+    createEffect(on(() => [settings().sizeMin, settings().sizeMax, [...starredIds()].join(), watchedTick(), addedMode(), [...(addedIds() ?? [])].join()], load))
     // Lost on the way: asked again once the connection is back.
     onBackOnline(() => (error() || !last()?.settled) && load())
 

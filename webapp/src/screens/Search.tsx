@@ -4,7 +4,7 @@ import { api, errorText } from '../tg/rpc'
 import { onBackOnline } from '../net'
 import { Search01Icon } from '@hugeicons/core-free-icons'
 import { t } from '../i18n'
-import { progress, settings } from '../store'
+import { addedIds, addedMode, addedView, progress, settings } from '../store'
 import { Icon } from '../ui/Icon'
 import { HiddenBySize, tileCard, VideoList } from './VideoList'
 
@@ -15,9 +15,10 @@ export function Search() {
     const [results, { refetch }] = createResource(
         () => {
             const q = params.q?.trim()
-            return q ? ([q, settings().sizeMin, settings().sizeMax] as const) : false
+            // The added chats travel with every ask, even one the gate itself did not change (a watched tick): `addedView()` is cheap.
+            return q ? ([q, settings().sizeMin, settings().sizeMax, addedMode(), [...(addedIds() ?? [])].join()] as const) : false
         },
-        async ([q, minBytes, maxBytes]) => api.search(q, { minBytes, maxBytes, ...(await progress()) }),
+        async ([q, minBytes, maxBytes]) => api.search(q, { minBytes, maxBytes, added: addedView(), ...(await progress()) }),
     )
     onBackOnline(() => results.error && refetch())
     let debounce = 0
