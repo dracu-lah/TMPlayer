@@ -3,11 +3,6 @@ package com.tmplayer.data
 import com.tmplayer.i18n.L
 import dev.g000sha256.tdl.TdlClient
 import dev.g000sha256.tdl.TdlResult
-import dev.g000sha256.tdl.dto.ChatJoinResult
-import dev.g000sha256.tdl.dto.ChatJoinResultDeclined
-import dev.g000sha256.tdl.dto.ChatJoinResultGuardBotApprovalRequired
-import dev.g000sha256.tdl.dto.ChatJoinResultRequestSent
-import dev.g000sha256.tdl.dto.ChatJoinResultSuccess
 import dev.g000sha256.tdl.dto.InviteLinkChatTypeChannel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -34,7 +29,7 @@ data class InvitePreview(
     val miniThumbnail: ByteArray?,
     val memberCount: Int,
     val description: String,
-    /** The admins approve each newcomer: the button asks to join rather than joining. */
+    /** The admins approve each newcomer who joins through Telegram. */
     val createsJoinRequest: Boolean,
     /** A paid subscription: joining is left to Telegram, where the payment is. */
     val paid: Boolean,
@@ -47,20 +42,16 @@ data class InvitePreview(
     override fun hashCode(): Int = link.hashCode() * 31 + title.hashCode()
 }
 
-/** What a join came to, from a public chat's Join or an invite's confirm. */
-sealed interface JoinOutcome {
-    data class Joined(val chat: ChatSummary?) : JoinOutcome
-    data object RequestSent : JoinOutcome
-    data class Refused(val reason: String) : JoinOutcome
-}
-
 /**
- * The rules behind opening and joining, kept apart from TDLib so they are tested once: which
- * post opens what, which errors mean what, and that the kids lock stops every one of them.
+ * The rules behind opening a link, kept apart from TDLib so they are tested once: which post
+ * opens what, which errors mean what, and that the kids lock stops every one of them.
+ *
+ * Nothing here joins a chat on the viewer's account any more (HX30): a chat not already joined
+ * is only ever previewed, and the viewer joins it themselves in Telegram if they want to.
  */
 object LinkRules {
 
-    /** Joining anything is off while the kids lock is on: its chats are the ones chosen for it. */
+    /** Previewing a chat the account is not in is off while the kids lock is on. */
     fun mayJoin(kidsAllowed: Set<Long>?): Boolean = kidsAllowed == null
 
     /**
@@ -85,30 +76,6 @@ object LinkRules {
         return PostOpen.OpenChat(chat, if (found) L.linkNoVideo else L.linkPostGone)
     }
 
-    /** A join's answer, as one of [JoinOutcome]. */
-    fun outcome(result: ChatJoinResult): JoinOutcome = when (result) {
-        is ChatJoinResultSuccess -> JoinOutcome.Joined(null)
-        is ChatJoinResultRequestSent -> JoinOutcome.RequestSent
-        is ChatJoinResultDeclined -> JoinOutcome.Refused(L.linkDeclined)
-        is ChatJoinResultGuardBotApprovalRequired -> JoinOutcome.Refused(L.linkBotApproval)
-        else -> JoinOutcome.Refused(L.linkJoinFailed(Failures.DEFAULT))
-    }
-
-    /** A join that came back as an error: some of Telegram's errors are answers, not failures. */
-    fun failure(message: String?): JoinOutcome {
-        val raw = message.orEmpty()
-        return when {
-            raw.contains("INVITE_REQUEST_SENT") -> JoinOutcome.RequestSent
-            raw.contains("USER_ALREADY_PARTICIPANT") -> JoinOutcome.Joined(null)
-            raw.contains("INVITE_HASH_EXPIRED") || raw.contains("INVITE_HASH_INVALID") || raw.contains("INVITE_HASH_EMPTY") ->
-                JoinOutcome.Refused(L.linkInviteInvalid)
-            raw.contains("CHANNELS_TOO_MUCH") -> JoinOutcome.Refused(L.linkTooMany)
-            raw.contains("USERS_TOO_MUCH") -> JoinOutcome.Refused(L.linkChatFull)
-            raw.contains("CHANNEL_PRIVATE") || raw.contains("USER_BANNED_IN_CHANNEL") -> JoinOutcome.Refused(L.linkBanned)
-            else -> JoinOutcome.Refused(L.linkJoinFailed(Failures.humanise(raw)))
-        }
-    }
-
     /** The invite check's error, said: an expired or mistyped invite is the usual one. */
     fun inviteFailure(message: String?): String {
         val raw = message.orEmpty()
@@ -120,7 +87,7 @@ object LinkRules {
     }
 }
 
-/** Opening and joining through TDLib, for the shared link flow on every device. */
+/** Resolving links through TDLib, for the shared link flow on every device (HX30: never joins). */
 class TelegramLinkActions(private val td: TdlClient) {
 
     /** Where [link] leads: a video to play, a chat to open, or why neither. */
@@ -155,7 +122,7 @@ class TelegramLinkActions(private val td: TdlClient) {
 
     /** The invite's chat, or why it cannot be shown (expired, wrong, the kids lock). */
     suspend fun previewInvite(link: TgLink.Invite): Result<InvitePreview> = withContext(Dispatchers.IO) {
-        if (!LinkRules.mayJoin(ChatGate.awaitReady())) return@withContext Result.failure(LinkRefusal(L.linkJoinKidsLock))
+        if (!LinkRules.mayJoin(ChatGate.awaitReady())) return@withContext Result.failure(LinkRefusal(L.linkKidsLock))
         when (val answer = td.checkChatInviteLink(link.url)) {
             is TdlResult.Failure -> Result.failure(LinkRefusal(LinkRules.inviteFailure(answer.message)))
             is TdlResult.Success -> {
@@ -179,31 +146,6 @@ class TelegramLinkActions(private val td: TdlClient) {
             }
         }
     }
-
-    /** Joins through an invite, once the viewer has confirmed it. */
-    suspend fun joinInvite(link: TgLink.Invite): JoinOutcome = withContext(Dispatchers.IO) {
-        if (!LinkRules.mayJoin(ChatGate.awaitReady())) return@withContext JoinOutcome.Refused(L.linkJoinKidsLock)
-        when (val answer = td.joinChatByInviteLink(link.url)) {
-            is TdlResult.Failure -> LinkRules.failure(answer.message)
-            is TdlResult.Success -> withChat(LinkRules.outcome(answer.result), (answer.result as? ChatJoinResultSuccess)?.chatId)
-        }
-    }
-
-    /** Joins a public group or channel seen through its @username. */
-    suspend fun joinPublic(chatId: Long): JoinOutcome = withContext(Dispatchers.IO) {
-        if (!LinkRules.mayJoin(ChatGate.awaitReady())) return@withContext JoinOutcome.Refused(L.linkJoinKidsLock)
-        when (val answer = td.joinChat(chatId)) {
-            is TdlResult.Failure -> LinkRules.failure(answer.message)
-            is TdlResult.Success -> withChat(LinkRules.outcome(answer.result), chatId)
-        }
-    }
-
-    private suspend fun withChat(outcome: JoinOutcome, chatId: Long?): JoinOutcome =
-        if (outcome is JoinOutcome.Joined && chatId != null && chatId != 0L) {
-            JoinOutcome.Joined(ChatRepository(td).summary(chatId))
-        } else {
-            outcome
-        }
 }
 
 /** A refusal already worded for the viewer. */

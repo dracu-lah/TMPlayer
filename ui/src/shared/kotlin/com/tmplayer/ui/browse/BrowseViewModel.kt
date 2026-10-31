@@ -35,7 +35,6 @@ import com.tmplayer.data.TdSession
 import com.tmplayer.ui.components.StateAction
 import com.tmplayer.ui.components.UiState
 import com.tmplayer.ui.icons.TmIcons
-import dev.g000sha256.tdl.TdlResult
 import dev.g000sha256.tdl.dto.ChatListArchive
 import dev.g000sha256.tdl.dto.ChatListMain
 import kotlinx.coroutines.CancellationException
@@ -604,72 +603,6 @@ class ChatListViewModel(
         if (membership != null || foldersJob?.isActive == true) return
         foldersGaveUp = true
         publish()
-    }
-
-    /**
-     * Pins, archives and marks read: the three actions that change Telegram rather than this app.
-     *
-     * Each one draws its result immediately and then lets TDLib correct it. Waiting on a round trip
-     * before the row moves means a menu that closes onto an unchanged list, which reads as a press
-     * that did nothing. TDLib sends the real position and read state back within a moment, and the
-     * collectors above apply it, so a request that fails is undone rather than left as a false row.
-     */
-    fun setPinned(chat: ChatSummary, pinned: Boolean, onFailure: (String) -> Unit) {
-        edit(chat.id) { it.copy(isPinned = pinned) }
-        arrange()
-        act(onFailure) { it.setPinned(chat, pinned) }
-    }
-
-    fun setArchived(chat: ChatSummary, archived: Boolean, onFailure: (String) -> Unit) {
-        edit(chat.id) { it.copy(isArchived = archived, isPinned = false) }
-        arrange()
-        act(onFailure) { it.setArchived(chat.id, archived) }
-    }
-
-    fun setMuted(chat: ChatSummary, muted: Boolean, onFailure: (String) -> Unit) {
-        // No arrange(): muting changes what a row says, not where it sits.
-        edit(chat.id) { it.copy(isMuted = muted) }
-        act(onFailure) { it.setMuted(chat.id, muted) }
-    }
-
-    fun markRead(chat: ChatSummary, onFailure: (String) -> Unit) {
-        edit(chat.id) { it.copy(unreadCount = 0) }
-        act(onFailure) { it.markRead(chat.id) }
-    }
-
-    /** Re-sorts the rows in hand, for a change that moves one of them rather than renaming it. */
-    private fun arrange() {
-        val current = chats ?: return
-        val sorted = arrangeChats(current)
-        if (sorted == current) return
-        chats = sorted
-        publish()
-    }
-
-    private fun act(
-        onFailure: (String) -> Unit,
-        request: suspend (ChatRepository) -> TdlResult<*>,
-    ) {
-        viewModelScope.launch {
-            val session = Td.awaitAuthorizedSession()
-            // Two ways for this to fail and both have to be caught. TDLib reports a refused
-            // request as a Failure value rather than by throwing, so a runCatching on its own
-            // would call every rejection a success and leave the optimistic row standing.
-            val outcome = runCatching { request(ChatRepository(session.client)) }
-            if (!session.isCurrent()) return@launch
-            val error = outcome.exceptionOrNull()
-            if (error is CancellationException) throw error
-            val message = when {
-                error != null -> Failures.humanise(error)
-                else -> (outcome.getOrNull() as? TdlResult.Failure)?.let {
-                    Failures.humanise(it.message)
-                }
-            } ?: return@launch
-
-            onFailure(message)
-            // Whatever was drawn on trust is now wrong, so ask TDLib what is actually true.
-            load()
-        }
     }
 
     /** Removes one account's data immediately when authorization is lost. */

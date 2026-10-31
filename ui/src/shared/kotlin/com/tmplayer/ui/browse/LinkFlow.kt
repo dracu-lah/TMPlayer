@@ -5,7 +5,6 @@ import com.tmplayer.data.ChatRepository
 import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.Failures
 import com.tmplayer.data.InvitePreview
-import com.tmplayer.data.JoinOutcome
 import com.tmplayer.data.KidsLock
 import com.tmplayer.data.ChatGate
 import com.tmplayer.data.LinkRules
@@ -59,19 +58,20 @@ sealed interface LinkStep {
     /** Telegram is being asked about [link]. */
     data class Opening(val link: TgLink) : LinkStep
 
-    /** An invite's chat, shown before joining; [joining] while the join is under way. */
-    data class Invite(val preview: InvitePreview, val joining: Boolean = false) : LinkStep
+    /** An invite's chat, not already joined (HX30): opened in Telegram, never joined in-app. */
+    data class Invite(val preview: InvitePreview) : LinkStep
 
-    /** A public group or channel the account is not in, shown before joining. */
-    data class Public(val info: ChatInfo, val joining: Boolean = false) : LinkStep
+    /** A public group or channel the account is not in (HX30): opened in Telegram, not joined here. */
+    data class Public(val info: ChatInfo) : LinkStep
 
     /** It could not be opened, for [message]. */
     data class Failed(val message: String) : LinkStep
 }
 
 /**
- * The link flow itself: resolves a post and plays it or opens its chat, previews an invite or a
- * public chat and joins it only once the viewer confirms. [onPlay] and [onOpenChat] are the
+ * The link flow itself: resolves a post and plays it or opens its chat, or previews an invite or
+ * a public chat the account is not in. Neither is ever joined here (HX30): the sheet offers to
+ * open the chat in Telegram instead, through [onOpenExternal]. [onPlay] and [onOpenChat] are the
  * platform's own (the player, the chat's grid); [say] its toast.
  */
 class LinkFlow(
@@ -79,6 +79,7 @@ class LinkFlow(
     private val onPlay: (PostOpen.Play) -> Unit,
     private val onOpenChat: (ChatSummary) -> Unit,
     private val say: (String) -> Unit,
+    private val onOpenExternal: (String) -> Unit = {},
 ) {
     private val _step = MutableStateFlow<LinkStep?>(null)
     val step: StateFlow<LinkStep?> = _step.asStateFlow()
@@ -144,41 +145,16 @@ class LinkFlow(
         }
     }
 
-    /** Joins the chat on show, once its Join is pressed. */
-    fun join() {
+    /** Opens the chat on show in Telegram itself (HX30): this app never joins it. */
+    fun openInTelegram() {
         val shown = _step.value
-        val invite = (shown as? LinkStep.Invite)?.takeIf { !it.joining }
-        val public = (shown as? LinkStep.Public)?.takeIf { !it.joining }
-        if (invite == null && public == null) return
-        _step.value = invite?.copy(joining = true) ?: public!!.copy(joining = true)
-        job = scope.launch {
-            val outcome = try {
-                val session = Td.awaitConnectedSessionOrNull()
-                if (session == null) {
-                    JoinOutcome.Refused(Failures.OFFLINE)
-                } else {
-                    val actions = TelegramLinkActions(session.client)
-                    if (invite != null) actions.joinInvite(invite.preview.link) else actions.joinPublic(public!!.info.summary.id)
-                }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                JoinOutcome.Refused(Failures.humanise(e))
-            }
-            val title = invite?.preview?.title ?: public!!.info.summary.title
-            when (outcome) {
-                is JoinOutcome.Joined -> {
-                    _step.value = null
-                    say(L.linkJoined(title))
-                    (outcome.chat ?: public?.info?.summary)?.let(onOpenChat)
-                }
-                JoinOutcome.RequestSent -> {
-                    _step.value = null
-                    say(L.linkRequestSent)
-                }
-                is JoinOutcome.Refused -> _step.value = LinkStep.Failed(outcome.reason)
-            }
+        val url = when (shown) {
+            is LinkStep.Invite -> shown.preview.link.url
+            is LinkStep.Public -> shown.info.link ?: return
+            else -> return
         }
+        _step.value = null
+        onOpenExternal(url)
     }
 
     /** A public chat on show, opened to look at without joining. */
@@ -217,5 +193,5 @@ class LinkFlow(
     }
 }
 
-/** Whether joining is possible at all here: never under the kids lock. */
+/** Whether a chat not already joined may be previewed at all: never under the kids lock. */
 suspend fun mayJoinChats(): Boolean = LinkRules.mayJoin(ChatGate.awaitReady())

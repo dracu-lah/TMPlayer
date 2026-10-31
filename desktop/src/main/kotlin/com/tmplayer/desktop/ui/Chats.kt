@@ -57,7 +57,6 @@ import com.tmplayer.ui.components.FastScroller
 import com.tmplayer.ui.components.TmDropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -262,18 +261,7 @@ fun ChatsPage(
                     nav = nav,
                     onOpen = state::openChat,
                     onStar = { chat -> scope.launch { state.settings.toggleFavorite(chat.id) } },
-                    // Pin, archive and read are said only when Telegram refuses them, as on the
-                    // phone: done, the row shows it (moving to the top, leaving, the badge
-                    // clearing). Muting still says so, since here a row without unread messages
-                    // looks the same either way.
                     actions = ChatRowActions(
-                        onTogglePinned = { chat -> model.setPinned(chat, !chat.isPinned) { toast(it) } },
-                        onToggleMuted = { chat ->
-                            model.setMuted(chat, !chat.isMuted) { toast(it) }
-                            toast(if (chat.isMuted) s.chatsUnmuted(chat.title) else s.chatsMuted(chat.title))
-                        },
-                        onToggleArchived = { chat -> model.setArchived(chat, !chat.isArchived) { toast(it) } },
-                        onMarkRead = { chat -> model.markRead(chat) { toast(it) } },
                         onHide = { chat ->
                             // Gone from the list is the answer; no toast (user, 2026-10-22). Settings,
                             // Library, Hidden chats shows it again.
@@ -357,15 +345,10 @@ internal fun ChoiceChips(choices: List<Choice>) {
 }
 
 /**
- * What a chat row can do besides open and star: the four that change the chat in Telegram itself,
- * on every device, which the phone and TV keep behind a long press. Each is handed the row as it
- * was drawn, so a toggle reads its current state off it.
+ * What a chat row can do besides open and star (HX30: nothing here changes the chat in Telegram
+ * itself any more; pinning, muting, archiving and marking read all stayed there).
  */
 internal class ChatRowActions(
-    val onTogglePinned: (ChatSummary) -> Unit = {},
-    val onToggleMuted: (ChatSummary) -> Unit = {},
-    val onToggleArchived: (ChatSummary) -> Unit = {},
-    val onMarkRead: (ChatSummary) -> Unit = {},
     /** Hides the chat from TMPlayer's lists (see HiddenChats); null leaves the entry out. */
     val onHide: ((ChatSummary) -> Unit)? = null,
 )
@@ -547,12 +530,7 @@ internal fun ChatRow(
                 }
                 when (event.key) {
                     Key.S -> onStar()
-                    Key.P -> actions.onTogglePinned(chat)
-                    Key.M -> actions.onToggleMuted(chat)
-                    Key.A -> actions.onToggleArchived(chat)
                     Key.H -> actions.onHide?.invoke(chat) ?: return@onPreviewKeyEvent false
-                    // Nothing to clear is not an error, and the key is still this row's.
-                    Key.R -> if (chat.unreadCount > 0) actions.onMarkRead(chat)
                     else -> return@onPreviewKeyEvent false
                 }
                 true
@@ -603,8 +581,8 @@ internal fun ChatRow(
 }
 
 /**
- * The row's menu, the phone's long press menu with the key for each entry beside it. The star is
- * private to this computer; everything under it changes the chat in Telegram, on every device.
+ * The row's menu, the phone's long press menu with the key for each entry beside it. Nothing
+ * here changes the chat in Telegram (HX30): the star and hide stay private to this computer.
  */
 @Composable
 private fun ChatRowMenu(
@@ -639,21 +617,6 @@ private fun ChatRowMenu(
         )
         // Private to this computer too: the chat leaves TMPlayer's lists, never Telegram.
         actions.onHide?.let { hide -> entry(s.browseHideChat, "H", TmIcons.VisibilityOff) { hide(chat) } }
-        HorizontalDivider()
-        entry(if (chat.isPinned) s.chatsUnpin else s.chatsPin, "P", TmIcons.Pin) { actions.onTogglePinned(chat) }
-        entry(
-            if (chat.isMuted) s.chatsUnmute else s.chatsMute,
-            "M",
-            if (chat.isMuted) TmIcons.Bell else TmIcons.BellOff,
-        ) { actions.onToggleMuted(chat) }
-        if (chat.unreadCount > 0) {
-            entry(s.chatsMarkRead, "R", TmIcons.Check) { actions.onMarkRead(chat) }
-        }
-        entry(
-            if (chat.isArchived) s.chatsUnarchive else s.chatsArchive,
-            "A",
-            TmIcons.Archive,
-        ) { actions.onToggleArchived(chat) }
     }
 }
 

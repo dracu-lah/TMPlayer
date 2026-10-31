@@ -61,8 +61,8 @@ import kotlinx.coroutines.launch
 /**
  * The desktop's link flow (CP79): a link pasted into the search palette (or a pinned post's link)
  * is opened here. A post plays from its start time or opens its chat; an invite or a public chat
- * is shown in a card first and joined only with Join pressed. Videos asked for off a chat's grid
- * (comments, round videos) play through here too.
+ * the account is not in is shown in a card, and opened in Telegram itself, never joined here
+ * (HX30). Videos asked for off a chat's grid (comments, round videos) play through here too.
  */
 @Composable
 fun DesktopLinkHost(state: ShellState) {
@@ -78,6 +78,7 @@ fun DesktopLinkHost(state: ShellState) {
             },
             onOpenChat = { chat -> state.openChat(chat) },
             say = toast,
+            onOpenExternal = com.tmplayer.desktop.os.OpenExternal::browse,
         )
     }
     val asked by LinkRequests.asked.collectAsState()
@@ -126,27 +127,16 @@ internal fun LinkStepCard(step: LinkStep, flow: LinkFlow) {
                     when {
                         p.paid -> s.linkInvitePaid
                         p.createsJoinRequest -> s.linkRequestNote
-                        else -> s.linkJoinNote
+                        else -> s.linkNotMember
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = Tone.muted,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    if (!p.paid) {
-                        JoinButton(
-                            label = when {
-                                p.createsJoinRequest -> s.linkRequestJoin
-                                p.isChannel -> s.linkJoinChannel
-                                else -> s.linkJoinGroup
-                            },
-                            joining = step.joining,
-                            onJoin = flow::join,
-                            modifier = Modifier.focusRequester(joinFocus),
-                        )
-                    }
+                    OpenInTelegramButton(onOpen = flow::openInTelegram, modifier = Modifier.focusRequester(joinFocus))
                     TextButton(onClick = flow::dismiss) { Text(s.commonClose) }
                 }
-                if (!p.paid) LaunchedEffect(Unit) { runCatching { joinFocus.requestFocus() } }
+                LaunchedEffect(Unit) { runCatching { joinFocus.requestFocus() } }
             }
             is LinkStep.Public -> {
                 val info = step.info
@@ -160,19 +150,10 @@ internal fun LinkStepCard(step: LinkStep, flow: LinkFlow) {
                 ).joinToString("  ·  ")
                 Text(facts, color = Tone.muted)
                 info.about?.let { Text(it, color = Tone.text, maxLines = 8, overflow = TextOverflow.Ellipsis) }
-                Text(if (info.joinByRequest) s.linkRequestNote else s.linkJoinNote, style = MaterialTheme.typography.bodySmall, color = Tone.muted)
+                Text(if (info.joinByRequest) s.linkRequestNote else s.linkNotMember, style = MaterialTheme.typography.bodySmall, color = Tone.muted)
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    JoinButton(
-                        label = when {
-                            info.joinByRequest -> s.linkRequestJoin
-                            channel -> s.linkJoinChannel
-                            else -> s.linkJoinGroup
-                        },
-                        joining = step.joining,
-                        onJoin = flow::join,
-                        modifier = Modifier.focusRequester(joinFocus),
-                    )
-                    OutlinedButton(onClick = flow::look, enabled = !step.joining) { Text(s.linkLookFirst) }
+                    OpenInTelegramButton(onOpen = flow::openInTelegram, modifier = Modifier.focusRequester(joinFocus))
+                    OutlinedButton(onClick = flow::look) { Text(s.linkLookFirst) }
                     TextButton(onClick = flow::dismiss) { Text(s.commonClose) }
                 }
                 LaunchedEffect(Unit) { runCatching { joinFocus.requestFocus() } }
@@ -181,20 +162,14 @@ internal fun LinkStepCard(step: LinkStep, flow: LinkFlow) {
     }
 }
 
-/** Join, which turns into a small spinner while Telegram answers, and ignores a second press. */
+/** Opens the chat in Telegram itself (HX30): this app never joins it. */
 @Composable
-internal fun JoinButton(label: String, joining: Boolean, onJoin: () -> Unit, modifier: Modifier = Modifier) {
+internal fun OpenInTelegramButton(onOpen: () -> Unit, modifier: Modifier = Modifier) {
     val s = LocalStrings.current
-    Button(onClick = { if (!joining) onJoin() }, enabled = !joining, modifier = modifier.pointerHoverIcon(PointerIcon.Hand)) {
-        if (joining) {
-            CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
-            Spacer(Modifier.width(8.dp))
-            Text(s.linkJoining)
-        } else {
-            Icon(TmIcons.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text(label)
-        }
+    Button(onClick = onOpen, modifier = modifier.pointerHoverIcon(PointerIcon.Hand)) {
+        Icon(TmIcons.OpenExternal, contentDescription = null, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(s.linkOpenInTelegram)
     }
 }
 

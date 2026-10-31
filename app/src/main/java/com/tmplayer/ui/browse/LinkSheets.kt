@@ -1,5 +1,8 @@
 package com.tmplayer.ui.browse
 
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -46,12 +49,14 @@ import kotlinx.coroutines.launch
  * The window's link flow on Android (CP79), on a phone and a television alike: whatever asked
  * for a link ([LinkRequests]: Search, a pinned post, another app's t.me or tg:// link) is opened
  * here. A post plays ([onPlay], from the link's start time) or opens its chat; an invite or a
- * public chat is shown first, and joined only with Join pressed.
+ * public chat the account is not in is shown, and opened in Telegram itself, never joined here
+ * (HX30).
  */
 @Composable
 internal fun TelegramLinkHost(onPlay: (MediaItem, String) -> Unit, onOpenChat: (ChatSummary) -> Unit) {
     val scope = rememberCoroutineScope()
     val toast = rememberToast()
+    val context = LocalContext.current
     val flow = remember {
         LinkFlow(
             scope = scope,
@@ -61,6 +66,7 @@ internal fun TelegramLinkHost(onPlay: (MediaItem, String) -> Unit, onOpenChat: (
             },
             onOpenChat = onOpenChat,
             say = toast,
+            onOpenExternal = { url -> context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) },
         )
     }
     val asked by LinkRequests.asked.collectAsState()
@@ -98,7 +104,7 @@ private fun LinkStepSheet(step: LinkStep, flow: LinkFlow) {
                 (if (preview.isChannel) L.chatsKindChannels else L.chatsKindGroups),
                 preview.memberCount.takeIf { it > 0 }?.let { if (preview.isChannel) s.chatsInfoSubscribers(it) else s.chatsInfoMembers(it) },
             ).joinToString("  ·  ")
-            JoinSheet(
+            NotMemberSheet(
                 title = preview.title,
                 facts = facts,
                 about = preview.description,
@@ -107,16 +113,9 @@ private fun LinkStepSheet(step: LinkStep, flow: LinkFlow) {
                 note = when {
                     preview.paid -> s.linkInvitePaid
                     preview.createsJoinRequest -> s.linkRequestNote
-                    else -> s.linkJoinNote
+                    else -> s.linkNotMember
                 },
-                joinLabel = when {
-                    preview.createsJoinRequest -> s.linkRequestJoin
-                    preview.isChannel -> s.linkJoinChannel
-                    else -> s.linkJoinGroup
-                },
-                canJoin = !preview.paid,
-                joining = step.joining,
-                onJoin = flow::join,
+                onOpenTelegram = flow::openInTelegram,
                 onLook = null,
                 onDismiss = flow::dismiss,
             )
@@ -129,21 +128,14 @@ private fun LinkStepSheet(step: LinkStep, flow: LinkFlow) {
                 info.memberCount?.let { if (channel) s.chatsInfoSubscribers(it) else s.chatsInfoMembers(it) },
                 info.username?.let { "@$it" },
             ).joinToString("  ·  ")
-            JoinSheet(
+            NotMemberSheet(
                 title = info.summary.title,
                 facts = facts,
                 about = info.about.orEmpty(),
                 photo = info.bigPhotoFileId.takeIf { it != 0 } ?: info.summary.photoFileId,
                 miniThumbnail = info.summary.miniThumbnail,
-                note = if (info.joinByRequest) s.linkRequestNote else s.linkJoinNote,
-                joinLabel = when {
-                    info.joinByRequest -> s.linkRequestJoin
-                    channel -> s.linkJoinChannel
-                    else -> s.linkJoinGroup
-                },
-                canJoin = true,
-                joining = step.joining,
-                onJoin = flow::join,
+                note = if (info.joinByRequest) s.linkRequestNote else s.linkNotMember,
+                onOpenTelegram = flow::openInTelegram,
                 onLook = flow::look,
                 onDismiss = flow::dismiss,
             )
@@ -151,19 +143,19 @@ private fun LinkStepSheet(step: LinkStep, flow: LinkFlow) {
     }
 }
 
-/** A chat shown before joining: its picture, name, facts and description, then Join (CP79). */
+/**
+ * A chat the account is not in (CP79, HX30): its picture, name, facts and description, then
+ * Open in Telegram. This app never joins it; only Telegram does.
+ */
 @Composable
-private fun JoinSheet(
+private fun NotMemberSheet(
     title: String,
     facts: String,
     about: String,
     photo: Int,
     miniThumbnail: ByteArray?,
     note: String,
-    joinLabel: String,
-    canJoin: Boolean,
-    joining: Boolean,
-    onJoin: () -> Unit,
+    onOpenTelegram: () -> Unit,
     onLook: (() -> Unit)?,
     onDismiss: () -> Unit,
 ) {
@@ -179,22 +171,18 @@ private fun JoinSheet(
             }
         }
         ChoiceList {
-            if (canJoin) {
-                // While the join is under way the line says so and a second press does nothing.
-                ChoiceLine(
-                    if (joining) s.linkJoining else joinLabel,
-                    modifier = Modifier.focusRequester(first),
-                    detail = s.linkJoinDetail,
-                    icon = TmIcons.Add,
-                    enabled = !joining,
-                    onClick = onJoin,
-                )
-            }
+            ChoiceLine(
+                s.linkOpenInTelegram,
+                modifier = Modifier.focusRequester(first),
+                detail = s.linkOpenInTelegramDetail,
+                icon = TmIcons.OpenExternal,
+                onClick = onOpenTelegram,
+            )
             if (onLook != null) {
-                ChoiceLine(s.linkLookFirst, detail = s.linkLookFirstDetail, icon = TmIcons.ArrowForward, enabled = !joining, onClick = onLook)
+                ChoiceLine(s.linkLookFirst, detail = s.linkLookFirstDetail, icon = TmIcons.ArrowForward, onClick = onLook)
             }
         }
-        if (canJoin) FocusOnOpen(first)
+        FocusOnOpen(first)
     }
 }
 

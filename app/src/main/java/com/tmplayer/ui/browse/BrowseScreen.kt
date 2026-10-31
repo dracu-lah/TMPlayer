@@ -236,14 +236,6 @@ internal fun BrowseScreen(
     /** How many downloads are running, for the badge on that row of the drawer and the rail. */
     downloadCount: Int = 0,
     onToggleFavorite: (ChatSummary) -> Unit = {},
-    /**
-     * These write to Telegram rather than to this device. Defaulted to nothing so a preview, or
-     * the screenshot fixture, can draw this screen without a TDLib client behind it.
-     */
-    onTogglePinned: (ChatSummary) -> Unit = {},
-    onToggleArchived: (ChatSummary) -> Unit = {},
-    onToggleMuted: (ChatSummary) -> Unit = {},
-    onMarkRead: (ChatSummary) -> Unit = {},
     onRestartMedia: (ResumeRecord) -> Unit = {},
     onForgetMedia: (ResumeRecord) -> Unit = {},
     /** Empties Continue watching in one go, rather than one held-OK menu per video. */
@@ -1185,59 +1177,6 @@ internal fun BrowseScreen(
                     ) {
                         chatMenu = null
                         hideChat(chat)
-                    },
-                )
-                // Everything below this point changes the chat in Telegram itself rather than
-                // only in this app, so each one says so: a star is private to this device, a pin
-                // is on the viewer's phone a second later.
-                add(
-                    MenuAction(
-                        label = if (chat.isPinned) s.browseUnpin else s.browsePin,
-                        icon = TmIcons.Pin,
-                        detail = s.browsePinDetail,
-                    ) {
-                        chatMenu = null
-                        onTogglePinned(chat)
-                    },
-                )
-                add(
-                    MenuAction(
-                        label = if (chat.isMuted) s.browseUnmute else s.browseMute,
-                        icon = if (chat.isMuted) TmIcons.Bell else TmIcons.BellOff,
-                        detail = if (chat.isMuted) {
-                            s.browseUnmuteDetail
-                        } else {
-                            s.browseMuteDetail
-                        },
-                    ) {
-                        chatMenu = null
-                        onToggleMuted(chat)
-                    },
-                )
-                if (chat.unreadCount > 0) {
-                    add(
-                        MenuAction(
-                            label = s.browseMarkRead,
-                            icon = TmIcons.Check,
-                            detail = s.browseMarkReadDetail,
-                        ) {
-                            chatMenu = null
-                            onMarkRead(chat)
-                        },
-                    )
-                }
-                add(
-                    MenuAction(
-                        label = if (chat.isArchived) s.browseUnarchive else s.browseArchive,
-                        icon = TmIcons.Archive,
-                        detail = if (chat.isArchived) {
-                            s.browseUnarchiveDetail
-                        } else {
-                            s.browseArchiveDetail
-                        },
-                    ) {
-                        chatMenu = null
-                        onToggleArchived(chat)
                     },
                 )
             },

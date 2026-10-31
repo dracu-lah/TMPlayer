@@ -1,9 +1,6 @@
 package com.tmplayer.data
 
 import com.tmplayer.i18n.L
-import dev.g000sha256.tdl.dto.ChatJoinResultDeclined
-import dev.g000sha256.tdl.dto.ChatJoinResultRequestSent
-import dev.g000sha256.tdl.dto.ChatJoinResultSuccess
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -44,7 +41,7 @@ class LinkAndKeepRulesTest {
     }
 
     @Test
-    fun `the kids lock stops a link to a chat it does not allow, and every join`() {
+    fun `the kids lock stops a link to a chat it does not allow, and previewing any other`() {
         val locked = LinkRules.decide(setOf(5L), 10, true, true, video(), chat(10, ChatKind.Channel), 0, 0)
         assertEquals(PostOpen.Refused(L.linkKidsLock), locked)
         val allowed = LinkRules.decide(setOf(10L), 10, true, true, video(), chat(10, ChatKind.Channel), 0, 0)
@@ -55,20 +52,7 @@ class LinkAndKeepRulesTest {
     }
 
     @Test
-    fun `join answers become outcomes`() {
-        assertEquals(JoinOutcome.Joined(null), LinkRules.outcome(ChatJoinResultSuccess(42)))
-        assertEquals(JoinOutcome.RequestSent, LinkRules.outcome(ChatJoinResultRequestSent()))
-        assertEquals(JoinOutcome.Refused(L.linkDeclined), LinkRules.outcome(ChatJoinResultDeclined()))
-    }
-
-    @Test
-    fun `some of telegram's join errors are answers`() {
-        assertEquals(JoinOutcome.RequestSent, LinkRules.failure("INVITE_REQUEST_SENT"))
-        assertEquals(JoinOutcome.Joined(null), LinkRules.failure("USER_ALREADY_PARTICIPANT"))
-        assertEquals(JoinOutcome.Refused(L.linkInviteInvalid), LinkRules.failure("INVITE_HASH_EXPIRED"))
-        assertEquals(JoinOutcome.Refused(L.linkTooMany), LinkRules.failure("CHANNELS_TOO_MUCH"))
-        assertEquals(JoinOutcome.Refused(L.linkChatFull), LinkRules.failure("USERS_TOO_MUCH"))
-        assertTrue(LinkRules.failure("SOMETHING_ELSE") is JoinOutcome.Refused)
+    fun `the invite check's errors are said plainly`() {
         assertEquals(L.linkInviteInvalid, LinkRules.inviteFailure("INVITE_HASH_INVALID"))
     }
 

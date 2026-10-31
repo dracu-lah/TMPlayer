@@ -33,9 +33,10 @@ import java.io.File
 
 /**
  * The pieces CP79, CP81 and CP82 add to the desktop, drawn on its own renderer in both themes: an
- * invite's card before joining and while joining, a public channel's card, a refusal, the pinned
- * post and round video entries over a chat's posters, and a line of the forward picker. With
- * TMPLAYER_SHOTS=<dir> the frames are written there as `link-*.png`.
+ * invite's card, a public channel's card, a refusal, the pinned post and round video entries over
+ * a chat's posters, and a line of the forward picker. Neither card ever joins the chat (HX30):
+ * both offer to open it in Telegram instead. With TMPLAYER_SHOTS=<dir> the frames are written
+ * there as `link-*.png`.
  */
 class LinkAndKeepShotsTest {
 
@@ -67,7 +68,6 @@ class LinkAndKeepShotsTest {
     fun linkCardsAndEntriesDraw() {
         val shots: List<Pair<String, @Composable () -> Unit>> = listOf(
             "invite" to { LinkStepCard(LinkStep.Invite(invite), flow) },
-            "invite-joining" to { LinkStepCard(LinkStep.Invite(invite, joining = true), flow) },
             "invite-request" to { LinkStepCard(LinkStep.Invite(invite.copy(createsJoinRequest = true)), flow) },
             "public" to {
                 LinkStepCard(

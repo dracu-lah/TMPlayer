@@ -29,7 +29,6 @@ import com.tmplayer.data.ChatInfo
 import com.tmplayer.data.ChatKind
 import com.tmplayer.data.ChatRepository
 import com.tmplayer.data.ChatSummary
-import com.tmplayer.data.Td
 import com.tmplayer.desktop.os.OpenExternal
 import com.tmplayer.i18n.L
 import com.tmplayer.ui.components.rememberToast
@@ -37,7 +36,6 @@ import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.theme.Tone
 import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
-import kotlinx.coroutines.launch
 
 /**
  * A chat's info on the desktop, opened from the Info button beside its name: the large picture,
@@ -66,37 +64,10 @@ internal fun ChatInfoPanel(chat: ChatSummary, onDismiss: () -> Unit) {
             ChatAvatar(chat.miniThumbnail, shown?.bigPhotoFileId?.takeIf { it != 0 } ?: chat.photoFileId, name, 104.dp)
             Text(name, style = MaterialTheme.typography.headlineSmall, color = Tone.text, textAlign = TextAlign.Center)
             shown?.let { facts(it) }?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = Tone.muted) }
-            // A public group or channel not joined yet (CP79): this panel is the preview, Join the confirm.
+            // A public group or channel not joined yet (CP79, HX30): opened in Telegram, never
+            // joined by this app.
             if (shown != null && shown.canJoin) {
-                val scope = androidx.compose.runtime.rememberCoroutineScope()
-                var joining by androidx.compose.runtime.remember(shown.summary.id) { androidx.compose.runtime.mutableStateOf(false) }
-                JoinButton(
-                    label = when {
-                        shown.joinByRequest -> s.linkRequestJoin
-                        shown.summary.kind == ChatKind.Channel -> s.linkJoinChannel
-                        else -> s.linkJoinGroup
-                    },
-                    joining = joining,
-                    onJoin = {
-                        joining = true
-                        scope.launch {
-                            val outcome = runCatching {
-                                val session = Td.awaitConnectedSessionOrNull()
-                                    ?: return@runCatching com.tmplayer.data.JoinOutcome.Refused(com.tmplayer.data.Failures.OFFLINE)
-                                com.tmplayer.data.TelegramLinkActions(session.client).joinPublic(shown.summary.id)
-                            }.getOrElse { com.tmplayer.data.JoinOutcome.Refused(com.tmplayer.data.Failures.humanise(it)) }
-                            joining = false
-                            toast(
-                                when (outcome) {
-                                    is com.tmplayer.data.JoinOutcome.Joined -> L.linkJoined(shown.summary.title)
-                                    com.tmplayer.data.JoinOutcome.RequestSent -> L.linkRequestSent
-                                    is com.tmplayer.data.JoinOutcome.Refused -> outcome.reason
-                                },
-                            )
-                            if (outcome is com.tmplayer.data.JoinOutcome.Joined) load.retry()
-                        }
-                    },
-                )
+                OpenInTelegramButton(onOpen = { shown.link?.let(OpenExternal::browse) })
             }
             // Could not be loaded: said, with Try again, so a failure does not pass for a wait.
             if (load.failed) {

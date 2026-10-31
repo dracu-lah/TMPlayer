@@ -36,8 +36,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.tmplayer.data.ChatInfo
 import com.tmplayer.data.ChatKind
-import com.tmplayer.data.ChatRepository
-import com.tmplayer.data.Td
 import com.tmplayer.i18n.L
 import com.tmplayer.ui.components.ChoiceSheet
 import com.tmplayer.ui.components.MediaPreview
@@ -48,7 +46,6 @@ import com.tmplayer.ui.components.showMessage
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.icons.TmIcons
 import com.tmplayer.ui.theme.Tone
-import kotlinx.coroutines.launch
 
 /**
  * A chat's info: its large picture, its name, what kind of chat it is and how many members or
@@ -83,7 +80,7 @@ fun ChatInfoSheet(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 ChatInfoBody(info, title, photoFileId, miniThumbnail, touch = true)
-                JoinChatButton(info, load)
+                JoinChatButton(info)
                 ChatInfoFailed(load)
             }
         }
@@ -94,7 +91,7 @@ fun ChatInfoSheet(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 ChatInfoBody(info, title, photoFileId, miniThumbnail, touch = false)
-                JoinChatButton(info, load)
+                JoinChatButton(info)
                 ChatInfoFailed(load)
             }
         }
@@ -102,46 +99,23 @@ fun ChatInfoSheet(
 }
 
 /**
- * Join, for a public group or channel seen through its @username and not yet joined (CP79). The
- * press is the confirm: the sheet above it is the preview. It turns into a spinner while Telegram
- * answers, and the sheet reloads once joined, so the button goes.
+ * Open in Telegram, for a public group or channel seen through its @username and not yet joined
+ * (CP79). This app never joins it (HX30): Telegram does, once the viewer presses this.
  */
 @Composable
-private fun JoinChatButton(info: ChatInfo?, load: ChatInfoLoad) {
+private fun JoinChatButton(info: ChatInfo?) {
     if (info == null || !info.canJoin) return
     val s = LocalStrings.current
     val context = LocalContext.current
-    val scope = androidx.compose.runtime.rememberCoroutineScope()
-    var joining by androidx.compose.runtime.remember(info.summary.id) { androidx.compose.runtime.mutableStateOf(false) }
-    val label = when {
-        info.joinByRequest -> s.linkRequestJoin
-        info.summary.kind == ChatKind.Channel -> s.linkJoinChannel
-        else -> s.linkJoinGroup
-    }
+    val link = info.link ?: return
     com.tmplayer.ui.components.TmButton(
         onClick = {
-            if (joining) return@TmButton
-            joining = true
-            scope.launch {
-                val outcome = runCatching {
-                    val session = Td.awaitConnectedSessionOrNull() ?: return@runCatching com.tmplayer.data.JoinOutcome.Refused(com.tmplayer.data.Failures.OFFLINE)
-                    com.tmplayer.data.TelegramLinkActions(session.client).joinPublic(info.summary.id)
-                }.getOrElse { com.tmplayer.data.JoinOutcome.Refused(com.tmplayer.data.Failures.humanise(it)) }
-                joining = false
-                showMessage(context, when (outcome) {
-                    is com.tmplayer.data.JoinOutcome.Joined -> L.linkJoined(info.summary.title)
-                    com.tmplayer.data.JoinOutcome.RequestSent -> L.linkRequestSent
-                    is com.tmplayer.data.JoinOutcome.Refused -> outcome.reason
-                })
-                if (outcome is com.tmplayer.data.JoinOutcome.Joined) load.retry()
-            }
+            context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(link)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         },
-        loading = joining,
-        busyLabel = s.linkJoining,
     ) {
-        Icon(TmIcons.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+        Icon(TmIcons.OpenExternal, contentDescription = null, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(8.dp))
-        Text(label)
+        Text(s.linkOpenInTelegram)
     }
 }
 

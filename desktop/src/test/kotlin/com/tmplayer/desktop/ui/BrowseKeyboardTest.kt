@@ -323,17 +323,14 @@ class BrowseKeyboardTest {
     }
 
     @Test
-    fun `p m a and r pin mute archive and mark read the focused chat, and shift F10 opens its menu`() = runComposeUiTest {
+    fun `h hides the focused chat, and shift F10 opens its menu with no telegram write left in it`() = runComposeUiTest {
         val chats = listOf(
             ChatSummary(id = 1, title = "Quiet", miniThumbnail = null, photoFileId = 0, kind = ChatKind.Channel, unreadCount = 0),
             ChatSummary(id = 2, title = "Busy", miniThumbnail = null, photoFileId = 0, kind = ChatKind.Channel, unreadCount = 4),
         )
         val done = mutableListOf<String>()
         val actions = ChatRowActions(
-            onTogglePinned = { done += "pin ${it.id}" },
-            onToggleMuted = { done += "mute ${it.id}" },
-            onToggleArchived = { done += "archive ${it.id}" },
-            onMarkRead = { done += "read ${it.id}" },
+            onHide = { done += "hide ${it.id}" },
         )
         setContent {
             TmMaterialTheme(dark = true) {
@@ -346,23 +343,19 @@ class BrowseKeyboardTest {
         }
         fun row(title: String) = hasText(title) and hasClickAction() and SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.Focused)
         onNode(row("Busy")).requestFocus()
-        onNode(isFocused()).performKeyInput { pressKey(Key.P) }
-        onNode(isFocused()).performKeyInput { pressKey(Key.M) }
-        onNode(isFocused()).performKeyInput { pressKey(Key.A) }
-        onNode(isFocused()).performKeyInput { pressKey(Key.R) }
-        assertEquals(listOf("pin 2", "mute 2", "archive 2", "read 2"), done)
+        onNode(isFocused()).performKeyInput { pressKey(Key.H) }
+        assertEquals(listOf("hide 2"), done)
 
-        // Nothing unread: R has nothing to clear, and the menu does not offer it.
         done.clear()
         onNode(row("Quiet")).requestFocus()
-        onNode(isFocused()).performKeyInput { pressKey(Key.R) }
-        assertEquals(emptyList<String>(), done)
         onNode(isFocused()).performKeyInput { withKeyDown(Key.ShiftLeft) { pressKey(Key.F10) } }
-        onNodeWithText("Pin to the top").assertExists()
-        onNodeWithText("Mute").assertExists()
-        onNodeWithText("Archive").assertExists()
+        onNodeWithText("Open").assertExists()
+        onNodeWithText("Hide from TMPlayer").assertExists()
+        onNodeWithText("Pin to the top").assertDoesNotExist()
+        onNodeWithText("Mute").assertDoesNotExist()
+        onNodeWithText("Archive").assertDoesNotExist()
         onNodeWithText("Mark as read").assertDoesNotExist()
-        onNodeWithText("Pin to the top").performClick()
-        assertEquals(listOf("pin 1"), done)
+        onNodeWithText("Hide from TMPlayer").performClick()
+        assertEquals(listOf("hide 1"), done)
     }
 }

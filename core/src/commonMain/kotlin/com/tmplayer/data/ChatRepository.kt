@@ -4,7 +4,6 @@ import com.tmplayer.i18n.L
 import dev.g000sha256.tdl.TdlClient
 import dev.g000sha256.tdl.TdlResult
 import dev.g000sha256.tdl.dto.Chat
-import dev.g000sha256.tdl.dto.ChatNotificationSettings
 import dev.g000sha256.tdl.dto.ChatListArchive
 import dev.g000sha256.tdl.dto.ChatListFolder
 import dev.g000sha256.tdl.dto.ChatListMain
@@ -469,83 +468,6 @@ class ChatRepository(private val td: TdlClient) {
     }
 
     /**
-     * Pins or unpins a chat, in whichever of the two lists it currently lives in.
-     *
-     * These next three write to the viewer's actual Telegram account and show up on their phone a
-     * second later. They are here because the tabs invite them: a screen with an Archived tab and
-     * pins at the top of every list is one somebody will try to pin something into. All three are
-     * reversible from the same menu, which is why these and not, say, leaving a chat.
-     */
-    suspend fun setPinned(chat: ChatSummary, pinned: Boolean): TdlResult<dev.g000sha256.tdl.dto.Ok> =
-        withContext(Dispatchers.IO) {
-            val list = if (chat.isArchived) ChatListArchive() else ChatListMain()
-            td.toggleChatIsPinned(list, chat.id, pinned)
-        }
-
-    /**
-     * Silences a chat, or gives it its voice back.
-     *
-     * Telegram has no mute flag: muting is a number of seconds to stay quiet for, and "forever" is
-     * that number at its largest.
-     *
-     * The chat's existing settings are read first and only the two mute fields are changed. The
-     * alternative, sending a freshly built settings object, would quietly reset the sound, the
-     * previews and the story settings of every chat the viewer ever muted from here, none of which
-     * they asked about and none of which this app has any business having an opinion on.
-     */
-    suspend fun setMuted(chatId: Long, muted: Boolean): TdlResult<dev.g000sha256.tdl.dto.Ok> =
-        withContext(Dispatchers.IO) {
-            val now = td.getChat(chatId).valueOrNull?.notificationSettings
-            val settings = ChatNotificationSettings(
-                // False either way: the chat is being given an answer of its own, and leaving it
-                // on the account-wide default is what "unmute" would mean if the default were mute.
-                useDefaultMuteFor = false,
-                muteFor = if (muted) MUTE_FOREVER else 0,
-                useDefaultSound = now?.useDefaultSound ?: true,
-                soundId = now?.soundId ?: 0,
-                useDefaultShowPreview = now?.useDefaultShowPreview ?: true,
-                showPreview = now?.showPreview ?: true,
-                useDefaultMuteStories = now?.useDefaultMuteStories ?: true,
-                muteStories = now?.muteStories ?: false,
-                useDefaultStorySound = now?.useDefaultStorySound ?: true,
-                storySoundId = now?.storySoundId ?: 0,
-                useDefaultShowStoryPoster = now?.useDefaultShowStoryPoster ?: true,
-                showStoryPoster = now?.showStoryPoster ?: true,
-                useDefaultDisablePinnedMessageNotifications =
-                    now?.useDefaultDisablePinnedMessageNotifications ?: true,
-                disablePinnedMessageNotifications = now?.disablePinnedMessageNotifications ?: false,
-                useDefaultDisableMentionNotifications =
-                    now?.useDefaultDisableMentionNotifications ?: true,
-                disableMentionNotifications = now?.disableMentionNotifications ?: false,
-            )
-            td.setChatNotificationSettings(chatId, settings)
-        }
-
-    suspend fun setArchived(chatId: Long, archived: Boolean): TdlResult<dev.g000sha256.tdl.dto.Ok> =
-        withContext(Dispatchers.IO) {
-            // Telegram has no "unarchive": a chat is moved from one list to the other, and the
-            // main list is where it goes back to.
-            td.addChatToList(chatId, if (archived) ChatListArchive() else ChatListMain())
-        }
-
-    /**
-     * Clears a chat's unread count without opening it.
-     *
-     * `forceRead` is what makes this work from a list. Without it TDLib treats the call as a claim
-     * that the messages were actually on screen, and a chat whose messages this app has never
-     * fetched keeps its count.
-     */
-    suspend fun markRead(chatId: Long): TdlResult<dev.g000sha256.tdl.dto.Ok> =
-        withContext(Dispatchers.IO) {
-            td.viewMessages(
-                chatId = chatId,
-                messageIds = longArrayOf(),
-                source = null,
-                forceRead = true,
-            )
-        }
-
-    /**
      * The chat a public @username names, as the chat list would show it, or null when no such
      * username exists, it is not a chat (a sticker set, say), or the kids lock keeps it out. It is
      * looked up on Telegram's servers, so it finds a channel or a person that is not in the list.
@@ -686,14 +608,6 @@ class ChatRepository(private val td: TdlClient) {
     }
 
     companion object {
-        /**
-         * Telegram's "forever", which is a count of seconds like any other mute.
-         *
-         * Its own clients send this exact number for the option they label Mute forever, so a chat
-         * silenced from here reads as muted rather than as muted for an oddly specific 68 years.
-         */
-        private const val MUTE_FOREVER = Int.MAX_VALUE
-
         const val PAGE_SIZE = 40
 
         /** Added chats searched side by side in [searchAddedChats]: two calls each, so six in flight. */

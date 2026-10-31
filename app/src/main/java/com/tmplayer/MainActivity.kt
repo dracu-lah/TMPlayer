@@ -1874,12 +1874,6 @@ private fun Root() {
                     downloadCount = activeDownloadCount,
                     updateVersion = offeredUpdate,
                     onUpdate = { showUpdate = true },
-                    // Each of these is said only when Telegram refuses it. Done, the row says so
-                    // itself: the pin, the bell, the badge clearing, or the row leaving the list.
-                    onTogglePinned = { chat -> chatsViewModel.setPinned(chat, !chat.isPinned) { toast(it) } },
-                    onToggleArchived = { chat -> chatsViewModel.setArchived(chat, !chat.isArchived) { toast(it) } },
-                    onToggleMuted = { chat -> chatsViewModel.setMuted(chat, !chat.isMuted) { toast(it) } },
-                    onMarkRead = { chat -> chatsViewModel.markRead(chat) { toast(it) } },
                     onToggleFavorite = { chat ->
                         scope.launch {
                             // Not said either way: the star fills or empties, and in the
