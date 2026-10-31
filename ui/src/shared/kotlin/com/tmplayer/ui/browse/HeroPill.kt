@@ -2,7 +2,6 @@ package com.tmplayer.ui.browse
 
 import com.tmplayer.ui.theme.collectIsFocusVisibleAsState
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -27,7 +26,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -37,17 +35,13 @@ import com.tmplayer.ui.components.isTouch
 import com.tmplayer.ui.icons.TmIcons
 import com.tmplayer.ui.theme.Motion
 import com.tmplayer.ui.theme.Tone
-import com.tmplayer.ui.theme.focusRing
-import com.tmplayer.ui.theme.rememberReducedMotion
 
 /**
  * Home's one bright action (the first-run card's button): a pill in [Tone.hero], near white on dark and near black on
  * light, [HERO_PILL_HEIGHT] tall and at most [HERO_PILL_MAX] wide. Under the remote or the
- * keyboard it grows by [Motion.FocusScale] (unless motion is off); the scale alone was the only
- * focus cue from 2026-10-22 until HX42 (reported on a Mi TV box with Reduce motion on, where the
- * scale never ran and the pill had no focus mark at all), so focus now also swaps the fill to
- * [Tone.focusFill] and adds [Modifier.focusRing], the same pair [DetailHero]'s own play pill
- * already uses: both survive reduced motion and a dark theme, where the scale-only cue did not.
+ * keyboard, focus swaps the fill to [Tone.focusFill]: no scale and no ring (user, 2026-11-01,
+ * the carousel's Play and Details pills read calmer as plain fill swaps than with HX42's scale
+ * and ring on top).
  */
 @Composable
 fun HeroPill(
@@ -61,12 +55,6 @@ fun HeroPill(
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusVisibleAsState()
     val hovered by interactions.collectIsHoveredAsState()
-    val still = rememberReducedMotion()
-    val scale by animateFloatAsState(
-        if (focused && !still) Motion.FocusScale else 1f,
-        Motion.standard(Motion.Fast),
-        label = "heroPillScale",
-    )
     val fill by animateColorAsState(
         when {
             focused -> Tone.focusFill
@@ -85,14 +73,9 @@ fun HeroPill(
         modifier
             .then(if (stretch) Modifier.widthIn(max = HERO_PILL_MAX).fillMaxWidth() else Modifier.widthIn(min = 160.dp, max = HERO_PILL_MAX))
             .heightIn(min = HERO_PILL_HEIGHT)
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-            }
             .then(if (focus != null) Modifier.focusRequester(focus) else Modifier)
             .clip(CircleShape)
             .background(fill)
-            .focusRing(focused, CircleShape)
             .clickable(interactionSource = interactions, indication = if (isTouch()) androidx.compose.foundation.LocalIndication.current else null, role = Role.Button, onClick = onClick)
             .padding(horizontal = 28.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.Center,

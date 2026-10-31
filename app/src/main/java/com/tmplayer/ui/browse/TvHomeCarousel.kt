@@ -10,7 +10,6 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -84,7 +83,6 @@ import com.tmplayer.ui.components.warmUpOnIntent
 import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Motion
 import com.tmplayer.ui.theme.Tone
-import com.tmplayer.ui.theme.focusRing
 import com.tmplayer.ui.theme.rememberReducedMotion
 
 /**
@@ -368,28 +366,22 @@ private fun TvFeaturedArt(pick: FeaturedPick, chatTitle: (Long) -> String, start
     }
 }
 
-/** Details beside Play: a quiet pill with the info icon, grown under the remote. */
+/**
+ * Details beside Play: the same primary fill as Play, not a quieter style of its own (user,
+ * 2026-11-01); no scale and no ring, a fill swap to [Tone.focusFill] alone carries focus, the
+ * same as [HeroPill] beside it.
+ */
 @Composable
 private fun TvDetailsPill(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
-    val still = rememberReducedMotion() || Motion.reduced
-    val scale by animateFloatAsState(if (focused && !still) Motion.FocusScale else 1f, Motion.standard(Motion.Fast), label = "detailsScale")
-    // HX42: the scale used to be the only focus mark (user, 2026-10-22), invisible with Reduce
-    // motion on or in a dark theme without a fill change; now the fill and ring carry it too, the
-    // same pair Play beside it uses.
-    val fill by animateColorAsState(if (focused) Tone.focusFill else Tone.surfaceHigh.copy(alpha = 0.8f), Motion.standard(Motion.Fast), label = "detailsFill")
-    val ink by animateColorAsState(if (focused) Tone.onFocusFill else Tone.text, Motion.standard(Motion.Fast), label = "detailsInk")
+    val fill by animateColorAsState(if (focused) Tone.focusFill else Tone.hero, Motion.standard(Motion.Fast), label = "detailsFill")
+    val ink by animateColorAsState(if (focused) Tone.onFocusFill else Tone.onHero, Motion.standard(Motion.Fast), label = "detailsInk")
     Row(
         modifier
             .heightIn(min = 48.dp)
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-            }
             .clip(CircleShape)
             .background(fill)
-            .focusRing(focused, CircleShape)
             .clickable(interactionSource = interactions, indication = null, role = Role.Button, onClick = onClick)
             .padding(start = 16.dp, end = 20.dp),
         verticalAlignment = Alignment.CenterVertically,
