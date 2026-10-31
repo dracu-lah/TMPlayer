@@ -20,7 +20,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * "Add chats" as the screens draw it (HX27). The screen holds no rule of its own: what is listed,
@@ -97,10 +99,22 @@ class AddChatsViewModel(
     fun start(chats: List<ChatSummary>) {
         if (headStart != null || chats.isEmpty() || counts == null) return
         headStart = viewModelScope.launch {
-            for (id in ChatPicking.headStart(chats)) count(id)
-            // Each count is its own job; the recommendation is made from whatever answered.
-            counting.values.toList().forEach { it.join() }
+            val jobs = ChatPicking.headStart(chats).mapNotNull { id ->
+                count(id)
+                counting[id]
+            }
+            // The band has to be there in the first seconds, so it is made from whatever has
+            // answered by then and not from the whole head start: one chat Telegram makes us wait
+            // twenty seconds for held back the other fifty nine, which ChatPickerScaleTest
+            // measured at 20.9 s before this.
+            withTimeoutOrNull(RECOMMEND_BY_MS) { jobs.joinAll() }
             recommend(chats)
+            // Nothing answered in time at all (offline, a cold database): rather than leave the
+            // band empty for the session, it waits for the head start and takes it then.
+            if (_state.value.recommended.isEmpty()) {
+                jobs.joinAll()
+                recommend(chats)
+            }
         }
     }
 
@@ -213,6 +227,13 @@ class AddChatsViewModel(
 
     companion object {
         private const val MAX_QUERY = 100
+
+        /**
+         * How long the Recommended band waits for the head start before it is taken from whatever
+         * answered: the three seconds AGENTS.md gives any first content, which is also what a
+         * viewer will sit through before deciding the screen is broken.
+         */
+        private const val RECOMMEND_BY_MS = 3_000L
 
         /** The live counter, or null while there is no signed in session to count over. */
         suspend fun calls(): ChatCountCalls? = Td.awaitConnectedSessionOrNull()?.let { ChatVideoCount.calls(it.client) }

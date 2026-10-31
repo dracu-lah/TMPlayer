@@ -15,10 +15,10 @@ import kotlinx.coroutines.withTimeoutOrNull
  * The counts behind the picker.
  *
  * What the budget is made of (AGENTS.md, scale): at most [AT_ONCE] chats are counted at a time,
- * each call gets [TIMEOUT_MS] and at most [TRIES] attempts, and a FLOOD_WAIT is waited out by the
- * call that got it, alone, so the other two go on. A wait Telegram asks for beyond
- * [MAX_FLOOD_WAIT_S] is not waited for at all: the row says it could not count and the viewer can
- * ask again, which is cheaper than holding a permit for a minute and a half.
+ * each call gets [TIMEOUT_MS], and a FLOOD_WAIT is waited out by the call that got it, alone, so
+ * the other two go on, at most [TRIES] times. A wait Telegram asks for beyond [MAX_FLOOD_WAIT_S]
+ * is not waited for at all: the row says it could not count and the viewer can ask again, which is
+ * cheaper than holding a permit for a minute and a half.
  *
  * Only an answer is remembered ([TTL_MS]), never a failure, so a chat that failed is asked again
  * while a chat that answered is not asked twice in a session. Nothing here pages or polls by
@@ -30,10 +30,18 @@ object ChatVideoCount {
     /** Counted at a time, across the whole app. */
     const val AT_ONCE = 3
 
-    /** Per call, after which the row says it could not count. */
-    const val TIMEOUT_MS = 15_000L
+    /**
+     * Per call, after which the row says it could not count.
+     *
+     * Generous for a round trip, and deliberately NOT long enough to cover a flood wait TDLib is
+     * sitting out inside the call, which can run to a minute: a timed out call is given up on
+     * rather than asked again, since TDLib may well still be holding the first one and a second
+     * would simply sit behind it. That cost a fifth call in flight against a budget of three
+     * ([AT_ONCE]) when this retried.
+     */
+    const val TIMEOUT_MS = 20_000L
 
-    /** Attempts per chat, the flood waits among them. */
+    /** Attempts per chat. Only a flood wait is worth another: a wait Telegram timed for us. */
     const val TRIES = 3
 
     /** A wait longer than this is not waited out: Telegram is asking for too much to hold a row. */
@@ -93,8 +101,11 @@ object ChatVideoCount {
                     if (wait == null || wait > MAX_FLOOD_WAIT_S) return null
                     delay(wait * 1000L + 250L)
                 }
-                // Timed out. Another try, in case the first call was simply lost.
-                null -> Unit
+                // Timed out, which is not the same as refused: the call may still be running
+                // inside TDLib, waiting out a flood of its own. Asking again would put a second
+                // call beside the first and hold a second permit, so the row says it could not
+                // count and offers the viewer another try instead.
+                null -> return null
             }
         }
         return null

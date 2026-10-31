@@ -169,6 +169,12 @@ export interface ListView {
     /** Video ids ("chatId:messageId") finished, and started. */
     watched: string[]
     started: string[]
+    /**
+     * The chats the viewer added (HX27), or null for every chat. The worker cannot read the page's
+     * storage, so the choice travels with the view, and every list the worker builds is held to it.
+     * Null is "nobody has answered, or they chose to keep all", which is the web app as it was.
+     */
+    added?: number[] | null
 }
 
 /** A search's cards, grouped as a chat's are, within the size limits, and how many the limits hid. */

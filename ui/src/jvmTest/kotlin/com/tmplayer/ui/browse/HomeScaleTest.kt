@@ -1,12 +1,20 @@
 package com.tmplayer.ui.browse
 
+import com.tmplayer.data.AddedChat
+import com.tmplayer.data.AddedChats
+import com.tmplayer.data.AddedChoice
+import com.tmplayer.data.AddedMode
+import com.tmplayer.data.ChatGate
 import com.tmplayer.data.ChatListLoad
 import com.tmplayer.data.ChatRepository
 import com.tmplayer.data.ChatSync
 import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.HomeCache
+import com.tmplayer.data.HomeLayout
 import com.tmplayer.data.HomeRow
 import com.tmplayer.data.HomeRows
+import com.tmplayer.data.KidsLock
+import com.tmplayer.data.ShelfEntry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
@@ -43,6 +51,9 @@ class HomeScaleTest {
     @After fun tearDown() {
         Dispatchers.resetMain()
         HomeCache.file = null
+        // Process wide: the added chats and the gate must not outlive the test that set them (HX27).
+        AddedChats.set(AddedChoice())
+        ChatGate.set(null)
     }
 
     private fun report(line: String) = println("HX8| $line")
@@ -224,5 +235,90 @@ class HomeScaleTest {
         assertTrue("stalled at $stalledAt ms", stalledAt in 3_000..6_000)
         assertTrue("first row at ${d.firstAt} ms", d.firstAt in 20_000..25_000)
         assertTrue(!model.stalled.value)
+    }
+
+    /** Every chat a row draws a video from, including the folded shows and the videos behind "See all". */
+    private fun chatsIn(rows: List<HomeRow>): Set<Long> {
+        val out = HashSet<Long>()
+        fun entries(list: List<ShelfEntry>) = list.forEach { entry ->
+            when (entry) {
+                is ShelfEntry.File -> out += entry.item.chatId
+                is ShelfEntry.Show -> entry.series.episodes.forEach { episode -> (episode.copies + episode.alsoIn).forEach { out += it.chatId } }
+            }
+        }
+        rows.forEach { row ->
+            when (row) {
+                is HomeRow.Chat -> {
+                    entries(row.entries)
+                    row.more.forEach { out += it.chatId }
+                }
+                is HomeRow.Recent -> entries(row.entries)
+                else -> Unit
+            }
+        }
+        return out
+    }
+
+    /**
+     * Forty chats added of three thousand (HX27): Home reads Recently added from the added chats one
+     * by one ([HomeLayout.overAdded]) rather than from one search across the account, drawn here
+     * as rememberHomeRows draws it. The source is gated as the repository gates it, so the search
+     * across chats still names videos from chats that were not added and Home must not show them.
+     */
+    @Test
+    fun `home with forty chats added of three thousand fills within its budget and shows nothing from the rest`() = runTest(dispatcher, timeout = 5.minutes) {
+        val account = SyntheticAccount(backgroundScope, { testScheduler.currentTime })
+        // Every tenth of the video chats from the first: some post while the test runs, some do not.
+        val chosenIds = (1L..400L step 10).toList()
+        AddedChats.set(AddedChoice(AddedMode.Picked, chosenIds.map { AddedChat(it, "Chat $it") }))
+        val added = AddedChats.ids.value ?: error("the choice was not set")
+        assertEquals(40, added.size)
+        val gated = object : HomeSource by account.homeSource {
+            override suspend fun recentMedia() = KidsLock.media(account.homeSource.recentMedia(), AddedChats.gate(ChatGate.allowed.value, AddedChats.ids.value))
+        }
+        val model = HomeViewModel(gated, work = dispatcher, disk = dispatcher, connected = MutableStateFlow(true), clock = { testScheduler.currentTime })
+        account.startPosting { account.followed }
+        val list = KidsLock.chats(account.mainList(), AddedChats.gate(ChatGate.allowed.value, added))
+        val layout = HomeLayout.overAdded(HomeLayout(), added)
+        val chosen = HomeLayout.chosenChats(list, layout.recentChats)
+        val picked = (chosen + HomeRows.favouriteChats(list, account.starred)).distinctBy { it.id }
+        var firstAt = -1L
+        var doneAt = -1L
+        val shownFrom = HashSet<Long>()
+        var builds = 0
+        backgroundScope.launch {
+            model.recentWanted = layout.needsRecent
+            model.requestRecent()
+            model.fill(picked)
+        }
+        backgroundScope.launch {
+            while (true) {
+                delay(HomeViewModel.AUTO_REFRESH_MS)
+                model.refreshInPlace(background = true)
+            }
+        }
+        backgroundScope.launch {
+            combine(model.loaded, model.recent, model.stalled) { loaded, recent, _ -> loaded to recent }.collect { (loaded, recent) ->
+                val rows = HomeRows.build(
+                    emptyList(), picked, loaded, recent, starred = account.starred, autoFill = true, recentMinStarred = 1,
+                    layout = layout, recentFrom = chosen.map { it.id },
+                )
+                builds++
+                shownFrom += chatsIn(rows)
+                if (firstAt < 0 && rows.any { (it is HomeRow.Chat && it.loaded && it.entries.isNotEmpty()) || (it is HomeRow.Recent && it.loaded && it.entries.isNotEmpty()) }) firstAt = at()
+                if (doneAt < 0 && recent != null && picked.take(HomeViewModel.EAGER_CHATS).all { it.id in loaded }) doneAt = at()
+            }
+        }
+        while (at() < 3_600_000L) advanceTimeBy(1_000)
+        runCurrent()
+        val searches = (account.calls["searchChatMessages"] ?: 0) + (account.calls["searchMessages"] ?: 0)
+        val strangers = shownFrom - added
+        report("home with ${added.size} chats added: first row ${firstAt / 1000.0} s, done ${doneAt / 1000.0} s; rows drew videos from ${shownFrom.size} chats (${strangers.size} not added), $builds builds; $searches searches in an hour, 429s ${account.tooManyRequests}, calls ${account.calls}")
+        assertTrue("first row at $firstAt ms", firstAt in 0..3_000)
+        assertTrue("rows showed nothing", shownFrom.size >= 2)
+        assertTrue("videos from chats that were not added: $strangers", strangers.isEmpty())
+        assertTrue("rows read chats that were not added: ${model.loaded.value.keys - added}", (model.loaded.value.keys - added).isEmpty())
+        assertTrue("$searches searches in an hour", searches < 1_500)
+        assertTrue("${account.tooManyRequests} 429s in an hour", account.tooManyRequests < 20)
     }
 }

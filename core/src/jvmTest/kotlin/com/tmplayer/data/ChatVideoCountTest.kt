@@ -84,7 +84,7 @@ class ChatVideoCountTest {
     }
 
     @Test
-    fun `a call that never answers is given up on and tried again, three times at most`() = runTest {
+    fun `a call that never answers is given up on, and not asked again behind itself`() = runTest {
         val calls = object : ChatCountCalls {
             val asked = AtomicInteger()
             override suspend fun videoCount(chatId: Long, localOnly: Boolean): CountAnswer {
@@ -94,8 +94,12 @@ class ChatVideoCountTest {
                 return CountAnswer.Counted(1)
             }
         }
+        val started = currentTime
         assertEquals(ChatCount.Unknown, ChatVideoCount.of(calls, 1, now = { currentTime }))
-        assertEquals(1 + ChatVideoCount.TRIES, calls.asked.get())
+        // The database, then one server call given up on: TDLib may still be holding it, and a
+        // second would sit behind the first while holding a second permit.
+        assertEquals(2, calls.asked.get())
+        assertEquals(ChatVideoCount.TIMEOUT_MS, currentTime - started)
     }
 
     @Test

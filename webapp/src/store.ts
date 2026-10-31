@@ -183,10 +183,18 @@ function applyTheme(theme: Theme) {
 }
 
 export async function loadSettings() {
-    const [saved, stars, later] = await Promise.all([read<Partial<Settings>>('settings'), starred(), laterList()])
+    const [saved, stars, later, added, mode] = await Promise.all([
+        read<Partial<Settings>>('settings'),
+        starred(),
+        laterList(),
+        addedChats(),
+        read<unknown>(ADDED_MODE),
+    ])
     // Keys of settings since removed (`rows`, the As rows layout) are dropped, so the next write leaves them behind.
     const known = Object.fromEntries(Object.entries(saved ?? {}).filter(([k]) => k in DEFAULTS)) as Partial<Settings>
     setSettings({ ...DEFAULTS, ...known })
+    setAddedIdsSignal(new Set(added.map((a) => a.chatId)))
+    setAddedModeSignal(readMode(mode))
     setStarredIds(new Set(stars))
     setLaterIds(new Set(later.map(laterId)))
     applyTheme(settings().theme)
@@ -457,6 +465,81 @@ export async function starred(): Promise<number[]> {
     return (await all<{ chatId: number; time: number }>('star:')).sort((a, b) => a.time - b.time).map((s) => s.chatId)
 }
 
+// The chats the viewer added (HX27, the apps' AddedChats)
+
+/**
+ * How much of the account this device draws from. 'unanswered' is every visitor from before the
+ * picker existed, who keeps seeing everything; 'all' is the same view chosen on purpose, which is
+ * what stops the one time prompt asking again; 'picked' honours the stored chats, and picking none
+ * is a real answer rather than a reason to show them all.
+ */
+export type AddedMode = 'unanswered' | 'all' | 'picked'
+
+export interface AddedChat {
+    chatId: number
+    /** The name it had when it was added, so a chat since left still has a row to remove. */
+    title: string
+    time: number
+}
+
+const ADDED_MODE = 'addedMode'
+
+const [addedMode, setAddedModeSignal] = createSignal<AddedMode>('unanswered')
+/** Live, for every list that browses and for the picker's own ticks. */
+const [addedIds, setAddedIdsSignal] = createSignal<ReadonlySet<number> | null>(null)
+export { addedIds, addedMode }
+
+/**
+ * The chats a list may draw from, or null for every chat: the same shape the apps' gate has, so
+ * one question is asked wherever videos are listed. Null while nobody has answered and under
+ * 'all'; a set, possibly empty, once chats have been picked.
+ */
+export function addedGate(): ReadonlySet<number> | null {
+    return addedMode() === 'picked' ? (addedIds() ?? new Set()) : null
+}
+
+/** Whether a chat's videos may be listed. */
+export function addedShows(chatId: number): boolean {
+    const gate = addedGate()
+    return gate === null || gate.has(chatId)
+}
+
+/** The whole choice, as the picker's Done writes it: the ids with the names they had. */
+export function setAddedChats(chats: readonly { chatId: number; title: string }[]) {
+    const now = Date.now()
+    const next = new Set<number>()
+    for (const c of chats) {
+        next.add(c.chatId)
+        write(`added:${c.chatId}`, { chatId: c.chatId, title: c.title, time: now } satisfies AddedChat)
+    }
+    for (const id of addedIds() ?? []) if (!next.has(id)) remove(`added:${id}`)
+    setAddedIdsSignal(next)
+    setAddedMode('picked')
+}
+
+/** "Keep all my chats": every chat, as an answer. */
+export function keepAllChats() {
+    for (const id of addedIds() ?? []) remove(`added:${id}`)
+    setAddedIdsSignal(new Set<number>())
+    setAddedMode('all')
+}
+
+function setAddedMode(mode: AddedMode) {
+    setAddedModeSignal(mode)
+    if (mode === 'unanswered') remove(ADDED_MODE)
+    else write(ADDED_MODE, mode)
+}
+
+/** The added chats with their names, newest first, for the picker and the list of gone chats. */
+export async function addedChats(): Promise<AddedChat[]> {
+    return (await all<AddedChat>('added:')).sort((a, b) => a.time - b.time)
+}
+
+/** Anything but the two known words, and nothing stored, reads as never asked. */
+function readMode(raw: unknown): AddedMode {
+    return raw === 'all' || raw === 'picked' ? raw : 'unanswered'
+}
+
 // Thumbnails
 
 /** The Cache API's store for poster answers and pictures (screens/posters.ts). */
@@ -491,5 +574,9 @@ export async function clearAll() {
     setSettings({ ...DEFAULTS })
     setStarredIds(new Set<number>())
     setLaterIds(new Set<string>())
+    // The added chats are the account's, not the device's, so signing out leaves none of them
+    // behind and the next account is asked for itself (as the apps' clearEverything does).
+    setAddedIdsSignal(new Set<number>())
+    setAddedModeSignal('unanswered')
     applyTheme(DEFAULTS.theme)
 }

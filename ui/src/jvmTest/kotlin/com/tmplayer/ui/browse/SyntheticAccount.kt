@@ -1,19 +1,23 @@
 package com.tmplayer.ui.browse
 
+import com.tmplayer.data.ChatCountCalls
 import com.tmplayer.data.ChatKind
 import com.tmplayer.data.ChatListCalls
 import com.tmplayer.data.ChatListRef
 import com.tmplayer.data.ChatLoad
 import com.tmplayer.data.ChatSummary
+import com.tmplayer.data.CountAnswer
 import com.tmplayer.data.FeedLane
 import com.tmplayer.data.MediaCursors
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.MediaPage
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -42,7 +46,9 @@ import kotlinx.coroutines.sync.withLock
  *   loading (`getChats`, `loadChats`) is always waited out;
  * - a folder's list is built from the main list and the archive, as TDLib builds it: asking for
  *   more of a folder than it holds reads both lists to their end;
- * - while the connection is down ([offline]) server calls wait for it to come back.
+ * - while the connection is down ([offline]) server calls wait for it to come back;
+ * - the picker's video counts ([chatCounts], HX27) answer from TDLib's database or from the server,
+ *   and some chats fail, flood or never answer, as [CountShape] lists.
  */
 class SyntheticAccount(
     parent: CoroutineScope,
@@ -54,6 +60,8 @@ class SyntheticAccount(
     val postEveryMs: Long = 90_000,
     /** True for a TDLib database that has the chat list already (a warm start). */
     val warm: Boolean = false,
+    /** False answers every count from the database, with none of [CountShape]'s awkward chats: the picker on a good day. */
+    val mixedCounts: Boolean = true,
 ) {
     /** Where TDLib's requests run: one that fails does not take the others, or the test, with it. */
     private val scope = CoroutineScope(parent.coroutineContext + SupervisorJob(parent.coroutineContext[Job]))
@@ -70,6 +78,10 @@ class SyntheticAccount(
         "search" to Flood(capacity = 30, refillMs = 1_000, waitS = 15),
         "global" to Flood(capacity = 6, refillMs = 10_000, waitS = 30),
         "dialogs" to Flood(capacity = 10, refillMs = 3_000, waitS = 30),
+        // A count is a cheap read, so Telegram lets twenty through at once and then two a second.
+        // The wait is ten seconds, which TDLib sits out inside one call; a client that keeps asking
+        // past that is handed a 429, which the counter answers with a pause of its own.
+        "count" to Flood(capacity = 20, refillMs = 500, waitS = 10),
     )
 
     val calls = LinkedHashMap<String, Int>()
@@ -374,6 +386,96 @@ class SyntheticAccount(
         override suspend fun myId(): Long = savedId
 
         override fun folders(): List<Int> = folders.keys.toList()
+    }
+
+    // ---- the picker's video counts, as TDLib answers them -------------------------------------
+
+    /**
+     * How [chatCounts] answers for a chat (HX27), by id so a test can say which it expects. A chat
+     * that is none of the awkward ones is [Local]. When two apply, the first in this list wins.
+     *
+     * - [Hung]: the last chat of the main list. The server call is sent and never answered, so only
+     *   the counter's own timeout ends it.
+     * - [Flood]: ids 5, 120 and 250. TDLib has no figure, and the server's first answer is
+     *   `FLOOD_WAIT_20`, which the counter must wait out; the second answer is the figure.
+     * - [Fails]: every multiple of 13 that is not a multiple of 7. TDLib has no figure and the
+     *   server answers "Internal Server Error", which is not a flood wait and is not retried.
+     * - [ServerOnly]: every multiple of 7 past chat 3. TDLib answers -1 (the chat was never opened
+     *   here) and the server gives the real figure.
+     * - [Local]: every other chat. TDLib answers the figure at once.
+     *
+     * Whatever answers, the figure is [videoCount], the same number from either side: that is how
+     * TDLib behaves for a chat whose count it has.
+     */
+    enum class CountShape { Local, ServerOnly, Fails, Flood, Hung }
+
+    val floodCountIds: Set<Long> = setOf(5L, 120L, 250L)
+
+    /** The chat whose count is never answered. */
+    val hungCountId: Long get() = mainChats.toLong()
+
+    fun countShape(chatId: Long): CountShape = when {
+        !mixedCounts -> CountShape.Local
+        chatId == hungCountId -> CountShape.Hung
+        chatId in floodCountIds -> CountShape.Flood
+        chatId % 13 == 0L && chatId % 7 != 0L -> CountShape.Fails
+        chatId > 3 && chatId % 7 == 0L -> CountShape.ServerOnly
+        else -> CountShape.Local
+    }
+
+    /** Count calls the counter has made, in total, whatever answered them. */
+    var countRequests = 0
+
+    /** Count calls being waited on now, and the most there ever were: [com.tmplayer.data.ChatVideoCount.AT_ONCE] as its caller sees it. */
+    var countsInFlight = 0
+    var maxCountsInFlight = 0
+
+    /** When each chat that flooded was handed its FLOOD_WAIT, and when every count was answered. */
+    val floodedAt = LinkedHashMap<Long, Long>()
+    val countAnsweredAt = ArrayList<Long>()
+
+    val chatCounts = object : ChatCountCalls {
+        override suspend fun videoCount(chatId: Long, localOnly: Boolean): CountAnswer {
+            countRequests++
+            countsInFlight++
+            maxCountsInFlight = maxOf(maxCountsInFlight, countsInFlight)
+            try {
+                val answer = if (localOnly) localCount(chatId) else serverCount(chatId)
+                countAnsweredAt += now()
+                return answer
+            } finally {
+                countsInFlight--
+            }
+        }
+
+        /** TDLib's own database: a few milliseconds, no flood bucket, -1 for a chat it has not counted. */
+        private suspend fun localCount(chatId: Long): CountAnswer {
+            count("getChatMessageCountLocal")
+            delay(2)
+            return CountAnswer.Counted(if (countShape(chatId) == CountShape.Local) this@SyntheticAccount.videoCount(chatId) else -1)
+        }
+
+        private suspend fun serverCount(chatId: Long): CountAnswer {
+            if (countShape(chatId) == CountShape.Hung) {
+                count("getChatMessageCount")
+                awaitCancellation()
+            }
+            return try {
+                server("getChatMessageCount", "count", latencyMs = 300) {
+                    when (countShape(chatId)) {
+                        CountShape.Flood -> if (floodedAt.putIfAbsent(chatId, now()) == null) CountAnswer.Failed("FLOOD_WAIT_20") else CountAnswer.Counted(this@SyntheticAccount.videoCount(chatId))
+                        CountShape.Fails -> CountAnswer.Failed("Internal Server Error")
+                        else -> CountAnswer.Counted(this@SyntheticAccount.videoCount(chatId))
+                    }
+                }
+            } catch (cancelled: CancellationException) {
+                // A CancellationException is an IllegalStateException: it must not become an answer.
+                throw cancelled
+            } catch (tooMany: IllegalStateException) {
+                // TDLib's own 429, in the words Telegram's failure carries.
+                CountAnswer.Failed(tooMany.message)
+            }
+        }
     }
 
     companion object {
