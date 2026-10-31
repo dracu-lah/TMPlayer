@@ -472,7 +472,7 @@ private fun FeaturedPage(
                 .align(Alignment.BottomStart)
                 // Only the page up takes the keyboard: Tab never lands on a button off screen.
                 .focusProperties { canFocus = current }
-                .padding(start = side, end = side, bottom = PAGE_FOOT)
+                .padding(start = side + HERO_START_EXTRA, end = side, bottom = PAGE_FOOT)
                 .widthIn(max = WORDS_WIDTH),
             verticalArrangement = Arrangement.spacedBy(WORDS_GAP),
         ) {
@@ -553,7 +553,7 @@ private fun FeaturedSkeleton(side: Dp) {
     Box(Modifier.fillMaxSize()) {
         SkeletonBox(shimmer, Modifier.fillMaxSize(), RectangleShape)
         Column(
-            Modifier.align(Alignment.BottomStart).padding(start = side, bottom = 12.dp).widthIn(max = WORDS_WIDTH).fillMaxWidth(),
+            Modifier.align(Alignment.BottomStart).padding(start = side + HERO_START_EXTRA, bottom = 12.dp).widthIn(max = WORDS_WIDTH).fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             SkeletonBox(shimmer, Modifier.fillMaxWidth(0.7f).height(40.dp), RoundedCornerShape(8.dp))
@@ -626,7 +626,7 @@ internal fun rememberFeatured(recent: HomeRow.Recent?, resume: HomeRow.Continue?
 
 /** How tall the carousel is in a page [width] by [height]: wide, never most of the window. */
 internal fun featuredHeight(width: Dp, height: Dp): Dp =
-    (width * 0.42f).coerceAtMost(height * 0.62f).coerceAtLeast(MIN_HEIGHT)
+    (width * 0.34f).coerceAtMost(height * 0.5f).coerceAtLeast(MIN_HEIGHT)
 
 private const val ADVANCE_MS = 6_000
 
@@ -641,7 +641,7 @@ private const val SWIPE_THRESHOLD = 0.5f
 
 /** A gap this long in the scroll events ends a gesture, its momentum included. */
 private const val SWIPE_QUIET_MS = 280L
-private val MIN_HEIGHT = 340.dp
+private val MIN_HEIGHT = 300.dp
 /**
  * How far down the picture fades into the page from the top, where a window's buttons stand: a
  * band across the whole width rather than the glow in the corner it replaced, which showed as a
@@ -655,6 +655,13 @@ private val INFO_WIDTH = 560.dp
 /** The arrows that turn the pages, beside the dots. */
 private val ARROW_SIZE = 44.dp
 private val WORDS_WIDTH = 640.dp
+
+/**
+ * A little more room than the dots and arrows keep ([side]), only for the hero's own words and
+ * buttons: now that the picture reads full width behind them, the same inset felt crowded against
+ * it (user, 2026-11-01).
+ */
+private val HERO_START_EXTRA: Dp = 10.dp
 
 /** Below Play, the foot of a page's words and buttons. */
 private val PAGE_FOOT = 12.dp

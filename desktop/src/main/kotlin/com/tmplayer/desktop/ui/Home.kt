@@ -359,15 +359,17 @@ internal fun HomeRowsView(
                             // (user, 2026-10-22), with the browser's Beta word beside it.
                             // Read here: the Box below hides the frame's own measures.
                             // In the big-screen mode the picture also stands behind the bar: as much
-                            // taller as the bar is, fading in over the bar and a bit more (the
-                            // Android TV carousel's 1.7 times the bar's height).
+                            // taller as the bar is, fading in over the bar and a little more (the
+                            // Android TV carousel's own reach, eased back from 1.7 times the bar's
+                            // height: user, 2026-11-01, a deeper reach read as a heavy cap over the
+                            // top of the picture rather than just enough for the bar to read).
                             val underBar = if (BigScreen.on) TV_BAR_HEIGHT else 0.dp
                             val heroHeight = featuredHeight(maxWidth, maxHeight) + underBar
                             Box {
                                 FeaturedCarousel(
                                     picks = featured,
                                     height = heroHeight,
-                                    topFade = if (underBar > 0.dp) underBar * 1.7f else null,
+                                    topFade = if (underBar > 0.dp) underBar * 1.2f else null,
                                     side = side,
                                     watch = watch,
                                     chatTitle = { titles[it].orEmpty() },

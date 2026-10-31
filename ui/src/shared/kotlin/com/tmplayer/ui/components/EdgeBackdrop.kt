@@ -33,13 +33,17 @@ import com.tmplayer.ui.theme.Motion
 /**
  * A hero's picture set into the page rather than laid over it: the Home carousel on every device.
  *
- * In a wide frame (a television, a desktop window, a phone on its side) the picture stands at the
- * end edge, [share] of the width at its own 16:9 shape, and fades into the page towards the start,
- * the foot and, by [topFade], the top; [cornerShade] grows a glow of the page's colour out of the
- * top end corner for a clock or a window's buttons standing there. The start, where the name, the facts and the buttons sit, is
- * the page itself, so the words need no shade and read in either theme. In a narrow frame (a phone
- * held upright) there is no room beside it, so the picture spans the width and fills the height,
- * and only the foot and the top fade.
+ * In a wide frame (a television, a desktop window, a phone on its side) the picture is full-bleed,
+ * [share] of the width (close to the whole of it) at its own 16:9 shape, cropped from its foot
+ * where that runs taller than the frame, and fades into the page towards the start, the foot and,
+ * by [topFade], the top; [cornerShade] grows a glow of the page's colour out of the top end corner
+ * for a clock or a window's buttons standing there. The start fade runs long and shallow (see
+ * [START_FADE], [START_FADE_CAP]): never quite the page's own colour outright, so a hint of the
+ * picture always shows through even under the words, which reads as the picture settling into the
+ * page on its own rather than a panel laid over it, the way a streaming app's own hero reads,
+ * rather than a narrower picture with a visible edge where it ends (user, 2026-11-01). In a narrow
+ * frame (a phone held upright) there is no room beside it, so the picture spans the width and fills
+ * the height, and only the foot and the top fade.
  *
  * Nothing is drawn behind it: a wash of the thumbnail's colours showed a channel's logo as a giant
  * ghost behind the words, since many a thumbnail is the channel's logo.
@@ -125,11 +129,11 @@ fun EdgeBackdrop(
                 val fades = if (Motion.television) Modifier.drawWithCache {
                     val across = if (wide) {
                         val stops = fadeOut(START_FADE)
-                        Brush.horizontalGradient(*(if (rtl) stops.reversedStops(ground) else stops.inStops(ground)))
+                        Brush.horizontalGradient(*(if (rtl) stops.reversedStops(ground, START_FADE_CAP) else stops.inStops(ground, START_FADE_CAP)))
                     } else null
                     val foot = Brush.verticalGradient(*fadeOut(FOOT_FADE).reversedStops(ground))
                     val reach = if (small) FOOT_FADE else (topFadeOf() / size.height).coerceIn(0f, 1f)
-                    val top = if (reach > 0f) Brush.verticalGradient(*fadeOut(reach).inStops(ground)) else null
+                    val top = if (reach > 0f) Brush.verticalGradient(*fadeOut(reach).inStops(ground, TOP_FADE_CAP)) else null
                     onDrawWithContent {
                         drawContent()
                         if (across != null) drawRect(across)
@@ -141,11 +145,11 @@ fun EdgeBackdrop(
                     .drawWithCache {
                         val across = if (wide) {
                             val stops = fadeOut(START_FADE)
-                            Brush.horizontalGradient(*(if (rtl) stops.reversedStops() else stops.inStops()))
+                            Brush.horizontalGradient(*(if (rtl) stops.reversedStops(START_FADE_CAP) else stops.inStops(START_FADE_CAP)))
                         } else null
                         val foot = Brush.verticalGradient(*fadeOut(FOOT_FADE).reversedStops())
                         val reach = if (small) FOOT_FADE else (topFadeOf() / size.height).coerceIn(0f, 1f)
-                        val top = if (reach > 0f) Brush.verticalGradient(*fadeOut(reach).inStops()) else null
+                        val top = if (reach > 0f) Brush.verticalGradient(*fadeOut(reach).inStops(TOP_FADE_CAP)) else null
                         onDrawWithContent {
                             drawContent()
                             if (across != null) drawRect(across, blendMode = BlendMode.DstIn)
@@ -237,28 +241,83 @@ private fun fadeOut(reach: Float): List<Pair<Float, Float>> =
 private fun List<Pair<Float, Float>>.inStops(): Array<Pair<Float, Color>> =
     map { (at, alpha) -> at to Color.Black.copy(alpha = alpha) }.toTypedArray()
 
+/**
+ * As [inStops], a mask that never drops the picture fully: at its darkest point only [cap] of it
+ * is erased, so a hint of the picture always shows even under the words, which is what reads as
+ * the picture settling into the page rather than a layer painted over it (user, 2026-11-01). The
+ * same [cap] as the ground-colour [inStops] overload, so the television and the offscreen-layer
+ * paths read alike.
+ */
+private fun List<Pair<Float, Float>>.inStops(cap: Float): Array<Pair<Float, Color>> {
+    val floor = 1f - cap
+    return map { (at, alpha) -> at to Color.Black.copy(alpha = floor + alpha * cap) }.toTypedArray()
+}
+
 /** The stops mirrored, clear at the end of the gradient. */
 private fun List<Pair<Float, Float>>.reversedStops(): Array<Pair<Float, Color>> =
     map { (at, alpha) -> (1f - at) to Color.Black.copy(alpha = alpha) }.reversed().toTypedArray()
+
+/** As [reversedStops], with the same [cap] as [inStops]. */
+private fun List<Pair<Float, Float>>.reversedStops(cap: Float): Array<Pair<Float, Color>> {
+    val floor = 1f - cap
+    return map { (at, alpha) -> (1f - at) to Color.Black.copy(alpha = floor + alpha * cap) }.reversed().toTypedArray()
+}
 
 /** As [inStops], drawn over the picture in the [ground] colour: solid where the mask is clear. */
 private fun List<Pair<Float, Float>>.inStops(ground: Color): Array<Pair<Float, Color>> =
     map { (at, alpha) -> at to ground.copy(alpha = 1f - alpha) }.toTypedArray()
 
+/**
+ * As [inStops], its deepest point [cap] of the [ground] colour rather than solid: the picture
+ * keeps showing faintly through even under the words, so the fade reads as settling into the page
+ * rather than a panel laid over it (user, 2026-11-01).
+ */
+private fun List<Pair<Float, Float>>.inStops(ground: Color, cap: Float): Array<Pair<Float, Color>> =
+    map { (at, alpha) -> at to ground.copy(alpha = (1f - alpha) * cap) }.toTypedArray()
+
 /** As [reversedStops], in the [ground] colour. */
 private fun List<Pair<Float, Float>>.reversedStops(ground: Color): Array<Pair<Float, Color>> =
     map { (at, alpha) -> (1f - at) to ground.copy(alpha = 1f - alpha) }.reversed().toTypedArray()
 
+/** As [reversedStops], with the same [cap] as [inStops]. */
+private fun List<Pair<Float, Float>>.reversedStops(ground: Color, cap: Float): Array<Pair<Float, Color>> =
+    map { (at, alpha) -> (1f - at) to ground.copy(alpha = (1f - alpha) * cap) }.reversed().toTypedArray()
+
 private val EASE = listOf(0f to 0f, 0.2f to 0.06f, 0.4f to 0.24f, 0.6f to 0.52f, 0.8f to 0.82f, 1f to 1f)
 
-/** How much of a wide frame's width the picture takes, against the end edge. */
-const val EDGE_SHARE = 0.68f
+/**
+ * How much of a wide frame's width the picture takes, against the end edge: the whole of it,
+ * outright. A share short of 1 (0.98 was tried) still left a sliver at the start edge with
+ * nothing drawn at all, flat and textureless against the faded picture right beside it, which
+ * read as the picture being cut exactly as the original 68 per cent share did, only narrower
+ * (user, 2026-11-01, caught by zooming into the rendered edge itself rather than trusting the
+ * numbers). At 1f the picture's own width is the frame's width exactly, so there is no gap to
+ * reintroduce by nudging this back down for a rounding worry that never showed up in practice.
+ */
+const val EDGE_SHARE = 1f
 
 /** A frame this many times wider than tall puts the picture at its end; a narrower one spans it. */
 private const val WIDE_RATIO = 1.4f
 
-/** The share of the picture's width that fades into the page at its start. */
-private const val START_FADE = 0.46f
+/**
+ * The share of the picture's width [START_FADE] fades into the page at its start, now that the
+ * picture is full-bleed. A short, deep fade read as a dark panel dropped on the picture; a long,
+ * shallow one (this, with [START_FADE_CAP] keeping its own deepest point short of solid) reads as
+ * the picture itself settling into the page, the words still readable the whole way (user,
+ * 2026-11-01). The foot fade stacks with this one under the words for the rest of the contrast.
+ */
+private const val START_FADE = 0.72f
+
+/** The deepest point of [START_FADE], short of the page's own colour outright: see [START_FADE]. */
+private const val START_FADE_CAP = 0.82f
+
+/**
+ * The deepest point of the top fade a caller reaches for with [topFade] or [topFadePx] (a
+ * television's clock and account, a window's own controls): short of the page's own colour
+ * outright, the same reasoning as [START_FADE_CAP], so a deep top fade does not read as a dark
+ * cap dropped over the picture's own top (user, 2026-11-01).
+ */
+private const val TOP_FADE_CAP = 0.85f
 
 /** The share of the picture's height that fades into the page at its foot. */
 private const val FOOT_FADE = 0.42f

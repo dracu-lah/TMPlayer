@@ -289,7 +289,9 @@ private fun CinemaLayout(page: DetailPage, holds: Holds, height: Dp) {
     val tv = !isTouch()
     val scroll = rememberScrollState()
     val episodes = remember { BringIntoViewRequester() }
-    val side = if (tv) 48.dp else 24.dp
+    // A bit more than before (user, 2026-11-01): the backdrop now runs full width behind the
+    // title and the buttons, where the old inset read as crowded against it.
+    val side = if (tv) 56.dp else 28.dp
     // How far the page has to scroll before the picture is as dim as it gets.
     val dimOver = with(LocalDensity.current) { (height * 0.6f).toPx() }
     Box(Modifier.fillMaxSize()) {
@@ -299,7 +301,10 @@ private fun CinemaLayout(page: DetailPage, holds: Holds, height: Dp) {
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .fillMaxWidth(BACKDROP_SHARE)
-                .fillMaxHeight(0.85f)
+                // Shorter than the whole first screen (user, 2026-11-01: brought in line with the
+                // Home carousel it opens from, which this page now reads as a continuation of,
+                // rather than towering over it).
+                .fillMaxHeight(0.62f)
                 .graphicsLayer { alpha = 1f - 0.75f * (scroll.value / dimOver).coerceIn(0f, 1f) },
         )
         Column(
@@ -315,7 +320,7 @@ private fun CinemaLayout(page: DetailPage, holds: Holds, height: Dp) {
             // its buttons, coming back up from below the fold, shows all of it again: the
             // picture and the title, not only the button at its foot.
             Column(
-                Modifier.fillMaxWidth().heightIn(min = height * 0.9f).revealFromTop(),
+                Modifier.fillMaxWidth().heightIn(min = height * 0.68f).revealFromTop(),
                 verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.Bottom),
             ) {
                 Spacer(Modifier.height(if (tv) 24.dp else 12.dp))

@@ -209,7 +209,7 @@ internal fun TvFeaturedCarousel(
         Row(
             Modifier
                 .align(Alignment.BottomStart)
-                .padding(start = start, bottom = PAGE_PAD)
+                .padding(start = start + HERO_START_EXTRA, bottom = PAGE_PAD)
                 .onFocusChanged { focusedIn.value = it.hasFocus },
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -341,7 +341,7 @@ private fun TvFeaturedArt(pick: FeaturedPick, chatTitle: (Long) -> String, start
             Modifier
                 .align(Alignment.BottomStart)
                 .fillMaxWidth(TEXT_SHARE)
-                .padding(start = start, bottom = PAGE_PAD + HERO_PILL_HEIGHT + TITLE_GAP)
+                .padding(start = start + HERO_START_EXTRA, bottom = PAGE_PAD + HERO_PILL_HEIGHT + TITLE_GAP)
                 // The room above, as padding would keep it, worked out as the column is measured.
                 .layout { measurable, constraints ->
                     val top = (headerFade().toDp() + TITLE_TOP_GAP).roundToPx().coerceAtLeast(0)
@@ -405,11 +405,15 @@ private fun TvFeaturedSkeleton(start: Dp, modifier: Modifier = Modifier) {
                 .fillMaxHeight()
                 .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)
                 .drawWithCache {
-                    // Clear at the start, where the words go, solid towards the end edge.
+                    // Never quite erased at the start, where the words go, visible towards the end
+                    // edge: the same reach and floor as the real picture's own start fade
+                    // ([com.tmplayer.ui.components.EDGE_SHARE] and its start fade, both private to
+                    // EdgeBackdrop.kt), so the stand-in does not flash a different fade than the
+                    // picture that replaces it.
                     val across = if (layoutDirection == LayoutDirection.Rtl) {
-                        Brush.horizontalGradient(0f to Color.Black, 0.55f to Color.Black, 1f to Color.Transparent)
+                        Brush.horizontalGradient(0f to Color.Black, 0.28f to Color.Black, 1f to Color.Black.copy(alpha = 0.18f))
                     } else {
-                        Brush.horizontalGradient(0f to Color.Transparent, 0.45f to Color.Black, 1f to Color.Black)
+                        Brush.horizontalGradient(0f to Color.Black.copy(alpha = 0.18f), 0.72f to Color.Black, 1f to Color.Black)
                     }
                     val down = Brush.verticalGradient(0f to Color.Black, 0.6f to Color.Black, 1f to Color.Transparent)
                     onDrawWithContent {
@@ -421,7 +425,7 @@ private fun TvFeaturedSkeleton(start: Dp, modifier: Modifier = Modifier) {
             RectangleShape,
         )
         Column(
-            Modifier.align(Alignment.BottomStart).padding(start = start, bottom = PAGE_PAD),
+            Modifier.align(Alignment.BottomStart).padding(start = start + HERO_START_EXTRA, bottom = PAGE_PAD),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             SkeletonBox(shimmer, Modifier.width(280.dp).height(28.dp), RoundedCornerShape(8.dp))
@@ -432,7 +436,7 @@ private fun TvFeaturedSkeleton(start: Dp, modifier: Modifier = Modifier) {
 }
 
 /** How tall the carousel is on a television under its heading: room below for the first row's titles. */
-internal val TV_FEATURED_HEIGHT = 284.dp
+internal val TV_FEATURED_HEIGHT = 232.dp
 
 /** How long a page is up before the carousel moves on. */
 private const val ADVANCE_MS = 7_000
@@ -473,14 +477,28 @@ internal class HomeIdle {
 /** The inset of the words and the buttons from the picture's edge. */
 private val PAGE_PAD = 24.dp
 
+/**
+ * A little more room than the rows below keep ([start]), only for the hero's own words and
+ * buttons: now that the picture reads full width behind them, the same inset as the rows felt
+ * crowded against it (user, 2026-11-01). The rows under the carousel keep their own [start] so
+ * Home's grid still lines up.
+ */
+private val HERO_START_EXTRA = 10.dp
+
 /** The share of the width the name and facts may take, over the start's fade. */
 private const val TEXT_SHARE = 0.6f
 
 /** Between the name and Play: the hero is the name and its two buttons. */
 private val TITLE_GAP = 14.dp
 
-/** How far down the picture fades in from the top under the TV top bar, as a share of the bar's height. */
-private const val BAR_FADE_REACH = 1.7f
+/**
+ * How far down the picture fades in from the top under the TV top bar, as a share of the bar's
+ * height: just past the bar itself, not deep into the picture (user, 2026-11-01: a deeper reach,
+ * together with the fade running to the page's own colour outright, read as a heavy cap over the
+ * top of the picture; [com.tmplayer.ui.components.EdgeBackdrop] now also keeps this fade short of
+ * solid at its own deepest point).
+ */
+private const val BAR_FADE_REACH = 1.2f
 
 /** The most a title logo takes over the television's carousel. */
 private val TV_LOGO_MAX_WIDTH = 340.dp

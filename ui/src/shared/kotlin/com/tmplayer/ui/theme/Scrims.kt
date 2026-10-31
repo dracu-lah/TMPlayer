@@ -112,15 +112,18 @@ object Scrims {
     }
 
     /**
-     * The same curve across a wide backdrop, solid at the start edge and clear by [reach] of the
-     * width, for text that sits on the start half. It starts from the right in a right to left
-     * layout, where the text does.
+     * The same curve across a wide backdrop, never quite the page's own colour outright at the
+     * start edge ([cap] short of it, see [START_CAP]) and clear by [reach] of the width, for text
+     * that sits on the start half. A hint of the picture always shows through even under the
+     * words, so a title page's hero reads as the picture settling into the page rather than a
+     * panel laid over it (user, 2026-11-01). It starts from the right in a right to left layout,
+     * where the text does.
      */
     @Composable
     @ReadOnlyComposable
-    fun startLong(reach: Float = START_REACH): Brush {
+    fun startLong(reach: Float = START_REACH, cap: Float = START_CAP): Brush {
         val edge = if (LocalLayoutDirection.current == LayoutDirection.Rtl) Edge.Right else Edge.Left
-        return LongBrush(Tone.scrim, -reach, edge)
+        return LongBrush(Tone.scrim, -reach, edge, cap)
     }
 
     /**
@@ -132,19 +135,30 @@ object Scrims {
     )
 
 
-    /** How far across a backdrop [startLong] reaches by default: past the text column. */
-    const val START_REACH = 0.6f
+    /**
+     * How far across a backdrop [startLong] reaches by default: past the text column, and now
+     * that the backdrop it is drawn on is full-bleed ([com.tmplayer.ui.browse.BACKDROP_SHARE]),
+     * the same reach as the Home carousel's own start fade
+     * ([com.tmplayer.ui.components.EDGE_SHARE]'s start fade), so a title page's hero and the
+     * carousel it was opened from read as the same picture treatment (user, 2026-11-01).
+     */
+    const val START_REACH = 0.72f
+
+    /** The deepest point of [startLong]'s default [cap], short of the page's own colour outright. */
+    const val START_CAP = 0.82f
 
     private enum class Edge { Bottom, Left, Right }
 
     /**
      * [LongCurve] in [color], solid at [edge] and clear [reach] away from it: a length in pixels
-     * when positive, a share of the width when negative (the start fade's form).
+     * when positive, a share of the width when negative (the start fade's form). Its own deepest
+     * point is [cap] of [color]'s alpha rather than all of it, so what sits behind it never fully
+     * disappears; 1 (the default) is solid at the edge, as [bottomLong] stays.
      *
      * A brush that is handed its size, rather than a plain gradient with fixed end points, so the
      * same brush serves a box of any height and stays clear above the fade.
      */
-    private class LongBrush(val color: Color, val reach: Float, val edge: Edge) : ShaderBrush() {
+    private class LongBrush(val color: Color, val reach: Float, val edge: Edge, val cap: Float = 1f) : ShaderBrush() {
         override fun createShader(size: Size): Shader {
             val length = if (reach < 0f) size.width * -reach else reach
             val (from, to) = when (edge) {
@@ -155,15 +169,15 @@ object Scrims {
             return LinearGradientShader(
                 from = from,
                 to = to,
-                colors = LongCurve.map { color.copy(alpha = it.second) },
+                colors = LongCurve.map { color.copy(alpha = it.second * cap) },
                 colorStops = LongCurve.map { it.first },
             )
         }
 
         override fun equals(other: Any?): Boolean =
-            other is LongBrush && other.color == color && other.reach == reach && other.edge == edge
+            other is LongBrush && other.color == color && other.reach == reach && other.edge == edge && other.cap == cap
 
-        override fun hashCode(): Int = (color.hashCode() * 31 + reach.hashCode()) * 31 + edge.hashCode()
+        override fun hashCode(): Int = ((color.hashCode() * 31 + reach.hashCode()) * 31 + edge.hashCode()) * 31 + cap.hashCode()
     }
 }
 

@@ -528,8 +528,13 @@ internal fun tallBackdropHeight(width: Dp, height: Dp, online: Boolean): Dp {
     return wanted.coerceAtMost(height * 0.66f)
 }
 
-/** How much of a wide page's width the backdrop takes, from the end edge. */
-internal const val BACKDROP_SHARE = 0.72f
+/**
+ * How much of a wide page's width the backdrop takes, from the end edge: the whole of it, as
+ * [com.tmplayer.ui.components.EDGE_SHARE] is for the Home carousel (a share short of 1 still left
+ * a flat, undrawn sliver at the start edge that read as a cut picture, user, 2026-11-01), so the
+ * two read as the same hero rather than two different widths of picture.
+ */
+internal const val BACKDROP_SHARE = 1f
 
 /** How fast a tall page's backdrop moves against the page's own scroll. */
 internal const val PARALLAX = 0.5f

@@ -213,7 +213,7 @@ internal fun FeaturedCarousel(
                     FeaturedControls(
                         pick, watch, chatTitle, onPlay, onDetails,
                         wide = true,
-                        modifier = Modifier.align(Alignment.BottomStart).padding(start = start, bottom = WIDE_FOOT),
+                        modifier = Modifier.align(Alignment.BottomStart).padding(start = start + HERO_START_EXTRA, bottom = WIDE_FOOT),
                     )
                 }
                 CarouselDots(
@@ -249,6 +249,13 @@ private val CONTROLS_ROOM: Dp = 4.dp + HERO_PILL_HEIGHT + DOTS_ROOM
 
 /** Under Play on its side, where the dots stand beside it rather than under it. */
 private val WIDE_FOOT: Dp = 14.dp
+
+/**
+ * A little more room than the rows below keep ([start]), only for the hero's own words and
+ * buttons on its side: now that the picture reads full width behind them, the same inset as the
+ * rows felt crowded against it (user, 2026-11-01).
+ */
+private val HERO_START_EXTRA: Dp = 10.dp
 
 /** What Play and Details take at the foot on its side, which a page keeps its name clear of. */
 private val WIDE_CONTROLS_ROOM: Dp = WIDE_FOOT + HERO_PILL_HEIGHT
@@ -303,7 +310,7 @@ private fun FeaturedPage(
                 Modifier
                     .align(Alignment.BottomStart)
                     .fillMaxWidth(WIDE_WORDS_SHARE)
-                    .padding(start = start, bottom = footRoom + TEXT_GAP),
+                    .padding(start = start + HERO_START_EXTRA, bottom = footRoom + TEXT_GAP),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 com.tmplayer.ui.online.TitleArt(meta, maxWidth = LOGO_MAX_WIDTH, maxHeight = WIDE_LOGO_MAX_HEIGHT) {
@@ -440,7 +447,7 @@ private fun FeaturedSkeleton(start: Dp, end: Dp, wide: Boolean) {
                 Modifier
                     .align(Alignment.BottomStart)
                     .fillMaxWidth(WIDE_WORDS_SHARE)
-                    .padding(start = start, bottom = WIDE_FOOT),
+                    .padding(start = start + HERO_START_EXTRA, bottom = WIDE_FOOT),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 SkeletonBox(shimmer, Modifier.fillMaxWidth(0.7f).height(30.dp), RoundedCornerShape(8.dp))
@@ -510,10 +517,10 @@ private const val VIEWPORT_SHARE = 0.7f
 private val MIN_HEIGHT = 320.dp
 
 /** The most of the window under the status bar the carousel takes on its side. */
-private const val WIDE_VIEWPORT_SHARE = 0.72f
+private const val WIDE_VIEWPORT_SHARE = 0.64f
 
 /** The least the carousel takes on its side: the name, the facts, the overview and Play. */
-private val WIDE_MIN_HEIGHT = 250.dp
+private val WIDE_MIN_HEIGHT = 220.dp
 
 /** How much wider than tall the frame is before the words go to the start, as [EdgeBackdrop] decides. */
 private const val WIDE_RATIO = 1.4f
