@@ -51,6 +51,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.tmplayer.data.Bookmark
@@ -284,7 +285,19 @@ fun WideDetailPanel(
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                             verticalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
-                            quick.forEach { WideIconAction(it.label, it.icon, it.onSelect, destructive = it.destructive, progress = it.progress, enabled = it.enabled, ghost = it.placeholder, waiting = it.placeholder && extrasComing) }
+                            quick.forEach {
+                                WideIconAction(
+                                    it.label,
+                                    it.icon,
+                                    it.onSelect,
+                                    destructive = it.destructive,
+                                    progress = it.progress,
+                                    enabled = it.enabled,
+                                    ghost = it.placeholder,
+                                    waiting = it.placeholder && extrasComing,
+                                    short = roundLabel(it, s),
+                                )
+                            }
                         }
                     }
                     trailers.unopened?.let { TrailerQr(it, Modifier.padding(vertical = 4.dp)) }
@@ -315,8 +328,11 @@ fun WideDetailPanel(
                     }
                 }
                 if (roomy) {
+                    // The story keeps to its own reading measure rather than stretching the row:
+                    // full width here left the file facts stranded at the far edge with a bare gap
+                    // between (user, 2026-11-01), so the facts now sit right after the words.
                     Row(horizontalArrangement = Arrangement.spacedBy(48.dp)) {
-                        Box(Modifier.weight(1f)) { story() }
+                        Box(Modifier.widthIn(max = READING)) { story() }
                         Box(Modifier.width(FILE_COLUMN)) { file() }
                     }
                 } else {
@@ -370,8 +386,10 @@ private const val FOCUS_AFTER_HOLD_TRIES = 10
 
 /**
  * One of the everyday actions beside Play on a large window: a round button as tall as the pill,
- * outlined, its name in a tip under the pointer and read out. A switch's icon turns into its
- * other one in place, so the press shows.
+ * outlined, with its short word under it, as the phone's own [RoundAction] carries (a row of bare
+ * icons here, told apart only by hovering, read "off" beside the one bright pill, user 2026-11-01).
+ * [label] stays the hover tip and what a screen reader reads; a switch's icon turns into its other
+ * one in place, so the press shows.
  */
 @Composable
 internal fun WideIconAction(
@@ -387,13 +405,17 @@ internal fun WideIconAction(
     progress: Float? = null,
     /** False for a button that only says how things stand (Downloaded): dimmed, a press does nothing. */
     enabled: Boolean = true,
+    /** The word or two under the button, as [RoundAction]'s own [roundLabel]; falls back to [label]. */
+    short: String = label,
 ) {
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusVisibleAsState()
     val shown by androidx.compose.animation.core.animateFloatAsState(if (ghost) 0f else 1f, com.tmplayer.ui.theme.Motion.standard(), label = "wideActionShown")
     if (ghost) {
-        Box(Modifier.size(WIDE_ACTION).clearAndSetSemantics {}) {
-            if (waiting) com.tmplayer.ui.components.SkeletonBox(com.tmplayer.ui.components.rememberShimmer(), Modifier.matchParentSize(), CircleShape)
+        Column(Modifier.width(RoundActionWidth).clearAndSetSemantics {}, horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(Modifier.size(WIDE_ACTION)) {
+                if (waiting) com.tmplayer.ui.components.SkeletonBox(com.tmplayer.ui.components.rememberShimmer(), Modifier.matchParentSize(), CircleShape)
+            }
         }
         return
     }
@@ -403,26 +425,40 @@ internal fun WideIconAction(
         destructive -> Tone.danger
         else -> Tone.text
     }
-    IconTip(label, side = TipSide.Below) {
-        Box(
-            Modifier
-                .graphicsLayer { alpha = shown }
-                .pressScale(interactions)
-                .size(WIDE_ACTION)
-                .downloadRing(progress)
-                .clip(CircleShape)
-                .background(if (focused) (if (destructive) Danger else Tone.focusFill) else Tone.surfaceHigh)
-                .border(1.dp, if (focused) Color.Transparent else Tone.outline, CircleShape)
-                .clickable(interactionSource = interactions, indication = if (enabled) LocalIndication.current else null, onClick = if (enabled) onClick else ({}))
-                .semantics {
-                    contentDescription = label
-                    role = Role.Button
-                    if (!enabled) disabled()
-                },
-            contentAlignment = Alignment.Center,
-        ) {
-            SwapIcon(icon, ink, size = 24.dp)
+    Column(
+        Modifier.graphicsLayer { alpha = shown }.width(RoundActionWidth),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        IconTip(label, side = TipSide.Below) {
+            Box(
+                Modifier
+                    .pressScale(interactions)
+                    .size(WIDE_ACTION)
+                    .downloadRing(progress)
+                    .clip(CircleShape)
+                    .background(if (focused) (if (destructive) Danger else Tone.focusFill) else Tone.surfaceHigh)
+                    .border(1.dp, if (focused) Color.Transparent else Tone.outline, CircleShape)
+                    .clickable(interactionSource = interactions, indication = if (enabled) LocalIndication.current else null, onClick = if (enabled) onClick else ({}))
+                    .semantics {
+                        contentDescription = label
+                        role = Role.Button
+                        if (!enabled) disabled()
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                SwapIcon(icon, ink, size = 24.dp)
+            }
         }
+        Text(
+            short,
+            style = fitLongestWord(short, MaterialTheme.typography.labelSmall, RoundActionWidth),
+            color = ink,
+            textAlign = TextAlign.Center,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.clearAndSetSemantics {},
+        )
     }
 }
 

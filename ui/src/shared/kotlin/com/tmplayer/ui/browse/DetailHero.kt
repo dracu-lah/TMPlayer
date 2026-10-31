@@ -584,10 +584,11 @@ internal val RoundActionWidth = 72.dp
 
 /**
  * [style], made smaller (down to [MIN_WORD_SCALE] of its size) until the longest word of [text]
- * fits [width] whole, so a narrow label wraps between words rather than inside one.
+ * fits [width] whole, so a narrow label wraps between words rather than inside one. Shared with
+ * a large window's own round actions ([WideIconAction]), whose captions are measured the same way.
  */
 @Composable
-private fun fitLongestWord(text: String, style: TextStyle, width: Dp): TextStyle {
+internal fun fitLongestWord(text: String, style: TextStyle, width: Dp): TextStyle {
     val measurer = rememberTextMeasurer()
     val room = with(LocalDensity.current) { width.toPx() }
     return remember(text, style, room) {
