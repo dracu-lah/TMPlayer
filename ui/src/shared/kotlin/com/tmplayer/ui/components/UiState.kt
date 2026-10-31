@@ -35,6 +35,7 @@ sealed interface UiState<out T> {
             StateAction.KeepLooking -> TmIcons.Search
             StateAction.SearchAllChats -> TmIcons.SearchRemove
             StateAction.Refresh -> TmIcons.Refresh
+            StateAction.AddChats -> TmIcons.ChatsMany
             null -> TmIcons.VideoOff
         }
     }
@@ -58,6 +59,12 @@ enum class StateAction {
 
     /** Ask Telegram again, for a list that may still be on its way (a first sign in). */
     Refresh,
+
+    /**
+     * Open the picker (HX27): the account has chats, but none of them has been added to TMPlayer,
+     * so the way on is a choice, not a retry.
+     */
+    AddChats,
     ;
 
     /** The button's words. */
@@ -65,6 +72,7 @@ enum class StateAction {
         KeepLooking -> L.commonKeepLooking
         SearchAllChats -> L.searchAllChats
         Refresh -> L.commonRefresh
+        AddChats -> L.browseAddChats
     }
 }
 

@@ -78,6 +78,24 @@ class BooksMatchStoresTest {
         book.addRecentSearch("harbour")
         assertEquals(listOf("harbour"), store.recentSearches.first())
 
+        // The added chats (HX27), with the three states the gate tells apart.
+        assertEquals(AddedMode.Unanswered, book.addedChats.first().mode)
+        assertEquals(AddedMode.Unanswered, store.addedChats.first().mode)
+        store.setAddedChats(listOf(AddedChat(-100L, "Show"), AddedChat(42L, "Clips")))
+        assertEquals(AddedMode.Picked, book.addedChats.first().mode)
+        assertEquals(setOf(-100L, 42L), book.addedChats.first().ids)
+        book.keepAllChats()
+        assertEquals(AddedMode.All, store.addedChats.first().mode)
+        assertEquals(null, store.addedChats.first().ids)
+        // An empty choice stays an answer in both: the key is not dropped with its last chat.
+        book.setAddedChats(emptyList())
+        assertEquals(AddedMode.Picked, store.addedChats.first().mode)
+        assertEquals(emptySet<Long>(), store.addedChats.first().ids)
+        store.addChat(7L, "Added one")
+        assertEquals(setOf(7L), book.addedChats.first().ids)
+        book.setAddedChats(AddedChats.without(book.addedChats.first().chats, 7L))
+        assertEquals(emptySet<Long>(), store.addedChats.first().ids)
+
         book.setPin("2580")
         assertEquals(PinCheck.Right, store.checkPin("2580"))
         store.setPin("1470")

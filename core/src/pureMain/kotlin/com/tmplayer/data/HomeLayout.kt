@@ -101,5 +101,24 @@ data class HomeLayout(
          */
         fun chosenChats(chats: List<ChatSummary>, chosen: Set<Long>): List<ChatSummary> =
             if (chosen.isEmpty()) emptyList() else chats.asSequence().filter { it.id in chosen }.distinctBy { it.id }.take(CHOSEN_MAX).toList()
+
+        /**
+         * Home's layout once the viewer has added chats (HX27, [AddedChats]).
+         *
+         * Recently added under [RecentSource.Auto] comes from ONE search across the whole account,
+         * which answers with the newest videos anywhere, so a viewer with twelve added chats of
+         * three thousand would see a row of chats they never added, post-filtered down to nothing.
+         * With a choice made, the row reads the added chats one by one instead, which is the path
+         * [RecentSource.Chosen] already takes.
+         *
+         * A viewer who picked their own chats for the row keeps them, narrowed to the ones still
+         * added. [added] null (nobody has answered the picker) leaves the layout alone, so Home
+         * works exactly as it did before this existed.
+         */
+        fun overAdded(layout: HomeLayout, added: Set<Long>?): HomeLayout = when {
+            added == null -> layout
+            layout.chosen -> layout.copy(recentChats = layout.recentChats.filterTo(LinkedHashSet()) { it in added })
+            else -> layout.copy(recentSource = RecentSource.Chosen, recentChats = added)
+        }
     }
 }

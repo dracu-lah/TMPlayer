@@ -283,9 +283,12 @@ class ChatRepository(private val td: TdlClient) {
                         .valueOrNull?.messages?.toList().orEmpty()
                 }
             }.flatMap { it.await() }
-            // The kids lock (CP57): Telegram searches the whole account, so the chats it leaves out
-            // are dropped here, before any of them costs a getChat.
-            val allowed = ChatGate.awaitReady()
+            // The kids lock (CP57) and the added chats (HX27): Telegram searches the whole account,
+            // so the chats the gate leaves out are dropped here, before any of them costs a
+            // getChat. Beware that this is a post-filter over ONE global search: a viewer with few
+            // added chats can get nothing back, which is why Home reads its Recently added row
+            // per chat ([RecentSource.Chosen]) once a choice has been made, not from here.
+            val allowed = ChatGate.awaitBrowsing()
             found.filter { KidsLock.allows(allowed, it.chatId) && HiddenChats.shows(it.chatId) }.groupBy { it.chatId }.flatMap { (chatId, messages) ->
                 val chatProtected = td.getChat(chatId).valueOrNull?.hasProtectedContent ?: false
                 MediaMapper.screen(messages, chatProtected).items
@@ -329,7 +332,7 @@ class ChatRepository(private val td: TdlClient) {
             val documents = ask(SearchMessagesFilterDocument(), cursor.documentOffset, cursor.documentDone)
             val videoFound = videos?.await()
             val documentFound = documents?.await()
-            val allowed = ChatGate.awaitReady()
+            val allowed = ChatGate.awaitBrowsing()
             val messages = listOfNotNull(videoFound, documentFound).flatMap { it.messages.toList() }
                 .filter { KidsLock.allows(allowed, it.chatId) && HiddenChats.shows(it.chatId) }
             val myId = if (messages.isEmpty()) 0L else Td.myId()
@@ -357,6 +360,78 @@ class ChatRepository(private val td: TdlClient) {
                 chats = briefs,
             )
         }
+    }
+
+    /**
+     * The same search, but inside the chats the viewer added (HX27), a page of chats at a time.
+     *
+     * Why this exists at all: [searchAllChats] is ONE `searchMessages` over the whole account, and
+     * Telegram gives no way to say "these chats only". Post-filtering its answer is what the gate
+     * does, and for a viewer who added twelve chats of three thousand it filters almost everything
+     * away: the search would look broken while working exactly as asked. So each added chat is
+     * searched on its own instead.
+     *
+     * The cost is kept to a page: [AllChatsSearch.CHATS_PER_PAGE] chats per page,
+     * [CHATS_AT_ONCE] of them in flight, two calls each (videos, and documents for the ones sent
+     * as files). Load more reaches the next chats rather than deeper into the ones already read,
+     * so a chat with hundreds of matches offers its newest here and the rest in the chat itself.
+     * [added] is in the order the viewer added the chats, which is the order they are searched.
+     */
+    suspend fun searchAddedChats(
+        query: String,
+        added: Collection<Long>,
+        cursor: AllChatsCursor = AllChatsCursor(),
+        limit: Int = AllChatsSearch.PAGE_SIZE,
+        filters: SearchFilters = SearchFilters(),
+    ): AllChatsPage = withContext(Dispatchers.IO) {
+        val kids = ChatGate.allowed.value
+        val order = added.filter { KidsLock.allows(kids, it) && HiddenChats.shows(it) }
+        val window = order.drop(cursor.chatsSearched).take(AllChatsSearch.CHATS_PER_PAGE)
+        val reached = (cursor.chatsSearched + window.size).coerceAtMost(order.size)
+        val ran = cursor.copy(chatsSearched = reached, videoDone = reached >= order.size, documentDone = reached >= order.size)
+        if (window.isEmpty()) return@withContext AllChatsPage(emptyList(), ran)
+        val myId = Td.myId()
+        val briefs = ArrayList<ChatBrief>()
+        val items = ArrayList<MediaItem>()
+        for (chunk in window.chunked(CHATS_AT_ONCE)) {
+            val pages = coroutineScope {
+                chunk.map { chatId ->
+                    async {
+                        // A chat that has gone, or that the type and archive filters leave out,
+                        // costs one getChat and nothing more.
+                        val chat = td.getChat(chatId).valueOrNull ?: return@async null
+                        val summary = summarise(chat, myId)
+                        if (!filters.includeArchived && summary.isArchived) return@async null
+                        if (!matchesType(filters.chatType, summary.kind)) return@async null
+                        val protected = chat.hasProtectedContent
+                        val found = coroutineScope {
+                            val videos = async { search(chatId, 0, SearchMessagesFilterVideo(), query, protected, limit) }
+                            val documents = async { search(chatId, 0, SearchMessagesFilterDocument(), query, protected, limit) }
+                            videos.await().items + documents.await().items
+                        }
+                        if (found.isEmpty()) null else Pair(summary, found)
+                    }
+                }.awaitAll()
+            }
+            for ((summary, found) in pages.filterNotNull()) {
+                briefs += ChatBrief(summary.id, summary.title, summary.kind, summary.photoFileId, summary.miniThumbnail)
+                items += found
+            }
+        }
+        AllChatsPage(
+            items = items.distinctBy { it.id }
+                .sortedWith(compareByDescending<MediaItem> { it.date }.thenByDescending { it.messageId }),
+            cursor = ran,
+            chats = briefs,
+        )
+    }
+
+    /** Whether a chat's kind answers the search's chat type filter. */
+    private fun matchesType(type: SearchChatType, kind: ChatKind): Boolean = when (type) {
+        SearchChatType.All -> true
+        SearchChatType.Channels -> kind == ChatKind.Channel
+        SearchChatType.Groups -> kind == ChatKind.Group
+        SearchChatType.People -> kind == ChatKind.Direct || kind == ChatKind.Saved
     }
 
     /**
@@ -620,6 +695,9 @@ class ChatRepository(private val td: TdlClient) {
         private const val MUTE_FOREVER = Int.MAX_VALUE
 
         const val PAGE_SIZE = 40
+
+        /** Added chats searched side by side in [searchAddedChats]: two calls each, so six in flight. */
+        const val CHATS_AT_ONCE = 3
 
         /** Per filter, for [recentMedia]: enough to fill a row of ten after screening and dedupe. */
         const val RECENT_LIMIT = 40

@@ -148,6 +148,11 @@ class GarbageInputTest {
             survive("DownloadRequest.decodeAll", text) { DownloadRequest.decodeAll(text) }
             survive("RecentSearches.decode", text) { RecentSearches.decode(text) }
             survive("HiddenChats.decode", text) { HiddenChats.decode(text) }
+            survive("AddedChats.decode", text) {
+                AddedChats.decode(text)
+                AddedChats.modeOf(text)
+                AddedChoice(AddedChats.modeOf(text), AddedChats.decode(text)).ids
+            }
             survive("HomeLayout.of", text) {
                 HomeLayout.decodeChats(text)
                 RecentSource.of(text)

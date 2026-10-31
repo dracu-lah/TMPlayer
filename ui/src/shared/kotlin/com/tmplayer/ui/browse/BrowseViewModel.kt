@@ -102,8 +102,10 @@ class ChatListViewModel(
      * no re-sync, and a chat arriving through an update is screened like the rest.
      */
     private fun followKidsLock() {
+        // The kids lock and the added chats, met in the middle: a chat added or removed in the
+        // picker leaves or rejoins the list at once, with no re-sync (HX27).
         viewModelScope.launch {
-            ChatGate.allowed.collect { publish() }
+            ChatGate.browsing.collect { publish() }
         }
         // A chat hidden from its menu, or shown again from Settings, leaves or rejoins the list at once.
         viewModelScope.launch {
@@ -124,7 +126,7 @@ class ChatListViewModel(
         // on the screen, so each folder's list is there at once as well.
         memory?.data<List<ChatSummary>>(QueryKey.ChatList())?.takeIf { it.isNotEmpty() }?.let { kept ->
             viewModelScope.launch {
-                ChatGate.awaitReady()
+                ChatGate.awaitBrowsing()
                 if (chats != null) return@launch
                 chats = kept
                 publish()
@@ -149,9 +151,10 @@ class ChatListViewModel(
                 if (_state.value is UiState.Loading) _state.value = loading()
             }
             if (remembered.isEmpty() || chats != null) return@launch
-            // The kids lock is read before yesterday's list is drawn, not after: painting every
-            // chat for the moment the store takes to answer would show what the lock hides.
-            ChatGate.awaitReady()
+            // The gate is read before yesterday's list is drawn, not after: painting every chat
+            // for the moment the store takes to answer would show what the lock hides, and flash
+            // the chats the viewer never added (HX27).
+            ChatGate.awaitBrowsing()
             if (chats != null) return@launch
             chats = remembered
             publish()
@@ -707,12 +710,19 @@ class ChatListViewModel(
 
     private fun publish() {
         val everything = chats ?: return
-        // Kept whole, before the kids lock and the hidden chats, which are applied below on each read.
+        // Kept whole, before the kids lock, the added chats and the hidden chats, which are
+        // applied below on each read. The picker reads this list, so it must stay whole: a chat
+        // cannot be added if the only list in memory is the one already narrowed to what was.
         memory?.put(QueryKey.ChatList(), everything)
-        val allowed = ChatGate.allowed.value
+        val allowed = ChatGate.browsing.value
         val loaded = com.tmplayer.data.HiddenChats.filter(KidsLock.chats(everything, allowed)) { it.id }
         _state.value = when {
             loaded.isNotEmpty() -> UiState.Content(BrowseData(loaded, account, foldersPending(), foldersFailed()))
+            // Nothing added yet (HX27), which is a choice to make rather than a fault: a first run
+            // that skipped the picker, or every added chat since left. Asked before the kids lock,
+            // since a locked app with nothing added should still say what to do about it.
+            com.tmplayer.data.AddedChats.ids.value != null && everything.isNotEmpty() ->
+                UiState.Empty(L.browseNoChatsAdded, StateAction.AddChats, icon = TmIcons.ChatsMany)
             // Said plainly, so a child's empty screen is not mistaken for a broken account.
             allowed != null && everything.isNotEmpty() -> UiState.Empty(L.lockKidsEmpty, icon = TmIcons.Lock)
             // A first sign in on a large account can meet this while Telegram is still sending
@@ -1150,6 +1160,8 @@ class MediaListViewModel(
         StateAction.Refresh -> load()
         // Leaves the chat for the search across all of them: the screen does that, with [query].
         StateAction.SearchAllChats -> SearchRequest.ask(query)
+        // Opens the picker, which each platform hosts itself (HX27).
+        StateAction.AddChats -> AddChatsRequest.ask()
     }
 
     /** What the viewer searched this chat for, for a screen offering the same words everywhere. */

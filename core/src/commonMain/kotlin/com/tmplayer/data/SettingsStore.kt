@@ -26,6 +26,8 @@ import java.io.File
 
 private val FAVORITES = stringSetPreferencesKey("favorite_chats")
 private val HIDDEN_CHATS = stringPreferencesKey("hidden_chats") // HiddenChats.KEY
+private val ADDED_CHATS = stringPreferencesKey("added_chats") // AddedChats.KEY
+private val ADDED_CHATS_MODE = stringPreferencesKey("added_chats_mode") // AddedChats.MODE_KEY
 private val PLAYER_HINT_SEEN = booleanPreferencesKey("player_hint_seen")
 private val FIRST_VIDEO_TIP_DISMISSED = booleanPreferencesKey("first_video_tip_dismissed")
 private val TV_BROWSE_HINT_SEEN = booleanPreferencesKey("tv_browse_hint_seen")
@@ -363,7 +365,7 @@ private fun cachedKey(chatId: Long, messageId: Long) =
  * instance per file in a process: each app opens it once, with [openDataStore], and every
  * `SettingsStore` shares that instance.
  */
-class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSource, CorrectionsSource, HiddenChatsSource {
+class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSource, CorrectionsSource, HiddenChatsSource, AddedChatsSource {
 
     /**
      * One preference, read the way every preference here is read.
@@ -397,6 +399,54 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
 
     suspend fun showAllChats() {
         prefs.edit { it.remove(HIDDEN_CHATS) }
+    }
+
+    // ---- added chats ------------------------------------------------------------------------
+
+    /** The chats the viewer added, with the mode beside them. See [AddedChats]. */
+    override val addedChats: Flow<AddedChoice> = read { prefs ->
+        AddedChoice(AddedChats.modeOf(prefs[ADDED_CHATS_MODE]), AddedChats.decode(prefs[ADDED_CHATS]))
+    }
+
+    /**
+     * Stores the whole answer the picker came back with, which is the only way the set changes as
+     * a whole: Done always writes [AddedMode.Picked], even for an empty choice, because an empty
+     * answer is an answer. Unlike the hidden chats, the key is NOT removed when the list empties,
+     * since an absent key means "never asked".
+     */
+    suspend fun setAddedChats(chats: List<AddedChat>) {
+        prefs.edit { prefs ->
+            prefs[ADDED_CHATS] = AddedChats.encode(chats)
+            prefs[ADDED_CHATS_MODE] = AddedChats.MODE_PICKED
+        }
+    }
+
+    /** "Keep all my chats": every chat stays, as an answer rather than as silence (HX28). */
+    suspend fun keepAllChats() {
+        prefs.edit { prefs ->
+            prefs.remove(ADDED_CHATS)
+            prefs[ADDED_CHATS_MODE] = AddedChats.MODE_ALL
+        }
+    }
+
+    /** Adds one chat to the choice, for the star-and-add row outside the picker. */
+    suspend fun addChat(chatId: Long, title: String) {
+        prefs.edit { prefs ->
+            val mode = AddedChats.modeOf(prefs[ADDED_CHATS_MODE])
+            // Adding one chat while every chat is shown would narrow the app to that chat alone,
+            // which nobody asked for, so the choice is only touched once the viewer has made one.
+            if (mode != AddedMode.Picked) return@edit
+            prefs[ADDED_CHATS] = AddedChats.encode(AddedChats.with(AddedChats.decode(prefs[ADDED_CHATS]), AddedChat(chatId, title)))
+        }
+    }
+
+    /** Takes one chat out of the choice. Nothing in Telegram changes, and downloads and history stay. */
+    suspend fun removeChat(chatId: Long) {
+        prefs.edit { prefs ->
+            val mode = AddedChats.modeOf(prefs[ADDED_CHATS_MODE])
+            if (mode != AddedMode.Picked) return@edit
+            prefs[ADDED_CHATS] = AddedChats.encode(AddedChats.without(AddedChats.decode(prefs[ADDED_CHATS]), chatId))
+        }
     }
 
     // ---- favourites -------------------------------------------------------------------------

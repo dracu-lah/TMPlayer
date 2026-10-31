@@ -12,6 +12,12 @@ data class AllChatsCursor(
     val documentOffset: String = "",
     val videoDone: Boolean = false,
     val documentDone: Boolean = false,
+    /**
+     * The search inside the added chats (HX27) walks the chats instead of Telegram's offsets:
+     * this is how many of them it has read. Both done flags go true together once it runs out of
+     * chats, so [done] means the same thing whichever search ran.
+     */
+    val chatsSearched: Int = 0,
 ) {
     val done: Boolean get() = videoDone && documentDone
 }
@@ -32,6 +38,13 @@ object AllChatsSearch {
 
     /** Videos asked for per page, per kind. */
     const val PAGE_SIZE = 30
+
+    /**
+     * Added chats read per page by the search inside them ([ChatRepository.searchAddedChats]).
+     * Eight chats is two calls each, which fills a page for an ordinary query while leaving the
+     * per-call budget of AGENTS.md room for Home and the chat list beside it.
+     */
+    const val CHATS_PER_PAGE = 8
 
     /**
      * What to ask Telegram when the whole query found nothing.

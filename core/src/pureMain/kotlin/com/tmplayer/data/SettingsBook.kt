@@ -16,7 +16,7 @@ import kotlinx.coroutines.flow.map
  * which the browser build either has no use for or keeps in the page. SettingsBookTest holds the
  * two to the same answers over one DataStore file.
  */
-class SettingsBook(private val kv: KeyValueStore) : AllowedChatsSource, CorrectionsSource, HiddenChatsSource {
+class SettingsBook(private val kv: KeyValueStore) : AllowedChatsSource, CorrectionsSource, HiddenChatsSource, AddedChatsSource {
 
     private fun <T> read(transform: (Map<String, Any>) -> T): Flow<T> = kv.data.map(transform).distinctUntilChanged()
 
@@ -103,6 +103,27 @@ class SettingsBook(private val kv: KeyValueStore) : AllowedChatsSource, Correcti
 
     suspend fun setHiddenChats(chats: List<HiddenChat>) {
         kv.edit { it[HiddenChats.KEY] = HiddenChats.encode(chats) }
+    }
+
+    /** The chats the viewer added, under SettingsStore's own keys ([AddedChats.KEY]). */
+    override val addedChats: Flow<AddedChoice> = read { e ->
+        AddedChoice(AddedChats.modeOf(e.string(AddedChats.MODE_KEY)), AddedChats.decode(e.string(AddedChats.KEY)))
+    }
+
+    /** As SettingsStore.setAddedChats: an empty choice is still an answer, so the key stays. */
+    suspend fun setAddedChats(chats: List<AddedChat>) {
+        kv.edit {
+            it[AddedChats.KEY] = AddedChats.encode(chats)
+            it[AddedChats.MODE_KEY] = AddedChats.MODE_PICKED
+        }
+    }
+
+    /** As SettingsStore.keepAllChats. */
+    suspend fun keepAllChats() {
+        kv.edit {
+            it.remove(AddedChats.KEY)
+            it[AddedChats.MODE_KEY] = AddedChats.MODE_ALL
+        }
     }
 
     /** The stored PIN line (salt and hash, as AppLock writes it), or null when none is set. */

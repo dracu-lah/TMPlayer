@@ -103,6 +103,7 @@
     "too_new": "This backup comes from a newer TMPlayer. Update TMPlayer, then restore it again."
   },
   "browse": {
+    "add_chats": "Add chats",
     "add_favourite": "Add to favourites",
     "add_favourite_detail": "Keeps it one press away in the Favourites tab",
     "already_downloaded": "Those are in Downloads already",
@@ -174,6 +175,7 @@
     "mute_detail": "Silences it in Telegram, on every device",
     "muted": "Muted",
     "no_chats": "No chats yet. Just after a sign in, Telegram can take a minute to send the list.",
+    "no_chats_added": "No chats added yet. Pick the chats whose videos you want here.",
     "no_match": "Nothing in this chat matches “{query}”.",
     "no_playable_videos": "No playable videos in this chat.",
     "no_space_for_any": "Not enough space for any of them",

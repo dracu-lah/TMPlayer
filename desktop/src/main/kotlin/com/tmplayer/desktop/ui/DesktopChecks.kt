@@ -60,7 +60,9 @@ private suspend fun checkOnce(state: ShellState) = withContext(Dispatchers.IO) {
     if (newVideos || episodes || pieces) {
         val session = withTimeoutOrNull(CONNECT_WAIT_MS) { Td.awaitConnectedSession() }
         if (session != null) {
-            val allowed = ChatGate.awaitReady()
+            // The kids lock and the chats the viewer added (HX27): no alert comes from a chat
+            // they never added.
+            val allowed = ChatGate.awaitBrowsing()
             if (newVideos) {
                 val alert = NewVideoAlerts.check(session.client, settings, allowed)
                 if (alert != null && !focused) {

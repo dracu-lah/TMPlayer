@@ -75,7 +75,9 @@ fun TvHomeChannels(
     val context = LocalContext.current.applicationContext
     val supported = remember { TvChannelsPublisher.supported(context) }
     if (!supported) return
-    val allowed by ChatGate.allowed.collectAsStateWithLifecycle()
+    // The launcher's rows are Home's rows, so they read the same gate: the kids lock and the
+    // chats the viewer added (HX27). A card for a chat they removed must not sit on the home screen.
+    val allowed by ChatGate.browsing.collectAsStateWithLifecycle()
     val art by model.art.collectAsStateWithLifecycle()
     val settled = model.rowsSettled
 

@@ -22,9 +22,9 @@ object NameReport {
     var lastListing: List<MediaItem> = emptyList()
         private set
 
-    /** Keeps [items] as the last listing, unless the kids lock keeps [chatId] out of sight. */
+    /** Keeps [items] as the last listing, unless the gate keeps [chatId] out of sight. */
     fun remember(chatId: Long, items: List<MediaItem>) {
-        if (!KidsLock.allows(ChatGate.allowed.value, chatId)) return
+        if (!KidsLock.allows(ChatGate.browsing.value, chatId)) return
         lastListing = items
     }
 

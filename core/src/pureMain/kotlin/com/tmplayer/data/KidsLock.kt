@@ -2,9 +2,12 @@ package com.tmplayer.data
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.concurrent.Volatile
@@ -66,8 +69,27 @@ object ChatGate {
     @Volatile
     private var following = false
 
-    /** The allowed chats, or null while the kids lock is off. */
+    /**
+     * The chats the kids lock allows, or null while it is off. This is the lock ALONE: a list that
+     * is the viewer's own record (Continue watching, Watched, Watch later, History, Downloads) and
+     * one chat they asked for by name reads this, so removing a chat from TMPlayer never loses the
+     * progress or the files they already have. Everything that browses reads [browsing] instead.
+     */
     val allowed: StateFlow<Set<Long>?> = state.asStateFlow()
+
+    /**
+     * What every list that browses reads (HX27): the kids lock and the chats the viewer added,
+     * met in the middle, or null when neither narrows anything. Chats, Home and its rows, the
+     * carousel, Recently added, search, a video's copies, the TV launcher's rows and the
+     * background checks all ask this one question.
+     */
+    val browsing: StateFlow<Set<Long>?> by lazy {
+        combine(state, AddedChats.ids) { kids, added -> AddedChats.gate(kids, added) }
+            .stateIn(Background.scope, SharingStarted.Eagerly, AddedChats.gate(state.value, AddedChats.ids.value))
+    }
+
+    /** [browsing], after waiting briefly for both the lock and the choice to be read. */
+    suspend fun awaitBrowsing(): Set<Long>? = AddedChats.gate(awaitReady(), AddedChats.awaitReady())
 
     /** Keeps [allowed] in step with [store] for the life of the process. */
     fun follow(store: AllowedChatsSource) {

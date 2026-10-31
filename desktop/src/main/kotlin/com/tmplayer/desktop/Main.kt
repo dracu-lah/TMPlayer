@@ -142,6 +142,8 @@ fun main(args: Array<String>) {
         // The kids lock (CP57), read once here for every list of chats in the process.
         com.tmplayer.data.ChatGate.follow(settings)
         com.tmplayer.data.HiddenChats.follow(settings)
+        // The chats the viewer added (HX27), read once here for every list that browses.
+        com.tmplayer.data.AddedChats.follow(settings)
         // The viewer's corrections to names and groups, for every screen that arranges a chat.
         com.tmplayer.data.VideoCorrections.follow(settings)
         OnlineMetadata.current = desktopOnlineMetadata()

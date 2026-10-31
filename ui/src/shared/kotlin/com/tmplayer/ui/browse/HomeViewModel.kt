@@ -990,6 +990,10 @@ fun rememberHomeRows(
     val partial by model.partial.collectAsState()
     val fresh by model.newEpisodes.collectAsState()
     val stalled by model.stalled.collectAsState()
+    // The chats the viewer added (HX27): with a choice made, Recently added reads them one by one
+    // rather than taking Telegram's newest across the whole account ([HomeLayout.overAdded]).
+    val added by com.tmplayer.data.AddedChats.ids.collectAsState()
+    val layout = remember(layout, added) { layout?.let { HomeLayout.overAdded(it, added) } }
     LaunchedEffect(model, continueWatching, watched) { model.followShows(continueWatching, watched) }
     // Recently added's search across chats only while it or the carousel is on; turned back on,
     // it is asked for at once, so the row fills without a restart.
@@ -1086,13 +1090,13 @@ fun rememberHomeRows(
 /**
  * [chats], or while the chat list is still on its way Home's own ([HomeViewModel.ownChats]):
  * the chats it had last time and its starred and found ones, read one by one. An account with
- * thousands of chats waited for its whole list before Home showed anything (HX8). The kids lock
- * and the hidden chats apply to these as to the list.
+ * thousands of chats waited for its whole list before Home showed anything (HX8). The gate (the
+ * kids lock and the added chats) and the hidden chats apply to these as to the list.
  */
 @Composable
 private fun rememberHomeChatList(model: HomeViewModel, chats: List<ChatSummary>, favourites: Set<Long>, recent: List<MediaItem>?): List<ChatSummary> {
     val own by model.ownChats.collectAsState()
-    val allowed by com.tmplayer.data.ChatGate.allowed.collectAsState()
+    val allowed by com.tmplayer.data.ChatGate.browsing.collectAsState()
     val hidden by com.tmplayer.data.HiddenChats.ids.collectAsState()
     val listMissing = chats.isEmpty()
     LaunchedEffect(listMissing, favourites, recent) {

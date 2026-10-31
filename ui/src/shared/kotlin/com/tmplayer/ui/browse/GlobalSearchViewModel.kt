@@ -63,7 +63,16 @@ fun interface VideoSearchSource {
         val Telegram = object : VideoSearchSource {
             override suspend fun page(query: String, cursor: AllChatsCursor, filters: SearchFilters): AllChatsPage {
                 val session = Td.awaitConnectedSessionOrNull() ?: throw Offline()
-                return ChatRepository(session.client).searchAllChats(query, cursor, filters = filters)
+                val repo = ChatRepository(session.client)
+                // Search reads the added chats alone (HX27). Telegram cannot be asked for "these
+                // chats only", so with a choice made each chat is searched on its own; with no
+                // choice made it is one search over the account, as it has always been.
+                val added = com.tmplayer.data.AddedChats.awaitReady()
+                return if (added == null) {
+                    repo.searchAllChats(query, cursor, filters = filters)
+                } else {
+                    repo.searchAddedChats(query, added, cursor, filters = filters)
+                }
             }
 
             override suspend fun stillThere(item: MediaItem): Boolean? {
@@ -198,9 +207,10 @@ class GlobalSearchViewModel(
     private var localNow: List<MediaItem> = emptyList()
 
     init {
-        // The kids lock coming on while results are listed takes its chats out of them.
+        // The kids lock coming on, or a chat removed in the picker, while results are listed
+        // takes its chats out of them at once.
         viewModelScope.launch {
-            ChatGate.allowed.collect { allowed ->
+            ChatGate.browsing.collect { allowed ->
                 if (allowed != null) _state.update { s -> s.copy(groups = s.groups.filter { g -> g.copies.all { KidsLock.allows(allowed, it.chatId) } }) }
             }
         }
@@ -304,7 +314,8 @@ class GlobalSearchViewModel(
         val query = GlobalSearch.parse(text)
         val now = _state.value
         if (!force && query == now.query) return
-        val allowed = ChatGate.allowed.value
+        // The kids lock and the added chats (HX27): search lists videos from the added chats alone.
+        val allowed = ChatGate.browsing.value
         // Only the words around Telegram's part changed (a quality marker, a space): the answer
         // asked for, or about to be, stands, and the new words only screen and rank it.
         if (!force && !query.isEmpty && query.server == now.query.server && (asked == query.server || now.settling) &&

@@ -634,7 +634,9 @@ private fun Root() {
     // The favourites the kids lock lets through, as the Favourites tab lists them, so every count
     // of them (the badge, Clear all) says the same number.
     val storedFavorites by settings.favorites.collectAsStateWithLifecycle(initialValue = emptySet())
-    val allowedChats by com.tmplayer.data.ChatGate.allowed.collectAsStateWithLifecycle()
+    // The Favourites tab lists the starred chats the gate shows: the kids lock and the chats
+    // the viewer added (HX27). A star on a chat they removed stays stored, for when it is back.
+    val allowedChats by com.tmplayer.data.ChatGate.browsing.collectAsStateWithLifecycle()
     val favorites = remember(storedFavorites, allowedChats) { com.tmplayer.data.KidsLock.favourites(storedFavorites, allowedChats) }
     val watchProgress by settings.watchProgress.collectAsStateWithLifecycle(initialValue = emptyMap())
     val continueWatching by settings.continueWatching.collectAsStateWithLifecycle(initialValue = emptyList())

@@ -326,7 +326,7 @@ internal fun LibraryRows(state: ShellState, version: String, chatList: List<com.
     val history by settings.continueWatching.collectAsState(initial = emptyList())
     // Only those the kids lock shows, as the Favourites section counts them.
     val storedFavourites by settings.favorites.collectAsState(initial = emptySet())
-    val allowedChats by com.tmplayer.data.ChatGate.allowed.collectAsState()
+    val allowedChats by com.tmplayer.data.ChatGate.browsing.collectAsState()
     val favourites = remember(storedFavourites, allowedChats) { com.tmplayer.data.KidsLock.favourites(storedFavourites, allowedChats) }
     val watchedList by state.watched.history.collectAsState(initial = emptyList())
     // The chats hidden from their menus (see HiddenChats), listed below with Show.

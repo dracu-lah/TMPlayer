@@ -341,7 +341,7 @@ fun SettingsScreen(
     val storedFavorites by settings.favorites.collectAsStateWithLifecycle(initialValue = emptySet())
     // The chats hidden from their menus (see HiddenChats), for Library's Hidden chats list.
     val hiddenChats by settings.hiddenChats.collectAsStateWithLifecycle(initialValue = emptyList())
-    val allowedChats by com.tmplayer.data.ChatGate.allowed.collectAsStateWithLifecycle()
+    val allowedChats by com.tmplayer.data.ChatGate.browsing.collectAsStateWithLifecycle()
     val favorites = remember(storedFavorites, allowedChats) { com.tmplayer.data.KidsLock.favourites(storedFavorites, allowedChats) }
     val liveFolders by Td.folders.collectAsStateWithLifecycle()
     val folders = accountFolders ?: liveFolders

@@ -42,11 +42,11 @@ object VideoCopies {
      * the order given. A list of copies to choose from offers a file once, however often it was
      * posted; the rest are the entry's second half, for "posted twice" or "in 2 chats".
      *
-     * Copies in a chat the kids lock hides ([allowed], see [visible]) are never offered.
+     * Copies in a chat the gate hides ([allowed], see [visible]) are never offered.
      */
     fun distinctFiles(
         copies: List<MediaItem>,
-        allowed: Set<Long>? = ChatGate.allowed.value,
+        allowed: Set<Long>? = ChatGate.browsing.value,
     ): List<Pair<MediaItem, List<MediaItem>>> {
         val groups = mutableListOf<MutableList<MediaItem>>()
         for (copy in visible(copies, allowed)) {
@@ -60,7 +60,7 @@ object VideoCopies {
     fun oneOfEachFile(
         copies: List<MediaItem>,
         playing: String,
-        allowed: Set<Long>? = ChatGate.allowed.value,
+        allowed: Set<Long>? = ChatGate.browsing.value,
     ): List<MediaItem> {
         val shown = distinctFiles(copies, allowed).map { (lead, same) -> same.firstOrNull { it.id == playing } ?: lead }
         // The video playing stays listed, ticked, whatever chat it came from.
@@ -68,10 +68,11 @@ object VideoCopies {
     }
 
     /**
-     * [copies] without those in chats the kids lock hides: [allowed] is [ChatGate.allowed], null
-     * while the lock is off.
+     * [copies] without those in chats the gate hides: [allowed] is [ChatGate.browsing], null when
+     * neither the kids lock nor a choice of chats narrows anything. A copy of the same video in a
+     * chat the viewer never added is not offered, so Play opens one of their own chats.
      */
-    fun visible(copies: List<MediaItem>, allowed: Set<Long>? = ChatGate.allowed.value): List<MediaItem> =
+    fun visible(copies: List<MediaItem>, allowed: Set<Long>? = ChatGate.browsing.value): List<MediaItem> =
         if (allowed == null) copies else copies.filter { it.chatId in allowed }
 
     /** One file posted twice: the same Telegram file, or the same file name and size. */
