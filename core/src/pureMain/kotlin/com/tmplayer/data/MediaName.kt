@@ -167,7 +167,7 @@ object MediaName {
         val tidy = clean(spaced(stripDecoration(stripExtension(fileName))))
         val parsed = parse(fileName, caption, maxYear)
         val release = parsed.year != null || parsed.isEpisode || EpisodeCopies.markers(fileName).isNotEmpty() ||
-            endsInTags(tidy) || parsed.part != null || parsed.extra != null ||
+            endsInTags(tidy) || parsed.part != null || parsed.extra != null || SHORT_LANGUAGE.containsMatchIn(tidy) ||
             (HARD_TAGS.find(tidy)?.range?.first ?: 0) > 0 ||
             (CAST_BRACKET.find(tidy)?.range?.first ?: 0) > 0
         // A name that is nothing but its marker ("Episode 1") reads back as the whole name, which
@@ -234,7 +234,7 @@ object MediaName {
 
         return Read(
             ParsedName(
-                title = clean(normalised.substring(0, cut)),
+                title = withoutLanguageTail(clean(normalised.substring(0, cut))),
                 year = year?.value,
                 season = episode?.season,
                 episode = episode?.number,
@@ -245,6 +245,25 @@ object MediaName {
             ),
             whole = clean(normalised),
         )
+    }
+
+    /**
+     * [title] without the short audio language channels write after it ("Night Train Mal",
+     * "Night Train #Hin", "Night Train Tam 2023" once cut at the year), up to three of them. Not
+     * when it is the whole title ("Mal (2011)") or follows an article or a joining word ("Tales of
+     * Tam"). They are not [TAGS]: as one of those, "Tam" would end a title wherever it stood.
+     */
+    private fun withoutLanguageTail(title: String): String {
+        var text = title
+        repeat(3) {
+            if (text.length < 4 || text.takeLast(3).lowercase() !in SHORT_LANGUAGE_WORDS) return text
+            val match = SHORT_LANGUAGE_TAIL.find(text) ?: return text
+            val before = text.substring(0, match.range.first).trim()
+            if (clean(before).lowercase() in ARTICLES || before.substringAfterLast(' ').lowercase() in JOINING_WORDS) return text
+            // A bracket the title closed stays closed: "Night Train (2k23) Mal".
+            text = before.trimEnd { it.isWhitespace() || (it in TRIM_CHARS && it !in CLOSING) }
+        }
+        return text
     }
 
     /** A piece of a split film, and where in the name its marker starts. */
@@ -483,23 +502,54 @@ object MediaName {
      * a title written in Tamil or Malayalam is a title.
      */
     private fun stripDecoration(name: String): String {
+        val visible = withoutInvisibles(name)
         // Most names carry no symbol at all, and are not copied out a character at a time.
-        val withoutSymbols = if (!hasOtherSymbol(name)) name else buildString(name.length) {
+        val withoutSymbols = if (!hasOtherSymbol(visible)) visible else buildString(visible.length) {
             var i = 0
-            while (i < name.length) {
-                val code = name.codePointAtIndex(i)
+            while (i < visible.length) {
+                val code = visible.codePointAtIndex(i)
                 if (!isOtherSymbol(code)) appendCodePointValue(code)
                 i += charCountOf(code)
             }
         }
-        return withoutSymbols
-            // A fansub group's tag, "[SubsPlease] Show - 02", is a signature in brackets.
-            .replace(GROUP_TAG, "")
-            .replace(HANDLE) { handleOf(it.value) }
+        // A fansub group's tag, "[SubsPlease] Show - 02", is a signature in brackets.
+        val unsigned = withoutSymbols.replace(GROUP_TAG, "")
+        return unsigned
+            .replace(HANDLE) {
+                handleOf(it.value, unsigned.substring(0, it.range.first), unsigned.substring(it.range.last + 1))
+            }
             .replace(SITE, " ")
             // Whatever the signature was attached with, once it is gone.
             .trimStart { it.isWhitespace() || it in TRIM_CHARS }
     }
+
+    /**
+     * [name] without the characters that take no space: zero width spaces, direction marks, soft
+     * hyphens and the variation selectors an emoji leaves behind, which a copied name carries in
+     * front of its title. A zero width joiner or non-joiner after a letter of another script stays,
+     * because Malayalam, Hindi and Persian spell words with them.
+     */
+    private fun withoutInvisibles(name: String): String {
+        if (name.none { isInvisible(it) || it == ZWNJ || it == ZWJ }) return name
+        return buildString(name.length) {
+            for (index in name.indices) {
+                val char = name[index]
+                val joinerInWord = (char == ZWNJ || char == ZWJ) && name.getOrNull(index - 1)?.let { joinsInScript(it) } == true
+                if (joinerInWord || !(isInvisible(char) || char == ZWNJ || char == ZWJ)) append(char)
+            }
+        }
+    }
+
+    private fun isInvisible(char: Char): Boolean =
+        char == '​' || char == '‎' || char == '‏' || char in '‪'..'‮' ||
+            char in '⁠'..'⁤' || char == '﻿' || char == '­' || char in '︀'..'️'
+
+    /** A letter or a vowel sign or virama of a script past Latin, which a joiner may follow. */
+    private fun joinsInScript(char: Char): Boolean =
+        char.code > 0x24F && (
+            char.isLetter() || char.category == CharCategory.NON_SPACING_MARK ||
+                char.category == CharCategory.COMBINING_SPACING_MARK
+            )
 
     private fun hasOtherSymbol(name: String): Boolean {
         var i = 0
@@ -512,16 +562,34 @@ object MediaName {
     }
 
     /**
-     * What a [HANDLE] match leaves behind. A handle can hold underscores, and so can the name it is
-     * stapled to: "@TamilMob_LinkZz_BEAST_2022_Tamil_HQ_HDRip.mkv" matches as one word. When the
-     * match runs on into a year or a release tag, it is a handle followed by the name, and the
-     * handle is taken as its first two words, which is how channels name themselves
-     * ("@TamilMob_LinkZz", "@HEVC_Mob"); the rest goes back as the name.
+     * What a [HANDLE] match leaves behind, given the text [before] and [after] it. A handle can hold
+     * underscores, and so can the name it is stapled to: "@TamilMob_LinkZz_BEAST_2022_Tamil_HQ_HDRip.mkv"
+     * matches as one word. When the match runs on into a year or a release tag, it is a handle
+     * followed by the name, and the handle is taken as its first two words, which is how channels
+     * name themselves ("@TamilMob_LinkZz", "@HEVC_Mob"); the rest goes back as the name.
+     *
+     * Otherwise a one word handle goes whole, and so does one signed after the name ("... @cinema_company")
+     * or before a name written apart ("@TG_Clips4u -Night Train"). A handle that opens the name and
+     * has nothing after it but the year and the tags carries the name in its underscores
+     * ("@CC_Night_Train", "@WMR_Night_Train.1990.Malayalam"): the handle is its first word, and the
+     * second too when that is a word channels name themselves with ("@CC_MAL_..."), never a title's.
      */
-    private fun handleOf(match: String): String {
+    private fun handleOf(match: String, before: String, after: String): String {
         val words = match.removePrefix("@").split('_').filter { it.isNotEmpty() }
         val runsOn = words.drop(1).any { BARE_YEAR.matches(it) || TAGS.matches(it) }
-        return if (runsOn && words.size > 2) " " + words.drop(2).joinToString(" ") else " "
+        if (runsOn) return if (words.size > 2) " " + words.drop(2).joinToString(" ") else " "
+        if (words.size < 2) return " "
+        val opensName = before.all { it.isWhitespace() || it in TRIM_CHARS }
+        if (!opensName || !(after.isBlank() || startsWithMarker(after))) return " "
+        val channelWord = words.size > 2 && words[1].lowercase() in CHANNEL_WORDS
+        return " " + words.drop(if (channelWord) 2 else 1).joinToString(" ") + " "
+    }
+
+    /** Whether [text], past its separators, opens on a year or a release tag. */
+    private fun startsWithMarker(text: String): Boolean {
+        val word = text.trimStart { it.isWhitespace() || it in TRIM_CHARS }
+            .takeWhile { it.isLetterOrDigit() || it == '-' || it == '+' }
+        return word.isNotEmpty() && (BARE_YEAR.matches(word) || TAGS.matches(word))
     }
 
     private fun clean(raw: String): String =
@@ -534,7 +602,12 @@ object MediaName {
      * this, so the separators go in one scan and the expression only runs on a name that still has
      * a run of spaces or a tab, a line break or a wide space in it.
      */
-    private fun spaced(text: String): String = collapsedSpaces(separatorsAsSpaces(text))
+    private fun spaced(text: String): String {
+        val collapsed = collapsedSpaces(separatorsAsSpaces(text))
+        // "Night Train 20241080p": a year run into its resolution is the two of them.
+        if (!GLUED_YEAR.containsMatchIn(collapsed)) return collapsed
+        return collapsed.replace(GLUED_YEAR) { "${it.groupValues[1]} ${it.groupValues[2]}" }
+    }
 
     private fun separatorsAsSpaces(text: String): String {
         val first = text.indexOfFirst { it == '.' || it == '_' }
@@ -680,12 +753,34 @@ object MediaName {
 
     private val LANGUAGE = Regex("""\b(""" + LANGUAGE_CODES.keys.joinToString("|") + """)\b""", RegexOption.IGNORE_CASE)
 
+    /** The short forms of the languages channels write after a title: "Night Train Mal". */
+    private val SHORT_LANGUAGE_WORDS = setOf("mal", "tam", "tel", "hin", "eng")
+
+    private val SHORT_LANGUAGE_TAIL = Regex("""\s+#?(?:mal|tam|tel|hin|eng)$""", RegexOption.IGNORE_CASE)
+
+    private val SHORT_LANGUAGE = Regex("""\s#?(?:mal|tam|tel|hin|eng)\b""", RegexOption.IGNORE_CASE)
+
+    /** "20241080p", a year run into the resolution after it. */
+    private val GLUED_YEAR = Regex("""(?<!\d)((?:19|20)\d{2})((?:480|576|720|1080|1440|2160)[pi])\b""", RegexOption.IGNORE_CASE)
+
     private val WHITESPACE = Regex("""\s+""")
     /** Includes the long dashes, written as escapes: "Show \u2014 E5" ends in one once cut. */
-    private val TRIM_CHARS = charArrayOf('-', '\u2013', '\u2014', '(', ')', '[', ']', '{', '}', ',', ':', '_', '.', '|')
+    private val TRIM_CHARS = charArrayOf('-', '\u2013', '\u2014', '(', ')', '[', ']', '{', '}', ',', ':', '_', '.', '|', '~')
 
-    /** An uploader's Telegram handle, wherever in the name they put it. */
-    private val HANDLE = Regex("""@[A-Za-z0-9_]{3,}""")
+    private const val ZWNJ = '\u200c'
+    private const val ZWJ = '\u200d'
+
+    /** An uploader's Telegram handle, wherever in the name they put it. "@CC" is one. */
+    private val HANDLE = Regex("""@[A-Za-z0-9_]{2,}""")
+
+    /**
+     * The second words of a channel's handle ("@CC_MAL_...", "@cinema_company_..."), lower case.
+     * Only these go with the first word, so "@CC_Harbour_Night" keeps "Harbour".
+     */
+    private val CHANNEL_WORDS = setOf(
+        "all", "mal", "tam", "tel", "hin", "eng", "new", "movies", "movie", "hd", "hevc", "mob", "files", "hub",
+        "club", "official", "world", "company", "cinema", "tv", "tg", "dub", "dubbed",
+    )
 
     /**
      * A tracker's domain. The label has to be three characters or more and the suffix has to be

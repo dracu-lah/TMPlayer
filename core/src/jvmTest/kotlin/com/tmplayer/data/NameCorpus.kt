@@ -21,6 +21,36 @@ object NameCorpus {
     )
 
     val CASES = listOf(
+        // A movie channel's handle, in every way the shapes seen in real chats stapled it on (HX31).
+        Case("@CC_Silver_Harbour_Night.mp4", "Silver Harbour Night"),
+        Case("_@CC_Silver_Harbour_Night_2.mkv", "Silver Harbour Night 2"),
+        Case("@CC_ALL_Copper_Lantern_Road.mkv", "Copper Lantern Road"),
+        Case("@CC_MAL_Copper_Lantern_Road.mkv", "Copper Lantern Road"),
+        Case("@cinema_company_The_Amber_Gate.mkv", "The Amber Gate"),
+        Case("@Mallu_Movies_Reed_Harbour.mkv", "Reed Harbour"),
+        Case("@WMR_Silver_Harbour.1990.Malayalam.720p.WebHD.x264.mp4", "Silver Harbour", 1990),
+        Case("@CC Amber Gate 1978 Malayalam.mkv", "Amber Gate", 1978),
+        Case("@CC Amber Gate.mkv", "Amber Gate"),
+        Case("@CC.Silver.Harbour.1965.Malayalam @cinema_company.mp4", "Silver Harbour", 1965),
+        Case("Silver Harbour 1972 WEBRip @cinema_company.mp4", "Silver Harbour", 1972),
+        // A year run into its quality, a short language word and a tag character on the end.
+        Case("Amber Gate 20241080p.mkv", "Amber Gate", 2024),
+        Case("Amber Gate 2024720p WEB-DL.mkv", "Amber Gate", 2024),
+        Case("Moon Ledger Mal.mkv", "Moon Ledger"),
+        Case("Moon Ledger #Hin.mkv", "Moon Ledger"),
+        Case("Moon Ledger Tam 2023 720p.mkv", "Moon Ledger", 2023),
+        Case("Moon Ledger (2k23) Mal.mkv", "Moon Ledger (2k23)"),
+        Case("Moon Ledger - Eng.mkv", "Moon Ledger"),
+        // Invisible characters and a leading tilde.
+        Case("\u200B\uFE0FCopper Tide 1000.mp4", "Copper Tide 1000"),
+        Case("~Reed Lantern (2023).mkv", "Reed Lantern", 2023),
+        // A joiner after a virama spells a Malayalam letter, and stays.
+        Case("അവൻ്‍ (2020).mkv", "അവൻ്‍", 2020),
+        // Titles that must survive the rules above.
+        Case("CC.mkv", "CC"),
+        Case("Mal (2011) 720p.mkv", "Mal", 2011),
+        Case("Tales of Tam.mkv", "Tales of Tam"),
+        Case("Hindi Medium Lite (2017).mkv", "Hindi Medium Lite", 2017),
         // A channel handle run into the name with underscores.
         Case("@HarbourMob_LinkZz_Night_Lantern_2022_Tamil_Proper_HQ_HDRip_700MB_x264_AAC.mkv", "Night Lantern", 2022),
         Case("@HEVC_Mob_Night_Lantern_2022_Tamil_720p.mkv", "Night Lantern", 2022),
