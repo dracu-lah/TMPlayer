@@ -106,6 +106,16 @@ toolchain was moved forward on 2026-10-18 (Gradle 9.8.1, AGP 9.4.1, Kotlin 2.4.2
 
 - **Kotlin must be 2.4.x or newer.** `dev.g000sha256:tdl-coroutines` 15 is built against
   `kotlin-stdlib` 2.4.10 and ships Kotlin 2.4 metadata; an older compiler rejects it outright.
+- **tdl-coroutines 15.0.0 can kill TDLib's receiver (HX34).** The wrapper decodes each update
+  from TDLib's JSON on its own receive loop (`TdlEngine`, a private scope with a plain `Job` and no
+  exception handler), and a field it requires but TDLib left out throws
+  `NoSuchElementException: Key background is missing in the map` (or `Key photo ...`). The throw
+  never reaches our code: it ends that loop, cancels the wrapper's scope and goes to the thread's
+  uncaught handler, so the app dies, and swallowing it there would leave a client that never
+  answers again. 17.0.0 (2026-10-27, TDLib 1.8.69) fixes the gift without a background (its
+  #162); it is a two-release TDLib jump with API breaks, so it is its own task: bump `tdl`,
+  fix the compile errors, then a phone and TV pass. 16.0.0 also fixes updates after an
+  authorization close and the receiver start.
 - **AGP 9, because the libraries now require it.** `androidx.core` 1.19, Compose 1.12 (the BOM
   from 2026.09.00 on) and the rest of that generation declare `minAndroidGradlePluginVersion`
   9.1.0 in their AAR metadata, so staying on AGP 8 would freeze every AndroidX dependency.
