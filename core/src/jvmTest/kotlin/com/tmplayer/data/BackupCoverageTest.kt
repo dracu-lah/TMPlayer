@@ -62,6 +62,10 @@ class BackupCoverageTest {
         "decode_memory", "heavy_ask_skip",
         // Records of files on this device's disk, and what Telegram said about them.
         "cached_video", "cached_video_ids", "wc_", "dl_", "duration_", "meta_",
+        // Android's chosen downloads folder (HX26): a path on this device's disk (an SD card or a
+        // USB drive, by its mount point), which means nothing on another one. A restore keeps
+        // using the default, internal folder until asked again, rather than carry a stale path.
+        "download_root", "download_root_pending",
     )
 
     private val source = listOf(

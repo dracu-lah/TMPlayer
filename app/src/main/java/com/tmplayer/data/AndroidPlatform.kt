@@ -41,7 +41,13 @@ class AndroidPaths(context: Context) : Paths {
     private val app = context.applicationContext
     override val databaseDir: File = File(app.filesDir, "tdlib")
     override val filesDir: File = cacheDir(app)
-    override val downloadsDir: File = File(app.filesDir, DOWNLOADS)
+
+    /**
+     * Asked fresh each time: a download may be moving to, or already living on, the volume
+     * chosen in Storage settings ([AndroidStorage], HX26) rather than the internal default.
+     * TDLib's own folders above never do; only this one moves.
+     */
+    override val downloadsDir: File get() = AndroidStorage.downloadsDir(app)
     override fun disk(): DiskInfo = DiskSpace.read(app, filesDir)
     override fun downloadsDisk(): DiskInfo = DiskSpace.read(app, downloadsDir)
 
