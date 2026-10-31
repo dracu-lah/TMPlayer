@@ -361,6 +361,11 @@ fun filterChats(
     val listed = when {
         archived -> chats.filter { it.isArchived }
         section == BrowseSection.of(BrowseTab.Favorites) -> chats
+        // A folder lists what Telegram puts in it, archived channels included (HX32): the members
+        // come from TDLib's own folder list, which leaves an archived chat out only when the
+        // folder is set to exclude the archive, so hiding them again here emptied folders of
+        // archived movie channels.
+        section is BrowseSection.Folder -> chats
         else -> chats.filterNot { it.isArchived }
     }
     val bySection = when (section) {

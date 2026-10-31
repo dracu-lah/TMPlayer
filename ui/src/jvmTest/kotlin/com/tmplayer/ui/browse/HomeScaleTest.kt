@@ -1,6 +1,8 @@
 package com.tmplayer.ui.browse
 
 import com.tmplayer.data.ChatListLoad
+import com.tmplayer.data.ChatRepository
+import com.tmplayer.data.ChatSync
 import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.HomeCache
 import com.tmplayer.data.HomeRow
@@ -19,6 +21,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -53,20 +56,28 @@ class HomeScaleTest {
         var firstAt = -1L
         var syncedAt = -1L
         var foldersAt = -1L
+        var synced: ChatSync? = null
         backgroundScope.launch {
-            val first = ChatListLoad.cached(account.listCalls, 300, emptyList(), 100)
+            val first = ChatListLoad.cached(account.listCalls, 300, emptyList(), ChatRepository.ARCHIVE_FIRST).chats
             firstAt = at()
             report("chat list first answer: ${first.size} chats at ${firstAt / 1000.0} s, calls ${account.calls}")
-            ChatListLoad.sync(account.listCalls, 300, first, 100)
+            synced = ChatListLoad.sync(account.listCalls, 300, first, ChatRepository.ARCHIVE_LIMIT)
             syncedAt = at()
-            report("chat list synced at ${syncedAt / 1000.0} s, calls ${account.calls}")
-            ChatListLoad.membership(account.listCalls, 300)
+            report("chat list synced at ${syncedAt / 1000.0} s, ${synced?.chats?.size} chats, calls ${account.calls}")
+            ChatListLoad.membership(account.listCalls, ChatRepository.FOLDER_LIMIT)
             foldersAt = at()
         }
         while (foldersAt < 0 && at() < 6 * 3_600_000L) advanceTimeBy(1_000)
         report("chat list folders read (behind the list) at ${foldersAt / 1000.0} s; calls ${account.calls}; flood waits ${account.floodHits}, ${account.floodWaitedMs / 1000} s waited")
         assertTrue("first answer at $firstAt ms", firstAt in 0..5_000)
-        assertTrue("synced at $syncedAt ms", syncedAt in 0..10_000)
+        // The whole archive is read behind the list, through TDLib's own waits (HX32): the 1,500
+        // archived chats are all in, none dropped, and the sync is not reported partial.
+        assertTrue("synced at $syncedAt ms", syncedAt in 0..5 * 60_000L)
+        val result = synced
+        assertTrue("synced", result != null)
+        assertEquals(300 + 1_500, result!!.chats.size)
+        assertEquals(1_500, result.chats.count { it.isArchived })
+        assertTrue("partial: ${result.archiveFailure} ${result.dropped}", !result.partial)
     }
 
     /** Desktop Home as [rememberHomeRows] and the desktop's HomePage drive it. */

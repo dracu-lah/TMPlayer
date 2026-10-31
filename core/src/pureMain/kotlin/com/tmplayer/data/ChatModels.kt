@@ -120,9 +120,22 @@ fun arrangeChats(chats: List<ChatSummary>): List<ChatSummary> =
  * [failure] is null both when every page arrived and when Telegram said there were no more, which
  * are the two ways of succeeding. It carries the raw TDLib message so the caller can decide
  * whether to show it, retry at the delay a flood wait names, or leave the cached list alone.
+ *
+ * The main list failing and the rest of the read going short are told apart (HX32), so a list
+ * that is missing chats never reads as a whole one: [archiveFailure] is why the archive could not
+ * be read (the archived rows already in hand are kept), and [dropped] counts the chats TDLib
+ * listed but would not describe, which are left out of [chats].
  */
-data class ChatSync(val chats: List<ChatSummary>, val failure: String? = null) {
-    val complete: Boolean get() = failure == null
+data class ChatSync(
+    val chats: List<ChatSummary>,
+    val failure: String? = null,
+    val archiveFailure: String? = null,
+    val dropped: Int = 0,
+) {
+    val complete: Boolean get() = failure == null && archiveFailure == null
+
+    /** True when [chats] is known to be short of the account: some chat was left out or a list failed. */
+    val partial: Boolean get() = !complete || dropped > 0
 }
 
 /** TDLib's answer to `loadChats` once every chat in the list is already local: code 404. */

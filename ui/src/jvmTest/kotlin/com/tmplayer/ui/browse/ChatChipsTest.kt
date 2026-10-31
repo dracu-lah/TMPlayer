@@ -45,6 +45,20 @@ class ChatChipsTest {
     }
 
     @Test
+    fun `a folder lists its archived chats too, and says when it could not be read (HX32)`() {
+        val inFolder = chats.map { if (it.id == 1L || it.id == 5L) it.copy(folderIds = listOf(7)) else it }
+        val folder = BrowseSection.Folder(7, "Movies")
+        assertEquals(listOf(1L, 5L), filterChats(inFolder, folder, emptySet(), "").map { it.id })
+
+        val loaded = BrowseData(inFolder)
+        assertEquals(FolderRead.Loaded, loaded.folderRead(7))
+        assertEquals(FolderRead.Loading, BrowseData(inFolder, foldersPending = true).folderRead(7))
+        // A failed folder is never "loading" or "empty", whatever is pending for the others.
+        assertEquals(FolderRead.NotLoaded, BrowseData(inFolder, foldersPending = true, foldersFailed = setOf(7)).folderRead(7))
+        assertEquals(FolderRead.Loaded, BrowseData(inFolder, foldersFailed = setOf(8)).folderRead(7))
+    }
+
+    @Test
     fun `the sort toggle orders by name without regard to case, and Recent keeps Telegram's order`() {
         assertEquals(listOf(4L, 3L, 2L, 1L), ids(ChatFilter.All, ChatSort.Name))
         assertEquals(listOf(1L, 4L), ids(ChatFilter.Unread, ChatSort.Recent))

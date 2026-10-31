@@ -49,11 +49,12 @@ class ChatRepository(private val td: TdlClient) {
     suspend fun cachedChats(
         limit: Int = CHAT_LIMIT,
         known: List<ChatSummary> = emptyList(),
-    ): List<ChatSummary> = withContext(Dispatchers.IO) { ChatListLoad.cached(listCalls, limit, known, ARCHIVE_LIMIT) }
+        archiveLimit: Int = ARCHIVE_FIRST,
+    ): ChatSync = withContext(Dispatchers.IO) { ChatListLoad.cached(listCalls, limit, known, archiveLimit) }
 
     /** Which chats are in which folder ([ChatListLoad.membership]): read behind the list, never ahead of it. */
-    suspend fun folderMembership(): Map<Long, List<Int>> =
-        withContext(Dispatchers.IO) { ChatListLoad.membership(listCalls, CHAT_LIMIT) }
+    suspend fun folderMembership(): FolderMembership =
+        withContext(Dispatchers.IO) { ChatListLoad.membership(listCalls, FOLDER_LIMIT) }
 
     /** The TDLib calls [ChatListLoad] reads the list with. */
     private val listCalls = object : ChatListCalls {
@@ -625,13 +626,20 @@ class ChatRepository(private val td: TdlClient) {
         const val CHAT_LIMIT = 300
 
         /**
-         * Rather fewer than the main list gets.
-         *
-         * The archive is where chats go to be out of the way, so it is read to fill a tab nobody
-         * opens often rather than to be browsed three hundred deep, and every id in it costs a
-         * `getChat` on the cold-start path that the main list is already paying for.
+         * How much of the archive the first read takes, from TDLib's local list: the cold start's
+         * first frame pays a `getChat` for each. A sync reads the rest ([ARCHIVE_LIMIT]).
          */
-        const val ARCHIVE_LIMIT = 100
+        const val ARCHIVE_FIRST = 100
+
+        /**
+         * The hard ceiling on the archive a sync reads, in pages of 100 until TDLib has all of it
+         * (HX32): an account with a thousand archived channels used to lose all but 100. The
+         * rows are read in chunks and kept as the main list's are, so the ceiling bounds memory.
+         */
+        const val ARCHIVE_LIMIT = 4000
+
+        /** Chats read per folder: ids only, so it can be far above [CHAT_LIMIT]. */
+        const val FOLDER_LIMIT = 2000
 
         /** Topics read per `getForumTopics` call; Telegram's own cap is 100. */
         private const val TOPIC_PAGE = 100

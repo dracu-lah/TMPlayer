@@ -290,6 +290,8 @@ internal fun BrowseScreen(
     chatPaging: com.tmplayer.ui.browse.ChatPaging = com.tmplayer.ui.browse.ChatPaging(),
     /** Reads the chat list's next chats, as its end comes near. */
     onMoreChats: () -> Unit = {},
+    /** Reads the folders' members again, from a folder page that could not be read (HX32). */
+    onRetryFolders: () -> Unit = {},
     /** A row came on screen without its videos: fetch them. */
     onHomeRowShown: (HomeRow) -> Unit = {},
     onHomeArtWanted: (ResumeRecord) -> Unit = {},
@@ -836,7 +838,14 @@ internal fun BrowseScreen(
                         if (tab.onChatsPage) chatChips(tab)
 
                         if (visible.isEmpty()) {
-                            EmptyTab(tab, query, chatFilter, onGoToChats = goToChats)
+                            EmptyTab(
+                                tab,
+                                query,
+                                chatFilter,
+                                folderRead = (tab as? BrowseSection.Folder)?.let { data.folderRead(it.id) } ?: com.tmplayer.ui.browse.FolderRead.Loaded,
+                                onRetryFolders = onRetryFolders,
+                                onGoToChats = goToChats,
+                            )
                         } else {
                             // A first run's chat list says how to get a first video in (CP42).
                             if (query.isBlank() && tab != BrowseSection.of(BrowseTab.Saved)) {
@@ -3064,6 +3073,10 @@ private fun EmptyTab(
     query: String,
     filter: ChatFilter = ChatFilter.All,
     history: HistoryTab? = null,
+    /** Whether the folder's members are known (HX32): only a read folder may call itself empty. */
+    folderRead: com.tmplayer.ui.browse.FolderRead = com.tmplayer.ui.browse.FolderRead.Loaded,
+    /** Reads the folders again, offered when the folder could not be read. */
+    onRetryFolders: () -> Unit = {},
     /**
      * Back to every chat, with Telegram's filters cleared: the way on from a tab that fills from
      * the chats (Favourites, Unread, Archived, the History tabs), which on a television saves a
@@ -3077,6 +3090,8 @@ private fun EmptyTab(
     // message says where to go rather than offering something to press.
     val message = when {
         query.isNotBlank() -> s.browseEmptyNoMatch(query)
+        tab is BrowseSection.Folder && folderRead == com.tmplayer.ui.browse.FolderRead.Loading -> s.browseFolderLoading
+        tab is BrowseSection.Folder && folderRead == com.tmplayer.ui.browse.FolderRead.NotLoaded -> s.browseFolderNotLoaded
         tab is BrowseSection.Folder ->
             s.browseEmptyFolder
         history == HistoryTab.Continue ->
@@ -3101,6 +3116,9 @@ private fun EmptyTab(
         // Nothing in the list by that name: the same words across every chat, which also asks
         // Telegram for a chat with that @username.
         query.isNotBlank() -> BigEmpty(message, icon = icon, actionLabel = s.searchAllChats, onAction = { SearchRequest.ask(query) })
+        // A folder that could not be read is not an empty one: it says so, and reads again.
+        tab is BrowseSection.Folder && folderRead == com.tmplayer.ui.browse.FolderRead.NotLoaded ->
+            BigEmpty(message, icon = icon, actionLabel = s.commonTryAgain, onAction = onRetryFolders)
         // A folder fills in Telegram and Saved Messages by forwarding, both said in the message.
         tab is BrowseSection.Folder || tab == BrowseSection.of(BrowseTab.Saved) -> BigEmpty(message, icon = icon)
         tab.isChats && filter == ChatFilter.All -> BigEmpty(message, icon = icon)

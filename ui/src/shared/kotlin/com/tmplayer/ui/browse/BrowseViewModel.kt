@@ -55,7 +55,21 @@ import kotlinx.coroutines.launch
 data class BrowseData(
     val chats: List<ChatSummary>,
     val account: Account? = null,
-)
+    /** True while the folders' members are still being read: a folder page is not empty yet, only unknown. */
+    val foldersPending: Boolean = false,
+    /** The folders whose members could not be read (HX32): their pages say so, with Try again, never "nothing in this folder". */
+    val foldersFailed: Set<Int> = emptySet(),
+) {
+    /** How reading [folderId]'s members went. */
+    fun folderRead(folderId: Int): FolderRead = when {
+        folderId in foldersFailed -> FolderRead.NotLoaded
+        foldersPending -> FolderRead.Loading
+        else -> FolderRead.Loaded
+    }
+}
+
+/** Whether a folder's members are known: an empty folder page may only say "nothing here" when [Loaded]. */
+enum class FolderRead { Loading, NotLoaded, Loaded }
 
 /**
  * @param settings where the cold-start snapshot lives. Null in the contexts that have no
@@ -319,6 +333,13 @@ class ChatListViewModel(
     fun loadMoreChats() {
         val current = chats ?: return
         val now = _paging.value
+        // A list short for another reason than its length (the archive, a chat, a failed first
+        // read): Try again reads it all again, as Refresh does, which waits out a flood wait.
+        if (now.partial && now.failure != null) {
+            if (loadJob?.isActive == true || refreshUnlessRateLimited() > 0) return
+            _paging.value = now.copy(loading = true, failure = null)
+            return
+        }
         if (moreJob?.isActive == true || loadJob?.isActive == true || !now.more) return
         _paging.value = now.copy(loading = true, failure = null)
         moreJob = viewModelScope.launch {
@@ -338,9 +359,11 @@ class ChatListViewModel(
                     publish()
                     if (sync.complete) rememberSnapshot(sync.chats)
                 }
+                val partial = sync.failure == null && sync.partial
                 _paging.value = ChatPaging(
                     more = mayHoldMore(chats.orEmpty()),
-                    failure = sync.failure?.let { Failures.humanise(it) },
+                    failure = sync.failure?.let { Failures.humanise(it) } ?: L.chatsSomeNotLoaded.takeIf { partial },
+                    partial = partial,
                 )
             } catch (cancelled: CancellationException) {
                 _paging.value = _paging.value.copy(loading = false)
@@ -396,8 +419,27 @@ class ChatListViewModel(
     }
 
     /** Which chats are in which folder, as last read ([fillFolders]); null until read once. */
-    private var membership: Map<Long, List<Int>>? = null
+    private var membership: com.tmplayer.data.FolderMembership? = null
     private var foldersJob: Job? = null
+
+    /** True when the folders could not be read at all (no connection, a failed read): their pages offer Try again. */
+    private var foldersGaveUp = false
+
+    /** Reads the folders' members again, from a folder page's Try again (HX32). */
+    fun retryFolders() {
+        if (foldersJob?.isActive == true) return
+        foldersGaveUp = false
+        publish()
+        foldersJob = viewModelScope.launch {
+            val session = Td.awaitConnectedSessionOrNull()
+            if (session == null) {
+                foldersGaveUp = true
+                publish()
+                return@launch
+            }
+            readFolders(ChatRepository(session.client), session)
+        }
+    }
 
     /**
      * Reads which chats are in which folder, behind the list rather than ahead of it: on a
@@ -406,17 +448,30 @@ class ChatListViewModel(
      */
     private fun fillFolders(repository: ChatRepository, session: com.tmplayer.data.TdSession) {
         if (foldersJob?.isActive == true || Td.folders.value.isEmpty()) return
-        foldersJob = viewModelScope.launch {
-            val found = runCatching { repository.folderMembership() }.getOrNull() ?: return@launch
-            if (!session.isCurrent()) return@launch
-            membership = found
-            val current = chats ?: return@launch
-            val next = com.tmplayer.data.ChatListLoad.withFolders(current, found)
-            if (next != current) {
-                chats = next
-                publish()
-            }
+        foldersJob = viewModelScope.launch { readFolders(repository, session) }
+    }
+
+    private suspend fun readFolders(repository: ChatRepository, session: com.tmplayer.data.TdSession) {
+        val found = try {
+            repository.folderMembership()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Throwable) {
+            null
         }
+        if (!session.isCurrent()) return
+        if (found == null) {
+            // Not an empty answer: the folders' pages say they could not be read.
+            foldersGaveUp = true
+            publish()
+            return
+        }
+        foldersGaveUp = false
+        membership = found
+        val current = chats ?: return
+        val next = com.tmplayer.data.ChatListLoad.withFolders(current, found)
+        if (next != current) chats = next
+        publish()
     }
 
     /**
@@ -451,7 +506,15 @@ class ChatListViewModel(
                     // An empty answer here is TDLib's database still waking, not an empty
                     // account; the connected sync below is the one allowed to say "no chats".
                     // Either way the cold-start snapshot is kept until something real beats it.
-                    repository.cachedChats(limit).takeIf { it.isNotEmpty() }?.let(::foldered) ?: chats
+                    // The archive's first page only when nothing is held yet: with the archived
+                    // rows already in hand its ids are read to the ceiling, as cheap ids, and the
+                    // list does not shrink to a page of the archive between two syncs (HX32).
+                    val held = chats.orEmpty()
+                    repository.cachedChats(
+                        limit,
+                        known = held.filter { it.isArchived },
+                        archiveLimit = if (held.isEmpty()) ChatRepository.ARCHIVE_FIRST else ChatRepository.ARCHIVE_LIMIT,
+                    ).chats.takeIf { it.isNotEmpty() }?.let(::foldered) ?: chats
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (_: Throwable) {
@@ -477,6 +540,7 @@ class ChatListViewModel(
                     if (session.isCurrent() && chats == null) {
                         _state.value = UiState.Error(Failures.OFFLINE)
                     }
+                    giveUpOnFolders()
                     return@launch
                 }
                 if (connected.generation != session.generation) return@launch
@@ -500,7 +564,13 @@ class ChatListViewModel(
                 // A first launch keeps what it got even when the sync fell short (a flood wait on
                 // a large account): without it every start waited on TDLib again (HX8).
                 if (sync.complete || (firstLoad && sync.chats.isNotEmpty())) chats?.let(::rememberSnapshot)
-                if (sync.complete) _paging.value = ChatPaging(more = mayHoldMore(sync.chats))
+                // A list short of the account says so, with Try again (HX32): the main list or the
+                // archive failing, or chats TDLib would not describe, are not left unsaid.
+                _paging.value = ChatPaging(
+                    more = if (sync.failure == null) mayHoldMore(sync.chats) else _paging.value.more,
+                    failure = L.chatsSomeNotLoaded.takeIf { sync.partial },
+                    partial = sync.partial,
+                )
                 if (session.isCurrent()) fillFolders(repository, session)
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -508,11 +578,20 @@ class ChatListViewModel(
                 if (session.isCurrent() && chats == null) {
                     _state.value = UiState.Error(Failures.humanise(error))
                 }
+                _paging.value = _paging.value.copy(loading = false)
+                giveUpOnFolders()
             }
         }
         loadJob = job
         // A newer load cancels this one; only the newest says when the list has arrived.
         job.invokeOnCompletion { if (loadJob === job) _refreshing.value = false }
+    }
+
+    /** A load that ended before the folders were read: their pages say so instead of waiting for ever. */
+    private fun giveUpOnFolders() {
+        if (membership != null || foldersJob?.isActive == true) return
+        foldersGaveUp = true
+        publish()
     }
 
     /**
@@ -587,6 +666,7 @@ class ChatListViewModel(
         moreJob?.cancel()
         foldersJob?.cancel()
         membership = null
+        foldersGaveUp = false
         account = null
         chats = null
         syncedAt = 0L
@@ -618,6 +698,13 @@ class ChatListViewModel(
         val LOADING_CHATS: String get() = L.browseLoadingChats
     }
 
+    /** Whether the folders' members are still on their way: a folder's page may not call itself empty yet. */
+    private fun foldersPending(): Boolean = membership == null && !foldersGaveUp && Td.folders.value.isNotEmpty()
+
+    /** The folders that could not be read: the failed ones of the last read, or all of them when it never happened. */
+    private fun foldersFailed(): Set<Int> = membership?.failed
+        ?: if (foldersGaveUp) Td.folders.value.mapTo(HashSet()) { it.id } else emptySet()
+
     private fun publish() {
         val everything = chats ?: return
         // Kept whole, before the kids lock and the hidden chats, which are applied below on each read.
@@ -625,7 +712,7 @@ class ChatListViewModel(
         val allowed = ChatGate.allowed.value
         val loaded = com.tmplayer.data.HiddenChats.filter(KidsLock.chats(everything, allowed)) { it.id }
         _state.value = when {
-            loaded.isNotEmpty() -> UiState.Content(BrowseData(loaded, account))
+            loaded.isNotEmpty() -> UiState.Content(BrowseData(loaded, account, foldersPending(), foldersFailed()))
             // Said plainly, so a child's empty screen is not mistaken for a broken account.
             allowed != null && everything.isNotEmpty() -> UiState.Empty(L.lockKidsEmpty, icon = TmIcons.Lock)
             // A first sign in on a large account can meet this while Telegram is still sending
@@ -640,9 +727,16 @@ class ChatListViewModel(
  *
  * @param more true when the main list came back full, so Telegram may hold older chats.
  * @param loading true while the next chats are read: the list's foot shows placeholder rows.
- * @param failure why the last read failed; the foot offers Try again.
+ * @param failure why the last read failed, or that some chats did not load; the foot offers Try again.
+ * @param partial [failure] is "some chats could not load" and Try again reloads the whole list.
  */
-data class ChatPaging(val more: Boolean = false, val loading: Boolean = false, val failure: String? = null)
+data class ChatPaging(
+    val more: Boolean = false,
+    val loading: Boolean = false,
+    val failure: String? = null,
+    /** The list is short of the account for a reason other than its length (HX32): Try again reads it all again. */
+    val partial: Boolean = false,
+)
 
 /**
  * Shown under the first chat list on a device, which is the slow one: every launch after it opens

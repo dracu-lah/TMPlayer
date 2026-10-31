@@ -1919,6 +1919,7 @@ private fun Root() {
                     homeFeedOf = homeViewModel::seeAll,
                     chatPaging = chatsViewModel.paging.collectAsStateWithLifecycle().value,
                     onMoreChats = chatsViewModel::loadMoreChats,
+                    onRetryFolders = chatsViewModel::retryFolders,
                     onHomeLaterArtWanted = homeViewModel::requestArt,
                     onPlayMedia = { item, chatTitle -> play(item, chatTitle = chatTitle) },
                     homeRefreshing = homeViewModel.refreshing.collectAsStateWithLifecycle().value,

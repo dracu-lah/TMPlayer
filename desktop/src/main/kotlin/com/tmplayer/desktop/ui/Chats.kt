@@ -206,6 +206,9 @@ fun ChatsPage(
                 filterChats(data.chats, section, favourites, query, filter, sort)
             }
             if (visible.isEmpty()) {
+                // A folder whose members are not known is not an empty one (HX32).
+                val folderRead = (section as? BrowseSection.Folder)?.let { data.folderRead(it.id) } ?: com.tmplayer.ui.browse.FolderRead.Loaded
+                val folderUnknown = query.isBlank() && folderRead != com.tmplayer.ui.browse.FolderRead.Loaded
                 EmptyNote(
                     icon = when {
                         favouritesOnly && query.isBlank() -> TmIcons.StarOutline
@@ -213,6 +216,8 @@ fun ChatsPage(
                     },
                     text = when {
                         query.isNotBlank() -> s.chatsNoMatch(query)
+                        folderRead == com.tmplayer.ui.browse.FolderRead.Loading -> s.browseFolderLoading
+                        folderRead == com.tmplayer.ui.browse.FolderRead.NotLoaded -> s.browseFolderNotLoaded
                         favouritesOnly -> s.chatsFavouritesEmpty
                         section.isChats && filter != ChatFilter.All -> s.chatsSectionEmpty(filter.label)
                         else -> s.chatsSectionEmpty(section.label)
@@ -221,13 +226,17 @@ fun ChatsPage(
                     // also asks Telegram for a chat with that @username.
                     actionLabel = when {
                         query.isNotBlank() -> s.searchAllChats
+                        folderRead == com.tmplayer.ui.browse.FolderRead.Loading -> null
+                        folderRead == com.tmplayer.ui.browse.FolderRead.NotLoaded -> s.commonTryAgain
                         // An empty filter or folder of the chats: back to all of them.
                         section.isChats && filter != ChatFilter.All -> s.browseGoToChats
                         favouritesOnly -> s.browseGoToChats
                         else -> null
                     },
                     onAction = {
-                        if (query.isNotBlank()) {
+                        if (folderUnknown) {
+                            model.retryFolders()
+                        } else if (query.isNotBlank()) {
                             state.searchEverywhere(query)
                         } else {
                             state.chatFilter = ChatFilter.All
