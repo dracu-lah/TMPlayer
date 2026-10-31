@@ -78,7 +78,6 @@ import com.tmplayer.ui.icons.TmIcons
 import com.tmplayer.ui.theme.Motion
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.Tv
-import com.tmplayer.ui.theme.focusRing
 import com.tmplayer.ui.theme.rememberReducedMotion
 import kotlinx.coroutines.launch
 import com.tmplayer.ui.components.SlowAnswerNotice
@@ -408,7 +407,6 @@ private fun MicOrb(onClick: () -> Unit, modifier: Modifier = Modifier) {
                 .size(64.dp)
                 .clip(CircleShape)
                 .background(fill)
-                .focusRing(focused, CircleShape)
                 .clickable(interactionSource = interactions, indication = null, onClick = onClick),
             contentAlignment = Alignment.Center,
         ) {
@@ -449,7 +447,6 @@ private fun TvPill(label: String, icon: ImageVector?, chosen: Boolean = false, p
             .height(48.dp)
             .clip(CircleShape)
             .background(fill)
-            .focusRing(focused, CircleShape)
             .clickable(interactionSource = interactions, indication = null, onClick = onClick)
             .padding(horizontal = 18.dp),
         verticalAlignment = Alignment.CenterVertically,

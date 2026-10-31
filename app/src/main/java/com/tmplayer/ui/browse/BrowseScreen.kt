@@ -2240,7 +2240,6 @@ private fun TvChip(chip: ChipSpec) {
             .height(48.dp)
             .clip(CircleShape)
             .background(background)
-            .focusRing(focused, CircleShape)
             .semantics {
                 selected = chip.selected
                 chip.description?.let { contentDescription = it }
@@ -2286,7 +2285,6 @@ private fun PillButton(
                 .height(48.dp)
                 .clip(CircleShape)
                 .background(background)
-                .focusRing(focused, CircleShape)
                 .clickable(interactionSource = interactions, indication = null, onClick = onClick)
                 // An icon on its own gets even padding, so the pill comes out round rather than wide.
                 .padding(horizontal = if (showLabel) 18.dp else 13.dp),

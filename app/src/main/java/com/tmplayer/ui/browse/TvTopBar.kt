@@ -66,7 +66,6 @@ import com.tmplayer.ui.icons.TmIcons
 import com.tmplayer.ui.theme.Motion
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.Tv
-import com.tmplayer.ui.theme.focusRing
 import com.tmplayer.ui.theme.rememberReducedMotion
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -310,7 +309,6 @@ private fun BarTab(label: String, icon: ImageVector, selected: Boolean, onClick:
                 }
                 .clip(pill)
                 .background(fill)
-                .focusRing(focused, pill)
                 .clickable(interactionSource = interactions, indication = null, role = Role.Tab, onClick = onClick)
                 .padding(horizontal = 14.dp),
             verticalAlignment = Alignment.CenterVertically,

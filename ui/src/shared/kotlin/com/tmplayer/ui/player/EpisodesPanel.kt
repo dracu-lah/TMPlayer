@@ -79,7 +79,6 @@ import com.tmplayer.ui.icons.TmIcons
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Tone
-import com.tmplayer.ui.theme.focusRing
 
 /**
  * What the player's episode list shows: the show the video playing belongs to, the steps either
@@ -384,7 +383,6 @@ private fun PanelButton(
             .clip(shape)
             .background(if (focused) Tone.focusFill else Tone.surfaceHigh)
             .then(if (!focused) Modifier.border(1.dp, Tone.outline, shape) else Modifier)
-            .focusRing(focused, shape)
             .clickable(
                 interactionSource = interactions,
                 indication = if (tv) null else androidx.compose.foundation.LocalIndication.current,
@@ -424,7 +422,6 @@ private fun SwitchLine(label: String, on: Boolean, onToggle: () -> Unit) {
             .heightIn(min = if (tv) 52.dp else 48.dp)
             .clip(shape)
             .background(if (focused) Tone.focusFill else Tone.surfaceHigh)
-            .focusRing(focused, shape)
             .semantics {
                 role = Role.Switch
                 stateDescription = if (on) s.commonOn else s.commonOff

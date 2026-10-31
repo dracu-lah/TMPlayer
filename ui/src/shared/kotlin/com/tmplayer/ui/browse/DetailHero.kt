@@ -68,7 +68,6 @@ import com.tmplayer.ui.theme.Motion
 import com.tmplayer.ui.theme.Scrims
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.focusRing
-import com.tmplayer.ui.theme.rememberReducedMotion
 
 /*
  * The pieces a title page is built from, shared by a video's detail page and a show's page on
@@ -166,8 +165,9 @@ internal fun FactLine(facts: List<Fact>, modifier: Modifier = Modifier, style: T
 /**
  * The one bright action on a title page: Play, Resume, "Resume S2 E4". A near-white pill on the
  * dark theme and a near-black one in daylight ([Tone.hero]), 52 dp tall (48 on a television), at
- * most [HeroPillMax] wide. Under the remote it takes the focus fill and grows, so at rest and
- * focused it differs in fill, size and (in daylight) ring.
+ * most [HeroPillMax] wide. Under the remote, focus swaps the fill to [Tone.focusFill]: no scale
+ * and no ring, the same plain fill swap as the Home carousel's own pills (user, 2026-11-01, a
+ * scale and a ring on top of an already-swapped fill read as repetitive).
  */
 @Composable
 internal fun HeroPill(
@@ -182,13 +182,6 @@ internal fun HeroPill(
     val tv = !isTouch()
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusVisibleAsState()
-    val reduced = rememberReducedMotion()
-    // Grows only under a remote: a pointer's focus sits on a full-width pill with no room around it.
-    val scale by animateFloatAsState(
-        if (focused && tv && !reduced) Motion.FocusScale else 1f,
-        Motion.standard(Motion.Fast),
-        label = "heroPillScale",
-    )
     val ink = if (focused) Tone.onFocusFill else Tone.onHero
     Row(
         modifier
@@ -197,15 +190,10 @@ internal fun HeroPill(
             .widthIn(max = HeroPillMax)
             .heightIn(min = if (tv) 48.dp else if (large) 56.dp else 52.dp)
             .then(if (large) Modifier.widthIn(min = 176.dp) else Modifier)
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-            }
             // Under a finger the pill gives a little and springs back, as every button here does.
             .then(if (tv) Modifier else Modifier.pressScale(interactions, Micro.PillPressScale))
             .clip(CircleShape)
             .background(if (focused) Tone.focusFill else Tone.hero)
-            .focusRing(focused, CircleShape)
             .clickable(interactionSource = interactions, indication = if (tv) null else LocalIndication.current, onClick = onClick)
             .padding(start = if (large) 24.dp else 20.dp, end = if (large) 30.dp else 24.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -280,12 +268,6 @@ internal fun RoundAction(
     val tv = !isTouch()
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusVisibleAsState()
-    val reduced = rememberReducedMotion()
-    val scale by animateFloatAsState(
-        if (focused && tv && !reduced) Motion.FocusScale else 1f,
-        Motion.standard(Motion.Fast),
-        label = "roundActionScale",
-    )
     val shown by animateFloatAsState(if (ghost) 0f else 1f, Motion.standard(), label = "roundActionShown")
     val modifier = modifier
         .graphicsLayer { alpha = shown }
@@ -304,10 +286,6 @@ internal fun RoundAction(
             modifier
                 .then(requester)
                 .heightIn(min = 48.dp)
-                .graphicsLayer {
-                    scaleX = scale
-                    scaleY = scale
-                }
                 .clip(CircleShape)
                 .background(
                     when {
@@ -316,7 +294,6 @@ internal fun RoundAction(
                         else -> Tone.surfaceHigh
                     },
                 )
-                .focusRing(focused, CircleShape)
                 .clickable(interactionSource = interactions, indication = null, enabled = !ghost, onClick = press)
                 .then(off)
                 .padding(start = 16.dp, end = 20.dp),

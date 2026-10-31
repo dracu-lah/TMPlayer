@@ -48,7 +48,6 @@ import com.tmplayer.ui.theme.FloatingTone
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.Tv
 import com.tmplayer.ui.theme.floatingSurface
-import com.tmplayer.ui.theme.focusRing
 
 /** One line of a [TvMenu]. [detail] says what the action will do when the label cannot. */
 data class MenuAction(
@@ -275,7 +274,6 @@ private fun MenuRow(action: MenuAction, touch: Boolean, modifier: Modifier = Mod
             .fillMaxWidth()
             .clip(RoundedCornerShape(Corner.Medium))
             .background(background)
-            .focusRing(focused, RoundedCornerShape(Corner.Medium))
             .clickable(
                 interactionSource = interactions,
                 // Nothing on a TV reacts to a press with a ripple, and the focus colour is the

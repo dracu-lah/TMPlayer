@@ -47,7 +47,6 @@ import com.tmplayer.ui.theme.FloatingTone
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.collectIsFocusVisibleAsState
 import com.tmplayer.ui.theme.floatingBorder
-import com.tmplayer.ui.theme.focusRing
 import kotlinx.coroutines.delay
 
 /**
@@ -198,7 +197,6 @@ private fun MenuRow(label: String, icon: ImageVector?, detail: String?, onClick:
             .heightIn(min = 52.dp)
             .clip(shape)
             .background(if (focused) Tone.focusFill else androidx.compose.ui.graphics.Color.Transparent)
-            .focusRing(focused, shape)
             .clickable(interactionSource = interactions, indication = androidx.compose.material3.ripple(), role = Role.Button, onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,

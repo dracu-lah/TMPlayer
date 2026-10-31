@@ -81,7 +81,6 @@ import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Danger
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.collectIsFocusVisibleAsState
-import com.tmplayer.ui.theme.focusRing
 import com.tmplayer.ui.theme.rememberReducedMotion
 import com.tmplayer.ui.theme.trackedFor
 
@@ -414,7 +413,6 @@ internal fun WideIconAction(
                 .clip(CircleShape)
                 .background(if (focused) (if (destructive) Danger else Tone.focusFill) else Tone.surfaceHigh)
                 .border(1.dp, if (focused) Color.Transparent else Tone.outline, CircleShape)
-                .focusRing(focused, CircleShape)
                 .clickable(interactionSource = interactions, indication = if (enabled) LocalIndication.current else null, onClick = if (enabled) onClick else ({}))
                 .semantics {
                     contentDescription = label
@@ -445,7 +443,6 @@ private fun WideTextAction(label: String, icon: ImageVector, onClick: () -> Unit
             .clip(CircleShape)
             .background(if (focused) (if (destructive) Danger else Tone.focusFill) else Color.Transparent)
             .border(1.dp, if (focused) Color.Transparent else Tone.outline, CircleShape)
-            .focusRing(focused, CircleShape)
             .clickable(interactionSource = interactions, indication = LocalIndication.current, onClick = onClick)
             .padding(start = 14.dp, end = 18.dp),
         verticalAlignment = Alignment.CenterVertically,

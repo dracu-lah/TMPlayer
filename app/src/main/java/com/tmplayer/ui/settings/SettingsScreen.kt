@@ -2527,7 +2527,6 @@ private fun RangeRow(
             .fillMaxWidth()
             .clip(RoundedCornerShape(Corner.Large))
             .background(background)
-            .focusRing(focused, RoundedCornerShape(Corner.Large))
             .onKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
                 when (event.key) {
@@ -3098,7 +3097,6 @@ private fun StepperRow(
             .heightIn(min = 64.dp)
             .clip(RoundedCornerShape(Corner.Large))
             .background(background)
-            .focusRing(focused, RoundedCornerShape(Corner.Large))
             .onKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
                 // Left and Right, not Up and Down: Up and Down move between settings, and Left
@@ -3471,7 +3469,6 @@ private fun FocusRow(
             // The filled card is how the focused row is found from a sofa.
             .clip(RoundedCornerShape(Corner.Large))
             .background(background)
-            .focusRing(focused, RoundedCornerShape(Corner.Large))
             .clickable(
                 interactionSource = interactions,
                 indication = null,
