@@ -63,6 +63,11 @@ private val WIFI_ONLY = booleanPreferencesKey("wifi_only_downloads")
 private val SAVE_MOBILE_DATA = booleanPreferencesKey("save_mobile_data")
 private val REMOVE_AFTER_WATCHING = booleanPreferencesKey("remove_after_watching")
 private val LOW_STORAGE_MODE = booleanPreferencesKey("low_storage_mode")
+// Android's chosen place for downloads (HX26): an absolute path to a volume's app-specific
+// folder, or blank for the default, internal storage. Left out of backups; see
+// BackupCoverageTest for why a path to this device's disk cannot travel to another one.
+private val DOWNLOAD_ROOT = stringPreferencesKey("download_root")
+private val DOWNLOAD_ROOT_PENDING = stringPreferencesKey("download_root_pending")
 private val LIGHTER_PICTURES = booleanPreferencesKey("lighter_pictures")
 private val REDUCE_MOTION = booleanPreferencesKey("reduce_motion")
 private val DEVICE_CARD_DISMISSED = booleanPreferencesKey("device_card_dismissed")
@@ -660,6 +665,35 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
 
     /** Read once at the start of playback, where a flow that has not emitted yet would lie. */
     suspend fun lowStorageModeNow(): Boolean = prefs.data.first()[LOW_STORAGE_MODE] ?: false
+
+    /**
+     * Where Android moves a finished download to, blank for the default (the app's own internal
+     * storage, as it always was). An SD card or USB drive chosen in Storage settings (HX26,
+     * [com.tmplayer.data.AndroidStorage]); the watch cache and TDLib's database are never here,
+     * and never move with it.
+     */
+    val downloadRoot: Flow<String> = read { it[DOWNLOAD_ROOT] ?: "" }
+
+    suspend fun setDownloadRoot(path: String) {
+        prefs.edit { it[DOWNLOAD_ROOT] = path }
+    }
+
+    /** Read once where a flow that has not emitted yet would answer the wrong folder. */
+    suspend fun downloadRootNow(): String = prefs.data.first()[DOWNLOAD_ROOT] ?: ""
+
+    /**
+     * A move of the downloads folder begun and not finished, written before the first file goes
+     * so a kill or a crash can pick up where it left off on the next launch (decoded with
+     * [StorageRelocationPlan.Pending]; Android leaves `oldCache` blank, since its cache never
+     * moves). Blank when nothing is pending.
+     */
+    val downloadRootPending: Flow<String> = read { it[DOWNLOAD_ROOT_PENDING] ?: "" }
+
+    suspend fun setDownloadRootPending(value: String) {
+        prefs.edit { it[DOWNLOAD_ROOT_PENDING] = value }
+    }
+
+    suspend fun downloadRootPendingNow(): String = prefs.data.first()[DOWNLOAD_ROOT_PENDING] ?: ""
 
     // ---- low-end devices (CP68) -------------------------------------------------------------
 

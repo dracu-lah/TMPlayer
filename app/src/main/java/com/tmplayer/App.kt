@@ -4,10 +4,12 @@ import android.app.Application
 import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
 import com.tmplayer.data.AndroidLogSink
+import com.tmplayer.data.AndroidStorage
 import com.tmplayer.data.AppLockSession
 import com.tmplayer.data.ChatGate
 import com.tmplayer.data.AppLocales
 import com.tmplayer.data.CrashReports
+import com.tmplayer.data.DownloadRelocation
 import com.tmplayer.data.LocalDownloads
 import com.tmplayer.data.NetworkMonitor
 import com.tmplayer.data.RemoveAfterWatching
@@ -154,6 +156,15 @@ class App : Application() {
         // The isolated screenshot fixture must never open TDLib or touch a Telegram account.
         // BuildConfig is variant-specific, and the promo package is never part of a release APK.
         if (BuildConfig.APPLICATION_ID.endsWith(".promo")) return
+        // Where downloads go (HX26): mirrored into a plain var so resolving a download's folder
+        // never waits on a DataStore read, then an unfinished move from an earlier run (a kill, a
+        // crash) is picked up and finished before the viewer could notice it never was.
+        backgroundScope.launch {
+            val settings = SettingsStore(this@App)
+            launch { settings.downloadRoot.collect { AndroidStorage.currentRoot = it } }
+            AndroidStorage.currentRoot = settings.downloadRootNow()
+            DownloadRelocation.resumePending(this@App, settings)
+        }
         // The kids lock (CP57), read once here for every list of chats in the process.
         ChatGate.follow(SettingsStore(this))
         com.tmplayer.data.HiddenChats.follow(SettingsStore(this))

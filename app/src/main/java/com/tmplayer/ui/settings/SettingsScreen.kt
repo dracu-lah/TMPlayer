@@ -1497,6 +1497,11 @@ fun SettingsScreen(
                         focus = if (landOnFreeUp) landing else null,
                     )
                 }
+                // Where downloads go (HX26): internal storage, or an SD card or USB drive the
+                // device has mounted, from a plain list rather than a folder picker, which a
+                // television's remote can reach too. Left out entirely when there is nothing but
+                // internal storage to choose between.
+                item { DownloadLocationRow(onMoved = { scope.launch { refresh() } }) }
                 // Here rather than among the downloads it acts on: it is a setting, and the
                 // Downloads page is the list. Turning it on is asked first; off deletes nothing.
                 item {
