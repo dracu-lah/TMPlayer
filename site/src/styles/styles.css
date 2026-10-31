@@ -1322,18 +1322,19 @@ html:not(.js) .js-only { display: none; }
   font-size: 0.95rem;
 }
 
-.later {
+/* The web app (a beta) under the device cards on the download page: no file to pick, just a link,
+   but it is a real way to run TMPlayer like the cards above it, so it gets the same card: a
+   border and a ground, not bare text (card audit, 2026-11-01). */
+.web-app {
   margin-top: 20px;
-  padding: 18px 22px;
-  border: 1px dashed var(--outline);
-  border-radius: var(--shape-l);
-  color: var(--on-surface-variant);
+  background: var(--surface-container-lowest);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--shape-xl);
+  padding: clamp(16px, 3.5vw, 34px);
 }
-.later p { margin: 0; font-size: 0.95rem; }
-.later strong { color: var(--on-surface); font-weight: 600; }
-/* The web app (a beta) under the device cards on the download page: no file, one link. */
 .web-app .platform-head { margin-bottom: 12px; }
 .web-app .platform-title h3 { margin: 0; }
+.web-app p { color: var(--on-surface-variant); font-size: 0.95rem; }
 .web-app .web-app-go { margin-top: 14px; }
 
 /* ---------- Key table ----------
@@ -2096,13 +2097,39 @@ kbd {
   border-radius: var(--shape-xl);
 }
 .policy-wrap h2 { margin: 0 0 12px; font-size: clamp(1.3rem, 3vw, 1.8rem); }
-/* The support page's own cards: a round icon above the heading, its own ground and centred glyph
-   (reuses .panel-icon's tone colours), with room below before the words start (user, 2026-11-01). */
-.support-section-icon { margin-bottom: 14px; }
 .policy-wrap p, .policy-wrap li { color: var(--on-surface-variant); line-height: 1.7; }
 .policy-wrap p:last-child { margin-bottom: 0; }
 .policy-wrap ul { margin: 14px 0; padding-left: 22px; }
 .policy-wrap li + li { margin-top: 10px; }
+
+/* A card's icon as a squircle beside its text, big enough to read as the card's own picture
+   rather than a small badge: the support page's Chip in card and GiveBand's talk card both use
+   it (user, 2026-11-01, "squircle full icons shown on the left side of the card... looks
+   premium"). On a phone there is no room beside the text, so it becomes a cover banner across the
+   card's own top instead, bled to its edges and corners like an image would be. */
+.cover-icon-row { display: flex; align-items: flex-start; gap: 24px; width: 100%; text-align: start; }
+.cover-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 88px;
+  height: 88px;
+  border-radius: 28%;
+}
+.cover-icon svg { width: 38px; height: 38px; }
+.cover-icon-body { min-width: 0; }
+@media (max-width: 639px) {
+  .cover-icon-row { flex-direction: column; gap: 0; }
+  .cover-icon { width: 100%; height: 132px; border-radius: 0; }
+  .cover-icon svg { width: 46px; height: 46px; }
+}
+/* The two cards' own padding, bled past on a phone so the cover reaches the card's edges and
+   corners: .policy-wrap section's clamp(24px, 3.5vw, 36px) and .lcard's clamp(20px, 3vw, 28px)
+   both resolve to their fixed floor under 640px, where 3 to 3.5vw never reaches it. */
+@media (max-width: 639px) {
+  .policy-wrap .cover-icon { margin: -24px -24px 20px; border-radius: var(--shape-xl) var(--shape-xl) 0 0; }
+  .lcard-talk .cover-icon { margin: -20px -20px 20px; border-radius: var(--shape-xxl) var(--shape-xxl) 0 0; }
+}
 
 /* The 404 page: one centred column, the code large enough to read as the answer, and the
    groups 16 to 32 px apart rather than a policy page's long-form spacing. */
@@ -5016,9 +5043,6 @@ html.dl-tabs-live[data-dl-tab] .platforms > .platform { animation: dl-tab-in 0.2
 .platforms .abi.pick .abi-file { color: var(--on-surface-variant); }
 .platforms .abi.pick .badge-quiet { background: var(--secondary-container); color: var(--on-secondary-container); }
 .platforms .abi.pick .abi-cmd { background: var(--surface-container-high); }
-
-/* No iPhone: a plain line. */
-.hp #download .later { padding: 0; border: 0; margin-top: 16px; }
 
 /* What it does: text on the page, a hairline over each item; the items with a picture keep the
    picture's own frame. */

@@ -29,12 +29,16 @@ Astro.locals.lang = ENGLISH;
     <p class="policy-lede">TMPlayer is free and open source: no ads, no paid tier, no account of ours. Everything here is voluntary and unlocks nothing.</p>
 
     <section id="chip-in">
-      <div class="panel-icon icon-play support-section-icon"><Icon name="hand-heart" /></div>
-      <h2>Chip in</h2>
-      <p>If TMPlayer saves you some bother, a coffee or a monthly sponsorship pays for the time that goes into it. Any amount is welcome, and one coffee is plenty.</p>
-      <div class="support-coffee support-coffee-start">
-        <CoffeeButton label="Buy me a coffee" large />
-        <a class="support-alt" href={SPONSORS_URL} rel="noopener"><Icon name="heart-btn" /> Sponsor on GitHub</a>
+      <div class="cover-icon-row">
+        <div class="cover-icon icon-play"><Icon name="hand-heart" /></div>
+        <div class="cover-icon-body">
+          <h2>Chip in</h2>
+          <p>If TMPlayer saves you some bother, a coffee or a monthly sponsorship pays for the time that goes into it. Any amount is welcome, and one coffee is plenty.</p>
+          <div class="support-coffee support-coffee-start">
+            <CoffeeButton label="Buy me a coffee" large />
+            <a class="support-alt" href={SPONSORS_URL} rel="noopener"><Icon name="heart-btn" /> Sponsor on GitHub</a>
+          </div>
+        </div>
       </div>
     </section>
 
