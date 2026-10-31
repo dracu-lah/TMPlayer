@@ -99,7 +99,6 @@
     "bmc_hide": "अभी के लिए छिपाएँ",
     "bmc_close": "बंद करें",
     "come_and_talk": "आइए, बात करें",
-    "news_and_help_live_on": "ख़बरें और मदद Telegram और GitHub Discussions पर मिलती हैं।",
     "github_discussions": "GitHub Discussions"
   },
   "common": {
@@ -626,7 +625,6 @@
     "open_the_installer": "इंस्टॉलर खोलें",
     "what_comes_next": "आगे क्या करें",
     "join_the_telegram_channel_for_updates": "अपडेट के लिए Telegram चैनल से जुड़ें",
-    "tvpk_more_note": "हर रिलीज़ के साथ एक पैकेज भी आता है जो वही पेज TV की ऐप सूची से खोलता है। ये उनके लिए हैं जो पहले से इन TV के लिए डेवलप करते हैं; ब्राउज़र ज़्यादा आसान है।",
     "tvpk_lg": "LG webOS पैकेज",
     "tvpk_lg_note": "LG के Developer Mode ऐप और ares टूल से इंस्टॉल होता है। Developer Mode कुछ देर बाद अपने आप बंद हो जाता है, जब तक उसे बढ़ाया न जाए।",
     "tvpk_samsung": "Samsung Tizen पैकेज",

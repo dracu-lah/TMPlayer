@@ -4,6 +4,7 @@
 // coffee button and the sponsor link on the end side (one column on a phone). It is SponsorOffer
 // inside, so the offer's words, links and rules stay in one place; the default slot is free for a
 // caller that needs to add something under the buttons.
+import Icon from './Icon.astro';
 import SponsorOffer from './SponsorOffer.astro';
 import { text } from '../i18n/t';
 
@@ -12,5 +13,10 @@ const { heading2 = false } = Astro.props;
 const t = (k: string) => text(Astro.locals.lang, k);
 ---
 <div class="lcard lcard-give" data-reveal>
-  <SponsorOffer short={t('home.support_line')} heading2={heading2}><slot /></SponsorOffer>
+  <div class="cover-icon-row">
+    <div class="cover-icon icon-play"><Icon name="heart-btn" /></div>
+    <div class="cover-icon-body">
+      <SponsorOffer short={t('home.support_line')} heading2={heading2}><slot /></SponsorOffer>
+    </div>
+  </div>
 </div>

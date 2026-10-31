@@ -99,7 +99,6 @@
     "bmc_hide": "暫時隱藏",
     "bmc_close": "關閉",
     "come_and_talk": "來聊聊吧",
-    "news_and_help_live_on": "最新消息與使用協助都在 Telegram 與 GitHub Discussions。",
     "github_discussions": "GitHub Discussions"
   },
   "common": {
@@ -626,7 +625,6 @@
     "open_the_installer": "開啟安裝程式",
     "what_comes_next": "接下來",
     "join_the_telegram_channel_for_updates": "加入 Telegram 頻道，取得更新消息",
-    "tvpk_more_note": "每個版本還附帶一個安裝包，可以從電視的 App 清單開啟同一個頁面。它們是給已經為這些電視開發的人；用瀏覽器比較簡單。",
     "tvpk_lg": "LG webOS 安裝包",
     "tvpk_lg_note": "透過 LG 的「開發者模式」App 和 ares 工具安裝。開發者模式過一段時間會自動關閉，除非延長。",
     "tvpk_samsung": "三星 Tizen 安裝包",

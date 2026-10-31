@@ -99,7 +99,6 @@
     "bmc_hide": "Ukryj na razie",
     "bmc_close": "Zamknij",
     "come_and_talk": "Porozmawiajmy",
-    "news_and_help_live_on": "Nowości i pomoc znajdziesz na Telegramie i w GitHub Discussions.",
     "github_discussions": "GitHub Discussions"
   },
   "common": {
@@ -626,7 +625,6 @@
     "open_the_installer": "Otwórz instalator",
     "what_comes_next": "Co dalej",
     "join_the_telegram_channel_for_updates": "Dołącz do kanału na Telegramie, żeby śledzić aktualizacje",
-    "tvpk_more_note": "Każde wydanie zawiera też pakiet, który otwiera tę samą stronę z listy aplikacji telewizora. Są dla osób, które już tworzą oprogramowanie na te telewizory; przeglądarka jest prostsza.",
     "tvpk_lg": "Pakiet LG webOS",
     "tvpk_lg_note": "Instaluje się aplikacją LG Developer Mode i narzędziami ares. Developer Mode wyłącza się po pewnym czasie, o ile go nie przedłużysz.",
     "tvpk_samsung": "Pakiet Samsung Tizen",

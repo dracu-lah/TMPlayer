@@ -99,7 +99,6 @@
     "bmc_hide": "暂时隐藏",
     "bmc_close": "关闭",
     "come_and_talk": "来聊聊吧",
-    "news_and_help_live_on": "新闻和帮助都在 Telegram 和 GitHub Discussions 上。",
     "github_discussions": "GitHub Discussions"
   },
   "common": {
@@ -626,7 +625,6 @@
     "open_the_installer": "打开安装程序",
     "what_comes_next": "接下来",
     "join_the_telegram_channel_for_updates": "加入 Telegram 频道，获取更新消息",
-    "tvpk_more_note": "每个版本还附带一个安装包，可以从电视的应用列表打开同一个页面。它们面向已经为这些电视做开发的人；用浏览器更简单。",
     "tvpk_lg": "LG webOS 安装包",
     "tvpk_lg_note": "通过 LG 的“开发者模式”应用和 ares 工具安装。开发者模式过一段时间会自动关闭，除非延长。",
     "tvpk_samsung": "三星 Tizen 安装包",

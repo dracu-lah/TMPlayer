@@ -99,7 +99,6 @@
     "bmc_hide": "Şimdilik gizle",
     "bmc_close": "Kapat",
     "come_and_talk": "Gel, konuşalım",
-    "news_and_help_live_on": "Haberler ve yardım Telegram'da ve GitHub Discussions'ta.",
     "github_discussions": "GitHub Discussions"
   },
   "common": {
@@ -626,7 +625,6 @@
     "open_the_installer": "Yükleyiciyi açın",
     "what_comes_next": "Sırada ne var",
     "join_the_telegram_channel_for_updates": "Güncellemeler için Telegram kanalına katılın",
-    "tvpk_more_note": "Her sürümde aynı sayfayı televizyonun uygulama listesinden açan bir paket de bulunur. Bu televizyonlar için zaten geliştirme yapanlara göredir; tarayıcı daha basittir.",
     "tvpk_lg": "LG webOS paketi",
     "tvpk_lg_note": "LG'nin Developer Mode uygulaması ve ares araçlarıyla kurulur. Developer Mode uzatılmazsa bir süre sonra kendini kapatır.",
     "tvpk_samsung": "Samsung Tizen paketi",

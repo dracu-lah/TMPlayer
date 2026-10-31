@@ -99,7 +99,6 @@
     "bmc_hide": "إخفاء مؤقتًا",
     "bmc_close": "إغلاق",
     "come_and_talk": "تعال وتحدّث معنا",
-    "news_and_help_live_on": "تجد الأخبار والمساعدة على Telegram وفي GitHub Discussions.",
     "github_discussions": "GitHub Discussions"
   },
   "common": {
@@ -626,7 +625,6 @@
     "open_the_installer": "افتح ملف التثبيت",
     "what_comes_next": "ما الخطوة التالية",
     "join_the_telegram_channel_for_updates": "انضم إلى قناة Telegram لمتابعة التحديثات",
-    "tvpk_more_note": "يتضمن كل إصدار أيضًا حزمة تفتح الصفحة نفسها من قائمة تطبيقات التلفاز. وهي لمن يطوّرون أصلًا لهذه التلفازات؛ والمتصفح أبسط.",
     "tvpk_lg": "حزمة LG webOS",
     "tvpk_lg_note": "تُثبَّت بتطبيق Developer Mode من LG وأدوات ares. يُطفئ Developer Mode نفسه بعد مدة ما لم يُمدَّد.",
     "tvpk_samsung": "حزمة Samsung Tizen",

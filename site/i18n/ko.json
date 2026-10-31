@@ -99,7 +99,6 @@
     "bmc_hide": "지금은 숨기기",
     "bmc_close": "닫기",
     "come_and_talk": "이야기 나눠요",
-    "news_and_help_live_on": "소식과 도움말은 Telegram과 GitHub Discussions에 있어요.",
     "github_discussions": "GitHub Discussions"
   },
   "common": {
@@ -626,7 +625,6 @@
     "open_the_installer": "설치 파일 열기",
     "what_comes_next": "다음 단계",
     "join_the_telegram_channel_for_updates": "업데이트 소식은 Telegram 채널에서 받아 보세요",
-    "tvpk_more_note": "릴리스마다 같은 페이지를 TV의 앱 목록에서 여는 패키지도 들어 있어요. 이런 TV용으로 이미 개발하는 분들을 위한 것이고, 브라우저가 더 간단해요.",
     "tvpk_lg": "LG webOS 패키지",
     "tvpk_lg_note": "LG의 Developer Mode 앱과 ares 도구로 설치해요. Developer Mode는 연장하지 않으면 시간이 지나 저절로 꺼져요.",
     "tvpk_samsung": "Samsung Tizen 패키지",

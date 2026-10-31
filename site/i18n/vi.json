@@ -99,7 +99,6 @@
     "bmc_hide": "Tạm ẩn",
     "bmc_close": "Đóng",
     "come_and_talk": "Cùng trò chuyện",
-    "news_and_help_live_on": "Tin tức và hỗ trợ có trên Telegram và GitHub Discussions.",
     "github_discussions": "GitHub Discussions"
   },
   "common": {
@@ -626,7 +625,6 @@
     "open_the_installer": "Mở trình cài đặt",
     "what_comes_next": "Bước tiếp theo",
     "join_the_telegram_channel_for_updates": "Tham gia kênh Telegram để nhận tin cập nhật",
-    "tvpk_more_note": "Mỗi bản phát hành còn kèm một gói mở cùng trang đó từ danh sách ứng dụng của TV. Gói này dành cho người vốn đã phát triển ứng dụng cho các TV này; dùng trình duyệt thì đơn giản hơn.",
     "tvpk_lg": "Gói LG webOS",
     "tvpk_lg_note": "Cài bằng ứng dụng Developer Mode của LG và công cụ ares. Developer Mode tự tắt sau một thời gian trừ khi được gia hạn.",
     "tvpk_samsung": "Gói Samsung Tizen",

@@ -2138,7 +2138,7 @@ kbd {
    both resolve to their fixed floor under 640px, where 3 to 3.5vw never reaches it. */
 @media (max-width: 639px) {
   .policy-wrap .cover-icon { margin: -24px -24px 20px; border-radius: var(--shape-xl) var(--shape-xl) 0 0; }
-  .lcard-talk .cover-icon { margin: -20px -20px 20px; border-radius: var(--shape-xxl) var(--shape-xxl) 0 0; }
+  .lcard-talk .cover-icon, .lcard-give .cover-icon { margin: -20px -20px 20px; border-radius: var(--shape-xxl) var(--shape-xxl) 0 0; }
 }
 
 /* The 404 page: one centred column, the code large enough to read as the answer, and the
@@ -3290,6 +3290,13 @@ a[lang="ar"] { font-family: "Noto Sans Arabic", "Segoe UI", Tahoma, sans-serif; 
 /* The download page note on Android developer registration, under the phone files. */
 .platform-note { margin: 14px 0 0; font-size: 0.88rem; line-height: 1.6; color: var(--on-surface-variant); max-width: 62ch; }
 
+/* Samsung/LG: the browser is the one real action in the card, so it gets its own button rather
+   than being one more sentence next to the package's; the package stays, one step quieter, under
+   its own small caption instead of a second paragraph repeating why it exists. */
+.platform-go { margin: 14px 0 0; }
+.abi-list-label { margin: 22px 0 0; padding-top: 18px; border-top: 1px solid var(--outline-variant); font-size: 0.8rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--on-surface-variant); }
+.abi-list-label + .abi-list { margin-top: 10px; }
+
 /* ---------- A closer look: marked screenshots ----------
 
    The features page pairs a screenshot with a numbered list, and lays a numbered mark over each
@@ -3813,12 +3820,13 @@ button.btn { font: inherit; font-weight: 600; font-size: 0.98rem; cursor: pointe
 .lcard .support-links { margin: 14px 0 0; justify-content: center; }
 .lcard-star .support-links a { color: inherit; opacity: 0.85; }
 .lcard-star .support-links a:hover { opacity: 1; background: color-mix(in srgb, currentColor 14%, transparent); color: inherit; }
-/* The offer inside GiveLCard lays its parts straight into the card's grid. */
-.lcard-give .support-more { display: contents; }
+/* The offer inside GiveLCard, behind its own cover-icon-row (the same squircle treatment as the
+   talk card beside it and the support page's Chip in card), so the two footer cards read as a
+   matched pair instead of one with a picture and one without. */
 .lcard-give .support-head h2, .lcard-give .support-head h3 { color: #ffffff; }
 .lcard-give .support-why > summary { color: rgba(255, 255, 255, 0.7); }
 .lcard-give .support-why > summary:hover, .lcard-give .support-why[open] > summary { background: rgba(255, 255, 255, 0.12); color: #ffffff; }
-.lcard-give .support-coffee { margin: 4px 0 0; }
+.lcard-give .support-coffee { margin: 14px 0 0; }
 .lcard-give .support-alt { color: rgba(255, 255, 255, 0.78); }
 .lcard-give .support-alt:hover { background: rgba(255, 255, 255, 0.1); color: #ffffff; }
 @media (min-width: 900px) {
@@ -3826,12 +3834,9 @@ button.btn { font: inherit; font-weight: 600; font-size: 0.98rem; cursor: pointe
   .lcard-text { justify-items: start; }
   .lcard-side { grid-column: 2; grid-row: 1 / span 2; justify-items: center; }
   .lcard .support-links { justify-content: flex-start; margin-inline-start: -12px; }
-  .lcard-give > .support-more > :is(h2, h3, .support-head) { grid-column: 1; grid-row: 1; align-self: end; margin: 0 0 6px; }
-  .lcard-give > .support-more > p { grid-column: 1; grid-row: 2; align-self: start; }
-  .lcard-give .support-coffee { grid-column: 2; grid-row: 1 / span 2; margin: 0; }
-  /* The talk card's links read as a single row under the text, not squeezed into the card's
-     narrow side column (that wrapped ragged with four links): its own single-column layout. */
-  .lcard-talk { grid-template-columns: 1fr; }
+  /* Both footer cards read as one column (icon and text up top, the action row under it) rather
+     than the text pinned left and the action stretched down a narrow right-hand rail. */
+  .lcard-give, .lcard-talk { grid-template-columns: 1fr; }
   .lcard-talk .lcard-side { grid-column: 1; grid-row: 2; justify-items: start; }
   .lcard-talk .support-links { margin: 0; justify-content: flex-start; max-width: none; }
 }

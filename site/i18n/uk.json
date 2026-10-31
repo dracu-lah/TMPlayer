@@ -99,7 +99,6 @@
     "bmc_hide": "Сховати поки що",
     "bmc_close": "Закрити",
     "come_and_talk": "Приходьте поговорити",
-    "news_and_help_live_on": "Новини та допомога є в Telegram і GitHub Discussions.",
     "github_discussions": "GitHub Discussions"
   },
   "common": {
@@ -626,7 +625,6 @@
     "open_the_installer": "Відкрийте інсталятор",
     "what_comes_next": "Що далі",
     "join_the_telegram_channel_for_updates": "Підпишіться на канал у Telegram, щоб стежити за оновленнями",
-    "tvpk_more_note": "У кожному випуску є й пакет, який відкриває ту саму сторінку зі списку застосунків телевізора. Він для тих, хто вже розробляє для цих телевізорів; браузер простіший.",
     "tvpk_lg": "Пакет LG webOS",
     "tvpk_lg_note": "Встановлюється через застосунок LG Developer Mode та інструменти ares. Developer Mode через деякий час сам вимикається, якщо його не продовжити.",
     "tvpk_samsung": "Пакет Samsung Tizen",

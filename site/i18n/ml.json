@@ -99,7 +99,6 @@
     "bmc_hide": "ഇപ്പോൾ മറയ്ക്കുക",
     "bmc_close": "അടയ്ക്കുക",
     "come_and_talk": "വന്ന് സംസാരിക്കൂ",
-    "news_and_help_live_on": "വാർത്തകളും സഹായവും Telegram-ലും GitHub Discussions-ലും ലഭിക്കും.",
     "github_discussions": "GitHub Discussions"
   },
   "common": {
@@ -626,7 +625,6 @@
     "open_the_installer": "ഇൻസ്റ്റാളർ തുറക്കുക",
     "what_comes_next": "അടുത്തതായി എന്ത്",
     "join_the_telegram_channel_for_updates": "അപ്ഡേറ്റുകൾക്കായി Telegram ചാനലിൽ ചേരൂ",
-    "tvpk_more_note": "ഓരോ റിലീസിലും അതേ പേജ് TV-യുടെ ആപ്പ് പട്ടികയിൽ നിന്ന് തുറക്കുന്ന ഒരു പാക്കേജും ഉണ്ട്. ഇത് ഈ TV-കൾക്കായി ഇപ്പോൾത്തന്നെ ഡെവലപ്പ് ചെയ്യുന്നവർക്കുള്ളതാണ്; ബ്രൗസറാണ് എളുപ്പം.",
     "tvpk_lg": "LG webOS പാക്കേജ്",
     "tvpk_lg_note": "LG-യുടെ Developer Mode ആപ്പും ares ടൂളുകളും ഉപയോഗിച്ച് ഇൻസ്റ്റാൾ ചെയ്യുന്നു. നീട്ടിയില്ലെങ്കിൽ Developer Mode കുറച്ചുകഴിഞ്ഞ് സ്വയം ഓഫാകും.",
     "tvpk_samsung": "Samsung Tizen പാക്കേജ്",

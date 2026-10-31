@@ -99,7 +99,6 @@
     "bmc_hide": "今は隠す",
     "bmc_close": "閉じる",
     "come_and_talk": "気軽にどうぞ",
-    "news_and_help_live_on": "お知らせとサポートは、TelegramとGitHub Discussionsで行っています。",
     "github_discussions": "GitHub Discussions"
   },
   "common": {
@@ -626,7 +625,6 @@
     "open_the_installer": "インストーラーを開く",
     "what_comes_next": "次にすること",
     "join_the_telegram_channel_for_updates": "Telegramチャンネルで最新情報を受け取る",
-    "tvpk_more_note": "各リリースには、同じページをテレビのアプリ一覧から開くパッケージも付いています。これらはこうしたテレビ向けに開発している人向けで、ブラウザーのほうが簡単です。",
     "tvpk_lg": "LG webOSパッケージ",
     "tvpk_lg_note": "LGのDeveloper Modeアプリとaresツールでインストールします。Developer Modeは、延長しないと一定時間後に自動でオフになります。",
     "tvpk_samsung": "Samsung Tizenパッケージ",

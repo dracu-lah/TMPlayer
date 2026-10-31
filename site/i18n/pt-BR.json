@@ -99,7 +99,6 @@
     "bmc_hide": "Ocultar por enquanto",
     "bmc_close": "Fechar",
     "come_and_talk": "Venha conversar",
-    "news_and_help_live_on": "Novidades e ajuda ficam no Telegram e no GitHub Discussions.",
     "github_discussions": "GitHub Discussions"
   },
   "common": {
@@ -626,7 +625,6 @@
     "open_the_installer": "Abra o instalador",
     "what_comes_next": "O que vem depois",
     "join_the_telegram_channel_for_updates": "Entre no canal do Telegram para receber as novidades",
-    "tvpk_more_note": "Cada versão também traz um pacote que abre a mesma página pela lista de apps da TV. Eles são para quem já desenvolve para essas TVs; o navegador é mais simples.",
     "tvpk_lg": "Pacote para LG webOS",
     "tvpk_lg_note": "Instalado com o app Developer Mode da LG e as ferramentas ares. O Developer Mode se desliga sozinho depois de um tempo, a menos que seja prorrogado.",
     "tvpk_samsung": "Pacote para Samsung Tizen",

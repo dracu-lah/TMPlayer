@@ -99,7 +99,6 @@
     "bmc_hide": "Hide for now",
     "bmc_close": "Close",
     "come_and_talk": "Come and talk",
-    "news_and_help_live_on": "News and help live on Telegram and in GitHub Discussions.",
     "github_discussions": "GitHub Discussions"
   },
   "common": {
@@ -606,8 +605,9 @@
     "tvpk_samsung_req": "Samsung TVs from 2020",
     "tvpk_lg_title": "LG TV",
     "tvpk_lg_req": "LG TVs on webOS 5 or newer",
-    "tvpk_browser_note": "Open web.tmplayer.org in the TV's own browser: it opens TMPlayer's TV build and you sign in with a QR code. A beta, not yet tried on every model.",
-    "tvpk_more_note": "A package that opens the same page from the TV's own app list, for people who already develop for these TVs. The browser above is simpler for everyone else.",
+    "tvpk_browser_note": "Open web.tmplayer.org in the TV's own browser: TMPlayer's TV build, no install, sign in with a QR code. A beta, not yet tried on every model.",
+    "tvpk_open_browser": "Open in the TV's browser",
+    "tvpk_advanced": "For developers",
     "tvpk_lg": "LG webOS package",
     "tvpk_lg_note": "Installed with LG's Developer Mode app and the ares tools. Developer Mode switches itself off after a while unless it is extended.",
     "tvpk_samsung": "Samsung Tizen package",

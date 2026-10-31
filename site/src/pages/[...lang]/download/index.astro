@@ -160,33 +160,40 @@ const trust = ['download.trust_free', 'download.trust_source', 'download.trust_a
 
           {/*
             Samsung and LG (both a beta): the TV's own browser is the way most people should take,
-            since web.tmplayer.org answers either brand's browser with the TV build already. Shown
-            with the android-tv tab, right after the native APK, since that is who lands here with
-            scripting off (a Samsung or LG TV matches none of the five detected platforms). Each
-            brand gets its own card instead of one combined block, and the .ipk/.wgt package for the
-            TV's own app list stays folded under "advanced": both need a developer setup (LG's
+            since web.tmplayer.org answers either brand's browser with the TV build already, so it
+            gets the card's one real button. Shown with the android-tv tab, right after the native
+            APK, since that is who lands here with scripting off (a Samsung or LG TV matches none
+            of the five detected platforms). Each brand gets its own card instead of one combined
+            block; the .ipk/.wgt package for the TV's own app list sits under its own small label,
+            one step down from the browser button, since it needs a developer setup (LG's
             Developer Mode, a Samsung certificate for that one TV) the browser skips entirely.
           */}
           <Platform id="samsung-tv" icon="samsung" tone="browse" title={t('download.tvpk_samsung_title')} req={t('download.tvpk_samsung_req')}>
-            <Fragment slot="before"><p>{t('download.tvpk_browser_note')}</p></Fragment>
+            <Fragment slot="before">
+              <p>{t('download.tvpk_browser_note')}</p>
+              <p class="platform-go"><a class="btn btn-outline" href="https://web.tmplayer.org/" rel="noopener">{t('download.tvpk_open_browser')}</a></p>
+              <p class="abi-list-label">{t('download.tvpk_advanced')}</p>
+            </Fragment>
             <AbiRow asset="tv-tizen">
               <Fragment slot="name">{t('download.tvpk_samsung')}</Fragment>
               <Fragment slot="note">{t('download.tvpk_samsung_note')}</Fragment>
               <p slot="file" class="abi-file" data-file>TMPlayer-&lt;version&gt;-samsung-tizen.wgt</p>
             </AbiRow>
             <Fragment slot="foot"><a href={l('/guides/telegram-on-samsung-or-lg-tv/#tmplayer-on-the-tv')}>{t('download.tvpk_guide')}</a></Fragment>
-            <Fragment slot="after"><p class="platform-note">{t('download.tvpk_more_note')}</p></Fragment>
           </Platform>
 
           <Platform id="lg-tv" icon="lg" tone="no" title={t('download.tvpk_lg_title')} req={t('download.tvpk_lg_req')}>
-            <Fragment slot="before"><p>{t('download.tvpk_browser_note')}</p></Fragment>
+            <Fragment slot="before">
+              <p>{t('download.tvpk_browser_note')}</p>
+              <p class="platform-go"><a class="btn btn-outline" href="https://web.tmplayer.org/" rel="noopener">{t('download.tvpk_open_browser')}</a></p>
+              <p class="abi-list-label">{t('download.tvpk_advanced')}</p>
+            </Fragment>
             <AbiRow asset="tv-webos">
               <Fragment slot="name">{t('download.tvpk_lg')}</Fragment>
               <Fragment slot="note">{t('download.tvpk_lg_note')}</Fragment>
               <p slot="file" class="abi-file" data-file>TMPlayer-&lt;version&gt;-lg-webos.ipk</p>
             </AbiRow>
             <Fragment slot="foot"><a href={l('/guides/telegram-on-samsung-or-lg-tv/#tmplayer-on-the-tv')}>{t('download.tvpk_guide')}</a></Fragment>
-            <Fragment slot="after"><p class="platform-note">{t('download.tvpk_more_note')}</p></Fragment>
           </Platform>
 
           <Platform id="android" icon="android" tone="yes" title={t('download.android_phone')} req={t('download.android_8_0_and_above')}>
