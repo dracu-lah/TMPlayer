@@ -308,6 +308,15 @@ class ChatListViewModel(
         }
     private var chats: List<ChatSummary>? = null
 
+    private val _everything = MutableStateFlow<List<ChatSummary>>(emptyList())
+
+    /**
+     * Every chat read, before the kids lock, the added chats and the hidden chats narrow it: what
+     * the picker lists (HX27). It is the one screen that must see a chat the viewer has not added,
+     * since otherwise there would be no way to add it; every other screen reads [state].
+     */
+    val everything: StateFlow<List<ChatSummary>> = _everything.asStateFlow()
+
     /** When the list last finished syncing, for [refreshIfStale]. */
     private var syncedAt = 0L
 
@@ -714,6 +723,7 @@ class ChatListViewModel(
         // applied below on each read. The picker reads this list, so it must stay whole: a chat
         // cannot be added if the only list in memory is the one already narrowed to what was.
         memory?.put(QueryKey.ChatList(), everything)
+        _everything.value = everything
         val allowed = ChatGate.browsing.value
         val loaded = com.tmplayer.data.HiddenChats.filter(KidsLock.chats(everything, allowed)) { it.id }
         _state.value = when {
