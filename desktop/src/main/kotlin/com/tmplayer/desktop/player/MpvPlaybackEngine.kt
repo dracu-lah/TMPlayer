@@ -48,6 +48,28 @@ object MpvNatives {
         runCatching { MpvMediampPlayer.prepareLibraries(DesktopPaths.nativeDir.absolutePath) }
             .onFailure { Logger.w("MpvNatives", "Falling back to mediamp's temp folder", it) }
     }
+
+    /** Why libmpv would not load, kept for the session so the next play does not try again (HX36). */
+    @Volatile
+    private var unavailable: VideoEngineUnavailable? = null
+
+    /**
+     * A new [MpvPlaybackEngine], or [VideoEngineUnavailable] when libmpv cannot be loaded. The
+     * loader's failure is an `Error` (`UnsatisfiedLinkError`, then `NoClassDefFoundError` on every
+     * later try), which nothing downstream catches, so it is caught here, once, and remembered:
+     * a second play gets the same answer at once instead of loading the DLL into a policy again.
+     */
+    fun create(hwdec: String): PlaybackEngine {
+        unavailable?.let { throw it }
+        try {
+            return MpvPlaybackEngine(hwdec)
+        } catch (e: LinkageError) {
+            Logger.w("MpvNatives", "libmpv could not be loaded", e)
+            val failure = VideoEngineUnavailable(VideoEngineFailure.describe(e), e)
+            unavailable = failure
+            throw failure
+        }
+    }
 }
 
 /**

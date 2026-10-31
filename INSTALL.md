@@ -209,6 +209,12 @@ The release page shows each file's SHA-256 beside it. Check a download with `sha
 it. It is not code signed yet, so SmartScreen says **Windows protected your PC**: click
 **More info**, then **Run anyway**. Then click through the installer.
 
+If a video then opens on **Windows blocked the video engine**, Smart App Control or an
+Application Control policy refused TMPlayer's unsigned video library. Open **Windows Security,
+App and browser control, Smart App Control** and set it to **Off** (Windows lets it be turned back
+on only by reinstalling), or ask whoever manages the computer to allow `%LOCALAPPDATA%\TMPlayer`.
+Then restart TMPlayer.
+
 Either way it installs for your user only, into your own profile, so it never asks for an
 administrator password. A newer version installs over it in place; your sign-in, history and
 downloads live in your user profile and are kept. Remove it under **Settings, Apps, Installed

@@ -1742,6 +1742,8 @@
     "downmix_on": "Downmix to stereo on",
     "drop_subtitle": "Drop a subtitle file: .srt, .ass, .vtt",
     "earlier": "Earlier",
+    "engine_blocked": "Windows blocked the video engine. Smart App Control or an Application Control policy refused one of TMPlayer's files. Allow TMPlayer in Windows Security, or ask whoever manages this computer, then restart TMPlayer. Help: tmplayer.org/install",
+    "engine_missing": "The video engine could not start on this computer. Reinstall TMPlayer, then try again. Help: tmplayer.org/install",
     "error_connection": "Lost the connection to Telegram. Check this device's internet and try again.",
     "error_container": "TMPlayer can't play this file. A different copy may work.",
     "error_dolby_vision": "This video is Dolby Vision profile 5, which plays only where both the device and the screen take Dolby Vision. An HDR10 or SDR copy will play here.",

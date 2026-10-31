@@ -236,7 +236,7 @@ fun PlayerScreen(
     idleLimitMs: Long = StillWatching.IDLE_LIMIT_MS,
     shortcutsOpen: Boolean = false,
     screenshotDir: () -> java.io.File = { java.io.File(UserDirs.pictures(), "TMPlayer") },
-    engineFactory: () -> PlaybackEngine = { MpvPlaybackEngine(OpenPrefs.hwdecFor(prefs.now.softwareDecoding)) },
+    engineFactory: () -> PlaybackEngine = { MpvNatives.create(OpenPrefs.hwdecFor(prefs.now.softwareDecoding)) },
     backdrop: Color = Color.Black,
     /** The loader's picture where there is no online metadata; for the fixtures, which have no TDLib. */
     loaderThumbnail: androidx.compose.ui.graphics.ImageBitmap? = null,
@@ -256,8 +256,16 @@ fun PlayerScreen(
     val castTitle = remember { arrayOf(com.tmplayer.desktop.cast.CastTitle("")) }
     // mpv on this computer, or the TV while a cast is on (CP73): a video opened with a session up
     // goes to the TV from the start.
+    // When libmpv cannot load (Windows blocked it), a stand-in whose reason the status sheet shows (HX36).
+    val engineBlocked = remember { arrayOfNulls<String>(1) }
     val engine = remember {
-        com.tmplayer.desktop.cast.SwitchingEngine(engineFactory()).also { e ->
+        val local = try {
+            engineFactory()
+        } catch (e: VideoEngineUnavailable) {
+            engineBlocked[0] = e.message ?: VideoEngineFailure.describe(e)
+            NoEngine(engineBlocked[0].orEmpty())
+        }
+        com.tmplayer.desktop.cast.SwitchingEngine(local).also { e ->
             (com.tmplayer.desktop.cast.DesktopCast.state.value as? com.tmplayer.desktop.cast.DesktopCast.State.Connected)?.let { c ->
                 e.switchTo(com.tmplayer.desktop.cast.CastPlaybackEngine(c.client) { castTitle[0] })
             }
@@ -487,6 +495,11 @@ fun PlayerScreen(
     }
 
     LaunchedEffect(current, attempt) {
+        // No video engine: nothing to open, and Try again says the same until the app restarts.
+        engineBlocked[0]?.let {
+            phase = Phase.Failed(it)
+            return@LaunchedEffect
+        }
         phase = Phase.Loading(if (item.chatId != 0L) s.playerConnectingTelegram else s.playerOpeningVideo)
         openingBytesAt[0] = StreamReads.delivered.get()
         openingStartMs = 0L
