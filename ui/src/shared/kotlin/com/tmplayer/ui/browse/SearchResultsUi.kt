@@ -43,6 +43,8 @@ import com.tmplayer.data.SearchSort
 import com.tmplayer.data.SeriesShelf
 import com.tmplayer.i18n.L
 import com.tmplayer.ui.components.MediaArt
+import com.tmplayer.ui.components.NameArt
+import com.tmplayer.ui.components.NameArtTile
 import com.tmplayer.ui.components.PosterArt
 import com.tmplayer.ui.components.ProgressLine
 import com.tmplayer.ui.components.SkeletonBox
@@ -66,11 +68,14 @@ fun ChatAvatar(chat: ChatBrief?, size: Dp, modifier: Modifier = Modifier) {
         thumbnailFileId = chat?.photoFileId ?: 0,
         modifier = modifier.size(size).clip(CircleShape),
     ) {
-        Text(
-            NameInitial.of(chat?.title).orEmpty(),
-            style = if (size >= 40.dp) MaterialTheme.typography.titleMedium else MaterialTheme.typography.labelSmall,
-            color = Tone.muted,
-        )
+        // No photo: the chat's own colour with its letter on it, never a grey disc (HX30 a).
+        NameArtTile(chat?.title) {
+            Text(
+                NameInitial.of(chat?.title).orEmpty(),
+                style = if (size >= 40.dp) MaterialTheme.typography.titleMedium else MaterialTheme.typography.labelSmall,
+                color = NameArt.onLetter,
+            )
+        }
     }
 }
 

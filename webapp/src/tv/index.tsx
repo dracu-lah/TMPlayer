@@ -8,6 +8,7 @@ import { A, useLocation, useNavigate } from '@solidjs/router'
 import { Home03Icon, Message01Icon, PlayIcon, Search01Icon } from '@hugeicons/core-free-icons'
 import { Icon, type IconData } from '../ui/Icon'
 import { initialOf } from '../ui/initial'
+import { nameArt } from '../ui/colour'
 import { me, back } from '../session'
 import { t } from '../i18n'
 import { loadThumb } from '../screens/thumbs'
@@ -101,7 +102,14 @@ export function TvBar() {
     return (
         <header class="tv-bar" classList={{ 'over-art': location.pathname === '/' && heroUp() && !scrolled() }}>
             <div class="tv-bar-row">
-                <A class="tv-picture" href="/settings" aria-label={t('nav.you')} title={t('nav.you')} aria-current={place() === '/settings' ? 'page' : undefined}>
+                <A
+                    class="tv-picture"
+                    href="/settings"
+                    aria-label={t('nav.you')}
+                    title={t('nav.you')}
+                    aria-current={place() === '/settings' ? 'page' : undefined}
+                    style={initial() ? { background: nameArt(me()?.name), color: '#fff' } : undefined}
+                >
                     <Show when={initial()} fallback={<span class="nav-picture-blank" />}>
                         {initial()}
                     </Show>

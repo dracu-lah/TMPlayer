@@ -28,7 +28,7 @@ import { size } from './VideoList'
 import { form, layout, layoutFixed, setLayout, type Layout } from '../form'
 import { Icon, type IconData } from '../ui/Icon'
 import { TmdbMark } from '../ui/TmdbMark'
-import { initialOf } from '../ui/initial'
+import { Initial } from '../ui/PageBar'
 import { checkKept, install, installed, installPrompt, iosBrowser, keepData, kept, refused } from '../install'
 import { cacheSizes, clearCaches } from '../cacheBounds'
 import { msoneOn, stateLine } from '../msoneFlag'
@@ -174,7 +174,7 @@ function AccountHeader() {
     return (
         <Show when={me()?.name}>
             <div class="set-account">
-                <span class="initial" aria-hidden="true">{initialOf(me()!.name)}</span>
+                <Initial name={me()!.name} />
                 <span class="set-text">
                     <span class="set-title">{me()!.name}</span>
                     <Show when={me()?.username}>

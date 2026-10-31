@@ -23,6 +23,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.MediaName
+import com.tmplayer.data.NameColour
 import com.tmplayer.ui.theme.OnArt
 import com.tmplayer.ui.theme.Scrims
 import java.util.Locale
@@ -132,17 +133,11 @@ object CoverArt {
      * Eight hand-tuned dark pairs, the lighter stop first: indigo, teal, plum, rust, forest, sea
      * blue, violet and olive. Every stop keeps white text at 6.9:1 or better, so the title is
      * readable on the cover with no scrim at all, and the scrim only adds to it.
+     *
+     * Kept in core as [NameColour.Pairs], since a chat with no photo wears the same eight
+     * ([NameArt]) and the web app has to draw them too.
      */
-    val Pairs: List<Pair<Color, Color>> = listOf(
-        Color(0xFF34397A) to Color(0xFF15173A),
-        Color(0xFF145A5A) to Color(0xFF082A2C),
-        Color(0xFF6A2A5E) to Color(0xFF2A1028),
-        Color(0xFF7A3524) to Color(0xFF30140D),
-        Color(0xFF245C34) to Color(0xFF0D2716),
-        Color(0xFF1F4A7E) to Color(0xFF0C1D38),
-        Color(0xFF4A3680) to Color(0xFF1C1438),
-        Color(0xFF6B5719) to Color(0xFF2B230A),
-    )
+    val Pairs: List<Pair<Color, Color>> = NameColour.Pairs.map { (light, deep) -> Color(light) to Color(deep) }
 
     /** The cover for [item], with [chatTitle]'s initial where the screen does not say the chat. */
     fun of(item: MediaItem, chatTitle: String? = null): Cover =

@@ -5,6 +5,7 @@ import { useNavigate } from '@solidjs/router'
 import { ArrowLeft02Icon } from '@hugeicons/core-free-icons'
 import { Icon } from './Icon'
 import { initialOf } from './initial'
+import { nameArt } from './colour'
 import { back } from '../session'
 
 /** `actions`, round buttons, sit at the far end, as the chat's own bar has Star, Sort, Search and Refresh. */
@@ -24,10 +25,17 @@ export function PageBar(props: { title: string; picture?: JSX.Element; actions?:
     )
 }
 
-/** A chat's picture where there is none yet: its first letter on the raised surface. */
-export function Initial(props: { name: string; class?: string }) {
+/**
+ * A chat's picture where there is none: its first letter on the chat's own colour, the same
+ * colour the apps draw for that name (HX30 a). A name with no letter at all keeps the colour.
+ */
+export function Initial(props: { name: string | null | undefined; class?: string }) {
     return (
-        <span class={props.class ? `initial ${props.class}` : 'initial'} aria-hidden="true">
+        <span
+            class={props.class ? `initial ${props.class}` : 'initial'}
+            style={{ background: nameArt(props.name), color: '#fff' }}
+            aria-hidden="true"
+        >
             {initialOf(props.name)}
         </span>
     )

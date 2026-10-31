@@ -57,6 +57,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.tmplayer.ui.components.EmptyArt
 import com.tmplayer.ui.components.MediaArt
+import com.tmplayer.ui.components.NameArt
+import com.tmplayer.ui.components.NameArtTile
 import com.tmplayer.ui.components.SlowAnswer
 import com.tmplayer.ui.components.StateAction
 import com.tmplayer.ui.components.UiState
@@ -427,11 +429,13 @@ fun ConfirmDialog(
     LaunchedEffect(Unit) { runCatching { (if (focusConfirm) confirmFocus else cancelFocus).requestFocus() } }
 }
 
-/** A chat's picture, or its first letter on the surface colour while there is none. */
+/** A chat's picture, or its first letter on the chat's own colour while there is none (HX30 a). */
 @Composable
 fun ChatAvatar(miniThumbnail: ByteArray?, photoFileId: Int, title: String, size: Dp) {
     MediaArt(miniThumbnail, photoFileId, Modifier.size(size).clip(CircleShape)) {
-        val letter = NameInitial.of(title) ?: return@MediaArt
-        Text(letter, style = MaterialTheme.typography.titleMedium, color = Tone.muted)
+        NameArtTile(title) {
+            val letter = NameInitial.of(title) ?: return@NameArtTile
+            Text(letter, style = MaterialTheme.typography.titleMedium, color = NameArt.onLetter)
+        }
     }
 }

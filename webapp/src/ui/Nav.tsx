@@ -8,6 +8,7 @@ import { A, useLocation, useNavigate } from '@solidjs/router'
 import { Clock01Icon, History, Home03Icon, Message01Icon, Search01Icon, Settings01Icon, StarIcon } from '@hugeicons/core-free-icons'
 import { Icon, type IconData } from './Icon'
 import { initialOf } from './initial'
+import { nameArt } from './colour'
 import { me } from '../session'
 import { t } from '../i18n'
 import { form } from '../form'
@@ -76,7 +77,11 @@ export function Nav() {
                     onClick={() => setOpen(!open())}
                 >
                     <span class="nav-glyph">
-                        <span class="nav-picture" classList={{ ringed: inProfile() || open() }}>
+                        <span
+                            class="nav-picture"
+                            classList={{ ringed: inProfile() || open() }}
+                            style={initial() ? { background: nameArt(me()?.name), color: '#fff' } : undefined}
+                        >
                             <Show when={initial()} fallback={<span class="nav-picture-blank" />}>
                                 {initial()}
                             </Show>
