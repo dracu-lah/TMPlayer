@@ -1509,9 +1509,14 @@ private fun Root() {
                     )
                 }
                 if (!keyboard) {
-                    // Under every sign in screen: the line Telegram's terms ask for, and the proxy
-                    // settings, for a network where Telegram is only reached through one. Before
-                    // this the proxy was offered only once the line was already known to be down.
+                    // Under every sign in screen: the line Telegram's terms ask for, the proxy
+                    // settings, for a network where Telegram is only reached through one, and Send
+                    // logs, for a sign in that is stuck with no error state to Try again from (HX
+                    // request, 2026-10-31: the QR pane had no way to get logs out at all). Before
+                    // the proxy button, it was offered only once the line was already known to be down.
+                    val loginFooterStrings = LocalStrings.current
+                    val openProxies = { com.tmplayer.ui.connect.ProxyScreenState.open = true }
+                    val sendLogs = com.tmplayer.ui.settings.rememberSendLogs()
                     androidx.compose.foundation.layout.Column(
                         Modifier
                             .fillMaxWidth()
@@ -1520,15 +1525,43 @@ private fun Root() {
                             .padding(top = 6.dp, bottom = if (FormFactor.isTv(context)) Tv.SafeV else 10.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        val openProxies = { com.tmplayer.ui.connect.ProxyScreenState.open = true }
                         if (FormFactor.isTv(context)) {
-                            // A real button on a remote, one press down from the form's own.
-                            com.tmplayer.ui.components.TmSecondaryButton(onClick = openProxies) {
-                                androidx.tv.material3.Text(LocalStrings.current.loginProxySettings)
+                            // Two real buttons on a remote, not a dropdown: a remote's D-pad reads a
+                            // button it can land on directly far better than a menu it has to open
+                            // first, and two is still little enough to show both at once.
+                            androidx.compose.foundation.layout.Row(
+                                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp),
+                            ) {
+                                com.tmplayer.ui.components.TmSecondaryButton(onClick = openProxies) {
+                                    androidx.tv.material3.Text(loginFooterStrings.loginProxySettings)
+                                }
+                                com.tmplayer.ui.components.TmSecondaryButton(onClick = sendLogs) {
+                                    androidx.tv.material3.Text(loginFooterStrings.logsSave)
+                                }
                             }
                         } else {
-                            androidx.compose.material3.TextButton(onClick = openProxies) {
-                                androidx.compose.material3.Text(LocalStrings.current.loginProxySettings)
+                            // A single icon on a phone, where "Proxy settings" and "Send logs" are
+                            // both rare, diagnostic actions: one button under the form reads calmer
+                            // than two competing with it, and the sheet is a tap away either way.
+                            var moreOpen by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+                            Box {
+                                androidx.compose.material3.IconButton(onClick = { moreOpen = true }) {
+                                    androidx.compose.material3.Icon(
+                                        com.tmplayer.ui.icons.TmIcons.MoreVert,
+                                        contentDescription = loginFooterStrings.commonMoreOptions,
+                                        tint = Tone.muted,
+                                    )
+                                }
+                                com.tmplayer.ui.components.TmDropdownMenu(expanded = moreOpen, onDismissRequest = { moreOpen = false }) {
+                                    androidx.compose.material3.DropdownMenuItem(
+                                        text = { androidx.compose.material3.Text(loginFooterStrings.loginProxySettings) },
+                                        onClick = { moreOpen = false; openProxies() },
+                                    )
+                                    androidx.compose.material3.DropdownMenuItem(
+                                        text = { androidx.compose.material3.Text(loginFooterStrings.logsSend) },
+                                        onClick = { moreOpen = false; sendLogs() },
+                                    )
+                                }
                             }
                         }
                         androidx.compose.material3.Text(

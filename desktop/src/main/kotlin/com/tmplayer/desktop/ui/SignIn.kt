@@ -72,6 +72,7 @@ import com.tmplayer.data.Failures
 import com.tmplayer.data.QrPhase
 import com.tmplayer.data.SignInMethod
 import com.tmplayer.data.Td
+import com.tmplayer.i18n.L
 import com.tmplayer.ui.auth.CountryPicker
 import com.tmplayer.ui.auth.QrCode
 import com.tmplayer.ui.auth.QrExpiredVeil
@@ -146,9 +147,38 @@ fun SignInScreen(auth: AuthState) {
                 is AuthState.Failed -> FailedPane(auth)
             }
             // Under every pane: the proxy, for a network where Telegram is reached only through
-            // one, rather than only once the line is known to be down.
-            TextButton(onClick = { com.tmplayer.ui.connect.ProxyScreenState.open = true }) {
-                Text(s.loginProxySettings)
+            // one, rather than only once the line is known to be down, and Save logs, for a sign
+            // in stuck with no error state to Try again from (HX request, 2026-10-31: the window
+            // had no way to get logs out until a pane actually failed). One icon rather than two
+            // text buttons under the form, since both are rare, diagnostic actions.
+            var moreOpen by remember { mutableStateOf(false) }
+            val scope = rememberCoroutineScope()
+            val toast = com.tmplayer.ui.components.rememberToast()
+            Box {
+                IconButton(onClick = { moreOpen = true }) {
+                    Icon(TmIcons.MoreVert, contentDescription = s.commonMoreOptions, tint = Tone.muted)
+                }
+                com.tmplayer.ui.components.TmDropdownMenu(expanded = moreOpen, onDismissRequest = { moreOpen = false }) {
+                    androidx.compose.material3.DropdownMenuItem(
+                        text = { Text(s.loginProxySettings) },
+                        onClick = { moreOpen = false; com.tmplayer.ui.connect.ProxyScreenState.open = true },
+                    )
+                    androidx.compose.material3.DropdownMenuItem(
+                        text = { Text(s.logsSave) },
+                        onClick = {
+                            moreOpen = false
+                            scope.launch {
+                                val file = SendLogs.save()
+                                if (file == null) {
+                                    toast(L.logsFailed)
+                                } else {
+                                    toast(L.logsSavedTo(file.absolutePath))
+                                    com.tmplayer.desktop.os.OpenExternal.reveal(file)
+                                }
+                            }
+                        },
+                    )
+                }
             }
             Text(
                 LocalStrings.current.authUnofficial,
