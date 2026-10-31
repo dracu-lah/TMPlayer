@@ -171,6 +171,16 @@ class AddChatsViewModel(
 
     fun toggle(chatId: Long) = _state.update { it.copy(ticked = ChatPicking.toggle(it.ticked, chatId)) }
 
+    /**
+     * Stars or unstars a chat from the picker itself (HX30), the same store the Favourites tab
+     * reads and the same toggle the chat menu elsewhere calls: no second notion of starred lives
+     * here. A chat can be starred whether or not it ends up ticked, and the other way round.
+     */
+    fun toggleStar(chatId: Long) {
+        val store = settings ?: return
+        viewModelScope.launch { store.toggleFavorite(chatId) }
+    }
+
     /** Select all, or Clear, over the rows on screen. [visible] is [ChatPicking.visible]. */
     fun selectAll(visible: Set<Long>) = _state.update { it.copy(ticked = ChatPicking.selectAll(it.ticked, visible)) }
 

@@ -187,6 +187,20 @@ class AppLockTest {
     }
 
     @Test
+    fun `a chat starred but not added leaves the Favourites tab while its star stays stored (HX27, HX30)`() {
+        val starred = setOf(1L, 2L)
+        // The gate the Favourites tab reads is the kids lock and the chats added, met in the
+        // middle (AddedChats.gate, read through ChatGate.browsing): chat 2 was never added, so
+        // it is left out of what the tab lists, exactly as a chat the kids lock hides would be.
+        val browsing = AddedChats.gate(kids = null, added = setOf(1L, 3L))
+        assertEquals(setOf(1L), KidsLock.favourites(starred, browsing))
+        // The star itself is a question KidsLock.favourites never answers from the stored set:
+        // it only narrows what is already there, so chat 2's star is still in [starred] here,
+        // ready to reappear in the tab the moment it is added again.
+        assertTrue(2L in starred)
+    }
+
+    @Test
     fun `clearing favourites under the lock keeps the hidden ones`() = runBlocking {
         settings.toggleFavorite(1L)
         settings.toggleFavorite(2L)

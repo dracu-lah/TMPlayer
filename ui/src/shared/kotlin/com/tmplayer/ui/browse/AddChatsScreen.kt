@@ -385,6 +385,7 @@ fun AddChatsScreen(
                                 tv = tv,
                                 onToggle = { tick(!ticked); model.toggle(row.id) },
                                 onCountAgain = { model.countAgain(row.id) },
+                                onToggleStar = { model.toggleStar(row.id) },
                                 onSelectAll = selectAllNow,
                             )
                         }
@@ -451,7 +452,8 @@ private sealed interface Ask {
 /**
  * One chat: its picture, name, how many videos it holds and a tick box, the whole row the target
  * so a thumb need not find the box and a remote can land on it. A long press (the Menu key on a
- * remote or a keyboard) counts again a chat that could not be counted.
+ * remote or a keyboard) counts again a chat that could not be counted, or else stars or unstars
+ * it (HX30): the same star the Favourites tab reads, one press away without leaving the picker.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -462,6 +464,7 @@ private fun PickRow(
     tv: Boolean,
     onToggle: () -> Unit,
     onCountAgain: () -> Unit,
+    onToggleStar: () -> Unit,
     onSelectAll: () -> Unit,
 ) {
     val s = LocalStrings.current
@@ -487,6 +490,10 @@ private fun PickRow(
                         onCountAgain()
                         true
                     }
+                    !unknown && event.key == Key.Menu -> {
+                        onToggleStar()
+                        true
+                    }
                     else -> false
                 }
             }
@@ -495,13 +502,21 @@ private fun PickRow(
             .focusRing(focused, round)
             .semantics(mergeDescendants = true) {
                 toggleableState = ToggleableState(ticked)
-                if (unknown) customActions = listOf(CustomAccessibilityAction(retry) { onCountAgain(); true })
+                customActions = if (unknown) {
+                    listOf(CustomAccessibilityAction(retry) { onCountAgain(); true })
+                } else {
+                    listOf(
+                        CustomAccessibilityAction(
+                            if (row.starred) s.browseRemoveFavourite else s.browseAddFavourite,
+                        ) { onToggleStar(); true },
+                    )
+                }
             }
             .combinedClickable(
                 interactionSource = interactions,
                 indication = if (tv) null else androidx.compose.foundation.LocalIndication.current,
                 role = Role.Checkbox,
-                onLongClick = if (unknown) onCountAgain else null,
+                onLongClick = if (unknown) onCountAgain else onToggleStar,
                 onClick = onToggle,
             )
             .padding(horizontal = 8.dp, vertical = 6.dp),
@@ -523,6 +538,10 @@ private fun PickRow(
                 if (row.starred) {
                     Icon(
                         TmIcons.Star,
+                        // The row's own long press (the Menu key on a remote or a keyboard)
+                        // already toggles it, so the icon says what is true rather than act
+                        // itself: a second, separately focusable target on this row would be
+                        // a second thing a remote has to find, which the tick box already is.
                         contentDescription = s.browseFavourite,
                         tint = if (focused) Tone.onFocusFill else Tone.accent,
                         modifier = Modifier.size(14.dp),
