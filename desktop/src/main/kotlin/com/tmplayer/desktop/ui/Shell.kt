@@ -443,6 +443,9 @@ private fun Browse(state: ShellState, player: PlayerContent) {
             }
         }
 
+        // The Add chats picker (HX27), a full page over Settings and the rest, under the search.
+        AddChatsPage(state, chats)
+
         // The search across every chat (Ctrl+K), over the page and the floating bar alike.
         val searchModel = rememberViewModel(Unit) {
             com.tmplayer.ui.browse.GlobalSearchViewModel(onSearched = { state.settings.addRecentSearch(it) })

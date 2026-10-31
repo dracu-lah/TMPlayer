@@ -415,6 +415,13 @@ internal fun LibraryRows(state: ShellState, version: String, chatList: List<com.
             if (on) com.tmplayer.data.ResumeSync.syncSoon(settings, afterMs = 0)
         }
     }
+    // The picker: the chats added decide what Chats, Home and search show (HX27).
+    val added by com.tmplayer.data.AddedChats.choice.collectAsState()
+    Action(
+        s.pickerAddMore,
+        if (added.mode == com.tmplayer.data.AddedMode.Picked) s.pickerAddedCount(added.chats.size) else s.pickerAddMoreDetail,
+        TmIcons.ChatsMany,
+    ) { com.tmplayer.ui.browse.AddChatsState.open = true }
     // Hidden chats: each one with Show, and Show all for several; the empty list says how one gets here.
     if (hiddenChats.isEmpty()) {
         Setting(s.settingsHiddenChats, s.settingsHiddenChatsNone, icon = TmIcons.VisibilityOff) {}

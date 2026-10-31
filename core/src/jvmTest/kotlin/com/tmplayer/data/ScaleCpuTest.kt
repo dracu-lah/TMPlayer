@@ -66,6 +66,33 @@ class ScaleCpuTest {
         assertTrue(ms < 50)
     }
 
+    /**
+     * The picker builds its rows in composition, so the cost lands on the frame the viewer is
+     * typing into: a search over an account of 3,000 chats ranks every title (HX27). A television
+     * stick is some ten times slower than this machine, so the budget is set where that still
+     * leaves a frame's room.
+     */
+    @Test
+    fun `the picker lists three thousand chats, searched, inside a frame`() {
+        val chats = (1L..3_000L).map { ChatSummary(it, "Chat $it", null, 0, ChatKind.Channel, isArchived = it > 1_500) }
+        val starred = (1L..3_000L step 75).toSet()
+        val recommended = (1L..30L).toList()
+        fun rows(query: String) = ChatPicking.rows(
+            chats = chats,
+            added = emptySet(),
+            starred = starred,
+            recommended = recommended,
+            query = query,
+            listComplete = true,
+        )
+        repeat(3) { rows("chat 1"); rows("") }
+        val plain = timed { repeat(10) { rows("") } } / 10.0
+        val searched = timed { repeat(10) { rows("chat 17") } } / 10.0
+        report("ChatPicking.rows over 3,000 chats: $plain ms as listed, $searched ms searched")
+        assertTrue("as listed: $plain ms", plain < 20)
+        assertTrue("searched: $searched ms", searched < 60)
+    }
+
     @Test
     fun `the search across chats folds three hundred cards quickly`() {
         val query = GlobalSearch.parse("Show")

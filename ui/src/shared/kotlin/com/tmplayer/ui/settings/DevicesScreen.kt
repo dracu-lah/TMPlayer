@@ -232,7 +232,7 @@ private fun SessionCard(session: AccountSession, s: Messages, nowSec: Long, acti
  * Cancel, Cancel focused so a stray press of OK on a remote changes nothing.
  */
 @Composable
-private fun Confirm(title: String, body: String, action: String, onYes: () -> Unit, onNo: () -> Unit) {
+internal fun Confirm(title: String, body: String, action: String, onYes: () -> Unit, onNo: () -> Unit) {
     val s = LocalStrings.current
     val cancel = remember { FocusRequester() }
     AnimatedVisibility(visible = true) {

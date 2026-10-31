@@ -188,6 +188,9 @@ private sealed interface Screen {
     data object Settings : Screen
     data object Downloads : Screen
     data object About : Screen
+
+    /** The Add chats picker (HX27), a full screen of its own over whatever opened it. */
+    data object AddChats : Screen
 }
 
 /**
@@ -204,6 +207,7 @@ private val ScreenSaver = listSaver<Screen, Any>(
             is Screen.Settings -> listOf(SCREEN_SETTINGS)
             is Screen.Downloads -> listOf(SCREEN_DOWNLOADS)
             is Screen.About -> listOf(SCREEN_ABOUT)
+            is Screen.AddChats -> listOf(SCREEN_ADD_CHATS)
             is Screen.Media -> listOf(
                 SCREEN_MEDIA,
                 screen.chat.id,
@@ -227,6 +231,7 @@ private val ScreenSaver = listSaver<Screen, Any>(
             SCREEN_SETTINGS -> Screen.Settings
             SCREEN_DOWNLOADS -> Screen.Downloads
             SCREEN_ABOUT -> Screen.About
+            SCREEN_ADD_CHATS -> Screen.AddChats
             else -> Screen.Chats
         }
     },
@@ -237,6 +242,7 @@ private const val SCREEN_MEDIA = "media"
 private const val SCREEN_SETTINGS = "settings"
 private const val SCREEN_DOWNLOADS = "downloads"
 private const val SCREEN_ABOUT = "about"
+private const val SCREEN_ADD_CHATS = "add_chats"
 
 /** The phone's screens as the bar and its transitions see them. */
 private object TouchScreens {
@@ -247,11 +253,12 @@ private object TouchScreens {
         is Screen.Settings -> SCREEN_SETTINGS
         is Screen.Downloads -> SCREEN_DOWNLOADS
         is Screen.About -> SCREEN_ABOUT
+        is Screen.AddChats -> SCREEN_ADD_CHATS
     }
 
     /**
      * Where a screen stands along the bar, left to right, for which way the next one slides in:
-     * Home, Chats, Search, then the picture's pages. Null for a chat, Settings and About, which
+     * Home, Chats, Search, then the picture's pages. Null for a chat, Settings, About and the Add chats picker, which
      * are not places on the bar: a chat and About change without a slide, and Settings is pushed
      * over whatever opened it ([isPushed]).
      */
@@ -262,7 +269,7 @@ private object TouchScreens {
             else -> 3
         }
         is Screen.Downloads -> 3
-        is Screen.Settings, is Screen.Media, is Screen.About -> null
+        is Screen.Settings, is Screen.Media, is Screen.About, is Screen.AddChats -> null
     }
 
     /**
@@ -1002,6 +1009,11 @@ private fun Root() {
     // Whether that ask came from a video refused for room, which makes the review lead with Low
     // storage mode, or from Settings' Storage, whose Free up space is the same review.
     var downloadsAskedForRoom by remember { mutableStateOf(true) }
+    // Where leaving the Add chats picker goes back to (Settings' row, the Chats page's empty state), and
+    // how many times it has been opened: each opening has a view model of its own, so one closed does
+    // not come back with its old ticks, while a rotation in the middle of one keeps them.
+    var addChatsCameFrom by rememberSaveable(stateSaver = ScreenSaver) { mutableStateOf<Screen>(Screen.Chats) }
+    var addChatsRun by rememberSaveable { mutableStateOf(0) }
     // The Settings page open, kept here because Settings itself is gone while About or the cached
     // videos are showing, and coming back from either should land on the page that led there.
     var settingsPage by rememberSaveable { mutableStateOf<SettingsPage?>(null) }
@@ -1773,6 +1785,19 @@ private fun Root() {
             downloadsFreeUp = 0
             screen = Screen.Downloads
         }
+        // "Add chats" from Settings' Library, a chat list or Home with nothing added (AddChatsRequest):
+        // the picker over whatever asked, which Back returns to.
+        val openAddChats: () -> Unit = {
+            if (screen !is Screen.AddChats) {
+                addChatsCameFrom = screen
+                addChatsRun++
+                screen = Screen.AddChats
+            }
+        }
+        val addChatsAsked by com.tmplayer.ui.browse.AddChatsRequest.pending.collectAsStateWithLifecycle()
+        LaunchedEffect(addChatsAsked) {
+            if (com.tmplayer.ui.browse.AddChatsRequest.take()) openAddChats()
+        }
         val reducedMotion = rememberReducedMotion() || Motion.reduced
         // A page of the browser, from Settings or Downloads: the browser comes back on it.
         val browseTo: (BrowseSection) -> Unit = { section ->
@@ -2057,6 +2082,7 @@ private fun Root() {
                         screen = Screen.Downloads
                     },
                     onOpenAbout = { screen = Screen.About },
+                    onOpenAddChats = openAddChats,
                     initialPage = settingsPage,
                     onPageChange = { settingsPage = it },
                 )
@@ -2066,6 +2092,16 @@ private fun Root() {
                 val leaveAbout = { screen = Screen.Settings }
                 BackHandler(onBack = leaveAbout)
                 AboutScreen(onBack = leaveAbout)
+            }
+
+            is Screen.AddChats -> {
+                // No floating bar: the picker is a screen of its own, and answers Back itself.
+                com.tmplayer.ui.browse.AddChatsPage(
+                    settings = settings,
+                    chatsViewModel = chatsViewModel,
+                    run = addChatsRun,
+                    onClose = { screen = addChatsCameFrom },
+                )
             }
         }
         }
@@ -2113,8 +2149,8 @@ private fun Root() {
                     transitionSpec = {
                         val from = TouchScreens.order(initialState, pickedTab)
                         val to = TouchScreens.order(targetState, pickedTab)
-                        val push = TouchScreens.isPushed(targetState) && initialState !is Screen.About
-                        val pop = TouchScreens.isPushed(initialState) && targetState !is Screen.About
+                        val push = TouchScreens.isPushed(targetState) && initialState !is Screen.About && initialState !is Screen.AddChats
+                        val pop = TouchScreens.isPushed(initialState) && targetState !is Screen.About && targetState !is Screen.AddChats
                         when {
                             // Settings, pushed over the page that opened it and popped back off:
                             // in from the end and out towards it, the way a pushed screen moves.

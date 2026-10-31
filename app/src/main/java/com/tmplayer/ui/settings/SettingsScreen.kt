@@ -279,6 +279,8 @@ fun SettingsScreen(
     onFreeUpSpace: () -> Unit = {},
     /** Settings, then About: the licence, the notices and every link. */
     onOpenAbout: () -> Unit = {},
+    /** Library's Add more chats: the picker, a screen of its own that the caller routes to (HX27). */
+    onOpenAddChats: () -> Unit = {},
     /**
      * The page to open on, or null for the category list. Also how a caller brings the viewer back
      * to the page they left for About or the cached videos, since this screen is gone meanwhile.
@@ -1263,6 +1265,16 @@ fun SettingsScreen(
                                 if (on) com.tmplayer.data.ResumeSync.syncSoon(settings, afterMs = 0)
                             }
                         },
+                    )
+                }
+                // The picker, always listed: the chats added decide what Chats, Home and search show.
+                item {
+                    val added by com.tmplayer.data.AddedChats.choice.collectAsState()
+                    ActionRow(
+                        title = s.pickerAddMore,
+                        subtitle = if (added.mode == com.tmplayer.data.AddedMode.Picked) s.pickerAddedCount(added.chats.size) else s.pickerAddMoreDetail,
+                        icon = TmIcons.ChatsMany,
+                        onClick = onOpenAddChats,
                     )
                 }
                 // Always listed, so the way back to a hidden chat is where the viewer looks for it,
