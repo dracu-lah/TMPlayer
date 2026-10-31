@@ -9,13 +9,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -40,11 +36,9 @@ import kotlinx.coroutines.withContext
  * 1. the online poster, when posters and overviews are on and the providers know the title (one
  *    already on this device spares the Telegram thumbnail's download);
  * 2. a portrait Telegram thumbnail, which fills the card as it is;
- * 3. a landscape thumbnail, shown whole across the middle of the card over a soft field of the
- *    same picture ([Thumbnails.backdrop], a 32 px decode stretched, no blur call), so nothing of
- *    the frame is cropped away to make it tall. No name is set on it: every card that wears this
- *    art writes the name under it, and the same words on the picture as well read twice
- *    (user, 2026-10-21);
+ * 3. a landscape thumbnail, cropped to fill the card same as a portrait one. No name is set on
+ *    it: every card that wears this art writes the name under it, and the same words on the
+ *    picture as well read twice (user, 2026-10-21);
  * 4. the file's [GeneratedCover], when there is no picture at all. That one keeps the name the
  *    caller's [cover] carries, since the cover is the picture there: a gradient with nothing on it
  *    reads as a card that failed to load. A caller that writes the name beside a small poster
@@ -125,7 +119,7 @@ fun PosterArt(
                     filterQuality = Thumbnails.drawFilter,
                     modifier = Modifier.fillMaxSize(),
                 )
-                else -> WidePicture(shown, miniThumbnail, thumbnailFileId)
+                else -> WidePicture(shown)
             }
         }
         MetaPicture(
@@ -138,26 +132,14 @@ fun PosterArt(
     }
 }
 
-/** A landscape picture whole across a tall card, over a soft field of itself. */
+/** A landscape picture cropped to fill a tall card, same as a portrait one. */
 @Composable
-private fun WidePicture(picture: ImageBitmap, miniThumbnail: ByteArray?, thumbnailFileId: Int) {
-    val field by produceState<ImageBitmap?>(null, thumbnailFileId, miniThumbnail) {
-        value = Thumbnails.backdrop(thumbnailFileId, miniThumbnail)
-    }
+private fun WidePicture(picture: ImageBitmap) {
     Box(Modifier.fillMaxSize()) {
-        Image(
-            field ?: picture,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            filterQuality = FilterQuality.Low,
-            modifier = Modifier.fillMaxSize(),
-        )
-        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = FIELD_DIM)))
         Image(
             picture,
             contentDescription = null,
-            contentScale = ContentScale.Fit,
-            alignment = Alignment.Center,
+            contentScale = ContentScale.Crop,
             filterQuality = Thumbnails.drawFilter,
             modifier = Modifier.fillMaxSize(),
         )
@@ -168,9 +150,6 @@ private fun WidePicture(picture: ImageBitmap, miniThumbnail: ByteArray?, thumbna
 
 /** The online poster's decode width: a card is at most about 180 dp wide. */
 private const val POSTER_WIDTH = 342
-
-/** The soft field is dimmed so the sharp picture over it reads as the picture. */
-private const val FIELD_DIM = 0.3f
 
 /** No inline preview to show: the generated cover stands in. */
 private object NoPreview

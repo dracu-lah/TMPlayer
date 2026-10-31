@@ -1004,7 +1004,7 @@ fun SeriesPanel(
                     when {
                         url != null -> MetaPicture(url, Modifier.fillMaxSize(), maxWidth = 342, contentDescription = s.metadataPoster)
                         !metaState.settled -> PosterPlaceholder()
-                        else -> MediaArt(art.miniThumbnail, art.thumbnailFileId, Modifier.fillMaxSize(), cover = cover, compactCover = true)
+                        else -> MediaArt(art.miniThumbnail, art.thumbnailFileId, Modifier.fillMaxSize(), cover = cover, compactCover = true, showCoverTitle = false)
                     }
                 }
             }
