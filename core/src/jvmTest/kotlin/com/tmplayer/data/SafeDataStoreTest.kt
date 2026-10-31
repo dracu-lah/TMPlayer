@@ -1,7 +1,12 @@
 package com.tmplayer.data
 
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
@@ -47,5 +52,18 @@ class SafeDataStoreTest {
         val store = SettingsStore.openDataStore(blocker.resolve(SettingsStore.FILE_NAME))
         store.edit { it[stringPreferencesKey("probe")] = "lost" }
         store.data.first()
+    }
+
+    @Test
+    fun aStoreThatCompletesWithoutAValueReadsAsEmpty() = runBlocking<Unit> {
+        // A store whose scope ended hands out a flow that finishes at once; `first()` on it was HX33.
+        val ended = object : DataStore<Preferences> {
+            override val data: Flow<Preferences> = emptyFlow()
+            override suspend fun updateData(transform: suspend (t: Preferences) -> Preferences): Preferences =
+                emptyPreferences()
+        }
+        val store = SafeDataStore(ended)
+        assertTrue(store.data.first().asMap().isEmpty())
+        assertEquals("system", SettingsStore(store).language.first().ifBlank { "system" })
     }
 }

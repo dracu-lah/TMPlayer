@@ -64,6 +64,7 @@ import com.tmplayer.data.SupportReminder
 import com.tmplayer.ui.components.UiState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.mapNotNull
 import com.tmplayer.data.Td
 import com.tmplayer.ui.browse.ChatListViewModel
@@ -313,7 +314,7 @@ private fun Browse(state: ShellState, player: PlayerContent) {
         val target = runCatching { state.settings.autoOpenTarget() }.getOrNull() ?: return@LaunchedEffect
         val chat = chats.state
             .mapNotNull { (it as? UiState.Content)?.value?.chats?.firstOrNull { chat -> chat.id == target } }
-            .first()
+            .firstOrNull() ?: return@LaunchedEffect
         if (state.openChat == null && (state.destination == Destination.Home || state.destination == Destination.Chats)) state.openChat(chat)
     }
 

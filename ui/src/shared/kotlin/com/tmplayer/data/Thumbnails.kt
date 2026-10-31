@@ -11,7 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -286,8 +286,8 @@ object Thumbnails {
                     val completion = async(start = CoroutineStart.UNDISPATCHED) {
                         td.fileUpdates
                             .filter { it.file.id == fileId && it.file.local.isDownloadingCompleted }
-                            .first()
-                            .file
+                            .firstOrNull()
+                            ?.file
                     }
                     // Thumbnails are small and plentiful; low priority keeps them behind playback.
                     val started = td.downloadFile(

@@ -9,6 +9,7 @@ import com.tmplayer.platform.Logger
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.onEmpty
 import okio.Path.Companion.toPath
 import java.io.File
 import java.io.IOException
@@ -38,6 +39,9 @@ internal class SafeDataStore(private val delegate: DataStore<Preferences>) : Dat
         Logger.w(TAG, "settings could not be read", error)
         emit(emptyPreferences())
     }
+        // A store whose scope has ended completes without a single value, and every `first()` on
+        // it then threw "Expected at least one element", fatal on the Windows desktop (HX33).
+        .onEmpty { emit(emptyPreferences()) }
 
     override suspend fun updateData(transform: suspend (t: Preferences) -> Preferences): Preferences =
         try {
