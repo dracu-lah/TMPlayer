@@ -536,14 +536,17 @@ object SeriesShelf {
 
     /**
      * What makes two files the same film: the title read off the name, and the year. A file names
-     * a film only when it carries a year or a quality marker (1080p, x265), so two clips that share
-     * a plain name ("Lecture", "Video") are never taken for copies of one another.
+     * a film only when it carries a year, a quality marker (1080p, x265), or a title specific
+     * enough on its own (two words or more), so two clips that share a plain single-word name
+     * ("Lecture", "Video") are never taken for copies of one another, while two re-posts of the
+     * same multi-word title fold even when neither carries a year (a channel handle prefixed to
+     * the name instead, HX45).
      */
     private fun filmKeyOf(item: MediaItem, name: ParsedName): String? {
         if (name.isSeries) return null
         val key = name.titleKey
         if (key.isEmpty()) return null
-        if (name.year == null && item.nameMarkers.isEmpty()) return null
+        if (name.year == null && item.nameMarkers.isEmpty() && (item.genericFileName || ' ' !in key)) return null
         return "$key|${name.year ?: ""}"
     }
 

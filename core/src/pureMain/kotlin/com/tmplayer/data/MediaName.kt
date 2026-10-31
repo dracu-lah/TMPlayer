@@ -394,12 +394,15 @@ object MediaName {
             }
 
         val season = SEASON_ONLY.find(text)
-        val number = EPISODE_ONLY.find(text) ?: DASHED_EPISODE.find(text)?.takeUnless { notAnEpisode(it, text) }
+        val range = EPISODE_RANGE.find(text)
+        val number = range ?: EPISODE_ONLY.find(text) ?: DASHED_EPISODE.find(text)?.takeUnless { notAnEpisode(it, text) }
         if (season == null && number == null) return null
+        val first = number?.groupValues?.get(1)?.toIntOrNull()
         return Episode(
             season = season?.groupValues?.get(1)?.toIntOrNull(),
-            number = number?.groupValues?.get(1)?.toIntOrNull(),
+            number = first,
             at = listOfNotNull(season?.range?.first, number?.range?.first).min(),
+            last = range?.groupValues?.get(2)?.toIntOrNull()?.takeIf { last -> first != null && last > first },
         )
     }
 
@@ -823,6 +826,13 @@ object MediaName {
      * wrong turns a standalone video into episode four of a series that does not exist.
      */
     private val EPISODE_ONLY = Regex("""\bep(?:isode)?[\s-]?(\d{1,3})\b""", RegexOption.IGNORE_CASE)
+
+    /**
+     * A combined range of episodes in one file, "EP(29-32)", "Ep 29-32": the first and the last
+     * ([ParsedName.lastEpisode]), the parenthesised form the "COMBINED" releases that post several
+     * episodes together tend to write.
+     */
+    private val EPISODE_RANGE = Regex("""\bep(?:isode)?[\s-]?\(?\s*(\d{1,3})\s*-\s*(\d{1,3})\s*\)?""", RegexOption.IGNORE_CASE)
 
     /** "E05" with no word in front, which only [looseEpisode] reads. */
     private val BARE_EPISODE = Regex("""\be(\d{1,3})\b""", RegexOption.IGNORE_CASE)

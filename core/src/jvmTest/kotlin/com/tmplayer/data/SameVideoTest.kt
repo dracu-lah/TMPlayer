@@ -187,6 +187,24 @@ class SameVideoTest {
     }
 
     @Test
+    fun `a film re-posted with no year or quality marker still folds by its specific title`() {
+        // HX45: a channel handle prefixed to the name instead of a year, same exact file name
+        // posted three times (the real "Prince of Mollywood"/Doraemon duplicate chat).
+        val a = video("@MovieeManHD Doraemon Nobita and the Castle of the Undersea .mkv", duration = 60)
+        val b = video("@MovieeManHD Doraemon Nobita and the Castle of the Undersea .mkv", duration = 60)
+        val c = video("@MovieeManHD Doraemon Nobita and the Castle of the Undersea .mkv", duration = 60)
+        val tile = (SeriesShelf.arrange(listOf(a, b, c), emptyMap()).single() as ShelfEntry.File).item
+        assertEquals(3, tile.versions.size)
+    }
+
+    @Test
+    fun `a single generic word still never folds two unrelated clips`() {
+        val a = video("Lecture.mp4", duration = 300)
+        val b = video("Lecture.mp4", duration = 300)
+        assertEquals(2, tiles(listOf(a, b)).size)
+    }
+
+    @Test
     fun `not the same video splits a copy out, a rename joins a file to its film`() {
         val a = video("Night Lantern (2022) 720p.mkv")
         val b = video("Night Lantern (2022) 1080p.mkv")

@@ -32,6 +32,17 @@ class MediaNameTest {
     }
 
     @Test
+    fun `a combined-episode release written as EP(29-32) opens on the first and knows its last`() {
+        // HX45: the real "Prince of Mollywood" duplicate-tile bug, season and episode written
+        // separately with the range in parentheses, which S01E29-E32 style parsing never matched.
+        val parsed = parse("Prince of Mollywood (2026) S01 EP(29-32) COMBINED #1080p WEB-DL x264.mkv")
+        assertEquals("Prince of Mollywood", parsed.title)
+        assertEquals(1, parsed.season)
+        assertEquals(29, parsed.episode)
+        assertEquals(32, parsed.lastEpisode)
+    }
+
+    @Test
     fun `treats dots as spaces`() {
         val parsed = parse("City.Archive.1999.1080p.BluRay.x264-GROUP.mkv")
         assertEquals("City Archive", parsed.title)
