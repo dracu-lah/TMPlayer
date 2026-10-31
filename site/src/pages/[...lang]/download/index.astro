@@ -109,10 +109,10 @@ const trust = ['download.trust_free', 'download.trust_source', 'download.trust_a
     */}
     <nav class="dl-tabs" id="dl-tabs" aria-label={t('download.platforms')}>
       <a href="#android-tv" data-tab="android-tv"><Icon name="tv-card" /><span class="dl-tab-name">{t('download.tab_tv')}</span></a>
-      <a href="#android" data-tab="android"><Icon name="phone-panel" /><span class="dl-tab-name">{t('download.tab_phone')}</span></a>
+      <a href="#android" data-tab="android"><Icon name="android" /><span class="dl-tab-name">{t('download.tab_phone')}</span></a>
       <a href="#windows" data-tab="windows"><Icon name="windows-panel" /><span class="dl-tab-name">Windows</span></a>
-      <a href="#macos" data-tab="macos" data-mac-jump hidden={!hasMac}><Icon name="laptop-panel" /><span class="dl-tab-name">Mac</span></a>
-      <a href="#linux" data-tab="linux"><Icon name="terminal-panel" /><span class="dl-tab-name">Linux</span></a>
+      <a href="#macos" data-tab="macos" data-mac-jump hidden={!hasMac}><Icon name="apple" /><span class="dl-tab-name">Mac</span></a>
+      <a href="#linux" data-tab="linux"><Icon name="linux" /><span class="dl-tab-name">Linux</span></a>
     </nav>
     <TickRow items={trust.map((k) => t(k))} />
     <p class="only-here muted small">{t('download.only_here')}</p>
@@ -205,7 +205,7 @@ const trust = ['download.trust_free', 'download.trust_source', 'download.trust_a
             </details>
           </Platform>
 
-          <Platform id="android" icon="phone-panel" tone="yes" title={t('download.android_phone')} req={t('download.android_8_0_and_above')}>
+          <Platform id="android" icon="android" tone="yes" title={t('download.android_phone')} req={t('download.android_8_0_and_above')}>
             <AbiRow asset="apk-universal">
               <T slot="name" k="download.universal_apk"><span class="badge badge-quiet" slot="span1">{t('download.universal_apk__span1')}</span></T>
               <Fragment slot="note">{t('download.one_file_for_every_phone')}</Fragment>
@@ -251,7 +251,7 @@ const trust = ['download.trust_free', 'download.trust_source', 'download.trust_a
             app.js shows it once the latest release carries a macos-arm64.dmg: until then it would
             offer a file that does not exist.
           */}
-          <Platform id="macos" icon="laptop-panel" tone="play" title="Mac" req={t('download.macos_req')} computer hidden={!hasMac}>
+          <Platform id="macos" icon="apple" tone="play" title="Mac" req={t('download.macos_req')} computer hidden={!hasMac}>
             <AbiRow asset="mac-dmg">
               <Fragment slot="name">DMG <span class="badge badge-quiet">{t('download.preview')}</span></Fragment>
               <T slot="note" k="download.mac_dmg_note"><em slot="em1">{t('download.mac_dmg_note__em1')}</em><em slot="em2">{t('download.mac_dmg_note__em2')}</em><em slot="em3">{t('download.mac_dmg_note__em3')}</em><em slot="em4">{t('download.mac_dmg_note__em4')}</em></T>
@@ -265,7 +265,7 @@ const trust = ['download.trust_free', 'download.trust_source', 'download.trust_a
             <Fragment slot="foot"><a href={l('/install/#macos')}>{t('download.full_steps')}</a></Fragment>
           </Platform>
 
-          <Platform id="linux" icon="terminal-panel" tone="no" title="Linux" req={t('download.x86_64_with_glibc_2')} computer>
+          <Platform id="linux" icon="linux" tone="no" title="Linux" req={t('download.x86_64_with_glibc_2')} computer>
             <AbiRow asset="linux-appimage">
               <Fragment slot="name">AppImage <span class="badge badge-quiet">{t('download.any_distribution')}</span></Fragment>
               <Fragment slot="note">{t('download.one_file_that_runs_on')}</Fragment>
