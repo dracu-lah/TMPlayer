@@ -8,6 +8,11 @@
 // every push to main; when that call fails or is rate limited it adds up the counts the release job
 // stored in releases.json, which are at most one release old. The in-app updater fetches the same
 // files, so the page says "downloads", never users or installs.
+//
+// Since workers/download-mirror started serving most of those files from Cloudflare's edge cache
+// instead of github.com, GitHub's own count only covers the first request for each file; every
+// request the mirror answers from cache is invisible to it. mirrorHits() reads the mirror's own
+// running total of those and it's added in, so DOWNLOADS keeps covering every real download.
 import { releases } from './releases';
 import { published } from '../i18n/t';
 
@@ -41,12 +46,25 @@ async function liveDownloads(): Promise<number | null> {
   }
 }
 
+async function mirrorHits(): Promise<number> {
+  try {
+    const res = await fetch('https://tmplayer-download-mirror.dracu.workers.dev/stats', {
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return 0;
+    const body = (await res.json()) as { hits?: number };
+    return body.hits ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
 const stored = releases.reduce((total, r) => total + (r.downloads ?? 0), 0);
-const live = await liveDownloads();
+const [live, hits] = await Promise.all([liveDownloads(), mirrorHits()]);
 
 /** Never below what the release job last stored, in case GitHub answers with a partial list. */
-export const DOWNLOADS = Math.max(live ?? 0, stored);
-console.log(`[tm-stats] ${DOWNLOADS} downloads (${live === null ? 'GitHub did not answer, stored counts' : 'from GitHub'})`);
+export const DOWNLOADS = Math.max(live ?? 0, stored) + hits;
+console.log(`[tm-stats] ${DOWNLOADS} downloads (${live === null ? 'GitHub did not answer, stored counts' : 'from GitHub'} + ${hits} from the mirror)`);
 export const LANGUAGES = published.length;
 export const LATEST = releases[0];
 

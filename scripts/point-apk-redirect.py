@@ -15,14 +15,16 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 VERCEL = ROOT / "site" / "vercel.json"
-REPO = "dracu-lah/TMPlayer"
+# workers/download-mirror: caches this at Cloudflare's edge, since a TV's Downloader app is what
+# this redirect is for and a slow route to GitHub's asset CDN hits it hardest.
+MIRROR = "https://tmplayer-download-mirror.dracu.workers.dev"
 
 
 def main():
     if len(sys.argv) != 2 or not re.fullmatch(r"\d+\.\d+\.\d+", sys.argv[1]):
         sys.exit("usage: point-apk-redirect.py X.Y.Z")
     version = sys.argv[1]
-    url = f"https://github.com/{REPO}/releases/download/v{version}/TMPlayer-{version}-universal.apk"
+    url = f"{MIRROR}/download/v{version}/TMPlayer-{version}-universal.apk"
     config = json.loads(VERCEL.read_text())
     hits = 0
     for rule in config.get("redirects", []):

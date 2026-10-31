@@ -24,6 +24,10 @@ import re
 import sys
 
 REPO = "dracu-lah/TMPlayer"
+# workers/download-mirror: caches these at Cloudflare's edge so a slow route to GitHub's asset
+# CDN doesn't make every update download slow. GitHub still sees the first request for a file, so
+# its download_count keeps counting; the worker counts every request after that itself.
+MIRROR = "https://tmplayer-download-mirror.dracu.workers.dev"
 
 # Feed key to the file name CI gives it: the same names release.yml checks before publishing.
 # Only what a release carries; a client finds nothing under any other key and says so.
@@ -126,7 +130,7 @@ def main():
         if digest is None:
             digest = sha256(os.path.join(args.dist, name))
         assets[key] = {
-            "url": f"https://github.com/{REPO}/releases/download/{tag}/{name}",
+            "url": f"{MIRROR}/download/{tag}/{name}",
             "sha256": digest,
             "size": size,
         }

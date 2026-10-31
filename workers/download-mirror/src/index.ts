@@ -1,23 +1,50 @@
 /* Caches TMPlayer's own GitHub release assets at Cloudflare's edge, so a slow route to GitHub's
    asset CDN doesn't make every download slow. The first request for a given file still reaches
-   github.com (so its download_count stays accurate; see site/AGENTS.md "Home page pill and
-   stats"), and Cloudflare serves every request after from its edge cache.
+   github.com, so GitHub's own download_count sees it as usual. Every request after is served
+   from Cloudflare's cache instead, which GitHub never sees, so this worker counts those itself in
+   DOWNLOADS (a KV namespace) and answers /stats with the running total. site/src/lib/stats.ts
+   adds that total to GitHub's own count, so the home page's "downloads" figure covers both: see
+   site/AGENTS.md "Home page pill and stats".
 
    Only ever proxies TMPlayer's own release assets: the path has to match PATH below, which pins
    the owner/repo and the file naming scripts/write-latest-json.py already uses. Anything else,
    or a method other than GET/HEAD, is refused before a subrequest is made. */
 
+interface Env {
+  DOWNLOADS: KVNamespace
+}
+
 const REPO = 'dracu-lah/TMPlayer'
 const PATH =
   /^\/download\/(v\d+\.\d+\.\d+(?:-beta\.\d+)?)\/(TMPlayer-[A-Za-z0-9._-]+\.(?:apk|msi|dmg|AppImage|tar\.xz))$/
+const COUNTER_KEY = 'hits'
+
+// Not atomic (a read, then a write), so a handful of requests landing in the same millisecond on
+// the same colo can lose a count to each other. Fine here: the number only has to track real
+// usage closely, the way GitHub's own download_count already only roughly does.
+async function bumpCounter(env: Env): Promise<void> {
+  const current = Number(await env.DOWNLOADS.get(COUNTER_KEY)) || 0
+  await env.DOWNLOADS.put(COUNTER_KEY, String(current + 1))
+}
+
+async function stats(env: Env): Promise<Response> {
+  const hits = Number(await env.DOWNLOADS.get(COUNTER_KEY)) || 0
+  return new Response(JSON.stringify({ hits }), {
+    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store' },
+  })
+}
 
 export default {
-  async fetch(request: Request): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    const url = new URL(request.url)
+
+    if (request.method === 'GET' && url.pathname === '/stats') {
+      return stats(env)
+    }
     if (request.method !== 'GET' && request.method !== 'HEAD') {
       return new Response('Method not allowed', { status: 405, headers: { Allow: 'GET, HEAD' } })
     }
 
-    const url = new URL(request.url)
     const match = PATH.exec(url.pathname)
     if (!match) {
       return new Response('Not found', { status: 404 })
@@ -36,14 +63,20 @@ export default {
       method: request.method,
       headers,
       redirect: 'follow',
-      // Tells Cloudflare's normal edge cache to keep this response a year: release files are
-      // named with their version (TMPlayer-1.28.3-universal.apk), so a given URL never changes
-      // under us. cacheEverything also applies to a cross-origin subrequest like this one.
+      // Tells Cloudflare's edge cache to keep this response a year: release files are named with
+      // their version (TMPlayer-1.28.3-universal.apk), so a given URL never changes under us.
+      // cacheEverything also applies to a cross-origin subrequest like this one, and the Response
+      // it returns carries Cloudflare's own cf-cache-status, which is how bumpCounter below knows
+      // this request never reached github.com.
       cf: { cacheEverything: true, cacheTtl: 31536000 },
     })
 
     if (upstream.status >= 400) {
       return new Response('Upstream error', { status: upstream.status === 404 ? 404 : 502 })
+    }
+
+    if (request.method === 'GET' && upstream.headers.get('cf-cache-status') === 'HIT') {
+      ctx.waitUntil(bumpCounter(env))
     }
 
     const out = new Headers(upstream.headers)

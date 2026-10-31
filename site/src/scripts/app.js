@@ -46,6 +46,19 @@ var tmT = (function () {
   var LATEST_PAGE = RELEASES_PAGE + '/latest';
   var TIMEOUT_MS = 9000;
 
+  /* Every binary download goes through the edge cache at workers/download-mirror instead of
+     straight to GitHub's asset CDN, which is what was slow for some readers. The first request
+     for a given file still reaches github.com (so its download_count still sees it), and the
+     worker counts every request it serves from cache itself (its /stats, added into
+     site/src/lib/stats.ts), so the home page's downloads figure stays accurate either way. */
+  var DOWNLOAD_MIRROR = 'https://tmplayer-download-mirror.dracu.workers.dev';
+  var GITHUB_DOWNLOAD_PREFIX = 'https://github.com/' + OWNER + '/' + REPO + '/releases/download/';
+  function mirrored(url) {
+    return typeof url === 'string' && url.indexOf(GITHUB_DOWNLOAD_PREFIX) === 0
+      ? DOWNLOAD_MIRROR + '/download/' + url.slice(GITHUB_DOWNLOAD_PREFIX.length)
+      : url;
+  }
+
   /* Every file a release can carry, matched loosely on the end of its name so a
      version in the middle never matters. The label is what the previous
      releases list calls it. A release now carries the universal APK, the MSI,
@@ -339,7 +352,7 @@ var tmT = (function () {
         return;
       }
       if (dl) {
-        dl.href = asset.browser_download_url;
+        dl.href = mirrored(asset.browser_download_url);
         dl.setAttribute('aria-label', tmT('download_file', 'Download {file}', { file: asset.name }));
       }
       if (size) {
@@ -354,7 +367,7 @@ var tmT = (function () {
     Array.prototype.forEach.call(sums, function (a) {
       var asset = findAsset(release, a.getAttribute('data-asset-link'));
       if (!asset) { return; }
-      a.href = asset.browser_download_url;
+      a.href = mirrored(asset.browser_download_url);
       var f = a.querySelector('[data-file]');
       if (f) { f.textContent = asset.name; }
     });
@@ -387,7 +400,7 @@ var tmT = (function () {
       var downloads = document.querySelector('a[href$="/download/"]');
       var page = downloads ? downloads.getAttribute('href') : '/download/';
       if (dmg) {
-        el.osBtn.href = dmg.browser_download_url;
+        el.osBtn.href = mirrored(dmg.browser_download_url);
         el.osBtn.title = dmg.name;
         el.osLabel.textContent = tmT('download_version_mac', 'Download {version} for Macs with Apple Silicon', { version: tag });
         // The hero has room for a short label only. It opens the macOS card rather than the file,
@@ -419,8 +432,8 @@ var tmT = (function () {
 
     var asset = kindId ? findAsset(release, kindId) : null;
     if (asset) {
-      el.osBtn.href = asset.browser_download_url;
-      el.heroBtn.href = asset.browser_download_url;
+      el.osBtn.href = mirrored(asset.browser_download_url);
+      el.heroBtn.href = mirrored(asset.browser_download_url);
       var what = kindOf(asset).label;
       el.heroLabel.textContent = tmT('download_version_for', 'Download {version} for {os}', { version: tag, os: NAMES[os] });
       el.osLabel.textContent = el.heroLabel.textContent;
@@ -484,7 +497,7 @@ var tmT = (function () {
         var list = make('ul', 'prev-assets');
         assets.forEach(function (asset) {
           var item = make('li');
-          var a = link(asset.browser_download_url, null, kindOf(asset).label);
+          var a = link(mirrored(asset.browser_download_url), null, kindOf(asset).label);
           a.setAttribute('aria-label', tmT('download_file', 'Download {file}', { file: asset.name }));
           item.appendChild(a);
           list.appendChild(item);

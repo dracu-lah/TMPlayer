@@ -48,8 +48,8 @@ After any change: `pnpm -C site build`, `python3 scripts/site-i18n-check.py` and
   Markdown twins and `/llms-full.txt` are generated (`integrations/markdown-twins.mjs`): never
   write one by hand. `robots.txt` names the AI crawlers only to allow them, training ones included
   (user, 2026-10-15).
-- **The download page** keeps its `preconnect` hints to GitHub's API, github.com and
-  `release-assets.githubusercontent.com`.
+- **The download page** keeps its `preconnect` hints to the download mirror (below), GitHub's API
+  and github.com.
 
 ## Screenshots on the site
 
@@ -96,8 +96,21 @@ numbered HTML markers matched by a numbered list.
 The "New in X" pill above the headline links the latest release page; the stats row shows
 downloads, platforms and languages (user, 2026-10-20). `src/lib/stats.ts` works them out at build
 time, so they are final in the first paint; app.js only counts them up in view. Downloads are the
-app files downloaded from GitHub across releases, so they are "downloads", never users or
-installs. The build logs `[tm-stats]` with its source (GitHub, else `releases.json`).
+app files downloaded from GitHub and from the download mirror (below) across releases, so they
+are "downloads", never users or installs. The build logs `[tm-stats]` with its source (GitHub,
+else `releases.json`) and the mirror's own count.
+
+## Download mirror
+
+Every binary download (`app.js`, `scripts/write-latest-json.py`'s `latest.json`, the `/apk`
+redirect `scripts/point-apk-redirect.py` writes) goes through `workers/download-mirror`, a
+Cloudflare Worker that caches TMPlayer's own GitHub release assets at the edge: a slow route to
+GitHub's asset CDN used to make every download slow, this doesn't. A file's first request still
+reaches github.com, so `download_count` there still sees it; every request after is served from
+cache, which GitHub never sees, so the worker counts those itself and answers them at `/stats`,
+which `stats.ts` adds to GitHub's count. It only ever proxies TMPlayer's own release assets (its
+path has to match the worker's own pattern): never make it a general-purpose GitHub proxy.
+Deploys manually, same as the web player: Actions, "Download mirror", Run workflow.
 
 ## Performance
 

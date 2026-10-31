@@ -48,14 +48,17 @@ const trust = ['download.trust_free', 'download.trust_source', 'download.trust_a
 ---
 <Base page="download" title={t('download.download_tmplayer_for_android_tv')} description={t('download.download_tmplayer_free_the_apk')}>
   {/*
-    The page reads the release from the GitHub API, and every download button goes to github.com,
-    which hands the file over from GitHub's asset host. Opening those connections early takes the
-    DNS and TLS time off the first click.
+    The page reads the release from the GitHub API, and every download button goes through the
+    edge cache at workers/download-mirror, which is what actually hands the file over now. The
+    plain GitHub hosts stay preconnected too: the mirror's first request for a file still reaches
+    them, and a few links (the release page, the no-JS fallback) go there directly. Opening these
+    connections early takes the DNS and TLS time off the first click.
   */}
   <Fragment slot="preconnect">
+    <link rel="preconnect" href="https://tmplayer-download-mirror.dracu.workers.dev">
     <link rel="preconnect" href="https://api.github.com" crossorigin>
     <link rel="preconnect" href="https://github.com">
-    <link rel="preconnect" href="https://release-assets.githubusercontent.com">
+    <link rel="dns-prefetch" href="https://release-assets.githubusercontent.com">
     <link rel="dns-prefetch" href="https://objects.githubusercontent.com">
   </Fragment>
   <Fragment slot="head">

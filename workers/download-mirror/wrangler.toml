@@ -1,3 +1,11 @@
 name = "tmplayer-download-mirror"
 main = "src/index.ts"
 compatibility_date = "2026-10-01"
+
+# Counts the downloads GitHub's own download_count never sees: a request this worker served from
+# Cloudflare's edge cache instead of fetching github.com. site/src/lib/stats.ts adds this to
+# GitHub's count so the home page's "downloads" figure stays accurate once caching hides most
+# traffic from GitHub.
+[[kv_namespaces]]
+binding = "DOWNLOADS"
+id = "f59c5358bfb04d05addf1805be9ca49a"
