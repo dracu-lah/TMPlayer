@@ -4,7 +4,6 @@ import com.tmplayer.ui.theme.collectIsFocusVisibleAsState
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
@@ -36,16 +35,19 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.tmplayer.ui.components.isTouch
 import com.tmplayer.ui.icons.TmIcons
-import com.tmplayer.ui.theme.Focus
 import com.tmplayer.ui.theme.Motion
 import com.tmplayer.ui.theme.Tone
+import com.tmplayer.ui.theme.focusRing
 import com.tmplayer.ui.theme.rememberReducedMotion
 
 /**
  * Home's one bright action (the first-run card's button): a pill in [Tone.hero], near white on dark and near black on
  * light, [HERO_PILL_HEIGHT] tall and at most [HERO_PILL_MAX] wide. Under the remote or the
- * keyboard it grows by [Motion.FocusScale] (unless motion is off) and keeps its colour: no
- * accent fill and no ring (user, 2026-10-22), the scale alone says where the focus is.
+ * keyboard it grows by [Motion.FocusScale] (unless motion is off); the scale alone was the only
+ * focus cue from 2026-10-22 until HX42 (reported on a Mi TV box with Reduce motion on, where the
+ * scale never ran and the pill had no focus mark at all), so focus now also swaps the fill to
+ * [Tone.focusFill] and adds [Modifier.focusRing], the same pair [DetailHero]'s own play pill
+ * already uses: both survive reduced motion and a dark theme, where the scale-only cue did not.
  */
 @Composable
 fun HeroPill(
@@ -66,12 +68,19 @@ fun HeroPill(
         label = "heroPillScale",
     )
     val fill by animateColorAsState(
-        // Under the remote it grows and keeps its colour (user, 2026-10-22): the scale is the focus.
-        if (hovered && !focused) Tone.hero.copy(alpha = 0.88f) else Tone.hero,
+        when {
+            focused -> Tone.focusFill
+            hovered -> Tone.hero.copy(alpha = 0.88f)
+            else -> Tone.hero
+        },
         Motion.standard(Motion.Fast),
         label = "heroPillFill",
     )
-    val ink = Tone.onHero
+    val ink by animateColorAsState(
+        if (focused) Tone.onFocusFill else Tone.onHero,
+        Motion.standard(Motion.Fast),
+        label = "heroPillInk",
+    )
     Row(
         modifier
             .then(if (stretch) Modifier.widthIn(max = HERO_PILL_MAX).fillMaxWidth() else Modifier.widthIn(min = 160.dp, max = HERO_PILL_MAX))
@@ -83,6 +92,7 @@ fun HeroPill(
             .then(if (focus != null) Modifier.focusRequester(focus) else Modifier)
             .clip(CircleShape)
             .background(fill)
+            .focusRing(focused, CircleShape)
             .clickable(interactionSource = interactions, indication = if (isTouch()) androidx.compose.foundation.LocalIndication.current else null, role = Role.Button, onClick = onClick)
             .padding(horizontal = 28.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.Center,

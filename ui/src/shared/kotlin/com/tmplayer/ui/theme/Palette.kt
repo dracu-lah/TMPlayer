@@ -117,17 +117,24 @@ val LocalDarkTheme = staticCompositionLocalOf { true }
 val LocalPureBlack = staticCompositionLocalOf { false }
 
 /**
- * A ring around whatever the remote is on, for the theme where the fill alone is not enough.
+ * A ring around whatever the remote is on, for when the fill alone is not enough.
  *
  * In daylight [Tone.focusFill] is a pale blue, a 1.24:1 step on near-white and well under the 3:1
  * a control is meant to stand out by, so an outline in the accent carries the signal the fill
- * cannot. In the dark theme the fill is already a bright block against a near-black screen, and a
- * ring in the same colour would be invisible, so there is none.
+ * cannot.
+ *
+ * In the dark theme [Tone.focusFill] is already a bright block against a near-black screen, but
+ * that block alone cannot tell "focused" apart from a control that is merely chosen or otherwise
+ * lit the same way (HX42: a Home banner pill with no fill change at all had no focus mark once
+ * Reduce motion turned its scale off). The ring there is [Tone.onFocusFill], Material's own
+ * contrast-guaranteed ink for that fill, rather than the accent again: a ring in the same hue as
+ * the block it sits on would still read as invisible.
  */
 @Composable
 fun Modifier.focusRing(focused: Boolean, shape: Shape): Modifier =
-    if (focused && FocusVisibility.visible && !LocalDarkTheme.current) {
-        border(width = Focus.Ring, color = Tone.accent, shape = shape)
+    if (focused && FocusVisibility.visible) {
+        val ring = if (LocalDarkTheme.current) Tone.onFocusFill else Tone.accent
+        border(width = Focus.Ring, color = ring, shape = shape)
     } else {
         this
     }

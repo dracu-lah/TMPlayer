@@ -375,9 +375,11 @@ private fun TvDetailsPill(label: String, onClick: () -> Unit, modifier: Modifier
     val focused by interactions.collectIsFocusedAsState()
     val still = rememberReducedMotion() || Motion.reduced
     val scale by animateFloatAsState(if (focused && !still) Motion.FocusScale else 1f, Motion.standard(Motion.Fast), label = "detailsScale")
-    // The same as Play beside it: the scale is the focus, the colour stays (user, 2026-10-22).
-    val fill = Tone.surfaceHigh.copy(alpha = 0.8f)
-    val ink = Tone.text
+    // HX42: the scale used to be the only focus mark (user, 2026-10-22), invisible with Reduce
+    // motion on or in a dark theme without a fill change; now the fill and ring carry it too, the
+    // same pair Play beside it uses.
+    val fill by animateColorAsState(if (focused) Tone.focusFill else Tone.surfaceHigh.copy(alpha = 0.8f), Motion.standard(Motion.Fast), label = "detailsFill")
+    val ink by animateColorAsState(if (focused) Tone.onFocusFill else Tone.text, Motion.standard(Motion.Fast), label = "detailsInk")
     Row(
         modifier
             .heightIn(min = 48.dp)
@@ -387,6 +389,7 @@ private fun TvDetailsPill(label: String, onClick: () -> Unit, modifier: Modifier
             }
             .clip(CircleShape)
             .background(fill)
+            .focusRing(focused, CircleShape)
             .clickable(interactionSource = interactions, indication = null, role = Role.Button, onClick = onClick)
             .padding(start = 16.dp, end = 20.dp),
         verticalAlignment = Alignment.CenterVertically,
