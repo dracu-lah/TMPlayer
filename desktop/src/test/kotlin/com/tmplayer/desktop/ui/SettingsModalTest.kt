@@ -66,7 +66,7 @@ class SettingsModalTest {
         shell.go(Destination.Settings)
         assertTrue(shell.modalOpen)
         assertEquals(Destination.Chats, shell.pageDestination)
-        // Settings to Downloads (Free up space) keeps the page under both.
+        // Settings to Downloads (a link such as the folder scan's) keeps the page under both.
         shell.go(Destination.Downloads)
         assertEquals(Destination.Chats, shell.pageDestination)
         shell.backFromPage()

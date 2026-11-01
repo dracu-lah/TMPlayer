@@ -91,10 +91,10 @@ internal data class StorageFigures(
 
 /**
  * The Storage group of Settings (B6, D1), settings only (user, 2026-10-22): what TMPlayer uses with
- * the one Free up space, which opens its review over the Downloads page; where the files live and
- * the button that moves them; the cache's limit; Remove after watching; Low storage mode; and the
- * folder scan. The rows that cleared one part each (the cached videos, the cache, the pictures,
- * everything but downloads) are groups in Free up space's review.
+ * the one Free up space, whose review opens over Settings and leaves the viewer here; where the
+ * files live and the button that moves them; the cache's limit; Remove after watching; Low storage
+ * mode; and the folder scan. The rows that cleared one part each (the cached videos, the cache,
+ * the pictures, everything but downloads) are groups in Free up space's review.
  */
 @Composable
 internal fun StorageGroup(state: ShellState, jumps: Map<com.tmplayer.ui.onboarding.SetupStep, com.tmplayer.ui.components.JumpTarget>) {
@@ -112,10 +112,27 @@ internal fun StorageGroup(state: ShellState, jumps: Map<com.tmplayer.ui.onboardi
     var busy by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(refresh) { figures = measureStorage(state) }
 
+    // Free up space's review opens here, over Settings, and the run ends here with its toast: it
+    // used to open over the Downloads panel, so the panel was what was left once it was done.
+    var reviewing by remember { mutableStateOf(false) }
+    var freeUpBusy by remember { mutableStateOf(false) }
+    val sources = rememberDownloadSources(state)
+
     // The page's own heading names it, so the card comes first, as on the phone's Storage page.
-    StorageCard(figures, nothingToFree = figures?.nothingToFree == true) {
-        state.downloadsOpenFreeUp = true
-        state.go(Destination.Downloads)
+    StorageCard(figures, nothingToFree = figures?.nothingToFree == true, busy = freeUpBusy) {
+        if (!freeUpBusy) reviewing = true
+    }
+    if (reviewing) {
+        SettingsFreeUpReview(state, sources, figures, onDismiss = { reviewing = false }) { picks, sections ->
+            reviewing = false
+            freeUpBusy = true
+            scope.launch {
+                val outcome = runFreeUp(state, picks, sections, sources.history, sources.cached)
+                freeUpBusy = false
+                refresh++
+                toast(com.tmplayer.ui.components.freeUpResult(outcome))
+            }
+        }
     }
 
     val root = desktop.storageRoot.takeIf { it.isNotBlank() }?.let(::File)
@@ -265,6 +282,31 @@ internal fun StorageCard(
             figures?.drives?.takeIf { it.size > 1 }?.forEach { Text(it, style = MaterialTheme.typography.bodySmall, color = Tone.muted) }
         }
     }
+}
+
+/**
+ * Free up space's review for Settings' Storage. Its own composable so the download queue's
+ * progress, read here, recomposes only the review while it is up and not the whole group.
+ */
+@Composable
+private fun SettingsFreeUpReview(
+    state: ShellState,
+    sources: DownloadSources,
+    figures: StorageFigures?,
+    onDismiss: () -> Unit,
+    onFree: (com.tmplayer.data.FreeUpReview.Picks, List<com.tmplayer.data.FreeUpReview.Section>) -> Unit,
+) {
+    val active by OfflineDownloads.active.collectAsState()
+    val unfinished = active.values.sortedBy { it.order }.filter { it.downloadedBytes > 0 }
+    val sections = freeUpSections(sources, unfinished, figures?.picturesBytes ?: 0L)
+    FreeUpReviewHost(
+        state,
+        sections = sections,
+        figures = figures,
+        askedForRoom = false,
+        onFree = { picks -> onFree(picks, sections) },
+        onDismiss = onDismiss,
+    )
 }
 
 /** The dialogs the Storage group can raise. */

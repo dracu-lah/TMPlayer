@@ -127,36 +127,16 @@ internal val REMOVE_AFTER_WATCHING_DETAIL: String get() = L.downloadsRemoveAfter
 fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloadsDir) {
     val s = LocalStrings.current
     val active by OfflineDownloads.active.collectAsState()
-    // The kids lock (CP57) leaves out the chats it does not allow here too: a download from one
-    // of them would otherwise be a way round it.
-    val allowedChats by com.tmplayer.data.ChatGate.allowed.collectAsState()
-    val allHistory by state.settings.downloadHistory.collectAsState(initial = emptyList())
-    val allCached by state.settings.cachedVideos.collectAsState(initial = emptyList())
-    val history = remember(allHistory, allowedChats) { com.tmplayer.data.KidsLock.records(allHistory, allowedChats) }
-    val cachedRecords = remember(allCached, allowedChats) { com.tmplayer.data.KidsLock.records(allCached, allowedChats) }
+    val sources = rememberDownloadSources(state)
+    val history = sources.history
+    val cached = sources.cached
+    val legacy = sources.legacy
+    val cachedBytes = sources.cachedBytes
     val unlisted by DownloadIndex.unlisted.collectAsState()
     val desktop by state.extras.prefs.state.collectAsState()
     val scope = rememberCoroutineScope()
     val toast = rememberToast()
     val queue = active.values.sortedBy { it.order }
-    // The cached videos the index already names are downloads, whatever the cache's records say.
-    val kept = remember(history) { history.map { it.chatId to it.messageId }.toSet() }
-    val cached = cachedRecords.filter { (it.chatId to it.messageId) !in kept }
-
-    // Legacy rows ask TDLib where their file is; the answers arrive as they come.
-    val legacy = remember { mutableStateMapOf<String, LocalFileAvailability>() }
-    LaunchedEffect(history) {
-        history.filter { it.localPath == null }.forEach { record ->
-            legacy[record.key] = DownloadIndex.legacyAvailability(record)
-        }
-    }
-    val cachedBytes = remember { mutableStateMapOf<String, Long>() }
-    LaunchedEffect(cached) {
-        cached.forEach { record ->
-            val id = runCatching { Td.currentFileId(record.chatId, record.messageId, record.fileId) }.getOrDefault(record.fileId)
-            cachedBytes[record.key] = runCatching { Td.localDownloadedBytes(id) }.getOrDefault(0L)
-        }
-    }
 
     var picked by remember { mutableStateOf<Set<String>>(emptySet()) }
     var confirm by remember { mutableStateOf<List<ResumeRecord>?>(null) }
@@ -172,8 +152,6 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
     val askedForRoom = remember { state.downloadsFreeUp }
     LaunchedEffect(Unit) { state.downloadsFreeUp = false }
     var freeUpBusy by remember { mutableStateOf(false) }
-    var lowStorageTurned by remember { mutableStateOf(false) }
-    val lowStorageOn by state.settings.lowStorageMode.collectAsState(initial = true)
     // The downloads that stopped part way or are still arriving, with what each holds here.
     val unfinished = queue.filter { it.downloadedBytes > 0 }
     // Recently played is folded away at the foot of the page until it is opened.
@@ -196,51 +174,9 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
     }
     val selectAll = { picked = history.map { it.key }.toSet() }
 
-    // Free up space's review, from what the page has measured: the groups in the order the sheet
-    // lists them. A download still coming down is listed as kept, so the figures add up. The
-    // desktop's unlisted files stay in their own section, where Keep is the other answer.
-    val reviewSections = run {
-        val coming = unfinished.map { it.fileId }.toSet()
-        val recent = cached.filter { (cachedBytes[it.key] ?: 0L) > 0 && it.fileId !in coming }
-        val keptNow = history
-            .filter { DownloadIndex.state(it) != DownloadIndex.FileState.Missing && legacy[it.key] != LocalFileAvailability.Missing }
-            .sortedByDescending { it.sizeBytes }
-        listOf(
-            com.tmplayer.data.FreeUpReview.Section(
-                com.tmplayer.data.FreeUpReview.Group.Unfinished,
-                unfinished.sumOf { it.downloadedBytes },
-                items = unfinished.map { p ->
-                    val busy = p.stage == OfflineDownloads.Stage.Running || p.stage == OfflineDownloads.Stage.Moving
-                    com.tmplayer.data.FreeUpReview.Item(
-                        p.fileId.toString(),
-                        correctedTitle(p.request.chatId, p.request.messageId, p.title),
-                        p.downloadedBytes,
-                        if (busy) com.tmplayer.data.FreeUpReview.Lock.Downloading else null,
-                    )
-                },
-            ),
-            com.tmplayer.data.FreeUpReview.Section(
-                com.tmplayer.data.FreeUpReview.Group.Recent,
-                recent.sumOf { cachedBytes[it.key] ?: 0L },
-                count = recent.size,
-                items = recent.map {
-                    com.tmplayer.data.FreeUpReview.Item(it.key, correctedTitle(it.chatId, it.messageId, it.title), cachedBytes[it.key] ?: 0L)
-                },
-            ),
-            com.tmplayer.data.FreeUpReview.Section(com.tmplayer.data.FreeUpReview.Group.Pictures, figures?.picturesBytes ?: 0L),
-            com.tmplayer.data.FreeUpReview.Section(
-                com.tmplayer.data.FreeUpReview.Group.Downloads,
-                keptNow.sumOf { it.sizeBytes },
-                items = keptNow.map { com.tmplayer.data.FreeUpReview.Item(it.key, correctedTitle(it.chatId, it.messageId, it.title), it.sizeBytes) },
-            ),
-        )
-    }
+    val reviewSections = freeUpSections(sources, unfinished, figures?.picturesBytes ?: 0L)
 
-    /**
-     * Free up space: what the review ticked, each through the one way this page removes that kind
-     * of thing. A download that started again since the sheet was drawn, or a file the player
-     * holds, is left and counted as left. Once started it runs to the end even if the page goes.
-     */
+    /** Free up space on what the review ticked ([runFreeUp]); once started it runs to the end even if the page goes. */
     fun freeUp(picks: com.tmplayer.data.FreeUpReview.Picks) {
         if (freeUpBusy) return
         val sections = reviewSections
@@ -249,48 +185,7 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
         freeingUp = false
         freeUpBusy = true
         scope.launch {
-            val outcome = kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable + kotlinx.coroutines.Dispatchers.IO) {
-                var freed = 0L
-                var skipped = 0
-                for (section in sections) {
-                    val ticked = com.tmplayer.data.FreeUpReview.picked(picks, section)
-                    when (section.group) {
-                        com.tmplayer.data.FreeUpReview.Group.Unfinished -> ticked.forEach { item ->
-                            val now = OfflineDownloads.active.value.values.firstOrNull { it.fileId.toString() == item.key }
-                            when {
-                                now == null -> Unit
-                                now.stage == OfflineDownloads.Stage.Running || now.stage == OfflineDownloads.Stage.Moving -> skipped++
-                                else -> {
-                                    dropUnfinished(state, now.fileId)
-                                    freed += item.bytes
-                                }
-                            }
-                        }
-                        com.tmplayer.data.FreeUpReview.Group.Recent -> ticked.forEach { item ->
-                            val record = recents.firstOrNull { it.key == item.key } ?: return@forEach
-                            val id = runCatching { Td.currentFileId(record.chatId, record.messageId, record.fileId) }.getOrDefault(record.fileId)
-                            runCatching { Td.deleteFile(id) }
-                            // Only forgotten once the bytes have gone: TDLib keeps a file a player has open.
-                            if (runCatching { Td.localDownloadedBytes(id) }.getOrDefault(0L) > 0) {
-                                skipped++
-                            } else {
-                                state.settings.forgetCachedVideo(record.chatId, record.messageId)
-                                freed += item.bytes
-                            }
-                        }
-                        com.tmplayer.data.FreeUpReview.Group.Downloads -> ticked.forEach { item ->
-                            val record = records.firstOrNull { it.key == item.key } ?: return@forEach
-                            if (runCatching { DownloadIndex.delete(state.settings, record) }.getOrDefault(false)) freed += item.bytes else skipped++
-                        }
-                        com.tmplayer.data.FreeUpReview.Group.Pictures -> if (com.tmplayer.data.FreeUpReview.wholePicked(picks, section)) {
-                            if (runCatching { Td.clearPicturesAndPreviews() }.isSuccess) freed += section.bytes
-                            runCatching { com.tmplayer.online.OnlineMetadata.current?.purgeImages() }
-                        }
-                        com.tmplayer.data.FreeUpReview.Group.Unmatched -> Unit
-                    }
-                }
-                com.tmplayer.data.FreeUpReview.Outcome(freed, skipped)
-            }
+            val outcome = runFreeUp(state, picks, sections, records, recents)
             // A download that went leaves the selection too.
             picked = picked - com.tmplayer.data.FreeUpReview.downloadsPicked(picks, sections).map { it.key }.toSet()
             refresh++
@@ -650,24 +545,13 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
     }
 
     if (freeingUp) {
-        val f = figures
-        val short = com.tmplayer.data.FreeUpSpace.isShort(f?.diskFreeBytes ?: -1, f?.diskTotalBytes ?: 0, askedForRoom = askedForRoom)
-        com.tmplayer.ui.components.FreeUpReviewDialog(
+        FreeUpReviewHost(
+            state,
             sections = reviewSections,
+            figures = figures,
+            askedForRoom = askedForRoom,
             onFree = { picks -> freeUp(picks) },
             onDismiss = { freeingUp = false },
-            lowStorage = if (short && (!lowStorageOn || lowStorageTurned)) {
-                com.tmplayer.ui.components.LowStorageOffer(
-                    mode = s.settingsLowStorage,
-                    windowBytes = com.tmplayer.player.LowStorageWindow.WINDOW_BYTES,
-                    on = lowStorageTurned,
-                ) {
-                    lowStorageTurned = true
-                    scope.launch { runCatching { state.settings.setLowStorageMode(true) } }
-                }
-            } else {
-                null
-            },
         )
     }
 
@@ -738,6 +622,191 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
     }
 }
 private val ResumeRecord.key: String get() = "$chatId:$messageId"
+
+/**
+ * What the Downloads page and Settings' Storage read to list and clear: the kept downloads and
+ * the recently played videos the kids lock allows, with what TDLib says about each as it answers.
+ */
+internal class DownloadSources(
+    val history: List<ResumeRecord>,
+    /** Recently played, less the ones the index already names as downloads. */
+    val cached: List<ResumeRecord>,
+    /** A legacy download's file, as TDLib has it, by record key. */
+    val legacy: Map<String, LocalFileAvailability>,
+    /** What a recently played video holds on the disk, by record key. */
+    val cachedBytes: Map<String, Long>,
+)
+
+@Composable
+internal fun rememberDownloadSources(state: ShellState): DownloadSources {
+    // The kids lock (CP57) leaves out the chats it does not allow here too: a download from one
+    // of them would otherwise be a way round it.
+    val allowedChats by com.tmplayer.data.ChatGate.allowed.collectAsState()
+    val allHistory by state.settings.downloadHistory.collectAsState(initial = emptyList())
+    val allCached by state.settings.cachedVideos.collectAsState(initial = emptyList())
+    val history = remember(allHistory, allowedChats) { com.tmplayer.data.KidsLock.records(allHistory, allowedChats) }
+    val cachedRecords = remember(allCached, allowedChats) { com.tmplayer.data.KidsLock.records(allCached, allowedChats) }
+    // The cached videos the index already names are downloads, whatever the cache's records say.
+    val kept = remember(history) { history.map { it.chatId to it.messageId }.toSet() }
+    val cached = remember(cachedRecords, kept) { cachedRecords.filter { (it.chatId to it.messageId) !in kept } }
+
+    // Legacy rows ask TDLib where their file is; the answers arrive as they come.
+    val legacy = remember { mutableStateMapOf<String, LocalFileAvailability>() }
+    LaunchedEffect(history) {
+        history.filter { it.localPath == null }.forEach { record ->
+            legacy[record.key] = runCatching { DownloadIndex.legacyAvailability(record) }.getOrDefault(LocalFileAvailability.Missing)
+        }
+    }
+    val cachedBytes = remember { mutableStateMapOf<String, Long>() }
+    LaunchedEffect(cached) {
+        cached.forEach { record ->
+            val id = runCatching { Td.currentFileId(record.chatId, record.messageId, record.fileId) }.getOrDefault(record.fileId)
+            cachedBytes[record.key] = runCatching { Td.localDownloadedBytes(id) }.getOrDefault(0L)
+        }
+    }
+    return DownloadSources(history, cached, legacy, cachedBytes)
+}
+
+/**
+ * Free up space's review, from what has been measured: the groups in the order the sheet lists
+ * them. A download still coming down is listed as kept, so the figures add up. The desktop's
+ * unlisted files stay in their own section of the Downloads page, where Keep is the other answer.
+ * Composable for the titles, which follow the viewer's renames.
+ */
+@Composable
+internal fun freeUpSections(
+    sources: DownloadSources,
+    unfinished: List<OfflineDownloads.Progress>,
+    picturesBytes: Long,
+): List<com.tmplayer.data.FreeUpReview.Section> {
+    val cachedBytes = sources.cachedBytes
+    val coming = unfinished.map { it.fileId }.toSet()
+    val recent = sources.cached.filter { (cachedBytes[it.key] ?: 0L) > 0 && it.fileId !in coming }
+    val keptNow = sources.history
+        .filter { DownloadIndex.state(it) != DownloadIndex.FileState.Missing && sources.legacy[it.key] != LocalFileAvailability.Missing }
+        .sortedByDescending { it.sizeBytes }
+    return listOf(
+        com.tmplayer.data.FreeUpReview.Section(
+            com.tmplayer.data.FreeUpReview.Group.Unfinished,
+            unfinished.sumOf { it.downloadedBytes },
+            items = unfinished.map { p ->
+                val busy = p.stage == OfflineDownloads.Stage.Running || p.stage == OfflineDownloads.Stage.Moving
+                com.tmplayer.data.FreeUpReview.Item(
+                    p.fileId.toString(),
+                    correctedTitle(p.request.chatId, p.request.messageId, p.title),
+                    p.downloadedBytes,
+                    if (busy) com.tmplayer.data.FreeUpReview.Lock.Downloading else null,
+                )
+            },
+        ),
+        com.tmplayer.data.FreeUpReview.Section(
+            com.tmplayer.data.FreeUpReview.Group.Recent,
+            recent.sumOf { cachedBytes[it.key] ?: 0L },
+            count = recent.size,
+            items = recent.map {
+                com.tmplayer.data.FreeUpReview.Item(it.key, correctedTitle(it.chatId, it.messageId, it.title), cachedBytes[it.key] ?: 0L)
+            },
+        ),
+        com.tmplayer.data.FreeUpReview.Section(com.tmplayer.data.FreeUpReview.Group.Pictures, picturesBytes),
+        com.tmplayer.data.FreeUpReview.Section(
+            com.tmplayer.data.FreeUpReview.Group.Downloads,
+            keptNow.sumOf { it.sizeBytes },
+            items = keptNow.map { com.tmplayer.data.FreeUpReview.Item(it.key, correctedTitle(it.chatId, it.messageId, it.title), it.sizeBytes) },
+        ),
+    )
+}
+
+/**
+ * Free up space: what the review ticked, each through the one way the app removes that kind of
+ * thing. A download that started again since the sheet was drawn, or a file the player holds, is
+ * left and counted as left. Runs to the end even if the caller's scope goes.
+ */
+internal suspend fun runFreeUp(
+    state: ShellState,
+    picks: com.tmplayer.data.FreeUpReview.Picks,
+    sections: List<com.tmplayer.data.FreeUpReview.Section>,
+    records: List<ResumeRecord>,
+    recents: List<ResumeRecord>,
+): com.tmplayer.data.FreeUpReview.Outcome =
+    kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable + kotlinx.coroutines.Dispatchers.IO) {
+        var freed = 0L
+        var skipped = 0
+        for (section in sections) {
+            val ticked = com.tmplayer.data.FreeUpReview.picked(picks, section)
+            when (section.group) {
+                com.tmplayer.data.FreeUpReview.Group.Unfinished -> ticked.forEach { item ->
+                    val now = OfflineDownloads.active.value.values.firstOrNull { it.fileId.toString() == item.key }
+                    when {
+                        now == null -> Unit
+                        now.stage == OfflineDownloads.Stage.Running || now.stage == OfflineDownloads.Stage.Moving -> skipped++
+                        else -> {
+                            dropUnfinished(state, now.fileId)
+                            freed += item.bytes
+                        }
+                    }
+                }
+                com.tmplayer.data.FreeUpReview.Group.Recent -> ticked.forEach { item ->
+                    val record = recents.firstOrNull { it.key == item.key } ?: return@forEach
+                    val id = runCatching { Td.currentFileId(record.chatId, record.messageId, record.fileId) }.getOrDefault(record.fileId)
+                    runCatching { Td.deleteFile(id) }
+                    // Only forgotten once the bytes have gone: TDLib keeps a file a player has open.
+                    if (runCatching { Td.localDownloadedBytes(id) }.getOrDefault(0L) > 0) {
+                        skipped++
+                    } else {
+                        runCatching { state.settings.forgetCachedVideo(record.chatId, record.messageId) }
+                        freed += item.bytes
+                    }
+                }
+                com.tmplayer.data.FreeUpReview.Group.Downloads -> ticked.forEach { item ->
+                    val record = records.firstOrNull { it.key == item.key } ?: return@forEach
+                    if (runCatching { DownloadIndex.delete(state.settings, record) }.getOrDefault(false)) freed += item.bytes else skipped++
+                }
+                com.tmplayer.data.FreeUpReview.Group.Pictures -> if (com.tmplayer.data.FreeUpReview.wholePicked(picks, section)) {
+                    if (runCatching { Td.clearPicturesAndPreviews() }.isSuccess) freed += section.bytes
+                    runCatching { com.tmplayer.online.OnlineMetadata.current?.purgeImages() }
+                }
+                com.tmplayer.data.FreeUpReview.Group.Unmatched -> Unit
+            }
+        }
+        com.tmplayer.data.FreeUpReview.Outcome(freed, skipped)
+    }
+
+/**
+ * Free up space's review over whichever page asked for it, with Low storage mode offered first on
+ * a device short of room while the mode is off ([askedForRoom]: the player was refused for room).
+ */
+@Composable
+internal fun FreeUpReviewHost(
+    state: ShellState,
+    sections: List<com.tmplayer.data.FreeUpReview.Section>,
+    figures: StorageFigures?,
+    askedForRoom: Boolean,
+    onFree: (com.tmplayer.data.FreeUpReview.Picks) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val s = LocalStrings.current
+    val scope = rememberCoroutineScope()
+    var lowStorageTurned by remember { mutableStateOf(false) }
+    val lowStorageOn by state.settings.lowStorageMode.collectAsState(initial = true)
+    val short = com.tmplayer.data.FreeUpSpace.isShort(figures?.diskFreeBytes ?: -1, figures?.diskTotalBytes ?: 0, askedForRoom = askedForRoom)
+    com.tmplayer.ui.components.FreeUpReviewDialog(
+        sections = sections,
+        onFree = onFree,
+        onDismiss = onDismiss,
+        lowStorage = if (short && (!lowStorageOn || lowStorageTurned)) {
+            com.tmplayer.ui.components.LowStorageOffer(
+                mode = s.settingsLowStorage,
+                windowBytes = com.tmplayer.player.LowStorageWindow.WINDOW_BYTES,
+                on = lowStorageTurned,
+            ) {
+                lowStorageTurned = true
+                scope.launch { runCatching { state.settings.setLowStorageMode(true) } }
+            }
+        } else {
+            null
+        },
+    )
+}
 
 /** A waiting or stopped download's line, with what it holds here when it holds anything. */
 private fun unfinishedAlso(line: String, row: OfflineDownloads.Progress): String =
