@@ -3593,7 +3593,7 @@ button.btn { font: inherit; font-weight: 600; font-size: 0.98rem; cursor: pointe
    a UPI app where there is one. It follows the theme like the rest of the site; only the QR sits
    on white (a code needs a light quiet zone to scan) and the Google Pay mark on its white disc. */
 .upi-dialog {
-  width: min(400px, calc(100% - 32px));
+  width: min(340px, calc(100% - 24px));
   padding: 0;
   border: 1px solid var(--outline-variant);
   border-radius: var(--shape-xl);
@@ -3601,31 +3601,29 @@ button.btn { font: inherit; font-weight: 600; font-size: 0.98rem; cursor: pointe
   color: var(--on-surface);
 }
 .upi-dialog::backdrop { background: rgba(10, 12, 18, 0.6); }
-.upi-box { position: relative; padding: 28px 24px 24px; text-align: center; }
+.upi-box { position: relative; display: grid; gap: 10px; padding: 16px; text-align: center; }
+.upi-head { display: flex; align-items: center; gap: 10px; padding-inline-end: 36px; text-align: start; }
 .upi-dialog-mark {
-  width: 56px; height: 56px; margin: 0 auto 10px; display: block;
-  padding: 4px; border-radius: var(--shape-full); background: #ffffff;
+  flex: none; width: 40px; height: 40px; display: block;
+  padding: 3px; border-radius: var(--shape-full); background: #ffffff;
   box-shadow: 0 0 0 1px rgba(15, 20, 30, 0.12);
 }
-.upi-box h2 { margin: 0 0 8px; font-size: 1.3rem; font-weight: 600; color: var(--on-surface); }
-.upi-note { margin: 0 auto 18px; max-width: 30ch; color: var(--on-surface-variant); font-size: 0.95rem; line-height: 1.5; }
-.upi-open { display: flex; width: 100%; justify-content: center; margin-bottom: 18px; }
+.upi-box h2 { margin: 0; font-size: 1.1rem; font-weight: 600; color: var(--on-surface); }
+.upi-note { margin: 0; color: var(--on-surface-variant); font-size: 0.88rem; line-height: 1.4; text-align: start; }
+.upi-open { display: flex; width: 100%; justify-content: center; min-height: 44px; }
 .upi-open[hidden] { display: none; }
 .upi-qr {
-  width: 220px; height: 220px; margin: 0 auto; display: block;
-  padding: 10px; border: 1px solid var(--outline-variant); border-radius: var(--shape-l);
+  width: 176px; height: 176px; margin: 0 auto; display: block;
+  padding: 8px; border: 1px solid var(--outline-variant); border-radius: var(--shape-l);
   background: #ffffff;
 }
-.upi-scan { margin: 14px auto 18px; max-width: 32ch; color: var(--on-surface-variant); font-size: 0.92rem; line-height: 1.5; }
-.upi-id { display: grid; justify-items: center; gap: 10px; }
-.upi-id-label { color: var(--on-surface-variant); font-size: 0.82rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
-.upi-id code {
-  padding: 8px 12px; border-radius: var(--shape-m, 12px); background: var(--surface-container);
-  color: var(--on-surface); font-size: 1.02rem; font-weight: 600; word-break: break-all;
-}
-.upi-id .btn { min-width: 160px; justify-content: center; }
+.upi-scan { margin: 0; color: var(--on-surface-variant); font-size: 0.82rem; line-height: 1.4; }
+.upi-id { display: grid; justify-items: center; gap: 6px; padding: 10px; border-radius: var(--shape-m, 12px); background: var(--surface-container); text-align: start; }
+.upi-id-label { display: none; }
+.upi-id code { min-width: 0; white-space: nowrap; color: var(--on-surface); font-size: 0.9rem; font-weight: 600; word-break: break-all; }
+.upi-id .btn { min-height: 36px; padding: 6px 12px; font-size: 0.86rem; }
 .upi-close {
-  position: absolute; top: 10px; inset-inline-end: 10px;
+  position: absolute; top: 8px; inset-inline-end: 8px;
   display: flex; align-items: center; justify-content: center;
   width: 36px; height: 36px; border: 0; border-radius: var(--shape-full);
   background: transparent; color: var(--on-surface-variant); cursor: pointer;

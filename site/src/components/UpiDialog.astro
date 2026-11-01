@@ -22,15 +22,16 @@ const qr = versioned(UPI_QR);
 <dialog class="upi-dialog" id="upi-dialog" aria-labelledby="upi-dialog-h">
   <div class="upi-box">
     <button type="button" class="upi-close" data-upi-close aria-label={close} title={close}><Icon name="close" /></button>
-    <img class="upi-dialog-mark" src={versioned('/brand/gpay-mark.png')} alt="" width="48" height="48" loading="lazy" decoding="async">
-    <h2 id="upi-dialog-h">{t('home.pay_by_upi')}</h2>
+    <div class="upi-head">
+      <img class="upi-dialog-mark" src={versioned('/brand/gpay-mark.png')} alt="" width="40" height="40" loading="lazy" decoding="async">
+      <h2 id="upi-dialog-h">{t('home.pay_by_upi')}</h2>
+    </div>
     <p class="upi-note">{t('home.upi_any_amount')}</p>
     <a class="btn btn-filled upi-open js-only" href={UPI_LINK} data-upi-open hidden>{t('home.upi_open_app')}</a>
     <img class="upi-qr" src={qr} alt="" width="220" height="220" loading="lazy" decoding="async">
     <p class="upi-scan">{t('home.upi_scan')}</p>
     <div class="upi-id">
-      <span class="upi-id-label">{t('home.upi_id_label')}</span>
-      <code>{UPI_ID}</code>
+      <code aria-label={t('home.upi_id_label')}>{UPI_ID}</code>
       <button type="button" class="btn btn-outline js-only" data-copy={UPI_ID}>
         <Icon name="copy-btn" /> <span data-copy-label>{t('home.upi_copy_id')}</span>
       </button>
