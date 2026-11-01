@@ -350,12 +350,12 @@ class BrowseKeyboardTest {
         onNode(row("Quiet")).requestFocus()
         onNode(isFocused()).performKeyInput { withKeyDown(Key.ShiftLeft) { pressKey(Key.F10) } }
         onNodeWithText("Open").assertExists()
-        onNodeWithText("Hide from TMPlayer").assertExists()
+        onNodeWithText("Remove from TMPlayer").assertExists()
         onNodeWithText("Pin to the top").assertDoesNotExist()
         onNodeWithText("Mute").assertDoesNotExist()
         onNodeWithText("Archive").assertDoesNotExist()
         onNodeWithText("Mark as read").assertDoesNotExist()
-        onNodeWithText("Hide from TMPlayer").performClick()
+        onNodeWithText("Remove from TMPlayer").performClick()
         assertEquals(listOf("hide 1"), done)
     }
 }
