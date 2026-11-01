@@ -61,7 +61,6 @@ html[data-form=tv] .offline-line { bottom: var(--tv-safe-v); }
 .tv-tab .icon { width: calc(var(--dp) * 20); height: calc(var(--dp) * 20); }
 .tv-tab[aria-current] { color: var(--fg); font-weight: 600; }
 html[data-tv-keys] .tv-tab:focus { outline: none; background: var(--focus-fill); color: var(--on-focus-fill); font-weight: 600; transform: scale(var(--focus-scale)); }
-html[data-theme=light][data-tv-keys] .tv-tab:focus { box-shadow: 0 0 0 calc(var(--dp) * 2) var(--accent); }
 /* The account's picture: a thin ring in the accent while Settings is shown; under the remote a
    wider ring a little way out, with a halo of the page's own ground so it reads over the carousel. */
 .tv-picture {
@@ -225,7 +224,7 @@ html[data-form=tv] input:not([type=range]):not([type=radio]) { font-size: calc(v
 html[data-form=tv][data-tv-keys] .search-field:focus-within { border-color: var(--accent); box-shadow: 0 0 0 calc(var(--dp) * 1) var(--accent); }
 html[data-form=tv][data-tv-keys] .search-field input:focus { outline: none; }
 /* Read only until OK: the field says it is waiting to be opened. */
-html[data-form=tv][data-tv-keys] .search-field:has(input[data-tv-locked]:focus) { background: var(--focus-fill); color: var(--on-focus-fill); border-color: transparent; }
+html[data-form=tv][data-tv-keys] .search-field:has(input[data-tv-locked]:focus) { background: var(--focus-fill); color: var(--on-focus-fill); border-color: transparent; box-shadow: none; }
 html[data-form=tv] .search-field:has(input[data-tv-locked]:focus) input::placeholder { color: inherit; }
 
 /* ---- Buttons and links ---- */
