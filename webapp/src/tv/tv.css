@@ -169,7 +169,7 @@ html[data-form=tv] .strip {
 html[data-form=tv] .cards { column-gap: calc(var(--dp) * 12); }
 html[data-form=tv] .vrow.cards { padding-bottom: calc(var(--dp) * 20); }
 html[data-form=tv] .card-art { border-radius: calc(var(--dp) * 12); }
-html[data-form=tv] .card-art-title { font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 18); left: calc(var(--dp) * 10); right: calc(var(--dp) * 10); bottom: calc(var(--dp) * 12); }
+html[data-form=tv] .card-mark .icon { width: calc(var(--dp) * 40); height: calc(var(--dp) * 40); }
 html[data-form=tv] .card-progress { height: calc(var(--dp) * 3); left: calc(var(--dp) * 8); right: calc(var(--dp) * 8); }
 html[data-form=tv] .card-name { margin-top: calc(var(--dp) * 6); min-height: calc(var(--dp) * 36); font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 18); }
 html[data-form=tv] .card-facts { margin-top: calc(var(--dp) * 6); font-size: calc(var(--dp) * 12); line-height: calc(var(--dp) * 16); }
@@ -180,9 +180,10 @@ html[data-form=tv][data-tv-keys] .card:focus .card-art { transform: scale(var(--
 html[data-form=tv][data-tv-keys] .card:focus .card-facts { color: var(--fg); }
 /* A row's See all, its last card (SeeAllTile): the row's poster size and focus, a chevron over "See all" in the accent on the surface tinted with it. */
 html[data-form=tv] .see-all-art {
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: calc(var(--dp) * 8);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: calc(var(--dp) * 4);
   background: color-mix(in srgb, var(--accent) 10%, var(--surface)); color: var(--accent);
 }
+html[data-form=tv] .see-all-art .icon { width: calc(var(--dp) * 32); height: calc(var(--dp) * 32); }
 html[data-form=tv] .see-all-label { font-size: calc(var(--dp) * 16); line-height: calc(var(--dp) * 24); font-weight: 600; }
 
 /* ---- Chats: rows that fill under the remote, as the app's TV lists do ---- */

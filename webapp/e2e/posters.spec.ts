@@ -64,9 +64,9 @@ test('a show card draws the poster for the title the app asks about, and nothing
     expect(seen.pictures).toEqual([`/tmdb/img/${px <= 260 ? 'w185' : 'w342'}/harbournotes0.jpg`])
     // TMDB itself is never contacted by the page: only the worker is, so the key stays there.
     expect(seen.others).toEqual([])
-    // The poster carries the title; the name stays for screen readers and as a tooltip.
+    // The poster carries the title; the name is written under the card, and is the poster's tooltip.
     await expect(page.locator('.card-art.posted')).toHaveAttribute('title', 'Harbour Notes')
-    await expect(page.locator('.card-shade')).toBeHidden()
+    await expect(page.locator('.card-name')).toHaveText('Harbour Notes')
 })
 
 test('the answer is kept: a second visit draws the poster without asking again', async ({ page, browserName }) => {
@@ -81,11 +81,11 @@ test('the answer is kept: a second visit draws the poster without asking again',
     expect(seen.pictures).toHaveLength(1)
 })
 
-test('nothing matched: the thumbnail stays, and the name stays on it', async ({ page }) => {
+test('nothing matched: the thumbnail stays, and the name stays under it', async ({ page }) => {
     const seen = await mockTmdb(page, { match: false })
     await openShows(page)
     await expect.poll(() => seen.asks.length).toBe(1)
-    await expect(page.locator('.card-art-title')).toBeVisible()
+    await expect(page.locator('.card-name')).toBeVisible()
     await expect(page.locator('.card-poster')).toHaveCount(0)
 })
 
@@ -93,7 +93,7 @@ test('TMDB down or throttled: the thumbnail stays, and the page stops asking for
     const seen = await mockTmdb(page, 503)
     await openShows(page)
     await expect.poll(() => seen.asks.length).toBeGreaterThan(0)
-    await expect(page.locator('.card-art-title')).toBeVisible()
+    await expect(page.locator('.card-name')).toBeVisible()
     await expect(page.locator('.card-poster')).toHaveCount(0)
     await page.reload()
     await expect(page.locator('.card')).toHaveCount(1)
@@ -125,7 +125,7 @@ test('the Settings switch turns lookups off at once, and stays off after a reloa
     await page.goto('/chats')
     await page.getByRole('link', { name: /Test Shows/ }).first().click()
     await expect(page.locator('.card')).toHaveCount(1)
-    await expect(page.locator('.card-art-title')).toBeVisible()
+    await expect(page.locator('.card-name')).toBeVisible()
     await page.waitForTimeout(500)
     expect(seen.asks).toHaveLength(asked)
     await expect(page.locator('.card-poster')).toHaveCount(0)

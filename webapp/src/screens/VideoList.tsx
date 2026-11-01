@@ -1,5 +1,7 @@
 import { createEffect, createResource, createSignal, onCleanup, onMount, Show } from 'solid-js'
-import { A } from '@solidjs/router'
+import { A, useNavigate } from '@solidjs/router'
+import { PlayCircleIcon, PlayIcon } from '@hugeicons/core-free-icons'
+import { Icon } from '../ui/Icon'
 import { resumes, settings, watchedTick } from '../store'
 import { loadThumb } from './thumbs'
 import { coverBackground } from './cover'
@@ -53,13 +55,16 @@ export const detailPath = (v: Pick<VideoItem, 'chatId' | 'messageId'>) => `/vide
 const cardPath = (v: VideoItem, direct?: boolean) => (direct ? watchPath(v) : detailPath(v))
 
 /**
- * The art of a portrait card, as the app draws a video's: the frame across the card's width, the
- * same frame blurred to fill the 2:3 card round it, and the name on a shade at its foot. With
- * posters on (Settings), TMDB's poster for the video's title fades in over all of that when there
- * is one, as the app's PosterArt does, and the name is left to the poster (kept for screen
- * readers). A lookup that fails, or posters turned off, leaves the thumbnail.
+ * The art of a portrait card, as the app draws a video's (MediaArt, PosterArt): the frame cropped
+ * to fill the 2:3 card (HX46: no letterbox over a blurred copy), on the title's cover gradient
+ * with a faint play mark in its middle until a picture is in, or where there is none. The name is
+ * written once, under the card (HX39), never on the art too. With posters on (Settings), TMDB's
+ * poster for the video's title fades in over all of that when there is one, as the app's
+ * PosterArt does. A lookup that fails, or posters turned off, leaves the thumbnail. On a desktop,
+ * a pointer over the card shows Play in the middle, which plays at once past the video's page
+ * (the desktop app's poster hover).
  */
-function CardArt(props: { thumb: string | null; title: string; poster: PosterAsk | null; progress?: number }) {
+function CardArt(props: { thumb: string | null; title: string; poster: PosterAsk | null; progress?: number; onPlay?: (e: MouseEvent) => void }) {
     let el!: HTMLDivElement
     const [src, setSrc] = createSignal<string | null>(null)
     const [seen, setSeen] = createSignal(false)
@@ -99,15 +104,16 @@ function CardArt(props: { thumb: string | null; title: string; poster: PosterAsk
         // The desktop's cover gradient for the title under everything, so a card waiting for its
         // frame or poster, or one with neither, is never a grey box.
         <div class="card-art" classList={{ posted: !!picture(), progressed: !!props.progress }} ref={el} title={picture() ? props.title : undefined} style={{ background: coverBackground(props.title) }}>
+            {/* Under the pictures, so it shows only on the bare cover (GeneratedCover's play mark). */}
+            <span class="card-mark" aria-hidden="true">
+                <Icon icon={PlayCircleIcon} size={56} />
+            </span>
             <Show when={src()}>
-                <img class="card-fill" src={src()!} alt="" decoding="async" />
-                <img class="card-frame" src={src()!} alt="" decoding="async" />
+                <img class="card-thumb" src={src()!} alt="" decoding="async" />
             </Show>
             <Show when={picture()}>
                 <img class="card-poster" src={picture()!} alt="" decoding="async" />
             </Show>
-            <div class="card-shade" />
-            <div class="card-art-title">{props.title}</div>
             <Show when={score()}>
                 <span class="card-score" classList={{ lifted: !!props.progress }} role="img" aria-label={t('metadata.score_out_of_ten', { site: 'TMDB', score: score()! })}>
                     <TmdbMark height={9} />
@@ -118,6 +124,14 @@ function CardArt(props: { thumb: string | null; title: string; poster: PosterAsk
                 <div class="card-progress">
                     <div style={{ width: `${Math.min(100, props.progress! * 100)}%` }} />
                 </div>
+            </Show>
+            <Show when={props.onPlay}>
+                {/* Shown by the stylesheet only on a desktop's hover; a span, since the card is a link already. */}
+                <span class="card-hover" aria-hidden="true">
+                    <span class="card-play" title={t('common.play')} onClick={(e) => props.onPlay!(e)}>
+                        <Icon icon={PlayIcon} size={24} />
+                    </span>
+                </span>
             </Show>
         </div>
     )
@@ -203,9 +217,16 @@ function cardLink(item: VideoItem, direct?: boolean, replace?: boolean, history?
 
 /** One portrait card, which opens the video's page (or plays it, from Continue watching). */
 export function Card(props: { card: CardData; progress?: number; replace?: boolean; direct?: boolean; history?: boolean }) {
+    const navigate = useNavigate()
+    // The hover's Play: plays at once, past the video's page, as a double click does in the desktop app.
+    const play = (e: MouseEvent) => {
+        e.preventDefault()
+        e.stopPropagation()
+        navigate(watchPath(props.card.item), { state: { video: props.card.item } })
+    }
     return (
         <A class="card" {...cardLink(props.card.item, props.direct, props.replace, props.history)}>
-            <CardArt thumb={props.card.item.thumb} title={props.card.title} poster={props.card.item.poster} progress={props.progress} />
+            <CardArt thumb={props.card.item.thumb} title={props.card.title} poster={props.card.item.poster} progress={props.progress} onPlay={play} />
             {/* Under the card, as the apps write it (two lines kept, so the facts line up along a row). */}
             <div class="card-name">{props.card.title}</div>
             <div class="card-facts">{props.card.facts}</div>
