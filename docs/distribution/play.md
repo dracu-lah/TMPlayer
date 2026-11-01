@@ -32,6 +32,28 @@ before acting on them.
 - Reviewers need to get in without a Telegram code, hence CP35's demo mode with openly licensed
   clips.
 
+## Lessons from another app's Play launch
+
+Prav (a chat app) wrote up its launch: <https://vishnusanal.github.io/posts/publishing-prav-on-play-store>.
+The app was finished, and it still took about six months. What applies here:
+
+- **Plan in weeks, not days.** Most of the time went on the account, finding testers and the
+  14 day test, not on code. The 14 days only start once 12 testers are opted in.
+- **Line up the 12 testers first.** Collect their Google account emails (from the TMPlayer channel
+  and community) before the build is ready, and ask for more than 12 since some drop out. Anyone
+  who leaves resets the "without a break" count, so check the console's tester count daily.
+- **Reviewer access is the usual first rejection.** Prav's first production submission was rejected
+  for having no demo account. CP35's demo mode must be easy to find from the first screen, and the
+  steps go in the console's "App access" section. Test it on a fresh install before submitting.
+- **Script the foreground service videos early.** Prav lost time working out what to record. Data
+  sync (downloads) and media playback each need a short clip; the demo mode content can be reused.
+- **Decide personal or organization on purpose.** A personal account ties the app to one developer
+  and shows their details publicly on the listing. An organization account avoids that but needs a
+  DUNS number, which stalled Prav for weeks. Check what will be shown before U07.
+- **Have a second card for the $25 fee.** Prav's card was blocked at payment.
+- **Check which track counts.** Prav's post says an internal test unlocked production; the policy
+  above says a closed test. Confirm in the console before starting the 14 days.
+
 ## How listings like this get removed
 
 Other players for Telegram videos have left Play, none with a published reason: TMP (Telegram
