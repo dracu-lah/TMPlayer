@@ -179,6 +179,8 @@ messages.set(
 const dialogs: Peer[] = [me, clips, shows, locked, quiet, copies]
 for (let i = 0; i < 1500; i++) dialogs.push(peer(-5000 - i, `Group ${i}`, 'chat'))
 dialogs.push(lighthouse)
+// Telegram's archive: two chats of its own, listed only when the archive is asked for.
+const archive: Peer[] = [peer(-7001, 'Archived Reels', 'chat', { chatType: 'channel' }), peer(-7002, 'Old Group', 'chat')]
 
 let globalFailsLeft = 2
 
@@ -274,10 +276,12 @@ export class TelegramClient {
         if (!peers.has(chatId)) throw rpcError('PEER_ID_INVALID')
         return [ids].flat().map((id) => (messages.get(chatId) ?? []).find((m) => m.id === id) ?? null)
     }
-    async *iterDialogs(_: unknown) {
-        for (let i = 0; i < dialogs.length; i++) {
+    async *iterDialogs(p?: { archived?: string; limit?: number }) {
+        const list = p?.archived === 'only' ? archive : dialogs
+        const limit = Math.min(list.length, p?.limit ?? Infinity)
+        for (let i = 0; i < limit; i++) {
             if (i % 100 === 0) await delay(20)
-            yield { peer: dialogs[i], isPinned: i < 2 }
+            yield { peer: list[i], isPinned: p?.archived !== 'only' && i < 2 }
         }
     }
     async downloadAsBuffer(t: { url: string }) {

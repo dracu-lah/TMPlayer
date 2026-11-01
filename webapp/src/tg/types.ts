@@ -79,6 +79,8 @@ export interface ChatItem {
     forum: boolean
     /** Saved Messages, which the page names in its own words. */
     self: boolean
+    /** In Telegram's archive: listed by `archivedChats`, never by `chats`. */
+    archived?: boolean
 }
 
 /** A chat list loaded part way: what has come so far, sent as `chats` runs. */

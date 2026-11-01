@@ -5,7 +5,7 @@ import { BaseTelegramClient, SentCode as MtSentCode, TelegramClient, User, type 
 import { rules } from '../rules'
 import { cryptoProvider } from './crypto'
 import { homePage } from './home'
-import { chatList, chatPage, forgetAll, rankChats, recentPage, searchAll, videoCounts, watchInfo } from './library'
+import { archivedList, chatList, chatPage, forgetAll, rankChats, recentPage, searchAll, videoCounts, watchInfo } from './library'
 import { clickSponsored, reportSponsored, viewSponsored } from './sponsored'
 import { chatProtects, files, itemOf, rawOf, thumbnails, toItem } from './media'
 import type { ChatInfo, ChatItem, ChatPage, ChatsEvent, ChatView, Country, Found, HomePage, HomeView, ListView, Me, RecentPage, QrEvent, RpcError, SentCode, SponsoredReport, VideoItem, WatchInfo } from './types'
@@ -244,6 +244,11 @@ export const api = {
     /** Every chat outside the archive, pinned first; pages of it arrive as `ChatsEvent`s while it loads. */
     async chats(ctx: Ctx, refresh: boolean): Promise<ChatItem[]> {
         return chatList(tg, refresh, (chats) => ctx.emit({ chats } satisfies ChatsEvent))
+    },
+
+    /** Every chat in Telegram's archive (HX32), for the Add chats picker; pages arrive as `ChatsEvent`s. */
+    async archivedChats(ctx: Ctx): Promise<ChatItem[]> {
+        return archivedList(tg, (chats) => ctx.emit({ chats } satisfies ChatsEvent))
     },
 
     /** Ids of the chats whose names answer `query`, best first. */

@@ -134,11 +134,12 @@ a.link { color: var(--accent); text-decoration: none; display: inline-block; pad
   min-height: 44px; padding: 10px 24px; font-weight: 500; transition: transform var(--fast) var(--ease), background var(--fast);
 }
 .danger-button:hover { background: var(--surface-high); }
-input:not([type=range]):not([type=radio]) {
+/* Text fields; a tick box keeps its own size (the Add chats picker's rows drew it full width). */
+input:not([type=range]):not([type=radio]):not([type=checkbox]) {
   font: inherit; font-size: 16px; color: var(--fg); background: var(--surface); border: 1px solid var(--line);
   border-radius: var(--r-m); padding: 11px 14px; width: 100%; outline: none;
 }
-input:not([type=range]):not([type=radio]):focus { border-color: var(--accent); }
+input:not([type=range]):not([type=radio]):not([type=checkbox]):focus { border-color: var(--accent); }
 
 /*
  * Layout. The page takes the whole width, as the app's do, with the app's gutters: 16 on a phone,
@@ -752,6 +753,12 @@ a.detail-round { text-decoration: none; }
 .chat-text { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
 .chat-count { font-size: 13px; line-height: 16px; min-height: 16px; }
 .picker-actions { display: flex; align-items: center; gap: 16px; margin-bottom: 8px; }
+.picker-actions > .link { margin-left: auto; flex: none; }
+/* The picker's filters (All, Archived, Channels, Groups, People), History's chips as buttons. */
+.picker-scopes { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; min-width: 0; padding: 2px; }
+.picker-scopes .history-tab { flex: none; background: none; cursor: pointer; font: inherit; font-size: 13px; font-weight: 500; }
+.picker-scopes .history-tab[aria-pressed="true"] { background: var(--accent-container); border-color: transparent; color: var(--on-accent-container); }
+.picker-band { margin: 16px 0 4px; padding: 0 8px; font-size: 14px; line-height: 20px; font-weight: 500; color: var(--muted); }
 .picker-blurb { margin: 0 0 16px; }
 .picker-gone-head { margin: 24px 0 8px; font-size: 14px; color: var(--muted); }
 .picker-gone-row { display: flex; align-items: center; gap: 16px; padding: 8px; }

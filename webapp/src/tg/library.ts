@@ -57,6 +57,11 @@ export function forgetAll() {
     dialogs = null
     dialogsLoading = null
     dialogsSoFar = []
+    dialogsAt = 0
+    headLoading = null
+    archived = null
+    archivedLoading = null
+    epoch++
     homeStates.clear()
     searches.clear()
     watchKept.clear()
@@ -279,16 +284,32 @@ export function chatItem(peer: Peer, pinned: boolean): ChatItem {
     }
 }
 
+/** When the whole list was read, or its head last read again. */
+let dialogsAt = 0
+/** A kept list older than this has its head read again before it is handed out (HX44). */
+const FRESH_MS = 60_000
+let headLoading: Promise<ChatItem[]> | null = null
+/** Bumped by a sign out, so an answer that lands after it is not kept for the next account. */
+let epoch = 0
+
 /**
  * Every chat outside the archive, pinned first, in Telegram's order. The list arrives in pages
  * of a hundred, each sent on to `onBatch` as it comes; it is kept for the session, and
- * `refresh` asks again.
+ * `refresh` asks again. A kept list more than a minute old is handed to `onBatch` at once and
+ * its first page then read again (one call), so a chat joined since, or a new private chat,
+ * shows up by itself, as the apps' list does without a Refresh button (HX44).
  */
 export async function chatList(tg: TelegramClient, refresh: boolean, onBatch: (chats: ChatItem[]) => void): Promise<ChatItem[]> {
-    if (dialogs && !refresh) return dialogs
+    if (dialogs && !refresh) {
+        if (Date.now() - dialogsAt < FRESH_MS) return dialogs
+        onBatch(dialogs)
+        headLoading ??= freshenHead(tg).finally(() => (headLoading = null))
+        return await headLoading
+    }
     dialogListeners.add(onBatch)
     try {
         dialogsLoading ??= (async () => {
+            const mine = epoch
             const out: ChatItem[] = []
             const seen = new Set<number>()
             for await (const d of tg.iterDialogs({ archived: 'exclude', pinned: 'include' })) {
@@ -296,16 +317,84 @@ export async function chatList(tg: TelegramClient, refresh: boolean, onBatch: (c
                 seen.add(d.peer.id)
                 out.push(chatItem(d.peer, d.isPinned))
                 if (out.length % PAGE === 0) {
+                    if (mine !== epoch) break
                     dialogsSoFar = out.slice()
                     for (const fn of dialogListeners) fn(dialogsSoFar)
                 }
             }
-            dialogs = out
+            if (mine === epoch) {
+                dialogs = out
+                dialogsAt = Date.now()
+            }
             return out
         })().finally(() => (dialogsLoading = null))
         return await dialogsLoading
     } finally {
         dialogListeners.delete(onBatch)
+    }
+}
+
+/**
+ * The list's first page read again: Telegram's head in its own order, then the rest as kept, so
+ * a chat moved up or newly joined comes first and nothing further down is asked for again. A
+ * failure keeps the list as it was and waits another minute before trying.
+ */
+async function freshenHead(tg: TelegramClient): Promise<ChatItem[]> {
+    const mine = epoch
+    const kept = dialogs ?? []
+    try {
+        const head: ChatItem[] = []
+        const seen = new Set<number>()
+        for await (const d of tg.iterDialogs({ archived: 'exclude', pinned: 'include', limit: PAGE })) {
+            if (seen.has(d.peer.id)) continue
+            seen.add(d.peer.id)
+            head.push(chatItem(d.peer, d.isPinned))
+        }
+        if (mine !== epoch) return kept
+        // Pinned chats all come in the head, so one further down is pinned no longer.
+        const rest = kept.filter((c) => !seen.has(c.id)).map((c) => (c.pinned ? { ...c, pinned: false } : c))
+        dialogs = [...head, ...rest]
+        dialogsAt = Date.now()
+        return dialogs
+    } catch {
+        if (mine === epoch) dialogsAt = Date.now()
+        return kept
+    }
+}
+
+let archived: ChatItem[] | null = null
+let archivedLoading: Promise<ChatItem[]> | null = null
+const archivedListeners = new Set<(chats: ChatItem[]) => void>()
+
+/**
+ * Every chat in Telegram's archive, read whole (HX32) in pages of a hundred and kept for the
+ * session. Only the Add chats picker and a Chats list narrowed to archived chats the viewer
+ * added ask for it: a channel archived to keep Telegram tidy is still a channel of videos.
+ */
+export async function archivedList(tg: TelegramClient, onBatch: (chats: ChatItem[]) => void): Promise<ChatItem[]> {
+    if (archived) return archived
+    archivedListeners.add(onBatch)
+    try {
+        archivedLoading ??= (async () => {
+            const mine = epoch
+            const out: ChatItem[] = []
+            const seen = new Set<number>()
+            for await (const d of tg.iterDialogs({ archived: 'only', pinned: 'include' })) {
+                if (seen.has(d.peer.id)) continue
+                seen.add(d.peer.id)
+                out.push({ ...chatItem(d.peer, false), archived: true })
+                if (out.length % PAGE === 0) {
+                    if (mine !== epoch) break
+                    const soFar = out.slice()
+                    for (const fn of archivedListeners) fn(soFar)
+                }
+            }
+            if (mine === epoch) archived = out
+            return out
+        })().finally(() => (archivedLoading = null))
+        return await archivedLoading
+    } finally {
+        archivedListeners.delete(onBatch)
     }
 }
 
