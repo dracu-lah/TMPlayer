@@ -23,7 +23,7 @@ object FilePicker {
     suspend fun open(title: String, vararg extensions: String): File? {
         FolderPicker.ensureFileKit()
         val viaFileKit = runCatching {
-            FileKit.openFilePicker(type = FileKitType.File(extensions.toSet()), dialogSettings = FileKitDialogSettings(title = title))
+            FileKit.openFilePicker(type = FileKitType.File(extensions.toSet()), dialogSettings = FolderPicker.dialogSettings(title))
         }
         viaFileKit.exceptionOrNull()?.let { Logger.w(TAG, "The system file picker failed; using Swing's", it) }
         if (viaFileKit.isSuccess) return viaFileKit.getOrNull()?.file
@@ -32,7 +32,7 @@ object FilePicker {
                 dialogTitle = title
                 fileFilter = FileNameExtensionFilter(extensions.joinToString(), *extensions)
             }
-            if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) chooser.selectedFile else null
+            if (chooser.showOpenDialog(FolderPicker.parentWindow()) == JFileChooser.APPROVE_OPTION) chooser.selectedFile else null
         }
     }
 
@@ -44,7 +44,7 @@ object FilePicker {
         FolderPicker.ensureFileKit()
         val base = suggestedName.removeSuffix(".$extension")
         val viaFileKit = runCatching {
-            FileKit.openFileSaver(suggestedName = base, extension = extension, dialogSettings = FileKitDialogSettings(title = title))
+            FileKit.openFileSaver(suggestedName = base, extension = extension, dialogSettings = FolderPicker.dialogSettings(title))
         }
         viaFileKit.exceptionOrNull()?.let { Logger.w(TAG, "The system save dialog failed; using Swing's", it) }
         val picked = if (viaFileKit.isSuccess) {
@@ -55,7 +55,7 @@ object FilePicker {
                     dialogTitle = title
                     selectedFile = File(currentDirectory, "$base.$extension")
                 }
-                if (chooser.showSaveDialog(null) == JFileChooser.APPROVE_OPTION) chooser.selectedFile else null
+                if (chooser.showSaveDialog(FolderPicker.parentWindow()) == JFileChooser.APPROVE_OPTION) chooser.selectedFile else null
             }
         }
         return picked?.let { if (it.name.endsWith(".$extension")) it else File(it.parentFile, "${it.name}.$extension") }

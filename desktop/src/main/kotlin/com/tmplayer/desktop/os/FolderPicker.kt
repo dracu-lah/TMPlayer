@@ -3,6 +3,7 @@ package com.tmplayer.desktop.os
 import com.tmplayer.platform.Logger
 import io.github.vinceglb.filekit.FileKit
 import io.github.vinceglb.filekit.PlatformFile
+import io.github.vinceglb.filekit.dialogs.FileKitDialogParent
 import io.github.vinceglb.filekit.dialogs.FileKitDialogSettings
 import io.github.vinceglb.filekit.dialogs.openDirectoryPicker
 import kotlinx.coroutines.Dispatchers
@@ -24,6 +25,23 @@ object FolderPicker {
     @Volatile
     private var initialised = false
 
+    /**
+     * The app's window, which every picker names as its parent. Without one, the portal's dialog
+     * is a window of its own: on a tiling window manager (sway) it was tiled beside TMPlayer,
+     * which shrank the app to half the screen and reloaded every page and picture, then again
+     * when it closed. With a parent it is a dialog of the app's, floated over it.
+     */
+    internal fun parentWindow(): java.awt.Window? = runCatching {
+        java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager().activeWindow
+            ?: java.awt.Window.getWindows().firstOrNull { it.isShowing && it is java.awt.Frame }
+    }.getOrNull()
+
+    /** The dialog's [title], over [parentWindow] when there is one. */
+    internal fun dialogSettings(title: String): FileKitDialogSettings =
+        parentWindow()?.let { window ->
+            runCatching { FileKitDialogSettings(title = title, parent = FileKitDialogParent.awt(window)) }.getOrNull()
+        } ?: FileKitDialogSettings(title = title)
+
     /** Starts FileKit once, for this picker and [FilePicker] alike. */
     internal fun ensureFileKit() {
         if (!initialised) {
@@ -37,7 +55,7 @@ object FolderPicker {
         ensureFileKit()
         val viaFileKit = runCatching {
             val start = startIn?.takeIf { it.isDirectory }?.let { PlatformFile(it) }
-            FileKit.openDirectoryPicker(directory = start, dialogSettings = FileKitDialogSettings(title = title))
+            FileKit.openDirectoryPicker(directory = start, dialogSettings = dialogSettings(title))
         }
         viaFileKit.exceptionOrNull()?.let { Logger.w(TAG, "The system folder picker failed; using Swing's", it) }
         if (viaFileKit.isSuccess) return viaFileKit.getOrNull()?.file
@@ -47,7 +65,7 @@ object FolderPicker {
                 fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
                 isAcceptAllFileFilterUsed = false
             }
-            if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) chooser.selectedFile else null
+            if (chooser.showOpenDialog(parentWindow()) == JFileChooser.APPROVE_OPTION) chooser.selectedFile else null
         }
     }
 
