@@ -182,14 +182,14 @@ fun SettingsPage(
     initialCategory: SettingsCategory? = null,
     /** Told once [initialCategory] has been opened, so a later visit opens on the list again. */
     onInitialTaken: () -> Unit = {},
+    /** An About sub page to open on, for the render tests. */
+    initialAbout: AboutView? = null,
 ) {
-    var showAbout by remember { mutableStateOf(false) }
+    // About TMPlayer (and its notices) open as a page under About and help, beside the list like
+    // every other page, rather than in Settings' place.
+    var aboutView by remember { mutableStateOf(initialAbout) }
     val settings = state.settings
     val supportCounters by settings.supportCounters.collectAsState(initial = SupportReminder.Counters())
-    if (showAbout) {
-        AboutPage(version, supporter = supportCounters.supporter, onBack = { showAbout = false })
-        return
-    }
     val scope = rememberCoroutineScope()
     val toast = rememberToast()
     // The app lock (CP57): a PIN being set, changed or removed takes the page's place.
@@ -242,6 +242,7 @@ fun SettingsPage(
         cameFromStep = cameFromStep,
         onJump = { step ->
             SettingsCategory.holding(step)?.let { target ->
+                aboutView = null
                 cameFromStep = step
                 jumpTo = step
                 openName = target.name
@@ -249,7 +250,7 @@ fun SettingsPage(
         },
         onPin = { pinFlow = it },
         onKidsChats = { pickingKidsChats = true },
-        onShowAbout = { showAbout = true },
+        onShowAbout = { aboutView = AboutView.Links },
     )
 
     LaunchedEffect(open, jumpTo) {
@@ -281,6 +282,17 @@ fun SettingsPage(
             },
     ) {
         val wide = maxWidth >= TWO_PANE_FROM
+        // The About sub page open, when About and help is the page shown.
+        val about = aboutView?.takeIf { (open ?: if (wide) settingsCategories.first() else null) == SettingsCategory.About }
+        val aboutBack: () -> Unit = { aboutView = if (aboutView == AboutView.Notices) AboutView.Links else null }
+        val aboutPage: @Composable (AboutView) -> Unit = { view ->
+            AboutContent(
+                view,
+                version,
+                supporter = supportCounters.supporter,
+                onRead = { aboutView = AboutView.Notices },
+            )
+        }
         val closePage: () -> Unit = {
             val back = cameFromStep
             if (back != null && open != SettingsCategory.SetupChoices) {
@@ -311,6 +323,8 @@ fun SettingsPage(
                     selected = if (wide) open ?: settingsCategories.first() else null,
                     focus = categoryFocus,
                     onOpen = { category ->
+                        // About and help from the list is its own page again, not the sub page.
+                        aboutView = null
                         cameFromStep = null
                         jumpTo = null
                         openName = category.name
@@ -327,25 +341,45 @@ fun SettingsPage(
                         horizontalArrangement = Arrangement.spacedBy(PANE_GAP),
                     ) {
                         ScrollPane(Modifier.width(LIST_WIDTH).fillMaxHeight()) { list() }
-                        key(shown) {
+                        key(shown, about) {
                             ScrollPane(Modifier.weight(1f).fillMaxHeight()) {
                                 Column(Modifier.widthIn(max = PAGE_MAX)) {
-                                    Text(
-                                        titleOf(shown),
-                                        style = MaterialTheme.typography.headlineSmall,
-                                        color = Tone.text,
-                                        modifier = Modifier.padding(start = 4.dp, top = 4.dp, bottom = 4.dp),
-                                    )
-                                    pages.Content(shown)
+                                    if (about != null) {
+                                        SubPageTitle(about.title(), about.backLabel(), aboutBack)
+                                        aboutPage(about)
+                                    } else {
+                                        Text(
+                                            titleOf(shown),
+                                            style = MaterialTheme.typography.headlineSmall,
+                                            color = Tone.text,
+                                            modifier = Modifier.padding(start = 4.dp, top = 4.dp, bottom = 4.dp),
+                                        )
+                                        pages.Content(shown)
+                                    }
                                 }
                             }
                         }
                     }
                 }
             } else {
-                key(open) {
+                key(open, about) {
                     ScrollPane(Modifier.fillMaxSize(), inset = false) {
-                        if (open == null) {
+                        if (about != null) {
+                            PageHeader(
+                                title = about.title(),
+                                leading = {
+                                    val interactions = remember { MutableInteractionSource() }
+                                    BarTooltip(about.backLabel(), "Esc", below = true) {
+                                        IconButton(
+                                            onClick = aboutBack,
+                                            interactionSource = interactions,
+                                            modifier = Modifier.focusRequester(backFocus).keyboardRing(interactions, CircleShape),
+                                        ) { Icon(TmIcons.ArrowBack, contentDescription = about.backLabel()) }
+                                    }
+                                },
+                            )
+                            Column(Modifier.widthIn(max = PAGE_MAX).padding(horizontal = pageMargin())) { aboutPage(about) }
+                        } else if (open == null) {
                             PageHeader(s().settingsTitle, s().settingsSavesAsYouGo)
                             Column(Modifier.widthIn(max = PAGE_MAX).padding(horizontal = pageMargin())) { list() }
                         } else {
@@ -370,7 +404,14 @@ fun SettingsPage(
         }
         // Esc on a page goes back to the list, as the phone's Back does; the wide layout has the
         // list beside the page already, so there it is left alone.
-        androidx.compose.runtime.SideEffect { escape.value = if (!wide && open != null) closePage else null }
+        // An About sub page goes back one step in either layout.
+        androidx.compose.runtime.SideEffect {
+            escape.value = when {
+                about != null -> aboutBack
+                !wide && open != null -> closePage
+                else -> null
+            }
+        }
     }
 
     if (confirmSignOut) SignOutDialog(state, onDismiss = { confirmSignOut = false })
