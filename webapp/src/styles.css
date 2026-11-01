@@ -774,7 +774,8 @@ a.detail-round { text-decoration: none; }
 
 /* Add chats (HX27): a tick box before each row's picture, and its rough video count under the name. */
 .pick-chat { display: flex; align-items: center; gap: 16px; flex: 1; min-width: 0; padding: 8px; cursor: pointer; border-radius: var(--r-m); }
-.chat-tick { flex: none; width: 22px; height: 22px; margin: 0; accent-color: var(--accent); cursor: pointer; }
+/* As specific as the page's input rule above (which made it as wide as the row, the name pushed out of sight), and later. */
+input.chat-tick[type=checkbox] { flex: none; width: 22px; height: 22px; margin: 0; padding: 0; border: 0; background: none; accent-color: var(--accent); cursor: pointer; }
 .chat-text { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
 .chat-count { font-size: 13px; line-height: 16px; min-height: 16px; }
 .picker-actions { display: flex; align-items: center; gap: 16px; margin-bottom: 8px; }
