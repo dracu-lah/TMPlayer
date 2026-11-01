@@ -1001,7 +1001,7 @@ p.muted a { text-decoration: underline; text-underline-offset: 2px; }
   background: var(--surface-container-low);
   border: 1px solid var(--outline-variant);
   border-radius: var(--shape-xl);
-  padding: clamp(22px, 3.5vw, 38px);
+  padding: clamp(20px, 3vw, 28px);
 }
 
 .release-head {
@@ -1060,7 +1060,7 @@ p.muted a { text-decoration: underline; text-underline-offset: 2px; }
   background: var(--surface-container);
   border: 1px solid var(--outline-variant);
   border-radius: var(--shape-l);
-  padding: 20px 22px;
+  padding: 16px 18px;
   transition: background-color 0.2s var(--ease-standard), border-color 0.2s var(--ease-standard);
 }
 .abi:hover { background: var(--surface-container-high); border-color: var(--outline); }
@@ -1207,7 +1207,7 @@ summary:hover { color: var(--on-surface); }
 /* A skeleton waits on a script; without one it would shimmer for ever. */
 html:not(.js) .js-only { display: none; }
 
-.release-strip { padding: clamp(18px, 2.6vw, 26px) clamp(22px, 3.5vw, 32px); }
+.release-strip { padding: clamp(16px, 2.4vw, 22px) clamp(20px, 3vw, 28px); }
 .release-strip .release-head { padding-bottom: 0; }
 
 .platforms { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; margin-top: 20px; }
@@ -1217,7 +1217,7 @@ html:not(.js) .js-only { display: none; }
   background: var(--surface-container-lowest);
   border: 1px solid var(--outline-variant);
   border-radius: var(--shape-xl);
-  padding: clamp(16px, 3.5vw, 34px);
+  padding: clamp(16px, 3vw, 28px);
   scroll-margin-top: 96px;
   min-width: 0;
 }
@@ -1340,7 +1340,7 @@ html:not(.js) .js-only { display: none; }
   background: var(--surface-container-lowest);
   border: 1px solid var(--outline-variant);
   border-radius: var(--shape-xl);
-  padding: clamp(16px, 3.5vw, 34px);
+  padding: clamp(16px, 3vw, 28px);
 }
 .web-app .platform-head { margin-bottom: 12px; }
 .web-app .platform-title h3 { margin: 0; }
@@ -1708,8 +1708,8 @@ kbd {
   counter-increment: step;
   display: grid;
   grid-template-columns: 56px minmax(0, 1fr);
-  gap: 0 24px;
-  padding: clamp(22px, 3vw, 34px);
+  gap: 0 20px;
+  padding: clamp(20px, 3vw, 28px);
   background: var(--surface-container-low);
   border-radius: var(--shape-xl);
   border: 1px solid var(--outline-variant);
@@ -1786,7 +1786,7 @@ kbd {
 }
 
 .panel {
-  padding: clamp(26px, 3.5vw, 38px);
+  padding: clamp(20px, 3vw, 28px);
   background: var(--surface-container-low);
   border: 1px solid var(--outline-variant);
   border-radius: var(--shape-xl);
@@ -1948,7 +1948,7 @@ kbd {
 .contact {
   position: relative;
   border-radius: var(--shape-xl);
-  padding: clamp(26px, 4vw, 52px);
+  padding: clamp(20px, 3vw, 28px);
   background: var(--surface-container-low);
   border: 1px solid var(--outline-variant);
   overflow: hidden;
@@ -2101,7 +2101,7 @@ kbd {
 }
 .policy-wrap section {
   margin: 0 0 16px;
-  padding: clamp(24px, 3.5vw, 36px);
+  padding: clamp(20px, 3vw, 28px);
   background: var(--surface-container-low);
   border: 1px solid var(--outline-variant);
   border-radius: var(--shape-xl);
@@ -2134,11 +2134,15 @@ kbd {
   .cover-icon svg { width: 46px; height: 46px; }
 }
 /* The two cards' own padding, bled past on a phone so the cover reaches the card's edges and
-   corners: .policy-wrap section's clamp(24px, 3.5vw, 36px) and .lcard's clamp(20px, 3vw, 28px)
-   both resolve to their fixed floor under 640px, where 3 to 3.5vw never reaches it. */
+   corners: .policy-wrap section's and .lcard's clamp(20px, 3vw, 28px) both resolve to 20px under
+   640px, where 3vw never reaches it. */
 @media (max-width: 639px) {
-  .policy-wrap .cover-icon { margin: -24px -24px 20px; border-radius: var(--shape-xl) var(--shape-xl) 0 0; }
-  .lcard-talk .cover-icon, .lcard-give .cover-icon { margin: -20px -20px 20px; border-radius: var(--shape-xxl) var(--shape-xxl) 0 0; }
+  /* width: auto plus stretch, so the negative margins widen the cover to the card's edges instead
+     of only shifting a 100% wide box to the start side. */
+  .policy-wrap .cover-icon, .lcard-talk .cover-icon { width: auto; align-self: stretch; }
+  .policy-wrap .cover-icon { margin: -20px -20px 20px; border-radius: var(--shape-xl) var(--shape-xl) 0 0; }
+  .lcard-talk .cover-icon { margin: -20px -20px 20px; border-radius: var(--shape-xxl) var(--shape-xxl) 0 0; }
+  .lcard-talk .lcard-text { justify-self: stretch; }
 }
 
 /* The 404 page: one centred column, the code large enough to read as the answer, and the
@@ -2752,7 +2756,7 @@ a.card:active,
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: clamp(24px, 3vw, 32px);
+  padding: clamp(20px, 2.6vw, 28px);
   border: 1px solid var(--outline-variant);
   border-radius: var(--shape-xl);
   background: var(--surface-container-lowest);
@@ -2820,7 +2824,7 @@ a.card:hover { text-decoration: none; color: var(--on-surface); border-color: va
    card and are simply absent when GitHub does not answer. */
 
 .support {
-  padding: clamp(32px, 4.5vw, 56px);
+  padding: clamp(20px, 3vw, 28px);
   border: 1px solid var(--outline-variant);
   border-radius: var(--shape-xxl);
   background: var(--surface-container-lowest);
@@ -2840,7 +2844,7 @@ a.card:hover { text-decoration: none; color: var(--on-surface); border-color: va
 @media (min-width: 640px) {
   .support-actions { grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); }
 }
-.support-actions .btn { justify-content: center; }
+.support-actions .btn { justify-content: center; padding-inline: 16px; white-space: nowrap; }
 .support-stats {
   display: flex;
   flex-wrap: wrap;
@@ -2997,9 +3001,11 @@ a.card:hover { text-decoration: none; color: var(--on-surface); border-color: va
 .support-give { max-width: 520px; }
 /* The same offer on a page with no star card of its own: a slim card at the end of the last band,
    so the rule above it has nothing to separate and goes. */
-.support-slim { margin-top: clamp(28px, 3.6vw, 40px); padding: clamp(24px, 3.4vw, 40px); }
+.support-slim { margin-top: clamp(28px, 3.6vw, 40px); padding: clamp(20px, 3vw, 28px); }
 .support-more-solo { margin-top: 0; padding-top: 0; border-top: 0; }
 .support-more-solo .support-actions { margin-bottom: 0; }
+/* A card's last row adds nothing under itself, so its bottom padding matches its sides. */
+.support-coffee:last-child, .support-actions:last-child, .platform > :last-child, .web-app > :last-child { margin-bottom: 0; }
 
 
 /* ---------- Changelog ----------
@@ -3015,7 +3021,7 @@ a.card:hover { text-decoration: none; color: var(--on-surface); border-color: va
 
 .changelog-entry {
   min-width: 0;
-  padding: clamp(24px, 3.4vw, 36px);
+  padding: clamp(20px, 3vw, 28px);
   background: var(--surface-container-lowest);
   border: 1px solid var(--outline-variant);
   border-radius: var(--shape-xl);
@@ -3591,7 +3597,7 @@ button.btn { font: inherit; font-weight: 600; font-size: 0.98rem; cursor: pointe
   gap: 12px;
   margin: clamp(24px, 3vw, 32px) auto clamp(20px, 2.6vw, 28px);
 }
-.support-coffee .btn-bmc { width: min(100%, 380px); }
+.support-coffee .btn { width: min(100%, 380px); justify-content: center; }
 .support-more-solo .support-coffee { margin-bottom: 0; }
 /* The support page is left-aligned prose. */
 .support-coffee-start { align-items: flex-start; margin-inline: 0; }
@@ -3820,13 +3826,12 @@ button.btn { font: inherit; font-weight: 600; font-size: 0.98rem; cursor: pointe
 .lcard .support-links { margin: 14px 0 0; justify-content: center; }
 .lcard-star .support-links a { color: inherit; opacity: 0.85; }
 .lcard-star .support-links a:hover { opacity: 1; background: color-mix(in srgb, currentColor 14%, transparent); color: inherit; }
-/* The offer inside GiveLCard, behind its own cover-icon-row (the same squircle treatment as the
-   talk card beside it and the support page's Chip in card), so the two footer cards read as a
-   matched pair instead of one with a picture and one without. */
+/* The offer inside GiveLCard lays its parts straight into the card's grid. */
+.lcard-give .support-more { display: contents; }
 .lcard-give .support-head h2, .lcard-give .support-head h3 { color: #ffffff; }
 .lcard-give .support-why > summary { color: rgba(255, 255, 255, 0.7); }
 .lcard-give .support-why > summary:hover, .lcard-give .support-why[open] > summary { background: rgba(255, 255, 255, 0.12); color: #ffffff; }
-.lcard-give .support-coffee { margin: 14px 0 0; }
+.lcard-give .support-coffee { margin: 4px 0 0; }
 .lcard-give .support-alt { color: rgba(255, 255, 255, 0.78); }
 .lcard-give .support-alt:hover { background: rgba(255, 255, 255, 0.1); color: #ffffff; }
 @media (min-width: 900px) {
@@ -3834,11 +3839,15 @@ button.btn { font: inherit; font-weight: 600; font-size: 0.98rem; cursor: pointe
   .lcard-text { justify-items: start; }
   .lcard-side { grid-column: 2; grid-row: 1 / span 2; justify-items: center; }
   .lcard .support-links { justify-content: flex-start; margin-inline-start: -12px; }
-  /* Both footer cards read as one column (icon and text up top, the action row under it) rather
-     than the text pinned left and the action stretched down a narrow right-hand rail. */
-  .lcard-give, .lcard-talk { grid-template-columns: 1fr; }
-  .lcard-talk .lcard-side { grid-column: 1; grid-row: 2; justify-items: start; }
-  .lcard-talk .support-links { margin: 0; justify-content: flex-start; max-width: none; }
+  .lcard-give > .support-more > :is(h2, h3, .support-head) { grid-column: 1; grid-row: 1; align-self: end; margin: 0 0 6px; }
+  .lcard-give > .support-more > p { grid-column: 1; grid-row: 2; align-self: start; }
+  .lcard-give .support-coffee { grid-column: 2; grid-row: 1 / span 2; margin: 0; }
+  /* The talk card is one column: icon and heading up top, its links in a row under them. */
+  .lcard-talk { grid-template-columns: 1fr; }
+}
+.lcard-talk .support-links { max-width: none; margin: 4px 0 0 -12px; justify-content: flex-start; }
+@media (max-width: 639px) {
+  .lcard-talk .support-links { flex-direction: column; align-items: flex-start; }
 }
 
 /* ==== Home page sections (2026-10-20 revamp) ==== */
@@ -4635,9 +4644,9 @@ html.dl-tabs-live[data-dl-tab] .platforms > .platform { animation: dl-tab-in 0.2
 .step-shot .shot { gap: 16px; }
 .step-shot .device-tv { max-width: 320px; }
 .step-shot figcaption { font-size: 0.9rem; }
-.dl-more { margin-top: 18px; }
+.code-fold.dl-more { margin-top: 18px; }
 .dl-more .callout { margin-top: 4px; }
-.dl-files { margin-top: 20px; }
+.code-fold.dl-files { margin-top: 20px; }
 /* The card sits right under the tabs in the head, on the same ground. */
 .hp .band#download { padding-top: 0; }
 .hp #download .release-strip { margin-top: 20px; }
@@ -4836,16 +4845,17 @@ html.dl-tabs-live[data-dl-tab] .platforms > .platform { animation: dl-tab-in 0.2
 
 .install-pick { margin-top: clamp(24px, 3vw, 32px); }
 .install-pick-h { margin: 0 0 12px; font-size: 0.9rem; color: var(--on-surface-variant); }
-.install-pick-row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); grid-auto-rows: 1fr; gap: 10px; }
+.install-pick-row { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); grid-auto-rows: 1fr; gap: 10px; }
 .install-pick-row a {
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  /* Top aligned: a two-line label must not lift its icon above its neighbours'. */
+  justify-content: flex-start;
   gap: 8px;
   min-height: 92px;
-  padding: 14px 8px;
+  padding: 18px 8px 14px;
   border: 1px solid var(--outline-variant);
   border-radius: var(--shape-l);
   background: var(--surface-container-low);
@@ -4861,9 +4871,8 @@ html.dl-tabs-live[data-dl-tab] .platforms > .platform { animation: dl-tab-in 0.2
 .install-pick-row a.is-yours { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); background: var(--primary-container); color: var(--on-primary-container); }
 .install-pick-more { display: inline-block; margin-top: 14px; font-size: 0.9rem; }
 @media (max-width: 640px) {
-  .install-pick-row { grid-template-columns: repeat(6, minmax(0, 1fr)); }
-  .install-pick-row a { grid-column: span 2; min-height: 84px; }
-  .install-pick-row a:nth-child(4) { grid-column: 2 / span 2; }
+  .install-pick-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .install-pick-row a { min-height: 84px; }
 }
 
 .step-time {
