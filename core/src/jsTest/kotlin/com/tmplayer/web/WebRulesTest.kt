@@ -142,6 +142,9 @@ class WebRulesTest {
         assertEquals("show", show.kind)
         assertTrue(show.series)
         assertNull(show.year)
+        // A lone episode on Home's carousel names its episode on Play; a film has none.
+        assertEquals("S01E02", show.episode)
+        assertNull(film.episode)
         assertNull(posterAsk(videos[2]))
     }
 

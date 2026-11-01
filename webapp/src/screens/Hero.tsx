@@ -7,7 +7,7 @@ import { answer, loadBackdropLightFirst, loadExtras, type Extras } from './poste
 import { settings } from '../store'
 import { TitleLogo } from '../ui/TitleLogo'
 import { coverBackground } from './cover'
-import { useFeatured } from './featured'
+import { pagePlayLabel, pageTitle, useFeatured } from './featured'
 import { detailPath, tileCard, useProgress, watchPath } from './VideoList'
 import type { HomeRow } from '../tg/types'
 
@@ -93,7 +93,12 @@ export function Hero(props: { rows: HomeRow[] | undefined }) {
     })
 
     const progressOf = useProgress()
-    const card = () => (pick() ? tileCard(pick()!, true) : null)
+    const card = () => {
+        const p = pick()
+        if (!p) return null
+        const c = tileCard(p, true)
+        return { ...c, title: pageTitle(p, c.title) }
+    }
     const resumed = () => (pick() ? (progressOf(pick()!.item) ?? 0) > 0 : false)
 
     // A laptop's touchpad swipes with two fingers as a sideways wheel, not a pointer drag: taken
@@ -177,7 +182,7 @@ export function Hero(props: { rows: HomeRow[] | undefined }) {
                         <div class="hero-actions">
                             <A class="hero-play" href={watchPath(pick()!.item)} state={{ video: pick()!.item }}>
                                 <Icon icon={PlayIcon} size={22} />
-                                {resumed() ? t('common.resume') : t('common.play')}
+                                {pagePlayLabel(pick()!, resumed())}
                             </A>
                             <A class="hero-info" href={detailPath(pick()!.item)} state={{ video: pick()!.item }} aria-label={t('detail.open_details')} title={t('detail.open_details')}>
                                 <Icon icon={InformationCircleIcon} size={22} />

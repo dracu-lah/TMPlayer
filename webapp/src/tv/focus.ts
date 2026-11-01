@@ -234,10 +234,14 @@ export function reveal(el: Element) {
 
 // ---- Remembering where the remote was ----------------------------------------------------
 
-/** What an item is, as a new copy of it (a row drawn again, a page come back) is too: its address, label or words. */
+/**
+ * What an item is, as a new copy of it (a row drawn again, a page come back) is too: its own
+ * data-tv-key where it has one (Home carousel's Play and Details, whose addresses change with the
+ * page and match a card's), else its address, label or words.
+ */
 function keyBase(el: Element): string {
     const radio = isRadio(el) ? `${el.name}=${el.closest('label')?.textContent?.trim() || el.value}` : null
-    const id = el.getAttribute('href') ?? radio ?? el.getAttribute('aria-label') ?? el.getAttribute('title') ?? el.textContent?.trim().slice(0, 40) ?? ''
+    const id = el.getAttribute('data-tv-key') ?? el.getAttribute('href') ?? radio ?? el.getAttribute('aria-label') ?? el.getAttribute('title') ?? el.textContent?.trim().slice(0, 40) ?? ''
     return `${el.tagName}|${id}`
 }
 

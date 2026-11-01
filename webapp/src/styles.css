@@ -974,6 +974,19 @@ button.nav-cell { border: 0; background: none; padding: 0; font: inherit; cursor
 .row-title { font-size: 20px; line-height: 28px; font-weight: 600; }
 
 /*
+ * EdgeBackdrop's fades as masks (2026-11-01): the picture runs the whole width, and its start fades
+ * long and shallow over 72% of it, never below 18% of the picture, so a hint of it stays under the
+ * words; its foot fades out over the lowest 42%. Eased stops, as the app's, so there is no band.
+ */
+:root {
+  --edge-start: linear-gradient(to right, rgba(0, 0, 0, .18), rgba(0, 0, 0, .229) 14.4%, rgba(0, 0, 0, .377) 28.8%, rgba(0, 0, 0, .606) 43.2%, rgba(0, 0, 0, .852) 57.6%, #000 72%);
+  --edge-foot: linear-gradient(to top, transparent, rgba(0, 0, 0, .06) 8.4%, rgba(0, 0, 0, .24) 16.8%, rgba(0, 0, 0, .52) 25.2%, rgba(0, 0, 0, .82) 33.6%, #000 42%);
+}
+[dir=rtl] {
+  --edge-start: linear-gradient(to left, rgba(0, 0, 0, .18), rgba(0, 0, 0, .229) 14.4%, rgba(0, 0, 0, .377) 28.8%, rgba(0, 0, 0, .606) 43.2%, rgba(0, 0, 0, .852) 57.6%, #000 72%);
+}
+
+/*
  * Home's carousel (FeaturedCarousel): the picture across the page and up behind the mark, its name,
  * facts, Play as the bright pill with Details beside it, and the dots. Its height is held from the
  * first frame.
@@ -1009,12 +1022,23 @@ button.nav-cell { border: 0; background: none; padding: 0; font: inherit; cursor
 .hero-dots { position: absolute; left: 0; right: 0; bottom: 8px; display: flex; justify-content: center; gap: 6px; }
 .hero-dots button { width: 6px; height: 6px; padding: 0; border: 0; border-radius: 3px; background: color-mix(in srgb, var(--fg) 40%, transparent); cursor: pointer; transition: width 200ms var(--ease), background var(--fast); }
 .hero-dots button.on { width: 22px; background: var(--fg); }
-:root[data-form="desktop"] .hero-text { right: auto; width: min(560px, 50%); align-items: flex-start; text-align: start; bottom: 40px; }
+/* The desktop's carousel (HomeCarousel, 2026-11-01): a third of the window's width tall, within half its height and no less than 300 px. */
+:root[data-form="desktop"] .hero { height: max(300px, min(34vw, 50dvh)); }
+:root[data-form="desktop"] .hero-art { background: var(--bg); }
+:root[data-form="desktop"] .hero-text { left: calc(var(--gutter) + 10px + env(safe-area-inset-left)); right: auto; width: min(560px, 50%); align-items: flex-start; text-align: start; bottom: 40px; }
 :root[data-form="desktop"] .hero-title { font-size: 36px; line-height: 44px; }
 :root[data-form="desktop"] .hero-actions { width: auto; }
 :root[data-form="desktop"] .hero-play { flex: none; padding: 0 28px; }
 :root[data-form="desktop"] .hero-dots { left: auto; right: calc(var(--gutter) + 8px); bottom: 56px; }
-:root[data-form="desktop"] .hero-frame { left: auto; right: 0; transform: translateY(-50%); width: min(70%, 900px); -webkit-mask-image: linear-gradient(to right, transparent, #000 30%); mask-image: linear-gradient(to right, transparent, #000 30%); }
+/* The whole width at its own 16:9, cropped from its foot, set into the page by the edge fades; nothing behind it. */
+:root[data-form="desktop"] .hero-fill { display: none; }
+:root[data-form="desktop"] .hero-frame {
+  left: 0; right: 0; top: 0; width: 100%; height: 100%; aspect-ratio: auto; transform: none; object-position: center top;
+  -webkit-mask-image: var(--edge-start), var(--edge-foot); -webkit-mask-composite: source-in;
+  mask-image: var(--edge-start), var(--edge-foot); mask-composite: intersect;
+}
+/* Only the top's shade stays, for the mark and name over the picture: the foot is the picture's own fade. */
+:root[data-form="desktop"] .hero-fade { background: linear-gradient(rgba(0, 0, 0, .35), transparent 22%); }
 @media (prefers-reduced-motion: reduce) { .hero-wait, .hero-fill, .hero-frame { animation: none; } }
 
 /* The title logo (TitleLogo): its slot as tall as a logo may be while one is coming or drawn, a

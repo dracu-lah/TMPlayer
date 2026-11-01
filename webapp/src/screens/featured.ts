@@ -7,7 +7,31 @@ import { createEffect, createMemo, createSignal, on } from 'solid-js'
 import { settings } from '../store'
 import { answer } from './posters'
 import { candidatesOf, FEATURED_LIMIT, isComplete, type Candidate } from './featuredRules'
+import { t } from '../i18n'
 import type { HomeRow, Tile } from '../tg/types'
+
+/**
+ * A lone episode on a page of its own (a show with one episode in the chat) stands for its show,
+ * as the apps' HomeFeatured.loneEpisode has it: the show's name and, on Play, the episode's code.
+ * Null for a whole show, a film or an extra.
+ */
+export function loneEpisode(tile: Tile): { show: string; code: string } | null {
+    const ask = tile.item.poster
+    if (tile.kind !== 'file' || tile.extra || !ask?.episode || !ask.title.trim()) return null
+    return { show: ask.title, code: ask.episode }
+}
+
+/** The name a carousel page writes: its show's for a lone episode, the card's otherwise. */
+export function pageTitle(tile: Tile, cardTitle: string): string {
+    return loneEpisode(tile)?.show ?? cardTitle
+}
+
+/** Play or Resume on a carousel page; a lone episode's names the episode ("Resume S01E02"). */
+export function pagePlayLabel(tile: Tile, resumed: boolean): string {
+    const lone = loneEpisode(tile)
+    if (lone) return resumed ? t('series.resume', { code: lone.code }) : t('series.play', { code: lone.code })
+    return resumed ? t('common.resume') : t('common.play')
+}
 
 const FILL_WAIT_MS = 1500
 const LOOKUPS_AT_ONCE = 2
@@ -62,6 +86,9 @@ async function completeKeys(list: Tile[], gone: { dead: boolean }): Promise<stri
     return list.filter((t) => verdict.get(t.key) === true).slice(0, FEATURED_LIMIT).map((t) => t.key)
 }
 
+/** The last fill's pages, by the Recently added it was made from (see useFeatured). */
+let lastFill: { sig: string; keys: string[] } | null = null
+
 /**
  * The carousel's pages: null while Recently added or the lookups are pending, an empty list when
  * nothing qualifies (the carousel is then not drawn). With Posters and details off there is no
@@ -91,10 +118,18 @@ export function useFeatured(rows: () => HomeRow[] | undefined): () => Tile[] | n
                 if (sig === null) return
                 const tiles = list()!
                 if (!online || !tiles.length) return void setPicks([])
+                // Home come back to with the same Recently added keeps the pages it had (and at
+                // once): a fill made again could pick others, while the remote is on one of them.
+                if (lastFill?.sig === sig) {
+                    const kept = lastFill.keys.map((k) => tiles.find((t) => t.key === k)).filter((t): t is Tile => !!t)
+                    if (kept.length === lastFill.keys.length) return void setPicks(kept)
+                }
                 state = { dead: false }
                 const mineState = state
                 void completeKeys(tiles, mineState).then((keys) => {
-                    if (mine === run) setPicks(keys.map((k) => tiles.find((t) => t.key === k)!))
+                    if (mine !== run) return
+                    lastFill = { sig, keys }
+                    setPicks(keys.map((k) => tiles.find((t) => t.key === k)!))
                 })
             },
         ),

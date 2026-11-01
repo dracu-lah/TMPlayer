@@ -183,6 +183,11 @@ interface PosterAsk {
     val series: Boolean
     /** ISO 639-1 codes, a hint for which of two titles of one name is meant. */
     val languages: Array<String>
+    /**
+     * "S01E02" when the video is one episode of a show (not an extra), else null: a lone episode
+     * on Home's carousel stands for its show and its Play names the episode (HomeFeatured.loneEpisode).
+     */
+    val episode: String?
 }
 
 /** A compressed file in a chat, listed as one that cannot be played. */
@@ -338,6 +343,9 @@ fun posterAsk(video: Video): PosterAsk? {
         "tmdbId" to query.tmdbId,
         "series" to item.parsedName.isSeries,
         "languages" to query.languages.toTypedArray(),
+        "episode" to SeriesShelf.episodeOf(item).takeIf { it.isEpisode && it.extra == null && it.title.isNotBlank() }?.let { name ->
+            name.episode?.let { "S${(name.season ?: 1).toString().padStart(2, '0')}E${it.toString().padStart(2, '0')}" }
+        },
     )
 }
 

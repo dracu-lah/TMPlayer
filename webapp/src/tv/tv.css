@@ -89,26 +89,31 @@ html[data-tv-keys] .tv-picture:focus {
 html[data-tv-keys] .tv-fullscreen:focus { outline: none; background: var(--focus-fill); color: var(--on-focus-fill); font-weight: 600; transform: scale(var(--focus-scale)); }
 html[data-theme=light][data-tv-keys] .tv-fullscreen:focus { box-shadow: 0 0 0 calc(var(--dp) * 2) var(--accent); }
 
-/* ---- Home's carousel (TvHomeCarousel): 284 dp under the bar, its picture up behind it ---- */
+/* ---- Home's carousel (TvHomeCarousel): 232 dp under the bar, its picture up behind it ---- */
 /* Home has no heading on a TV: the carousel, or the rows, start under the bar. */
 html[data-form=tv] .page > .page-title.home-title { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 .tv-hero {
-  position: relative; height: calc(var(--tv-bar-h) + var(--dp) * 284);
+  position: relative; height: calc(var(--tv-bar-h) + var(--dp) * 232);
   margin: calc(-1 * var(--tv-bar-h)) calc(-1 * var(--tv-end)) calc(var(--dp) * 16) calc(-1 * var(--tv-safe-h));
   overflow: hidden;
 }
-/* The picture at the end, melting into the page at its start, its foot and under the bar. */
+/*
+ * The picture across the whole page (EdgeBackdrop, 2026-11-01), set into it by the edge fades
+ * (styles.css): a long, shallow start that never drops it below 18% under the words, the foot, and
+ * under the bar a top fade to 15% reaching just past it (1.2 bars), eased the same way.
+ */
 .tv-hero-art {
-  position: absolute; top: 0; right: 0; bottom: 0; width: 72%; background: var(--surface);
-  -webkit-mask-image: linear-gradient(to right, transparent, #000 45%), linear-gradient(to bottom, transparent, #000 30%, #000 62%, transparent);
+  --edge-top: linear-gradient(to bottom, rgba(0, 0, 0, .15), rgba(0, 0, 0, .201) 6.5%, rgba(0, 0, 0, .354) 13.1%, rgba(0, 0, 0, .592) 19.6%, rgba(0, 0, 0, .847) 26.2%, #000 32.7%);
+  position: absolute; top: 0; right: 0; bottom: 0; width: 100%; background: var(--surface);
+  -webkit-mask-image: var(--edge-start), var(--edge-foot), var(--edge-top);
   -webkit-mask-composite: source-in;
-  mask-image: linear-gradient(to right, transparent, #000 45%), linear-gradient(to bottom, transparent, #000 30%, #000 62%, transparent);
+  mask-image: var(--edge-start), var(--edge-foot), var(--edge-top);
   mask-composite: intersect;
 }
 .tv-hero-art.cover { opacity: .6; }
-.tv-hero-art img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; animation: fade 200ms ease-out; }
+.tv-hero-art img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center top; animation: fade 200ms ease-out; }
 .tv-hero-text {
-  position: absolute; left: var(--tv-safe-h); bottom: calc(var(--dp) * (24 + 52 + 14)); width: 60%;
+  position: absolute; left: calc(var(--tv-safe-h) + var(--dp) * 10); bottom: calc(var(--dp) * (24 + 52 + 14)); width: 60%;
   display: flex; flex-direction: column; gap: calc(var(--dp) * 8);
 }
 .tv-hero-title {
@@ -116,12 +121,13 @@ html[data-form=tv] .page > .page-title.home-title { position: absolute; width: 1
   overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
 }
 .tv-hero-facts { color: var(--muted); font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 20); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tv-hero-actions { position: absolute; left: var(--tv-safe-h); bottom: calc(var(--dp) * 24); display: flex; align-items: center; gap: calc(var(--dp) * 12); }
-/* Play (HeroPill): the text colour as its fill, the page's ground as its ink; the remote grows it.
-   The chat's pill beside it is as tall (HERO_PILL_HEIGHT, 52 dp), so the two share one top, foot and middle. */
+.tv-hero-actions { position: absolute; left: calc(var(--tv-safe-h) + var(--dp) * 10); bottom: calc(var(--dp) * 24); display: flex; align-items: center; gap: calc(var(--dp) * 12); }
+/* Play and Details (HeroPill, TvDetailsPill): the same bright pill, the text colour as its fill and the
+   page's ground as its ink, both 52 dp tall so the two share one top, foot and middle. Under the remote
+   the fill swaps to the focus fill: no scale and no ring (2026-11-01), so it shows with reduced motion too (HX42). */
 .tv-hero-play, .tv-hero-pill {
   display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; text-decoration: none; white-space: nowrap;
-  transition: transform var(--fast) var(--ease);
+  transition: background-color var(--fast), color var(--fast);
 }
 .tv-hero-play {
   min-width: calc(var(--dp) * 160); height: calc(var(--dp) * 52); padding: 0 calc(var(--dp) * 28); gap: calc(var(--dp) * 8);
@@ -130,18 +136,17 @@ html[data-form=tv] .page > .page-title.home-title { position: absolute; width: 1
 .tv-hero-play .icon { width: calc(var(--dp) * 26); height: calc(var(--dp) * 26); }
 .tv-hero-pill {
   max-width: calc(var(--dp) * 320); height: calc(var(--dp) * 52); padding: 0 calc(var(--dp) * 20) 0 calc(var(--dp) * 16); gap: calc(var(--dp) * 8);
-  background: color-mix(in srgb, var(--surface-high) 80%, transparent); color: var(--fg); font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 20); font-weight: 500;
+  background: var(--fg); color: var(--bg); font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 20); font-weight: 600;
 }
 .tv-hero-pill span { overflow: hidden; text-overflow: ellipsis; }
 .tv-hero-pill .icon { width: calc(var(--dp) * 22); height: calc(var(--dp) * 22); }
-html[data-tv-keys] .tv-hero-play:focus, html[data-tv-keys] .tv-hero-pill:focus { outline: none; transform: scale(var(--focus-scale)); }
-html[data-theme=light][data-tv-keys] .tv-hero-pill:focus, html[data-theme=light][data-tv-keys] .tv-hero-play:focus { box-shadow: 0 0 0 calc(var(--dp) * 2) var(--accent); }
+html[data-tv-keys] .tv-hero-play:focus, html[data-tv-keys] .tv-hero-pill:focus { outline: none; background: var(--focus-fill); color: var(--on-focus-fill); }
 /* Which page is up, at the end, on the buttons' middle line: a row as tall as Play, its marks centred in it. */
 .tv-hero-dots { position: absolute; right: var(--tv-end); bottom: calc(var(--dp) * 24); height: calc(var(--dp) * 52); display: flex; align-items: center; gap: calc(var(--dp) * 6); }
 .tv-hero-dots span { width: calc(var(--dp) * 6); height: calc(var(--dp) * 6); border-radius: 999px; background: color-mix(in srgb, var(--fg) 35%, transparent); transition: width var(--fast); }
 .tv-hero-dots span.on { width: calc(var(--dp) * 18); background: var(--fg); }
 /* While Recently added is asked for: the same size, still (nothing animates while waiting on a TV). */
-.tv-hero-wait { position: absolute; left: var(--tv-safe-h); bottom: calc(var(--dp) * 24); display: flex; flex-direction: column; gap: calc(var(--dp) * 10); }
+.tv-hero-wait { position: absolute; left: calc(var(--tv-safe-h) + var(--dp) * 10); bottom: calc(var(--dp) * 24); display: flex; flex-direction: column; gap: calc(var(--dp) * 10); }
 .tv-hero-wait span { display: block; border-radius: calc(var(--dp) * 8); background: var(--surface-high); }
 .tv-hero-wait span:nth-child(1) { width: calc(var(--dp) * 280); height: calc(var(--dp) * 28); }
 .tv-hero-wait span:nth-child(2) { width: calc(var(--dp) * 180); height: calc(var(--dp) * 14); }

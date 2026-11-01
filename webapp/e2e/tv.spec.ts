@@ -598,7 +598,7 @@ for (const size of [
         test.skip(({ browserName }) => browserName !== 'chromium', 'the TV walk runs in Chromium')
         test.use({ viewport: size })
 
-        test('Home carousel: Play and the chat\'s pill are one height on one middle, the dots on it, and the title\'s wide picture is up', async ({ page, context }) => {
+        test('Home carousel: Play and Details are one height on one middle, the dots on it, and the title\'s wide picture is up', async ({ page, context }) => {
             await fakeCase(context, 'big')
             await everyTitleMatched(page)
             await tv(page)
@@ -607,7 +607,7 @@ for (const size of [
             const play = await box(page, '.tv-hero-play')
             const pill = await box(page, '.tv-hero-pill')
             const dot = await box(page, '.tv-hero-dots span')
-            // Heights as laid out (the remote's focus grows Play from its middle, which stays put).
+            // Heights as laid out (the remote's focus only swaps the fill, so nothing moves).
             const tall = (sel: string) => page.locator(sel).first().evaluate((el) => (el as HTMLElement).offsetHeight)
             expect(await tall('.tv-hero-play')).toBe(await tall('.tv-hero-pill'))
             expect(Math.abs(mid(play) - mid(pill))).toBeLessThan(1)
@@ -615,6 +615,16 @@ for (const size of [
             // The page's picture is drawn, never a blank dark area.
             await expect(page.locator('.tv-hero-art img')).toHaveCount(1)
             await expect(page.locator('.tv-hero-art.cover')).toHaveCount(0)
+            // Details opens the page's video, and Back puts the remote on Details again, not on that video's card below.
+            for (let i = 0; i < 4 && !(await focused(page)).startsWith('tv-hero-play|'); i++) await press(page, 'ArrowUp')
+            await press(page, 'ArrowRight')
+            const details = await focused(page)
+            expect(details).toContain('tv-hero-pill|/video/')
+            await press(page, 'Enter')
+            await expect(page).toHaveURL(/\/video\//)
+            await press(page, 'Backspace')
+            await expect(page).toHaveURL(/\/$/)
+            await expect.poll(() => focused(page)).toBe(details)
         })
 
         test('Recently added: Right past the last card lands on See all, a card of the row\'s size, and OK opens the page, which reads on', async ({ page, context }) => {

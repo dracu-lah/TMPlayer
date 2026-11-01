@@ -2,10 +2,10 @@
 // Home.tsx import it on demand): the remote's keys and focus map, the top bar, and Home's carousel.
 // Their look follows the Android TV app's TvTopBar and TvHomeCarousel; sizes are in the app's dp
 // on a 960 x 540 screen (tv.css).
-import { useFeatured } from '../screens/featured'
+import { pagePlayLabel, pageTitle, useFeatured } from '../screens/featured'
 import { createEffect, createSignal, For, on, onCleanup, onMount, Show } from 'solid-js'
 import { A, useLocation, useNavigate } from '@solidjs/router'
-import { ArrowExpandIcon, ArrowShrinkIcon, Home03Icon, Message01Icon, PlayIcon, Search01Icon } from '@hugeicons/core-free-icons'
+import { ArrowExpandIcon, ArrowShrinkIcon, Home03Icon, InformationCircleIcon, Message01Icon, PlayIcon, Search01Icon } from '@hugeicons/core-free-icons'
 import { Icon, type IconData } from '../ui/Icon'
 import { initialOf } from '../ui/initial'
 import { nameArt } from '../ui/colour'
@@ -15,7 +15,7 @@ import { loadThumb } from '../screens/thumbs'
 import { loadBackdropLightFirst } from '../screens/posters'
 import { coverBackground } from '../screens/cover'
 import { settings } from '../store'
-import { tileCard, useProgress, watchPath } from '../screens/VideoList'
+import { detailPath, tileCard, useProgress, watchPath } from '../screens/VideoList'
 import { createFocusMap, resting } from './focus'
 import type { HomeRow } from '../tg/types'
 import './tv.css'
@@ -167,21 +167,29 @@ export function TvBar() {
     )
 }
 
+/**
+ * The carousel's page, kept while Home is away (a video's page opened from Details), so Back
+ * finds the page it left and the remote on Details, as the app's carousel keeps its own.
+ */
+const [heroPage, setHeroPage] = createSignal<string | null>(null)
+
 /** How long a page of the carousel is up before it moves on. */
 const ADVANCE_MS = 7_000
 
 /**
  * Home's carousel on a TV (TvHomeCarousel): the newest five in Recently added, one picture at a
- * time across the page and up behind the bar, its name and facts, Play and its chat. Play and the
- * chat's pill stay put while the pages change under them; Left on Play goes back a page, Right on
- * the chat's pill goes on one. It moves on by itself only while the remote is elsewhere, the tab
+ * time across the whole page and up behind the bar, its name and facts, Play and Details. Play and
+ * Details stay put while the pages change under them; Left on Play goes back a page, Right on
+ * Details goes on one. Both are the same plain bright pill, and the remote on one swaps its fill
+ * to the focus fill, nothing more (no scale, no ring), so the mark holds with reduced motion and
+ * in the dark theme alike (HX42). It moves on by itself only while the remote is elsewhere, the tab
  * is in sight, motion is allowed and a key was pressed in the last minute, so a TV left on Home is
  * not drawing a new picture every few seconds for hours. It has its size from the first frame.
  */
 export function TvHero(props: { rows: HomeRow[] | undefined }) {
     /** null while Recently added is still asked for; empty when there is nothing to show. */
     const picks = useFeatured(() => props.rows)
-    const [key, setKey] = createSignal<string | null>(null)
+    const [key, setKey] = [heroPage, setHeroPage]
     const index = () => Math.max(0, picks()?.findIndex((p) => p.key === key()) ?? 0)
     const pick = () => picks()?.[index()] ?? null
     const go = (i: number) => {
@@ -234,7 +242,12 @@ export function TvHero(props: { rows: HomeRow[] | undefined }) {
     const src = () => wide() ?? frame()
 
     const progressOf = useProgress()
-    const card = () => (pick() ? tileCard(pick()!, true) : null)
+    const card = () => {
+        const p = pick()
+        if (!p) return null
+        const c = tileCard(p, true)
+        return { ...c, title: pageTitle(p, c.title) }
+    }
     const resumed = () => {
         const p = pick()
         return p ? (progressOf(p.item) ?? 0) > 0 : false
@@ -265,16 +278,23 @@ export function TvHero(props: { rows: HomeRow[] | undefined }) {
                         <A
                             class="tv-hero-play"
                             data-tv-first
+                            data-tv-key="hero-play"
                             href={watchPath(pick()!.item)}
                             state={{ video: pick()!.item }}
                             ref={turn('left', () => index() > 0, () => index() - 1)}
                         >
                             <Icon icon={PlayIcon} size={26} />
-                            <span>{resumed() ? t('common.resume') : t('common.play')}</span>
+                            <span>{pagePlayLabel(pick()!, resumed())}</span>
                         </A>
-                        <A class="tv-hero-pill" href={`/chat/${pick()!.item.chatId}`} ref={turn('right', () => (picks()?.length ?? 0) > 1, () => index() + 1)}>
-                            <Icon icon={Message01Icon} size={22} />
-                            <span>{t('detail.open_chat', { title: pick()!.item.chat })}</span>
+                        <A
+                            class="tv-hero-pill"
+                            data-tv-key="hero-details"
+                            href={detailPath(pick()!.item)}
+                            state={{ video: pick()!.item }}
+                            ref={turn('right', () => (picks()?.length ?? 0) > 1, () => index() + 1)}
+                        >
+                            <Icon icon={InformationCircleIcon} size={22} />
+                            <span>{t('detail.open_details')}</span>
                         </A>
                     </div>
                     <Show when={(picks()?.length ?? 0) > 1}>
