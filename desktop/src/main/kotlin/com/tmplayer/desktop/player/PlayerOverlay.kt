@@ -268,7 +268,9 @@ private val BookmarkColor = Color(0xE6FFFFFF)
  * button comes up, so a double click (fullscreen) does not flicker the picture first; holding the
  * left button down past [HOLD_MS] plays fast until it is let go ([onHold], the phone's "Hold to
  * speed up"), and is no click; right click opens the More options panel; the mouse's back button
- * goes back.
+ * goes back. While the picture is zoomed ([canPan]) a left drag past the touch slop moves it
+ * ([onPan]) and is neither a click nor a hold; a press that stays put still clicks, holds and
+ * double clicks as ever.
  */
 @Composable
 internal fun BoxScope.VideoGestures(
@@ -279,8 +281,14 @@ internal fun BoxScope.VideoGestures(
     scope: CoroutineScope,
     /** True as a hold starts, false as it ends. */
     onHold: (Boolean) -> Unit = {},
+    /** Whether a drag moves the picture now: only while it is zoomed. */
+    canPan: () -> Boolean = { false },
+    /** A drag's step on the zoomed picture, in pixels. */
+    onPan: (Offset) -> Unit = {},
 ) {
     val click by rememberUpdatedState(onClick)
+    val panNow by rememberUpdatedState(canPan)
+    val pan by rememberUpdatedState(onPan)
     val double by rememberUpdatedState(onDoubleClick)
     val right by rememberUpdatedState(onRightClick)
     val back by rememberUpdatedState(onMouseBack)
@@ -295,9 +303,27 @@ internal fun BoxScope.VideoGestures(
                 var holding = false
                 var doubled = false
                 var down = false
+                // Where the left press went down and where the drag has reached; dragging once
+                // it has gone past the slop on a zoomed picture.
+                var pressedAt = Offset.Zero
+                var lastAt = Offset.Zero
+                var dragging = false
                 while (true) {
                     val event = awaitPointerEvent()
                     when (event.type) {
+                        PointerEventType.Move -> {
+                            if (!down || holding || doubled || !event.buttons.isPrimaryPressed) continue
+                            val at = event.changes.firstOrNull()?.position ?: continue
+                            if (!dragging) {
+                                if (!panNow() || (at - pressedAt).getDistance() < viewConfiguration.touchSlop) continue
+                                dragging = true
+                                holdTimer?.cancel()
+                                holdTimer = null
+                                lastAt = pressedAt
+                            }
+                            pan(at - lastAt)
+                            lastAt = at
+                        }
                         PointerEventType.Press -> {
                             val at = event.changes.firstOrNull()?.position ?: Offset.Zero
                             when {
@@ -305,6 +331,8 @@ internal fun BoxScope.VideoGestures(
                                 event.buttons.isBackPressed -> back()
                                 event.buttons.isPrimaryPressed && !down -> {
                                     down = true
+                                    pressedAt = at
+                                    dragging = false
                                     val waiting = pending
                                     if (waiting != null && waiting.isActive) {
                                         waiting.cancel()
@@ -327,6 +355,8 @@ internal fun BoxScope.VideoGestures(
                             holdTimer = null
                             when {
                                 doubled -> doubled = false
+                                // A drag that moved the picture is not a click as well.
+                                dragging -> dragging = false
                                 holding -> {
                                     holding = false
                                     hold(false)

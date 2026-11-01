@@ -47,8 +47,11 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.isCtrlPressed as pointerCtrl
+import androidx.compose.ui.input.pointer.isMetaPressed as pointerMeta
 import androidx.compose.ui.input.pointer.isShiftPressed as pointerShift
 import androidx.compose.ui.input.pointer.onPointerEvent
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.platform.LocalWindowInfo
 import com.tmplayer.data.MediaItem
@@ -79,6 +82,7 @@ import com.tmplayer.desktop.DesktopPrefs
 import com.tmplayer.desktop.WatchedWords
 import com.tmplayer.data.DownloadRunner
 import com.tmplayer.data.OfflineDownloads
+import com.tmplayer.player.PictureZoom
 import com.tmplayer.player.PlaybackSpeed
 import com.tmplayer.player.Stereo3d
 import com.tmplayer.player.SeekUndo
@@ -284,6 +288,11 @@ fun PlayerScreen(
     // The same status with the position and the buffer's end left as they were, which is what the
     // body reads: it changes when something other than the clock does (SteadyStatus).
     val status by remember(liveStatus) { derivedStateOf(SteadyStatus) { liveStatus.value } }
+
+    // The free zoom over the picture shape (PictureZoom), and the size of the area the picture is
+    // drawn in, which its pointer positions and its clamp are measured against.
+    var zoom by remember { mutableStateOf(PictureZoom.NONE) }
+    var videoBox by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
     val tracks by activeEngine.tracks.collectAsState()
     val castState by com.tmplayer.desktop.cast.DesktopCast.state.collectAsState()
 
@@ -445,6 +454,50 @@ fun PlayerScreen(
 
     fun showFlash(kind: Flash.Kind, text: String = "") {
         flash = Flash(kind, text, System.nanoTime())
+    }
+
+    // ---- free zoom ---------------------------------------------------------------------------
+    // Ctrl+wheel around the pointer (a Windows touchpad's pinch arrives as exactly that), Alt+=
+    // and Alt+-, and a drag to move the enlarged picture, all through mpv's own video-zoom and
+    // video-pan. macOS and Linux deliver no pinch to a Java window, so there it is the wheel and
+    // the keys. A new video, a new shape, 3D and leaving the player all start it again.
+
+    /** The area the picture is in and the picture's size there at 100 per cent, for the shape in force. */
+    fun zoomFrame(): PictureZoom.Frame? {
+        val box = videoBox
+        val now = status
+        val aspect = if (now.videoWidth > 0 && now.videoHeight > 0) now.videoWidth.toDouble() / now.videoHeight else 0.0
+        val (width, height) = now.scale.pictureSize(box.width, box.height, aspect)
+        return PictureZoom.Frame(box.width.toFloat(), box.height.toFloat(), width.toFloat(), height.toFloat()).takeIf { it.valid }
+    }
+
+    /** Only over this computer's own picture while it plays: not a cast, not 3D, not locked. */
+    fun zoomAllowed(): Boolean =
+        phase == Phase.Playing && !screenLocked && activeEngine === engine.local && !status.stereo.on && status.videoWidth > 0
+
+    /** [next], held inside the picture, to mpv; [say] puts the figure up ("Zoom 135%"). */
+    fun applyZoom(next: PictureZoom, say: Boolean) {
+        val frame = zoomFrame()
+        val held = if (frame == null || !next.zoomed) PictureZoom.NONE else next.clampedTo(frame)
+        if (held != zoom) {
+            zoom = held
+            val (x, y) = frame?.let(held::mpvPan) ?: (0.0 to 0.0)
+            engine.setZoom(held.mpvZoom, x, y)
+        }
+        if (say) showFlash(Flash.Kind.Text, L.playerZoomPercent(L.messages.formatter.scalePercent(held.percent)))
+    }
+
+    /** [steps] of the zoom (negative is out) around [at], or the middle of the picture. */
+    fun zoomStep(steps: Float, at: Offset? = null) {
+        if (!zoomAllowed()) return
+        val frame = zoomFrame() ?: return
+        val focus = at ?: Offset(frame.viewWidth / 2f, frame.viewHeight / 2f)
+        applyZoom(zoom.stepped(steps, focus.x, focus.y, frame), say = true)
+    }
+
+    fun resetZoom(say: Boolean) {
+        if (!zoom.zoomed && !say) return
+        applyZoom(PictureZoom.NONE, say)
     }
 
     fun refocus() {
@@ -642,6 +695,8 @@ fun PlayerScreen(
             }
             if (playing != null) Logger.i("PlayerStart", "open to playing ${System.currentTimeMillis() - openStartedAt} ms (file ${item.fileId})")
         }
+        // Every file opens whole; the engine puts mpv's own zoom back as it opens.
+        zoom = PictureZoom.NONE
         engine.open(data, start, prefs)
         val error = engine.state.value.error
         // On a TV the casting panel says what went wrong, with Play here beside it.
@@ -996,6 +1051,8 @@ fun PlayerScreen(
      */
     fun setStereo(next: Stereo3d) {
         val before = status.stereo
+        // 3D draws for the whole picture: the zoom goes before it comes on.
+        if (next.on) resetZoom(say = false)
         engine.setStereo3d(next)
         when {
             next.on && (!before.on || next.view != before.view) -> showFlash(Flash.Kind.Text, L.playerStereoOnNow(stereoGlassesLabel(next.view)))
@@ -1181,6 +1238,8 @@ fun PlayerScreen(
     }
 
     fun setScale(scale: VideoScale) {
+        // A shape is a fresh start for the zoom, and its own name is the answer on screen.
+        resetZoom(say = false)
         engine.setScale(scale)
         showFlash(Flash.Kind.Text, scale.label)
         // A fixed shape is for this player only; the other three are kept for every video.
@@ -1464,6 +1523,8 @@ fun PlayerScreen(
             is PlayerAction.Screenshot -> takeScreenshot(action.withSubtitles)
             PlayerAction.AbRepeat -> pressAbRepeat()
             PlayerAction.CycleShape -> setScale(status.scale.next())
+            is PlayerAction.ZoomStep -> zoomStep(action.direction.toFloat())
+            PlayerAction.ZoomReset -> if (zoomAllowed()) resetZoom(say = true)
             is PlayerAction.ChapterStep -> stepChapter(action.forward)
             PlayerAction.AddBookmark -> addBookmark()
             PlayerAction.UndoSeek -> undoSeek()
@@ -1716,6 +1777,13 @@ fun PlayerScreen(
                     // not the volume's under it as well.
                     if (showEpisodes || showShortcuts || showOnline || menu?.panel == true || event.changes.any { it.isConsumed }) return@onPointerEvent
                     val delta = event.changes.firstOrNull()?.scrollDelta ?: return@onPointerEvent
+                    // Ctrl (or Cmd on a Mac) with the wheel zooms around the pointer, as a browser
+                    // and VLC do; a touchpad's pinch on Windows comes as the same event.
+                    val mods = event.keyboardModifiers
+                    if (mods.pointerCtrl || (mac && mods.pointerMeta)) {
+                        zoomStep(-delta.y, event.changes.firstOrNull()?.position)
+                        return@onPointerEvent
+                    }
                     SeekMath.wheelAction(delta.x, delta.y, event.keyboardModifiers.pointerShift, wheelSeeksNow)
                         ?.let(dispatchNow)
                 }
@@ -1728,8 +1796,13 @@ fun PlayerScreen(
                         PointerIcon.Default
                     },
                 )
-                .subtitleDropTarget(onDrop = ::loadSubtitle, onRefused = { showFlash(Flash.Kind.Text, it) }),
+                .subtitleDropTarget(onDrop = ::loadSubtitle, onRefused = { showFlash(Flash.Kind.Text, it) })
+                .onSizeChanged { videoBox = it },
         ) {
+            // A resized window, another picture size or shape: the zoom stays, its move held inside.
+            LaunchedEffect(videoBox, status.videoWidth, status.videoHeight, status.scale) {
+                if (zoom.zoomed) applyZoom(zoom, say = false)
+            }
             val casting = activeEngine as? com.tmplayer.desktop.cast.CastPlaybackEngine
             if (casting == null) {
                 (engine.local as? MpvPlaybackEngine)?.let { MpvMediampPlayerSurface(it.player, Modifier.fillMaxSize()) }
@@ -1746,6 +1819,8 @@ fun PlayerScreen(
                 onRightClick = { at -> menu = if (menu?.panel == true) null else MenuAt(MenuPage.Main, MenuAt.Anchor.Cursor, at) },
                 onMouseBack = onBack,
                 scope = scope,
+                canPan = { zoom.zoomed && zoomAllowed() },
+                onPan = { delta -> zoomFrame()?.let { frame -> applyZoom(zoom.panBy(delta.x, delta.y, frame), say = false) } },
                 onHold = { on ->
                     if (on && !ignoreClicks && holdSpeed > 0f && status.playing && speedBeforeHold == null) {
                         // Not remembered as the series' speed, as a pick in the speed menu is.

@@ -50,6 +50,13 @@ interface PlaybackEngine {
     /** [id] null turns the track type off (subtitles); audio always keeps one. */
     fun selectTrack(type: TrackType, id: Int?)
     fun setScale(scale: VideoScale)
+
+    /**
+     * The free zoom over the shape ([com.tmplayer.player.PictureZoom]): mpv's `video-zoom`, a
+     * power of two, and `video-pan-x`/`-y` in the enlarged picture's size. 0, 0, 0 is none. An
+     * engine with no picture of its own (a cast) ignores it.
+     */
+    fun setZoom(zoom: Double, panX: Double, panY: Double) {}
     fun setDownmix(stereo: Boolean)
 
     /**

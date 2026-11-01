@@ -123,6 +123,10 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
     /** The picture shape and the 3D drawn, weighed into `video-aspect-override` (HX16). */
     private val aspect = AspectOwner()
 
+    /** True while the free zoom has the picture enlarged; the subtitles then keep to the window. */
+    @Volatile
+    private var zoomed = false
+
     /**
      * The shader file mpv was last given. mpv reads a shader file once per path and keeps it for
      * the player's life, so a file written again under the same name is never read again: each
@@ -341,6 +345,8 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
         // Before the file loads, so the decoder and the downmix start with it.
         applyNightOptions(prefs.nightMode)
         applyScale(prefs.scale)
+        // mpv keeps the zoom across files; every file opens whole.
+        setZoom(0.0, 0.0, 0.0)
         applySubtitleStyle(prefs.subtitleStyle)
         // Set before the file loads, so the first line is already in step; mpv keeps both across files.
         runCatching {
@@ -563,6 +569,30 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
         applyAspect(aspect.scale(scale))
     }
 
+    /**
+     * mpv's own zoom and pan, so the picture is enlarged by the renderer that already scales it:
+     * no extra pass and nothing per frame. While enlarged, plain text and ASS lines are placed in
+     * the window rather than in the enlarged picture (`sub-use-margins`, `sub-ass-use-margins`)
+     * and an ASS track's size follows the window (`sub-ass-scale-with-window`), so no line is
+     * carried off the screen or blown up with the picture. Picture subtitles (PGS, VobSub) are
+     * part of the picture to mpv and zoom with it. Each property on its own, so one this libmpv
+     * does not know leaves the rest applied.
+     */
+    override fun setZoom(zoom: Double, panX: Double, panY: Double) {
+        val safe = { v: Double -> if (v.isFinite()) v else 0.0 }
+        val h = handle
+        runCatching { h.setPropertyDouble("video-zoom", safe(zoom)) }
+        runCatching { h.setPropertyDouble("video-pan-x", safe(panX)) }
+        runCatching { h.setPropertyDouble("video-pan-y", safe(panY)) }
+        val now = safe(zoom) > 0.0
+        if (now == zoomed) return
+        zoomed = now
+        val word = if (now) "yes" else "no"
+        runCatching { h.setPropertyString("sub-use-margins", word) }
+        runCatching { h.setPropertyString("sub-ass-use-margins", word) }
+        runCatching { h.setPropertyString("sub-ass-scale-with-window", word) }
+    }
+
     /** `video-aspect-override` as [AspectOwner] has it for the shape and the 3D in force. */
     @Synchronized
     private fun applyAspect(wanted: String) {
@@ -726,7 +756,8 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
         // Lines inside the picture, never down in a wide video's black bars: where the phone and
         // the television put them, so a letterboxed video has its subtitles at the same height
         // on every device (PlayerActivity.subtitleBottomFraction).
-        runCatching { h.setPropertyString("sub-use-margins", "no") }
+        // While zoomed the window holds them instead (setZoom).
+        runCatching { h.setPropertyString("sub-use-margins", if (zoomed) "yes" else "no") }
         for ((name, value) in style.mpvProperties(subtitleFont(style.face))) {
             val set = runCatching { h.setPropertyString(name, value) }.getOrDefault(false)
             if (!set && name == "sub-border-style" && value == "background-box") {

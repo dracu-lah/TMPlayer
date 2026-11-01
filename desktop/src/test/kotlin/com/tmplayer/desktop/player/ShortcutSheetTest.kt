@@ -32,6 +32,7 @@ class ShortcutSheetTest {
         "Mute" to { it == PlayerAction.ToggleMute },
         "Fullscreen" to { it == PlayerAction.ToggleFullscreen },
         "Picture shape" to { it == PlayerAction.CycleShape },
+        "Zoom in, out, reset" to { it is PlayerAction.ZoomStep || it == PlayerAction.ZoomReset },
         "Subtitles next, previous, on or off" to {
             it == PlayerAction.SubtitleNext || it == PlayerAction.SubtitlePrevious || it == PlayerAction.SubtitleToggle
         },
@@ -116,9 +117,10 @@ class ShortcutSheetTest {
             "[" -> Key.LeftBracket
             "-" -> Key.Minus
             "=" -> Key.Equals
+            "0" -> Key.Zero
             else -> letter(name)
         }
-        return KeyPress(key, shift = "Shift" in mods, ctrl = "Ctrl" in mods, alt = "Alt" in mods, meta = "Cmd" in mods)
+        return KeyPress(key, shift = "Shift" in mods, ctrl = "Ctrl" in mods, alt = "Alt" in mods || "Option" in mods, meta = "Cmd" in mods)
     }
 
     private fun letter(name: String): Key = LETTERS[name] ?: error("unknown key name '$name' on the sheet")

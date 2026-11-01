@@ -154,6 +154,7 @@ class SwitchingEngine(val local: PlaybackEngine) : PlaybackEngine {
     override fun setMuted(muted: Boolean) = active.setMuted(muted)
     override fun selectTrack(type: TrackType, id: Int?) = active.selectTrack(type, id)
     override fun setScale(scale: VideoScale) = active.setScale(scale)
+    override fun setZoom(zoom: Double, panX: Double, panY: Double) = active.setZoom(zoom, panX, panY)
     override fun setDownmix(stereo: Boolean) = active.setDownmix(stereo)
     override fun setVolumeBoost(on: Boolean) = active.setVolumeBoost(on)
     override fun setNightMode(on: Boolean) = active.setNightMode(on)

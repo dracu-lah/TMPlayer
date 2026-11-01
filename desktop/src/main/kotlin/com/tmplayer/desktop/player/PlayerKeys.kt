@@ -52,6 +52,12 @@ sealed interface PlayerAction {
     /** The next picture shape: fit, crop to fill, stretch, and round again. */
     data object CycleShape : PlayerAction
 
+    /** The free zoom one step in (1) or out (-1) around the picture's centre. See [com.tmplayer.player.PictureZoom]. */
+    data class ZoomStep(val direction: Int) : PlayerAction
+
+    /** The picture back at 100 per cent of its shape. */
+    data object ZoomReset : PlayerAction
+
     /** The next chapter, or back to the start of this one (or the one before). See [Chapters]. */
     data class ChapterStep(val forward: Boolean) : PlayerAction
 
@@ -99,6 +105,10 @@ data class KeyContext(
  * Ctrl+Left/Right step through chapters (not a minute) and B adds a bookmark (not VLC's next
  * audio track, which A and # still are). macOS swaps Ctrl for Cmd on the window
  * shortcuts and the chapter keys.
+ *
+ * The zoom keys are mpv's own: Alt+= and Alt+- (Option on a Mac), with Alt+0 and mpv's
+ * Alt+Backspace to put the picture back. Ctrl+= and Ctrl+- were already the sound delay, and Alt
+ * with an arrow seeks, so mpv's Alt+arrow pan is the mouse's drag here instead.
  */
 object PlayerKeys {
 
@@ -121,6 +131,15 @@ object PlayerKeys {
         if (command && !shift && !alt && key == Key.G) return PlayerAction.GoToTime
         if (context.mac && ctrl && meta && key == Key.F) return PlayerAction.ToggleFullscreen
         if (alt && (key == Key.Enter || key == Key.NumPadEnter)) return PlayerAction.ToggleFullscreen
+        if (alt && !ctrl && !meta) {
+            when (key) {
+                // Alt+Shift+= is the same physical key as Alt++, so either zooms in.
+                Key.Equals, Key.Plus, Key.NumPadAdd -> return PlayerAction.ZoomStep(1)
+                Key.Minus, Key.NumPadSubtract -> if (!shift) return PlayerAction.ZoomStep(-1)
+                Key.Zero, Key.NumPad0, Key.Backspace -> if (!shift) return PlayerAction.ZoomReset
+                else -> Unit
+            }
+        }
 
         when (key) {
             Key.DirectionLeft, Key.DirectionRight -> {
@@ -277,6 +296,7 @@ object PlayerKeys {
             L.keysGroupWindow to listOf(
                 L.keysRowFullscreen to L.keysFullscreenKeys,
                 L.playerPictureShape to "W",
+                L.keysRowZoom to L.keysZoomKeys(if (mac) L.keysOption else L.keysAlt),
                 L.keysRowAlwaysOnTop to "$cmd+T",
                 L.keysRowMini to "$cmd+P",
                 L.keysRowScreenshot to L.keysScreenshotKeys,

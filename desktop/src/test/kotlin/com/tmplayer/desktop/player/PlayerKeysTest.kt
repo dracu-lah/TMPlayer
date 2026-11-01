@@ -132,6 +132,23 @@ class PlayerKeysTest {
     }
 
     @Test
+    fun `alt zooms the mpv way and leaves the sound delay and the seeks alone`() {
+        assertEquals(PlayerAction.ZoomStep(1), action(Key.Equals, alt = true))
+        assertEquals(PlayerAction.ZoomStep(1), action(Key.Equals, alt = true, shift = true))
+        assertEquals(PlayerAction.ZoomStep(1), action(Key.NumPadAdd, alt = true))
+        assertEquals(PlayerAction.ZoomStep(-1), action(Key.Minus, alt = true))
+        assertEquals(PlayerAction.ZoomReset, action(Key.Zero, alt = true))
+        assertEquals(PlayerAction.ZoomReset, action(Key.Backspace, alt = true))
+        // Option is Alt on a Mac, and the same keys work there.
+        assertEquals(PlayerAction.ZoomStep(1), action(Key.Equals, alt = true, context = KeyContext(mac = true)))
+        assertEquals(PlayerAction.AudioDelay(1), action(Key.Equals, ctrl = true))
+        assertEquals(PlayerAction.SeekBy(-10_000L), action(Key.DirectionLeft, alt = true))
+        assertEquals(PlayerAction.ToggleFullscreen, action(Key.Enter, alt = true))
+        assertEquals(PlayerAction.JumpToTenth(0), action(Key.Zero))
+        assertEquals(PlayerAction.Back, action(Key.Backspace))
+    }
+
+    @Test
     fun `episodes, window and sheets`() {
         assertEquals(PlayerAction.NextEpisode, action(Key.N, shift = true))
         assertEquals(PlayerAction.PreviousEpisode, action(Key.P, shift = true))
