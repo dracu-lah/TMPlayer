@@ -57,6 +57,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -154,6 +156,11 @@ fun CoffeeDialog(
                 )
                 val links: @Composable () -> Unit = {
                     TextButton(onClick = { OpenExternal.browse(About.SPONSORS) }) { Text(s.supportSponsorGithub) }
+                    // Buy Me a Coffee takes cards and PayPal, so UPI stands beside it for anybody
+                    // who pays that way (user, 2026-11-01). A computer has no UPI app, so it is the
+                    // code for the phone in the viewer's hand and the ID to copy, never a button
+                    // that would open nothing.
+                    UpiRow()
                     // A star costs nothing and is worth asking for too (user, 2026-10-18).
                     TextButton(onClick = { OpenExternal.browse(About.SOURCE) }) {
                         Icon(TmIcons.StarOutline, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -364,3 +371,38 @@ private val STACK_BELOW = 400.dp
 private val PLATE = 180.dp
 private const val QR_PIXELS = 400
 private const val CARD_DELAY_MS = 4_000L
+
+/**
+ * Paying by UPI on a computer (user, 2026-11-01): the code a phone's UPI app reads, the ID beside
+ * it, and a button that copies the ID for whoever would rather type it in their own app. There is
+ * no `upi://` handler on Windows, Linux or macOS, so nothing here pretends to open one.
+ */
+@Composable
+private fun UpiRow() {
+    val s = LocalStrings.current
+    val clipboard = LocalClipboardManager.current
+    var copied by remember { mutableStateOf(false) }
+    val bitmap by produceState<ImageBitmap?>(initialValue = null, key1 = About.UPI_LINK) {
+        value = withContext(Dispatchers.Default) { QrCode.render(About.UPI_LINK, QR_PIXELS) }
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            Modifier.size(104.dp).clip(RoundedCornerShape(Corner.Small)).background(Color.White),
+            contentAlignment = Alignment.Center,
+        ) {
+            // A scanner needs a quiet margin of the code's own white to find it.
+            bitmap?.let { Image(it, contentDescription = s.supportScanUpi, modifier = Modifier.fillMaxSize().padding(8.dp)) }
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(s.supportPayUpi, style = MaterialTheme.typography.titleSmall)
+            Text(s.supportScanUpi, style = MaterialTheme.typography.bodySmall)
+            Text(About.UPI_ID, style = MaterialTheme.typography.bodyMedium)
+            TextButton(
+                onClick = {
+                    // A refused clipboard leaves the ID on screen to copy by hand.
+                    copied = runCatching { clipboard.setText(AnnotatedString(About.UPI_ID)) }.isSuccess
+                },
+            ) { Text(if (copied) s.supportUpiCopied else s.supportUpiCopy) }
+        }
+    }
+}

@@ -2880,18 +2880,25 @@
     "weight_regular": "Regular"
   },
   "support": {
+    "any_amount": "Any amount counts, and the smallest one is not a small thing. Support it if it is useful to you.",
     "buy_coffee": "Buy me a coffee",
     "dont_show": "Don't show again",
     "maybe_later": "Maybe later",
     "never": "Don't ask again",
     "note_touch": "{note} Open the page here, or scan the code on another device.",
     "note_tv": "{note} Point your phone's camera at the code.",
+    "pay_upi": "Pay by UPI",
     "popup_note": "{note} Open the page here, or scan the code with your phone.",
     "qr_for": "QR code for {link}",
     "scan_coffee": "Scan for Buy Me a Coffee",
+    "scan_upi": "Scan with GPay, PhonePe, Paytm or any UPI app",
     "sponsor_github": "Sponsor on GitHub",
     "star_github": "Star on GitHub",
-    "star_note": "Or star TMPlayer on GitHub: it costs nothing and helps more people find it."
+    "star_note": "Or star TMPlayer on GitHub: it costs nothing and helps more people find it.",
+    "upi_copied": "UPI ID copied",
+    "upi_copy": "Copy the UPI ID",
+    "upi_id": "UPI ID",
+    "upi_no_app": "No UPI app answered on this device. Scan the code from a phone, or copy the ID into your UPI app."
   },
   "theme": {
     "black": "Black",

@@ -27,6 +27,16 @@ object About {
     const val EMAIL = "hello@tmplayer.org"
     const val SPONSORS = "https://github.com/sponsors/dracu-lah"
     const val COFFEE = "https://buymeacoffee.com/nevil.dev"
+
+    /**
+     * Paying by UPI, which Buy Me a Coffee cannot take (user, 2026-11-01): it takes cards and
+     * PayPal, and most of the people who use TMPlayer pay by UPI instead, so the way they would
+     * have chipped in was missing. [UPI_LINK] is what a UPI app answers and what the code on the
+     * television and the desktop holds, so GPay, PhonePe, Paytm, BHIM or a bank app all take it.
+     * A phone opens the link; anything without a UPI app shows the code and [UPI_ID] to copy.
+     */
+    const val UPI_ID = "nevilnicks4321@okaxis"
+    const val UPI_LINK = "upi://pay?pa=$UPI_ID&pn=TMPlayer&cu=INR&tn=TMPlayer%20support"
     const val SITE = "https://tmplayer.org/"
     const val SUPPORT_PAGE = "https://tmplayer.org/support/"
     const val OPENSUBTITLES = "https://www.opensubtitles.com"

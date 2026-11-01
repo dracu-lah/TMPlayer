@@ -20,6 +20,7 @@ import {
     TranslateIcon,
     Clock01Icon,
     VideoReplayIcon,
+    FavouriteIcon,
 } from '@hugeicons/core-free-icons'
 import { addedIds, addedMode, settings, setSetting, SIZE_DEFAULTS, storageWorks, type Theme } from '../store'
 import { back, me, signOut } from '../session'
@@ -41,6 +42,9 @@ const THEMES: Theme[] = ['system', 'dark', 'light', 'black']
 const LAYOUTS: Layout[] = ['desktop', 'tv']
 /** The build's own notices: the TV build's (under /tv/) also name core-js. */
 const LICENCES = `${import.meta.env.BASE_URL}licenses.txt`
+// The same UPI details the apps and the site carry (ui About.kt, site/src/lib/support.ts).
+const UPI_ID = 'nevilnicks4321@okaxis'
+const UPI_LINK = `upi://pay?pa=${UPI_ID}&pn=TMPlayer&cu=INR&tn=${encodeURIComponent('TMPlayer support')}`
 
 type PageId = 'appearance' | 'home' | 'playback' | 'library' | 'storage' | 'about'
 
@@ -209,6 +213,7 @@ function PageBody(props: { id: PageId }) {
                 <StoragePage />
             </Match>
             <Match when={props.id === 'about'}>
+                <Chip />
                 <About />
             </Match>
         </Switch>
@@ -463,6 +468,39 @@ function About() {
             <div class="set-block">
                 <p class="muted small">{t('about.licence_line')}</p>
                 <a class="link" href={LICENCES} target="_blank" rel="noopener">{t('about.read')}</a>
+            </div>
+        </div>
+    )
+}
+
+/**
+ * Chipping in (user, 2026-11-01). Buy Me a Coffee takes cards and PayPal, which most people here
+ * do not use: UPI stands beside it, with Google Pay's own mark, since that is the app most of them
+ * pay with. On a phone the UPI row is a real `upi://` link, which GPay, PhonePe or Paytm answers;
+ * a browser on a computer has nothing to answer it, so there the row opens the site's support page,
+ * which shows the code and the ID. Nothing here is checked afterwards and nothing is unlocked.
+ */
+function Chip() {
+    const touch = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches
+    const upi = touch ? UPI_LINK : 'https://tmplayer.org/support/'
+    return (
+        <div class="set-card">
+            <a class="set-row" href="https://buymeacoffee.com/nevil.dev" target="_blank" rel="noopener">
+                <RowBody icon={FavouriteIcon} title={t('support.buy_coffee')} />
+                <Icon icon={ArrowRight01Icon} size={20} class="set-chevron" />
+            </a>
+            <a class="set-row" href={upi} target={touch ? undefined : '_blank'} rel="noopener">
+                <span class="set-icon set-icon-plain">
+                    <img src="/gpay-mark.png" alt="" width="24" height="24" />
+                </span>
+                <span class="set-text">
+                    <span class="set-title">{t('support.pay_upi')}</span>
+                    <span class="set-sub">{UPI_ID}</span>
+                </span>
+                <Icon icon={ArrowRight01Icon} size={20} class="set-chevron" />
+            </a>
+            <div class="set-block">
+                <p class="muted small">{t('support.any_amount')}</p>
             </div>
         </div>
     )

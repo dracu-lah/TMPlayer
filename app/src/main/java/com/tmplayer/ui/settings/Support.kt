@@ -1,5 +1,10 @@
 package com.tmplayer.ui.settings
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.text.BasicText
@@ -26,7 +31,9 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -188,6 +195,9 @@ fun CoffeeDialog(
                 // No scan code on a phone: the button opens the page on the screen the code would
                 // be on (user, 2026-10-18). The television, with no browser, keeps its code.
                 CoffeeButton(onClick = { openLink(context, About.COFFEE) }, modifier = Modifier.fillMaxWidth())
+                // Buy Me a Coffee takes cards and PayPal only, so UPI stands beside it for anybody
+                // who pays that way (user, 2026-11-01).
+                UpiPay(modifier = Modifier.fillMaxWidth())
                 // The two free or quieter ways side by side: a sponsorship, and a star, which costs
                 // nothing and is worth asking for as much as a coffee (user, 2026-10-18).
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -230,6 +240,9 @@ fun CoffeeDialog(
                     Text(title, style = MaterialTheme.typography.headlineSmall, color = Tone.text)
                     Text(text, style = MaterialTheme.typography.bodyLarge, color = Tone.muted)
                     SponsorsCode()
+                    // A television has no browser and no UPI app, so UPI is a code for the phone
+                    // in the viewer's hand, with the ID under it to type by hand (user, 2026-11-01).
+                    UpiCode()
                     Text(s.supportStarNote, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
                     // The card floats, so a button at rest takes the step above its fill.
                     CompositionLocalProvider(LocalOnFloating provides true) {
@@ -381,3 +394,104 @@ private fun Label(text: String) {
 
 /** Pixels each code is drawn at, so it stays crisp on a 4K panel. */
 private const val QR_PIXELS = 520
+
+/**
+ * Paying by UPI on a phone (user, 2026-11-01). The button hands [About.UPI_LINK] to whichever UPI
+ * app is installed, and the system asks which one when there are several. A device with no UPI app
+ * throws [ActivityNotFoundException], which is caught: the button is then replaced by the code and
+ * the ID, so the press never does nothing.
+ *
+ * Nothing is unlocked and nothing is checked afterwards: the app never learns whether anybody paid,
+ * as with the coffee link.
+ */
+@Composable
+private fun UpiPay(modifier: Modifier = Modifier) {
+    val s = LocalStrings.current
+    val context = LocalContext.current
+    var failed by remember { mutableStateOf(false) }
+
+    if (failed) {
+        Column(
+            modifier,
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            androidx.compose.material3.Text(
+                s.supportUpiNoApp,
+                style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                color = Tone.muted,
+                textAlign = TextAlign.Center,
+            )
+            UpiPlate(plate = 200.dp)
+            UpiIdRow()
+        }
+        return
+    }
+
+    TmSecondaryButton(
+        onClick = {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(About.UPI_LINK))
+            failed = runCatching { context.startActivity(intent) }.isFailure
+        },
+        modifier = modifier.heightIn(min = 56.dp),
+    ) { Label(s.supportPayUpi) }
+}
+
+/** The UPI ID in full, with a button that copies it, for anybody typing it into their own app. */
+@Composable
+private fun UpiIdRow() {
+    val s = LocalStrings.current
+    val context = LocalContext.current
+    var copied by remember { mutableStateOf(false) }
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        androidx.compose.material3.Text(
+            "${s.supportUpiId}: ${About.UPI_ID}",
+            style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+            color = Tone.text,
+            textAlign = TextAlign.Center,
+        )
+        androidx.compose.material3.TextButton(
+            onClick = {
+                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                // A refused or missing clipboard leaves the ID on screen to copy by hand.
+                copied = runCatching {
+                    clipboard?.setPrimaryClip(ClipData.newPlainText(About.UPI_ID, About.UPI_ID)) != null
+                }.getOrDefault(false)
+            },
+        ) {
+            androidx.compose.material3.Text(if (copied) s.supportUpiCopied else s.supportUpiCopy)
+        }
+    }
+}
+
+/** The UPI code on its white plate, the size a camera across a room can still read. */
+@Composable
+private fun UpiPlate(plate: Dp) {
+    val s = LocalStrings.current
+    val bitmap by produceState<ImageBitmap?>(initialValue = null, key1 = About.UPI_LINK) {
+        value = withContext(Dispatchers.Default) { QrCode.render(About.UPI_LINK, QR_PIXELS) }
+    }
+    Box(
+        Modifier.size(plate).clip(RoundedCornerShape(Corner.Medium)).background(Color.White),
+        contentAlignment = Alignment.Center,
+    ) {
+        bitmap?.let {
+            // A scanner needs a quiet margin of the code's own white to find it.
+            Image(it, contentDescription = s.supportScanUpi, modifier = Modifier.fillMaxSize().padding(10.dp))
+        }
+    }
+}
+
+/** UPI on a television: the code, what it is for, and the ID under it. */
+@Composable
+private fun UpiCode() {
+    val s = LocalStrings.current
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+        UpiPlate(plate = 96.dp)
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(s.supportPayUpi, style = MaterialTheme.typography.titleSmall, color = Tone.text)
+            Text(s.supportScanUpi, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
+            Text(About.UPI_ID, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
+        }
+    }
+}

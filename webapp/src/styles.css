@@ -441,6 +441,8 @@ html[data-form=tv] .panel .set-block-title { font-size: calc(var(--dp) * 16); li
   flex: none; width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center;
   background: color-mix(in srgb, var(--accent) 16%, var(--surface)); color: var(--accent);
 }
+/* Google Pay's mark is its own artwork on white, so its tile is white in either theme. */
+.set-icon-plain { background: #fff; border: 1px solid color-mix(in srgb, var(--muted) 30%, transparent); }
 .set-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .set-title { font-size: 16px; line-height: 24px; }
 .set-sub { font-size: 14px; line-height: 20px; color: var(--muted); }
