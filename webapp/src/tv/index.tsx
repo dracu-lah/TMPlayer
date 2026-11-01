@@ -274,7 +274,15 @@ export function TvHero(props: { rows: HomeRow[] | undefined }) {
                         <h2 class="tv-hero-title">{card()!.title}</h2>
                         <p class="tv-hero-facts">{card()!.facts}</p>
                     </div>
-                    <div class="tv-hero-actions" onFocusIn={() => setFocusedIn(true)} onFocusOut={() => setFocusedIn(false)}>
+                    <div
+                        class="tv-hero-actions"
+                        onFocusIn={() => {
+                            setFocusedIn(true)
+                            // The page the remote is on is kept by its key, so Home come back to shows it again.
+                            if (key() !== pick()?.key) setKey(pick()?.key ?? null)
+                        }}
+                        onFocusOut={() => setFocusedIn(false)}
+                    >
                         <A
                             class="tv-hero-play"
                             data-tv-first

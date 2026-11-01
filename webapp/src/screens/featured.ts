@@ -86,8 +86,8 @@ async function completeKeys(list: Tile[], gone: { dead: boolean }): Promise<stri
     return list.filter((t) => verdict.get(t.key) === true).slice(0, FEATURED_LIMIT).map((t) => t.key)
 }
 
-/** The last fill's pages, by the Recently added it was made from (see useFeatured). */
-let lastFill: { sig: string; keys: string[] } | null = null
+/** The last fill's pages, and the newest candidate it was made from (see useFeatured). */
+let lastFill: { newest: string | null; keys: string[] } | null = null
 
 /**
  * The carousel's pages: null while Recently added or the lookups are pending, an empty list when
@@ -118,9 +118,11 @@ export function useFeatured(rows: () => HomeRow[] | undefined): () => Tile[] | n
                 if (sig === null) return
                 const tiles = list()!
                 if (!online || !tiles.length) return void setPicks([])
-                // Home come back to with the same Recently added keeps the pages it had (and at
-                // once): a fill made again could pick others, while the remote is on one of them.
-                if (lastFill?.sig === sig) {
+                // Home come back to keeps the pages it had (and at once) while every one of them is
+                // still a candidate and nothing newer has come in: a fill made again could pick
+                // others while the remote is on one of them, and Recently added reading on (more of
+                // a chat loaded) is no reason to. A new video at the top is, so it gets its page.
+                if (lastFill && lastFill.newest === tiles[0]?.key) {
                     const kept = lastFill.keys.map((k) => tiles.find((t) => t.key === k)).filter((t): t is Tile => !!t)
                     if (kept.length === lastFill.keys.length) return void setPicks(kept)
                 }
@@ -128,7 +130,7 @@ export function useFeatured(rows: () => HomeRow[] | undefined): () => Tile[] | n
                 const mineState = state
                 void completeKeys(tiles, mineState).then((keys) => {
                     if (mine !== run) return
-                    lastFill = { sig, keys }
+                    lastFill = { newest: tiles[0]?.key ?? null, keys }
                     setPicks(keys.map((k) => tiles.find((t) => t.key === k)!))
                 })
             },
