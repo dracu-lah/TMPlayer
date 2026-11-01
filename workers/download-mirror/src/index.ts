@@ -16,7 +16,7 @@ interface Env {
 
 const REPO = 'dracu-lah/TMPlayer'
 const PATH =
-  /^\/download\/(v\d+\.\d+\.\d+(?:-beta\.\d+)?)\/(TMPlayer-[A-Za-z0-9._-]+\.(?:apk|msi|dmg|AppImage|tar\.xz))$/
+  /^\/download\/(v\d+\.\d+\.\d+(?:-beta\.\d+)?)\/(TMPlayer-[A-Za-z0-9._-]+\.(?:apk|msi|dmg|AppImage|tar\.xz|ipk|wgt))$/
 const COUNTER_KEY = 'hits'
 
 // Not atomic (a read, then a write), so a handful of requests landing in the same millisecond on
