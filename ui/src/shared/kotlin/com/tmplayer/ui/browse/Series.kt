@@ -68,6 +68,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
@@ -872,6 +873,8 @@ fun SeriesPanel(
     // Where the up-next episode sits in the list shown, or -1 when it is in another season or range.
     val upNextAt = if (next != null) listed.indexOfFirst { it.sameAs(next) } else -1
     val upNextFocus = remember(series.key) { FocusRequester() }
+    // Episode cards a row on a large window (see the grid below); one elsewhere.
+    val episodeColumns = remember(series.key) { mutableIntStateOf(1) }
     val scope = rememberCoroutineScope()
     LaunchedEffect(shown.number, rangeAt, firstPaint) {
         // Nothing to scroll while the first frame is held for the caches.
@@ -881,7 +884,10 @@ fun SeriesPanel(
             // A long season (an anime's hundreds) opens on its up-next episode under a finger, one
             // card of what came before above it, so nobody scrolls to the 57th by hand. A short one
             // opens at the top, where the hero and Play are. A remote gets there with Down from Play.
-            if (!tv && upNextAt > 0 && listed.size > LONG_SEASON) list.scrollToItem(FIRST_EPISODE_ITEM + upNextAt - 1)
+            // A large window's grid holds [episodeColumns] episodes a row: the row before the one
+            // holding the up-next episode.
+            val perRow = episodeColumns.intValue.coerceAtLeast(1)
+            if (!tv && upNextAt > 0 && listed.size > LONG_SEASON) list.scrollToItem(FIRST_EPISODE_ITEM + (upNextAt / perRow - 1).coerceAtLeast(0))
             return@LaunchedEffect
         }
         if (list.firstVisibleItemIndex > SEASONS_ITEM) list.scrollToItem(SEASONS_ITEM)
@@ -952,7 +958,8 @@ fun SeriesPanel(
         // and larger episode cards. A phone and a television keep their own.
         val large = wide && !tv && com.tmplayer.ui.components.deviceForm() == com.tmplayer.data.DeviceForm.Desktop && maxWidth >= LARGE_PAGE
         val heroHeight = if (large) {
-            (maxHeight * 0.7f).coerceIn(420.dp, 720.dp)
+            // As tall as a video's page's hero, so the first row of episodes shows under it.
+            (maxHeight * 0.62f).coerceIn(400.dp, 680.dp)
         } else if (wide) {
             (maxHeight * 0.62f).coerceIn(280.dp, 560.dp)
         } else {
@@ -1043,7 +1050,7 @@ fun SeriesPanel(
                         waiting = !metaState.settled,
                         hold = holdOverview,
                         style = if (large) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.bodyMedium,
-                        lines = if (large || wide) 3 else null,
+                        lines = if (large) LARGE_OVERVIEW_LINES else if (wide) 3 else null,
                     )
                     // The credit's line kept with the held words, so it does not add one when they come.
                     Box(Modifier.neverShrink()) { meta?.let { if (text != null) MetaCredit(it) } }
@@ -1113,7 +1120,9 @@ fun SeriesPanel(
             Column(Modifier.padding(pad), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (large) {
                     // Play a size up, and the trailer and the downloads as round buttons beside it.
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    // On one top line, as on a video's page: the pill is as tall as a button's
+                    // circle, so a word running to two lines under one never lowers its circle.
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
                         HeroPill(
                             label = seriesPlayLabel(target.code, watch.pointOf(target), anyWatched = progress.watched > 0),
                             icon = TmIcons.Play,
@@ -1122,7 +1131,18 @@ fun SeriesPanel(
                             focusRequester = playFocus,
                             large = true,
                         )
-                        others.forEach { (label, icon, run, enabled, progress) -> WideIconAction(label, icon, run, ghost = trailerGhost && label == s.metadataTrailer, waiting = trailerGhost && label == s.metadataTrailer && !extrasState.settled, progress = progress, enabled = enabled) }
+                        // The same short words under the buttons as a video's page and the phone's.
+                        others.forEach { action ->
+                            val trailerSlot = trailerGhost && action.label == s.metadataTrailer
+                            WideIconAction(
+                                action.label, action.icon, action.run,
+                                ghost = trailerSlot,
+                                waiting = trailerSlot && !extrasState.settled,
+                                progress = action.progress,
+                                enabled = action.enabled,
+                                short = action.short ?: roundLabel(action.label, s),
+                            )
+                        }
                     }
                 } else if (tv) {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -1184,6 +1204,55 @@ fun SeriesPanel(
             }
         }
 
+        // One episode's card, in the list or in a row of the grid below.
+        val episodeCard: @Composable (SeriesEpisode, Modifier) -> Unit = { episode, cardModifier ->
+            androidx.compose.runtime.key(episode.item.id) {
+                    val chosen = copyOf(episode, if (next != null && episode.sameAs(next)) next.item else watch.pick(episode, progress))
+                    val rowFocus = remember { FocusRequester() }
+                    if (episodeReturn) {
+                        DisposableEffect(episode.item.id) {
+                            episodeFocus.attach(episode.item.id, rowFocus)
+                            onDispose { episodeFocus.detach(episode.item.id, rowFocus) }
+                        }
+                    }
+                    EpisodeRow(
+                        episode = episode,
+                        point = watch.pointOf(episode),
+                        finished = watch.finishedEpisode(episode),
+                        upNext = next != null && episode.sameAs(next),
+                        onClick = {
+                            val open = onOpenEpisode
+                            if (open != null) {
+                                open(chosen) { runCatching { rowFocus.requestFocus() } }
+                            } else {
+                                if (episodeReturn) returnEpisode = episode.item.id
+                                onPlay(chosen)
+                            }
+                        },
+                        onLongClick = onLongClick?.let { { it(chosen) } },
+                        chosen = chosen,
+                        modifier = cardModifier,
+                        lineModifier = (if (next != null && episode.sameAs(next)) Modifier.focusRequester(upNextFocus) else Modifier)
+                            .focusRequester(rowFocus)
+                            .then(if (episodeReturn) Modifier.onFocusChanged { episodeFocus.changed(episode.item.id, it.hasFocus) } else Modifier),
+                        name = EpisodeNames.listName(episode.season, episode.episode, names),
+                        guide = EpisodeNames.listed(episode.season, episode.episode, names),
+                        showOverview = true,
+                        large = large,
+                        holdOverview = holdEpisodeWords,
+                    )
+            }
+        }
+        // A large window lays the episodes side by side where two (or three) cards fit at a
+        // width that still reads well, rather than one narrow column with the rest of the
+        // window bare (user, 2026-11-01). A phone and a television keep their single list.
+        val columns = if (large) {
+            val room = maxWidth - pad.calculateLeftPadding(androidx.compose.ui.unit.LayoutDirection.Ltr) - pad.calculateRightPadding(androidx.compose.ui.unit.LayoutDirection.Ltr)
+            ((room + EPISODE_GAP) / (EPISODE_CARD_MIN + EPISODE_GAP)).toInt().coerceIn(1, EPISODE_COLUMNS_MAX)
+        } else {
+            1
+        }
+        SideEffect { episodeColumns.intValue = columns }
         // The page's ground, and the band's way back, for the moment the caches are asked.
         if (firstPaint) HeroStaysWhole(list) { LazyColumn(
             state = list,
@@ -1213,7 +1282,9 @@ fun SeriesPanel(
                                 .align(Alignment.BottomStart)
                                 .fillMaxWidth(if (large) TEXT_SHARE_LARGE else if (wide) TEXT_SHARE else 1f)
                                 .padding(pad)
-                                .padding(top = heroHeight * 0.35f, bottom = if (wide) 8.dp else 0.dp),
+                                .padding(top = heroHeight * 0.35f, bottom = if (wide) 8.dp else 0.dp)
+                                // A large window's words stop at a reading measure past the poster.
+                                .then(if (large) Modifier.widthIn(max = LARGE_HERO_TEXT) else Modifier),
                             horizontalArrangement = Arrangement.spacedBy(if (tv || large) 24.dp else 16.dp),
                             verticalAlignment = Alignment.Bottom,
                         ) {
@@ -1244,41 +1315,21 @@ fun SeriesPanel(
                     Spacer(Modifier.height(2.dp))
                 }
             }
-            items(listed, key = { it.item.id }) { episode ->
-                val chosen = copyOf(episode, if (next != null && episode.sameAs(next)) next.item else watch.pick(episode, progress))
-                val rowFocus = remember { FocusRequester() }
-                if (episodeReturn) {
-                    DisposableEffect(episode.item.id) {
-                        episodeFocus.attach(episode.item.id, rowFocus)
-                        onDispose { episodeFocus.detach(episode.item.id, rowFocus) }
+            if (columns > 1) {
+                // Keyed by a row's first episode, so the fast scroller's bubble still names it.
+                items(listed.chunked(columns), key = { it.first().item.id }) { row ->
+                    Row(
+                        Modifier.fillMaxWidth().padding(pad).padding(bottom = EPISODE_GAP - 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(EPISODE_GAP),
+                    ) {
+                        row.forEach { episodeCard(it, Modifier.weight(1f)) }
+                        repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
                     }
                 }
-                EpisodeRow(
-                    episode = episode,
-                    point = watch.pointOf(episode),
-                    finished = watch.finishedEpisode(episode),
-                    upNext = next != null && episode.sameAs(next),
-                    onClick = {
-                        val open = onOpenEpisode
-                        if (open != null) {
-                            open(chosen) { runCatching { rowFocus.requestFocus() } }
-                        } else {
-                            if (episodeReturn) returnEpisode = episode.item.id
-                            onPlay(chosen)
-                        }
-                    },
-                    onLongClick = onLongClick?.let { { it(chosen) } },
-                    chosen = chosen,
-                    modifier = Modifier.padding(pad).widthIn(max = if (large) EPISODES_MAX_LARGE else EPISODES_MAX),
-                    lineModifier = (if (next != null && episode.sameAs(next)) Modifier.focusRequester(upNextFocus) else Modifier)
-                        .focusRequester(rowFocus)
-                        .then(if (episodeReturn) Modifier.onFocusChanged { episodeFocus.changed(episode.item.id, it.hasFocus) } else Modifier),
-                    name = EpisodeNames.listName(episode.season, episode.episode, names),
-                    guide = EpisodeNames.listed(episode.season, episode.episode, names),
-                    showOverview = true,
-                    large = large,
-                    holdOverview = holdEpisodeWords,
-                )
+            } else {
+                items(listed, key = { it.item.id }) { episode ->
+                    episodeCard(episode, Modifier.padding(pad).widthIn(max = if (large) EPISODES_MAX_LARGE else EPISODES_MAX))
+                }
             }
             // The cast and "More like this" after the episodes: composed only once scrolled to.
             if (meta != null && extras != null) {
@@ -1582,8 +1633,27 @@ private val SERIES_POSTER_LARGE: Dp = 176.dp
 /** From this width a desktop show page is drawn large (see SeriesPanel). */
 private val LARGE_PAGE: Dp = 1000.dp
 
-/** The words' share of a large page's width, from the start; the backdrop shows past them. */
-private const val TEXT_SHARE_LARGE = 0.55f
+/**
+ * The words' share of a large page's width, from the start; the backdrop shows past them. Wide
+ * enough that the overview beside the poster is not cut to a narrow column on a small window
+ * (user, 2026-11-01: "cramped"), with [LARGE_HERO_TEXT] as its stop on a wide one.
+ */
+private const val TEXT_SHARE_LARGE = 0.72f
+
+/** A large page's poster and words over the backdrop stop growing here. */
+private val LARGE_HERO_TEXT: Dp = 900.dp
+
+/** A large page's overview: four lines before "More". */
+private const val LARGE_OVERVIEW_LINES = 4
+
+/** A large page's episode cards are never narrower than this when laid side by side. */
+private val EPISODE_CARD_MIN: Dp = 600.dp
+
+/** At most this many episode cards side by side. */
+private const val EPISODE_COLUMNS_MAX = 3
+
+/** Between episode cards side by side. */
+private val EPISODE_GAP: Dp = 16.dp
 
 /** A large show page's overview: about 65 characters a line. */
 private val LARGE_READING: Dp = 680.dp

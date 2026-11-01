@@ -217,9 +217,9 @@ internal fun SeriesPage(
     val index = remember(history) { history.associateBy { "${it.chatId}:${it.messageId}" } }
     // Over the page and its header, with none of its own: the window's buttons show on their own.
     CoverWindowControls()
-    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
-        // A large window's page keeps a wider margin, in step with its larger type.
-        val margin = if (maxWidth >= 1200.dp) 56.dp else 32.dp
+    // The same margin as a video's page, so the two title pages start on one line.
+    val margin = titlePageMargin()
+    Box(Modifier.fillMaxSize()) {
         SeriesPanel(
             series = series,
             watch = watch,
