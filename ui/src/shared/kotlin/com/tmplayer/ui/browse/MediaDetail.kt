@@ -441,9 +441,20 @@ internal fun DetailBookmarks(bookmarks: List<Bookmark>, onOpen: ((Bookmark) -> U
 /**
  * The facts table and the synopsis. One block, focusable on a remote so the D-pad can scroll down
  * to it: without a stop of its own it would sit under the last button, out of reach.
+ *
+ * [large] is a large window's page: the table a size up, with room for the longer labels.
  */
 @Composable
-internal fun DetailFacts(item: MediaItem, facts: MediaFacts, s: Messages, overview: String?, credit: MetaInfo? = null, showSynopsis: Boolean = true) {
+internal fun DetailFacts(
+    item: MediaItem,
+    facts: MediaFacts,
+    s: Messages,
+    overview: String?,
+    credit: MetaInfo? = null,
+    showSynopsis: Boolean = true,
+    large: Boolean = false,
+) {
+    val factStyle = if (large) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodySmall
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusVisibleAsState()
     val shape = RoundedCornerShape(Corner.Medium)
@@ -481,19 +492,19 @@ internal fun DetailFacts(item: MediaItem, facts: MediaFacts, s: Messages, overvi
             .then(if (remote) Modifier.focusRing(focused, shape).focusable(interactionSource = interactions) else Modifier)
             .background(if (focused) Tone.surfaceHigh else Color.Transparent)
             .padding(vertical = 8.dp, horizontal = if (remote) 8.dp else 0.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(if (large) 8.dp else 6.dp),
     ) {
         lines.forEach { (label, value) ->
             Row(Modifier.fillMaxWidth()) {
                 Text(
                     label,
-                    style = MaterialTheme.typography.bodySmall,
+                    style = factStyle,
                     color = Tone.muted,
-                    modifier = Modifier.width(FACT_LABEL),
+                    modifier = if (large) Modifier.width(FACT_LABEL_LARGE).padding(end = 12.dp) else Modifier.width(FACT_LABEL),
                 )
                 Text(
                     value,
-                    style = MaterialTheme.typography.bodySmall,
+                    style = factStyle,
                     color = Tone.text,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
@@ -567,6 +578,9 @@ val DETAIL_PANE_WIDTH = 440.dp
 private val DETAIL_POSTER = 84.dp
 private val DETAIL_POSTER_TV = 72.dp
 private val FACT_LABEL = 112.dp
+
+/** The facts table's labels on a large window's page, where they are set a size up. */
+private val FACT_LABEL_LARGE = 132.dp
 private val JOINERS = Regex("[-_.]+")
 
 /** August 2013, in seconds: a post dated before Telegram existed is a fixture, not a date worth printing. */

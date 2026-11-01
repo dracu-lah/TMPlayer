@@ -436,6 +436,7 @@ private fun DetailPane(state: ShellState, request: DetailRequest) {
                     }
                 },
                 copyStarted = { SettingsStore.progressKey(it.chatId, it.messageId) in progress },
+                margin = titlePageMargin(),
             )
             }
         }

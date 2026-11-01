@@ -117,6 +117,8 @@ fun WideDetailPanel(
     onOpenBookmark: ((Bookmark) -> Unit)? = null,
     onPickCopy: ((MediaItem) -> Unit)? = onOpenItem,
     copyStarted: (MediaItem) -> Boolean = { false },
+    /** How far the page's words sit in from the window's sides; null picks one for the width. */
+    margin: androidx.compose.ui.unit.Dp? = null,
 ) {
     val s = LocalStrings.current
     val corrections by com.tmplayer.data.VideoCorrections.state.collectAsState()
@@ -183,35 +185,40 @@ fun WideDetailPanel(
 
     BoxWithConstraints(modifier.fillMaxSize()) {
         val roomy = maxWidth >= ROOMY
-        // A bit more than before (user, 2026-11-01): the backdrop now runs full width behind the
-        // title and the buttons, where the old inset read as crowded against it.
-        val side = if (roomy) 56.dp else 36.dp
-        // 16:9 of the sheet's width while that leaves Play on the first screen; shorter than
-        // before (user, 2026-11-01), brought in line with the Home carousel's own reduced height.
-        val heroHeight = minOf(maxWidth * (9f / 16f), maxHeight * 0.46f).coerceAtLeast(220.dp)
+        // The platform's margin for a title page (the desktop's is twice a page's own), else one
+        // drawn to the window: the hero's words and the sections under it start on one line.
+        val side = margin ?: if (roomy) 56.dp else 36.dp
+        // The hero holds the title, the facts and the actions over the picture (user, 2026-11-01:
+        // its band used to hold the title alone, with everything else squeezed in under it). It
+        // is at least this tall, and taller where its words need it.
+        val heroHeight = (maxHeight * HERO_SHARE).coerceIn(HERO_MIN, HERO_MAX)
+        // A short window keeps the title logo smaller, so Play stays on the first screen.
+        val logoHeight = if (roomy && maxHeight >= TALL_WINDOW) 150.dp else 120.dp
         // The sheet's own ground and Close, for the moment the caches are asked.
         if (firstPaint) Column(Modifier.fillMaxSize().verticalScroll(scroll)) {
-            Box(Modifier.fillMaxWidth().height(heroHeight).clipToBounds()) {
+            Box(Modifier.fillMaxWidth().heightIn(min = heroHeight).clipToBounds()) {
                 // Half the page's speed, so the picture drifts away under the title.
-                val drift = Modifier.fillMaxSize().graphicsLayer { if (!reduced) translationY = scroll.value * PARALLAX }
+                val drift = Modifier.matchParentSize().graphicsLayer { if (!reduced) translationY = scroll.value * PARALLAX }
                 // The same full-bleed hero as the Home carousel ([com.tmplayer.ui.components.EdgeBackdrop]):
                 // almost any desktop window is wider than 16:9 at this height, so a plain crop
                 // across the middle used to show only a slice of the picture; EdgeBackdrop instead
                 // stands the picture whole at its own aspect, cropped from the foot only where that
                 // runs taller than the frame, with the same long start fade as the carousel.
                 com.tmplayer.ui.components.EdgeBackdrop(source, drift)
+                // Laid from the hero's foot up, so what is held above Play (the logo, the genres
+                // line) never moves it; kept clear of the Back button at the top.
                 Column(
                     Modifier
                         .align(Alignment.BottomStart)
-                        .fillMaxWidth(if (roomy) 0.72f else 0.86f)
-                        .padding(horizontal = side),
+                        .fillMaxWidth()
+                        .padding(start = side, end = side, top = HERO_TOP, bottom = 12.dp)
+                        .widthIn(max = HERO_TEXT),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     if (eyebrow.isNotEmpty()) {
                         // One line, so the episode's name arriving after its code never adds a second.
                         Text(eyebrow, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = Tone.accent, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
-                    val logoHeight = if (roomy) 150.dp else 120.dp
                     TitleSlot(logoHeight, hold = holdsTitle) {
                         com.tmplayer.ui.online.TitleArt(
                             meta,
@@ -228,15 +235,7 @@ fun WideDetailPanel(
                             Text(heading, style = style.trackedFor(heading), fontWeight = FontWeight.Bold, color = Tone.text, maxLines = 3, overflow = TextOverflow.Ellipsis)
                         }
                     }
-                }
-            }
-
-            Column(
-                Modifier.fillMaxWidth().padding(start = side, end = side, top = 20.dp, bottom = 40.dp),
-                verticalArrangement = Arrangement.spacedBy(32.dp),
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(22.dp)) {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Column(Modifier.padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         // The match's year on the facts line only when it was there on the first
                         // frame; later it opens the genres line, in its held place.
                         val matchYear = meta?.year.takeIf { parsed.year == null }
@@ -274,9 +273,13 @@ fun WideDetailPanel(
                                 .padding(horizontal = 12.dp, vertical = 8.dp),
                         )
                     }
+                    // Play and the round buttons share one top line: the pill is as tall as a
+                    // button's circle, so a word under one button running to two lines never
+                    // lowers that circle against the others.
                     Row(
+                        Modifier.padding(top = 10.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                        verticalAlignment = Alignment.Top,
                     ) {
                         primary?.let { HeroPill(it.label, it.icon, it.onSelect, focusRequester = firstAction, large = true) }
                         FlowRow(
@@ -301,43 +304,38 @@ fun WideDetailPanel(
                     }
                     trailers.unopened?.let { TrailerQr(it, Modifier.padding(vertical = 4.dp)) }
                 }
+            }
 
-                // The overview at a reading measure, the copies and bookmarks under it, and the
-                // file's own facts beside it where the sheet is wide enough, else under it.
-                val story: @Composable () -> Unit = {
-                    Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
-                        if (overview != null || holdSynopsis) {
-                            Column(Modifier.widthIn(max = READING), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                SynopsisSlot(overview, waiting = metaComing, hold = holdSynopsis, style = MaterialTheme.typography.bodyLarge, lines = 5)
-                                if (metaOverview != null && meta != null) MetaCredit(meta)
+            Column(
+                Modifier.fillMaxWidth().padding(start = side, end = side, top = 24.dp, bottom = 40.dp),
+                verticalArrangement = Arrangement.spacedBy(36.dp),
+            ) {
+                // The overview at a reading measure with the copies and bookmarks under it, and
+                // the file's own facts beside it where the window is wide enough, else under it.
+                StoryBesideFacts(
+                    story = {
+                        Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                            if (overview != null || holdSynopsis) {
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    SynopsisSlot(overview, waiting = metaComing, hold = holdSynopsis, style = MaterialTheme.typography.bodyLarge, lines = SYNOPSIS_LINES)
+                                    if (metaOverview != null && meta != null) MetaCredit(meta)
+                                    MetaPeopleLine(extras)
+                                }
+                            } else {
                                 MetaPeopleLine(extras)
                             }
-                        } else {
-                            MetaPeopleLine(extras)
+                            Versions(item, onPickCopy, chatTitle, copyStarted)
+                            TelegramQualityLine(item)
+                            DetailBookmarks(bookmarks, onOpenBookmark)
                         }
-                        Versions(item, onPickCopy, chatTitle, copyStarted)
-                        TelegramQualityLine(item)
-                        DetailBookmarks(bookmarks, onOpenBookmark)
-                    }
-                }
-                val file: @Composable () -> Unit = {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(s.detailHeading, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = Tone.text)
-                        DetailFacts(item, facts, s, overview = null, showSynopsis = false)
-                    }
-                }
-                if (roomy) {
-                    // The story keeps to its own reading measure rather than stretching the row:
-                    // full width here left the file facts stranded at the far edge with a bare gap
-                    // between (user, 2026-11-01), so the facts now sit right after the words.
-                    Row(horizontalArrangement = Arrangement.spacedBy(48.dp)) {
-                        Box(Modifier.widthIn(max = READING)) { story() }
-                        Box(Modifier.width(FILE_COLUMN)) { file() }
-                    }
-                } else {
-                    story()
-                    file()
-                }
+                    },
+                    facts = {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(s.detailHeading, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = Tone.text)
+                            DetailFacts(item, facts, s, overview = null, showSynopsis = false, large = roomy)
+                        }
+                    },
+                )
 
                 when {
                     meta != null && extras != null -> MetaCastRow(extras.cast)
@@ -494,14 +492,77 @@ private fun WideTextAction(label: String, icon: ImageVector, onClick: () -> Unit
  */
 private val WIDE_HEADLINE = HEADLINE_ACTIONS + DetailAction.StartOver
 
-/** From this width the detail sets its words larger and puts the file's facts beside the overview. */
+/** From this width the detail sets its words larger. */
 private val ROOMY = 880.dp
 
-/** About 65 characters of the overview's type: the measure it reads best at. */
-private val READING = 640.dp
+/** About 70 characters of the overview's type: the measure it reads best at. */
+private val READING = 660.dp
 
-/** The file's facts beside the overview. */
-private val FILE_COLUMN = 300.dp
+/** The narrowest the overview's column gets with the file's facts beside it. */
+private val READING_MIN = 460.dp
+
+/** The file's facts beside the overview: never narrower, so a release name wraps once at most. */
+private val FACTS_MIN = 380.dp
+
+/** The file's facts column stops growing here. */
+private val FACTS_MAX = 560.dp
+
+/** Between the overview and the file's facts beside it. */
+private val COLUMN_GAP = 56.dp
+
+/** Between the overview and the file's facts under it, on a narrow window. */
+private val STACK_GAP = 28.dp
+
+/** The overview's lines before "More": room for a whole paragraph under the hero. */
+private const val SYNOPSIS_LINES = 6
+
+/** The hero's words (title, facts, actions) keep to this width over the picture. */
+private val HERO_TEXT = 760.dp
+
+/** The hero's share of the window's height, kept between [HERO_MIN] and [HERO_MAX]. */
+private const val HERO_SHARE = 0.62f
+private val HERO_MIN = 320.dp
+private val HERO_MAX = 680.dp
+
+/** The hero's words stay below this, clear of the Back button over the picture. */
+private val HERO_TOP = 88.dp
+
+/** From this window height the title logo is drawn at its full size. */
+private val TALL_WINDOW = 760.dp
+
+/**
+ * The overview's column and the file's facts: side by side where there is room for both (the
+ * facts from a fixed line, so they never stand right after a short caption on one page and far
+ * from it on the next), else one under the other. An empty [story] (no overview, copies or
+ * bookmarks) leaves the facts at the start rather than after an empty column.
+ */
+@Composable
+private fun StoryBesideFacts(story: @Composable () -> Unit, facts: @Composable () -> Unit) {
+    androidx.compose.ui.layout.Layout(content = { Box { story() }; Box { facts() } }) { measurables, constraints ->
+        val total = constraints.maxWidth
+        val gap = COLUMN_GAP.roundToPx()
+        val factsMin = FACTS_MIN.roundToPx()
+        val loose = constraints.copy(minWidth = 0, minHeight = 0)
+        if (total >= READING_MIN.roundToPx() + gap + factsMin) {
+            val storyWidth = minOf(READING.roundToPx(), total - gap - factsMin)
+            val first = measurables[0].measure(loose.copy(maxWidth = storyWidth))
+            val factsAt = if (first.width == 0) 0 else storyWidth + gap
+            val second = measurables[1].measure(loose.copy(maxWidth = minOf(FACTS_MAX.roundToPx(), total - factsAt)))
+            layout(total, maxOf(first.height, second.height)) {
+                first.place(0, 0)
+                second.place(factsAt, 0)
+            }
+        } else {
+            val first = measurables[0].measure(loose.copy(maxWidth = minOf(READING.roundToPx(), total)))
+            val second = measurables[1].measure(loose.copy(maxWidth = minOf(FACTS_MAX.roundToPx(), total)))
+            val below = if (first.height == 0) 0 else first.height + STACK_GAP.roundToPx()
+            layout(total, below + second.height) {
+                first.place(0, 0)
+                second.place(0, below)
+            }
+        }
+    }
+}
 
 /** The round actions beside Play: as tall as the large pill. */
 internal val WIDE_ACTION = 56.dp

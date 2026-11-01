@@ -310,6 +310,14 @@ fun pageMargin(): Dp {
     return if (wide) 32.dp else 24.dp
 }
 
+/**
+ * How far a title page's words sit in from the window's sides: a video's page and a show's,
+ * which fill the window with no side bar beside them. Twice [pageMargin], so they widen at the
+ * same window width as every other page and the two title pages start on one line.
+ */
+@Composable
+fun titlePageMargin(): Dp = pageMargin() * 2
+
 /** The window width past which [pageMargin] widens. */
 private val WIDE_WINDOW = 1440.dp
 
