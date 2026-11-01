@@ -322,6 +322,8 @@ export interface WatchInfo {
     quality: string | null
     /** Every copy of this video in the chat (this one among them, best first) when there is more than one file of it. */
     copies: CopyRef[]
+    /** The caption as an overview, its file facts and lines repeating the name taken off (MediaText.overviewOf); null when nothing is left. */
+    overview: string | null
 }
 
 /** One copy of a video, for the copies list on its page: what its name says of the picture, and where it was posted. */

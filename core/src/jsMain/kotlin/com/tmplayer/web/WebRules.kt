@@ -349,6 +349,13 @@ fun posterAsk(video: Video): PosterAsk? {
     )
 }
 
+/**
+ * What a video's page says of it when nothing online does (MediaText.overviewOf): its caption with
+ * the file's facts (File name, Size, Quality...) and lines repeating its name taken off, or null
+ * when nothing is left.
+ */
+fun overviewOf(video: Video): String? = MediaText.overviewOf(video.caption, video.fileName, video.title)
+
 /** The title a tile shows for [video], as the apps' cards do. */
 fun tileTitle(video: Video): String = SeriesShelf.tileTitle(toItem(video))
 

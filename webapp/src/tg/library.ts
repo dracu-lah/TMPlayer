@@ -686,6 +686,7 @@ export async function watchInfo(tg: TelegramClient, chatId: number, messageId: n
         protected: s.protected,
         quality: r.qualityLabel(current) ?? null,
         copies,
+        overview: r.overviewOf(current) ?? null,
     }
     watchKept.set(id, { version: s.version, view: viewKey, info })
     while (watchKept.size > 20) watchKept.delete(watchKept.keys().next().value!)

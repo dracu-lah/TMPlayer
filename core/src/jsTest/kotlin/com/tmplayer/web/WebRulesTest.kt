@@ -149,6 +149,14 @@ class WebRulesTest {
     }
 
     @Test
+    fun `a caption becomes the overview without the file's facts`() {
+        val video = screen(arrayOf(raw(1, "Harbour.Notes.2019.1080p.mkv", caption = "A harbour town keeps its notes.\nSize: 1.2 GB\nQuality: 1080p"))).videos[0]
+        assertEquals("A harbour town keeps its notes.", overviewOf(video))
+        val bare = screen(arrayOf(raw(2, "Harbour.Notes.2019.1080p.mkv", caption = "Size: 1.2 GB"))).videos[0]
+        assertNull(overviewOf(bare))
+    }
+
+    @Test
     fun `a Continue watching card is named as the apps name it`() {
         val videos = screen(
             arrayOf(

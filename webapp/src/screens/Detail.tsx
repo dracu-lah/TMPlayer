@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createResource, createSignal, For, Match, onCleanup, onMount, Show, Switch, type JSX } from 'solid-js'
 import { A, useLocation, useNavigate, useParams } from '@solidjs/router'
-import { Cancel01Icon, ClapperboardIcon, Clock01Icon, ListVideoIcon, PlayIcon, RepeatIcon, Tick02Icon } from '@hugeicons/core-free-icons'
+import { ArrowLeft02Icon, Cancel01Icon, ClapperboardIcon, Clock01Icon, ListVideoIcon, PlayIcon, RepeatIcon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { api, errorText } from '../tg/rpc'
 import { back } from '../session'
 import { t } from '../i18n'
@@ -17,6 +17,7 @@ import { answer, loadBackdropLightFirst, loadExtras, loadFile, loadPoster, type 
 import { coverBackground } from './cover'
 import { Card, clock, detailPath, shortLength, size, tileCard, useProgress, watchPath } from './VideoList'
 import { warmFile } from '../stream/reader'
+import { form } from '../form'
 import type { ChatView, CopyRef, VideoItem, WatchInfo } from '../tg/types'
 
 const dot = '  ·  '
@@ -175,7 +176,21 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
     }
     const posted = () => new Date(item.date).toLocaleDateString('en', { day: 'numeric', month: 'short', year: 'numeric' })
     const year = () => found()?.year ?? null
-    const overview = () => extras()?.episode?.overview || found()?.overview || ''
+    // TMDB's words first; else the caption, its file facts (File name, Size, Quality...) and lines
+    // repeating the name taken off (MediaText.overviewOf), as the apps' detail falls back to it.
+    const tmdbOverview = () => extras()?.episode?.overview || found()?.overview || ''
+    const overview = () => tmdbOverview() || props.info?.overview || ''
+    // A wide desktop window sets About beside the overview, at the overview's reading measure, as
+    // WideDetail's ROOMY layout does, rather than far down the page under the episodes.
+    const roomyQuery = matchMedia('(min-width: 880px)')
+    const [roomy, setRoomy] = createSignal(roomyQuery.matches)
+    const onRoomy = () => setRoomy(roomyQuery.matches)
+    roomyQuery.addEventListener('change', onRoomy)
+    onCleanup(() => roomyQuery.removeEventListener('change', onRoomy))
+    const side = () => form() === 'desktop' && roomy()
+    // What stands behind the words: a film's wide picture, else a show's poster (whole, over a soft
+    // copy of itself, never Telegram's thumbnail blown up behind it), else the video's own frame.
+    const shown = () => (film() && backdrop() ? 'backdrop' : poster() ? 'poster' : art() ? 'frame' : null)
     createEffect(() => (overview(), more(), queueMicrotask(() => !more() && measure())))
     const genres = () => [(extras()?.genres ?? []).join(', '), extras()?.certification ?? ''].filter(Boolean).join(dot)
     // The facts line: year, length, quality, size and the chat, with a dot between (the apps' FactLine).
@@ -188,25 +203,64 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
         return ''
     }
 
+    const aboutSection = () => (
+        <section class="detail-about">
+            <h2 class="detail-section">{t('detail.about')}</h2>
+            <Show when={credit()}>
+                <p class="detail-credit">{credit()}</p>
+            </Show>
+            <dl>
+                <Show when={props.info?.fileName}>
+                    <dt>{t('detail.file_name')}</dt>
+                    <dd>{props.info!.fileName}</dd>
+                </Show>
+                <Show when={props.info?.height}>
+                    <dt>{t('detail.resolution')}</dt>
+                    <dd>{`${resolution()}${dot}${props.info!.width} × ${props.info!.height}`}</dd>
+                </Show>
+                <Show when={container()}>
+                    <dt>{t('detail.video')}</dt>
+                    <dd>{container()}</dd>
+                </Show>
+                <dt>{t('detail.size')}</dt>
+                <dd>{size(item.size)}</dd>
+                <Show when={item.duration}>
+                    <dt>{t('detail.length')}</dt>
+                    <dd>{shortLength(item.duration)}</dd>
+                </Show>
+                <dt>{t('detail.posted')}</dt>
+                <dd>{posted()}</dd>
+                <dt>{t('nav.chats')}</dt>
+                <dd class="detail-chat-line">
+                    <A class="inline-link" href={`/chat/${item.chatId}`}>{props.info?.chatTitle ?? item.chat}</A>
+                    <StarButton chatId={item.chatId} />
+                </dd>
+            </dl>
+        </section>
+    )
+
     return (
         <article class="detail">
-            <div class="detail-hero" classList={{ blank: !art() && !poster() && !backdrop() }} style={!art() && !poster() && !backdrop() ? { background: coverBackground(title()) } : undefined}>
-                <Show when={art()}>
-                    <img class="detail-art" src={art()!} alt="" />
-                </Show>
-                <Show
-                    when={film() && backdrop()}
-                    fallback={
-                        <Show when={poster()} fallback={<Show when={art()}><img class="detail-frame" src={art()!} alt="" /></Show>}>
+            <div class="detail-hero" classList={{ blank: !shown() }} style={!shown() ? { background: coverBackground(title()) } : undefined}>
+                <div class="detail-pic">
+                    <Switch>
+                        <Match when={shown() === 'backdrop'}>
+                            <img class="detail-backdrop" src={backdrop()!} alt="" />
+                        </Match>
+                        <Match when={shown() === 'poster'}>
+                            <img class="detail-poster-soft" src={poster()!} alt="" />
                             <img class="detail-poster" src={poster()!} alt="" />
-                        </Show>
-                    }
-                >
-                    <img class="detail-backdrop" src={backdrop()!} alt="" />
-                </Show>
+                        </Match>
+                        <Match when={shown() === 'frame'}>
+                            <img class="detail-art" src={art()!} alt="" />
+                            <img class="detail-frame" src={art()!} alt="" />
+                        </Match>
+                    </Switch>
+                </div>
                 <div class="detail-fade" />
-                <button type="button" class="detail-close" aria-label={t('detail.close')} title={t('detail.close')} onClick={props.onClose}>
-                    <Icon icon={Cancel01Icon} size={24} />
+                {/* Back at the top start, as every other page leaves (the apps' detail since 2026-10-27). */}
+                <button type="button" class="detail-close" aria-label={t('common.back')} title={t('common.back')} onClick={props.onClose}>
+                    <Icon icon={ArrowLeft02Icon} size={24} />
                 </button>
             </div>
             <div class="detail-body">
@@ -285,51 +339,24 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
                 <Show when={props.info?.protected || !item.canBeSaved}>
                     <p class="notice muted small">{t('detail.protected')}</p>
                 </Show>
-                <Show when={overview()}>
-                    <section class="detail-overview">
-                        <p class="detail-synopsis" classList={{ open: more() }} ref={synopsis}>{overview()}</p>
-                        <Show when={cut() || more()}>
-                            <button type="button" class="link detail-more" onClick={() => setMore(!more())}>{more() ? t('common.less') : t('common.more')}</button>
-                        </Show>
-                        <p class="muted small">{t('metadata.credit', { provider: 'TMDB' })}</p>
-                    </section>
-                </Show>
+                <div class="detail-story" classList={{ side: side() }}>
+                    <Show when={overview()}>
+                        <section class="detail-overview">
+                            <p class="detail-synopsis" classList={{ open: more() }} ref={synopsis}>{overview()}</p>
+                            <Show when={cut() || more()}>
+                                <button type="button" class="link detail-more" onClick={() => setMore(!more())}>{more() ? t('common.less') : t('common.more')}</button>
+                            </Show>
+                            <Show when={tmdbOverview()}>
+                                <p class="muted small">{t('metadata.credit', { provider: 'TMDB' })}</p>
+                            </Show>
+                        </section>
+                    </Show>
+                    <Show when={side()}>{aboutSection()}</Show>
+                </div>
                 <Show when={props.info?.seasons.length}>
                     <Episodes info={props.info!} current={item} />
                 </Show>
-                <section class="detail-about">
-                    <h2 class="detail-section">{t('detail.about')}</h2>
-                    <Show when={credit()}>
-                        <p class="detail-credit">{credit()}</p>
-                    </Show>
-                    <dl>
-                        <Show when={props.info?.fileName}>
-                            <dt>{t('detail.file_name')}</dt>
-                            <dd>{props.info!.fileName}</dd>
-                        </Show>
-                        <Show when={props.info?.height}>
-                            <dt>{t('detail.resolution')}</dt>
-                            <dd>{`${resolution()}${dot}${props.info!.width} × ${props.info!.height}`}</dd>
-                        </Show>
-                        <Show when={container()}>
-                            <dt>{t('detail.video')}</dt>
-                            <dd>{container()}</dd>
-                        </Show>
-                        <dt>{t('detail.size')}</dt>
-                        <dd>{size(item.size)}</dd>
-                        <Show when={item.duration}>
-                            <dt>{t('detail.length')}</dt>
-                            <dd>{shortLength(item.duration)}</dd>
-                        </Show>
-                        <dt>{t('detail.posted')}</dt>
-                        <dd>{posted()}</dd>
-                        <dt>{t('nav.chats')}</dt>
-                        <dd class="detail-chat-line">
-                            <A class="inline-link" href={`/chat/${item.chatId}`}>{props.info?.chatTitle ?? item.chat}</A>
-                            <StarButton chatId={item.chatId} />
-                        </dd>
-                    </dl>
-                </section>
+                <Show when={!side()}>{aboutSection()}</Show>
                 <Show when={extras()?.cast?.length}>
                     <Cast people={extras()!.cast!} />
                 </Show>
