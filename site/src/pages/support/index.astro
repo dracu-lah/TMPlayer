@@ -10,6 +10,7 @@ import FooterPlain from '../../components/plain/FooterPlain.astro';
 import CoffeeButton from '../../components/CoffeeButton.astro';
 import UpiButton from '../../components/UpiButton.astro';
 import { SPONSORS_URL } from '../../lib/support';
+import { text } from '../../i18n/t';
 import ShareLinks from '../../components/support/ShareLinks.astro';
 import { ENGLISH } from '../../i18n/langs';
 
@@ -38,7 +39,7 @@ Astro.locals.lang = ENGLISH;
           <div class="support-coffee support-coffee-start">
             <CoffeeButton label="Buy me a coffee" large />
             <UpiButton label="Pay by UPI (India)" large />
-            <a class="support-alt" href={SPONSORS_URL} rel="noopener"><Icon name="heart-btn" /> Sponsor on GitHub</a>
+            <a class="support-alt" href={SPONSORS_URL} rel="noopener"><Icon name="heart-btn" /> {text('en', 'home.sponsor_on_github')}</a>
           </div>
           <p class="upi-aside">Buy Me a Coffee takes cards and PayPal. Pay by UPI opens GPay, PhonePe, Paytm or any other UPI app on a phone, and shows the QR and the UPI ID on a computer.</p>
         </div>
