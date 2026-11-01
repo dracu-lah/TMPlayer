@@ -41,7 +41,7 @@ export function Chats() {
     // list is whole and some added chat is not in it, so nobody else pays for it.
     const archiveWanted = () => {
         const gate = addedGate()
-        if (!gate?.size || !chats()) return false
+        if (!gate?.size || chats.error || !chats()) return false
         const here = new Set(chats()!.map((c) => c.id))
         return [...gate].some((id) => !here.has(id))
     }

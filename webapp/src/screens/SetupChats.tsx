@@ -29,10 +29,12 @@ export function SetupChats() {
     // The chat list, as far as it has come: the first page is enough to know whether to ask.
     const [seen, setSeen] = createSignal(0)
     const [chats] = createResource(() => call('chats', [false], { onEvent: (e) => void setSeen((e as ChatsEvent).chats.length) }) as Promise<ChatItem[]>)
-    const enough = () => Math.max(seen(), chats()?.length ?? 0) >= STEP_MIN
+    // A resource read after it failed throws, so the failure is asked about first.
+    const whole = () => (chats.error ? undefined : chats())
+    const enough = () => Math.max(seen(), whole()?.length ?? 0) >= STEP_MIN
     // A small account, or a list that will not load (offline), goes on to browse everything, unanswered.
     createEffect(() => {
-        if ((chats() || chats.error) && !enough()) go()
+        if ((chats.error || whole()) && !enough()) go()
     })
 
     const [choice, setChoice] = createSignal<Choice>('all')
