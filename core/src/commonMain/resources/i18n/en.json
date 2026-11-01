@@ -1608,7 +1608,7 @@
     "confirm_title": "{count, plural, one {Select # chat?} other {Select # chats?}}",
     "count_about": "{count, plural, =0 {No videos counted} one {About # video} other {About # videos}}",
     "count_again": "Count again",
-    "count_many": "About 1,000+ videos",
+    "count_many": "1,000+ videos",
     "count_unknown_keys": "Could not count. Press Menu to try again.",
     "count_unknown_touch": "Could not count. Hold to try again.",
     "discard_body": "The chats you ticked will not be added.",

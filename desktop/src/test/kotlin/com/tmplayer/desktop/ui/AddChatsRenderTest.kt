@@ -1,6 +1,7 @@
 package com.tmplayer.desktop.ui
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.Density
@@ -49,6 +50,24 @@ class AddChatsRenderTest {
             AddChatsScreen(chats = CHATS.take(8), listComplete = false, starred = emptySet(), model = model, onClose = {}, partial = true)
         }
         model.stop()
+    }
+
+    @Test
+    fun `while the recommendation is worked out its place is held and the other bands wait`() {
+        // Counts that never answer: the band is not taken within the frames drawn here.
+        val slow = object : ChatCountCalls {
+            override suspend fun videoCount(chatId: Long, localOnly: Boolean): CountAnswer = kotlinx.coroutines.awaitCancellation()
+        }
+        val model = AddChatsViewModel(counts = slow)
+        var held = false
+        shot("add-chats-holding", 1366, 900, true, model) {
+            AddChatsScreen(chats = CHATS, listComplete = true, starred = setOf(102L), model = model, onClose = {})
+            // Read while the screen is up: closing it stops the counting, which ends the wait.
+            val now = model.state.collectAsState().value
+            if (now.recommending) held = true
+        }
+        assertTrue("the band's place was held while it was worked out", held)
+        assertFalse("closing the screen ends the wait", model.state.value.recommending)
     }
 
     /** Renders until the counts have landed (they answer off the main thread), then keeps the last frame. */

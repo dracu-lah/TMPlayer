@@ -101,6 +101,15 @@ import com.tmplayer.ui.onboarding.QuietButton
 import com.tmplayer.ui.onboarding.SetupButton
 import com.tmplayer.ui.settings.Confirm
 import com.tmplayer.ui.theme.Tone
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import com.tmplayer.ui.components.GroupPlace
+import com.tmplayer.ui.components.SettingsSectionLabel
+import com.tmplayer.ui.components.SkeletonBox
+import com.tmplayer.ui.components.groupedCard
+import com.tmplayer.ui.components.rememberShimmer
+import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Tv
 import com.tmplayer.ui.theme.focusRing
 
@@ -284,11 +293,22 @@ fun AddChatsScreen(
                         if (searchField != null) {
                             searchField(typed, onType, s.commonSearch, field)
                         } else {
+                            // In the settings cards' own shape and fill, with the glass in front, as
+                            // the app's other search boxes are, not Material's sharp outlined box.
                             OutlinedTextField(
                                 value = typed,
                                 onValueChange = onType,
                                 singleLine = true,
                                 placeholder = { Text(s.commonSearch) },
+                                leadingIcon = { Icon(TmIcons.Search, contentDescription = null, tint = Tone.muted) },
+                                shape = RoundedCornerShape(Corner.Large),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedContainerColor = Tone.surface,
+                                    unfocusedContainerColor = Tone.surface,
+                                    focusedBorderColor = Tone.accent,
+                                    unfocusedBorderColor = Tone.outline,
+                                    cursorColor = Tone.accent,
+                                ),
                                 modifier = field,
                             )
                         }
@@ -348,17 +368,16 @@ fun AddChatsScreen(
                     }
                 }
                 val bands = rows.groupBy { it.band }
+                // The Recommended band is worked out in the first seconds and lands above every other
+                // band, which moved the row under a click or a finger down a whole band. Until it is
+                // taken its place is held by placeholders, and the bands under it wait with it.
+                val holding = state.recommending && state.query.isBlank() && state.scope == ChatPicking.Scope.All
+                val divider = 16.dp + (if (tv) 52.dp else 44.dp) + 12.dp
                 for ((band, inBand) in bands) {
-                    val label = if (bands.size > 1) bandLabel(band, s) else null
+                    if (holding && band != ChatPicking.Band.Saved) continue
+                    val label = if (bands.size > 1 || holding) bandLabel(band, s) else null
                     if (label != null) {
-                        item(key = "band-$band") {
-                            Text(
-                                label,
-                                style = MaterialTheme.typography.titleSmall,
-                                color = Tone.muted,
-                                modifier = Modifier.padding(top = 14.dp, bottom = 4.dp).semantics { heading() },
-                            )
-                        }
+                        item(key = "band-$band") { BandLabel(label) }
                     }
                     if (band == ChatPicking.Band.Recommended && state.belowBar) {
                         item(key = "below-bar") {
@@ -366,16 +385,17 @@ fun AddChatsScreen(
                                 s.pickerBelowBar(ChatSuggestions.MIN_VIDEOS),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Tone.muted,
-                                modifier = Modifier.padding(bottom = 4.dp),
+                                modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
                             )
                         }
                     }
-                    items(inBand, key = { it.id }) { row ->
+                    itemsIndexed(inBand, key = { _, row -> row.id }) { index, row ->
                         // Only a row on screen is counted: this effect leaves with the row.
                         if (row.band != ChatPicking.Band.Gone) LaunchedEffect(row.id) { model.count(row.id) }
                         val ticked = row.id in state.ticked
+                        val card = Modifier.groupedCard(GroupPlace(first = index == 0, last = index == inBand.lastIndex), divider)
                         if (row.band == ChatPicking.Band.Gone) {
-                            GoneRow(row, tv, onRemove = { model.toggle(row.id) })
+                            GoneRow(row, tv, card, onRemove = { model.toggle(row.id) })
                         } else {
                             val shape = ChatSuggestions.shape(state.counted[row.id])
                             PickRow(
@@ -383,11 +403,20 @@ fun AddChatsScreen(
                                 ticked = ticked,
                                 shape = shape,
                                 tv = tv,
+                                modifier = card,
                                 onToggle = { tick(!ticked); model.toggle(row.id) },
                                 onCountAgain = { model.countAgain(row.id) },
                                 onToggleStar = { model.toggleStar(row.id) },
                                 onSelectAll = selectAllNow,
                             )
+                        }
+                    }
+                }
+                if (holding) {
+                    item(key = "band-recommended-held") {
+                        Column {
+                            BandLabel(s.pickerBandRecommended)
+                            PickSkeleton(rows = HELD_ROWS, tv = tv, divider = divider)
                         }
                     }
                 }
@@ -414,8 +443,14 @@ fun AddChatsScreen(
                     },
                     onNo = { asking = null },
                 )
+                // The running total and Done on a card of their own, so the foot reads as the bar it
+                // is rather than words left under the list.
                 null -> Row(
-                    Modifier.fillMaxWidth().padding(top = 8.dp, bottom = if (form == DeviceForm.Phone) 12.dp else 0.dp),
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp, bottom = if (form == DeviceForm.Phone) 12.dp else 0.dp)
+                        .groupedCard(GroupPlace.Alone)
+                        .padding(start = ROW_INSET, end = 10.dp, top = 10.dp, bottom = 10.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -466,6 +501,7 @@ private fun PickRow(
     onCountAgain: () -> Unit,
     onToggleStar: () -> Unit,
     onSelectAll: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val s = LocalStrings.current
     val interactions = remember { MutableInteractionSource() }
@@ -477,7 +513,7 @@ private fun PickRow(
     val avatar = if (tv) 52.dp else 44.dp
     val retry = s.pickerCountAgain
     Row(
-        Modifier
+        modifier
             .fillMaxWidth()
             .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
@@ -519,7 +555,7 @@ private fun PickRow(
                 onLongClick = if (unknown) onCountAgain else onToggleStar,
                 onClick = onToggle,
             )
-            .padding(horizontal = 8.dp, vertical = 6.dp),
+            .padding(horizontal = ROW_INSET, vertical = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -594,10 +630,10 @@ private fun CountLine(shape: ChatSuggestions.CountShape, ink: Color, tv: Boolean
  * is pressed.
  */
 @Composable
-private fun GoneRow(row: ChatPicking.Row, tv: Boolean, onRemove: () -> Unit) {
+private fun GoneRow(row: ChatPicking.Row, tv: Boolean, modifier: Modifier, onRemove: () -> Unit) {
     val s = LocalStrings.current
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+        modifier.fillMaxWidth().padding(horizontal = ROW_INSET, vertical = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -647,6 +683,56 @@ private fun scopeLabel(scope: ChatPicking.Scope, s: com.tmplayer.i18n.Messages):
     ChatPicking.Scope.Groups -> s.browseFilterGroups
     ChatPicking.Scope.People -> s.browseFilterPeople
 }
+
+/** A row's words and box sit this far in from its card's edges, as a settings row's do. */
+private val ROW_INSET = 16.dp
+
+/** How many placeholder rows hold the Recommended band's place while it is worked out. */
+private const val HELD_ROWS = 5
+
+/** A band's name over its card, in the settings sections' small capitals and in line with the rows' words. */
+@Composable
+private fun BandLabel(label: String) {
+    SettingsSectionLabel(
+        label,
+        Modifier.padding(start = ROW_INSET, end = ROW_INSET, top = 20.dp, bottom = 8.dp).semantics { heading() },
+    )
+}
+
+/**
+ * The Recommended band's stand in: rows shaped like the real ones (a round picture, a name, a
+ * count and a box) in the same card, shimmering, so the band arrives into the place it was
+ * already given.
+ */
+@Composable
+private fun PickSkeleton(rows: Int, tv: Boolean, divider: Dp) {
+    val shimmer = rememberShimmer()
+    val avatar = if (tv) 52.dp else 44.dp
+    val words = LocalStrings.current.pickerLoading
+    Column(Modifier.semantics(mergeDescendants = true) { contentDescription = words }) {
+        repeat(rows) { index ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .groupedCard(GroupPlace(first = index == 0, last = index == rows - 1), divider)
+                    .padding(horizontal = ROW_INSET, vertical = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                SkeletonBox(shimmer, Modifier.size(avatar), CircleShape)
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Names of differing lengths, as a real list has.
+                    SkeletonBox(shimmer, Modifier.fillMaxWidth(NAME_WIDTHS[index % NAME_WIDTHS.size]).height(if (tv) 16.dp else 14.dp))
+                    SkeletonBox(shimmer, Modifier.width(if (tv) 120.dp else 96.dp).height(if (tv) 12.dp else 10.dp))
+                }
+                SkeletonBox(shimmer, Modifier.size(20.dp), RoundedCornerShape(Corner.Small))
+            }
+        }
+    }
+}
+
+/** The placeholder names' widths, as shares of the row. */
+private val NAME_WIDTHS = floatArrayOf(0.55f, 0.4f, 0.65f, 0.35f, 0.5f)
 
 /** What a band's heading says; Saved Messages is one row and needs none. */
 private fun bandLabel(band: ChatPicking.Band, s: com.tmplayer.i18n.Messages): String? = when (band) {

@@ -43,6 +43,9 @@ class AddChatsViewModel(
      * @param counted each chat's videos as they arrive; a chat absent from here is still counting.
      * @param recommended the Recommended band, taken once and then left alone, so no row moves
      *   under a finger as the counts come in.
+     * @param recommending true from the first open until the Recommended band is taken (at most
+     *   [RECOMMEND_BY_MS]), while the screen holds the band's place with a skeleton so no row
+     *   moves under a finger or a click when it lands.
      * @param saving true while the choice is being written, so Done cannot run twice.
      * @param saved true once it is written and the screen may close.
      */
@@ -53,6 +56,7 @@ class AddChatsViewModel(
         val counted: Map<Long, ChatCount> = emptyMap(),
         val recommended: List<Long> = emptyList(),
         val belowBar: Boolean = false,
+        val recommending: Boolean = false,
         val saving: Boolean = false,
         val saved: Boolean = false,
     )
@@ -98,6 +102,7 @@ class AddChatsViewModel(
      */
     fun start(chats: List<ChatSummary>) {
         if (headStart != null || chats.isEmpty() || counts == null) return
+        if (_state.value.recommended.isEmpty()) _state.update { it.copy(recommending = true) }
         headStart = viewModelScope.launch {
             val jobs = ChatPicking.headStart(chats).mapNotNull { id ->
                 count(id)
@@ -109,6 +114,9 @@ class AddChatsViewModel(
             // measured at 20.9 s before this.
             withTimeoutOrNull(RECOMMEND_BY_MS) { jobs.joinAll() }
             recommend(chats)
+            // The list is shown from here on whatever came of it: offline, a band that arrives
+            // later is better than a screen of placeholders for as long as the line is down.
+            _state.update { it.copy(recommending = false) }
             // Nothing answered in time at all (offline, a cold database): rather than leave the
             // band empty for the session, it waits for the head start and takes it then.
             if (_state.value.recommended.isEmpty()) {
@@ -226,6 +234,8 @@ class AddChatsViewModel(
     fun stop() {
         headStart?.cancel()
         headStart = null
+        // A head start cut short never takes the band, so nothing is left waiting on it.
+        _state.update { it.copy(recommending = false) }
         counting.values.toList().forEach { it.cancel() }
         counting.clear()
     }
