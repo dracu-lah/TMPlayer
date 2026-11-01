@@ -1,10 +1,8 @@
 ---
 // The site footer, on every page (FooterPlain and ChangelogFooter render this one). The brand with
 // the app's mark, its one line and the profiles on the start side; the pages in four labelled
-// columns; and a bottom row with the licence line and the policy pages. Buy Me a Coffee stays the
-// larger button in its own brand, with GitHub Sponsors the quieter link under it.
-import { versioned } from '../lib/asset-version';
-import { BMC_URL, SPONSORS_URL } from '../lib/support';
+// columns; and a bottom row with the licence line and the policy pages. The Community column ends with one
+// "Sponsor me" link to the support page, which holds the coffee, UPI and GitHub Sponsors options.
 import Icon from './Icon.astro';
 import T from './T.astro';
 import { text } from '../i18n/t';
@@ -12,7 +10,6 @@ import { l } from '../i18n/links';
 
 const lang = Astro.locals.lang;
 const t = (k: string) => text(lang, k);
-const cup = versioned('/brand/bmc-cup-on-yellow.svg');
 
 // TMPlayer Music, the sibling app for the audio files in your own Telegram chats, by the same
 // author. ON now that music.tmplayer.org has a release: the bottom row names it beside nevil.dev,
@@ -70,8 +67,7 @@ const SHOW_MUSIC_LINK = true;
             <li><a href="https://t.me/tmplayer_chat" rel="noopener"><T k="common.telegram_group" /></a></li>
             <li><a href="https://github.com/dracu-lah/TMPlayer/discussions" rel="noopener"><T k="common.discussions" /></a></li>
             <li><a href={l(lang, '/translate/')}><T k="common.translate" /></a></li>
-            <li><a class="footer-bmc" data-bmc href={BMC_URL} rel="noopener"><img src={cup} alt="" width="10" height="14" loading="lazy" decoding="async"> <T k="home.buy_me_a_coffee" /></a></li>
-            <li><a href={SPONSORS_URL} rel="noopener"><T k="common.sponsor" /></a></li>
+            <li><a href={l(lang, '/support/')}><T k="common.sponsor" /></a></li>
           </ul>
         </div>
       </nav>

@@ -27,23 +27,18 @@ Astro.locals.lang = ENGLISH;
 <main id="main" class="policy-page">
   <div class="wrap policy-wrap">
     <p class="eyebrow">Support the project</p>
-    <h1>Support TMPlayer</h1>
+    <h1>Support <span class="support-mark icon-play" aria-hidden="true"><Icon name="hand-heart" /></span> TMPlayer</h1>
     <p class="policy-lede">TMPlayer is free and open source: no ads, no paid tier, no account of ours. Everything here is voluntary and unlocks nothing.</p>
 
     <section id="chip-in">
-      <div class="cover-icon-row">
-        <div class="cover-icon icon-play"><Icon name="hand-heart" /></div>
-        <div class="cover-icon-body">
-          <h2>Chip in</h2>
-          <p>If TMPlayer saves you some bother, a coffee or a monthly sponsorship pays for the time that goes into it. Any amount counts, and the smallest one is not a small thing.</p>
-          <div class="support-coffee support-coffee-start">
-            <CoffeeButton label="Buy me a coffee" large />
-            <UpiButton label="Pay by UPI (India)" large />
-            <a class="support-alt" href={SPONSORS_URL} rel="noopener"><Icon name="heart-btn" /> {text('en', 'home.sponsor_on_github')}</a>
-          </div>
-          <p class="upi-aside">Buy Me a Coffee takes cards and PayPal. Pay by UPI opens GPay, PhonePe, Paytm or any other UPI app on a phone, and shows the QR and the UPI ID on a computer.</p>
-        </div>
+      <h2>Chip in</h2>
+      <p>If TMPlayer saves you some bother, a coffee or a monthly sponsorship pays for the time that goes into it. Any amount counts, and the smallest one is not a small thing.</p>
+      <div class="support-coffee support-coffee-start">
+        <CoffeeButton label="Buy me a coffee" large />
+        <UpiButton label="Pay by UPI (India)" large />
+        <a class="support-alt" href={SPONSORS_URL} rel="noopener"><Icon name="heart-btn" /> {text('en', 'home.sponsor_on_github')}</a>
       </div>
+      <p class="upi-aside">Buy Me a Coffee takes cards and PayPal. Pay by UPI opens GPay, PhonePe, Paytm or any other UPI app on a phone, and shows the QR and the UPI ID on a computer.</p>
     </section>
 
     <section id="star">

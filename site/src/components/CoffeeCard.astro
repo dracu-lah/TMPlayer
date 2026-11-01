@@ -1,35 +1,36 @@
 ---
-// The Buy Me a Coffee card that floats at the bottom of the page's start edge (bottom left, bottom
-// right on a right-to-left page). Asked for on 2026-10-18.
+// The support card that floats at the bottom of the page's start edge (bottom left, bottom right on
+// a right-to-left page). Asked for on 2026-10-18; revamped on 2026-11-01 to offer both ways to
+// chip in: Google Pay (UPI, which is how most of the readers here pay) and Buy Me a Coffee (cards
+// and PayPal).
 //
 // The card is written hidden and app.js shows it once the page has loaded and gone idle, with a
 // short slide and fade (none under reduced motion). It is position: fixed, so it moves nothing
-// when it arrives. On a phone it is a small pill; on a wider screen it is a card with the question
-// over the brand's words. It steps out of the way while the footer or the page's own support offer
-// is on screen, and on a phone it stands above the download bar. The x hides it for this page view
+// when it arrives. It stands above the download bar on a phone. The x hides it for this page view
 // only, on purpose: the next page or a reload brings it back, and nothing is stored.
 //
-// The card is one link to the Buy Me a Coffee page, which app.js opens over the site in
-// CoffeeDialog like the site's other support links (user, 2026-10-20; no scan code on the card,
-// 2026-10-18). The x is a separate
-// button beside the link. With scripting off, the card never appears. Every word is a catalog
-// string, so it arrives translated.
+// The two buttons are the site's own UpiButton and CoffeeButton, so they keep each brand's colours
+// and behaviour: the UPI link opens a UPI app on a phone and UpiDialog (QR and ID) elsewhere, the
+// coffee link opens CoffeeDialog. With scripting off, the card never appears. Every word is a
+// catalog string, so it arrives translated.
 import Icon from './Icon.astro';
+import CoffeeButton from './CoffeeButton.astro';
+import UpiButton from './UpiButton.astro';
 import { text } from '../i18n/t';
-import { versioned } from '../lib/asset-version';
-import { BMC_URL } from '../lib/support';
 
 const t = (k: string) => text(Astro.locals.lang, k);
-const cup = versioned('/brand/bmc-cup-on-yellow.svg');
 const hide = t('home.bmc_hide');
 ---
 <aside class="bmc-float" id="bmc-float" aria-label={t('home.support_tmplayer')} hidden>
-  <a class="bmc-float-link" data-bmc href={BMC_URL} rel="noopener" target="_blank">
-    <span class="bmc-tile" aria-hidden="true"><img src={cup} alt="" width="14" height="20" loading="lazy" decoding="async"></span>
-    <span class="bmc-float-text">
-      <span class="bmc-float-title">{t('home.bmc_card_title')}</span>
-      <span class="bmc-float-line">{t('home.buy_me_a_coffee')}</span>
-    </span>
-  </a>
-  <button type="button" class="bmc-float-close" data-bmc-hide aria-label={hide} title={hide}><Icon name="close" /></button>
+  <div class="bmc-float-head">
+    <div class="bmc-float-text">
+      <p class="bmc-float-title">{t('home.bmc_card_title')}</p>
+      <p class="bmc-float-line">{t('home.bmc_card_line')}</p>
+    </div>
+    <button type="button" class="bmc-float-close" data-bmc-hide aria-label={hide} title={hide}><Icon name="close" /></button>
+  </div>
+  <div class="bmc-float-actions">
+    <UpiButton label={t('home.bmc_card_upi')} />
+    <CoffeeButton label={t('home.bmc_card_coffee')} />
+  </div>
 </aside>

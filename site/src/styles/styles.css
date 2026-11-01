@@ -2128,6 +2128,19 @@ kbd {
 }
 .cover-icon svg { width: 38px; height: 38px; }
 .cover-icon-body { min-width: 0; }
+/* The hand holding a heart, inline between "Support" and "TMPlayer" in the support page's title,
+   tipped a little so it reads as a gesture. It is sized in em, so it follows the title's size. */
+.support-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 0.95em;
+  height: 0.95em;
+  margin-inline: 0.06em;
+  border-radius: 28%;
+  vertical-align: 0.07em;
+  transform: rotate(-8deg);
+}
+.support-mark svg { width: 0.5em; height: 0.5em; }
 @media (max-width: 639px) {
   .cover-icon-row { flex-direction: column; gap: 0; }
   .cover-icon { width: 100%; height: 132px; border-radius: 0; }
@@ -2207,21 +2220,6 @@ kbd {
 .footer-cols ul { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
 .footer-cols a { color: var(--on-surface-variant); font-size: 0.9rem; line-height: 1.4; transition: color 0.2s var(--ease-standard); }
 .footer-cols a:hover { color: var(--on-surface); text-decoration: none; }
-/* Buy Me a Coffee keeps its own yellow and cup, the larger of the two support links. */
-.footer-cols a.footer-bmc {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 6px 12px;
-  border-radius: var(--shape-full);
-  background: var(--bmc-yellow);
-  color: var(--bmc-ink);
-  font-weight: 600;
-  font-size: 0.86rem;
-  white-space: nowrap;
-}
-.footer-cols a.footer-bmc:hover { color: var(--bmc-ink); }
-.footer-bmc img { flex: none; width: 10px; height: 14px; }
 
 .footer-bottom {
   display: flex;
@@ -3656,8 +3654,22 @@ button.btn { font: inherit; font-weight: 600; font-size: 0.98rem; cursor: pointe
 .support-coffee .btn { width: min(100%, 380px); justify-content: center; }
 .support-more-solo .support-coffee { margin-bottom: 0; }
 /* The support page is left-aligned prose. */
-.support-coffee-start { align-items: flex-start; margin-inline: 0; }
-.support-coffee-start .support-alt { margin-inline-start: -12px; }
+/* On the support page the buttons sit in two equal columns that start at the text's edge, so the
+   coffee, UPI and star buttons share one width and one left line in every card. The sponsor link
+   takes its own row under them, flush with the text. */
+.support-coffee-start {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  justify-items: stretch;
+  gap: 12px;
+  margin: 24px 0 8px;
+}
+.support-coffee-start .btn { width: 100%; padding-inline: 16px; white-space: normal; text-align: center; }
+.support-coffee-start .support-alt { grid-column: 1 / -1; justify-self: start; margin-inline-start: -12px; }
+@media (max-width: 639px) {
+  .support-coffee-start { grid-template-columns: minmax(0, 1fr); }
+}
 
 /* The Buy Me a Coffee page over the site (CoffeeDialog.astro): their widget page in a frame the
    size their widget script gives it, 420 px wide and nearly the window's height, full screen on a
@@ -3712,36 +3724,23 @@ button.btn { font: inherit; font-weight: 600; font-size: 0.98rem; cursor: pointe
   .bmc-dialog[open] { animation: none; }
 }
 
-/* The yellow tile the cup stands on, in the floating card. */
-.bmc-tile {
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: 36px;
-  height: 36px;
-  border-radius: var(--shape-full);
-  background: var(--bmc-yellow);
-  transition: transform 0.3s var(--ease-emphasised);
-}
-.bmc-tile img { width: 14px; height: 20px; }
-.bmc-float .bmc-tile { width: 42px; height: 42px; }
-.bmc-float .bmc-tile img { width: 16px; height: 23px; }
-
-/* The floating card. Above the page and the download bar, under the back to top button. */
+/* The floating support card: the question and the x on top, the two ways to chip in under it
+   (UPI and Buy Me a Coffee, each in its own brand colours). Above the page and the download bar,
+   under the back to top button. One radius family: the card is --shape-xl, the buttons --shape-l. */
 .bmc-float {
   position: fixed;
   inset-inline-start: clamp(12px, 2.5vw, 32px);
   bottom: clamp(16px, 3vw, 32px);
   z-index: 38;
-  display: flex;
-  align-items: center;
+  display: grid;
+  gap: 12px;
   /* Clear of the back to top button on the other side. */
-  max-width: calc(100% - 96px);
+  width: min(340px, calc(100% - 96px));
+  padding: 14px;
   border: 1px solid var(--outline-variant);
-  border-radius: var(--shape-full);
+  border-radius: var(--shape-xl);
   background: var(--surface-container-low);
   color: var(--on-surface);
-  
   opacity: 0;
   visibility: hidden;
   transform: translate3d(0, 18px, 0);
@@ -3754,45 +3753,18 @@ button.btn { font: inherit; font-weight: 600; font-size: 0.98rem; cursor: pointe
 .bmc-float[hidden] { display: none; }
 .bmc-float.is-on:not(.is-away) { opacity: 1; visibility: visible; transform: none; transition-delay: 0s; }
 .bmc-float:hover { border-color: var(--outline); }
-.bmc-float-link {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  min-height: 56px;
-  padding: 8px;
-  padding-inline-end: 4px;
-  border-radius: inherit;
-  color: inherit;
-  text-decoration: none;
-}
-.bmc-float-link:hover { text-decoration: none; }
-
-.bmc-float-text { display: grid; min-width: 0; }
-/* On a phone the question is read out but not shown, so the link's name is the same everywhere. */
-.bmc-float-title {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-}
-.bmc-float-line {
-  overflow: hidden;
-  font-size: 1rem;
-  font-weight: 600;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
+.bmc-float-head { display: flex; align-items: flex-start; gap: 8px; }
+.bmc-float-text { display: grid; gap: 2px; min-width: 0; flex: 1; padding-inline-start: 2px; padding-top: 2px; }
+.bmc-float-title { margin: 0; font-size: 1.05rem; font-weight: 600; line-height: 1.3; color: var(--on-surface); }
+.bmc-float-line { margin: 0; font-size: 0.88rem; font-weight: 500; line-height: 1.4; color: var(--on-surface-variant); }
 .bmc-float-close {
   flex: none;
   display: inline-grid;
   place-items: center;
   width: 40px;
   height: 40px;
-  margin-inline-end: 4px;
+  margin-block: -8px;
+  margin-inline-end: -8px;
   padding: 0;
   border: 0;
   border-radius: var(--shape-full);
@@ -3800,33 +3772,35 @@ button.btn { font: inherit; font-weight: 600; font-size: 0.98rem; cursor: pointe
   color: var(--on-surface-variant);
   cursor: pointer;
 }
-.bmc-float-close svg { width: 18px; height: 18px; }
+.bmc-float-close svg { width: 16px; height: 16px; }
 .bmc-float-close:hover { background: var(--surface-container-high); color: var(--on-surface); }
+.bmc-float-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.bmc-float-actions .btn {
+  min-height: 44px;
+  padding: 8px 10px;
+  gap: 8px;
+  border-radius: var(--shape-l);
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+.bmc-float-actions .btn span { overflow: hidden; text-overflow: ellipsis; }
+.bmc-float-actions .btn-upi .upi-mark { width: 22px; height: 22px; }
+.bmc-float-actions .btn:active { transform: scale(0.98); }
 /* Above the download bar while it shows, as the back to top button does. */
 @media (max-width: 699px) {
   .get-bar-on .bmc-float { bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
 }
-
-/* From a small tablet up: a card, with the question over the brand's words. */
-@media (min-width: 640px) {
-  .bmc-float { border-radius: var(--shape-xl); max-width: 440px; }
-  .bmc-float-link { gap: 16px; padding: 14px 16px; padding-inline-end: 6px; }
-  .bmc-float .bmc-tile { width: 56px; height: 56px; border-radius: var(--shape-l); }
-  .bmc-float .bmc-tile img { width: 21px; height: 30px; }
-  .bmc-float-title { position: static; display: block; width: auto; height: auto; margin: 0; clip: auto; overflow: hidden; font-size: 1.05rem; font-weight: 600; line-height: 1.35; white-space: nowrap; text-overflow: ellipsis; }
-  .bmc-float-line { color: var(--on-surface-variant); font-size: 0.95rem; font-weight: 500; line-height: 1.35; }
-  .bmc-float-close { align-self: flex-start; width: 36px; height: 36px; margin: 8px; margin-inline-start: 0; }
-  .bmc-float-close svg { width: 16px; height: 16px; }
+/* Narrow phones: the buttons stack so a long translation still fits. */
+@media (max-width: 460px) {
+  .bmc-float-actions { grid-template-columns: 1fr; }
 }
 @media (prefers-reduced-motion: reduce) {
   .bmc-float { transform: none; transition: opacity 0.2s linear, visibility 0s linear 0.2s; }
-  .bmc-tile { transition: none; }
-  .bmc-float-link:hover .bmc-tile { transform: none; }
+  .bmc-float-actions .btn:active { transform: none; }
 }
 @media (hover: none) {
   .btn-bmc:hover { box-shadow: none; }
   .bmc-float:hover { border-color: var(--outline-variant); }
-  .bmc-float-link:hover .bmc-tile { transform: none; }
   .support-alt:hover { background: transparent; color: var(--on-surface-variant); }
 }
 
@@ -5195,4 +5169,4 @@ html.dl-tabs-live[data-dl-tab] .platforms > .platform { animation: dl-tab-in 0.2
 /* ==== end Header pages ==== */
 
 /* The line under the two pay buttons on /support/, which says what each of them takes. */
-.upi-aside { max-width: 62ch; margin-top: 14px; color: var(--on-surface-variant); font-size: 0.94rem; }
+.upi-aside { max-width: none; margin-top: 0; padding-top: 14px; border-top: 1px solid var(--outline-variant); color: var(--on-surface-variant); font-size: 0.94rem; }
