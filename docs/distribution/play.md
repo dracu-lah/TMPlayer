@@ -74,6 +74,63 @@ What keeps TMPlayer clear of the same:
 - **A way to report.** CP35's Report action for chats, since Play treats an app that shows other
   people's posts as user generated content.
 
+## What the research found (2026-11-02)
+
+No source states why TMP, Telegram Video Player or TelePlayer left Play; nothing public was found
+beyond the TMP developer's own words. The documented cases of look-alike and player apps show the
+likely routes:
+
+- **Telegram+ (2015).** Removed for "intellectual property and impersonation" after Google asked
+  for proof the client was authorized. Telegram said it had not asked for the removal. It came
+  back with an all caps "unofficial" disclaimer and one feature cut at Telegram's request.
+  <https://www.androidpolice.com/2015/03/03/telegram-from-the-former-dev-of-whatsapp-pulled-from-the-play-store-by-google-for-impersonation-of-telegram/>
+- **Perfect Player (2019).** A pay-TV company's copyright complaint said the app let people watch
+  its channels. The app ships with no playlists, yet it was removed until a counter-notice. A
+  player with no content of its own is not safe from a complaint.
+  <https://torrentfreak.com/google-play-removes-perfect-player-after-bogus-copyright-complaint-191019/>
+- **Downloader (browser app).** Removed under the "Unauthorized Use of Copyrighted Content"
+  policy after an infringement notice. <https://torrentfreak.com/?p=235348>
+- **Pirate Bay front ends (2014).** Pulled with no notice and no chance to fix, appeals refused,
+  policy strikes on the accounts. Too many strikes end the developer account.
+- **User generated content.** An app that shows other people's posts must let users report and
+  block content and users, and moderate it. <https://support.google.com/googleplay/android-developer/answer/9876937>
+
+So the three routes are: look-alike or impersonation, a copyright complaint about what the app can
+play, and the user generated content rules. A removal can also come without a stated reason.
+
+## Don't dos
+
+- **Don't use Telegram's name, logo or colours as the app's identity.** Title "TMPlayer", own
+  icon, and "unofficial, not affiliated with Telegram" in the first line of the description.
+- **Don't show real titles, posters or channel names** in the listing, screenshots, the demo or
+  the reviewer notes. Demo clips only, openly licensed.
+- **Don't say "watch movies", "free movies", "stream any film" or "uploader"**, in any field or
+  language. A player for the videos already in your own chats, nothing more.
+- **Don't ship or link content.** No built-in channel list, no search that finds public channels
+  for the viewer, no link to a channel that carries copyrighted video. Perfect Player shows an
+  empty player still gets a complaint.
+- **Don't set `ignore_platform_restrictions`** and don't remove the `MediaMapper` restriction
+  skip in the Play build.
+- **Don't keep the updater, `REQUEST_INSTALL_PACKAGES`, donation or sponsor links** in the Play
+  flavor. Play policy bans self updates and outside payment prompts.
+- **Don't submit without reviewer access.** The demo mode is found from the first screen and the
+  steps are in "App access". Test it on a fresh install.
+- **Don't skip Report and Block.** Chats and their videos get a Report action and a hide option
+  before the first submission.
+- **Don't let the Data safety form drift** from the privacy page or the real behaviour (Sentry is
+  opt in, the Telegram session stays on the device).
+- **Don't change the foreground service types or permissions** after approval without a new
+  declaration and video.
+- **Don't ignore a complaint.** Reply within the stated days, with a counter-notice if the claim is
+  wrong. Don't upload a second listing or a second account to get around a removal: that
+  endangers the whole developer account.
+- **Don't let strikes pile up.** After any warning, fix the cause in the next update before it
+  repeats.
+- **Don't test with a real account in a recording.** Videos and screenshots use a throwaway
+  account with demo chats.
+- **Don't let a release silently change the store build.** Every Play update re-reads this list
+  and the Telegram terms check in [telegram-apps.md](telegram-apps.md).
+
 ## Developer verification (also for the GitHub APK)
 
 Since 2026-09-30 certified Android devices in Brazil, Indonesia, Singapore and Thailand install
