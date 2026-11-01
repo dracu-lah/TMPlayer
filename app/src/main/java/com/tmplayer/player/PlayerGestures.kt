@@ -19,7 +19,9 @@ import kotlin.math.roundToInt
  * the controls (or plays and pauses, if the viewer chose that); a double tap on a side jumps, and
  * every further tap on the same side adds another jump with a running total; a double tap in the
  * middle plays and pauses; a held finger plays fast until it lifts; a sideways drag scrubs; a
- * vertical drag on the left is brightness and on the right volume; a pinch steps the fitting.
+ * vertical drag on the left is brightness and on the right volume; a pinch zooms the picture
+ * freely around the fingers, and once it is enlarged one or two fingers move it about, as in VLC
+ * (on Android 6, where the video surface cannot follow a zoom, a pinch steps the fitting instead).
  *
  * Fed from the activity's own [android.app.Activity.dispatchTouchEvent] rather than attached to
  * the video view, because once the controller is up its buttons and scrub bar are the views under
@@ -44,6 +46,22 @@ class PlayerGestures(
     private val onScrub: (deltaMs: Long, targetMs: Long, durationMs: Long, rate: Float) -> Unit = { _, _, _, _ -> },
     private val onScrubEnd: () -> Unit = {},
     private val onPinch: (expanding: Boolean) -> Unit = {},
+    /**
+     * Whether a pinch starting now zooms freely ([onZoom]) rather than stepping the fitting
+     * ([onPinch]): false in 3D, while locked, for sound alone, and where the surface cannot follow.
+     */
+    private val zoomAllowed: () -> Boolean = { false },
+    /** True while the picture is enlarged, when a one finger drag moves it instead of its usual job. */
+    private val zoomed: () -> Boolean = { false },
+    /**
+     * One step of a free pinch: the scale change since the last, the point between the fingers in
+     * window pixels, and how far that point moved (the two finger drag).
+     */
+    private val onZoom: (factor: Float, focusX: Float, focusY: Float, dx: Float, dy: Float) -> Unit = { _, _, _, _, _ -> },
+    /** The fingers of a free pinch lifted, or the pinch was cut short. */
+    private val onZoomEnd: () -> Unit = {},
+    /** A one finger drag on the enlarged picture, in pixels. */
+    private val onPan: (dx: Float, dy: Float) -> Unit = { _, _ -> },
     /** Where the video is now and how long it is, for the drag that scrubs. */
     private val positionMs: () -> Long = { 0L },
     private val durationMs: () -> Long = { 0L },
@@ -173,6 +191,15 @@ class PlayerGestures(
                 val from = start ?: return false
                 if (viewHeight <= 0) return false
                 if (controlsVisible || scaling || holding) return false
+                // Enlarged, a drag moves the picture (VLC's way): brightness, volume and the
+                // sideways scrub wait until it is back at 100 per cent, where they work as ever.
+                if (dragKind == DRAG_PAN || (dragKind == DRAG_NONE && zoomed())) {
+                    dragKind = DRAG_PAN
+                    onPan(-distanceX, -distanceY)
+                    return true
+                }
+                // The finger left down after a pinch is still the pinch's, never a volume drag.
+                if (pinched) return false
                 if (dragKind == DRAG_NONE && !begin(from, event)) return false
 
                 // Measured from where the finger went down rather than summed step by step, so a
@@ -205,17 +232,42 @@ class PlayerGestures(
     /** True between the first and last finger of a pinch, so no drag is read out of it. */
     private var scaling = false
 
+    /** True from a pinch's start to the end of the touch it was part of. */
+    private var pinched = false
+
+    /** True while the pinch under way drives the free zoom, and where its fingers' centre was last. */
+    private var zooming = false
+    private var lastFocusX = 0f
+    private var lastFocusY = 0f
+
+    private fun endZoom() {
+        if (!zooming) return
+        zooming = false
+        onZoomEnd()
+    }
+
     private val scaleDetector = ScaleGestureDetector(
         context,
         object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
 
             override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
                 scaling = true
+                pinched = true
                 dragKind = DRAG_NONE
+                zooming = zoomAllowed()
+                lastFocusX = detector.focusX
+                lastFocusY = detector.focusY
                 return true
             }
 
             override fun onScale(detector: ScaleGestureDetector): Boolean {
+                if (zooming) {
+                    // Every step, so the picture follows the fingers; true resets the factor.
+                    onZoom(detector.scaleFactor, detector.focusX, detector.focusY, detector.focusX - lastFocusX, detector.focusY - lastFocusY)
+                    lastFocusX = detector.focusX
+                    lastFocusY = detector.focusY
+                    return true
+                }
                 // One step per pinch, not one per frame: the control has three stops, and
                 // reporting every intermediate scale factor would run through all of them
                 // before the fingers finished moving.
@@ -232,9 +284,14 @@ class PlayerGestures(
 
             override fun onScaleEnd(detector: ScaleGestureDetector) {
                 scaling = false
+                endZoom()
             }
         },
-    )
+    ).apply {
+        // A double tap held and dragged would zoom, and the second tap of a run of double tap
+        // seeks lands exactly like that: the run keeps its taps.
+        isQuickScaleEnabled = false
+    }
 
     /**
      * Offers one touch event to the gestures. Whether the event goes on to the views underneath is
@@ -269,6 +326,8 @@ class PlayerGestures(
             fine = null
             dragKind = DRAG_NONE
             scaling = false
+            pinched = false
+            endZoom()
         }
         return false
     }
@@ -289,6 +348,8 @@ class PlayerGestures(
         fine = null
         dragKind = DRAG_NONE
         scaling = false
+        pinched = false
+        endZoom()
         onChrome = false
     }
 
@@ -401,6 +462,7 @@ class PlayerGestures(
         private const val DRAG_BRIGHTNESS = 1
         private const val DRAG_VOLUME = 2
         private const val DRAG_SEEK = 3
+        private const val DRAG_PAN = 4
 
         /**
          * Which side of the picture a figure belongs on: each gesture's indicator comes up where

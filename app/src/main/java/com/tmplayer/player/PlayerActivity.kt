@@ -75,6 +75,7 @@ import com.tmplayer.data.CopyHandoff
 import com.tmplayer.data.VideoCopies
 import com.tmplayer.data.copyQuality
 import com.tmplayer.data.hasPictureInPicture
+import com.tmplayer.data.videoFollowsTransforms
 import com.tmplayer.data.LocalDownloads
 import com.tmplayer.data.OpeningStall
 import com.tmplayer.data.start
@@ -1176,6 +1177,13 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     private var playbackSpeed = PlaybackSpeed.DEFAULT
 
     /**
+     * The free pinch zoom over [videoScale] ([PictureZoom]): a scale and a move on the picture's
+     * frame, never kept past this video. Phone only. A television gets none: it has no touch, its
+     * remote already steps the picture shapes, and the arrows belong to seeking and focus.
+     */
+    private var zoom = PictureZoom.NONE
+
+    /**
      * The soundtrack and subtitles this series was last watched with, read before the player is
      * built and written back whenever the viewer changes either.
      */
@@ -2124,7 +2132,11 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         controls?.setShapeOffered(!isAudio)
         // On a television only while 3D is drawn for a headset, which needs a copy per eye.
         view.findViewById<View>(androidx.media3.ui.R.id.exo_content_frame)
-            ?.addOnLayoutChangeListener { frame, _, _, _, _, _, _, _, _ -> fitSubtitlesTo(frame) }
+            ?.addOnLayoutChangeListener { frame, _, _, _, _, _, _, _, _ ->
+                fitSubtitlesTo(frame)
+                // A phone turned or another size of picture: the zoom stays, its move held inside.
+                reclampZoom()
+            }
         // PlayerView sets the frame's aspect from each video size it hears, after this activity
         // heard it: a fixed shape is put back once it has, rather than fought over per event.
         (view.findViewById<View>(androidx.media3.ui.R.id.exo_content_frame) as? AspectRatioFrameLayout)
@@ -2150,6 +2162,11 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 onScrub = { delta, target, length, rate -> feedback?.scrub(delta, target, length, rate) },
                 onScrubEnd = { feedback?.scrubEnded() },
                 onPinch = ::pinchScale,
+                zoomAllowed = ::zoomAllowed,
+                zoomed = { zoom.zoomed },
+                onZoom = ::zoomBy,
+                onZoomEnd = ::zoomEnded,
+                onPan = ::panZoom,
                 positionMs = { player?.currentPosition ?: 0L },
                 durationMs = { player?.duration?.takeIf { it > 0 } ?: 0L },
                 onSeekTo = { at -> if (!refuseSeek()) player?.seekTo(at) },
@@ -2157,7 +2174,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 onTapControls = ::toggleControls,
                 onTogglePlay = ::togglePlaybackFromPicture,
                 isOnChrome = { x, y ->
-                    controls?.isOnChrome(x, y) == true || isOnNextUpCard(x, y) || isOnSkipPill(x, y) || isOnUndoChip(x, y)
+                    controls?.isOnChrome(x, y) == true || isOnNextUpCard(x, y) || isOnSkipPill(x, y) || isOnUndoChip(x, y) ||
+                        feedback?.isOnZoomChip(x, y) == true
                 },
                 systemEdges = ::systemGestureEdges,
             ).also { it.prefs = touchPrefs }
@@ -2715,15 +2733,128 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             }
             return super.dispatchTouchEvent(event)
         }
+        // A touch that starts on the zoom's figure is the figure's tap (Reset zoom), controls or not.
+        if (event.actionMasked == android.view.MotionEvent.ACTION_DOWN) {
+            touchOnZoomChip = feedback?.isOnZoomChip(event.rawX, event.rawY) == true
+        }
         gestures?.onTouchEvent(event, surface.width, surface.height)
-        if (controlsUp) return super.dispatchTouchEvent(event)
+        if (controlsUp || touchOnZoomChip) return super.dispatchTouchEvent(event)
         return true
     }
 
+    /** True for the whole of a touch that began on the zoom's figure. */
+    private var touchOnZoomChip = false
+
+    // ---- free zoom (phone) --------------------------------------------------------------------
+
+    private fun contentFrame(): View? = touchSurface?.findViewById(androidx.media3.ui.R.id.exo_content_frame)
+
     /**
-     * A pinch on the picture steps the fitting one stop, out towards filling the screen or back
-     * towards the video's own shape. Only over Original, Fill and Stretch: a pinch is about
-     * filling the screen, and from a fixed shape it starts at Original.
+     * Whether a pinch zooms freely now. Not on a television (no gestures there at all), not for
+     * sound alone, not while locked, in the corner window or casting, not in 3D (a headset's two
+     * halves and the anaglyph are drawn for the whole frame), and not where the video surface
+     * cannot follow a view's scale (Android 6's SurfaceView, [videoFollowsTransforms]); there the
+     * pinch steps the shape as it always did.
+     */
+    private fun zoomAllowed(): Boolean =
+        !FormFactor.isTv(this) && !isAudio && !locked && !inPictureInPicture && !stereo.on &&
+            cast?.casting != true && videoFollowsTransforms(touchSurface?.videoSurfaceView)
+
+    /**
+     * The view the picture is in, and the picture's own size there at 100 per cent: the frame as
+     * laid out, or where the effects pipeline draws the shape, the box inside it.
+     */
+    private fun zoomFrame(): PictureZoom.Frame? {
+        val view = touchSurface ?: return null
+        val frame = contentFrame() ?: return null
+        var width = frame.width
+        var height = frame.height
+        if (shapeInPipeline()) {
+            videoScale.pictureSize(frame.width, frame.height, pipelineAspect()).let { (w, h) -> width = w; height = h }
+        }
+        return PictureZoom.Frame(view.width.toFloat(), view.height.toFloat(), width.toFloat(), height.toFloat())
+            .takeIf { it.valid }
+    }
+
+    /** One step of a pinch, from the gestures, in window pixels. */
+    private fun zoomBy(factor: Float, focusX: Float, focusY: Float, dx: Float, dy: Float) {
+        val frame = zoomFrame() ?: return
+        // The row would only be in the way of the picture being looked at.
+        if (controlsUp) controls?.hideAnimated()
+        val origin = IntArray(2)
+        touchSurface?.getLocationInWindow(origin)
+        zoom = zoom.pinch(factor, focusX - origin[0], focusY - origin[1], frame).panBy(dx, dy, frame)
+        renderZoom()
+        showZoom(live = true)
+    }
+
+    /** The fingers lifted: just over 100 per cent settles on 100, and the figure fades soon after. */
+    private fun zoomEnded() {
+        zoom = zoomFrame()?.let(zoom::settled) ?: PictureZoom.NONE
+        renderZoom()
+        showZoom(live = false)
+    }
+
+    /** A one finger drag on the enlarged picture. */
+    private fun panZoom(dx: Float, dy: Float) {
+        val frame = zoomFrame() ?: return
+        zoom = zoom.panBy(dx, dy, frame)
+        renderZoom()
+        showZoom(live = false)
+    }
+
+    private fun showZoom(live: Boolean) {
+        val percent = L.messages.formatter.percent(zoom.percent / 100.0)
+        feedback?.zoom(L.playerZoomPercent(percent), live) { resetZoom() }
+    }
+
+    /**
+     * Back to the picture as the shape draws it: the figure's tap, More options' Reset zoom. [say]
+     * leaves "Zoom 100%" up a moment as the answer; a new shape says its own name instead.
+     */
+    private fun resetZoom(say: Boolean = true) {
+        val was = zoom.zoomed
+        zoom = PictureZoom.NONE
+        renderZoom()
+        if (say && was) showZoom(live = false) else feedback?.zoomGone()
+    }
+
+    /** The zoom held inside a frame that changed size. */
+    private fun reclampZoom() {
+        // The corner window is a passing size that shows no zoom: held against it, the move
+        // would be lost on the way back to full screen.
+        if (!zoom.zoomed || inPictureInPicture) return
+        zoom = zoomFrame()?.let(zoom::clampedTo) ?: PictureZoom.NONE
+        renderZoom()
+    }
+
+    /**
+     * Puts [zoom] on the picture's frame as a scale about its centre and a move: the GPU does it as
+     * part of drawing the window (and the window manager for a SurfaceView), so nothing is decoded
+     * or allocated per frame and the FFmpeg path is the same as the hardware one. The corner window
+     * always shows the whole picture; the zoom comes back as it leaves. The subtitles are not in the
+     * frame and keep the fitted picture's place ([fitSubtitlesTo]), so they are never enlarged or
+     * carried off the screen.
+     */
+    private fun renderZoom() {
+        val frame = contentFrame() ?: return
+        val shown = if (inPictureInPicture) PictureZoom.NONE else zoom
+        if (frame.scaleX == shown.scale && frame.scaleY == shown.scale &&
+            frame.translationX == shown.panX && frame.translationY == shown.panY
+        ) {
+            return
+        }
+        frame.scaleX = shown.scale
+        frame.scaleY = shown.scale
+        frame.translationX = shown.panX
+        frame.translationY = shown.panY
+    }
+
+    /**
+     * Where the free zoom cannot run ([zoomAllowed]: Android 6, 3D), a pinch steps the fitting one
+     * stop, out towards filling the screen or back towards the video's own shape. Only over
+     * Original, Fill and Stretch: a pinch is about filling the screen, and from a fixed shape it
+     * starts at Original.
      */
     private fun pinchScale(expanding: Boolean) {
         val target = videoScale.pinch(wider = expanding)
@@ -2811,7 +2942,16 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         }
         val at = IntArray(2)
         val origin = IntArray(2)
-        frame.getLocationInWindow(at)
+        // The frame's place as laid out, without the zoom's scale and move (renderZoom): the lines
+        // keep the fitted picture's place, which is always on the screen, and their size.
+        val parent = frame.parent as? View
+        if (parent != null) {
+            parent.getLocationInWindow(at)
+            at[0] += frame.left
+            at[1] += frame.top
+        } else {
+            frame.getLocationInWindow(at)
+        }
         root.getLocationInWindow(origin)
         // Where the effects pipeline draws the shape, the frame is the whole view and the picture
         // a box inside it, which is where the lines belong. A headset's halves stay whole.
@@ -2935,6 +3075,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      */
     private fun applyScale(scale: VideoScale) {
         videoScale = scale
+        // A shape is a fresh start for the zoom; the shape's own name is the answer on screen.
+        resetZoom(say = false)
         player?.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
         renderShape()
         controls?.setShape(scale, animate = true)
@@ -4430,6 +4572,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         letGoOfPlayer()
         touchSurface?.let { findViewById<FrameLayout>(R.id.playback_container).removeView(it) }
         touchSurface = null
+        // The next frame starts unzoomed, as the next video does.
+        zoom = PictureZoom.NONE
+        feedback?.zoomGone()
         // The listener is gone before the release, so the player's own "no cues" never arrives:
         // the line on screen would stay frozen over the next video's opening.
         showCues(emptyList())
@@ -6071,6 +6216,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         subtitleTwin?.visibility = subtitleView.visibility
         downloadChip.visibility = View.GONE
         gestures?.controlsVisible = false
+        // The corner window shows the whole picture; back at full size the zoom returns.
+        renderZoom()
     }
 
     // ---- the phone's extras: settings, overflow, lock, next up --------------------------------
@@ -6125,7 +6272,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             // A picture to shape, as for 3D: not sound alone, not while a cast plays it.
             pictureShape = stereoOffered(),
             stereo = stereoOffered(),
+            zoomed = zoom.zoomed,
         )
+        override fun zoomDetail(): String? =
+            zoom.takeIf { it.zoomed }?.let { L.messages.formatter.percent(it.percent / 100.0) }
         override fun tvEntries() = PlayerMenu.tvEntries(
             pictureInPicture = hasPictureInPicture(),
             saveToDownloads = canSaveToDownloads(),
@@ -6191,6 +6341,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             PhoneMenuEntry.LoadSubtitleFile -> subtitleFiles.pick()
             PhoneMenuEntry.SaveToDownloads -> saveToDownloads()
             PhoneMenuEntry.MarkWatched -> toggleWatched()
+            PhoneMenuEntry.ResetZoom -> resetZoom()
             // Pages of the panel itself, opened there.
             PhoneMenuEntry.PictureShape, PhoneMenuEntry.Stereo, PhoneMenuEntry.Speed, PhoneMenuEntry.SleepTimer,
             PhoneMenuEntry.AddBookmark, PhoneMenuEntry.Bookmarks, PhoneMenuEntry.PlaybackDetails,
@@ -6572,6 +6723,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             }
         }
         stereo = next
+        // 3D draws for the whole frame, a headset's halves above all: the picture goes back whole.
+        if (next.on) resetZoom(say = false)
         if (!next.on && !before.on) return null
         if (stereoPipeline) {
             sendPipelineEffects()

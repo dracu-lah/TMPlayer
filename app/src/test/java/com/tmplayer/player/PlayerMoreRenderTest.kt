@@ -126,7 +126,7 @@ class PlayerMoreRenderTest {
         }
     }
 
-    /** A paused video from a message, a sleep timer running and Volume boost on. */
+    /** A paused video from a message, a sleep timer running, Volume boost on and the picture zoomed. */
     class FakeHost(override val tv: Boolean, private val sideways: Boolean) : PlayerMoreHost {
         var closings = 0
         override fun title() = "Night Train S01E04"
@@ -139,7 +139,10 @@ class PlayerMoreRenderTest {
             saveFrame = true,
             pictureShape = true,
             stereo = true,
+            // Pinched larger, so the phone's shots show Reset zoom under the shape.
+            zoomed = true,
         )
+        override fun zoomDetail() = "135%"
         override fun tvEntries() = PlayerMenu.tvEntries(
             pictureInPicture = true,
             saveToDownloads = true,

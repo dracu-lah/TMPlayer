@@ -190,7 +190,16 @@ class PlayerMenuTest {
                 saveFrame = true,
             ),
         )
-        assertEquals(PhoneMenuEntry.entries.toSet(), PlayerMenu.phoneEntries(true, true, true, true, paused = true, bookmarks = true, chapters = true, saveFrame = true, pictureShape = true, stereo = true).toSet())
+        assertEquals(PhoneMenuEntry.entries.toSet(), PlayerMenu.phoneEntries(true, true, true, true, paused = true, bookmarks = true, chapters = true, saveFrame = true, pictureShape = true, stereo = true, zoomed = true).toSet())
+    }
+
+    @Test
+    fun `reset zoom is offered under the shape only while the picture is zoomed`() {
+        assertFalse(PhoneMenuEntry.ResetZoom in PlayerMenu.phoneEntries(true, true, true, true, pictureShape = true))
+        assertFalse(PhoneMenuEntry.ResetZoom in PlayerMenu.phoneEntries(true, true, true, true, zoomed = true))
+        val zoomed = PlayerMenu.phoneEntries(true, true, true, true, pictureShape = true, zoomed = true)
+        assertEquals(zoomed.indexOf(PhoneMenuEntry.PictureShape) + 1, zoomed.indexOf(PhoneMenuEntry.ResetZoom))
+        assertEquals("Reset zoom", PhoneMenuEntry.ResetZoom.label())
     }
 
     @Test

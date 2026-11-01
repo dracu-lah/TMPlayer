@@ -64,6 +64,26 @@ class PlayerFeedback(private val root: FrameLayout, insertBelow: View?) {
         typeface = Typeface.DEFAULT
         accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
     }
+    private var onZoomReset: (() -> Unit)? = null
+
+    /**
+     * The free zoom's figure ("Zoom 135%"), up while a pinch or a drag moves the picture and a
+     * moment after. A tap on it puts the picture back at 100 per cent; TalkBack reads the figure
+     * as it settles and offers the same reset as the chip's action.
+     */
+    private val zoomChip = pill().apply {
+        layoutParams = FrameLayout.LayoutParams(wrap, wrap, Gravity.TOP or Gravity.CENTER_HORIZONTAL)
+            .apply { topMargin = dp(84f) }
+        accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
+        isClickable = true
+        setOnClickListener { onZoomReset?.invoke() }
+        androidx.core.view.ViewCompat.replaceAccessibilityAction(
+            this,
+            androidx.core.view.accessibility.AccessibilityNodeInfoCompat.AccessibilityActionCompat.ACTION_CLICK,
+            L.playerResetZoom,
+            null,
+        )
+    }
     private val level = LevelPill(context)
     private val scrub = ScrubCard(context)
     private val offer = OfferPill(context)
@@ -83,7 +103,7 @@ class PlayerFeedback(private val root: FrameLayout, insertBelow: View?) {
     init {
         val at = insertBelow?.let { root.indexOfChild(it) }?.takeIf { it >= 0 } ?: root.childCount
         // Inserted in reverse so they land in this order, bottom to top.
-        listOf(spinner, scrub, level, hold, note, offer, ripple).forEach { view ->
+        listOf(spinner, scrub, level, hold, zoomChip, note, offer, ripple).forEach { view ->
             if (view.layoutParams == null) {
                 view.layoutParams = FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
@@ -223,6 +243,41 @@ class PlayerFeedback(private val root: FrameLayout, insertBelow: View?) {
         hold.animate().alpha(0f).setDuration(FADE_MS).withEndAction { hold.visibility = View.GONE }.start()
     }
 
+    // ---- zoom --------------------------------------------------------------------------------
+
+    private val hideZoom = Runnable {
+        zoomChip.animate().alpha(0f).setDuration(FADE_MS).withEndAction { zoomChip.visibility = View.GONE }.start()
+    }
+
+    /**
+     * The zoom's figure, [text]. Held up while [live] (fingers still on the picture), then gone a
+     * moment after; [onReset] is what a tap on it does.
+     */
+    fun zoom(text: String, live: Boolean, onReset: () -> Unit) {
+        onZoomReset = onReset
+        if (zoomChip.text != text) zoomChip.text = text
+        zoomChip.removeCallbacks(hideZoom)
+        zoomChip.animate().cancel()
+        zoomChip.alpha = 1f
+        zoomChip.visibility = View.VISIBLE
+        if (!live) zoomChip.postDelayed(hideZoom, ZOOM_MS)
+    }
+
+    /** The zoom's figure away at once: picture in picture, the lock, a new shape. */
+    fun zoomGone() {
+        zoomChip.removeCallbacks(hideZoom)
+        zoomChip.animate().cancel()
+        zoomChip.visibility = View.GONE
+    }
+
+    /** Whether a touch at these window coordinates lands on the zoom's figure, which takes it. */
+    fun isOnZoomChip(rawX: Float, rawY: Float): Boolean {
+        if (zoomChip.visibility != View.VISIBLE || zoomChip.alpha < 0.5f) return false
+        val at = IntArray(2)
+        zoomChip.getLocationInWindow(at)
+        return rawX >= at[0] && rawX < at[0] + zoomChip.width && rawY >= at[1] && rawY < at[1] + zoomChip.height
+    }
+
     // ---- brightness and volume ---------------------------------------------------------------
 
     /** [fraction] 0 to 1; the pill sits on [left]'s side, the side the finger is dragging. */
@@ -250,8 +305,9 @@ class PlayerFeedback(private val root: FrameLayout, insertBelow: View?) {
         waiting = false
         spinner.removeCallbacks(showSpinner)
         note.removeCallbacks(hideNote)
+        zoomChip.removeCallbacks(hideZoom)
         offer.dismiss()
-        listOf(ripple, hold, note, level, scrub, spinner).forEach {
+        listOf(ripple, hold, zoomChip, note, level, scrub, spinner).forEach {
             it.animate().cancel()
             it.visibility = View.GONE
         }
@@ -650,6 +706,9 @@ class PlayerFeedback(private val root: FrameLayout, insertBelow: View?) {
     private companion object {
         const val FADE_MS = 300L
         const val NOTE_MS = 900L
+
+        /** How long the zoom's figure stays after the fingers lift: long enough to reach for it. */
+        const val ZOOM_MS = 1_800L
         const val OFFER_MS = 7_000L
         const val FOCUSED_TEXT = 0xFF111111.toInt()
         const val TICK_MS = 260L

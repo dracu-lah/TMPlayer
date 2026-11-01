@@ -119,6 +119,9 @@ interface PlayerMoreHost {
     fun phoneEntries(): List<PhoneMenuEntry>
     fun tvEntries(): List<PlayerMenuEntry>
     fun shape(): VideoScale
+
+    /** The pinch zoom as its line shows it ("135%"), or null at 100 per cent. */
+    fun zoomDetail(): String? = null
     fun speed(): Float
     fun skipSilence(): Boolean
     fun stereo(): Stereo3d
@@ -378,7 +381,7 @@ class PlayerMorePanel(
 
     /** Every line the panel can carry: the phone's and the television's entries share these names. */
     private enum class Kind {
-        LockScreen, PictureInPicture, PlaybackDetails, StartOver, PictureShape, Stereo, Speed,
+        LockScreen, PictureInPicture, PlaybackDetails, StartOver, PictureShape, ResetZoom, Stereo, Speed,
         VolumeBoost, NightMode, EvenVolume, SleepTimer, AbLoop, NextChapter, PreviousChapter,
         NextFrame, PreviousFrame, SaveFrame, AddBookmark, Bookmarks, OpenInAnotherApp,
         LoadSubtitleFile, SaveToDownloads, MarkWatched, RemoteKeys,
@@ -432,6 +435,7 @@ class PlayerMorePanel(
             Kind.PlaybackDetails -> Line(kind, s.playerPlaybackDetails, TmIcons.Info, null)
             Kind.StartOver -> Line(kind, s.playerStartOver, TmIcons.Refresh, null)
             Kind.PictureShape -> Line(kind, s.playerPictureShape, TmIcons.AspectRatio, host.shape().label)
+            Kind.ResetZoom -> Line(kind, s.playerResetZoom, TmIcons.Refresh, host.zoomDetail())
             Kind.Stereo -> Line(kind, s.playerStereo, TmIcons.Visibility, host.stereoDetail() ?: s.commonOff)
             Kind.Speed -> Line(kind, s.playerSpeed, ImageVector.vectorResource(R.drawable.ic_speed), PlaybackSpeed.label(host.speed()))
             Kind.VolumeBoost -> Line(kind, s.playerVolumeBoost, volume, if (host.volumeBoost()) s.playerVolumeBoostOnDetail else s.commonOff)

@@ -77,6 +77,11 @@ enum class PhoneMenuEntry {
      * at a time and the pinch only the first three, so this is where any one is a tap away.
      */
     PictureShape,
+    /**
+     * Only while the picture is pinched larger than its shape: back to 100 per cent in one tap,
+     * without a gesture (the zoom chip's tap does the same), so TalkBack reaches it too.
+     */
+    ResetZoom,
     /** 3D video, as on the television: a page of the layout, the glasses and the eye swap. */
     Stereo,
     /** The speeds as a page, the one playing on the line, as the row's button opens them. */
@@ -125,6 +130,7 @@ fun PhoneMenuEntry.label(
     PhoneMenuEntry.LockScreen -> L.playerLockScreen
     PhoneMenuEntry.PictureInPicture -> L.playerPictureInPicture
     PhoneMenuEntry.PictureShape -> shape?.let { L.commonWithDetail(L.playerPictureShape, it.label) } ?: L.playerPictureShape
+    PhoneMenuEntry.ResetZoom -> L.playerResetZoom
     PhoneMenuEntry.Stereo -> stereo?.let { L.commonWithDetail(L.playerStereo, it) } ?: L.playerStereo
     PhoneMenuEntry.Speed -> L.playerSpeed
     PhoneMenuEntry.VolumeBoost -> L.playerVolumeBoost
@@ -233,8 +239,9 @@ object PlayerMenu {
      * CP37 cleared stays clear. [chapters] adds the chapter steps. [saveFrame] is false for a
      * chat that restricts saving (or while that is still being asked), whose frames stay in it.
      * [pictureShape] is whether there is a picture to shape (not sound alone, not a cast), and
-     * [stereo] offers 3D video beside it; Speed follows them. The lock stays first: the line
-     * people come here for.
+     * [stereo] offers 3D video beside it; Speed follows them. [zoomed] adds Reset zoom under the
+     * shape while a pinch has the picture enlarged. The lock stays first: the line people come
+     * here for.
      */
     fun phoneEntries(
         pictureInPicture: Boolean,
@@ -247,10 +254,12 @@ object PlayerMenu {
         saveFrame: Boolean = false,
         pictureShape: Boolean = false,
         stereo: Boolean = false,
+        zoomed: Boolean = false,
     ): List<PhoneMenuEntry> = buildList {
         add(PhoneMenuEntry.LockScreen)
         if (pictureInPicture) add(PhoneMenuEntry.PictureInPicture)
         if (pictureShape) add(PhoneMenuEntry.PictureShape)
+        if (pictureShape && zoomed) add(PhoneMenuEntry.ResetZoom)
         if (stereo) add(PhoneMenuEntry.Stereo)
         add(PhoneMenuEntry.Speed)
         add(PhoneMenuEntry.VolumeBoost)

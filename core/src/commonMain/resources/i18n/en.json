@@ -1063,6 +1063,7 @@
     "exporting": "Copying {title}"
   },
   "keys": {
+    "alt": "Alt",
     "audio_delay_keys": "Ctrl+-, Ctrl+=",
     "audio_keys": "A, Shift+A",
     "back_keys": "Esc, Backspace",
@@ -1080,6 +1081,7 @@
     "group_window": "Window",
     "home_end": "Home, End",
     "left_right": "Left, Right",
+    "option": "Option",
     "row_ab_repeat": "Repeat A to B: start, end, off",
     "row_always_on_top": "Always on top",
     "row_audio": "Audio next, previous",
@@ -1110,6 +1112,7 @@
     "row_undo_seek": "Back to where you were before a long jump",
     "row_volume": "Volume",
     "row_wheel_seek": "Seek 10 s with the wheel",
+    "row_zoom": "Zoom in, out, reset",
     "screenshot_keys": "S, Shift+S",
     "seek_5min": "Ctrl+Alt+Left, Ctrl+Alt+Right",
     "seek_5min_mac": "Cmd+Shift+Alt+Left, Cmd+Shift+Alt+Right",
@@ -1122,7 +1125,8 @@
     "subtitles_keys": "V, Shift+V, C",
     "volume_shift_wheel": "Up, Down, Shift+wheel",
     "volume_wheel": "Up, Down, wheel",
-    "wheel": "wheel"
+    "wheel": "wheel",
+    "zoom_keys": "{alt}+=, {alt}+-, {alt}+0, Ctrl+wheel"
   },
   "language": {
     "keep": "Keep it",
@@ -1926,6 +1930,7 @@
     "repeat_off": "Repeat off",
     "repeating": "Repeating {start} to {end}",
     "reset_delay": "Reset delay",
+    "reset_zoom": "Reset zoom",
     "resuming_from": "Resuming from {time}",
     "rotation_follow": "Rotation: follow the phone",
     "rotation_landscape": "Rotation: locked sideways",
@@ -2053,7 +2058,8 @@
     "volume_boost_on": "Volume boost on",
     "volume_boost_on_detail": "On: quiet speech lifted, loud scenes held back",
     "watch_again": "Watch again",
-    "wifi_only": "This video isn't downloaded yet, and Wi-Fi only is on, so it won't play on mobile data. Connect to Wi-Fi, or turn Wi-Fi only off in Settings."
+    "wifi_only": "This video isn't downloaded yet, and Wi-Fi only is on, so it won't play on mobile data. Connect to Wi-Fi, or turn Wi-Fi only off in Settings.",
+    "zoom_percent": "Zoom {percent}"
   },
   "profile": {
     "heading": "Your viewing",

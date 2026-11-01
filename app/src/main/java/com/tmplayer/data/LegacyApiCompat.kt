@@ -57,3 +57,16 @@ fun Service.stopForegroundRemoving() {
 fun Context.hasPictureInPicture(): Boolean =
     Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
         packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)
+
+/**
+ * Whether a scale or a move set on the views around [videoView] carries the video with it, which
+ * the player's pinch zoom is (PictureZoom). A TextureView is drawn with the rest of the window and
+ * always follows. A SurfaceView's frames go to a surface of their own, placed by the window
+ * manager: Android 7 moved that surface in step with the view's transformed bounds ("simple
+ * translations or scales of a SurfaceView no longer create rendering artifacts"), while on
+ * Android 6 the view's scale is ignored and the picture would stay put under a moved hole. There
+ * the pinch keeps stepping the picture shape instead.
+ */
+fun videoFollowsTransforms(videoView: android.view.View?): Boolean =
+    videoView is android.view.TextureView ||
+        (videoView != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N)
