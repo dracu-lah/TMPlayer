@@ -261,7 +261,7 @@ class HomeScaleTest {
 
     /**
      * Forty chats added of three thousand (HX27): Home reads Recently added from the added chats one
-     * by one ([HomeLayout.overAdded]) rather than from one search across the account, drawn here
+     * by one ([HomeLayout.chosenChats]) rather than from one search across the account, drawn here
      * as rememberHomeRows draws it. The source is gated as the repository gates it, so the search
      * across chats still names videos from chats that were not added and Home must not show them.
      */
@@ -279,8 +279,8 @@ class HomeScaleTest {
         val model = HomeViewModel(gated, work = dispatcher, disk = dispatcher, connected = MutableStateFlow(true), clock = { testScheduler.currentTime })
         account.startPosting { account.followed }
         val list = KidsLock.chats(account.mainList(), AddedChats.gate(ChatGate.allowed.value, added))
-        val layout = HomeLayout.overAdded(HomeLayout(), added)
-        val chosen = HomeLayout.chosenChats(list, layout.recentChats)
+        val layout = HomeLayout()
+        val chosen = HomeLayout.chosenChats(list, added)
         val picked = (chosen + HomeRows.favouriteChats(list, account.starred)).distinctBy { it.id }
         var firstAt = -1L
         var doneAt = -1L

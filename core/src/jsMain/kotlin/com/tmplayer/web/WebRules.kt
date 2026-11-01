@@ -19,7 +19,6 @@ import com.tmplayer.data.MediaFacts
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.MediaName
 import com.tmplayer.data.MediaText
-import com.tmplayer.data.RecentSource
 import com.tmplayer.data.ResumeRecord
 import com.tmplayer.data.ResumeRewind
 import com.tmplayer.data.Series
@@ -543,24 +542,21 @@ fun home(
     }.toTypedArray()
 }
 
-/** Settings > Home as the page keeps it: each row's switch and where Recently added reads from. */
+/** Settings > Home as the page keeps it: each row's switch. */
 interface WebHomeLayout {
     val carousel: Boolean
     val continueWatching: Boolean
     val recentlyAdded: Boolean
     val starredRows: Boolean
-    /** "auto" or "chosen"; anything else is "auto". */
-    val source: String
-    val recentChats: Array<Double>
 }
 
 /** Which of Home's chats are read, and where Recently added comes from, as HomeViewModel picks them. */
 interface HomePlan {
     /** The chats Home reads, the ones Recently added waits on first. */
     val picked: Array<Double>
-    /** The chats Recently added reads alone (chosen chats), or null for Home's own. */
+    /** The chats Recently added reads alone (the added chats), or null for Home's own. */
     val recentFrom: Array<Double>?
-    /** Chosen chats, and none chosen or none of them left: a line stands in the row's place. */
+    /** Added chats, and none added or none of them left: a line stands in the row's place. */
     val noneChosen: Boolean
     /** Recently added's search across chats is wanted at all (its row or the carousel is on). */
     val needsRecent: Boolean
@@ -573,26 +569,24 @@ private fun homeLayout(l: WebHomeLayout) = HomeLayout(
     continueWatching = l.continueWatching,
     recentlyAdded = l.recentlyAdded,
     starredRows = l.starredRows,
-    recentSource = RecentSource.of(l.source),
-    recentChats = l.recentChats.map { it.toLong() }.filter { it != 0L }.take(HomeLayout.STORED_MAX).toCollection(LinkedHashSet()),
 )
 
 /**
- * Home's chats under Settings > Home (HomeViewModel's picking, 2026-10-27): Automatic picks them
- * as before; Chosen chats feed Recently added alone, the first [HomeLayout.CHOSEN_MAX] in [chats]'
- * order; a starred chat is read for a row of its own only while that switch is on. [added] is the
- * viewer's Add chats choice (HX27), which Recently added reads chat by chat (HomeLayout.overAdded);
- * null when nothing was picked. [listWhole] says the chat list is in, so a chosen chat missing from
- * it is gone rather than still on its way.
+ * Home's chats as HomeViewModel picks them (2026-11-01): [added] is the viewer's Add chats choice
+ * (HX27), null when nothing was picked. Picked, Recently added reads the added chats alone, the
+ * first [HomeLayout.CHOSEN_MAX] in [chats]' order; otherwise Home picks its own chats as before. A
+ * starred chat is read for a row of its own only while that switch is on. [listWhole] says the
+ * chat list is in, so an added chat missing from it is gone rather than still on its way.
  */
 fun homePlan(chats: Array<WebChat>, starred: Array<Double>, recent: Array<Video>?, layout: WebHomeLayout, added: Array<Double>?, listWhole: Boolean): HomePlan {
-    val l = HomeLayout.overAdded(homeLayout(layout), added?.map { it.toLong() }?.toSet())
+    val l = homeLayout(layout)
+    val addedIds = added?.map { it.toLong() }?.filterTo(LinkedHashSet()) { it != 0L }
     val list = chats.map(::summary)
     val favourites = starred.map { it.toLong() }.toSet()
-    val autoPick = l.needsRecent && !l.chosen
-    val chosen = l.needsRecent && l.chosen
+    val autoPick = l.needsRecent && addedIds == null
+    val chosen = l.needsRecent && addedIds != null
     val rowChats = if (l.starredRows || (l.needsRecent && !chosen)) HomeRows.favouriteChats(list, favourites) else emptyList()
-    val chosenChats = if (chosen) HomeLayout.chosenChats(list, l.recentChats) else emptyList()
+    val chosenChats = if (chosen && addedIds != null) HomeLayout.chosenChats(list, addedIds) else emptyList()
     val picked = when {
         autoPick -> HomeRows.homeChats(list, favourites, recent?.map(::toItem))
         chosen -> (chosenChats + rowChats).distinctBy { it.id }
@@ -602,13 +596,13 @@ fun homePlan(chats: Array<WebChat>, starred: Array<Double>, recent: Array<Video>
     return plain(
         "picked" to picked.map { it.id.toDouble() }.toTypedArray(),
         "recentFrom" to recentFrom,
-        "noneChosen" to (chosen && (l.recentChats.isEmpty() || (listWhole && recentFrom.isNullOrEmpty()))),
+        "noneChosen" to (chosen && (addedIds.isNullOrEmpty() || (listWhole && recentFrom.isNullOrEmpty()))),
         "needsRecent" to l.needsRecent,
         "autoPick" to autoPick,
     )
 }
 
-/** The chosen chats Home reads, ids only, at most [HomeLayout.CHOSEN_MAX]: for the worker to look up any the chat list has not reached. */
+/** The added chats Home reads, ids only, at most [HomeLayout.CHOSEN_MAX]: for the worker to look up any the chat list has not reached. */
 fun homeChosenMax(): Int = HomeLayout.CHOSEN_MAX
 
 private fun summary(chat: WebChat) = ChatSummary(

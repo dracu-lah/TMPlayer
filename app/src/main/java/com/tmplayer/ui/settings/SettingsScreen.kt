@@ -95,7 +95,6 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
-import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.platform.LocalContext
@@ -197,7 +196,11 @@ import kotlinx.coroutines.withContext
  * other way round, shown only where the Android TV home screen has Play next or channels. [SetupChoices]
  * gathers the setup's answers (SetupChoicesList), each with a way to the page it also lives on.
  */
-enum class SettingsPage { SetupChoices, Appearance, Playback, Subtitles, Gestures, Library, Home, TvHome, Notifications, Storage, Lock, About }
+/**
+ * Settings' pages, in the order the category list shows them (2026-11-01: App lock, Connected
+ * devices and Sign out are one page, [Account], and Setup choices is last, as Redo setup choices).
+ */
+enum class SettingsPage { Appearance, Playback, Subtitles, Gestures, Library, Home, TvHome, Notifications, Storage, Account, About, SetupChoices }
 
 /**
  * Focus for a row in a lazy list, which exists only once the list has been measured: a frame
@@ -222,9 +225,6 @@ private sealed interface Prompt {
     data object TestVersions : Prompt
     data object ClearHistory : Prompt
     data object ClearFavorites : Prompt
-
-    /** The chats hidden from their menus, each with Show, and Show all. */
-    data object HiddenChats : Prompt
     data object SignOut : Prompt
 
     /** A backup file picked, with what restoring it would change. */
@@ -303,8 +303,6 @@ fun SettingsScreen(
     val homeLayout by settings.homeLayout.collectAsStateWithLifecycle(initialValue = com.tmplayer.data.HomeLayout())
     // Posters and details on, which the Home carousel's pages need (its line says so when off).
     val metaOn = com.tmplayer.online.OnlineMetadata.current?.settings?.collectAsStateWithLifecycle()?.value?.enabled == true
-    var pickingHomeSource by remember { mutableStateOf(false) }
-    var pickingHomeChats by remember { mutableStateOf(false) }
     // The single video watching leaves behind. Empty until the first read, which reads the same as
     // having none: "Nothing cached" for a frame is honest either way.
     val cached by settings.cachedVideos.collectAsStateWithLifecycle(initialValue = emptyList())
@@ -341,8 +339,6 @@ fun SettingsScreen(
     val touchHere = isTouch()
     // Only those the kids lock shows, as the Favourites tab counts them.
     val storedFavorites by settings.favorites.collectAsStateWithLifecycle(initialValue = emptySet())
-    // The chats hidden from their menus (see HiddenChats), for Library's Hidden chats list.
-    val hiddenChats by settings.hiddenChats.collectAsStateWithLifecycle(initialValue = emptyList())
     val allowedChats by com.tmplayer.data.ChatGate.browsing.collectAsStateWithLifecycle()
     val favorites = remember(storedFavorites, allowedChats) { com.tmplayer.data.KidsLock.favourites(storedFavorites, allowedChats) }
     val liveFolders by Td.folders.collectAsStateWithLifecycle()
@@ -438,7 +434,7 @@ fun SettingsScreen(
     // The page open over the category list, or null for the list itself. Saved, so a rotation
     // keeps the viewer where they were.
     var page by rememberSaveable { mutableStateOf(initialPage) }
-    // The Devices page (CP83), over the list while it is open.
+    // The Devices page (CP83), over Account and security while it is open.
     var devicesOpen by rememberSaveable { mutableStateOf(false) }
     var devicesClosed by remember { mutableStateOf(false) }
     val devicesFocus = remember { FocusRequester() }
@@ -470,7 +466,7 @@ fun SettingsScreen(
         }
     }
     fun titleOf(target: SettingsPage): String = when (target) {
-        SettingsPage.SetupChoices -> s.setupChoicesTitle
+        SettingsPage.SetupChoices -> s.settingsRedoSetupChoices
         SettingsPage.Appearance -> s.settingsPageAppearance
         SettingsPage.Playback -> s.settingsPlayback
         SettingsPage.Subtitles -> s.settingsSubtitles
@@ -480,7 +476,7 @@ fun SettingsScreen(
         SettingsPage.TvHome -> s.settingsPageTvHome
         SettingsPage.Notifications -> s.settingsPageNotifications
         SettingsPage.Storage -> s.settingsPageStorage
-        SettingsPage.Lock -> s.lockTitle
+        SettingsPage.Account -> s.settingsPageAccount
         SettingsPage.About -> s.settingsPageAbout
     }
 
@@ -535,7 +531,7 @@ fun SettingsScreen(
                 returnTo = null
                 // Back from a page lands on the row that opened it, with the list scrolled where
                 // it was. A first arrival starts on the first row, at the top.
-                val row = categoryFocus.getValue(back ?: SettingsPage.SetupChoices)
+                val row = categoryFocus.getValue(back ?: SettingsPage.Appearance)
                 // A list drawn afresh (Settings left for Downloads and come back to) starts at
                 // its top, where a row near the foot such as Storage is not laid out yet and
                 // cannot take focus: the list goes to its foot for it, and focus brings it into view.
@@ -573,7 +569,7 @@ fun SettingsScreen(
                 pinPadWasOpen = true
                 return@LaunchedEffect
             }
-            if (pinPadWasOpen && page == SettingsPage.Lock) landing.settle()
+            if (pinPadWasOpen && page == SettingsPage.Account) landing.settle()
         }
     }
 
@@ -684,8 +680,7 @@ fun SettingsScreen(
                                 // Never listed here: its switch is on the privacy rows already.
                                 SetupStep.CrashReports -> null
                                 // Never in this list at all (Setup.stepsFor needs a chat list this
-                                // page does not hand it): "Recently added comes from" and "Add
-                                // more chats" already live on their own rows above.
+                                // page does not hand it): "Add chats" lives on Library's own row.
                                 SetupStep.Chats -> null
                             }
                             target?.let {
@@ -1271,24 +1266,16 @@ fun SettingsScreen(
                         },
                     )
                 }
-                // The picker, always listed: the chats added decide what Chats, Home and search show.
+                // The picker, always listed: the chats added decide what Chats, Home and search
+                // show. The one list of which chats TMPlayer shows (2026-11-01): a chat's menu
+                // "Remove from TMPlayer" unticks a chat here, and Home's Recently added follows it.
                 item {
                     val added by com.tmplayer.data.AddedChats.choice.collectAsState()
                     ActionRow(
-                        title = s.pickerAddMore,
+                        title = s.browseAddChats,
                         subtitle = if (added.mode == com.tmplayer.data.AddedMode.Picked) s.pickerAddedCount(added.chats.size) else s.pickerAddMoreDetail,
                         icon = TmIcons.ChatsMany,
                         onClick = onOpenAddChats,
-                    )
-                }
-                // Always listed, so the way back to a hidden chat is where the viewer looks for it,
-                // and an empty list says how a chat gets on it.
-                item {
-                    ActionRow(
-                        title = s.settingsHiddenChats,
-                        subtitle = if (hiddenChats.isEmpty()) s.settingsHiddenChatsNone else s.settingsHiddenChatsDetail(hiddenChats.size),
-                        icon = TmIcons.VisibilityOff,
-                        onClick = { if (hiddenChats.isNotEmpty()) prompt = Prompt.HiddenChats },
                     )
                 }
                 if (favorites.isNotEmpty()) {
@@ -1320,28 +1307,6 @@ fun SettingsScreen(
                     }
                 }
 
-                // ---- backup -----------------------------------------------------------------------------
-
-                // To a file the viewer keeps, and back: settings, lists and resume points, never the
-                // Telegram sign in. See BackupActions for where the file goes on a box with no picker.
-                sectionTitle { s.backupSection }
-                item {
-                    ActionRow(
-                        title = s.backupBackUp,
-                        subtitle = s.backupBackUpDetail,
-                        icon = TmIcons.Download,
-                        onClick = backup.backUp,
-                    )
-                }
-                item {
-                    ActionRow(
-                        title = s.backupRestore,
-                        subtitle = s.backupRestoreDetail,
-                        icon = TmIcons.Refresh,
-                        onClick = backup.restore,
-                    )
-                }
-
                 // ---- posters and details --------------------------------------------------------------
                 onlineMetadataSection(
                     onEditKey = { editingTmdbKey = true },
@@ -1350,8 +1315,9 @@ fun SettingsScreen(
                 )
             }
 
-            // Which rows Home shows, each on by default, and where Recently added (and the carousel,
-            // drawn from it) takes its videos from (users, 2026-10-27).
+            // Which rows Home shows, each on by default (users, 2026-10-27). Which chats Recently
+            // added and the carousel read is the added chats, so a note says so and points at Add
+            // chats rather than offering a second picker here (2026-11-01).
             SettingsPage.Home -> {
                 sectionTitle { s.settingsHomeRows }
                 item(key = "home_carousel") {
@@ -1396,28 +1362,7 @@ fun SettingsScreen(
                         onToggle = { scope.launch { settings.setHomeStarredRows(!homeLayout.starredRows) } },
                     )
                 }
-                sectionTitle { s.settingsHomeRecentFrom }
-                item(key = "home_recent_source") {
-                    ActionRow(
-                        title = s.settingsHomeRecentFrom,
-                        subtitle = if (homeLayout.chosen) s.settingsHomeSourceChosen else s.settingsHomeSourceAuto,
-                        icon = TmIcons.List,
-                        onClick = { pickingHomeSource = true },
-                    )
-                }
-                if (homeLayout.chosen) {
-                    item(key = "home_recent_chats") {
-                        // Only the chosen chats still in the list count: one left or deleted is skipped on Home too.
-                        val count = if (chats.isEmpty()) homeLayout.recentChats.size else chats.count { it.id in homeLayout.recentChats }
-                        ActionRow(
-                            title = s.settingsHomeChooseChats,
-                            subtitle = s.settingsHomeSourceChosenDetail(count = count),
-                            icon = TmIcons.Check,
-                            onClick = { pickingHomeChats = true },
-                        )
-                    }
-                }
-                settingsNote { SettingsNoteText(s.settingsHomeRecentFromNote) }
+                settingsNote { SettingsNoteText(s.settingsHomeFollowsAdded) }
             }
 
             // What TMPlayer puts on the Android TV home screen, a page of its own rather than two rows
@@ -1474,7 +1419,6 @@ fun SettingsScreen(
                     add(Triple(Notice.NewEpisodes, s.settingsAlertEpisodes, s.settingsAlertEpisodesDetail))
                     add(Triple(Notice.NewVideos, s.settingsNewVideos, s.settingsNewVideosDetail))
                     add(Triple(Notice.MissingPieces, s.settingsAlertPieces, s.settingsAlertPiecesDetail))
-                    add(Triple(Notice.LowStorage, s.settingsAlertLowStorage, s.settingsAlertLowStorageDetail))
                     if (Updates.enabled) add(Triple(Notice.UpdateReady, s.settingsAlertUpdate, s.settingsAlertUpdateDetail))
                     if (SupportReminder.enabled && !supportCounters.finished) {
                         add(Triple(Notice.Support, s.settingsSponsorReminders, s.settingsSponsorRemindersDetail))
@@ -1549,6 +1493,18 @@ fun SettingsScreen(
                         onToggle = { scope.launch { settings.setLowStorageMode(!lowStorage) } },
                     )
                 }
+                // Its notification, beside the mode it is about rather than on the Notifications
+                // page (2026-11-01). A phone's only, as that page is: a TV posts none (CP76).
+                if (touch) {
+                    item(key = "notice-${Notice.LowStorage.name}") {
+                        NoticeToggleRow(
+                            notice = Notice.LowStorage,
+                            title = s.settingsLowStorageAlert,
+                            subtitle = s.settingsAlertLowStorageDetail,
+                            onBlocked = { toast(s.notifyBlocked) },
+                        )
+                    }
+                }
                 // A phone's row only. A television is on the wall and a stick is behind it, both plugged
                 // into a network that is Wi-Fi or a cable and never a data allowance somebody pays for by
                 // the gigabyte, so on a TV this asks the viewer to rule out something that cannot happen.
@@ -1587,7 +1543,10 @@ fun SettingsScreen(
                 }
             }
 
-            SettingsPage.Lock -> {
+            // App lock, the devices the account is signed in on and Sign out: one page (2026-11-01),
+            // each of them about who may use this account here.
+            SettingsPage.Account -> {
+                sectionTitle { s.lockTitle }
                 if (!appLock.pinSet) {
                     item {
                         ActionRow(
@@ -1670,6 +1629,27 @@ fun SettingsScreen(
                             start = if (touch) 16.dp else 0.dp,
                             end = if (touch) 16.dp else 0.dp,
                         ),
+                    )
+                }
+
+                sectionTitle { s.settingsAccountSignedIn }
+                // Where the account is signed in, and ending a session (CP83). Inside Settings, so
+                // behind its PIN when the lock or the kids lock asks for one.
+                item {
+                    ActionRow(
+                        title = s.settingsDevices,
+                        subtitle = s.settingsDevicesDetail,
+                        icon = TmIcons.Phone,
+                        modifier = Modifier.focusRequester(devicesFocus),
+                        onClick = { devicesOpen = true },
+                    )
+                }
+                // Last, under the cards rather than in one: the one press here that ends the
+                // session, asked first (Prompt.SignOut).
+                settingsNote {
+                    SignOutButton(
+                        label = s.settingsSignOut,
+                        onClick = { prompt = Prompt.SignOut },
                     )
                 }
             }
@@ -1759,6 +1739,31 @@ fun SettingsScreen(
                             )
                         }
                     }
+                }
+
+                // ---- backup ----------------------------------------------------------------------------
+
+                // To a file the viewer keeps, and back: settings, lists and resume points, never the
+                // Telegram sign in. See BackupActions for where the file goes on a box with no picker.
+                // Here rather than on Library since 2026-11-01: it is the whole account's, not the
+                // library's. Without the version rows (a store build) the remote lands on it.
+                sectionTitle { s.backupSection }
+                item {
+                    ActionRow(
+                        title = s.backupBackUp,
+                        subtitle = s.backupBackUpDetail,
+                        icon = TmIcons.Download,
+                        modifier = if (Updates.enabled) Modifier else Modifier.focusRequester(landing),
+                        onClick = backup.backUp,
+                    )
+                }
+                item {
+                    ActionRow(
+                        title = s.backupRestore,
+                        subtitle = s.backupRestoreDetail,
+                        icon = TmIcons.Refresh,
+                        onClick = backup.restore,
+                    )
                 }
 
                 // ---- help ----------------------------------------------------------------------------
@@ -1917,22 +1922,12 @@ fun SettingsScreen(
                 }
                 item {
                     ActionRow(
-                        title = titleOf(SettingsPage.SetupChoices),
-                        subtitle = s.setupChoicesSummary,
-                        icon = TmIcons.Checklist,
-                        modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.SetupChoices)),
-                        onClick = {
-                            cameFromStep = null
-                            showPage(SettingsPage.SetupChoices)
-                        },
-                    )
-                }
-                item {
-                    ActionRow(
                         title = titleOf(SettingsPage.Appearance),
+                        // Plain facts, "Dark · English": "System default, English right now" read
+                        // oddly beside the theme (UX review, 2026-10-27).
                         subtitle = s.settingsPageAppearanceSummary(
                             theme = themeChoice.label,
-                            language = s.languageRowDetail(language),
+                            language = com.tmplayer.ui.i18n.languageShortName(language),
                         ),
                         icon = TmIcons.Palette,
                         modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Appearance)),
@@ -1987,7 +1982,7 @@ fun SettingsScreen(
                 item {
                     ActionRow(
                         title = titleOf(SettingsPage.Home),
-                        subtitle = s.settingsPageHomeSummary,
+                        subtitle = s.settingsPageHomeRowsSummary,
                         icon = TmIcons.Home,
                         modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Home)),
                         onClick = { showPage(SettingsPage.Home) },
@@ -2011,7 +2006,7 @@ fun SettingsScreen(
                     item {
                         ActionRow(
                             title = titleOf(SettingsPage.Notifications),
-                            subtitle = s.settingsPageNotificationsSummary,
+                            subtitle = s.settingsPageNotificationsSummaryShort,
                             icon = TmIcons.Bell,
                             modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Notifications)),
                             onClick = { showPage(SettingsPage.Notifications) },
@@ -2035,22 +2030,12 @@ fun SettingsScreen(
                 }
                 item {
                     ActionRow(
-                        title = titleOf(SettingsPage.Lock),
-                        subtitle = AppLockWords.summary(appLock),
+                        title = titleOf(SettingsPage.Account),
+                        // The lock's state when it is set, which is the thing worth knowing at a glance.
+                        subtitle = if (appLock.pinSet) AppLockWords.summary(appLock) else s.settingsPageAccountSummary,
                         icon = TmIcons.Lock,
-                        modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Lock)),
-                        onClick = { showPage(SettingsPage.Lock) },
-                    )
-                }
-                // Where the account is signed in, and ending a session (CP83). Inside Settings, so
-                // behind its PIN when the lock or the kids lock asks for one.
-                item {
-                    ActionRow(
-                        title = s.settingsDevices,
-                        subtitle = s.settingsDevicesDetail,
-                        icon = TmIcons.Phone,
-                        modifier = Modifier.focusRequester(devicesFocus),
-                        onClick = { devicesOpen = true },
+                        modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Account)),
+                        onClick = { showPage(SettingsPage.Account) },
                     )
                 }
                 item {
@@ -2062,28 +2047,26 @@ fun SettingsScreen(
                         subtitle = if (offered != null) {
                             UpdateWords.settingsRow(offered)
                         } else {
-                            s.settingsPageAboutSummary(Updates.installedVersion)
+                            s.settingsPageAboutBackupSummary(Updates.installedVersion)
                         },
                         icon = TmIcons.Info,
                         tint = if (offered != null) Tone.caution else Color.Unspecified,
-                        modifier = Modifier
-                            .focusRequester(categoryFocus.getValue(SettingsPage.About))
-                            // A held Down stops here. Sign out is the only row below, and a remote
-                            // whose key is held to reach the end of the list should land on a page
-                            // to open, not on the way out of the account: one fresh press reaches it.
-                            .onPreviewKeyEvent { event ->
-                                !touch && event.key == Key.DirectionDown && event.type == KeyEventType.KeyDown &&
-                                    event.nativeKeyEvent.repeatCount > 0
-                            },
+                        modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.About)),
                         onClick = { showPage(SettingsPage.About) },
                     )
                 }
-
-                // Last, under the cards rather than in one: the one press here that ends the session.
-                settingsNote {
-                    SignOutButton(
-                        label = s.settingsSignOut,
-                        onClick = { prompt = Prompt.SignOut },
+                // The setup's answers again, last: each also lives on its own page, so this is a
+                // way back through them rather than a page to open first (UX review, 2026-10-27).
+                item {
+                    ActionRow(
+                        title = titleOf(SettingsPage.SetupChoices),
+                        subtitle = s.setupChoicesSummary,
+                        icon = TmIcons.Checklist,
+                        modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.SetupChoices)),
+                        onClick = {
+                            cameFromStep = null
+                            showPage(SettingsPage.SetupChoices)
+                        },
                     )
                 }
             }
@@ -2259,27 +2242,6 @@ fun SettingsScreen(
     if (editingTmdbKey) MetadataKeyDialog(onClose = { editingTmdbKey = false })
     if (editingOmdbKey) OmdbKeyDialog(onClose = { editingOmdbKey = false })
 
-    if (pickingHomeSource) {
-        HomeSourceSheet(
-            chosen = homeLayout.chosen,
-            onPick = { source ->
-                pickingHomeSource = false
-                scope.launch { settings.setHomeRecentSource(source) }
-                // Chosen with nothing chosen yet: the picker comes up at once.
-                if (source == com.tmplayer.data.RecentSource.Chosen && homeLayout.recentChats.isEmpty()) pickingHomeChats = true
-            },
-            onClose = { pickingHomeSource = false },
-        )
-    }
-    if (pickingHomeChats) {
-        HomeChatsSheet(
-            chats = chats,
-            chosen = homeLayout.recentChats,
-            onChange = { next -> scope.launch { settings.setHomeRecentChats(next) } },
-            onClose = { pickingHomeChats = false },
-        )
-    }
-
     if (pickingKidsChats) {
         KidsChatsSheet(
             chats = chats,
@@ -2349,41 +2311,6 @@ fun SettingsScreen(
             },
             onDismiss = { prompt = null },
         )
-
-        Prompt.HiddenChats -> {
-            // The last one shown closes the list, which has nothing left to say.
-            LaunchedEffect(hiddenChats.isEmpty()) { if (hiddenChats.isEmpty()) prompt = null }
-            val firstLine = remember { androidx.compose.ui.focus.FocusRequester() }
-            ChoiceSheet(
-                title = s.settingsHiddenChats,
-                note = s.settingsHiddenChatsNote,
-                onDismiss = { prompt = null },
-                onClose = { prompt = null },
-                ignoreRelease = !isTouch(),
-            ) {
-                ChoiceList {
-                    hiddenChats.forEachIndexed { index, chat ->
-                        ChoiceLine(
-                            chat.title.ifBlank { chat.id.toString() },
-                            modifier = if (index == 0) Modifier.focusRequester(firstLine) else Modifier,
-                            detail = s.settingsHiddenChatsShow,
-                            icon = TmIcons.VisibilityOff,
-                        ) {
-                            // The line leaving this list is the answer.
-                            scope.launch { settings.showChat(chat.id) }
-                        }
-                    }
-                    if (hiddenChats.size > 1) {
-                        ChoiceLine(s.settingsHiddenChatsShowAll, icon = TmIcons.Checklist) {
-                            prompt = null
-                            // The Hidden chats row saying there are none is the answer.
-                            scope.launch { settings.showAllChats() }
-                        }
-                    }
-                }
-                FocusOnOpen(firstLine)
-            }
-        }
 
         Prompt.SignOut -> TvConfirm(
             title = s.settingsSignOutTitle,

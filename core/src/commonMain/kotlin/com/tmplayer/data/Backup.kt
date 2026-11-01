@@ -146,7 +146,9 @@ object Backups {
         "gesture_volume" to Kind.BOOL,
         "high_contrast" to Kind.BOOL,
         "history_tab" to Kind.TEXT,
-        // The chats hidden from the lists ([HiddenChats]), one text setting.
+        // The retired hidden chats (AddedChats.HIDDEN_KEY). Never written now (the setting is
+        // folded into the added chats and deleted), but read back from an older backup, so the
+        // next whole chat list folds it in the same way.
         "hidden_chats" to Kind.TEXT,
         // The chats the viewer added ([AddedChats]) and whether they answered at all: a backup
         // restored on a device that never asked is treated as the answer it carries.
@@ -158,9 +160,6 @@ object Backups {
         "home_carousel" to Kind.BOOL,
         "home_continue" to Kind.BOOL,
         "home_recent" to Kind.BOOL,
-        // The chats ticked for Recently added, by id, as one text setting ([HomeLayout.encodeChats]).
-        "home_recent_chats" to Kind.TEXT,
-        "home_recent_source" to Kind.TEXT,
         "home_starred_rows" to Kind.BOOL,
         "language" to Kind.TEXT,
         "lighter_pictures" to Kind.BOOL,

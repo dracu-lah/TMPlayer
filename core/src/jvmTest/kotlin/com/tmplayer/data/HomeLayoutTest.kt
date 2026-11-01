@@ -5,7 +5,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Home's rows as Settings turns them on and off, and Recently added read from chosen chats. */
+/** Home's rows as Settings turns them on and off, and Recently added read from the added chats. */
 class HomeLayoutTest {
 
     private var nextId = 1L
@@ -78,32 +78,31 @@ class HomeLayoutTest {
     }
 
     @Test
-    fun `chosen chats feed Recently added alone`() {
-        val layout = HomeLayout(recentSource = RecentSource.Chosen, recentChats = setOf(3))
-        val rows = build(layout, home = listOf(chat(3)) + chats.take(2), recentFrom = listOf(3))
+    fun `added chats feed Recently added alone`() {
+        val rows = build(HomeLayout(), home = listOf(chat(3)) + chats.take(2), recentFrom = listOf(3))
         val recentRow = rows.filterIsInstance<HomeRow.Recent>().single()
         assertTrue(recentRow.entries.isNotEmpty())
         assertTrue(recentRow.entries.all { it is ShelfEntry.File && it.item.chatId == 3L })
         assertEquals(listOf(3L), recentRow.chatIds)
-        // The starred chats keep their rows; the chosen one, not starred, has none.
+        // The starred chats keep their rows; the added one, not starred, has none.
         assertEquals(listOf(1L, 2L), rows.filterIsInstance<HomeRow.Chat>().map { it.chatId })
     }
 
     @Test
-    fun `none chosen says so in the row's place`() {
-        val layout = HomeLayout(recentSource = RecentSource.Chosen)
+    fun `none added says so in the row's place`() {
+        val layout = HomeLayout()
         val recentRow = build(layout, recentFrom = emptyList(), noneChosen = true).filterIsInstance<HomeRow.Recent>().single()
         assertTrue(recentRow.noneChosen)
         assertTrue(recentRow.loaded)
         assertFalse(recentRow.hasMore)
-        // Chosen chats not in the list yet (it is on its way): loading, not the line.
-        val waiting = build(layout.copy(recentChats = setOf(9)), recentFrom = emptyList()).filterIsInstance<HomeRow.Recent>().single()
+        // Added chats not in the list yet (it is on its way): loading, not the line.
+        val waiting = build(layout, recentFrom = emptyList()).filterIsInstance<HomeRow.Recent>().single()
         assertFalse(waiting.loaded)
         assertFalse(waiting.noneChosen)
     }
 
     @Test
-    fun `chosen chats that were left or hidden are skipped, and the list is bounded`() {
+    fun `added chats that were left are skipped, and the list is bounded`() {
         assertEquals(listOf(1L, 3L), HomeLayout.chosenChats(chats, setOf(3, 1, 99)).map { it.id })
         assertTrue(HomeLayout.chosenChats(chats, emptySet()).isEmpty())
         val many = (1L..3_000L).map { chat(it) }
@@ -111,15 +110,8 @@ class HomeLayoutTest {
     }
 
     @Test
-    fun `stored values read back, and garbage reads as the defaults`() {
-        val ids = setOf(5L, -1001234567890L, 42L)
-        assertEquals(ids, HomeLayout.decodeChats(HomeLayout.encodeChats(ids)))
-        assertEquals(setOf(1L, 2L), HomeLayout.decodeChats(" 1, x,,2\n0\n1e9, 9999999999999999999999"))
-        assertTrue(HomeLayout.decodeChats(null).isEmpty())
-        assertEquals(RecentSource.Chosen, RecentSource.of(" chosen "))
-        assertEquals(RecentSource.Auto, RecentSource.of("{}"))
-        assertEquals(HomeLayout(), HomeLayout.of(null, null, null, null, "nonsense", "[]"))
-        val huge = (1..20_000).joinToString(",")
-        assertEquals(HomeLayout.STORED_MAX, HomeLayout.decodeChats(huge).size)
+    fun `values not stored read as the defaults`() {
+        assertEquals(HomeLayout(), HomeLayout.of(null, null, null, null))
+        assertEquals(HomeLayout(carousel = false), HomeLayout.of(false, null, null, null))
     }
 }

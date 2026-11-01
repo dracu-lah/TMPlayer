@@ -424,7 +424,7 @@ internal fun HomeRowsView(
                                 }
                                 is HomeRow.Chat -> ShelfStrips(state, side, sizes, row.entries, { row.title }) { openSeries = it }
                                 is HomeRow.Recent -> if (row.noneChosen) {
-                                    com.tmplayer.ui.browse.HomeNoneChosenCard(onSettings = onOpenHomeSettings, start = side, end = side)
+                                    com.tmplayer.ui.browse.HomeNoneChosenCard(start = side, end = side)
                                 } else {
                                     ShelfStrips(state, side, sizes, row.entries, { titles[it].orEmpty() }) { openSeries = it }
                                 }

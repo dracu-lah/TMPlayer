@@ -307,11 +307,11 @@ internal fun MouseRows(state: ShellState) {
 private class Confirm(val title: String, val message: String, val detail: String?, val action: () -> Unit)
 
 /**
- * Library: which videos show, what opens on launch, the lists, the backup and Posters and
- * details, under the phone's headings.
+ * Library: which videos show, what opens on launch, the lists and Posters and details, under the
+ * phone's headings. The backup is on About and help since 2026-11-01 ([AboutRows]).
  */
 @Composable
-internal fun LibraryRows(state: ShellState, version: String, chatList: List<com.tmplayer.data.ChatSummary>, jumps: Map<SetupStep, JumpTarget>) {
+internal fun LibraryRows(state: ShellState, chatList: List<com.tmplayer.data.ChatSummary>, jumps: Map<SetupStep, JumpTarget>) {
     val s = LocalStrings.current
     val settings = state.settings
     val scope = rememberCoroutineScope()
@@ -329,15 +329,8 @@ internal fun LibraryRows(state: ShellState, version: String, chatList: List<com.
     val allowedChats by com.tmplayer.data.ChatGate.browsing.collectAsState()
     val favourites = remember(storedFavourites, allowedChats) { com.tmplayer.data.KidsLock.favourites(storedFavourites, allowedChats) }
     val watchedList by state.watched.history.collectAsState(initial = emptyList())
-    // The chats hidden from their menus (see HiddenChats), listed below with Show.
-    val hiddenChats by settings.hiddenChats.collectAsState(initial = emptyList())
     var confirm by remember { mutableStateOf<Confirm?>(null) }
     val undoToast = com.tmplayer.ui.components.rememberActionToast()
-    // A backup file picked, with what restoring it would change, while the prompt is up.
-    var restorePlan by remember { mutableStateOf<RestorePlan?>(null) }
-    val backups = remember(settings, state.watched, version) {
-        BackupService(settings, state.watched, OnlineMetadata.current?.store, version, bookmarks = state.bookmarks)
-    }
 
     Setting(s.settingsSmallest, SizeFilter.label(minSize), icon = TmIcons.FilterHorizontal) {
         Stepper(
@@ -415,31 +408,14 @@ internal fun LibraryRows(state: ShellState, version: String, chatList: List<com.
             if (on) com.tmplayer.data.ResumeSync.syncSoon(settings, afterMs = 0)
         }
     }
-    // The picker: the chats added decide what Chats, Home and search show (HX27).
+    // The picker: the chats added decide what Chats, Home and search show (HX27). The one list of
+    // which chats TMPlayer shows: a chat's "Remove from TMPlayer" unticks a chat here (2026-11-01).
     val added by com.tmplayer.data.AddedChats.choice.collectAsState()
     Action(
-        s.pickerAddMore,
+        s.browseAddChats,
         if (added.mode == com.tmplayer.data.AddedMode.Picked) s.pickerAddedCount(added.chats.size) else s.pickerAddMoreDetail,
         TmIcons.ChatsMany,
     ) { com.tmplayer.ui.browse.AddChatsState.open = true }
-    // Hidden chats: each one with Show, and Show all for several; the empty list says how one gets here.
-    if (hiddenChats.isEmpty()) {
-        Setting(s.settingsHiddenChats, s.settingsHiddenChatsNone, icon = TmIcons.VisibilityOff) {}
-    } else {
-        Setting(s.settingsHiddenChats, s.settingsHiddenChatsNote, icon = TmIcons.VisibilityOff) {}
-        hiddenChats.forEach { chat ->
-            Action(chat.title.ifBlank { chat.id.toString() }, s.settingsHiddenChatOne, TmIcons.Chats, value = s.settingsHiddenChatsShow, end = RowEnd.None) {
-                // The line leaving this list is the answer.
-                scope.launch { settings.showChat(chat.id) }
-            }
-        }
-        if (hiddenChats.size > 1) {
-            Action(s.settingsHiddenChatsShowAll, s.settingsHiddenChatsDetail(hiddenChats.size), TmIcons.Checklist, end = RowEnd.None) {
-                // The list emptying is the answer.
-                scope.launch { settings.showAllChats() }
-            }
-        }
-    }
     if (favourites.isNotEmpty()) Action(s.settingsClearFavourites, s.settingsClearFavouritesDetail(favourites.size), TmIcons.Close, end = RowEnd.None) {
         confirm = Confirm(
             title = s.settingsFavouritesClearTitle,
@@ -461,55 +437,8 @@ internal fun LibraryRows(state: ShellState, version: String, chatList: List<com.
         }
     }
 
-    // To a file and back: settings, lists and resume points, never the Telegram sign in.
-    Group(s.backupSection)
-    Action(s.backupBackUp, s.backupBackUpDetail, TmIcons.Download) {
-        scope.launch {
-            val file = FilePicker.save(s.backupSaveTitle, backups.fileName(), "json") ?: return@launch
-            val saved = withContext(Dispatchers.IO) { runCatching { file.writeText(backups.export()) }.isSuccess }
-            toast(if (saved) s.backupSavedTo(file.absolutePath) else s.backupFailed)
-        }
-    }
-    Action(s.backupRestore, s.backupRestoreDetail, TmIcons.Refresh) {
-        scope.launch {
-            val file = FilePicker.open(s.backupPickTitle, "json") ?: return@launch
-            val text = withContext(Dispatchers.IO) {
-                // No backup comes near this; a video picked by mistake is not read whole.
-                runCatching { file.takeIf { it.length() <= 32L * 1024 * 1024 }?.readText() }.getOrNull()
-            }
-            if (text == null) {
-                toast(s.backupReadFailed)
-                return@launch
-            }
-            when (val read = backups.read(text)) {
-                is BackupRead.Ok -> {
-                    val plan = backups.plan(read.backup)
-                    if (plan.nothing) toast(s.backupRestoreNothing) else restorePlan = plan
-                }
-                else -> BackupWords.refusal(read)?.let { toast(it) }
-            }
-        }
-    }
-
     OnlineMetadataGroup(Modifier.jumpTarget(jumps.getValue(SetupStep.Posters)))
 
-    restorePlan?.let { plan ->
-        ConfirmDialog(
-            title = s.backupRestoreTitle,
-            message = BackupWords.restoreMessage(plan),
-            detail = s.backupRestoreUntouched,
-            confirmLabel = s.backupRestoreConfirm,
-            destructive = false,
-            onConfirm = {
-                restorePlan = null
-                scope.launch {
-                    val done = runCatching { backups.restore(plan.backup) }.isSuccess
-                    toast(if (done) s.backupRestored else s.backupReadFailed)
-                }
-            },
-            onDismiss = { restorePlan = null },
-        )
-    }
     confirm?.let { asked ->
         ConfirmDialog(
             title = asked.title,
@@ -525,14 +454,20 @@ internal fun LibraryRows(state: ShellState, version: String, chatList: List<com.
     }
 }
 
-/** App lock: the PIN, asking for it on open, the kids lock and its chats. */
+/**
+ * Account and security (2026-11-01): App lock (the PIN, asking for it on open, the kids lock and
+ * its chats), then where the account is signed in and Sign out, which were a row and a button of
+ * their own on the list before.
+ */
 @Composable
-internal fun LockRows(state: ShellState, onPin: (DesktopPinFlow) -> Unit, onKidsChats: () -> Unit) {
+internal fun AccountRows(state: ShellState, onPin: (DesktopPinFlow) -> Unit, onKidsChats: () -> Unit) {
     val s = LocalStrings.current
     val settings = state.settings
     val scope = rememberCoroutineScope()
     val appLock by settings.appLock.collectAsState(initial = AppLockSettings())
+    var confirmSignOut by remember { mutableStateOf(false) }
 
+    Group(s.lockTitle)
     if (!appLock.pinSet) {
         Action(s.lockSetPin, s.lockSetPinDetail, TmIcons.Lock) { onPin(DesktopPinFlow.Set) }
     } else {
@@ -564,13 +499,17 @@ internal fun LockRows(state: ShellState, onPin: (DesktopPinFlow) -> Unit, onKids
         color = Tone.muted,
         modifier = Modifier.padding(horizontal = SETTING_INSET),
     )
+    Group(s.settingsAccountSignedIn)
     // Where the account is signed in, and ending a session (CP83): behind this page's PIN.
     Action(s.settingsDevices, s.settingsDevicesDetail, TmIcons.Phone) { com.tmplayer.ui.settings.DevicesScreenState.open = true }
+    // Last, under the card rather than in it: the one press here that ends the session. It asks first.
+    SignOutButton(s.settingsSignOut) { confirmSignOut = true }
+    if (confirmSignOut) SignOutDialog(state, onDismiss = { confirmSignOut = false })
 }
 
 /**
- * About and help: the version and its updates (only where this build updates itself), then help,
- * privacy and About TMPlayer, and the privacy note at the end, as the phone's page has them.
+ * About and help: the version and its updates (only where this build updates itself), the backup,
+ * then help, privacy and About TMPlayer, and the privacy note at the end, as the phone's page has them.
  */
 @Composable
 internal fun AboutRows(state: ShellState, version: String, onShowAbout: () -> Unit) {
@@ -578,6 +517,11 @@ internal fun AboutRows(state: ShellState, version: String, onShowAbout: () -> Un
     val settings = state.settings
     val scope = rememberCoroutineScope()
     val toast = rememberToast()
+    // A backup file picked, with what restoring it would change, while the prompt is up.
+    var restorePlan by remember { mutableStateOf<RestorePlan?>(null) }
+    val backups = remember(settings, state.watched, version) {
+        BackupService(settings, state.watched, OnlineMetadata.current?.store, version, bookmarks = state.bookmarks)
+    }
     val notifyUpdates by settings.updateNotify.collectAsState(initial = true)
     val testVersions by settings.updateTestVersions.collectAsState(initial = false)
     var askTestVersions by remember { mutableStateOf(false) }
@@ -662,6 +606,54 @@ internal fun AboutRows(state: ShellState, version: String, onShowAbout: () -> Un
         )
     }
 
+    // To a file and back: settings, lists and resume points, never the Telegram sign in. Here
+    // rather than on Library since 2026-11-01: it is the whole account's, not the library's.
+    Group(s.backupSection)
+    Action(s.backupBackUp, s.backupBackUpDetail, TmIcons.Download) {
+        scope.launch {
+            val file = FilePicker.save(s.backupSaveTitle, backups.fileName(), "json") ?: return@launch
+            val saved = withContext(Dispatchers.IO) { runCatching { file.writeText(backups.export()) }.isSuccess }
+            toast(if (saved) s.backupSavedTo(file.absolutePath) else s.backupFailed)
+        }
+    }
+    Action(s.backupRestore, s.backupRestoreDetail, TmIcons.Refresh) {
+        scope.launch {
+            val file = FilePicker.open(s.backupPickTitle, "json") ?: return@launch
+            val text = withContext(Dispatchers.IO) {
+                // No backup comes near this; a video picked by mistake is not read whole.
+                runCatching { file.takeIf { it.length() <= 32L * 1024 * 1024 }?.readText() }.getOrNull()
+            }
+            if (text == null) {
+                toast(s.backupReadFailed)
+                return@launch
+            }
+            when (val read = backups.read(text)) {
+                is BackupRead.Ok -> {
+                    val plan = backups.plan(read.backup)
+                    if (plan.nothing) toast(s.backupRestoreNothing) else restorePlan = plan
+                }
+                else -> BackupWords.refusal(read)?.let { toast(it) }
+            }
+        }
+    }
+
+    restorePlan?.let { plan ->
+        ConfirmDialog(
+            title = s.backupRestoreTitle,
+            message = BackupWords.restoreMessage(plan),
+            detail = s.backupRestoreUntouched,
+            confirmLabel = s.backupRestoreConfirm,
+            destructive = false,
+            onConfirm = {
+                restorePlan = null
+                scope.launch {
+                    val done = runCatching { backups.restore(plan.backup) }.isSuccess
+                    toast(if (done) s.backupRestored else s.backupReadFailed)
+                }
+            },
+            onDismiss = { restorePlan = null },
+        )
+    }
     Group(s.settingsHelp)
     // A proxy (CP77), for a network where Telegram is blocked: the connecting help's own screen.
     val proxyOn by com.tmplayer.data.Td.proxyOn.collectAsState()
@@ -763,7 +755,6 @@ internal fun NotificationRows(state: ShellState) {
         add(Triple(com.tmplayer.data.Notice.NewEpisodes, s.settingsAlertEpisodes, s.settingsAlertEpisodesDetailDesktop))
         add(Triple(com.tmplayer.data.Notice.NewVideos, s.settingsNewVideos, s.settingsNewVideosDetailDesktop))
         add(Triple(com.tmplayer.data.Notice.MissingPieces, s.settingsAlertPieces, s.settingsAlertPiecesDetail))
-        add(Triple(com.tmplayer.data.Notice.LowStorage, s.settingsAlertLowStorage, s.settingsAlertLowStorageDetail))
         if (Updates.enabled) add(Triple(com.tmplayer.data.Notice.UpdateReady, s.settingsAlertUpdate, s.settingsAlertUpdateDetailDesktop))
         if (SupportReminder.enabled && !supportCounters.finished) {
             add(Triple(com.tmplayer.data.Notice.Support, s.settingsSponsorReminders, s.settingsSponsorRemindersDetail))

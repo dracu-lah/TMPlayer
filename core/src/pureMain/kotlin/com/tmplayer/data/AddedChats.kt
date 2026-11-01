@@ -46,6 +46,13 @@ data class AddedChoice(
 /** Where the added chats are kept: `SettingsStore` in the apps, `SettingsBook` in the browser. */
 interface AddedChatsSource {
     val addedChats: Flow<AddedChoice>
+
+    /**
+     * Folds the retired hidden chats (the `hidden_chats` setting, before 2026-11-01) into the
+     * choice, given the whole chat list, and deletes that setting ([AddedChats.withoutHidden]).
+     * Nothing to do for a store that never had it.
+     */
+    suspend fun migrateHiddenChats(everything: List<AddedChat>) {}
 }
 
 /**
@@ -60,8 +67,12 @@ interface AddedChatsSource {
  * there, read state and all.
  *
  * Stored as one text setting ([KEY]), a line per chat, with the mode beside it ([MODE_KEY]), so
- * the choice travels in a backup like any other. Process wide, as [HiddenChats] and [ChatGate]
- * are, so every list reads the same answer without a store of its own.
+ * the choice travels in a backup like any other. Process wide, as [ChatGate] is, so every list
+ * reads the same answer without a store of its own.
+ *
+ * This is the only "which chats" list (2026-11-01). The chat menu's "Remove from TMPlayer" unticks
+ * a chat here ([removing]), and the older hidden chats, a block list of their own, were folded in
+ * once ([withoutHidden]) and are gone.
  */
 object AddedChats {
     const val KEY = "added_chats"
@@ -74,6 +85,12 @@ object AddedChats {
     @Volatile
     private var following = false
 
+    @Volatile
+    private var source: AddedChatsSource? = null
+
+    @Volatile
+    private var hiddenFolded = false
+
     /** The stored answer, [AddedMode.Unanswered] until a store is read. */
     val choice: StateFlow<AddedChoice> = state.asStateFlow()
 
@@ -84,9 +101,26 @@ object AddedChats {
     fun follow(store: AddedChatsSource) {
         if (following) return
         following = true
+        source = store
         Background.scope.launch {
             store.addedChats.collect(::set)
         }
+    }
+
+    /**
+     * Asks the followed store to fold the retired hidden chats into the choice
+     * ([AddedChatsSource.migrateHiddenChats]), from the chat list after each sync. Under "every
+     * chat" the fold needs every chat to keep, so [everything] is handed over only when [whole];
+     * a pick folds without it. Once a whole list has been handed over this does nothing more in
+     * the process. A store with nothing left to fold does nothing, and a failure is logged by the
+     * background scope and tried again on the next sync.
+     */
+    fun foldHiddenChats(everything: List<AddedChat>, whole: Boolean) {
+        val store = source ?: return
+        if (hiddenFolded) return
+        if (whole && everything.isNotEmpty()) hiddenFolded = true
+        val list = if (whole) everything else emptyList()
+        Background.scope.launch { store.migrateHiddenChats(list) }
     }
 
     /** Sets the answer directly. For tests, and for a process with no store to follow. */
@@ -150,9 +184,50 @@ object AddedChats {
     /** [chats] without [chatId]. */
     fun without(chats: List<AddedChat>, chatId: Long): List<AddedChat> = chats.filter { it.id != chatId }
 
+    /**
+     * The answer once the viewer removes [chatId] from a chat's menu ("Remove from TMPlayer"): the
+     * same list the picker ticks, so the chat is unticked there too.
+     *
+     * Under [AddedMode.Picked] the chat simply leaves the set. Under [AddedMode.Unanswered] and
+     * [AddedMode.All] ("every chat") the answer becomes [AddedMode.Picked] with every chat of
+     * [everything] but this one, so the others stay exactly where they were rather than the app
+     * still claiming to show every chat. With [everything] empty (no chat list to keep) the answer
+     * is left alone: an empty pick would empty the whole library over one chat.
+     */
+    fun removing(choice: AddedChoice, chatId: Long, everything: List<AddedChat>): AddedChoice = when {
+        choice.mode == AddedMode.Picked -> choice.copy(chats = without(choice.chats, chatId))
+        everything.none { it.id != chatId } -> choice
+        else -> AddedChoice(AddedMode.Picked, everything.filter { it.id != chatId }.distinctBy { it.id })
+    }
+
+    /**
+     * The one-time fold of the retired hidden chats ([hiddenIds] of [HIDDEN_KEY]) into [choice].
+     *
+     * Under [AddedMode.Picked] the hidden chats leave the set (they are almost always missing from
+     * it already). Under [AddedMode.Unanswered] and [AddedMode.All] the answer becomes
+     * [AddedMode.Picked] with every chat of [everything] that was not hidden, which is what the
+     * viewer saw. Null while that needs the chat list and [everything] is empty: the fold waits.
+     * Nothing hidden leaves [choice] as it is.
+     */
+    fun withoutHidden(choice: AddedChoice, hidden: Set<Long>, everything: List<AddedChat>): AddedChoice? = when {
+        hidden.isEmpty() -> choice
+        choice.mode == AddedMode.Picked -> choice.copy(chats = choice.chats.filter { it.id !in hidden })
+        everything.isEmpty() -> null
+        else -> AddedChoice(AddedMode.Picked, everything.filter { it.id !in hidden }.distinctBy { it.id })
+    }
+
+    /** The retired hidden chats' stored text (a line per chat, its id then a tab and its name) back to their ids. */
+    fun hiddenIds(raw: String?): Set<Long> = decode(raw).mapTo(LinkedHashSet()) { it.id }
+
     /** [items] from the added chats only, in their order ([added] null: all of them). */
     fun <T> filter(items: List<T>, added: Set<Long>? = ids.value, chatOf: (T) -> Long): List<T> =
         if (added == null) items else items.filter { chatOf(it) in added }
+
+    /**
+     * The retired hidden chats' setting, read once by the fold ([withoutHidden]) and then deleted.
+     * Still in a backup's settings, so an older backup restored here is folded in the same way.
+     */
+    const val HIDDEN_KEY = "hidden_chats"
 
     /** Every chat, chosen on purpose. */
     const val MODE_ALL = "all"

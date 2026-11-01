@@ -6,7 +6,7 @@ import { createSignal } from 'solid-js'
 import { clear, createStore, del, entries, get, set, type UseStore } from 'idb-keyval'
 import type { Sort, VideoItem } from './tg/types'
 import { clearIndex, POSTERS as POSTER_CACHE, THUMBS, touch } from './cacheBounds'
-import { cleanHome, type RecentSource } from './ui/homeSettings'
+import { cleanHome } from './ui/homeSettings'
 
 export type Theme = 'system' | 'dark' | 'light' | 'black'
 
@@ -29,14 +29,7 @@ export interface Settings {
     homeContinue: boolean
     homeRecent: boolean
     homeStarred: boolean
-    /** Where Recently added reads from: Home's own chats, or only `recentChats`. */
-    recentSource: RecentSource
-    /** The chats ticked for Chosen chats; kept when the source goes back to Automatic. */
-    recentChats: number[]
 }
-
-export type { RecentSource } from './ui/homeSettings'
-export { RECENT_CHATS_MAX } from './ui/homeSettings'
 
 export interface Resume {
     chatId: number
@@ -62,8 +55,6 @@ const DEFAULTS: Settings = {
     homeContinue: true,
     homeRecent: true,
     homeStarred: true,
-    recentSource: 'auto',
-    recentChats: [],
 }
 
 const THEME_KEY = 'tmplayer-theme'

@@ -286,9 +286,9 @@ class ChatRepository(private val td: TdlClient) {
             // so the chats the gate leaves out are dropped here, before any of them costs a
             // getChat. Beware that this is a post-filter over ONE global search: a viewer with few
             // added chats can get nothing back, which is why Home reads its Recently added row
-            // per chat ([RecentSource.Chosen]) once a choice has been made, not from here.
+            // per added chat ([HomeLayout.chosenChats]) once a choice has been made, not from here.
             val allowed = ChatGate.awaitBrowsing()
-            found.filter { KidsLock.allows(allowed, it.chatId) && HiddenChats.shows(it.chatId) }.groupBy { it.chatId }.flatMap { (chatId, messages) ->
+            found.filter { KidsLock.allows(allowed, it.chatId) }.groupBy { it.chatId }.flatMap { (chatId, messages) ->
                 val chatProtected = td.getChat(chatId).valueOrNull?.hasProtectedContent ?: false
                 MediaMapper.screen(messages, chatProtected).items
             }.distinctBy { it.id }
@@ -333,7 +333,7 @@ class ChatRepository(private val td: TdlClient) {
             val documentFound = documents?.await()
             val allowed = ChatGate.awaitBrowsing()
             val messages = listOfNotNull(videoFound, documentFound).flatMap { it.messages.toList() }
-                .filter { KidsLock.allows(allowed, it.chatId) && HiddenChats.shows(it.chatId) }
+                .filter { KidsLock.allows(allowed, it.chatId) }
             val myId = if (messages.isEmpty()) 0L else Td.myId()
             val briefs = ArrayList<ChatBrief>()
             val items = messages.groupBy { it.chatId }.flatMap { (chatId, inChat) ->
@@ -384,7 +384,7 @@ class ChatRepository(private val td: TdlClient) {
         filters: SearchFilters = SearchFilters(),
     ): AllChatsPage = withContext(Dispatchers.IO) {
         val kids = ChatGate.allowed.value
-        val order = added.filter { KidsLock.allows(kids, it) && HiddenChats.shows(it) }
+        val order = added.filter { KidsLock.allows(kids, it) }
         val window = order.drop(cursor.chatsSearched).take(AllChatsSearch.CHATS_PER_PAGE)
         val reached = (cursor.chatsSearched + window.size).coerceAtMost(order.size)
         val ran = cursor.copy(chatsSearched = reached, videoDone = reached >= order.size, documentDone = reached >= order.size)

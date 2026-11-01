@@ -733,7 +733,6 @@ internal fun HomePane(
                             is HomeRow.Chat -> ShelfRows(row.entries, watch, touch, isFirst, first, { row.title }, onPlay, onHoldMedia, start, end, rowTiles, seeAllEnd) { opened.open(it) }
                             is HomeRow.Recent -> if (row.noneChosen) {
                                 com.tmplayer.ui.browse.HomeNoneChosenCard(
-                                    onSettings = onOpenHomeSettings,
                                     start = start,
                                     end = end,
                                     focus = if (isFirst) first else null,

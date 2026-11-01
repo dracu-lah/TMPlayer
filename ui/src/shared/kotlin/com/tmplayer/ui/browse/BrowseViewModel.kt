@@ -108,10 +108,6 @@ class ChatListViewModel(
         viewModelScope.launch {
             ChatGate.browsing.collect { publish() }
         }
-        // A chat hidden from its menu, or shown again from Settings, leaves or rejoins the list at once.
-        viewModelScope.launch {
-            com.tmplayer.data.HiddenChats.ids.collect { publish() }
-        }
     }
 
     /**
@@ -640,6 +636,11 @@ class ChatListViewModel(
                 if (sync.complete || sync.chats.isNotEmpty()) chats = foldered(sync.chats)
                 if (sync.complete) syncedAt = System.currentTimeMillis()
                 if (session.isCurrent()) publish()
+                // The retired hidden chats are folded into the added chats (AddedChats.foldHiddenChats).
+                // Under "every chat" the fold keeps every chat but the hidden ones, so it is handed
+                // the list only once it is whole; a pick folds without it.
+                val whole = sync.complete && !sync.partial && sync.failure == null && !mayHoldMore(sync.chats)
+                com.tmplayer.data.AddedChats.foldHiddenChats(sync.chats.map { com.tmplayer.data.AddedChat(it.id, it.title) }, whole)
                 // A first launch keeps what it got even when the sync fell short (a flood wait on
                 // a large account): without it every start waited on TDLib again (HX8).
                 if (sync.complete || (firstLoad && sync.chats.isNotEmpty())) chats?.let(::rememberSnapshot)
@@ -729,13 +730,13 @@ class ChatListViewModel(
 
     private fun publish() {
         val everything = chats ?: return
-        // Kept whole, before the kids lock, the added chats and the hidden chats, which are
-        // applied below on each read. The picker reads this list, so it must stay whole: a chat
+        // Kept whole, before the kids lock and the added chats, which are applied below on each
+        // read. The picker reads this list, so it must stay whole: a chat
         // cannot be added if the only list in memory is the one already narrowed to what was.
         memory?.put(QueryKey.ChatList(), everything)
         _everything.value = everything
         val allowed = ChatGate.browsing.value
-        val loaded = com.tmplayer.data.HiddenChats.filter(KidsLock.chats(everything, allowed)) { it.id }
+        val loaded = KidsLock.chats(everything, allowed)
         _state.value = when {
             loaded.isNotEmpty() -> UiState.Content(BrowseData(loaded, account, foldersPending(), foldersFailed()))
             // Nothing added yet (HX27), which is a choice to make rather than a fault: a first run

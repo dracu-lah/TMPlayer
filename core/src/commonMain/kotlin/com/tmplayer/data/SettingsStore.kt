@@ -25,7 +25,8 @@ import okio.Path.Companion.toPath
 import java.io.File
 
 private val FAVORITES = stringSetPreferencesKey("favorite_chats")
-private val HIDDEN_CHATS = stringPreferencesKey("hidden_chats") // HiddenChats.KEY
+// The retired hidden chats (AddedChats.HIDDEN_KEY): read once to fold them into the added chats, then deleted.
+private val HIDDEN_CHATS = stringPreferencesKey("hidden_chats")
 private val ADDED_CHATS = stringPreferencesKey("added_chats") // AddedChats.KEY
 private val ADDED_CHATS_MODE = stringPreferencesKey("added_chats_mode") // AddedChats.MODE_KEY
 private val PLAYER_HINT_SEEN = booleanPreferencesKey("player_hint_seen")
@@ -81,8 +82,6 @@ private val HOME_CAROUSEL = booleanPreferencesKey("home_carousel")
 private val HOME_CONTINUE = booleanPreferencesKey("home_continue")
 private val HOME_RECENT = booleanPreferencesKey("home_recent")
 private val HOME_STARRED_ROWS = booleanPreferencesKey("home_starred_rows")
-private val HOME_RECENT_SOURCE = stringPreferencesKey("home_recent_source")
-private val HOME_RECENT_CHATS = stringPreferencesKey("home_recent_chats")
 private val CRASH_REPORTS = booleanPreferencesKey("crash_reports")
 private val LAST_CHAT = longPreferencesKey("last_chat")
 private val MIN_SIZE = longPreferencesKey("min_size_bytes")
@@ -370,7 +369,7 @@ private fun cachedKey(chatId: Long, messageId: Long) =
  * instance per file in a process: each app opens it once, with [openDataStore], and every
  * `SettingsStore` shares that instance.
  */
-class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSource, CorrectionsSource, HiddenChatsSource, AddedChatsSource {
+class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSource, CorrectionsSource, AddedChatsSource {
 
     /**
      * One preference, read the way every preference here is read.
@@ -385,27 +384,6 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
         .distinctUntilChanged()
         .flowOn(Dispatchers.Default)
 
-    // ---- hidden chats -----------------------------------------------------------------------
-
-    /** The chats hidden from TMPlayer's lists, in the order they were hidden. See [HiddenChats]. */
-    override val hiddenChats: Flow<List<HiddenChat>> = read { HiddenChats.decode(it[HIDDEN_CHATS]) }
-
-    suspend fun hideChat(chatId: Long, title: String) {
-        prefs.edit { it[HIDDEN_CHATS] = HiddenChats.encode(HiddenChats.with(HiddenChats.decode(it[HIDDEN_CHATS]), HiddenChat(chatId, title))) }
-    }
-
-    /** Lists [chatId] again, wherever it was left out. */
-    suspend fun showChat(chatId: Long) {
-        prefs.edit { prefs ->
-            val left = HiddenChats.decode(prefs[HIDDEN_CHATS]).filter { it.id != chatId }
-            if (left.isEmpty()) prefs.remove(HIDDEN_CHATS) else prefs[HIDDEN_CHATS] = HiddenChats.encode(left)
-        }
-    }
-
-    suspend fun showAllChats() {
-        prefs.edit { it.remove(HIDDEN_CHATS) }
-    }
-
     // ---- added chats ------------------------------------------------------------------------
 
     /** The chats the viewer added, with the mode beside them. See [AddedChats]. */
@@ -416,8 +394,8 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
     /**
      * Stores the whole answer the picker came back with, which is the only way the set changes as
      * a whole: Done always writes [AddedMode.Picked], even for an empty choice, because an empty
-     * answer is an answer. Unlike the hidden chats, the key is NOT removed when the list empties,
-     * since an absent key means "never asked".
+     * answer is an answer. The key is NOT removed when the list empties, since an absent key
+     * means "never asked".
      */
     suspend fun setAddedChats(chats: List<AddedChat>) {
         prefs.edit { prefs ->
@@ -445,12 +423,38 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
         }
     }
 
-    /** Takes one chat out of the choice. Nothing in Telegram changes, and downloads and history stay. */
-    suspend fun removeChat(chatId: Long) {
+    /**
+     * Takes one chat out of the choice. Nothing in Telegram changes, and downloads and history stay.
+     *
+     * Under "every chat" (unanswered or Keep all), [everything] is the chat list the viewer sees:
+     * the choice becomes those chats but this one ([AddedChats.removing]), which is what the chat
+     * menu's "Remove from TMPlayer" does. Without it, only a picked choice changes.
+     */
+    suspend fun removeChat(chatId: Long, everything: List<AddedChat> = emptyList()) {
         prefs.edit { prefs ->
-            val mode = AddedChats.modeOf(prefs[ADDED_CHATS_MODE])
-            if (mode != AddedMode.Picked) return@edit
-            prefs[ADDED_CHATS] = AddedChats.encode(AddedChats.without(AddedChats.decode(prefs[ADDED_CHATS]), chatId))
+            val now = AddedChoice(AddedChats.modeOf(prefs[ADDED_CHATS_MODE]), AddedChats.decode(prefs[ADDED_CHATS]))
+            val next = AddedChats.removing(now, chatId, everything)
+            if (next == now) return@edit
+            prefs[ADDED_CHATS] = AddedChats.encode(next.chats)
+            prefs[ADDED_CHATS_MODE] = AddedChats.MODE_PICKED
+        }
+    }
+
+    /**
+     * The one-time fold of the retired hidden chats into the added chats ([AddedChats.withoutHidden]),
+     * then the old setting is deleted. Waits, with the setting kept, while the fold needs a chat
+     * list and [everything] is empty. Text that does not parse counts as nothing hidden.
+     */
+    override suspend fun migrateHiddenChats(everything: List<AddedChat>) {
+        prefs.edit { prefs ->
+            val raw = prefs[HIDDEN_CHATS] ?: return@edit
+            val now = AddedChoice(AddedChats.modeOf(prefs[ADDED_CHATS_MODE]), AddedChats.decode(prefs[ADDED_CHATS]))
+            val next = AddedChats.withoutHidden(now, AddedChats.hiddenIds(raw), everything) ?: return@edit
+            if (next != now && next.mode == AddedMode.Picked) {
+                prefs[ADDED_CHATS] = AddedChats.encode(next.chats)
+                prefs[ADDED_CHATS_MODE] = AddedChats.MODE_PICKED
+            }
+            prefs.remove(HIDDEN_CHATS)
         }
     }
 
@@ -1179,15 +1183,13 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
         prefs.edit { it[HOME_CAROUSEL] = value }
     }
 
-    /** Which rows Home shows and where Recently added reads from ([HomeLayout]); every row on by default. */
+    /** Which rows Home shows ([HomeLayout]); every row on by default. */
     val homeLayout: Flow<HomeLayout> = read {
         HomeLayout.of(
             carousel = it[HOME_CAROUSEL],
             continueWatching = it[HOME_CONTINUE],
             recentlyAdded = it[HOME_RECENT],
             starredRows = it[HOME_STARRED_ROWS],
-            source = it[HOME_RECENT_SOURCE],
-            chats = it[HOME_RECENT_CHATS],
         )
     }
 
@@ -1201,15 +1203,6 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
 
     suspend fun setHomeStarredRows(value: Boolean) {
         prefs.edit { it[HOME_STARRED_ROWS] = value }
-    }
-
-    suspend fun setHomeRecentSource(value: RecentSource) {
-        prefs.edit { it[HOME_RECENT_SOURCE] = value.name }
-    }
-
-    /** The chats ticked for Recently added; an empty set clears the setting. */
-    suspend fun setHomeRecentChats(ids: Set<Long>) {
-        prefs.edit { if (ids.isEmpty()) it.remove(HOME_RECENT_CHATS) else it[HOME_RECENT_CHATS] = HomeLayout.encodeChats(ids) }
     }
 
     // ---- the support window ----------------------------------------------------------------

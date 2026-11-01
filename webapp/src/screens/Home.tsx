@@ -113,8 +113,8 @@ export function Home() {
                                     <h2 class="row-title" id={`row-${row.key}`}>{t('home.row_recent_all')}</h2>
                                 </div>
                                 <div class="notice home-none-chosen">
-                                    <p>{t('home.none_chosen')}</p>
-                                    <A class="link" href="/settings/home" data-tv-first>{t('home.open_settings')}</A>
+                                    <p>{t('home.none_added')}</p>
+                                    <A class="link" href="/added-chats" data-tv-first>{t('browse.add_chats')}</A>
                                 </div>
                             </section>
                         </Match>
@@ -131,7 +131,7 @@ export function Home() {
 /** Settings > Home as the worker reads it (HomeView.layout). */
 function homeLayout(): HomeView['layout'] {
     const s = settings()
-    return { carousel: s.carousel, continueWatching: s.homeContinue, recentlyAdded: s.homeRecent, starredRows: s.homeStarred, source: s.recentSource, recentChats: s.recentChats }
+    return { carousel: s.carousel, continueWatching: s.homeContinue, recentlyAdded: s.homeRecent, starredRows: s.homeStarred }
 }
 
 function rowTitle(row: HomeRow, selfId: number | null): string {

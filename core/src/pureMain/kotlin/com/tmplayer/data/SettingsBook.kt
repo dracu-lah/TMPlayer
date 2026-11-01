@@ -16,7 +16,7 @@ import kotlinx.coroutines.flow.map
  * which the browser build either has no use for or keeps in the page. SettingsBookTest holds the
  * two to the same answers over one DataStore file.
  */
-class SettingsBook(private val kv: KeyValueStore) : AllowedChatsSource, CorrectionsSource, HiddenChatsSource, AddedChatsSource {
+class SettingsBook(private val kv: KeyValueStore) : AllowedChatsSource, CorrectionsSource, AddedChatsSource {
 
     private fun <T> read(transform: (Map<String, Any>) -> T): Flow<T> = kv.data.map(transform).distinctUntilChanged()
 
@@ -98,13 +98,6 @@ class SettingsBook(private val kv: KeyValueStore) : AllowedChatsSource, Correcti
 
     override val kidsAllowedChats: Flow<Set<Long>?> = read(::allowedChatsOf)
 
-    /** The chats hidden from the lists, under SettingsStore's own key ([HiddenChats.KEY]). */
-    override val hiddenChats: Flow<List<HiddenChat>> = read { HiddenChats.decode(it[HiddenChats.KEY] as? String) }
-
-    suspend fun setHiddenChats(chats: List<HiddenChat>) {
-        kv.edit { it[HiddenChats.KEY] = HiddenChats.encode(chats) }
-    }
-
     /** The chats the viewer added, under SettingsStore's own keys ([AddedChats.KEY]). */
     override val addedChats: Flow<AddedChoice> = read { e ->
         AddedChoice(AddedChats.modeOf(e.string(AddedChats.MODE_KEY)), AddedChats.decode(e.string(AddedChats.KEY)))
@@ -123,6 +116,31 @@ class SettingsBook(private val kv: KeyValueStore) : AllowedChatsSource, Correcti
         kv.edit {
             it.remove(AddedChats.KEY)
             it[AddedChats.MODE_KEY] = AddedChats.MODE_ALL
+        }
+    }
+
+    /** As SettingsStore.removeChat: under "every chat", [everything] but [chatId] becomes the choice. */
+    suspend fun removeChat(chatId: Long, everything: List<AddedChat> = emptyList()) {
+        kv.edit { e ->
+            val now = AddedChoice(AddedChats.modeOf(e[AddedChats.MODE_KEY] as? String), AddedChats.decode(e[AddedChats.KEY] as? String))
+            val next = AddedChats.removing(now, chatId, everything)
+            if (next == now) return@edit
+            e[AddedChats.KEY] = AddedChats.encode(next.chats)
+            e[AddedChats.MODE_KEY] = AddedChats.MODE_PICKED
+        }
+    }
+
+    /** As SettingsStore.migrateHiddenChats, for a browser profile that carried the setting over in a backup. */
+    override suspend fun migrateHiddenChats(everything: List<AddedChat>) {
+        kv.edit { e ->
+            val raw = e[AddedChats.HIDDEN_KEY] as? String ?: return@edit
+            val now = AddedChoice(AddedChats.modeOf(e[AddedChats.MODE_KEY] as? String), AddedChats.decode(e[AddedChats.KEY] as? String))
+            val next = AddedChats.withoutHidden(now, AddedChats.hiddenIds(raw), everything) ?: return@edit
+            if (next != now && next.mode == AddedMode.Picked) {
+                e[AddedChats.KEY] = AddedChats.encode(next.chats)
+                e[AddedChats.MODE_KEY] = AddedChats.MODE_PICKED
+            }
+            e.remove(AddedChats.HIDDEN_KEY)
         }
     }
 

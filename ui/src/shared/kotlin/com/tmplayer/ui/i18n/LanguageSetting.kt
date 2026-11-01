@@ -33,6 +33,17 @@ fun Strings.languageRowDetail(saved: String): String =
     }
 
 /**
+ * The language in use, named in itself, for a one-line summary such as Settings' Appearance row
+ * ("Dark · English"): the picked language, or the one "System default" resolves to, without the
+ * "System default" wording, which read oddly beside the theme.
+ */
+fun languageShortName(saved: String): String = when {
+    saved.isBlank() -> systemLanguageName() ?: Languages.find(Languages.ENGLISH)?.name ?: "English"
+    saved.equals(Languages.PSEUDO, ignoreCase = true) -> Onboarding.PSEUDO_NAME
+    else -> Languages.find(saved)?.name ?: saved
+}
+
+/**
  * The one-time "Now in Español" card's state, the same on every device: [language] is the tag
  * to announce, or null when there is nothing to say, and [dismiss] remembers it was said. See
  * [LanguageNotice] for the rule.

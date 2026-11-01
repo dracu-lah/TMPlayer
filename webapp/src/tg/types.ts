@@ -212,14 +212,12 @@ export interface HomeView extends ListView {
     /** Continue watching's videos, the latest first. */
     resumes: ResumeMark[]
     starred: number[]
-    /** Settings > Home: which rows are built, and where Recently added reads from (the apps' HomeLayout). */
+    /** Settings > Home: which rows are built (the apps' HomeLayout). Recently added reads the added chats (`added`) once there are any. */
     layout: {
         carousel: boolean
         continueWatching: boolean
         recentlyAdded: boolean
         starredRows: boolean
-        source: 'auto' | 'chosen'
-        recentChats: number[]
     }
 }
 
@@ -238,7 +236,7 @@ export interface HomeRow {
     hasMore: boolean
     /** False for Recently added kept for the carousel alone (its row is off in Settings): not drawn. */
     asRow: boolean
-    /** Recently added reads chosen chats and none is chosen or left: a line in its place leads to Settings > Home. */
+    /** Recently added reads the added chats and none is added or left: a line in its place leads to Add chats. */
     noneChosen: boolean
 }
 

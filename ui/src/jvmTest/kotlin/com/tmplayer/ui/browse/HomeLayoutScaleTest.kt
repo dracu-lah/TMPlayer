@@ -3,7 +3,6 @@ package com.tmplayer.ui.browse
 import com.tmplayer.data.HomeLayout
 import com.tmplayer.data.HomeRow
 import com.tmplayer.data.HomeRows
-import com.tmplayer.data.RecentSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -96,8 +95,9 @@ class HomeLayoutScaleTest {
         val account = SyntheticAccount(backgroundScope, { testScheduler.currentTime })
         val model = model(account)
         val list = account.mainList()
-        val layout = HomeLayout(starredRows = false, recentSource = RecentSource.Chosen, recentChats = list.mapTo(HashSet()) { it.id })
-        val chosen = HomeLayout.chosenChats(list, layout.recentChats)
+        // Every chat added in the picker: Recently added reads the added chats, bounded.
+        val layout = HomeLayout(starredRows = false)
+        val chosen = HomeLayout.chosenChats(list, list.mapTo(HashSet()) { it.id })
         assertEquals(HomeLayout.CHOSEN_MAX, chosen.size)
         var firstAt = -1L
         backgroundScope.launch {

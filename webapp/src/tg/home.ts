@@ -20,10 +20,10 @@ const RESUMES_READ = 20
  * list, through Telegram's flood waits, before Home settled (HX8).
  */
 const LIST_ENOUGH = 300
-/** Chosen chats Recently added waits on, read at once (HomeRows.CHOSEN_WAIT); the rest count through the search across chats. */
+/** Added chats Recently added waits on, read at once (HomeRows.CHOSEN_WAIT); the rest count through the search across chats. */
 const CHOSEN_WAIT = 8
-/** Every row on, Recently added from Home's own chats: Home as it was before Settings > Home. */
-const ALL_ON: HomeView['layout'] = { carousel: true, continueWatching: true, recentlyAdded: true, starredRows: true, source: 'auto', recentChats: [] }
+/** Every row on: Home as it was before Settings > Home. */
+const ALL_ON: HomeView['layout'] = { carousel: true, continueWatching: true, recentlyAdded: true, starredRows: true }
 
 /** Telegram's answer for a chat this account can no longer read: its videos are gone for it. */
 const chatGone = (e: unknown) => /^(CHANNEL_PRIVATE|CHAT_FORBIDDEN|USER_BANNED_IN_CHANNEL|PEER_ID_INVALID|CHANNEL_INVALID|CHAT_ID_INVALID)/.test(String((e as { text?: string })?.text ?? ''))
@@ -38,8 +38,8 @@ export async function homePage(tg: TelegramClient, view: HomeView, signal: Abort
     // Settings > Home (HomeLayout): a row that is off is not built and nothing is read for it.
     const layout = view.layout ?? ALL_ON
     const needsRecent = layout.carousel || layout.recentlyAdded
-    // The chats Recently added reads one by one: the chosen ones, or the added ones (HomeLayout.overAdded).
-    const chosenWanted = !needsRecent ? [] : layout.source === 'chosen' ? (gate ? layout.recentChats.filter((id) => gate.has(id)) : layout.recentChats) : (view.added ?? [])
+    // The chats Recently added reads one by one: the added ones (HomeLayout.chosenChats), none before the picker is answered.
+    const chosenWanted = !needsRecent ? [] : (view.added ?? [])
     // Looked up by id once the list is in, for those it does not carry (an archived chat).
     let chosenLooked = chosenWanted.length === 0
     const items = new Map<string, VideoItem>()

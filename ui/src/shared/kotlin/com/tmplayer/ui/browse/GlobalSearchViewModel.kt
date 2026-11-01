@@ -214,12 +214,6 @@ class GlobalSearchViewModel(
                 if (allowed != null) _state.update { s -> s.copy(groups = s.groups.filter { g -> g.copies.all { KidsLock.allows(allowed, it.chatId) } }) }
             }
         }
-        // So does hiding a chat from its menu while results from it are listed.
-        viewModelScope.launch {
-            com.tmplayer.data.HiddenChats.ids.collect { hidden ->
-                if (hidden.isNotEmpty()) _state.update { s -> s.copy(groups = s.groups.filter { g -> g.copies.none { it.chatId in hidden } }) }
-            }
-        }
     }
 
     /** The text changed: local matches now, Telegram after the settle. Blank clears it all. */
@@ -375,11 +369,10 @@ class GlobalSearchViewModel(
                 GlobalSearch.merge(carried, local, query, s.sort, identity)
             }
             // The same words searched before: Telegram's pages from then, listed at once through
-            // the kids lock and the hidden chats as they are now, and asked again only once stale.
+            // the kids lock and the added chats as they are now, and asked again only once stale.
             if (kept != null) {
-                val hidden = com.tmplayer.data.HiddenChats.ids.value
                 kept.data.pages.forEachIndexed { index, page ->
-                    absorb(page.copy(items = page.items.filter { KidsLock.allows(allowed, it.chatId) && it.chatId !in hidden }), keepTo = query, fresh = index == 0)
+                    absorb(page.copy(items = page.items.filter { KidsLock.allows(allowed, it.chatId) }), keepTo = query, fresh = index == 0)
                 }
                 _state.update { it.copy(searching = false, settling = false, endReached = kept.data.cursor.done) }
                 if (!kept.stale) return@launch

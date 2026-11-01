@@ -1948,6 +1948,15 @@ private fun Root() {
                     // (HistoryRemoval): Undo on a touch screen, asked first under a remote.
                     // The clears below were asked first, and the emptied row or tab is their answer.
                     onClearFavorites = { scope.launch { settings.clearFavorites(allowedChats) } },
+                    onRemoveChat = { chat ->
+                        scope.launch {
+                            // The whole list, before the kids lock: under "every chat" the rest of
+                            // it becomes the choice, so a lock switched off later hides nothing more.
+                            val everything = chatsViewModel.everything.value.map { com.tmplayer.data.AddedChat(it.id, it.title) }
+                            runCatching { settings.removeChat(chat.id, everything) }
+                                .onFailure { android.util.Log.w("TMPlayer", "removing a chat failed", it) }
+                        }
+                    },
                     onClearHistory = { scope.launch { settings.clearWatchHistory() } },
                     onMarkMediaWatched = { record ->
                         setWatched(record.toMediaItem(), record.chatTitle, watched = true)

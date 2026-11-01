@@ -52,7 +52,7 @@ const PAGES: { id: PageId; icon: IconData; title: () => string; summary: () => s
         title: () => t('settings.appearance'),
         summary: () => (form() === 'phone' || layoutFixed() ? t(`theme.${settings().theme}`) : `${t(`theme.${settings().theme}`)}${dot}${t(`settings.layout_${layout()}`)}`),
     },
-    { id: 'home', icon: Home03Icon, title: () => t('settings.page_home'), summary: () => t('settings.page_home_summary') },
+    { id: 'home', icon: Home03Icon, title: () => t('settings.page_home'), summary: () => t('settings.page_home_rows_summary') },
     { id: 'playback', icon: PlayIcon, title: () => t('settings.playback'), summary: () => t('settings.resume_rewind') },
     { id: 'library', icon: GridViewIcon, title: () => t('settings.library'), summary: () => t('settings.page_library_summary') },
     { id: 'storage', icon: HardDriveIcon, title: () => t('web.settings_storage'), summary: () => t('web.settings_storage_summary') },
@@ -338,12 +338,11 @@ function TvMsone() {
 }
 
 /**
- * Settings > Home (the apps' Home page, 8f55cf2): a switch for each of Home's rows, then where
- * Recently added (and the carousel drawn from it) comes from, Automatic or Chosen chats, with the
- * chats' picker behind Choose chats.
+ * Settings > Home (the apps' Home page, 8f55cf2): a switch for each of Home's rows, and a note that
+ * Recently added (and the carousel drawn from it) follows the chats added in Add chats. Its own
+ * "Chosen chats" picker repeated Add chats and is gone (2026-11-01).
  */
 function HomePage() {
-    const chosen = () => settings().recentSource === 'chosen'
     return (
         <>
             <div class="set-card">
@@ -377,36 +376,8 @@ function HomePage() {
                     onChange={(on) => setSetting('homeStarred', on)}
                 />
             </div>
-            <div class="set-card set-blocks">
-                <div class="set-block">
-                    <h3 class="set-block-title" id="recent-source-label">{t('settings.home_recent_from')}</h3>
-                    <RecentSourceChoice />
-                    <p class="muted small">{chosen() ? t('settings.home_source_chosen_detail', { count: settings().recentChats.length }) : t('settings.home_source_auto_detail')}</p>
-                    <p class="muted small">{t('settings.home_recent_from_note')}</p>
-                </div>
-                <Show when={chosen()}>
-                    <A class="set-row" href="/home-chats">
-                        <RowBody icon={Message01Icon} title={t('settings.home_choose_chats')} subtitle={t('settings.home_source_chosen_detail', { count: settings().recentChats.length })} />
-                        <Icon icon={ArrowRight01Icon} size={20} class="set-chevron" />
-                    </A>
-                </Show>
-            </div>
+            <p class="muted small">{t('settings.home_follows_added')}</p>
         </>
-    )
-}
-
-function RecentSourceChoice() {
-    return (
-        <Choices
-            label="recent-source-label"
-            name="recent-source"
-            options={[
-                { value: 'auto', label: t('settings.home_source_auto') },
-                { value: 'chosen', label: t('settings.home_source_chosen') },
-            ]}
-            value={settings().recentSource}
-            onPick={(v) => setSetting('recentSource', v)}
-        />
     )
 }
 
@@ -767,13 +738,7 @@ function TvSettings() {
             <TvSwitch id="home-continue" title={t('settings.home_continue')} on={settings().homeContinue} onText={t('settings.home_continue_on')} offText={t('settings.home_continue_off')} onPick={(on) => setSetting('homeContinue', on)} />
             <TvSwitch id="home-recent" title={t('settings.home_recent')} on={settings().homeRecent} onText={t('settings.home_recent_on')} offText={t('settings.home_recent_off')} onPick={(on) => setSetting('homeRecent', on)} />
             <TvSwitch id="home-starred" title={t('settings.home_starred_rows')} on={settings().homeStarred} onText={t('settings.home_starred_rows_on')} offText={t('settings.home_starred_rows_off')} onPick={(on) => setSetting('homeStarred', on)} />
-            <TvPanel title={t('settings.home_recent_from')} id="recent-source-label" anchor="home-source">
-                <RecentSourceChoice />
-                <p class="muted small">{settings().recentSource === 'chosen' ? t('settings.home_source_chosen_detail', { count: settings().recentChats.length }) : t('settings.home_source_auto_detail')}</p>
-                <Show when={settings().recentSource === 'chosen'}>
-                    <A class="outline-button" style={{ 'align-self': 'start' }} href="/home-chats">{t('settings.home_choose_chats')}</A>
-                </Show>
-            </TvPanel>
+            <p class="muted small">{t('settings.home_follows_added')}</p>
             <TvPanel title="" id="size-label" anchor="size">
                 <SizeLimits />
             </TvPanel>

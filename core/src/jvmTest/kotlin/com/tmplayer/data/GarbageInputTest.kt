@@ -147,16 +147,17 @@ class GarbageInputTest {
             survive("DecodeMemory.decode", text) { DecodeMemory.decode(text) }
             survive("DownloadRequest.decodeAll", text) { DownloadRequest.decodeAll(text) }
             survive("RecentSearches.decode", text) { RecentSearches.decode(text) }
-            survive("HiddenChats.decode", text) { HiddenChats.decode(text) }
+            survive("AddedChats.hiddenIds", text) {
+                val hidden = AddedChats.hiddenIds(text)
+                AddedChats.withoutHidden(AddedChoice(AddedChats.modeOf(text)), hidden, AddedChats.decode(text))
+            }
             survive("AddedChats.decode", text) {
                 AddedChats.decode(text)
                 AddedChats.modeOf(text)
                 AddedChoice(AddedChats.modeOf(text), AddedChats.decode(text)).ids
             }
             survive("HomeLayout.of", text) {
-                HomeLayout.decodeChats(text)
-                RecentSource.of(text)
-                HomeLayout.of(null, false, null, true, text, text)
+                HomeLayout.of(null, false, null, true)
             }
             survive("PieceAlerts.decode", text) { PieceAlerts.decode(text) }
             survive("SupportReminder.decodeRecent", text) { SupportReminder.decodeRecent(text) }

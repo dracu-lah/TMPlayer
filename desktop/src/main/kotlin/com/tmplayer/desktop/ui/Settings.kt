@@ -87,7 +87,6 @@ import com.tmplayer.ui.components.SettingsDividerStart
 import com.tmplayer.ui.components.TmAlertDialog
 import com.tmplayer.ui.components.rememberToast
 import com.tmplayer.ui.i18n.LocalStrings
-import com.tmplayer.ui.i18n.languageRowDetail
 import com.tmplayer.ui.icons.TmIcons
 import com.tmplayer.ui.lock.AppLockWords
 import com.tmplayer.ui.lock.PinPad
@@ -103,8 +102,13 @@ import kotlinx.coroutines.withContext
  * phone's order. [Mouse] stands where the phone has Player gestures: how the pointer drives the
  * player, which is what the phone's gestures are for a finger.
  */
+/**
+ * Settings' pages, in the list's order (2026-11-01: App lock, Connected devices and Sign out are
+ * one page, [Account], and Setup choices is last, as Redo setup choices, so the wide layout opens
+ * on Appearance).
+ */
 enum class SettingsCategory {
-    SetupChoices, Appearance, Playback, Subtitles, Mouse, Library, Home, Notifications, Storage, Lock, About;
+    Appearance, Playback, Subtitles, Mouse, Library, Home, Notifications, Storage, Account, About, SetupChoices;
 
     internal val icon: androidx.compose.ui.graphics.vector.ImageVector
         get() = when (this) {
@@ -117,7 +121,7 @@ enum class SettingsCategory {
             Home -> TmIcons.Home
             Notifications -> TmIcons.Bell
             Storage -> TmIcons.Download
-            Lock -> TmIcons.Lock
+            Account -> TmIcons.Lock
             About -> TmIcons.Info
         }
 
@@ -148,7 +152,7 @@ var settingsSummaryOverride: (SettingsCategory) -> String? = { null }
 internal fun titleOf(category: SettingsCategory): String {
     val s = LocalStrings.current
     return when (category) {
-        SettingsCategory.SetupChoices -> s.setupChoicesTitle
+        SettingsCategory.SetupChoices -> s.settingsRedoSetupChoices
         SettingsCategory.Appearance -> s.settingsPageAppearance
         SettingsCategory.Playback -> s.settingsPlayback
         SettingsCategory.Subtitles -> s.settingsSubtitles
@@ -157,14 +161,14 @@ internal fun titleOf(category: SettingsCategory): String {
         SettingsCategory.Home -> s.settingsPageHome
         SettingsCategory.Notifications -> s.settingsPageNotifications
         SettingsCategory.Storage -> s.settingsPageStorage
-        SettingsCategory.Lock -> s.lockTitle
+        SettingsCategory.Account -> s.settingsPageAccount
         SettingsCategory.About -> s.settingsPageAbout
     }
 }
 
 /**
- * Settings on the desktop, organised as the phone's: a list of pages (who is signed in over it,
- * Sign out under it), each page its grouped cards of rows. A window wide enough for both keeps the
+ * Settings on the desktop, organised as the phone's: a list of pages (who is signed in over it),
+ * each page its grouped cards of rows; Sign out is on Account and security. A window wide enough for both keeps the
  * list on the left and the open page beside it, as a desktop's preferences window does; a narrow
  * one shows the list, and a page in its place with a Back arrow, as the phone does. Esc goes back
  * there, the arrow keys walk the rows, and Tab reaches every control.
@@ -229,7 +233,6 @@ fun SettingsPage(
     val categoryFocus = remember { SettingsCategory.entries.associateWith { FocusRequester() } }
     val backFocus = remember { FocusRequester() }
     var returnTo by remember { mutableStateOf<SettingsCategory?>(null) }
-    var confirmSignOut by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
     // What Esc does: back to the list from a page in the narrow layout, nothing otherwise.
     val escape = remember { mutableStateOf<(() -> Unit)?>(null) }
@@ -329,7 +332,6 @@ fun SettingsPage(
                         jumpTo = null
                         openName = category.name
                     },
-                    onSignOut = { confirmSignOut = true },
                 )
             }
             if (wide) {
@@ -414,7 +416,6 @@ fun SettingsPage(
         }
     }
 
-    if (confirmSignOut) SignOutDialog(state, onDismiss = { confirmSignOut = false })
     if (pickingKidsChats) {
         KidsChatsDialog(chatList, appLock.kidsChats, settings, onClose = { pickingKidsChats = false })
     }
@@ -447,8 +448,7 @@ private fun ScrollPane(modifier: Modifier, inset: Boolean = true, content: @Comp
 
 /**
  * The list of pages: who is signed in, "Recommended for this device" while it has something to
- * say, one row per page with its most telling value under its name, and Sign out at the end, in
- * the phone's order. [selected] is the page open beside it in the wide layout, null in the narrow
+ * say, and one row per page with its most telling value under its name, in the phone's order. [selected] is the page open beside it in the wide layout, null in the narrow
  * one, where each row leads on to its page.
  */
 @Composable
@@ -459,7 +459,6 @@ private fun CategoryList(
     selected: SettingsCategory?,
     focus: Map<SettingsCategory, FocusRequester>,
     onOpen: (SettingsCategory) -> Unit,
-    onSignOut: () -> Unit,
 ) {
     val s = LocalStrings.current
     val settings = state.settings
@@ -486,7 +485,8 @@ private fun CategoryList(
         settingsCategories.forEach { category ->
             val summary = when (category) {
                 SettingsCategory.SetupChoices -> s.setupChoicesSummary
-                SettingsCategory.Appearance -> s.settingsPageAppearanceSummary(theme = theme.label, language = s.languageRowDetail(language))
+                // Plain facts, "Dark · English" (UX review, 2026-10-27).
+                SettingsCategory.Appearance -> s.settingsPageAppearanceSummary(theme = theme.label, language = com.tmplayer.ui.i18n.languageShortName(language))
                 SettingsCategory.Playback -> s.settingsPagePlaybackSummaryDesktop
                 SettingsCategory.Subtitles -> {
                     val style = listOf(
@@ -498,15 +498,15 @@ private fun CategoryList(
                 }
                 SettingsCategory.Mouse -> s.settingsPageMouseSummary
                 SettingsCategory.Library -> s.settingsPageLibrarySummary
-                SettingsCategory.Home -> s.settingsPageHomeSummary
-                SettingsCategory.Notifications -> settingsSummaryOverride(category) ?: s.settingsPageNotificationsSummary
+                SettingsCategory.Home -> s.settingsPageHomeRowsSummary
+                SettingsCategory.Notifications -> settingsSummaryOverride(category) ?: s.settingsPageNotificationsSummaryShort
                 SettingsCategory.Storage -> disk?.takeIf { it.totalBytes > 0 }?.let {
                     s.settingsStorageFree(StorageRelocationPlan.size(it.freeBytes), StorageRelocationPlan.size(it.totalBytes))
                 } ?: s.settingsPageStorageSummary
-                SettingsCategory.Lock -> AppLockWords.summary(appLock)
+                SettingsCategory.Account -> if (appLock.pinSet) AppLockWords.summary(appLock) else s.settingsPageAccountSummary
                 // An update waiting is said here as well as inside, in the same colour, so it is
                 // not hidden one level down.
-                SettingsCategory.About -> offered?.let { UpdateWords.settingsRow(it) } ?: s.settingsPageAboutSummary(version)
+                SettingsCategory.About -> offered?.let { UpdateWords.settingsRow(it) } ?: s.settingsPageAboutBackupSummary(version)
             }
             val caution = category == SettingsCategory.About && offered != null
             Setting(
@@ -520,8 +520,6 @@ private fun CategoryList(
             ) { if (selected == null) RowTail(null, RowEnd.Chevron) }
         }
     }
-    // Last, under the card rather than in it: the one press here that ends the session.
-    SignOutButton(s.settingsSignOut, onSignOut)
 }
 
 /**
@@ -554,11 +552,11 @@ internal class SettingsPages(
                     SettingsCategory.Playback -> PlaybackRows(state, jumps)
                     SettingsCategory.Subtitles -> SubtitlesRows(state)
                     SettingsCategory.Mouse -> MouseRows(state)
-                    SettingsCategory.Library -> LibraryRows(state, version, chatList, jumps)
-                    SettingsCategory.Home -> HomeLayoutRows(state, chatList)
+                    SettingsCategory.Library -> LibraryRows(state, chatList, jumps)
+                    SettingsCategory.Home -> HomeLayoutRows(state)
                     SettingsCategory.Notifications -> NotificationRows(state)
                     SettingsCategory.Storage -> StorageGroup(state, jumps)
-                    SettingsCategory.Lock -> LockRows(state, onPin, onKidsChats)
+                    SettingsCategory.Account -> AccountRows(state, onPin, onKidsChats)
                     SettingsCategory.About -> AboutRows(state, version, onShowAbout)
                     SettingsCategory.SetupChoices -> Unit
                 }
@@ -742,9 +740,9 @@ private fun AccountHeader(account: com.tmplayer.data.Account) {
     }
 }
 
-/** Sign out at the end of the list: full width, in the danger colour. It still asks first. */
+/** Sign out at the end of Account and security: full width, in the danger colour. It still asks first. */
 @Composable
-private fun SignOutButton(label: String, onClick: () -> Unit) {
+internal fun SignOutButton(label: String, onClick: () -> Unit) {
     val interactions = remember { MutableInteractionSource() }
     androidx.compose.material3.Button(
         onClick = onClick,

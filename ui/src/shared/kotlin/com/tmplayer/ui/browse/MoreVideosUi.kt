@@ -61,10 +61,9 @@ class PagedVideos(
         val kept = key?.let { PageQueries.cache.peek<Kept>(it, PageQueries.CHAT_STALE_MS) }
         if (kept != null) {
             val allowed = ChatGate.allowed.value
-            val hidden = com.tmplayer.data.HiddenChats.ids.value
             next = kept.data.next
             _state.value = State(
-                items = kept.data.items.filter { KidsLock.allows(allowed, it.chatId) && it.chatId !in hidden },
+                items = kept.data.items.filter { KidsLock.allows(allowed, it.chatId) },
                 loading = false,
                 done = kept.data.done,
             )

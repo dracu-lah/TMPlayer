@@ -1,33 +1,17 @@
 package com.tmplayer.data
 
 /**
- * Where Recently added (and the carousel, which is drawn from it) takes its videos from.
- *
- * [Auto] is Home as it has been since 2026-10-21: the starred chats, then Saved Messages, the
- * pinned chats and the chats with the most videos ([HomeRows.homeChats]). [Chosen] is the chats
- * the viewer ticked in Settings, and only those.
- */
-enum class RecentSource {
-    Auto,
-    Chosen,
-    ;
-
-    companion object {
-        /** The stored name back to a source; anything else, a missing value included, is [Auto]. */
-        fun of(raw: String?): RecentSource {
-            val name = raw?.trim().orEmpty()
-            return entries.firstOrNull { it.name.equals(name, ignoreCase = true) } ?: Auto
-        }
-    }
-}
-
-/**
- * Which rows Home shows (users, 2026-10-27: turn off Continue watching or Recently added, and say
- * which chats feed Recently added). Every switch is on by default, which is Home as it was.
+ * Which rows Home shows (users, 2026-10-27: turn off Continue watching or Recently added). Every
+ * switch is on by default, which is Home as it was.
  *
  * A row that is off is not built, so nothing is asked of Telegram for it: Recently added's search
  * across chats and its chats' reads only run while it or the carousel is on ([needsRecent]), and a
  * starred chat is read for a row of its own only while [starredRows] is on.
+ *
+ * Which chats Recently added and the carousel read is not a Home setting: it is the chats the
+ * viewer added ([AddedChats], 2026-11-01). Once they have answered the picker, the row reads those
+ * chats one by one ([chosenChats]); before that it is Home's own pick ([HomeRows.homeChats]). Home
+ * once had a "Chosen chats" list of its own here, which repeated the picker and is gone.
  *
  * Watch later and New episodes have no switch: Home has not shown them since it fills itself
  * (2026-10-23), they live on the History page.
@@ -37,9 +21,6 @@ data class HomeLayout(
     val continueWatching: Boolean = true,
     val recentlyAdded: Boolean = true,
     val starredRows: Boolean = true,
-    val recentSource: RecentSource = RecentSource.Auto,
-    /** The chats ticked for [RecentSource.Chosen]; kept when the source goes back to [RecentSource.Auto]. */
-    val recentChats: Set<Long> = emptySet(),
 ) {
     /** Whether Recently added's videos are wanted at all: for its row or for the carousel. */
     val needsRecent: Boolean get() = carousel || recentlyAdded
@@ -47,19 +28,14 @@ data class HomeLayout(
     /** Every row off: Home says so and offers its settings, rather than standing blank. */
     val allOff: Boolean get() = !carousel && !continueWatching && !recentlyAdded && !starredRows
 
-    val chosen: Boolean get() = recentSource == RecentSource.Chosen
-
     companion object {
         /**
-         * Chosen chats Home reads for Recently added, the first in the chat list's order (its
-         * recency). Select all on an account of 3,000 chats would otherwise put 3,000 chats into
-         * every build of Home; past these, a chosen chat still counts through the search across
-         * chats, which costs nothing per chat.
+         * Added chats Home reads for Recently added, the first in the chat list's order (its
+         * recency). An account that added 3,000 chats would otherwise put 3,000 chats into every
+         * build of Home; past these, an added chat still counts through the search across chats,
+         * which costs nothing per chat.
          */
         const val CHOSEN_MAX = 50
-
-        /** Chosen chats kept in the setting: more than any account has, so a bad file stays small. */
-        const val STORED_MAX = 10_000
 
         /** From the stored values, each of which may be missing; a value that does not parse is the default. */
         fun of(
@@ -67,58 +43,19 @@ data class HomeLayout(
             continueWatching: Boolean?,
             recentlyAdded: Boolean?,
             starredRows: Boolean?,
-            source: String?,
-            chats: String?,
         ): HomeLayout = HomeLayout(
             carousel = carousel ?: true,
             continueWatching = continueWatching ?: true,
             recentlyAdded = recentlyAdded ?: true,
             starredRows = starredRows ?: true,
-            recentSource = RecentSource.of(source),
-            recentChats = decodeChats(chats),
         )
 
-        /** The stored ids, comma or line separated; anything that is not a chat id is skipped. */
-        fun decodeChats(raw: String?): Set<Long> {
-            if (raw.isNullOrBlank()) return emptySet()
-            val out = LinkedHashSet<Long>()
-            for (part in raw.splitToSequence(',', '\n')) {
-                val id = part.trim().toLongOrNull() ?: continue
-                if (id == 0L) continue
-                out += id
-                if (out.size >= STORED_MAX) break
-            }
-            return out
-        }
-
-        fun encodeChats(ids: Collection<Long>): String =
-            ids.asSequence().filter { it != 0L }.distinct().take(STORED_MAX).joinToString(",")
-
         /**
-         * The chosen chats Home reads, in [chats]' order, at most [CHOSEN_MAX]. A chat that was
-         * left or deleted, hidden, or kept out by the kids lock is not in [chats], so it is
-         * skipped without a word.
+         * The added chats ([chosen], [AddedChats.ids]) Home reads for Recently added, in [chats]'
+         * order, at most [CHOSEN_MAX]. A chat that was left or deleted, or kept out by the kids
+         * lock, is not in [chats], so it is skipped without a word.
          */
         fun chosenChats(chats: List<ChatSummary>, chosen: Set<Long>): List<ChatSummary> =
             if (chosen.isEmpty()) emptyList() else chats.asSequence().filter { it.id in chosen }.distinctBy { it.id }.take(CHOSEN_MAX).toList()
-
-        /**
-         * Home's layout once the viewer has added chats (HX27, [AddedChats]).
-         *
-         * Recently added under [RecentSource.Auto] comes from ONE search across the whole account,
-         * which answers with the newest videos anywhere, so a viewer with twelve added chats of
-         * three thousand would see a row of chats they never added, post-filtered down to nothing.
-         * With a choice made, the row reads the added chats one by one instead, which is the path
-         * [RecentSource.Chosen] already takes.
-         *
-         * A viewer who picked their own chats for the row keeps them, narrowed to the ones still
-         * added. [added] null (nobody has answered the picker) leaves the layout alone, so Home
-         * works exactly as it did before this existed.
-         */
-        fun overAdded(layout: HomeLayout, added: Set<Long>?): HomeLayout = when {
-            added == null -> layout
-            layout.chosen -> layout.copy(recentChats = layout.recentChats.filterTo(LinkedHashSet()) { it in added })
-            else -> layout.copy(recentSource = RecentSource.Chosen, recentChats = added)
-        }
     }
 }

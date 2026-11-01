@@ -25,7 +25,6 @@ const loadChat = () => import('./screens/Chat').then((m) => ({ default: m.Chat }
 const loadChatInfo = () => import('./screens/ChatInfo').then((m) => ({ default: m.ChatInfo }))
 const loadRecent = () => import('./screens/Recent').then((m) => ({ default: m.Recent }))
 const loadAddChats = () => import('./screens/AddChats').then((m) => ({ default: m.AddChats }))
-const loadHomeChats = () => import('./screens/HomeChats').then((m) => ({ default: m.HomeChats }))
 const SetupChats = lazy(() => import('./screens/SetupChats').then((m) => ({ default: m.SetupChats })))
 const loadSearch = () => import('./screens/Search').then((m) => ({ default: m.Search }))
 const loadSettingsPage = () => import('./screens/Settings').then((m) => ({ default: m.Settings }))
@@ -38,7 +37,6 @@ const Recent = lazy(loadRecent)
 const Settings = lazy(loadSettingsPage)
 const Detail = lazy(loadDetail)
 const AddChats = lazy(loadAddChats)
-const HomeChats = lazy(loadHomeChats)
 const Favourites = lazy(() => loadLibrary().then((m) => ({ default: m.Favourites })))
 const HistoryPage = lazy(() => loadLibrary().then((m) => ({ default: m.HistoryPage })))
 const later = [loadChats, loadChat, loadChatInfo, loadSearch, loadRecent, loadSettingsPage, loadDetail, loadWatch, loadAddChats]
@@ -161,7 +159,6 @@ export function App() {
             <Route path="/search" component={Search} />
             <Route path="/recent" component={Recent} />
             <Route path="/added-chats" component={AddChats} />
-            <Route path="/home-chats" component={HomeChats} />
             <Route path="/setup/chats" component={SetupChats} />
             <Route path="/video/:chatId/:messageId" component={Detail} />
             <Route path="/watch/:chatId/:messageId" component={Watch} />

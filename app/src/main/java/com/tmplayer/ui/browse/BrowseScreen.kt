@@ -238,6 +238,8 @@ internal fun BrowseScreen(
     /** How many downloads are running, for the badge on that row of the drawer and the rail. */
     downloadCount: Int = 0,
     onToggleFavorite: (ChatSummary) -> Unit = {},
+    /** "Remove from TMPlayer" in a chat's menu: unticks it in the added chats ([com.tmplayer.data.AddedChats.removing]). */
+    onRemoveChat: (ChatSummary) -> Unit = {},
     onRestartMedia: (ResumeRecord) -> Unit = {},
     onForgetMedia: (ResumeRecord) -> Unit = {},
     /** Empties Continue watching in one go, rather than one held-OK menu per video. */
@@ -386,13 +388,6 @@ internal fun BrowseScreen(
     LaunchedEffect(searchConnected) { if (searchConnected) search.reconnected() }
     val panelScope = rememberCoroutineScope()
     val panelContext = LocalContext.current
-    // Hiding a chat from its menu: gone from the lists at once, which is the answer; no toast
-    // (user, 2026-10-22). Settings, Library, Hidden chats shows it again.
-    val hideScope = rememberCoroutineScope()
-    val hideStore = remember(panelContext) { SettingsStore(panelContext) }
-    val hideChat: (ChatSummary) -> Unit = { chat ->
-        hideScope.launch { hideStore.hideChat(chat.id, chat.title) }
-    }
     // A hold, the info key or a right click: the quick menu, which leads to the page by Details.
     var held by remember { mutableStateOf<Pair<MediaItem, String>?>(null) }
     val holdMedia: (MediaItem, String) -> Unit = { item, title -> held = item to title }
@@ -1173,15 +1168,17 @@ internal fun BrowseScreen(
                         onToggleFavorite(chat)
                     },
                 )
-                // Also private to this device: the chat leaves TMPlayer's lists, never Telegram.
+                // Also private to this device: the chat is unticked in Add chats, the one list of
+                // which chats TMPlayer shows, so it leaves the lists at once, which is the answer;
+                // no toast (user, 2026-10-22). Never Telegram.
                 add(
                     MenuAction(
-                        label = s.browseHideChat,
+                        label = s.browseRemoveChat,
                         icon = TmIcons.VisibilityOff,
-                        detail = s.browseHideChatDetail,
+                        detail = s.browseRemoveChatDetail,
                     ) {
                         chatMenu = null
-                        hideChat(chat)
+                        onRemoveChat(chat)
                     },
                 )
             },

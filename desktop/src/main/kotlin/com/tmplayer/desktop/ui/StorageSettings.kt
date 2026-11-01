@@ -197,6 +197,11 @@ internal fun StorageGroup(state: ShellState, jumps: Map<com.tmplayer.ui.onboardi
         Modifier.jumpTarget(jumps[com.tmplayer.ui.onboarding.SetupStep.Storage]),
         icon = TmIcons.Archive,
     ) { on -> scope.launch { settings.setLowStorageMode(on) } }
+    // Its notification, beside the mode it is about rather than on the Notifications page (2026-11-01).
+    val lowStorageAlert by settings.noticeOn(com.tmplayer.data.Notice.LowStorage).collectAsState(initial = com.tmplayer.data.Notice.LowStorage.defaultOn)
+    Toggle(s.settingsLowStorageAlert, s.settingsAlertLowStorageDetail, lowStorageAlert, icon = TmIcons.Bell) { on ->
+        scope.launch { settings.setNoticeOn(com.tmplayer.data.Notice.LowStorage, on) }
+    }
     Action(s.storageScan, s.storageScanDetail(DesktopPaths.downloadsDir.path), TmIcons.Search, end = RowEnd.None) {
         scope.launch {
             val found = DownloadIndex.scan(settings)

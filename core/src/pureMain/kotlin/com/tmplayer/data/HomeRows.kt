@@ -95,8 +95,8 @@ sealed interface HomeRow {
          */
         val asRow: Boolean = true,
         /**
-         * Recently added reads chosen chats ([RecentSource.Chosen]) and none is chosen, or none of
-         * them is left in the chat list: a line in the row's place says so and leads to Settings.
+         * Recently added reads the added chats ([AddedChats]) and none is added, or none of them is
+         * left in the chat list: a line in the row's place says so and leads to Add chats.
          */
         val noneChosen: Boolean = false,
     ) : HomeRow {
@@ -255,7 +255,7 @@ object HomeRows {
         val inContinue = HashSet(seen)
 
         val homeChats = favourites.distinctBy { it.id }
-        // The chats Recently added draws from: Home's chats, or the chosen ones (in Home's order).
+        // The chats Recently added draws from: Home's chats, or the added ones (in Home's order).
         val homeOrder = if (recentFrom == null) homeChats.map { it.id } else recentFrom.distinct()
         val homeIds = homeOrder.toHashSet()
         // Where Home fills itself, its chats are not all known until the chat list and the search

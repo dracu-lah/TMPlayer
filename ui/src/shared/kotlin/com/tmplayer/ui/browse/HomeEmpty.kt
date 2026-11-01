@@ -166,12 +166,13 @@ fun HomeOffCard(onSettings: () -> Unit, modifier: Modifier = Modifier, focus: Fo
 }
 
 /**
- * In Recently added's place when it reads chosen chats and none is there to read
- * ([com.tmplayer.data.HomeRow.Recent.noneChosen]): what is wrong and the way to Home's settings,
- * whose button takes the remote's focus through [focus] when this is Home's first row.
+ * In Recently added's place when it reads the added chats and none is there to read
+ * ([com.tmplayer.data.HomeRow.Recent.noneChosen]): what is wrong and the way to the Add chats
+ * picker ([AddChatsRequest]), whose button takes the remote's focus through [focus] when this is
+ * Home's first row.
  */
 @Composable
-fun HomeNoneChosenCard(onSettings: () -> Unit, start: Dp, end: Dp, modifier: Modifier = Modifier, focus: FocusRequester? = null) {
+fun HomeNoneChosenCard(start: Dp, end: Dp, modifier: Modifier = Modifier, focus: FocusRequester? = null, onAddChats: () -> Unit = { AddChatsRequest.ask() }) {
     val s = com.tmplayer.ui.i18n.LocalStrings.current
     val touch = isTouch()
     Column(
@@ -184,15 +185,15 @@ fun HomeNoneChosenCard(onSettings: () -> Unit, start: Dp, end: Dp, modifier: Mod
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(if (touch) 14.dp else 18.dp)) {
-            IconChip(TmIcons.Home, size = if (touch) 36.dp else 44.dp)
+            IconChip(TmIcons.ChatsMany, size = if (touch) 36.dp else 44.dp)
             Text(
-                s.homeNoneChosen,
+                s.homeNoneAdded,
                 style = if (touch) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge,
                 color = Tone.muted,
                 modifier = Modifier.weight(1f),
             )
         }
-        HeroPill(label = s.homeOpenSettings, onClick = onSettings, focus = focus, icon = TmIcons.Settings)
+        HeroPill(label = s.browseAddChats, onClick = onAddChats, focus = focus, icon = TmIcons.Add)
     }
 }
 
