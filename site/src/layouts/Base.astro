@@ -146,9 +146,11 @@ const strings = lang.path ? jsStrings(lang) : {};
 {notice && <KaoNotice />}
 <slot />
 {getBar && <GetBar />}
-{/* The Buy Me a Coffee card, everywhere but the pages whose one job is another button: download,
-    install, the support page (which is the offer itself) and the 404. */}
-{!notFound && page !== 'download' && page !== 'install' && path !== '/support/' && <CoffeeCard />}
+{/* The Buy Me a Coffee card, everywhere but the support page (which is the offer itself) and the
+    404. The download and install pages carry it too (user, 2026-11-01): they are the busiest pages
+    and the moment somebody gets the app is the moment the offer makes sense. On a phone it stands
+    above the download bar (.get-bar-on .bmc-float). */}
+{!notFound && path !== '/support/' && <CoffeeCard />}
 {/* Where the support links open the Buy Me a Coffee page, over the site. */}
 <CoffeeDialog />
 {Object.keys(strings).length > 0 && <script type="application/json" id="tm-strings" set:html={json(strings)} is:inline></script>}

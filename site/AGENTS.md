@@ -60,6 +60,12 @@ retaking one, run `python3 scripts/site-shot-variants.py <name>` for the phone s
 (`--check` lists missing ones). Only demo-content screenshots, never a real account; light and
 dark shots stay paired.
 
+Cards made for posting elsewhere (Telegram, LinkedIn, X) live in `site/public/social/` and stay
+PNG, as `og.png` does, because the networks' crawlers cannot be relied on to decode WebP. Each is
+drawn from its own page in `scripts/social-card-*.html` with headless Chromium at 1200x630
+(`--window-size=1200,630 --screenshot=... --allow-file-access-from-files`), so it can be redrawn
+when the figures move.
+
 A shot that points at one thing is cropped and zoomed, and its arrows, circles and underlines are
 drawn by `scripts/annotate-shot.py` from a spec in `scripts/annotations/` (user, 2026-10-14). No
 words go into an image: labels stay HTML with catalog keys. The `/features/` tour keeps its
@@ -80,9 +86,10 @@ numbered HTML markers matched by a numbered list.
   near-black text and their official cup from `public/brand/`, never redrawn or recoloured), and
   GitHub Sponsors is the quieter link under it. Links live in `src/lib/support.ts`; the page is
   `buymeacoffee.com/nevil.dev` (`/nevil` is somebody else).
-- Every page but download, install, support and the 404 has the floating `CoffeeCard` (a pill on a
+- Every page but support and the 404 has the floating `CoffeeCard` (a pill on a
   phone, a card wider up, bottom of the start edge), shown shortly after load and then always on
-  screen, above the phone's download bar (user, 2026-10-20). No scan code on it. The support page
+  screen, above the phone's download bar (user, 2026-10-20). The download and install pages carry
+  it as well since 2026-11-01 (user: the card was missing where most readers go). No scan code on it. The support page
   dropped its own QR codes too (user, 2026-11-01, "remove the scan option": two buttons already
   say where to go); `GiveBand`'s star card is the only place they still show. Its x hides it for
   that page view only, nothing stored.
