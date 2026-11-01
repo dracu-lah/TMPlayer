@@ -15,6 +15,32 @@ Where the rest lives, read when the task touches it:
 | Stores, package managers, Telegram's terms | [docs/distribution/README.md](docs/distribution/README.md) |
 | The site: how to run it, add a page, a string or a language | [site/README.md](site/README.md) |
 | Ground rules, style, translations | [CONTRIBUTING.md](CONTRIBUTING.md) |
+| Telegram's terms, store rules, what to check on a sign in/manifest/updater change | [docs/agents/telegram-terms.md](docs/agents/telegram-terms.md) |
+| Screenshots (WebP, quality 88, convert command) | [docs/agents/screenshots.md](docs/agents/screenshots.md) |
+| Onboarding pictures and tour badges | [docs/agents/onboarding-pictures.md](docs/agents/onboarding-pictures.md) |
+| Branches and worktrees tidy-up | [docs/agents/branches.md](docs/agents/branches.md) |
+
+## Token budget and publishing
+
+Locked by the user (2026-11-02); the global `~/.claude/CLAUDE.md` wins over anything looser here or
+asked in a session, and `git push`, `gh release`, `gh workflow run` and `wrangler deploy` are denied
+at user level. In short: short sessions with a Progress / handoff section in the plan file and a
+clear point after each phase; no subagent unless the work is noisy (max two, cheapest model); grep
+then line-range reads; short answers; the user runs all publishing, so commit locally and print the
+exact commands with what each does and what to check.
+
+## Working method
+
+Think before building (user, 2026-11-02), so one feature is not built twice or only for one platform:
+
+- **Look first.** Grep for what already covers the feature and extend it. "Recently added" built
+  beside "add more chats" had to be merged later.
+- **Shared parts first.** A UI feature starts from the design system (tokens, shared components) and
+  an existing library or tool where one saves work, not a hand-rolled copy.
+- **TV is a platform, not a port.** The Android TV remote and focus are specified and tested with the
+  feature; phone and desktop working does not mean TV works.
+- **Machine checks before manual ones.** Focus/D-pad tests (`performKeyInput` with `Key.DirectionDown`
+  and `assertIsFocused()`), preview screenshot tests per form factor, scale tests, then devices.
 
 ## Building a feature
 
@@ -82,70 +108,3 @@ grep -rInP '\x{2014}|\x{2013}' --exclude-dir=.git --exclude-dir=build --exclude-
 
 Public copy (posts, store text, release notes, the site) describes TMPlayer as a player for the
 videos already in your own Telegram chats: "video", not "film" or "movie", no real titles.
-
-## Telegram's terms and the stores
-
-TMPlayer stays a client Telegram and the stores have no reason to remove. Check these whenever a
-change touches sign in, what is shown from a chat, the manifest, the updater or any store text
-(details and sources in `docs/distribution/telegram-apps.md` and `docs/distribution/play.md`):
-
-- **Telegram API terms.** The app's own `api_id` from secrets, never a sample one. No "Telegram"
-  in any app or store title and no paper plane logo; "unofficial, not affiliated with Telegram" in
-  every description. Telegram's sponsored messages stay shown in channels. Nothing is done on the
-  user's behalf without them knowing, and read state is never faked or hidden.
-- **Telegram's own restrictions stay on.** Never set TDLib's `ignore_platform_restrictions`, and
-  keep `MediaMapper` skipping messages with a restriction reason.
-- **A store build has no updater.** Google Play and Amazon get a file without the in-app updater
-  and without `REQUEST_INSTALL_PACKAGES`, as the F-Droid build already is; only the GitHub APK
-  updates itself.
-- **Google Play** wants API 36 as the target for new apps and updates since 2026-08-31 (the app
-  targets 35), a declaration for each foreground service type, an AAB, and a demo reviewers can
-  use without a Telegram code. It is set aside while the budget is $0 (working plan, Phase G).
-- **Amazon** is Fire OS only: the Appstore left other phones on 2025-08-20, and Vega OS sticks run
-  neither the APK nor sideloaded apps.
-- **Developer verification.** Since 2026-09-30 certified devices in Brazil, Indonesia, Singapore
-  and Thailand install only apps from registered developers, everywhere in 2027. Registering
-  `com.tmplayer` and the release key (U07, U08, CP15) is what keeps the GitHub APK installable.
-
-## Screenshots
-
-Every screenshot in the repository is a WebP, and stays one. Convert before committing:
-
-```sh
-magick shot.png -define webp:method=6 -define webp:sharp-yuv=true -quality 88 docs/screenshots/name.webp
-```
-
-Quality 88 is settled (about 39 to 44 dB PSNR on this app's screens, so the TV's small text stays
-sharp, at 60 to 90 per cent less than the PNG). Do not commit the PNG beside it and do not lower
-the quality. `docs/screenshots/` is the README's; the site's are in `site/public/screenshots/`
-(see [site/AGENTS.md](site/AGENTS.md) for their variants and references). Two images stay PNG on
-purpose: `site/public/og.png` (link preview crawlers cannot be relied on to decode WebP) and
-`site/public/icon-512.png` (the PWA icon).
-
-## Onboarding pictures
-
-The setup's answers and the quick tour's pages (CP67, CP69) show cropped, marked screenshots of the promo
-build: one spec each in `scripts/annotations/` (`setup-android-*`, `setup-desktop-*`,
-`tour-android-<page>[-dark|-tv]`, `tour-desktop-<page>-light|dark`), drawn by
-`scripts/annotate-shot.py` into `app/src/main/res/drawable-nodpi/` and
-`ui/src/jvmMain/resources/onboarding/`. A tour spec marks each thing its page talks about with one
-`circle`, in the order of the page's numbered lines; the app draws the numbers over the picture,
-so no number or word goes into an image. After retaking or re-marking a tour shot, run
-`scripts/tour-badges.py` (`--check` says whether it is due).
-
-## Branches and worktrees
-
-`main` is the only long lived branch. Work done in a worktree or on a side branch (an agent's
-`worktree-agent-*` branch, a `diag/*` test build, a branch held back until a release) is tidied
-away as soon as it is merged or no longer needed:
-
-- After merging: `git worktree remove <path>`, `git branch -d <branch>`, and if it was pushed,
-  `gh api -X DELETE repos/dracu-lah/TMPlayer/git/refs/heads/<branch>`. Then `git fetch --prune`.
-- A branch kept on purpose (such as `site-after-<version>`, merged on release day) is named in
-  `private/PLAN.md` (the working notes, kept off GitHub) with the day it goes, and deleted the
-  same way once merged.
-- Before deleting a branch that was never merged, say so, list its commit hashes in the report,
-  and ask first.
-- Check with `git worktree list`, `git branch` and
-  `gh api repos/dracu-lah/TMPlayer/branches --jq '.[].name'` that only `main` (and any branch
-  kept on purpose) is left.
