@@ -72,8 +72,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
-import com.tmplayer.data.AddedChats
-import com.tmplayer.data.AddedMode
 import com.tmplayer.data.DeviceFit
 import com.tmplayer.data.DeviceForm
 import com.tmplayer.data.Recommendation
@@ -103,6 +101,10 @@ import kotlinx.coroutines.launch
  * A remote or a keyboard starts each step on Next. Up, or Right on a wide screen, reaches the
  * answers; OK on one marks it and returns to Next. Wide screens (a television, a desktop window,
  * a phone on its side) put the words beside the answers; a phone held upright stacks them.
+ *
+ * A page holding several switch steps ([Setup.pages]: Low storage mode, Save mobile data, Send
+ * crash reports) draws them as one row each ([SwitchesPage]) under one heading, and its Next
+ * writes every one that changed.
  */
 @Composable
 fun SetupScreen(
@@ -113,9 +115,9 @@ fun SetupScreen(
     /** What the Device step says about this device, and what it offers to change (CP68). */
     fit: DeviceFit = DeviceFit.Fine,
     recommendations: List<Recommendation> = emptyList(),
-    /** How many steps of the first run come before these, and each group's size, for the bar at the top. */
+    /** How many pages of the first run come before these, and each group's size, for the bar at the top. */
     before: Int = 0,
-    groups: List<Int> = listOf(state.steps.size),
+    groups: List<Int> = listOf(state.pages.size),
     /** Whether something follows the last step, so its button says Next rather than Done. */
     moreAfter: Boolean = false,
     /** Skip all: out of the setup and whatever follows it. */
@@ -124,13 +126,6 @@ fun SetupScreen(
     onBackFromFirst: (() -> Unit)? = null,
     /** What the crash report step starts or stops once its answer is written (CP102f). */
     crashReporting: CrashReporting = CrashReporting.Unavailable,
-    /**
-     * The real "Add chats" picker (HX27/HX28), over the host's own chat list, drawn full screen
-     * in place of this one while it is up. Null leaves [SetupStep.Chats] unable to open anything;
-     * the host that offers the step is the one that must supply this (see [Setup.stepsFor]'s
-     * `chatsAvailable`).
-     */
-    chatsPicker: (@Composable (onClose: () -> Unit) -> Unit)? = null,
 ) {
     val s = LocalStrings.current
     val scope = rememberCoroutineScope()
@@ -139,7 +134,6 @@ fun SetupScreen(
     val lighter by settings.lighterPictures.collectAsState(initial = false)
     val saveData by settings.saveMobileData.collectAsState(initial = false)
     val crashReports by settings.crashReports.collectAsState(initial = false)
-    val addedChats by AddedChats.choice.collectAsState()
     val posters = online?.settings?.collectAsState()?.value?.enabled ?: true
     val values = SetupValues(
         posters = posters,
@@ -147,59 +141,38 @@ fun SetupScreen(
         lighter = lighter,
         saveData = saveData,
         crashReports = crashReports,
-        addedChatsPicked = addedChats.mode == AddedMode.Picked,
     )
     val form = deviceForm()
     val remote = form != DeviceForm.Phone
 
+    val page = state.page
     val step = state.step
-    // What is marked on this step: the viewer's pick, or until there is one, what is set now.
-    var picked by remember(step) { mutableStateOf<SetupChoice?>(null) }
-    val selected = picked ?: values.current(step)
+    val switches = page.size > 1
+    // What is marked on each step of this page: the viewer's pick, or until there is one, what is
+    // set now. Keyed by the page, so walking back finds the answers that were written.
+    var picks by remember(state.index) { mutableStateOf<Map<SetupStep, SetupChoice>>(emptyMap()) }
+    fun selectedOn(on: SetupStep): SetupChoice = picks[on] ?: values.current(on)
+    val selected = selectedOn(step)
     val primaryFocus = remember { FocusRequester() }
-    var focusedOn by remember { mutableStateOf<SetupStep?>(null) }
-    // The real picker, over this whole screen rather than inside it: a list of chats has its own
-    // chrome (search, Select all, a total at the foot) and drawing both at once would double it.
-    var showChatsPicker by remember(step) { mutableStateOf(false) }
-
-    if (step == SetupStep.Chats && showChatsPicker) {
-        val picker = chatsPicker
-        if (picker == null) {
-            // Should not happen (the host only offers the step with a picker to open), but nothing
-            // here may be a dead end: fall back to the two-answer card instead of a blank screen.
-            showChatsPicker = false
-        } else {
-            picker {
-                // The picker already wrote the answer itself (Done) or changed nothing (Back,
-                // discarded): either way it is resolved, so this step is done either way, exactly
-                // like skipping it would be.
-                showChatsPicker = false
-                if (!state.next()) onDone()
-            }
-            return
-        }
-    }
+    var focusedOn by remember { mutableStateOf<Int?>(null) }
 
     fun next() {
-        // The Chats step's real answer takes a screen, not a setting: Next opens it rather than
-        // writing anything, whether this is a fresh pick or a returning viewer reviewing theirs.
-        if (step == SetupStep.Chats && selected == SetupChoice.ChooseChats) {
-            showChatsPicker = true
-            return
-        }
-        val choice = selected
-        // Only a change is written: Next on an untouched step leaves every setting as it was, even
-        // one changed on its own in Settings since. Mobile data suggests saving although it is off,
-        // and the Device and Chats steps' answers are actions, so both compare with what is really set.
-        if (choice != values.chosen(step)) {
-            scope.launch {
-                runCatching {
-                    choice.applyTo(
-                        settings,
-                        posters = online?.let { o -> { on: Boolean -> o.setEnabled(on) } },
-                        recommendations = recommendations,
-                        crashReports = crashReporting.onChange,
-                    )
+        for (on in page) {
+            val choice = selectedOn(on)
+            // Only a change is written: Next on an untouched step leaves every setting as it was,
+            // even one changed on its own in Settings since. Mobile data suggests saving although
+            // it is off, and the Device step's answer is an action, so both compare with what is
+            // really set.
+            if (choice != values.chosen(on)) {
+                scope.launch {
+                    runCatching {
+                        choice.applyTo(
+                            settings,
+                            posters = online?.let { o -> { enabled: Boolean -> o.setEnabled(enabled) } },
+                            recommendations = recommendations,
+                            crashReports = crashReporting.onChange,
+                        )
+                    }
                 }
             }
         }
@@ -207,21 +180,20 @@ fun SetupScreen(
     }
 
     fun mark(choice: SetupChoice) {
-        picked = choice
-        // A remote goes back to Next, one press from moving on with what it marked. The Chats
-        // step's "Choose chats" instead opens the picker at once, both for a tap and for a remote's
-        // OK on the row, so marking it never leaves a dangling answer nothing will ever write.
-        if (step == SetupStep.Chats && choice == SetupChoice.ChooseChats) {
-            showChatsPicker = true
-        } else if (remote) {
-            runCatching { primaryFocus.requestFocus() }
-        }
+        picks = picks + (choice.step to choice)
+        // A remote goes back to Next, one press from moving on with what it marked. On a page of
+        // switches it stays on the row, since the next press is as likely another switch.
+        if (remote && !switches) runCatching { primaryFocus.requestFocus() }
     }
 
     val back: (() -> Unit)? = if (!state.isFirst) ({ state.back() }) else onBackFromFirst
     BackHandler { back?.invoke() ?: onSkipAll() }
 
-    val copy = s.setupCopy(step).let { if (step == SetupStep.Device) it.copy(title = s.fitHeadline(fit)) else it }
+    val copy = when {
+        switches -> SetupCopy(s.setupDataTitle, s.setupDataBody)
+        step == SetupStep.Device -> s.setupCopy(step).copy(title = s.fitHeadline(fit))
+        else -> s.setupCopy(step)
+    }
     val last = state.isLast && !moreAfter
     StepFrame(
         group = s.setupGroupPreferences,
@@ -232,7 +204,7 @@ fun SetupScreen(
         onSkipAll = if (last) null else onSkipAll,
         modifier = modifier,
         primaryFocus = primaryFocus,
-        onPrimaryFocused = { focusedOn = step },
+        onPrimaryFocused = { focusedOn = state.index },
     ) { wide ->
         if (wide) {
             Row(
@@ -251,17 +223,17 @@ fun SetupScreen(
                     // Two squares side by side, as large as the width allows and the height leaves
                     // room for, with the answer's name and line under each.
                     val side = min((maxWidth - GAP) / 2 - CARD_PAD * 2, maxHeight - LABELS - CARD_PAD * 2)
-                    if (step == SetupStep.Device) {
+                    if (switches) {
+                        Column(Modifier.verticalScroll(rememberScrollState())) {
+                            SwitchesPage(page, ::selectedOn, ::mark)
+                        }
+                    } else if (step == SetupStep.Device) {
                         Column(Modifier.verticalScroll(rememberScrollState())) {
                             DeviceChoices(recommendations, selected, ::mark)
                         }
                     } else if (step == SetupStep.CrashReports) {
                         Column(Modifier.verticalScroll(rememberScrollState())) {
                             CrashChoice(selected, ::mark)
-                        }
-                    } else if (step == SetupStep.Chats) {
-                        Column(Modifier.verticalScroll(rememberScrollState())) {
-                            ChatsChoice(selected, addedChats.chats.size, ::mark)
                         }
                     } else {
                         Choices(step, selected, side, ::mark)
@@ -274,12 +246,12 @@ fun SetupScreen(
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 StepHeading(copy.title, copy.body)
-                if (step == SetupStep.Device) {
+                if (switches) {
+                    SwitchesPage(page, ::selectedOn, ::mark)
+                } else if (step == SetupStep.Device) {
                     DeviceChoices(recommendations, selected, ::mark)
                 } else if (step == SetupStep.CrashReports) {
                     CrashChoice(selected, ::mark)
-                } else if (step == SetupStep.Chats) {
-                    ChatsChoice(selected, addedChats.chats.size, ::mark)
                 } else {
                     Choices(step, selected, side = null, onPick = ::mark)
                 }
@@ -291,11 +263,11 @@ fun SetupScreen(
     // A remote or a keyboard starts each step on Next, asked for again over a few frames until it
     // has it: a window not yet focused, or a list arriving under the setup, can refuse the first.
     if (remote) {
-        LaunchedEffect(step) {
+        LaunchedEffect(state.index) {
             repeat(FOCUS_TRIES) {
                 withFrameNanos { }
                 if (it > 0) delay(FOCUS_RETRY_MS)
-                if (focusedOn == step) return@LaunchedEffect
+                if (focusedOn == state.index) return@LaunchedEffect
                 runCatching { primaryFocus.requestFocus() }
             }
         }
@@ -350,38 +322,37 @@ private fun CrashChoice(selected: SetupChoice, onPick: (SetupChoice) -> Unit) {
 }
 
 /**
- * The Chats step's two rows ([SetupStep.Chats], HX28): Browse everything, the recommended default,
- * and Choose chats, which opens the real "Add chats" picker (HX27) at once rather than waiting for
- * Next, since there is nothing to mark here that a tap on it should not already act on. Once
- * chosen, the count under the row is the same words Settings' own "Choose chats" row uses, so
- * reopening it to change a mind reads as the same feature in both places.
+ * The switch steps sharing one page ([Setup.pages]): a row each, in the order of [page], every
+ * one starting on what is set now (Low storage mode as it is, Save mobile data on as suggested,
+ * crash reports off until turned on). Pressing a row only marks the other answer; the page's Next
+ * writes what is marked, as on every other step. The crash report row keeps its privacy policy
+ * link ([CrashReportsQuestion]): it is the one consent question.
  */
 @Composable
-private fun ChatsChoice(selected: SetupChoice, chosenCount: Int, onPick: (SetupChoice) -> Unit) {
+internal fun SwitchesPage(page: List<SetupStep>, selected: (SetupStep) -> SetupChoice, onPick: (SetupChoice) -> Unit) {
     val s = LocalStrings.current
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        OptionRow(
-            title = s.setupChatsAll,
-            detail = s.setupChatsAllDetail,
-            selected = selected == SetupChoice.BrowseAllChats,
-            recommended = true,
-            modifier = Modifier.arrowsMoveFocus(),
-        ) { onPick(SetupChoice.BrowseAllChats) }
-        OptionRow(
-            title = s.setupChatsChoose,
-            detail = s.setupChatsChooseDetail,
-            selected = selected == SetupChoice.ChooseChats,
-            modifier = Modifier.arrowsMoveFocus(),
-        ) { onPick(SetupChoice.ChooseChats) }
-        if (selected == SetupChoice.ChooseChats) {
-            Text(
-                s.settingsHomeSourceChosenDetail(count = chosenCount),
-                style = MaterialTheme.typography.bodySmall,
-                color = Tone.muted,
-                // Lines up under the row's own title: its 16 dp padding, then the mark and the
-                // gap before the words (OptionRow's own 22 dp mark, 12 dp spacing).
-                modifier = Modifier.padding(start = 16.dp + 22.dp + 12.dp, top = 2.dp),
-            )
+        for (step in page) {
+            val now = selected(step)
+            when (step) {
+                SetupStep.CrashReports -> CrashChoice(now, onPick)
+                else -> {
+                    // The answer the switch turns on, and the one it turns back to.
+                    val (on, off) = when (step) {
+                        SetupStep.Storage -> SetupChoice.LowStorage to SetupChoice.KeepWhilePlaying
+                        SetupStep.MobileData -> SetupChoice.SaveData to SetupChoice.NoLimits
+                        else -> null
+                    } ?: continue
+                    val copy = s.choiceCopy(on)
+                    OptionRow(
+                        title = copy.title,
+                        detail = copy.detail,
+                        selected = now == on,
+                        role = Role.Switch,
+                        modifier = Modifier.arrowsMoveFocus(),
+                    ) { onPick(if (now == on) off else on) }
+                }
+            }
         }
     }
 }

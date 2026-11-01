@@ -136,7 +136,28 @@ fun DevicesScreen(onClose: () -> Unit, modifier: Modifier = Modifier, preview: L
                     val others = list.filterNot { it.current }
                     mine.forEach { SessionCard(it, s, now) }
                     Spacer(Modifier.height(4.dp))
-                    Text(s.sessionsOthers, style = MaterialTheme.typography.titleMedium, color = Tone.text, modifier = Modifier.semantics { heading() })
+                    // End all other sessions sits beside the heading, not after the list, so it
+                    // stays in view without scrolling past every device (CP83 follow-up: the
+                    // bottom button was out of sight once a few devices were signed in).
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(s.sessionsOthers, style = MaterialTheme.typography.titleMedium, color = Tone.text, modifier = Modifier.semantics { heading() })
+                        if (others.size > 1 && asking != ALL) {
+                            SetupButton(s.sessionsEndAll, onClick = { asking = ALL; note = null })
+                        }
+                    }
+                    if (asking == ALL) {
+                        Confirm(
+                            title = s.sessionsEndAllTitle,
+                            body = s.sessionsEndAllConfirm,
+                            action = if (busy) s.sessionsEnding else s.sessionsEndAll,
+                            onYes = { end(ALL, "") },
+                            onNo = { asking = null },
+                        )
+                    }
                     if (others.isEmpty()) Text(s.sessionsNoneOther, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
                     others.forEachIndexed { index, session ->
                         val name = AccountSessions.title(session, s)
@@ -156,20 +177,6 @@ fun DevicesScreen(onClose: () -> Unit, modifier: Modifier = Modifier, preview: L
                                     onClick = { asking = session.id; note = null },
                                 )
                             }
-                        }
-                    }
-                    if (others.size > 1) {
-                        Spacer(Modifier.height(4.dp))
-                        if (asking == ALL) {
-                            Confirm(
-                                title = s.sessionsEndAllTitle,
-                                body = s.sessionsEndAllConfirm,
-                                action = if (busy) s.sessionsEnding else s.sessionsEndAll,
-                                onYes = { end(ALL, "") },
-                                onNo = { asking = null },
-                            )
-                        } else {
-                            SetupButton(s.sessionsEndAll, onClick = { asking = ALL; note = null })
                         }
                     }
                 }

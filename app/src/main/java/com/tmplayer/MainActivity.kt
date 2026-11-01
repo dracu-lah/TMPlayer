@@ -170,6 +170,12 @@ import kotlinx.coroutines.withContext
 private const val EXIT_WINDOW_MS = 2_000L
 
 /**
+ * The mandatory chat choice's picker ([com.tmplayer.data.ChatsGate]) keeps its view model under
+ * this fixed run, apart from every opening from Settings, so a rotation mid-choice keeps the ticks.
+ */
+private const val GATE_RUN = -1
+
+/**
  * How long getting a video ready may take before the app says so.
  *
  * Long enough that the usual case, where everything asked for is already in TDLib's database and
@@ -695,11 +701,30 @@ private fun Root() {
     // that Settings re-offered stays out of the drawer and the rail.
     val offeredUpdate = updateState.release?.version
         ?.takeUnless { (updateState as? UpdateState.Available)?.skipped == true }
+    // Given the settings store so the chat list can paint from the last sync's snapshot before
+    // TDLib has finished opening its database. Held by the process rather than the activity, as is
+    // Home below: the system destroys this activity behind the player whenever it is short of
+    // memory (and always, with "Don't keep activities" on), and an activity-owned list came back
+    // from the player as a first visit, skeleton, tip and all, then refetched every Home row.
+    val chatsViewModel: ChatListViewModel = viewModel(
+        viewModelStoreOwner = ShellViewModels,
+        factory = object : androidx.lifecycle.ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T =
+                ChatListViewModel(settings, com.tmplayer.data.PageQueries.cache) as T
+        },
+    )
+    // The mandatory chat choice (ChatsGate): an account that never chose which chats to show is
+    // asked before the app, once the setup is done. While it is up (or briefly waits for the chat
+    // list), nothing of the shell's own is offered: no update popup, What's new, language card,
+    // tour offer or support prompt over or before it.
+    val chatsGate = com.tmplayer.ui.browse.rememberChatsGate(chatsViewModel, setupPending)
+    val gateUp = com.tmplayer.data.ChatsGate.up(chatsGate)
+    val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
+    val inShell = auth is AuthState.Ready && !setupPending && !gateUp && lifecycleState.isAtLeast(Lifecycle.State.RESUMED)
     // The popup follows the item, once per version, two seconds after it appears. Not over the
     // sign in screens and not over the player (another activity, which leaves this one stopped):
     // either way the wait starts again once the shell is in front.
-    val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
-    val inShell = auth is AuthState.Ready && !setupPending && lifecycleState.isAtLeast(Lifecycle.State.RESUMED)
     LaunchedEffect(offeredUpdate, inShell) {
         val version = offeredUpdate ?: return@LaunchedEffect
         if (!inShell) return@LaunchedEffect
@@ -820,19 +845,6 @@ private fun Root() {
         ) { forgotten -> withContext(Dispatchers.Main) { toast(com.tmplayer.data.GoneVideos.message(forgotten)) } }
     }
 
-    // Given the settings store so the chat list can paint from the last sync's snapshot before
-    // TDLib has finished opening its database. Held by the process rather than the activity, as is
-    // Home below: the system destroys this activity behind the player whenever it is short of
-    // memory (and always, with "Don't keep activities" on), and an activity-owned list came back
-    // from the player as a first visit, skeleton, tip and all, then refetched every Home row.
-    val chatsViewModel: ChatListViewModel = viewModel(
-        viewModelStoreOwner = ShellViewModels,
-        factory = object : androidx.lifecycle.ViewModelProvider.Factory {
-            @Suppress("UNCHECKED_CAST")
-            override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T =
-                ChatListViewModel(settings, com.tmplayer.data.PageQueries.cache) as T
-        },
-    )
     val chatsState by chatsViewModel.state.collectAsStateWithLifecycle()
     // Home's rows, fetched a row at a time as they come on screen, with the size limits a chat's
     // grid uses.
@@ -1427,7 +1439,7 @@ private fun Root() {
             kotlinx.coroutines.delay(com.tmplayer.ui.browse.HomeFirstPaint.HOLD_MAX_MS)
             homeHoldOver = true
         }
-        val holdForHome = reached && !setupPending && !(appLock?.onOpen == true && !appUnlocked) && !homeHoldOver && !com.tmplayer.ui.browse.HomeFirstPaint.ready
+        val holdForHome = reached && !setupPending && !gateUp && !(appLock?.onOpen == true && !appUnlocked) && !homeHoldOver && !com.tmplayer.ui.browse.HomeFirstPaint.ready
         com.tmplayer.ui.components.BrandLoaderHandOff(
             label = com.tmplayer.ui.auth.loaderLabel(shownAuth, LocalStrings.current)
                 ?: if (holdForHome) LocalStrings.current.loginGettingReady else null,
@@ -1612,45 +1624,32 @@ private fun Root() {
             return@Box
         }
 
-        // The setup after sign in (CP67), in place of the shell until it is done or skipped. It
-        // waits for the chat list, so the shell is ready under it when it ends; a list slow to
-        // come is not waited on for ever.
+        // The setup after sign in (CP67), in place of the shell until it is done or skipped. It no
+        // longer waits for the chat list: only the mandatory chat choice after it needs that.
         if (setupPending) {
-            var waitedOut by remember { mutableStateOf(false) }
-            LaunchedEffect(Unit) {
-                delay(Setup.WAIT_FOR_CHATS_MS)
-                waitedOut = true
-            }
-            val chatsLoaded = chatsState is UiState.Content
             // What this device is short of, and which settings would help (CP68): the Device step.
             val fit = com.tmplayer.ui.onboarding.rememberDeviceFit()
             val light by settings.lightSettings.collectAsStateWithLifecycle(initialValue = null)
             val seekThumbnails = com.tmplayer.ui.onboarding.rememberSeekThumbnailsShown()
-            if (light == null ||
-                Setup.decide(pending = true, chatsLoaded = chatsLoaded, waitedOut = waitedOut) == Setup.Decision.Wait
-            ) {
+            val lightNow = light
+            if (lightNow == null) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { androidx.compose.material3.CircularProgressIndicator(color = Tone.accent) }
                 return@Box
             }
             val finish: () -> Unit = { scope.launch { runCatching { settings.markSetupDone() } } }
             // Read once, as the setup opens: applying them must not take the step away under the viewer.
             val recommendations = remember {
-                com.tmplayer.data.DeviceFitRules.recommendations(fit, light!!, seekThumbnails)
+                com.tmplayer.data.DeviceFitRules.recommendations(fit, lightNow, seekThumbnails)
             }
-            // The same steps Settings' Setup choices lists (Setup.stepsFor), plus the Chats step
-            // (HX28) once the list is really in and worth narrowing; read once, as every other
-            // "read once as the setup opens" value here is, so a chat added mid-setup does not
-            // move the step count under the viewer.
-            val chatsReady = chatsLoaded && chats.isNotEmpty()
-            val steps = remember(chatsReady) {
+            // The same steps Settings' Setup choices lists (Setup.stepsFor), read once as the setup opens.
+            val steps = remember {
                 Setup.stepsFor(
                     FormFactor.form(context),
                     posters = com.tmplayer.online.OnlineMetadata.current != null,
                     recommendations = recommendations,
-                    chatsAvailable = chatsReady && Setup.worthChoosingChats(chats.size),
                 )
             }
-            // The choices, then the quick tour (CP69); with no choices to make, the tour alone.
+            // Appearance, then the choices; the quick tour is offered on its own once the shell is up.
             SetupAndTour(
                 settings,
                 steps,
@@ -1662,24 +1661,6 @@ private fun Root() {
                     com.tmplayer.ui.onboarding.CrashReporting(CrashReports.available) { on ->
                         if (on) CrashReports.start(context, true) else CrashReports.stop()
                     }
-                },
-                // The real "Add chats" picker (HX27), over the same chat list the shell already
-                // has: a view model of its own so leaving and reopening the step starts from the
-                // store, same as the picker does everywhere else it opens.
-                chatsPicker = { onPickerClose ->
-                    val model = remember {
-                        com.tmplayer.ui.browse.newAddChatsViewModel(settings)
-                    }
-                    com.tmplayer.ui.browse.AddChatsFed(
-                        settings = settings,
-                        chatsViewModel = chatsViewModel,
-                        model = model,
-                        onClose = onPickerClose,
-                        sendLogs = { com.tmplayer.ui.settings.SendLogsButton() },
-                        searchField = if (com.tmplayer.ui.components.isTouch()) null else { value, onValueChange, placeholder, modifier ->
-                            com.tmplayer.ui.components.TvSearchField(value = value, onValueChange = onValueChange, placeholder = placeholder, modifier = modifier)
-                        },
-                    )
                 },
             )
             return@Box
@@ -1706,6 +1687,27 @@ private fun Root() {
                     settingsUnlocked = true
                 },
                 onCancel = { activity?.finish() },
+            )
+            return@Box
+        }
+
+        // The mandatory chat choice (ChatsGate), after the app lock so a locked app is unlocked
+        // before any chat name is shown. In place of the app, not over it, so a remote cannot walk
+        // out of it; it goes by itself once Done writes the choice. Back leaves the app. The view
+        // model is kept under a fixed key, so a rotation keeps the ticks.
+        if (chatsGate == com.tmplayer.data.ChatsGate.Move.Wait) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { androidx.compose.material3.CircularProgressIndicator(color = Tone.accent) }
+            return@Box
+        }
+        if (chatsGate == com.tmplayer.data.ChatsGate.Move.Show) {
+            val activity = LocalActivity.current
+            com.tmplayer.ui.browse.AddChatsPage(
+                settings = settings,
+                chatsViewModel = chatsViewModel,
+                run = GATE_RUN,
+                onClose = {},
+                required = true,
+                onLeave = { activity?.finish() },
             )
             return@Box
         }

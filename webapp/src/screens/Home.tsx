@@ -114,7 +114,7 @@ export function Home() {
                                 </div>
                                 <div class="notice home-none-chosen">
                                     <p>{t('home.none_added')}</p>
-                                    <A class="link" href="/added-chats" data-tv-first>{t('browse.add_chats')}</A>
+                                    <A class="link" href="/added-chats" data-tv-first>{t('picker.choose_chats')}</A>
                                 </div>
                             </section>
                         </Match>

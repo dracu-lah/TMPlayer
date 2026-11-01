@@ -412,8 +412,8 @@ internal fun LibraryRows(state: ShellState, chatList: List<com.tmplayer.data.Cha
     // which chats TMPlayer shows: a chat's "Remove from TMPlayer" unticks a chat here (2026-11-01).
     val added by com.tmplayer.data.AddedChats.choice.collectAsState()
     Action(
-        s.browseAddChats,
-        if (added.mode == com.tmplayer.data.AddedMode.Picked) s.pickerAddedCount(added.chats.size) else s.pickerAddMoreDetail,
+        s.pickerRowTitle,
+        com.tmplayer.ui.browse.chosenChatsDetail(added, s),
         TmIcons.ChatsMany,
     ) { com.tmplayer.ui.browse.AddChatsState.open = true }
     if (favourites.isNotEmpty()) Action(s.settingsClearFavourites, s.settingsClearFavouritesDetail(favourites.size), TmIcons.Close, end = RowEnd.None) {

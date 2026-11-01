@@ -187,13 +187,13 @@ fun HomeNoneChosenCard(start: Dp, end: Dp, modifier: Modifier = Modifier, focus:
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(if (touch) 14.dp else 18.dp)) {
             IconChip(TmIcons.ChatsMany, size = if (touch) 36.dp else 44.dp)
             Text(
-                s.homeNoneAdded,
+                s.homeNoneAddedChosen,
                 style = if (touch) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge,
                 color = Tone.muted,
                 modifier = Modifier.weight(1f),
             )
         }
-        HeroPill(label = s.browseAddChats, onClick = onAddChats, focus = focus, icon = TmIcons.Add)
+        HeroPill(label = s.pickerChooseChats, onClick = onAddChats, focus = focus, icon = TmIcons.Add)
     }
 }
 

@@ -11,6 +11,7 @@ import com.tmplayer.data.ChatPicking
 import com.tmplayer.data.ChatSuggestions
 import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.ChatVideoCount
+import com.tmplayer.data.Failures
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.Td
 import kotlinx.coroutines.CancellationException
@@ -32,10 +33,13 @@ import kotlinx.coroutines.withTimeoutOrNull
  * @param chats every chat of the account, unnarrowed ([ChatListViewModel.everything]).
  * @param counts the counter's calls, or null where there is nothing to count against (a preview,
  *   the promo build): the rows then say nothing about videos rather than spin.
+ * @param write where Done writes the choice: the store's own [SettingsStore.setAddedChats], or a
+ *   test's stand in; null leaves Done doing nothing, as with no store.
  */
 class AddChatsViewModel(
     private val settings: SettingsStore? = null,
     private val counts: ChatCountCalls? = null,
+    private val write: (suspend (List<AddedChat>) -> Unit)? = settings?.let { store -> store::setAddedChats },
 ) : ViewModel(com.tmplayer.platform.JobFailures.viewModelScope("AddChats")) {
 
     /**
@@ -48,6 +52,7 @@ class AddChatsViewModel(
      *   moves under a finger or a click when it lands.
      * @param saving true while the choice is being written, so Done cannot run twice.
      * @param saved true once it is written and the screen may close.
+     * @param error what went wrong when the last write failed, shown with Try again, or null.
      */
     data class State(
         val query: String = "",
@@ -59,6 +64,7 @@ class AddChatsViewModel(
         val recommending: Boolean = false,
         val saving: Boolean = false,
         val saved: Boolean = false,
+        val error: String? = null,
     )
 
     private val _state = MutableStateFlow(State())
@@ -203,29 +209,30 @@ class AddChatsViewModel(
     /**
      * Writes the choice. The names are kept with the ids, so a chat later left or deleted still
      * has a row to remove. Pressed twice, it runs once.
+     *
+     * A write that fails (a full disk, a store that cannot be opened) ends the saving and says
+     * what happened ([State.error]), so the screen offers Try again rather than sitting on a
+     * press that never finishes, which in the mandatory chat choice would trap the viewer.
+     * Nothing is tried again on its own.
      */
     fun done(chats: List<ChatSummary>) {
-        val store = settings ?: return
+        val save = write ?: return
         if (_state.value.saving || _state.value.saved) return
-        _state.update { it.copy(saving = true) }
+        _state.update { it.copy(saving = true, error = null) }
         viewModelScope.launch {
             val ticked = _state.value.ticked
             val byId = chats.associateBy { it.id }
             val known = addedNames.associate { it.id to it.title }
             val chosen = ticked.map { id -> AddedChat(id, byId[id]?.title ?: known[id].orEmpty()) }
-            store.setAddedChats(chosen)
+            try {
+                save(chosen)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Throwable) {
+                _state.update { it.copy(saving = false, error = Failures.humanise(failure)) }
+                return@launch
+            }
             opened = ticked
-            _state.update { it.copy(saving = false, saved = true) }
-        }
-    }
-
-    /** "Keep all my chats": every chat, as an answer (HX28 asks it, Settings offers it again). */
-    fun keepAll() {
-        val store = settings ?: return
-        if (_state.value.saving || _state.value.saved) return
-        _state.update { it.copy(saving = true) }
-        viewModelScope.launch {
-            store.keepAllChats()
             _state.update { it.copy(saving = false, saved = true) }
         }
     }

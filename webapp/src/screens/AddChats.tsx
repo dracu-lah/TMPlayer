@@ -1,9 +1,13 @@
-// The Add chats picker (HX27): which of the viewer's chats TMPlayer draws from. Nothing changes in
-// Telegram either way; Done always writes a choice, even an empty one, because an empty choice is
-// a real answer and not a reason to fall back to every chat (store.ts setAddedChats). The rows,
+// The chats picker (HX27): which of the viewer's chats TMPlayer shows videos from. Nothing changes
+// in Telegram either way; Done always writes a choice, even an empty one, because an empty choice
+// is a real answer and not a reason to fall back to every chat (store.ts setAddedChats). The rows,
 // their bands and what Select all means are core's ChatPicking rules (ui/picking.ts); the archive
 // is read whole beside the list (HX32), and a list that failed part way says so.
-import { createEffect, createMemo, createResource, createSignal, For, onCleanup, onMount, Show } from 'solid-js'
+//
+// Opened with `setup=1` it is the chats gate (App.tsx): no Back, no bar, and Done waits for at
+// least one chat. Either way a viewer who has not chosen before opens on the Recommended band
+// ticked for them, made from the head of the list counted first (core's ChatSuggestions).
+import { createEffect, createMemo, createResource, createSignal, For, onCleanup, onMount, Show, untrack } from 'solid-js'
 import { useBeforeLeave, useNavigate, useSearchParams } from '@solidjs/router'
 import { Search01Icon, StarIcon } from '@hugeicons/core-free-icons'
 import { api, call } from '../tg/rpc'
@@ -14,9 +18,10 @@ import { form } from '../form'
 import { Icon } from '../ui/Icon'
 import { PageBar } from '../ui/PageBar'
 import { VirtualGrid, type GridLayout } from '../ui/VirtualGrid'
-import { adding, allTicked, changed, clearVisible, needsConfirm, pickRows, SCOPES, selectAll, visibleIds, type Band, type PickRow, type Scope } from '../ui/picking'
+import { adding, allTicked, changed, clearVisible, counted, headStart, MIN_VIDEOS, needsConfirm, pickRows, recommend, RECOMMEND_BY_MS, SCOPES, selectAll, visibleIds, type Band, type PickRow, type Scope } from '../ui/picking'
 import { ChatPicture } from './ChatPicture'
 import { chatName } from './Chats'
+import { gateNext } from './SetupChats'
 import type { ChatItem, ChatsEvent } from '../tg/types'
 
 /** One row at a time, as wide as the list: a tick, the picture, the name and its rough count. */
@@ -26,6 +31,8 @@ const ROW_LAYOUT: GridLayout = { cols: 1, estimate: 72 }
 const UNKNOWN = -1
 /** Past this the exact figure is not worth a longer phrase. */
 const MANY = 1000
+/** The head start is counted this many chats at a time, so the band can be made from what answered by its deadline. */
+const HEAD_BATCH = 3
 
 type Key = Parameters<typeof t>[0]
 
@@ -37,13 +44,14 @@ const SCOPE_LABEL: Record<Scope, Key> = {
     people: 'browse.filter_people',
 }
 const BAND_LABEL: Partial<Record<Band, Key>> = {
+    recommended: 'picker.band_recommended',
     starred: 'picker.band_starred',
     chats: 'browse.filter_all_chats',
     archived: 'browse.filter_archived',
     gone: 'picker.band_gone',
 }
 
-type Item = { head: string } | { row: PickRow<ChatItem> }
+type Item = { head: string } | { note: string } | { row: PickRow<ChatItem> }
 
 /** A chat list read from the worker, with its pages as they come and whether it failed part way. */
 function useChatList(name: 'chats' | 'archivedChats') {
@@ -59,9 +67,10 @@ function useChatList(name: 'chats' | 'archivedChats') {
 
 export function AddChats() {
     const navigate = useNavigate()
-    // Opened from the first run's "Your chats" step: Done goes on to where the visitor was headed.
+    // Opened as the chats gate: Done goes on to where the visitor was headed.
     const [params] = useSearchParams<{ setup?: string; next?: string }>()
-    const setupNext = () => (params.setup ? (params.next?.startsWith('/') ? params.next : '/') : null)
+    const gate = () => params.setup !== undefined
+    const setupNext = () => (gate() ? gateNext(params.next) : null)
 
     // The full account's chats, unfiltered, archive included: picking from them is the one place
     // the gate itself does not apply (Chats.tsx is the gated browse list; this is where it is set).
@@ -84,17 +93,24 @@ export function AddChats() {
     const [ticked, setTicked] = createSignal<ReadonlySet<number>>(new Set())
     let start: ReadonlySet<number> = new Set()
     let seeded = false
+    const [seededNow, setSeededNow] = createSignal(false)
     createEffect(() => {
         const s = stored()
         if (s && !seeded) {
             seeded = true
             start = new Set(s.map((a) => a.chatId))
             setTicked(start)
+            setSeededNow(true)
         }
     })
 
     const [text, setText] = createSignal('')
     const [scope, setScope] = createSignal<Scope>('all')
+    // The Recommended band, taken once and then left alone, so no row moves under a finger as later counts arrive.
+    const [recommended, setRecommended] = createSignal<number[]>([])
+    const [belowBar, setBelowBar] = createSignal(false)
+    const [recommending, setRecommending] = createSignal(false)
+    const whole = () => !text().trim() && scope() === 'all'
     const rows = createMemo(() =>
         pickRows({
             chats: list(),
@@ -102,23 +118,35 @@ export function AddChats() {
             added: new Set((stored() ?? []).map((a) => a.chatId)),
             addedNames: new Map((stored() ?? []).map((a) => [a.chatId, a.title])),
             starred: starredIds(),
+            recommended: recommended(),
             query: text(),
             scope: scope(),
             listComplete: loaded(),
         }),
     )
     const visible = createMemo(() => visibleIds(rows()))
-    // A heading over each band once there is more than one; Saved Messages has none.
+    // A heading over each band once there is more than one; Saved Messages has none. While the
+    // head start counts, the Recommended band's place is held under Saved Messages with a line.
     const items = createMemo((): Item[] => {
-        const bands = new Set(rows().map((r) => r.band))
+        const shown = rows()
+        const bands = new Set(shown.map((r) => r.band))
+        const holding = recommending() && whole()
         const out: Item[] = []
         let last: Band | null = null
-        for (const row of rows()) {
+        const hold = () => {
+            out.push({ head: t('picker.band_recommended') }, { note: t('browse.finding_videos') })
+            last = 'recommended'
+        }
+        shown.forEach((row, i) => {
+            if (holding && last !== 'recommended' && row.band !== 'saved') hold()
             const label = BAND_LABEL[row.band]
-            if (row.band !== last && bands.size > 1 && label) out.push({ head: t(label) })
+            if (row.band !== last && (bands.size > 1 || holding) && label) out.push({ head: t(label) })
             last = row.band
             out.push({ row })
-        }
+            // Under the last recommended row, when none cleared the bar: why these are offered unticked.
+            if (row.band === 'recommended' && belowBar() && shown[i + 1]?.band !== 'recommended') out.push({ note: t('picker.below_bar', { minimum: MIN_VIDEOS }) })
+        })
+        if (holding && last !== 'recommended' && out.length) hold()
         return out
     })
 
@@ -154,7 +182,53 @@ export function AddChats() {
         requested.delete(id)
         wantCount(id)
     }
-    onCleanup(() => clearTimeout(flush))
+    let closed = false
+    let recommendBy = 0
+    onCleanup(() => {
+        closed = true
+        clearTimeout(flush)
+        clearTimeout(recommendBy)
+    })
+
+    // The head of the list is counted once, as soon as the first chats and the stored choice are
+    // in, so the Recommended band shows within the first seconds rather than after the whole
+    // account is read (core's ChatPicking.headStart). Three at a time, as the rows' own counts go,
+    // and it stops when the picker closes.
+    let started = false
+    let taken = false
+    const takeRecommendation = () => {
+        if (taken) return
+        const answer = recommend(counted(list(), known()))
+        if (!answer.ids.length) return
+        taken = true
+        setRecommended(answer.ids)
+        setBelowBar(answer.belowBar)
+        // Ticked for a viewer who has not chosen before; one who has keeps their own choice, with the band only shown.
+        if (!start.size && !ticked().size && answer.ticked.size) setTicked(new Set(answer.ticked))
+    }
+    createEffect(() => {
+        if (started || !seededNow() || !list().length) return
+        started = true
+        const ids = untrack(() => headStart(list())).filter((id) => !requested.has(id))
+        ids.forEach((id) => requested.add(id))
+        setRecommending(true)
+        const counting = (async () => {
+            for (let i = 0; i < ids.length && !closed; i += HEAD_BATCH) await resolveCounts(ids.slice(i, i + HEAD_BATCH))
+        })()
+        // The band is made from whatever answered by the deadline: one slow chat must not hold back the other fifty nine.
+        let settled = false
+        const settle = () => {
+            if (settled || closed) return
+            settled = true
+            clearTimeout(recommendBy)
+            takeRecommendation()
+            setRecommending(false)
+            // Nothing answered in time at all (offline, a cold start): the band waits for the head start instead of staying empty.
+            if (!taken) void counting.then(() => !closed && takeRecommendation())
+        }
+        recommendBy = window.setTimeout(settle, RECOMMEND_BY_MS)
+        void counting.then(settle)
+    })
 
     const toggle = (id: number) =>
         setTicked((t) => {
@@ -202,16 +276,20 @@ export function AddChats() {
     let leaving = false
     let discard!: HTMLDialogElement
     let retryLeave: (() => void) | null = null
+    // The gate asks nothing: leaving it only meets it again (App.tsx), so there is nothing to lose.
     useBeforeLeave((e) => {
-        if (leaving || e.defaultPrevented || !changed(start, ticked())) return
+        if (leaving || gate() || e.defaultPrevented || !changed(start, ticked())) return
         e.preventDefault()
         retryLeave = () => e.retry(true)
         discard.showModal()
     })
 
     const [saving, setSaving] = createSignal(false)
+    // The gate needs at least one chat; Settings takes an empty choice as a real answer.
+    const blocked = () => gate() && !ticked().size
+    const doneLabel = () => (ticked().size ? t('common.done') : gate() ? t('picker.gate_done_none') : t('picker.done_none'))
     const done = () => {
-        if (saving()) return
+        if (saving() || blocked()) return
         setSaving(true)
         const byId = new Map(list().map((c) => [c.id, chatName(c)]))
         const oldNames = new Map((stored() ?? []).map((a: AddedChat) => [a.chatId, a.title]))
@@ -225,15 +303,27 @@ export function AddChats() {
 
     return (
         <>
-            <PageBar title={t('browse.add_chats')} />
-            <h1 class="visually-hidden">{t('browse.add_chats')}</h1>
-            <p class="muted picker-blurb">{t('picker.blurb')}</p>
+            <Show
+                when={gate()}
+                fallback={
+                    <>
+                        <PageBar title={t('picker.choose_chats')} />
+                        <h1 class="visually-hidden">{t('picker.choose_chats')}</h1>
+                        <p class="muted picker-blurb">{t('picker.blurb_only')}</p>
+                    </>
+                }
+            >
+                {/* The gate has no Back: choosing is the way on. */}
+                <h1 class="page-title">{t('picker.gate_title')}</h1>
+                <p class="muted picker-blurb">{t('picker.gate_body')}</p>
+            </Show>
             <label class="search-field">
                 <Icon icon={Search01Icon} size={20} />
-                <input type="search" placeholder={t('chats.search')} aria-label={t('chats.search')} value={text()} onInput={(e) => setText(e.currentTarget.value)} />
+                {/* The TV's remote starts here, as the apps' picker does; the field stays read only until OK. */}
+                <input type="search" placeholder={t('chats.search')} aria-label={t('chats.search')} value={text()} onInput={(e) => setText(e.currentTarget.value)} data-tv-first />
             </label>
             <div class="picker-actions">
-                <div class="picker-scopes" role="group" aria-label={t('browse.add_chats')}>
+                <div class="picker-scopes" role="group" aria-label={t('picker.choose_chats')}>
                     <For each={SCOPES}>
                         {(s) => (
                             <button class="history-tab" type="button" aria-pressed={scope() === s} onClick={() => setScope(s)}>
@@ -258,10 +348,12 @@ export function AddChats() {
             <Show when={(loaded() || failed()) && !rows().length}>
                 <p class="muted">{text().trim() ? t('chats.no_match', { query: text().trim() }) : t('picker.empty')}</p>
             </Show>
-            <VirtualGrid items={items()} layout={() => ROW_LAYOUT} rowClass="chats" label={t('browse.add_chats')}>
+            <VirtualGrid items={items()} layout={() => ROW_LAYOUT} rowClass="chats" label={t('picker.choose_chats')}>
                 {(item) =>
                     'head' in item ? (
                         <h2 class="picker-band">{item.head}</h2>
+                    ) : 'note' in item ? (
+                        <p class="muted small picker-note">{item.note}</p>
                     ) : item.row.chat ? (
                         <PickRowView chat={item.row.chat} on={ticked().has(item.row.id)} onToggle={() => toggle(item.row.id)} count={countOf(item.row.id)} onWant={() => wantCount(item.row.id)} onRetry={() => retryCount(item.row.id)} />
                     ) : (
@@ -279,7 +371,7 @@ export function AddChats() {
             </VirtualGrid>
             <div class="select-bar">
                 <span class="select-count" aria-live="polite">{footer()}</span>
-                <button class="primary" type="button" disabled={saving()} onClick={done}>{t('common.done')}</button>
+                <button class="primary" type="button" disabled={saving() || blocked()} onClick={done}>{doneLabel()}</button>
             </div>
             <dialog class="confirm" ref={confirmAll} aria-labelledby="select-all-title" onClose={() => setAsking(0)}>
                 <h2 id="select-all-title">{t('picker.confirm_title', { count: asking() })}</h2>

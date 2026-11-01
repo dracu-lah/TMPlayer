@@ -60,7 +60,7 @@ class TourTest {
     }
 
     @Test
-    fun `an updated install is offered the tour once, a fresh sign in has it after the setup`() = runBlocking {
+    fun `an updated install and a fresh sign in are both offered the tour once`() = runBlocking {
         val updated = store()
         assertEquals(SettingsStore.TourState.Never, updated.tourState.first())
         updated.openTour()
@@ -71,7 +71,8 @@ class TourTest {
         val fresh = store()
         fresh.armSetup()
         fresh.markSetupDone()
-        assertEquals("never offered after the setup showed it", SettingsStore.TourState.Done, fresh.tourState.first())
+        // The tour is no longer a counted part of the setup: it is offered on its own after it.
+        assertEquals("offered once after the setup", SettingsStore.TourState.Never, fresh.tourState.first())
     }
 
     private fun store(): SettingsStore {

@@ -60,7 +60,7 @@ internal fun HomeLayoutRows(state: ShellState) {
         icon = TmIcons.StarOutline,
     ) { scope.launch { settings.setHomeStarredRows(it) } }
     Text(
-        s.settingsHomeFollowsAdded,
+        s.settingsHomeFollowsAddedChosen,
         style = MaterialTheme.typography.bodySmall,
         color = Tone.muted,
         modifier = Modifier.padding(start = SETTING_INSET, end = SETTING_INSET, top = 4.dp),

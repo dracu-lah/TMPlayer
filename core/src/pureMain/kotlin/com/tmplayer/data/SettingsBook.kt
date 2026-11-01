@@ -111,7 +111,10 @@ class SettingsBook(private val kv: KeyValueStore) : AllowedChatsSource, Correcti
         }
     }
 
-    /** As SettingsStore.keepAllChats. */
+    /**
+     * As SettingsStore.keepAllChats: no screen writes this any more; kept so stored "all" answers
+     * and the store parity tests stay valid.
+     */
     suspend fun keepAllChats() {
         kv.edit {
             it.remove(AddedChats.KEY)

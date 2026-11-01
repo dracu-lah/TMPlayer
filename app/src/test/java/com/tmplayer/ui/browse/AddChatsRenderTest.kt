@@ -3,8 +3,16 @@ package com.tmplayer.ui.browse
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.os.Looper
+import android.view.View
+import android.view.ViewGroup
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.ui.platform.ViewRootForTest
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsNode
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getAllSemanticsNodes
+import androidx.compose.ui.semantics.getOrNull
 import com.tmplayer.data.ChatCount
 import com.tmplayer.data.ChatCountCalls
 import com.tmplayer.data.ChatKind
@@ -72,6 +80,121 @@ class AddChatsRenderTest {
         assertTrue(model.state.value.recommended.isEmpty())
         assertTrue(model.state.value.ticked.isEmpty())
         model.stop()
+    }
+
+    /**
+     * The mandatory chat choice (ChatsGate) on a phone: its own heading, no Back button, Done not
+     * pressable until a chat is ticked, and the system Back leaves rather than closing or asking
+     * to discard.
+     */
+    @Test
+    @Config(sdk = [35], qualifiers = "w411dp-h891dp-port-night-xhdpi")
+    fun `required mode has no Back, needs a tick and leaves on Back`() {
+        FormFactor.override(false)
+        val model = AddChatsViewModel(write = {})
+        var closed = 0
+        var left = 0
+        val activity = Robolectric.buildActivity(ComponentActivity::class.java).setup().get()
+        activity.setContent {
+            TmMaterialTheme(dark = true) {
+                AddChatsScreen(
+                    chats = CHATS,
+                    listComplete = true,
+                    starred = emptySet(),
+                    model = model,
+                    onClose = { closed++ },
+                    required = true,
+                    onLeave = { left++ },
+                )
+            }
+        }
+        idle()
+        assertTrue(node(activity, "Choose chats to watch") != null)
+        assertTrue("no Back button", node(activity, "Back", clickable = true) == null)
+        assertTrue(node(activity, "Choose at least one chat") != null)
+        assertTrue("Done waits for a tick", node(activity, "Choose at least one chat", clickable = true) == null)
+
+        activity.onBackPressedDispatcher.onBackPressed()
+        idle()
+        assertEquals(1, left)
+        assertEquals(0, closed)
+        assertTrue("never asks to discard", node(activity, "Discard changes?") == null)
+
+        click(activity, "Harbour Notes")
+        idle()
+        assertTrue("a tick makes Done pressable", node(activity, "Done", clickable = true) != null)
+        // No frame is drawn here: drawing the window while the tick box still animates left the
+        // native canvas in a state that stopped the next test's counts from landing.
+        model.stop()
+    }
+
+    /** A save that fails says so with Try again, rather than sitting on the press for ever. */
+    @Test
+    @Config(sdk = [35], qualifiers = "w411dp-h891dp-port-night-xhdpi")
+    fun `a failed save shows the error and Try again`() {
+        FormFactor.override(false)
+        var tries = 0
+        val model = AddChatsViewModel(write = {
+            tries++
+            throw java.io.IOException("No space left on device")
+        })
+        val activity = Robolectric.buildActivity(ComponentActivity::class.java).setup().get()
+        activity.setContent {
+            TmMaterialTheme(dark = true) {
+                AddChatsScreen(chats = CHATS, listComplete = true, starred = emptySet(), model = model, onClose = {}, required = true)
+            }
+        }
+        idle()
+        click(activity, "Harbour Notes")
+        idle()
+        click(activity, "Done")
+        idle()
+        assertTrue("the error is kept", model.state.value.error != null)
+        assertFalse("not stuck saving", model.state.value.saving)
+        assertFalse(model.state.value.saved)
+        assertTrue(node(activity, "Try again", clickable = true) != null)
+        // Nothing tries again by itself; Try again does.
+        assertEquals(1, tries)
+        save("add-chats-save-failed-phone.png", draw(activity))
+        click(activity, "Try again")
+        idle()
+        assertEquals(2, tries)
+        model.stop()
+    }
+
+    private fun idle() = repeat(10) { shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(100)) }
+
+    /** Every merged semantics node of the window's Compose views. */
+    private fun nodes(activity: ComponentActivity): List<SemanticsNode> {
+        val out = mutableListOf<SemanticsNode>()
+        fun walk(view: View) {
+            if (view is ViewRootForTest) out += view.semanticsOwner.getAllSemanticsNodes(mergingEnabled = true)
+            if (view is ViewGroup) for (i in 0 until view.childCount) walk(view.getChildAt(i))
+        }
+        walk(activity.window.decorView)
+        return out
+    }
+
+    /** The node whose words include [text] (and that can be pressed, when [clickable]), or null. */
+    private fun node(activity: ComponentActivity, text: String, clickable: Boolean = false): SemanticsNode? =
+        nodes(activity).firstOrNull { node ->
+            val words = node.config.getOrNull(SemanticsProperties.Text).orEmpty().map { it.text }
+            words.any { it == text } && (!clickable || node.config.getOrNull(SemanticsActions.OnClick) != null)
+        }
+
+    private fun click(activity: ComponentActivity, text: String) {
+        val target = node(activity, text, clickable = true) ?: error(
+            "nothing pressable reads $text among " +
+                nodes(activity).map { n -> n.config.getOrNull(SemanticsProperties.Text).orEmpty().joinToString("|") { it.text } }.filter { it.isNotBlank() },
+        )
+        target.config.getOrNull(SemanticsActions.OnClick)?.action?.invoke()
+    }
+
+    private fun draw(activity: ComponentActivity): Bitmap {
+        val root = activity.window.decorView
+        val bitmap = Bitmap.createBitmap(root.width, root.height, Bitmap.Config.ARGB_8888)
+        root.draw(Canvas(bitmap))
+        return bitmap
     }
 
     private fun render(tv: Boolean, model: AddChatsViewModel, chats: List<ChatSummary>): Bitmap {

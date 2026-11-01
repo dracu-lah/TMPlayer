@@ -68,6 +68,7 @@ import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.toggleableState
@@ -133,6 +134,11 @@ import com.tmplayer.ui.theme.focusRing
  * @param sendLogs the platform's Send logs button, drawn beside Try again when the list is short.
  * @param searchField the television's own search box, which only the app has; the touch and
  *   desktop screens draw a plain text field.
+ * @param required the mandatory chat choice ([com.tmplayer.data.ChatsGate]): its own heading and
+ *   words, no Back button, Done only once a chat is ticked, and Back (the system's, Esc) calls
+ *   [onLeave] instead of asking to discard, since there is nothing behind it to go back to.
+ * @param onLeave what Back does in [required] mode: leaves the app on the phone and the
+ *   television, nothing on the desktop.
  */
 @Composable
 fun AddChatsScreen(
@@ -148,6 +154,8 @@ fun AddChatsScreen(
     onLoadMore: () -> Unit = {},
     sendLogs: (@Composable () -> Unit)? = null,
     searchField: (@Composable (value: String, onValueChange: (String) -> Unit, placeholder: String, modifier: Modifier) -> Unit)? = null,
+    required: Boolean = false,
+    onLeave: () -> Unit = onClose,
 ) {
     val s = LocalStrings.current
     val form = deviceForm()
@@ -206,6 +214,9 @@ fun AddChatsScreen(
     val leave = {
         when {
             asking != null -> asking = null
+            // Nothing behind the mandatory choice to go back to: Back leaves the app (or, on the
+            // desktop, does nothing), and the ticks are not lost to a discard question.
+            required -> onLeave()
             model.changed -> asking = Ask.Discard
             else -> onClose()
         }
@@ -255,34 +266,38 @@ fun AddChatsScreen(
             ) {
                 // A phone stacks Back, the title and the words; a wide screen has the room to put Back
                 // beside the title, which leaves more of it for the rows.
+                val headingText = if (required) s.pickerGateTitle else s.pickerChooseChats
+                val blurbText = if (required) s.pickerGateBody else s.pickerBlurbOnly
                 if (compact) {
                     item(key = "title") {
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                QuietButton(s.commonBack, icon = true, onClick = leave)
+                                if (!required) QuietButton(s.commonBack, icon = true, onClick = leave)
                                 Text(
-                                    s.browseAddChats,
+                                    headingText,
                                     style = MaterialTheme.typography.headlineMedium,
                                     color = Tone.text,
                                     modifier = Modifier.semantics { heading() },
                                 )
                             }
-                            Text(s.pickerBlurb, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
+                            Text(blurbText, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
                         }
                     }
                 } else {
-                    item(key = "back") {
-                        QuietButton(s.commonBack, icon = true, onClick = leave)
+                    if (!required) {
+                        item(key = "back") {
+                            QuietButton(s.commonBack, icon = true, onClick = leave)
+                        }
                     }
                     item(key = "title") {
                         Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text(
-                                s.browseAddChats,
+                                headingText,
                                 style = MaterialTheme.typography.headlineMedium,
                                 color = Tone.text,
                                 modifier = Modifier.semantics { heading() },
                             )
-                            Text(s.pickerBlurb, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
+                            Text(blurbText, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
                         }
                     }
                 }
@@ -444,33 +459,72 @@ fun AddChatsScreen(
                     onNo = { asking = null },
                 )
                 // The running total and Done on a card of their own, so the foot reads as the bar it
-                // is rather than words left under the list.
-                null -> Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp, bottom = if (form == DeviceForm.Phone) 12.dp else 0.dp)
-                        .groupedCard(GroupPlace.Alone)
-                        .padding(start = ROW_INSET, end = 10.dp, top = 10.dp, bottom = 10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        totalLine(total, s),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Tone.text,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
-                    )
-                    // Nothing ticked is an answer too: Done reads as what it will do.
-                    SetupButton(
-                        if (state.ticked.isEmpty()) s.pickerAddLater else s.commonDone,
-                        primary = true,
-                        onClick = { model.done(chats) },
-                    )
+                // is rather than words left under the list. A save that failed says so above it,
+                // with Try again and Send logs; nothing tries again on its own.
+                null -> Column(Modifier.fillMaxWidth()) {
+                    val failed = state.error
+                    if (failed != null) {
+                        Column(
+                            Modifier.fillMaxWidth().padding(top = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Text(failed, style = MaterialTheme.typography.bodyMedium, color = Tone.danger)
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                SetupButton(s.commonTryAgain, primary = true, onClick = { model.done(chats) })
+                                sendLogs?.invoke()
+                            }
+                        }
+                    }
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp, bottom = if (form == DeviceForm.Phone) 12.dp else 0.dp)
+                            .groupedCard(GroupPlace.Alone)
+                            .padding(start = ROW_INSET, end = 10.dp, top = 10.dp, bottom = 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            totalLine(total, s),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Tone.text,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                        // Nothing ticked is an answer in Settings, and Done reads as what it will
+                        // do; the mandatory choice needs at least one chat, and says so instead.
+                        val none = state.ticked.isEmpty()
+                        if (required && none) {
+                            DisabledDone(s.pickerGateDoneNone)
+                        } else {
+                            SetupButton(
+                                if (none) s.pickerDoneNone else s.commonDone,
+                                primary = true,
+                                onClick = { model.done(chats) },
+                            )
+                        }
+                    }
                 }
             }
         }
+    }
+}
+
+/**
+ * The mandatory choice's Done while nothing is ticked: the button's shape and place, dimmed and
+ * not pressable, so the foot says what is missing rather than offering a press that does nothing.
+ */
+@Composable
+private fun DisabledDone(label: String) {
+    Box(
+        Modifier
+            .clip(CircleShape)
+            .background(Tone.surfaceHigh)
+            .semantics { disabled() }
+            .padding(horizontal = 18.dp, vertical = 10.dp),
+    ) {
+        Text(label, style = MaterialTheme.typography.labelLarge, color = Tone.muted)
     }
 }
 
@@ -769,6 +823,8 @@ fun AddChatsFed(
     modifier: Modifier = Modifier,
     sendLogs: (@Composable () -> Unit)? = null,
     searchField: (@Composable (value: String, onValueChange: (String) -> Unit, placeholder: String, modifier: Modifier) -> Unit)? = null,
+    required: Boolean = false,
+    onLeave: () -> Unit = onClose,
 ) {
     val everything by chatsViewModel.everything.collectAsState()
     val paging by chatsViewModel.paging.collectAsState()
@@ -779,7 +835,7 @@ fun AddChatsFed(
     val chats = remember(everything, kids) { KidsLock.chats(everything, kids) }
     AddChatsScreen(
         chats = chats,
-        listComplete = everything.isNotEmpty() && connected && !refreshing && !paging.loading && !paging.more && !paging.partial,
+        listComplete = listComplete(everything, connected, refreshing, paging),
         starred = starred,
         model = model,
         onClose = onClose,
@@ -791,6 +847,8 @@ fun AddChatsFed(
         onLoadMore = chatsViewModel::loadMoreChats,
         sendLogs = sendLogs,
         searchField = searchField,
+        required = required,
+        onLeave = onLeave,
     )
 }
 
@@ -814,6 +872,17 @@ private class LiveCounts : ChatCountCalls {
  */
 fun newAddChatsViewModel(settings: SettingsStore): AddChatsViewModel =
     AddChatsViewModel(settings, LiveCounts()).also { it.open() }
+
+/**
+ * What Settings' "Chosen chats" row says under its name, the same on every platform: how many
+ * chats are chosen (TMPlayer shows videos only from these), none yet for an account that never
+ * answered, or, for one that kept every chat before choosing became mandatory, that it did.
+ */
+fun chosenChatsDetail(choice: com.tmplayer.data.AddedChoice, s: com.tmplayer.i18n.Strings): String = when (choice.mode) {
+    com.tmplayer.data.AddedMode.Picked -> s.pickerRowDetail(choice.chats.size)
+    com.tmplayer.data.AddedMode.All -> s.pickerRowDetailAll
+    com.tmplayer.data.AddedMode.Unanswered -> s.pickerRowDetail(0)
+}
 
 /**
  * Whether the picker is up on the desktop: one switch for the window, read by the shell, which

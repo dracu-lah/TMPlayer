@@ -45,6 +45,7 @@ import com.tmplayer.ui.nav.BackStack
 import com.tmplayer.ui.nav.LocalBackStack
 import com.tmplayer.ui.onboarding.AppearanceStep
 import com.tmplayer.ui.onboarding.CrashReporting
+import com.tmplayer.ui.onboarding.Setup
 import com.tmplayer.ui.onboarding.SetupScreen
 import com.tmplayer.ui.onboarding.SetupAndTour
 import com.tmplayer.ui.onboarding.SetupState
@@ -116,7 +117,7 @@ class SetupRenderTest {
         }
         for (dark in listOf(true, false)) {
             save("setup-appearance-${if (dark) "dark" else "light"}.png", render(dark) {
-                AppearanceStep(settings, onNext = {}, onSkipAll = {}, groups = listOf(1, all.size, 6))
+                AppearanceStep(settings, onNext = {}, onSkipAll = {}, groups = listOf(1, Setup.pages(all).size))
             })
         }
         save("setup-appearance-narrow.png", render(true, width = 520, height = 900) {
@@ -303,72 +304,55 @@ class SetupRenderTest {
     }
 
     /**
-     * HX28's Chats step. "Browse everything" writes an explicit answer (AddedMode.All) rather than
-     * leaving it unanswered, even though nothing changed. "Choose chats" opens the real picker at
-     * once rather than waiting for Next; the picker's own close (Done or an unchanged Back, both
-     * resolved either way) moves the setup on to the next step, exactly like skipping it would.
+     * The switch steps on one page (Setup.pages): a row each under one heading, starting on what
+     * is set (Low storage mode off, Save mobile data on as suggested, crash reports off). Pressing
+     * a row only marks it; Done writes every one that changed.
      */
     @Test
-    fun chatsStepBrowseAllOrOpensThePicker() = runComposeUiTest {
-        MetaFixture.install("on")
-        var pickerShown = false
+    fun switchesShareOnePage() = runComposeUiTest {
+        var started: Boolean? = null
         var done = false
-        var pickerClose: (() -> Unit)? = null
+        val setup = SetupState.paged(Setup.pages(listOf(SetupStep.Storage, SetupStep.MobileData, SetupStep.CrashReports)))
         setContent {
             TmMaterialTheme(dark = true) {
                 Box(Modifier.size(1280.dp, 800.dp)) {
-                    SetupScreen(
-                        settings,
-                        remember { SetupState(listOf(SetupStep.Chats)) },
-                        onDone = { done = true },
-                        chatsPicker = { onClose ->
-                            pickerShown = true
-                            pickerClose = onClose
-                        },
-                    )
+                    SetupScreen(settings, setup, onDone = { done = true }, crashReporting = CrashReporting(true) { started = it })
                 }
             }
         }
-        // A single-step setup's primary button says Done, not Next.
+        val low = hasText("Low storage mode") and hasClickAction()
+        val save = hasText("Save mobile data") and hasClickAction()
+        val crash = hasText("Send crash reports") and hasClickAction()
+        onNode(hasText("Storage, data and reports")).assertExists()
+        onNode(low).assertIsNotSelected()
+        onNode(save).assertIsSelected()
+        onNode(crash).assertIsNotSelected()
+        onNode(hasText("Read the privacy policy") and hasClickAction()).assertExists()
+        onNode(low).performClick()
+        onNode(crash).performClick()
+        waitForIdle()
+        onNode(low).assertIsSelected()
+        onNode(crash).assertIsSelected()
+        assertFalse("marked, not yet written", runBlocking { settings.lowStorageMode.first() })
         onNode(hasText("Done") and hasClickAction()).performClick()
         waitForIdle()
+        assertTrue("one page, so Done finished it", done)
         waitUntil(timeoutMillis = WRITE_MS) {
-            runBlocking { settings.addedChats.first().mode == com.tmplayer.data.AddedMode.All }
+            runBlocking { settings.lowStorageMode.first() && settings.saveMobileData.first() && settings.crashReportsNow() } && started == true
         }
-        assertFalse("the picker never opened for Browse everything", pickerShown)
-        assertTrue("last step: Next already finished it", done)
     }
 
     @Test
-    fun chooseChatsOpensThePickerAtOnce() = runComposeUiTest {
-        MetaFixture.install("on")
-        var pickerShown = false
-        var done = false
-        var pickerClose: (() -> Unit)? = null
-        setContent {
-            TmMaterialTheme(dark = true) {
-                Box(Modifier.size(1280.dp, 800.dp)) {
-                    SetupScreen(
-                        settings,
-                        remember { SetupState(listOf(SetupStep.Chats)) },
-                        onDone = { done = true },
-                        chatsPicker = { onClose ->
-                            pickerShown = true
-                            pickerClose = onClose
-                        },
-                    )
-                }
-            }
+    fun switchesPageLightAndDark() {
+        val pages = Setup.pages(listOf(SetupStep.Storage, SetupStep.MobileData, SetupStep.CrashReports))
+        for (dark in listOf(true, false)) {
+            save("setup-switches-${if (dark) "dark" else "light"}.png", render(dark) {
+                SetupScreen(settings, remember { SetupState.paged(pages) }, onDone = {}, crashReporting = CrashReporting(true))
+            })
         }
-        onNode(hasText("Choose chats") and hasClickAction()).performClick()
-        waitForIdle()
-        assertTrue("tapping it opens the real picker, not a wait for Next", pickerShown)
-        assertFalse("the picker, not the two-answer card, decides when this step is done", done)
-        // The picker closing (Done, or an unchanged Back) resolves the step either way, same as
-        // skipping it: nothing left half set, and the setup moves on by itself.
-        pickerClose?.invoke()
-        waitForIdle()
-        assertTrue("the setup moved on once the picker was done with it", done)
+        save("setup-switches-narrow.png", render(true, width = 520, height = 900) {
+            SetupScreen(settings, remember { SetupState.paged(pages) }, onDone = {}, crashReporting = CrashReporting(true))
+        })
     }
 
     /** CP69: Lighter turns the three lighter rows on together, Save mobile data turns on both its settings. */
@@ -455,7 +439,7 @@ class SetupRenderTest {
 
     /**
      * CP102f: the whole flow asks the question last among the preferences when the build can
-     * report, and never when it cannot (the desktop today).
+     * report, on the switches page beside Storage, and never when it cannot (the desktop today).
      */
     @Test
     fun crashReportsOnlyWhereAvailable() = runComposeUiTest {
@@ -476,21 +460,15 @@ class SetupRenderTest {
         }
         onNode(hasText("Next") and hasClickAction()).performClick()
         waitForIdle()
-        onNode(hasText("Keep whole videos") and hasClickAction()).assertExists()
-        onNode(hasText("Next") and hasClickAction()).performClick()
-        waitForIdle()
+        onNode(hasText("Low storage mode") and hasClickAction()).assertExists()
         onNode(hasText("Send crash reports") and hasClickAction()).assertIsNotSelected()
-        onNode(hasText("Next") and hasClickAction()).performClick()
-        waitForIdle()
-        onNode(hasText("Quick tour")).assertExists()
+        onNode(hasText("Done") and hasClickAction()).assertExists()
 
         available = false
         waitForIdle()
         onNode(hasText("Next") and hasClickAction()).performClick()
         waitForIdle()
-        onNode(hasText("Next") and hasClickAction()).performClick()
-        waitForIdle()
-        onNode(hasText("Quick tour")).assertExists()
+        onNode(hasText("Keep whole videos") and hasClickAction()).assertExists()
         onNode(hasText("Send crash reports")).assertDoesNotExist()
     }
 
@@ -536,12 +514,38 @@ class SetupRenderTest {
     }
 
     /**
-     * One flow: Appearance, then the preferences, then the tour. Back on the tour's first page
-     * returns to the last preference, and Skip all from the tour ends everything.
+     * One flow: Appearance, then the preferences, and done: the tour is no longer part of it
+     * (the shell offers it on its own). Back on the first preference returns to Appearance, and
+     * Skip all from Appearance ends everything.
      */
     @Test
-    fun setupThenTour() = runComposeUiTest {
+    fun setupEndsAfterThePreferences() = runComposeUiTest {
         MetaFixture.install("on")
+        var done = 0
+        setContent {
+            TmMaterialTheme(dark = true) {
+                Box(Modifier.size(1280.dp, 800.dp)) {
+                    SetupAndTour(settings, listOf(SetupStep.Storage), onDone = { done++ })
+                }
+            }
+        }
+        onNode(hasText("Theme and size")).assertExists()
+        onNode(hasText("Next") and hasClickAction()).performClick()
+        waitForIdle()
+        onNode(hasText("Keep whole videos") and hasClickAction()).assertExists()
+        onNode(hasText("Back") and hasClickAction()).performClick()
+        waitForIdle()
+        onNode(hasText("Theme and size")).assertExists()
+        onNode(hasText("Next") and hasClickAction()).performClick()
+        waitForIdle()
+        onNode(hasText("Done") and hasClickAction()).performClick()
+        waitForIdle()
+        assertEquals(1, done)
+        onNode(hasText("Quick tour")).assertDoesNotExist()
+    }
+
+    @Test
+    fun skipAllFromAppearanceEndsTheSetup() = runComposeUiTest {
         var done = false
         setContent {
             TmMaterialTheme(dark = true) {
@@ -550,23 +554,6 @@ class SetupRenderTest {
                 }
             }
         }
-        onNode(hasText("Theme and size")).assertExists()
-        onNode(hasText("Next") and hasClickAction()).performClick()
-        waitForIdle()
-        onNode(hasText("Keep whole videos") and hasClickAction()).assertExists()
-        onNode(hasText("Next") and hasClickAction()).performClick()
-        waitForIdle()
-        onNode(hasText("Quick tour")).assertExists()
-        onNode(hasText("Back") and hasClickAction()).performClick()
-        waitForIdle()
-        onNode(hasText("Keep whole videos") and hasClickAction()).assertExists()
-        onNode(hasText("Back") and hasClickAction()).performClick()
-        waitForIdle()
-        onNode(hasText("Theme and size")).assertExists()
-        onNode(hasText("Next") and hasClickAction()).performClick()
-        waitForIdle()
-        onNode(hasText("Next") and hasClickAction()).performClick()
-        waitForIdle()
         onNode(hasText("Skip all") and hasClickAction()).performClick()
         waitForIdle()
         assertTrue(done)

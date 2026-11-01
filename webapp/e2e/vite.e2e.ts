@@ -7,8 +7,18 @@ import base from '../vite.config'
 
 const MEDIA = fileURLToPath(new URL('./media/', import.meta.url))
 
+/**
+ * Every test but the chats gate's own starts on an account that has already answered which chats
+ * it watches ('all', every chat), as the tests were written before choosing was required; the
+ * `unanswered` case leaves it open so the gate (App.tsx) shows. Written before the app reads its
+ * settings: IndexedDB runs this read-write transaction before the app's later read of the store.
+ * A browser that refuses storage (app.spec.ts) is left to meet the gate.
+ */
+const ANSWERED = `(function(){try{if(/(?:^|;\\s*)e2e=[^;]*unanswered/.test(document.cookie))return;var o=indexedDB.open('tmplayer-app');o.onupgradeneeded=function(){o.result.createObjectStore('kv')};o.onsuccess=function(){var s=o.result.transaction('kv','readwrite').objectStore('kv'),g=s.get('addedMode');g.onsuccess=function(){if(g.result===undefined)s.put('all','addedMode')};s.transaction.oncomplete=function(){o.result.close()}}}catch(e){}})()`
+
 const testServer: Plugin = {
     name: 'tmplayer-e2e',
+    transformIndexHtml: (html) => html.replace('<head>', `<head>\n  <script>${ANSWERED}</script>`),
     // Also behind `vite preview`, for the TV build made with this config (`--mode tv`) in old engines.
     configurePreviewServer(server) {
         ;(testServer.configureServer as (s: typeof server) => void)(server)

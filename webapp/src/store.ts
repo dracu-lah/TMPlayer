@@ -538,6 +538,14 @@ const [addedIds, setAddedIdsSignal] = createSignal<ReadonlySet<number> | null>(n
 export { addedIds, addedMode }
 
 /**
+ * Whether the chats gate (App.tsx) stands aside for this visit, with nothing written: the account
+ * has too few chats to be worth choosing from, or its list would not load (offline). Kept in
+ * memory only, so the gate asks again on the next visit, or once the connection comes back.
+ */
+const [chatsGateWaived, setChatsGateWaived] = createSignal(false)
+export { chatsGateWaived, setChatsGateWaived }
+
+/**
  * The chats a list may draw from, or null for every chat: the same shape the apps' gate has, so
  * one question is asked wherever videos are listed. Null while nobody has answered and under
  * 'all'; a set, possibly empty, once chats have been picked.
@@ -569,13 +577,6 @@ export function setAddedChats(chats: readonly { chatId: number; title: string }[
     for (const id of addedIds() ?? []) if (!next.has(id)) remove(`added:${id}`)
     setAddedIdsSignal(next)
     setAddedMode('picked')
-}
-
-/** "Keep all my chats": every chat, as an answer. */
-export function keepAllChats() {
-    for (const id of addedIds() ?? []) remove(`added:${id}`)
-    setAddedIdsSignal(new Set<number>())
-    setAddedMode('all')
 }
 
 function setAddedMode(mode: AddedMode) {

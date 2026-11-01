@@ -86,54 +86,68 @@ class SetupTest {
     }
 
     @Test
-    fun `the Chats step is offered only when asked for, last of the preferences`() {
-        assertFalse(SetupStep.Chats in Setup.steps(posters = true, phone = true))
+    fun `the switch steps share one page at the end, the pictured ones keep their own`() {
+        val phone = listOf(SetupStep.Posters, SetupStep.Storage, SetupStep.Performance, SetupStep.MobileData, SetupStep.CrashReports)
         assertEquals(
-            listOf(SetupStep.Posters, SetupStep.Storage, SetupStep.Performance, SetupStep.MobileData, SetupStep.Chats),
-            Setup.steps(posters = true, phone = true, chats = true),
+            listOf(
+                listOf(SetupStep.Posters),
+                listOf(SetupStep.Performance),
+                listOf(SetupStep.Storage, SetupStep.MobileData, SetupStep.CrashReports),
+            ),
+            Setup.pages(phone),
         )
-        // stepsFor defaults to leaving it out, so Settings' Setup choices (which has no chat list
-        // to hand it) never lists it without saying so on purpose.
-        assertFalse(SetupStep.Chats in Setup.stepsFor(com.tmplayer.data.DeviceForm.Phone, true, emptyList()))
-        assertTrue(
-            SetupStep.Chats in Setup.stepsFor(com.tmplayer.data.DeviceForm.Phone, true, emptyList(), chatsAvailable = true),
+        // Device stays on a page of its own like Posters and Performance.
+        assertEquals(
+            listOf(listOf(SetupStep.Posters), listOf(SetupStep.Device), listOf(SetupStep.MobileData, SetupStep.CrashReports)),
+            Setup.pages(listOf(SetupStep.Posters, SetupStep.Device, SetupStep.MobileData, SetupStep.CrashReports)),
+        )
+        // Two are enough to share.
+        assertEquals(
+            listOf(listOf(SetupStep.Performance), listOf(SetupStep.Storage, SetupStep.CrashReports)),
+            Setup.pages(listOf(SetupStep.Storage, SetupStep.Performance, SetupStep.CrashReports)),
         )
     }
 
     @Test
-    fun `a fresh account with almost nothing to choose from is not asked`() {
-        assertFalse(Setup.worthChoosingChats(0))
-        assertFalse(Setup.worthChoosingChats(Setup.CHATS_STEP_MIN - 1))
-        assertTrue(Setup.worthChoosingChats(Setup.CHATS_STEP_MIN))
-        assertTrue(Setup.worthChoosingChats(3_000))
+    fun `a lone switch step keeps its own page where it was`() {
+        val steps = listOf(SetupStep.Posters, SetupStep.Storage, SetupStep.Performance)
+        assertEquals(steps.map { listOf(it) }, Setup.pages(steps))
+        assertEquals(listOf(listOf(SetupStep.CrashReports)), Setup.pages(listOf(SetupStep.CrashReports)))
+        assertEquals(emptyList<List<SetupStep>>(), Setup.pages(emptyList()))
     }
 
     @Test
-    fun `Chats starts on Browse everything, or on Choose chats for a returning answer`() {
-        val fresh = SetupValues(posters = true, lowStorage = false)
-        assertEquals(SetupChoice.BrowseAllChats, fresh.current(SetupStep.Chats))
-        assertTrue(SetupChoice.BrowseAllChats.recommended)
-        assertFalse(SetupChoice.ChooseChats.recommended)
-        assertFalse(SetupChoice.BrowseAllChats.screenshot || SetupChoice.ChooseChats.screenshot)
-
-        val returning = SetupValues(posters = true, lowStorage = false, addedChatsPicked = true)
-        assertEquals(SetupChoice.ChooseChats, returning.current(SetupStep.Chats))
-
-        // An action step like Device: Next always applies what is marked, never only on a change,
-        // so "Browse everything" writes an explicit answer (HX28) even when nothing moved.
-        assertNull(fresh.chosen(SetupStep.Chats))
-        assertNull(returning.chosen(SetupStep.Chats))
+    fun `every platform's setup is three pages after Appearance`() {
+        fun pages(form: com.tmplayer.data.DeviceForm, crash: Boolean, recommendations: List<com.tmplayer.data.Recommendation> = emptyList()) =
+            Setup.pages(Setup.withCrashReports(Setup.stepsFor(form, posters = true, recommendations = recommendations), crash))
+        val lighter = listOf(com.tmplayer.data.Recommendation.entries.first { it != com.tmplayer.data.Recommendation.LowStorageMode })
+        // Phone: Posters, Performance, then Storage, Mobile data and Crash reports together.
+        assertEquals(3, pages(com.tmplayer.data.DeviceForm.Phone, crash = true).size)
+        // Phone short of memory: Posters, Device, then Mobile data and Crash reports together.
+        assertEquals(
+            listOf(listOf(SetupStep.Posters), listOf(SetupStep.Device), listOf(SetupStep.MobileData, SetupStep.CrashReports)),
+            pages(com.tmplayer.data.DeviceForm.Phone, crash = true, recommendations = lighter),
+        )
+        // Television: Posters, Performance, then Storage and Crash reports together.
+        assertEquals(3, pages(com.tmplayer.data.DeviceForm.Tv, crash = true).size)
+        // Desktop with or without crash reports.
+        assertEquals(3, pages(com.tmplayer.data.DeviceForm.Desktop, crash = false).size)
+        assertEquals(3, pages(com.tmplayer.data.DeviceForm.Desktop, crash = true).size)
     }
 
     @Test
-    fun `Browse everything keeps every chat as an answer, Choose chats writes nothing itself`() = runBlocking {
-        val settings = store()
-        SetupChoice.BrowseAllChats.applyTo(settings, posters = null)
-        assertEquals(com.tmplayer.data.AddedMode.All, settings.addedChats.first().mode)
-        // Never reached through the setup screen itself (it opens the picker instead), but must
-        // not throw if some other caller hits it, and must not write anything on its own.
-        SetupChoice.ChooseChats.applyTo(settings, posters = null)
-        assertEquals(com.tmplayer.data.AddedMode.All, settings.addedChats.first().mode)
+    fun `a paged setup walks by page, and its steps are every page's`() {
+        val setup = SetupState.paged(Setup.pages(listOf(SetupStep.Posters, SetupStep.Storage, SetupStep.Performance, SetupStep.MobileData)))
+        assertEquals(listOf(SetupStep.Posters), setup.page)
+        assertTrue(setup.next())
+        assertEquals(SetupStep.Performance, setup.step)
+        assertTrue(setup.next())
+        assertEquals(listOf(SetupStep.Storage, SetupStep.MobileData), setup.page)
+        assertTrue(setup.isLast)
+        assertFalse(setup.next())
+        assertEquals(listOf(SetupStep.Posters, SetupStep.Performance, SetupStep.Storage, SetupStep.MobileData), setup.steps)
+        // Built from steps, every step is a page of its own, as before.
+        assertEquals(4, SetupState(listOf(SetupStep.Posters, SetupStep.Storage, SetupStep.Performance, SetupStep.MobileData)).pages.size)
     }
 
     @Test
@@ -307,17 +321,13 @@ class SetupTest {
             for (step in SetupStep.entries) {
                 val copy = s.setupCopy(step)
                 assertTrue(copy.title.isNotBlank() && copy.body.isNotBlank())
-                // Chats (HX28) is new this session: its English text exists (en.json, AGENTS.md's
-                // rule), but every other catalog is translated separately, never by an agent on
-                // its own (AGENTS.md, the user's LangSync rule), so it still falls back to English
-                // here and must not fail this check until that pass has run.
-                if (language.tag != Languages.ENGLISH && step != SetupStep.Chats) {
+                if (language.tag != Languages.ENGLISH) {
                     assertNotEquals("${language.tag} $step", en.setupCopy(step).body, copy.body)
                 }
                 for (choice in step.choices) {
                     val words = s.choiceCopy(choice)
                     assertTrue(words.title.isNotBlank() && words.detail.isNotBlank())
-                    if (language.tag != Languages.ENGLISH && step != SetupStep.Chats) {
+                    if (language.tag != Languages.ENGLISH) {
                         assertNotEquals("${language.tag} $choice", en.choiceCopy(choice).detail, words.detail)
                     }
                 }

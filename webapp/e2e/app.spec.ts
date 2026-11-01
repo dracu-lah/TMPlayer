@@ -118,9 +118,17 @@ test('a browser that refuses storage still works, and Settings says so', async (
             throw new DOMException('refused', 'InvalidStateError')
         }
     })
+    // Nothing is kept, so the chats gate asks on every visit; the answer holds until the page reloads.
+    const passGate = async () => {
+        await expect(page).toHaveURL(/\/added-chats\?setup=1/)
+        await page.getByRole('checkbox', { name: 'Test Clips' }).check()
+        await page.getByRole('button', { name: 'Done' }).click()
+    }
     await page.goto('/settings/storage')
+    await passGate()
     await expect(page.getByText(/This browser is not keeping TMPlayer's data/)).toBeVisible()
     await page.goto('/settings/appearance')
+    await passGate()
     await page.locator('label').filter({ hasText: /^Dark$/ }).click()
     await page.locator('nav a[href="/chats"]').click()
     await expect(page.getByRole('link', { name: /Test Clips/ }).first()).toBeVisible()

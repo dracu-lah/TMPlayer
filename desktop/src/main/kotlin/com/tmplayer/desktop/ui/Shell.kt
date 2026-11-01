@@ -327,6 +327,10 @@ private fun Browse(state: ShellState, player: PlayerContent) {
     val update = rememberNavUpdate(state)
     UpdatePopupTrigger(state, update)
     val setupPending by state.settings.setupPending.collectAsState(initial = false)
+    // The mandatory chat choice (ChatsGate), after the setup: while it is up (or briefly waits for
+    // the chat list) it covers the window, and no notice, tour or support prompt shows with it.
+    val chatsGate = com.tmplayer.ui.browse.rememberChatsGate(chats, setupPending)
+    val gateUp = com.tmplayer.data.ChatsGate.up(chatsGate)
     val chatsUi by chats.state.collectAsState()
     DownloadToasts(state)
     // Half watched entries that can no longer become a card are swept once per sign in, as on the
@@ -444,7 +448,8 @@ private fun Browse(state: ShellState, player: PlayerContent) {
         }
 
         // The Add chats picker (HX27), a full page over Settings and the rest, under the search.
-        AddChatsPage(state, chats)
+        // Not while the mandatory chat choice is up, which is a picker of its own over everything.
+        if (!gateUp) AddChatsPage(state, chats)
 
         // The search across every chat (Ctrl+K), over the page and the floating bar alike.
         val searchModel = rememberViewModel(Unit) {
@@ -485,23 +490,25 @@ private fun Browse(state: ShellState, player: PlayerContent) {
         // The language card and What's new wait for the setup, as on the phone.
         // Over the floating bar or a chat's bar: at the window's smallest width the card reaches
         // in over the bar's right end, and would hide the picture and its menu.
-        if (!setupPending) {
+        if (!setupPending && !gateUp) {
             val foot = if (BigScreen.on) 24.dp else maxOf(NavBarClearance, ChatBarClearance)
             ShellNotices(state, Modifier.align(Alignment.BottomEnd).padding(start = 24.dp, top = 24.dp, end = 24.dp, bottom = foot))
         }
         if (setupPending) {
-            SetupOverlay(state, chatsUi is UiState.Content, chats)
+            SetupOverlay(state)
+        } else if (gateUp) {
+            ChatsGateOverlay(state, chats, waiting = chatsGate == com.tmplayer.data.ChatsGate.Move.Wait)
         }
         // The quick tour on its own (CP69): taken from the offer, or opened from Settings.
         val tour by state.settings.tourState.collectAsState(initial = com.tmplayer.data.SettingsStore.TourState.Done)
-        if (!setupPending && tour == com.tmplayer.data.SettingsStore.TourState.Pending) {
+        if (!setupPending && !gateUp && tour == com.tmplayer.data.SettingsStore.TourState.Pending) {
             val tourScope = rememberCoroutineScope()
             CoverWindowControls()
             Surface(Modifier.fillMaxSize().windowDrag(), color = Tone.background) {
                 com.tmplayer.ui.onboarding.TourOnly(onDone = { tourScope.launch { runCatching { state.settings.markTourDone() } } })
             }
         }
-        if (SupportReminder.enabled && !setupPending) {
+        if (SupportReminder.enabled && !setupPending && !gateUp) {
             SupportAskHost(state)
         }
 
@@ -522,17 +529,13 @@ private fun Browse(state: ShellState, player: PlayerContent) {
 private const val HOUSEKEEPING_DELAY_MS = 20_000L
 
 /**
- * The setup after sign in (CP67) over the whole window, once the chat list is in or after a wait
- * for one that is slow to come. Browse is drawn under it, so the list is ready when the setup ends.
+ * The setup after sign in (CP67) over the whole window. Browse is drawn under it, so the list is
+ * coming in while the setup runs; the setup itself no longer waits for it (only the mandatory
+ * chat choice after it does).
  */
 @Composable
-private fun SetupOverlay(state: ShellState, chatsLoaded: Boolean, chats: com.tmplayer.ui.browse.ChatListViewModel) {
+private fun SetupOverlay(state: ShellState) {
     val scope = rememberCoroutineScope()
-    var waitedOut by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        delay(Setup.WAIT_FOR_CHATS_MS)
-        waitedOut = true
-    }
     val finish: () -> Unit = { scope.launch { runCatching { state.settings.markSetupDone() } } }
     CoverWindowControls()
     Surface(Modifier.fillMaxSize().windowDrag(), color = Tone.background) {
@@ -540,28 +543,23 @@ private fun SetupOverlay(state: ShellState, chatsLoaded: Boolean, chats: com.tmp
         val fit = com.tmplayer.ui.onboarding.rememberDeviceFit()
         val light by state.settings.lightSettings.collectAsState(initial = null)
         val now = light
-        if (now == null || Setup.decide(pending = true, chatsLoaded = chatsLoaded, waitedOut = waitedOut) == Setup.Decision.Wait) {
+        if (now == null) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Tone.accent) }
             return@Surface
         }
         val recommendations = remember {
             com.tmplayer.data.DeviceFitRules.recommendations(fit, now, seekThumbnailsShown = false, pictures = false)
         }
-        // The list is already known whole by the time this can show (chatsLoaded), read once as
-        // every other "as the setup opens" value here is.
-        val chatsSnapshot = (chats.state.value as? UiState.Content)?.value?.chats.orEmpty()
         // The same steps Settings' Setup choices lists (Setup.stepsFor): the desktop is only ever
-        // offered Low storage mode there, so Performance stays. Plus the Chats step (HX28) once
-        // the list is really in and worth narrowing.
-        val steps = remember(chatsSnapshot.isNotEmpty()) {
+        // offered Low storage mode there, so Performance stays.
+        val steps = remember {
             Setup.stepsFor(
                 com.tmplayer.data.DeviceForm.Desktop,
                 posters = com.tmplayer.online.OnlineMetadata.current != null,
                 recommendations = recommendations,
-                chatsAvailable = Setup.worthChoosingChats(chatsSnapshot.size),
             )
         }
-        // The choices, then the quick tour (CP69); with no choices to make, the tour alone.
+        // Appearance, then the choices; the quick tour is offered on its own once the shell is up.
         com.tmplayer.ui.onboarding.SetupAndTour(
             state.settings,
             steps,
@@ -576,19 +574,32 @@ private fun SetupOverlay(state: ShellState, chatsLoaded: Boolean, chats: com.tmp
                     }
                 }
             },
-            // The real "Add chats" picker (HX27), over the window's own chat list rather than the
-            // global AddChatsState overlay: that one draws earlier in this same window (under this
-            // overlay, which would hide it), so this step gets its own view model instead.
-            chatsPicker = { onPickerClose ->
-                val model = remember { com.tmplayer.ui.browse.newAddChatsViewModel(state.settings) }
-                com.tmplayer.ui.browse.AddChatsFed(
-                    settings = state.settings,
-                    chatsViewModel = chats,
-                    model = model,
-                    onClose = onPickerClose,
-                    sendLogs = { SendLogsActions() },
-                )
-            },
+        )
+    }
+}
+
+/**
+ * The mandatory chat choice (ChatsGate) over the whole window, built like [SetupOverlay]: the
+ * picker in its required mode, with no Back (Esc does nothing here: there is nothing behind it),
+ * and gone by itself once Done writes the choice. [waiting] is the short wait for the chat list.
+ * Its own view model, made once for the window, so it never shares ticks with Settings' picker.
+ */
+@Composable
+private fun ChatsGateOverlay(state: ShellState, chats: com.tmplayer.ui.browse.ChatListViewModel, waiting: Boolean) {
+    CoverWindowControls()
+    Surface(Modifier.fillMaxSize().windowDrag(), color = Tone.background) {
+        if (waiting) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Tone.accent) }
+            return@Surface
+        }
+        val model = rememberViewModel(Unit) { com.tmplayer.ui.browse.newAddChatsViewModel(state.settings) }
+        com.tmplayer.ui.browse.AddChatsFed(
+            settings = state.settings,
+            chatsViewModel = chats,
+            model = model,
+            onClose = {},
+            required = true,
+            sendLogs = { SendLogsActions() },
         )
     }
 }

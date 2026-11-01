@@ -72,7 +72,7 @@ enum class StateAction {
         KeepLooking -> L.commonKeepLooking
         SearchAllChats -> L.searchAllChats
         Refresh -> L.commonRefresh
-        AddChats -> L.browseAddChats
+        AddChats -> L.pickerChooseChats
     }
 }
 

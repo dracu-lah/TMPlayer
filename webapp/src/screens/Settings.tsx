@@ -400,12 +400,15 @@ function TvSwitch(props: { id: string; title: string; on: boolean; onText: strin
     )
 }
 
+/** What the chosen chats row says: how many, or, for an answer from before choosing was required, every chat. */
+const chosenDetail = () => (addedMode() === 'all' ? t('picker.row_detail_all') : t('picker.row_detail', { count: addedMode() === 'picked' ? (addedIds()?.size ?? 0) : 0 }))
+
 function Library() {
     return (
         <>
             <div class="set-card">
                 <A class="set-row" href="/added-chats">
-                    <RowBody icon={Message01Icon} title={t('browse.add_chats')} subtitle={addedMode() === 'picked' ? t('picker.total', { chats: addedIds()?.size ?? 0 }) : t('picker.blurb')} />
+                    <RowBody icon={Message01Icon} title={t('picker.row_title')} subtitle={chosenDetail()} />
                     <Icon icon={ArrowRight01Icon} size={20} class="set-chevron" />
                 </A>
                 <ToggleRow
@@ -709,9 +712,9 @@ function TvSettings() {
     return (
         <section class="settings">
             <h1 class="page-title">{t('nav.settings')}</h1>
-            <TvPanel title={t('browse.add_chats')} id="add-chats-label">
-                <p class="muted small">{addedMode() === 'picked' ? t('picker.total', { chats: addedIds()?.size ?? 0 }) : t('picker.blurb')}</p>
-                <A class="outline-button" style={{ 'align-self': 'start' }} href="/added-chats">{t('browse.add_chats')}</A>
+            <TvPanel title={t('picker.row_title')} id="add-chats-label">
+                <p class="muted small">{chosenDetail()}</p>
+                <A class="outline-button" style={{ 'align-self': 'start' }} href="/added-chats">{t('picker.choose_chats')}</A>
             </TvPanel>
             <TvPanel title={t('settings.theme')} id="theme-label">
                 <Choices

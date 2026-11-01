@@ -97,6 +97,13 @@ object AddedChats {
     /** The added ids, or null while every chat is shown. Intersect with the kids lock, never alone. */
     val ids: StateFlow<Set<Long>?> = idState.asStateFlow()
 
+    /**
+     * Whether [choice] holds the stored answer yet rather than the [AddedMode.Unanswered] it starts
+     * on, so the mandatory chat choice ([ChatsGate]) never takes an answer that is still being read
+     * for no answer at all.
+     */
+    val loaded: StateFlow<Boolean> = ready.asStateFlow()
+
     /** Keeps [choice] in step with [store] for the life of the process. */
     fun follow(store: AddedChatsSource) {
         if (following) return

@@ -12,9 +12,11 @@ import com.tmplayer.i18n.Strings
 /**
  * The short setup after signing in (CP67, CP69), on the phone, the television and the desktop
  * alike. It replaced the two page tour before sign in and the one card after it (CP42): the sign
- * in screen comes first, and once the account is in, the setup runs as one flow in three groups
- * ([SetupAndTour]): Appearance, these preference steps (one thing each, a picture of each answer,
- * the current answer marked and Next to keep or apply it), and the quick tour ([Tour]) last.
+ * in screen comes first, and once the account is in, the setup runs as one flow in two groups
+ * ([SetupAndTour]): Appearance, then these preference steps (one thing each, a picture of each
+ * answer, the current answer marked and Next to keep or apply it), with the switch-like ones
+ * together on one page ([Setup.pages]). The quick tour ([Tour]) is offered on its own afterwards,
+ * and which chats to show is the mandatory chat choice ([com.tmplayer.data.ChatsGate]), not a step.
  *
  * Who sees it: a sign in screen arms it (`SettingsStore.armSetup`), so an install that was signed
  * in before this existed never does, and a fresh sign in always does. Settings can run it again.
@@ -31,16 +33,6 @@ enum class SetupStep {
 
     /** On a phone only: Save mobile data and downloads that wait for Wi-Fi, or no limits. */
     MobileData,
-
-    /**
-     * Which chats TMPlayer reads for videos (HX28): browse the whole account, or open the "Add
-     * chats" picker ([com.tmplayer.ui.browse.AddChatsScreen], HX27) and choose a smaller set.
-     * Only where the chat list has come in with enough chats to make narrowing worth asking
-     * ([Setup.worthChoosingChats]); the picker's own Done is what writes the answer, not Next, so
-     * the step is drawn with its own rows rather than the two pictured answers every other step
-     * has (there is nothing to picture: the real choice is a screen of chats).
-     */
-    Chats,
 
     /**
      * Send crash reports (CP102f), the one consent question: off until it is turned on, with no
@@ -75,14 +67,6 @@ enum class SetupChoice(val step: SetupStep) {
     // Off first: it is what Next keeps when the switch was never touched.
     CrashReportsOff(SetupStep.CrashReports),
     CrashReportsOn(SetupStep.CrashReports),
-    // Browse everything first: it is the recommended, default answer, and what every account
-    // already does until this is answered (AddedChats.AddedMode.Unanswered reads the same as
-    // every chat). Choosing it writes that on purpose (HX28's "answer rather than silence"), so a
-    // later nag for existing accounts never asks somebody who already went through this.
-    BrowseAllChats(SetupStep.Chats),
-    // Writing the real answer takes a screen of chats, not a tap: the picker's own Done does it
-    // (AddChatsViewModel.done), not this answer's applyTo. Marking it opens the picker at once.
-    ChooseChats(SetupStep.Chats),
     ;
 
     /**
@@ -109,18 +93,16 @@ data class SetupValues(
     val lighter: Boolean = false,
     val saveData: Boolean = false,
     val crashReports: Boolean = false,
-    /** Whether [com.tmplayer.data.AddedChats] already holds a chosen set (HX27's Picked mode). */
-    val addedChatsPicked: Boolean = false,
 ) {
     /**
      * The answer on [step] that matches what is set, as Settings' Setup choices names it. Unlike
      * [current], Mobile data says what is set rather than what is suggested; null for the Device
-     * and Chats steps, whose answers are an action rather than a plain setting (so Next always
-     * writes or opens something rather than only on a change).
+     * step, whose answer is an action rather than a plain setting (so Next always writes it
+     * rather than only on a change).
      */
     fun chosen(step: SetupStep): SetupChoice? = when (step) {
         SetupStep.MobileData -> if (saveData) SetupChoice.SaveData else SetupChoice.NoLimits
-        SetupStep.Device, SetupStep.Chats -> null
+        SetupStep.Device -> null
         else -> current(step)
     }
 
@@ -135,9 +117,6 @@ data class SetupValues(
         SetupStep.Device -> SetupChoice.ApplyRecommended
         // What is set, which on a fresh install is off: the switch is never turned on for anyone.
         SetupStep.CrashReports -> if (crashReports) SetupChoice.CrashReportsOn else SetupChoice.CrashReportsOff
-        // A returning viewer (Settings' "Run the setup again", a reinstall that restored its
-        // backup) starts marked on what they already chose, never silently back to everything.
-        SetupStep.Chats -> if (addedChatsPicked) SetupChoice.ChooseChats else SetupChoice.BrowseAllChats
     }
 }
 
@@ -160,17 +139,12 @@ object Setup {
         device: Boolean = false,
         devicePerformance: Boolean = device,
         phone: Boolean = false,
-        /** Whether the Chats step (HX28) is offered: the host's own call to [worthChoosingChats]. */
-        chats: Boolean = false,
     ): List<SetupStep> =
         buildList {
             if (posters) add(SetupStep.Posters)
             if (device) add(SetupStep.Device) else if (storage) add(SetupStep.Storage)
             if (!(device && devicePerformance)) add(SetupStep.Performance)
             if (phone) add(SetupStep.MobileData)
-            // Last of the preferences proper: it is the one step that needs a loaded chat list and
-            // a screen of its own, so it comes after every quick, two-tap step.
-            if (chats) add(SetupStep.Chats)
         }
 
     /**
@@ -183,30 +157,30 @@ object Setup {
         form: DeviceForm,
         posters: Boolean,
         recommendations: List<Recommendation>,
-        /**
-         * Whether the Chats step is worth offering right now: the chat list has come in
-         * ([worthChoosingChats] over its size). Defaults to false, so Settings' Setup choices
-         * (which calls this without a chat list) never lists it: that page already has its own
-         * permanent "Add more chats" row, and showing a second, smaller picker beside it would be
-         * a second thing to keep in step rather than a help.
-         */
-        chatsAvailable: Boolean = false,
     ): List<SetupStep> = steps(
         posters = posters,
         device = recommendations.isNotEmpty(),
         devicePerformance = form != DeviceForm.Desktop && recommendations.any { it != Recommendation.LowStorageMode },
         phone = form == DeviceForm.Phone,
-        chats = chatsAvailable,
     )
 
     /**
-     * Whether the chat list has enough chats for narrowing them to mean anything. Below this, a
-     * fresh account (Saved Messages and a couple of chats) would meet a picker with nothing to
-     * choose from, which is worse than the step it replaces: never asked, never a dead end.
+     * The steps that are one switch each (Low storage mode, Save mobile data, Send crash reports)
+     * rather than two pictured answers, and so can share a page.
      */
-    const val CHATS_STEP_MIN = 4
+    val SWITCHES: Set<SetupStep> = setOf(SetupStep.Storage, SetupStep.MobileData, SetupStep.CrashReports)
 
-    fun worthChoosingChats(totalChats: Int): Boolean = totalChats >= CHATS_STEP_MIN
+    /**
+     * [steps] as the pages the setup shows, in order. Posters, Device and Performance keep a page
+     * each (their answers are pictured, and the annotated shots of them stay valid). Two or more
+     * of the [SWITCHES] share one page at the end, a row each, so a phone's three switch steps
+     * take one page rather than three; a lone one keeps its own page where it was.
+     */
+    fun pages(steps: List<SetupStep>): List<List<SetupStep>> {
+        val switches = steps.filter { it in SWITCHES }
+        if (switches.size < 2) return steps.map { listOf(it) }
+        return steps.filter { it !in SWITCHES }.map { listOf(it) } + listOf(switches)
+    }
 
     /**
      * Whether the storage step is offered. Low storage mode is core's (`TdByteWindow`), so the
@@ -227,7 +201,7 @@ object Setup {
         /** Nothing to do: not armed, or already done. */
         None,
 
-        /** Armed, but the chat list (and with it the folder list) is not in yet. */
+        /** Armed, but what it waits on is not in yet. */
         Wait,
 
         /** Show it. */
@@ -235,10 +209,10 @@ object Setup {
     }
 
     /**
-     * The setup's next move. [pending] is the armed flag; [chatsLoaded] whether the chat list has
-     * come from TDLib, which sends the folders before it, so an empty folder list then really
-     * means none. [waitedOut] gives up waiting on a list that is slow to come, and the setup goes
-     * ahead with the folders known so far.
+     * The setup's next move. [pending] is the armed flag; [chatsLoaded] whether what it waits on
+     * has come. [waitedOut] gives up waiting on something slow to come, and it goes ahead. The
+     * shells no longer hold the setup for the chat list (only the mandatory chat choice waits on
+     * that, with [WAIT_FOR_CHATS_MS]), so they call this with `chatsLoaded = true`.
      */
     fun decide(pending: Boolean, chatsLoaded: Boolean, waitedOut: Boolean = false): Decision = when {
         !pending -> Decision.None
@@ -246,7 +220,7 @@ object Setup {
         else -> Decision.Show
     }
 
-    /** How long the setup waits for the chat list before going ahead without it. */
+    /** How long the mandatory chat choice waits for the chat list before letting the app through. */
     const val WAIT_FOR_CHATS_MS = 8_000L
 
     /** Whether [auth] is a screen of the sign in itself, which is what arms the setup. */
@@ -305,14 +279,6 @@ suspend fun SetupChoice.applyTo(
             settings.setCrashReports(false)
             crashReports?.invoke(false)
         }
-        // "Keep all my chats" (HX28): an explicit answer, not silence, so a later one-time prompt
-        // for accounts that never saw this never asks somebody who already did.
-        SetupChoice.BrowseAllChats -> settings.keepAllChats()
-        // Never reached in the setup itself: the step opens the real picker before this would run
-        // (SetupScreen's own Next, over SetupStep.Chats), and the picker's own Done
-        // (AddChatsViewModel.done) writes the answer directly. Kept only so this `when` stays
-        // exhaustive for callers outside the setup screen.
-        SetupChoice.ChooseChats -> Unit
     }
 }
 
@@ -333,21 +299,34 @@ class CrashReporting(val available: Boolean, val onChange: (Boolean) -> Unit = {
 }
 
 /**
- * Where the setup is. Picking an answer or Skip moves on and finishes after the last step; Back
- * goes to the step before, and from the first leaves the setup as Skip all does. Snapshot state,
- * so a screen that reads [index] recomposes when it moves.
+ * Where the setup is, a page at a time. Picking an answer or Skip moves on and finishes after the
+ * last page; Back goes to the page before, and from the first leaves the setup as Skip all does.
+ * Snapshot state, so a screen that reads [index] recomposes when it moves.
+ *
+ * Built from steps, each step is a page of its own (Settings' shots, the promo captures and most
+ * tests walk them that way); [paged] takes the setup's real pages ([Setup.pages]), where the
+ * switch steps can share one.
  */
-class SetupState(val steps: List<SetupStep>, start: Int = 0) {
+class SetupState private constructor(val pages: List<List<SetupStep>>, start: Int, @Suppress("UNUSED_PARAMETER") paged: Unit) {
+    constructor(steps: List<SetupStep>, start: Int = 0) : this(steps.map { listOf(it) }, start, Unit)
+
     init {
-        require(steps.isNotEmpty()) { "a setup with no steps is not shown" }
+        require(pages.isNotEmpty() && pages.none { it.isEmpty() }) { "a setup with no steps is not shown" }
     }
 
-    var index by mutableIntStateOf(start.coerceIn(0, steps.lastIndex))
+    /** Every step, page after page. */
+    val steps: List<SetupStep> = pages.flatten()
+
+    var index by mutableIntStateOf(start.coerceIn(0, pages.lastIndex))
         private set
 
-    val step: SetupStep get() = steps[index]
+    /** The steps on the page shown: one, or the switch steps together. */
+    val page: List<SetupStep> get() = pages[index]
+
+    /** The page's first step, which is the page's whole question unless it holds several. */
+    val step: SetupStep get() = page.first()
     val isFirst: Boolean get() = index == 0
-    val isLast: Boolean get() = index == steps.lastIndex
+    val isLast: Boolean get() = index == pages.lastIndex
 
     /** Skip all is offered while more than this step is left; on the last, Skip says the same. */
     val canSkipAll: Boolean get() = !isLast
@@ -365,6 +344,11 @@ class SetupState(val steps: List<SetupStep>, start: Int = 0) {
         index--
         return true
     }
+
+    companion object {
+        /** A setup over [pages] as [Setup.pages] makes them. */
+        fun paged(pages: List<List<SetupStep>>, start: Int = 0): SetupState = SetupState(pages, start, Unit)
+    }
 }
 
 /** A step's heading and the sentence under it. */
@@ -380,7 +364,6 @@ fun Strings.setupCopy(step: SetupStep): SetupCopy = when (step) {
     SetupStep.MobileData -> SetupCopy(setupMobileTitle, setupMobileBody)
     // The screen says which: memory, storage or both (fitHeadline).
     SetupStep.Device -> SetupCopy(deviceShortMemory, deviceQuestion)
-    SetupStep.Chats -> SetupCopy(setupChatsTitle, setupChatsBody)
     SetupStep.CrashReports -> SetupCopy(setupCrashTitle, setupCrashBody)
 }
 
@@ -397,6 +380,4 @@ fun Strings.choiceCopy(choice: SetupChoice): ChoiceCopy = when (choice) {
     SetupChoice.NotNow -> ChoiceCopy(deviceNotNow, settingsSavesAsYouGo)
     SetupChoice.CrashReportsOn -> ChoiceCopy(settingsCrashReports, setupCrashHolds)
     SetupChoice.CrashReportsOff -> ChoiceCopy(settingsCrashReports, settingsCrashReportsOff)
-    SetupChoice.BrowseAllChats -> ChoiceCopy(setupChatsAll, setupChatsAllDetail)
-    SetupChoice.ChooseChats -> ChoiceCopy(setupChatsChoose, setupChatsChooseDetail)
 }

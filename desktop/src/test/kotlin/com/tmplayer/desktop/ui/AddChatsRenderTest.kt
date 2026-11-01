@@ -1,8 +1,18 @@
 package com.tmplayer.desktop.ui
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.ImageComposeScene
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.runComposeUiTest
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.use
@@ -12,11 +22,14 @@ import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.CountAnswer
 import com.tmplayer.ui.browse.AddChatsScreen
 import com.tmplayer.ui.browse.AddChatsViewModel
+import com.tmplayer.ui.nav.BackStack
+import com.tmplayer.ui.nav.LocalBackStack
 import com.tmplayer.ui.theme.TmMaterialTheme
 import com.tmplayer.ui.theme.TmSchemes
 import org.jetbrains.skia.Bitmap
 import org.jetbrains.skia.EncodedImageFormat
 import org.jetbrains.skia.Image
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -27,7 +40,98 @@ import java.io.File
  * besides the ground, and only the rows on screen were counted. With TMPLAYER_SHOTS=<dir> the
  * frames are written there.
  */
+@OptIn(ExperimentalTestApi::class)
 class AddChatsRenderTest {
+
+    /**
+     * The mandatory chat choice (ChatsGate): its own heading, no Back button, Done unavailable
+     * until a chat is ticked, and Back (Esc) calls the leave action instead of closing or asking
+     * to discard.
+     */
+    @Test
+    fun `required mode has no Back, needs a tick and does not close on Back`() = runComposeUiTest {
+        val model = AddChatsViewModel(write = {})
+        val back = BackStack()
+        var closed = 0
+        var left = 0
+        setContent {
+            CompositionLocalProvider(LocalBackStack provides back) {
+                TmMaterialTheme(dark = true) {
+                    Box(Modifier.size(1280.dp, 900.dp)) {
+                        AddChatsScreen(
+                            chats = CHATS,
+                            listComplete = true,
+                            starred = emptySet(),
+                            model = model,
+                            onClose = { closed++ },
+                            required = true,
+                            onLeave = { left++ },
+                        )
+                    }
+                }
+            }
+        }
+        waitForIdle()
+        onNode(hasText("Choose chats to watch")).assertExists()
+        onNode(hasText("Back") and hasClickAction()).assertDoesNotExist()
+        // Nothing ticked: Done says what is missing and cannot be pressed.
+        onNode(hasText("Choose at least one chat")).assertExists()
+        onNode(hasText("Choose at least one chat") and hasClickAction()).assertDoesNotExist()
+        onNode(hasText("Done") and hasClickAction()).assertDoesNotExist()
+
+        // Back leaves (the app, on a phone) rather than closing, and never asks to discard.
+        onNode(hasText("Harbour Notes") and hasClickAction()).performClick()
+        waitForIdle()
+        back.handleBack()
+        waitForIdle()
+        assertEquals(1, left)
+        assertEquals(0, closed)
+        onNode(hasText("Discard changes?")).assertDoesNotExist()
+
+        // A tick makes Done pressable.
+        onNode(hasText("Done") and hasClickAction()).assertExists()
+        model.stop()
+    }
+
+    /** A save that fails says so with Try again rather than sitting on the press for ever. */
+    @Test
+    fun `a failed save shows the error and Try again`() = runComposeUiTest {
+        var tries = 0
+        val model = AddChatsViewModel(write = {
+            tries++
+            throw java.io.IOException("No space left on device")
+        })
+        var closed = false
+        setContent {
+            TmMaterialTheme(dark = true) {
+                Box(Modifier.size(1280.dp, 900.dp)) {
+                    AddChatsScreen(
+                        chats = CHATS,
+                        listComplete = true,
+                        starred = emptySet(),
+                        model = model,
+                        onClose = { closed = true },
+                        required = true,
+                    )
+                }
+            }
+        }
+        waitForIdle()
+        onNode(hasText("Harbour Notes") and hasClickAction()).performClick()
+        waitForIdle()
+        onNode(hasText("Done") and hasClickAction()).performClick()
+        waitUntil(timeoutMillis = 3_000) { model.state.value.error != null }
+        waitForIdle()
+        assertFalse("not stuck saving", model.state.value.saving)
+        assertFalse("not saved", model.state.value.saved)
+        assertFalse(closed)
+        onNode(hasText("Try again") and hasClickAction()).assertExists()
+        // Nothing tries again by itself; Try again does, once per press.
+        assertEquals(1, tries)
+        onNode(hasText("Try again") and hasClickAction()).performClick()
+        waitUntil(timeoutMillis = 3_000) { tries == 2 }
+        model.stop()
+    }
 
     @Test
     fun `the picker draws the bands and counts only what is on screen`() {

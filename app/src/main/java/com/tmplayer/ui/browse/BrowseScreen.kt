@@ -1175,7 +1175,7 @@ internal fun BrowseScreen(
                     MenuAction(
                         label = s.browseRemoveChat,
                         icon = TmIcons.VisibilityOff,
-                        detail = s.browseRemoveChatDetail,
+                        detail = s.browseRemoveChatDetailChosen,
                     ) {
                         chatMenu = null
                         onRemoveChat(chat)

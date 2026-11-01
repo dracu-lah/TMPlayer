@@ -12,13 +12,17 @@ import com.tmplayer.data.SettingsStore
 import com.tmplayer.ui.components.deviceForm
 
 /**
- * The setup a fresh sign in walks through (CP67, CP69): one flow under one name, in three groups
- * on one count and one bar. Appearance first ([AppearanceStep]: theme and interface size, so
+ * The setup a fresh sign in walks through (CP67, CP69): one flow under one name, in two groups on
+ * one count and one bar. Appearance first ([AppearanceStep]: theme and interface size, so
  * everything after is already drawn the way the viewer likes it), then the preferences
- * ([SetupScreen]), then the quick tour ([TourScreen]) as the last, optional group. Skip all, on any
- * step, ends the whole setup; Back on a group's first step goes to the step before it.
+ * ([SetupScreen]), with the switch steps together on one page ([Setup.pages]). Skip all, on any
+ * step, ends the whole setup; Back on the preferences' first page goes back to Appearance.
  *
- * [onDone] is called once, at the end: the host marks the setup and the tour done.
+ * The quick tour is no longer a counted part of it: once the setup is done the shell offers the
+ * tour on its own, once (`SettingsStore.markSetupDone` leaves it at `TourState.Never`), after the
+ * mandatory chat choice, and [TourOnly] shows it when taken.
+ *
+ * [onDone] is called once, at the end: the host marks the setup done.
  */
 @Composable
 fun SetupAndTour(
@@ -34,53 +38,40 @@ fun SetupAndTour(
      * reports crashes.
      */
     crashReporting: CrashReporting = CrashReporting.Unavailable,
-    /** The real "Add chats" picker for [SetupStep.Chats] (HX27/HX28); see [SetupScreen]'s own doc. */
-    chatsPicker: (@Composable (onClose: () -> Unit) -> Unit)? = null,
 ) {
-    val form = deviceForm()
-    val pages = remember(form) { Tour.pages(form) }
     val asked = remember(steps, crashReporting.available) { Setup.withCrashReports(steps, crashReporting.available) }
-    val setup = remember(asked) { asked.takeIf { it.isNotEmpty() }?.let { SetupState(it) } }
-    val tour = remember(pages) { TourProgress(pages) }
+    val pages = remember(asked) { Setup.pages(asked) }
+    val setup = remember(pages) { pages.takeIf { it.isNotEmpty() }?.let { SetupState.paged(it) } }
     var phase by remember { mutableStateOf(SetupPhase.Appearance) }
-    val groups = listOf(1, asked.size, pages.size)
+    val groups = if (setup != null) listOf(1, pages.size) else listOf(1)
 
     when {
-        phase == SetupPhase.Appearance -> AppearanceStep(
-            settings,
-            onNext = { phase = if (setup != null) SetupPhase.Preferences else SetupPhase.Tour },
-            onSkipAll = onDone,
-            modifier = modifier,
-            groups = groups,
-        )
         phase == SetupPhase.Preferences && setup != null -> SetupScreen(
             settings,
             setup,
-            onDone = { phase = SetupPhase.Tour },
+            onDone = onDone,
             modifier = modifier,
             fit = fit,
             recommendations = recommendations,
             before = 1,
             groups = groups,
-            moreAfter = true,
             onSkipAll = onDone,
             onBackFromFirst = { phase = SetupPhase.Appearance },
             crashReporting = crashReporting,
-            chatsPicker = chatsPicker,
         )
-        else -> TourScreen(
-            tour,
-            onDone = onDone,
+        else -> AppearanceStep(
+            settings,
+            onNext = { if (setup != null) phase = SetupPhase.Preferences else onDone() },
+            onSkipAll = onDone,
             modifier = modifier,
-            before = 1 + asked.size,
             groups = groups,
-            onBackFromFirst = { phase = if (setup != null) SetupPhase.Preferences else SetupPhase.Appearance },
+            moreAfter = setup != null,
         )
     }
 }
 
-/** The setup's three groups, in the order they come. */
-private enum class SetupPhase { Appearance, Preferences, Tour }
+/** The setup's two groups, in the order they come. */
+private enum class SetupPhase { Appearance, Preferences }
 
 /** The quick tour on its own: taken from the offer to an updated install, or opened from Settings. */
 @Composable

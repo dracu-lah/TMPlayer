@@ -679,9 +679,6 @@ fun SettingsScreen(
                                 SetupStep.Device -> null
                                 // Never listed here: its switch is on the privacy rows already.
                                 SetupStep.CrashReports -> null
-                                // Never in this list at all (Setup.stepsFor needs a chat list this
-                                // page does not hand it): "Add chats" lives on Library's own row.
-                                SetupStep.Chats -> null
                             }
                             target?.let {
                                 SetupPlace(titleOf(it)) {
@@ -1272,8 +1269,8 @@ fun SettingsScreen(
                 item {
                     val added by com.tmplayer.data.AddedChats.choice.collectAsState()
                     ActionRow(
-                        title = s.browseAddChats,
-                        subtitle = if (added.mode == com.tmplayer.data.AddedMode.Picked) s.pickerAddedCount(added.chats.size) else s.pickerAddMoreDetail,
+                        title = s.pickerRowTitle,
+                        subtitle = com.tmplayer.ui.browse.chosenChatsDetail(added, s),
                         icon = TmIcons.ChatsMany,
                         onClick = onOpenAddChats,
                     )
@@ -1362,7 +1359,7 @@ fun SettingsScreen(
                         onToggle = { scope.launch { settings.setHomeStarredRows(!homeLayout.starredRows) } },
                     )
                 }
-                settingsNote { SettingsNoteText(s.settingsHomeFollowsAdded) }
+                settingsNote { SettingsNoteText(s.settingsHomeFollowsAddedChosen) }
             }
 
             // What TMPlayer puts on the Android TV home screen, a page of its own rather than two rows

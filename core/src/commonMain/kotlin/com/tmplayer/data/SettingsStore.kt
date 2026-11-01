@@ -404,7 +404,11 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
         }
     }
 
-    /** "Keep all my chats": every chat stays, as an answer rather than as silence (HX28). */
+    /**
+     * Every chat, as an answer rather than as silence (HX28's "Keep all my chats"). No screen
+     * writes this any more, since choosing chats became mandatory; kept so stored [AddedMode.All]
+     * answers, older backups and the store parity tests stay valid.
+     */
     suspend fun keepAllChats() {
         prefs.edit { prefs ->
             prefs.remove(ADDED_CHATS)
@@ -2100,12 +2104,14 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
 
     /**
      * Finished, or skipped: not shown again until the next sign in or [replaySetup]. The quick
-     * tour comes at the end of the setup, so it is done with it, and never offered on its own.
+     * tour is no longer part of the setup: unless it was already done, it is left (or put back)
+     * at [TourState.Never], so the shell offers it once on its own after the setup and the
+     * mandatory chat choice. A tour already taken or turned down stays done.
      */
     suspend fun markSetupDone() {
         prefs.edit {
             it[SETUP] = SETUP_DONE
-            it[TOUR] = TOUR_DONE
+            if (it[TOUR] != TOUR_DONE) it.remove(TOUR)
         }
     }
 
@@ -2116,9 +2122,9 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
 
     /**
      * The quick tour (CP69): [TourState.Never] until it has been shown or offered, [TourState.Pending]
-     * while it waits to be shown on its own, [TourState.Done] after. A fresh sign in shows it after
-     * the setup and marks it done with [markSetupDone]; an install updated from a version without
-     * it is offered it once, which is what [TourState.Never] is there to tell.
+     * while it waits to be shown on its own, [TourState.Done] after. A fresh sign in is offered it
+     * once after the setup ([markSetupDone] leaves it at [TourState.Never]), as is an install
+     * updated from a version without it.
      */
     val tourState: Flow<TourState> = read {
         when (it[TOUR]) {

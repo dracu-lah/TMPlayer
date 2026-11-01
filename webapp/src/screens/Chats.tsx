@@ -82,7 +82,7 @@ export function Chats() {
         <>
             <div class="list-head">
                 <h1 class="page-title">{t('nav.chats')}</h1>
-                <A class="link" href="/added-chats">{t('browse.add_chats')}</A>
+                <A class="link" href="/added-chats">{t('picker.choose_chats')}</A>
             </div>
             <label class="search-field">
                 <Icon icon={Search01Icon} size={20} />

@@ -1,4 +1,4 @@
-// Which chats TMPlayer browses: the Add chats picker with the archive (HX27, HX32), over the fake Telegram.
+// Which chats TMPlayer shows videos from: the chats picker with the archive (HX27, HX32), over the fake Telegram.
 import { expect, test } from '@playwright/test'
 
 test('the picker reads the archive, and its filter lists only archived chats', async ({ page }) => {
@@ -15,7 +15,7 @@ test('the picker reads the archive, and its filter lists only archived chats', a
 
 test('an archived chat that was added is browsed in Chats', async ({ page }) => {
     await page.goto('/chats')
-    await page.getByRole('link', { name: 'Add chats' }).click()
+    await page.getByRole('link', { name: 'Choose chats' }).click()
     await page.getByRole('button', { name: 'Archived', exact: true }).click()
     await page.getByRole('checkbox', { name: 'Archived Reels' }).check()
     await page.getByRole('button', { name: 'Done' }).click()
@@ -26,7 +26,7 @@ test('an archived chat that was added is browsed in Chats', async ({ page }) => 
 
 test('leaving the picker with ticks not saved asks first', async ({ page }) => {
     await page.goto('/chats')
-    await page.getByRole('link', { name: 'Add chats' }).click()
+    await page.getByRole('link', { name: 'Choose chats' }).click()
     await page.getByRole('checkbox', { name: 'Test Clips' }).check()
     await page.getByRole('button', { name: 'Back' }).click()
     const ask = page.getByRole('dialog', { name: 'Discard changes?' })

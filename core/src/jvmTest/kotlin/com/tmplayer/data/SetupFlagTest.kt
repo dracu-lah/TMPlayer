@@ -2,6 +2,7 @@ package com.tmplayer.data
 
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -60,6 +61,29 @@ class SetupFlagTest {
         settings.markSetupDone()
         settings.replaySetup()
         assertTrue(settings.lowStorageMode.first())
+    }
+
+    @Test
+    fun `finishing the setup leaves the tour to be offered on its own`() = runBlocking {
+        val settings = store()
+        settings.armSetup()
+        settings.markSetupDone()
+        // No longer part of the setup: the shell offers it once, after the chat choice.
+        assertEquals(SettingsStore.TourState.Never, settings.tourState.first())
+        // Waiting to be shown from an earlier offer: put back to the offer, not marked done.
+        settings.openTour()
+        settings.replaySetup()
+        settings.markSetupDone()
+        assertEquals(SettingsStore.TourState.Never, settings.tourState.first())
+    }
+
+    @Test
+    fun `a tour already taken or turned down stays done through the setup`() = runBlocking {
+        val settings = store()
+        settings.markTourDone()
+        settings.replaySetup()
+        settings.markSetupDone()
+        assertEquals(SettingsStore.TourState.Done, settings.tourState.first())
     }
 
     @Test

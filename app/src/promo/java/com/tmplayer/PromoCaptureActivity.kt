@@ -343,10 +343,7 @@ class PromoCaptureActivity : ComponentActivity() {
                             val recommendations = com.tmplayer.ui.onboarding.rememberRecommendations(store, fit)
                             val lowEnd = com.tmplayer.data.DeviceFitOverride.forced != null
                             val steps = remember(lowEnd) {
-                                // Chats needs a real chat list and a picker the capture tool does
-                                // not wire up; left out here as Mobile data already is for a form
-                                // that does not offer it.
-                                SetupStep.entries.filter { (if (lowEnd) it != SetupStep.Storage else it != SetupStep.Device) && it != SetupStep.Chats }
+                                SetupStep.entries.filter { if (lowEnd) it != SetupStep.Storage else it != SetupStep.Device }
                             }
                             val setup = remember(steps) {
                                 SetupState(
@@ -358,13 +355,13 @@ class PromoCaptureActivity : ComponentActivity() {
                             val shown = remember(recommendations.isNotEmpty()) { recommendations }
                             SetupScreen(store, setup, onDone = { screen = "chats" }, fit = fit, recommendations = shown)
                         }
-                        // A fresh sign in's whole walk (CP69): the setup's choices, then the tour, on one count.
+                        // A fresh sign in's whole walk (CP69): Appearance, then the setup's choices on one count.
                         "setuptour" -> {
                             val store = remember { SettingsStore(applicationContext) }
                             val phone = com.tmplayer.ui.components.deviceForm() == com.tmplayer.data.DeviceForm.Phone
                             val steps = remember(phone) {
                                 SetupStep.entries.filter {
-                                    it != SetupStep.Device && it != SetupStep.Chats && (phone || it != SetupStep.MobileData)
+                                    it != SetupStep.Device && (phone || it != SetupStep.MobileData)
                                 }
                             }
                             com.tmplayer.ui.onboarding.SetupAndTour(store, steps, onDone = { screen = "chats" })

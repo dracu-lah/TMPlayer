@@ -1,9 +1,9 @@
-import { createEffect, createSignal, ErrorBoundary, lazy, Match, onMount, Show, Switch, type ParentProps } from 'solid-js'
+import { createEffect, createSignal, ErrorBoundary, lazy, Match, on, onMount, Show, Switch, type ParentProps } from 'solid-js'
 import { A, Route, Router, useLocation, useNavigate } from '@solidjs/router'
 import { api, errorText, sessionHere, useHere } from './tg/rpc'
 import { online } from './net'
 import { entryState, me, sessionEndedElsewhere, setMe } from './session'
-import { addedMode, loadSettings } from './store'
+import { addedMode, chatsGateWaived, loadSettings, setChatsGateWaived } from './store'
 import { form, holdForm } from './form'
 import { Home } from './screens/Home'
 import { Nav } from './ui/Nav'
@@ -45,6 +45,17 @@ const loadTv = () => import('./tv')
 const TvKeys = lazy(() => loadTv().then((m) => ({ default: m.TvKeys })))
 const TvBar = lazy(() => loadTv().then((m) => ({ default: m.TvBar })))
 
+/** The pages the chats gate leaves alone: signing in, and the gate's own two. */
+const GATE_FREE = ['/signin', '/setup/chats', '/added-chats']
+
+/**
+ * The chats gate (the apps' ChatsGate): a signed in visitor who has never chosen which chats to
+ * watch is sent to choose first, whatever page they asked for, then on to it. An answer on file
+ * ('picked', or 'all' from before choosing was required) never sees it again.
+ */
+const gated = () => addedMode() === 'unanswered' && !chatsGateWaived()
+const toGate = (next: string) => `/setup/chats?next=${encodeURIComponent(next)}`
+
 // Safari has no requestIdleCallback.
 const idle = (fn: () => void) => ('requestIdleCallback' in window ? requestIdleCallback(fn) : setTimeout(fn, 1500))
 
@@ -69,18 +80,32 @@ function Shell(props: ParentProps) {
         const user = me()
         if (user === undefined) return
         const onSignIn = location.pathname === '/signin'
+        // Signed out: whoever signs in next is weighed by the gate afresh.
+        if (!user) setChatsGateWaived(false)
         if (!user && !onSignIn) {
             const next = location.pathname + location.search
             navigate(next === '/' ? '/signin' : `/signin?next=${encodeURIComponent(next)}`, { replace: true, state: entryState() })
         } else if (user && onSignIn) {
             const next = new URLSearchParams(location.search).get('next')
             const to = next?.startsWith('/') ? next : '/'
-            // Just signed in and never asked which chats to browse: the first run's one step first.
-            navigate(addedMode() === 'unanswered' ? `/setup/chats?next=${encodeURIComponent(to)}` : to, { replace: true, state: entryState() })
+            // Just signed in and never asked which chats to watch: straight to the gate, not past a page first.
+            navigate(gated() ? toGate(to) : to, { replace: true, state: entryState() })
         }
         // Fetched ahead only: one that fails now (offline) is fetched again when its page opens.
         if (user) idle(() => later.forEach((load) => load().catch(() => {})))
     })
+    // Every other page, not only the one after signing in: a visitor already signed in who never
+    // chose (an answer left open before choosing was required) meets the gate on their next visit.
+    createEffect(() => {
+        if (!me() || !gated()) return
+        const path = location.pathname
+        if (GATE_FREE.includes(path)) return
+        navigate(toGate(path + location.search), { replace: true })
+    })
+    // A gate waived while offline asks again once the connection is back.
+    createEffect(on(online, (now, was) => {
+        if (now && was === false) setChatsGateWaived(false)
+    }))
     // Signed in: ask the browser once to keep the data, and keep the picture caches within their caps.
     let kept = false
     createEffect(() => {
@@ -94,8 +119,8 @@ function Shell(props: ParentProps) {
     const playing = () => location.pathname.startsWith('/watch/')
     // A video's page is a page of its own over everything, as the apps' detail is: no bar under it.
     const detail = () => location.pathname.startsWith('/video/')
-    // The first run's step stands alone, as the apps' setup does.
-    const setup = () => location.pathname.startsWith('/setup/')
+    // The gate stands alone, as the apps' setup does: no bar to wander off through.
+    const setup = () => location.pathname.startsWith('/setup/') || (location.pathname === '/added-chats' && new URLSearchParams(location.search).has('setup'))
     // A resize in Auto layout waits while a video plays.
     createEffect(() => holdForm(playing()))
 
