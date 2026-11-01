@@ -65,6 +65,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.HomeLayout
 import com.tmplayer.data.HomeRow
@@ -912,8 +913,19 @@ private val BRAND_TOP = 14.dp
 private fun HomeBrand(modifier: Modifier = Modifier) {
     // The big-screen mode's bar signs the window at its end already.
     if (BigScreen.on) return
-    com.tmplayer.ui.components.BrandLockup(modifier, layout = com.tmplayer.ui.components.BrandLayout.Row, badge = false)
+    com.tmplayer.ui.components.BrandLockup(
+        modifier,
+        size = HOME_BRAND,
+        layout = com.tmplayer.ui.components.BrandLayout.Row,
+        badge = false,
+    )
 }
+
+/**
+ * The lockup's size on Home: the bars' Small (26 dp, 18 sp) read smaller than the row headings
+ * under it on a computer screen (user, 2026-11-01), so the name is a step above them here.
+ */
+private val HOME_BRAND = com.tmplayer.ui.components.BrandSize(40.dp, 28.sp, 14.dp)
 
 /** Between two cards in a strip or a grid. */
 private val CARD_GAP = 16.dp
