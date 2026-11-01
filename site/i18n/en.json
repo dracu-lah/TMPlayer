@@ -98,6 +98,12 @@
     "bmc_card_title": "Enjoying TMPlayer?",
     "bmc_hide": "Hide for now",
     "bmc_close": "Close",
+    "pay_by_upi": "Pay by UPI (India)",
+    "upi_scan": "Scan this with GPay, PhonePe, Paytm or any UPI app.",
+    "upi_open_app": "Open a UPI app",
+    "upi_id_label": "UPI ID",
+    "upi_copy_id": "Copy the UPI ID",
+    "upi_any_amount": "Any amount counts, and the smallest one is not a small thing. Support it if it is useful to you.",
     "come_and_talk": "Come and talk",
     "github_discussions": "GitHub Discussions"
   },

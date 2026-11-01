@@ -1869,3 +1869,48 @@ var tmT = (function () {
     });
   });
 })();
+
+/* Pay by UPI (UpiButton.astro, UpiDialog.astro, user 2026-11-01). The button is a real `upi://`
+   link, which a phone answers by opening GPay, PhonePe, Paytm or whichever UPI app is installed.
+   Nothing on a computer or a television's browser answers it, and a phone cannot scan its own
+   screen, so this opens the box with the QR and the ID to copy wherever the pointer is not a
+   finger, and leaves the link alone where it is. Inside the box the open button shows only on a
+   touch device, for the same reason. A middle click or a browser without <dialog> follows the
+   link as before; Esc, the x and the backdrop close it. */
+(function () {
+  'use strict';
+
+  var dialog = document.getElementById('upi-dialog');
+  var links = document.querySelectorAll('[data-upi]');
+  if (!dialog || !links.length || typeof dialog.showModal !== 'function') { return; }
+  var touch = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+  var opener = null;
+
+  var open = dialog.querySelector('[data-upi-open]');
+  if (open && touch) { open.hidden = false; }
+
+  function show(event) {
+    // A phone opens its own UPI app: the link does the job there.
+    if (touch) { return; }
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) { return; }
+    event.preventDefault();
+    opener = event.currentTarget;
+    dialog.showModal();
+  }
+
+  Array.prototype.forEach.call(links, function (link) {
+    link.addEventListener('click', show);
+  });
+
+  function close() { if (dialog.open) { dialog.close(); } }
+
+  var x = dialog.querySelector('[data-upi-close]');
+  if (x) { x.addEventListener('click', close); }
+  dialog.addEventListener('click', function (event) {
+    if (event.target === dialog) { close(); }
+  });
+  dialog.addEventListener('close', function () {
+    if (opener && document.contains(opener)) { opener.focus(); }
+    opener = null;
+  });
+})();

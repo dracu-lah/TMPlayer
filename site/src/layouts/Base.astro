@@ -13,6 +13,7 @@ import KaoNotice from '../components/KaoNotice.astro';
 import GetBar from '../components/GetBar.astro';
 import CoffeeCard from '../components/CoffeeCard.astro';
 import CoffeeDialog from '../components/CoffeeDialog.astro';
+import UpiDialog from '../components/UpiDialog.astro';
 import { buildString, jsStrings, published, text } from '../i18n/t';
 import { pageUrl } from '../i18n/links';
 import { ORIGIN, type PageId } from '../i18n/langs';
@@ -153,6 +154,8 @@ const strings = lang.path ? jsStrings(lang) : {};
 {!notFound && path !== '/support/' && <CoffeeCard />}
 {/* Where the support links open the Buy Me a Coffee page, over the site. */}
 <CoffeeDialog />
+{/* And where Pay by UPI opens, on anything that cannot answer a upi:// link. */}
+<UpiDialog />
 {Object.keys(strings).length > 0 && <script type="application/json" id="tm-strings" set:html={json(strings)} is:inline></script>}
 <script is:inline src={appUrl}></script>
 <!--

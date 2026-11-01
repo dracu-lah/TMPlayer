@@ -24,9 +24,13 @@
 // own `lede` keep their line in the open, as does the support page, where it is the subject.
 //
 // Buy Me a Coffee comes first, as the large button in its own brand, and GitHub Sponsors is the
-// quieter link under it (user, 2026-10-18).
+// quieter link under it (user, 2026-10-18). Between them, Pay by UPI: Buy Me a Coffee cannot take
+// GPay or any other UPI app, which is how most readers here would pay (user, 2026-11-01). It is a
+// real `upi://` link, so a phone opens its UPI app; app.js turns it into the UpiDialog (the QR and
+// the ID to copy) on anything that cannot answer that link.
 import Icon from './Icon.astro';
 import CoffeeButton from './CoffeeButton.astro';
+import UpiButton from './UpiButton.astro';
 import { text } from '../i18n/t';
 import { SPONSORS_URL } from '../lib/support';
 
@@ -64,6 +68,7 @@ const line = release
   )}
   <div class="support-coffee">
     <CoffeeButton label={t('home.buy_me_a_coffee')} large />
+    <UpiButton label={t('home.pay_by_upi')} large />
     <a class="support-alt" href={SPONSORS_URL} rel="noopener"><Icon name="heart-btn" /> {t('home.sponsor_on_github')}</a>
   </div>
   <slot />

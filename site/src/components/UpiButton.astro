@@ -1,0 +1,22 @@
+---
+// Pay by UPI, in Google Pay's own colours: the GPay mark on white, as Google's own pay buttons
+// have it (user, 2026-11-01). Buy Me a Coffee takes cards and PayPal only, so most readers here,
+// who pay by UPI, had no way to chip in at all.
+//
+// The link is a real `upi://` link, so a phone opens its UPI app straight from it: GPay, PhonePe,
+// Paytm, BHIM or a bank app, whichever the reader has. app.js catches the click on anything that
+// cannot answer such a link (a computer, a television's browser) and opens UpiDialog instead,
+// which shows the QR and the ID to copy. With scripting off the link is left alone.
+//
+// The mark is Google Pay's own artwork, used to name the way to pay, never redrawn or recoloured;
+// it is a PNG because that is the artwork there is, under a versioned URL cached for a year.
+import { versioned } from '../lib/asset-version';
+import { UPI_LINK } from '../lib/support';
+
+interface Props { label: string; large?: boolean; class?: string }
+const { label, large = false, class: extra } = Astro.props;
+---
+<a data-upi class:list={['btn', 'btn-upi', { 'btn-upi-lg': large }, extra]} href={UPI_LINK}>
+  <img class="upi-mark" src={versioned('/brand/gpay-mark.png')} alt="" width="24" height="24" loading="lazy" decoding="async">
+  <span>{label}</span>
+</a>

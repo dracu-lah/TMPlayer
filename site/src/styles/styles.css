@@ -3575,6 +3575,56 @@ button.btn { font: inherit; font-weight: 600; font-size: 0.98rem; cursor: pointe
 .btn-bmc-lg { min-height: 64px; padding: 16px 36px; gap: 14px; font-size: 1.16rem; }
 .btn-bmc-lg .bmc-cup { width: 20px; height: 28px; }
 
+/* Pay by UPI, under the coffee button: Google Pay's mark on white, as Google's own pay buttons
+   have it (user, 2026-11-01). White in both themes, as the mark's own artwork is drawn for white;
+   the border carries the edge in light mode, where the page is white too. */
+.btn-upi {
+  background: #ffffff;
+  color: #1f2430;
+  border-color: rgba(15, 20, 30, 0.14);
+  justify-content: center;
+}
+.btn-upi:hover { background: #ffffff; color: #1f2430; border-color: rgba(15, 20, 30, 0.28); }
+.btn-upi .upi-mark { flex: none; width: 24px; height: 24px; }
+.btn-upi-lg { min-height: 64px; padding: 16px 36px; gap: 14px; font-size: 1.16rem; }
+.btn-upi-lg .upi-mark { width: 30px; height: 30px; }
+
+/* The UPI box over the site (UpiDialog.astro): the QR, the ID to copy, and the button that opens
+   a UPI app where there is one. White, like the mark and like a payment slip, in both themes. */
+.upi-dialog {
+  width: min(400px, calc(100% - 32px));
+  padding: 0;
+  border: 1px solid rgba(15, 20, 30, 0.14);
+  border-radius: var(--shape-xl);
+  background: #ffffff;
+  color: #1f2430;
+}
+.upi-dialog::backdrop { background: rgba(10, 12, 18, 0.56); }
+.upi-box { position: relative; padding: 28px 24px 24px; text-align: center; }
+.upi-dialog-mark { width: 48px; height: 48px; margin: 0 auto 10px; display: block; }
+.upi-box h2 { margin: 0 0 8px; font-size: 1.3rem; font-weight: 600; }
+.upi-note { margin: 0 auto 18px; max-width: 30ch; color: #4a5160; font-size: 0.95rem; line-height: 1.5; }
+.upi-open { width: 100%; margin-bottom: 18px; }
+.upi-qr {
+  width: 220px; height: 220px; margin: 0 auto;
+  padding: 10px; border: 1px solid rgba(15, 20, 30, 0.14); border-radius: var(--shape-l);
+  background: #ffffff;
+}
+.upi-scan { margin: 14px auto 18px; max-width: 32ch; color: #4a5160; font-size: 0.92rem; line-height: 1.5; }
+.upi-id { display: grid; justify-items: center; gap: 10px; }
+.upi-id-label { color: #6b7280; font-size: 0.82rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+.upi-id code { font-size: 1.02rem; font-weight: 600; word-break: break-all; }
+.upi-id .btn { color: #1f2430; border-color: rgba(15, 20, 30, 0.2); }
+.upi-id .btn:hover { background: rgba(15, 20, 30, 0.05); color: #1f2430; }
+.upi-close {
+  position: absolute; top: 10px; inset-inline-end: 10px;
+  display: flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px; border: 0; border-radius: var(--shape-full);
+  background: transparent; color: #6b7280; cursor: pointer;
+}
+.upi-close:hover { background: rgba(15, 20, 30, 0.06); color: #1f2430; }
+.upi-close svg { width: 18px; height: 18px; }
+
 .support-alt {
   display: inline-flex;
   align-items: center;
@@ -5137,3 +5187,6 @@ html.dl-tabs-live[data-dl-tab] .platforms > .platform { animation: dl-tab-in 0.2
 .star-inset { margin: clamp(28px, 4vw, 44px) 0; }
 
 /* ==== end Header pages ==== */
+
+/* The line under the two pay buttons on /support/, which says what each of them takes. */
+.upi-aside { max-width: 62ch; margin-top: 14px; color: var(--on-surface-variant); font-size: 0.94rem; }

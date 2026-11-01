@@ -8,6 +8,7 @@ import { breadcrumb } from '../../components/breadcrumb';
 import HeaderPlain from '../../components/plain/HeaderPlain.astro';
 import FooterPlain from '../../components/plain/FooterPlain.astro';
 import CoffeeButton from '../../components/CoffeeButton.astro';
+import UpiButton from '../../components/UpiButton.astro';
 import { SPONSORS_URL } from '../../lib/support';
 import ShareLinks from '../../components/support/ShareLinks.astro';
 import { ENGLISH } from '../../i18n/langs';
@@ -33,11 +34,13 @@ Astro.locals.lang = ENGLISH;
         <div class="cover-icon icon-play"><Icon name="hand-heart" /></div>
         <div class="cover-icon-body">
           <h2>Chip in</h2>
-          <p>If TMPlayer saves you some bother, a coffee or a monthly sponsorship pays for the time that goes into it. Any amount is welcome, and one coffee is plenty.</p>
+          <p>If TMPlayer saves you some bother, a coffee or a monthly sponsorship pays for the time that goes into it. Any amount counts, and the smallest one is not a small thing.</p>
           <div class="support-coffee support-coffee-start">
             <CoffeeButton label="Buy me a coffee" large />
+            <UpiButton label="Pay by UPI (India)" large />
             <a class="support-alt" href={SPONSORS_URL} rel="noopener"><Icon name="heart-btn" /> Sponsor on GitHub</a>
           </div>
+          <p class="upi-aside">Buy Me a Coffee takes cards and PayPal. Pay by UPI opens GPay, PhonePe, Paytm or any other UPI app on a phone, and shows the QR and the UPI ID on a computer.</p>
         </div>
       </div>
     </section>

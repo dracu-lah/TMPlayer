@@ -1,0 +1,39 @@
+---
+// Paying by UPI, over the site, as CoffeeDialog does for Buy Me a Coffee (user, 2026-11-01: Buy
+// Me a Coffee has no GPay, and most readers here pay by UPI).
+//
+// The box holds the QR, the UPI ID with a copy button, and, on a device that can answer a
+// `upi://` link, a button that opens the UPI app chooser. A phone cannot scan its own screen, so
+// there the app button comes first and the QR is there for the phone beside it; on a computer or
+// a television the QR leads, since nothing on them opens a UPI app. app.js decides which by
+// pointer type, so a page with scripting off still shows the QR and the ID, which are enough.
+//
+// The QR is drawn from the pay link with qrencode (see src/lib/support.ts), not from anybody's own
+// Google Pay picture, so it carries no photograph and no name.
+import Icon from './Icon.astro';
+import { text } from '../i18n/t';
+import { UPI_ID, UPI_LINK, UPI_QR } from '../lib/support';
+import { versioned } from '../lib/asset-version';
+
+const t = (k: string) => text(Astro.locals.lang, k);
+const close = t('home.bmc_close');
+const qr = versioned(UPI_QR);
+---
+<dialog class="upi-dialog" id="upi-dialog" aria-labelledby="upi-dialog-h">
+  <div class="upi-box">
+    <button type="button" class="upi-close" data-upi-close aria-label={close} title={close}><Icon name="close" /></button>
+    <img class="upi-dialog-mark" src={versioned('/brand/gpay-mark.png')} alt="" width="48" height="48" loading="lazy" decoding="async">
+    <h2 id="upi-dialog-h">{t('home.pay_by_upi')}</h2>
+    <p class="upi-note">{t('home.upi_any_amount')}</p>
+    <a class="btn btn-filled upi-open js-only" href={UPI_LINK} data-upi-open hidden>{t('home.upi_open_app')}</a>
+    <img class="upi-qr" src={qr} alt="" width="220" height="220" loading="lazy" decoding="async">
+    <p class="upi-scan">{t('home.upi_scan')}</p>
+    <div class="upi-id">
+      <span class="upi-id-label">{t('home.upi_id_label')}</span>
+      <code>{UPI_ID}</code>
+      <button type="button" class="btn btn-outline js-only" data-copy={UPI_ID}>
+        <Icon name="copy-btn" /> <span data-copy-label>{t('home.upi_copy_id')}</span>
+      </button>
+    </div>
+  </div>
+</dialog>
