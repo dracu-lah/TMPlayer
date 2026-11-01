@@ -72,6 +72,15 @@ async function forgetCache(cache: string) {
     } catch {}
 }
 
+/**
+ * Clears the thumbnails only: the pictures of the account's own chats and videos, which a session
+ * Telegram ended leaves behind (HX23). The posters are TMDB's and stay.
+ */
+export async function clearThumbs() {
+    await globalThis.caches?.delete(THUMBS).catch(() => {})
+    await forgetCache(THUMBS)
+}
+
 /** Clears the thumbnail and poster caches only; the sign in, settings, places and watched stay. */
 export async function clearCaches() {
     for (const n of [THUMBS, POSTERS]) {

@@ -3,6 +3,7 @@ import { createSignal } from 'solid-js'
 import type { Navigator } from '@solidjs/router'
 import { api, whenUnauthorized } from './tg/rpc'
 import { clearAll } from './store'
+import { clearThumbs } from './cacheBounds'
 import type { Me } from './tg/types'
 
 /** undefined while the session is checked, null when signed out. */
@@ -22,10 +23,17 @@ export async function signOut() {
     setMe(null)
 }
 
-/** The session ended elsewhere: as Sign out, and the sign in page says why. */
+/**
+ * The session ended elsewhere, and the sign in page says why. Unlike Sign out the viewer chose
+ * nothing, so their watched list, places, Watch later, stars, chosen chats, bookmarks and settings
+ * stay for when they sign in again, as the apps keep them (169fff9); only the old session's
+ * thumbnails go, with the worker's copy of the account.
+ */
 export async function sessionEndedElsewhere() {
     setSessionEnded(true)
-    await signOut()
+    await api.logOut().catch(() => {})
+    await clearThumbs().catch(() => {})
+    setMe(null)
 }
 
 /** Signed in again: the line about the old session goes. */
@@ -34,7 +42,7 @@ export function signedIn(user: Me) {
     setMe(user)
 }
 
-// Signed out elsewhere: back to sign in, with nothing of the old account left behind.
+// Signed out elsewhere: back to sign in, the viewer's own lists kept.
 whenUnauthorized(() => {
     if (me()) sessionEndedElsewhere()
 })
