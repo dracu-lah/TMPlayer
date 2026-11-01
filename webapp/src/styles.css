@@ -1066,6 +1066,12 @@ button.nav-cell { border: 0; background: none; padding: 0; font: inherit; cursor
 .pick.on .pick-box { background: var(--accent); border-color: var(--accent); color: var(--bg); }
 .pick.on .pick-card { opacity: .8; }
 .pick input:focus-visible ~ .pick-box { outline: 2px solid var(--accent); outline-offset: 3px; }
+/* The desktop's History: a card's tick box shows on hover (or with the keyboard on it) and starts select mode. */
+.hist-cell { position: relative; }
+.hover-tick.pick-box { padding: 0; cursor: pointer; color: transparent; opacity: 0; transition: opacity var(--fast); }
+.hist-cell:hover .hover-tick, .hover-tick:focus-visible { opacity: 1; }
+.hover-tick:hover { background: rgb(0 0 0 / .65); color: #fff; }
+.hover-tick:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .select-bar {
   position: fixed; z-index: 7; left: 50%; transform: translateX(-50%);
   bottom: calc(86px + env(safe-area-inset-bottom)); width: min(480px, calc(100vw - 32px));

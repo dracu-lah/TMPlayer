@@ -5,13 +5,13 @@ import { A, useParams } from '@solidjs/router'
 import { CheckmarkCircle02Icon, Clock01Icon, History, PlayIcon, StarIcon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { api, call } from '../tg/rpc'
 import { t } from '../i18n'
-import { laterIds, laterList, resumes, starredIds, watchedList, watchedTick } from '../store'
+import { laterIds, laterKey, laterList, resumes, starredIds, watchedList, watchedTick } from '../store'
 import { Icon, type IconData } from '../ui/Icon'
 import { Card, ContinueCard, useLeft, useProgress, videoCard } from './VideoList'
 import { ChatRow } from './Chats'
 import { form } from '../form'
 import { clearHistoryWithUndo } from '../clearHistory'
-import { historyId, removeWithUndo } from '../historyEdits'
+import { historyId, removeLaterWithUndo, removeWithUndo } from '../historyEdits'
 import { prune, range, toggleAll } from '../ui/selection'
 import { chatGone, forgetGone } from '../goneVideos'
 import type { VideoItem } from '../tg/types'
@@ -60,6 +60,8 @@ const TABS: { tab: Tab; href: string; icon: IconData; label: () => string; blurb
 interface Entry {
     item: VideoItem
     time: number
+    /** What a tick names: the video's history id, or on Watch later the line's own key (a whole show has one). */
+    key: string
 }
 
 /**
@@ -75,7 +77,7 @@ async function lookUp(list: { chatId: number; messageId: number; time: number }[
                 (v) => (v === null && gone.push(r), v),
                 (e) => (chatGone(e) && gone.push(r), null),
             )
-            return { item, time: r.time }
+            return { item, time: r.time, key: historyId(r) }
         }),
     )
     if (gone.length) void forgetGone(gone)
@@ -94,24 +96,27 @@ export function HistoryPage() {
             const done = async () => lookUp(await watchedList())
             if (tab === 'continue') return left()
             if (tab === 'watched') return done()
-            if (tab === 'later') return (await laterList()).map((l) => ({ item: l.item, time: l.time }))
+            if (tab === 'later') return (await laterList()).map((l) => ({ item: l.item, time: l.time, key: laterKey(l) }))
             const both = [...(await left()), ...(await done())]
             // A video can be in both lists (finished once, left part way since): one card, the newer.
             const seen = new Set<string>()
-            return both.sort((a, b) => b.time - a.time).filter((e) => !seen.has(historyId(e.item)) && !!seen.add(historyId(e.item)))
+            return both.sort((a, b) => b.time - a.time).filter((e) => !seen.has(e.key) && !!seen.add(e.key))
         },
     )
     const progress = useProgress()
     const leftOf = useLeft()
     const days = () => byDay(entries.latest ?? [])
 
-    // Select mode (not on Watch later, which keeps its own list): ticks, Select all, Remove (n).
+    // Select mode: ticks, Select all, Remove (n). On Watch later the ticked lines leave Watch later
+    // alone; elsewhere they leave Continue watching and Watched together.
     const [selecting, setSelecting] = createSignal(false)
     const [picked, setPicked] = createSignal<ReadonlySet<string>>(new Set())
     let anchor: string | null = null
     let confirmDialog!: HTMLDialogElement
-    const order = createMemo(() => (entries.latest ?? []).map((e) => historyId(e.item)))
+    const order = createMemo(() => (entries.latest ?? []).map((e) => e.key))
     const tv = () => form() === 'tv'
+    const desktop = () => form() === 'desktop'
+    const later = () => tab() === 'later'
     // The selection follows what is on the page: an item that vanished (removed, undone away, a tab change) is dropped.
     createEffect(on(order, (ids) => setPicked((p) => (p.size ? prune(p, ids) : p))))
     createEffect(on(tab, () => leave(), { defer: true }))
@@ -134,22 +139,35 @@ export function HistoryPage() {
         const ids = [...picked()]
         if (!ids.length) return
         leave()
-        await removeWithUndo(ids, !tv())
+        if (later()) await removeLaterWithUndo(ids, !tv())
+        else await removeWithUndo(ids, !tv())
+    }
+    // A Ctrl (Cmd) or Shift click on a card, or its tick box shown on hover, starts select mode
+    // with that card ticked, as the desktop app's History does (8470ce8).
+    const startWith = (id: string, shift: boolean) => {
+        if (!selecting()) setSelecting(true)
+        tick(id, shift)
     }
     // A TV remote cannot reach the toast's Undo, so it is asked first; the phone and the desktop remove at once.
     const remove = () => (tv() ? confirmDialog.showModal() : void doRemove())
     onMount(() => {
         const keys = (e: KeyboardEvent) => {
-            if (!selecting() || form() !== 'desktop') return
+            if (form() !== 'desktop') return
             const inField = e.target instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) && (e.target as HTMLInputElement).type !== 'checkbox'
-            if (inField) return
+            if (inField || confirmDialog.open) return
+            // Ctrl+A ticks every card, starting select mode when it is not on yet; the rest only act in it.
             if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
+                if (!order().length) return
                 e.preventDefault()
+                setSelecting(true)
                 setPicked(new Set(order()))
-            } else if ((e.key === 'Delete' || e.key === 'Backspace') && picked().size) {
+                return
+            }
+            if (!selecting()) return
+            if ((e.key === 'Delete' || e.key === 'Backspace') && picked().size) {
                 e.preventDefault()
                 remove()
-            } else if (e.key === 'Escape' && !confirmDialog.open) leave()
+            } else if (e.key === 'Escape') leave()
         }
         addEventListener('keydown', keys)
         onCleanup(() => removeEventListener('keydown', keys))
@@ -157,16 +175,25 @@ export function HistoryPage() {
     return (
         <>
             <PageHead title={t('browse.tab_history_heading')} blurb={meta().blurb()} />
-            {/* One click, no question: Continue watching and Watched are cleared and the toast offers Undo for 8 s. Not on Watch later, which it keeps. */}
-            <Show when={tab() !== 'later' && days().length}>
+            {/* One click, no question, and the toast offers Undo for 8 s: Clear history takes Continue watching and Watched and keeps Watch later; on Watch later, Clear Watch later takes that list alone. */}
+            <Show when={days().length}>
                 <div class="history-actions">
                     <button class="link" type="button" onClick={() => (selecting() ? leave() : setSelecting(true))}>
                         {selecting() ? t('common.cancel') : t('browse.select')}
                     </button>
                     <Show when={!selecting()}>
-                        <button class="link" type="button" onClick={() => void clearHistoryWithUndo()}>
-                            {t('browse.clear_history')}
-                        </button>
+                        <Show
+                            when={later()}
+                            fallback={
+                                <button class="link" type="button" onClick={() => void clearHistoryWithUndo()}>
+                                    {t('browse.clear_history')}
+                                </button>
+                            }
+                        >
+                            <button class="link" type="button" onClick={() => void removeLaterWithUndo(null)}>
+                                {t('browse.clear_watch_later')}
+                            </button>
+                        </Show>
                     </Show>
                 </div>
             </Show>
@@ -197,14 +224,41 @@ export function HistoryPage() {
                                 <div class="cards" classList={{ 'continue-cards': tab() === 'continue' && form() !== 'tv' }}>
                                     <For each={d.entries}>
                                         {(e) => {
-                                            const id = historyId(e.item)
+                                            const id = e.key
                                             const card = (
                                                 <Show when={tab() === 'continue' && form() !== 'tv'} fallback={<Card card={videoCard(e.item)} progress={progress(e.item)} direct={tab() === 'continue'} history={tab() !== 'later' && !tv()} />}>
                                                     <ContinueCard item={e.item} left={leftOf(e.item)} />
                                                 </Show>
                                             )
                                             return (
-                                                <Show when={selecting()} fallback={card}>
+                                                <Show
+                                                    when={selecting()}
+                                                    fallback={
+                                                        <Show when={desktop()} fallback={card}>
+                                                            <div
+                                                                class="hist-cell"
+                                                                ref={(el) =>
+                                                                    // Caught on the way down, before the card's own link or menu sees the click.
+                                                                    el.addEventListener(
+                                                                        'click',
+                                                                        (ev) => {
+                                                                            if (!(ev.ctrlKey || ev.metaKey || ev.shiftKey)) return
+                                                                            ev.preventDefault()
+                                                                            ev.stopPropagation()
+                                                                            startWith(id, ev.shiftKey)
+                                                                        },
+                                                                        true,
+                                                                    )
+                                                                }
+                                                            >
+                                                                {card}
+                                                                <button class="hover-tick pick-box" type="button" aria-label={`${t('browse.select')}: ${e.item.name}`} onClick={() => startWith(id, false)}>
+                                                                    <Icon icon={Tick02Icon} size={16} />
+                                                                </button>
+                                                            </div>
+                                                        </Show>
+                                                    }
+                                                >
                                                     <label class="pick" classList={{ on: picked().has(id) }}>
                                                         <input type="checkbox" checked={picked().has(id)} onClick={(ev) => tick(id, ev.shiftKey)} onChange={(ev) => (ev.currentTarget.checked = picked().has(id))} aria-label={e.item.name} />
                                                         <span class="pick-box" aria-hidden="true"><Icon icon={Tick02Icon} size={16} /></span>
@@ -233,7 +287,7 @@ export function HistoryPage() {
             </Show>
             <dialog class="confirm" ref={confirmDialog} aria-labelledby="remove-title">
                 <h2 id="remove-title">{t('browse.remove_selected_title', { count: picked().size })}</h2>
-                <p>{t('browse.remove_selected_message', { count: picked().size })}</p>
+                <p>{later() ? t('browse.remove_selected_later_message', { count: picked().size }) : t('browse.remove_selected_message', { count: picked().size })}</p>
                 <p class="muted">{t('browse.remove_selected_detail')}</p>
                 <div class="confirm-buttons">
                     <button class="link" type="button" onClick={() => confirmDialog.close()}>{t('common.cancel')}</button>

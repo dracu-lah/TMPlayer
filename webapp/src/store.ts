@@ -443,6 +443,38 @@ export async function laterList(): Promise<Later[]> {
     return (await all<Later>('later:')).sort((a, b) => b.time - a.time)
 }
 
+/** The key a Watch later line goes by, for History's ticks and `removeLater`. */
+export const laterKey = laterId
+
+/**
+ * Takes the Watch later lines with these keys off, or every line when `keys` is null (Clear Watch
+ * later), and returns exactly what went, times included, so an Undo puts back the same order.
+ */
+export async function removeLater(keys: readonly string[] | null): Promise<Later[]> {
+    const wanted = keys ? new Set(keys) : null
+    const gone = (await laterList()).filter((l) => !wanted || wanted.has(laterId(l)))
+    if (!gone.length) return gone
+    const next = new Set(laterIds())
+    for (const l of gone) {
+        const key = laterId(l)
+        next.delete(key)
+        remove(`later:${key}`)
+    }
+    setLaterIds(next)
+    return gone
+}
+
+/** Undo for `removeLater`: the same lines back, with the times they had. */
+export function restoreLater(lines: readonly Later[]) {
+    const next = new Set(laterIds())
+    for (const l of lines) {
+        const key = laterId(l)
+        next.add(key)
+        write(`later:${key}`, l)
+    }
+    setLaterIds(next)
+}
+
 // Starred chats
 
 /** The starred chats, live, for every star drawn. */
