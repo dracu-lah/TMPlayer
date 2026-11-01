@@ -9,7 +9,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import com.tmplayer.data.SettingsStore
@@ -23,6 +22,7 @@ import com.tmplayer.ui.i18n.LocalStrings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Signing out (B6, Decision E5). Downloads are files in the viewer's own folder now, not cache, so
@@ -32,7 +32,6 @@ import kotlinx.coroutines.withContext
 internal fun SignOutDialog(state: ShellState, onDismiss: () -> Unit) {
     val s = LocalStrings.current
     val settings = state.settings
-    val scope = rememberCoroutineScope()
     var alsoDownloads by remember { mutableStateOf(false) }
     var size by remember { mutableLongStateOf(-1L) }
     LaunchedEffect(Unit) {
@@ -47,9 +46,14 @@ internal fun SignOutDialog(state: ShellState, onDismiss: () -> Unit) {
         onConfirm = {
             onDismiss()
             val deleteDownloads = alsoDownloads
-            scope.launch {
+            // On the process's scope, not this dialog's: closing the dialog cancelled its scope
+            // part way, every step's runCatching swallowed the cancel, nothing was cleared and the
+            // logout itself was never sent, so the window sat on Connecting for good.
+            com.tmplayer.platform.Background.scope.launch {
                 signOut(settings, deleteDownloads, state.watched, state.bookmarks)
-                state.showChats(com.tmplayer.ui.browse.BrowseSection.of(com.tmplayer.ui.browse.BrowseTab.Chats))
+                withContext(Dispatchers.Main) {
+                    state.showChats(com.tmplayer.ui.browse.BrowseSection.of(com.tmplayer.ui.browse.BrowseTab.Chats))
+                }
                 Td.logOut()
             }
         },
@@ -74,7 +78,8 @@ internal suspend fun signOut(
 ) {
     val downloads = runCatching { settings.downloadsNow() }.getOrDefault(emptyList())
     if (deleteDownloads) downloads.forEach { runCatching { DownloadIndex.delete(settings, it) } }
-    runCatching { Td.clearMediaCache() }
+    // TDLib's logOut destroys its own files as well, so a large cache is not waited on for long.
+    runCatching { withTimeoutOrNull(CLEAR_CACHE_MS) { Td.clearMediaCache() } }
     // Consent was the leaving account's to give: reporting stops, and a crash waiting to be asked
     // about goes, as on the phone. clearEverything turns the switch itself off.
     runCatching { com.tmplayer.desktop.DesktopCrashReports.stop() }
@@ -89,3 +94,6 @@ internal suspend fun signOut(
     // The bookmarks go with it, for the same reason.
     bookmarks?.let { runCatching { it.clear() } }
 }
+
+/** How long signing out waits for the video cache to be cleared before logging out regardless. */
+private const val CLEAR_CACHE_MS = 5_000L

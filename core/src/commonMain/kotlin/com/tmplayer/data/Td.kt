@@ -57,6 +57,8 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.util.concurrent.atomic.AtomicLong
@@ -1029,7 +1031,9 @@ object Td {
     suspend fun logOut() {
         logOutAsked = true
         _auth.value = AuthState.Connecting
-        runCatching { current?.logOut() }
+        // Sent whatever happens to the caller: a cancelled caller (a closing dialog's scope) left
+        // the window on Connecting with TDLib still signed in, the request never sent.
+        withContext(NonCancellable) { runCatching { current?.logOut() } }
     }
 
     /**
