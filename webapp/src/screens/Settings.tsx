@@ -16,7 +16,10 @@ import {
     Message01Icon,
     PaintBoardIcon,
     PlayIcon,
+    StarIcon,
     TranslateIcon,
+    Clock01Icon,
+    VideoReplayIcon,
 } from '@hugeicons/core-free-icons'
 import { addedIds, addedMode, settings, setSetting, SIZE_DEFAULTS, storageWorks, type Theme } from '../store'
 import { back, me, signOut } from '../session'
@@ -39,7 +42,7 @@ const LAYOUTS: Layout[] = ['desktop', 'tv']
 /** The build's own notices: the TV build's (under /tv/) also name core-js. */
 const LICENCES = `${import.meta.env.BASE_URL}licenses.txt`
 
-type PageId = 'appearance' | 'playback' | 'library' | 'storage' | 'about'
+type PageId = 'appearance' | 'home' | 'playback' | 'library' | 'storage' | 'about'
 
 /** The app's pages (SettingsPage) that the web has something to put in, in its order. */
 const PAGES: { id: PageId; icon: IconData; title: () => string; summary: () => string }[] = [
@@ -49,6 +52,7 @@ const PAGES: { id: PageId; icon: IconData; title: () => string; summary: () => s
         title: () => t('settings.appearance'),
         summary: () => (form() === 'phone' || layoutFixed() ? t(`theme.${settings().theme}`) : `${t(`theme.${settings().theme}`)}${dot}${t(`settings.layout_${layout()}`)}`),
     },
+    { id: 'home', icon: Home03Icon, title: () => t('settings.page_home'), summary: () => t('settings.page_home_summary') },
     { id: 'playback', icon: PlayIcon, title: () => t('settings.playback'), summary: () => t('settings.resume_rewind') },
     { id: 'library', icon: GridViewIcon, title: () => t('settings.library'), summary: () => t('settings.page_library_summary') },
     { id: 'storage', icon: HardDriveIcon, title: () => t('web.settings_storage'), summary: () => t('web.settings_storage_summary') },
@@ -192,6 +196,9 @@ function PageBody(props: { id: PageId }) {
             <Match when={props.id === 'appearance'}>
                 <Appearance />
             </Match>
+            <Match when={props.id === 'home'}>
+                <HomePage />
+            </Match>
             <Match when={props.id === 'playback'}>
                 <Playback />
             </Match>
@@ -330,6 +337,98 @@ function TvMsone() {
     )
 }
 
+/**
+ * Settings > Home (the apps' Home page, 8f55cf2): a switch for each of Home's rows, then where
+ * Recently added (and the carousel drawn from it) comes from, Automatic or Chosen chats, with the
+ * chats' picker behind Choose chats.
+ */
+function HomePage() {
+    const chosen = () => settings().recentSource === 'chosen'
+    return (
+        <>
+            <div class="set-card">
+                <h3 class="set-block-title set-card-title">{t('settings.home_rows')}</h3>
+                <ToggleRow
+                    icon={Home03Icon}
+                    title={t('settings.home_carousel')}
+                    subtitle={settings().carousel ? t('settings.home_carousel_on') : t('settings.home_carousel_off')}
+                    on={settings().carousel}
+                    onChange={(on) => setSetting('carousel', on)}
+                />
+                <ToggleRow
+                    icon={VideoReplayIcon}
+                    title={t('settings.home_continue')}
+                    subtitle={settings().homeContinue ? t('settings.home_continue_on') : t('settings.home_continue_off')}
+                    on={settings().homeContinue}
+                    onChange={(on) => setSetting('homeContinue', on)}
+                />
+                <ToggleRow
+                    icon={Clock01Icon}
+                    title={t('settings.home_recent')}
+                    subtitle={settings().homeRecent ? t('settings.home_recent_on') : t('settings.home_recent_off')}
+                    on={settings().homeRecent}
+                    onChange={(on) => setSetting('homeRecent', on)}
+                />
+                <ToggleRow
+                    icon={StarIcon}
+                    title={t('settings.home_starred_rows')}
+                    subtitle={settings().homeStarred ? t('settings.home_starred_rows_on') : t('settings.home_starred_rows_off')}
+                    on={settings().homeStarred}
+                    onChange={(on) => setSetting('homeStarred', on)}
+                />
+            </div>
+            <div class="set-card set-blocks">
+                <div class="set-block">
+                    <h3 class="set-block-title" id="recent-source-label">{t('settings.home_recent_from')}</h3>
+                    <RecentSourceChoice />
+                    <p class="muted small">{chosen() ? t('settings.home_source_chosen_detail', { count: settings().recentChats.length }) : t('settings.home_source_auto_detail')}</p>
+                    <p class="muted small">{t('settings.home_recent_from_note')}</p>
+                </div>
+                <Show when={chosen()}>
+                    <A class="set-row" href="/home-chats">
+                        <RowBody icon={Message01Icon} title={t('settings.home_choose_chats')} subtitle={t('settings.home_source_chosen_detail', { count: settings().recentChats.length })} />
+                        <Icon icon={ArrowRight01Icon} size={20} class="set-chevron" />
+                    </A>
+                </Show>
+            </div>
+        </>
+    )
+}
+
+function RecentSourceChoice() {
+    return (
+        <Choices
+            label="recent-source-label"
+            name="recent-source"
+            options={[
+                { value: 'auto', label: t('settings.home_source_auto') },
+                { value: 'chosen', label: t('settings.home_source_chosen') },
+            ]}
+            value={settings().recentSource}
+            onPick={(v) => setSetting('recentSource', v)}
+        />
+    )
+}
+
+/** One of Settings > Home's switches on a TV: its words and an On or Off choice made with OK. */
+function TvSwitch(props: { id: string; title: string; on: boolean; onText: string; offText: string; onPick: (on: boolean) => void }) {
+    return (
+        <TvPanel title={props.title} id={`${props.id}-label`}>
+            <p class="muted small">{props.on ? props.onText : props.offText}</p>
+            <Choices
+                label={`${props.id}-label`}
+                name={props.id}
+                options={[
+                    { value: 'on', label: t('common.on') },
+                    { value: 'off', label: t('common.off') },
+                ]}
+                value={props.on ? 'on' : 'off'}
+                onPick={(v) => props.onPick(v === 'on')}
+            />
+        </TvPanel>
+    )
+}
+
 function Library() {
     return (
         <>
@@ -338,13 +437,6 @@ function Library() {
                     <RowBody icon={Message01Icon} title={t('browse.add_chats')} subtitle={addedMode() === 'picked' ? t('picker.total', { chats: addedIds()?.size ?? 0 }) : t('picker.blurb')} />
                     <Icon icon={ArrowRight01Icon} size={20} class="set-chevron" />
                 </A>
-                <ToggleRow
-                    icon={Home03Icon}
-                    title={t('settings.home_carousel')}
-                    subtitle={settings().carousel ? t('settings.home_carousel_on') : t('settings.home_carousel_off')}
-                    on={settings().carousel}
-                    onChange={(on) => setSetting('carousel', on)}
-                />
                 <ToggleRow
                     icon={Image01Icon}
                     title={t('web.posters_title')}
@@ -671,18 +763,16 @@ function TvSettings() {
                     <p class="muted small">{t('settings.layout_detail_desktop')}</p>
                 </TvPanel>
             </Show>
-            <TvPanel title={t('settings.home_carousel')} id="carousel-label">
-                <p class="muted small">{settings().carousel ? t('settings.home_carousel_on') : t('settings.home_carousel_off')}</p>
-                <Choices
-                    label="carousel-label"
-                    name="carousel"
-                    options={[
-                        { value: 'on', label: t('common.on') },
-                        { value: 'off', label: t('common.off') },
-                    ]}
-                    value={settings().carousel ? 'on' : 'off'}
-                    onPick={(v) => setSetting('carousel', v === 'on')}
-                />
+            <TvSwitch id="carousel" title={t('settings.home_carousel')} on={settings().carousel} onText={t('settings.home_carousel_on')} offText={t('settings.home_carousel_off')} onPick={(on) => setSetting('carousel', on)} />
+            <TvSwitch id="home-continue" title={t('settings.home_continue')} on={settings().homeContinue} onText={t('settings.home_continue_on')} offText={t('settings.home_continue_off')} onPick={(on) => setSetting('homeContinue', on)} />
+            <TvSwitch id="home-recent" title={t('settings.home_recent')} on={settings().homeRecent} onText={t('settings.home_recent_on')} offText={t('settings.home_recent_off')} onPick={(on) => setSetting('homeRecent', on)} />
+            <TvSwitch id="home-starred" title={t('settings.home_starred_rows')} on={settings().homeStarred} onText={t('settings.home_starred_rows_on')} offText={t('settings.home_starred_rows_off')} onPick={(on) => setSetting('homeStarred', on)} />
+            <TvPanel title={t('settings.home_recent_from')} id="recent-source-label" anchor="home-source">
+                <RecentSourceChoice />
+                <p class="muted small">{settings().recentSource === 'chosen' ? t('settings.home_source_chosen_detail', { count: settings().recentChats.length }) : t('settings.home_source_auto_detail')}</p>
+                <Show when={settings().recentSource === 'chosen'}>
+                    <A class="outline-button" style={{ 'align-self': 'start' }} href="/home-chats">{t('settings.home_choose_chats')}</A>
+                </Show>
             </TvPanel>
             <TvPanel title="" id="size-label" anchor="size">
                 <SizeLimits />

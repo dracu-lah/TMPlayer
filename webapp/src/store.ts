@@ -6,6 +6,7 @@ import { createSignal } from 'solid-js'
 import { clear, createStore, del, entries, get, set, type UseStore } from 'idb-keyval'
 import type { Sort, VideoItem } from './tg/types'
 import { clearIndex, POSTERS as POSTER_CACHE, THUMBS, touch } from './cacheBounds'
+import { cleanHome, type RecentSource } from './ui/homeSettings'
 
 export type Theme = 'system' | 'dark' | 'light' | 'black'
 
@@ -22,9 +23,20 @@ export interface Settings {
     posters: boolean
     /** Taken off a saved position when a video resumes, in milliseconds; null for the app's default. */
     rewindMs: number | null
-    /** The carousel at the top of Home in the TV layout (the apps' "Carousel on Home"), on by default. */
+    /** The carousel at the top of Home (the apps' "Carousel on Home"), on by default. */
     carousel: boolean
+    /** Settings > Home's other rows (the apps' HomeLayout), each on by default. */
+    homeContinue: boolean
+    homeRecent: boolean
+    homeStarred: boolean
+    /** Where Recently added reads from: Home's own chats, or only `recentChats`. */
+    recentSource: RecentSource
+    /** The chats ticked for Chosen chats; kept when the source goes back to Automatic. */
+    recentChats: number[]
 }
+
+export type { RecentSource } from './ui/homeSettings'
+export { RECENT_CHATS_MAX } from './ui/homeSettings'
 
 export interface Resume {
     chatId: number
@@ -40,7 +52,20 @@ export interface Resume {
 const MB = 1024 * 1024
 /** SizeFilter.DEFAULT_MIN and DEFAULT_MAX: 400 MB up, no top. */
 export const SIZE_DEFAULTS = { sizeMin: 400 * MB, sizeMax: 8 * 1024 * MB }
-const DEFAULTS: Settings = { theme: 'system', ...SIZE_DEFAULTS, sort: 'Newest', posters: true, rewindMs: null, carousel: true }
+const DEFAULTS: Settings = {
+    theme: 'system',
+    ...SIZE_DEFAULTS,
+    sort: 'Newest',
+    posters: true,
+    rewindMs: null,
+    carousel: true,
+    homeContinue: true,
+    homeRecent: true,
+    homeStarred: true,
+    recentSource: 'auto',
+    recentChats: [],
+}
+
 const THEME_KEY = 'tmplayer-theme'
 
 let db: UseStore | null = null
@@ -192,7 +217,7 @@ export async function loadSettings() {
     ])
     // Keys of settings since removed (`rows`, the As rows layout) are dropped, so the next write leaves them behind.
     const known = Object.fromEntries(Object.entries(saved ?? {}).filter(([k]) => k in DEFAULTS)) as Partial<Settings>
-    setSettings({ ...DEFAULTS, ...known })
+    setSettings({ ...DEFAULTS, ...cleanHome(known) })
     setAddedIdsSignal(new Set(added.map((a) => a.chatId)))
     setAddedModeSignal(readMode(mode))
     setStarredIds(new Set(stars))

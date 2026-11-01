@@ -388,6 +388,11 @@ input:not([type=range]):not([type=radio]):focus { border-color: var(--accent); }
 /* The TV keeps its one page of panels (session 20): the blocks inside them take the panel's own padding and its title's size. */
 .panel .set-block { padding: 0; }
 .panel .set-block-title { font-size: 16px; line-height: 24px; font-weight: 500; }
+/* A card's own heading over its rows (Settings > Home's Rows on Home). */
+.set-card-title { margin: 0; padding: 12px 16px 4px; color: var(--muted); font-size: 14px; line-height: 20px; }
+/* Home's line where Recently added would be, when none of its chosen chats is there. */
+.home-none-chosen { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+.home-none-chosen p { margin: 0; flex: 1 1 280px; }
 html[data-form=tv] .panel .set-block-title { font-size: calc(var(--dp) * 16); line-height: calc(var(--dp) * 24); }
 
 /* Settings: panels in Corner.Large, the theme as one segmented choice. */

@@ -59,11 +59,12 @@ test.describe('Settings as pages', () => {
             await page.goto('/settings')
             await expect(page).toHaveURL(/\/settings\/appearance$/)
             const list = page.getByRole('navigation', { name: 'Settings' })
-            await expect(list.getByRole('link')).toHaveCount(5)
+            // Appearance, Home, Playback, Library, Storage and About.
+            await expect(list.getByRole('link')).toHaveCount(6)
             await expect(page.getByRole('radio', { name: 'Dark' })).toBeVisible()
             await expect(list.getByRole('link', { name: /^Appearance/ })).toHaveAttribute('aria-current', 'page')
-            await list.getByRole('link', { name: /^Library/ }).click()
-            await expect(page).toHaveURL(/\/settings\/library$/)
+            await list.getByRole('link', { name: /^Home/ }).click()
+            await expect(page).toHaveURL(/\/settings\/home$/)
             await expect(page.getByRole('switch', { name: /^Carousel on Home/ })).toBeVisible()
             await expect(page.getByRole('radio', { name: 'Dark' })).toHaveCount(0)
             // The account and Sign out stay beside every page.
@@ -91,7 +92,8 @@ test.describe('Settings as pages', () => {
     test.describe('on a desktop', () => {
         test.use(IN.desktop)
         test('the carousel switch is a switch, and stays as it was left after a reload', async ({ page }) => {
-            await page.goto('/settings/library')
+            // On Settings > Home since the apps moved it there with Home's other rows (8f55cf2).
+            await page.goto('/settings/home')
             const carousel = page.getByRole('switch', { name: /^Carousel on Home/ })
             await expect(carousel).toHaveAttribute('aria-checked', 'true')
             await carousel.click()

@@ -262,6 +262,9 @@ class WebRulesTest {
             arrayOf(chatVideos(1.0, mine), chatVideos(2.0, harbour, complete = false)),
             emptyArray(),
             false,
+            layout(),
+            null,
+            false,
         )
         rows.forEach(::isPlain)
         assertContentEquals(arrayOf("continue", "recent", "chat"), rows.map { it.kind }.toTypedArray())
@@ -274,7 +277,71 @@ class WebRulesTest {
         assertEquals(1, rows[2].tiles.count { it.kind == "show" })
         assertTrue(rows[2].totalAtLeast)
         // Before the search across chats answers, Recently added holds its place.
-        val waiting = home(emptyArray(), arrayOf(starredChat, saved), arrayOf(2.0), emptyArray(), null, true)
+        val waiting = home(emptyArray(), arrayOf(starredChat, saved), arrayOf(2.0), emptyArray(), null, true, layout(), null, false)
         assertFalse(waiting.first { it.kind == "recent" }.loaded)
+    }
+
+    private fun layout(
+        carousel: Boolean = true,
+        continueWatching: Boolean = true,
+        recentlyAdded: Boolean = true,
+        starredRows: Boolean = true,
+        source: String = "auto",
+        recentChats: Array<Double> = emptyArray(),
+    ): WebHomeLayout {
+        val o: dynamic = js("({})")
+        o.carousel = carousel
+        o.continueWatching = continueWatching
+        o.recentlyAdded = recentlyAdded
+        o.starredRows = starredRows
+        o.source = source
+        o.recentChats = recentChats
+        return o.unsafeCast<WebHomeLayout>()
+    }
+
+    @Test
+    fun `Settings Home: rows off are not built, chosen chats feed Recently added alone`() {
+        val saved = chat(1.0, "Me", saved = true)
+        val starredChat = chat(2.0, "Harbour")
+        val other = chat(3.0, "News")
+        val chats = arrayOf(saved, starredChat, other)
+        val mine = videosIn(1.0, 10 to "Quiet.Coast.2021.1080p.mkv")
+        val news = videosIn(3.0, 30 to "Night.Ferry.2020.mkv")
+        val resume: dynamic = js("({})")
+        resume.video = mine[0]
+        resume.chatTitle = "Me"
+        resume.positionMs = 60_000.0
+        resume.durationMs = 3_600_000.0
+        resume.updatedAt = 1_700_000_000_000.0
+
+        // Continue and starred rows off: neither is built, and no starred chat is read for a row.
+        val quiet = layout(continueWatching = false, starredRows = false)
+        val rows = home(arrayOf(resume.unsafeCast<WebResume>()), chats, arrayOf(2.0), arrayOf(chatVideos(1.0, mine)), emptyArray(), false, quiet, null, false)
+        assertContentEquals(arrayOf("recent"), rows.map { it.kind }.toTypedArray())
+        assertTrue(rows[0].asRow)
+
+        // Recently added off with the carousel on: kept for the carousel, not drawn as a row.
+        val forCarousel = home(emptyArray(), chats, arrayOf(2.0), arrayOf(chatVideos(1.0, mine)), emptyArray(), false, layout(recentlyAdded = false), null, false)
+        assertFalse(forCarousel.first { it.kind == "recent" }.asRow)
+        // Both off: no Recently added at all, and no search across chats wanted.
+        val bare = layout(recentlyAdded = false, carousel = false)
+        assertTrue(home(emptyArray(), chats, arrayOf(2.0), emptyArray(), emptyArray(), false, bare, null, false).none { it.kind == "recent" })
+        assertFalse(homePlan(chats, arrayOf(2.0), null, bare, null, true).needsRecent)
+
+        // Chosen chats: only those are read for Recently added, starred rows still picked.
+        val chosen = layout(source = "chosen", recentChats = arrayOf(3.0))
+        val plan = homePlan(chats, arrayOf(2.0), null, chosen, null, true)
+        assertContentEquals(arrayOf(3.0), plan.recentFrom)
+        assertContentEquals(arrayOf(3.0, 2.0), plan.picked)
+        assertFalse(plan.noneChosen)
+        val fromChosen = home(emptyArray(), chats, arrayOf(2.0), arrayOf(chatVideos(3.0, news), chatVideos(2.0, emptyArray())), emptyArray(), false, chosen, plan.recentFrom, plan.noneChosen)
+        assertTrue(fromChosen.first { it.kind == "recent" }.tiles.all { it.video?.chatId == 3.0 })
+
+        // Chosen, and nothing chosen: the line in the row's place.
+        val none = homePlan(chats, arrayOf(2.0), null, layout(source = "chosen"), null, true)
+        assertTrue(none.noneChosen)
+        assertTrue(home(emptyArray(), chats, arrayOf(2.0), emptyArray(), emptyArray(), false, layout(source = "chosen"), none.recentFrom, true).first { it.kind == "recent" }.noneChosen)
+        // A source that is not known reads as Automatic.
+        assertTrue(homePlan(chats, arrayOf(2.0), null, layout(source = "???"), null, true).autoPick)
     }
 }

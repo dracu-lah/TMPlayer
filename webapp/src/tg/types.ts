@@ -210,6 +210,15 @@ export interface HomeView extends ListView {
     /** Continue watching's videos, the latest first. */
     resumes: ResumeMark[]
     starred: number[]
+    /** Settings > Home: which rows are built, and where Recently added reads from (the apps' HomeLayout). */
+    layout: {
+        carousel: boolean
+        continueWatching: boolean
+        recentlyAdded: boolean
+        starredRows: boolean
+        source: 'auto' | 'chosen'
+        recentChats: number[]
+    }
 }
 
 /** One row of Home, as the app builds it (WebRules' home). A row not `loaded` is still waiting for Telegram. */
@@ -225,6 +234,10 @@ export interface HomeRow {
     tiles: Tile[]
     /** The chat has more than the row shows. */
     hasMore: boolean
+    /** False for Recently added kept for the carousel alone (its row is off in Settings): not drawn. */
+    asRow: boolean
+    /** Recently added reads chosen chats and none is chosen or left: a line in its place leads to Settings > Home. */
+    noneChosen: boolean
 }
 
 /** Home as far as it has come; sent as `HomeEvent`s while the chats answer. */

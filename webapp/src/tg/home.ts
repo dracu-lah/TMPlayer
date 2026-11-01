@@ -20,6 +20,10 @@ const RESUMES_READ = 20
  * list, through Telegram's flood waits, before Home settled (HX8).
  */
 const LIST_ENOUGH = 300
+/** Chosen chats Recently added waits on, read at once (HomeRows.CHOSEN_WAIT); the rest count through the search across chats. */
+const CHOSEN_WAIT = 8
+/** Every row on, Recently added from Home's own chats: Home as it was before Settings > Home. */
+const ALL_ON: HomeView['layout'] = { carousel: true, continueWatching: true, recentlyAdded: true, starredRows: true, source: 'auto', recentChats: [] }
 
 /** Telegram's answer for a chat this account can no longer read: its videos are gone for it. */
 const chatGone = (e: unknown) => /^(CHANNEL_PRIVATE|CHAT_FORBIDDEN|USER_BANNED_IN_CHANNEL|PEER_ID_INVALID|CHANNEL_INVALID|CHAT_ID_INVALID)/.test(String((e as { text?: string })?.text ?? ''))
@@ -31,6 +35,13 @@ export async function homePage(tg: TelegramClient, view: HomeView, signal: Abort
     // (starred chat rows, Recently added) and the search across chats it reads for the carousel.
     const gate = view.added ? new Set(view.added) : null
     const allowed = (id: number) => !gate || gate.has(id)
+    // Settings > Home (HomeLayout): a row that is off is not built and nothing is read for it.
+    const layout = view.layout ?? ALL_ON
+    const needsRecent = layout.carousel || layout.recentlyAdded
+    // The chats Recently added reads one by one: the chosen ones, or the added ones (HomeLayout.overAdded).
+    const chosenWanted = !needsRecent ? [] : layout.source === 'chosen' ? (gate ? layout.recentChats.filter((id) => gate.has(id)) : layout.recentChats) : (view.added ?? [])
+    // Looked up by id once the list is in, for those it does not carry (an archived chat).
+    let chosenLooked = chosenWanted.length === 0
     const items = new Map<string, VideoItem>()
     let resumes: WebResume[] | null = null
     // Continue's cards are named as a chat's tiles are ("Long Road (2019)", not its file name).
@@ -85,8 +96,12 @@ export async function homePage(tg: TelegramClient, view: HomeView, signal: Abort
         const chats = chatsNow()
         const byId = new Map(chats.map((c) => [c.id, c]))
         // The chats Home picks for itself from the search across chats are only known once the whole list is.
-        const picked = r.homeChats(chats, view.starred, listEnough() ? recent : null)
-        for (const id of picked) {
+        const plan = r.homePlan(chats, view.starred, listEnough() ? recent : null, layout, view.added ?? null, listEnough() && chosenLooked)
+        const picked = plan.picked
+        // Chosen chats past the first few are not read one by one: the search across chats counts them.
+        const chosenLate = new Set((plan.recentFrom ?? []).slice(CHOSEN_WAIT))
+        const reads = picked.filter((id) => !chosenLate.has(id))
+        for (const id of reads) {
             if (asked.has(id)) continue
             asked.add(id)
             queue.push(id)
@@ -94,7 +109,7 @@ export async function homePage(tg: TelegramClient, view: HomeView, signal: Abort
         pump()
         // An id the rules picked that the chats here do not carry is left out, never passed on as undefined.
         const pickedChats = picked.flatMap((id) => byId.get(id) ?? [])
-        const built = r.home(resumes ?? [], pickedChats, view.starred, [...loaded.values()], recent, !listEnough())
+        const built = r.home(resumes ?? [], pickedChats, view.starred, [...loaded.values()], recent, plan.autoPick && !listEnough(), layout, plan.recentFrom ?? null, plan.noneChosen)
         const rows: HomeRow[] = built.map((row) => ({
             key: row.key,
             kind: row.kind as HomeRow['kind'],
@@ -103,6 +118,8 @@ export async function homePage(tg: TelegramClient, view: HomeView, signal: Abort
             loaded: row.loaded,
             starredOnly: row.starredOnly,
             hasMore: row.hasMore,
+            asRow: row.asRow,
+            noneChosen: row.noneChosen,
             tiles:
                 row.kind === 'continue'
                     ? row.resumes.flatMap((id): Tile[] => {
@@ -113,8 +130,8 @@ export async function homePage(tg: TelegramClient, view: HomeView, signal: Abort
                     : tilesOf(row, items, view),
         }))
         // Recently added's See all reads on through the same chats, and says "in starred chats" as the row does.
-        if (listEnough() && recent !== null) rememberHomeChats(pickedChats.map((c) => c.id), rows.find((row) => row.kind === 'recent')?.starredOnly ?? false)
-        const settled = resumes !== null && recent !== null && listEnough() && picked.every((id) => loaded.has(id))
+        if (listEnough() && recent !== null) rememberHomeChats(plan.recentFrom ?? pickedChats.map((c) => c.id), rows.find((row) => row.kind === 'recent')?.starredOnly ?? false)
+        const settled = resumes !== null && recent !== null && listEnough() && chosenLooked && reads.every((id) => loaded.has(id))
         return { rows, gone, selfId, settled }
     }
 
@@ -129,6 +146,8 @@ export async function homePage(tg: TelegramClient, view: HomeView, signal: Abort
     }
 
     const readResumes = async () => {
+        // Continue watching off: nothing part way is read for Home.
+        if (!layout.continueWatching) return void (resumes = [])
         const marks = view.resumes.slice(0, RESUMES_READ)
         const byChat = new Map<number, typeof marks>()
         for (const m of marks) byChat.set(m.chatId, [...(byChat.get(m.chatId) ?? []), m])
@@ -171,6 +190,8 @@ export async function homePage(tg: TelegramClient, view: HomeView, signal: Abort
     }
 
     const readRecent = async () => {
+        // Neither Recently added nor the carousel is on: no search across chats.
+        if (!needsRecent) return void (recent = [])
         try {
             const got = await across(tg, '', gate)
             for (const [k, v] of got.items) items.set(k, v)
@@ -178,6 +199,24 @@ export async function homePage(tg: TelegramClient, view: HomeView, signal: Abort
         } catch {
             recent = []
         }
+    }
+
+    // Chosen (or added) chats the list does not carry, an archived one for instance, by id, at most
+    // HomeLayout.CHOSEN_MAX, once the list is in: without this such a chat was never read for Home.
+    const readChosen = async () => {
+        if (chosenLooked) return
+        await enoughCame
+        const listed = new Set(knownChats().chats.map((c) => c.id))
+        const missing = chosenWanted.filter((id) => !listed.has(id) && !early.has(id)).slice(0, r.homeChosenMax())
+        for (let i = 0; i < missing.length && !signal.aborted; i += PARALLEL) {
+            await Promise.all(
+                missing.slice(i, i + PARALLEL).map(async (id) => {
+                    const peer = await tg.getPeer(id).catch(() => null)
+                    if (peer) early.set(id, chatItem(peer, false))
+                }),
+            )
+        }
+        chosenLooked = true
     }
 
     const readChats = async () => {
@@ -194,7 +233,7 @@ export async function homePage(tg: TelegramClient, view: HomeView, signal: Abort
         // The rest of the list goes on loading behind Home, for the Chats page; Home waits for
         // the first LIST_ENOUGH of it only.
         void readChats()
-        await Promise.all([first, readRecent().then(schedule), enoughCame.then(schedule)])
+        await Promise.all([first, readRecent().then(schedule), enoughCame.then(schedule), readChosen().then(schedule)])
         // Home's chats come out of each build; wait for them until a build asks for none new.
         for (;;) {
             if (signal.aborted) throw new DOMException('aborted', 'AbortError')

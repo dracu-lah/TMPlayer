@@ -1,4 +1,4 @@
-import { createEffect, createSignal, For, Index, lazy, on, onCleanup, Show } from 'solid-js'
+import { createEffect, createSignal, For, Index, lazy, Match, on, onCleanup, Show, Switch } from 'solid-js'
 import { A } from '@solidjs/router'
 import { ArrowLeft01Icon, ArrowRight01Icon } from '@hugeicons/core-free-icons'
 import { call, errorText } from '../tg/rpc'
@@ -9,7 +9,7 @@ import { forgetGone } from '../goneVideos'
 import { Icon } from '../ui/Icon'
 import { Card, ContinueCard, tileCard, useLeft, useProgress, useWarmDataCentres, videoCard, type CardData } from './VideoList'
 import { form } from '../form'
-import type { HomePage, HomeRow } from '../tg/types'
+import type { HomePage, HomeRow, HomeView } from '../tg/types'
 
 /** The TV layout's carousel, in the TV chunk (plan 8.5). */
 const TvHero = lazy(() => import('../tv').then((m) => ({ default: m.TvHero })))
@@ -42,7 +42,7 @@ export function Home() {
         setBusy(true)
         try {
             const [left, seen] = await Promise.all([resumes(), progress()])
-            const view = { minBytes: settings().sizeMin, maxBytes: settings().sizeMax, ...seen, resumes: left, starred: [...starredIds()], added: addedView() }
+            const view = { minBytes: settings().sizeMin, maxBytes: settings().sizeMax, ...seen, resumes: left, starred: [...starredIds()], added: addedView(), layout: homeLayout() }
             apply(await call('home', [view], { signal: mine.signal, onEvent: (p) => void apply(p as HomePage) }))
         } catch (e) {
             if (!mine.signal.aborted) setError(e)
@@ -50,13 +50,18 @@ export function Home() {
             if (abort === mine) setBusy(false)
         }
     }
-    // Asked again when the size limits, the stars or the added chats change, as every list is.
-    createEffect(on(() => [settings().sizeMin, settings().sizeMax, [...starredIds()].join(), watchedTick(), addedMode(), [...(addedIds() ?? [])].join()], load))
+    // Asked again when the size limits, the stars, the added chats or Settings > Home change, as every list is.
+    createEffect(on(() => [settings().sizeMin, settings().sizeMax, [...starredIds()].join(), watchedTick(), addedMode(), [...(addedIds() ?? [])].join(), JSON.stringify(homeLayout())], load))
     // Lost on the way: asked again once the connection is back.
     onBackOnline(() => (error() || !last()?.settled) && load())
 
     const page = () => last()
-    const firstRun = () => page()?.settled && !page()!.rows.length
+    // Every row off in Settings > Home: Home says so and leads there, rather than standing blank.
+    const allOff = () => {
+        const l = homeLayout()
+        return !l.carousel && !l.continueWatching && !l.recentlyAdded && !l.starredRows
+    }
+    const firstRun = () => !allOff() && page()?.settled && !page()!.rows.length
     return (
         <>
             {/* The app's Home opens on its mark and name, not on a heading (the page is still called Home). */}
@@ -90,9 +95,43 @@ export function Home() {
                     </Show>
                 </div>
             </Show>
-            <For each={page()?.rows ?? []}>{(row) => <Row row={row} selfId={page()?.selfId ?? null} />}</For>
+            <Show when={allOff()}>
+                <div class="first-run">
+                    <h2>{t('home.off_title')}</h2>
+                    <p>{t('home.off_body')}</p>
+                    <A class="primary-link" href="/settings/home">{t('home.open_settings')}</A>
+                </div>
+            </Show>
+            <For each={page()?.rows ?? []}>
+                {(row) => (
+                    <Switch>
+                        {/* Recently added kept for the carousel alone: its row is off. */}
+                        <Match when={row.kind === 'recent' && !row.asRow}>{null}</Match>
+                        <Match when={row.kind === 'recent' && row.noneChosen}>
+                            <section class="home-row" aria-labelledby={`row-${row.key}`}>
+                                <div class="row-head">
+                                    <h2 class="row-title" id={`row-${row.key}`}>{t('home.row_recent_all')}</h2>
+                                </div>
+                                <div class="notice home-none-chosen">
+                                    <p>{t('home.none_chosen')}</p>
+                                    <A class="link" href="/settings/home" data-tv-first>{t('home.open_settings')}</A>
+                                </div>
+                            </section>
+                        </Match>
+                        <Match when={true}>
+                            <Row row={row} selfId={page()?.selfId ?? null} />
+                        </Match>
+                    </Switch>
+                )}
+            </For>
         </>
     )
+}
+
+/** Settings > Home as the worker reads it (HomeView.layout). */
+function homeLayout(): HomeView['layout'] {
+    const s = settings()
+    return { carousel: s.carousel, continueWatching: s.homeContinue, recentlyAdded: s.homeRecent, starredRows: s.homeStarred, source: s.recentSource, recentChats: s.recentChats }
 }
 
 function rowTitle(row: HomeRow, selfId: number | null): string {
