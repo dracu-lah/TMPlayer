@@ -283,12 +283,14 @@ internal class Choice(
 /**
  * A row of chips under a page's heading: the Chats filters and order, History's two tabs, and in
  * a narrow window the chat sections. Scrolls sideways when the window is too narrow for all of it.
+ * [inset] is the room before the first chip: the page margin, or less inside a list that already
+ * stands in from the page's edge (Downloads), so the chips start under its headings.
  */
 @Composable
-internal fun ChoiceChips(choices: List<Choice>) {
+internal fun ChoiceChips(choices: List<Choice>, inset: androidx.compose.ui.unit.Dp = pageMargin()) {
     LazyRow(
         Modifier.fillMaxWidth().padding(bottom = 4.dp),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = pageMargin()),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = inset),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         items(choices, key = { it.key }) { choice ->

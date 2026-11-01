@@ -452,7 +452,10 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
                     contentPadding = PaddingValues(top = 8.dp, bottom = 8.dp + bottom),
                     modifier = Modifier
                         .padding(end = (margin - ROW_INSET).coerceAtLeast(0.dp))
-                        .widthIn(max = LIST_MAX + ROW_INSET * 2)
+                        // In the Settings and Downloads panel the list spans the panel, with the
+                        // same margin on both sides: capped there it stopped short of the panel's
+                        // right edge and left a wide empty strip by the scrollbar.
+                        .widthIn(max = if (state.modalOpen) Dp.Unspecified else LIST_MAX + ROW_INSET * 2)
                         .fillMaxHeight()
                         .homeEndScrolls(list)
                         .remembersRemoteItem(),
@@ -518,6 +521,9 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
                                             selected = sort == downloadsSort,
                                         ) { scope.launch { state.settings.setDownloadsSort(sort) } }
                                     },
+                                    // The list already stands in from the page's edge: the
+                                    // chips start where the headings' words do.
+                                    inset = ROW_INSET,
                                 )
                             }
                         }
