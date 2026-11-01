@@ -246,6 +246,9 @@ var tmT = (function () {
     if (typeof bytes !== 'number' || !isFinite(bytes) || bytes <= 0) { return ''; }
     var mb = bytes / (1024 * 1024);
     if (mb >= 1024) { return (mb / 1024).toFixed(2) + ' GB'; }
+    /* The TV wrappers are a few KB (a shell page and an icon), so under 1 MB
+       "0.0 MB" would read as an empty or broken download; show KB instead. */
+    if (mb < 1) { return Math.max(1, Math.round(bytes / 1024)) + ' KB'; }
     return mb.toFixed(1) + ' MB';
   }
 
