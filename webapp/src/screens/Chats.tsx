@@ -4,7 +4,7 @@ import { PinIcon, Search01Icon, StarIcon } from '@hugeicons/core-free-icons'
 import { api, call, errorText } from '../tg/rpc'
 import { onBackOnline } from '../net'
 import { t } from '../i18n'
-import { addedShows, setStarred, starredIds } from '../store'
+import { addedGate, addedShows, setStarred, starredIds } from '../store'
 import { Icon } from '../ui/Icon'
 import { tvDp, VirtualGrid, type GridLayout } from '../ui/VirtualGrid'
 import { form } from '../form'
@@ -36,7 +36,20 @@ export function Chats() {
     onBackOnline(() => chats.error && refetch())
     // Chats browses the viewer's own choice (HX27): a chat left out of it never shows here, though
     // it still answers a link, a notification or an address typed by hand.
-    const list = () => (chats.error ? partial() : (chats() ?? partial())).filter((c) => addedShows(c.id))
+    const main = () => (chats.error ? partial() : (chats() ?? partial())).filter((c) => addedShows(c.id))
+    // An archived chat the viewer added is browsed too (HX32): the archive is read only once the
+    // list is whole and some added chat is not in it, so nobody else pays for it.
+    const archiveWanted = () => {
+        const gate = addedGate()
+        if (!gate?.size || chats.error || !chats()) return false
+        const here = new Set(chats()!.map((c) => c.id))
+        return [...gate].some((id) => !here.has(id))
+    }
+    const [archived] = createResource(archiveWanted, () => call('archivedChats', []) as Promise<ChatItem[]>)
+    const list = () => {
+        const extra = archived.error ? [] : (archived() ?? []).filter((c) => addedShows(c.id))
+        return extra.length ? [...main(), ...extra] : main()
+    }
     const [text, setText] = createSignal(params.q ?? '')
     const query = () => params.q?.trim() ?? ''
     // The ranking reads the whole list, so it waits for it.
@@ -77,7 +90,8 @@ export function Chats() {
             </label>
             <Show when={chats.error}>
                 <div class="notice error-notice">
-                    <p class="error">{errorText(chats.error)}</p>
+                    {/* Part of the list came before the failure: it stays, and the line says the rest is missing (HX32). */}
+                    <p class="error">{partial().length ? t('chats.some_not_loaded') : errorText(chats.error)}</p>
                     <button class="link" type="button" onClick={refetch}>{t('common.try_again')}</button>
                 </div>
             </Show>

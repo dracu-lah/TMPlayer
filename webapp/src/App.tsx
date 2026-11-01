@@ -3,7 +3,7 @@ import { A, Route, Router, useLocation, useNavigate } from '@solidjs/router'
 import { api, errorText, sessionHere, useHere } from './tg/rpc'
 import { online } from './net'
 import { entryState, me, sessionEndedElsewhere, setMe } from './session'
-import { loadSettings } from './store'
+import { addedMode, loadSettings } from './store'
 import { form, holdForm } from './form'
 import { Home } from './screens/Home'
 import { Nav } from './ui/Nav'
@@ -26,6 +26,7 @@ const loadChatInfo = () => import('./screens/ChatInfo').then((m) => ({ default: 
 const loadRecent = () => import('./screens/Recent').then((m) => ({ default: m.Recent }))
 const loadAddChats = () => import('./screens/AddChats').then((m) => ({ default: m.AddChats }))
 const loadHomeChats = () => import('./screens/HomeChats').then((m) => ({ default: m.HomeChats }))
+const SetupChats = lazy(() => import('./screens/SetupChats').then((m) => ({ default: m.SetupChats })))
 const loadSearch = () => import('./screens/Search').then((m) => ({ default: m.Search }))
 const loadSettingsPage = () => import('./screens/Settings').then((m) => ({ default: m.Settings }))
 const loadLibrary = () => import('./screens/Library')
@@ -75,7 +76,9 @@ function Shell(props: ParentProps) {
             navigate(next === '/' ? '/signin' : `/signin?next=${encodeURIComponent(next)}`, { replace: true, state: entryState() })
         } else if (user && onSignIn) {
             const next = new URLSearchParams(location.search).get('next')
-            navigate(next?.startsWith('/') ? next : '/', { replace: true, state: entryState() })
+            const to = next?.startsWith('/') ? next : '/'
+            // Just signed in and never asked which chats to browse: the first run's one step first.
+            navigate(addedMode() === 'unanswered' ? `/setup/chats?next=${encodeURIComponent(to)}` : to, { replace: true, state: entryState() })
         }
         // Fetched ahead only: one that fails now (offline) is fetched again when its page opens.
         if (user) idle(() => later.forEach((load) => load().catch(() => {})))
@@ -93,6 +96,8 @@ function Shell(props: ParentProps) {
     const playing = () => location.pathname.startsWith('/watch/')
     // A video's page is a page of its own over everything, as the apps' detail is: no bar under it.
     const detail = () => location.pathname.startsWith('/video/')
+    // The first run's step stands alone, as the apps' setup does.
+    const setup = () => location.pathname.startsWith('/setup/')
     // A resize in Auto layout waits while a video plays.
     createEffect(() => holdForm(playing()))
 
@@ -119,7 +124,7 @@ function Shell(props: ParentProps) {
                             {props.children}
                         </ErrorBoundary>
                     </main>
-                    <Show when={!playing() && !detail()}>
+                    <Show when={!playing() && !detail() && !setup()}>
                         {/* A chat has its own bar at the foot on a phone and a desktop (Chat.tsx). */}
                         <Show when={form() === 'tv'} fallback={<Show when={!location.pathname.startsWith('/chat/')}><Nav /></Show>}>
                             <TvBar />
@@ -157,6 +162,7 @@ export function App() {
             <Route path="/recent" component={Recent} />
             <Route path="/added-chats" component={AddChats} />
             <Route path="/home-chats" component={HomeChats} />
+            <Route path="/setup/chats" component={SetupChats} />
             <Route path="/video/:chatId/:messageId" component={Detail} />
             <Route path="/watch/:chatId/:messageId" component={Watch} />
             <Route path="/settings/:page?" component={Settings} />
