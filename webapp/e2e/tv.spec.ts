@@ -138,7 +138,10 @@ for (const size of [
             await press(page, 'Enter')
             await expect(page).toHaveURL(/\/settings$/)
             await expect.poll(() => focused(page)).toContain('tv-picture')
-            await press(page, 'ArrowDown')
+            // Down to the theme's choices (Add chats stands above them since HX27).
+            const onTheme = () => page.evaluate(() => (document.activeElement as HTMLInputElement | null)?.name === 'theme')
+            for (let i = 0; i < 6 && !(await onTheme()); i++) await press(page, 'ArrowDown')
+            expect(await onTheme()).toBe(true)
             await press(page, 'ArrowRight')
             expect(await page.evaluate(() => document.documentElement.dataset.theme ?? 'system')).toBe('system')
             await press(page, 'Enter')
