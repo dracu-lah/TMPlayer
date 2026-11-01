@@ -2804,7 +2804,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     }
 
     private fun showZoom(live: Boolean) {
-        val percent = L.messages.formatter.percent(zoom.percent / 100.0)
+        val percent = L.messages.formatter.scalePercent(zoom.percent)
         feedback?.zoom(L.playerZoomPercent(percent), live) { resetZoom() }
     }
 
@@ -6275,7 +6275,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             zoomed = zoom.zoomed,
         )
         override fun zoomDetail(): String? =
-            zoom.takeIf { it.zoomed }?.let { L.messages.formatter.percent(it.percent / 100.0) }
+            zoom.takeIf { it.zoomed }?.let { L.messages.formatter.scalePercent(it.percent) }
         override fun tvEntries() = PlayerMenu.tvEntries(
             pictureInPicture = hasPictureInPicture(),
             saveToDownloads = canSaveToDownloads(),

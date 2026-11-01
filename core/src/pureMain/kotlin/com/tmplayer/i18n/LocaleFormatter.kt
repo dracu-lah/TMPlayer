@@ -33,6 +33,12 @@ class LocaleFormatter internal constructor(private val messages: Messages) {
         return PlatformText.percent(locale, whole / 100.0)
     }
 
+    /**
+     * A size as a percentage of the normal one, over 100 as well: a zoom's `135%`. [percent] is
+     * for progress and stops at 100.
+     */
+    fun scalePercent(percent: Int): String = PlatformText.percent(locale, percent.coerceIn(0, 100_000) / 100.0)
+
     /** `1.5 GB`, `350 MB`, `12 KB` (binary units, as the rest of the app counts), or "" for nothing. */
     fun size(bytes: Long): String = when {
         bytes <= 0 -> ""
