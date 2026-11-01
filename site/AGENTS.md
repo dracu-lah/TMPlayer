@@ -62,9 +62,10 @@ dark shots stay paired.
 
 Cards made for posting elsewhere (Telegram, LinkedIn, X) live in `site/public/social/` and stay
 PNG, as `og.png` does, because the networks' crawlers cannot be relied on to decode WebP. Each is
-drawn from its own page in `scripts/social-card-*.html` with headless Chromium at 1200x630
-(`--window-size=1200,630 --screenshot=... --allow-file-access-from-files`), so it can be redrawn
-when the figures move.
+drawn by `python3 scripts/build-social-card.py --downloads <count>`, which writes the page
+(`scripts/social-card-*.html`) and renders it with headless Chromium at 1200x630, so a card can be
+redrawn when the figures move. A card stays in the site's language: Poppins, the site's blue, one
+radius family, the real platform marks from `site/src/icons`, and the site's own screenshots.
 
 A shot that points at one thing is cropped and zoomed, and its arrows, circles and underlines are
 drawn by `scripts/annotate-shot.py` from a spec in `scripts/annotations/` (user, 2026-10-14). No
