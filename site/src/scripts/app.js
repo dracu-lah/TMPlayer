@@ -1593,8 +1593,8 @@ var tmT = (function () {
 })();
 
 /* The support popup (src/components/SupportPopup.astro): opens a few seconds after the page has
-   loaded, once per tab session. Its close control is a ring that fills for a few seconds, then the
-   x and "Maybe later"; until then Esc and a click outside do nothing (user, 2026-11-02). The
+   loaded, once per tab session. No close icon (user, 2026-11-03): "Maybe later" shows from the
+   start, dimmed for a few seconds; until then it, Esc and a click outside do nothing. The
    pay buttons open the UPI and coffee dialogs above it, so it needs no handling here. */
 (function () {
   'use strict';
@@ -1606,21 +1606,16 @@ var tmT = (function () {
   var OPEN_AFTER = 3000;
   var CLOSE_AFTER = 5000;
   var ready = false;
-  var closeBtn = pop.querySelector('.support-pop-close');
   var later = pop.querySelector('.support-pop-later');
 
   function open() {
     // Not over another dialog, and not while the page is in a background tab.
     if (document.querySelector('dialog[open]') || document.hidden) { setTimeout(open, 3000); return; }
     try { sessionStorage.setItem(KEY, '1'); } catch (e) { /* ignore */ }
-    pop.style.setProperty('--pop-wait', CLOSE_AFTER + 'ms');
     pop.showModal();
-    pop.classList.add('is-counting');
     setTimeout(function () {
       ready = true;
-      pop.classList.add('is-ready');
-      closeBtn.disabled = false;
-      later.hidden = false;
+      later.disabled = false;
     }, CLOSE_AFTER);
   }
 
@@ -1630,7 +1625,7 @@ var tmT = (function () {
   }
 
   Array.prototype.forEach.call(pop.querySelectorAll('[data-pop-close]'), function (b) { b.addEventListener('click', close); });
-  // Esc is held back until the close control is there.
+  // Esc is held back until "Maybe later" is live.
   // Chrome lets a second Esc press close a dialog whose cancel was prevented, so a close before
   // the control is ready opens it again.
   pop.addEventListener('cancel', function (e) { if (!ready) { e.preventDefault(); } });

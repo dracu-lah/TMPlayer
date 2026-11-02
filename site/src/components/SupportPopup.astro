@@ -4,9 +4,9 @@
 // opened with showModal by app.js a few seconds after the page loads, so focus is trapped and the
 // page behind is inert while it is up.
 //
-// It is written closed. The close control is not offered at first: a ring fills for a few seconds
-// and then turns into the x, and until then Esc and a click outside do nothing. "Maybe later" is
-// the quiet text button that arrives with it. Shown once per tab session (sessionStorage), never
+// It is written closed. It has no close icon (user, 2026-11-03: the x read as too pushy): "Maybe
+// later", the quiet text button at its foot, is there from the start, dimmed for its first few
+// seconds, and Esc and a click outside close it from then on too. Shown once per tab session (sessionStorage), never
 // on the support or 404 pages. On the download and install pages it opens a few seconds after a
 // download click instead of on a timer, so a reader who came straight there is never blocked. The two buttons are the site's UpiButton and
 // CoffeeButton, so they keep each brand's colours and open the same dialogs. With scripting off it
@@ -22,12 +22,6 @@ const t = (k: string) => text(Astro.locals.lang, k);
 ---
 <dialog class="support-pop" id="support-pop" aria-labelledby="support-pop-title" aria-describedby="support-pop-line" data-after-download={afterDownload ? "" : undefined}>
   <div class="support-pop-box">
-    <button type="button" class="support-pop-close" data-pop-close aria-label={t('home.bmc_close')} title={t('home.bmc_close')} disabled>
-      <svg class="support-pop-ring" viewBox="0 0 40 40" aria-hidden="true" focusable="false">
-        <circle cx="20" cy="20" r="17" />
-      </svg>
-      <Icon name="close" />
-    </button>
     <span class="support-pop-badge" aria-hidden="true"><Icon name="hand-heart" /></span>
     <h2 class="support-pop-title" id="support-pop-title">{t('home.bmc_pop_title')}</h2>
     <p class="support-pop-line" id="support-pop-line">{t('home.bmc_pop_line')}</p>
@@ -36,6 +30,6 @@ const t = (k: string) => text(Astro.locals.lang, k);
       <CoffeeButton label={t('home.bmc_card_coffee')} />
     </div>
     <p class="support-pop-note">{t('home.bmc_pop_note')}</p>
-    <button type="button" class="support-pop-later" data-pop-close hidden>{t('home.bmc_pop_later')}</button>
+    <button type="button" class="support-pop-later" data-pop-close disabled>{t('home.bmc_pop_later')}</button>
   </div>
 </dialog>
