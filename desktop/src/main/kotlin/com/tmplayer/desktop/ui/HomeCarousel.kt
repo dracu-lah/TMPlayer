@@ -486,7 +486,7 @@ private fun FeaturedPage(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            FeaturedInfo(pick, meta, Modifier.widthIn(max = INFO_WIDTH), overviewLines = 3)
+            FeaturedInfo(pick, meta, Modifier.widthIn(max = INFO_WIDTH), overviewLines = 3, scoreLogoHeight = 22.dp, scoreLines = 2)
             Spacer(Modifier.height(6.dp))
             Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),

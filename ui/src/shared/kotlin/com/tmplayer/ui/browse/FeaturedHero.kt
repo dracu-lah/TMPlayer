@@ -88,6 +88,8 @@ fun FeaturedInfo(
     modifier: Modifier = Modifier,
     overviewLines: Int = 3,
     textAlign: TextAlign = TextAlign.Start,
+    scoreLogoHeight: androidx.compose.ui.unit.Dp = 16.dp,
+    scoreLines: Int = 1,
 ) {
     val s = LocalStrings.current
     val extras = rememberMetaExtras(meta)
@@ -110,7 +112,7 @@ fun FeaturedInfo(
             textAlign = textAlign,
         )
         // The first three sites' scores, on one line, each with its mark.
-        extras?.let { MetaScoresRow(it, maxLines = 1, limit = 3, centered = textAlign == TextAlign.Center) }
+        extras?.let { MetaScoresRow(it, maxLines = scoreLines, limit = 3, centered = textAlign == TextAlign.Center, logoHeight = scoreLogoHeight) }
         if (overview.isNotEmpty() && overviewLines > 0) {
             Text(
                 overview,

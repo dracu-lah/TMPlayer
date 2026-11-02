@@ -306,10 +306,10 @@ private const val WIDE_RATIO = 1.4f
  * the picture itself settling into the page, the words still readable the whole way (user,
  * 2026-11-01). The foot fade stacks with this one under the words for the rest of the contrast.
  */
-private const val START_FADE = 0.72f
+private const val START_FADE = 0.6f
 
 /** The deepest point of [START_FADE], short of the page's own colour outright: see [START_FADE]. */
-private const val START_FADE_CAP = 0.82f
+private const val START_FADE_CAP = 0.78f
 
 /**
  * The deepest point of the top fade a caller reaches for with [topFade] or [topFadePx] (a

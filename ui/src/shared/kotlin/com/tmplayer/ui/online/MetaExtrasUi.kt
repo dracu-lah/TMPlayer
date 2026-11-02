@@ -177,6 +177,7 @@ fun MetaScoresRow(
     centered: Boolean = false,
     provider: MetaProvider = MetaProvider.Tmdb,
     style: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.bodyMedium,
+    logoHeight: Dp = LOGO_HEIGHT,
 ) {
     val scores = remember(extras, provider) { extras.withProviderScore(provider).scores }
     if (scores.isEmpty()) return
@@ -187,7 +188,7 @@ fun MetaScoresRow(
         itemVerticalAlignment = Alignment.CenterVertically,
         maxLines = maxLines,
     ) {
-        for (score in scores.take(limit)) ScoreItem(score, style)
+        for (score in scores.take(limit)) ScoreItem(score, style, logoHeight = logoHeight)
     }
 }
 

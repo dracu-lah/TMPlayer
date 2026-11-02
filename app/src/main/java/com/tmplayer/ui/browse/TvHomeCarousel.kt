@@ -361,22 +361,24 @@ private fun TvFeaturedArt(pick: FeaturedPick, chatTitle: (Long) -> String, start
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            FeaturedInfo(pick, meta, overviewLines = 2)
+            // Ten-foot sizes: the marks at 24 dp (16 dp is a phone's), two lines for them so none is
+            // clipped, three of the overview so the description is not cut after two.
+            FeaturedInfo(pick, meta, overviewLines = 3, scoreLogoHeight = 24.dp, scoreLines = 2)
         }
     }
 }
 
 /**
- * Details beside Play: the same primary fill as Play, not a quieter style of its own (user,
- * 2026-11-01); no scale and no ring, a fill swap to [Tone.focusFill] alone carries focus, the
+ * Details beside Play: a quieter grey fill so Play leads (user, 2026-11-02, replacing the
+ * 2026-11-01 same-fill rule); no scale and no ring, a fill swap to [Tone.focusFill] alone carries focus, the
  * same as [HeroPill] beside it.
  */
 @Composable
 private fun TvDetailsPill(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
-    val fill by animateColorAsState(if (focused) Tone.focusFill else Tone.hero, Motion.standard(Motion.Fast), label = "detailsFill")
-    val ink by animateColorAsState(if (focused) Tone.onFocusFill else Tone.onHero, Motion.standard(Motion.Fast), label = "detailsInk")
+    val fill by animateColorAsState(if (focused) Tone.focusFill else Tone.surfaceHigh, Motion.standard(Motion.Fast), label = "detailsFill")
+    val ink by animateColorAsState(if (focused) Tone.onFocusFill else Tone.text, Motion.standard(Motion.Fast), label = "detailsInk")
     Row(
         modifier
             .heightIn(min = 48.dp)
