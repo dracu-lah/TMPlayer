@@ -304,7 +304,7 @@ private fun CinemaLayout(page: DetailPage, holds: Holds, height: Dp) {
                 // Shorter than the whole first screen (user, 2026-11-01: brought in line with the
                 // Home carousel it opens from, which this page now reads as a continuation of,
                 // rather than towering over it).
-                .fillMaxHeight(0.62f)
+                .fillMaxHeight(0.74f)
                 .graphicsLayer { alpha = 1f - 0.75f * (scroll.value / dimOver).coerceIn(0f, 1f) },
         )
         Column(

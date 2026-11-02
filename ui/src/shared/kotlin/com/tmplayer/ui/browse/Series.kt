@@ -959,9 +959,9 @@ fun SeriesPanel(
         val large = wide && !tv && com.tmplayer.ui.components.deviceForm() == com.tmplayer.data.DeviceForm.Desktop && maxWidth >= LARGE_PAGE
         val heroHeight = if (large) {
             // As tall as a video's page's hero, so the first row of episodes shows under it.
-            (maxHeight * 0.62f).coerceIn(400.dp, 680.dp)
+            (maxHeight * 0.74f).coerceIn(400.dp, 800.dp)
         } else if (wide) {
-            (maxHeight * 0.62f).coerceIn(280.dp, 560.dp)
+            (maxHeight * 0.74f).coerceIn(280.dp, 680.dp)
         } else {
             // Chosen once, so the online picture fades into the frame rather than growing it.
             tallBackdropHeight(maxWidth, maxHeight, online = onlineBackdrop)

@@ -97,21 +97,21 @@ class FeaturedCarouselRenderTest {
         ),
     )
 
-    private fun render(out: String, rtl: Boolean = false) {
-        FormFactor.override(false)
+    private fun render(out: String, rtl: Boolean = false, tv: Boolean = false) {
+        FormFactor.override(tv)
         // Still: the stand-in's shimmer is an endless animation the paused looper would never get
         // past, and the pages then hold still with their segments drawn static, as with Reduce motion.
         Motion.reduced = true
-        val loading = compose(null, rtl)
+        val loading = compose(null, rtl, tv)
         draw(loading.first, "featured-loading-$out")
-        val pages = compose(picks(), rtl)
+        val pages = compose(picks(), rtl, tv)
         draw(pages.first, "featured-$out")
         assertTrue(loading.second > 0f)
         assertEquals("the row under the carousel stays put as the pages arrive", loading.second, pages.second, 0.5f)
     }
 
     /** Home's top with the carousel showing [shown], and where the row under it starts. */
-    private fun compose(shown: List<FeaturedPick>?, rtl: Boolean = false): Pair<ComponentActivity, Float> {
+    private fun compose(shown: List<FeaturedPick>?, rtl: Boolean = false, tv: Boolean = false): Pair<ComponentActivity, Float> {
         var rowTop = -1f
         val activity = Robolectric.buildActivity(ComponentActivity::class.java).setup().get()
         activity.setContent {
@@ -124,8 +124,22 @@ class FeaturedCarouselRenderTest {
             ) {
                 BoxWithConstraints(Modifier.fillMaxSize().background(Tone.background)) {
                     val under = 24.dp
-                    val height = featuredHeight(maxWidth, maxHeight - under) + under
+                    val height = if (tv) TV_FEATURED_HEIGHT else featuredHeight(maxWidth, maxHeight - under) + under
                     Column(Modifier.fillMaxSize()) {
+                      if (tv) {
+                        // The television's carousel: no status bar, a fixed height.
+                        TvFeaturedCarousel(
+                            picks = shown,
+                            height = height,
+                            start = 48.dp,
+                            end = 48.dp,
+                            watch = SeriesWatch(point = { null }, finished = { false }),
+                            chatTitle = { if (it == 8L) "Film Club" else "Weekend Films" },
+                            active = false,
+                            onPlay = { _, _ -> },
+                            onDetails = {},
+                        )
+                      } else {
                       // The carousel with the app's name over its top corner, as HomePane sets it.
                       Box {
                         FeaturedCarousel(
@@ -141,6 +155,7 @@ class FeaturedCarouselRenderTest {
                             onDetails = {},
                         )
                         PhoneHomeBrand(Modifier.align(Alignment.TopStart).padding(start = 16.dp, top = under + BRAND_TOP), onArt = true)
+                      }
                       }
                         // The first row under it.
                         Box(
@@ -165,6 +180,10 @@ class FeaturedCarouselRenderTest {
         file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         assertTrue(file.length() > 0)
     }
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w960dp-h540dp-land-night-xhdpi")
+    fun `television`() = render("tv", tv = true)
 
     @Test
     fun `five different pages from the starred chats`() {

@@ -520,9 +520,9 @@ private const val SYNOPSIS_LINES = 6
 private val HERO_TEXT = 760.dp
 
 /** The hero's share of the window's height, kept between [HERO_MIN] and [HERO_MAX]. */
-private const val HERO_SHARE = 0.62f
+private const val HERO_SHARE = 0.74f
 private val HERO_MIN = 320.dp
-private val HERO_MAX = 680.dp
+private val HERO_MAX = 800.dp
 
 /** The hero's words stay below this, clear of the Back button over the picture. */
 private val HERO_TOP = 88.dp
