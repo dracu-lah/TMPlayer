@@ -1603,7 +1603,7 @@ var tmT = (function () {
   if (!pop || typeof pop.showModal !== 'function') { return; }
   var KEY = 'tmp-support-pop';
   try { if (sessionStorage.getItem(KEY)) { return; } } catch (e) { /* storage blocked: show it anyway */ }
-  var OPEN_AFTER = 8000;
+  var OPEN_AFTER = 3000;
   var CLOSE_AFTER = 5000;
   var ready = false;
   var closeBtn = pop.querySelector('.support-pop-close');
