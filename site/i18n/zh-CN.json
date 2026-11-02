@@ -97,6 +97,10 @@
     "tv_chats_alt": "电视上 TMPlayer 的聊天界面：搜索、筛选，以及可以随时回去看的演示聊天。不显示任何消息。",
     "bmc_card_title": "喜欢 TMPlayer 吗？",
     "bmc_hide": "暂时隐藏",
+    "bmc_pop_later": "以后再说",
+    "bmc_pop_line": "人人免费，没有广告，也没有付费墙。你的支持用于开发新功能和修复问题。",
+    "bmc_pop_note": "自愿支持。没有任何功能因此被锁定。",
+    "bmc_pop_title": "帮助 TMPlayer 持续成长",
     "bmc_close": "关闭",
     "come_and_talk": "来聊聊吧",
     "github_discussions": "GitHub Discussions"

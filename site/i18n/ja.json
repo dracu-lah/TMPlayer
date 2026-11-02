@@ -97,6 +97,10 @@
     "tv_chats_alt": "テレビでのTMPlayerのチャット画面: 検索、フィルター、すぐに戻れるデモチャット。メッセージは表示されません。",
     "bmc_card_title": "TMPlayer を気に入っていただけましたか？",
     "bmc_hide": "今は隠す",
+    "bmc_pop_later": "あとで",
+    "bmc_pop_line": "誰でも無料で、広告も有料の壁もありません。いただいた支援は、新機能と修正の費用になります。",
+    "bmc_pop_note": "任意です。支援しなくても制限はありません。",
+    "bmc_pop_title": "TMPlayerの成長を応援してください",
     "bmc_close": "閉じる",
     "come_and_talk": "気軽にどうぞ",
     "github_discussions": "GitHub Discussions"

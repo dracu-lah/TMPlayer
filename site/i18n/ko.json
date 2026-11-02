@@ -97,6 +97,10 @@
     "tv_chats_alt": "TV의 TMPlayer 채팅 화면: 검색, 필터, 다시 들어갈 데모 채팅. 메시지는 보이지 않아요.",
     "bmc_card_title": "TMPlayer가 마음에 드시나요?",
     "bmc_hide": "지금은 숨기기",
+    "bmc_pop_later": "나중에",
+    "bmc_pop_line": "누구나 무료이며 광고도 유료 장벽도 없습니다. 후원은 새 기능과 수정에 쓰입니다.",
+    "bmc_pop_note": "선택 사항입니다. 막아 둔 기능은 없습니다.",
+    "bmc_pop_title": "TMPlayer가 계속 성장하도록 도와주세요",
     "bmc_close": "닫기",
     "come_and_talk": "이야기 나눠요",
     "github_discussions": "GitHub Discussions"

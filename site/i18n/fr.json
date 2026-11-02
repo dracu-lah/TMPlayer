@@ -97,6 +97,10 @@
     "tv_chats_alt": "L'écran Discussions de TMPlayer sur un téléviseur : recherche, filtres et discussions de démonstration à reprendre. Aucun message n'est affiché.",
     "bmc_card_title": "TMPlayer vous plaît ?",
     "bmc_hide": "Masquer pour l'instant",
+    "bmc_pop_later": "Plus tard",
+    "bmc_pop_line": "Gratuit pour tous, sans publicité ni accès payant. Votre soutien finance les nouvelles fonctions et les corrections.",
+    "bmc_pop_note": "Facultatif. Rien n'est verrouillé derrière.",
+    "bmc_pop_title": "Aidez TMPlayer à continuer de grandir",
     "bmc_close": "Fermer",
     "come_and_talk": "Venez discuter",
     "github_discussions": "GitHub Discussions"

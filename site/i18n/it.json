@@ -97,6 +97,10 @@
     "tv_chats_alt": "La schermata Chat di TMPlayer su un televisore: ricerca, filtri e chat dimostrative da riprendere. Nessun messaggio è mostrato.",
     "bmc_card_title": "Ti piace TMPlayer?",
     "bmc_hide": "Nascondi per ora",
+    "bmc_pop_later": "Forse più tardi",
+    "bmc_pop_line": "Gratis per tutti, senza pubblicità né paywall. Il tuo sostegno finanzia nuove funzioni e correzioni.",
+    "bmc_pop_note": "Facoltativo. Niente è bloccato dietro.",
+    "bmc_pop_title": "Aiuta TMPlayer a continuare a crescere",
     "bmc_close": "Chiudi",
     "come_and_talk": "Vieni a parlarne",
     "github_discussions": "GitHub Discussions"
