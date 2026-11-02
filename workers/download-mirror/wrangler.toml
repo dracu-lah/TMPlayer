@@ -9,3 +9,11 @@ compatibility_date = "2026-10-01"
 [[kv_namespaces]]
 binding = "DOWNLOADS"
 id = "f59c5358bfb04d05addf1805be9ca49a"
+
+# One data point per cached download. KV puts are capped at 1,000 a day on the free plan, which
+# stopped the counter on 2026-11-02; Analytics Engine writes are not. /stats reads the total back
+# through the SQL API (secrets CF_ACCOUNT_ID and CF_API_TOKEN, a token with Account Analytics: Read)
+# and adds the frozen KV total in DOWNLOADS.
+[[analytics_engine_datasets]]
+binding = "HITS"
+dataset = "tmplayer_hits"
