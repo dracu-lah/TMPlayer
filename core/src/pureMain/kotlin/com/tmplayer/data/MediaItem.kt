@@ -165,6 +165,24 @@ data class MediaItem(
         return this
     }
 
+    companion object {
+        /**
+         * [fresh], a new answer for a list already [held] (looked up by [id]), with each video the
+         * list had kept as the instance already held, or, where only something past its names
+         * changed (a download, a view count), given what was read off the held one's names.
+         * Without it one new post in a chat had every name of the chat read again, about 0.1 ms a
+         * name on a desktop and many times that on a TV (HX73).
+         */
+        fun carryReads(fresh: List<MediaItem>, held: (String) -> MediaItem?): List<MediaItem> = fresh.map { item ->
+            val before = held(item.id)
+            when {
+                before == null -> item
+                before == item -> before
+                else -> item.keptReads(before)
+            }
+        }
+    }
+
     /** [value] read before, else [compute]'s answer, which stores itself; [NotFound] stands for null. */
     @Suppress("UNCHECKED_CAST")
     private inline fun <T> read(value: Any?, compute: () -> T): T = when {

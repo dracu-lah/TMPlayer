@@ -103,4 +103,26 @@ class ScaleCpuTest {
         report("GlobalSearch.merge: 10 pages of 60 into ${groups.size} cards in $ms ms")
         assertTrue(ms < 2_000)
     }
+
+    /**
+     * A refreshed answer is new instances of the same videos: one new post read every name again
+     * (HX73). [MediaItem.carryReads] keeps the held ones, so the build after it reads only the new.
+     */
+    @Test
+    fun `a refreshed answer is not parsed again`() {
+        repeat(3) { SeriesShelf.arrange(chat(1_000), emptyMap()) }
+        val held = chat(2_000)
+        SeriesShelf.arrange(held, emptyMap())
+        val byId = held.associateBy { it.id }
+        // The same videos, newly made, one of them now on the device.
+        val answer = held.mapIndexed { i, item -> if (i == 5) item.copy(onDevice = true) else item.copy() }
+        val fromScratch = timed { SeriesShelf.arrange(answer.map { it.copy() }, emptyMap()) }
+        val carried = MediaItem.carryReads(answer, byId::get)
+        val again = timed { SeriesShelf.arrange(carried, emptyMap()) }
+        report("arrange of 2000 refreshed videos: $fromScratch ms read again, $again ms carried")
+        assertTrue("an unchanged video is the one held", carried[0] === held[0])
+        assertTrue("a changed video is the new one", carried[5] !== held[5] && carried[5].onDevice)
+        assertTrue(SeriesShelf.arrange(carried, emptyMap()) == SeriesShelf.arrange(answer.map { it.copy() }, emptyMap()))
+        assertTrue("carried $again ms against $fromScratch ms", again * 2 < fromScratch)
+    }
 }

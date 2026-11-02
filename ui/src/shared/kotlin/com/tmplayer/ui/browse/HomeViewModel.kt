@@ -34,6 +34,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.asCoroutineDispatcher
 import com.tmplayer.data.WatchLaterRecord
 import kotlinx.coroutines.flow.filterNot
 import kotlinx.coroutines.flow.map
@@ -627,7 +628,7 @@ class HomeViewModel(
         val ended = lane?.done == true
         // Where the read stopped, for a See all page to read on from.
         if (lane == null) reads.remove(chatId) else reads[chatId] = lane
-        val kept = withinLimits(items).take(ROW_KEEP)
+        val kept = carryReads(withinLimits(items).take(ROW_KEEP), _loaded.value[chatId].orEmpty() + _recent.value.orEmpty())
         _partial.update { if (ended && kept.size == items.size) it - chatId else it + chatId }
         // Unchanged rows are not written again, so nothing recomposes for an answer that is the same.
         _loaded.update { if (it[chatId] == kept) it else it + (chatId to kept) }
@@ -639,6 +640,17 @@ class HomeViewModel(
             com.tmplayer.data.PageQueries.prefetchChat(chatId)
         }
         return HomeFetches.Outcome.Done
+    }
+
+    /**
+     * [fresh] keeping what was read off the names of the videos Home already [held] (see
+     * [MediaItem.carryReads]): a refreshed row, or Recently added, is not parsed again for one new post.
+     */
+    private fun carryReads(fresh: List<MediaItem>, held: List<MediaItem>): List<MediaItem> {
+        if (held.isEmpty()) return fresh
+        val byId = HashMap<String, MediaItem>(held.size * 2)
+        held.forEach { byId.putIfAbsent(it.id, it) }
+        return MediaItem.carryReads(fresh, byId::get)
     }
 
     private fun noteFresh() {
@@ -666,7 +678,7 @@ class HomeViewModel(
                 if (_recent.value == null) _recent.value = emptyList()
                 return@ask HomeFetches.Outcome.of(failure)
             }
-            val kept = withinLimits(items)
+            val kept = carryReads(withinLimits(items), _recent.value.orEmpty() + _loaded.value.values.flatten())
             if (_recent.value != kept) _recent.value = kept
             noteFresh()
             HomeFetches.Outcome.Done
@@ -949,6 +961,21 @@ class HomeViewModel(
 }
 
 /**
+ * Where Home's rows are built: one thread, below the screen's priority. A build reads hundreds of
+ * names and does not stop part way, so on [Dispatchers.Default] a build the next answer had
+ * cancelled ran on beside the new one; on a 4-core TV a cold start's builds took every core and the
+ * JIT while the main thread drew the top bar, past the ANR limit (Mi TV, 1.28.3, HX73). Here a build
+ * waits for the one before, a cancelled one never starts, and the main thread and the player come
+ * first (Java priority 4 is Android's background priority, nice 10).
+ */
+private val homeBuild = java.util.concurrent.Executors.newSingleThreadExecutor { task ->
+    Thread(task, "home-rows").apply {
+        isDaemon = true
+        priority = Thread.NORM_PRIORITY - 1
+    }
+}.asCoroutineDispatcher()
+
+/**
  * Home's rows for what is on screen now, rebuilt only when one of the inputs changes.
  *
  * @param chats the chat list, which decides the starred rows' order.
@@ -1026,7 +1053,7 @@ fun rememberHomeRows(
         val chosen = layout.needsRecent && added != null
         val addedIds = added.orEmpty()
         val key = listOf(chats, favourites, recent, autoFill, layout, added)
-        val picking = homeMemo.home.takeIf { homeMemo.same(homeMemo.key, key) }?.let { it to homeMemo.recentFrom } ?: withContext(Dispatchers.Default) {
+        val picking = homeMemo.home.takeIf { homeMemo.same(homeMemo.key, key) }?.let { it to homeMemo.recentFrom } ?: withContext(homeBuild) {
             val rowChats = if (layout.starredRows || (layout.needsRecent && !chosen)) HomeRows.favouriteChats(chats, favourites) else emptyList()
             val chosenChats = if (chosen) HomeLayout.chosenChats(chats, addedIds) else emptyList()
             val picked = when {
@@ -1067,7 +1094,7 @@ fun rememberHomeRows(
         val inputs = listOf(continueWatching, watchLater, home, favourites, loaded, recent, partial, fresh, corrections, recentMinStarred, autoFill, chatsPending, layout, recentFrom, noneChosen)
         if (value.isNotEmpty() && homeMemo.same(homeMemo.built, inputs)) return@produceState
         if (value.isNotEmpty()) delay(HomeViewModel.ROWS_SETTLE_MS)
-        val built = withContext(Dispatchers.Default) {
+        val built = withContext(homeBuild) {
             HomeRows.build(
                 continueWatching, home, loaded, recent, partial = partial, watchLater = watchLater, fresh = fresh,
                 recentMinStarred = recentMinStarred, starred = favourites, autoFill = autoFill,
