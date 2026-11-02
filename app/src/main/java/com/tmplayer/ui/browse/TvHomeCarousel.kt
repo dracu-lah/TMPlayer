@@ -438,7 +438,7 @@ private fun TvFeaturedSkeleton(start: Dp, modifier: Modifier = Modifier) {
 }
 
 /** How tall the carousel is on a television under its heading: room below for the first row's titles. */
-internal val TV_FEATURED_HEIGHT = 232.dp
+internal val TV_FEATURED_HEIGHT = 280.dp
 
 /** How long a page is up before the carousel moves on. */
 private const val ADVANCE_MS = 7_000
