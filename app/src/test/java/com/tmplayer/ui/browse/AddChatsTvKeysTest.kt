@@ -20,7 +20,9 @@ import androidx.compose.ui.semantics.getAllSemanticsNodes
 import androidx.compose.ui.semantics.getOrNull
 import com.tmplayer.data.ChatCountCalls
 import com.tmplayer.data.ChatKind
+import com.tmplayer.data.ChatPicking
 import com.tmplayer.data.ChatSummary
+import com.tmplayer.data.ChatVideoCount
 import com.tmplayer.data.CountAnswer
 import com.tmplayer.data.FormFactor
 import com.tmplayer.ui.theme.TmMaterialTheme
@@ -99,6 +101,34 @@ class AddChatsTvKeysTest {
         press(activity, KeyEvent.KEYCODE_DPAD_LEFT)
         press(activity, KeyEvent.KEYCODE_DPAD_LEFT)
         assertEquals("Left at the top reaches the filters", listOf("All"), focusedWords(activity))
+        model.stop()
+    }
+
+    @Test
+    fun `a held Down does not count the rows it runs past`() {
+        // The answers are kept app wide, and the other tests here have counted these chats.
+        ChatVideoCount.forget()
+        val asked = java.util.Collections.synchronizedSet(HashSet<Long>())
+        val recording = object : ChatCountCalls {
+            override suspend fun videoCount(chatId: Long, localOnly: Boolean): CountAnswer {
+                asked += chatId
+                return Counts.videoCount(chatId, localOnly)
+            }
+        }
+        val model = AddChatsViewModel(counts = recording, write = {})
+        val activity = open(model, chats = CHATS)
+        hold(activity, KeyEvent.KEYCODE_DPAD_DOWN, repeats = 30)
+        // The settle after the last jump is a coroutine delay, which runs on the real clock.
+        Thread.sleep(700)
+        idle()
+        val place = focusedTitle(activity).single().removePrefix("Chat number ").toInt()
+        val head = ChatPicking.headStart(CHATS).toSet()
+        assertTrue("the held Down went past the head start, to $place", 1_000L + place > head.max() + 40)
+        // Counted: the head start, and the rows on screen where the remote stopped. Not the
+        // screenfuls in between, each a Telegram call whose answer rebuilt the list mid-jump.
+        val passed = asked.filter { it !in head && it < 1_000L + place - 20 }
+        assertTrue("rows run past were counted: ${passed.size} of them", passed.isEmpty())
+        assertTrue("the rows where it stopped are counted: at $place, asked ${asked.filter { it !in head }.sorted()}", (1_000L + place) in asked)
         model.stop()
     }
 

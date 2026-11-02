@@ -65,7 +65,10 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
@@ -105,6 +108,7 @@ import com.tmplayer.data.DeviceForm
 import com.tmplayer.data.KidsLock
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.Td
+import com.tmplayer.ui.components.EdgeStep
 import com.tmplayer.ui.components.LoadMoreAhead
 import com.tmplayer.ui.components.deviceForm
 import com.tmplayer.ui.components.rememberToggleTick
@@ -231,6 +235,12 @@ fun AddChatsScreen(
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     val held = remember { IntArray(1) }
     val jump = remember { arrayOfNulls<Job>(1) }
+    // True while the remote is jumping and for a moment after the last jump. The rows a held Down
+    // runs past are not counted, so each jump does not also start a count in Telegram whose
+    // answer rebuilds the whole list while the next jump is being drawn (52% janky frames on the
+    // Mi TV, HX76). Cleared by time, not by the key's release, which can land on another control.
+    var racing by remember { mutableStateOf(false) }
+    val settle = remember { arrayOfNulls<Job>(1) }
     val nowShown by rememberUpdatedState(shown)
     val nowPlace by rememberUpdatedState(placeOf)
     val doneReady = !(required && state.ticked.isEmpty())
@@ -239,6 +249,12 @@ fun AddChatsScreen(
         val list = nowShown
         if (list.isEmpty() || jump[0]?.isActive == true) return
         val row = list[at.coerceIn(0, list.lastIndex)]
+        racing = true
+        settle[0]?.cancel()
+        settle[0] = scope.launch {
+            delay(RACE_SETTLE_MS)
+            racing = false
+        }
         jump[0] = scope.launch {
             val index = lazyIndex[row.id]
             if (index != null && listState.layoutInfo.visibleItemsInfo.none { it.key == row.id }) {
@@ -392,193 +408,204 @@ fun AddChatsScreen(
         contentAlignment = Alignment.TopCenter,
     ) {
         Column(Modifier.widthIn(max = 680.dp).fillMaxWidth().fillMaxHeight()) {
-            LazyColumn(
-                Modifier.weight(1f).fillMaxWidth(),
-                state = listState,
-                contentPadding = PaddingValues(top = if (form == DeviceForm.Phone) 16.dp else 0.dp, bottom = 8.dp),
-            ) { CountingScope(this).run {
-                // A phone stacks Back, the title and the words; a wide screen has the room to put Back
-                // beside the title, which leaves more of it for the rows.
-                val headingText = if (required) s.pickerGateTitle else s.pickerChooseChats
-                val blurbText = if (required) s.pickerGateBody else s.pickerBlurbOnly
-                if (compact) {
-                    item(key = "title") {
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                if (!required) QuietButton(s.commonBack, icon = true, onClick = leave)
+            // On the television the list steps instead of sliding each focused row a third of the way
+            // down: the slide was a fresh layout of the list on every frame of every press (HX76).
+            EdgeStep(start = 24.dp, end = 24.dp, enabled = tv) {
+                LazyColumn(
+                    Modifier.weight(1f).fillMaxWidth(),
+                    state = listState,
+                    contentPadding = PaddingValues(top = if (form == DeviceForm.Phone) 16.dp else 0.dp, bottom = 8.dp),
+                ) { CountingScope(this).run {
+                    // A phone stacks Back, the title and the words; a wide screen has the room to put Back
+                    // beside the title, which leaves more of it for the rows.
+                    val headingText = if (required) s.pickerGateTitle else s.pickerChooseChats
+                    val blurbText = if (required) s.pickerGateBody else s.pickerBlurbOnly
+                    if (compact) {
+                        item(key = "title") {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    if (!required) QuietButton(s.commonBack, icon = true, onClick = leave)
+                                    Text(
+                                        headingText,
+                                        style = MaterialTheme.typography.headlineMedium,
+                                        color = Tone.text,
+                                        modifier = Modifier.semantics { heading() },
+                                    )
+                                }
+                                Text(blurbText, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
+                            }
+                        }
+                    } else {
+                        if (!required) {
+                            item(key = "back") {
+                                QuietButton(s.commonBack, icon = true, onClick = leave)
+                            }
+                        }
+                        item(key = "title") {
+                            Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Text(
                                     headingText,
                                     style = MaterialTheme.typography.headlineMedium,
                                     color = Tone.text,
                                     modifier = Modifier.semantics { heading() },
                                 )
+                                Text(blurbText, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
                             }
-                            Text(blurbText, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
                         }
                     }
-                } else {
-                    if (!required) {
-                        item(key = "back") {
-                            QuietButton(s.commonBack, icon = true, onClick = leave)
-                        }
-                    }
-                    item(key = "title") {
-                        Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text(
-                                headingText,
-                                style = MaterialTheme.typography.headlineMedium,
-                                color = Tone.text,
-                                modifier = Modifier.semantics { heading() },
-                            )
-                            Text(blurbText, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
-                        }
-                    }
-                }
-                item(key = "search") {
-                    val field = Modifier.fillMaxWidth().focusRequester(searchFocus)
-                    Box(Modifier.padding(top = 12.dp)) {
-                        val onType: (String) -> Unit = { typed = it; model.type(it) }
-                        if (searchField != null) {
-                            searchField(typed, onType, s.commonSearch, field, toFirstRow)
-                        } else {
-                            // In the settings cards' own shape and fill, with the glass in front, as
-                            // the app's other search boxes are, not Material's sharp outlined box.
-                            OutlinedTextField(
-                                value = typed,
-                                onValueChange = onType,
-                                singleLine = true,
-                                placeholder = { Text(s.commonSearch) },
-                                leadingIcon = { Icon(TmIcons.Search, contentDescription = null, tint = Tone.muted) },
-                                shape = RoundedCornerShape(Corner.Large),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedContainerColor = Tone.surface,
-                                    unfocusedContainerColor = Tone.surface,
-                                    focusedBorderColor = Tone.accent,
-                                    unfocusedBorderColor = Tone.outline,
-                                    cursorColor = Tone.accent,
-                                ),
-                                // A keyboard's Enter goes to the first answer; a phone's keyboard
-                                // only closes, since a touch screen has no focus to move.
-                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                                keyboardActions = KeyboardActions(onSearch = { if (compact) toFirstRow() else defaultKeyboardAction(ImeAction.Done) }),
-                                modifier = field,
-                            )
-                        }
-                    }
-                }
-                item(key = "scopes") {
-                    Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Row(
-                            Modifier.weight(1f).horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            for (scope in ChatPicking.Scope.entries) {
-                                CopyChip(
-                                    label = scopeLabel(scope, s),
-                                    chosen = state.scope == scope,
-                                    onClick = { model.scope(scope) },
-                                    modifier = if (state.scope == scope) Modifier.focusRequester(chipFocus) else Modifier,
+                    item(key = "search") {
+                        val field = Modifier.fillMaxWidth().focusRequester(searchFocus)
+                        Box(Modifier.padding(top = 12.dp)) {
+                            val onType: (String) -> Unit = { typed = it; model.type(it) }
+                            if (searchField != null) {
+                                searchField(typed, onType, s.commonSearch, field, toFirstRow)
+                            } else {
+                                // In the settings cards' own shape and fill, with the glass in front, as
+                                // the app's other search boxes are, not Material's sharp outlined box.
+                                OutlinedTextField(
+                                    value = typed,
+                                    onValueChange = onType,
+                                    singleLine = true,
+                                    placeholder = { Text(s.commonSearch) },
+                                    leadingIcon = { Icon(TmIcons.Search, contentDescription = null, tint = Tone.muted) },
+                                    shape = RoundedCornerShape(Corner.Large),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedContainerColor = Tone.surface,
+                                        unfocusedContainerColor = Tone.surface,
+                                        focusedBorderColor = Tone.accent,
+                                        unfocusedBorderColor = Tone.outline,
+                                        cursorColor = Tone.accent,
+                                    ),
+                                    // A keyboard's Enter goes to the first answer; a phone's keyboard
+                                    // only closes, since a touch screen has no focus to move.
+                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                                    keyboardActions = KeyboardActions(onSearch = { if (compact) toFirstRow() else defaultKeyboardAction(ImeAction.Done) }),
+                                    modifier = field,
                                 )
                             }
                         }
-                        // The television's Select all sits in the foot beside Done, where Right
-                        // from any row lands, not at the far end of the filters (HX76).
-                        if (compact && !tv && visible.isNotEmpty()) selectAllButton()
                     }
-                }
-                if (!listComplete && !partial) {
-                    item(key = "loading") {
-                        val words = s.pickerLoading
-                        LinearProgressIndicator(
-                            modifier = Modifier.fillMaxWidth().height(2.dp).semantics { contentDescription = words },
-                            color = Tone.accent,
-                            trackColor = Tone.track,
-                        )
+                    item(key = "scopes") {
+                        Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Row(
+                                Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                for (scope in ChatPicking.Scope.entries) {
+                                    CopyChip(
+                                        label = scopeLabel(scope, s),
+                                        chosen = state.scope == scope,
+                                        onClick = { model.scope(scope) },
+                                        modifier = if (state.scope == scope) Modifier.focusRequester(chipFocus) else Modifier,
+                                    )
+                                }
+                            }
+                            // The television's Select all sits in the foot beside Done, where Right
+                            // from any row lands, not at the far end of the filters (HX76).
+                            if (compact && !tv && visible.isNotEmpty()) selectAllButton()
+                        }
                     }
-                }
-                if (partial) {
-                    item(key = "partial") {
-                        Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text(s.chatsSomeNotLoaded, style = MaterialTheme.typography.bodyMedium, color = Tone.danger)
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                SetupButton(s.commonTryAgain, primary = true, onClick = onRetry)
-                                sendLogs?.invoke()
+                    if (!listComplete && !partial) {
+                        item(key = "loading") {
+                            val words = s.pickerLoading
+                            LinearProgressIndicator(
+                                modifier = Modifier.fillMaxWidth().height(2.dp).semantics { contentDescription = words },
+                                color = Tone.accent,
+                                trackColor = Tone.track,
+                            )
+                        }
+                    }
+                    if (partial) {
+                        item(key = "partial") {
+                            Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(s.chatsSomeNotLoaded, style = MaterialTheme.typography.bodyMedium, color = Tone.danger)
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    SetupButton(s.commonTryAgain, primary = true, onClick = onRetry)
+                                    sendLogs?.invoke()
+                                }
                             }
                         }
                     }
-                }
-                if (!compact && visible.isNotEmpty()) {
-                    item(key = "selectAll") {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { selectAllButton() }
-                    }
-                }
-                if (rows.isEmpty()) {
-                    item(key = "empty") {
-                        val words = if (state.query.isNotBlank()) s.chatsNoMatch(state.query.trim()) else s.pickerEmpty
-                        // While the list is still arriving an empty screen is not an answer yet.
-                        if (listComplete || partial) {
-                            Text(words, style = MaterialTheme.typography.bodyMedium, color = Tone.muted, modifier = Modifier.padding(vertical = 16.dp))
+                    if (!compact && visible.isNotEmpty()) {
+                        item(key = "selectAll") {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { selectAllButton() }
                         }
                     }
-                }
-                val divider = 16.dp + (if (tv) 52.dp else 44.dp) + 12.dp
-                for ((band, inBand) in bands) {
-                    if (holding && band != ChatPicking.Band.Saved) continue
-                    val label = if (bands.size > 1 || holding) bandLabel(band, s) else null
-                    if (label != null) {
-                        item(key = "band-$band") { BandLabel(label) }
-                    }
-                    if (band == ChatPicking.Band.Recommended && state.belowBar) {
-                        item(key = "below-bar") {
-                            Text(
-                                s.pickerBelowBar(ChatSuggestions.MIN_VIDEOS),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Tone.muted,
-                                modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
-                            )
+                    if (rows.isEmpty()) {
+                        item(key = "empty") {
+                            val words = if (state.query.isNotBlank()) s.chatsNoMatch(state.query.trim()) else s.pickerEmpty
+                            // While the list is still arriving an empty screen is not an answer yet.
+                            if (listComplete || partial) {
+                                Text(words, style = MaterialTheme.typography.bodyMedium, color = Tone.muted, modifier = Modifier.padding(vertical = 16.dp))
+                            }
                         }
                     }
-                    val base = count
-                    inBand.forEachIndexed { i, row -> lazyIndex[row.id] = base + i }
-                    itemsIndexed(inBand, key = { _, row -> row.id }) { index, row ->
-                        // Only a row on screen is counted: this effect leaves with the row.
-                        if (row.band != ChatPicking.Band.Gone) LaunchedEffect(row.id) { model.count(row.id) }
-                        val ticked = row.id in state.ticked
-                        val requester = remember(row.id) { FocusRequester() }
-                        DisposableEffect(row.id) {
-                            rowFocus[row.id] = requester
-                            onDispose { if (rowFocus[row.id] === requester) rowFocus.remove(row.id) }
+                    val divider = 16.dp + (if (tv) 52.dp else 44.dp) + 12.dp
+                    for ((band, inBand) in bands) {
+                        if (holding && band != ChatPicking.Band.Saved) continue
+                        val label = if (bands.size > 1 || holding) bandLabel(band, s) else null
+                        if (label != null) {
+                            item(key = "band-$band") { BandLabel(label) }
                         }
-                        val card = rowModifier(row.id, requester)
-                            .groupedCard(GroupPlace(first = index == 0, last = index == inBand.lastIndex), divider)
-                        if (row.band == ChatPicking.Band.Gone) {
-                            GoneRow(row, tv, card, onRemove = { model.toggle(row.id) })
-                        } else {
-                            val shape = ChatSuggestions.shape(state.counted[row.id])
-                            PickRow(
-                                row = row,
-                                ticked = ticked,
-                                shape = shape,
-                                tv = tv,
-                                modifier = card,
-                                onToggle = { tick(!ticked); model.toggle(row.id) },
-                                onCountAgain = { model.countAgain(row.id) },
-                                onToggleStar = { model.toggleStar(row.id) },
-                                onSelectAll = selectAllNow,
-                            )
+                        if (band == ChatPicking.Band.Recommended && state.belowBar) {
+                            item(key = "below-bar") {
+                                Text(
+                                    s.pickerBelowBar(ChatSuggestions.MIN_VIDEOS),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Tone.muted,
+                                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+                                )
+                            }
+                        }
+                        val base = count
+                        inBand.forEachIndexed { i, row -> lazyIndex[row.id] = base + i }
+                        // One content type, so a jump of the remote reuses the rows it scrolls away
+                        // rather than building a screenful from nothing in one frame.
+                        itemsIndexed(inBand, key = { _, row -> row.id }, contentType = { _, _ -> ROW_TYPE }) { index, row ->
+                            // Only a row on screen is counted: this effect leaves with the row. It
+                            // waits for the list to stop (a fling, a held Down), so the rows run past
+                            // on the way are never counted at all.
+                            if (row.band != ChatPicking.Band.Gone) LaunchedEffect(row.id) {
+                                snapshotFlow { racing || listState.isScrollInProgress }.first { !it }
+                                model.count(row.id)
+                            }
+                            val ticked = row.id in state.ticked
+                            val requester = remember(row.id) { FocusRequester() }
+                            DisposableEffect(row.id) {
+                                rowFocus[row.id] = requester
+                                onDispose { if (rowFocus[row.id] === requester) rowFocus.remove(row.id) }
+                            }
+                            val card = rowModifier(row.id, requester)
+                                .groupedCard(GroupPlace(first = index == 0, last = index == inBand.lastIndex), divider)
+                            if (row.band == ChatPicking.Band.Gone) {
+                                GoneRow(row, tv, card, onRemove = { model.toggle(row.id) })
+                            } else {
+                                val shape = ChatSuggestions.shape(state.counted[row.id])
+                                PickRow(
+                                    row = row,
+                                    ticked = ticked,
+                                    shape = shape,
+                                    tv = tv,
+                                    modifier = card,
+                                    onToggle = { tick(!ticked); model.toggle(row.id) },
+                                    onCountAgain = { model.countAgain(row.id) },
+                                    onToggleStar = { model.toggleStar(row.id) },
+                                    onSelectAll = selectAllNow,
+                                )
+                            }
                         }
                     }
-                }
-                if (holding) {
-                    item(key = "band-recommended-held") {
-                        Column {
-                            BandLabel(s.pickerBandRecommended)
-                            PickSkeleton(rows = HELD_ROWS, tv = tv, divider = divider)
+                    if (holding) {
+                        item(key = "band-recommended-held") {
+                            Column {
+                                BandLabel(s.pickerBandRecommended)
+                                PickSkeleton(rows = HELD_ROWS, tv = tv, divider = divider)
+                            }
                         }
                     }
-                }
-            } }
+                } }
+            }
 
             when (val question = asking) {
                 is Ask.SelectAll -> Confirm(
@@ -1077,3 +1104,8 @@ private class CountingScope(private val inner: LazyListScope) : LazyListScope by
 
 /** Repeats of a held Down or Up that walk row by row before the rest move a screenful each. */
 private const val HOLD_REPEATS = 6
+
+/** How long after the remote's last jump the rows on screen start counting. */
+private const val RACE_SETTLE_MS = 400L
+
+private const val ROW_TYPE = "row"

@@ -1,5 +1,6 @@
 package com.tmplayer.ui.browse
 
+import com.tmplayer.ui.components.EdgeStep
 import com.tmplayer.ui.components.keepTopInSight
 import kotlinx.coroutines.flow.first
 import androidx.compose.runtime.snapshotFlow
@@ -1404,34 +1405,6 @@ private fun rememberFeatured(recent: HomeRow.Recent?): List<com.tmplayer.data.Fe
     }
     return if (!enabled) emptyList() else decided
 }
-
-
-/**
- * A row that keeps still while the focused tile stands between its margins ([start], [end]) and
- * otherwise moves just far enough to bring it inside them, at once rather than slid.
- */
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
-@Composable
-private fun EdgeStep(start: Dp, end: Dp, content: @Composable () -> Unit) {
-    val density = LocalDensity.current
-    val startPx = with(density) { start.toPx() }
-    val endPx = with(density) { end.toPx() }
-    val spec = remember(startPx, endPx) {
-        object : androidx.compose.foundation.gestures.BringIntoViewSpec {
-            @Deprecated("Matches the interface; the snap is the point.")
-            override val scrollAnimationSpec: androidx.compose.animation.core.AnimationSpec<Float> =
-                androidx.compose.animation.core.snap()
-
-            override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float = when {
-                offset < startPx -> offset - startPx
-                offset + size > containerSize - endPx -> offset + size - (containerSize - endPx)
-                else -> 0f
-            }
-        }
-    }
-    CompositionLocalProvider(androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides spec, content = content)
-}
-
 
 /** How long an empty Home waits for its rows before it takes itself for a first run. */
 private const val ROWS_WAIT_MS = 10_000L
