@@ -12,6 +12,7 @@ import appUrl from '../scripts/app.js?url';
 import KaoNotice from '../components/KaoNotice.astro';
 import GetBar from '../components/GetBar.astro';
 import CoffeeCard from '../components/CoffeeCard.astro';
+import SupportPopup from '../components/SupportPopup.astro';
 import CoffeeDialog from '../components/CoffeeDialog.astro';
 import UpiDialog from '../components/UpiDialog.astro';
 import { buildString, jsStrings, published, text } from '../i18n/t';
@@ -152,6 +153,10 @@ const strings = lang.path ? jsStrings(lang) : {};
     and the moment somebody gets the app is the moment the offer makes sense. On a phone it stands
     above the download bar (.get-bar-on .bmc-float). */}
 {!notFound && path !== '/support/' && <CoffeeCard />}
+{/* The support popup: the same pages as the card. On the download and install pages it does not
+    open on a timer (it would stand between a reader and the app); it waits for a download click
+    and opens a few seconds later, when the reader has just got what they came for. */}
+{!notFound && path !== '/support/' && <SupportPopup afterDownload={page === 'download' || page === 'install'} />}
 {/* Where the support links open the Buy Me a Coffee page, over the site. */}
 <CoffeeDialog />
 {/* And where Pay by UPI opens, on anything that cannot answer a upi:// link. */}

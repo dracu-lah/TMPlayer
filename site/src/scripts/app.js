@@ -1592,6 +1592,64 @@ var tmT = (function () {
   whenLoaded();
 })();
 
+/* The support popup (src/components/SupportPopup.astro): opens a few seconds after the page has
+   loaded, once per tab session. Its close control is a ring that fills for a few seconds, then the
+   x and "Maybe later"; until then Esc and a click outside do nothing (user, 2026-11-02). The
+   pay buttons open the UPI and coffee dialogs above it, so it needs no handling here. */
+(function () {
+  'use strict';
+
+  var pop = document.getElementById('support-pop');
+  if (!pop || typeof pop.showModal !== 'function') { return; }
+  var KEY = 'tmp-support-pop';
+  try { if (sessionStorage.getItem(KEY)) { return; } } catch (e) { /* storage blocked: show it anyway */ }
+  var OPEN_AFTER = 8000;
+  var CLOSE_AFTER = 5000;
+  var ready = false;
+  var closeBtn = pop.querySelector('.support-pop-close');
+  var later = pop.querySelector('.support-pop-later');
+
+  function open() {
+    // Not over another dialog, and not while the page is in a background tab.
+    if (document.querySelector('dialog[open]') || document.hidden) { setTimeout(open, 3000); return; }
+    try { sessionStorage.setItem(KEY, '1'); } catch (e) { /* ignore */ }
+    pop.style.setProperty('--pop-wait', CLOSE_AFTER + 'ms');
+    pop.showModal();
+    pop.classList.add('is-counting');
+    setTimeout(function () {
+      ready = true;
+      pop.classList.add('is-ready');
+      closeBtn.disabled = false;
+      later.hidden = false;
+    }, CLOSE_AFTER);
+  }
+
+  function close() {
+    if (!ready) { return; }
+    pop.close();
+  }
+
+  Array.prototype.forEach.call(pop.querySelectorAll('[data-pop-close]'), function (b) { b.addEventListener('click', close); });
+  // Esc is held back until the close control is there.
+  pop.addEventListener('cancel', function (e) { if (!ready) { e.preventDefault(); } });
+  // A click on the backdrop closes it, once it may.
+  pop.addEventListener('click', function (e) { if (e.target === pop) { close(); } });
+
+  if (pop.hasAttribute('data-after-download')) {
+    // A direct visit to the download page: wait for the reader to start a download, once.
+    var armed = false;
+    document.addEventListener('click', function (e) {
+      var hit = e.target.closest && e.target.closest('a[data-dl], #os-download');
+      if (!hit || armed) { return; }
+      armed = true;
+      setTimeout(open, 4000);
+    });
+    return;
+  }
+  var go = function () { setTimeout(open, OPEN_AFTER); };
+  if (document.readyState === 'complete') { go(); } else { window.addEventListener('load', go); }
+})();
+
 /* The home page's stats row counts up once, as it comes into view (an IntersectionObserver, no
    layout reads). The final figures are already in the HTML; under reduced motion, or without
    the observer, they simply stay. Each figure is drawn in the page's own short form of a number,

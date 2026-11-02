@@ -5170,3 +5170,101 @@ html.dl-tabs-live[data-dl-tab] .platforms > .platform { animation: dl-tab-in 0.2
 
 /* The line under the two pay buttons on /support/, which says what each of them takes. */
 .upi-aside { max-width: none; margin-top: 0; padding-top: 14px; border-top: 1px solid var(--outline-variant); color: var(--on-surface-variant); font-size: 0.94rem; }
+
+/* The support popup (SupportPopup.astro): the floating card's surface, border and radii, centred
+   over a dimmed page. The close button is a disabled ring while it fills, then the x. */
+.support-pop {
+  width: min(420px, calc(100% - 32px));
+  max-width: none;
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--shape-xl);
+  background: var(--surface-container-low);
+  color: var(--on-surface);
+  box-shadow: var(--shadow-2);
+  overflow: visible;
+}
+.support-pop::backdrop { background: rgba(13, 12, 34, 0.55); }
+.support-pop[open] { animation: support-pop-in 0.4s var(--ease-emphasised); }
+.support-pop[open]::backdrop { animation: support-pop-fade 0.3s var(--ease-standard); }
+@keyframes support-pop-in { from { opacity: 0; transform: translate3d(0, 24px, 0) scale(0.97); } }
+@keyframes support-pop-fade { from { opacity: 0; } }
+.support-pop-box { position: relative; display: grid; justify-items: center; gap: 12px; padding: 32px 24px 20px; text-align: center; }
+.support-pop-badge {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--shape-full);
+  background: var(--primary-container);
+  color: var(--primary);
+}
+.support-pop-badge svg { width: 28px; height: 28px; }
+.support-pop-title { margin: 4px 0 0; font-size: 1.35rem; font-weight: 600; line-height: 1.25; color: var(--on-surface); }
+.support-pop-line { margin: 0; font-size: 0.95rem; line-height: 1.55; color: var(--on-surface-variant); text-wrap: pretty; }
+.support-pop-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; margin-top: 8px; }
+.support-pop-actions .btn {
+  min-height: 48px;
+  padding: 8px 10px;
+  gap: 8px;
+  border-radius: var(--shape-l);
+  font-size: 0.92rem;
+  white-space: nowrap;
+}
+.support-pop-actions .btn span { overflow: hidden; text-overflow: ellipsis; }
+.support-pop-actions .btn-upi .upi-mark { width: 22px; height: 22px; }
+.support-pop-actions .btn:active { transform: scale(0.98); }
+.support-pop-note { margin: 0; font-size: 0.8rem; line-height: 1.4; color: var(--on-surface-variant); }
+.support-pop-later {
+  min-height: 40px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--shape-full);
+  background: transparent;
+  color: var(--on-surface-variant);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+.support-pop-later:hover { background: var(--surface-container-high); color: var(--on-surface); }
+.support-pop-later[hidden] { display: none; }
+.support-pop-close {
+  position: absolute;
+  inset-block-start: 8px;
+  inset-inline-end: 8px;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--shape-full);
+  background: transparent;
+  color: var(--on-surface-variant);
+  cursor: pointer;
+}
+.support-pop-close svg:not(.support-pop-ring) { grid-area: 1 / 1; width: 16px; height: 16px; opacity: 0; transition: opacity 0.25s var(--ease-standard); }
+.support-pop-close:not(:disabled):hover { background: var(--surface-container-high); color: var(--on-surface); }
+.support-pop-ring { grid-area: 1 / 1; width: 40px; height: 40px; transform: rotate(-90deg); transition: opacity 0.25s var(--ease-standard); }
+.support-pop-ring circle {
+  fill: none;
+  stroke: var(--primary);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-dasharray: 107;
+  stroke-dashoffset: 107;
+}
+.support-pop.is-counting .support-pop-ring circle { animation: support-pop-ring var(--pop-wait, 5s) linear forwards; }
+@keyframes support-pop-ring { to { stroke-dashoffset: 0; } }
+.support-pop.is-ready .support-pop-ring { opacity: 0; }
+.support-pop.is-ready .support-pop-close svg:not(.support-pop-ring) { opacity: 1; }
+@media (max-width: 460px) {
+  .support-pop-actions { grid-template-columns: 1fr; }
+  .support-pop-box { padding-inline: 20px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .support-pop[open], .support-pop[open]::backdrop { animation: none; }
+  .support-pop-actions .btn:active { transform: none; }
+}
