@@ -3821,7 +3821,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * has one: Media3's previous for a lone item goes back to its start, and a stray press on a
      * headset, the lock screen or picture in picture took a two hour video back to 0:00.
      */
-    private inner class EpisodeStepping(exo: ExoPlayer) : androidx.media3.common.ForwardingPlayer(exo) {
+    private inner class EpisodeStepping(exo: ExoPlayer) : StateChangeOnlyPlayer(exo) {
         override fun getAvailableCommands(): Player.Commands {
             val found = _episodes.value
             val more = Player.Commands.Builder().addAll(super.getAvailableCommands())
