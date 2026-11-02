@@ -46,4 +46,17 @@ class MetaImageSizeTest {
         val tvmaze = "https://static.tvmaze.com/uploads/images/medium_landscape/1/4600.jpg"
         assertEquals(tvmaze, MetaImageSize.still(tvmaze, 520))
     }
+
+    @Test
+    fun `a carousel at 1080p and at 4K asks for the size that is wide enough, the original past 1280`() {
+        // HX55: TMDB serves no 1920 wide backdrop on its image API (the sizes are w300, w780,
+        // w1280 and the original), so the original is the sharpest copy for a frame past 1280.
+        val named = "https://image.tmdb.org/t/p/w780/b.jpg"
+        assertEquals("https://image.tmdb.org/t/p/w1280/b.jpg", MetaImageSize.atLeast(named, 1280))
+        assertEquals("https://image.tmdb.org/t/p/original/b.jpg", MetaImageSize.atLeast(named, 1920))
+        assertEquals("https://image.tmdb.org/t/p/original/b.jpg", MetaImageSize.atLeast(named, 3840))
+        // The reference crop (w1920_and_h800_multi_faces) is not an API size: an address in it is kept.
+        val crop = "https://media.themoviedb.org/t/p/w1920_and_h800_multi_faces/b.jpg"
+        assertEquals(crop, MetaImageSize.atLeast(crop, 1920))
+    }
 }

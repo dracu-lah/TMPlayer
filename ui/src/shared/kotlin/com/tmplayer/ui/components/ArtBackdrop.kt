@@ -211,7 +211,7 @@ internal fun rememberBackdropArt(source: BackdropSource, drawn: Int): BackdropAr
 }
 
 /** What the backdrop draws at one step of the chain. Neither set means the generated cover. */
-internal class BackdropArt(
+class BackdropArt(
     val picture: ImageBitmap? = null,
     val field: ImageBitmap? = null,
 )

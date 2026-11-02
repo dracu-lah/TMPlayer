@@ -59,6 +59,31 @@ fun EdgeBackdrop(
     modifier: Modifier = Modifier,
     share: Float = EDGE_SHARE,
     topFade: Dp = 0.dp,
+    topFadePx: (() -> Float)? = null,
+    cornerShade: Dp = 0.dp,
+    onPictured: (() -> Unit)? = null,
+) = EdgeBackdropOf(
+    cover = source.cover,
+    art = { width -> rememberBackdropArt(source, width) },
+    modifier = modifier,
+    share = share,
+    topFade = topFade,
+    topFadePx = topFadePx,
+    cornerShade = cornerShade,
+    onPictured = onPictured,
+)
+
+/**
+ * [EdgeBackdrop]'s drawing, with the picture handed in: [art] is asked for the width the frame
+ * draws at, in pixels. Split out so a test can draw a picture of any size without the network.
+ */
+@Composable
+fun EdgeBackdropOf(
+    cover: Cover,
+    art: @Composable (pictureWidth: Int) -> BackdropArt?,
+    modifier: Modifier = Modifier,
+    share: Float = EDGE_SHARE,
+    topFade: Dp = 0.dp,
     /**
      * [topFade] in pixels, read where the fades are drawn rather than here: for a reach that
      * follows something measured (the TV carousel's heading), so its arrival redraws the fades
@@ -77,7 +102,7 @@ fun EdgeBackdrop(
         val pictureW = if (wide) (frameW * share).toInt() else frameW
         // The size the carousel's next pages are decoded at ahead ([prefetchBackdrop]).
         androidx.compose.runtime.SideEffect { if (pictureW > 0) edgeDrawnWidth = pictureW }
-        val art = rememberBackdropArt(source, pictureW)
+        val art = art(pictureW)
         val topFadeFixed = with(density) { topFade.toPx() }
         val topFadeOf: () -> Float = topFadePx ?: { topFadeFixed }
         val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
@@ -109,16 +134,11 @@ fun EdgeBackdrop(
                 // the wide frame showed a slice of it: it stands whole at the frame's height
                 // instead, over a soft copy of itself filling the rest.
                 val upright = wide && !standIn && !small && picture != null && picture.height > picture.width
-                val (w, h) = when {
-                    picture == null -> pictureW to (if (wide) minOf(frameH, pictureW * 9 / 16) else frameH)
-                    upright -> pictureW to frameH
-                    !wide -> frameW to frameH
-                    else -> {
-                        val cap = if (!standIn && picture.width < SHARP_MIN_WIDTH) (picture.width * EDGE_SMALL_SCALE).toInt() else Int.MAX_VALUE
-                        val width = minOf(pictureW, cap)
-                        width to minOf(frameH, if (standIn) width * 9 / 16 else width * picture.height / picture.width.coerceAtLeast(1))
-                    }
-                }
+                val (w, h) = edgeSize(frameW, frameH, pictureW, wide, picture?.width ?: 0, picture?.height ?: 0, standIn, upright)
+                // A picture drawn narrower than the frame has its own edge in the middle of the
+                // page, so it fades out to the page's colour there: the full-bleed fade keeps a
+                // hint of the picture, which would show as a hard line at its start.
+                val startCap = if (wide && w < pictureW && !standIn) 1f else START_FADE_CAP
                 val sized = with(density) { Modifier.size(w.toDp(), h.toDp()) }
                 val ground = Tone.background
                 // A television paints the page's colour over the picture's edges instead: the
@@ -129,7 +149,7 @@ fun EdgeBackdrop(
                 val fades = if (Motion.television) Modifier.drawWithCache {
                     val across = if (wide) {
                         val stops = fadeOut(START_FADE)
-                        Brush.horizontalGradient(*(if (rtl) stops.reversedStops(ground, START_FADE_CAP) else stops.inStops(ground, START_FADE_CAP)))
+                        Brush.horizontalGradient(*(if (rtl) stops.reversedStops(ground, startCap) else stops.inStops(ground, startCap)))
                     } else null
                     val foot = Brush.verticalGradient(*fadeOut(FOOT_FADE).reversedStops(ground))
                     val reach = if (small) FOOT_FADE else (topFadeOf() / size.height).coerceIn(0f, 1f)
@@ -145,7 +165,7 @@ fun EdgeBackdrop(
                     .drawWithCache {
                         val across = if (wide) {
                             val stops = fadeOut(START_FADE)
-                            Brush.horizontalGradient(*(if (rtl) stops.reversedStops(START_FADE_CAP) else stops.inStops(START_FADE_CAP)))
+                            Brush.horizontalGradient(*(if (rtl) stops.reversedStops(startCap) else stops.inStops(startCap)))
                         } else null
                         val foot = Brush.verticalGradient(*fadeOut(FOOT_FADE).reversedStops())
                         val reach = if (small) FOOT_FADE else (topFadeOf() / size.height).coerceIn(0f, 1f)
@@ -196,7 +216,7 @@ fun EdgeBackdrop(
                 } else {
                     // The colours alone: the cover's number and initial would sit under the clock.
                     GeneratedCover(
-                        remember(source.cover) { source.cover.copy(number = null, chatInitial = null) },
+                        remember(cover) { cover.copy(number = null, chatInitial = null) },
                         place,
                         showTitle = false,
                     )
@@ -331,6 +351,47 @@ private const val CORNER_STRETCH = 2.6f
 
 /** How many times its own width a thumbnail may be drawn here, at most, before it reads as a blur. */
 private const val EDGE_SMALL_SCALE = 2f
+
+/**
+ * How many times its own width a picture that is sharp enough to stand ([SHARP_MIN_WIDTH] and up)
+ * may be drawn across a wide frame before it reads soft. A 1280 pixel backdrop across a 1080p
+ * television is exactly this; a 780 pixel one is not, and is drawn at 1.5 times its width at the
+ * end of the frame, fading into the page at its start, like the old smaller picture on the side
+ * that read clearer than the same picture stretched to the whole width (HX55, 2026-11-02).
+ */
+internal const val EDGE_SOFT_SCALE = 1.5f
+
+/**
+ * The size, in pixels, [EdgeBackdropOf] draws a picture at: [pictureW] across (the frame's width
+ * at its [share]) when it is sharp enough for that, no wider than [EDGE_SMALL_SCALE] times a
+ * thumbnail's own width or [EDGE_SOFT_SCALE] times a larger picture's, and no taller than the
+ * frame (cropped from its foot then). [picW] and [picH] are the picture's own size, 0 with none;
+ * a [standIn] (the blurred field) is stretched whole, and an [upright] one stands at the frame's
+ * height.
+ */
+internal fun edgeSize(
+    frameW: Int,
+    frameH: Int,
+    pictureW: Int,
+    wide: Boolean,
+    picW: Int,
+    picH: Int,
+    standIn: Boolean,
+    upright: Boolean,
+): Pair<Int, Int> = when {
+    picW == 0 -> pictureW to (if (wide) minOf(frameH, pictureW * 9 / 16) else frameH)
+    upright -> pictureW to frameH
+    !wide -> frameW to frameH
+    else -> {
+        val cap = when {
+            standIn -> Int.MAX_VALUE
+            picW < SHARP_MIN_WIDTH -> (picW * EDGE_SMALL_SCALE).toInt()
+            else -> (picW * EDGE_SOFT_SCALE).toInt()
+        }
+        val width = minOf(pictureW, cap)
+        width to minOf(frameH, if (standIn) width * 9 / 16 else width * picH / picW.coerceAtLeast(1))
+    }
+}
 
 /** The soft copy behind an upright picture: blurred past any detail, and dimmed so the picture leads. */
 private val UPRIGHT_FIELD_BLUR = 48.dp
