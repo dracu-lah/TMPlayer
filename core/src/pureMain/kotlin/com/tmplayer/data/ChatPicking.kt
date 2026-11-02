@@ -119,6 +119,75 @@ object ChatPicking {
         return out
     }
 
+    /**
+     * One line of the television's list: a chat, or the single row that stands for the chats of
+     * [band] counted at no videos (HX76).
+     */
+    sealed interface Item {
+        val band: Band
+
+        data class Chat(val row: Row) : Item {
+            override val band: Band get() = row.band
+        }
+
+        /** [count] chats of [band] with nothing to watch, closed; pressing it opens them in place. */
+        data class Folded(override val band: Band, val count: Int) : Item
+    }
+
+    /**
+     * The short list: chats counted at 0 videos fold into one row at the end of their band, so the
+     * default list holds what can be watched and most viewers press Done without scrolling.
+     *
+     * Only a chat that is counted at none folds: one not counted yet (or that could not be) stays
+     * where it is, since "no videos" is an answer and not a guess. A ticked or starred chat never
+     * folds, nor does Saved Messages or a chat that is gone (its row is how it gets removed).
+     * [open] bands show their folded chats in place, at the end of the band, with no fold row.
+     */
+    fun fold(
+        rows: List<Row>,
+        counts: Map<Long, ChatCount>,
+        ticked: Set<Long>,
+        open: Set<Band> = emptySet(),
+    ): List<Item> {
+        val out = ArrayList<Item>(rows.size)
+        var at = 0
+        while (at < rows.size) {
+            val band = rows[at].band
+            var end = at
+            while (end < rows.size && rows[end].band == band) end++
+            val folded = ArrayList<Row>()
+            for (i in at until end) {
+                if (folds(rows[i], counts, ticked)) folded += rows[i] else out += Item.Chat(rows[i])
+            }
+            if (folded.isNotEmpty()) {
+                if (band in open) folded.forEach { out += Item.Chat(it) } else out += Item.Folded(band, folded.size)
+            }
+            at = end
+        }
+        return out
+    }
+
+    private fun folds(row: Row, counts: Map<Long, ChatCount>, ticked: Set<Long>): Boolean =
+        row.band != Band.Saved && row.band != Band.Gone && !row.starred && row.id !in ticked &&
+            (counts[row.id] as? ChatCount.Known)?.videos == 0
+
+    /** The chats [fold] holds back for [band], in list order: what pressing the fold opens. */
+    fun foldedIn(rows: List<Row>, counts: Map<Long, ChatCount>, ticked: Set<Long>, band: Band): List<Row> =
+        rows.filter { it.band == band && folds(it, counts, ticked) }
+
+    /**
+     * The chats of [rows] still to count in the background, past the head start: uncounted, not
+     * Gone, in list order, at most [limit] so one pass is bounded.
+     */
+    fun toCount(rows: List<Row>, counts: Map<Long, ChatCount>, limit: Int = Int.MAX_VALUE): List<Long> {
+        val out = ArrayList<Long>()
+        for (row in rows) {
+            if (out.size >= limit) break
+            if (row.band != Band.Gone && !counts.containsKey(row.id)) out += row.id
+        }
+        return out
+    }
+
     /** The ids of [rows], which is what Select all and Clear act on: what is on the screen now. */
     fun visible(rows: List<Row>): Set<Long> = rows.asSequence().filter { it.band != Band.Gone }.mapTo(LinkedHashSet()) { it.id }
 

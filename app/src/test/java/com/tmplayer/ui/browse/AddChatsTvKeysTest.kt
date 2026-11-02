@@ -39,10 +39,11 @@ import org.robolectric.annotation.GraphicsMode
 import java.io.File
 
 /**
- * The chat picker with a remote alone on a large account (HX76): 3,000 chats, the mandatory
- * choice as the setup step shows it. The remote starts on the first row, not in the search box;
- * Done is one Right away from any row; Back goes up to the filters and then leaves; a held Down
- * speeds up; Left goes back to the start of the band; the search keyboard's Search lands on a row.
+ * The three pane picker with a remote alone on a large account (HX76): 3,000 chats, the mandatory
+ * choice as the setup step shows it. Every line of the focus map: start on Done when the
+ * Recommended band ticked something, else the first row; the rail, the list and the panel each
+ * answer Left, Right, Up, Down and Back; the chats with no videos fold into one row that opens in
+ * place; a held Down speeds up; the search keyboard's Search lands on a row.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -55,24 +56,77 @@ class AddChatsTvKeysTest {
     }
 
     @Test
-    fun `the remote reaches Done, the top and deep rows in a few presses`() {
+    fun `the remote starts on Done when the Recommended band ticked something`() {
         val model = AddChatsViewModel(counts = Counts, write = {})
+        val activity = open(model, chats = CHATS)
+        assertEquals(listOf("Done"), focusedWords(activity))
+        save("add-chats-tv-three-panes.png", draw(activity))
+        model.stop()
+    }
+
+    @Test
+    fun `the remote starts on the first row when nothing is ticked`() {
+        val model = AddChatsViewModel(counts = null, write = {})
+        val activity = open(model, chats = CHATS)
+        assertEquals(listOf("Saved Messages"), focusedTitle(activity))
+        model.stop()
+    }
+
+    @Test
+    fun `no chats at all starts on the rail and the empty scope stays on it`() {
+        val model = AddChatsViewModel(counts = Counts, write = {})
+        val activity = open(model, chats = emptyList())
+        assertTrue(focusedWords(activity).contains("All"))
+        press(activity, KeyEvent.KEYCODE_DPAD_RIGHT)
+        assertTrue("an empty list keeps the remote on the rail", focusedWords(activity).contains("All"))
+        model.stop()
+    }
+
+    @Test
+    fun `the rail answers Up, Down, Right and OK, and Left from a row comes back to it`() {
+        val model = AddChatsViewModel(counts = null, write = {})
+        val activity = open(model, chats = CHATS)
+        press(activity, KeyEvent.KEYCODE_DPAD_LEFT)
+        assertTrue("Left goes to the rail on the current entry", focusedWords(activity).contains("All"))
+        press(activity, KeyEvent.KEYCODE_DPAD_DOWN)
+        assertTrue(focusedWords(activity).contains("Channels"))
+        press(activity, KeyEvent.KEYCODE_DPAD_UP)
+        assertTrue(focusedWords(activity).contains("All"))
+        press(activity, KeyEvent.KEYCODE_DPAD_RIGHT)
+        assertEquals("Right goes into the list", listOf("Saved Messages"), focusedTitle(activity))
+        press(activity, KeyEvent.KEYCODE_DPAD_LEFT)
+        press(activity, KeyEvent.KEYCODE_DPAD_CENTER)
+        assertEquals("OK goes into the list too", listOf("Saved Messages"), focusedTitle(activity))
+        model.stop()
+    }
+
+    @Test
+    fun `a row goes right to Done and the panel goes left to the row it came from`() {
+        val model = AddChatsViewModel(counts = null, write = {})
+        // Not required, so Done is on the panel with nothing ticked.
+        val activity = open(model, chats = CHATS, required = false)
+        press(activity, KeyEvent.KEYCODE_DPAD_DOWN)
+        val row = focusedTitle(activity)
+        press(activity, KeyEvent.KEYCODE_DPAD_RIGHT)
+        assertEquals(listOf("Save with no chats"), focusedWords(activity))
+        press(activity, KeyEvent.KEYCODE_DPAD_DOWN)
+        assertTrue("Down is Select all: ${focusedWords(activity)}", focusedWords(activity).single().startsWith("Select all chats ("))
+        press(activity, KeyEvent.KEYCODE_DPAD_UP)
+        assertEquals(listOf("Save with no chats"), focusedWords(activity))
+        press(activity, KeyEvent.KEYCODE_DPAD_LEFT)
+        assertEquals("Left goes back to the row it came from", row, focusedTitle(activity))
+        model.stop()
+    }
+
+    @Test
+    fun `Back goes from a row to the rail and a second Back leaves the required choice`() {
+        val model = AddChatsViewModel(counts = null, write = {})
         var left = 0
         val activity = open(model, chats = CHATS, onLeave = { left++ })
-
-        assertEquals("the remote starts on the first row", listOf("Saved Messages"), focusedTitle(activity))
-        save("add-chats-tv-remote.png", draw(activity))
-
-        // Done (or, with nothing ticked yet, Select all beside it) is one press from any row.
         press(activity, KeyEvent.KEYCODE_DPAD_DOWN)
-        press(activity, KeyEvent.KEYCODE_DPAD_RIGHT)
-        val foot = focusedWords(activity)
-        assertTrue("one Right lands in the foot, on $foot", foot.any { it in setOf("Done", "Select all", "Clear") })
-
-        // Back from the foot goes to the filters, a second Back leaves the mandatory choice.
         activity.onBackPressedDispatcher.onBackPressed()
         idle()
-        assertEquals("Back goes up to the filters", listOf("All"), focusedWords(activity))
+        assertTrue("Back goes to the rail", focusedWords(activity).contains("All"))
         assertEquals(0, left)
         activity.onBackPressedDispatcher.onBackPressed()
         idle()
@@ -81,26 +135,33 @@ class AddChatsTvKeysTest {
     }
 
     @Test
-    fun `a held Down speeds up and Left goes back to the start of the band`() {
-        val model = AddChatsViewModel(counts = Counts, write = {})
-        val activity = open(model, chats = CHATS)
+    fun `the chats with no videos fold into one row that opens in place`() {
+        val model = AddChatsViewModel(counts = SmallCounts, write = {})
+        val activity = open(model, chats = SMALL, required = false)
+        // On the first row (the remote starts there when nothing was ticked), then down to the fold.
         assertEquals(listOf("Saved Messages"), focusedTitle(activity))
+        var presses = 0
+        while (focusedWords(activity).none { it.endsWith("chats with no videos") } && presses++ < 20) {
+            press(activity, KeyEvent.KEYCODE_DPAD_DOWN)
+        }
+        val fold = focusedWords(activity)
+        assertTrue("a fold row was reached: $fold", fold.any { it == "25 chats with no videos" })
+        press(activity, KeyEvent.KEYCODE_DPAD_CENTER)
+        assertEquals("the remote stands on the first chat of the fold", listOf("Quiet 1"), focusedTitle(activity))
+        assertTrue("the fold is gone once open", nodes(activity).none { words(it).any { w -> w.endsWith("chats with no videos") } })
+        model.stop()
+    }
 
+    @Test
+    fun `a held Down speeds up`() {
+        val model = AddChatsViewModel(counts = Counts, write = {}, countsRest = false)
+        val activity = open(model, chats = CHATS)
+        press(activity, KeyEvent.KEYCODE_DPAD_LEFT)
         // Twenty repeats of a held Down: the first few walk, the rest move a screenful each.
         hold(activity, KeyEvent.KEYCODE_DPAD_DOWN, repeats = 20)
         val deep = focusedTitle(activity).single()
         val place = deep.removePrefix("Chat number ").toIntOrNull() ?: 0
-        assertTrue("a held Down went far, to $deep", place > 40)
-
-        // Left goes back to the start of the band, then the band before it.
-        press(activity, KeyEvent.KEYCODE_DPAD_LEFT)
-        val bandStart = focusedTitle(activity).single()
-        assertTrue("Left lands on a band's first row, not $deep", bandStart != deep)
-        press(activity, KeyEvent.KEYCODE_DPAD_LEFT)
-        press(activity, KeyEvent.KEYCODE_DPAD_LEFT)
-        press(activity, KeyEvent.KEYCODE_DPAD_LEFT)
-        press(activity, KeyEvent.KEYCODE_DPAD_LEFT)
-        assertEquals("Left at the top reaches the filters", listOf("All"), focusedWords(activity))
+        assertTrue("a held Down went far, to $deep", place > 80)
         model.stop()
     }
 
@@ -115,8 +176,9 @@ class AddChatsTvKeysTest {
                 return Counts.videoCount(chatId, localOnly)
             }
         }
-        val model = AddChatsViewModel(counts = recording, write = {})
+        val model = AddChatsViewModel(counts = recording, write = {}, countsRest = false)
         val activity = open(model, chats = CHATS)
+        press(activity, KeyEvent.KEYCODE_DPAD_LEFT)
         hold(activity, KeyEvent.KEYCODE_DPAD_DOWN, repeats = 30)
         // The settle after the last jump is a coroutine delay, which runs on the real clock.
         Thread.sleep(700)
@@ -128,25 +190,22 @@ class AddChatsTvKeysTest {
         // screenfuls in between, each a Telegram call whose answer rebuilt the list mid-jump.
         val passed = asked.filter { it !in head && it < 1_000L + place - 20 }
         assertTrue("rows run past were counted: ${passed.size} of them", passed.isEmpty())
-        assertTrue("the rows where it stopped are counted: at $place, asked ${asked.filter { it !in head }.sorted()}", (1_000L + place) in asked)
+        assertTrue("the rows where it stopped are counted: at $place", (1_000L + place) in asked)
         model.stop()
     }
 
     @Test
-    fun `the search keyboard's Search puts the remote on a row`() {
-        val model = AddChatsViewModel(counts = Counts, write = {})
+    fun `the Search entry opens the field and the keyboard's Search puts the remote on a row`() {
+        val model = AddChatsViewModel(counts = null, write = {})
         val activity = open(model, chats = CHATS, search = true)
+        press(activity, KeyEvent.KEYCODE_DPAD_LEFT)
+        repeat(5) { press(activity, KeyEvent.KEYCODE_DPAD_DOWN) }
+        assertTrue(focusedWords(activity).contains("Search"))
+        press(activity, KeyEvent.KEYCODE_DPAD_CENTER)
+        assertEquals("OK on Search puts the remote in the field", listOf("search probe"), focusedWords(activity))
         click(activity, "search probe")
         idle()
         assertEquals(listOf("Saved Messages"), focusedTitle(activity))
-        model.stop()
-    }
-
-    @Test
-    fun `no chats leaves the remote on the filters`() {
-        val model = AddChatsViewModel(counts = Counts, write = {})
-        val activity = open(model, chats = emptyList())
-        assertEquals(listOf("All"), focusedWords(activity))
         model.stop()
     }
 
@@ -154,6 +213,7 @@ class AddChatsTvKeysTest {
         model: AddChatsViewModel,
         chats: List<ChatSummary>,
         search: Boolean = false,
+        required: Boolean = true,
         onLeave: () -> Unit = {},
     ): ComponentActivity {
         FormFactor.override(true)
@@ -170,7 +230,7 @@ class AddChatsTvKeysTest {
                     starred = emptySet(),
                     model = model,
                     onClose = {},
-                    required = true,
+                    required = required,
                     onLeave = onLeave,
                     // A stand-in for the television's search box: a press is its keyboard's Search.
                     searchField = if (!search) null else { _, _, _, modifier, onSubmit ->
@@ -254,9 +314,25 @@ class AddChatsTvKeysTest {
         val CHATS: List<ChatSummary> = listOf(chat(100, "Saved Messages", ChatKind.Saved)) +
             (1..2_999).map { chat(1_000L + it, "Chat number $it") }
 
+        /** The first twelve hold 50 videos, every seventh after them 5, the rest none. */
         val Counts = object : ChatCountCalls {
             override suspend fun videoCount(chatId: Long, localOnly: Boolean): CountAnswer =
-                CountAnswer.Counted(if (chatId in 1_001L..1_012L) 50 else 0)
+                CountAnswer.Counted(
+                    when {
+                        chatId in 1_001L..1_012L -> 50
+                        chatId % 7 == 0L -> 5
+                        else -> 0
+                    },
+                )
+        }
+
+        /** Saved Messages, five chats with videos and twenty five without. */
+        val SMALL: List<ChatSummary> = listOf(chat(100, "Saved Messages", ChatKind.Saved)) +
+            (1..5).map { chat(2_000L + it, "Loud $it") } + (1..25).map { chat(3_000L + it, "Quiet $it") }
+
+        val SmallCounts = object : ChatCountCalls {
+            override suspend fun videoCount(chatId: Long, localOnly: Boolean): CountAnswer =
+                CountAnswer.Counted(if (chatId in 2_001L..2_005L) 3 else 0)
         }
     }
 }

@@ -266,6 +266,44 @@ class ChatPickerScaleTest {
     }
 
     /**
+     * The television's short list folds the chats counted at no videos, so every chat is counted
+     * once in the background (HX76): never more than three at a time, a flood wait held by the call
+     * that got it while the others go on, and nothing asked once the picker closes.
+     */
+    @Test
+    fun `the background count stays at three in flight, rides out a flood wait and stops on leave`() = runTest(dispatcher, timeout = 5.minutes) {
+        val account = SyntheticAccount(backgroundScope, { testScheduler.currentTime })
+        picker(account) { model ->
+            val chats = account.mainList()
+            model.start(chats)
+            model.countRest(chats)
+            until(10 * 60_000) { model.headStartDone() }
+            // Well past the head start, and still counting: a long list is not a short wait.
+            val pastHead = until(10 * 60_000) { model.state.value.counted.size >= ChatPicking.COUNT_AHEAD + 400 }
+            val counted = model.state.value.counted.size
+            report("background count: $counted chats after ${pastHead / 1000.0} s, most in flight ${account.maxCountsInFlight}, flood waits ${account.floodHits}")
+            assertTrue("counted past the head start: $counted", counted >= ChatPicking.COUNT_AHEAD + 400)
+            assertTrue("${account.maxCountsInFlight} counts in flight", account.maxCountsInFlight <= ChatVideoCount.AT_ONCE)
+            // Held while the remote jumps: nothing new is asked until it lets go.
+            model.hold(true)
+            advanceTimeBy(1_000)
+            val held = account.countRequests
+            advanceTimeBy(5_000)
+            assertEquals("a held count asked for more", held, account.countRequests)
+            model.hold(false)
+            advanceTimeBy(5_000)
+            assertTrue("a released count did not go on", account.countRequests > held)
+            // Closing stops it where it is.
+            model.stop()
+            runCurrent()
+            advanceTimeBy(3 * 60_000)
+            val settled = account.countRequests
+            advanceTimeBy(60_000)
+            assertEquals("the counter asked after stop", settled, account.countRequests)
+        }
+    }
+
+    /**
      * A call that is never answered holds one permit for its three timeouts and then says it could
      * not count; the other counts are not held behind it, and the row is offered again, never
      * cached as empty.

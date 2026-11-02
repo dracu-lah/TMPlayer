@@ -16,6 +16,9 @@ import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.Td
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -40,6 +43,8 @@ class AddChatsViewModel(
     private val settings: SettingsStore? = null,
     private val counts: ChatCountCalls? = null,
     private val write: (suspend (List<AddedChat>) -> Unit)? = settings?.let { store -> store::setAddedChats },
+    /** Whether [countRest] counts the whole account in the background; a test of the row counts turns it off. */
+    private val countsRest: Boolean = true,
 ) : ViewModel(com.tmplayer.platform.JobFailures.viewModelScope("AddChats")) {
 
     /**
@@ -77,6 +82,10 @@ class AddChatsViewModel(
     private var addedNames: List<AddedChat> = emptyList()
 
     private var headStart: Job? = null
+    private var background: Job? = null
+
+    /** True while the remote is jumping: the background count waits so the list is not rebuilt mid jump. */
+    @Volatile private var held = false
     private val counting = HashMap<Long, Job>()
 
     /**
@@ -131,6 +140,37 @@ class AddChatsViewModel(
             }
         }
     }
+
+    /**
+     * Counts the rest of the account in the background once the head start is done (HX76), so the
+     * television's short list can fold the chats with no videos. At most [BACKGROUND_AT_ONCE] at a
+     * time, in list order, each one the counter's own budget (FLOOD_WAIT waited out by the call that
+     * got it, the others go on). It stops with [stop], and a chat counted by its row is skipped.
+     */
+    fun countRest(chats: List<ChatSummary>) {
+        if (counts == null || !countsRest || background != null || chats.isEmpty()) return
+        background = viewModelScope.launch {
+            headStart?.join()
+            val queue = Channel<Long>(Channel.UNLIMITED)
+            for (chat in chats) queue.trySend(chat.id)
+            queue.close()
+            coroutineScope {
+                repeat(BACKGROUND_AT_ONCE) {
+                    launch {
+                        for (id in queue) {
+                            while (held) delay(HOLD_POLL_MS)
+                            if (_state.value.counted.containsKey(id)) continue
+                            count(id)
+                            counting[id]?.join()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /** Pauses and resumes the background count: the screen holds it while the remote is jumping. */
+    fun hold(on: Boolean) { held = on }
 
     /**
      * Counts one chat, for a row that came on screen. Asked twice for the same chat, it counts
@@ -241,6 +281,8 @@ class AddChatsViewModel(
     fun stop() {
         headStart?.cancel()
         headStart = null
+        background?.cancel()
+        background = null
         // A head start cut short never takes the band, so nothing is left waiting on it.
         _state.update { it.copy(recommending = false) }
         counting.values.toList().forEach { it.cancel() }
@@ -254,6 +296,10 @@ class AddChatsViewModel(
 
     companion object {
         private const val MAX_QUERY = 100
+
+        /** Chats counted at once by the background pass, the same three as the counter's own gate. */
+        const val BACKGROUND_AT_ONCE = 3
+        private const val HOLD_POLL_MS = 150L
 
         /**
          * How long the Recommended band waits for the head start before it is taken from whatever
