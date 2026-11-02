@@ -31,3 +31,10 @@ site/.astro/
 
 # Working notes kept off GitHub (plan, SEO and outreach)
 private/
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+.env*
+!.env.example
