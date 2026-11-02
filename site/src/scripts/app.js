@@ -1631,7 +1631,10 @@ var tmT = (function () {
 
   Array.prototype.forEach.call(pop.querySelectorAll('[data-pop-close]'), function (b) { b.addEventListener('click', close); });
   // Esc is held back until the close control is there.
+  // Chrome lets a second Esc press close a dialog whose cancel was prevented, so a close before
+  // the control is ready opens it again.
   pop.addEventListener('cancel', function (e) { if (!ready) { e.preventDefault(); } });
+  pop.addEventListener('close', function () { if (!ready) { pop.showModal(); } });
   // A click on the backdrop closes it, once it may.
   pop.addEventListener('click', function (e) { if (e.target === pop) { close(); } });
 
