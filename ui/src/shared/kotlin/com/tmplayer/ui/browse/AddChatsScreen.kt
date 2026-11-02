@@ -26,6 +26,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyItemScope
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -54,6 +56,17 @@ import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -132,7 +145,8 @@ import com.tmplayer.ui.theme.focusRing
  * @param onLoadMore asks the chat list for its next chats as the end of this list nears; nothing
  *   pages by itself, so an idle screen costs nothing.
  * @param sendLogs the platform's Send logs button, drawn beside Try again when the list is short.
- * @param searchField the television's own search box, which only the app has; the touch and
+ * @param searchField the television's own search box, which only the app has, with what its
+ *   keyboard's Search does (the remote goes to the first answer); the touch and
  *   desktop screens draw a plain text field.
  * @param required the mandatory chat choice ([com.tmplayer.data.ChatsGate]): its own heading and
  *   words, no Back button, Done only once a chat is ticked, and Back (the system's, Esc) calls
@@ -153,7 +167,7 @@ fun AddChatsScreen(
     onRetry: () -> Unit = {},
     onLoadMore: () -> Unit = {},
     sendLogs: (@Composable () -> Unit)? = null,
-    searchField: (@Composable (value: String, onValueChange: (String) -> Unit, placeholder: String, modifier: Modifier) -> Unit)? = null,
+    searchField: (@Composable (value: String, onValueChange: (String) -> Unit, placeholder: String, modifier: Modifier, onSubmit: () -> Unit) -> Unit)? = null,
     required: Boolean = false,
     onLeave: () -> Unit = onClose,
 ) {
@@ -189,18 +203,130 @@ fun AddChatsScreen(
     val allTicked = ChatPicking.allTicked(state.ticked, visible)
     val total = ChatPicking.total(state.ticked, state.counted)
 
+    // The Recommended band is worked out in the first seconds and lands above every other band,
+    // which moved the row under a click or a finger down a whole band. Until it is taken its place
+    // is held by placeholders, and the bands under it wait with it.
+    val holding = state.recommending && state.query.isBlank() && state.scope == ChatPicking.Scope.All
+    val bands = remember(rows) { rows.groupBy { it.band } }
+    // The rows as drawn, top to bottom, which is what the remote's jumps count in (HX76).
+    val shown = remember(bands, holding) {
+        bands.flatMap { (band, inBand) -> if (holding && band != ChatPicking.Band.Saved) emptyList() else inBand }
+    }
+    val placeOf = remember(shown) { HashMap<Long, Int>(shown.size * 2).apply { shown.forEachIndexed { i, row -> put(row.id, i) } } }
+
+    // The remote's way round a long list (HX76): the first row takes the focus, not the search
+    // box; Right (the end side) goes to Done from any row; Left (the start side) goes back to the
+    // start of the row's band, then the band before, then the filters; Back goes up to the
+    // filters before it leaves; Page and Channel Up or Down, and Down or Up held, move a screenful.
+    val scope = rememberCoroutineScope()
+    val doneFocus = remember { FocusRequester() }
+    val chipFocus = remember { FocusRequester() }
+    // The rows on screen and where each sits in the lazy list, written as the list is laid out.
+    val rowFocus = remember { HashMap<Long, FocusRequester>() }
+    val lazyIndex = remember { HashMap<Long, Int>() }
+    var onRow by remember { mutableStateOf<Long?>(null) }
+    var inFoot by remember { mutableStateOf(false) }
+    // Once a key is pressed the remote is the viewer's, and the first focus stops following the list.
+    var keyed by remember { mutableStateOf(false) }
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    val held = remember { IntArray(1) }
+    val jump = remember { arrayOfNulls<Job>(1) }
+    val nowShown by rememberUpdatedState(shown)
+    val nowPlace by rememberUpdatedState(placeOf)
+    val doneReady = !(required && state.ticked.isEmpty())
+
+    fun focusRow(at: Int) {
+        val list = nowShown
+        if (list.isEmpty() || jump[0]?.isActive == true) return
+        val row = list[at.coerceIn(0, list.lastIndex)]
+        jump[0] = scope.launch {
+            val index = lazyIndex[row.id]
+            if (index != null && listState.layoutInfo.visibleItemsInfo.none { it.key == row.id }) {
+                // One item above it stays in sight, so the jump reads as a move and not a new page.
+                listState.scrollToItem((index - 1).coerceAtLeast(0))
+            }
+            withFrameNanos { }
+            rowFocus[row.id]?.let { runCatching { it.requestFocus() } }
+        }
+    }
+    fun toTop() {
+        scope.launch {
+            listState.scrollToItem(0)
+            withFrameNanos { }
+            runCatching { chipFocus.requestFocus() }
+        }
+    }
+    // Done, or while the mandatory choice has nothing ticked, the television's Select all beside it.
+    fun toFoot(): Boolean = when {
+        doneReady -> runCatching { doneFocus.requestFocus() }.isSuccess
+        tv -> runCatching { selectFocus.requestFocus() }.isSuccess
+        else -> false
+    }
+    fun rowKey(event: KeyEvent, id: Long): Boolean {
+        val vertical = event.key == Key.DirectionDown || event.key == Key.DirectionUp
+        if (event.type == KeyEventType.KeyUp) {
+            if (vertical) held[0] = 0
+            return false
+        }
+        if (event.type != KeyEventType.KeyDown) return false
+        val at = nowPlace[id] ?: return false
+        val page = (listState.layoutInfo.visibleItemsInfo.size - 2).coerceAtLeast(3)
+        val end = if (rtl) Key.DirectionLeft else Key.DirectionRight
+        val start = if (rtl) Key.DirectionRight else Key.DirectionLeft
+        return when (event.key) {
+            end, Key.MediaPlayPause, Key.MediaPlay -> toFoot()
+            start -> {
+                val list = nowShown
+                val band = list[at].band
+                val bandStart = list.indexOfFirst { it.band == band }
+                when {
+                    at > bandStart -> focusRow(bandStart)
+                    bandStart == 0 -> toTop()
+                    else -> {
+                        val before = list[bandStart - 1].band
+                        focusRow(list.indexOfFirst { it.band == before })
+                    }
+                }
+                true
+            }
+            Key.PageDown, Key.ChannelDown -> { focusRow(at + page); true }
+            Key.PageUp, Key.ChannelUp -> { if (at == 0) toTop() else focusRow(at - page); true }
+            Key.DirectionDown, Key.DirectionUp -> {
+                // A held arrow walks row by row for a moment, then a screenful at a time; a jump
+                // still running swallows the repeats, so a slow television is not queued up.
+                held[0]++
+                if (held[0] <= HOLD_REPEATS) return false
+                focusRow(if (event.key == Key.DirectionDown) at + page else at - page)
+                true
+            }
+            else -> false
+        }
+    }
+    fun rowModifier(id: Long, requester: FocusRequester): Modifier = Modifier
+        .focusRequester(requester)
+        .onFocusChanged { if (it.hasFocus) onRow = id else if (onRow == id) onRow = null }
+        .onPreviewKeyEvent { rowKey(it, id) }
+    // Enter in the search box (the television keyboard's Search) puts the remote on the first answer.
+    val toFirstRow = { if (nowShown.isNotEmpty()) focusRow(0) }
+
     LaunchedEffect(Unit) { if (typed != state.query) model.type(typed) }
     LaunchedEffect(chats.isNotEmpty()) { if (chats.isNotEmpty()) model.start(chats) }
     // Nothing is counted once the screen is gone, and a count already running is cancelled.
     DisposableEffect(model) { onDispose { model.stop() } }
     LaunchedEffect(state.saved) { if (state.saved) onClose() }
-    LaunchedEffect(Unit) {
-        if (!tv) return@LaunchedEffect
+    // The remote starts on the first row, where OK ticks, not in the search box (HX76). Until a row
+    // is there it stands on the filters, and moves down to the first row when one lands, unless a
+    // key has been pressed since.
+    val firstId = shown.firstOrNull()?.id
+    LaunchedEffect(firstId) {
+        if (!tv || keyed) return@LaunchedEffect
         // The list lays its first items out a frame after this runs, and a request before that
         // finds nothing to focus.
         withFrameNanos { }
         withFrameNanos { }
-        runCatching { searchFocus.requestFocus() }
+        if (keyed) return@LaunchedEffect
+        val first = firstId?.let { rowFocus[it] }
+        if (first == null || runCatching { first.requestFocus() }.isFailure) runCatching { chipFocus.requestFocus() }
     }
     // The list's own end triggers the chat list's next chats, one request at a time.
     LoadMoreAhead(listState, enabled = !listComplete && !partial && !loadingMore, onLoadMore = onLoadMore)
@@ -214,6 +340,9 @@ fun AddChatsScreen(
     val leave = {
         when {
             asking != null -> asking = null
+            // On the television Back from the list or the foot goes up to the filters first, so
+            // the top of a long list is one press away; Back there leaves.
+            tv && (onRow != null || inFoot) -> toTop()
             // Nothing behind the mandatory choice to go back to: Back leaves the app (or, on the
             // desktop, does nothing), and the ticks are not lost to a discard question.
             required -> onLeave()
@@ -255,6 +384,10 @@ fun AddChatsScreen(
             .pointerInput(Unit) {}
             .focusProperties { onExit = { if (requestedFocusDirection in ARROWS) cancelFocusChange() } }
             .focusGroup()
+            .onPreviewKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown) keyed = true
+                false
+            }
             .then(outer),
         contentAlignment = Alignment.TopCenter,
     ) {
@@ -263,7 +396,7 @@ fun AddChatsScreen(
                 Modifier.weight(1f).fillMaxWidth(),
                 state = listState,
                 contentPadding = PaddingValues(top = if (form == DeviceForm.Phone) 16.dp else 0.dp, bottom = 8.dp),
-            ) {
+            ) { CountingScope(this).run {
                 // A phone stacks Back, the title and the words; a wide screen has the room to put Back
                 // beside the title, which leaves more of it for the rows.
                 val headingText = if (required) s.pickerGateTitle else s.pickerChooseChats
@@ -306,7 +439,7 @@ fun AddChatsScreen(
                     Box(Modifier.padding(top = 12.dp)) {
                         val onType: (String) -> Unit = { typed = it; model.type(it) }
                         if (searchField != null) {
-                            searchField(typed, onType, s.commonSearch, field)
+                            searchField(typed, onType, s.commonSearch, field, toFirstRow)
                         } else {
                             // In the settings cards' own shape and fill, with the glass in front, as
                             // the app's other search boxes are, not Material's sharp outlined box.
@@ -324,6 +457,10 @@ fun AddChatsScreen(
                                     unfocusedBorderColor = Tone.outline,
                                     cursorColor = Tone.accent,
                                 ),
+                                // A keyboard's Enter goes to the first answer; a phone's keyboard
+                                // only closes, since a touch screen has no focus to move.
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                                keyboardActions = KeyboardActions(onSearch = { if (compact) toFirstRow() else defaultKeyboardAction(ImeAction.Done) }),
                                 modifier = field,
                             )
                         }
@@ -341,10 +478,13 @@ fun AddChatsScreen(
                                     label = scopeLabel(scope, s),
                                     chosen = state.scope == scope,
                                     onClick = { model.scope(scope) },
+                                    modifier = if (state.scope == scope) Modifier.focusRequester(chipFocus) else Modifier,
                                 )
                             }
                         }
-                        if (compact && visible.isNotEmpty()) selectAllButton()
+                        // The television's Select all sits in the foot beside Done, where Right
+                        // from any row lands, not at the far end of the filters (HX76).
+                        if (compact && !tv && visible.isNotEmpty()) selectAllButton()
                     }
                 }
                 if (!listComplete && !partial) {
@@ -382,11 +522,6 @@ fun AddChatsScreen(
                         }
                     }
                 }
-                val bands = rows.groupBy { it.band }
-                // The Recommended band is worked out in the first seconds and lands above every other
-                // band, which moved the row under a click or a finger down a whole band. Until it is
-                // taken its place is held by placeholders, and the bands under it wait with it.
-                val holding = state.recommending && state.query.isBlank() && state.scope == ChatPicking.Scope.All
                 val divider = 16.dp + (if (tv) 52.dp else 44.dp) + 12.dp
                 for ((band, inBand) in bands) {
                     if (holding && band != ChatPicking.Band.Saved) continue
@@ -404,11 +539,19 @@ fun AddChatsScreen(
                             )
                         }
                     }
+                    val base = count
+                    inBand.forEachIndexed { i, row -> lazyIndex[row.id] = base + i }
                     itemsIndexed(inBand, key = { _, row -> row.id }) { index, row ->
                         // Only a row on screen is counted: this effect leaves with the row.
                         if (row.band != ChatPicking.Band.Gone) LaunchedEffect(row.id) { model.count(row.id) }
                         val ticked = row.id in state.ticked
-                        val card = Modifier.groupedCard(GroupPlace(first = index == 0, last = index == inBand.lastIndex), divider)
+                        val requester = remember(row.id) { FocusRequester() }
+                        DisposableEffect(row.id) {
+                            rowFocus[row.id] = requester
+                            onDispose { if (rowFocus[row.id] === requester) rowFocus.remove(row.id) }
+                        }
+                        val card = rowModifier(row.id, requester)
+                            .groupedCard(GroupPlace(first = index == 0, last = index == inBand.lastIndex), divider)
                         if (row.band == ChatPicking.Band.Gone) {
                             GoneRow(row, tv, card, onRemove = { model.toggle(row.id) })
                         } else {
@@ -435,7 +578,7 @@ fun AddChatsScreen(
                         }
                     }
                 }
-            }
+            } }
 
             when (val question = asking) {
                 is Ask.SelectAll -> Confirm(
@@ -480,18 +623,31 @@ fun AddChatsScreen(
                             .fillMaxWidth()
                             .padding(top = 8.dp, bottom = if (form == DeviceForm.Phone) 12.dp else 0.dp)
                             .groupedCard(GroupPlace.Alone)
+                            .onFocusChanged { inFoot = it.hasFocus }
                             .padding(start = ROW_INSET, end = 10.dp, top = 10.dp, bottom = 10.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(
-                            totalLine(total, s),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Tone.text,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f),
-                        )
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                totalLine(total, s),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Tone.text,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            // The remote's short cuts, said where the eye goes looking for Done.
+                            if (tv && shown.isNotEmpty()) {
+                                Text(
+                                    s.pickerTvKeys,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Tone.muted,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                        if (tv && visible.isNotEmpty()) selectAllButton()
                         // Nothing ticked is an answer in Settings, and Done reads as what it will
                         // do; the mandatory choice needs at least one chat, and says so instead.
                         val none = state.ticked.isEmpty()
@@ -501,6 +657,7 @@ fun AddChatsScreen(
                             SetupButton(
                                 if (none) s.pickerDoneNone else s.commonDone,
                                 primary = true,
+                                modifier = Modifier.focusRequester(doneFocus),
                                 onClick = { model.done(chats) },
                             )
                         }
@@ -822,7 +979,7 @@ fun AddChatsFed(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     sendLogs: (@Composable () -> Unit)? = null,
-    searchField: (@Composable (value: String, onValueChange: (String) -> Unit, placeholder: String, modifier: Modifier) -> Unit)? = null,
+    searchField: (@Composable (value: String, onValueChange: (String) -> Unit, placeholder: String, modifier: Modifier, onSubmit: () -> Unit) -> Unit)? = null,
     required: Boolean = false,
     onLeave: () -> Unit = onClose,
 ) {
@@ -893,3 +1050,30 @@ fun chosenChatsDetail(choice: com.tmplayer.data.AddedChoice, s: com.tmplayer.i18
 object AddChatsState {
     var open by mutableStateOf(false)
 }
+
+/**
+ * The lazy list's own scope, counting the items given to it so far, so a row's place in the
+ * list is known while it is off screen and a jump of the remote can scroll to it (HX76).
+ */
+private class CountingScope(private val inner: LazyListScope) : LazyListScope by inner {
+    var count = 0
+        private set
+
+    override fun item(key: Any?, contentType: Any?, content: @Composable LazyItemScope.() -> Unit) {
+        count++
+        inner.item(key, contentType, content)
+    }
+
+    override fun items(
+        count: Int,
+        key: ((index: Int) -> Any)?,
+        contentType: (index: Int) -> Any?,
+        itemContent: @Composable LazyItemScope.(index: Int) -> Unit,
+    ) {
+        this.count += count
+        inner.items(count, key, contentType, itemContent)
+    }
+}
+
+/** Repeats of a held Down or Up that walk row by row before the rest move a screenful each. */
+private const val HOLD_REPEATS = 6

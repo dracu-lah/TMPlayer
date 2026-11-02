@@ -1639,7 +1639,8 @@
     "total": "{chats, plural, one {# chat} other {# chats}} chosen",
     "total_counting": "{chats, plural, one {# chat} other {# chats}} chosen, about {videos} videos so far",
     "total_none": "No chats chosen yet",
-    "total_videos": "{chats, plural, one {# chat} other {# chats}} chosen, about {videos} videos"
+    "total_videos": "{chats, plural, one {# chat} other {# chats}} chosen, about {videos} videos",
+    "tv_keys": "Right for Done, Back for the top, hold Down to go faster"
   },
   "player": {
     "add_bookmark": "Add bookmark",

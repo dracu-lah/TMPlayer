@@ -40,8 +40,8 @@ internal fun AddChatsPage(
         onClose = onClose,
         sendLogs = { SendLogsButton() },
         // A remote and a sofa get the television's own search box, which opens its keyboard on a press.
-        searchField = if (isTouch()) null else { value, onValueChange, placeholder, modifier ->
-            TvSearchField(value = value, onValueChange = onValueChange, placeholder = placeholder, modifier = modifier)
+        searchField = if (isTouch()) null else { value, onValueChange, placeholder, modifier, onSubmit ->
+            TvSearchField(value = value, onValueChange = onValueChange, placeholder = placeholder, modifier = modifier, onSubmit = onSubmit)
         },
         required = required,
         onLeave = onLeave,
