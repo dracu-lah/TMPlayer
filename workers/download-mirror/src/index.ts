@@ -2,7 +2,7 @@
    asset CDN doesn't make every download slow. The first request for a given file still reaches
    github.com, so GitHub's own download_count sees it as usual. Every request after is served
    from Cloudflare's cache instead, which GitHub never sees, so this worker counts those itself in
-   HITS (Analytics Engine, plus a frozen KV base in DOWNLOADS) and answers /stats with the running total. site/src/lib/stats.ts
+   a Durable Object (plus a frozen KV base in DOWNLOADS) and answers /stats with the running total. site/src/lib/stats.ts
    adds that total to GitHub's own count, so the home page's "downloads" figure covers both: see
    site/AGENTS.md "Home page pill and stats".
 
@@ -12,11 +12,28 @@
 
 interface Env {
   DOWNLOADS: KVNamespace
-  HITS: AnalyticsEngineDataset
-  // Secrets for reading HITS back through the SQL API (wrangler secret put). Without them /stats
-  // answers with the KV base alone.
-  CF_ACCOUNT_ID?: string
-  CF_API_TOKEN?: string
+  COUNTER: DurableObjectNamespace
+}
+
+// One object holds the running count of cached downloads. A Durable Object serialises its
+// requests, so unlike the old KV read-then-write no two hits can overwrite each other, and a write
+// here is not capped like the free KV tier's 1,000 puts a day (which stopped this counter on
+// 2026-11-02). The KV key 'hits' is frozen: it holds the total up to that day, and /stats adds the
+// object's count on top.
+export class HitCounter {
+  constructor(private state: DurableObjectState) {}
+  async fetch(request: Request): Promise<Response> {
+    const n = (await this.state.storage.get<number>('n')) ?? 0
+    if (new URL(request.url).pathname === '/hit') {
+      await this.state.storage.put('n', n + 1)
+      return new Response(String(n + 1))
+    }
+    return new Response(String(n))
+  }
+}
+
+function counter(env: Env): DurableObjectStub {
+  return env.COUNTER.get(env.COUNTER.idFromName('hits'))
 }
 
 const REPO = 'dracu-lah/TMPlayer'
@@ -24,41 +41,16 @@ const PATH =
   /^\/download\/(v\d+\.\d+\.\d+(?:-beta\.\d+)?)\/(TMPlayer-[A-Za-z0-9._-]+\.(?:apk|msi|dmg|AppImage|tar\.xz|ipk|wgt))$/
 const COUNTER_KEY = 'hits'
 
-// Each cached download is one Analytics Engine data point: a write there is not metered like a KV
-// put (the free KV tier stopped this counter on 2026-11-02 at 1,000 puts a day). The KV key 'hits'
-// is now frozen: it holds the total up to that day and /stats adds the Analytics Engine count on top.
-function bumpCounter(env: Env): void {
-  env.HITS.writeDataPoint({ indexes: ['hit'], doubles: [1] })
+async function bumpCounter(env: Env): Promise<void> {
+  await counter(env).fetch('https://counter/hit')
 }
 
-const STATS_TTL_SECONDS = 600
-
-async function analyticsHits(env: Env): Promise<number> {
-  if (!env.CF_ACCOUNT_ID || !env.CF_API_TOKEN) return 0
-  try {
-    const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/analytics_engine/sql`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${env.CF_API_TOKEN}` },
-      body: "SELECT sum(_sample_interval * double1) AS n FROM tmplayer_hits FORMAT JSON",
-    })
-    if (!res.ok) return 0
-    const body = (await res.json()) as { data?: { n?: number | string }[] }
-    return Number(body.data?.[0]?.n) || 0
-  } catch {
-    return 0
-  }
-}
-
-async function stats(env: Env, ctx: ExecutionContext, url: URL): Promise<Response> {
-  const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store' }
-  const cacheKey = new Request(`${url.origin}/stats-cache`)
-  const cached = await caches.default.match(cacheKey)
-  if (cached) return new Response(cached.body, { headers })
+async function stats(env: Env): Promise<Response> {
   const base = Number(await env.DOWNLOADS.get(COUNTER_KEY)) || 0
-  const hits = base + (await analyticsHits(env))
-  const body = JSON.stringify({ hits })
-  ctx.waitUntil(caches.default.put(cacheKey, new Response(body, { headers: { 'Cache-Control': `max-age=${STATS_TTL_SECONDS}` } })))
-  return new Response(body, { headers })
+  const live = Number(await (await counter(env).fetch('https://counter/get')).text()) || 0
+  return new Response(JSON.stringify({ hits: base + live }), {
+    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store' },
+  })
 }
 
 export default {
@@ -66,7 +58,7 @@ export default {
     const url = new URL(request.url)
 
     if (request.method === 'GET' && url.pathname === '/stats') {
-      return stats(env, ctx, url)
+      return stats(env)
     }
     if (request.method !== 'GET' && request.method !== 'HEAD') {
       return new Response('Method not allowed', { status: 405, headers: { Allow: 'GET, HEAD' } })
@@ -103,7 +95,7 @@ export default {
     }
 
     if (request.method === 'GET' && upstream.headers.get('cf-cache-status') === 'HIT') {
-      bumpCounter(env)
+      ctx.waitUntil(bumpCounter(env))
     }
 
     const out = new Headers(upstream.headers)
