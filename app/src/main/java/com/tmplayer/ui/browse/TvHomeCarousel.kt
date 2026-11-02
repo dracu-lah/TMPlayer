@@ -437,8 +437,13 @@ private fun TvFeaturedSkeleton(start: Dp, modifier: Modifier = Modifier) {
     }
 }
 
-/** How tall the carousel is on a television under its heading: room below for the first row's titles. */
-internal val TV_FEATURED_HEIGHT = 280.dp
+/**
+ * How tall the carousel is on a television under its heading: room below for the first row's titles.
+ * 328 dp, not 280: at 280 the logo, facts, two lines of marks and Play left room for two lines of
+ * the overview, which Compose ellipsizes at on the Mi TV (HX55, 2026-11-03), so the third line had
+ * no room.
+ */
+internal val TV_FEATURED_HEIGHT = 328.dp
 
 /** How long a page is up before the carousel moves on. */
 private const val ADVANCE_MS = 7_000
@@ -504,7 +509,7 @@ private const val BAR_FADE_REACH = 1.2f
 
 /** The most a title logo takes over the television's carousel. */
 private val TV_LOGO_MAX_WIDTH = 340.dp
-private val TV_LOGO_MAX_HEIGHT = 72.dp
+private val TV_LOGO_MAX_HEIGHT = 56.dp
 
 /** The least room between the TV top bar and the carousel's title block. */
 private val TITLE_TOP_GAP = 32.dp
