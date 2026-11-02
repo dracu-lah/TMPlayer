@@ -107,4 +107,6 @@ grep -rInP '\x{2014}|\x{2013}' --exclude-dir=.git --exclude-dir=build --exclude-
 ```
 
 Public copy (posts, store text, release notes, the site) describes TMPlayer as a player for the
-videos already in your own Telegram chats: "video", not "film" or "movie", no real titles.
+videos already in your own Telegram chats: "video", not "film" or "movie", no real titles, never
+"uploader", "movie channel" or "watch any movie", and posts link tmplayer.org/legal (2026-10-15, so
+nothing reads like a piracy tool).
