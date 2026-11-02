@@ -2898,7 +2898,8 @@
     "upi_copied": "UPI ID copied",
     "upi_copy": "Copy the UPI ID",
     "upi_id": "UPI ID",
-    "upi_no_app": "No UPI app answered on this device. Scan the code from a phone, or copy the ID into your UPI app."
+    "upi_no_app": "No UPI app answered on this device. Scan the code from a phone, or copy the ID into your UPI app.",
+    "upi_note": "If the app that opened is not the one you use, or none opened, scan the code or copy the ID and pay in your own UPI app."
   },
   "theme": {
     "black": "Black",

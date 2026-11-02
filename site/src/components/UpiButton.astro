@@ -4,9 +4,10 @@
 // who pay by UPI, had no way to chip in at all.
 //
 // The link is a real `upi://` link, so a phone opens its UPI app straight from it: GPay, PhonePe,
-// Paytm, BHIM or a bank app, whichever the reader has. app.js catches the click on anything that
-// cannot answer such a link (a computer, a television's browser) and opens UpiDialog instead,
-// which shows the QR and the ID to copy. With scripting off the link is left alone.
+// Paytm, BHIM or a bank app, whichever the reader has. app.js also opens UpiDialog on every click
+// (HX75, 2026-11-02): the QR and the ID to copy, for when the wrong app opened or none did. On a
+// computer or a television's browser the link is held back, since nothing there answers it. With
+// scripting off the link is left alone.
 //
 // The mark is Google Pay's own artwork, used to name the way to pay, never redrawn or recoloured;
 // it is a PNG because that is the artwork there is, under a versioned URL cached for a year.

@@ -396,10 +396,11 @@ private fun Label(text: String) {
 private const val QR_PIXELS = 520
 
 /**
- * Paying by UPI on a phone (user, 2026-11-01). The button hands [About.UPI_LINK] to whichever UPI
- * app is installed, and the system asks which one when there are several. A device with no UPI app
- * throws [ActivityNotFoundException], which is caught: the button is then replaced by the code and
- * the ID, so the press never does nothing.
+ * Paying by UPI on a phone (user, 2026-11-01; HX75, 2026-11-02). The button hands [About.UPI_LINK]
+ * to whichever UPI app is installed, and the system asks which one when there are several. The
+ * window with the code, the ID and Copy opens as well, every time: the app that opened may be the
+ * wrong one, or none may open ([ActivityNotFoundException] is caught and the window then says so),
+ * and the viewer can still pay from their own app. Close, Back and a tap outside close it.
  *
  * Nothing is unlocked and nothing is checked afterwards: the app never learns whether anybody paid,
  * as with the coffee link.
@@ -408,33 +409,48 @@ private const val QR_PIXELS = 520
 private fun UpiPay(modifier: Modifier = Modifier) {
     val s = LocalStrings.current
     val context = LocalContext.current
+    var showing by remember { mutableStateOf(false) }
     var failed by remember { mutableStateOf(false) }
-
-    if (failed) {
-        Column(
-            modifier,
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            androidx.compose.material3.Text(
-                s.supportUpiNoApp,
-                style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
-                color = Tone.muted,
-                textAlign = TextAlign.Center,
-            )
-            UpiPlate(plate = 200.dp)
-            UpiIdRow()
-        }
-        return
-    }
 
     TmSecondaryButton(
         onClick = {
             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(About.UPI_LINK))
             failed = runCatching { context.startActivity(intent) }.isFailure
+            showing = true
         },
         modifier = modifier.heightIn(min = 56.dp),
     ) { Label(s.supportPayUpi) }
+
+    if (showing) UpiDialog(failed = failed, onClose = { showing = false })
+}
+
+/** The window under "Pay by UPI": the code for another phone, the ID to copy, and Close. */
+@Composable
+private fun UpiDialog(failed: Boolean, onClose: () -> Unit) {
+    val s = LocalStrings.current
+    FloatingWindow(onDismiss = onClose, ignoreRelease = true) {
+        Column(
+            Modifier
+                .width(min(maxWidth - PhonePad.Side * 2, 440.dp))
+                .floatingSurface()
+                .verticalScroll(rememberScrollState())
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(s.supportPayUpi, style = MaterialTheme.typography.headlineSmall, color = Tone.text, textAlign = TextAlign.Center)
+            Text(
+                if (failed) s.supportUpiNoApp else s.supportUpiNote,
+                style = MaterialTheme.typography.bodyMedium,
+                color = Tone.muted,
+                textAlign = TextAlign.Center,
+            )
+            UpiPlate(plate = 200.dp)
+            Text(s.supportScanUpi, style = MaterialTheme.typography.bodyMedium, color = Tone.muted, textAlign = TextAlign.Center)
+            UpiIdRow()
+            TmSecondaryButton(onClick = onClose) { Label(s.commonClose) }
+        }
+    }
 }
 
 /** The UPI ID in full, with a button that copies it, for anybody typing it into their own app. */

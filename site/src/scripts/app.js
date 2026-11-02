@@ -1934,9 +1934,10 @@ var tmT = (function () {
 /* Pay by UPI (UpiButton.astro, UpiDialog.astro, user 2026-11-01). The button is a real `upi://`
    link, which a phone answers by opening GPay, PhonePe, Paytm or whichever UPI app is installed.
    Nothing on a computer or a television's browser answers it, and a phone cannot scan its own
-   screen, so this opens the box with the QR and the ID to copy wherever the pointer is not a
-   finger, and leaves the link alone where it is. Inside the box the open button shows only on a
-   touch device, for the same reason. A middle click or a browser without <dialog> follows the
+   screen, so this opens the box with the QR and the ID to copy on every device. Where the pointer
+   is not a finger the link is held back; on a touch device it is followed as well, so the UPI app
+   opens and the box is waiting when the viewer comes back. Inside the box the open button shows
+   only on a touch device, for the same reason. A middle click or a browser without <dialog> follows the
    link as before; Esc, the x and the backdrop close it. */
 (function () {
   'use strict';
@@ -1951,12 +1952,12 @@ var tmT = (function () {
   if (open && touch) { open.hidden = false; }
 
   function show(event) {
-    // A phone opens its own UPI app: the link does the job there.
-    if (touch) { return; }
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) { return; }
-    event.preventDefault();
     opener = event.currentTarget;
-    dialog.showModal();
+    // A phone opens its own UPI app from the link, and the box opens too (HX75): the app that
+    // opened may be the wrong one, or none may open, and the QR and the ID are the way out.
+    if (!touch) { event.preventDefault(); }
+    if (!dialog.open) { dialog.showModal(); }
   }
 
   Array.prototype.forEach.call(links, function (link) {

@@ -1,5 +1,6 @@
 import { createEffect, createResource, createSignal, For, Match, onMount, Show, Switch, type JSX } from 'solid-js'
 import { A, useNavigate, useParams } from '@solidjs/router'
+import { renderSVG } from 'uqr'
 import {
     ArrowLeft02Icon,
     ArrowRight01Icon,
@@ -474,22 +475,43 @@ function About() {
 }
 
 /**
- * Chipping in (user, 2026-11-01). Buy Me a Coffee takes cards and PayPal, which most people here
- * do not use: UPI stands beside it, with Google Pay's own mark, since that is the app most of them
- * pay with. On a phone the UPI row is a real `upi://` link, which GPay, PhonePe or Paytm answers;
- * a browser on a computer has nothing to answer it, so there the row opens the site's support page,
- * which shows the code and the ID. Nothing here is checked afterwards and nothing is unlocked.
+ * Chipping in (user, 2026-11-01; HX75, 2026-11-02). Buy Me a Coffee takes cards and PayPal, which
+ * most people here do not use: UPI stands beside it, with Google Pay's own mark, since that is the
+ * app most of them pay with. The UPI row always opens a window with the code, the ID and Copy. On
+ * a phone it also follows the real `upi://` link, which GPay, PhonePe or Paytm answers; the window
+ * is there for when the wrong app opened or none did. A computer has nothing to answer the link,
+ * so the window is all it gets. Nothing here is checked afterwards and nothing is unlocked.
  */
 function Chip() {
     const touch = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches
-    const upi = touch ? UPI_LINK : 'https://tmplayer.org/support/'
+    let dialog!: HTMLDialogElement
+    const [copied, setCopied] = createSignal(false)
+    const qr = renderSVG(UPI_LINK, { pixelSize: 6, border: 2, whiteColor: '#fff', blackColor: '#0e0f13' })
+    const open = () => {
+        setCopied(false)
+        if (!dialog.open) dialog.showModal()
+        // A phone hands the link to its UPI app; a refused or unanswered link leaves the window up.
+        if (touch) {
+            try { location.href = UPI_LINK } catch { /* the window shows the code and the ID */ }
+        }
+    }
+    const copy = async () => {
+        // A refused or missing clipboard leaves the ID on screen to copy by hand.
+        try {
+            await navigator.clipboard.writeText(UPI_ID)
+            setCopied(true)
+        } catch {
+            setCopied(false)
+        }
+    }
     return (
+        <>
         <div class="set-card">
             <a class="set-row" href="https://buymeacoffee.com/nevil.dev" target="_blank" rel="noopener">
                 <RowBody icon={FavouriteIcon} title={t('support.buy_coffee')} />
                 <Icon icon={ArrowRight01Icon} size={20} class="set-chevron" />
             </a>
-            <a class="set-row" href={upi} target={touch ? undefined : '_blank'} rel="noopener">
+            <button class="set-row" type="button" onClick={open}>
                 <span class="set-icon set-icon-plain">
                     <img src="/gpay-mark.png" alt="" width="24" height="24" />
                 </span>
@@ -498,11 +520,28 @@ function Chip() {
                     <span class="set-sub">{UPI_ID}</span>
                 </span>
                 <Icon icon={ArrowRight01Icon} size={20} class="set-chevron" />
-            </a>
+            </button>
             <div class="set-block">
                 <p class="muted small">{t('support.any_amount')}</p>
             </div>
         </div>
+        <dialog
+            class="confirm upi-dialog"
+            ref={dialog}
+            aria-labelledby="upi-title"
+            onClick={(e) => { if (e.target === dialog) dialog.close() }}
+        >
+            <h2 id="upi-title">{t('support.pay_upi')}</h2>
+            <p class="muted">{t('support.upi_note')}</p>
+            <div class="qr"><div class="qr-code" role="img" aria-label={t('support.scan_upi')} innerHTML={qr} /></div>
+            <p class="muted small">{t('support.scan_upi')}</p>
+            <p class="upi-id"><code>{UPI_ID}</code></p>
+            <div class="confirm-buttons">
+                <button class="link" type="button" onClick={copy}>{copied() ? t('support.upi_copied') : t('support.upi_copy')}</button>
+                <button class="primary" type="button" onClick={() => dialog.close()}>{t('common.close')}</button>
+            </div>
+        </dialog>
+        </>
     )
 }
 

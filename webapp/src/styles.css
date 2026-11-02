@@ -882,6 +882,8 @@ input.chat-tick[type=checkbox] { flex: none; width: 22px; height: 22px; margin: 
 .confirm[open] { display: flex; flex-direction: column; gap: 16px; }
 .confirm::backdrop { background: rgb(0 0 0 / .5); }
 .confirm h2 { font-size: 24px; line-height: 32px; font-weight: 400; }
+.upi-dialog { max-height: calc(100dvh - 32px); overflow-y: auto; }
+.upi-id { text-align: center; font-size: 16px; overflow-wrap: anywhere; user-select: all; }
 .confirm-buttons { display: flex; justify-content: flex-end; align-items: center; gap: 16px; }
 button.primary.danger { background: var(--error); color: var(--bg); }
 @media (prefers-reduced-motion: reduce) { .round-button.spinning .icon { animation-duration: 2s; } .pop-menu { animation: none; } }
