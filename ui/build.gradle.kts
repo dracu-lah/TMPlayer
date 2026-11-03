@@ -81,6 +81,10 @@ kotlin {
                 implementation(libs.zxing.core)
             }
         }
+        // The large-account model, shared with :app's debug build (a fake chat source for the TV picker).
+        jvmTest {
+            kotlin.srcDir("src/synthetic/kotlin")
+        }
         jvmTest.dependencies {
             implementation(libs.junit)
             implementation(libs.kotlinx.coroutines.test)

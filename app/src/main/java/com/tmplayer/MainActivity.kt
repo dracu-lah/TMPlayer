@@ -326,6 +326,10 @@ class MainActivity : ComponentActivity() {
                 if (intent.getBooleanExtra("lowend", false)) com.tmplayer.data.DeviceFit(true, true) else null
             if (intent.getBooleanExtra("devicehint", false)) com.tmplayer.data.DeviceFitHint.raise()
         }
+        // `--ez fakechats true` on a debug build: the Add chats picker over 3,000 fake chats (HX76).
+        if (BuildConfig.DEBUG && intent?.hasExtra("fakechats") == true) {
+            com.tmplayer.ui.browse.DebugFakeChats.on = intent.getBooleanExtra("fakechats", false)
+        }
         Td.start(this)
         // A debug or promo build can force the support card on, to check it by eye:
         // `adb shell am start -n com.tmplayer/.MainActivity --ez support_reminder true`.

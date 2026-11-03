@@ -185,7 +185,6 @@ fun AddChatsScreen(
     val choice by AddedChats.choice.collectAsState()
     val listState = rememberLazyListState()
     val searchFocus = remember { FocusRequester() }
-    val selectFocus = remember { FocusRequester() }
     var asking by remember { mutableStateOf<Ask?>(null) }
     // Typed here and handed on, since a text field fed back through a flow a frame late loses keys.
     var typed by rememberSaveable { mutableStateOf(state.query) }
@@ -224,7 +223,6 @@ fun AddChatsScreen(
         }
     }
     val visible = remember(items) { ChatPicking.visible(items.mapNotNull { (it as? ChatPicking.Item.Chat)?.row }) }
-    val allTicked = ChatPicking.allTicked(state.ticked, visible)
     val total = ChatPicking.total(state.ticked, state.counted)
 
     // The Recommended band is worked out in the first seconds and lands above every other band,
@@ -328,12 +326,8 @@ fun AddChatsScreen(
         val at = lastRow?.let { nowPlace[it] } ?: 0
         focusRow(at)
     }
-    // Done, or while the mandatory choice has nothing ticked, the television's Select all beside it.
-    fun toFoot(): Boolean = when {
-        doneReady -> runCatching { doneFocus.requestFocus() }.isSuccess
-        tv -> runCatching { selectFocus.requestFocus() }.isSuccess
-        else -> false
-    }
+    // Done; with nothing ticked in the mandatory choice it is off and the remote stays put. No picker has a Select all for now (user, 2026-11-03).
+    fun toFoot(): Boolean = doneReady && runCatching { doneFocus.requestFocus() }.isSuccess
     fun rowKey(event: KeyEvent, id: Long): Boolean {
         val vertical = event.key == Key.DirectionDown || event.key == Key.DirectionUp
         if (event.type == KeyEventType.KeyUp) {
@@ -434,7 +428,7 @@ fun AddChatsScreen(
     // Back from a question puts the remote on the button that asked it.
     var wasAsking by remember { mutableStateOf(false) }
     LaunchedEffect(asking) {
-        if (asking == null && wasAsking && tv) runCatching { selectFocus.requestFocus() }
+        if (asking == null && wasAsking && tv) toFoot()
         wasAsking = asking != null
     }
 
@@ -453,33 +447,9 @@ fun AddChatsScreen(
     }
     BackHandler(onBack = leave)
 
-    // Select all over the rows shown, with a word first when it is a lot. Ctrl+A runs the same.
-    val selectAllNow = {
-        val adding = model.adding(visible)
-        when {
-            adding == 0 -> Unit
-            ChatPicking.needsConfirm(adding) -> asking = Ask.SelectAll(adding)
-            else -> model.selectAll(visible)
-        }
-    }
+
     val tick = rememberToggleTick()
     val compact = form != DeviceForm.Phone
-    val tvScopeName = when {
-        state.query.isNotBlank() -> s.pickerResults
-        state.scope == ChatPicking.Scope.All -> s.pickerAllChats
-        else -> scopeLabel(state.scope, s)
-    }
-    val selectAllButton: @Composable () -> Unit = {
-        QuietButton(
-            when {
-                !tv -> if (allTicked) s.commonClear else s.browseSelectAll
-                allTicked -> s.pickerClearScope(tvScopeName, visible.size)
-                else -> s.pickerSelectScope(tvScopeName, visible.size)
-            },
-            modifier = Modifier.focusRequester(selectFocus).selectAllKeys(selectAllNow),
-            onClick = { if (allTicked) model.clear(visible) else selectAllNow() },
-        )
-    }
 
     val outer = when (form) {
         DeviceForm.Tv -> Modifier.padding(horizontal = Tv.SafeH, vertical = Tv.SafeV)
@@ -597,9 +567,6 @@ fun AddChatsScreen(
                                     )
                                 }
                             }
-                            // The television's Select all sits in the foot beside Done, where Right
-                            // from any row lands, not at the far end of the filters (HX76).
-                            if (compact && !tv && visible.isNotEmpty()) selectAllButton()
                         }
                     }
                     }
@@ -622,11 +589,6 @@ fun AddChatsScreen(
                                     sendLogs?.invoke()
                                 }
                             }
-                        }
-                    }
-                    if (!compact && visible.isNotEmpty()) {
-                        item(key = "selectAll") {
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { selectAllButton() }
                         }
                     }
                     if (rows.isEmpty()) {
@@ -698,7 +660,6 @@ fun AddChatsScreen(
                                     onToggle = { tick(!ticked); model.toggle(row.id) },
                                     onCountAgain = { model.countAgain(row.id) },
                                     onToggleStar = { model.toggleStar(row.id) },
-                                    onSelectAll = selectAllNow,
                                 )
                             }
                         }
@@ -718,16 +679,6 @@ fun AddChatsScreen(
         val questionUi: (@Composable () -> Unit)? = asking?.let { question ->
             {
                 when (question) {
-                    is Ask.SelectAll -> Confirm(
-                        title = s.pickerConfirmTitle(question.count),
-                        body = s.pickerConfirmBody,
-                        action = s.browseSelectAll,
-                        onYes = {
-                            asking = null
-                            model.selectAll(visible)
-                        },
-                        onNo = { asking = null },
-                    )
                     Ask.Discard -> Confirm(
                         title = s.pickerDiscardTitle,
                         body = s.pickerDiscardBody,
@@ -830,6 +781,7 @@ fun AddChatsScreen(
                             val n = scopeCounts.getValue(sc)
                             RailEntry(
                                 label = scopeLabel(sc, s),
+                                icon = railIcon(sc),
                                 detail = if (n > 0) s.formatter.number(n) else null,
                                 chosen = state.scope == sc,
                                 dim = n == 0,
@@ -848,6 +800,7 @@ fun AddChatsScreen(
                         }
                         RailEntry(
                             label = s.commonSearch,
+                            icon = TmIcons.Search,
                             detail = state.query.trim().ifBlank { null },
                             chosen = searching || state.query.isNotBlank(),
                             dim = false,
@@ -902,7 +855,6 @@ fun AddChatsScreen(
                             )
                             failure()
                             doneButton()
-                            if (visible.isNotEmpty()) selectAllButton()
                             if (required) {
                                 Text(s.pickerGateBody, style = MaterialTheme.typography.bodySmall, color = Tone.muted, maxLines = 6, overflow = TextOverflow.Ellipsis)
                             }
@@ -930,7 +882,16 @@ private val TV_RAIL = listOf(
     ChatPicking.Scope.People,
     ChatPicking.Scope.Archived,
 )
-private val RAIL_WIDTH = 190.dp
+private val RAIL_WIDTH = 210.dp
+
+/** The icon a scope wears in the rail, from the shared set, so the rail reads at a glance across the room. */
+private fun railIcon(scope: ChatPicking.Scope) = when (scope) {
+    ChatPicking.Scope.Channels -> TmIcons.Channel
+    ChatPicking.Scope.Groups -> TmIcons.Group
+    ChatPicking.Scope.People -> TmIcons.Person
+    ChatPicking.Scope.Archived -> TmIcons.Archive
+    else -> TmIcons.Chats
+}
 private val PANEL_WIDTH = 240.dp
 
 /** The row a line of the list stands for; a fold has no chat, so it gets an id no chat can have. */
@@ -943,6 +904,7 @@ private fun itemRow(item: ChatPicking.Item): ChatPicking.Row = when (item) {
 @Composable
 private fun RailEntry(
     label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
     detail: String?,
     chosen: Boolean,
     dim: Boolean,
@@ -969,6 +931,7 @@ private fun RailEntry(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        Icon(icon, contentDescription = null, tint = ink, modifier = Modifier.size(22.dp))
         Text(
             label,
             style = MaterialTheme.typography.titleMedium,
@@ -1038,8 +1001,6 @@ private val ARROWS = setOf(FocusDirection.Up, FocusDirection.Down, FocusDirectio
 
 /** A question the foot is asking in place of the total. */
 private sealed interface Ask {
-    data class SelectAll(val count: Int) : Ask
-
     data object Discard : Ask
 }
 
@@ -1059,7 +1020,6 @@ private fun PickRow(
     onToggle: () -> Unit,
     onCountAgain: () -> Unit,
     onToggleStar: () -> Unit,
-    onSelectAll: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val s = LocalStrings.current
@@ -1077,10 +1037,6 @@ private fun PickRow(
             .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 when {
-                    (event.isCtrlPressed || event.isMetaPressed) && event.key == Key.A -> {
-                        onSelectAll()
-                        true
-                    }
                     unknown && event.key == Key.Menu -> {
                         onCountAgain()
                         true
@@ -1225,15 +1181,6 @@ private fun RowAvatar(row: ChatPicking.Row, size: Dp) {
     ChatAvatar(brief, size)
 }
 
-/** Ctrl+A (Cmd+A on a Mac) on a control of the list ticks every row shown; a text field keeps its own. */
-private fun Modifier.selectAllKeys(onSelectAll: () -> Unit): Modifier = onPreviewKeyEvent { event ->
-    if (event.type == KeyEventType.KeyDown && (event.isCtrlPressed || event.isMetaPressed) && event.key == Key.A) {
-        onSelectAll()
-        true
-    } else {
-        false
-    }
-}
 
 private fun scopeLabel(scope: ChatPicking.Scope, s: com.tmplayer.i18n.Messages): String = when (scope) {
     ChatPicking.Scope.All -> s.browseFilterAll

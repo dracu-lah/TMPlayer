@@ -169,6 +169,9 @@ class SyntheticAccount(
     /** The whole main list as the app would end up holding it, in Telegram's order. */
     fun mainList(): List<ChatSummary> = (1L..mainChats).map(::summary)
 
+    /** The archive as the app would end up holding it. */
+    fun archivedList(): List<ChatSummary> = (1..archivedChats).map { summary(archivedId(it)) }
+
     /** Videos in [chatId]: a few huge chats, the rest a hundred or so, none past [videoChats]. */
     fun videoCount(chatId: Long): Int = when {
         chatId > videoChats || chatId >= 100_000L -> 0

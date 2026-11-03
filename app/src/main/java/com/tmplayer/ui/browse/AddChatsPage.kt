@@ -1,6 +1,7 @@
 package com.tmplayer.ui.browse
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -26,6 +27,29 @@ internal fun AddChatsPage(
     required: Boolean = false,
     onLeave: () -> Unit = onClose,
 ) {
+    if (DebugFakeChats.active) {
+        // Debug only (HX76): 3,000 fake chats and their counts, to measure the TV picker on a long list.
+        val fake: AddChatsViewModel = viewModel(
+            key = "add-chats-fake-$run",
+            factory = object : ViewModelProvider.Factory {
+                @Suppress("UNCHECKED_CAST")
+                override fun <T : ViewModel> create(modelClass: Class<T>): T =
+                    AddChatsViewModel(settings, DebugFakeChats.counts()).also { it.open() } as T
+            },
+        )
+        val fakeChats = remember { DebugFakeChats.chats() }
+        AddChatsScreen(
+            chats = fakeChats,
+            listComplete = true,
+            starred = emptySet(),
+            model = fake,
+            onClose = onClose,
+            sendLogs = { SendLogsButton() },
+            required = required,
+            onLeave = onLeave,
+        )
+        return
+    }
     val model: AddChatsViewModel = viewModel(
         key = "add-chats-$run",
         factory = object : ViewModelProvider.Factory {

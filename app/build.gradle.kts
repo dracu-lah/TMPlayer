@@ -282,6 +282,9 @@ android {
     // The promo fixture's demo library, plain Kotlin that the desktop's promo render test compiles
     // too, so every platform's screenshots show the same chats and titles.
     sourceSets.getByName("promo").kotlin.directories += "src/promo/shared"
+    // The large-account model the UI's scale tests use, for the debug-only fake chat source on the
+    // picker (`--ez fakechats true`). Debug alone: a release carries none of it.
+    sourceSets.getByName("debug").kotlin.directories += "../ui/src/synthetic/kotlin"
     // The promo build's own name, so it is told apart from the real one on a launcher; with
     // `-PpromoShots` the real name, since the home screen channel shots carry it over the row.
     // The preview build's name and marked TV banner, so it is told apart from the real one.
