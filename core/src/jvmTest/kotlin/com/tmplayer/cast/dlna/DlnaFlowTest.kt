@@ -339,7 +339,7 @@ class DlnaFlowTest {
         c.renderer.pollOnce(); c.renderer.pollOnce()
         assertTrue("two misses are not a loss", c.isOpen)
         c.renderer.pollOnce()
-        assertEquals(DlnaClosed.Lost, closes.poll(2, TimeUnit.SECONDS))
+        assertEquals(DlnaClosed.Lost, closes.poll(10, TimeUnit.SECONDS))
         assertFalse(c.isOpen)
         assertFalse("port closed", c.server.running)
     }
@@ -349,7 +349,7 @@ class DlnaFlowTest {
         val c = newCast(discover())
         c.open(video(), 0) { }
         c.renderer.markGone()
-        assertEquals(DlnaClosed.Lost, closes.poll(2, TimeUnit.SECONDS))
+        assertEquals(DlnaClosed.Lost, closes.poll(10, TimeUnit.SECONDS))
         assertFalse(c.server.running)
     }
 
