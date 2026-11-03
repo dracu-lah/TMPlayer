@@ -284,6 +284,10 @@ class ChatPickerScaleTest {
             report("background count: $counted chats after ${pastHead / 1000.0} s, most in flight ${account.maxCountsInFlight}, flood waits ${account.floodHits}")
             assertTrue("counted past the head start: $counted", counted >= ChatPicking.COUNT_AHEAD + 400)
             assertTrue("${account.maxCountsInFlight} counts in flight", account.maxCountsInFlight <= ChatVideoCount.AT_ONCE)
+            // Answers land in batches (HX76): one state update per half second at most past the head
+            // start (each update re-folds every row), never one per chat.
+            val updatesCap = ChatPicking.COUNT_AHEAD + pastHead / 500 + 5
+            assertTrue("${model.stateUpdates} state updates for $counted chats (cap $updatesCap)", model.stateUpdates <= updatesCap)
             // Held while the remote jumps: nothing new is asked until it lets go.
             model.hold(true)
             advanceTimeBy(1_000)
@@ -300,6 +304,24 @@ class ChatPickerScaleTest {
             val settled = account.countRequests
             advanceTimeBy(60_000)
             assertEquals("the counter asked after stop", settled, account.countRequests)
+        }
+    }
+
+    /** On the television the background count asks for one chat at a time (HX76). */
+    @Test
+    fun `the television counts one chat at a time in the background`() = runTest(dispatcher, timeout = 5.minutes) {
+        val account = SyntheticAccount(backgroundScope, { testScheduler.currentTime })
+        picker(account) { model ->
+            val chats = account.mainList()
+            model.start(chats)
+            until(10 * 60_000) { model.headStartDone() }
+            val before = account.maxCountsInFlight
+            model.countRest(chats, AddChatsViewModel.BACKGROUND_ON_TV)
+            val target = ChatPicking.COUNT_AHEAD + 100
+            until(10 * 60_000) { model.state.value.counted.size >= target }
+            assertTrue("counted ${model.state.value.counted.size}", model.state.value.counted.size >= target)
+            assertTrue("most in flight ${account.maxCountsInFlight} before $before", account.maxCountsInFlight <= maxOf(before, 1))
+            model.stop()
         }
     }
 

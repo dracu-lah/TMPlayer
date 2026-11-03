@@ -88,6 +88,12 @@ class AddChatsViewModel(
     @Volatile private var held = false
     private val counting = HashMap<Long, Job>()
 
+    /** Background answers waiting for the next batch: one state update per [BATCH_MS], not one per chat. */
+    private val pending = HashMap<Long, ChatCount>()
+    /** State updates the count has made, for the scale test's cap on how often the screen is recomposed. */
+    var stateUpdates = 0
+        private set
+
     /**
      * Reads the stored choice and ticks what it holds. A viewer who has never answered opens on
      * the recommendation alone, which is what the Recommended band ticks as it arrives; one who
@@ -146,8 +152,11 @@ class AddChatsViewModel(
      * television's short list can fold the chats with no videos. At most [BACKGROUND_AT_ONCE] at a
      * time, in list order, each one the counter's own budget (FLOOD_WAIT waited out by the call that
      * got it, the others go on). It stops with [stop], and a chat counted by its row is skipped.
+     * The answers are applied in batches every [BATCH_MS] and not while the remote is jumping, since
+     * each update re-folds every row (4,500 chats took 1.1 to 1.4 cores of the Mi TV).
+     * @param atOnce how many chats are asked at a time; the television passes [BACKGROUND_ON_TV].
      */
-    fun countRest(chats: List<ChatSummary>) {
+    fun countRest(chats: List<ChatSummary>, atOnce: Int = BACKGROUND_AT_ONCE) {
         if (counts == null || !countsRest || background != null || chats.isEmpty()) return
         background = viewModelScope.launch {
             headStart?.join()
@@ -155,18 +164,36 @@ class AddChatsViewModel(
             for (chat in chats) queue.trySend(chat.id)
             queue.close()
             coroutineScope {
-                repeat(BACKGROUND_AT_ONCE) {
+                val flusher = launch {
+                    while (true) {
+                        delay(BATCH_MS)
+                        if (!held) flush()
+                    }
+                }
+                val workers = List(atOnce.coerceAtLeast(1)) {
                     launch {
                         for (id in queue) {
                             while (held) delay(HOLD_POLL_MS)
-                            if (_state.value.counted.containsKey(id)) continue
-                            count(id)
+                            if (_state.value.counted.containsKey(id) || pending.containsKey(id)) continue
+                            count(id, batched = true)
                             counting[id]?.join()
                         }
                     }
                 }
+                workers.joinAll()
+                flusher.cancel()
             }
+            flush()
         }
+    }
+
+    /** Applies the waiting background answers in one state update. */
+    private fun flush() {
+        if (pending.isEmpty()) return
+        val batch = HashMap(pending)
+        pending.clear()
+        stateUpdates++
+        _state.update { it.copy(counted = it.counted + batch) }
     }
 
     /** Pauses and resumes the background count: the screen holds it while the remote is jumping. */
@@ -176,9 +203,9 @@ class AddChatsViewModel(
      * Counts one chat, for a row that came on screen. Asked twice for the same chat, it counts
      * once; scrolled away and back, it reads the answer it already has.
      */
-    fun count(chatId: Long) {
+    fun count(chatId: Long, batched: Boolean = false) {
         val calls = counts ?: return
-        if (_state.value.counted.containsKey(chatId) || counting.containsKey(chatId)) return
+        if (_state.value.counted.containsKey(chatId) || counting.containsKey(chatId) || pending.containsKey(chatId)) return
         counting[chatId] = viewModelScope.launch {
             val answer = try {
                 ChatVideoCount.of(calls, chatId)
@@ -189,7 +216,12 @@ class AddChatsViewModel(
                 // not count, and the viewer can ask again.
                 ChatCount.Unknown
             }
-            _state.update { it.copy(counted = it.counted + (chatId to answer)) }
+            if (batched) {
+                pending[chatId] = answer
+            } else {
+                stateUpdates++
+                _state.update { it.copy(counted = it.counted + (chatId to answer)) }
+            }
         }.also { job -> job.invokeOnCompletion { counting.remove(chatId) } }
     }
 
@@ -283,6 +315,7 @@ class AddChatsViewModel(
         headStart = null
         background?.cancel()
         background = null
+        flush()
         // A head start cut short never takes the band, so nothing is left waiting on it.
         _state.update { it.copy(recommending = false) }
         counting.values.toList().forEach { it.cancel() }
@@ -299,6 +332,10 @@ class AddChatsViewModel(
 
         /** Chats counted at once by the background pass, the same three as the counter's own gate. */
         const val BACKGROUND_AT_ONCE = 3
+
+        /** One at a time on the television: its four weak cores cannot spare more (HX76). */
+        const val BACKGROUND_ON_TV = 1
+        private const val BATCH_MS = 500L
         private const val HOLD_POLL_MS = 150L
 
         /**

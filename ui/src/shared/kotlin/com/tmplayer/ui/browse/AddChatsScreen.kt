@@ -422,7 +422,7 @@ fun AddChatsScreen(
     }
     // The background count waits while the remote jumps, so the list is not rebuilt mid jump.
     LaunchedEffect(racing) { model.hold(racing) }
-    LaunchedEffect(chats.isNotEmpty(), listComplete) { if (tv && listComplete && chats.isNotEmpty()) model.countRest(chats) }
+    LaunchedEffect(chats.isNotEmpty(), listComplete) { if (tv && listComplete && chats.isNotEmpty()) model.countRest(chats, AddChatsViewModel.BACKGROUND_ON_TV) }
     // The list's own end triggers the chat list's next chats, one request at a time.
     LoadMoreAhead(listState, enabled = !listComplete && !partial && !loadingMore, onLoadMore = onLoadMore)
     // Back from a question puts the remote on the button that asked it.
