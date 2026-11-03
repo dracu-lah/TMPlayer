@@ -1,0 +1,502 @@
+NOTIFY * HTTP/1.1
+HOST: 239.255.255.250:1900
+CACHE-CONTROL: max-age=100
+LOCATION: http://192.0.2.27:49494/description.xml
+OPT: "http://schemas.upnp.org/upnp/1/0/"; ns=01
+01-NLS: 00000000-0000-0000-0000-000000000002
+NT: upnp:rootdevice
+NTS: ssdp:byebye
+SERVER: Linux/0, UPnP/1.0, Portable SDK for UPnP devices/17.1.9
+X-User-Agent: redsonic
+USN: uuid:00000000-0000-0000-0000-000000000001::upnp:rootdevice
+
+
+----
+NOTIFY * HTTP/1.1
+HOST: 239.255.255.250:1900
+CACHE-CONTROL: max-age=100
+LOCATION: http://192.0.2.27:49494/description.xml
+OPT: "http://schemas.upnp.org/upnp/1/0/"; ns=01
+01-NLS: 00000000-0000-0000-0000-000000000002
+NT: uuid:00000000-0000-0000-0000-000000000001
+NTS: ssdp:byebye
+SERVER: Linux/0, UPnP/1.0, Portable SDK for UPnP devices/17.1.9
+X-User-Agent: redsonic
+USN: uuid:00000000-0000-0000-0000-000000000001
+
+
+----
+NOTIFY * HTTP/1.1
+HOST: 239.255.255.250:1900
+CACHE-CONTROL: max-age=100
+LOCATION: http://192.0.2.27:49494/description.xml
+OPT: "http://schemas.upnp.org/upnp/1/0/"; ns=01
+01-NLS: 00000000-0000-0000-0000-000000000002
+NT: urn:schemas-upnp-org:device:MediaRenderer:1
+NTS: ssdp:byebye
+SERVER: Linux/0, UPnP/1.0, Portable SDK for UPnP devices/17.1.9
+X-User-Agent: redsonic
+USN: uuid:00000000-0000-0000-0000-000000000001::urn:schemas-upnp-org:device:MediaRenderer:1
+
+
+----
+NOTIFY * HTTP/1.1
+HOST: 239.255.255.250:1900
+CACHE-CONTROL: max-age=100
+LOCATION: http://192.0.2.27:49494/description.xml
+OPT: "http://schemas.upnp.org/upnp/1/0/"; ns=01
+01-NLS: 00000000-0000-0000-0000-000000000002
+NT: urn:schemas-upnp-org:service:AVTransport:1
+NTS: ssdp:byebye
+SERVER: Linux/0, UPnP/1.0, Portable SDK for UPnP devices/17.1.9
+X-User-Agent: redsonic
+USN: uuid:00000000-0000-0000-0000-000000000001::urn:schemas-upnp-org:service:AVTransport:1
+
+
+----
+NOTIFY * HTTP/1.1
+HOST: 239.255.255.250:1900
+CACHE-CONTROL: max-age=100
+LOCATION: http://192.0.2.27:49494/description.xml
+OPT: "http://schemas.upnp.org/upnp/1/0/"; ns=01
+01-NLS: 00000000-0000-0000-0000-000000000002
+NT: urn:schemas-upnp-org:service:ConnectionManager:1
+NTS: ssdp:byebye
+SERVER: Linux/0, UPnP/1.0, Portable SDK for UPnP devices/17.1.9
+X-User-Agent: redsonic
+USN: uuid:00000000-0000-0000-0000-000000000001::urn:schemas-upnp-org:service:ConnectionManager:1
+
+
+----
+NOTIFY * HTTP/1.1
+HOST: 239.255.255.250:1900
+CACHE-CONTROL: max-age=100
+LOCATION: http://192.0.2.27:49494/description.xml
+OPT: "http://schemas.upnp.org/upnp/1/0/"; ns=01
+01-NLS: 00000000-0000-0000-0000-000000000002
+NT: urn:schemas-upnp-org:service:RenderingControl:1
+NTS: ssdp:byebye
+SERVER: Linux/0, UPnP/1.0, Portable SDK for UPnP devices/17.1.9
+X-User-Agent: redsonic
+USN: uuid:00000000-0000-0000-0000-000000000001::urn:schemas-upnp-org:service:RenderingControl:1
+
+
+----
+NOTIFY * HTTP/1.1
+HOST: 239.255.255.250:1900
+CACHE-CONTROL: max-age=100
+LOCATION: http://192.0.2.27:49494/description.xml
+OPT: "http://schemas.upnp.org/upnp/1/0/"; ns=01
+01-NLS: 00000000-0000-0000-0000-000000000002
+NT: upnp:rootdevice
+NTS: ssdp:byebye
+SERVER: Linux/0, UPnP/1.0, Portable SDK for UPnP devices/17.1.9
+X-User-Agent: redsonic
+USN: uuid:00000000-0000-0000-0000-000000000001::upnp:rootdevice
+
+
+----
+NOTIFY * HTTP/1.1
+HOST: 239.255.255.250:1900
+CACHE-CONTROL: max-age=100
+LOCATION: http://192.0.2.27:49494/description.xml
+OPT: "http://schemas.upnp.org/upnp/1/0/"; ns=01
+01-NLS: 00000000-0000-0000-0000-000000000002
+NT: uuid:00000000-0000-0000-0000-000000000001
+NTS: ssdp:byebye
+SERVER: Linux/0, UPnP/1.0, Portable SDK for UPnP devices/17.1.9
+X-User-Agent: redsonic
+USN: uuid:00000000-0000-0000-0000-000000000001
+
+
+----
+NOTIFY * HTTP/1.1
+HOST: 239.255.255.250:1900
+CACHE-CONTROL: max-age=100
+LOCATION: http://192.0.2.27:49494/description.xml
+OPT: "http://schemas.upnp.org/upnp/1/0/"; ns=01
+01-NLS: 00000000-0000-0000-0000-000000000002
+NT: urn:schemas-upnp-org:device:MediaRenderer:1
+NTS: ssdp:byebye
+SERVER: Linux/0, UPnP/1.0, Portable SDK for UPnP devices/17.1.9
+X-User-Agent: redsonic
+USN: uuid:00000000-0000-0000-0000-000000000001::urn:schemas-upnp-org:device:MediaRenderer:1
+
+
+----
+NOTIFY * HTTP/1.1
+HOST: 239.255.255.250:1900
+CACHE-CONTROL: max-age=100
+LOCATION: http://192.0.2.27:49494/description.xml
+OPT: "http://schemas.upnp.org/upnp/1/0/"; ns=01
+01-NLS: 00000000-0000-0000-0000-000000000002
+NT: urn:schemas-upnp-org:service:AVTransport:1
+NTS: ssdp:byebye
+SERVER: Linux/0, UPnP/1.0, Portable SDK for UPnP devices/17.1.9
+X-User-Agent: redsonic
+USN: uuid:00000000-0000-0000-0000-000000000001::urn:schemas-upnp-org:service:AVTransport:1
+
+
+----
+NOTIFY * HTTP/1.1
+HOST: 239.255.255.250:1900
+CACHE-CONTROL: max-age=100
+LOCATION: http://192.0.2.27:49494/description.xml
+OPT: "http://schemas.upnp.org/upnp/1/0/"; ns=01
+01-NLS: 00000000-0000-0000-0000-000000000002
+NT: urn:schemas-upnp-org:service:ConnectionManager:1
+NTS: ssdp:byebye
+SERVER: Linux/0, UPnP/1.0, Portable SDK for UPnP devices/17.1.9
+X-User-Agent: redsonic
+USN: uuid:00000000-0000-0000-0000-000000000001::urn:schemas-upnp-org:service:ConnectionManager:1
+
+
+----
+NOTIFY * HTTP/1.1
+HOST: 239.255.255.250:1900
+CACHE-CONTROL: max-age=100
+LOCATION: http://192.0.2.27:49494/description.xml
+OPT: "http://schemas.upnp.org/upnp/1/0/"; ns=01
+01-NLS: 00000000-0000-0000-0000-000000000002
+NT: urn:schemas-upnp-org:service:RenderingControl:1
+NTS: ssdp:byebye
+SERVER: Linux/0, UPnP/1.0, Portable SDK for UPnP devices/17.1.9
+X-User-Agent: redsonic
+USN: uuid:00000000-0000-0000-0000-000000000001::urn:schemas-upnp-org:service:RenderingControl:1
+
+
+----
+NOTIFY * HTTP/1.1
+HOST: 239.255.255.250:1900
+CACHE-CONTROL: max-age=100
+LOCATION: http://192.0.2.27:49494/description.xml
+OPT: "http://schemas.upnp.org/upnp/1/0/"; ns=01
+01-NLS: 00000000-0000-0000-0000-000000000002
+NT: upnp:rootdevice
+NTS: ssdp:alive
+SERVER: Linux/0, UPnP/1.0, Portable SDK for UPnP devices/17.1.9
+X-User-Agent: redsonic
+USN: uuid:00000000-0000-0000-0000-000000000001::upnp:rootdevice
+
+
+----
+NOTIFY * HTTP/1.1
+HOST: 239.255.255.250:1900
+CACHE-CONTROL: max-age=100
+LOCATION: http://192.0.2.27:49494/description.xml
+OPT: "http://schemas.upnp.org/upnp/1/0/"; ns=01
+01-NLS: 00000000-0000-0000-0000-000000000002
+NT: uuid:00000000-0000-0000-0000-000000000001
+NTS: ssdp:alive
+SERVER: Linux/0, UPnP/1.0, Portable SDK for UPnP devices/17.1.9
+X-User-Agent: redsonic
+USN: uuid:00000000-0000-0000-0000-000000000001
+
+
+----
+NOTIFY * HTTP/1.1
+HOST: 239.255.255.250:1900
+CACHE-CONTROL: max-age=100
+LOCATION: http://192.0.2.27:49494/description.xml
+OPT: "http://schemas.upnp.org/upnp/1/0/"; ns=01
+01-NLS: 00000000-0000-0000-0000-000000000002
+NT: urn:schemas-upnp-org:device:MediaRenderer:1
+NTS: ssdp:alive
+SERVER: Linux/0, UPnP/1.0, Portable SDK for UPnP devices/17.1.9
+X-User-Agent: redsonic
+USN: uuid:00000000-0000-0000-0000-000000000001::urn:schemas-upnp-org:device:MediaRenderer:1
+
+
+----
+NOTIFY * HTTP/1.1
+HOST: 239.255.255.250:1900
+CACHE-CONTROL: max-age=100
+LOCATION: http://192.0.2.27:49494/description.xml
+OPT: "http://schemas.upnp.org/upnp/1/0/"; ns=01
+01-NLS: 00000000-0000-0000-0000-000000000002
+NT: urn:schemas-upnp-org:service:AVTransport:1
+NTS: ssdp:alive
+SERVER: Linux/0, UPnP/1.0, Portable SDK for UPnP devices/17.1.9
+X-User-Agent: redsonic
+USN: uuid:00000000-0000-0000-0000-000000000001::urn:schemas-upnp-org:service:AVTransport:1
+
+
+----
+NOTIFY * HTTP/1.1
+HOST: 239.255.255.250:1900
+CACHE-CONTROL: max-age=100
+LOCATION: http://192.0.2.27:49494/description.xml
+OPT: "http://schemas.upnp.org/upnp/1/0/"; ns=01
+01-NLS: 00000000-0000-0000-0000-000000000002
+NT: urn:schemas-upnp-org:service:ConnectionManager:1
+NTS: ssdp:alive
+SERVER: Linux/0, UPnP/1.0, Portable SDK for UPnP devices/17.1.9
+X-User-Agent: redsonic
+USN: uuid:00000000-0000-0000-0000-000000000001::urn:schemas-upnp-org:service:ConnectionManager:1
+
+
+----
+NOTIFY * HTTP/1.1
+HOST: 239.255.255.250:1900
+CACHE-CONTROL: max-age=100
+LOCATION: http://192.0.2.27:49494/description.xml
+OPT: "http://schemas.upnp.org/upnp/1/0/"; ns=01
+01-NLS: 00000000-0000-0000-0000-000000000002
+NT: urn:schemas-upnp-org:service:RenderingControl:1
+NTS: ssdp:alive
+SERVER: Linux/0, UPnP/1.0, Portable SDK for UPnP devices/17.1.9
+X-User-Agent: redsonic
+USN: uuid:00000000-0000-0000-0000-000000000001::urn:schemas-upnp-org:service:RenderingControl:1
+
+
+----
+NOTIFY * HTTP/1.1
+HOST: 239.255.255.250:1900
+CACHE-CONTROL: max-age=100
+LOCATION: http://192.0.2.27:49494/description.xml
+OPT: "http://schemas.upnp.org/upnp/1/0/"; ns=01
+01-NLS: 00000000-0000-0000-0000-000000000002
+NT: upnp:rootdevice
+NTS: ssdp:alive
+SERVER: Linux/0, UPnP/1.0, Portable SDK for UPnP devices/17.1.9
+X-User-Agent: redsonic
+USN: uuid:00000000-0000-0000-0000-000000000001::upnp:rootdevice
+
+
+----
+NOTIFY * HTTP/1.1
+HOST: 239.255.255.250:1900
+CACHE-CONTROL: max-age=100
+LOCATION: http://192.0.2.27:49494/description.xml
+OPT: "http://schemas.upnp.org/upnp/1/0/"; ns=01
+01-NLS: 00000000-0000-0000-0000-000000000002
+NT: uuid:00000000-0000-0000-0000-000000000001
+NTS: ssdp:alive
+SERVER: Linux/0, UPnP/1.0, Portable SDK for UPnP devices/17.1.9
+X-User-Agent: redsonic
+USN: uuid:00000000-0000-0000-0000-000000000001
+
+
+----
+NOTIFY * HTTP/1.1
+HOST: 239.255.255.250:1900
+CACHE-CONTROL: max-age=100
+LOCATION: http://192.0.2.27:49494/description.xml
+OPT: "http://schemas.upnp.org/upnp/1/0/"; ns=01
+01-NLS: 00000000-0000-0000-0000-000000000002
+NT: urn:schemas-upnp-org:device:MediaRenderer:1
+NTS: ssdp:alive
+SERVER: Linux/0, UPnP/1.0, Portable SDK for UPnP devices/17.1.9
+X-User-Agent: redsonic
+USN: uuid:00000000-0000-0000-0000-000000000001::urn:schemas-upnp-org:device:MediaRenderer:1
+
+
+----
+NOTIFY * HTTP/1.1
+HOST: 239.255.255.250:1900
+CACHE-CONTROL: max-age=100
+LOCATION: http://192.0.2.27:49494/description.xml
+OPT: "http://schemas.upnp.org/upnp/1/0/"; ns=01
+01-NLS: 00000000-0000-0000-0000-000000000002
+NT: urn:schemas-upnp-org:service:AVTransport:1
+NTS: ssdp:alive
+SERVER: Linux/0, UPnP/1.0, Portable SDK for UPnP devices/17.1.9
+X-User-Agent: redsonic
+USN: uuid:00000000-0000-0000-0000-000000000001::urn:schemas-upnp-org:service:AVTransport:1
+
+
+----
+NOTIFY * HTTP/1.1
+HOST: 239.255.255.250:1900
+CACHE-CONTROL: max-age=100
+LOCATION: http://192.0.2.27:49494/description.xml
+OPT: "http://schemas.upnp.org/upnp/1/0/"; ns=01
+01-NLS: 00000000-0000-0000-0000-000000000002
+NT: urn:schemas-upnp-org:service:ConnectionManager:1
+NTS: ssdp:alive
+SERVER: Linux/0, UPnP/1.0, Portable SDK for UPnP devices/17.1.9
+X-User-Agent: redsonic
+USN: uuid:00000000-0000-0000-0000-000000000001::urn:schemas-upnp-org:service:ConnectionManager:1
+
+
+----
+NOTIFY * HTTP/1.1
+HOST: 239.255.255.250:1900
+CACHE-CONTROL: max-age=100
+LOCATION: http://192.0.2.27:49494/description.xml
+OPT: "http://schemas.upnp.org/upnp/1/0/"; ns=01
+01-NLS: 00000000-0000-0000-0000-000000000002
+NT: urn:schemas-upnp-org:service:RenderingControl:1
+NTS: ssdp:alive
+SERVER: Linux/0, UPnP/1.0, Portable SDK for UPnP devices/17.1.9
+X-User-Agent: redsonic
+USN: uuid:00000000-0000-0000-0000-000000000001::urn:schemas-upnp-org:service:RenderingControl:1
+
+
+----
+NOTIFY * HTTP/1.1
+HOST: 239.255.255.250:1900
+CACHE-CONTROL: max-age=100
+LOCATION: http://192.0.2.27:49494/description.xml
+OPT: "http://schemas.upnp.org/upnp/1/0/"; ns=01
+01-NLS: 00000000-0000-0000-0000-000000000002
+NT: upnp:rootdevice
+NTS: ssdp:alive
+SERVER: Linux/0, UPnP/1.0, Portable SDK for UPnP devices/17.1.9
+X-User-Agent: redsonic
+USN: uuid:00000000-0000-0000-0000-000000000001::upnp:rootdevice
+
+
+----
+NOTIFY * HTTP/1.1
+HOST: 239.255.255.250:1900
+CACHE-CONTROL: max-age=100
+LOCATION: http://192.0.2.27:49494/description.xml
+OPT: "http://schemas.upnp.org/upnp/1/0/"; ns=01
+01-NLS: 00000000-0000-0000-0000-000000000002
+NT: uuid:00000000-0000-0000-0000-000000000001
+NTS: ssdp:alive
+SERVER: Linux/0, UPnP/1.0, Portable SDK for UPnP devices/17.1.9
+X-User-Agent: redsonic
+USN: uuid:00000000-0000-0000-0000-000000000001
+
+
+----
+NOTIFY * HTTP/1.1
+HOST: 239.255.255.250:1900
+CACHE-CONTROL: max-age=100
+LOCATION: http://192.0.2.27:49494/description.xml
+OPT: "http://schemas.upnp.org/upnp/1/0/"; ns=01
+01-NLS: 00000000-0000-0000-0000-000000000002
+NT: urn:schemas-upnp-org:device:MediaRenderer:1
+NTS: ssdp:alive
+SERVER: Linux/0, UPnP/1.0, Portable SDK for UPnP devices/17.1.9
+X-User-Agent: redsonic
+USN: uuid:00000000-0000-0000-0000-000000000001::urn:schemas-upnp-org:device:MediaRenderer:1
+
+
+----
+NOTIFY * HTTP/1.1
+HOST: 239.255.255.250:1900
+CACHE-CONTROL: max-age=100
+LOCATION: http://192.0.2.27:49494/description.xml
+OPT: "http://schemas.upnp.org/upnp/1/0/"; ns=01
+01-NLS: 00000000-0000-0000-0000-000000000002
+NT: urn:schemas-upnp-org:service:AVTransport:1
+NTS: ssdp:alive
+SERVER: Linux/0, UPnP/1.0, Portable SDK for UPnP devices/17.1.9
+X-User-Agent: redsonic
+USN: uuid:00000000-0000-0000-0000-000000000001::urn:schemas-upnp-org:service:AVTransport:1
+
+
+----
+NOTIFY * HTTP/1.1
+HOST: 239.255.255.250:1900
+CACHE-CONTROL: max-age=100
+LOCATION: http://192.0.2.27:49494/description.xml
+OPT: "http://schemas.upnp.org/upnp/1/0/"; ns=01
+01-NLS: 00000000-0000-0000-0000-000000000002
+NT: urn:schemas-upnp-org:service:ConnectionManager:1
+NTS: ssdp:alive
+SERVER: Linux/0, UPnP/1.0, Portable SDK for UPnP devices/17.1.9
+X-User-Agent: redsonic
+USN: uuid:00000000-0000-0000-0000-000000000001::urn:schemas-upnp-org:service:ConnectionManager:1
+
+
+----
+NOTIFY * HTTP/1.1
+HOST: 239.255.255.250:1900
+CACHE-CONTROL: max-age=100
+LOCATION: http://192.0.2.27:49494/description.xml
+OPT: "http://schemas.upnp.org/upnp/1/0/"; ns=01
+01-NLS: 00000000-0000-0000-0000-000000000002
+NT: urn:schemas-upnp-org:service:RenderingControl:1
+NTS: ssdp:alive
+SERVER: Linux/0, UPnP/1.0, Portable SDK for UPnP devices/17.1.9
+X-User-Agent: redsonic
+USN: uuid:00000000-0000-0000-0000-000000000001::urn:schemas-upnp-org:service:RenderingControl:1
+
+
+----
+NOTIFY * HTTP/1.1
+HOST: 239.255.255.250:1900
+CACHE-CONTROL: max-age=100
+LOCATION: http://192.0.2.27:49494/description.xml
+OPT: "http://schemas.upnp.org/upnp/1/0/"; ns=01
+01-NLS: 00000000-0000-0000-0000-000000000002
+NT: upnp:rootdevice
+NTS: ssdp:alive
+SERVER: Linux/0, UPnP/1.0, Portable SDK for UPnP devices/17.1.9
+X-User-Agent: redsonic
+USN: uuid:00000000-0000-0000-0000-000000000001::upnp:rootdevice
+
+
+----
+NOTIFY * HTTP/1.1
+HOST: 239.255.255.250:1900
+CACHE-CONTROL: max-age=100
+LOCATION: http://192.0.2.27:49494/description.xml
+OPT: "http://schemas.upnp.org/upnp/1/0/"; ns=01
+01-NLS: 00000000-0000-0000-0000-000000000002
+NT: uuid:00000000-0000-0000-0000-000000000001
+NTS: ssdp:alive
+SERVER: Linux/0, UPnP/1.0, Portable SDK for UPnP devices/17.1.9
+X-User-Agent: redsonic
+USN: uuid:00000000-0000-0000-0000-000000000001
+
+
+----
+NOTIFY * HTTP/1.1
+HOST: 239.255.255.250:1900
+CACHE-CONTROL: max-age=100
+LOCATION: http://192.0.2.27:49494/description.xml
+OPT: "http://schemas.upnp.org/upnp/1/0/"; ns=01
+01-NLS: 00000000-0000-0000-0000-000000000002
+NT: urn:schemas-upnp-org:device:MediaRenderer:1
+NTS: ssdp:alive
+SERVER: Linux/0, UPnP/1.0, Portable SDK for UPnP devices/17.1.9
+X-User-Agent: redsonic
+USN: uuid:00000000-0000-0000-0000-000000000001::urn:schemas-upnp-org:device:MediaRenderer:1
+
+
+----
+NOTIFY * HTTP/1.1
+HOST: 239.255.255.250:1900
+CACHE-CONTROL: max-age=100
+LOCATION: http://192.0.2.27:49494/description.xml
+OPT: "http://schemas.upnp.org/upnp/1/0/"; ns=01
+01-NLS: 00000000-0000-0000-0000-000000000002
+NT: urn:schemas-upnp-org:service:AVTransport:1
+NTS: ssdp:alive
+SERVER: Linux/0, UPnP/1.0, Portable SDK for UPnP devices/17.1.9
+X-User-Agent: redsonic
+USN: uuid:00000000-0000-0000-0000-000000000001::urn:schemas-upnp-org:service:AVTransport:1
+
+
+----
+NOTIFY * HTTP/1.1
+HOST: 239.255.255.250:1900
+CACHE-CONTROL: max-age=100
+LOCATION: http://192.0.2.27:49494/description.xml
+OPT: "http://schemas.upnp.org/upnp/1/0/"; ns=01
+01-NLS: 00000000-0000-0000-0000-000000000002
+NT: urn:schemas-upnp-org:service:ConnectionManager:1
+NTS: ssdp:alive
+SERVER: Linux/0, UPnP/1.0, Portable SDK for UPnP devices/17.1.9
+X-User-Agent: redsonic
+USN: uuid:00000000-0000-0000-0000-000000000001::urn:schemas-upnp-org:service:ConnectionManager:1
+
+
+----
+NOTIFY * HTTP/1.1
+HOST: 239.255.255.250:1900
+CACHE-CONTROL: max-age=100
+LOCATION: http://192.0.2.27:49494/description.xml
+OPT: "http://schemas.upnp.org/upnp/1/0/"; ns=01
+01-NLS: 00000000-0000-0000-0000-000000000002
+NT: urn:schemas-upnp-org:service:RenderingControl:1
+NTS: ssdp:alive
+SERVER: Linux/0, UPnP/1.0, Portable SDK for UPnP devices/17.1.9
+X-User-Agent: redsonic
+USN: uuid:00000000-0000-0000-0000-000000000001::urn:schemas-upnp-org:service:RenderingControl:1
+

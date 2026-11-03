@@ -1,0 +1,8 @@
+HTTP 200 OK
+Date: Tue, 03 Nov 2026 11:01:34 GMT
+Content-Type: text/xml; charset="utf-8"
+Server: Linux/0 UPnP/1.0 GUPnP/1.6.6
+Content-Length: 416
+Ext: 
+
+<?xml version="1.0"?><s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><s:Body><u:GetDeviceCapabilitiesResponse xmlns:u="urn:schemas-upnp-org:service:AVTransport:2"><PlayMedia>NONE,NETWORK</PlayMedia><RecMedia>NOT_IMPLEMENTED</RecMedia><RecQualityModes>NOT_IMPLEMENTED</RecQualityModes></u:GetDeviceCapabilitiesResponse></s:Body></s:Envelope>

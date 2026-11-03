@@ -1,0 +1,244 @@
+NOTIFY * HTTP/1.1
+Host: 239.255.255.250:1900
+NTS: ssdp:byebye
+NT: urn:schemas-upnp-org:service:RenderingControl:2
+USN: uuid:00000000-0000-0000-0000-000000000001::urn:schemas-upnp-org:service:RenderingControl:2
+
+
+----
+NOTIFY * HTTP/1.1
+Host: 239.255.255.250:1900
+NTS: ssdp:byebye
+NT: urn:schemas-upnp-org:service:AVTransport:2
+USN: uuid:00000000-0000-0000-0000-000000000001::urn:schemas-upnp-org:service:AVTransport:2
+
+
+----
+NOTIFY * HTTP/1.1
+Host: 239.255.255.250:1900
+NTS: ssdp:byebye
+NT: urn:schemas-upnp-org:service:ConnectionManager:2
+USN: uuid:00000000-0000-0000-0000-000000000001::urn:schemas-upnp-org:service:ConnectionManager:2
+
+
+----
+NOTIFY * HTTP/1.1
+Host: 239.255.255.250:1900
+NTS: ssdp:byebye
+NT: urn:schemas-upnp-org:device:MediaRenderer:2
+USN: uuid:00000000-0000-0000-0000-000000000001::urn:schemas-upnp-org:device:MediaRenderer:2
+
+
+----
+NOTIFY * HTTP/1.1
+Host: 239.255.255.250:1900
+NTS: ssdp:byebye
+NT: uuid:00000000-0000-0000-0000-000000000001
+USN: uuid:00000000-0000-0000-0000-000000000001
+
+
+----
+NOTIFY * HTTP/1.1
+Host: 239.255.255.250:1900
+NTS: ssdp:byebye
+NT: upnp:rootdevice
+USN: uuid:00000000-0000-0000-0000-000000000001::upnp:rootdevice
+
+
+----
+NOTIFY * HTTP/1.1
+Host: 239.255.255.250:1900
+Cache-Control: max-age=1800
+Location: http://192.0.2.27:59443/00000000-0000-0000-0000-000000000002.xml
+Server: Linux/0 UPnP/1.0 GUPnP/1.6.6
+NTS: ssdp:alive
+NT: urn:schemas-upnp-org:service:RenderingControl:2
+USN: uuid:00000000-0000-0000-0000-000000000001::urn:schemas-upnp-org:service:RenderingControl:2
+
+
+----
+NOTIFY * HTTP/1.1
+Host: 239.255.255.250:1900
+Cache-Control: max-age=1800
+Location: http://192.0.2.27:59443/00000000-0000-0000-0000-000000000002.xml
+Server: Linux/0 UPnP/1.0 GUPnP/1.6.6
+NTS: ssdp:alive
+NT: urn:schemas-upnp-org:service:AVTransport:2
+USN: uuid:00000000-0000-0000-0000-000000000001::urn:schemas-upnp-org:service:AVTransport:2
+
+
+----
+NOTIFY * HTTP/1.1
+Host: 239.255.255.250:1900
+Cache-Control: max-age=1800
+Location: http://192.0.2.27:59443/00000000-0000-0000-0000-000000000002.xml
+Server: Linux/0 UPnP/1.0 GUPnP/1.6.6
+NTS: ssdp:alive
+NT: urn:schemas-upnp-org:service:ConnectionManager:2
+USN: uuid:00000000-0000-0000-0000-000000000001::urn:schemas-upnp-org:service:ConnectionManager:2
+
+
+----
+NOTIFY * HTTP/1.1
+Host: 239.255.255.250:1900
+Cache-Control: max-age=1800
+Location: http://192.0.2.27:59443/00000000-0000-0000-0000-000000000002.xml
+Server: Linux/0 UPnP/1.0 GUPnP/1.6.6
+NTS: ssdp:alive
+NT: urn:schemas-upnp-org:device:MediaRenderer:2
+USN: uuid:00000000-0000-0000-0000-000000000001::urn:schemas-upnp-org:device:MediaRenderer:2
+
+
+----
+NOTIFY * HTTP/1.1
+Host: 239.255.255.250:1900
+Cache-Control: max-age=1800
+Location: http://192.0.2.27:59443/00000000-0000-0000-0000-000000000002.xml
+Server: Linux/0 UPnP/1.0 GUPnP/1.6.6
+NTS: ssdp:alive
+NT: uuid:00000000-0000-0000-0000-000000000001
+USN: uuid:00000000-0000-0000-0000-000000000001
+
+
+----
+NOTIFY * HTTP/1.1
+Host: 239.255.255.250:1900
+Cache-Control: max-age=1800
+Location: http://192.0.2.27:59443/00000000-0000-0000-0000-000000000002.xml
+Server: Linux/0 UPnP/1.0 GUPnP/1.6.6
+NTS: ssdp:alive
+NT: upnp:rootdevice
+USN: uuid:00000000-0000-0000-0000-000000000001::upnp:rootdevice
+
+
+----
+NOTIFY * HTTP/1.1
+Host: 239.255.255.250:1900
+Cache-Control: max-age=1800
+Location: http://192.0.2.27:59443/00000000-0000-0000-0000-000000000002.xml
+Server: Linux/0 UPnP/1.0 GUPnP/1.6.6
+NTS: ssdp:alive
+NT: urn:schemas-upnp-org:service:RenderingControl:2
+USN: uuid:00000000-0000-0000-0000-000000000001::urn:schemas-upnp-org:service:RenderingControl:2
+
+
+----
+NOTIFY * HTTP/1.1
+Host: 239.255.255.250:1900
+Cache-Control: max-age=1800
+Location: http://192.0.2.27:59443/00000000-0000-0000-0000-000000000002.xml
+Server: Linux/0 UPnP/1.0 GUPnP/1.6.6
+NTS: ssdp:alive
+NT: urn:schemas-upnp-org:service:AVTransport:2
+USN: uuid:00000000-0000-0000-0000-000000000001::urn:schemas-upnp-org:service:AVTransport:2
+
+
+----
+NOTIFY * HTTP/1.1
+Host: 239.255.255.250:1900
+Cache-Control: max-age=1800
+Location: http://192.0.2.27:59443/00000000-0000-0000-0000-000000000002.xml
+Server: Linux/0 UPnP/1.0 GUPnP/1.6.6
+NTS: ssdp:alive
+NT: urn:schemas-upnp-org:service:ConnectionManager:2
+USN: uuid:00000000-0000-0000-0000-000000000001::urn:schemas-upnp-org:service:ConnectionManager:2
+
+
+----
+NOTIFY * HTTP/1.1
+Host: 239.255.255.250:1900
+Cache-Control: max-age=1800
+Location: http://192.0.2.27:59443/00000000-0000-0000-0000-000000000002.xml
+Server: Linux/0 UPnP/1.0 GUPnP/1.6.6
+NTS: ssdp:alive
+NT: urn:schemas-upnp-org:device:MediaRenderer:2
+USN: uuid:00000000-0000-0000-0000-000000000001::urn:schemas-upnp-org:device:MediaRenderer:2
+
+
+----
+NOTIFY * HTTP/1.1
+Host: 239.255.255.250:1900
+Cache-Control: max-age=1800
+Location: http://192.0.2.27:59443/00000000-0000-0000-0000-000000000002.xml
+Server: Linux/0 UPnP/1.0 GUPnP/1.6.6
+NTS: ssdp:alive
+NT: uuid:00000000-0000-0000-0000-000000000001
+USN: uuid:00000000-0000-0000-0000-000000000001
+
+
+----
+NOTIFY * HTTP/1.1
+Host: 239.255.255.250:1900
+Cache-Control: max-age=1800
+Location: http://192.0.2.27:59443/00000000-0000-0000-0000-000000000002.xml
+Server: Linux/0 UPnP/1.0 GUPnP/1.6.6
+NTS: ssdp:alive
+NT: upnp:rootdevice
+USN: uuid:00000000-0000-0000-0000-000000000001::upnp:rootdevice
+
+
+----
+NOTIFY * HTTP/1.1
+Host: 239.255.255.250:1900
+Cache-Control: max-age=1800
+Location: http://192.0.2.27:59443/00000000-0000-0000-0000-000000000002.xml
+Server: Linux/0 UPnP/1.0 GUPnP/1.6.6
+NTS: ssdp:alive
+NT: urn:schemas-upnp-org:service:RenderingControl:2
+USN: uuid:00000000-0000-0000-0000-000000000001::urn:schemas-upnp-org:service:RenderingControl:2
+
+
+----
+NOTIFY * HTTP/1.1
+Host: 239.255.255.250:1900
+Cache-Control: max-age=1800
+Location: http://192.0.2.27:59443/00000000-0000-0000-0000-000000000002.xml
+Server: Linux/0 UPnP/1.0 GUPnP/1.6.6
+NTS: ssdp:alive
+NT: urn:schemas-upnp-org:service:AVTransport:2
+USN: uuid:00000000-0000-0000-0000-000000000001::urn:schemas-upnp-org:service:AVTransport:2
+
+
+----
+NOTIFY * HTTP/1.1
+Host: 239.255.255.250:1900
+Cache-Control: max-age=1800
+Location: http://192.0.2.27:59443/00000000-0000-0000-0000-000000000002.xml
+Server: Linux/0 UPnP/1.0 GUPnP/1.6.6
+NTS: ssdp:alive
+NT: urn:schemas-upnp-org:service:ConnectionManager:2
+USN: uuid:00000000-0000-0000-0000-000000000001::urn:schemas-upnp-org:service:ConnectionManager:2
+
+
+----
+NOTIFY * HTTP/1.1
+Host: 239.255.255.250:1900
+Cache-Control: max-age=1800
+Location: http://192.0.2.27:59443/00000000-0000-0000-0000-000000000002.xml
+Server: Linux/0 UPnP/1.0 GUPnP/1.6.6
+NTS: ssdp:alive
+NT: urn:schemas-upnp-org:device:MediaRenderer:2
+USN: uuid:00000000-0000-0000-0000-000000000001::urn:schemas-upnp-org:device:MediaRenderer:2
+
+
+----
+NOTIFY * HTTP/1.1
+Host: 239.255.255.250:1900
+Cache-Control: max-age=1800
+Location: http://192.0.2.27:59443/00000000-0000-0000-0000-000000000002.xml
+Server: Linux/0 UPnP/1.0 GUPnP/1.6.6
+NTS: ssdp:alive
+NT: uuid:00000000-0000-0000-0000-000000000001
+USN: uuid:00000000-0000-0000-0000-000000000001
+
+
+----
+NOTIFY * HTTP/1.1
+Host: 239.255.255.250:1900
+Cache-Control: max-age=1800
+Location: http://192.0.2.27:59443/00000000-0000-0000-0000-000000000002.xml
+Server: Linux/0 UPnP/1.0 GUPnP/1.6.6
+NTS: ssdp:alive
+NT: upnp:rootdevice
+USN: uuid:00000000-0000-0000-0000-000000000001::upnp:rootdevice
+

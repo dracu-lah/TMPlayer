@@ -1,0 +1,14 @@
+# gmrender-resurrect (Ubuntu's gmediarender), a software UPnP MediaRenderer for HX40 tests.
+# Build: podman build -t tmplayer-gmrender -f scripts/dlna/Containerfile.gmrender scripts/dlna
+# Run (host network so SSDP multicast reaches it; audio to the host's PipeWire, muted by -60 dB,
+# because the audio clock is what makes playback run in real time):
+#   podman run -d --name gmr --network host --security-opt label=disable \
+#     -v $XDG_RUNTIME_DIR/pulse/native:/pulse -e PULSE_SERVER=unix:/pulse tmplayer-gmrender \
+#     gmediarender -I <iface> -p 49494 -f "TMP Test GMR" -u 11111111-2222-3333-4444-555555555555 \
+#     --logfile=stdout --gstout-initial-volume-db=-60 --gstout-audiosink=pulsesink --gstout-videosink=fakesink
+FROM docker.io/library/ubuntu:24.04
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends gmediarender gstreamer1.0-plugins-base \
+      gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav \
+ && rm -rf /var/lib/apt/lists/*

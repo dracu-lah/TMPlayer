@@ -1,0 +1,23 @@
+HTTP 500 Internal Server Error
+CONTENT-LENGTH: 412
+Accept-Ranges: bytes
+CONTENT-TYPE: text/xml; charset="utf-8"
+DATE: Tue, 03 Nov 2026 10:59:44 GMT
+EXT: 
+SERVER: Linux/0, UPnP/1.0, Portable SDK for UPnP devices/17.1.9
+X-User-Agent: redsonic
+
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
+<s:Body>
+<s:Fault>
+<faultcode>s:Client</faultcode>
+<faultstring>UPnPError</faultstring>
+<detail>
+<UPnPError xmlns="urn:schemas-upnp-org:control-1-0">
+<errorCode>501</errorCode>
+<errorDescription>Playing failed</errorDescription>
+</UPnPError>
+</detail>
+</s:Fault>
+</s:Body>
+</s:Envelope>

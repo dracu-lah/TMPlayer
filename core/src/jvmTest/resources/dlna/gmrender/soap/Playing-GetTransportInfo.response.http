@@ -1,0 +1,16 @@
+HTTP 200 OK
+CONTENT-LENGTH: 411
+Accept-Ranges: bytes
+CONTENT-TYPE: text/xml; charset="utf-8"
+DATE: Tue, 03 Nov 2026 10:59:40 GMT
+EXT: 
+SERVER: Linux/0, UPnP/1.0, Portable SDK for UPnP devices/17.1.9
+X-User-Agent: redsonic
+
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><s:Body>
+<u:GetTransportInfoResponse xmlns:u="urn:schemas-upnp-org:service:AVTransport:1">
+<CurrentTransportState>PLAYING</CurrentTransportState>
+<CurrentTransportStatus>OK</CurrentTransportStatus>
+<CurrentSpeed>1</CurrentSpeed>
+</u:GetTransportInfoResponse>
+</s:Body> </s:Envelope>

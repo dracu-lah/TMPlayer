@@ -1,0 +1,16 @@
+# Rygel's Playbin MediaRenderer (GUPnP, a different UPnP stack from gmrender's libupnp) for HX40
+# tests. Video needs a display, so Xvfb is started by hand (xvfb-run as PID 1 swallowed the child).
+# Build: podman build -t tmplayer-rygel -f scripts/dlna/Containerfile.rygel scripts/dlna
+# Run:   podman run -d --name rygel --network host --security-opt label=disable \
+#          -v $XDG_RUNTIME_DIR/pulse/native:/pulse -e PULSE_SERVER=unix:/pulse tmplayer-rygel
+# rygel.conf names the interface (wlp0s20f3): edit it to yours. The first Play after a start
+# sometimes segfaults (exit 139): remove the container and run it again.
+FROM docker.io/library/ubuntu:24.04
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends rygel rygel-playbin gstreamer1.0-plugins-base \
+      gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-pulseaudio gstreamer1.0-x xvfb xauth dbus \
+ && rm -rf /var/lib/apt/lists/*
+RUN mkdir -p /root/.config
+COPY rygel.conf /root/.config/rygel.conf
+CMD ["sh", "-c", "Xvfb :99 -screen 0 1280x720x24 & sleep 2; export DISPLAY=:99; exec dbus-run-session -- rygel -g 3"]

@@ -1,0 +1,69 @@
+HTTP 200 OK
+CONTENT-LENGTH: 2057
+Accept-Ranges: bytes
+CONTENT-TYPE: text/xml; charset="utf-8"
+DATE: Tue, 03 Nov 2026 10:59:37 GMT
+LAST-MODIFIED: Tue, 03 Nov 2026 10:59:05 GMT
+SERVER: Linux/0, UPnP/1.0, Portable SDK for UPnP devices/17.1.9
+X-User-Agent: redsonic
+CONNECTION: close
+
+<?xml version="1.0"?>
+<root xmlns="urn:schemas-upnp-org:device-1-0">
+<specVersion>
+<major>1</major>
+<minor>0</minor>
+</specVersion>
+<device>
+<deviceType>urn:schemas-upnp-org:device:MediaRenderer:1</deviceType>
+<presentationURL></presentationURL>
+<friendlyName>SCRUBBED-ace35c</friendlyName>
+<manufacturer>Ivo Clarysse, Henner Zeller</manufacturer>
+<manufacturerURL>http://github.com/hzeller/gmrender-resurrect</manufacturerURL>
+<modelDescription>gmediarender 0.1</modelDescription>
+<modelName>gmediarender</modelName>
+<modelNumber>0.1</modelNumber>
+<modelURL>http://github.com/hzeller/gmrender-resurrect</modelURL>
+<UDN>uuid:00000000-0000-0000-0000-000000000001</UDN>
+<iconList>
+<icon>
+<mimetype>image/png</mimetype>
+<width>64</width>
+<height>64</height>
+<depth>24</depth>
+<url>/upnp/grender-64x64.png</url>
+</icon>
+<icon>
+<mimetype>image/png</mimetype>
+<width>128</width>
+<height>128</height>
+<depth>24</depth>
+<url>/upnp/grender-128x128.png</url>
+</icon>
+</iconList>
+<serviceList>
+<service>
+<serviceType>urn:schemas-upnp-org:service:AVTransport:1</serviceType>
+<serviceId>urn:upnp-org:serviceId:AVTransport</serviceId>
+<SCPDURL>/upnp/rendertransportSCPD.xml</SCPDURL>
+<controlURL>/upnp/control/rendertransport1</controlURL>
+<eventSubURL>/upnp/event/rendertransport1</eventSubURL>
+</service>
+<service>
+<serviceType>urn:schemas-upnp-org:service:ConnectionManager:1</serviceType>
+<serviceId>urn:upnp-org:serviceId:ConnectionManager</serviceId>
+<SCPDURL>/upnp/renderconnmgrSCPD.xml</SCPDURL>
+<controlURL>/upnp/control/renderconnmgr1</controlURL>
+<eventSubURL>/upnp/event/renderconnmgr1</eventSubURL>
+</service>
+<service>
+<serviceType>urn:schemas-upnp-org:service:RenderingControl:1</serviceType>
+<serviceId>urn:upnp-org:serviceId:RenderingControl</serviceId>
+<SCPDURL>/upnp/rendercontrolSCPD.xml</SCPDURL>
+<controlURL>/upnp/control/rendercontrol1</controlURL>
+<eventSubURL>/upnp/event/rendercontrol1</eventSubURL>
+</service>
+</serviceList>
+</device>
+<URLBase>http://192.0.2.27:49494/</URLBase>
+</root>

@@ -1,0 +1,21 @@
+HTTP 200 OK
+CONTENT-LENGTH: 1115
+Accept-Ranges: bytes
+CONTENT-TYPE: text/xml; charset="utf-8"
+DATE: Tue, 03 Nov 2026 10:59:42 GMT
+EXT: 
+SERVER: Linux/0, UPnP/1.0, Portable SDK for UPnP devices/17.1.9
+X-User-Agent: redsonic
+
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><s:Body>
+<u:GetPositionInfoResponse xmlns:u="urn:schemas-upnp-org:service:AVTransport:1">
+<Track>1</Track>
+<TrackDuration>0:00:30</TrackDuration>
+<TrackMetaData>&lt;DIDL-Lite xmlns=&quot;urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/&quot; xmlns:dc=&quot;http://purl.org/dc/elements/1.1/&quot; xmlns:upnp=&quot;urn:schemas-upnp-org:metadata-1-0/upnp/&quot;&gt;&lt;item id=&quot;1&quot; parentID=&quot;0&quot; restricted=&quot;1&quot;&gt;&lt;dc:title&gt;TMPlayer capture&lt;/dc:title&gt;&lt;upnp:class&gt;object.item.videoItem&lt;/upnp:class&gt;&lt;res protocolInfo=&quot;http-get:*:video/mp4:DLNA.ORG_OP=01;DLNA.ORG_FLAGS=01700000000000000000000000000000&quot;&gt;http://192.0.2.27:8765/a.mp4&lt;/res&gt;&lt;/item&gt;&lt;/DIDL-Lite&gt;</TrackMetaData>
+<TrackURI>http://192.0.2.27:8765/a.mp4</TrackURI>
+<RelTime>00:00:05</RelTime>
+<AbsTime>NOT_IMPLEMENTED</AbsTime>
+<RelCount>2147483647</RelCount>
+<AbsCount>2147483647</AbsCount>
+</u:GetPositionInfoResponse>
+</s:Body> </s:Envelope>
