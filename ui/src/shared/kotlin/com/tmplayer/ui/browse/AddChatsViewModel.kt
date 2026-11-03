@@ -155,8 +155,10 @@ class AddChatsViewModel(
      * The answers are applied in batches every [BATCH_MS] and not while the remote is jumping, since
      * each update re-folds every row (4,500 chats took 1.1 to 1.4 cores of the Mi TV).
      * @param atOnce how many chats are asked at a time; the television passes [BACKGROUND_ON_TV].
+     * @param batchMs the gap between batches; the television passes [BATCH_ON_TV_MS], since a batch
+     * still re-folds 4,500 rows and 500 ms kept the Mi TV's main thread at half a core.
      */
-    fun countRest(chats: List<ChatSummary>, atOnce: Int = BACKGROUND_AT_ONCE) {
+    fun countRest(chats: List<ChatSummary>, atOnce: Int = BACKGROUND_AT_ONCE, batchMs: Long = BATCH_MS) {
         if (counts == null || !countsRest || background != null || chats.isEmpty()) return
         background = viewModelScope.launch {
             headStart?.join()
@@ -166,7 +168,7 @@ class AddChatsViewModel(
             coroutineScope {
                 val flusher = launch {
                     while (true) {
-                        delay(BATCH_MS)
+                        delay(batchMs)
                         if (!held) flush()
                     }
                 }
@@ -336,6 +338,7 @@ class AddChatsViewModel(
         /** One at a time on the television: its four weak cores cannot spare more (HX76). */
         const val BACKGROUND_ON_TV = 1
         private const val BATCH_MS = 500L
+        const val BATCH_ON_TV_MS = 5_000L
         private const val HOLD_POLL_MS = 150L
 
         /**

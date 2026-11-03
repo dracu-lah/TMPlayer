@@ -316,9 +316,13 @@ class ChatPickerScaleTest {
             model.start(chats)
             until(10 * 60_000) { model.headStartDone() }
             val before = account.maxCountsInFlight
-            model.countRest(chats, AddChatsViewModel.BACKGROUND_ON_TV)
+            model.countRest(chats, AddChatsViewModel.BACKGROUND_ON_TV, AddChatsViewModel.BATCH_ON_TV_MS)
             val target = ChatPicking.COUNT_AHEAD + 100
-            until(10 * 60_000) { model.state.value.counted.size >= target }
+            val elapsed = until(10 * 60_000) { model.state.value.counted.size >= target }
+            // One state update per five seconds on the television: each re-folds every row, and half
+            // a second kept the Mi TV's main thread at half a core with 4,500 chats (HX76).
+            val updatesCap = ChatPicking.COUNT_AHEAD + elapsed / AddChatsViewModel.BATCH_ON_TV_MS + 5
+            assertTrue("${model.stateUpdates} state updates in ${elapsed / 1000} s (cap $updatesCap)", model.stateUpdates <= updatesCap)
             assertTrue("counted ${model.state.value.counted.size}", model.state.value.counted.size >= target)
             assertTrue("most in flight ${account.maxCountsInFlight} before $before", account.maxCountsInFlight <= maxOf(before, 1))
             model.stop()
