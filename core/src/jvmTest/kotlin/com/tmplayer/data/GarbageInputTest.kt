@@ -3,6 +3,15 @@ package com.tmplayer.data
 import com.tmplayer.cast.ByteRange
 import com.tmplayer.cast.Mp4Probe
 import com.tmplayer.cast.WebVtt
+import com.tmplayer.cast.dlna.Didl
+import com.tmplayer.cast.dlna.DeviceDescription
+import com.tmplayer.cast.dlna.DlnaFeatures
+import com.tmplayer.cast.dlna.DlnaPlayback
+import com.tmplayer.cast.dlna.SinkCaps
+import com.tmplayer.cast.dlna.Soap
+import com.tmplayer.cast.dlna.Ssdp
+import com.tmplayer.cast.dlna.TransportActions
+import com.tmplayer.cast.dlna.UpnpTime
 import com.tmplayer.i18n.Decimal
 import com.tmplayer.json.JSONObject
 import com.tmplayer.online.AniListApi
@@ -112,6 +121,54 @@ class GarbageInputTest {
         "﻿1\n00:00:01,000 --> 00:00:02,000\nx".encodeToByteArray(),
         byteArrayOf(-1, -2, 0, 0x31), byteArrayOf(-2, -1, 0x31, 0),
     ) + List(300) { ByteArray(random.nextInt(0, 400)).also(random::nextBytes) }
+
+    /** What a renderer or a stranger on UDP 1900 and the LAN's HTTP ports may send (HX40). */
+    private val dlnaCorpus: List<String> = listOf(
+        "HTTP/1.1 200 OK\r\nLOCATION: \r\nUSN: \r\nST: \r\n\r\n", "NOTIFY * HTTP/1.1\r\nNTS: ssdp:alive\r\n\r\n",
+        "NOTIFY * HTTP/1.1\r\nNTS: ssdp:byebye\r\nUSN: uuid:\r\nNT: x\r\n\r\n", "HTTP/1.1 200 OK\r\nCACHE-CONTROL: max-age=99999999999999999999\r\nLOCATION: x\r\nUSN: uuid:a\r\n\r\n",
+        "HTTP/1.1 200 OK\n" + "X: y\n".repeat(5_000), "NOTIFY\r\n\r\n", "\r\n\r\n\r\n", "HTTP/1.1 200 OK\r\n:\r\n::\r\n",
+        "<root/>", "<?xml version=\"1.0\"?><root><device/></root>", "<root><device><deviceType>urn:schemas-upnp-org:device:MediaRenderer:1</deviceType></device></root>",
+        "<root><device><deviceType>urn:schemas-upnp-org:device:MediaRenderer:1</deviceType><UDN>uuid:x</UDN><serviceList><service/></serviceList></device></root>",
+        "<root><URLBase>http://[::1</URLBase><device><deviceType>urn:schemas-upnp-org:device:MediaRenderer:1</deviceType><UDN>uuid:x</UDN><serviceList><service><serviceType>urn:schemas-upnp-org:service:AVTransport:1</serviceType><controlURL>http://a b/c</controlURL></service></serviceList></device></root>",
+        "<root><device><deviceType>urn:schemas-upnp-org:device:MediaRenderer:1</deviceType><UDN>uuid:x</UDN><serviceList><service><serviceType>urn:schemas-upnp-org:service:AVTransport:1</serviceType><controlURL>" + "../".repeat(2_000) + "</controlURL></service></serviceList></device></root>",
+        "<!DOCTYPE r [<!ENTITY a \"b\">]><r>&a;</r>", "<?xml version=\"1.0\"?><!DOCTYPE x SYSTEM \"http://127.0.0.1/evil.dtd\"><x/>",
+        "<a>".repeat(3_000) + "</a>".repeat(3_000), "<a>" + "x".repeat(300_000) + "</a>", "<a b=\"" + "&amp;".repeat(100_000) + "\"/>", "<a>&#0;&#xD800;&#99999999;</a>",
+        "<s:Envelope xmlns:s=\"x\"><s:Body/></s:Envelope>", "<s:Envelope xmlns:s=\"x\"><s:Body><s:Fault><detail><UPnPError><errorCode>99999999999</errorCode></UPnPError></detail></s:Fault></s:Body></s:Envelope>",
+        "<s:Envelope xmlns:s=\"x\"><s:Body><u:R xmlns:u=\"y\">" + "<V>1</V>".repeat(500) + "</u:R></s:Body></s:Envelope>",
+        "<DIDL-Lite><item><res protocolInfo=\"a:b\">u</res><res/></item></DIDL-Lite>", "<DIDL-Lite><item/></DIDL-Lite>", "<DIDL-Lite/>",
+        "http-get:*:video/mp4:DLNA.ORG_PN=", "http-get:*:", ":::::", "*:*:*:*", "http-get:*:;;;;:*,", ",".repeat(10_000), "http-get:*:video/mp4:*,".repeat(20_000),
+        "http-get:*:video/mp4:DLNA.ORG_PN=" + "A".repeat(100_000),
+        "0:00:00.", "0:00:00.99999999999999999999", "99999:59:59.999", "1:1:1:1", "+", "-", "0:0:0 F1/0", "0:00:01 F9999999999/1", "NOT_IMPLEMENTED",
+        "Play,,,", "\\,\\,", "X_DLNA_PS=1/16\\,1/8\\", "PLAY,PAUSE".repeat(50_000),
+        "PLAYING", "TRANSITIONING", "STOPPED", "ERROR_OCCURRED", "NO_MEDIA_PRESENT", "\u0000",
+    )
+
+    @Test
+    fun dlnaParsersNeverThrow() {
+        for (text in texts + dlnaCorpus) {
+            survive("Ssdp.parse", text) { Ssdp.parse(text.toByteArray()) }
+            survive("Ssdp.udnOf", text) { Ssdp.udnOf(text); Ssdp.maxAge(text) }
+            survive("DeviceDescription.parse", text) { DeviceDescription.parse(text, "http://192.168.1.2:80/d.xml") }
+            survive("DeviceDescription.parse location", text) { DeviceDescription.parse("<root/>", text) }
+            survive("Soap.parse", text) { Soap.parse(200, text); Soap.parse(500, text); Soap.parse(0, text) }
+            survive("Soap.envelope", text) { Soap.parse(200, Soap.envelope("urn:x", "Act", listOf("Arg" to text))) }
+            survive("Didl.parse", text) { Didl.parse(text) }
+            survive("Didl.item", text) { Didl.parse(Didl.item(text, text, text, DlnaFeatures(profile = text), subtitleUrl = text, durationMs = text.length.toLong())) }
+            survive("SinkCaps.parse", text) { SinkCaps.parse(text) }
+            survive("UpnpTime.parseMs", text) { UpnpTime.parseMs(text) }
+            survive("TransportActions.parse", text) { TransportActions.parse(text) }
+            survive("DlnaPlayback.update", text) {
+                val p = DlnaPlayback(UpnpTime.parseMs(text) ?: 0)
+                p.loaded(0, 0)
+                p.update(text, text, UpnpTime.parseMs(text), UpnpTime.parseMs(text), 1_000)
+                p.update("PLAYING", text, UpnpTime.parseMs(text), UpnpTime.parseMs(text), 2_000)
+                p.seeking(UpnpTime.parseMs(text) ?: Long.MAX_VALUE, 2_500)
+                p.update("STOPPED", text, UpnpTime.parseMs(text), null, 3_000)
+            }
+        }
+        for (b in bytes) survive("Ssdp.parse bytes", b.toList()) { Ssdp.parse(b) }
+        assertNoFailures()
+    }
 
     @Test
     fun textParsersNeverThrow() {

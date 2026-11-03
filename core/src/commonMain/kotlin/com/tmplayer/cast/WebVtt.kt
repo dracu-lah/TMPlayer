@@ -46,6 +46,27 @@ object WebVtt {
         return sb.toString()
     }
 
+    /** MIME type of [writeSrt]'s output, as DLNA renderers (Samsung, LG) ask for it. */
+    const val SRT_MIME = "text/srt"
+
+    /**
+     * The same cues as SubRip, for the renderers that read SRT beside the video and not WebVTT
+     * (DLNA). Numbered from 1, `HH:MM:SS,mmm` times, and a cue that is blank or ends before it
+     * starts is left out, as [write] does.
+     */
+    fun writeSrt(cues: List<Cue>): String {
+        val sb = StringBuilder()
+        var n = 0
+        cues.sortedBy { it.startMs }.forEach { cue ->
+            if (cue.text.isBlank() || cue.endMs <= cue.startMs) return@forEach
+            sb.append(++n).append('\n')
+            sb.append(stamp(cue.startMs).replace('.', ',')).append(" --> ").append(stamp(cue.endMs).replace('.', ',')).append('\n')
+            sb.append(cue.text.replace("-->", "->").lines().filter { it.isNotBlank() }.joinToString("\n"))
+            sb.append("\n\n")
+        }
+        return sb.toString()
+    }
+
     fun stamp(ms: Long): String {
         val t = ms.coerceAtLeast(0)
         val h = t / 3_600_000

@@ -41,12 +41,14 @@ class CastServer(
     private val port: Int = 0,
     /** Who may ask; the private and link local ranges by default. Tests on loopback widen it. */
     private val allowed: (InetAddress) -> Boolean = ::isLocalNetwork,
+    private val clock: () -> Long = { System.nanoTime() / 1_000_000 },
 ) {
 
     /** This session's secret: the first segment of every path. */
     val token: String = newToken()
 
     private val resources = ConcurrentHashMap<String, CastResource>()
+    private val dlnaServing = ConcurrentHashMap<String, DlnaServing>()
     private val connections = CopyOnWriteArrayList<Socket>()
     private val streamsPerResource = ConcurrentHashMap<String, CopyOnWriteArrayList<Socket>>()
 
@@ -63,6 +65,16 @@ class CastServer(
 
     val running: Boolean get() = server?.isClosed == false
 
+    @Volatile
+    private var lastActivityMs = clock()
+
+    /**
+     * Milliseconds since a request began or a byte of a body was sent. A renderer paused for a
+     * long time holds no request open, so a DLNA session that sees this pass 30 minutes while
+     * paused closes the server (and its port) instead of keeping it open for nothing.
+     */
+    fun idleMs(): Long = clock() - lastActivityMs
+
     /** The port it ended up on, once [start]ed. */
     val boundPort: Int get() = server?.localPort ?: -1
 
@@ -73,6 +85,7 @@ class CastServer(
         socket.reuseAddress = true
         socket.bind(InetSocketAddress(bind, port), BACKLOG)
         server = socket
+        lastActivityMs = clock()
         acceptor = Thread({ acceptLoop(socket) }, "cast-server").apply {
             isDaemon = true
             start()
@@ -89,15 +102,17 @@ class CastServer(
         connections.clear()
         streamsPerResource.clear()
         resources.clear()
+        dlnaServing.clear()
     }
 
     /**
      * Makes [resource] available as [name] (a file name, so the receiver sees an extension) and
      * returns the URL a receiver opens it at. The same name again replaces it.
      */
-    fun publish(name: String, resource: CastResource): String {
+    fun publish(name: String, resource: CastResource, dlna: DlnaServing? = null): String {
         val clean = name.replace(Regex("[^A-Za-z0-9._-]"), "_").ifBlank { "media" }
         resources[clean] = resource
+        if (dlna != null) dlnaServing[clean] = dlna else dlnaServing.remove(clean)
         // A replaced video's open streams belong to the old one.
         streamsPerResource.remove(clean)?.forEach { runCatching { it.close() } }
         return urlFor(clean)
@@ -105,6 +120,7 @@ class CastServer(
 
     fun unpublish(name: String) {
         resources.remove(name)
+        dlnaServing.remove(name)
         streamsPerResource.remove(name)?.forEach { runCatching { it.close() } }
     }
 
@@ -123,7 +139,7 @@ class CastServer(
             }
             if (!allowed(client.inetAddress)) {
                 Logger.w(TAG, "Refused ${client.inetAddress.hostAddress}")
-                runCatching { client.close() }
+                refuse(client)
                 continue
             }
             connections += client
@@ -131,6 +147,32 @@ class CastServer(
                 isDaemon = true
                 start()
             }
+        }
+    }
+
+    /**
+     * Answers a stranger with a 403 and closes, on a thread of its own so a slow peer cannot hold
+     * up the accept loop. The request is read (briefly) before the close: closing on unread data
+     * resets the connection, and the 403 would never arrive.
+     */
+    private fun refuse(client: Socket) {
+        Thread({
+            try {
+                client.soTimeout = REFUSE_READ_MS
+                client.getOutputStream().apply {
+                    write("HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".toByteArray(Charsets.ISO_8859_1))
+                    flush()
+                }
+                client.shutdownOutput()
+                val sink = ByteArray(2048)
+                runCatching { client.getInputStream().read(sink) }
+            } catch (_: Exception) {
+            } finally {
+                runCatching { client.close() }
+            }
+        }, "cast-refuse").apply {
+            isDaemon = true
+            start()
         }
     }
 
@@ -144,6 +186,7 @@ class CastServer(
             while (!socket.isClosed) {
                 val request = HttpRequest.read(input) ?: break
                 served.incrementAndGet()
+                lastActivityMs = clock()
                 val keepOpen = respond(socket, request, output)
                 output.flush()
                 if (!keepOpen || request.wantsClose) break
@@ -182,6 +225,7 @@ class CastServer(
             else -> null
         } ?: return notFound(out)
         val head = request.method == "HEAD"
+        val extra = dlnaHeaders(dlnaServing[name], request, resource)
         return when (resource) {
             is CastResource.Tree -> notFound(out)
             is CastResource.Chunked -> {
@@ -199,14 +243,14 @@ class CastServer(
                 true
             }
             is CastResource.Text -> {
-                writeHead(out, 200, "OK", mapOf("Content-Type" to resource.mime), resource.bytes.size.toLong())
+                writeHead(out, 200, "OK", mapOf("Content-Type" to resource.mime) + extra, resource.bytes.size.toLong())
                 if (!head) out.write(resource.bytes)
                 true
             }
-            is CastResource.Ranged -> serveRanged(socket, name, resource, request, out, head)
+            is CastResource.Ranged -> serveRanged(socket, name, resource, request, out, head, extra)
             is CastResource.Stream -> {
                 // Made as it goes: no length, so the connection's end is the body's end.
-                writeHead(out, 200, "OK", mapOf("Content-Type" to resource.mime, "Connection" to "close"), null)
+                writeHead(out, 200, "OK", mapOf("Content-Type" to resource.mime, "Connection" to "close") + extra, null)
                 if (!head) {
                     track(name, socket)
                     resource.write(request.query, out)
@@ -224,6 +268,7 @@ class CastServer(
         request: HttpRequest,
         out: OutputStream,
         head: Boolean,
+        extra: Map<String, String> = emptyMap(),
     ): Boolean {
         val total = resource.source.length
         val range = request.header("range")?.let { ByteRange.parse(it, total) }
@@ -238,6 +283,7 @@ class CastServer(
         val headers = LinkedHashMap<String, String>()
         headers["Content-Type"] = resource.mime
         headers["Accept-Ranges"] = "bytes"
+        headers.putAll(extra)
         if (span != null) headers["Content-Range"] = "bytes $start-$end/$total"
         writeHead(out, if (span != null) 206 else 200, if (span != null) "Partial Content" else "OK", headers, length)
         if (head || length == 0L) return true
@@ -249,6 +295,7 @@ class CastServer(
                 val n = reader.read(buffer, 0, minOf(buffer.size.toLong(), left).toInt())
                 if (n < 0) throw IOException("Source ended $left bytes early")
                 out.write(buffer, 0, n)
+                lastActivityMs = clock()
                 left -= n
             }
         }
@@ -273,6 +320,24 @@ class CastServer(
 
     private fun untrack(name: String, socket: Socket) {
         streamsPerResource[name]?.remove(socket)
+    }
+
+    /**
+     * The DLNA headers of an answer for a resource published with [DlnaServing]: the transfer mode
+     * (echoing what the renderer asked for), the content features when it asks for them, and the
+     * subtitle's address for Samsung's `getCaptionInfo.sec`.
+     */
+    private fun dlnaHeaders(serving: DlnaServing?, request: HttpRequest, resource: CastResource): Map<String, String> {
+        if (serving == null || resource is CastResource.Chunked || resource is CastResource.Tree) return emptyMap()
+        val out = LinkedHashMap<String, String>()
+        val asked = request.header("transferMode.dlna.org")?.trim()
+        out["transferMode.dlna.org"] = TRANSFER_MODES.firstOrNull { it.equals(asked, ignoreCase = true) }
+            ?: if (serving.interactive) "Interactive" else "Streaming"
+        if (request.header("getcontentFeatures.dlna.org")?.trim() == "1") out["contentFeatures.dlna.org"] = serving.features
+        if (request.header("getCaptionInfo.sec")?.trim() == "1" && serving.captionName != null) {
+            out["CaptionInfo.sec"] = urlFor(serving.captionName)
+        }
+        return out
     }
 
     private fun notFound(out: OutputStream): Boolean {
@@ -300,6 +365,8 @@ class CastServer(
         private const val READ_TIMEOUT_MS = 120_000
         private const val COPY_BUFFER = 64 * 1024
         private const val SEND_BUFFER = 64 * 1024
+        private const val REFUSE_READ_MS = 300
+        private val TRANSFER_MODES = listOf("Streaming", "Interactive", "Background")
 
         /** Reads of one resource at once, beyond which the oldest is closed. */
         const val MAX_STREAMS = 3
@@ -321,6 +388,13 @@ class CastServer(
                     (address.address[1].toInt() and 0xC0) == 64)
     }
 }
+
+/**
+ * How a resource is described to a DLNA renderer: the `contentFeatures.dlna.org` value, whether
+ * it is fetched as a whole file ([interactive], a subtitle) rather than played, and the name of
+ * the subtitle to point `CaptionInfo.sec` at.
+ */
+class DlnaServing(val features: String, val captionName: String? = null, val interactive: Boolean = false)
 
 /** What [CastServer] can serve. */
 sealed interface CastResource {
