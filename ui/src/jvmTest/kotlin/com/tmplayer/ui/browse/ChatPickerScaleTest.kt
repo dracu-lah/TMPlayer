@@ -402,9 +402,8 @@ class ChatPickerScaleTest {
             val unknown = state.counted.filterValues { it == ChatCount.Unknown }.keys
             report("recommended ${state.recommended.size} of ${head.size} counted (${unknown.size} could not be counted: ${unknown.sorted()}) at ${took / 1000.0} s; ticked ${state.ticked.size}; first ${state.recommended.take(5)}")
             assertEquals(want, state.recommended)
-            assertEquals(want.take(ChatSuggestions.MAX_PRETICKED).toSet(), state.ticked)
+            assertTrue("nothing is ticked for the viewer", state.ticked.isEmpty())
             assertTrue("more than the ticked cap qualify, or the cap is not tested: ${want.size}", want.size > ChatSuggestions.MAX_PRETICKED)
-            assertTrue(state.ticked.size <= ChatSuggestions.MAX_PRETICKED)
             // A chat that could not be counted is left out, not written off as empty.
             assertTrue(unknown.none { it in state.recommended })
             for (id in state.recommended) assertTrue("chat $id", account.videoCount(id) >= ChatSuggestions.MIN_VIDEOS)

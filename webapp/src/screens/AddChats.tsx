@@ -203,8 +203,7 @@ export function AddChats() {
         taken = true
         setRecommended(answer.ids)
         setBelowBar(answer.belowBar)
-        // Ticked for a viewer who has not chosen before; one who has keeps their own choice, with the band only shown.
-        if (!start.size && !ticked().size && answer.ticked.size) setTicked(new Set(answer.ticked))
+        // Recommended rows are shown, never ticked for the viewer (2026-11-04).
     }
     createEffect(() => {
         if (started || !seededNow() || !list().length) return

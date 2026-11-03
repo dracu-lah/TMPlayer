@@ -41,7 +41,7 @@ import java.io.File
 /**
  * The three pane picker with a remote alone on a large account (HX76): 3,000 chats, the mandatory
  * choice as the setup step shows it. Every line of the focus map: start on Done when the
- * Recommended band ticked something, else the first row; the rail, the list and the panel each
+ * Recommended band ticked something (no longer: nothing is ticked for the viewer), else the first row; the rail, the list and the panel each
  * answer Left, Right, Up, Down and Back; the chats with no videos fold into one row that opens in
  * place; a held Down speeds up; the search keyboard's Search lands on a row.
  */
@@ -56,12 +56,15 @@ class AddChatsTvKeysTest {
     }
 
     @Test
-    fun `the remote starts on Done when the Recommended band ticked something`() {
+    fun `the remote starts on the first row when the Recommended band is shown, nothing is ticked for the viewer`() {
         val model = AddChatsViewModel(counts = Counts, write = {})
         val activity = open(model, chats = CHATS)
-        assertEquals(listOf("Done"), focusedWords(activity))
+        assertTrue(model.state.value.ticked.isEmpty())
+        assertEquals(listOf("Saved Messages"), focusedTitle(activity))
         save("add-chats-tv-three-panes.png", draw(activity))
         model.stop()
+        idle()
+        ChatVideoCount.forget()
     }
 
     @Test
@@ -158,7 +161,6 @@ class AddChatsTvKeysTest {
     fun `a held Down speeds up`() {
         val model = AddChatsViewModel(counts = Counts, write = {}, countsRest = false)
         val activity = open(model, chats = CHATS)
-        press(activity, KeyEvent.KEYCODE_DPAD_LEFT)
         // Twenty repeats of a held Down: the first few walk, the rest move half a screen each.
         hold(activity, KeyEvent.KEYCODE_DPAD_DOWN, repeats = 20)
         val deep = focusedTitle(activity).single()
@@ -181,7 +183,6 @@ class AddChatsTvKeysTest {
         }
         val model = AddChatsViewModel(counts = recording, write = {}, countsRest = false)
         val activity = open(model, chats = CHATS)
-        press(activity, KeyEvent.KEYCODE_DPAD_LEFT)
         hold(activity, KeyEvent.KEYCODE_DPAD_DOWN, repeats = 30)
         // The settle after the last jump is a coroutine delay, which runs on the real clock.
         Thread.sleep(700)

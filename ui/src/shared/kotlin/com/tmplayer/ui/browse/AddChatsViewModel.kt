@@ -242,13 +242,10 @@ class AddChatsViewModel(
         val answer = ChatSuggestions.recommend(ChatPicking.counted(chats, _state.value.counted))
         if (answer.ids.isEmpty()) return
         _state.update { now ->
-            // Ticked for a viewer who has not chosen before; one who has keeps their own choice,
-            // with the recommendation only shown.
-            val tick = if (opened.isNullOrEmpty() && now.ticked.isEmpty()) answer.ticked else emptySet()
+            // Shown only: nothing is ticked for the viewer (user, 2026-11-04).
             now.copy(
                 recommended = answer.ids,
                 belowBar = answer.belowBar,
-                ticked = if (tick.isEmpty()) now.ticked else now.ticked + tick,
             )
         }
     }
