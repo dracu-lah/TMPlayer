@@ -44,6 +44,13 @@
     -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <!--
+      Casting to a TV by DLNA (HX40): the Wi-Fi chip passes the multicast replies to the search for
+      TVs only while an app holds this lock, and TMPlayer holds it only while the cast picker is
+      open. An install time permission, no prompt. The cast itself is kept going with the screen
+      off by DlnaCastService (the media playback type above) and a Wi-Fi lock.
+    -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <!--
       Keeps the two background checks (new videos in starred chats, the sponsor reminder) scheduled
       across a restart: JobScheduler drops a persisted job without it. Nothing runs at boot itself.
     -->
@@ -218,6 +225,16 @@
         -->
         <service
             android:name=".player.PlaybackService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
+
+        <!--
+          Keeps a DLNA cast alive with the screen off (HX40): the cast server lives in the player,
+          and Google's Cast framework gives it a foreground service of its own, DLNA has none.
+          Running only while a video is on the TV. Not exported.
+        -->
+        <service
+            android:name=".cast.DlnaCastService"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
 

@@ -275,6 +275,7 @@
     "lost": "Lost the connection to {name}",
     "mute_tv": "Mute the TV",
     "none_found": "No TVs found yet. Check that the TV is on and on the same Wi-Fi (not a guest network), that no VPN is on, that the TV's network standby or DLNA is switched on, and that this computer's firewall allows local devices.",
+    "none_found_phone": "No TVs found yet. Check that the TV is on and on the same Wi-Fi as this phone (not a guest network), that no VPN is on, and that the TV's network standby or DLNA is switched on.",
     "on_device": "On {name}",
     "picture_too_large": "This TV plays video up to 1080p, and this one is 4K. Play it here instead.",
     "play_here": "Play here",
@@ -296,7 +297,8 @@
     "subtitles_inside": "Subtitles inside this file can't be shown on the TV yet. Load a subtitle file, or find one online, to show them.",
     "tv_volume": "TV volume",
     "unmute_tv": "Unmute the TV",
-    "volume_fixed": "The TV sets its own volume: use its remote"
+    "volume_fixed": "The TV sets its own volume: use its remote",
+    "wifi_only": "Casting needs Wi-Fi or Ethernet. Join the TV's Wi-Fi network, then try again."
   },
   "chats": {
     "favourite": "Add to favourites",

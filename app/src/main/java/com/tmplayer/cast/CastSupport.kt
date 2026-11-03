@@ -2,8 +2,12 @@ package com.tmplayer.cast
 
 import android.content.Context
 import com.tmplayer.data.FormFactor
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import java.net.InetAddress
+
+/** How a receiver is spoken to: Google's Cast framework, or DLNA over the local network. */
+enum class CastKind { GoogleCast, Dlna }
 
 /** A receiver the phone can cast to, as the picker lists it. */
 data class CastDeviceInfo(
@@ -14,13 +18,21 @@ data class CastDeviceInfo(
     val model: String,
     val connected: Boolean = false,
     val connecting: Boolean = false,
+    val kind: CastKind = CastKind.GoogleCast,
+    /** Where it is on the network, when known: a TV that answers both ways is one row ([MergedCastSupport]). */
+    val address: InetAddress? = null,
 )
 
 /** Where the phone's cast session stands. */
 sealed interface CastSessionState {
     data object Idle : CastSessionState
     data class Connecting(val name: String) : CastSessionState
-    data class Connected(val name: String, val model: String, val address: InetAddress?) : CastSessionState
+    data class Connected(
+        val name: String,
+        val model: String,
+        val address: InetAddress?,
+        val kind: CastKind = CastKind.GoogleCast,
+    ) : CastSessionState
 
     /** The connection dropped (the TV went off, the Wi-Fi changed); the framework is trying again. */
     data class Suspended(val name: String) : CastSessionState
@@ -53,6 +65,8 @@ data class RemoteStatus(
     val tracks: List<RemoteTrack> = emptyList(),
     /** The receiver changes its playback rate. */
     val supportsRate: Boolean = false,
+    /** The bar may move on a video it plays from a file (a DLNA TV can leave Seek out of what it allows). */
+    val canSeek: Boolean = true,
 )
 
 /** A subtitle side track, already on the cast server as WebVTT. */
@@ -71,12 +85,26 @@ data class CastLoadRequest(
     val activeTrackIds: List<Long> = emptyList(),
     /** An HLS master playlist with fMP4 segments, rather than a file. */
     val hls: Boolean = false,
+    /** The receiver can seek in it by ranges (a file as it is); false for a rewrap made as it is sent. */
+    val seekable: Boolean = true,
+)
+
+/**
+ * What the cast server does for a receiver that is not a Chromecast (DLNA): who may fetch the
+ * video (the TV's address alone), the DLNA headers each resource goes out with, and how long a
+ * paused cast keeps the port open.
+ */
+class ServerAccess(
+    val allowed: (InetAddress) -> Boolean,
+    val serving: (CastResource) -> DlnaServing?,
+    val idleLimitMs: Long,
 )
 
 /**
  * Casting as the rest of the app sees it, whichever build this is. The regular build answers
- * through Google's Cast framework ([CastBuild] in src/cast); the F-Droid build has no Google code
- * at all, and its [CastBuild] (src/nocast) is never [available], so no Cast button is drawn.
+ * through Google's Cast framework ([CastBuild] in src/cast) and through DLNA ([DlnaCastSupport]),
+ * both in one list ([MergedCastSupport]). The F-Droid build has no Google code at all, and its
+ * [CastBuild] (src/nocast) is never [available]: it casts by DLNA alone.
  *
  * A television has no use for casting and gets none either.
  */
@@ -85,6 +113,21 @@ interface CastSupport {
     val devices: StateFlow<List<CastDeviceInfo>>
     val session: StateFlow<CastSessionState>
     val remote: StateFlow<RemoteStatus>
+
+    /** What the connected receiver plays; null: not told, so the model name decides ([ReceiverCaps.forModel]). */
+    val caps: ReceiverCaps? get() = null
+
+    /** For a DLNA receiver: the server's rules and headers. Null: a Cast receiver, the server as it always was. */
+    val serverAccess: ServerAccess? get() = null
+
+    /** The plan as this receiver can use it (DLNA drops HLS). */
+    fun adapt(plan: CastPlan): CastPlan = plan
+
+    /** Why the receiver turned the last load down, in a sentence for the viewer; null when it said nothing. */
+    val refusal: String? get() = null
+
+    /** True while there is no Wi-Fi or Ethernet to find a TV on (mobile data alone): the picker says to join the TV's Wi-Fi. */
+    val offLan: StateFlow<Boolean> get() = NO
 
     /** Starts looking for receivers, for a picker that is open; [stopDiscovery] when it closes. */
     fun startDiscovery()
@@ -108,6 +151,8 @@ interface CastSupport {
     fun setRate(rate: Double)
 }
 
+private val NO = MutableStateFlow(false)
+
 /** The one [CastSupport] of the process, made on first use from the main thread. */
 object Cast {
     @Volatile
@@ -116,11 +161,22 @@ object Cast {
     /** The one already made, or null: for a question that must not create it off the main thread. */
     fun existing(): CastSupport? = support
 
+    /**
+     * One list for the phone: Google Cast where the build has it ([CastBuild]; [NoCastSupport] in
+     * the F-Droid build and without Play services), and DLNA beside it in both builds, so the
+     * F-Droid build gets the Cast button for the first time.
+     */
+    private fun phoneSupport(context: Context): CastSupport {
+        val google = runCatching { CastBuild.create(context) }.getOrDefault(NoCastSupport)
+        val dlna = DlnaCastSupport.create(context)
+        return MergedCastSupport(google, dlna)
+    }
+
     fun support(context: Context): CastSupport {
         support?.let { return it }
         synchronized(this) {
             support?.let { return it }
-            val made = if (FormFactor.isTv(context)) NoCastSupport else runCatching { CastBuild.create(context.applicationContext) }.getOrDefault(NoCastSupport)
+            val made = if (FormFactor.isTv(context)) NoCastSupport else runCatching { phoneSupport(context.applicationContext) }.getOrDefault(NoCastSupport)
             support = made
             return made
         }

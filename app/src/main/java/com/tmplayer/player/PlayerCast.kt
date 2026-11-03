@@ -157,6 +157,10 @@ class PlayerCast(
         private set
 
     private var server: CastServer? = null
+
+    /** What the running server was made for, to make it again when the TV's network or kind changes. */
+    private var serverBind: java.net.InetAddress? = null
+    private var serverDlna = false
     private var streams: CastStreams? = null
     private var source: CastSource? = null
     private var name = "video"
@@ -245,6 +249,10 @@ class PlayerCast(
                     reload(lastKnownMs)
                 } else if (!casting && ready) {
                     begin(hooks.handOff())
+                } else if (casting && state.name != device) {
+                    // Another TV picked while casting (Cast or DLNA): the video goes there at its place.
+                    Log.i(TAG, "Moving the cast from $device to ${state.name}")
+                    begin(lastKnownMs)
                 }
             }
             // Dropped, or a Reconnect that did not get through: the cast screen stays up saying
@@ -295,8 +303,8 @@ class PlayerCast(
                 val p = withContext(Dispatchers.IO) { MediaProbe.of(src, file) }
                 probe = p
                 val preferred = hooks.audioLanguage()?.let { lang -> p.audio.firstOrNull { sameLanguage(it.language, lang) }?.number }
-                val caps = ReceiverCaps.forModel(connectedState.model)
-                val pl = CastFormats.plan(p, caps, preferred, canConvertAudio = canConvert, canTranscodeVideo = false)
+                val caps = capsFor(connectedState.model)
+                val pl = support.adapt(CastFormats.plan(p, caps, preferred, canConvertAudio = canConvert, canTranscodeVideo = false))
                 plan = pl
                 Log.i(TAG, "Plan for $file on ${connectedState.model}: $pl ($p)")
                 if (!pl.castable) {
@@ -331,17 +339,47 @@ class PlayerCast(
             while (isActive && casting) {
                 delay(TICK_MS)
                 refresh()
+                closeIfIdle()
             }
         }
     }
 
+    /** What the connected TV plays: its own word (DLNA's Sink list), else the model name decides. */
+    private fun capsFor(model: String?): ReceiverCaps = support.caps ?: ReceiverCaps.forModel(model)
+
+    /**
+     * The cast server on the phone's address on the TV's network. Made again when it is not running
+     * (closed for a long pause) or the phone's address or the kind of TV changed under it (the Wi-Fi
+     * switched). A DLNA TV gets a server open to its address alone with the DLNA headers.
+     */
     private fun ensureServer(state: CastSessionState.Connected) {
-        if (server?.running == true) return
         val bind = LanAddress.forReceiver(state.address) ?: throw IOException(L.castConnectFailed(state.name))
-        val s = CastServer(bind)
+        val access = support.serverAccess
+        if (server?.running == true && serverBind == bind && serverDlna == (access != null)) return
+        runCatching { server?.stop() }
+        val s = if (access != null) CastServer(bind, allowed = access.allowed) else CastServer(bind)
         s.start()
         server = s
-        streams = CastStreams(s) { AndroidAudioConverter() }
+        serverBind = bind
+        serverDlna = access != null
+        streams = CastStreams(s, converterFactory = { AndroidAudioConverter() }, serving = access?.serving)
+    }
+
+    /**
+     * A DLNA cast paused with no request from the TV for 30 minutes closes the port and lets the
+     * service go; the TV's player is stopped, and Play loads the video again at the place
+     * ([retry] makes the server again).
+     */
+    private fun closeIfIdle() {
+        val limit = support.serverAccess?.idleLimitMs ?: return
+        val s = server?.takeIf { it.running } ?: return
+        if (view.phase != CastPhase.Paused || s.idleMs() < limit) return
+        Log.i(TAG, "Paused and untouched for ${s.idleMs() / 1000} s, closing the server")
+        support.stopMedia()
+        runCatching { s.stop() }
+        wantPlaying = false
+        note = L.castIdleClosed
+        refresh()
     }
 
     private suspend fun startRoute(atMs: Long) {
@@ -382,6 +420,7 @@ class PlayerCast(
                 subtitle = hooks.subtitleLine(),
                 durationMs = pub.durationMs.takeIf { it > 0 } ?: if (p.durationMs > 0) (p.durationMs - pub.offsetMs).coerceAtLeast(0) else 0,
                 startMs = if (pub.seekable) atMs else 0,
+                seekable = pub.seekable,
                 autoplay = wantPlaying,
                 // HLS carries its subtitles in the playlist; side tracks are for the rest.
                 subtitles = if (pub.hls) emptyList() else subs.toList(),
@@ -426,6 +465,17 @@ class PlayerCast(
     private fun reload(atMs: Long) {
         val r = route ?: return retryFromStart(atMs)
         activity.lifecycleScope.launch {
+            // The server may be closed (a long pause) or on an address the phone left.
+            val state = support.session.value as? CastSessionState.Connected
+            if (state != null && streams != null) {
+                val ready = runCatching { withContext(Dispatchers.IO) { ensureServer(state) } }
+                ready.exceptionOrNull()?.let { e ->
+                    Log.w(TAG, "Cast server could not be made again", e)
+                    error = e.message ?: failureText()
+                    refresh()
+                    return@launch
+                }
+            }
             if (!load(r, atMs)) {
                 error = failureText()
                 refresh()
@@ -448,8 +498,9 @@ class PlayerCast(
      * only play 1080p (an unnamed TV, which was tried), or the plain failure.
      */
     private fun failureText(): String {
+        support.refusal?.let { return it }
         val model = (support.session.value as? CastSessionState.Connected)?.model
-        return if (CastFormats.mayBeTooLarge(probe?.video, ReceiverCaps.forModel(model))) L.castLoadFailedLarge else L.castLoadFailed
+        return if (CastFormats.mayBeTooLarge(probe?.video, capsFor(model))) L.castLoadFailedLarge else L.castLoadFailed
     }
 
     private fun noteFor(r: CastRoute): String? {
@@ -462,7 +513,7 @@ class PlayerCast(
             r is CastRoute.Hls && r.audio.isEmpty() && p.audio.isNotEmpty() -> L.castSilent
             r is CastRoute.Hls && hlsAudio?.converted == true -> L.castSoundConvertedPhone
             r is CastRoute.Remux && r.audioTrack == null && p.audio.isNotEmpty() -> L.castSilent
-            r is CastRoute.Direct && audioCodec != null && CastFormats.audioSupport(audioCodec, ReceiverCaps.forModel(model)) == Support.No -> L.castSilent
+            r is CastRoute.Direct && audioCodec != null && CastFormats.audioSupport(audioCodec, capsFor(model)) == Support.No -> L.castSilent
             CAST_SUBTITLES && r !is CastRoute.Hls && p.text.any { it.isText } && subs.isEmpty() -> L.castSubtitlesInside
             else -> null
         }
@@ -640,6 +691,12 @@ class PlayerCast(
         val pub = published ?: return
         val duration = screen.value.durationMs
         val target = positionMs.coerceAtLeast(0).let { if (duration > 0) it.coerceAtMost(duration - 500) else it }
+        if (pub.seekable && !remote.canSeek) {
+            // Said, not pretended: the TV's own list of what it allows leaves Seek out.
+            note = L.castCannotSeek
+            refresh()
+            return
+        }
         place.expect(target, SystemClock.elapsedRealtime())
         endedReported = false
         seekTarget = target
@@ -814,7 +871,11 @@ class PlayerCast(
      */
     fun release() {
         val mine = published?.url
-        if (casting && mine != null && support.remote.value.contentId == mine) support.stopMedia()
+        val onTv = support.remote.value.contentId
+        if (casting && mine != null && onTv == mine) support.stopMedia()
+        // A DLNA cast lives in this server and the service that keeps it alive: both go with the
+        // activity, unless the next episode's player already loaded its own video on the TV.
+        if (casting && support.serverAccess != null && (mine == null || onTv == null || onTv == mine)) support.endSession()
         casting = false
         ticker?.cancel()
         runCatching { server?.stop() }

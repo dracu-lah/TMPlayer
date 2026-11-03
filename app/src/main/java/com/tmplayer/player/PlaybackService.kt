@@ -115,7 +115,7 @@ class PlaybackService : MediaSessionService() {
     }
 
     companion object {
-        private const val CHANNEL_ID = "playback"
+        internal const val CHANNEL_ID = "playback"
         private const val NOTIFICATION_ID = 0x7A1
 
         /** "Playback stopped": its own id, so it outlasts the media notification it replaces. */

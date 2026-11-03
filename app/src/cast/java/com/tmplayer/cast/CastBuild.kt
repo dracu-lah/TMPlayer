@@ -326,6 +326,7 @@ private class GoogleCastSupport(context: Context) : CastSupport {
                     model = device?.modelName ?: route.description.orEmpty(),
                     connected = connected && route.id == selected.id,
                     connecting = route.id == connectingId,
+                    address = runCatching { device?.inetAddress }.getOrNull(),
                 )
             }
             .sortedBy { it.name.lowercase() }

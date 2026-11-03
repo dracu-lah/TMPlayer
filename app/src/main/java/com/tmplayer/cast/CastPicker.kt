@@ -18,8 +18,9 @@ import com.tmplayer.ui.icons.TmIcons
 import kotlinx.coroutines.delay
 
 /**
- * The Cast picker, the app's picker sheet: the Chromecasts and Google TVs on the Wi-Fi, found while
- * it is open, the one in use marked, and Stop casting under them during a cast. Picking one starts
+ * The Cast picker, the app's picker sheet: the Chromecasts and Google TVs on the Wi-Fi and the TVs
+ * that take a DLNA push (marked DLNA), found while it is open, the one in use marked, and Stop
+ * casting under them during a cast. Without Wi-Fi or Ethernet it says to join the TV's network. Picking one starts
  * the session and the sheet stays up, the TV's line saying it is connecting, until the session is
  * up (then it closes) or has failed (then it says so, and another try is a tap away). Closed at
  * once, it left nothing on the screen to say anything was happening. The player (or the next video
@@ -34,6 +35,7 @@ fun CastPickerSheet(support: CastSupport, onDismiss: () -> Unit) {
     }
     val devices by support.devices.collectAsState()
     val session by support.session.collectAsState()
+    val offLan by support.offLan.collectAsState()
     var waitedLong by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         delay(NONE_FOUND_AFTER_MS)
@@ -53,14 +55,15 @@ fun CastPickerSheet(support: CastSupport, onDismiss: () -> Unit) {
         note = when {
             failed != null -> s.castConnectFailed(failed.name)
             devices.isNotEmpty() -> null
-            waitedLong -> s.castNoneFound
+            offLan -> s.castWifiOnly
+            waitedLong -> s.castNoneFoundPhone
             else -> s.castSearching
         },
     ) {
         devices.forEach { d ->
             ChoiceLine(
                 title = d.name,
-                detail = if (d.connecting) s.castConnecting(d.name) else d.model.ifBlank { null },
+                detail = if (d.connecting) s.castConnecting(d.name) else deviceDetail(d, s.castDlnaLabel),
                 selected = if (connected) d.connected else null,
                 icon = TmIcons.Tv,
             ) {
@@ -99,6 +102,12 @@ fun CastPageButton(modifier: Modifier = Modifier) {
     // Filled in the hero colour while a TV is connected; the same size as the page's Back.
     PageDiscButton(TmIcons.Cast, label, { open = true }, modifier, active = connected != null, prominent = true)
     if (open) CastPickerSheet(support, onDismiss = { open = false })
+}
+
+/** "Model" for a Cast TV, "Model · DLNA" for one found by DLNA (the protocol's name, in small print). */
+internal fun deviceDetail(d: CastDeviceInfo, dlnaLabel: String): String? {
+    val parts = listOfNotNull(d.model.ifBlank { null }, dlnaLabel.takeIf { d.kind == CastKind.Dlna })
+    return parts.joinToString(" \u00B7 ").ifBlank { null }
 }
 
 private const val NONE_FOUND_AFTER_MS = 8_000L
