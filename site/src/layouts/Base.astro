@@ -66,6 +66,8 @@ const langsInfo = localized && {
 };
 const json = (v: unknown) => JSON.stringify(v).replace(/<\//g, '<\\/');
 const strings = lang.path ? jsStrings(lang) : {};
+/** The site's support popup. Off for now (user, 2026-11-03): it can read as a paid project. */
+const SHOW_SUPPORT_POPUP = false;
 ---
 <!DOCTYPE html>
 <html lang={lang.tag} dir={lang.dir}>
@@ -156,7 +158,8 @@ const strings = lang.path ? jsStrings(lang) : {};
 {/* The support popup: the same pages as the card. On the download and install pages it does not
     open on a timer (it would stand between a reader and the app); it waits for a download click
     and opens a few seconds later, when the reader has just got what they came for. */}
-{!notFound && path !== '/support/' && <SupportPopup afterDownload={page === 'download' || page === 'install'} />}
+{/* Hidden for now (user, 2026-11-03): it can read as a paid project. Set to true to bring it back. */}
+{SHOW_SUPPORT_POPUP && !notFound && path !== '/support/' && <SupportPopup afterDownload={page === 'download' || page === 'install'} />}
 {/* Where the support links open the Buy Me a Coffee page, over the site. */}
 <CoffeeDialog />
 {/* And where Pay by UPI opens, on anything that cannot answer a upi:// link. */}

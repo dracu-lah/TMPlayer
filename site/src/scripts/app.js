@@ -1574,8 +1574,10 @@ var tmT = (function () {
   }
 
   function whenLoaded() {
+    // Not the window's load event: on a slow page it comes only after the images, and the card
+    // then seemed to wait for the first scroll (user, 2026-11-03). The page being parsed is enough.
     var go = function () { setTimeout(show, reduced ? 300 : 700); };
-    if (document.readyState === 'complete') { go(); } else { window.addEventListener('load', go); }
+    if (document.readyState !== 'loading') { go(); } else { document.addEventListener('DOMContentLoaded', go); }
   }
 
   card.querySelector('[data-bmc-hide]').addEventListener('click', function () {
