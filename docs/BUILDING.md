@@ -143,6 +143,10 @@ toolchain was moved forward on 2026-10-18 (Gradle 9.8.1, AGP 9.4.1, Kotlin 2.4.2
   their tests are `jvmTest`.
 - **`compileSdk` is 37** because `tdl-coroutines` 14+ declares that minimum in its AAR metadata.
   `targetSdk` deliberately stays at 35.
+- **Local network permission (DLNA casting).** Android 17 asks for a local network permission
+  once an app targets it; at `targetSdk` 35 it does not apply. Before raising `targetSdk` to 37,
+  request it before SSDP discovery and the cast server, or DLNA and Cast discovery find nothing.
+  The manifest holds `CHANGE_WIFI_MULTICAST_STATE` for SSDP.
 - **The FFmpeg extension is built from source** for releases: `scripts/build-media3ext.sh`
   builds nextlib-media3ext at its pinned commit with `scripts/media3ext/tmplayer-decoders.patch`
   (FFmpeg's mpeg4, msmpeg4v2, msmpeg4v3, vc1 and mjpeg decoders, and the light video mode below)

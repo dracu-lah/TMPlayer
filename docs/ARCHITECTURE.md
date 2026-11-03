@@ -79,6 +79,30 @@ holds the arithmetic side of it.
 6. Network cut during a seek: the buffering overlay shows speed 0 and playback recovers when the
    network returns (TDLib reconnects by itself).
 
+## Casting
+
+Two protocols, one picker. Google Cast and DLNA (UPnP AVTransport) both push one video to a TV;
+TMPlayer is the control point and serves only the chosen video and its subtitle, never a library.
+
+- **Core `cast/`** is shared by every build: `CastServer` (token path, Range, an `allowed` address
+  filter), `CastSource`, `CastFormats` (`ReceiverCaps` and the `CastPlan` routes), `MkvRemuxer`,
+  `CastRecovery`, `LanAddress`, `WebVtt`. `cast/dlna/` holds the DLNA client: SSDP discovery,
+  device description, SOAP, DIDL, `SinkCaps` (what the TV says it plays), `DlnaRenderer` with
+  polling, and `DlnaCast` for one session.
+- **LAN guard.** The session token in the URL plus the renderer's own IP; no PIN, as a TV cannot
+  type one. DLNA streams carry DLNA headers and close after 30 minutes idle (paused).
+- **Phone (`app/.../cast/`).** `CastSupport` is the interface `PlayerCast`, `CastRemoteScreen` and
+  `CastPickerSheet` drive. `MergedCastSupport(google, dlna)` joins the lists (ids `gc:` and
+  `dlna:`; Cast wins one row per address). `DlnaCastSupport` discovers only while a picker is
+  open and holds a multicast lock only then. `DlnaCastService` keeps a DLNA cast alive with the
+  screen off (foreground, media session, Wi-Fi and wake locks). The F-Droid build has DLNA alone.
+- **Desktop.** `DesktopCast` holds a `Receiver` (Cast or DLNA), `CastFinder` lists both,
+  `CastPlaybackEngine` plays on it.
+- **Android TV** has no casting and runs no discovery.
+- **Not done yet:** subtitles to a DLNA TV, a no-seek TV greying the bar, an MPEG-TS remux
+  (only if real TVs refuse fMP4). Fixtures from real renderers are in `scripts/dlna/` and the
+  core tests; `scripts/dlna/capture.py` records more from any TV.
+
 ## Constraints the design answers to
 
 The target device is a 1 GB RAM, 8 GB storage Android TV stick. That is why the app caches one
