@@ -30,8 +30,14 @@ fun <T : Any> FadeOver(
     content: @Composable (T) -> Unit,
 ) {
     // None on a television: the better picture replaces the preview at once, with no second
-    // picture drawn under it for the length of a fade.
-    val still = Motion.television || rememberReducedMotion() || Motion.reduced
+    // picture drawn under it for the length of a fade. Nothing of the fade is composed there
+    // either (no Animatable, effect or second box): every avatar of a picker row a held Down
+    // brings in paid for them (HX76). The flag is fixed for the process, so the groups never swap.
+    if (Motion.television) {
+        Box(modifier, propagateMinConstraints = true) { key(target) { content(target) } }
+        return
+    }
+    val still = rememberReducedMotion() || Motion.reduced
     var top by remember { mutableStateOf(target) }
     var under by remember { mutableStateOf<T?>(null) }
     val alpha = remember { Animatable(1f) }
@@ -50,8 +56,8 @@ fun <T : Any> FadeOver(
     Box(modifier) {
         under?.let { old -> key(old) { content(old) } }
         key(top) {
-            // still: no graphicsLayer, no Animatable read, so a TV draw pass skips the layer
-            // that forced Compose's View-backed GraphicsViewLayer on every row (HX76).
+            // still (reduced motion): no graphicsLayer and no Animatable read, so the draw pass
+            // records no layer per tile for a fade that never runs.
             if (still) {
                 Box(Modifier.matchParentSize()) { content(top) }
             } else {

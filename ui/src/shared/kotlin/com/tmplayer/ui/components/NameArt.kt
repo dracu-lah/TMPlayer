@@ -2,6 +2,7 @@ package com.tmplayer.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -11,6 +12,18 @@ import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFontFamilyResolver
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.toOffset
+import kotlin.math.roundToInt
 import com.tmplayer.data.NameColour
 import com.tmplayer.ui.theme.Tone
 
@@ -49,6 +62,58 @@ fun NameArtTile(name: String?, modifier: Modifier = Modifier, letter: @Composabl
         content = { letter() },
     )
 }
+
+/**
+ * [letter] painted in [style], centred, from a text layout every avatar on screen shares: one
+ * node and no paragraph laid out per avatar. A `Text` was a node, a semantics entry and a fresh
+ * layout for each row a held Down brought into a TV list (HX76), for a letter that repeats. The
+ * letter is decoration (the chat's name is written beside it), so nothing is said for it.
+ */
+@Composable
+fun DrawnLetter(letter: String, style: TextStyle, modifier: Modifier = Modifier) {
+    val measurer = LetterLayouts.measurer(
+        LocalFontFamilyResolver.current,
+        LocalDensity.current,
+        LocalLayoutDirection.current,
+    )
+    Spacer(
+        modifier.fillMaxSize().drawWithCache {
+            val layout = if (letter.isEmpty()) null else measurer.measure(letter, style)
+            val at = layout?.let {
+                Alignment.Center.align(
+                    it.size,
+                    IntSize(size.width.roundToInt(), size.height.roundToInt()),
+                    layoutDirection,
+                ).toOffset()
+            }
+            onDrawBehind { if (layout != null && at != null) drawText(layout, topLeft = at) }
+        },
+    )
+}
+
+/**
+ * The one [TextMeasurer] [DrawnLetter] lays its letters out with, made again only when the fonts,
+ * the density or the direction change. Its cache holds a few dozen letters, which is the whole
+ * alphabet of a screen. Touched only from the UI thread, as composition and drawing are.
+ */
+private object LetterLayouts {
+    private var fonts: FontFamily.Resolver? = null
+    private var density: Density? = null
+    private var direction: LayoutDirection? = null
+    private var current: TextMeasurer? = null
+
+    fun measurer(fonts: FontFamily.Resolver, density: Density, direction: LayoutDirection): TextMeasurer {
+        val kept = current
+        if (kept != null && fonts == this.fonts && density == this.density && direction == this.direction) return kept
+        this.fonts = fonts
+        this.density = density
+        this.direction = direction
+        return TextMeasurer(fonts, density, direction, cacheSize = LETTERS_KEPT).also { current = it }
+    }
+}
+
+/** Letters [LetterLayouts] keeps laid out: an alphabet, digits and a few others. */
+private const val LETTERS_KEPT = 64
 
 /** The colours of [NameArtTile], for a caller that paints its own frame. */
 object NameArt {

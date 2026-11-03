@@ -49,6 +49,7 @@ import com.tmplayer.data.SearchSort
 import com.tmplayer.data.SeriesShelf
 import com.tmplayer.i18n.L
 import com.tmplayer.ui.components.MediaArt
+import com.tmplayer.ui.components.DrawnLetter
 import com.tmplayer.ui.components.NameArt
 import com.tmplayer.ui.components.NameArtTile
 import com.tmplayer.ui.components.PosterArt
@@ -94,11 +95,14 @@ fun ChatAvatar(chat: ChatBrief?, size: Dp, modifier: Modifier = Modifier) {
         // 80dp avatar (the search chat-matches row) was left with the same small letter as a
         // 20dp one (user, 2026-11-01).
         NameArtTile(chat?.title) {
-            Text(
-                NameInitial.of(chat?.title).orEmpty(),
-                style = MaterialTheme.typography.titleMedium.copy(fontSize = (size.value * 0.4f).coerceIn(11f, 40f).sp),
-                color = NameArt.onLetter,
-            )
+            val letter = NameInitial.of(chat?.title).orEmpty()
+            val style = MaterialTheme.typography.titleMedium.copy(fontSize = (size.value * 0.4f).coerceIn(11f, 40f).sp)
+            // Drawn on the television, where a held Down composes a row of these per jump (HX76).
+            if (Motion.television) {
+                DrawnLetter(letter, style.copy(color = NameArt.onLetter))
+            } else {
+                Text(letter, style = style, color = NameArt.onLetter)
+            }
         }
     }
 }

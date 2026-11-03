@@ -33,7 +33,6 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
@@ -75,6 +74,17 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.runtime.Stable
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
+import com.tmplayer.i18n.Messages
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
@@ -181,6 +191,7 @@ fun AddChatsScreen(
     onLeave: () -> Unit = onClose,
 ) {
     val s = LocalStrings.current
+    val countWords = remember(s) { CountWords(s) }
     val form = deviceForm()
     val tv = form == DeviceForm.Tv
     val state by model.state.collectAsState()
@@ -668,6 +679,7 @@ fun AddChatsScreen(
                                     row = row,
                                     ticked = ticked,
                                     shape = shape,
+                                    countWords = countWords,
                                     tv = tv,
                                     modifier = card,
                                     onToggle = { tick(!ticked); model.toggle(row.id) },
@@ -1029,6 +1041,7 @@ private fun PickRow(
     row: ChatPicking.Row,
     ticked: Boolean,
     shape: ChatSuggestions.CountShape,
+    countWords: CountWords,
     tv: Boolean,
     onToggle: () -> Unit,
     onCountAgain: () -> Unit,
@@ -1043,7 +1056,6 @@ private fun PickRow(
     val ink = if (focused) Tone.onFocusFill else Tone.text
     val quiet = if (focused) Tone.onFocusFill else Tone.muted
     val avatar = if (tv) 52.dp else 44.dp
-    val retry = s.pickerCountAgain
     Row(
         modifier
             .fillMaxWidth()
@@ -1068,8 +1080,9 @@ private fun PickRow(
             .focusRing(focused, round)
             .semantics(mergeDescendants = true) {
                 toggleableState = ToggleableState(ticked)
+                // The words are read here, when semantics are asked for, not while the row composes.
                 customActions = if (unknown) {
-                    listOf(CustomAccessibilityAction(retry) { onCountAgain(); true })
+                    listOf(CustomAccessibilityAction(s.pickerCountAgain) { onCountAgain(); true })
                 } else {
                     listOf(
                         CustomAccessibilityAction(
@@ -1114,7 +1127,7 @@ private fun PickRow(
                     )
                 }
             }
-            CountLine(shape, quiet, tv)
+            CountLine(shape, countWords, quiet, tv)
         }
         // A drawn box on TV (HX76): Material3's Checkbox ran its color and check animations on
         // every row a hold passed over (226 ms over about 40 rows), which a hold never needs to
@@ -1127,18 +1140,60 @@ private fun PickRow(
     }
 }
 
-/** The tick box [PickRow] draws on TV instead of Material3's animated [Checkbox] (HX76). */
+/**
+ * The tick box [PickRow] draws on TV instead of Material3's animated [Checkbox] (HX76): one node
+ * that paints the box and [TmIcons.Check]'s stroke itself. A box with a border and an [Icon] in it
+ * was three nodes and a vector painter for every row a held Down brought in.
+ */
 @Composable
 private fun PickTick(ticked: Boolean) {
-    Box(
-        Modifier
-            .size(20.dp)
-            .background(if (ticked) Tone.accent else Color.Transparent, RoundedCornerShape(4.dp))
-            .border(2.dp, if (ticked) Tone.accent else Tone.outline, RoundedCornerShape(4.dp)),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (ticked) Icon(TmIcons.Check, contentDescription = null, tint = Tone.onAccent, modifier = Modifier.size(14.dp))
-    }
+    val fill = Tone.accent
+    val outline = Tone.outline
+    val mark = Tone.onAccent
+    Spacer(
+        Modifier.size(20.dp).drawWithCache {
+            val ring = 2.dp.toPx()
+            val half = ring / 2
+            val corner = 4.dp.toPx()
+            // TmIcons.Check (M5 14 L8.5 17.5 L19 6.5, a 1.5 round stroke on 24) at 14dp, centred.
+            val unit = 14.dp.toPx() / 24f
+            val origin = (size.width - 24f * unit) / 2
+            val check = Path().apply {
+                moveTo(origin + 5f * unit, origin + 14f * unit)
+                lineTo(origin + 8.5f * unit, origin + 17.5f * unit)
+                lineTo(origin + 19f * unit, origin + 6.5f * unit)
+            }
+            val checkStroke = Stroke(width = 1.5f * unit, cap = StrokeCap.Round, join = StrokeJoin.Round)
+            val ringStroke = Stroke(width = ring)
+            onDrawBehind {
+                if (ticked) {
+                    drawRoundRect(fill, cornerRadius = CornerRadius(corner))
+                    drawPath(check, mark, style = checkStroke)
+                } else {
+                    // Where `border` puts it: the stroke's middle half its width in from the edge.
+                    drawRoundRect(
+                        outline,
+                        topLeft = Offset(half, half),
+                        size = Size(size.width - ring, size.height - ring),
+                        cornerRadius = CornerRadius(corner - half),
+                        style = ringStroke,
+                    )
+                }
+            }
+        },
+    )
+}
+
+/**
+ * Each count's words, formatted once for the screen rather than once per row brought into view:
+ * an ICU plural and a locale number for every new row was a share of what a held Down cost on TV
+ * (HX76). Bounded by itself, since a count past [ChatSuggestions.MANY] reads as "many" instead.
+ */
+@Stable
+private class CountWords(private val s: Messages) {
+    private val words = HashMap<Int, String>()
+
+    fun about(videos: Int): String = words.getOrPut(videos) { s.pickerCountAbout(videos) }
 }
 
 /**
@@ -1146,7 +1201,7 @@ private fun PickTick(ticked: Boolean) {
  * bar, which is what keeps a row from changing height the moment its count lands.
  */
 @Composable
-private fun CountLine(shape: ChatSuggestions.CountShape, ink: Color, tv: Boolean) {
+private fun CountLine(shape: ChatSuggestions.CountShape, countWords: CountWords, ink: Color, tv: Boolean) {
     val s = LocalStrings.current
     val style = if (tv) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodySmall
     val density = LocalDensity.current
@@ -1161,7 +1216,7 @@ private fun CountLine(shape: ChatSuggestions.CountShape, ink: Color, tv: Boolean
                     .height(line * 0.6f)
                     .background(Tone.surfaceHigh, RoundedCornerShape(4.dp)),
             )
-            is ChatSuggestions.CountShape.Exact -> Text(s.pickerCountAbout(shape.videos), style = style, color = ink, maxLines = 1)
+            is ChatSuggestions.CountShape.Exact -> Text(countWords.about(shape.videos), style = style, color = ink, maxLines = 1)
             ChatSuggestions.CountShape.Many -> Text(s.pickerCountMany, style = style, color = ink, maxLines = 1)
             ChatSuggestions.CountShape.Unknown -> Text(
                 if (tv) s.pickerCountUnknownKeys else s.pickerCountUnknownTouch,
