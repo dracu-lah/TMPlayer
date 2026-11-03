@@ -340,7 +340,7 @@ object FolderExport {
         return outcome.copy(moved = removed, notMoved = kept)
     }
 
-    private fun folderFor(context: Context, tree: Uri): SafFolder? {
+    internal fun folderFor(context: Context, tree: Uri): FolderCopyIo.Folder<Uri>? {
         val parent = runCatching {
             DocumentsContract.buildDocumentUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree))
         }.getOrNull() ?: return null
@@ -352,7 +352,7 @@ object FolderExport {
      * space: "primary:Movies/Kept" is /storage/emulated/0/Movies/Kept, "1A2B-3C4D:Videos" is
      * /storage/1A2B-3C4D/Videos. Null for any other provider (a cloud drive has no path).
      */
-    private fun pathOf(tree: Uri): File? {
+    internal fun pathOf(tree: Uri): File? {
         if (tree.authority != EXTERNAL_STORAGE) return null
         val id = runCatching { DocumentsContract.getTreeDocumentId(tree) }.getOrNull() ?: return null
         val volume = id.substringBefore(':')
@@ -363,7 +363,7 @@ object FolderExport {
     }
 
     /** The room in the folder [tree] names, or null when it cannot be read (the confirmation then says so). */
-    private fun freeBytes(tree: Uri): Long? = pathOf(tree)?.let(::statFree)
+    internal fun freeBytes(tree: Uri): Long? = pathOf(tree)?.let(::statFree)
 
     private fun statFree(path: File): Long? {
         // The nearest folder that exists: StatFs needs a real path, and any one on the volume will do.

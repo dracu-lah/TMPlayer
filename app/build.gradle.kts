@@ -413,6 +413,11 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.test.core)
+    // Focus and D-pad tests of the app's own screens, run under Robolectric (HX57).
+    testImplementation(platform(libs.androidx.compose.bom))
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    // Declares the empty ComponentActivity the compose rule starts; debug only, so no release APK has it.
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
     // The unit tests run against android.jar stubs, whose org.json returns nothing, and the UI
     // text catalog is parsed with org.json. The real library goes first on the test classpath.
     testImplementation(libs.json)

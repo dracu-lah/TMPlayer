@@ -433,7 +433,7 @@ class DownloadService : Service() {
         //
         // In Downloads already, which is the other way a video can be here in full: the file in
         // the folder is the download, and TDLib, which let go of it, would fetch it all again.
-        if (LocalDownloads.fileFor(SettingsStore(applicationContext), request.chatId, request.messageId) != null) {
+        if (LocalDownloads.videoFor(SettingsStore(applicationContext), request.chatId, request.messageId) != null) {
             withContext(NonCancellable) {
                 synchronized(lock) { requests.remove(request.fileId) }
                 OfflineDownloads.forget(request.fileId)
@@ -639,15 +639,32 @@ class DownloadService : Service() {
         refresh()
     }
 
+    /**
+     * The picked folder ("Other folder", HX57) when one is chosen and still reachable, else null so
+     * the download falls back to the app's own folder instead of failing until the viewer notices.
+     */
+    private fun pickedFolder(): DownloadFinisher.TreeTarget? {
+        val context = applicationContext
+        val folder = AndroidStorage.currentTree() ?: return null
+        if (!DownloadTree.usable(context, folder)) return null
+        return object : DownloadFinisher.TreeTarget {
+            override val label: String get() = DownloadTree.label(context, folder)
+            override fun freeBytes(): Long? = DownloadTree.freeBytes(folder)
+            override suspend fun put(source: java.io.File, name: String, onProgress: (Long, Long) -> Unit): String =
+                DownloadTree.putFile(context, folder, source, name, onProgress).toString()
+        }
+    }
+
     /** The move itself, through [DownloadFinisher], and what the row and the shade say after. */
     private suspend fun finishNow(request: DownloadRequest) {
         val id = request.fileId
         val outcome = DownloadFinisher(
             settings = SettingsStore(applicationContext),
             downloadsDir = { AndroidPaths(applicationContext).downloadsDir },
+            tree = { pickedFolder() },
         ).finish(request, onProgress = { _, _ -> refresh() })
         when (outcome) {
-            is DownloadFinisher.Outcome.Moved -> {
+            is DownloadFinisher.Outcome.Moved, is DownloadFinisher.Outcome.MovedToTree -> {
                 synchronized(lock) { requests.remove(id) }
                 OfflineDownloads.forget(id)
                 lines.remove(id)

@@ -11,7 +11,6 @@ import android.util.Log
 import android.widget.Toast
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import androidx.core.content.FileProvider
 import com.tmplayer.data.CacheShelf
 import com.tmplayer.data.DiskSpace
 import com.tmplayer.data.LocalDownloads
@@ -22,7 +21,6 @@ import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.Td
 import com.tmplayer.data.start
 import com.tmplayer.i18n.L
-import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -345,7 +343,7 @@ internal suspend fun shareVideo(context: Context, item: MediaItem, send: Boolean
         return
     }
     val uri = runCatching {
-        FileProvider.getUriForFile(context, "${context.packageName}.updates", File(path))
+        com.tmplayer.data.LocalVideo.handoutUri(context, path) ?: error("Nothing to hand out")
     }.onFailure { Log.w(SHARE_TAG, "Cannot share $path", it) }.getOrNull() ?: run {
         com.tmplayer.ui.components.showMessage(context, L.gridShareFailed)
         return

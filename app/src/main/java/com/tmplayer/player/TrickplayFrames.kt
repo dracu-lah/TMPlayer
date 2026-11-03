@@ -46,6 +46,8 @@ class TrickplayFrames(
     private val complete: () -> Boolean,
     private val sizeBytes: () -> Long,
     private val durationMs: () -> Long,
+    /** Opens a download kept in a picked folder (HX57), whose "path" is a `content://` string. */
+    private val context: android.content.Context? = null,
 ) : ScrubThumbnails {
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -152,7 +154,12 @@ class TrickplayFrames(
         openedFor = null
         val reader = MediaMetadataRetriever()
         val opened = runCatching {
-            if (done) reader.setDataSource(file) else reader.setDataSource(PartialFile(File(file), sizeBytes()))
+            when {
+                context != null && com.tmplayer.data.StoredLocation.isDocument(file) ->
+                    reader.setDataSource(context, android.net.Uri.parse(file))
+                done -> reader.setDataSource(file)
+                else -> reader.setDataSource(PartialFile(File(file), sizeBytes()))
+            }
         }.isSuccess
         if (!opened) {
             runCatching { reader.release() }

@@ -47,29 +47,32 @@ object LocalDownloads {
         else -> FileState.Present
     }
 
-    /** [stateOf] against the real disk. */
+    /**
+     * [stateOf] against the real disk, or against the picked folder for a record kept there (a
+     * folder whose permission was taken back, or whose card is out, reads as Missing).
+     */
     fun stateOf(record: ResumeRecord): FileState {
         val path = record.localPath ?: return FileState.Legacy
-        val file = File(path)
-        return stateOf(path, if (file.isFile) file.length() else null, record.sizeBytes)
+        val video = LocalVideo.of(null, path) ?: return FileState.Missing
+        return stateOf(path, video.length(), record.sizeBytes)
     }
 
-    /** The file of a download that is present, or null for anything else. */
-    fun presentFile(record: ResumeRecord?): File? {
+    /** The video of a download that is present, or null for anything else. */
+    fun presentVideo(record: ResumeRecord?): LocalVideo? {
         val path = record?.localPath ?: return null
-        return File(path).takeIf { stateOf(record) == FileState.Present }
+        return LocalVideo.of(null, path)?.takeIf { stateOf(record) == FileState.Present }
     }
 
-    /** The downloaded file for one message, if it is in the Downloads folder. */
-    suspend fun fileFor(settings: SettingsStore, chatId: Long, messageId: Long): File? =
+    /** The downloaded video for one message, if it is in the Downloads folder or the picked folder. */
+    suspend fun videoFor(settings: SettingsStore, chatId: Long, messageId: Long): LocalVideo? =
         withContext(Dispatchers.IO) {
-            presentFile(runCatching { settings.downloadRecord(chatId, messageId) }.getOrNull())
+            presentVideo(runCatching { settings.downloadRecord(chatId, messageId) }.getOrNull())
         }
 
     /** [MediaItem.id] of every present download, for the grid to tell Downloaded from Cached. */
     suspend fun presentIds(settings: SettingsStore): Set<String> = withContext(Dispatchers.IO) {
         runCatching { settings.downloadsNow() }.getOrDefault(emptyList())
-            .filter { presentFile(it) != null }
+            .filter { presentVideo(it) != null }
             .map { "${it.chatId}:${it.messageId}" }
             .toSet()
     }
@@ -77,16 +80,19 @@ object LocalDownloads {
     /** What the files in the Downloads folder come to, measured on the disk. */
     suspend fun indexedBytes(settings: SettingsStore): Long = withContext(Dispatchers.IO) {
         runCatching { settings.downloadsNow() }.getOrDefault(emptyList())
-            .sumOf { record -> record.localPath?.let(::File)?.takeIf { it.isFile }?.length() ?: 0L }
+            .sumOf { record -> LocalVideo.of(null, record.localPath)?.length() ?: 0L }
     }
 
     /**
-     * A path for one video that another app can be handed: the download's own when it has one,
-     * otherwise TDLib's complete cached copy, resolved against this session first. Null when
-     * neither has the whole video.
+     * A path for one video that another app can be handed: the download's own when it has one
+     * (a document's `content://` string when it is in the picked folder, which [ShareMedia] and
+     * [com.tmplayer.player.ExternalPlayer] hand over as it is), otherwise TDLib's complete cached
+     * copy, resolved against this session first. Null when neither has the whole video.
      */
     suspend fun shareablePath(settings: SettingsStore, chatId: Long, messageId: Long, fileId: Int): String? {
-        fileFor(settings, chatId, messageId)?.let { return it.absolutePath }
+        videoFor(settings, chatId, messageId)?.let { video ->
+            return video.file?.absolutePath ?: video.uri().toString()
+        }
         val current = runCatching { Td.currentFileId(chatId, messageId, fileId) }.getOrDefault(fileId)
         return runCatching { Td.localFilePath(current) }.getOrNull()
     }
@@ -100,8 +106,17 @@ object LocalDownloads {
      */
     suspend fun delete(settings: SettingsStore, record: ResumeRecord): Boolean = withContext(Dispatchers.IO) {
         val path = record.localPath ?: return@withContext false
-        val file = File(path)
-        if (file.exists() && !file.delete() && file.exists()) return@withContext false
+        val video = LocalVideo.of(null, path)
+        when (video) {
+            is LocalVideo.OnDisk -> {
+                val file = video.file
+                if (file.exists() && !file.delete() && file.exists()) return@withContext false
+            }
+            // A folder that cannot be reached answers "not there", so the record can be removed;
+            // a document that is there and will not go keeps its record, like a file that will not.
+            is LocalVideo.InTree -> if (video.exists() && !video.delete()) return@withContext false
+            null -> Unit
+        }
         runCatching { settings.forgetDownload(record.chatId, record.messageId) }.isSuccess
     }
 

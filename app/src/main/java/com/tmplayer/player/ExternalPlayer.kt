@@ -3,12 +3,10 @@ package com.tmplayer.player
 import android.content.Context
 import android.content.Intent
 import android.util.Log
-import androidx.core.content.FileProvider
 import com.tmplayer.data.LocalFileAvailability
 import com.tmplayer.data.Td
 import com.tmplayer.data.valueOrNull
 import com.tmplayer.i18n.L
-import java.io.File
 
 /**
  * Hands one Telegram video to whatever else on the device can play it.
@@ -25,9 +23,6 @@ import java.io.File
 object ExternalPlayer {
 
     private const val TAG = "ExternalPlayer"
-
-    /** The authority the manifest declares, scoped to TDLib's cache and the Downloads folder. */
-    private const val AUTHORITY_SUFFIX = ".updates"
 
     /** What another app would actually get if it were handed this file right now. */
     enum class Readiness {
@@ -116,11 +111,11 @@ object ExternalPlayer {
      * often TMPlayer: the viewer asks to leave and arrives back where they started.
      */
     fun chooserFor(context: Context, path: String, title: String, mimeType: String): Intent? {
-        val file = File(path)
-        if (!file.isFile || file.length() <= 0) return null
-        val uri = runCatching {
-            FileProvider.getUriForFile(context, context.packageName + AUTHORITY_SUFFIX, file)
-        }.onFailure { Log.w(TAG, "Cannot hand out $path", it) }.getOrNull() ?: return null
+        val uri = com.tmplayer.data.LocalVideo.handoutUri(context, path)
+        if (uri == null) {
+            Log.w(TAG, "Cannot hand out $path")
+            return null
+        }
 
         val view = Intent(Intent.ACTION_VIEW)
             .setDataAndType(uri, mimeType.ifBlank { "video/*" })

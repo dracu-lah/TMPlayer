@@ -65,6 +65,11 @@
     <!-- Which app answers YouTube links, so a trailer goes to Google's app as a video id and to
          another client, such as SmartTube, as its watch link (TrailerOpener). -->
     <queries>
+        <!-- The folder picker "Other folder" and Save to folder rely on (HX57); without this Android 11
+             and later may report no app for it even though the system's own file picker is there. -->
+        <intent>
+            <action android:name="android.intent.action.OPEN_DOCUMENT_TREE" />
+        </intent>
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="vnd.youtube" />

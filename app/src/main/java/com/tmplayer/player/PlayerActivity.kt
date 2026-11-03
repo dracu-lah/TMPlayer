@@ -77,6 +77,7 @@ import com.tmplayer.data.copyQuality
 import com.tmplayer.data.hasPictureInPicture
 import com.tmplayer.data.videoFollowsTransforms
 import com.tmplayer.data.LocalDownloads
+import com.tmplayer.data.LocalVideo
 import com.tmplayer.data.OpeningStall
 import com.tmplayer.data.start
 import com.tmplayer.data.pauseAll
@@ -444,7 +445,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * playback comes from it: no TDLib stream, no room check, no claim on the cache, no connection.
      * Set once, before the player is built.
      */
-    private var downloadedFile: File? = null
+    private var downloadedVideo: LocalVideo? = null
     private var fileSizeBytes = 0L
     private var durationSec = 0
 
@@ -776,7 +777,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         ) && DecoderSwitch.softwareVideoChosen(player)
         // The copy the viewer picked plays as picked, with the one line that names its codec.
         val swappable = playingQuality == 0 && !qualityHandPicked && !softwareSwapTried && !copyHandPicked &&
-            downloadedFile == null && joinedSource == null && hasMessage()
+            downloadedVideo == null && joinedSource == null && hasMessage()
         if (!swappable) {
             if (unwatchable) return tooLargeForSoftware(format)
             noteSoftwareDecode(playing = false)
@@ -1055,7 +1056,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         appendLine("TMPlayer ${com.tmplayer.BuildConfig.VERSION_NAME} (${com.tmplayer.BuildConfig.VERSION_CODE})")
         appendLine("${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}, Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})${if (FormFactor.isTv(this@PlayerActivity)) ", TV" else ""}")
         appendLine("${statusTitle.text}: ${statusText.text}")
-        appendLine("File: ${mediaFileName.ifBlank { "?" }}, ${mediaMime.ifBlank { "?" }}, ${fileSizeBytes} bytes, ${durationSec} s, ${if (downloadedFile != null) "downloaded" else "streamed"}")
+        appendLine("File: ${mediaFileName.ifBlank { "?" }}, ${mediaMime.ifBlank { "?" }}, ${fileSizeBytes} bytes, ${durationSec} s, ${if (downloadedVideo != null) "downloaded" else "streamed"}")
         player?.videoFormat?.let { appendLine("Video: ${it.sampleMimeType} ${it.codecs.orEmpty()} ${it.width}x${it.height}") }
         player?.audioFormat?.let { appendLine("Audio: ${it.sampleMimeType} ${it.codecs.orEmpty()} ${it.channelCount} ch ${it.sampleRate} Hz") }
         lastPlaybackError?.let { e ->
@@ -1078,7 +1079,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         if (openedAt == 0L) return
         val now = SystemClock.elapsedRealtime()
         val fromPress = if (pressedAt > 0) "press to first frame ${now - pressedAt} ms, " else ""
-        Log.i(START_TAG, "${fromPress}open to first frame ${now - openedAt} ms (file $fileId, resume $resumeMs ms, ${if (downloadedFile != null) "download" else "stream"})")
+        Log.i(START_TAG, "${fromPress}open to first frame ${now - openedAt} ms (file $fileId, resume $resumeMs ms, ${if (downloadedVideo != null) "download" else "stream"})")
         openedAt = 0L
         pressedAt = 0L
         openedGate.complete(Unit)
@@ -1592,7 +1593,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         // waits behind this window, so a video streamed from Telegram gives way to it rather than
         // ending on "Can't play this". A downloaded file plays on: it needs no session.
         lifecycleScope.launch {
-            runCatching { Td.sessionEnded.collect { ended -> if (ended && downloadedFile == null) leaveForSignIn() } }
+            runCatching { Td.sessionEnded.collect { ended -> if (ended && downloadedVideo == null) leaveForSignIn() } }
         }
         // On a television too: the controls timeout and the remaining time readout apply there.
         lifecycleScope.launch {
@@ -1674,10 +1675,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         override fun source(): Pair<com.tmplayer.cast.CastSource, String>? {
             val client = castClient ?: return null
             val joined = joinedSource
-            val uri = joined ?: downloadedFile?.let { android.net.Uri.fromFile(it) } ?: tdFileUri(fileId)
+            val uri = joined ?: downloadedVideo?.uri() ?: tdFileUri(fileId)
             val length = when {
                 joined != null -> joined.getQueryParameters("s").sumOf { it.toLongOrNull() ?: 0L }
-                downloadedFile != null -> downloadedFile!!.length()
+                downloadedVideo != null -> downloadedVideo?.length() ?: 0L
                 else -> fileSizeBytes
             }
             if (length <= 0) return null
@@ -1920,14 +1921,14 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             // The download index first. Every way into this screen passes here, the next episode
             // and autoplay included, so a downloaded episode plays from its file however it was
             // reached.
-            val downloaded = if (joined) null else LocalDownloads.fileFor(settings, chatId, messageId)
-            downloadedFile = downloaded
+            val downloaded = if (joined) null else LocalDownloads.videoFor(settings, chatId, messageId)
+            downloadedVideo = downloaded
             if (joined) {
                 // Decided for every piece in [prepareJoined].
             } else if (downloaded != null) {
                 downloadComplete = true
                 downloadedFraction = 1f
-                if (fileSizeBytes <= 0) fileSizeBytes = downloaded.length()
+                if (fileSizeBytes <= 0) fileSizeBytes = downloaded.length() ?: 0L
             } else {
                 // An id carried in from a stored row, a channel or a notification may name another
                 // file in this TDLib session ([Td.fileIdFits]), and a resume point past that file's
@@ -2069,11 +2070,11 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             built.addListener(playerListener)
             // A plain file for a download, which the default data source reads directly; the TDLib
             // stream for everything else, carrying its type so the right reader is tried first.
-            val source = joinedSource ?: downloadedFile?.let { android.net.Uri.fromFile(it) }
+            val source = joinedSource ?: downloadedVideo?.uri()
                 ?: tdFileUri(fileId, streamType(mediaMime, mediaFileName))
             // A stream also holds the Wi-Fi up while it plays, which matters once the screen is
             // off and the sound plays on ([PlaybackService]); a file on the disk needs only the CPU.
-            val local = if (joinedSource != null) joinedAllLocal else downloadedFile != null
+            val local = if (joinedSource != null) joinedAllLocal else downloadedVideo != null
             built.setWakeMode(if (local) C.WAKE_MODE_LOCAL else C.WAKE_MODE_NETWORK)
             // Built out of sight (the next episode, or a stream opened again, behind the
             // notification): no video decoding until somebody can see it.
@@ -2524,7 +2525,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
     /** Telegram's lighter copies of the upload playing (CP80); none for a download or a joined video. */
     private fun telegramQualities(): List<com.tmplayer.data.TelegramQuality> =
-        if (downloadedFile != null || joinedSource != null) emptyList() else postItem?.qualities.orEmpty()
+        if (downloadedVideo != null || joinedSource != null) emptyList() else postItem?.qualities.orEmpty()
 
     /**
      * Plays [copy] in place of the copy playing, at the same moment ([VideoCopies.carryOver]
@@ -2593,7 +2594,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * pieces, a download, or an upload partly or wholly on this device already.
      */
     private suspend fun pickTelegramQuality() {
-        if (!hasMessage() || joinedSource != null || downloadedFile != null || playingQuality != 0) return
+        if (!hasMessage() || joinedSource != null || downloadedVideo != null || playingQuality != 0) return
         val wish = com.tmplayer.data.QualityWish.take(chatId, messageId)
         qualityHandPicked = wish != null
         if (wish == 0) return
@@ -2675,7 +2676,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     /** "Play Telegram's 480p" on the sheet that says nothing is arriving: the next copy down. */
     private fun lighterQuality(): com.tmplayer.data.TelegramQuality? {
         val fresh = postItem ?: return null
-        if (downloadedFile != null || joinedSource != null) return null
+        if (downloadedVideo != null || joinedSource != null) return null
         val now = if (playingQuality != 0) com.tmplayer.data.TelegramQualities.withQuality(fresh, fresh.qualities.firstOrNull { it.height == playingQuality } ?: return null) else fresh
         return com.tmplayer.data.TelegramQualities.lighter(now)
     }
@@ -4016,7 +4017,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         recoveryJob = null
         recoveryAttempts = 0
         reSourced = false
-        downloadedFile = null
+        downloadedVideo = null
         downloadComplete = false
         downloadedFraction = 0f
         lastProgressRender = 0L
@@ -4494,7 +4495,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         sameId: () -> Unit = { showError(friendlyError(error), retryable = !isHopeless(error)) },
     ): Boolean {
         // A file in the Downloads folder has no Telegram id to go stale.
-        if (downloadedFile != null) return false
+        if (downloadedVideo != null) return false
         if (reSourced || chatId == 0L || messageId == 0L) return false
         reSourced = true
         itemScope.launch {
@@ -4644,7 +4645,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * it played. On the Mi TV this was "Telegram lost track of file", then "Can't play this".
      */
     private fun sessionLost(error: PlaybackException): Boolean =
-        downloadedFile == null && (
+        downloadedVideo == null && (
             Td.sessionEnded.value ||
                 generateSequence(error.cause) { it.cause }.take(MAX_CAUSE_HOPS).any { it is com.tmplayer.data.SessionLostException }
             )
@@ -5024,9 +5025,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         val streamed = ArrayList<MediaItem>()
         var local = true
         for (piece in playable) {
-            val file = LocalDownloads.fileFor(settings, piece.chatId, piece.messageId)
-            if (file != null) {
-                sources += android.net.Uri.fromFile(file) to file.length()
+            val video = LocalDownloads.videoFor(settings, piece.chatId, piece.messageId)
+            if (video != null) {
+                sources += video.uri() to (video.length() ?: 0L)
                 continue
             }
             val id = runCatching { Td.currentFileId(piece.chatId, piece.messageId, piece.fileId) }.getOrDefault(piece.fileId)
@@ -5465,7 +5466,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      */
     override suspend fun onlineTarget(): SubtitleTarget? {
         if (mediaTitle.isBlank()) return null
-        val local = downloadedFile
+        val local = downloadedVideo
         val id = fileId
         val size = fileSizeBytes
         val hash = withContext(Dispatchers.IO) {
@@ -5473,7 +5474,11 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 when {
                     // The hash is of the whole file's two ends, which for a joined video are two pieces.
                     joinedSource != null -> null
-                    local != null -> MovieHash.of(local)
+                    local != null -> local.length()?.takeIf { MovieHash.hashable(it) }?.let { size ->
+                        val head = local.readAt(0, MovieHash.CHUNK)
+                        val tail = local.readAt(MovieHash.tailOffset(size), MovieHash.CHUNK)
+                        if (head != null && tail != null && head.size >= MovieHash.CHUNK && tail.size >= MovieHash.CHUNK) MovieHash.of(size, head, tail) else null
+                    }
                     id != 0 -> withTimeoutOrNull(3_000) {
                         OnlineSubtitles.hashFromTdlib(Td.awaitConnectedSession().client, id, size)
                     }
@@ -5906,11 +5911,12 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             val frames = TrickplayFrames(
                 scope = lifecycleScope,
                 // Not for a video joined from pieces: one piece's file is not the video's.
-                path = { if (joinedSource != null) null else downloadedFile?.path ?: trickplayPath },
+                path = { if (joinedSource != null) null else downloadedVideo?.let { it.file?.path ?: it.uri().toString() } ?: trickplayPath },
                 spans = { trickplaySpans },
-                complete = { downloadedFile != null || downloadComplete },
-                sizeBytes = { downloadedFile?.length() ?: fileSizeBytes },
+                complete = { downloadedVideo != null || downloadComplete },
+                sizeBytes = { downloadedVideo?.length() ?: fileSizeBytes },
                 durationMs = { player?.duration?.takeIf { it > 0 } ?: durationSec * 1_000L },
+                context = this@PlayerActivity,
             )
             trickplay = frames
             showScrubPictures()
@@ -5962,7 +5968,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     private fun applyDownloadState(file: TdFile) {
         // TDLib let go of a download's file when it moved into Downloads, so what it says about
         // that id now is "nothing here", which is not true of the video on screen.
-        if (downloadedFile != null) return
+        if (downloadedVideo != null) return
         if (fileSizeBytes <= 0 && file.size > 0) fileSizeBytes = file.size
         val local = file.local
         trickplayPath = local.path.takeIf { it.isNotBlank() }
@@ -6557,11 +6563,11 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         itemScope.launch {
             repeat(CHAPTER_TRIES) { attempt ->
                 if (attempt > 0) delay(CHAPTER_RETRY_MS)
-                val local = downloadedFile
+                val local = downloadedVideo
                 val found = withContext(Dispatchers.IO) {
                     runCatching {
                         if (local != null) {
-                            FileChapters.read(language) { offset, length -> readLocal(local, offset, length) }
+                            FileChapters.read(language) { offset, length -> local.readAt(offset, length) }
                         } else {
                             val client = Td.awaitAuthorizedSession().client
                             FileChapters.read(language) { offset, length -> readDownloaded(client, offset, length) }
@@ -6578,13 +6584,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             }
         }
     }
-
-    private fun readLocal(file: File, offset: Long, length: Int): ByteArray? =
-        java.io.RandomAccessFile(file, "r").use { raf ->
-            if (offset >= raf.length()) return null
-            val count = minOf(length.toLong(), raf.length() - offset).toInt()
-            ByteArray(count).also { raf.seek(offset); raf.readFully(it) }
-        }
 
     /** [length] bytes at [offset] of the file streaming, or null unless TDLib has all of them. */
     private suspend fun readDownloaded(client: TdlClient, offset: Long, length: Int): ByteArray? {
@@ -6928,7 +6927,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * not one the queue has, and not one with no message to download it from again.
      */
     private fun canSaveToDownloads(): Boolean =
-        savable == true && downloadedFile == null && fileId > 0 && chatId != 0L && messageId != 0L &&
+        savable == true && downloadedVideo == null && fileId > 0 && chatId != 0L && messageId != 0L &&
             !OfflineDownloads.isDownloading(fileId)
 
     /**
@@ -6941,7 +6940,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 when {
                     savable == null -> CHECKING_FEEDBACK
                     savable == false -> NOT_SAVABLE_FEEDBACK
-                    downloadedFile != null -> L.playerAlreadyInDownloads
+                    downloadedVideo != null -> L.playerAlreadyInDownloads
                     else -> L.playerAlreadyDownloading
                 },
             )
@@ -7689,7 +7688,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * "downloaded"; the cache says caching, or a viewer reads it as a download they never started.
      */
     private fun isRealDownload(): Boolean =
-        downloadedFile != null || (fileId > 0 && OfflineDownloads.isDownloading(fileId))
+        downloadedVideo != null || (fileId > 0 && OfflineDownloads.isDownloading(fileId))
 
     /**
      * Puts the video's own artwork behind the wait.
@@ -8043,7 +8042,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                     if (lastBufferedMs >= 0) noteOpeningProgress()
                     lastBufferedMs = buffered
                 }
-                val local = downloadComplete || downloadedFile != null || (joinedSource != null && joinedAllLocal)
+                val local = downloadComplete || downloadedVideo != null || (joinedSource != null && joinedAllLocal)
                 // Offline has its own words on the chip, and carries on by itself once back.
                 if (networkOffline) {
                     lastProgressAtMs = SystemClock.elapsedRealtime()
@@ -8237,7 +8236,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 }
             }
 
-            val local = downloadedFile
+            val local = downloadedVideo
             val availability = if (local != null) {
                 LocalFileAvailability.Complete
             } else {
@@ -8360,10 +8359,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         }
         saveResumePosition()
         lifecycleScope.launch {
-            val local = downloadedFile
+            val local = downloadedVideo
             val outcome = runCatching {
                 if (local != null) {
-                    ExternalPlayer.handOverFile(this@PlayerActivity, local.absolutePath, mediaTitle)
+                    ExternalPlayer.handOverFile(this@PlayerActivity, local.file?.absolutePath ?: local.uri().toString(), mediaTitle)
                 } else {
                     ExternalPlayer.handOver(this@PlayerActivity, fileId, mediaTitle)
                 }
@@ -8424,7 +8423,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                     if (lastBufferedMs >= 0) noteOpeningProgress()
                     lastBufferedMs = buffered
                 }
-                val local = downloadComplete || downloadedFile != null || (joinedSource != null && joinedAllLocal)
+                val local = downloadComplete || downloadedVideo != null || (joinedSource != null && joinedAllLocal)
                 if (networkOffline) {
                     noteOpeningProgress()
                     continue

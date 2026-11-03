@@ -45,6 +45,22 @@ object AndroidStorage {
     @Volatile var currentRoot: String = ""
 
     /**
+     * The application context, set once at launch ([com.tmplayer.App]) beside [currentRoot], for
+     * the code that reads a video the index names and has no screen to ask (a document in a picked
+     * folder needs a content resolver).
+     */
+    @Volatile var appContext: Context? = null
+
+    /**
+     * The picked folder ("Other folder", HX57) when [currentRoot] is one, else null. A value that
+     * is blank, a plain volume path, malformed or from a cloud provider is not a folder here.
+     */
+    fun currentTree(): android.net.Uri? = DownloadTree.parse(currentRoot)
+
+    /** Whether the stored location is a picked folder, usable or not. */
+    val usesTree: Boolean get() = StoredLocation.kindOf(currentRoot) == StoredLocation.Kind.Tree
+
+    /**
      * The internal default, first, then every other volume this device has mounted right now.
      * Nothing past the first entry on a device with no card or drive at all, which is when
      * Settings leaves the whole row out: there is nothing to choose between.
@@ -128,14 +144,22 @@ object AndroidStorage {
      * viewer notices).
      */
     fun downloadsDir(context: Context): File {
-        val chosen = currentRoot.takeIf { it.isNotBlank() }?.let(::File)
+        // A picked folder is written to through the system's own calls, never a path; the internal
+        // folder here is only where TDLib's file waits to be copied there (and where a download
+        // goes while the picked folder cannot be reached).
+        val chosen = currentRoot.takeIf { StoredLocation.kindOf(it) == StoredLocation.Kind.Volume }?.let(::File)
         if (chosen != null && isUsable(chosen)) return downloadsDirOf(chosen)
         return File(context.applicationContext.filesDir, AndroidPaths.DOWNLOADS)
     }
 
     /** Whether the chosen volume (if any) is reachable right now, for Settings' own warning line. */
     fun chosenIsReachable(): Boolean {
-        val chosen = currentRoot.takeIf { it.isNotBlank() }?.let(::File) ?: return true
+        if (usesTree) {
+            val tree = currentTree() ?: return false
+            val app = appContext ?: return true
+            return DownloadTree.usable(app, tree)
+        }
+        val chosen = currentRoot.takeIf { StoredLocation.kindOf(it) == StoredLocation.Kind.Volume }?.let(::File) ?: return true
         return isUsable(chosen)
     }
 }

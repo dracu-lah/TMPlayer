@@ -136,7 +136,7 @@ internal fun MediaDetailOpened(
     val kept by produceState(initialValue = Kept(item.locality == MediaItem.Locality.Downloaded, null), item.id, history) {
         val records = history ?: return@produceState
         value = withContext(Dispatchers.IO) {
-            fun present(copy: MediaItem) = LocalDownloads.presentFile(
+            fun present(copy: MediaItem) = LocalDownloads.presentVideo(
                 records.firstOrNull { it.chatId == copy.chatId && it.messageId == copy.messageId },
             ) != null
             val own = present(item)
@@ -388,7 +388,7 @@ internal fun MediaDetailOpened(
                     val app = context.applicationContext
                     App.backgroundScope.launch(Dispatchers.IO) {
                         val record = runCatching { settings.downloadRecord(item.chatId, item.messageId) }.getOrNull()
-                        val said = if (record == null || LocalDownloads.presentFile(record) == null) {
+                        val said = if (record == null || LocalDownloads.presentVideo(record) == null) {
                             s.downloadsFileGone
                         } else {
                             com.tmplayer.data.FolderExport.saveToGalleryNow(

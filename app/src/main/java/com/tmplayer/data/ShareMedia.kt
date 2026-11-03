@@ -3,9 +3,7 @@ package com.tmplayer.data
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import androidx.core.content.FileProvider
 import com.tmplayer.i18n.L
-import java.io.File
 
 /**
  * Hands a downloaded video to whatever else is on the phone.
@@ -14,9 +12,6 @@ import java.io.File
  * app receiving it has any way to say so.
  */
 object ShareMedia {
-
-    /** The authority the manifest declares, scoped to TDLib's own media directory. */
-    private const val AUTHORITY_SUFFIX = ".updates"
 
     /**
      * A share sheet for one or several videos, or null when none of them can be shared.
@@ -61,11 +56,5 @@ object ShareMedia {
      * returning null. A video moved or deleted between the list being drawn and the button being
      * pressed should drop out of the share rather than take the app down with it.
      */
-    private fun uriFor(context: Context, path: String): Uri? {
-        val file = File(path)
-        if (!file.isFile || file.length() <= 0) return null
-        return runCatching {
-            FileProvider.getUriForFile(context, context.packageName + AUTHORITY_SUFFIX, file)
-        }.getOrNull()
-    }
+    internal fun uriFor(context: Context, path: String): Uri? = LocalVideo.handoutUri(context, path)
 }

@@ -47,11 +47,47 @@ object DownloadRelocation {
     private val _moving = MutableStateFlow<Moving?>(null)
     val moving: StateFlow<Moving?> = _moving.asStateFlow()
 
+    /**
+     * Where downloads go (HX57): the app's own folder, a volume's app folder (HX26), or a folder the
+     * viewer picked ("Other folder"). [key] is what [SettingsStore.downloadRoot] holds.
+     */
+    sealed interface Destination {
+        val key: String
+
+        data object Internal : Destination {
+            override val key: String = ""
+        }
+
+        data class Volume(val root: File) : Destination {
+            override val key: String get() = root.path
+        }
+
+        data class Tree(val uri: android.net.Uri) : Destination {
+            override val key: String get() = uri.toString()
+        }
+
+        companion object {
+            /** A volume's root (null for internal), as [AndroidStorage.Volume] holds it. */
+            fun ofRoot(root: File?): Destination = if (root == null) Internal else Volume(root)
+
+            /**
+             * The destination a stored value names. A blank, malformed or cloud value is the internal
+             * folder, the one place that is always there, never a crash or a half understood path.
+             */
+            fun parse(value: String?): Destination = when (StoredLocation.kindOf(value)) {
+                StoredLocation.Kind.Volume -> Volume(File(value.orEmpty()))
+                StoredLocation.Kind.Tree -> DownloadTree.parse(value)?.let(::Tree) ?: Internal
+                else -> Internal
+            }
+        }
+    }
+
     /** How a move went, for the toast at the end. [label] is the volume's own name, as Settings shows it. */
     data class Outcome(
         val movedCount: Int,
         val failed: List<String>,
-        val downloadsDir: File,
+        /** The folder on the disk moved into; null when the destination is a picked folder. */
+        val downloadsDir: File?,
         val label: String,
         /** Why the move stopped before trying every file, or null when it tried them all. */
         val stoppedBy: Stop? = null,
@@ -78,7 +114,7 @@ object DownloadRelocation {
     private fun sizeText(bytes: Long): String = StorageRelocationPlan.size(bytes)
 
     /** Whether [e] is the file system saying the disk is full, in the words the JDK and Android use. */
-    internal fun isNoSpace(e: IOException): Boolean {
+    internal fun isNoSpace(e: Throwable): Boolean {
         val text = generateSequence<Throwable>(e) { it.cause }.mapNotNull { it.message }.joinToString(" ")
         return text.contains("No space left", ignoreCase = true) || text.contains("ENOSPC") || text.contains("disk full", ignoreCase = true)
     }
@@ -89,9 +125,18 @@ object DownloadRelocation {
      */
     suspend fun waitingFor(context: Context, settings: SettingsStore): String? {
         val pending = StorageRelocationPlan.Pending.decode(settings.downloadRootPendingNow()) ?: return null
-        val root = pending.root.takeIf { it.isNotBlank() }?.let(::File) ?: return null
-        if (AndroidStorage.isUsable(root)) return null
-        return AndroidStorage.volumes(context).firstOrNull { it.root?.path == root.path }?.label ?: L.storageAndroidRemovable(1)
+        return when (val destination = Destination.parse(pending.root)) {
+            Destination.Internal -> null
+            is Destination.Tree ->
+                if (DownloadTree.usable(context, destination.uri)) null else DownloadTree.label(context, destination.uri)
+            is Destination.Volume ->
+                if (AndroidStorage.isUsable(destination.root)) {
+                    null
+                } else {
+                    AndroidStorage.volumes(context).firstOrNull { it.root?.path == destination.root.path }?.label
+                        ?: L.storageAndroidRemovable(1)
+                }
+        }
     }
 
     /** Drops a pending move for good; what already moved stays moved and the rest stays where it is. */
@@ -107,8 +152,8 @@ object DownloadRelocation {
     /** Whether a move is running right now; the Settings row disables its trigger while this is true. */
     val running: Boolean get() = activeJob != null
 
-    /** The volume in use, or null for the internal default. */
-    fun currentRoot(): File? = AndroidStorage.currentRoot.takeIf { it.isNotBlank() }?.let(::File)
+    /** The volume in use, or null for the internal default or a picked folder (which has no path). */
+    fun currentRoot(): File? = (Destination.parse(AndroidStorage.currentRoot) as? Destination.Volume)?.root
 
     /**
      * Just the folder, nothing of what is already downloaded moved: new downloads go to [root]
@@ -116,9 +161,12 @@ object DownloadRelocation {
      * they are. HX26's "leave in place", and the one of the two always on offer, since it needs no
      * room for anything but the next download.
      */
-    suspend fun useWithoutMoving(settings: SettingsStore, root: File?) {
-        settings.setDownloadRoot(root?.path.orEmpty())
-        AndroidStorage.currentRoot = root?.path.orEmpty()
+    suspend fun useWithoutMoving(settings: SettingsStore, root: File?) = useWithoutMoving(settings, Destination.ofRoot(root))
+
+    suspend fun useWithoutMoving(settings: SettingsStore, destination: Destination) {
+        settings.setDownloadRoot(destination.key)
+        AndroidStorage.currentRoot = destination.key
+        AndroidStorage.appContext?.let { runCatching { DownloadTree.releaseUnused(it, settings) } }
     }
 
     /**
@@ -137,13 +185,22 @@ object DownloadRelocation {
         label: String,
         onOutcome: (Outcome) -> Unit,
         onCancelled: () -> Unit,
+    ): Boolean = start(context, settings, Destination.ofRoot(root), label, onOutcome, onCancelled)
+
+    fun start(
+        context: Context,
+        settings: SettingsStore,
+        destination: Destination,
+        label: String,
+        onOutcome: (Outcome) -> Unit,
+        onCancelled: () -> Unit,
     ): Boolean {
         if (activeJob != null) return false
         val app = context.applicationContext
         val job = scope.launch {
             lock.withLock {
                 val outcome = try {
-                    run(app, settings, root, label)
+                    run(app, settings, destination, label)
                 } finally {
                     withContext(NonCancellable) { OfflineDownloads.resumeAll(app) }
                 }
@@ -176,40 +233,116 @@ object DownloadRelocation {
         if (!lock.tryLock()) return
         try {
             val app = context.applicationContext
-            val root = pending.root.takeIf { it.isNotBlank() }?.let(::File)
-            // A card that is not there: wait quietly. The row says so and offers to forget the move.
-            if (root != null && !AndroidStorage.isUsable(root)) return
-            val label = AndroidStorage.volumes(app).firstOrNull { it.root?.path == root?.path }?.label ?: L.storageAndroidInternal
-            finish(app, settings, pending, root, label)
+            val destination = Destination.parse(pending.root)
+            // A card that is not there, or a folder whose permission was taken back: wait quietly.
+            // The row says so and offers to forget the move.
+            val reachable = when (destination) {
+                Destination.Internal -> true
+                is Destination.Volume -> AndroidStorage.isUsable(destination.root)
+                is Destination.Tree -> DownloadTree.usable(app, destination.uri)
+            }
+            if (!reachable) return
+            finish(app, settings, pending, destination, labelOf(app, destination))
         } finally {
             lock.unlock()
         }
     }
 
-    private suspend fun run(context: Context, settings: SettingsStore, root: File?, label: String): Outcome {
+    private fun labelOf(context: Context, destination: Destination): String = when (destination) {
+        Destination.Internal -> L.storageAndroidInternal
+        is Destination.Tree -> DownloadTree.label(context, destination.uri)
+        is Destination.Volume ->
+            AndroidStorage.volumes(context).firstOrNull { it.root?.path == destination.root.path }?.label ?: L.storageAndroidRemovable(1)
+    }
+
+    /** The folder on the disk a destination writes into; null for a picked folder, which is written through the system. */
+    private fun dirOf(context: Context, destination: Destination): File? = when (destination) {
+        Destination.Internal -> File(context.filesDir, AndroidPaths.DOWNLOADS)
+        is Destination.Volume -> AndroidStorage.downloadsDirOf(destination.root)
+        is Destination.Tree -> null
+    }
+
+    /**
+     * The downloads that still have to go to [destination]: every record whose video is there
+     * (a record whose file has gone is left for the Downloads page to show as missing) and is not
+     * in [destination] already, whether it is a file on the disk or a document in a picked folder.
+     */
+    fun toMove(context: Context, records: List<ResumeRecord>, destination: Destination): List<Pair<ResumeRecord, LocalVideo>> {
+        val dir = dirOf(context, destination)
+        return records.mapNotNull { record ->
+            val video = LocalVideo.of(context, record.localPath) ?: return@mapNotNull null
+            if (!video.exists()) return@mapNotNull null
+            val inPlace = when (destination) {
+                is Destination.Tree -> video is LocalVideo.InTree && StoredLocation.documentIsIn(destination.key, record.localPath.orEmpty())
+                else -> video is LocalVideo.OnDisk && dir != null && StorageRelocationPlan.inside(video.file, dir)
+            }
+            if (inPlace) null else record to video
+        }
+    }
+
+    private suspend fun run(context: Context, settings: SettingsStore, destination: Destination, label: String): Outcome {
         OfflineDownloads.pauseAll(context)
         awaitNothingMoving()
         val oldDownloadsDir = AndroidStorage.downloadsDir(context)
-        val pending = StorageRelocationPlan.Pending(root = root?.path.orEmpty(), oldCache = "", oldDownloads = oldDownloadsDir.path)
+        val pending = StorageRelocationPlan.Pending(root = destination.key, oldCache = "", oldDownloads = oldDownloadsDir.path)
         settings.setDownloadRootPending(pending.encode())
-        settings.setDownloadRoot(root?.path.orEmpty())
-        AndroidStorage.currentRoot = root?.path.orEmpty()
-        return finish(context, settings, pending, root, label)
+        settings.setDownloadRoot(destination.key)
+        AndroidStorage.currentRoot = destination.key
+        return finish(context, settings, pending, destination, label)
+    }
+
+    /**
+     * Puts one video where [destination] keeps downloads and returns the path to record for it.
+     * A file on the disk or a document, into a folder on the disk or a picked folder: the copy is
+     * made whole and size checked before the original is let go, and a failure or a cancel leaves
+     * no partial video at either end. Throws [IOException] when the move fails; the original is
+     * untouched then.
+     */
+    private suspend fun transfer(
+        context: Context,
+        video: LocalVideo,
+        destination: Destination,
+        dir: File?,
+        onProgress: (done: Long, total: Long) -> Unit,
+    ): String {
+        if (destination is Destination.Tree) {
+            val length = video.length() ?: throw java.io.FileNotFoundException("Nothing to move at ${video.uri()}")
+            val document = DownloadTree.put(context, destination.uri, video.name(), length, { video.open() }, onProgress)
+            letGo(video)
+            return document.toString()
+        }
+        val into = dir ?: throw IOException("No folder to move into")
+        return when (video) {
+            is LocalVideo.OnDisk -> DownloadFiles.moveIntoDownloads(video.file, into, video.file.name, onProgress).absolutePath
+            is LocalVideo.InTree -> {
+                val moved = DownloadTree.pull(video, into, video.name(), onProgress)
+                letGo(video)
+                moved.absolutePath
+            }
+        }
+    }
+
+    /** Removes the original of a video that is now whole at its new place; a stubborn one is logged, never a failure. */
+    private fun letGo(video: LocalVideo) {
+        val gone = when (video) {
+            is LocalVideo.OnDisk -> runCatching { video.file.delete() }.getOrDefault(false) || !video.file.exists()
+            is LocalVideo.InTree -> video.delete()
+        }
+        if (!gone) Logger.w(TAG, "Moved a download but could not delete the original at ${video.uri()}")
     }
 
     private suspend fun finish(
         context: Context,
         settings: SettingsStore,
         pending: StorageRelocationPlan.Pending,
-        root: File?,
+        destination: Destination,
         label: String,
     ): Outcome {
-        val to = if (root != null) AndroidStorage.downloadsDirOf(root) else File(context.filesDir, AndroidPaths.DOWNLOADS)
-        to.mkdirs()
+        val to = dirOf(context, destination)
+        to?.mkdirs()
         val records = runCatching { settings.downloadsNow() }.getOrDefault(emptyList())
-        val toMove = StorageRelocationPlan.toMove(records, to)
-        val files = toMove.mapNotNull { record -> record.localPath?.let { record to File(it) } }
-        val total = files.sumOf { (_, file) -> file.length() }
+        val files = toMove(context, records, destination)
+        val total = files.sumOf { (_, video) -> video.length() ?: 0L }
         var movedCount = 0
         val failed = mutableListOf<String>()
         var stoppedBy: Stop? = null
@@ -218,22 +351,25 @@ object DownloadRelocation {
             var done = 0L
             for ((record, src) in files) {
                 val before = done
-                val size = src.length().coerceAtLeast(0)
+                val size = (src.length() ?: 0L).coerceAtLeast(0)
                 try {
-                    val target = DownloadFiles.moveIntoDownloads(src, to, src.name) { landed, _ ->
+                    val newPath = transfer(context, src, destination, to) { landed, _ ->
                         _moving.value = Moving(before + landed, total)
                     }
-                    settings.setDownloadPath(record.chatId, record.messageId, target.absolutePath)
+                    settings.setDownloadPath(record.chatId, record.messageId, newPath)
                     movedCount++
-                } catch (e: IOException) {
+                } catch (e: Exception) {
+                    // A cancel is not a failure: it stops the move here, between files.
+                    if (e is CancellationException) throw e
                     // The record still points at the old place, which still plays from there.
-                    Logger.w(TAG, "Could not move ${src.name} to the new downloads folder", e)
-                    failed += src.name
+                    val name = src.name()
+                    Logger.w(TAG, "Could not move $name to the new downloads folder", e)
+                    failed += name
                     // A full disk or a pulled card fails every later file the same slow way, so
                     // stop at the first and say why instead of trying them all.
                     stoppedBy = when {
-                        isNoSpace(e) -> Stop.NoSpace((total - before - DiskSpace.read(context, to).freeBytes).coerceAtLeast(size))
-                        (root != null && !AndroidStorage.isUsable(root)) || !src.exists() -> Stop.VolumeGone
+                        isNoSpace(e) -> Stop.NoSpace((total - before - freeAt(context, destination, to)).coerceAtLeast(size))
+                        !reachable(context, destination) || !src.exists() -> Stop.VolumeGone
                         else -> null
                     }
                     if (stoppedBy != null) break
@@ -245,9 +381,23 @@ object DownloadRelocation {
         }
         if (failed.isEmpty()) {
             settings.setDownloadRootPending("")
-            removeIfEmpty(File(pending.oldDownloads), to)
+            if (to != null) removeIfEmpty(File(pending.oldDownloads), to)
         }
+        // A folder the viewer gave up keeps its grant only while a download is still in it.
+        runCatching { DownloadTree.releaseUnused(context, settings) }
         return Outcome(movedCount, failed, to, label, stoppedBy)
+    }
+
+    private fun reachable(context: Context, destination: Destination): Boolean = when (destination) {
+        Destination.Internal -> true
+        is Destination.Volume -> AndroidStorage.isUsable(destination.root)
+        is Destination.Tree -> DownloadTree.usable(context, destination.uri)
+    }
+
+    /** Room left at the destination; zero when it cannot be asked, so the message quotes the whole size still to move. */
+    private fun freeAt(context: Context, destination: Destination, dir: File?): Long = when (destination) {
+        is Destination.Tree -> DownloadTree.freeBytes(destination.uri) ?: 0L
+        else -> dir?.let { DiskSpace.read(context, it).freeBytes } ?: 0L
     }
 
     /**

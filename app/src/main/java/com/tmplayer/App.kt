@@ -159,6 +159,7 @@ class App : Application() {
         // Where downloads go (HX26): mirrored into a plain var so resolving a download's folder
         // never waits on a DataStore read, then an unfinished move from an earlier run (a kill, a
         // crash) is picked up and finished before the viewer could notice it never was.
+        AndroidStorage.appContext = this
         backgroundScope.launch {
             val settings = SettingsStore(this@App)
             launch { settings.downloadRoot.collect { AndroidStorage.currentRoot = it } }

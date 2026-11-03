@@ -143,6 +143,26 @@ class GarbageInputTest {
         "PLAYING", "TRANSITIONING", "STOPPED", "ERROR_OCCURRED", "NO_MEDIA_PRESENT", "\u0000",
     )
 
+    /** The stored downloads location and a record's path (HX57): a path or a picked folder's content:// string. */
+    @Test
+    fun storedLocationNeverThrows() {
+        val tree = "content://com.android.externalstorage.documents/tree/primary%3AMovies"
+        val extra = listOf(
+            tree, "$tree/document/x", "$tree/document/", "content://", "content://com.android.externalstorage.documents/tree/",
+            "content://com.android.externalstorage.documents/tree/" + "%".repeat(50_000), "content:", "CONTENT://X", "/".repeat(10_000),
+        )
+        for (text in texts + extra) {
+            survive("StoredLocation.kindOf", text) { StoredLocation.kindOf(text) }
+            survive("StoredLocation.isDocument", text) { StoredLocation.isDocument(text) }
+            survive("StoredLocation.documentIsIn", text) {
+                StoredLocation.documentIsIn(text, text)
+                StoredLocation.documentIsIn(tree, text)
+                StoredLocation.documentIsIn(text, "$tree/document/x")
+            }
+        }
+        assertNoFailures()
+    }
+
     @Test
     fun dlnaParsersNeverThrow() {
         for (text in texts + dlnaCorpus) {

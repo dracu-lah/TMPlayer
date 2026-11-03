@@ -23,6 +23,9 @@ import java.io.IOException
  * @param isPlaying whether a player has the file open, which holds the move: a player streaming
  *   the file would lose it, and moving an open file is refused outright on some file systems.
  * @param maySave whether Telegram still lets this message be kept, asked just before the move.
+ * @param tree the folder the viewer picked for downloads (HX57), when one is chosen and can be
+ *   reached right now; null otherwise, and the file goes to [downloadsDir] as it always did, which
+ *   is also where a download lands while a picked folder cannot be reached.
  */
 class DownloadFinisher(
     private val settings: SettingsStore,
@@ -34,11 +37,27 @@ class DownloadFinisher(
         Td.maySave(chat, message)
     },
     private val pollMs: Long = POLL_MS,
+    private val tree: () -> TreeTarget? = { null },
 ) {
+    /** A picked folder as the finisher writes to it; [DownloadService] wires the real one. */
+    interface TreeTarget {
+        /** The folder's name for a message. */
+        val label: String
+
+        /** Room left on the folder's drive, or null when it cannot be asked. */
+        fun freeBytes(): Long?
+
+        /** Copies [source] in under [name], checked whole, and returns the new document's string. */
+        suspend fun put(source: File, name: String, onProgress: (done: Long, total: Long) -> Unit): String
+    }
+
     /** How a finish ended. */
     sealed interface Outcome {
         /** In the Downloads folder as [file], and recorded there. */
         data class Moved(val file: File) : Outcome
+
+        /** In the picked folder as the document [uri], and recorded there. */
+        data class MovedToTree(val uri: String) : Outcome
 
         /** Still in the cache, untouched, with [reason] for the row. Try again repeats the move. */
         data class Failed(val reason: String) : Outcome
@@ -75,6 +94,7 @@ class DownloadFinisher(
             ?: return Outcome.Failed(NOT_FOUND)
         val source = File(path)
         val name = DownloadFiles.safeName(request.title, request.fileName.ifBlank { source.name })
+        tree()?.let { picked -> return finishIntoTree(request, fileId, source, name, picked, onProgress) }
         val target = try {
             DownloadFiles.moveIntoDownloads(source, downloadsDir(), name) { done, total ->
                 OfflineDownloads.moving(fileId, movedBytes = done)
@@ -97,6 +117,41 @@ class DownloadFinisher(
         // asked first everywhere.
         runCatching { td.deleteFile(fileId) }
         return Outcome.Moved(target)
+    }
+
+    /**
+     * [finish]'s second half when downloads go to a picked folder: the copy is written and checked
+     * before anything else changes, the record then holds the document, and only then are the
+     * cache's file and TDLib's copy let go. Any failure leaves the file whole in the cache for Try
+     * again, and the folder without a partial copy.
+     */
+    private suspend fun finishIntoTree(
+        request: DownloadRequest,
+        fileId: Int,
+        source: File,
+        name: String,
+        picked: TreeTarget,
+        onProgress: (done: Long, total: Long) -> Unit,
+    ): Outcome {
+        val size = source.length()
+        val free = runCatching { picked.freeBytes() }.getOrNull()
+        if (free != null && free < size) {
+            return Outcome.Failed(L.storageAndroidNoSpace(picked.label, StorageRelocationPlan.size(size - free)))
+        }
+        val uri = try {
+            picked.put(source, name) { done, total ->
+                OfflineDownloads.moving(fileId, movedBytes = done)
+                onProgress(done, total)
+            }
+        } catch (failure: IOException) {
+            return Outcome.Failed(if (DownloadRelocation.isNoSpace(failure)) L.storageAndroidNoSpace(picked.label, StorageRelocationPlan.size(size)) else MOVE_FAILED)
+        }
+        settings.noteDownload(request.item().copy(sizeBytes = size), request.chatTitle, uri)
+        com.tmplayer.data.SupportReminder.downloadFinished()
+        runCatching { settings.forgetCachedVideo(request.chatId, request.messageId) }
+        runCatching { td.deleteFile(fileId) }
+        runCatching { source.delete() }
+        return Outcome.MovedToTree(uri)
     }
 
     companion object {

@@ -403,7 +403,7 @@ class MainActivity : ComponentActivity() {
             // rather than opening a player that can only fail. The row itself goes with the entry.
             com.tmplayer.data.GoneVideos.reasonFor(video.chatId, video.messageId)?.let { reason ->
                 val downloaded = withContext(Dispatchers.IO) {
-                    runCatching { LocalDownloads.fileFor(SettingsStore(this@MainActivity), video.chatId, video.messageId) }.getOrNull()
+                    runCatching { LocalDownloads.videoFor(SettingsStore(this@MainActivity), video.chatId, video.messageId) }.getOrNull()
                 } != null
                 if (!downloaded) {
                     com.tmplayer.ui.components.showMessage(this@MainActivity, com.tmplayer.data.GoneVideos.openMessage(reason))
@@ -845,7 +845,7 @@ private fun Root() {
         com.tmplayer.data.GoneVideos.follow(
             settings = settings,
             watched = watchedStore,
-            keptOnDevice = { chatId, messageId -> LocalDownloads.fileFor(settings, chatId, messageId) != null },
+            keptOnDevice = { chatId, messageId -> LocalDownloads.videoFor(settings, chatId, messageId) != null },
         ) { forgotten -> withContext(Dispatchers.Main) { toast(com.tmplayer.data.GoneVideos.message(forgotten)) } }
     }
 
@@ -1162,7 +1162,7 @@ private fun Root() {
         // HX21) and not downloaded says so instead of opening a player that can only fail.
         var gone: com.tmplayer.data.GoneReason? = null
         val item = withContext(Dispatchers.Default) {
-            val downloaded = LocalDownloads.fileFor(settings, chosen.chatId, chosen.messageId) != null
+            val downloaded = LocalDownloads.videoFor(settings, chosen.chatId, chosen.messageId) != null
             if (!downloaded) gone = com.tmplayer.data.GoneVideos.reasonFor(chosen.chatId, chosen.messageId)
             if (!downloaded && gone == null &&
                 !runCatching { Td.fileIdFits(chosen.fileId, chosen.sizeBytes) }.getOrDefault(true)
@@ -1188,7 +1188,7 @@ private fun Root() {
         withContext(Dispatchers.Default) {
             // A download plays from its file in the Downloads folder, and nothing below applies
             // to it: it needs no connection, no room, and it is not the cache's to claim.
-            if (LocalDownloads.fileFor(settings, item.chatId, item.messageId) != null) {
+            if (LocalDownloads.videoFor(settings, item.chatId, item.messageId) != null) {
                 withContext(Dispatchers.Main) {
                     com.tmplayer.ui.components.PlayPress.open()
                     context.startActivity(PlayerActivity.intent(context, item, chatTitle))
@@ -1367,7 +1367,7 @@ private fun Root() {
         settings.rememberChatOpened(stored.chatId)
         // In the Downloads folder: it plays from there, and asking Telegram first would only
         // be a wait, and offline a long one.
-        if (LocalDownloads.fileFor(settings, stored.chatId, stored.messageId) != null) {
+        if (LocalDownloads.videoFor(settings, stored.chatId, stored.messageId) != null) {
             play(stored, chatTitle = chatTitle)
             return
         }

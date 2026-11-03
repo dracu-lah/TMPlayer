@@ -45,9 +45,9 @@ class LocalDownloadsTest {
         settings.noteDownload(item(2), "Chat", File(folder.root, "gone.mp4").path)
         settings.noteDownload(item(3), "Chat")
 
-        assertEquals(here, LocalDownloads.fileFor(settings, 1L, 1L))
-        assertNull(LocalDownloads.fileFor(settings, 1L, 2L))
-        assertNull(LocalDownloads.fileFor(settings, 1L, 3L))
+        assertEquals(LocalVideo.OnDisk(here), LocalDownloads.videoFor(settings, 1L, 1L))
+        assertNull(LocalDownloads.videoFor(settings, 1L, 2L))
+        assertNull(LocalDownloads.videoFor(settings, 1L, 3L))
         assertEquals(setOf("1:1"), LocalDownloads.presentIds(settings))
         assertEquals(10L, LocalDownloads.indexedBytes(settings))
 

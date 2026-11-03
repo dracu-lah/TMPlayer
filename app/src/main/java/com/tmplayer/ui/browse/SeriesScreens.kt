@@ -137,7 +137,7 @@ internal fun SeriesOpened(
         .collectAsStateWithLifecycle(initialValue = emptyList())
     val downloadedIds by produceState(initialValue = emptySet<String>(), history) {
         value = withContext(Dispatchers.IO) {
-            history.filter { com.tmplayer.data.LocalDownloads.presentFile(it) != null }
+            history.filter { com.tmplayer.data.LocalDownloads.presentVideo(it) != null }
                 .mapTo(HashSet()) { "${it.chatId}:${it.messageId}" }
         }
     }
