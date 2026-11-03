@@ -48,13 +48,55 @@ object DownloadRelocation {
     val moving: StateFlow<Moving?> = _moving.asStateFlow()
 
     /** How a move went, for the toast at the end. [label] is the volume's own name, as Settings shows it. */
-    data class Outcome(val movedCount: Int, val failed: List<String>, val downloadsDir: File, val label: String) {
+    data class Outcome(
+        val movedCount: Int,
+        val failed: List<String>,
+        val downloadsDir: File,
+        val label: String,
+        /** Why the move stopped before trying every file, or null when it tried them all. */
+        val stoppedBy: Stop? = null,
+    ) {
         val message: String
             get() = when {
+                stoppedBy is Stop.NoSpace -> L.storageAndroidNoSpace(label, sizeText(stoppedBy.neededBytes))
+                stoppedBy is Stop.VolumeGone -> L.storageAndroidCardGone(label)
                 failed.isEmpty() -> L.storageAndroidMovedTo(label)
                 failed.size == 1 -> L.storageMovedButOne(failed.first())
                 else -> L.storageMovedButSome(failed.size)
             }
+    }
+
+    /** The first failure that makes every later file pointless, so the move stops there (HX57). */
+    sealed interface Stop {
+        /** The target filled up; [neededBytes] is how much more the rest of the move would take. */
+        data class NoSpace(val neededBytes: Long) : Stop
+
+        /** The card or drive (either end of the move) went away. */
+        data object VolumeGone : Stop
+    }
+
+    private fun sizeText(bytes: Long): String = StorageRelocationPlan.size(bytes)
+
+    /** Whether [e] is the file system saying the disk is full, in the words the JDK and Android use. */
+    internal fun isNoSpace(e: IOException): Boolean {
+        val text = generateSequence<Throwable>(e) { it.cause }.mapNotNull { it.message }.joinToString(" ")
+        return text.contains("No space left", ignoreCase = true) || text.contains("ENOSPC") || text.contains("disk full", ignoreCase = true)
+    }
+
+    /**
+     * The label of the volume a move is waiting for, or null when none is pending or it is
+     * reachable (the move then just finishes at the next launch). Shown on the Storage row.
+     */
+    suspend fun waitingFor(context: Context, settings: SettingsStore): String? {
+        val pending = StorageRelocationPlan.Pending.decode(settings.downloadRootPendingNow()) ?: return null
+        val root = pending.root.takeIf { it.isNotBlank() }?.let(::File) ?: return null
+        if (AndroidStorage.isUsable(root)) return null
+        return AndroidStorage.volumes(context).firstOrNull { it.root?.path == root.path }?.label ?: L.storageAndroidRemovable(1)
+    }
+
+    /** Drops a pending move for good; what already moved stays moved and the rest stays where it is. */
+    suspend fun forgetPending(settings: SettingsStore) {
+        settings.setDownloadRootPending("")
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + JobFailures.handler(TAG))
@@ -135,6 +177,8 @@ object DownloadRelocation {
         try {
             val app = context.applicationContext
             val root = pending.root.takeIf { it.isNotBlank() }?.let(::File)
+            // A card that is not there: wait quietly. The row says so and offers to forget the move.
+            if (root != null && !AndroidStorage.isUsable(root)) return
             val label = AndroidStorage.volumes(app).firstOrNull { it.root?.path == root?.path }?.label ?: L.storageAndroidInternal
             finish(app, settings, pending, root, label)
         } finally {
@@ -164,15 +208,17 @@ object DownloadRelocation {
         to.mkdirs()
         val records = runCatching { settings.downloadsNow() }.getOrDefault(emptyList())
         val toMove = StorageRelocationPlan.toMove(records, to)
-        val total = toMove.sumOf { File(it.localPath!!).length() }
+        val files = toMove.mapNotNull { record -> record.localPath?.let { record to File(it) } }
+        val total = files.sumOf { (_, file) -> file.length() }
         var movedCount = 0
         val failed = mutableListOf<String>()
-        if (toMove.isNotEmpty()) _moving.value = Moving(0, total)
+        var stoppedBy: Stop? = null
+        if (files.isNotEmpty()) _moving.value = Moving(0, total)
         try {
             var done = 0L
-            for (record in toMove) {
-                val src = File(record.localPath!!)
+            for ((record, src) in files) {
                 val before = done
+                val size = src.length().coerceAtLeast(0)
                 try {
                     val target = DownloadFiles.moveIntoDownloads(src, to, src.name) { landed, _ ->
                         _moving.value = Moving(before + landed, total)
@@ -180,12 +226,19 @@ object DownloadRelocation {
                     settings.setDownloadPath(record.chatId, record.messageId, target.absolutePath)
                     movedCount++
                 } catch (e: IOException) {
-                    // Typically the card went away mid move, or something else has the file open.
                     // The record still points at the old place, which still plays from there.
                     Logger.w(TAG, "Could not move ${src.name} to the new downloads folder", e)
                     failed += src.name
+                    // A full disk or a pulled card fails every later file the same slow way, so
+                    // stop at the first and say why instead of trying them all.
+                    stoppedBy = when {
+                        isNoSpace(e) -> Stop.NoSpace((total - before - DiskSpace.read(context, to).freeBytes).coerceAtLeast(size))
+                        (root != null && !AndroidStorage.isUsable(root)) || !src.exists() -> Stop.VolumeGone
+                        else -> null
+                    }
+                    if (stoppedBy != null) break
                 }
-                done = before + src.length().coerceAtLeast(0)
+                done = before + size
             }
         } finally {
             _moving.value = null
@@ -194,7 +247,7 @@ object DownloadRelocation {
             settings.setDownloadRootPending("")
             removeIfEmpty(File(pending.oldDownloads), to)
         }
-        return Outcome(movedCount, failed, to, label)
+        return Outcome(movedCount, failed, to, label, stoppedBy)
     }
 
     /**

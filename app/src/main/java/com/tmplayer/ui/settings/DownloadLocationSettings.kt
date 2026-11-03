@@ -1,14 +1,21 @@
 package com.tmplayer.ui.settings
 
 import android.content.Context
+import android.content.BroadcastReceiver
 import android.content.Intent
+import android.content.IntentFilter
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tmplayer.data.AndroidPaths
 import com.tmplayer.data.AndroidStorage
@@ -36,8 +43,10 @@ import java.io.File
  * (HX26): internal storage, always, plus whichever SD card or USB-OTG drive the device currently
  * has mounted. A list rather than Android's own folder picker because a television's remote has
  * to reach it too, and many TV boxes and launchers have no folder picker at all; the phone gets
- * the same list, which keeps the two in step and needs no permission from either. Left out of the
- * Storage page entirely on a device with nothing but internal storage: there is nothing to choose.
+ * the same list, which keeps the two in step and needs no permission from either. Always shown,
+ * even with internal storage alone (HX57): the line says where downloads live, how much room is
+ * left, and that they are erased with the app. The list is read again when Settings comes back to
+ * the front and when a card is mounted or removed.
  *
  * TDLib's cache and database are never offered here and never move: only the Downloads folder
  * does ([DownloadRelocation]), so the watch cache (recently played videos) always stays on
@@ -50,14 +59,24 @@ internal fun DownloadLocationRow(onMoved: () -> Unit) {
     val s = LocalStrings.current
     val toast = rememberToast()
     val scope = rememberCoroutineScope()
-    val volumes = remember { AndroidStorage.volumes(context) }
-    if (volumes.size <= 1) return
+    var volumesTick by remember { mutableStateOf(0) }
+    val volumes = remember(volumesTick) { AndroidStorage.volumes(context) }
+    VolumeChanges { volumesTick++ }
 
     val downloadRoot by settings.downloadRoot.collectAsStateWithLifecycle(initialValue = AndroidStorage.currentRoot)
     val moving by DownloadRelocation.moving.collectAsStateWithLifecycle(initialValue = null)
     var picking by remember { mutableStateOf(false) }
     var choice by remember { mutableStateOf<LocationChoice?>(null) }
     var refused by remember { mutableStateOf<String?>(null) }
+    var waiting by remember { mutableStateOf<String?>(null) }
+    var forgetting by remember { mutableStateOf(false) }
+    // A card put back finishes a move that was waiting for it; one still out is shown on the row.
+    LaunchedEffect(volumesTick) {
+        runCatching {
+            DownloadRelocation.resumePending(context, settings)
+            waiting = DownloadRelocation.waitingFor(context, settings)
+        }
+    }
 
     val current = volumes.firstOrNull { it.root?.path == downloadRoot.ifBlank { null } } ?: volumes.first()
     val reachable = downloadRoot.isBlank() || AndroidStorage.chosenIsReachable()
@@ -69,12 +88,39 @@ internal fun DownloadLocationRow(onMoved: () -> Unit) {
                 StorageRelocationPlan.size(moving!!.doneBytes),
                 StorageRelocationPlan.size(moving!!.totalBytes),
             )
+            waiting != null -> s.storageAndroidWaiting(waiting!!)
             !reachable -> s.storageAndroidUnavailable(current.label)
             else -> current.label
         },
         icon = TmIcons.Folder,
         onClick = { if (!DownloadRelocation.running) picking = true },
     )
+
+    if (waiting != null) {
+        ActionRow(
+            title = s.storageAndroidForget,
+            subtitle = s.storageAndroidForgetTitle(waiting.orEmpty()),
+            icon = TmIcons.Folder,
+            onClick = { forgetting = true },
+        )
+    }
+
+    if (forgetting) {
+        TvConfirm(
+            title = s.storageAndroidForgetTitle(waiting.orEmpty()),
+            message = s.storageAndroidForgetBody(waiting.orEmpty()),
+            confirmLabel = s.storageAndroidForget,
+            destructive = false,
+            onConfirm = {
+                forgetting = false
+                scope.launch {
+                    DownloadRelocation.forgetPending(settings)
+                    waiting = null
+                }
+            },
+            onDismiss = { forgetting = false },
+        )
+    }
 
     if (picking) {
         ChoiceSheet(
@@ -87,8 +133,8 @@ internal fun DownloadLocationRow(onMoved: () -> Unit) {
                 volumes.forEach { volume ->
                     ChoiceLine(
                         title = volume.label,
-                        detail = volume.root?.let { root ->
-                            runCatching { s.storageFree(StorageRelocationPlan.size(DiskSpace.read(context, root).freeBytes)) }.getOrNull()
+                        detail = (volume.root ?: context.filesDir).let { dir ->
+                            runCatching { s.storageFree(StorageRelocationPlan.size(DiskSpace.read(context, dir).freeBytes)) }.getOrNull()
                         },
                         selected = volume.root?.path == current.root?.path,
                         onClick = {
@@ -170,6 +216,36 @@ internal fun DownloadLocationRow(onMoved: () -> Unit) {
     }
 }
 
+/**
+ * Calls [onChange] when Settings returns to the front and when a card or drive is mounted or
+ * taken out, so the volume list never goes stale while the page is open.
+ */
+@Composable
+private fun VolumeChanges(onChange: () -> Unit) {
+    val context = LocalContext.current
+    val owner = LocalLifecycleOwner.current
+    val latest by androidx.compose.runtime.rememberUpdatedState(onChange)
+    DisposableEffect(owner) {
+        val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_RESUME) latest() }
+        owner.lifecycle.addObserver(observer)
+        onDispose { owner.lifecycle.removeObserver(observer) }
+    }
+    DisposableEffect(context) {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(c: Context?, intent: Intent?) = latest()
+        }
+        val filter = IntentFilter().apply {
+            listOf(
+                Intent.ACTION_MEDIA_MOUNTED, Intent.ACTION_MEDIA_UNMOUNTED, Intent.ACTION_MEDIA_EJECT,
+                Intent.ACTION_MEDIA_REMOVED, Intent.ACTION_MEDIA_BAD_REMOVAL,
+            ).forEach(::addAction)
+            addDataScheme("file")
+        }
+        val registered = runCatching { androidx.core.content.ContextCompat.registerReceiver(context, receiver, filter, androidx.core.content.ContextCompat.RECEIVER_EXPORTED) }.isSuccess
+        onDispose { if (registered) runCatching { context.unregisterReceiver(receiver) } }
+    }
+}
+
 /** A volume the viewer tapped, with what moving its existing downloads there would take. */
 private data class LocationChoice(val volume: AndroidStorage.Volume, val plan: LocationPlan.Ready)
 
@@ -217,4 +293,4 @@ private suspend fun planLocationChange(context: Context, settings: SettingsStore
         }
     }
 
-private fun sizeOf(records: List<ResumeRecord>): Long = records.sumOf { File(it.localPath!!).length() }
+private fun sizeOf(records: List<ResumeRecord>): Long = records.sumOf { record -> record.localPath?.let { File(it).length() } ?: 0L }

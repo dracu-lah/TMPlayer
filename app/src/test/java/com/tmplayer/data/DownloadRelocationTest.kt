@@ -173,4 +173,62 @@ class DownloadRelocationTest {
         assertTrue(volumes.isNotEmpty())
         assertNull(volumes.first().root)
     }
+
+    @Test
+    fun `a card that goes away stops the move at the first file and says so`() {
+        val first = File(internalDownloads, "Episode 4.mkv")
+        val second = File(internalDownloads, "Episode 5.mkv")
+        download(4, first)
+        download(5, second)
+        // A "card" that cannot be written to: its folder is a plain file, so nothing can land.
+        val gone = File(folder.root, "gone").apply { writeText("not a folder") }
+        AndroidStorage.currentRoot = ""
+
+        val latch = CountDownLatch(1)
+        var outcome: DownloadRelocation.Outcome? = null
+        DownloadRelocation.start(
+            context = context,
+            settings = settings,
+            root = gone,
+            label = "SD card",
+            onOutcome = { outcome = it; latch.countDown() },
+            onCancelled = { latch.countDown() },
+        )
+        awaitOnMain(latch)
+
+        assertEquals(DownloadRelocation.Stop.VolumeGone, outcome?.stoppedBy)
+        assertEquals(1, outcome?.failed?.size)
+        assertEquals(0, outcome?.movedCount)
+        assertTrue(first.isFile && second.isFile)
+        assertTrue(outcome?.message.orEmpty().contains("SD card"))
+        assertTrue(runBlocking { settings.downloadRootPendingNow() }.isNotEmpty())
+    }
+
+    @Test
+    fun `a full disk is recognised from the file system's own words`() {
+        assertTrue(DownloadRelocation.isNoSpace(java.io.IOException("write failed: ENOSPC (No space left on device)")))
+        assertTrue(DownloadRelocation.isNoSpace(java.io.IOException("x", java.io.IOException("No space left on device"))))
+        assertFalse(DownloadRelocation.isNoSpace(java.io.IOException("Permission denied")))
+        val outcome = DownloadRelocation.Outcome(0, listOf("a.mkv"), folder.root, "SD card", DownloadRelocation.Stop.NoSpace(5L * 1024 * 1024 * 1024))
+        assertTrue(outcome.message.contains("full"))
+    }
+
+    @Test
+    fun `a pending move whose card is gone waits and can be forgotten`() = runBlocking {
+        val gone = File(folder.root, "gone2").apply { writeText("not a folder") }
+        settings.setDownloadRootPending(
+            StorageRelocationPlan.Pending(root = gone.path, oldCache = "", oldDownloads = internalDownloads.path).encode(),
+        )
+
+        DownloadRelocation.resumePending(context, settings)
+
+        // Nothing was tried and nothing was dropped: the row can name what it is waiting for.
+        assertTrue(settings.downloadRootPendingNow().isNotEmpty())
+        assertTrue(DownloadRelocation.waitingFor(context, settings) != null)
+
+        DownloadRelocation.forgetPending(settings)
+
+        assertEquals("", settings.downloadRootPendingNow())
+        assertNull(DownloadRelocation.waitingFor(context, settings))
+    }
 }

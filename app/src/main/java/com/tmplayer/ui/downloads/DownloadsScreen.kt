@@ -453,7 +453,7 @@ fun DownloadsScreen(
         // the disk, and TDLib knows nothing about it any more.
         when (val state = LocalDownloads.stateOf(record)) {
             LocalDownloads.FileState.Present -> {
-                val bytes = java.io.File(record.localPath!!).length()
+                val bytes = record.localPath?.let { java.io.File(it).length() } ?: 0L
                 return row.copy(bytes = bytes, complete = true, state = state)
             }
             LocalDownloads.FileState.Missing -> return row.copy(state = state)
