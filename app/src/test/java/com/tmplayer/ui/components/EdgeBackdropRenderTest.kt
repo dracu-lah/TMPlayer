@@ -68,7 +68,7 @@ class EdgeBackdropRenderTest {
         return BackdropArt(picture = bitmap.asImageBitmap())
     }
 
-    private fun draw(source: Source, name: String, tv: Boolean, frameHeight: Int): Pair<Bitmap, Int> {
+    private fun draw(source: Source, name: String, tv: Boolean, frameHeight: Int, overhang: Float = 0f): Pair<Bitmap, Int> {
         FormFactor.override(tv)
         Motion.reduced = true
         val activity = Robolectric.buildActivity(ComponentActivity::class.java).setup().get()
@@ -80,6 +80,7 @@ class EdgeBackdropRenderTest {
                             cover = Cover("Night Train", null, 0),
                             art = { art(source) },
                             modifier = Modifier.fillMaxSize(),
+                            overhang = overhang,
                         )
                     }
                 }
@@ -96,6 +97,28 @@ class EdgeBackdropRenderTest {
         val frame = (frameHeight * activity.resources.displayMetrics.density).toInt()
         return bitmap to frame
     }
+
+    /**
+     * The picture runs on below the frame (HX58, 2026-11-04): still the picture's own pixels a
+     * little under the frame's foot, where it used to end, and the page's colour at its own end, so
+     * it is not cut anywhere.
+     */
+    private fun overhangs(name: String, tv: Boolean, frameHeight: Int) {
+        val (bitmap, frame) = draw(Source.Sharp, name, tv, frameHeight, overhang = EDGE_OVERHANG)
+        val end = (frame * (1f + EDGE_OVERHANG)).toInt()
+        val ground = bitmap.getPixel(6, (end + 40).coerceAtMost(bitmap.height - 1))
+        val x = bitmap.width - 6
+        assertNotEquals("$name: the picture goes on under the frame's foot", ground, bitmap.getPixel(x, frame + 8))
+        assertEquals("$name: and ends in the page's colour", ground, bitmap.getPixel(x, (end - 2).coerceAtMost(bitmap.height - 1)))
+    }
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w960dp-h540dp-land-night-xhdpi")
+    fun `television 1080p, picture runs on under the frame`() = overhangs("tv-overhang", tv = true, frameHeight = 328)
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w960dp-h540dp-land-night-xhdpi")
+    fun `wide window, picture runs on under the frame`() = overhangs("wide-overhang", tv = false, frameHeight = 360)
 
     /** Every source on one form factor: the soft one leaves the page's colour at the start of the frame. */
     private fun everySource(name: String, tv: Boolean, frameHeight: Int) {

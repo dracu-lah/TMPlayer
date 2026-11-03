@@ -19,6 +19,9 @@ import com.tmplayer.ui.theme.Tone
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
@@ -61,6 +64,7 @@ fun EdgeBackdrop(
     topFade: Dp = 0.dp,
     topFadePx: (() -> Float)? = null,
     cornerShade: Dp = 0.dp,
+    overhang: Float = 0f,
     onPictured: (() -> Unit)? = null,
 ) = EdgeBackdropOf(
     cover = source.cover,
@@ -70,6 +74,7 @@ fun EdgeBackdrop(
     topFade = topFade,
     topFadePx = topFadePx,
     cornerShade = cornerShade,
+    overhang = overhang,
     onPictured = onPictured,
 )
 
@@ -91,6 +96,16 @@ fun EdgeBackdropOf(
      */
     topFadePx: (() -> Float)? = null,
     cornerShade: Dp = 0.dp,
+    /**
+     * How far a wide picture runs on below the frame, as a share of the frame's height (0 keeps it
+     * inside, the phone's upright carousel always does): the foot of the frame is then not where
+     * the picture ends, so it is not sliced there. It fades into the page behind whatever sits
+     * under the frame (the first row of Home, the sections under a detail page's hero), as
+     * Netflix's, Disney+'s and Prime's heroes do, rather than being cut off at the frame's foot
+     * (user, 2026-11-04: "still feels like a cut image"). Drawn outside the frame's bounds, so a
+     * caller must not clip it.
+     */
+    overhang: Float = 0f,
     /** Called once the first picture (or the cover standing for it) is drawn. */
     onPictured: (() -> Unit)? = null,
 ) {
@@ -134,12 +149,16 @@ fun EdgeBackdropOf(
                 // the wide frame showed a slice of it: it stands whole at the frame's height
                 // instead, over a soft copy of itself filling the rest.
                 val upright = wide && !standIn && !small && picture != null && picture.height > picture.width
-                val (w, h) = edgeSize(frameW, frameH, pictureW, wide, picture?.width ?: 0, picture?.height ?: 0, standIn, upright)
+                val extra = if (wide) (frameH * overhang.coerceAtLeast(0f)).toInt() else 0
+        val (w, h) = edgeSize(frameW, frameH, pictureW, wide, picture?.width ?: 0, picture?.height ?: 0, standIn, upright, extra)
                 // A picture drawn narrower than the frame has its own edge in the middle of the
                 // page, so it fades out to the page's colour there: the full-bleed fade keeps a
                 // hint of the picture, which would show as a hard line at its start.
                 val startCap = if (wide && w < pictureW && !standIn) 1f else START_FADE_CAP
                 val sized = with(density) { Modifier.size(w.toDp(), h.toDp()) }
+                // The part below the frame is drawn outside it, not squeezed into it: the frame
+                // is told the picture is no taller than itself, and the picture is laid at its top.
+                val spill = if (extra > 0) Modifier.spillBelow() else Modifier
                 val ground = Tone.background
                 // A television paints the page's colour over the picture's edges instead: the
                 // same look on the page's plain ground, without an offscreen layer two thirds of
@@ -151,14 +170,16 @@ fun EdgeBackdropOf(
                         val stops = fadeOut(START_FADE)
                         Brush.horizontalGradient(*(if (rtl) stops.reversedStops(ground, startCap) else stops.inStops(ground, startCap)))
                     } else null
-                    val foot = Brush.verticalGradient(*fadeOut(FOOT_FADE).reversedStops(ground))
+                    val foot = Brush.verticalGradient(*fadeOut(footReach(size.height, frameH)).reversedStops(ground))
                     val reach = if (small) FOOT_FADE else (topFadeOf() / size.height).coerceIn(0f, 1f)
                     val top = if (reach > 0f) Brush.verticalGradient(*fadeOut(reach).inStops(ground, TOP_FADE_CAP)) else null
+                    val dim = SolidColor(ground.copy(alpha = PICTURE_DIM))
                     onDrawWithContent {
                         drawContent()
                         if (across != null) drawRect(across)
                         drawRect(foot)
                         if (top != null) drawRect(top)
+                        drawRect(dim)
                     }
                 } else Modifier
                     .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)
@@ -167,17 +188,20 @@ fun EdgeBackdropOf(
                             val stops = fadeOut(START_FADE)
                             Brush.horizontalGradient(*(if (rtl) stops.reversedStops(startCap) else stops.inStops(startCap)))
                         } else null
-                        val foot = Brush.verticalGradient(*fadeOut(FOOT_FADE).reversedStops())
+                        val foot = Brush.verticalGradient(*fadeOut(footReach(size.height, frameH)).reversedStops())
                         val reach = if (small) FOOT_FADE else (topFadeOf() / size.height).coerceIn(0f, 1f)
                         val top = if (reach > 0f) Brush.verticalGradient(*fadeOut(reach).inStops(TOP_FADE_CAP)) else null
+                        val dim = SolidColor(ground.copy(alpha = PICTURE_DIM))
                         onDrawWithContent {
                             drawContent()
                             if (across != null) drawRect(across, blendMode = BlendMode.DstIn)
                             drawRect(foot, blendMode = BlendMode.DstIn)
                             if (top != null) drawRect(top, blendMode = BlendMode.DstIn)
+                            // Only over the picture's own pixels, as the television's overlay is.
+                            drawRect(dim, blendMode = BlendMode.SrcAtop)
                         }
                     }
-                val place = Modifier.align(if (small) Alignment.CenterEnd else Alignment.TopEnd).then(sized).then(fades)
+                val place = Modifier.align(if (small) Alignment.CenterEnd else Alignment.TopEnd).then(spill).then(sized).then(fades)
                 if (picture != null && upright) {
                     Box(place) {
                         // Not on a television: a blur that size is a full screen pass on a stick's GPU.
@@ -205,7 +229,7 @@ fun EdgeBackdropOf(
                         bitmap = picture,
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
-                        alignment = Alignment.TopCenter,
+                        alignment = CROP_ANCHOR,
                         filterQuality = Thumbnails.drawFilter,
                         modifier = if (lowRes && !Motion.television) {
                             place.then(Modifier.blur(STAND_IN_BLUR))
@@ -303,7 +327,15 @@ private fun List<Pair<Float, Float>>.reversedStops(ground: Color): Array<Pair<Fl
 private fun List<Pair<Float, Float>>.reversedStops(ground: Color, cap: Float): Array<Pair<Float, Color>> =
     map { (at, alpha) -> (1f - at) to ground.copy(alpha = (1f - alpha) * cap) }.reversed().toTypedArray()
 
-private val EASE = listOf(0f to 0f, 0.2f to 0.06f, 0.4f to 0.24f, 0.6f to 0.52f, 0.8f to 0.82f, 1f to 1f)
+/**
+ * The fades' curve: a smoothstep sampled every tenth, so a fade has no kink where it starts or
+ * ends. Six straight segments (the curve this replaced) showed as a faint band at the foot of the
+ * picture on a large screen, which read as the picture's edge.
+ */
+private val EASE = (0..10).map { i ->
+    val t = i / 10f
+    t to t * t * (3f - 2f * t)
+}
 
 /**
  * How much of a wide frame's width the picture takes, against the end edge: the whole of it,
@@ -315,6 +347,14 @@ private val EASE = listOf(0f to 0f, 0.2f to 0.06f, 0.4f to 0.24f, 0.6f to 0.52f,
  * reintroduce by nudging this back down for a rounding worry that never showed up in practice.
  */
 const val EDGE_SHARE = 1f
+
+/**
+ * The overhang the Home carousels ask for, as a share of their frame's height: on a television
+ * (328 dp and its heading) and on a desktop window about a fifth to two fifths of the picture's own
+ * height more is drawn than the frame holds, which is what it takes for the picture to end in the
+ * page's colour behind the first row rather than at the frame's foot.
+ */
+const val EDGE_OVERHANG = 0.4f
 
 /** A frame this many times wider than tall puts the picture at its end; a narrower one spans it. */
 private const val WIDE_RATIO = 1.4f
@@ -339,8 +379,33 @@ private const val START_FADE_CAP = 0.78f
  */
 private const val TOP_FADE_CAP = 0.85f
 
-/** The share of the picture's height that fades into the page at its foot. */
+/** The share of the frame's height that fades into the page at its foot. */
 private const val FOOT_FADE = 0.42f
+
+/**
+ * How much of the picture [PICTURE_DIM] takes off overall, in the page's colour: a bright picture
+ * (a snow scene, a white studio) otherwise outshone the words over it and the rows under it. Light
+ * enough that a picture still reads as itself, as the streaming apps' heroes do.
+ */
+private const val PICTURE_DIM = 0.10f
+
+/**
+ * The share of a picture's own height its foot fade takes: [FOOT_FADE] of the frame, counted up
+ * from the frame's foot to the end of the picture. A picture that ends at the frame's foot fades
+ * as always; one that runs on below ([EdgeBackdropOf]'s overhang) keeps the same start and fades
+ * on to its own end, so it ends in the page's colour instead of being cut.
+ */
+private fun footReach(pictureH: Float, frameH: Int): Float =
+    if (pictureH <= 0f) FOOT_FADE else ((pictureH - frameH * (1f - FOOT_FADE)) / pictureH).coerceIn(FOOT_FADE, 1f)
+
+/**
+ * Measured with no height limit and laid at the top, reporting no more than the frame has: the
+ * picture below the frame is drawn but takes no room and is not squeezed or centred into it.
+ */
+private fun Modifier.spillBelow(): Modifier = layout { measurable, constraints ->
+    val placeable = measurable.measure(constraints.copy(minHeight = 0, maxHeight = Constraints.Infinity))
+    layout(placeable.width, minOf(placeable.height, constraints.maxHeight)) { placeable.place(0, 0) }
+}
 
 /**
  * How much wider than tall the [cornerShade] glow reaches: the whole cluster of a television's
@@ -365,7 +430,7 @@ internal const val EDGE_SOFT_SCALE = 1.5f
  * The size, in pixels, [EdgeBackdropOf] draws a picture at: [pictureW] across (the frame's width
  * at its [share]) when it is sharp enough for that, no wider than [EDGE_SMALL_SCALE] times a
  * thumbnail's own width or [EDGE_SOFT_SCALE] times a larger picture's, and no taller than the
- * frame (cropped from its foot then). [picW] and [picH] are the picture's own size, 0 with none;
+ * frame plus [extra] (cropped from its foot then). [picW] and [picH] are the picture's own size, 0 with none;
  * a [standIn] (the blurred field) is stretched whole, and an [upright] one stands at the frame's
  * height.
  */
@@ -378,8 +443,9 @@ internal fun edgeSize(
     picH: Int,
     standIn: Boolean,
     upright: Boolean,
+    extra: Int = 0,
 ): Pair<Int, Int> = when {
-    picW == 0 -> pictureW to (if (wide) minOf(frameH, pictureW * 9 / 16) else frameH)
+    picW == 0 -> pictureW to (if (wide) minOf(frameH + extra, pictureW * 9 / 16) else frameH)
     upright -> pictureW to frameH
     !wide -> frameW to frameH
     else -> {
@@ -389,9 +455,16 @@ internal fun edgeSize(
             else -> (picW * EDGE_SOFT_SCALE).toInt()
         }
         val width = minOf(pictureW, cap)
-        width to minOf(frameH, if (standIn) width * 9 / 16 else width * picH / picW.coerceAtLeast(1))
+        width to minOf(frameH + extra, if (standIn) width * 9 / 16 else width * picH / picW.coerceAtLeast(1))
     }
 }
+
+/**
+ * Where a picture taller than its box is cropped: mostly from the foot, which fades away anyway,
+ * a little from the top, where the clock's and the window's own shade already lie, rather than
+ * strictly from the foot, which kept the very top (sky, black bars) and lost the subject's torso.
+ */
+private val CROP_ANCHOR = androidx.compose.ui.BiasAlignment(0f, -0.5f)
 
 /** The soft copy behind an upright picture: blurred past any detail, and dimmed so the picture leads. */
 private val UPRIGHT_FIELD_BLUR = 48.dp

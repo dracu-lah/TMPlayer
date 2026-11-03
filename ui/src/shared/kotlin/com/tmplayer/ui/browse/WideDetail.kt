@@ -37,7 +37,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
@@ -196,7 +195,7 @@ fun WideDetailPanel(
         val logoHeight = if (roomy && maxHeight >= TALL_WINDOW) 150.dp else 120.dp
         // The sheet's own ground and Close, for the moment the caches are asked.
         if (firstPaint) Column(Modifier.fillMaxSize().verticalScroll(scroll)) {
-            Box(Modifier.fillMaxWidth().heightIn(min = heroHeight).clipToBounds()) {
+            Box(Modifier.fillMaxWidth().heightIn(min = heroHeight)) {
                 // Half the page's speed, so the picture drifts away under the title.
                 val drift = Modifier.matchParentSize().graphicsLayer { if (!reduced) translationY = scroll.value * PARALLAX }
                 // The same full-bleed hero as the Home carousel ([com.tmplayer.ui.components.EdgeBackdrop]):
@@ -204,7 +203,8 @@ fun WideDetailPanel(
                 // across the middle used to show only a slice of the picture; EdgeBackdrop instead
                 // stands the picture whole at its own aspect, cropped from the foot only where that
                 // runs taller than the frame, with the same long start fade as the carousel.
-                com.tmplayer.ui.components.EdgeBackdrop(source, drift)
+                // Runs on below the hero and fades into the sections under it, so it is not clipped here.
+                com.tmplayer.ui.components.EdgeBackdrop(source, drift, overhang = DETAIL_OVERHANG)
                 // Laid from the hero's foot up, so what is held above Play (the logo, the genres
                 // line) never moves it; kept clear of the Back button at the top.
                 Column(
@@ -521,6 +521,9 @@ private val HERO_TEXT = 760.dp
 
 /** The hero's share of the window's height, kept between [HERO_MIN] and [HERO_MAX]. */
 private const val HERO_SHARE = 0.74f
+
+/** How far the hero's picture runs on under the sections below it, as a share of the hero's height. */
+private const val DETAIL_OVERHANG = 0.25f
 private val HERO_MIN = 320.dp
 private val HERO_MAX = 800.dp
 
