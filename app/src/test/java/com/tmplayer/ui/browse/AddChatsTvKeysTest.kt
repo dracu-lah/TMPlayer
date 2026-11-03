@@ -105,7 +105,11 @@ class AddChatsTvKeysTest {
         val model = AddChatsViewModel(counts = null, write = {})
         // Not required, so Done is on the panel with nothing ticked.
         val activity = open(model, chats = CHATS, required = false)
+        // The focus fill, ring and ink are painted in the draw phase (HX76): the pictures show
+        // the row the remote left drawn plain again and the one it reached lit.
+        save("add-chats-tv-row-focused.png", draw(activity))
         press(activity, KeyEvent.KEYCODE_DPAD_DOWN)
+        save("add-chats-tv-row-focus-moved.png", draw(activity))
         val row = focusedTitle(activity)
         press(activity, KeyEvent.KEYCODE_DPAD_RIGHT)
         assertEquals(listOf("Save with no chats"), focusedWords(activity))

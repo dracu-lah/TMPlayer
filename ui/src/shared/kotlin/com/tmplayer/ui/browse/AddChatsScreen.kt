@@ -145,6 +145,14 @@ import com.tmplayer.ui.components.rememberShimmer
 import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Tv
 import com.tmplayer.ui.theme.focusRing
+import com.tmplayer.ui.theme.focusDrawn
+import com.tmplayer.ui.theme.focusRingColor
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.ui.graphics.ColorProducer
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.runtime.State
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.semantics.role
 
 /**
  * "Add chats" (HX27): every chat of the account with a tick box, the videos each holds, and the
@@ -1050,11 +1058,19 @@ private fun PickRow(
 ) {
     val s = LocalStrings.current
     val interactions = remember { MutableInteractionSource() }
-    val focused by interactions.collectIsFocusVisibleAsState()
+    // Kept as a State and read only where it is drawn (the fill, the ring, the words' and the
+    // star's colours), so a focus move draws the row it leaves and the one it reaches again and
+    // composes neither (HX76: the two rows composed again were 35 of PickRow's 81 samples a hold).
+    val focused = interactions.collectIsFocusVisibleAsState()
     val unknown = shape == ChatSuggestions.CountShape.Unknown
     val round = RoundedCornerShape(12.dp)
-    val ink = if (focused) Tone.onFocusFill else Tone.text
-    val quiet = if (focused) Tone.onFocusFill else Tone.muted
+    val onFocus = Tone.onFocusFill
+    val text = Tone.text
+    val muted = Tone.muted
+    val ink = remember(focused, onFocus, text) { ColorProducer { if (focused.value) onFocus else text } }
+    val quiet = remember(focused, onFocus, muted) { ColorProducer { if (focused.value) onFocus else muted } }
+    val titleStyle = (if (tv) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleSmall)
+        .let { remember(it) { it.copy(fontWeight = FontWeight.SemiBold) } }
     val avatar = if (tv) 52.dp else 44.dp
     Row(
         modifier
@@ -1076,8 +1092,7 @@ private fun PickRow(
             // A clip is a layer, and this TV (API 28) records each one through a View (HX76): the
             // TV has no ripple to bound, so its fill and ring take the shape without one.
             .then(if (tv) Modifier else Modifier.clip(round))
-            .background(if (focused) Tone.focusFill else Color.Transparent, round)
-            .focusRing(focused, round)
+            .focusDrawn(focused, focusRingColor(), round, fill = Tone.focusFill)
             .semantics(mergeDescendants = true) {
                 toggleableState = ToggleableState(ticked)
                 // The words are read here, when semantics are asked for, not while the row composes.
@@ -1105,26 +1120,20 @@ private fun PickRow(
         RowAvatar(row, avatar)
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(
+                BasicText(
                     row.title.ifBlank { row.id.toString() },
-                    style = if (tv) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
+                    style = titleStyle,
                     color = ink,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false),
                 )
                 if (row.starred) {
-                    Icon(
-                        TmIcons.Star,
-                        // The row's own long press (the Menu key on a remote or a keyboard)
-                        // already toggles it, so the icon says what is true rather than act
-                        // itself: a second, separately focusable target on this row would be
-                        // a second thing a remote has to find, which the tick box already is.
-                        contentDescription = s.browseFavourite,
-                        tint = if (focused) Tone.onFocusFill else Tone.accent,
-                        modifier = Modifier.size(14.dp),
-                    )
+                    // The row's own long press (the Menu key on a remote or a keyboard) already
+                    // toggles it, so the icon says what is true rather than act itself: a second,
+                    // separately focusable target on this row would be a second thing a remote has
+                    // to find, which the tick box already is.
+                    RowStar(focused, s.browseFavourite)
                 }
             }
             CountLine(shape, countWords, quiet, tv)
@@ -1138,6 +1147,32 @@ private fun PickRow(
             Checkbox(checked = ticked, onCheckedChange = null)
         }
     }
+}
+
+/**
+ * A starred row's star, in the accent or, on the focused row, the focus fill's ink: an [Icon]
+ * whose tint is picked in the draw phase, so a focus move repaints it without composing it.
+ */
+@Composable
+private fun RowStar(focused: State<Boolean>, description: String) {
+    val painter = rememberVectorPainter(TmIcons.Star)
+    val accent = Tone.accent
+    val onFocus = Tone.onFocusFill
+    Spacer(
+        Modifier
+            .size(14.dp)
+            .semantics {
+                contentDescription = description
+                role = Role.Image
+            }
+            .drawWithCache {
+                val plain = ColorFilter.tint(accent)
+                val lit = ColorFilter.tint(onFocus)
+                onDrawBehind {
+                    with(painter) { draw(size, colorFilter = if (focused.value) lit else plain) }
+                }
+            },
+    )
 }
 
 /**
@@ -1201,7 +1236,7 @@ private class CountWords(private val s: Messages) {
  * bar, which is what keeps a row from changing height the moment its count lands.
  */
 @Composable
-private fun CountLine(shape: ChatSuggestions.CountShape, countWords: CountWords, ink: Color, tv: Boolean) {
+private fun CountLine(shape: ChatSuggestions.CountShape, countWords: CountWords, ink: ColorProducer, tv: Boolean) {
     val s = LocalStrings.current
     val style = if (tv) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodySmall
     val density = LocalDensity.current
@@ -1216,9 +1251,9 @@ private fun CountLine(shape: ChatSuggestions.CountShape, countWords: CountWords,
                     .height(line * 0.6f)
                     .background(Tone.surfaceHigh, RoundedCornerShape(4.dp)),
             )
-            is ChatSuggestions.CountShape.Exact -> Text(countWords.about(shape.videos), style = style, color = ink, maxLines = 1)
-            ChatSuggestions.CountShape.Many -> Text(s.pickerCountMany, style = style, color = ink, maxLines = 1)
-            ChatSuggestions.CountShape.Unknown -> Text(
+            is ChatSuggestions.CountShape.Exact -> BasicText(countWords.about(shape.videos), style = style, color = ink, maxLines = 1)
+            ChatSuggestions.CountShape.Many -> BasicText(s.pickerCountMany, style = style, color = ink, maxLines = 1)
+            ChatSuggestions.CountShape.Unknown -> BasicText(
                 if (tv) s.pickerCountUnknownKeys else s.pickerCountUnknownTouch,
                 style = style,
                 color = ink,

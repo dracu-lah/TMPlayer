@@ -196,6 +196,7 @@ import com.tmplayer.ui.theme.Focus
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.Tv
 import com.tmplayer.ui.theme.focusRing
+import com.tmplayer.ui.theme.focusDrawn
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -2202,7 +2203,7 @@ internal fun VideoTile(
         ink = remember(focusedState, text, muted) { androidx.compose.ui.graphics.ColorProducer { if (focusedState.value) text else muted } }
         // Drawn only round the focused tile: a transparent ring was still a rounded stroke drawn
         // on every tile in view.
-        ring = Modifier.focusRingDrawn(focusedState, accent, shape)
+        ring = Modifier.focusDrawn(focusedState, accent, shape)
     }
     Column(
         modifier
@@ -2271,38 +2272,6 @@ internal fun VideoTile(
         }
     }
 }
-
-/**
- * [Focus.Ring] round a television's tile, painted from [focused] in the draw phase alone, so a
- * focus move draws the tile again and composes nothing. The stroke is the one
- * [androidx.compose.foundation.border] draws for a rounded shape (whole pixels wide, inset by half
- * of that, the corners shrunk to match), so the ring looks as it did when it was a border.
- */
-private fun Modifier.focusRingDrawn(focused: androidx.compose.runtime.State<Boolean>, color: Color, shape: Shape): Modifier =
-    drawWithCache {
-        val stroke = kotlin.math.min(kotlin.math.ceil(Focus.Ring.toPx()), kotlin.math.ceil(size.minDimension / 2))
-        val half = stroke / 2
-        val outline = shape.createOutline(size, layoutDirection, this)
-        val corner = (outline as? androidx.compose.ui.graphics.Outline.Rounded)?.roundRect?.topLeftCornerRadius?.let {
-            androidx.compose.ui.geometry.CornerRadius((it.x - half).coerceAtLeast(0f), (it.y - half).coerceAtLeast(0f))
-        }
-        val style = androidx.compose.ui.graphics.drawscope.Stroke(stroke)
-        onDrawWithContent {
-            drawContent()
-            if (!focused.value) return@onDrawWithContent
-            if (corner != null) {
-                drawRoundRect(
-                    color,
-                    topLeft = androidx.compose.ui.geometry.Offset(half, half),
-                    size = androidx.compose.ui.geometry.Size(size.width - stroke, size.height - stroke),
-                    cornerRadius = corner,
-                    style = style,
-                )
-            } else {
-                drawOutline(outline, color, style = style)
-            }
-        }
-    }
 
 /**
  * A line of facts under a tile in the tile's [ink]. On a television the colour is read where the
