@@ -180,18 +180,22 @@ object FolderExport {
                 } else {
                     null
                 }
-                candidate to path?.let(::File)?.takeIf { it.isFile }
+                candidate to LocalVideo.of(app, path)?.takeIf { it.exists() }
             }
             val sorted = FolderCopy.sort(
                 withFiles,
                 whole = { it.second != null },
                 canBeSaved = { Td.maySave(it.first.record.chatId, it.first.record.messageId) },
             )
-            val items = sorted.copy.map { (candidate, file) ->
+            val items = sorted.copy.map { (candidate, video) ->
+                val local = video!!
                 Item(
-                    FolderCopyIo.Source(file!!, candidate.record.fileName ?: candidate.title, candidate.title, "", candidate.key),
+                    FolderCopyIo.Source(
+                        candidate.record.fileName ?: candidate.title, candidate.title, "", candidate.key,
+                        local.name(), { local.length() }, { local.open() },
+                    ),
                     candidate.record,
-                    file.length(),
+                    local.length() ?: 0L,
                     candidate.record.updatedAt,
                 )
             }

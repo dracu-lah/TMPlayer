@@ -124,7 +124,7 @@ internal fun DownloadLocationRow(onMoved: () -> Unit) {
             )
             waiting != null -> s.storageAndroidWaiting(waiting!!)
             onTree && !reachable -> s.storageAndroidFolderUnreachable(treeState?.label.orEmpty())
-            onTree -> treeState?.label.orEmpty()
+            onTree -> s.storageAndroidFolderChosen(treeState?.label.orEmpty())
             !reachable -> s.storageAndroidUnavailable(current.label)
             else -> current.label
         },

@@ -57,7 +57,7 @@ class StorageRelocationPlanTest {
     fun `a drive without room for the downloads and a gigabyte says how much each is`() {
         val verdict = validate(candidate(free = 20 * gb), downloadsBytes = 38 * gb)
         verdict as StorageRelocationPlan.Verdict.Refused
-        assertEquals("That drive has 20.0 GB free. The downloads alone need 39.0 GB.", verdict.reason)
+        assertEquals("That drive has 20.0 GB free. The downloads and 1 GB to spare need 39.0 GB.", verdict.reason)
     }
 
     @Test

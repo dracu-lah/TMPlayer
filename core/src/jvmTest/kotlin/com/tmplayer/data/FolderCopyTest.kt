@@ -150,7 +150,19 @@ class FolderCopyTest {
         assertEquals(1, out.forbidden)
         assertEquals(2, out.unfinished)
         // The originals are untouched.
-        assertTrue(sources.all { it.file.isFile })
+        assertTrue(sources.all { it.exists() })
+    }
+
+    @Test
+    fun aVideoReadThroughAStreamIsCopiedAndAGoneOneIsReported() {
+        val bytes = ByteArray(500) { it.toByte() }
+        val here = FolderCopyIo.Source("Doc", "Doc", "", "k1", "doc.mp4", { bytes.size.toLong() }, { bytes.inputStream() })
+        val gone = FolderCopyIo.Source("Gone", "Gone", "", "k2", "gone.mp4", { null }, { error("not opened") })
+        val folder = FakeFolder()
+        val out = FolderCopyIo.copyAll(folder, listOf(here, gone), 0, 0, { false }) {}
+        assertEquals(1, out.copied)
+        assertEquals(listOf("k1"), out.verifiedKeys)
+        assertEquals(1, out.failed.size)
     }
 
     @Test
@@ -216,7 +228,7 @@ class FolderCopyTest {
     fun aGoneFileATooLargeOneAndAShortCopyAreFailuresNotStops() {
         val dir = tempDir()
         val folder = FakeFolder(max = 50)
-        val gone = video(dir, "Gone.mp4", 10).also { it.file.delete() }
+        val gone = video(dir, "Gone.mp4", 10).also { File(dir, "Gone.mp4").delete() }
         val big = video(dir, "Big.mp4", 100)
         val fine = video(dir, "Fine.mp4", 10)
         val out = FolderCopyIo.copyAll(folder, listOf(gone, big, fine), 0, 0, { false }) {}

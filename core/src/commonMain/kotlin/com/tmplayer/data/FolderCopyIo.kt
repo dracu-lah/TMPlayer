@@ -19,7 +19,27 @@ object FolderCopyIo {
      * One finished download to copy: the file on the disk, the name it goes by, its title for the
      * viewer, and [key], the caller's own name for it (which a Move deletes by).
      */
-    class Source(val file: File, val displayName: String, val title: String, val mimeType: String, val key: String = file.path)
+    class Source(
+        val displayName: String,
+        val title: String,
+        val mimeType: String,
+        val key: String,
+        /** The name on the disk, used when [displayName] gives nothing usable. */
+        val fileName: String,
+        private val lengthOrNull: () -> Long?,
+        private val opener: () -> InputStream,
+    ) {
+        /** A video that is a plain file (desktop, TDLib's cache, an app folder). */
+        constructor(file: File, displayName: String, title: String, mimeType: String, key: String = file.path) :
+            this(displayName, title, mimeType, key, file.name, { if (file.isFile) file.length() else null }, { file.inputStream() })
+
+        /** Its size, or null when it is gone. */
+        fun length(): Long? = runCatching { lengthOrNull() }.getOrNull()
+
+        fun exists(): Boolean = length() != null
+
+        fun open(): InputStream = opener()
+    }
 
     /** Where the copies go, as each platform reaches it. [H] is its handle on one new file. */
     interface Folder<H> {
@@ -78,19 +98,19 @@ object FolderCopyIo {
             return outcome(if (folder.lost(error)) FolderCopy.Stop.FolderLost else stopFor(error) ?: FolderCopy.Stop.FolderLost, total)
         }
         val maxBytes = runCatching { folder.maxFileBytes() }.getOrNull()
-        val bytesTotal = sources.sumOf { runCatching { it.file.length() }.getOrDefault(0L) }
+        val bytesTotal = sources.sumOf { it.length() ?: 0L }
         var bytesBefore = 0L
         for ((index, source) in sources.withIndex()) {
-            if (index > 0) bytesBefore += runCatching { sources[index - 1].file.length() }.getOrDefault(0L)
+            if (index > 0) bytesBefore += sources[index - 1].length() ?: 0L
             if (cancelled()) return outcome(FolderCopy.Stop.Cancelled, total - index)
             onProgress(FolderCopy.Progress(index, total, source.title, 0f, bytesBefore, bytesTotal))
             // Asked again here, not when the list was made: the selection can change under a
             // long batch (a download deleted, or removed after watching).
-            if (!source.file.isFile) {
+            val length = source.length()
+            if (length == null) {
                 failed += FolderCopy.Failure(source.title, L.downloadsFileGone)
                 continue
             }
-            val length = source.file.length()
             if (maxBytes != null && length > maxBytes) {
                 failed += FolderCopy.Failure(source.title, L.downloadsSaveToFolderTooLarge)
                 continue
@@ -99,7 +119,7 @@ object FolderCopyIo {
             val free = runCatching { folder.freeBytes() }.getOrNull()
             if (free != null && free < length) return outcome(FolderCopy.Stop.NoSpace, total - index)
 
-            val name = FolderCopy.freeName(FolderCopy.nameFor(source.displayName, source.file.name)) { it.lowercase() in taken }
+            val name = FolderCopy.freeName(FolderCopy.nameFor(source.displayName, source.fileName)) { it.lowercase() in taken }
             taken += name.lowercase()
             val handle = try {
                 folder.create(name, source.mimeType.ifBlank { "video/*" })
@@ -114,7 +134,7 @@ object FolderCopyIo {
             var shown = -1
             val finished = try {
                 folder.open(handle).use { out ->
-                    source.file.inputStream().use { input ->
+                    source.open().use { input ->
                         pipe(input, out, cancelled) { bytes ->
                             // A step per percent, not per buffer: the dialog redraws on each.
                             val percent = (bytes * 100 / whole).toInt()
