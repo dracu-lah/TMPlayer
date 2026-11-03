@@ -33,6 +33,7 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
@@ -68,6 +69,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.snapshots.Snapshot
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -212,10 +214,16 @@ fun AddChatsScreen(
     // visible does not rebuild the rows.
     var foldOpen by remember(state.scope) { mutableStateOf<Set<ChatPicking.Band>>(emptySet()) }
     val folding = tv && state.query.isBlank()
+    // onRow is read untracked (HX76): a focus move alone never re-runs fold over every row (it ran
+    // once per held-Down jump, 11 ms each plus a GC spike, even through a narrower derived value,
+    // since a derived state tracks what its inner derived states read). The row the remote stands
+    // on only matters when a count or a tick refolds, and those are tracked. A row kept for the
+    // focus stays unfolded after the remote leaves it, until the next refold.
     val items by remember(rows, folding, foldOpen) {
         derivedStateOf {
             if (folding) {
-                val keep = onRow?.let { state.ticked + it } ?: state.ticked
+                val focusedRow = Snapshot.withoutReadObservation { onRow }
+                val keep = focusedRow?.let { state.ticked + it } ?: state.ticked
                 ChatPicking.fold(rows, state.counted, keep, foldOpen)
             } else {
                 rows.map { ChatPicking.Item.Chat(it) }
@@ -421,7 +429,9 @@ fun AddChatsScreen(
         foldFocus = null
     }
     // The background count waits while the remote jumps, so the list is not rebuilt mid jump.
-    LaunchedEffect(racing) { model.hold(racing) }
+    // LaunchedEffect(Unit), not LaunchedEffect(racing): keying on racing read it in the body, so
+    // the whole screen recomposed on every settle flip (HX76); snapshotFlow reads it off-composition.
+    LaunchedEffect(Unit) { snapshotFlow { racing }.collect { model.hold(it) } }
     LaunchedEffect(chats.isNotEmpty(), listComplete) { if (tv && listComplete && chats.isNotEmpty()) model.countRest(chats, AddChatsViewModel.BACKGROUND_ON_TV, AddChatsViewModel.BATCH_ON_TV_MS) }
     // The list's own end triggers the chat list's next chats, one request at a time.
     LoadMoreAhead(listState, enabled = !listComplete && !partial && !loadingMore, onLoadMore = onLoadMore)
@@ -1048,8 +1058,10 @@ private fun PickRow(
                     else -> false
                 }
             }
-            .clip(round)
-            .background(if (focused) Tone.focusFill else Color.Transparent)
+            // A clip is a layer, and this TV (API 28) records each one through a View (HX76): the
+            // TV has no ripple to bound, so its fill and ring take the shape without one.
+            .then(if (tv) Modifier else Modifier.clip(round))
+            .background(if (focused) Tone.focusFill else Color.Transparent, round)
             .focusRing(focused, round)
             .semantics(mergeDescendants = true) {
                 toggleableState = ToggleableState(ticked)
@@ -1101,7 +1113,28 @@ private fun PickRow(
             }
             CountLine(shape, quiet, tv)
         }
-        Checkbox(checked = ticked, onCheckedChange = null)
+        // A drawn box on TV (HX76): Material3's Checkbox ran its color and check animations on
+        // every row a hold passed over (226 ms over about 40 rows), which a hold never needs to
+        // see settle. Phone and desktop keep the Checkbox and its ripple.
+        if (tv) {
+            PickTick(ticked)
+        } else {
+            Checkbox(checked = ticked, onCheckedChange = null)
+        }
+    }
+}
+
+/** The tick box [PickRow] draws on TV instead of Material3's animated [Checkbox] (HX76). */
+@Composable
+private fun PickTick(ticked: Boolean) {
+    Box(
+        Modifier
+            .size(20.dp)
+            .background(if (ticked) Tone.accent else Color.Transparent, RoundedCornerShape(4.dp))
+            .border(2.dp, if (ticked) Tone.accent else Tone.outline, RoundedCornerShape(4.dp)),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (ticked) Icon(TmIcons.Check, contentDescription = null, tint = Tone.onAccent, modifier = Modifier.size(14.dp))
     }
 }
 
@@ -1123,8 +1156,7 @@ private fun CountLine(shape: ChatSuggestions.CountShape, ink: Color, tv: Boolean
                 Modifier
                     .width(if (tv) 120.dp else 96.dp)
                     .height(line * 0.6f)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(Tone.surfaceHigh),
+                    .background(Tone.surfaceHigh, RoundedCornerShape(4.dp)),
             )
             is ChatSuggestions.CountShape.Exact -> Text(s.pickerCountAbout(shape.videos), style = style, color = ink, maxLines = 1)
             ChatSuggestions.CountShape.Many -> Text(s.pickerCountMany, style = style, color = ink, maxLines = 1)

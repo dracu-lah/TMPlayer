@@ -183,9 +183,11 @@ fun Modifier.groupedCard(place: GroupPlace, dividerStart: Dp = SettingsDividerSt
     val line = Tone.outline
     val hairline = !LocalDarkTheme.current
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    // Only a rounded end clips its row: a clip is a layer, and a long list of square middle rows
+    // made one each per row a TV (API 28) records through a View on every scroll (HX76).
     return this
-        .clip(shape)
-        .background(fill)
+        .then(if (place.first || place.last) Modifier.clip(shape) else Modifier)
+        .background(fill, shape)
         .drawWithContent {
             drawContent()
             val stroke = 1.dp.toPx()

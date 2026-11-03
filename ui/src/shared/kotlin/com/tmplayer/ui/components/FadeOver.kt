@@ -50,7 +50,13 @@ fun <T : Any> FadeOver(
     Box(modifier) {
         under?.let { old -> key(old) { content(old) } }
         key(top) {
-            Box(Modifier.matchParentSize().graphicsLayer { this.alpha = alpha.value }) { content(top) }
+            // still: no graphicsLayer, no Animatable read, so a TV draw pass skips the layer
+            // that forced Compose's View-backed GraphicsViewLayer on every row (HX76).
+            if (still) {
+                Box(Modifier.matchParentSize()) { content(top) }
+            } else {
+                Box(Modifier.matchParentSize().graphicsLayer { this.alpha = alpha.value }) { content(top) }
+            }
         }
     }
 }
