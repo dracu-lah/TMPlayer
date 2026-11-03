@@ -193,6 +193,9 @@ class AddChatsTvKeysTest {
         // screenfuls in between, each a Telegram call whose answer rebuilt the list mid-jump.
         val passed = asked.filter { it !in head && it < 1_000L + place - 20 }
         assertTrue("rows run past were counted: ${passed.size} of them", passed.isEmpty())
+        // The screenful under the stop is composed ahead for the next jump, but not on screen.
+        val ahead = asked.filter { it > 1_000L + place + 12 }
+        assertTrue("rows composed ahead were counted: $ahead", ahead.isEmpty())
         assertTrue("the rows where it stopped are counted: at $place", (1_000L + place) in asked)
         model.stop()
     }

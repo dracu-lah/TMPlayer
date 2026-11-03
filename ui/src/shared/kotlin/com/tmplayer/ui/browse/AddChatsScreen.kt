@@ -31,7 +31,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Checkbox
@@ -126,6 +125,7 @@ import com.tmplayer.data.Td
 import com.tmplayer.ui.components.EdgeStep
 import com.tmplayer.ui.components.LoadMoreAhead
 import com.tmplayer.ui.components.deviceForm
+import com.tmplayer.ui.components.rememberJumpAheadListState
 import com.tmplayer.ui.components.rememberToggleTick
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.icons.TmIcons
@@ -204,7 +204,8 @@ fun AddChatsScreen(
     val tv = form == DeviceForm.Tv
     val state by model.state.collectAsState()
     val choice by AddedChats.choice.collectAsState()
-    val listState = rememberLazyListState()
+    // The television's held Down jumps a screen at a time: the rows it lands on are composed ahead (HX76).
+    val listState = rememberJumpAheadListState(enabled = tv)
     val searchFocus = remember { FocusRequester() }
     var asking by remember { mutableStateOf<Ask?>(null) }
     // Typed here and handed on, since a text field fed back through a flow a frame late loses keys.
@@ -657,9 +658,13 @@ fun AddChatsScreen(
                             val row = itemRow(item)
                             // Only a row on screen is counted: this effect leaves with the row. It
                             // waits for the list to stop (a fling, a held Down), so the rows run past
-                            // on the way are never counted at all.
+                            // on the way are never counted at all, and for the row to be in sight,
+                            // since the rows composed ahead of a jump run it too.
                             if (item is ChatPicking.Item.Chat && row.band != ChatPicking.Band.Gone) LaunchedEffect(row.id) {
-                                snapshotFlow { racing || listState.isScrollInProgress }.first { !it }
+                                snapshotFlow {
+                                    racing || listState.isScrollInProgress ||
+                                        listState.layoutInfo.visibleItemsInfo.none { it.key == row.id }
+                                }.first { !it }
                                 model.count(row.id)
                             }
                             val ticked = row.id in state.ticked
