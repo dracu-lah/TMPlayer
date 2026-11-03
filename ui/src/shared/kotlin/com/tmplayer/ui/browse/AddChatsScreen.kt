@@ -369,11 +369,14 @@ fun AddChatsScreen(
             Key.PageDown, Key.ChannelDown -> { focusRow(at + page); true }
             Key.PageUp, Key.ChannelUp -> { if (at == 0) toTop() else focusRow(at - page); true }
             Key.DirectionDown, Key.DirectionUp -> {
-                // A held arrow walks row by row for a moment, then a screenful at a time; a jump
-                // still running swallows the repeats, so a slow television is not queued up.
+                // A held arrow walks row by row for a moment, then half a screen at a time; a jump
+                // still running swallows the repeats, so a slow television is not queued up. Half,
+                // not a full page: each jump composes about 4 new rows rather than 7, which is
+                // what a held Down cost on the Mi TV (HX76). Page and Channel keys keep a screenful.
                 held[0]++
                 if (held[0] <= HOLD_REPEATS) return false
-                focusRow(if (event.key == Key.DirectionDown) at + page else at - page)
+                val step = (page / 2).coerceAtLeast(2)
+                focusRow(if (event.key == Key.DirectionDown) at + step else at - step)
                 true
             }
             else -> false

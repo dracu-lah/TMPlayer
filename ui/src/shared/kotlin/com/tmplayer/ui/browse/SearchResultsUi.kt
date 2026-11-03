@@ -25,6 +25,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -55,11 +60,25 @@ import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.icons.TmIcons
 import com.tmplayer.ui.online.rememberMeta
 import com.tmplayer.ui.theme.Corner
+import com.tmplayer.ui.theme.Motion
 import com.tmplayer.ui.theme.Tone
 
 // The search across every chat as the three platforms draw it (CP73): a result card, the chats
 // stacked as avatars, the words for its states. The phone and the desktop use the card as it is;
 // the television its poster. Taps, focus and keys are the caller's.
+
+/**
+ * [CircleShape] as a canvas clip on the television: `clip` is a graphics layer there, a View-backed
+ * one on Android 9, and a Home or picker row held on Down drew one per avatar every frame (HX76).
+ * A clip path inside the draw pass costs no layer and Skia anti-aliases it. Elsewhere the layer is
+ * cheap and also clips what the pointer can hit, so `clip` stays.
+ */
+private fun Modifier.circleCrop(): Modifier =
+    if (!Motion.television) clip(CircleShape)
+    else drawWithCache {
+        val circle = Path().apply { addOval(Rect(Offset.Zero, Offset(size.width, size.height))) }
+        onDrawWithContent { clipPath(circle) { this@onDrawWithContent.drawContent() } }
+    }
 
 /** A chat's picture in a circle, its first letter where it has none. */
 @Composable
@@ -67,7 +86,7 @@ fun ChatAvatar(chat: ChatBrief?, size: Dp, modifier: Modifier = Modifier) {
     MediaArt(
         miniThumbnail = chat?.miniThumbnail,
         thumbnailFileId = chat?.photoFileId ?: 0,
-        modifier = modifier.size(size).clip(CircleShape),
+        modifier = modifier.size(size).circleCrop(),
     ) {
         // No photo: the chat's own colour with its letter on it, never a grey disc (HX30 a).
         // One glyph only (NameInitial.of never returns two), so the circle can take a letter

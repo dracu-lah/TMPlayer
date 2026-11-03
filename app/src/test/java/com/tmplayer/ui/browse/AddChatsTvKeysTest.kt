@@ -155,11 +155,12 @@ class AddChatsTvKeysTest {
         val model = AddChatsViewModel(counts = Counts, write = {}, countsRest = false)
         val activity = open(model, chats = CHATS)
         press(activity, KeyEvent.KEYCODE_DPAD_LEFT)
-        // Twenty repeats of a held Down: the first few walk, the rest move a screenful each.
+        // Twenty repeats of a held Down: the first few walk, the rest move half a screen each.
         hold(activity, KeyEvent.KEYCODE_DPAD_DOWN, repeats = 20)
         val deep = focusedTitle(activity).single()
         val place = deep.removePrefix("Chat number ").toIntOrNull() ?: 0
-        assertTrue("a held Down went far, to $deep", place > 80)
+        // Walking row by row would reach about 20; half-screen jumps reach about 80.
+        assertTrue("a held Down went far, to $deep", place > 60)
         model.stop()
     }
 
