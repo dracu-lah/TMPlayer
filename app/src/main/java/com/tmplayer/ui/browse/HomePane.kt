@@ -830,7 +830,9 @@ internal fun HomePane(
             if (spot == FEATURED_KEY) {
                 val play = tvPlayFocus ?: return false
                 if (!carousel) return false
-                if (listState.firstVisibleItemIndex != 0) listState.scrollToItem(0)
+                // Offset too: Down from Play moves a tall carousel up inside item 0, which the
+                // index alone does not show, and Play came back with the carousel shifted.
+                if (listState.firstVisibleItemIndex != 0 || listState.firstVisibleItemScrollOffset != 0) listState.scrollToItem(0)
                 return runCatching { play.requestFocus() }.isSuccess
             }
             val at = listed.indexOfFirst { it.key == spot }
