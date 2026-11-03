@@ -108,3 +108,17 @@ object Didl {
     private const val MAX_TITLE = 200
     private const val MAX_RES = 16
 }
+
+/**
+ * The DLNA headers a file or a rewrapped stream goes out with: a file takes byte ranges, a stream
+ * made as it is sent does not and is marked converted. No profile name: a wrong `DLNA.ORG_PN` is
+ * worse than none.
+ */
+fun dlnaFeaturesFor(resource: com.tmplayer.cast.CastResource): DlnaFeatures {
+    val ranged = resource is com.tmplayer.cast.CastResource.Ranged
+    return DlnaFeatures(profile = null, rangeSeek = ranged, converted = !ranged)
+}
+
+/** [dlnaFeaturesFor] as the server's per-resource headers. */
+fun dlnaServing(resource: com.tmplayer.cast.CastResource): com.tmplayer.cast.DlnaServing =
+    com.tmplayer.cast.DlnaServing(dlnaFeaturesFor(resource).field())

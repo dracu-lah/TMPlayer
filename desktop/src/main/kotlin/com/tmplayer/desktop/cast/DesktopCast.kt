@@ -36,44 +36,44 @@ object DesktopCast {
 
     sealed interface State {
         data object Idle : State
-        data class Connecting(val device: CastDevice) : State
-        data class Connected(val device: CastDevice, val client: CastClient) : State
+        data class Connecting(val device: CastTarget) : State
+        data class Connected(val device: CastTarget, val receiver: Receiver) : State
 
         /** The channel broke: the TV went off or left the network. Reconnect, or play here. */
-        data class Lost(val device: CastDevice) : State
+        data class Lost(val device: CastTarget) : State
 
-        data class Failed(val device: CastDevice, val message: String) : State
+        data class Failed(val device: CastTarget, val message: String) : State
     }
 
-    val discovery = CastDiscovery()
+    val discovery = CastFinder()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + com.tmplayer.platform.JobFailures.handler("DesktopCast"))
     private val _state = MutableStateFlow<State>(State.Idle)
     val state: StateFlow<State> = _state.asStateFlow()
     private var watching: Job? = null
 
-    fun connect(device: CastDevice) {
-        (state.value as? State.Connected)?.let { if (it.device.id == device.id) return else it.client.stopReceiver() }
+    fun connect(device: CastTarget) {
+        (state.value as? State.Connected)?.let { if (it.device.id == device.id) return else it.receiver.stopReceiver() }
         watching?.cancel()
         _state.value = State.Connecting(device)
         scope.launch {
-            val client = CastClient(device)
+            val receiver = Receiver.of(device)
             try {
-                client.connect()
+                receiver.connect()
             } catch (e: Exception) {
                 Logger.w(TAG, "Could not connect to ${device.name}", e)
-                runCatching { client.close() }
+                runCatching { receiver.close() }
                 if ((state.value as? State.Connecting)?.device == device) _state.value = State.Failed(device, L.castConnectFailed(device.name))
                 return@launch
             }
             if ((state.value as? State.Connecting)?.device != device) {
-                client.close()
+                receiver.close()
                 return@launch
             }
-            _state.value = State.Connected(device, client)
+            _state.value = State.Connected(device, receiver)
             watching = scope.launch {
-                client.lost.first { it }
-                if ((state.value as? State.Connected)?.client === client) _state.value = State.Lost(device)
-                runCatching { client.close() }
+                receiver.lost.first { it }
+                if ((state.value as? State.Connected)?.receiver === receiver) _state.value = State.Lost(device)
+                runCatching { receiver.close() }
             }
         }
     }
@@ -81,7 +81,7 @@ object DesktopCast {
     /** Ends the cast: the TV's player stops and the session closes. */
     fun disconnect() {
         watching?.cancel()
-        (state.value as? State.Connected)?.client?.stopReceiver()
+        (state.value as? State.Connected)?.receiver?.stopReceiver()
         _state.value = State.Idle
     }
 
@@ -97,7 +97,7 @@ object DesktopCast {
             is State.Failed -> s.device
             else -> return
         }
-        connect(discovery.devices.value.firstOrNull { it.id == device.id } ?: device)
+        connect(discovery.find(device.id) ?: device)
     }
 
     private const val TAG = "DesktopCast"

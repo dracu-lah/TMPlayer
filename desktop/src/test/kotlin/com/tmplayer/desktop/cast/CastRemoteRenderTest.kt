@@ -75,26 +75,40 @@ class CastRemoteRenderTest {
     )
 
     @Test
-    fun `the desktop casting panel is one compact card`() {
-        val client = CastClient(CastDevice("id", "Living Room TV", "Chromecast", java.net.InetAddress.getLoopbackAddress()))
-        val engine = CastPlaybackEngine(client) { CastTitle("Episode 4") }
+    fun `the desktop casting panel is one compact card, for a Cast TV and a DLNA one`() {
+        val loopback = java.net.InetAddress.getLoopbackAddress()
+        val dlna = com.tmplayer.cast.dlna.DlnaDevice(
+            com.tmplayer.cast.dlna.DeviceDescription(
+                "uuid:t", "Bedroom TV", "Acme", "T1000", null,
+                com.tmplayer.cast.dlna.DlnaService("urn:schemas-upnp-org:service:AVTransport:1", "http://127.0.0.1/av"), null, null,
+            ),
+            loopback, "http://127.0.0.1/d.xml",
+        )
+        val targets = listOf(
+            "cast" to CastTarget.of(CastDevice("id", "Living Room TV", "Chromecast", loopback)),
+            "dlna" to CastTarget.of(dlna),
+        )
         val out = File("build/cast-shots").apply { mkdirs() }
-        for ((label, status) in listOf("starting" to PlaybackStatus(), "failed" to PlaybackStatus(error = "The TV couldn't play this video."))) {
-            val png = ImageComposeScene(1280, 720, Density(1f)) {
-                PlayerTheme {
-                    Box(Modifier.fillMaxSize().background(Color(0xFF0B0D10))) {
-                        CastingPanel(engine, status, onPlayHere = {})
+        for ((kind, target) in targets) {
+            val receiver = Receiver.of(target)
+            val engine = CastPlaybackEngine(receiver) { CastTitle("Episode 4") }
+            for ((label, status) in listOf("starting" to PlaybackStatus(), "failed" to PlaybackStatus(error = "The TV couldn't play this video."))) {
+                val png = ImageComposeScene(1280, 720, Density(1f)) {
+                    PlayerTheme {
+                        Box(Modifier.fillMaxSize().background(Color(0xFF0B0D10))) {
+                            CastingPanel(engine, status, onPlayHere = {})
+                        }
                     }
+                }.use { scene ->
+                    scene.render(0)
+                    scene.render(1_000_000_000).encodeToData(org.jetbrains.skia.EncodedImageFormat.PNG)!!.bytes
                 }
-            }.use { scene ->
-                scene.render(0)
-                scene.render(1_000_000_000).encodeToData(org.jetbrains.skia.EncodedImageFormat.PNG)!!.bytes
+                assertTrue(png.size > 2_000)
+                out.resolve("desktop-panel-$kind-$label.png").writeBytes(png)
             }
-            assertTrue(png.size > 2_000)
-            out.resolve("desktop-panel-$label.png").writeBytes(png)
+            engine.abandon()
+            receiver.close()
         }
-        engine.abandon()
-        client.close()
     }
 
     @Test

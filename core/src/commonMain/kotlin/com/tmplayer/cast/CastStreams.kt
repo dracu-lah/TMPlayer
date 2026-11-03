@@ -18,6 +18,8 @@ class CastStreams(
     /** How the receiver's reads ride out a Telegram stall; null reads the source as it is. */
     private val recovery: CastRecovery? = CastRecovery(),
     private val converterFactory: (() -> AudioConverter)? = null,
+    /** The DLNA headers a resource goes out with (see [com.tmplayer.cast.dlna.dlnaServing]); null for a Cast receiver. */
+    private val serving: ((CastResource) -> DlnaServing?)? = null,
 ) {
 
     /** What the receiver is told to load, and how the sender reads its clock. */
@@ -54,7 +56,8 @@ class CastStreams(
                     "video/x-matroska" -> "mkv"
                     else -> "mp4"
                 }
-                val url = server.publish("video.$ext", CastResource.Ranged(source, route.mime))
+                val resource = CastResource.Ranged(source, route.mime)
+                val url = server.publish("video.$ext", resource, serving?.invoke(resource))
                 Published(url, route.mime, 0, true, route)
             }
             is CastRoute.Hls -> {
@@ -95,7 +98,7 @@ class CastStreams(
                 val file = "stream$n.mp4"
                 lastStream?.let(server::unpublish)
                 lastStream = file
-                server.publish(file, resource)
+                server.publish(file, resource, serving?.invoke(resource))
                 Published(server.urlFor(file) + "?t=$startMs", "video/mp4", offset, false, route)
             }
             is CastRoute.TranscodeVideo -> throw IOException("Converting the picture is not available here")

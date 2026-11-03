@@ -271,7 +271,7 @@ fun PlayerScreen(
         }
         com.tmplayer.desktop.cast.SwitchingEngine(local).also { e ->
             (com.tmplayer.desktop.cast.DesktopCast.state.value as? com.tmplayer.desktop.cast.DesktopCast.State.Connected)?.let { c ->
-                e.switchTo(com.tmplayer.desktop.cast.CastPlaybackEngine(c.client) { castTitle[0] })
+                e.switchTo(com.tmplayer.desktop.cast.CastPlaybackEngine(c.receiver) { castTitle[0] })
             }
         }
     }
@@ -728,9 +728,9 @@ fun PlayerScreen(
         val cs = castState
         val casting = engine.cast
         when {
-            cs is com.tmplayer.desktop.cast.DesktopCast.State.Connected && casting?.client !== cs.client -> {
+            cs is com.tmplayer.desktop.cast.DesktopCast.State.Connected && casting?.receiver !== cs.receiver -> {
                 val at = engine.state.value.takeIf { it.opened }?.positionMs
-                engine.switchTo(com.tmplayer.desktop.cast.CastPlaybackEngine(cs.client) { castTitle[0] }, tellReceiver = false)
+                engine.switchTo(com.tmplayer.desktop.cast.CastPlaybackEngine(cs.receiver) { castTitle[0] }, tellReceiver = false)
                 if (at != null) reopenAt = at
                 attempt++
             }

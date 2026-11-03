@@ -504,6 +504,18 @@ compose.desktop {
                 // CFBundleShortVersionString stays the release's x.y.z (1.28.2 for its test
                 // versions too); CFBundleVersion, the build number, orders them (1.28.201, 1.28.299).
                 packageBuildVersion = installerVersion
+                // macOS 15 and later asks before an app talks to devices on the local network
+                // (casting to a TV: Cast over mDNS, DLNA over SSDP). The text is what the prompt says.
+                infoPlist {
+                    extraKeysRawXml = """
+                        <key>NSLocalNetworkUsageDescription</key>
+                        <string>TMPlayer looks for TVs on your network to cast the video you are watching to them.</string>
+                        <key>NSBonjourServices</key>
+                        <array>
+                            <string>_googlecast._tcp</string>
+                        </array>
+                    """.trimIndent()
+                }
             }
             windows {
                 iconFile.set(packagingDir.file("icons/tmplayer.ico"))

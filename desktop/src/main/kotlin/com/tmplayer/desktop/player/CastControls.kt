@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.sp
 import com.tmplayer.cast.CastPhase
 import com.tmplayer.desktop.cast.CastPlaybackEngine
 import com.tmplayer.desktop.cast.DesktopCast
+import com.tmplayer.desktop.cast.ReceiverKind
 import com.tmplayer.ui.components.TmDropdownMenu
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.icons.TmIcons
@@ -56,11 +57,12 @@ internal fun CastButton() {
     val devices by DesktopCast.discovery.devices.collectAsState()
     var open by remember { mutableStateOf(false) }
     var waitedLong by remember { mutableStateOf(false) }
+    var tries by remember { mutableStateOf(0) }
     DisposableEffect(open) {
         if (open) DesktopCast.discovery.start()
         onDispose { if (open) DesktopCast.discovery.stop() }
     }
-    LaunchedEffect(open) {
+    LaunchedEffect(open, tries) {
         waitedLong = false
         if (open) {
             delay(NONE_FOUND_AFTER_MS)
@@ -91,7 +93,16 @@ internal fun CastButton() {
                             CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
                             Spacer(Modifier.width(12.dp))
                         }
-                        Text(if (waitedLong) s.castNoneFound else s.castSearching, fontSize = 14.sp, maxLines = 3)
+                        Text(if (waitedLong) s.castNoneFound else s.castSearching, fontSize = 14.sp, maxLines = 8)
+                    }
+                    if (waitedLong) {
+                        TextButton(
+                            onClick = {
+                                DesktopCast.discovery.restart()
+                                tries++
+                            },
+                            modifier = Modifier.padding(horizontal = 8.dp),
+                        ) { Text(s.commonTryAgain) }
                     }
                 }
                 for (device in devices) {
@@ -100,7 +111,11 @@ internal fun CastButton() {
                         text = {
                             Column {
                                 Text(device.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                val line = device.status.takeIf { it.isNotBlank() } ?: device.model
+                                val line = if (device.kind == ReceiverKind.Dlna) {
+                                    listOf(s.castDlnaLabel, device.model).filter { it.isNotBlank() }.joinToString(" · ")
+                                } else {
+                                    device.status.takeIf { it.isNotBlank() } ?: device.model
+                                }
                                 if (line.isNotBlank()) Text(line, fontSize = 12.sp, color = Color.White.copy(alpha = 0.6f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
                         },
@@ -151,8 +166,8 @@ internal fun BoxScope.CastingPanel(
     val state by DesktopCast.state.collectAsState()
     val note by cast.note.collectAsState()
     val phase by cast.phase.collectAsState()
-    val volume by cast.client.volume.collectAsState()
-    val name = cast.client.device.name
+    val volume by cast.receiver.volume.collectAsState()
+    val name = cast.receiver.name
     val lost = state is DesktopCast.State.Lost || state is DesktopCast.State.Failed
     val trouble = lost || status.error != null || phase == CastPhase.Stopped || phase == CastPhase.Failed
     Column(
