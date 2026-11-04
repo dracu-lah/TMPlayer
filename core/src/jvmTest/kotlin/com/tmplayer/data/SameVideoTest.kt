@@ -324,8 +324,8 @@ class SameVideoTest {
     private companion object {
         const val MB = 1024L * 1024
 
-        /** The budget on an idle machine. */
-        const val ARRANGE_BUDGET_MS = 200.0
+        /** The budget on an idle machine: about 60 ms here, 200 ms failed once on a shared CI runner (2026-11-03). */
+        const val ARRANGE_BUDGET_MS = 500.0
 
         /** How many calibration rounds the arranging may take; set from idle runs, with room. */
         const val ARRANGE_PACE_FACTOR = 5.0
