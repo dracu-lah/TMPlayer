@@ -1411,6 +1411,12 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      */
     private var resumeNotice: String? = null
 
+    // The TV theme and player sizes follow the app's layout, not only the system's UI mode (HX78).
+    override fun attachBaseContext(newBase: android.content.Context) {
+        super.attachBaseContext(newBase)
+        FormFactor.uiModeOverride(newBase)?.let { runCatching { applyOverrideConfiguration(it) } }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         // Fragments are not restored. A restored playback fragment comes back before the player is
         // rebuilt, so it would attach with nothing behind it and no transport controls. A clean

@@ -261,6 +261,16 @@
             android:noHistory="true"
             android:taskAffinity=""
             android:theme="@android:style/Theme.NoDisplay" />
+        <!--
+          The layout switch (HX78): a process of its own that ends the app's and opens it again,
+          so the TV or phone layout is decided afresh. Draws nothing. See FormRestart.
+        -->
+        <activity
+            android:name=".FormRestartActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:process=":restart"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
         <receiver
             android:name=".data.NoticeDismissReceiver"
             android:exported="false" />

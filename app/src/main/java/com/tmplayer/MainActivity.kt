@@ -151,6 +151,7 @@ import com.tmplayer.ui.settings.SettingsScreen
 import com.tmplayer.ui.settings.CoffeeDialog
 import com.tmplayer.ui.settings.LanguageDialog
 import com.tmplayer.ui.settings.LanguageNoticeCard
+import com.tmplayer.ui.settings.LayoutNudgeHost
 import com.tmplayer.ui.settings.WhatsNewDialog
 import com.tmplayer.ui.i18n.rememberLanguageNotice
 import com.tmplayer.ui.i18n.rememberWhatsNew
@@ -313,7 +314,26 @@ private data class RoomPrompt(
 
 class MainActivity : ComponentActivity() {
 
+    // The TV resources follow the app's layout, not only the system's UI mode (HX78).
+    override fun attachBaseContext(newBase: android.content.Context) {
+        super.attachBaseContext(newBase)
+        FormFactor.uiModeOverride(newBase)?.let { wanted ->
+            runCatching { applyOverrideConfiguration(wanted) }
+                .onFailure { com.tmplayer.platform.Logger.w("tm-form", "ui mode override failed", it) }
+            forcedTv = FormFactor.isTv(newBase)
+        }
+    }
+
+    /** The TV layout on a device the system does not call a TV: a box, or a tablet set to TV (HX78). */
+    private var forcedTv = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
+        com.tmplayer.platform.Logger.i(
+            "tm-form",
+            "MainActivity ui mode type=${resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_TYPE_MASK}",
+        )
+        // The TV layout is drawn for a landscape screen; a phone or tablet set to it turns to one.
+        if (forcedTv) requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         // Asked for rather than inherited. API 35 and above draws behind the bars anyway, but the
         // stick and half the phones this runs on are older, so this makes the two the same
         // everywhere. Every screen already handles its own insets.
@@ -369,6 +389,9 @@ class MainActivity : ComponentActivity() {
                         }
                         // Messages at the top, clear of the floating bar and the buttons at the foot.
                         TopMessageHost()
+                        // The layout nudge (HX78), over every screen: a box shown the touch layout
+                        // meets it on the sign in screen already.
+                        LayoutNudgeHost()
                     }
                 }
             }
@@ -454,11 +477,14 @@ class MainActivity : ComponentActivity() {
 
     override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
         debugHangOnInput(event.action == android.view.KeyEvent.ACTION_DOWN)
+        // A remote on the touch layout: offer the TV one (HX78). The key still goes through.
+        runCatching { com.tmplayer.ui.settings.LayoutNudge.onKey(this, event) }
         return super.dispatchKeyEvent(event)
     }
 
     override fun dispatchTouchEvent(event: android.view.MotionEvent): Boolean {
         debugHangOnInput(event.actionMasked == android.view.MotionEvent.ACTION_DOWN)
+        runCatching { com.tmplayer.ui.settings.LayoutNudge.onTouch(this, event) }
         return super.dispatchTouchEvent(event)
     }
 

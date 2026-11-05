@@ -191,7 +191,8 @@ fun feedbackFacts(context: Context): Feedback.Facts {
     return Feedback.Facts(
         version = BuildConfig.VERSION_NAME,
         platform = platform,
-        device = "$model, Android ${Build.VERSION.RELEASE}",
+        // The layout's reason goes along (HX78): a generic box shown the wrong one says why.
+        device = "$model, Android ${Build.VERSION.RELEASE}, ${runCatching { FormFactor.describe(context) }.getOrDefault("form unknown")}",
         language = Translator.messages.tag,
     )
 }

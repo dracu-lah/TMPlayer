@@ -390,6 +390,7 @@ fun SettingsScreen(
     val supportCounters by settings.supportCounters.collectAsState(initial = SupportReminder.Counters())
     // The language picker, the "What's new" sheet and "Report a problem", each over the list.
     var pickingLanguage by remember { mutableStateOf(false) }
+    var pickingLayout by remember { mutableStateOf(false) }
     var stylingSubtitles by remember { mutableStateOf(false) }
     var showingLearnt by remember { mutableStateOf(false) }
     var trackPicker by remember { mutableStateOf<TrackLanguagePicker?>(null) }
@@ -790,6 +791,21 @@ fun SettingsScreen(
                         icon = TmIcons.Language,
                         modifier = Modifier.focusRequester(landing),
                         onClick = { pickingLanguage = true },
+                    )
+                }
+
+                // The layout (HX78): Automatic, TV or Phone and tablet. A generic TV box reports no
+                // television, so the way to the TV layout has to be here, reachable by the remote
+                // on the touch layout as much as by touch on the TV one.
+                item(key = "layout") {
+                    ActionRow(
+                        title = s.interfaceLayout,
+                        subtitle = s.layoutRowDetail(
+                            remember { com.tmplayer.data.FormFactor.choice(context) },
+                            remember { com.tmplayer.data.FormFactor.autoIsTv(context) },
+                        ),
+                        icon = if (touch) TmIcons.Phone else TmIcons.Tv,
+                        onClick = { pickingLayout = true },
                     )
                 }
 
@@ -2168,6 +2184,7 @@ fun SettingsScreen(
     qrLink?.let { (url, what) -> LinkQrDialog(url = url, what = what, onClose = { qrLink = null }) }
     if (supporting) SupportDialog(from = "settings", onClose = { supporting = false })
     if (pickingLanguage) LanguageDialog(settings, onClose = { pickingLanguage = false })
+    if (pickingLayout) LayoutSheet(onClose = { pickingLayout = false })
     if (showingLearnt) {
         LearntLanguagesSheet(
             learnt = learntLanguages,

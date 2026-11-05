@@ -46,6 +46,8 @@ class App : Application() {
     @OptIn(UnstableApi::class)
     override fun onCreate() {
         super.onCreate()
+        // The layout switch's own process only reopens the app (HX78): nothing to start there.
+        if (FormRestart.inRestartProcess(this)) return
         // First of all, so a crash anywhere below is written down for the next start to offer.
         CrashReports.watch(this)
         // Before anything reads them: a television trades looks for speed (see [Motion.television]).
@@ -53,6 +55,8 @@ class App : Application() {
         com.tmplayer.data.SettingsDefaults.evenVolume = !com.tmplayer.data.FormFactor.isTv(this)
         // The shared code logs through a facade; on Android it goes to logcat as it always has.
         Logger.sink = AndroidLogSink
+        // Why this device got the TV or the phone layout, for a generic box's report (HX78).
+        Logger.i("tm-form", com.tmplayer.data.FormFactor.describe(this))
         // A background job or a view model's job that throws is logged and reported (with the
         // switch on), never the end of the process (HX10).
         com.tmplayer.platform.JobFailures.report = CrashReports::handled
