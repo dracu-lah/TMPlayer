@@ -248,7 +248,9 @@ export function Player(props: {
             if (gen !== generation) return
             video.playbackRate = rate
             setSwitchable(!!engine.setAudio)
-            setDetails(`${p.container}, ${p.mime.replace(/^[^;]*;\s*/, '')}. ${engine.detail}`)
+            // Which HEVC name the TV took (hevcnames.ts), so a tester's screenshot says which step played it.
+            const hevc = way === 'remux' && p.hevcAs ? (p.hevcTrusted ? `, HEVC sent to the TV decoder unasked` : `, HEVC as ${p.hevcAs}`) : ''
+            setDetails(`${p.container}, ${p.mime.replace(/^[^;]*;\s*/, '')}. ${engine.detail}${hevc}`)
             if (play) video.play().catch(() => {})
             void findChapters(f, gen)
             // The storyboard as soon as the video is open, so it is in by the time the bar is touched.

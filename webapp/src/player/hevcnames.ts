@@ -3,10 +3,14 @@
 // file's own level or `hvc1` where they know `hev1`. The decoder reads the stream's own header
 // (hvcC), not the string, so a string of the same profile the browser takes stands in for it.
 
-/** Main and Main 10 at levels 5.0, 5.1 and 3.1 (L150, L153, L93), as players and TVs name them. */
+/**
+ * Main and Main 10 at levels 5.1, 5.0 and 3.1 (L153, L150, L93), as players and TVs name them.
+ * `L153.90` first: Bilibili's 4K HEVC (`hev1.1.6.L153.90`, with E-AC-3) plays through Media Source
+ * on LG TVs in bili-webos (MIT, its docs/ux-evidence TV runs, 2026-10).
+ */
 const STAND_INS: Record<string, string[]> = {
-    '1': ['1.6.L150.90', '1.6.L153.B0', '1.6.L150.B0', '1.6.L93.B0'],
-    '2': ['2.4.L150.90', '2.4.L153.B0', '2.4.L150.B0', '2.4.L93.B0'],
+    '1': ['1.6.L153.90', '1.6.L150.90', '1.6.L153.B0', '1.6.L150.B0', '1.6.L93.B0'],
+    '2': ['2.4.L153.90', '2.4.L150.90', '2.4.L153.B0', '2.4.L150.B0', '2.4.L93.B0'],
 }
 
 /**

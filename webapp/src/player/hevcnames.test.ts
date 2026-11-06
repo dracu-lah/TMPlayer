@@ -25,10 +25,12 @@ test('a TV that knows only hev1 gets hev1', () => {
     )
 })
 
-test('a TV that turns the file level down gets a stand-in of the same profile', () => {
+test('a TV that turns the file own name down gets a stand-in of the same profile', () => {
     // A 4K Main 10 file at level 5.1 with constraint bytes the TV does not read, on a TV taking only L150.90.
     const tv = (m: string) => /codecs="hvc1\.2\.4\.L150\.90"/.test(m)
     assert.equal(hevcAccepted('hvc1.2.4.L153.B0.0.0.0.0.0', tv), 'hvc1.2.4.L150.90')
+    // The name bili-webos plays 4K with on LG TVs comes first among the stand-ins.
+    assert.equal(hevcAccepted('hev1.1.6.H153', (m) => m.includes('L153.90')), 'hvc1.1.6.L153.90')
     // Never a Main 8 bit name for a Main 10 file.
     assert.equal(
         hevcAccepted('hvc1.2.4.L153.B0', (m) => m.includes('hvc1.1.')),
