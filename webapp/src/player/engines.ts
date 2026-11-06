@@ -21,6 +21,7 @@ import {
 import type { TgFile } from '../stream/reader'
 import type { HevcTranscoder, Transcoded } from './hevc'
 import { hevcAccepted, hevcNames, tvDecodesHevc, withHevc } from './hevcnames'
+import { TV_BROWSER, tvNativeOff, tvPlaysNatively } from './tvnative'
 
 export interface Probe {
     input: Input
@@ -165,7 +166,11 @@ export async function probe(file: TgFile, durationHint: number): Promise<Probe> 
     // QuickTime files are MP4 to every browser that plays them.
     const asMp4 = mime.replace('video/quicktime', 'video/mp4')
     const probeEl = document.createElement('video')
-    const native = isoOrWebm && probeEl.canPlayType(asMp4) !== '' && !!navigator.serviceWorker?.controller
+    const controlled = !!navigator.serviceWorker?.controller
+    // On an LG or Samsung TV the browser can say no to a codec string its TV decodes: the TV's own
+    // player is tried when the container plays and every codec is on the TV's list (tvnative.ts).
+    const tvNative = TV_BROWSER.test(navigator.userAgent) && !tvNativeOff() && tvPlaysNatively(asMp4, probeEl.canPlayType(asMp4.split(';')[0]) !== '')
+    const native = isoOrWebm && controlled && (probeEl.canPlayType(asMp4) !== '' || tvNative)
     const vcodec = (await video?.getCodecParameterString().catch(() => null)) ?? null
     const isHevc = !!vcodec && /^(hev1|hvc1)\./.test(vcodec)
     // HEVC: the first of its names this Media Source takes, a stand-in of the same profile on a TV

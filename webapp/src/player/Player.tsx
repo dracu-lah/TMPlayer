@@ -2,7 +2,8 @@ import { createEffect, createSignal, onCleanup, onMount, Show, type JSX } from '
 import '@videojs/html/video/player'
 import '@videojs/html/ui/container'
 import { Alert02Icon, Cancel01Icon } from '@hugeicons/core-free-icons'
-import { openFile, streams, warmFile, type TgFile } from '../stream/reader'
+import { openFile, streams, warmFile, workerAsked, type TgFile } from '../stream/reader'
+import { noteTvNative, TV_BROWSER } from './tvnative'
 import { codecName, keyFrames, nativeEngine, playableSound, probe, RemuxEngine, route, Unplayable, type Engine, type Probe, type SoundTrack, type Why } from './engines'
 import { LIBAV_FORMATS, LibavEngine } from './libav'
 import { MoviEngine, moviSupported } from './movi'
@@ -36,6 +37,8 @@ interface Source {
 const NEXT_AHEAD = 30
 /** Waiting this long with nothing arriving says so, as the app's OpeningStall. */
 const STALL_MS = 15_000
+/** An LG or Samsung TV, whose own player may be given the file (tvnative.ts). */
+const onTv = TV_BROWSER.test(navigator.userAgent)
 /** How long the picture has to move on after a failure nobody caught, before the player says it broke. */
 const CRASH_GRACE_MS = 8_000
 
@@ -359,6 +362,12 @@ export function Player(props: {
         if (engine?.name !== 'native' || !probed) return
         const p = probed
         const at = video.currentTime
+        // A TV whose media server fetched /stream/ itself, around the worker: counted, and after two the TV stays on the repack.
+        if (onTv) {
+            const reached = workerAsked(source().key)
+            noteTvNative(reached)
+            if (!reached) console.warn('[player] the TV player did not go through the stream worker')
+        }
         grabber()?.destroy()
         setGrabber(null)
         engine.destroy()
@@ -688,7 +697,11 @@ export function Player(props: {
                     preload="auto"
                     // Android's WebView draws a grey, blurred play button on a video with no poster; the opening loader covers the wait.
                     poster={BLANK_POSTER}
-                    onLoadedMetadata={() => advance(1)}
+                    onLoadedMetadata={() => {
+                        // The TV's own player read the file through the worker: the route works on this TV.
+                        if (onTv && engine?.name === 'native' && workerAsked(source().key)) noteTvNative(true)
+                        advance(1)
+                    }}
                     onCanPlay={() => {
                         advance(2)
                         // A play the browser held back (no tap to allow it): the controls' Play button, not a loader that never ends.

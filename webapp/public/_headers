@@ -25,6 +25,12 @@
   Cache-Control: no-cache
   Service-Worker-Allowed: /
 
+# The TV build's stream-only worker (src/install.ts registerStreamWorker), for the whole site.
+/tv/sw.js
+  ! Cache-Control
+  Cache-Control: no-cache
+  Service-Worker-Allowed: /
+
 /manifest.webmanifest
   Content-Type: application/manifest+json
 

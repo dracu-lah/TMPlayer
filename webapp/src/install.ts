@@ -3,6 +3,7 @@
 // not, and asking the browser to keep TMPlayer's data.
 import { createSignal } from 'solid-js'
 import { Workbox } from 'workbox-window'
+import { TV_BROWSER, tvNativeOff } from './player/tvnative'
 
 const HOUR = 60 * 60 * 1000
 
@@ -14,6 +15,17 @@ if (import.meta.env.DEV) (window as unknown as { __e2eUpdateReady?: () => void }
 
 let wb: Workbox | null = null
 let waiting = false
+
+/**
+ * The TV build's worker: public/sw.js left as `dev` (no offline shell, it answers only /stream/),
+ * from the TV build's folder for the whole site, so the TV's own player can be given a file
+ * (player/tvnative.ts). Only on a TV agent, so `?tv=1` on a computer keeps the site's own worker,
+ * and only in a secure context (the LAN build over http has none). Failing is fine: the repack plays.
+ */
+export function registerStreamWorker() {
+    if (!('serviceWorker' in navigator) || !window.isSecureContext || !TV_BROWSER.test(navigator.userAgent) || tvNativeOff()) return
+    navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`, { scope: '/' }).catch((e) => console.warn('[sw] TV stream worker', e))
+}
 
 /** Registers the service worker. A new version found later waits until the user picks Reload, so nothing changes under a playing video. */
 export function registerWorker() {

@@ -320,6 +320,14 @@ function evict() {
 /** Files the Service Worker may read, by the key in their /stream/ URL. */
 export const streams = new Map<string, TgFile>()
 
+/** Keys the Service Worker has asked bytes for, so the player knows the `<video>` reached it (player/tvnative.ts). */
+const asked = new Set<string>()
+
+/** Whether the Service Worker was asked for any of `key`'s bytes since it was opened. */
+export function workerAsked(key: string): boolean {
+    return asked.has(key)
+}
+
 /** Answers the Service Worker's range reads for the `<video>` element. */
 export function serveStreams() {
     if (!('serviceWorker' in navigator)) return
@@ -327,6 +335,8 @@ export function serveStreams() {
         const msg = ev.data as { type?: string; key: string; start: number; end: number }
         if (msg?.type !== 'read') return
         const port = ev.ports[0]
+        if (!port || typeof msg.key !== 'string') return
+        asked.add(msg.key)
         const file = streams.get(msg.key)
         if (!file) return port.postMessage({ error: 'gone' })
         try {
