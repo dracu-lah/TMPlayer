@@ -20,6 +20,7 @@ import {
 } from 'mediabunny'
 import type { TgFile } from '../stream/reader'
 import type { HevcTranscoder, Transcoded } from './hevc'
+import { hevcAccepted, hevcNames, tvDecodesHevc, withHevc } from './hevcnames'
 
 export interface Probe {
     input: Input
@@ -42,6 +43,10 @@ export interface Probe {
     videoCodec: string
     /** HEVC this browser cannot decode, turned into H.264 by hevc.js on the way (player/hevc.ts). */
     transcode: boolean
+    /** The HEVC name the Media Source took (its own or a stand-in, player/hevcnames.ts); null for other codecs. */
+    hevcAs: string | null
+    /** No HEVC name was taken, but this is a TV that decodes HEVC: the Source Buffer is tried without asking. */
+    hevcTrusted: boolean
 }
 
 /** Why a file cannot play here: the page says "needs the app" with the reason. */
@@ -162,13 +167,21 @@ export async function probe(file: TgFile, durationHint: number): Promise<Probe> 
     const probeEl = document.createElement('video')
     const native = isoOrWebm && probeEl.canPlayType(asMp4) !== '' && !!navigator.serviceWorker?.controller
     const vcodec = (await video?.getCodecParameterString().catch(() => null)) ?? null
-    let remuxable = !!MS && !!vcodec && MS.isTypeSupported(`video/mp4; codecs="${vcodec.replace(/^hev1/, 'hvc1')}"`)
+    const isHevc = !!vcodec && /^(hev1|hvc1)\./.test(vcodec)
+    // HEVC: the first of its names this Media Source takes, a stand-in of the same profile on a TV
+    // that turns the file's own down (hevcnames.ts). The picture is still decoded by the browser.
+    const taken = MS && vcodec && isHevc ? hevcAccepted(vcodec, (m) => MS.isTypeSupported(m)) : null
+    // Turned down everywhere on an LG or Samsung TV: tried anyway under the file's own name.
+    const hevcTrusted = !!MS && !!vcodec && isHevc && !taken && !native && tvDecodesHevc(navigator.userAgent)
+    const hevcAs = taken ?? (hevcTrusted && vcodec ? vcodec.replace(/^hev1/, 'hvc1') : null)
+    if (MS && vcodec && isHevc && !taken && !native) console.warn('[player] no HEVC name taken by Media Source', vcodec, hevcNames(vcodec).length, 'tried', hevcTrusted ? ', trying the TV decoder anyway' : '')
+    let remuxable = !!MS && !!vcodec && (isHevc ? !!hevcAs : MS.isTypeSupported(`video/mp4; codecs="${vcodec}"`))
     // No HEVC decoder here: hevc.js can stand it in as H.264 where the browser encodes that.
     let transcode = false
     if (!remuxable && !native && vcodec && /^(hev1|hvc1)/.test(vcodec) && (await (await import('./hevc')).canTranscodeHevc())) {
         transcode = remuxable = true
     }
-    return { input, container: format.name, video, audios, duration, base, mime: asMp4, native, remuxable, videoCodec: codecName(video), transcode }
+    return { input, container: format.name, video, audios, duration, base, mime: asMp4, native, remuxable, videoCodec: codecName(video), transcode, hevcAs: transcode ? null : hevcAs, hevcTrusted: !transcode && hevcTrusted }
 }
 
 /**
@@ -306,6 +319,10 @@ export abstract class FeedEngine implements Engine {
     private retries = 0
     /** Set by a repack of HEVC this browser cannot decode: each fragment goes through it first. */
     protected transcoder: HevcTranscoder | null = null
+    /** The HEVC name this browser's Media Source took for the file (player/hevcnames.ts), or null. */
+    protected hevcAs: string | null = null
+    /** `hevcAs` is the file's own name, unasked: the TV's Source Buffer answers for it. */
+    protected hevcTrusted = false
     /** Whether the transcoded fragments carry the (AAC) sound too. */
     protected transcodedSound = false
     // A drag over the seek bar fires `seeking` dozens of times a second: only where it settles is
@@ -546,10 +563,18 @@ export abstract class FeedEngine implements Engine {
     }
 
     private async sourceBuffer(output: Output, offset: number, codec: string, as?: string): Promise<SourceBuffer> {
-        const mime = as ?? (await output.getMimeType()).replace(/hev1\./g, 'hvc1.')
+        const own = (await output.getMimeType()).replace(/hev1\./g, 'hvc1.')
+        const mime = as ?? (this.hevcAs ? withHevc(own, this.hevcAs) : own)
         if (!this.sb) {
-            if (!MS!.isTypeSupported(mime)) throw new Unplayable({ kind: 'picture', codec })
-            this.sb = this.ms.addSourceBuffer(mime)
+            const unasked = !as && this.hevcTrusted
+            if (!unasked && !MS!.isTypeSupported(mime)) throw new Unplayable({ kind: 'picture', codec })
+            try {
+                this.sb = this.ms.addSourceBuffer(mime)
+            } catch (e) {
+                // The TV turned the HEVC down after all: the next engine, then the reason.
+                if (unasked) throw new Unplayable({ kind: 'picture', codec })
+                throw e
+            }
             this.sb.mode = 'segments'
             this.mime = mime
         }
@@ -648,6 +673,8 @@ export class RemuxEngine extends FeedEngine {
         ev: EngineEvents,
     ) {
         super(video, p.duration, ev)
+        this.hevcAs = p.hevcAs
+        this.hevcTrusted = p.hevcTrusted
         if (!p.video) throw new Unplayable({ kind: 'no-picture' })
         this.keySink = new EncodedPacketSink(p.video)
         this.begin(start)
