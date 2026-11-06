@@ -21,7 +21,7 @@ esac
 VERSION="$(sed -n 's/.*findProperty("tmVersionName") as String?) ?: "\([0-9]*\.[0-9]*\.[0-9]*\).*/\1/p' "$ROOT/app/build.gradle.kts" | head -n 1)"
 VERSION="${TV_VERSION:-${VERSION:-0.0.1}}"
 
-rm -rf "$OUT/webos" "$OUT/tizen" "$OUT"/*.ipk "$OUT"/*.wgt
+rm -rf "$OUT/webos" "$OUT/webos-service" "$OUT/tizen" "$OUT"/*.ipk "$OUT"/*.wgt
 mkdir -p "$OUT/webos" "$OUT/tizen" "$OUT/.tools"
 
 # Fill the shell page: words from en.json (HTML escaped), address from the argument.
@@ -52,7 +52,9 @@ HOST="$(printf '%s' "$ORIGIN" | sed -E 's#^[a-z]+://##; s#:[0-9]+$##')"
 # LG webOS
 cp "$OUT/index.html" "$HERE/webos/icon.png" "$HERE/webos/largeIcon.png" "$OUT/webos/"
 sed "s#{{VERSION}}#$VERSION#" "$HERE/webos/appinfo.json" > "$OUT/webos/appinfo.json"
-(cd "$OUT/.tools" && npx --yes --package @webos-tools/cli ares-package --outdir "$OUT" "$OUT/webos" >/dev/null)
+# The JS service next to the app (service/, R4): ares-package takes the app folder, then the service folder.
+cp -R "$HERE/webos/service/org.tmplayer.tv.service" "$OUT/webos-service"
+(cd "$OUT/.tools" && npx --yes --package @webos-tools/cli ares-package --outdir "$OUT" "$OUT/webos" "$OUT/webos-service" >/dev/null)
 mv "$OUT/org.tmplayer.tv_${VERSION}_all.ipk" "$OUT/TMPlayer-tv.ipk"
 
 # Samsung Tizen (unsigned)

@@ -9,6 +9,7 @@ closes the app). The words come from `core/src/commonMain/resources/i18n/en.json
 | --- | --- |
 | `shell/index.html` | The template, filled in by `package.sh` |
 | `webos/` | `appinfo.json` and the 80 and 130 px icons for LG webOS |
+| `webos/service/` | LG's JS service `org.tmplayer.tv.service`: a 127.0.0.1 stream bridge (ES5 for Node 8, no dependencies), packed into the `.ipk` next to the app; `pnpm test:tv` tests it |
 | `tizen/` | `config.xml` and the 512 px icon for Samsung Tizen (5.5 and later) |
 | `package.sh` | Builds `out/TMPlayer-tv.ipk` and `out/TMPlayer-tv.wgt` |
 

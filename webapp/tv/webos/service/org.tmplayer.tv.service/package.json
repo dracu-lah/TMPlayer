@@ -1,0 +1,7 @@
+{
+  "name": "org.tmplayer.tv.service",
+  "version": "1.0.0",
+  "description": "TMPlayer stream bridge on 127.0.0.1",
+  "main": "service.js",
+  "private": true
+}

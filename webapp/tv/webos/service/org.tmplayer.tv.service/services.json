@@ -1,0 +1,10 @@
+{
+  "id": "org.tmplayer.tv.service",
+  "description": "TMPlayer stream bridge on 127.0.0.1",
+  "services": [
+    {
+      "name": "org.tmplayer.tv.service",
+      "description": "Hands the TV's own player the bytes of a Telegram file"
+    }
+  ]
+}

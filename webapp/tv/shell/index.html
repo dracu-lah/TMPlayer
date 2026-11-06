@@ -69,6 +69,50 @@ button:focus { outline: none; border-color: #6ea8ff; -webkit-box-shadow: 0 0 0 6
     busy = false;
   }
 
+  // LG webOS only: the JS service next to this page (service/, bridge.js) listens on 127.0.0.1 so the
+  // TV's own player can be handed the file. It answers a port and a token, which go to the hosted page
+  // in the URL fragment. Any trouble (Samsung, an older package, no answer in 3 s) opens the page plain.
+  var SERVICE = 'luna://org.tmplayer.tv.service/';
+  function callService(method, params, ok, fail) {
+    try {
+      if (window.webOS && window.webOS.service && typeof window.webOS.service.request === 'function') {
+        window.webOS.service.request('luna://org.tmplayer.tv.service', { method: method, parameters: params, onSuccess: ok, onFailure: fail });
+        return;
+      }
+      if (window.PalmServiceBridge) {
+        var bridge = new window.PalmServiceBridge();
+        bridge.onservicecallback = function (msg) {
+          try {
+            var r = JSON.parse(msg);
+            if (r && r.returnValue !== false) { ok(r); } else { fail(r); }
+          } catch (e) { fail(e); }
+        };
+        bridge.call(SERVICE + method, JSON.stringify(params));
+        return;
+      }
+    } catch (e2) {}
+    fail();
+  }
+
+  function openApp() {
+    var page = ADDRESS.split('#')[0];
+    var origin = /^(https?:\/\/[^\/?#]+)/.exec(page);
+    var opened = false;
+    function open(fragment) {
+      if (opened) { return; }
+      opened = true;
+      clearTimeout(wait);
+      location.replace(fragment ? page + '#' + fragment : page);
+    }
+    var wait = setTimeout(function () { open(''); }, 3000);
+    if (!origin) { open(''); return; }
+    callService('start', { origin: origin[1] }, function (r) {
+      var port = r && Number(r.port);
+      var token = r && typeof r.token === 'string' && /^[0-9a-f]{8,64}$/.test(r.token) ? r.token : '';
+      open(port > 0 && port < 65536 && token ? 'tvsvc=' + port + '.' + token : '');
+    }, function () { open(''); });
+  }
+
   function check() {
     if (busy) { return; }
     busy = true;
@@ -79,7 +123,7 @@ button:focus { outline: none; border-color: #6ea8ff; -webkit-box-shadow: 0 0 0 6
       if (finished) { return; }
       finished = true;
       clearTimeout(timer);
-      if (ok) { location.replace(ADDRESS); } else { showCard(); }
+      if (ok) { openApp(); } else { showCard(); }
     }
     var timer = setTimeout(function () { done(false); }, TIMEOUT_MS);
     var sep = ADDRESS.indexOf('?') < 0 ? '?' : '&';

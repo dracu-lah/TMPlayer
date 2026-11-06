@@ -17,6 +17,7 @@
     "test:tmdb": "node --test \"tmdb/*.test.ts\"",
     "test:player": "node --test \"src/player/*.test.ts\"",
     "test:ui": "node --test \"src/ui/*.test.ts\"",
+    "test:tv": "node --test \"tv/test/*.test.cjs\"",
     "e2e": "playwright test"
   },
   "dependencies": {
