@@ -289,12 +289,12 @@ export interface Engine {
 }
 
 /** The browser decodes the file itself, read through /stream/ by the Service Worker. */
-export function nativeEngine(video: HTMLVideoElement, url: string, start: number): Engine {
+export function nativeEngine(video: HTMLVideoElement, url: string, start: number, detail = 'Played by the browser'): Engine {
     video.src = url
     if (start > 0) video.currentTime = start
     return {
         name: 'native',
-        detail: 'Played by the browser',
+        detail,
         destroy() {
             video.removeAttribute('src')
             video.load()

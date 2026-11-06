@@ -244,8 +244,11 @@ export function Player(props: {
             }
             if (way === 'native') {
                 // On the webOS .ipk the loopback bridge wins over the Service Worker address (tvservice.ts).
-                const url = tvServiceUrl(src.key, src.size, p.mime) ?? `/stream/${encodeURIComponent(src.key)}?size=${src.size}&mime=${encodeURIComponent(p.mime.split(';')[0])}`
-                engine = nativeEngine(video, url, at)
+                const bridged = tvServiceUrl(src.key, src.size, p.mime)
+                const url = bridged ?? `/stream/${encodeURIComponent(src.key)}?size=${src.size}&mime=${encodeURIComponent(p.mime.split(';')[0])}`
+                // Says which route fed the player, so a tester's screenshot tells R4 (bridge) from R3 (worker).
+                const how = bridged ? 'Played by the TV player through the TMPlayer service' : form() === 'tv' ? 'Played by the TV player through the Service Worker' : 'Played by the browser'
+                engine = nativeEngine(video, url, at, how)
                 // A second element on the same stream for the seek bar's frames; not on an iPhone or
                 // iPad (Safari's memory and range limits) nor on the TV layout.
                 if (PICTURES_SHOWN && !appleTouch && form() !== 'tv') setGrabber(new FrameGrabber(url))
