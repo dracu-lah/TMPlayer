@@ -3,6 +3,7 @@ import '@videojs/html/video/player'
 import '@videojs/html/ui/container'
 import { Alert02Icon, Cancel01Icon } from '@hugeicons/core-free-icons'
 import { openFile, streams, warmFile, workerAsked, type TgFile } from '../stream/reader'
+import { bridgeAsked, tvServiceUrl } from '../stream/tvservice'
 import { noteTvNative, TV_BROWSER } from './tvnative'
 import { codecName, keyFrames, nativeEngine, playableSound, probe, RemuxEngine, route, Unplayable, type Engine, type Probe, type SoundTrack, type Why } from './engines'
 import { LIBAV_FORMATS, LibavEngine } from './libav'
@@ -242,7 +243,8 @@ export function Player(props: {
                 return await fallback(e, f, at, play, gen, rate, p)
             }
             if (way === 'native') {
-                const url = `/stream/${encodeURIComponent(src.key)}?size=${src.size}&mime=${encodeURIComponent(p.mime.split(';')[0])}`
+                // On the webOS .ipk the loopback bridge wins over the Service Worker address (tvservice.ts).
+                const url = tvServiceUrl(src.key, src.size, p.mime) ?? `/stream/${encodeURIComponent(src.key)}?size=${src.size}&mime=${encodeURIComponent(p.mime.split(';')[0])}`
                 engine = nativeEngine(video, url, at)
                 // A second element on the same stream for the seek bar's frames; not on an iPhone or
                 // iPad (Safari's memory and range limits) nor on the TV layout.
@@ -364,7 +366,7 @@ export function Player(props: {
         const at = video.currentTime
         // A TV whose media server fetched /stream/ itself, around the worker: counted, and after two the TV stays on the repack.
         if (onTv) {
-            const reached = workerAsked(source().key)
+            const reached = workerAsked(source().key) || bridgeAsked(source().key)
             noteTvNative(reached)
             if (!reached) console.warn('[player] the TV player did not go through the stream worker')
         }
@@ -699,7 +701,7 @@ export function Player(props: {
                     poster={BLANK_POSTER}
                     onLoadedMetadata={() => {
                         // The TV's own player read the file through the worker: the route works on this TV.
-                        if (onTv && engine?.name === 'native' && workerAsked(source().key)) noteTvNative(true)
+                        if (onTv && engine?.name === 'native' && (workerAsked(source().key) || bridgeAsked(source().key))) noteTvNative(true)
                         advance(1)
                     }}
                     onCanPlay={() => {
