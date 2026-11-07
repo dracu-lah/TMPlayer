@@ -87,4 +87,22 @@ class EpisodeGuideTest {
         val seasons = EpisodeGuide.seasons(series, emptyList(), null, today = "2026-10-06")
         assertEquals(listOf(1, 2), seasons.map { it.number })
     }
+
+    /** Die Bergretter (2026-11-07): "S08 E06a" and "S08 E06b" share a number; the guide lists it once, on the first half. */
+    @Test
+    fun `the halves of a split episode are one row in the guide, on the first half`() {
+        val names = listOf(
+            "Die Bergretter - S08 E05.mp4",
+            "Die Bergretter - S08 E06b - Schneeblind Teil 2.mp4",
+            "Die Bergretter - S08 E06a - Schneeblind Teil 1.mp4",
+        )
+        val items = names.mapIndexed { at, name -> video(at + 1L, name) }
+        val series = EpisodeGuide.seriesOf(items[0], items) ?: error("no series")
+        val episodes = series.seasons.single().episodes
+        assertEquals(listOf("S08E05", "S08E06a", "S08E06b"), episodes.map { it.code })
+        assertEquals(listOf("", "a", "b"), episodes.map { it.partLetter })
+        val guide = EpisodeGuide.episodes(8, series, null, today = "2026-10-06")
+        assertEquals(listOf(5, 6), guide.map { it.number })
+        assertEquals("S08E06a", guide.last().inChat?.code)
+    }
 }

@@ -53,6 +53,7 @@ import com.tmplayer.online.MetaExtras
 import com.tmplayer.online.MetaInfo
 import com.tmplayer.online.MetaKind
 import com.tmplayer.online.OnlineMetadata
+import com.tmplayer.ui.components.EdgeStep
 import com.tmplayer.ui.components.MediaArt
 import com.tmplayer.ui.components.ProgressLine
 import com.tmplayer.ui.components.TileBadgeInset
@@ -132,9 +133,13 @@ fun SeasonsSection(
         }
         statusLine(extras, s)?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = Tone.muted) }
 
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            seasons.forEach { season ->
-                SeasonChip(season, chosen = season.number == selected, tv = tv) { selected = season.number }
+        // 18 listed seasons are wider than the screen: under the remote a chip is brought in at
+        // once and just far enough, as the show page's tabs are ([SeasonTabs]).
+        EdgeStep(start = 24.dp, end = 24.dp, enabled = tv) {
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                seasons.forEach { season ->
+                    SeasonChip(season, chosen = season.number == selected, tv = tv) { selected = season.number }
+                }
             }
         }
         // Said plainly, in the caution colour: a gap in a season reads as the app losing episodes

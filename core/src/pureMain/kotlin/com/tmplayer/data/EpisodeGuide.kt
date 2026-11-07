@@ -74,7 +74,9 @@ object EpisodeGuide {
      * announced episodes before they are dated.
      */
     fun episodes(season: Int, series: Series?, listed: List<MetaEpisode>?, today: String): List<Episode> {
-        val held = series?.seasons?.firstOrNull { it.number == season }?.episodes.orEmpty().associateBy { it.episode }
+        // The halves of a split episode (E06a, E06b) share a number: the guide lists the number once,
+        // on its first half, which is the one the seasons list sorts first.
+        val held = series?.seasons?.firstOrNull { it.number == season }?.episodes.orEmpty().groupBy { it.episode }.mapValues { it.value.first() }
         val provider = listed.orEmpty().filter { it.season == season }.associateBy { it.number }
         val numbers = (held.keys + provider.keys).sortedDistinct()
         return numbers.map { n ->
