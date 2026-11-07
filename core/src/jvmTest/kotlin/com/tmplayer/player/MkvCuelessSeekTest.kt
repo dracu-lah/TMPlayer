@@ -286,6 +286,11 @@ class MkvCuelessSeekTest {
         val head = el(0x1A45DFA3, el(0x4282, "webm".toByteArray()))
         val bare = head + id(0x18538067) + unknownSize + el(0x1549A966, float(0x4489, 1000.0)) + uint(0x1F43B675, 0)
         assertEquals(MkvClusters.DEFAULT_TIMECODE_SCALE_NS, MkvClusters.timecodeScale(bare))
+        // Where the first Cluster starts, when the head reaches it, sized or not.
+        for (built in listOf(build(seconds = 10), build(seconds = 10, unknownClusters = true, unknownSegment = true))) {
+            assertEquals(built.firstCluster, MkvClusters.head(built.bytes)?.firstCluster)
+            assertEquals(-1L, MkvClusters.head(built.bytes, (built.firstCluster - 1).toInt())?.firstCluster)
+        }
     }
 
     @Test

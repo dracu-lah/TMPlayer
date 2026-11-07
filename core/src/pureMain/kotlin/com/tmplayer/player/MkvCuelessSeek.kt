@@ -326,11 +326,14 @@ object MkvClusters {
     }
 
     /**
-     * The TimecodeScale (nanoseconds per Timestamp unit) from the head of a file, from its Info;
-     * the Matroska default when Info says none, null when the head is not Matroska or holds no Info
-     * before its first Cluster.
+     * What the head of a file says: its TimecodeScale (nanoseconds per Timestamp unit) from its
+     * Info, the Matroska default when Info names none, null when no Info came before the first
+     * Cluster or the head ran out first; and where its first Cluster starts, -1 when past the head.
      */
-    fun timecodeScale(head: ByteArray, length: Int = head.size): Long? {
+    class Head(val timecodeScaleNs: Long?, val firstCluster: Long)
+
+    /** [Head] of the first [length] bytes of a file; null when they are not a Matroska file's. */
+    fun head(head: ByteArray, length: Int = head.size): Head? {
         val n = length.coerceIn(0, head.size)
         val ebmlId = vint(head, 0, n, keepMarker = true) ?: return null
         if (ebmlId.value != ID_EBML) return null
@@ -341,19 +344,21 @@ object MkvClusters {
         if (segmentId.value != ID_SEGMENT) return null
         val segmentSize = vint(head, p.toInt() + segmentId.length, n, keepMarker = false) ?: return null
         p += segmentId.length + segmentSize.length
+        var scale: Long? = null
         while (p < n) {
-            val id = vint(head, p.toInt(), n, keepMarker = true) ?: return null
-            val size = vint(head, p.toInt() + id.length, n, keepMarker = false) ?: return null
-            if (size.value == allOnes(size.length)) return null
+            val id = vint(head, p.toInt(), n, keepMarker = true) ?: break
+            if (id.value == ID_CLUSTER) return Head(scale, p)
+            val size = vint(head, p.toInt() + id.length, n, keepMarker = false) ?: break
+            if (size.value == allOnes(size.length)) break
             val body = p + id.length + size.length
-            when (id.value) {
-                ID_CLUSTER -> return null
-                ID_INFO -> return infoScale(head, body, minOf(n.toLong(), body + size.value))
-            }
+            if (id.value == ID_INFO) scale = infoScale(head, body, minOf(n.toLong(), body + size.value))
             p = body + size.value
         }
-        return null
+        return Head(scale, -1)
     }
+
+    /** The TimecodeScale of [head] ([Head.timecodeScaleNs]). */
+    fun timecodeScale(head: ByteArray, length: Int = head.size): Long? = head(head, length)?.timecodeScaleNs
 
     private fun infoScale(head: ByteArray, from: Long, until: Long): Long? {
         var p = from
