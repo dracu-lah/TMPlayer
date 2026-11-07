@@ -3184,6 +3184,7 @@
     "coffee_setting": "Buy Me a Coffee button",
     "coffee_setting_detail": "A small button in the bottom corner that opens Buy Me a Coffee. Its x hides it until you next open TMPlayer; turn this off to hide it for good",
     "coffee_sponsor_github": "Or sponsor on GitHub",
+    "converting": "Converting this video's picture for this browser. It can take up to a minute to start.",
     "gone_from_chat": "This video is gone from the chat.",
     "install_button": "Install",
     "install_ios": "Tap Share, then Add to Home Screen. TMPlayer then opens full screen, like an app.",

@@ -106,6 +106,8 @@ export function Player(props: {
     const [source, setSource] = createSignal<Source>({ key: item.key, size: item.size, duration: item.duration, height: 0 })
     const [error, setError] = createSignal<string | null>(null)
     const [needsApp, setNeedsApp] = createSignal<Why | null>(null)
+    /** The picture is converted here (HEVC with no decoder), which makes the opening slow: the loader says so. */
+    const [converting, setConverting] = createSignal(false)
     /** A line over the picture: the sound, a subtitle file, a quality switch. */
     const [notice, setNotice] = createSignal('')
     const [audios, setAudios] = createSignal<SoundTrack[]>([])
@@ -232,6 +234,7 @@ export function Player(props: {
             if (typeof p === 'string') return await fallback(new Unplayable({ kind: 'format', format: p }), f, at, play, gen, rate)
             if (gen !== generation) return p.input.dispose()
             probed = p
+            setConverting(p.transcode)
             setAudios(p.audios)
             setAudio(p.audios[0] ?? null)
             let way: 'native' | 'remux'
@@ -805,7 +808,7 @@ export function Player(props: {
                 </Show>
 
                 <Show when={opening() !== null && !blocked()}>
-                    <OpeningLoader item={item} info={props.info} at={resumedAt() ?? 0} stage={opening()!} onClose={close} />
+                    <OpeningLoader item={item} info={props.info} at={resumedAt() ?? 0} stage={opening()!} converting={converting()} onClose={close} />
                 </Show>
 
                 <Show when={blocked()}>
