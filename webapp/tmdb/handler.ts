@@ -7,6 +7,12 @@
 //        poster: "/abc.jpg" | null } or { match: false }. 503 when TMDB cannot be asked right now.
 //        The answer also carries the title's overview (English) and its wide picture's file, which
 //        MetaInfo has beside the poster: `overview`, `backdrop`.
+//   GET /tmdb/search?k=film|show&t=<title>&y=<year>&l=ta,hi
+//        "Choose the right poster": the titles TMDB has that the name could mean, films and shows
+//        each searched with the year and without it, merged and ranked (choices.ts), at most ten:
+//        { choices: [{ id, kind, title, year, language, overview, poster }] }. 503 as above when
+//        nothing could be learned. Kept an hour at the edge, a failure never.
+//   GET /tmdb/poster also takes p=1 with id: the viewer picked that title, so no year backs it.
 //   GET /tmdb/extras?k=film|show&id=<tmdb id>[&s=1&e=3][&r=GB]
 //        the detail page's second helping (MetaExtras): genres, length, rating, age rating, directors
 //        or creators, cast, a trailer's YouTube id, and for a show's episode its own name and words.
@@ -24,6 +30,7 @@
 // more after a second, and none of these failures is ever cached. The title is the only thing
 // that leaves for TMDB: no chat, file or account.
 import { extras, type Extras } from './extras.ts'
+import { mergeChoices } from './choices.ts'
 import { best, normalise, trusted, type Ask, type Candidate } from './match.ts'
 
 export interface Env {
@@ -182,12 +189,15 @@ export function createHandler(deps: Deps) {
         const id = num('id', 1, 999_999_999)
         if (Number.isNaN(year) || Number.isNaN(id)) return null
         const languages = (p.get('l') ?? '').split(',').filter((l) => /^[a-z]{2,3}$/.test(l)).slice(0, 8)
-        return { title, year, kind, tmdbId: id, series: p.get('s') === '1', languages }
+        // A pick names its title by id; "picked" without one is no question.
+        const picked = p.get('p') === '1'
+        if (picked && id === null) return null
+        return { title, year, kind, tmdbId: id, series: p.get('s') === '1', languages, ...(picked ? { picked } : {}) }
     }
 
     /** What the cache files an answer under: the cleaned title, as MetaQuery.cacheKey does, never the raw one. */
     function cacheRequest(origin: string, ask: Ask): Request {
-        const q = new URLSearchParams({ k: ask.kind, t: normalise(ask.title), y: String(ask.year ?? ''), id: String(ask.tmdbId ?? ''), s: ask.series ? '1' : '0', l: ask.languages.join(',') })
+        const q = new URLSearchParams({ k: ask.kind, t: normalise(ask.title), y: String(ask.year ?? ''), id: String(ask.tmdbId ?? ''), s: ask.series ? '1' : '0', l: ask.languages.join(','), p: ask.picked ? '1' : '0' })
         return new Request(`${origin}/tmdb/poster?${q}`)
     }
 
@@ -220,6 +230,53 @@ export function createHandler(deps: Deps) {
         }
         const response = json(body, 200, { 'Cache-Control': `public, max-age=3600, s-maxage=${ttl}`, 'X-Poster-Cache': 'miss' })
         if (deps.cache) {
+            const put = deps.cache.put(cacheKey, response.clone()).catch(() => {})
+            deps.later?.(put)
+        }
+        return response
+    }
+
+    /**
+     * The titles a name could mean (OnlineMetadata.candidates): films and shows, each with the year
+     * and without it, the kind the file looks like first so a throttle part way still leaves its titles.
+     */
+    async function search(url: URL, env: Env): Promise<Response> {
+        const ask = parse(url)
+        if (!ask) return json({ error: 'bad request' }, 400)
+        const key = env.TMDB_API_KEY?.trim()
+        if (!key) return unavailable('no key', 300)
+        // The search is for the name: a forced id in the question is not part of it.
+        const question: Ask = { ...ask, tmdbId: null }
+        const q = new URLSearchParams({ v: '1', k: question.kind, t: normalise(question.title), y: String(question.year ?? ''), l: question.languages.join(',') })
+        const cacheKey = new Request(`${url.origin}/tmdb/search?${q}`)
+        const kept = await deps.cache?.match(cacheKey).catch(() => undefined)
+        if (kept) {
+            const headers = new Headers(kept.headers)
+            headers.set('X-Poster-Cache', 'hit')
+            return new Response(kept.body, { status: kept.status, headers })
+        }
+        if (now() < pausedUntil) return unavailable('throttled', (pausedUntil - now()) / 1000)
+        if (refusedAt && now() - refusedAt < REFUSED_RETRY) return unavailable('refused', (REFUSED_RETRY - (now() - refusedAt)) / 1000)
+        const lists: { film: boolean; candidates: Candidate[] }[] = []
+        let blocked: Outcome | null = null
+        const years = question.year === null ? [null] : [question.year, null]
+        for (const film of question.kind === 'film' ? [true, false] : [false, true]) {
+            for (const year of years) {
+                // Once TMDB says to wait or turns the key down, nothing more is asked this time; nor
+                // after an outage that has answered nothing yet (not four tries into a dead line).
+                if (blocked && blocked.kind === 'blocked' && (blocked.reason !== 'unavailable' || !lists.length)) continue
+                const params = `query=${encodeURIComponent(question.title)}&include_adult=false&language=en-US` + (year !== null ? `&${film ? 'year' : 'first_air_date_year'}=${year}` : '')
+                const reply = await retrying(key, `search/${film ? 'movie' : 'tv'}`, params)
+                if (reply.kind === 'ok') lists.push({ film, candidates: ((reply.json.results ?? []) as any[]).map((o) => candidate(film, o)) })
+                else blocked = stopped(reply)
+            }
+        }
+        // Nothing learned and something in the way: say so, so the page offers Try again; never "no titles".
+        if (!lists.length && blocked && blocked.kind === 'blocked') return unavailable(blocked.reason, blocked.waitS)
+        if (!blocked) refusedAt = 0
+        const response = json({ choices: mergeChoices(question, lists) }, 200, { 'Cache-Control': 'public, max-age=60, s-maxage=3600', 'X-Poster-Cache': 'miss' })
+        // A partial answer (one search was throttled) is shown but not kept, so a later try fills it in.
+        if (deps.cache && !blocked) {
             const put = deps.cache.put(cacheKey, response.clone()).catch(() => {})
             deps.later?.(put)
         }
@@ -321,6 +378,7 @@ export function createHandler(deps: Deps) {
         // The key's quota is the apps' to spend: another site's page may not use this proxy.
         if (request.headers.get('sec-fetch-site') === 'cross-site') return new Response('Forbidden', { status: 403 })
         if (url.pathname === '/tmdb/poster') return poster(request, url, env)
+        if (url.pathname === '/tmdb/search') return search(url, env)
         if (url.pathname === '/tmdb/extras') return details(url, env)
         if (url.pathname.startsWith('/tmdb/img/')) return image(url)
         return new Response('Not found', { status: 404 })

@@ -6,7 +6,7 @@ import { resumes, settings, watchedTick } from '../store'
 import { loadThumb } from './thumbs'
 import { coverBackground } from './cover'
 import { isPromoCover, useObservedCovers } from './promo'
-import { keptRating, loadBackdrop, loadPoster, posterSizeFor } from './posters'
+import { askOf, keptRating, loadBackdrop, loadPoster, posterSizeFor } from './posters'
 import { TmdbMark } from '../ui/TmdbMark'
 import { warmDataCentres, warmFile } from '../stream/reader'
 import { t } from '../i18n'
@@ -229,7 +229,7 @@ export function Card(props: { card: CardData; progress?: number; replace?: boole
     }
     return (
         <A class="card" {...cardLink(props.card.item, props.direct, props.replace, props.history)}>
-            <CardArt thumb={props.card.item.thumb} cover={props.card.item.cover} title={props.card.title} poster={props.card.item.poster} progress={props.progress} onPlay={play} />
+            <CardArt thumb={props.card.item.thumb} cover={props.card.item.cover} title={props.card.title} poster={askOf(props.card.item)} progress={props.progress} onPlay={play} />
             {/* Under the card, as the apps write it (two lines kept, so the facts line up along a row). */}
             <div class="card-name">{props.card.title}</div>
             <div class="card-facts">{props.card.facts}</div>
@@ -275,7 +275,7 @@ export function ContinueCard(props: { item: VideoItem; left?: Left }) {
     })
     // The title's own wide picture where TMDB has one (OnlineArt), the video's frame until then.
     createEffect(() => {
-        const ask = props.item.poster
+        const ask = askOf(props.item)
         if (!seen() || !ask || !settings().posters) return void setWide(null)
         let live = true
         loadBackdrop(ask).then(

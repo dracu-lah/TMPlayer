@@ -83,7 +83,7 @@ object SameTitle {
      */
     fun onlineKey(item: MediaItem): String? {
         val online = OnlineMetadata.current ?: return null
-        val query = item.metaQuery ?: return null
+        val query = VideoCorrections.queryOf(item) ?: return null
         val found = runCatching { online.peek(query) }.getOrNull() as? MetaResult.Found ?: return null
         val info = found.info
         val kind = if (info.kind == MetaKind.Show) "show" else "film"

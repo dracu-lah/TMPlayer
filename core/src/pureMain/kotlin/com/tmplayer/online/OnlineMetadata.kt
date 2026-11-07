@@ -183,6 +183,66 @@ class OnlineMetadata(
         }
     }
 
+    // ---- choosing the right title --------------------------------------------------------------
+
+    private val choicesMemory = LruMap<String, List<PosterChoice>>(CHOICES_MEMORY_ENTRIES)
+
+    /**
+     * The titles TMDB has that [query] could mean, for "Choose the right poster": films and shows,
+     * each searched with the year and without it (so the right one is there when the file's year is
+     * off), merged and ranked by [PosterChoiceRules.merge]. Up to four calls through the same rate
+     * limiter as every lookup, asked only when the viewer opens the picker, and kept in memory only
+     * for this run. Offline, throttled, refused and "no key" are answers of their own
+     * ([PosterChoices]); this never throws. A forced id in [query] is ignored: the search is for
+     * the name.
+     */
+    suspend fun candidates(query: MetaQuery): PosterChoices {
+        val s = store.now
+        if (!s.enabled) return PosterChoices.Off
+        if (!tmdbUsable(s)) return PosterChoices.NoKey
+        val title = query.title.trim()
+        if (title.isEmpty()) return PosterChoices.Found(emptyList())
+        val lang = tmdbLanguage()
+        val key = listOf(title.lowercase(), query.year?.toString().orEmpty(), query.kind.name, query.languages.joinToString(","), lang).joinToString("|")
+        locksLock.locked { choicesMemory[key] }?.let { return PosterChoices.Found(it) }
+        return try {
+            askCandidates(activeKey(s), query.copy(title = title), lang, key)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            PosterChoices.Unavailable
+        }
+    }
+
+    private suspend fun askCandidates(apiKey: String, query: MetaQuery, lang: String, memoryKey: String): PosterChoices {
+        val lists = ArrayList<Pair<Boolean, List<MetaCandidate>>>()
+        var blocked = false
+        val years = listOf(query.year, null).distinct()
+        // The kind the file looks like first, so a throttle part way still leaves its titles.
+        for (film in if (query.kind == MetaKind.Film) listOf(true, false) else listOf(false, true)) {
+            for (year in years) {
+                if (paused(MetaProvider.Tmdb)) {
+                    blocked = true
+                    continue
+                }
+                val reply = retrying { if (film) tmdb.searchMovie(apiKey, query.title, year, lang) else tmdb.searchTv(apiKey, query.title, year, lang) }
+                val problem = trouble(MetaProvider.Tmdb, reply, apiKey)
+                when {
+                    problem == null -> lists += film to (reply as MetaReply.Ok).value
+                    problem === Outcome.Blocked -> blocked = true
+                }
+            }
+        }
+        // A key TMDB just turned down is a message of its own, not a throttle to wait out.
+        if (lists.isEmpty() && !tmdbUsable(store.now)) return PosterChoices.NoKey
+        // Nothing learned and something in the way: say so, so Try again is offered; never "no titles".
+        if (lists.isEmpty() && blocked) return PosterChoices.Unavailable
+        val choices = PosterChoiceRules.merge(query, lists)
+        // A partial answer (one search was throttled) is shown but not kept, so a later try fills it in.
+        if (!blocked) locksLock.locked { choicesMemory[memoryKey] = choices }
+        return PosterChoices.Found(choices)
+    }
+
     private fun remembered(key: String): MetaResult? {
         memory[key]?.let { return it }
         val stored = cache.answer(key) ?: return null
@@ -544,6 +604,7 @@ class OnlineMetadata(
      * and picture. [name] is how the file reads, the viewer's own title where they gave one.
      */
     suspend fun matched(item: MediaItem, name: com.tmplayer.data.ParsedName, info: MetaInfo): MatchedMeta? {
+        chosen(item, info)?.let { return it }
         MetaConfidence.basis(name, info)?.let { return MatchedMeta(info, it) }
         if (!MetaConfidence.needsRuntime(name, info, item.durationSec)) return null
         val key = runtimeKey(item, name, info)
@@ -561,9 +622,20 @@ class OnlineMetadata(
      * the poster faded in over it a moment later, even with both decoded already.
      */
     fun peekMatched(item: MediaItem, name: com.tmplayer.data.ParsedName, info: MetaInfo): MatchedMeta? {
+        chosen(item, info)?.let { return it }
         MetaConfidence.basis(name, info)?.let { return MatchedMeta(info, it) }
         if (!MetaConfidence.needsRuntime(name, info, item.durationSec)) return null
         return runtimeVerdicts[runtimeKey(item, name, info)]?.matched
+    }
+
+    /**
+     * [info] as the viewer's own pick for [item], when they picked exactly this title: it needs no
+     * year or runtime to back it, since the viewer's word is the backing.
+     */
+    private fun chosen(item: MediaItem, info: MetaInfo): MatchedMeta? {
+        val pick = com.tmplayer.data.VideoCorrections.current[item.id]?.pick ?: return null
+        if (info.provider != MetaProvider.Tmdb || info.id != pick.tmdbId.toString() || info.kind != pick.kind) return null
+        return MatchedMeta(info, MatchBasis.Chosen)
     }
 
     /** [matched]'s verdicts that took the provider's runtime, a "no" included, for this run. */
@@ -590,7 +662,7 @@ class OnlineMetadata(
      * details are off or found nothing; never throws.
      */
     suspend fun idsFor(item: MediaItem): VideoIds = runCatching {
-        val query = item.metaQuery ?: return VideoIds()
+        val query = com.tmplayer.data.VideoCorrections.queryOf(item) ?: return VideoIds()
         val info = (lookup(query) as? MetaResult.Found)?.info ?: return VideoIds()
         val imdb = providerExtras(info)?.imdbId?.trim()?.lowercase()?.takeIf { IMDB_ID.matches(it) }
         VideoIds(tmdb = info.id.takeIf { info.provider == MetaProvider.Tmdb && it.all(Char::isDigit) }, imdb = imdb)
@@ -895,7 +967,7 @@ class OnlineMetadata(
         val asked = HashMap<String, MetaInfo?>()
         val best = LinkedHashMap<String, Pair<KnownTitle, Int>>()
         for (item in items) {
-            val full = item.metaQuery ?: continue
+            val full = com.tmplayer.data.VideoCorrections.queryOf(item) ?: continue
             val show = full.showOnly()
             val cacheKey = show.cacheKey(lang)
             val info = if (cacheKey in asked) asked[cacheKey] else cachedMatch(show).also { asked[cacheKey] = it }
@@ -1060,6 +1132,9 @@ class OnlineMetadata(
         /** Pictures fetched at once: a row's worth on screen, and few enough to leave the video its line. */
         const val IMAGE_PARALLEL = 6
         private const val MEMORY_ENTRIES = 600
+
+        /** Pickers' lists kept for this run: a few dozen opened by hand, never a tile's. */
+        private const val CHOICES_MEMORY_ENTRIES = 24
 
         /**
          * A screen or two of Home's tiles: each holds a cast list and a recommendation list, a few

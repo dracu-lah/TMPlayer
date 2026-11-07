@@ -16,6 +16,7 @@ import com.tmplayer.data.DetailAction.SaveToDownloads
 import com.tmplayer.data.DetailAction.Share
 import com.tmplayer.data.DetailAction.StartOver
 import com.tmplayer.data.DetailAction.JoinCopies
+import com.tmplayer.data.DetailAction.ChoosePoster
 import com.tmplayer.data.DetailAction.Rename
 import com.tmplayer.data.DetailAction.SplitCopy
 import com.tmplayer.data.DetailAction.UseMatch
@@ -115,11 +116,11 @@ class DetailActionsTest {
     @Test
     fun `corrections come last, each with its undo, and none of them keeps a copy`() {
         val base = DetailContext(canBeSaved = false, canCorrect = true)
-        assertEquals(listOf(Play, MarkWatched, Rename), DetailActions.of(base))
-        assertEquals(listOf(SplitCopy, WrongMatch, Rename), DetailActions.of(base.copy(grouped = true, matched = true)).takeLast(3))
-        assertEquals(listOf(JoinCopies, UseMatch, Rename), DetailActions.of(base.copy(separated = true, wrongMatch = true)).takeLast(3))
+        assertEquals(listOf(Play, MarkWatched, ChoosePoster, Rename), DetailActions.of(base))
+        assertEquals(listOf(SplitCopy, WrongMatch, ChoosePoster, Rename), DetailActions.of(base.copy(grouped = true, matched = true)).takeLast(4))
+        assertEquals(listOf(JoinCopies, UseMatch, ChoosePoster, Rename), DetailActions.of(base.copy(separated = true, wrongMatch = true)).takeLast(4))
         assertFalse(DetailActions.of(DetailContext(canBeSaved = true)).contains(Rename))
-        assertFalse(listOf(SplitCopy, JoinCopies, WrongMatch, UseMatch, Rename).any(DetailActions::keepsACopy))
+        assertFalse(listOf(SplitCopy, JoinCopies, WrongMatch, UseMatch, ChoosePoster, Rename).any(DetailActions::keepsACopy))
     }
 
     @Test

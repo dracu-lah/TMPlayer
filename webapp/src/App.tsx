@@ -9,6 +9,7 @@ import { Home } from './screens/Home'
 import { Nav } from './ui/Nav'
 import { Toaster } from './ui/Toast'
 import { CardMenu } from './ui/CardMenu'
+import { PosterPicker } from './ui/PosterPicker'
 import { applyUpdate, askKeepOnce, updateReady } from './install'
 import { scheduleTrim } from './cacheBounds'
 import { t } from './i18n'
@@ -163,6 +164,7 @@ function Shell(props: ParentProps) {
             </Show>
             <Toaster />
             <CardMenu />
+            <PosterPicker />
             <Show when={sessionHere() === 'elsewhere'}>
                 <OtherTab />
             </Show>

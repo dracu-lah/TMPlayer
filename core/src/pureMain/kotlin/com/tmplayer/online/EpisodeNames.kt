@@ -81,7 +81,7 @@ object EpisodeNames {
      * numbering, which covers a bare "E5" the file name alone does not give away.
      */
     private fun queryFor(tag: EpisodeTag, item: MediaItem?): MetaQuery =
-        item?.let { it.metaQuery }
+        item?.let { com.tmplayer.data.VideoCorrections.queryOf(it) }
             ?.takeIf { it.wantsEpisode && (it.season ?: 1) == tag.season && it.episode == tag.episode }
             ?: MetaQuery(title = tag.show, season = tag.season, episode = tag.episode)
 }

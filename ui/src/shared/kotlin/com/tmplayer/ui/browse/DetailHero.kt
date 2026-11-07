@@ -569,6 +569,7 @@ internal fun roundLabel(row: DetailRow, s: Messages): String = when (row.action)
     DetailAction.JoinCopies -> s.detailRoundJoin
     DetailAction.WrongMatch -> s.detailRoundWrongMatch
     DetailAction.UseMatch -> s.detailRoundUseMatch
+    DetailAction.ChoosePoster -> s.posterRound
     DetailAction.Rename -> s.detailRoundRename
     // Play rows beside the pill are the extras, told apart by their wording.
     else -> roundLabel(row.label, s)

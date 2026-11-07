@@ -61,6 +61,12 @@ enum class DetailAction {
     /** Undoes [WrongMatch]. */
     UseMatch,
 
+    /**
+     * "Choose the right poster": a list of the TMDB titles this video could be, and the viewer's
+     * pick forced for it ([PosterPick]). Offered beside [WrongMatch], and also when nothing matched.
+     */
+    ChoosePoster,
+
     /** The title the viewer wants to see, which grouping reads too. */
     Rename,
 
@@ -170,6 +176,9 @@ object DetailActions {
                 context.wrongMatch -> add(DetailAction.UseMatch)
                 context.matched -> add(DetailAction.WrongMatch)
             }
+            // Wrong or missing posters are the common complaint, so the pick is there even when
+            // lookups found nothing: the picker says plainly when they are off.
+            add(DetailAction.ChoosePoster)
             add(DetailAction.Rename)
         }
     }

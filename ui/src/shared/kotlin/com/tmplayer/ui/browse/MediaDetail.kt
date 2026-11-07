@@ -160,6 +160,7 @@ fun detailRow(
         DetailAction.JoinCopies -> DetailRow(action, s.gridSameVideoAgain, TmIcons.Add, onSelect = onSelect)
         DetailAction.WrongMatch -> DetailRow(action, s.gridWrongMatch, TmIcons.VisibilityOff, s.gridWrongMatchDetail, onSelect = onSelect)
         DetailAction.UseMatch -> DetailRow(action, s.gridMatchAgain, TmIcons.Image, onSelect = onSelect)
+        DetailAction.ChoosePoster -> DetailRow(action, s.posterChoose, TmIcons.Search, s.posterChooseDetail, onSelect = onSelect)
         DetailAction.Rename -> DetailRow(action, s.gridRename, TmIcons.Edit, s.gridRenameDetail, onSelect = onSelect)
         DetailAction.CommentVideos -> DetailRow(action, s.detailCommentsVideos, TmIcons.Chats, onSelect = onSelect)
         DetailAction.ExportCopy -> DetailRow(action, s.keepExportGallery, TmIcons.Image, s.keepExportGalleryDetail, onSelect = onSelect)

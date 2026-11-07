@@ -5,7 +5,7 @@
 // qualifying hides the carousel.
 import { createEffect, createMemo, createSignal, on } from 'solid-js'
 import { settings } from '../store'
-import { answer } from './posters'
+import { answer, askOf } from './posters'
 import { candidatesOf, FEATURED_LIMIT, isComplete, type Candidate } from './featuredRules'
 import { t } from '../i18n'
 import type { HomeRow, Tile } from '../tg/types'
@@ -44,7 +44,7 @@ const asCandidate = (t: Tile): Candidate & { tile: Tile } => ({
     extra: t.extra,
     size: t.item.size,
     duration: t.item.duration,
-    asked: !!t.item.poster,
+    asked: !!askOf(t.item),
 })
 
 /** The keys of `list` that are complete, in order, at most the carousel's pages. */
@@ -65,7 +65,7 @@ async function completeKeys(list: Tile[], gone: { dead: boolean }): Promise<stri
         while (!gone.dead && next < list.length) {
             const tile = list[next++]
             try {
-                verdict.set(tile.key, isComplete(await answer(tile.item.poster!)))
+                verdict.set(tile.key, isComplete(await answer(askOf(tile.item)!)))
             } catch {
                 verdict.set(tile.key, false)
             }

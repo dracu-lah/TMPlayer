@@ -3,7 +3,7 @@ import { A } from '@solidjs/router'
 import { InformationCircleIcon, PlayIcon } from '@hugeicons/core-free-icons'
 import { t } from '../i18n'
 import { Icon } from '../ui/Icon'
-import { answer, loadBackdropLightFirst, loadExtras, type Extras } from './posters'
+import { answer, askOf, loadBackdropLightFirst, loadExtras, type Extras } from './posters'
 import { settings } from '../store'
 import { TitleLogo } from '../ui/TitleLogo'
 import { coverBackground } from './cover'
@@ -69,7 +69,8 @@ export function Hero(props: { rows: HomeRow[] | undefined }) {
     // The title's wide picture, the light copy at once and the full one after it; the cover until then.
     const [src, setSrc] = createSignal<string | null>(null)
     createEffect(() => {
-        const ask = pick()?.item.poster
+        const it = pick()?.item
+        const ask = it ? askOf(it) : null
         setSrc(null)
         if (!ask) return
         const stop = loadBackdropLightFirst(ask, setSrc)
@@ -80,7 +81,8 @@ export function Hero(props: { rows: HomeRow[] | undefined }) {
     const [extras, setExtras] = createSignal<Extras | null>(null)
     const [pending, setPending] = createSignal(false)
     createEffect(() => {
-        const ask = pick()?.item.poster
+        const it = pick()?.item
+        const ask = it ? askOf(it) : null
         setExtras(null)
         setPending(!!ask && settings().posters)
         if (!ask || !settings().posters) return

@@ -14,6 +14,9 @@ enum class MatchBasis {
 
     /** A show's title, for a file that names its episode (S01E02, an air date). */
     ShowCode,
+
+    /** The viewer picked this title for the video ("Choose the right poster"): nothing else has to back it. */
+    Chosen,
 }
 
 /** A provider's answer for one video, with what it rests on. */

@@ -488,7 +488,7 @@ class GlobalSearchViewModel(
     /** The online title of [item], when the providers have already been asked about it. */
     private fun onlineNames(item: MediaItem): List<String> {
         val online = OnlineMetadata.current ?: return emptyList()
-        val query = item.metaQuery ?: return emptyList()
+        val query = com.tmplayer.data.VideoCorrections.queryOf(item) ?: return emptyList()
         val found = runCatching { online.peek(query) }.getOrNull() as? MetaResult.Found ?: return emptyList()
         return listOf(found.info.title)
     }
