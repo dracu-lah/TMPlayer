@@ -135,6 +135,7 @@ data class MediaItem(
     @Volatile private var progressKeyRead: String? = null
     @Volatile private var markersRead: Set<String>? = null
     @Volatile private var captionLinesRead: Set<String>? = null
+    @Volatile private var miniKeyRead: Long = 0
 
     /**
      * This item, made by [from]'s copy(), with what was read off [from]'s names kept where the
@@ -256,6 +257,18 @@ data class MediaItem(
      * look up videos by it hundreds of times a build.
      */
     val id: String = "$chatId:$messageId"
+
+    /**
+     * [PromoCovers.keyOf] of [miniThumbnail], worked out once: 0 for a video with no preview.
+     * Telegram's tiny JPEG is the same bytes for the same cover, so this tells one picture from
+     * another without decoding either.
+     */
+    internal val miniKey: Long
+        get() {
+            val bytes = miniThumbnail?.takeIf { it.isNotEmpty() } ?: return 0
+            if (miniKeyRead == 0L) miniKeyRead = PromoCovers.keyOf(bytes)
+            return miniKeyRead
+        }
 
     /** [ProgressKeys.of] for this video, the key its place and its Watched mark are stored under. */
     internal val progressKey: String
