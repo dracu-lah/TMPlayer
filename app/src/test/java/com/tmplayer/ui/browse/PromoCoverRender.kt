@@ -21,16 +21,10 @@ import com.tmplayer.ui.components.PromoCoverBook
 import com.tmplayer.ui.components.isTouch
 import com.tmplayer.ui.theme.TMPlayerTheme
 import com.tmplayer.ui.theme.Tone
-import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
-import org.junit.Test
-import org.junit.runner.RunWith
 import org.robolectric.Robolectric
-import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
-import org.robolectric.annotation.Config
-import org.robolectric.annotation.GraphicsMode
 import java.io.ByteArrayOutputStream
 import java.io.File
 
@@ -39,14 +33,14 @@ import java.io.File
  * (WP: adverts on covers). The advert is solid red and one video's own picture solid blue, so
  * the pixels say which was drawn: with the advert found (PromoCoverBook) no red is on screen, the
  * generated covers stand in and the blue one stays; with nothing found the red is drawn, which
- * keeps the check honest. The phone upright and on its side, and the television.
+ * keeps the check honest. Run by [PromoCoverPhoneRenderTest], [PromoCoverPhoneLandRenderTest] and
+ * [PromoCoverTvRenderTest], one class each: the build forks a process per class, and after the
+ * first test of a process Compose's frame clock under Robolectric stops delivering frames, so the
+ * previews were never decoded for the second case.
  */
-@RunWith(RobolectricTestRunner::class)
-@GraphicsMode(GraphicsMode.Mode.NATIVE)
-class PromoCoverRenderTest {
+class PromoCoverRender {
     private var nextId = 1L
 
-    @After
     fun tearDown() {
         FormFactor.override(false)
         PromoCoverBook.clear()
@@ -94,7 +88,12 @@ class PromoCoverRenderTest {
                 }
             }
         }
-        repeat(20) { shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(100)) }
+        // MediaArt decodes the preview on Dispatchers.Default and posts it back to the main thread,
+        // so the paused looper alone never sees it arrive: give the worker real time between idles.
+        repeat(30) {
+            Thread.sleep(50)
+            shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(100))
+        }
         val root = activity.window.decorView
         val bitmap = Bitmap.createBitmap(root.width, root.height, Bitmap.Config.ARGB_8888)
         root.draw(Canvas(bitmap))
@@ -115,7 +114,7 @@ class PromoCoverRenderTest {
         return red to blue
     }
 
-    private fun check(tv: Boolean, name: String) {
+    fun check(tv: Boolean, name: String) {
         val (redBefore, _) = render(tv, flag = false, out = "promo-$name-plain.png")
         assertTrue("the control should show the advert ($redBefore)", redBefore > 1_000)
         PromoCoverBook.clear()
@@ -123,16 +122,4 @@ class PromoCoverRenderTest {
         assertEquals("the advert must not be drawn", 0, red)
         assertTrue("the video's own picture stays ($blue)", blue > 1_000)
     }
-
-    @Test
-    @Config(sdk = [35], qualifiers = "w411dp-h891dp-port-night-xhdpi")
-    fun phone() = check(tv = false, name = "phone")
-
-    @Test
-    @Config(sdk = [35], qualifiers = "w891dp-h411dp-land-night-xhdpi")
-    fun phoneLandscape() = check(tv = false, name = "phone-land")
-
-    @Test
-    @Config(sdk = [35], qualifiers = "w960dp-h540dp-land-television-night-mdpi")
-    fun television() = check(tv = true, name = "tv")
 }
