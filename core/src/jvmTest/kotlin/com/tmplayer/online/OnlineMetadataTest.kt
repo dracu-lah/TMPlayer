@@ -3,6 +3,7 @@ package com.tmplayer.online
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -516,6 +517,25 @@ class OnlineMetadataTest {
         val q = query("Amelie.2001.mkv")
         assertEquals("Film|amelie|2001||||en-US", q.cacheKey("en-US"))
         assertEquals("Film|amelie|2001||||ar+en", q.cacheKey("ar"))
+    }
+
+    @Test
+    fun theFilesAudioLanguagesArePartOfTheKeyOnlyWhenThereAreSome() {
+        val tamil = MetaQuery(title = "Idiot", year = 2022, languages = listOf("ta"))
+        val hindi = tamil.copy(languages = listOf("hi"))
+        val none = tamil.copy(languages = emptyList())
+        assertEquals("Film|idiot|2022||||en-US|ta", tamil.cacheKey("en-US"))
+        assertEquals("Film|idiot|2022||||ar+en|hi", hindi.cacheKey("ar"))
+        assertEquals("Film|idiot|2022||||en-US", none.cacheKey("en-US"))
+        assertNotEquals(tamil.cacheKey("en-US"), hindi.cacheKey("en-US"))
+    }
+
+    @Test
+    fun audioLanguagesInAnyOrderShareOneKey() {
+        val a = MetaQuery(title = "Idiot", year = 2022, languages = listOf("ta", "hi"))
+        val b = a.copy(languages = listOf("hi", "ta"))
+        assertEquals("Film|idiot|2022||||en-US|hi-ta", a.cacheKey("en-US"))
+        assertEquals(a.cacheKey("en-US"), b.cacheKey("en-US"))
     }
 
     @Test

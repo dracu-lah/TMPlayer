@@ -66,6 +66,10 @@ fun PosterArt(
     // Decoding: nothing drawn yet, so the colour cover is not flashed for a frame under a preview
     // about to land. [NoPreview] once there is none to decode.
     var full by remember(thumbnailFileId) { mutableStateOf(Thumbnails.peekFull(thumbnailFileId)) }
+    // An uploader's advert on the cover ([PromoCovers]) and no online poster: the generated cover
+    // is drawn, and neither the preview nor the thumbnail is decoded or fetched. A poster, when
+    // there is one, is drawn over all of this as ever.
+    val promo = rememberIsPromoCover(miniThumbnail)
     var mini by remember {
         mutableStateOf<Any?>(if (miniThumbnail == null || miniThumbnail.isEmpty()) NoPreview else null)
     }
@@ -73,9 +77,9 @@ fun PosterArt(
     // the message, and the effect restarts on the array itself: the same preview is not decoded and
     // hashed again for it, and none is decoded while the sharp thumbnail covers it.
     val miniSource = remember { PreviewSource() }
-    LaunchedEffect(miniThumbnail) {
+    LaunchedEffect(miniThumbnail, promo) {
         val bytes = miniThumbnail
-        if (bytes == null || bytes.isEmpty()) {
+        if (bytes == null || bytes.isEmpty() || promo) {
             if (mini == null) mini = NoPreview
             return@LaunchedEffect
         }
@@ -91,8 +95,8 @@ fun PosterArt(
     // the card meanwhile, and the thumbnail is fetched only when the poster cannot be had.
     val tv = Motion.television
     var posterFailed by remember(posterUrl) { mutableStateOf(false) }
-    LaunchedEffect(thumbnailFileId, posterUrl, posterPending, posterFailed) {
-        if (full != null) return@LaunchedEffect
+    LaunchedEffect(thumbnailFileId, posterUrl, posterPending, posterFailed, promo) {
+        if (full != null || promo) return@LaunchedEffect
         // The provider's poster comes first: when it is on this device already, it is what the
         // card shows, and the video's own thumbnail is not fetched from Telegram at all.
         val online = com.tmplayer.online.OnlineMetadata.current
@@ -100,7 +104,7 @@ fun PosterArt(
         if (posterUrl != null && online != null && withContext(Dispatchers.IO) { online.hasImage(posterUrl) }) return@LaunchedEffect
         full = Thumbnails.full(thumbnailFileId)
     }
-    val picture: Any? = full ?: mini
+    val picture: Any? = if (promo) NoPreview else full ?: mini
     // On a television, once the online poster is fully drawn it covers the card edge to edge: the
     // surface and the preview under it are then left out, rather than drawn (and kept decoded)
     // for nothing on every frame. Known at once for a poster already in memory.

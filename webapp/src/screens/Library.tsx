@@ -7,6 +7,7 @@ import { api, call } from '../tg/rpc'
 import { t } from '../i18n'
 import { laterIds, laterKey, laterList, resumes, starredIds, watchedList, watchedTick } from '../store'
 import { Icon, type IconData } from '../ui/Icon'
+import { useObservedCovers } from './promo'
 import { Card, ContinueCard, useLeft, useProgress, videoCard } from './VideoList'
 import { ChatRow } from './Chats'
 import { form } from '../form'
@@ -106,6 +107,7 @@ export function HistoryPage() {
     const progress = useProgress()
     const leftOf = useLeft()
     const days = () => byDay(entries.latest ?? [])
+    useObservedCovers(() => (entries.latest ?? []).map((e) => e.item))
 
     // Select mode: ticks, Select all, Remove (n). On Watch later the ticked lines leave Watch later
     // alone; elsewhere they leave Continue watching and Watched together.

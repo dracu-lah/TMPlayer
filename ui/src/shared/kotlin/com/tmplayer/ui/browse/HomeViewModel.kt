@@ -632,6 +632,8 @@ class HomeViewModel(
         _partial.update { if (ended && kept.size == items.size) it - chatId else it + chatId }
         // Unchanged rows are not written again, so nothing recomposes for an answer that is the same.
         _loaded.update { if (it[chatId] == kept) it else it + (chatId to kept) }
+        // Adverts on the covers of this chat's row, found off the main thread for the tiles to read.
+        kotlinx.coroutines.withContext(work) { runCatching { com.tmplayer.ui.components.PromoCoverBook.observe(kept) } }
         noteFresh()
         // A chat shown on Home is one likely opened next: the first few have their grid's first
         // page fetched behind, at low priority, so opening one draws it at once. Not while Home

@@ -5,6 +5,7 @@ import { Icon } from '../ui/Icon'
 import { resumes, settings, watchedTick } from '../store'
 import { loadThumb } from './thumbs'
 import { coverBackground } from './cover'
+import { isPromoCover, useObservedCovers } from './promo'
 import { keptRating, loadBackdrop, loadPoster, posterSizeFor } from './posters'
 import { TmdbMark } from '../ui/TmdbMark'
 import { warmDataCentres, warmFile } from '../stream/reader'
@@ -64,7 +65,7 @@ const cardPath = (v: VideoItem, direct?: boolean) => (direct ? watchPath(v) : de
  * a pointer over the card shows Play in the middle, which plays at once past the video's page
  * (the desktop app's poster hover).
  */
-function CardArt(props: { thumb: string | null; title: string; poster: PosterAsk | null; progress?: number; onPlay?: (e: MouseEvent) => void }) {
+function CardArt(props: { thumb: string | null; cover?: string | null; title: string; poster: PosterAsk | null; progress?: number; onPlay?: (e: MouseEvent) => void }) {
     let el!: HTMLDivElement
     const [src, setSrc] = createSignal<string | null>(null)
     const [seen, setSeen] = createSignal(false)
@@ -77,7 +78,8 @@ function CardArt(props: { thumb: string | null; title: string; poster: PosterAsk
             io.disconnect()
             setSeen(true)
             const thumb = props.thumb
-            if (thumb) againOnce(() => loadThumb(thumb), (url) => !gone && setSrc(url), () => gone)
+            // Not fetched when it is an uploader's advert (promo.ts): the cover gradient stands in.
+            if (thumb && !isPromoCover(props.cover)) againOnce(() => loadThumb(thumb), (url) => !gone && setSrc(url), () => gone)
         })
         io.observe(el)
         onCleanup(() => io.disconnect())
@@ -108,7 +110,7 @@ function CardArt(props: { thumb: string | null; title: string; poster: PosterAsk
             <span class="card-mark" aria-hidden="true">
                 <Icon icon={PlayCircleIcon} size={56} />
             </span>
-            <Show when={src()}>
+            <Show when={src() && !isPromoCover(props.cover)}>
                 <img class="card-thumb" src={src()!} alt="" decoding="async" />
             </Show>
             <Show when={picture()}>
@@ -227,7 +229,7 @@ export function Card(props: { card: CardData; progress?: number; replace?: boole
     }
     return (
         <A class="card" {...cardLink(props.card.item, props.direct, props.replace, props.history)}>
-            <CardArt thumb={props.card.item.thumb} title={props.card.title} poster={props.card.item.poster} progress={props.progress} onPlay={play} />
+            <CardArt thumb={props.card.item.thumb} cover={props.card.item.cover} title={props.card.title} poster={props.card.item.poster} progress={props.progress} onPlay={play} />
             {/* Under the card, as the apps write it (two lines kept, so the facts line up along a row). */}
             <div class="card-name">{props.card.title}</div>
             <div class="card-facts">{props.card.facts}</div>
@@ -266,7 +268,7 @@ export function ContinueCard(props: { item: VideoItem; left?: Left }) {
             if (!entries.some((e) => e.isIntersecting)) return
             io.disconnect()
             setSeen(true)
-            if (props.item.thumb) loadThumb(props.item.thumb).then(setSrc, () => {})
+            if (props.item.thumb && !isPromoCover(props.item.cover)) loadThumb(props.item.thumb).then(setSrc, () => {})
         })
         io.observe(el)
         onCleanup(() => io.disconnect())
@@ -285,8 +287,8 @@ export function ContinueCard(props: { item: VideoItem; left?: Left }) {
     const facts = () => [props.item.chat, size(props.item.size)].filter(Boolean).join(dot)
     return (
         <A class="card continue-card" {...cardLink(props.item, true, false, form() !== 'tv')}>
-            <div class="continue-art" ref={el}>
-                <Show when={src()}>
+            <div class="continue-art" ref={el} style={isPromoCover(props.item.cover) ? { background: coverBackground(props.item.title) } : undefined}>
+                <Show when={src() && !isPromoCover(props.item.cover)}>
                     <img class="continue-img" src={src()!} alt="" decoding="async" />
                 </Show>
                 <Show when={wide()}>
@@ -327,6 +329,7 @@ const isSponsored = (e: CardData | SponsoredItem): e is SponsoredItem => !('item
  */
 export function VideoList(props: { cards: CardData[]; label?: string; onEnd?: () => void; sponsored?: SponsoredItem[]; sponsoredBetween?: number }) {
     useWarmDataCentres(() => props.cards.map((c) => c.item))
+    useObservedCovers(() => props.cards.map((c) => c.item))
     onCleanup(() => clearTimeout(hoverTimer))
     const progress = useProgress()
     const entries = () => placeSponsored(props.cards, props.sponsored ?? [], props.sponsoredBetween ?? 0)

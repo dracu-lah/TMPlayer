@@ -63,6 +63,24 @@ export function toItem(msg: Message): VideoItem | null {
     return itemOf(msg, name || caption || 'Video', null)
 }
 
+/**
+ * A hash of the video's inline preview (Telegram's tiny stripped JPEG, the apps' miniThumbnail):
+ * identical bytes for an identical cover. Two FNV-1a lanes of 32 bits, as 16 hex digits. Null
+ * where the message has no preview.
+ */
+export function coverKey(m: { getThumbnail(type: string): { raw: unknown } | null }): string | null {
+    const raw = m.getThumbnail('i')?.raw as { bytes?: Uint8Array } | undefined
+    const bytes = raw?.bytes
+    if (!bytes || !bytes.length) return null
+    let a = 0x811c9dc5
+    let b = 0x01000193
+    for (const byte of bytes) {
+        a = Math.imul(a ^ byte, 0x01000193)
+        b = Math.imul(b ^ byte, 0x85ebca6b) ^ (b >>> 15)
+    }
+    return (a >>> 0).toString(16).padStart(8, '0') + (b >>> 0).toString(16).padStart(8, '0')
+}
+
 /** The page's item for a message already known to hold a video, under [title], its file noted. */
 export function itemOf(msg: Message, title: string, poster: PosterAsk | null | undefined, name?: string): VideoItem | null {
     const m = msg.media
@@ -90,6 +108,7 @@ export function itemOf(msg: Message, title: string, poster: PosterAsk | null | u
         chat: msg.chat.displayName,
         date: msg.date.getTime(),
         thumb: thumb?.uniqueFileId ?? null,
+        cover: coverKey(m),
         ...alternatives(msg, raw?.media),
         canBeSaved: !raw?.noforwards && !chatProtects(msg),
         poster: poster ?? null,

@@ -62,6 +62,9 @@ fun MediaArt(
     // which is a dropped frame on a stick every time the list moves. Null while that is under way,
     // so the stand-in is not flashed for a frame under a picture that is about to arrive.
     var full by remember(thumbnailFileId) { mutableStateOf(Thumbnails.peekFull(thumbnailFileId)) }
+    // An uploader's advert on the cover ([PromoCovers]): not drawn, not decoded, not fetched. The
+    // stand-in is drawn instead, which is the generated cover wherever the caller gave one.
+    val promo = rememberIsPromoCover(miniThumbnail)
     // Not at all when the sharp thumbnail is already in memory: a tile scrolling back into view
     // would decode and hash a preview it never shows.
     var mini by remember {
@@ -71,9 +74,9 @@ fun MediaArt(
     // the message, and the effect below restarts on the array itself; the same picture is not
     // decoded and hashed again for it, nor is one decoded at all under a sharp thumbnail.
     val miniSource = remember { MiniSource() }
-    LaunchedEffect(miniThumbnail) {
+    LaunchedEffect(miniThumbnail, promo) {
         val bytes = miniThumbnail
-        if (bytes == null || bytes.isEmpty()) {
+        if (bytes == null || bytes.isEmpty() || promo) {
             if (mini == null) mini = NoMini
             return@LaunchedEffect
         }
@@ -88,8 +91,8 @@ fun MediaArt(
     // [Td.connected]: TDLib on a stick flaps often, and twenty collectors would mean the effect
     // restarting under every visible tile at once. A message with no thumbnail at all has nothing
     // to wait for.
-    LaunchedEffect(thumbnailFileId) {
-        if (thumbnailFileId <= 0) return@LaunchedEffect
+    LaunchedEffect(thumbnailFileId, promo) {
+        if (thumbnailFileId <= 0 || promo) return@LaunchedEffect
         if (full == null) full = Thumbnails.full(thumbnailFileId)
         if (full != null) return@LaunchedEffect
         Td.connected.collectLatest { connected ->
@@ -103,7 +106,7 @@ fun MediaArt(
     // Where a television or a Lighter picture draws by hand ([DrawnPicture]) the surface under it
     // is left out, which on a television was one more fill of every tile on screen, every frame.
     val drawn = Motion.television || Thumbnails.light
-    val shown: Any? = full ?: mini?.bitmap ?: if (mini == null) null else Missing
+    val shown: Any? = if (promo) Missing else full ?: mini?.bitmap ?: if (mini == null) null else Missing
     Box(
         modifier.then(if (drawn && shown is ImageBitmap) Modifier else Modifier.background(Tone.surface)),
         contentAlignment = Alignment.Center,
