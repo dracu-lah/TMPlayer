@@ -106,3 +106,41 @@ test('a touchpad swipe across the carousel turns one page and never goes Back', 
     const cancelled = await hero.evaluate((el) => !el.dispatchEvent(new WheelEvent('wheel', { deltaX: 30, deltaY: 0, bubbles: true, cancelable: true })))
     expect(cancelled).toBe(true)
 })
+
+test('the carousel has its facts and overview, arrows that show on hover, and keys: Left and Right turn, Enter opens the details', async ({ page, context }) => {
+    await fakeCase(context, 'big')
+    await mockTmdb(page, null)
+    await noSizeFloor(page)
+    await page.goto('/')
+    const hero = page.locator('section.hero')
+    await expect(hero).toBeVisible()
+    const dots = hero.locator('.hero-dots button')
+    await expect(dots.nth(1)).toBeVisible()
+    // The words: kind, year and genres, and the overview, as the apps' carousel writes them.
+    const words = hero.locator('.hero-text:not(.leaving)').first()
+    await expect(words.locator('.hero-facts')).toContainText('2019')
+    await expect(words.locator('.hero-facts')).toContainText('Drama, Mystery')
+    await expect(words.locator('.hero-overview')).toContainText('A harbour town keeps its notes.')
+    // The arrows keep their places hidden and come with the pointer.
+    const next = hero.getByRole('button', { name: 'Scroll on' })
+    await expect(next).toBeHidden()
+    const mobile = test.info().project.name.startsWith('phone')
+    if (!mobile) {
+        await hero.hover()
+        await expect(next).toBeVisible()
+        await next.click()
+        await expect(dots.nth(1)).toHaveAttribute('aria-selected', 'true')
+        await page.mouse.move(5, 5)
+    }
+    // The carousel takes the keyboard: Tab reaches it (not its arrows), the arrow keys turn the page.
+    await hero.focus()
+    await expect(hero).toBeFocused()
+    const start = mobile ? 0 : 1
+    await page.keyboard.press('ArrowRight')
+    await expect(dots.nth(start + 1)).toHaveAttribute('aria-selected', 'true')
+    await page.keyboard.press('ArrowLeft')
+    await expect(dots.nth(start)).toHaveAttribute('aria-selected', 'true')
+    expect(await hero.getByRole('button', { name: 'Scroll on' }).getAttribute('tabindex')).toBe('-1')
+    await page.keyboard.press('Enter')
+    await expect(page).toHaveURL(/\/video\//)
+})
