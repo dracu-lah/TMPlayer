@@ -12,6 +12,8 @@ import { warmDataCentres, warmFile } from '../stream/reader'
 import { t } from '../i18n'
 import { form } from '../form'
 import { cardLayout, VirtualGrid } from '../ui/VirtualGrid'
+import { stableCards } from './stableCards'
+export { stableCards }
 import { cardMenu } from '../ui/CardMenu'
 import { placeSponsored, SponsoredCard } from './Sponsored'
 import type { SponsoredItem, Tile, VideoItem } from '../tg/types'

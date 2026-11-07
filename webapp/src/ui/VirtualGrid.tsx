@@ -83,22 +83,31 @@ export function VirtualGrid<T>(props: {
         const last = items[items.length - 1]
         if (props.onEnd && last && last.index >= rows() - 3) props.onEnd()
     })
+    // The numbers of the rows drawn now; the same numbers (so the same rows) while only their places move.
+    const rowNumbers = createMemo(
+        () => v.getVirtualItems().map((r) => r.index),
+        [] as number[],
+        { equals: (a, b) => a.length === b.length && a.every((n, i) => n === b[i]) },
+    )
     return (
         <div ref={el} class="vgrid" role="list" aria-label={props.label} style={{ height: `${v.getTotalSize()}px` }}>
-            <For each={v.getVirtualItems()}>
-                {(row) => {
-                    const first = () => ranges()[row.index]?.[0] ?? 0
+            {/* Keyed by the row's number: the virtualizer hands out new row objects at every scroll or
+                measure, and a row kept by its object was built again (and every card in it drawn again). */}
+            <For each={rowNumbers()}>
+                {(index) => {
+                    const row = () => v.getVirtualItems().find((r) => r.index === index)
+                    const first = () => ranges()[index]?.[0] ?? 0
                     const cells = () => {
-                        const [a, b] = ranges()[row.index] ?? [0, 0]
+                        const [a, b] = ranges()[index] ?? [0, 0]
                         return props.items.slice(a, b)
                     }
                     return (
                         <ul
                             class={`vrow ${props.rowClass}`}
                             role="presentation"
-                            data-index={row.index}
+                            data-index={index}
                             ref={(r) => queueMicrotask(() => r.isConnected && v.measureElement(r))}
-                            style={{ transform: `translateY(${row.start - top()}px)`, '--cols': layout().cols }}
+                            style={{ transform: `translateY(${(row()?.start ?? 0) - top()}px)`, '--cols': layout().cols }}
                         >
                             <For each={cells()}>{(item, i) => <li role="listitem" classList={{ wide: !!props.wide?.(item) }}>{props.children(item, first() + i())}</li>}</For>
                         </ul>

@@ -1,4 +1,4 @@
-import { createEffect, createResource, createSignal, For, on, onCleanup, Show } from 'solid-js'
+import { createEffect, createMemo, createResource, createSignal, For, on, onCleanup, Show } from 'solid-js'
 import { A, useParams, useSearchParams } from '@solidjs/router'
 import { Cancel01Icon, InformationCircleIcon, RefreshIcon, Search01Icon, Sorting01Icon, StarIcon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { call, errorText } from '../tg/rpc'
@@ -12,8 +12,8 @@ import { notePool } from '../ui/PosterPicker'
 import { ChatPicture } from './ChatPicture'
 import { chatName, StarButton } from './Chats'
 import { noVideosWithin, sizeLabel, sizeScale } from './sizes'
-import { tileCard, VideoList } from './VideoList'
-import type { ChatPage, ChatView, RpcError, Sort } from '../tg/types'
+import { stableCards, tileCard, VideoList, type CardData } from './VideoList'
+import type { ChatPage, ChatView, RpcError, Sort, Tile } from '../tg/types'
 
 const SORTS: { value: Sort; key: Parameters<typeof t>[0] }[] = [
     { value: 'Newest', key: 'grid.sort_newest' },
@@ -98,9 +98,10 @@ export function Chat() {
     // Another order, size limits or words: the same videos arranged again, in the worker.
     createEffect(on(() => JSON.stringify(view()), () => page() && run('view'), { defer: true }))
 
-    const atEnd = () => {
+    // Scrolling to the foot always asks for the next page (infinite scroll, no More button).
+    const atEnd = (auto = false) => {
         const p = page()
-        if (!p || p.done || busy() || moreFailed() || idlePages() >= IDLE_PAGES) return
+        if (!p || p.done || busy() || moreFailed() || (auto && idlePages() >= IDLE_PAGES)) return
         run('more')
     }
 
@@ -113,7 +114,8 @@ export function Chat() {
     onCleanup(() => clearTimeout(waitTimer))
 
     const title = () => (page() ? chatName(page()!) : '')
-    const cards = () => page()?.tiles.map((tile) => tileCard(tile)) ?? []
+    const toCards = stableCards<Tile, CardData>((tile) => tileCard(tile))
+    const cards = createMemo(() => toCards(page()?.tiles ?? []))
     // The videos on screen, so "Choose the right poster" can offer a pick to the others of its title.
     createEffect(() => {
         const p = page()
@@ -331,9 +333,6 @@ export function Chat() {
                 <Show when={moreFailed()}>
                     <p class="error">{t('grid.more_failed')}</p>
                     <button class="link" type="button" onClick={() => run('more')}>{t('common.try_again')}</button>
-                </Show>
-                <Show when={page() && !page()!.done && !busy() && !moreFailed() && idlePages() >= IDLE_PAGES}>
-                    <button class="link" type="button" onClick={() => run('more')}>{t('common.more')}</button>
                 </Show>
             </div>
             <Show when={page()?.archives.length}>
