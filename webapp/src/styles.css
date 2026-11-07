@@ -677,15 +677,37 @@ html[data-form=tv] .panel .set-block-title { font-size: calc(var(--dp) * 16); li
 :root[data-form="desktop"] .detail-backdrop { object-position: center top; }
 :root[data-form="desktop"] .detail-poster { left: auto; right: 0; top: 0; height: 100%; transform: none; border-radius: 0; box-shadow: none; }
 :root[data-form="desktop"] .detail-close { top: 16px; left: 16px; }
-:root[data-form="desktop"] .detail-body { margin-top: -120px; padding: 0 36px; max-width: 1100px; }
-@media (min-width: 880px) { :root[data-form="desktop"] .detail-body { padding: 0 56px; } }
-/* About beside the overview on a wide window (WideDetail's ROOMY): the words at their reading measure, the file's facts right after them. */
-.detail-story { display: contents; }
-.detail-story.side { display: flex; align-items: flex-start; gap: 48px; }
-.detail-story.side > .detail-overview { flex: 0 1 640px; min-width: 0; }
-.detail-story.side > .detail-about { flex: 0 0 300px; min-width: 0; }
-.detail-story.side .detail-section { margin-top: 0; }
-:root[data-form="desktop"] .detail-overview { max-width: 640px; }
+/*
+ * The body's column (2026-11-07): centred, 1280 px at most, with the page's own side padding on
+ * both sides, so the words and the picture share the gutters and a wide window is symmetric. From
+ * 1100 px it is two columns (60 / 40, 32 px apart, as the desktop app's WideDetail): the name and
+ * facts over the main column's actions, overview and cast, About beside them as a label and value
+ * list, top aligned with the actions so the picture stays clear over it; the episodes, and more
+ * from the chat, run the full width under both. Below that one column, in the order the phone has.
+ */
+:root[data-form="desktop"] .detail-body {
+  margin-top: -120px; margin-inline: auto; max-width: 1280px;
+  padding: 0 calc(var(--gutter) + env(safe-area-inset-right)) 0 calc(var(--gutter) + env(safe-area-inset-left));
+}
+/* One column: the wrappers pass their children to the body, which orders them (About and the cast after the episodes). */
+.detail-cols, .detail-main, .detail-side { display: contents; }
+.detail-body > .detail-episodes { order: 1; }
+.detail-side > .detail-about { order: 2; }
+.detail-main > .detail-cast { order: 3; }
+.detail-body > .more-from { order: 4; }
+@media (min-width: 1100px) {
+  :root[data-form="desktop"] .detail-cols { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); column-gap: 32px; row-gap: 16px; align-items: start; }
+  :root[data-form="desktop"] .detail-main { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  :root[data-form="desktop"] .detail-side { display: block; min-width: 0; }
+  :root[data-form="desktop"] .detail-head { grid-column: 1; }
+  :root[data-form="desktop"] .detail-main, :root[data-form="desktop"] .detail-side { grid-row: 2; }
+  :root[data-form="desktop"] .detail-main { grid-column: 1; }
+  :root[data-form="desktop"] .detail-side { grid-column: 2; }
+  :root[data-form="desktop"] .detail-main > *, :root[data-form="desktop"] .detail-side > * { order: 0; }
+  :root[data-form="desktop"] .detail-overview, :root[data-form="desktop"] .detail-versions { max-width: none; }
+  :root[data-form="desktop"] .detail-about .detail-section { margin-top: 0; }
+  :root[data-form="desktop"] .detail-about dl { grid-template-columns: 128px minmax(0, 1fr); }
+}
 :root[data-form="desktop"] .detail-round-disc { border: 1px solid var(--line); }
 :root[data-form="desktop"] .detail-round[aria-pressed="true"] .detail-round-disc { border-color: transparent; }
 :root[data-form="desktop"] .detail-title { font-size: 40px; line-height: 48px; }

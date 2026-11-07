@@ -359,7 +359,12 @@ html[data-form=tv] .detail-close { display: none; }
 html[data-form=tv] .detail-body {
   margin-top: 0; padding: 40vh calc(var(--dp) * 56) 0; gap: calc(var(--dp) * 16);
 }
-html[data-form=tv] .detail-body > * { order: 3; }
+/* The cols and main wrappers pass their children to the body (display: contents), so the order is set on the children. */
+html[data-form=tv] .detail-body > *, html[data-form=tv] .detail-main > *, html[data-form=tv] .detail-side > * { order: 3; }
+html[data-form=tv] .detail-body > .detail-episodes { order: 4; }
+html[data-form=tv] .detail-side > .detail-about { order: 5; }
+html[data-form=tv] .detail-main > .detail-cast { order: 6; }
+html[data-form=tv] .detail-body > .more-from { order: 7; }
 html[data-form=tv] .detail-head { order: 0; max-width: 55%; gap: calc(var(--dp) * 8); }
 html[data-form=tv] .detail-overview { order: 1; max-width: 55%; }
 html[data-form=tv] .detail-actions { order: 2; flex-direction: row; align-items: flex-start; gap: calc(var(--dp) * 12); margin-top: calc(var(--dp) * 4); }
