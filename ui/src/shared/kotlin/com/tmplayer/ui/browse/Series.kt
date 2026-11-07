@@ -1,5 +1,6 @@
 package com.tmplayer.ui.browse
 
+import com.tmplayer.ui.components.EdgeStep
 import com.tmplayer.ui.components.FastScroller
 import com.tmplayer.ui.components.keepTopInSight
 import com.tmplayer.ui.theme.collectIsFocusVisibleAsState
@@ -253,7 +254,10 @@ fun SeasonTabs(
     // card the remote left: since the tab under focus is the season shown, landing on the next one
     // would swap the episodes from under the viewer.
     val chosenFocus = focusRequester ?: remember { FocusRequester() }
-    Row(
+    // A row of 18 tabs is wider than the screen: under the remote each tab is brought in at once and
+    // just far enough. The platform's slide left the focus out of sight on a television (the Die
+    // Bergretter report, 2026-11-07: "not scrollable"), where EdgeStep is what Home's rows use.
+    EdgeStep(start = 24.dp, end = 24.dp, enabled = tv) { Row(
         modifier
             .then(if (tv) Modifier.focusProperties { onEnter = { chosenFocus.requestFocus() } } else Modifier)
             .horizontalScroll(rememberScrollState()),
@@ -307,7 +311,7 @@ fun SeasonTabs(
                 )
             }
         }
-    }
+    } }
 }
 
 /**
@@ -545,7 +549,8 @@ private fun EpisodeLine(
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    s.seriesEpisodeShort(episode.season, episode.episode),
+                    // "S8 E6a" and "S8 E6b": the two halves of a split episode are not told apart otherwise.
+                    s.seriesEpisodeShort(episode.season, episode.episode) + episode.partLetter,
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = Tone.muted,
@@ -1345,7 +1350,7 @@ fun SeriesPanel(
         if (firstPaint) {
             ScrollToTop(list)
             // A long season is one hold from its end; the bubble names the episode on screen.
-            val episodeLabels = remember(listed) { listed.associate { it.item.id to s.seriesEpisodeShort(it.season, it.episode) } }
+            val episodeLabels = remember(listed) { listed.associate { it.item.id to s.seriesEpisodeShort(it.season, it.episode) + it.partLetter } }
             FastScroller(list, label = { key -> episodeLabels[key] })
         }
         onBack?.let { back ->
@@ -1536,7 +1541,7 @@ private fun EpisodeRanges(
     modifier: Modifier = Modifier,
 ) {
     val tv = !isTouch()
-    Row(
+    EdgeStep(start = 24.dp, end = 24.dp, enabled = tv) { Row(
         modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -1574,7 +1579,7 @@ private fun EpisodeRanges(
                     .padding(horizontal = if (tv) 18.dp else 14.dp, vertical = if (tv) 10.dp else 8.dp),
             )
         }
-    }
+    } }
 }
 
 /** Episodes per range once a season is longer than this; see [EpisodeRanges]. */
