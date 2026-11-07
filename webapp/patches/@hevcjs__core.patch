@@ -1,0 +1,65 @@
+diff --git a/dist/index.js b/dist/index.js
+index 3be214d2061583d4a1a983d7e473fdc97d06c525..92cbff79e19af73057dd7de4abb40045ec6fd4e7 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -16,8 +16,13 @@ var H264Encoder = class {
+     this.onChunk = null;
+     /** Callback invoked when codec description (avcC) is available */
+     this.onCodecDescription = null;
+-    this._width = config.width;
+-    this._height = config.height;
++    // TMPlayer patch: a source 2560 px wide or more is encoded at half its width and height (2x2 average
++    // while converting): a software H.264 encoder cannot keep up with 4K, and the picture is the player's fallback.
++    this._srcWidth = config.width;
++    this._srcHeight = config.height;
++    this._step = config.width >= 2560 ? 2 : 1;
++    this._width = this._step === 2 ? Math.floor(config.width / 4) * 2 : config.width;
++    this._height = this._step === 2 ? Math.floor(config.height / 4) * 2 : config.height;
+     this._fps = config.fps ?? 25;
+     this._encoder = new VideoEncoder({
+       output: (chunk, metadata) => this._handleOutput(chunk, metadata),
+@@ -50,6 +55,44 @@ var H264Encoder = class {
+    * Converts Uint16Array YUV planes to I420 Uint8Array, creates VideoFrame, encodes.
+    */
+   encode(frame, timestampUs, keyFrame = false) {
++    if (this._step === 2 && frame.width === this._srcWidth && frame.height === this._srcHeight) {
++      const ow = this._width;
++      const oh = this._height;
++      const ocw = ow >> 1;
++      const och = oh >> 1;
++      const sh = frame.bitDepth > 8 ? frame.bitDepth - 8 : 0;
++      const sw = frame.width;
++      const scw = frame.chromaWidth;
++      const out = new Uint8Array(ow * oh + ocw * och * 2);
++      const Y = frame.y;
++      for (let y = 0; y < oh; y++) {
++        let i = y * 2 * sw;
++        let o = y * ow;
++        for (let x = 0; x < ow; x++, i += 2, o++) {
++          out[o] = (Y[i] + Y[i + 1] + Y[i + sw] + Y[i + sw + 1] + 2) >> (2 + sh);
++        }
++      }
++      const base = ow * oh;
++      for (let y = 0; y < och; y++) {
++        let i = y * 2 * scw;
++        let o = y * ocw;
++        for (let x = 0; x < ocw; x++, i += 2, o++) {
++          out[base + o] = (frame.cb[i] + frame.cb[i + 1] + frame.cb[i + scw] + frame.cb[i + scw + 1] + 2) >> (2 + sh);
++          out[base + ocw * och + o] = (frame.cr[i] + frame.cr[i + 1] + frame.cr[i + scw] + frame.cr[i + scw + 1] + 2) >> (2 + sh);
++        }
++      }
++      const small = new VideoFrame(out, {
++        format: "I420",
++        codedWidth: ow,
++        codedHeight: oh,
++        timestamp: timestampUs,
++        duration: Math.round(1e6 / this._fps),
++        colorSpace: { primaries: "bt709", transfer: "bt709", matrix: "bt709" }
++      });
++      this._encoder.encode(small, { keyFrame });
++      small.close();
++      return;
++    }
+     const w = frame.width;
+     const h = frame.height;
+     const cw = frame.chromaWidth;

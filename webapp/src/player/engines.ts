@@ -66,7 +66,7 @@ export class Unplayable extends Error {
     }
 }
 
-const debug = location.hostname === 'localhost'
+const debug = location.hostname === 'localhost' || location.hostname === '127.0.0.1'
 const mark = (label: string, since: number) => debug && console.debug('[remux]', label, Math.round(performance.now() - since), 'ms')
 
 /** How long a seek waits for the one before it to wind down, how long a drag must rest, and how long a seek may stall. */

@@ -13,7 +13,7 @@ export type FromWorker =
     | { type: 'ready'; id: number }
     | { type: 'error'; id: number; message: string }
 
-const debug = self.location.hostname === 'localhost'
+const debug = self.location.hostname === 'localhost' || self.location.hostname === '127.0.0.1'
 
 let glue: Promise<void> | null = null
 /** The decoder's glue is a classic script setting globalThis.HEVCDecoderModule, which the transcoder looks for first. */
@@ -65,6 +65,7 @@ async function handle(m: ToWorker) {
         const perf = transcoder.lastPerfStats
         const busy = perf ? perf.demuxMs + perf.decodeMs + perf.encodeMs : 0
         const speed = perf && busy > 0 ? perf.segDurMs / busy : 0
+        if (debug && perf) console.debug('[hevc] fragment', JSON.stringify(perf), 'in', m.bytes.byteLength, 'out', bytes?.byteLength ?? 0)
         post({ type: 'out', id: m.id, init, codec: result?.codec ?? 'avc1.640033', bytes, speed }, [init?.buffer, bytes?.buffer].filter(Boolean) as Transferable[])
     } catch (e) {
         post({ type: 'error', id: m.id, message: String((e as Error)?.message ?? e) })

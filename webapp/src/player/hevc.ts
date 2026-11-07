@@ -24,8 +24,8 @@ export interface Transcoded {
     bytes: Uint8Array | null
 }
 
-/** Workers that convert fragments side by side: two where the device has the cores, else one. */
-const PARALLEL = (navigator.hardwareConcurrency ?? 4) >= 8 && !matchMedia('(pointer: coarse)').matches ? 2 : 1
+/** Workers that convert fragments side by side: three on 12 cores or more, two on 8, else one (a 4K fragment takes about twice as long to make as it plays, so each worker added is a step towards real time). */
+const PARALLEL = matchMedia('(pointer: coarse)').matches ? 1 : (navigator.hardwareConcurrency ?? 4) >= 12 ? 3 : (navigator.hardwareConcurrency ?? 4) >= 8 ? 2 : 1
 
 class Lane {
     private worker = new Worker(new URL('./hevc-worker.ts', import.meta.url), { type: 'module' })
