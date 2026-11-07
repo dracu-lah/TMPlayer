@@ -32,7 +32,11 @@ data class SeriesEpisode(
 
     /** "S01E02"; a release with no season of its own counts as season one. */
     val code: String
-        get() = "S${season.toString().padStart(2, '0')}E${episode.toString().padStart(2, '0')}" + if (part > 0) ('a' + part - 1).toString() else ""
+        get() = "S${season.toString().padStart(2, '0')}E${episode.toString().padStart(2, '0')}" + partLetter
+
+    /** "a" for the first half of a split episode, "b" for the second; empty for a whole one. */
+    val partLetter: String
+        get() = if (part > 0) ('a' + (part - 1)).toString() else ""
 
     /** The same episode, whichever copy each of the two stands for. */
     fun sameAs(other: SeriesEpisode): Boolean = season == other.season && episode == other.episode && part == other.part
