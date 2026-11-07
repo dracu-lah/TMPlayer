@@ -8074,7 +8074,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 }
                 if (!nudged && OpeningStall.nudgeDue(local, lastProgressAtMs, SystemClock.elapsedRealtime())) {
                     nudged = true
-                    Td.nudgeForStream()
+                    Td.nudgeForStream(fileId)
                 }
                 if (OpeningStall.stalled(opening = true, local = local, lastProgressAtMs, SystemClock.elapsedRealtime())) {
                     stalledMidPlay = true
@@ -8454,7 +8454,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 }
                 if (!nudged && OpeningStall.nudgeDue(local, lastProgressAtMs, SystemClock.elapsedRealtime())) {
                     nudged = true
-                    Td.nudgeForStream()
+                    Td.nudgeForStream(fileId)
                 }
                 if (OpeningStall.stalled(opening = true, local = local, lastProgressAtMs, SystemClock.elapsedRealtime())) {
                     showSlowStart()
@@ -8545,16 +8545,27 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         slowStartUp = false
         stalledMidPlay = false
         recoveryAttempts = 0
-        App.backgroundScope.launch { runCatching { Td.retryConnecting() } }
         showStatus(L.playerTryingAgain)
         val exo = player
         if (exo == null) {
+            App.backgroundScope.launch { runCatching { Td.retryConnecting() } }
             retryPlayback()
             return
         }
-        exo.stop()
-        exo.prepare()
-        exo.playWhenReady = true
+        // In this order: the connections reopened and the download TDLib calls active but that
+        // sends nothing dropped, and only then the stream opened again. Opened first, it would take
+        // the dead download for a running one and never ask for the bytes (the same stall, again
+        // and again until another video was watched).
+        lifecycleScope.launch {
+            withContext(Dispatchers.IO) {
+                runCatching { Td.retryConnecting() }
+                runCatching { Td.dropStalledDownload(fileId) }
+            }
+            val current = player ?: return@launch
+            current.stop()
+            current.prepare()
+            current.playWhenReady = true
+        }
     }
 
     /** Download first on [showSlowStart]: the video joins the download queue and the player steps back. */
