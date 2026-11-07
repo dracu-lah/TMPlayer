@@ -507,6 +507,7 @@ export const PAGE_STRINGS = [
     'watched.today',
     'watched.yesterday',
     'web.app_body',
+    'web.converting',
     'web.gone_from_chat',
     'web.install_button',
     'web.install_ios_before_sign_in',

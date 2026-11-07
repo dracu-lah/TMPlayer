@@ -106,6 +106,8 @@ export function Player(props: {
     const [source, setSource] = createSignal<Source>({ key: item.key, size: item.size, duration: item.duration, height: 0 })
     const [error, setError] = createSignal<string | null>(null)
     const [needsApp, setNeedsApp] = createSignal<Why | null>(null)
+    /** The picture is converted here (HEVC with no decoder), which makes the opening slow: the loader says so. */
+    const [converting, setConverting] = createSignal(false)
     /** A line over the picture: the sound, a subtitle file, a quality switch. */
     const [notice, setNotice] = createSignal('')
     const [audios, setAudios] = createSignal<SoundTrack[]>([])
@@ -232,6 +234,7 @@ export function Player(props: {
             if (typeof p === 'string') return await fallback(new Unplayable({ kind: 'format', format: p }), f, at, play, gen, rate)
             if (gen !== generation) return p.input.dispose()
             probed = p
+            setConverting(p.transcode)
             setAudios(p.audios)
             setAudio(p.audios[0] ?? null)
             let way: 'native' | 'remux'
@@ -257,7 +260,7 @@ export function Player(props: {
             video.playbackRate = rate
             setSwitchable(!!engine.setAudio)
             // Which HEVC name the TV took (hevcnames.ts), so a tester's screenshot says which step played it.
-            const hevc = way === 'remux' && p.hevcAs ? (p.hevcTrusted ? `, HEVC sent to the TV decoder unasked` : `, HEVC as ${p.hevcAs}`) : ''
+            const hevc = way === 'remux' && p.hevcAs ? (p.hevcTrusted ? `, ${p.videoCodec} sent to the TV decoder unasked (${p.tryNames.length} names to try)` : p.hevcAs.startsWith('av01.') ? `, AV1 as ${p.hevcAs}` : `, HEVC as ${p.hevcAs}`) : ''
             setDetails(`${p.container}, ${p.mime.replace(/^[^;]*;\s*/, '')}. ${engine.detail}${hevc}`)
             if (play) video.play().catch(() => {})
             void findChapters(f, gen)
@@ -548,7 +551,7 @@ export function Player(props: {
             stuckSince = performance.now()
             if (stall()) setStall(null)
         } else if (!navigator.onLine && performance.now() - stuckSince > 2000) setStall('offline')
-        else if (performance.now() - stuckSince > STALL_MS && !stall()) setStall(everPlayed ? 'mid' : 'start')
+        else if (performance.now() - stuckSince > (probed?.transcode ? STALL_MS * 3 : STALL_MS) && !stall()) setStall(everPlayed ? 'mid' : 'start')
     }
 
     // Hidden (another app, a closed tab, a reload): the place is saved now, not at the next 10 s.
@@ -805,7 +808,7 @@ export function Player(props: {
                 </Show>
 
                 <Show when={opening() !== null && !blocked()}>
-                    <OpeningLoader item={item} info={props.info} at={resumedAt() ?? 0} stage={opening()!} onClose={close} />
+                    <OpeningLoader item={item} info={props.info} at={resumedAt() ?? 0} stage={opening()!} converting={converting()} onClose={close} />
                 </Show>
 
                 <Show when={blocked()}>

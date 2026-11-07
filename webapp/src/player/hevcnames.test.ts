@@ -1,7 +1,7 @@
 // node --test: the HEVC names the player asks a Media Source about (hevcnames.ts).
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { hevcAccepted, hevcNames, tvDecodesHevc, withHevc } from './hevcnames.ts'
+import { av1Names, hevcAccepted, hevcNames, pictureNames, tvDecodesHevc, withHevc } from './hevcnames.ts'
 
 test('LG and Samsung TVs are trusted with HEVC, other browsers are asked', () => {
     // The webOS 6 agent (Chromium 79) of a 2021 LG QNED TV, and Tizen 5.5.
@@ -63,4 +63,16 @@ test('withHevc swaps the picture codec and keeps the sound', () => {
     assert.equal(withHevc('video/mp4; codecs="hvc1.2.4.L153.B0, mp4a.40.2"', 'hev1.2.4.L150.90'), 'video/mp4; codecs="hev1.2.4.L150.90, mp4a.40.2"')
     assert.equal(withHevc('video/mp4; codecs="hvc1.1.6.L93.B0"', 'hvc1.1.6.L93.B0'), 'video/mp4; codecs="hvc1.1.6.L93.B0"')
     assert.equal(withHevc('video/mp4; codecs="avc1.640028"', 'hvc1.1.6.L93.B0'), 'video/mp4; codecs="avc1.640028"')
+})
+
+test('AV1 names: own, short form, then 5.1, 5.0 and 4.1 of the same profile and depth', () => {
+    assert.deepEqual(av1Names('av01.0.12M.10.0.112.09.16.09.0'), ['av01.0.12M.10.0.112.09.16.09.0', 'av01.0.12M.10', 'av01.0.13M.10', 'av01.0.09M.10'])
+    assert.deepEqual(av1Names('hvc1.1.6.L93.B0'), [])
+    assert.equal(pictureNames('av01.0.08M.08')[0], 'av01.0.08M.08')
+    assert.equal(pictureNames('hvc1.1.6.L93.B0')[0], 'hvc1.1.6.L93.B0')
+})
+
+test('a TV that takes only the short AV1 form gets it, and the sound is kept', () => {
+    assert.equal(hevcAccepted('av01.0.12M.10.0.112.09.16.09.0', (m) => /codecs="av01\.0\.12M\.10"$/.test(m)), 'av01.0.12M.10')
+    assert.equal(withHevc('video/mp4; codecs="av01.0.12M.10.0.112.09.16.09.0, ec-3"', 'av01.0.12M.10'), 'video/mp4; codecs="av01.0.12M.10, ec-3"')
 })

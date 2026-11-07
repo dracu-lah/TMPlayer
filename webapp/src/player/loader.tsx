@@ -20,7 +20,7 @@ import type { VideoItem, WatchInfo } from '../tg/types'
  *
  * `stage` is how far the opening has come: 0 reading the file, 1 its head read, 2 able to play.
  */
-export function OpeningLoader(props: { item: VideoItem; info: WatchInfo | null; at: number; stage: number; onClose: () => void }) {
+export function OpeningLoader(props: { item: VideoItem; info: WatchInfo | null; at: number; stage: number; converting?: boolean; onClose: () => void }) {
     const item = props.item
     const [art, setArt] = createSignal<string | null>(null)
     const [poster, setPoster] = createSignal<string | null>(null)
@@ -69,7 +69,7 @@ export function OpeningLoader(props: { item: VideoItem; info: WatchInfo | null; 
     }
     // An episode's own words are not in the poster answer: a show's overview would describe the wrong thing.
     const overview = () => (ep() ? '' : (found()?.overview ?? '').trim())
-    const status = () => (props.stage === 0 ? t('player.loader_reading') : props.at > 0 ? t('player.resuming_from', { time: clock(props.at) }) : t('player.loader_starting'))
+    const status = () => (props.stage === 0 ? t('player.loader_reading') : props.converting ? t('web.converting') : props.at > 0 ? t('player.resuming_from', { time: clock(props.at) }) : t('player.loader_starting'))
     const progress = () => [0.12, 0.45, 0.85][Math.min(2, Math.max(0, props.stage))]
 
     return (
