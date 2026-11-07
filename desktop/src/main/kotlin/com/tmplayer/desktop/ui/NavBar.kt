@@ -193,6 +193,12 @@ private fun inProfile(state: ShellState): Boolean =
 /** The command key as the OS names it, for the tooltips. */
 private val COMMAND = if (OsInfo.isMac) "⌘" else "Ctrl+"
 
+/** The Choose chats button's size on the desktop's headers and bar, a header icon button's. */
+internal val CHOOSE_CHATS_SIZE = 40.dp
+
+/** The Choose chats button's key as the tooltips name it (ShellState.onPreviewKey). */
+internal val CHOOSE_CHATS_SHORTCUT = "${COMMAND}Shift+A"
+
 @Composable
 private fun NavBar(
     state: ShellState,

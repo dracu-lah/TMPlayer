@@ -576,6 +576,19 @@ class ShellState(
     var profileOpen by mutableStateOf(false)
 
     /**
+     * Whether the Choose chats button and its key may act: signed in, and neither the setup nor the
+     * mandatory chat choice (which is the chooser itself) is up. Set by the shell.
+     */
+    var chooseChatsAllowed by mutableStateOf(false)
+
+    /** Opens Choose chats (the screen Settings' row opens) unless it is up already or not allowed. */
+    fun chooseChats(): Boolean {
+        if (!chooseChatsAllowed || com.tmplayer.ui.browse.AddChatsState.open) return false
+        com.tmplayer.ui.browse.AddChatsRequest.ask()
+        return true
+    }
+
+    /**
      * Ends the app, set by the window. Ctrl+Q (Cmd+Q) reaches it from any page: a tiling window
      * manager such as sway draws no title bar, so there is no close button to find, and the player
      * already answered Ctrl+Q while the rest of the app did not.
@@ -588,7 +601,7 @@ class ShellState(
     /**
      * Shortcuts that work wherever focus is, even inside a text field: Ctrl+F (Cmd+F) to search
      * the page, Ctrl+K (Cmd+K) to open or close the search across every chat, Ctrl+, (Cmd+,) for
-     * Settings, Ctrl+Q (Cmd+Q) to quit. The command key is the OS's own, as
+     * Settings, Ctrl+Shift+A (Cmd+Shift+A) for Choose chats, Ctrl+Q (Cmd+Q) to quit. The command key is the OS's own, as
      * the player reads it: Ctrl on a Mac is a text field's caret key, and Super+Q on Linux belongs
      * to the window manager.
      */
@@ -618,6 +631,8 @@ class ShellState(
                 focusSearch()
                 true
             }
+            // Choose chats, the person-with-a-plus button's key (Ctrl+A is the picker's own Select all).
+            command && event.isShiftPressed && event.key == Key.A -> chooseChats()
             command && event.key == Key.Comma -> {
                 go(Destination.Settings)
                 true
