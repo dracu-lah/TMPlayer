@@ -7,6 +7,7 @@ import { registerStreamWorker, registerWorker } from './install'
 import { watchForm } from './form'
 import { watchCrashes } from './crash'
 import { takeMsoneParam } from './msoneFlag'
+import { blockBrowserMenu } from './ui/CardMenu'
 import './styles.css'
 
 // Before anything else runs, so a failure in what follows still gets its card (HX10).
@@ -18,6 +19,8 @@ if (location.hostname === 'localhost') void import('./survey')
 if (!document.documentElement.dataset.old) {
     markEntry()
     watchForm()
+    // The browser's right click menu is the app's own long press menu on a card, and nothing elsewhere.
+    blockBrowserMenu()
     takeMsoneParam()
     serveStreams()
     // The webOS .ipk wrapper opens the page with #tvsvc=port.token: the TV's player then reads through its loopback bridge.

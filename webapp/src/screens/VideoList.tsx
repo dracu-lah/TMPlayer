@@ -11,7 +11,7 @@ import { warmDataCentres, warmFile } from '../stream/reader'
 import { t } from '../i18n'
 import { form } from '../form'
 import { cardLayout, VirtualGrid } from '../ui/VirtualGrid'
-import { historyMenu } from '../ui/CardMenu'
+import { cardMenu } from '../ui/CardMenu'
 import { placeSponsored, SponsoredCard } from './Sponsored'
 import type { SponsoredItem, Tile, VideoItem } from '../tg/types'
 import type { PosterAsk } from '../rules'
@@ -203,7 +203,8 @@ const intent = (v: VideoItem) => {
 /** What every card's link does: warm the file on intent, keep the video it stands for for the page it opens. */
 function cardLink(item: VideoItem, direct?: boolean, replace?: boolean, history?: boolean) {
     return {
-        ...(history ? historyMenu(item) : {}),
+        // The right click and long press menu on every card; a TV remote has no pointer, and its hold of OK opens the card's own page.
+        ...(form() !== 'tv' ? cardMenu(item, !!history) : {}),
         href: cardPath(item, direct),
         state: { video: item },
         replace,

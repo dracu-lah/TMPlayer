@@ -119,6 +119,7 @@ export const PAGE_STRINGS = [
     'detail.resolution',
     'detail.resume_at',
     'detail.round_trailer',
+    'detail.round_unwatched',
     'detail.round_watch_later',
     'detail.round_watched',
     'detail.size',
