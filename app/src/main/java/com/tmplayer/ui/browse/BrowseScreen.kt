@@ -1001,6 +1001,8 @@ internal fun BrowseScreen(
         val pageFocus = remember { FocusRequester() }
         // The account's picture, which Back from Settings returns the remote to.
         val profileFocus = remember { FocusRequester() }
+        // The Choose chats button, which Back from that screen returns the remote to.
+        val chooseChatsFocus = remember { FocusRequester() }
         var barRefocus by remember { mutableIntStateOf(0) }
         LaunchedEffect(barRefocus) {
             if (barRefocus == 0) return@LaunchedEffect
@@ -1041,7 +1043,11 @@ internal fun BrowseScreen(
         val pressedSinceArrival = remember { booleanArrayOf(false) }
         LaunchedEffect(returnToRail) {
             if (returnToRail == null) return@LaunchedEffect
-            val landing = if (returnToRail == RailReturn.Profile) profileFocus else barFocus
+            val landing = when (returnToRail) {
+                RailReturn.Profile -> profileFocus
+                RailReturn.ChooseChats -> chooseChatsFocus
+                else -> barFocus
+            }
             repeat(RETURN_HOLD_FRAMES) {
                 if (pressedSinceArrival[0]) return@repeat
                 withFrameNanos { }
@@ -1134,6 +1140,8 @@ internal fun BrowseScreen(
                 solid = { barGround },
                 onDown = { homeShown && runCatching { tvPlayFocus.requestFocus(FocusDirection.Enter) }.getOrDefault(false) },
                 profileFocus = profileFocus,
+                onChooseChats = { AddChatsRequest.ask() },
+                chooseChatsFocus = chooseChatsFocus,
             )
         }
     }
@@ -1822,8 +1830,9 @@ private fun ContinueArt(text: VideoCardText, modifier: Modifier = Modifier, badg
 /**
  * Back from Downloads, or a tab picked on its top bar: the remote goes to the browser's bar, on the
  * page's own item. Back from Settings ([Profile]): onto the account's picture, whose menu opened it.
+ * Back from Choose chats ([ChooseChats]): onto the bar's button that opened it.
  */
-enum class RailReturn { Downloads, Settings, Profile }
+enum class RailReturn { Downloads, Settings, Profile, ChooseChats }
 
 /** How many frames, about a second and a half at 60 Hz, the top bar holds focus on its item. */
 private const val RETURN_HOLD_FRAMES = 90

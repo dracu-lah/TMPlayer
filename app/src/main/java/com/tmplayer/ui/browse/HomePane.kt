@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -259,6 +260,8 @@ internal fun HomePane(
     // unless Settings turned the row off and kept the carousel it feeds. Its "no chosen chats"
     // line shows either way, so the carousel's empty place is explained.
     val listed = remember(rows) { rows.filter { it !is HomeRow.Recent || it.asRow || it.noneChosen } }
+    // No chat chosen yet: the card says so with its own Choose chats button, so the bar's stays out.
+    val noneChosen = remember(rows) { rows.any { it is HomeRow.Recent && it.noneChosen } }
     val first = remember { FocusRequester() }
     val scope = rememberCoroutineScope()
     // Kept across a turn of the phone: the show is looked up again in the rows once they are back.
@@ -591,20 +594,20 @@ internal fun HomePane(
                         // sets the title's art down the left, so there the name takes the right
                         // corner and stays off it (user, 2026-10-27).
                         val sideways = androidx.compose.ui.platform.LocalConfiguration.current.let { it.screenWidthDp > it.screenHeightDp }
-                        PhoneHomeBrand(
-                            if (sideways) {
-                                Modifier.align(Alignment.TopEnd).padding(end = end, top = under + BRAND_TOP)
-                            } else {
-                                Modifier.align(Alignment.TopStart).padding(start = start, top = under + BRAND_TOP)
-                            },
-                            onArt = true,
-                        )
+                        PhoneHomeCorner(sideways, start, end, under, chooseChats = !noneChosen)
                       }
                     }
                 } else if (touch) {
                     // No carousel: the name heads the rows instead.
                     item(key = BRAND_KEY, contentType = BRAND_KEY) {
-                        PhoneHomeBrand(Modifier.padding(start = start, top = BRAND_TOP, bottom = 4.dp), onArt = false)
+                        Box(Modifier.fillMaxWidth()) {
+                            PhoneHomeBrand(Modifier.padding(start = start, top = BRAND_TOP, bottom = 4.dp), onArt = false)
+                            if (!noneChosen) {
+                                com.tmplayer.ui.components.ChooseChatsButton(
+                                    Modifier.align(Alignment.TopEnd).padding(end = chooseChatsEnd(end), top = BRAND_TOP - CHOOSE_CHATS_LIFT),
+                                )
+                            }
+                        }
                     }
                 }
                 items(listed, key = { it.key }, contentType = { it::class }) { row ->
@@ -1541,6 +1544,45 @@ private const val BRAND_KEY = "brand"
 
 /** The name's distance below the status bar on a phone's Home. */
 internal val BRAND_TOP = 12.dp
+
+/**
+ * How far the Choose chats button (48 dp) stands above the name's top so the two centre on one
+ * line (the name is 26 dp tall), and how far its glyph is from its end, so the glyph's edge lines
+ * up with the page's margin rather than the button's.
+ */
+internal val CHOOSE_CHATS_LIFT = 11.dp
+private val CHOOSE_CHATS_EDGE = 12.dp
+
+/** The button's end padding: the page's margin less the button's own air, never negative. */
+private fun chooseChatsEnd(end: Dp): Dp = (end - CHOOSE_CHATS_EDGE).coerceAtLeast(0.dp)
+
+/**
+ * The top corners of a phone's Home over the carousel's picture, under the status bar: the app's
+ * mark and name at the start and Choose chats at the end, on one line. A phone on its side sets
+ * the title's art down the left, so there the name takes the right corner, with the button
+ * beside it. [chooseChats] is false while no chat is chosen: the card below has its own button.
+ */
+@Composable
+internal fun BoxScope.PhoneHomeCorner(sideways: Boolean, start: Dp, end: Dp, under: Dp, chooseChats: Boolean) {
+    if (sideways) {
+        Row(
+            Modifier.align(Alignment.TopEnd).padding(end = chooseChatsEnd(end), top = under + BRAND_TOP - CHOOSE_CHATS_LIFT),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            PhoneHomeBrand(Modifier, onArt = true)
+            if (chooseChats) com.tmplayer.ui.components.ChooseChatsButton(onArt = true)
+        }
+    } else {
+        PhoneHomeBrand(Modifier.align(Alignment.TopStart).padding(start = start, top = under + BRAND_TOP), onArt = true)
+        if (chooseChats) {
+            com.tmplayer.ui.components.ChooseChatsButton(
+                Modifier.align(Alignment.TopEnd).padding(end = chooseChatsEnd(end), top = under + BRAND_TOP - CHOOSE_CHATS_LIFT),
+                onArt = true,
+            )
+        }
+    }
+}
 
 /** The mark and "TMPlayer" at the top of a phone's Home, in the colours for art over the carousel. */
 @Composable
