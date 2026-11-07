@@ -257,7 +257,7 @@ export function Player(props: {
             video.playbackRate = rate
             setSwitchable(!!engine.setAudio)
             // Which HEVC name the TV took (hevcnames.ts), so a tester's screenshot says which step played it.
-            const hevc = way === 'remux' && p.hevcAs ? (p.hevcTrusted ? `, HEVC sent to the TV decoder unasked` : `, HEVC as ${p.hevcAs}`) : ''
+            const hevc = way === 'remux' && p.hevcAs ? (p.hevcTrusted ? `, ${p.videoCodec} sent to the TV decoder unasked (${p.tryNames.length} names to try)` : p.hevcAs.startsWith('av01.') ? `, AV1 as ${p.hevcAs}` : `, HEVC as ${p.hevcAs}`) : ''
             setDetails(`${p.container}, ${p.mime.replace(/^[^;]*;\s*/, '')}. ${engine.detail}${hevc}`)
             if (play) video.play().catch(() => {})
             void findChapters(f, gen)
@@ -548,7 +548,7 @@ export function Player(props: {
             stuckSince = performance.now()
             if (stall()) setStall(null)
         } else if (!navigator.onLine && performance.now() - stuckSince > 2000) setStall('offline')
-        else if (performance.now() - stuckSince > STALL_MS && !stall()) setStall(everPlayed ? 'mid' : 'start')
+        else if (performance.now() - stuckSince > (probed?.transcode ? STALL_MS * 3 : STALL_MS) && !stall()) setStall(everPlayed ? 'mid' : 'start')
     }
 
     // Hidden (another app, a closed tab, a reload): the place is saved now, not at the next 10 s.

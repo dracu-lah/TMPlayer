@@ -20,7 +20,7 @@ import {
 } from 'mediabunny'
 import type { TgFile } from '../stream/reader'
 import type { HevcTranscoder, Transcoded } from './hevc'
-import { hevcAccepted, hevcNames, tvDecodesHevc, withHevc } from './hevcnames'
+import { hevcAccepted, pictureNames, tvDecodesHevc, withHevc } from './hevcnames'
 import { tvServiceUp } from '../stream/tvservice'
 import { TV_BROWSER, tvNativeOff, tvPlaysNatively } from './tvnative'
 
@@ -45,8 +45,10 @@ export interface Probe {
     videoCodec: string
     /** HEVC this browser cannot decode, turned into H.264 by hevc.js on the way (player/hevc.ts). */
     transcode: boolean
-    /** The HEVC name the Media Source took (its own or a stand-in, player/hevcnames.ts); null for other codecs. */
+    /** The HEVC or AV1 name the Media Source took (its own or a stand-in, player/hevcnames.ts); null for other codecs. */
     hevcAs: string | null
+    /** The names the Source Buffer is asked for, in turn, when `hevcTrusted` (the TV's refusal is only known by trying). */
+    tryNames: string[]
     /** No name was taken, but this is a TV that decodes HEVC, AV1 and VP9: the Source Buffer is tried without asking. */
     hevcTrusted: boolean
 }
@@ -174,25 +176,26 @@ export async function probe(file: TgFile, durationHint: number): Promise<Probe> 
     const native = isoOrWebm && controlled && (probeEl.canPlayType(asMp4) !== '' || tvNative)
     const vcodec = (await video?.getCodecParameterString().catch(() => null)) ?? null
     const isHevc = !!vcodec && /^(hev1|hvc1)\./.test(vcodec)
-    // HEVC: the first of its names this Media Source takes, a stand-in of the same profile on a TV
-    // that turns the file's own down (hevcnames.ts). The picture is still decoded by the browser.
-    const taken = MS && vcodec && isHevc ? hevcAccepted(vcodec, (m) => MS.isTypeSupported(m)) : null
-    // Turned down everywhere on an LG or Samsung TV: tried anyway under the file's own name.
-    const hevcTrusted = !!MS && !!vcodec && isHevc && !taken && !native && tvDecodesHevc(navigator.userAgent)
-    const hevcAs = taken ?? (hevcTrusted && vcodec ? vcodec.replace(/^hev1/, 'hvc1') : null)
-    if (MS && vcodec && isHevc && !taken && !native) console.warn('[player] no HEVC name taken by Media Source', vcodec, hevcNames(vcodec).length, 'tried', hevcTrusted ? ', trying the TV decoder anyway' : '')
-    // AV1 and VP9 on an LG or Samsung TV: the same, the browser's canPlayType can say no to a codec
-    // the TV decodes (a webOS tester's TV plays everything but H.266). Tried unasked, and a refusal
-    // goes on to the next engine as before.
-    const isAv1Vp9 = !!vcodec && /^(av01|vp09)\./.test(vcodec)
-    const pictureTrusted = !!MS && isAv1Vp9 && !native && tvDecodesHevc(navigator.userAgent) && !MS.isTypeSupported(`video/mp4; codecs="${vcodec}"`)
-    let remuxable = !!MS && !!vcodec && (isHevc ? !!hevcAs : pictureTrusted || MS.isTypeSupported(`video/mp4; codecs="${vcodec}"`))
+    const isAv1 = !!vcodec && vcodec.startsWith('av01.')
+    // HEVC and AV1: the first of their names this Media Source takes, a stand-in of the same profile
+    // on a TV that turns the file's own down (hevcnames.ts). The picture is still decoded by the browser.
+    const taken = MS && vcodec && (isHevc || isAv1) ? hevcAccepted(vcodec, (m) => MS.isTypeSupported(m)) : null
+    // Turned down everywhere on an LG or Samsung TV: tried anyway, each name in turn, since the TV
+    // decodes HEVC, AV1 and VP9 in hardware and its canPlayType can say no to what it plays.
+    const tvTrusted = !!MS && !!vcodec && !taken && !native && tvDecodesHevc(navigator.userAgent)
+    const hevcTrusted = tvTrusted && isHevc
+    const isVp9 = !!vcodec && vcodec.startsWith('vp09.')
+    const pictureTrusted = tvTrusted && (isAv1 || isVp9) && !MS!.isTypeSupported(`video/mp4; codecs="${vcodec}"`)
+    const tryNames = hevcTrusted || (pictureTrusted && isAv1) ? pictureNames(vcodec!).map((n) => n.replace(/^hev1/, 'hvc1')) : []
+    const hevcAs = taken ?? tryNames[0] ?? null
+    if (MS && vcodec && (isHevc || isAv1) && !taken && !native) console.warn(`[player] no ${isAv1 ? 'AV1' : 'HEVC'} name taken by Media Source`, vcodec, pictureNames(vcodec).length, 'tried', tvTrusted ? ', trying the TV decoder anyway' : '')
+    let remuxable = !!MS && !!vcodec && (isHevc || isAv1 ? !!hevcAs || pictureTrusted : pictureTrusted || MS.isTypeSupported(`video/mp4; codecs="${vcodec}"`))
     // No HEVC decoder here: hevc.js can stand it in as H.264 where the browser encodes that.
     let transcode = false
     if (!remuxable && !native && vcodec && /^(hev1|hvc1)/.test(vcodec) && (await (await import('./hevc')).canTranscodeHevc())) {
         transcode = remuxable = true
     }
-    return { input, container: format.name, video, audios, duration, base, mime: asMp4, native, remuxable, videoCodec: codecName(video), transcode, hevcAs: transcode ? null : hevcAs, hevcTrusted: !transcode && (hevcTrusted || pictureTrusted) }
+    return { input, container: format.name, video, audios, duration, base, mime: asMp4, native, remuxable, videoCodec: codecName(video), transcode, hevcAs: transcode ? null : hevcAs, tryNames: transcode ? [] : tryNames, hevcTrusted: !transcode && (hevcTrusted || pictureTrusted) }
 }
 
 /**
@@ -334,6 +337,8 @@ export abstract class FeedEngine implements Engine {
     protected hevcAs: string | null = null
     /** `hevcAs` is the file's own name, unasked: the TV's Source Buffer answers for it. */
     protected hevcTrusted = false
+    /** The names the Source Buffer is asked for in turn while `hevcTrusted`. */
+    protected tryNames: string[] = []
     /** Whether the transcoded fragments carry the (AAC) sound too. */
     protected transcodedSound = false
     // A drag over the seek bar fires `seeking` dozens of times a second: only where it settles is
@@ -575,19 +580,32 @@ export abstract class FeedEngine implements Engine {
 
     private async sourceBuffer(output: Output, offset: number, codec: string, as?: string): Promise<SourceBuffer> {
         const own = (await output.getMimeType()).replace(/hev1\./g, 'hvc1.')
-        const mime = as ?? (this.hevcAs ? withHevc(own, this.hevcAs) : own)
+        let mime = as ?? (this.hevcAs ? withHevc(own, this.hevcAs) : own)
         if (!this.sb) {
             const unasked = !as && this.hevcTrusted
             if (!unasked && !MS!.isTypeSupported(mime)) throw new Unplayable({ kind: 'picture', codec })
-            try {
-                this.sb = this.ms.addSourceBuffer(mime)
-            } catch (e) {
-                // The TV turned the HEVC down after all: the next engine, then the reason.
-                if (unasked) throw new Unplayable({ kind: 'picture', codec })
-                throw e
+            // Unasked (a TV): the file's own name first, then each stand-in, until the TV's Source Buffer takes one;
+            // the one taken is kept, so every later append (and a sound change) names the picture the same way.
+            const names = unasked && this.tryNames.length ? [...new Set([this.hevcAs, ...this.tryNames])] : [this.hevcAs]
+            let lastError: unknown = null
+            for (const name of names) {
+                const m = name && !as ? withHevc(own, name) : mime
+                try {
+                    this.sb = this.ms.addSourceBuffer(m)
+                    this.mime = m
+                    this.hevcAs = name
+                    break
+                } catch (e) {
+                    lastError = e
+                }
             }
+            if (!this.sb) {
+                // The TV turned the picture down after all: the next engine, then the reason.
+                if (unasked) throw new Unplayable({ kind: 'picture', codec })
+                throw lastError
+            }
+            mime = this.mime
             this.sb.mode = 'segments'
-            this.mime = mime
         }
         await this.idle(this.sb)
         // Another sound track can mean another codec (AC-3 converted to Opus, then AAC copied).
@@ -606,7 +624,7 @@ export abstract class FeedEngine implements Engine {
      * are in hand (so the first frames always go in).
      */
     private async roomAhead(gen: number) {
-        const limit = phone ? 30 : 60
+        const limit = this.aheadLimit
         for (;;) {
             if (gen !== this.gen) return
             const sb = this.sb!
@@ -623,6 +641,9 @@ export abstract class FeedEngine implements Engine {
         }
     }
 
+    /** How many seconds ahead of the playhead are read: 30 on a phone, 60 elsewhere, less where the Source Buffer is small (a TV's, for 4K). */
+    private aheadLimit = phone ? 30 : 60
+
     private async append(sb: SourceBuffer, data: Uint8Array) {
         for (let attempt = 0; ; attempt++) {
             try {
@@ -631,8 +652,17 @@ export abstract class FeedEngine implements Engine {
                 await this.idle(sb)
                 return
             } catch (e) {
-                if ((e as DOMException)?.name !== 'QuotaExceededError' || attempt > 2) throw e
-                const behind = this.video.currentTime - 10
+                if ((e as DOMException)?.name !== 'QuotaExceededError') throw e
+                const t = this.video.currentTime
+                let ahead = 0
+                for (let i = 0; i < sb.buffered.length; i++) if (t >= sb.buffered.start(i) - 1 && t <= sb.buffered.end(i)) ahead = sb.buffered.end(i) - t
+                // A TV's Source Buffer holds a few seconds of 4K, not a minute: with playable seconds in it,
+                // read less far ahead from now on and wait for the picture to use some up, instead of failing.
+                // Nothing playable and still full (or no room after 40 waits) is a real failure.
+                const waiting = ahead >= 3 && attempt < 40
+                if (!waiting && attempt > 2) throw e
+                if (ahead >= 3) this.aheadLimit = Math.max(6, Math.min(this.aheadLimit, Math.floor(ahead) - 1))
+                const behind = t - (attempt > 2 ? 2 : 10)
                 if (behind > 0) {
                     sb.remove(0, behind)
                     await this.idle(sb)
@@ -686,6 +716,7 @@ export class RemuxEngine extends FeedEngine {
         super(video, p.duration, ev)
         this.hevcAs = p.hevcAs
         this.hevcTrusted = p.hevcTrusted
+        this.tryNames = p.tryNames
         if (!p.video) throw new Unplayable({ kind: 'no-picture' })
         this.keySink = new EncodedPacketSink(p.video)
         this.begin(start)

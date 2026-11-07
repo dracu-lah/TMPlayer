@@ -28,9 +28,29 @@ export function hevcNames(codec: string): string[] {
     return [...new Set(names)]
 }
 
-/** The first of `hevcNames(codec)` that `supported` takes in an MP4, or null. */
+/**
+ * The names to try for an AV1 `codec` (`av01.P.LLT.DD` and the colour fields after it), in order:
+ * its own, the short form without the colour fields (a TV's Media Source can turn the long one
+ * down while its decoder plays the stream), then the same profile and depth at levels 5.1, 5.0 and
+ * 4.1 (what 4K TVs list). Empty when `codec` is not AV1.
+ */
+export function av1Names(codec: string): string[] {
+    const m = /^av01\.(\d)\.(\d{2})([MH])\.(\d{2})/.exec(codec)
+    if (!m) return []
+    const [, profile, , tier, depth] = m
+    const names = [codec, `av01.${profile}.${m[2]}${tier}.${depth}`]
+    for (const level of ['13', '12', '09']) names.push(`av01.${profile}.${level}M.${depth}`)
+    return [...new Set(names)]
+}
+
+/** The names to try for an HEVC or AV1 picture codec; empty for any other. */
+export function pictureNames(codec: string): string[] {
+    return codec.startsWith('av01.') ? av1Names(codec) : hevcNames(codec)
+}
+
+/** The first of `pictureNames(codec)` that `supported` takes in an MP4, or null. */
 export function hevcAccepted(codec: string, supported: (mime: string) => boolean): string | null {
-    for (const name of hevcNames(codec)) {
+    for (const name of pictureNames(codec)) {
         try {
             if (supported(`video/mp4; codecs="${name}"`)) return name
         } catch {
@@ -49,7 +69,7 @@ export function tvDecodesHevc(userAgent: string): boolean {
     return /Web0S|webOS|Tizen/.test(userAgent)
 }
 
-/** `mime` with its HEVC codec named `name` instead, the sound's codec kept. */
+/** `mime` with its HEVC or AV1 codec named `name` instead, the sound's codec kept. */
 export function withHevc(mime: string, name: string): string {
-    return mime.replace(/(hev1|hvc1)\.[^,"\s]+/, name)
+    return mime.replace(/(hev1|hvc1|av01)\.[^,"\s]+/, name)
 }
