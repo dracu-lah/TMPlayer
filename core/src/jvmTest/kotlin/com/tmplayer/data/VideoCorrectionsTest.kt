@@ -93,4 +93,16 @@ class VideoCorrectionsTest {
         assertEquals("Name", backup.memory["vsort_-1001234"])
         assertEquals("Unwatched", backup.memory["vfilter_-1001234"])
     }
+
+    @Test
+    fun `a poster pick travels in a backup and reads back after a restore`() {
+        val stored = VideoCorrection(wrongMatch = false, title = "Idiot", pick = PosterPick(321, show = true)).encode()
+        val settings = mapOf<String, Any>("fix_-1001234_56" to stored, "fix_-1001234_57" to "tmdb=film:oops")
+        val backup = Backups.collect(settings, emptyMap(), MetaSettings(), createdAt = 0, appVersion = "test")
+        assertEquals(stored, backup.memory["fix_-1001234_56"])
+        val restored = (Backups.decode(Backups.encode(backup)) as BackupRead.Ok).backup
+        assertEquals(PosterPick(321, show = true), VideoCorrection.decode(restored.memory["fix_-1001234_56"] as? String).pick)
+        // A hand-edited value that is no pick restores as no correction rather than breaking the restore.
+        assertTrue(VideoCorrection.decode(restored.memory["fix_-1001234_57"] as? String).isEmpty)
+    }
 }
