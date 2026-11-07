@@ -47,7 +47,7 @@ export interface Probe {
     transcode: boolean
     /** The HEVC name the Media Source took (its own or a stand-in, player/hevcnames.ts); null for other codecs. */
     hevcAs: string | null
-    /** No HEVC name was taken, but this is a TV that decodes HEVC: the Source Buffer is tried without asking. */
+    /** No name was taken, but this is a TV that decodes HEVC, AV1 and VP9: the Source Buffer is tried without asking. */
     hevcTrusted: boolean
 }
 
@@ -181,13 +181,18 @@ export async function probe(file: TgFile, durationHint: number): Promise<Probe> 
     const hevcTrusted = !!MS && !!vcodec && isHevc && !taken && !native && tvDecodesHevc(navigator.userAgent)
     const hevcAs = taken ?? (hevcTrusted && vcodec ? vcodec.replace(/^hev1/, 'hvc1') : null)
     if (MS && vcodec && isHevc && !taken && !native) console.warn('[player] no HEVC name taken by Media Source', vcodec, hevcNames(vcodec).length, 'tried', hevcTrusted ? ', trying the TV decoder anyway' : '')
-    let remuxable = !!MS && !!vcodec && (isHevc ? !!hevcAs : MS.isTypeSupported(`video/mp4; codecs="${vcodec}"`))
+    // AV1 and VP9 on an LG or Samsung TV: the same, the browser's canPlayType can say no to a codec
+    // the TV decodes (a webOS tester's TV plays everything but H.266). Tried unasked, and a refusal
+    // goes on to the next engine as before.
+    const isAv1Vp9 = !!vcodec && /^(av01|vp09)\./.test(vcodec)
+    const pictureTrusted = !!MS && isAv1Vp9 && !native && tvDecodesHevc(navigator.userAgent) && !MS.isTypeSupported(`video/mp4; codecs="${vcodec}"`)
+    let remuxable = !!MS && !!vcodec && (isHevc ? !!hevcAs : pictureTrusted || MS.isTypeSupported(`video/mp4; codecs="${vcodec}"`))
     // No HEVC decoder here: hevc.js can stand it in as H.264 where the browser encodes that.
     let transcode = false
     if (!remuxable && !native && vcodec && /^(hev1|hvc1)/.test(vcodec) && (await (await import('./hevc')).canTranscodeHevc())) {
         transcode = remuxable = true
     }
-    return { input, container: format.name, video, audios, duration, base, mime: asMp4, native, remuxable, videoCodec: codecName(video), transcode, hevcAs: transcode ? null : hevcAs, hevcTrusted: !transcode && hevcTrusted }
+    return { input, container: format.name, video, audios, duration, base, mime: asMp4, native, remuxable, videoCodec: codecName(video), transcode, hevcAs: transcode ? null : hevcAs, hevcTrusted: !transcode && (hevcTrusted || pictureTrusted) }
 }
 
 /**
