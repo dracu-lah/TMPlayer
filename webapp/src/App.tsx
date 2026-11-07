@@ -3,7 +3,7 @@ import { A, Route, Router, useLocation, useNavigate } from '@solidjs/router'
 import { api, errorText, sessionHere, useHere } from './tg/rpc'
 import { online } from './net'
 import { entryState, me, sessionEndedElsewhere, setMe } from './session'
-import { addedMode, chatsGateWaived, loadSettings, setChatsGateWaived } from './store'
+import { chatsGated as gated, loadSettings, setChatsGateWaived } from './store'
 import { form, holdForm } from './form'
 import { Home } from './screens/Home'
 import { Nav } from './ui/Nav'
@@ -54,7 +54,6 @@ const GATE_FREE = ['/signin', '/setup/chats', '/added-chats']
  * watch is sent to choose first, whatever page they asked for, then on to it. An answer on file
  * ('picked', or 'all' from before choosing was required) never sees it again.
  */
-const gated = () => addedMode() === 'unanswered' && !chatsGateWaived()
 const toGate = (next: string) => `/setup/chats?next=${encodeURIComponent(next)}`
 
 // Safari has no requestIdleCallback.

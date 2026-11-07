@@ -272,6 +272,8 @@ function byKey(key: string, within: Element = document.body): HTMLElement | null
 interface Memory {
     key: string
     scroll: number
+    /** An item of the bar (`data-tv-back`, Choose chats) that opened this page's sub page: Back lands on it. */
+    bar?: boolean
 }
 
 export function createFocusMap(host: Host) {
@@ -299,6 +301,10 @@ export function createFocusMap(host: Host) {
     }
 
     const remember = (el: Element) => {
+        if (el instanceof HTMLElement && inBar(el) && el.hasAttribute('data-tv-back')) {
+            memory.set(host.path(), { key: keyOf(el), scroll: scrollY, bar: true })
+            return
+        }
         if (!(el instanceof HTMLElement) || inBar(el) || !document.querySelector('.page')?.contains(el)) return
         const key = keyOf(el)
         lastPage = { el, key, rect: rectOf(el) }
@@ -393,12 +399,13 @@ export function createFocusMap(host: Host) {
         lastPage = null
         if (path.startsWith('/watch/')) return stopWaiting()
         const active = document.activeElement
-        if (!wasBack && inBar(active)) {
+        // The bar's Choose chats opens a page to work in: the page takes the remote, not the bar.
+        if (!wasBack && inBar(active) && !active?.hasAttribute('data-tv-back')) {
             // The bar's item for the new page, once the bar has marked it.
             return settle(() => barCurrent(), null, false, 500)
         }
         const saved = wasBack ? memory.get(path) : undefined
-        if (saved) return settle(() => byKey(saved.key, document.querySelector('.page') ?? document.body), saved.scroll, true)
+        if (saved) return settle(() => byKey(saved.key, (saved.bar ? bar() : document.querySelector('.page')) ?? document.body), saved.scroll, true)
         // Home waits a moment for its carousel's Play before taking the first card. After a second
         // the page's first item stands in (a chat's Back while its cards are still coming), and the
         // wait goes on: the first card takes the remote when it arrives, unless the remote or a

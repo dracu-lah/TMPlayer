@@ -6,6 +6,7 @@ import { onBackOnline } from '../net'
 import { t } from '../i18n'
 import { addedGate, addedShows, setStarred, starredIds } from '../store'
 import { Icon } from '../ui/Icon'
+import { ChooseChatsButton } from '../ui/ChooseChatsButton'
 import { tvDp, VirtualGrid, type GridLayout } from '../ui/VirtualGrid'
 import { form } from '../form'
 import { ChatPicture } from './ChatPicture'
@@ -82,7 +83,10 @@ export function Chats() {
         <>
             <div class="list-head">
                 <h1 class="page-title">{t('nav.chats')}</h1>
-                <A class="link" href="/added-chats">{t('picker.choose_chats')}</A>
+                {/* The TV's bar holds its own (tv/index.tsx). */}
+                <Show when={form() !== 'tv'}>
+                    <ChooseChatsButton />
+                </Show>
             </div>
             <label class="search-field">
                 <Icon icon={Search01Icon} size={20} />
