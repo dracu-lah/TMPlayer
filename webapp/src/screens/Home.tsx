@@ -7,6 +7,7 @@ import { t } from '../i18n'
 import { addedIds, addedMode, addedView, progress, resumes, settings, starredIds, watchedTick } from '../store'
 import { forgetGone } from '../goneVideos'
 import { Icon } from '../ui/Icon'
+import { ChooseChatsButton } from '../ui/ChooseChatsButton'
 import { useObservedCovers } from './promo'
 import { Card, ContinueCard, tileCard, useLeft, useProgress, useWarmDataCentres, videoCard, type CardData } from './VideoList'
 import { form } from '../form'
@@ -66,11 +67,17 @@ export function Home() {
     return (
         <>
             {/* The app's Home opens on its mark and name, not on a heading (the page is still called Home). */}
-            <h1 class="page-title home-title">
-                <img class="home-mark" src="/icon.svg" alt="" width="28" height="28" />
-                <span class="home-brand" aria-hidden="true">TMPlayer</span>
-                <span class="visually-hidden">{t('browse.tab_home')}</span>
-            </h1>
+            <div class="home-head">
+                <h1 class="page-title home-title">
+                    <img class="home-mark" src="/icon.svg" alt="" width="28" height="28" />
+                    <span class="home-brand" aria-hidden="true">TMPlayer</span>
+                    <span class="visually-hidden">{t('browse.tab_home')}</span>
+                </h1>
+                {/* The TV's bar holds its own (tv/index.tsx). */}
+                <Show when={form() !== 'tv'}>
+                    <ChooseChatsButton />
+                </Show>
+            </div>
             <Show when={settings().carousel}>
                 <Show when={form() === 'tv'} fallback={<Hero rows={page()?.rows} />}>
                     <TvHero rows={page()?.rows} />

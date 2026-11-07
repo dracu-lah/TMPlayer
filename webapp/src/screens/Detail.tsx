@@ -18,7 +18,6 @@ import { answer, askOf, loadBackdropLightFirst, loadExtras, loadFile, loadPoster
 import { coverBackground } from './cover'
 import { Card, clock, detailPath, shortLength, size, tileCard, useProgress, watchPath } from './VideoList'
 import { warmFile } from '../stream/reader'
-import { form } from '../form'
 import type { ChatView, CopyRef, VideoItem, WatchInfo } from '../tg/types'
 
 const dot = '  ·  '
@@ -194,14 +193,6 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
     // repeating the name taken off (MediaText.overviewOf), as the apps' detail falls back to it.
     const tmdbOverview = () => extras()?.episode?.overview || found()?.overview || ''
     const overview = () => tmdbOverview() || props.info?.overview || ''
-    // A wide desktop window sets About beside the overview, at the overview's reading measure, as
-    // WideDetail's ROOMY layout does, rather than far down the page under the episodes.
-    const roomyQuery = matchMedia('(min-width: 880px)')
-    const [roomy, setRoomy] = createSignal(roomyQuery.matches)
-    const onRoomy = () => setRoomy(roomyQuery.matches)
-    roomyQuery.addEventListener('change', onRoomy)
-    onCleanup(() => roomyQuery.removeEventListener('change', onRoomy))
-    const side = () => form() === 'desktop' && roomy()
     // What stands behind the words: a film's wide picture, else a show's poster (whole, over a soft
     // copy of itself, never Telegram's thumbnail blown up behind it), else the video's own frame.
     const shown = () => (film() && backdrop() ? 'backdrop' : poster() ? 'poster' : art() ? 'frame' : null)
@@ -278,6 +269,8 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
                 </button>
             </div>
             <div class="detail-body">
+                {/* Two columns on a wide window (the main words, About beside them); one column otherwise, each wrapper a plain pass-through there. */}
+                <div class="detail-cols">
                 <header class="detail-head">
                     <Show when={ep()}>
                         {(e) => <p class="detail-code">{episodeName() ? `${e().code}${dot}${episodeName()}` : e().code}</p>}
@@ -327,6 +320,7 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
                         </div>
                     </Show>
                 </header>
+                <div class="detail-main">
                 <div class="detail-actions">
                     <button type="button" class="detail-play" data-tv-first onClick={() => play()}>
                         <Icon icon={PlayIcon} size={22} />
@@ -357,26 +351,25 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
                 <Show when={props.info?.protected || !item.canBeSaved}>
                     <p class="notice muted small">{t('detail.protected')}</p>
                 </Show>
-                <div class="detail-story" classList={{ side: side() }}>
-                    <Show when={overview()}>
-                        <section class="detail-overview">
-                            <p class="detail-synopsis" classList={{ open: more() }} ref={synopsis}>{overview()}</p>
-                            <Show when={cut() || more()}>
-                                <button type="button" class="link detail-more" onClick={() => setMore(!more())}>{more() ? t('common.less') : t('common.more')}</button>
-                            </Show>
-                            <Show when={tmdbOverview()}>
-                                <p class="muted small">{t('metadata.credit', { provider: 'TMDB' })}</p>
-                            </Show>
-                        </section>
-                    </Show>
-                    <Show when={side()}>{aboutSection()}</Show>
+                <Show when={overview()}>
+                    <section class="detail-overview">
+                        <p class="detail-synopsis" classList={{ open: more() }} ref={synopsis}>{overview()}</p>
+                        <Show when={cut() || more()}>
+                            <button type="button" class="link detail-more" onClick={() => setMore(!more())}>{more() ? t('common.less') : t('common.more')}</button>
+                        </Show>
+                        <Show when={tmdbOverview()}>
+                            <p class="muted small">{t('metadata.credit', { provider: 'TMDB' })}</p>
+                        </Show>
+                    </section>
+                </Show>
+                <Show when={extras()?.cast?.length}>
+                    <Cast people={extras()!.cast!} />
+                </Show>
+                </div>
+                <div class="detail-side">{aboutSection()}</div>
                 </div>
                 <Show when={props.info?.seasons.length}>
                     <Episodes info={props.info!} current={item} />
-                </Show>
-                <Show when={!side()}>{aboutSection()}</Show>
-                <Show when={extras()?.cast?.length}>
-                    <Cast people={extras()!.cast!} />
                 </Show>
                 <Show when={!props.info?.seasons.length && props.info?.more.length}>
                     <More info={props.info!} />

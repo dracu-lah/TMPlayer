@@ -187,12 +187,140 @@ fun WideDetailPanel(
         // The platform's margin for a title page (the desktop's is twice a page's own), else one
         // drawn to the window: the hero's words and the sections under it start on one line.
         val side = margin ?: if (roomy) 56.dp else 36.dp
+        // A window wider than the content column keeps the words in a centred column of
+        // [TitlePageContentMax], with equal gutters at both sides; the picture still runs full bleed.
+        val gutter = maxOf(side, (maxWidth - TitlePageContentMax) / 2)
+        // From this width the body is two balanced columns (the video's words and the About
+        // block), top aligned; below it, one column, as before.
+        val twoColumn = maxWidth >= TWO_COLUMN
         // The hero holds the title, the facts and the actions over the picture (user, 2026-11-01:
         // its band used to hold the title alone, with everything else squeezed in under it). It
-        // is at least this tall, and taller where its words need it.
-        val heroHeight = (maxHeight * HERO_SHARE).coerceIn(HERO_MIN, HERO_MAX)
+        // is at least this tall, and taller where its words need it. In two columns it holds the
+        // title alone, and the facts and the actions open the main column under it.
+        val heroHeight = if (twoColumn) {
+            (maxHeight * TWO_COLUMN_HERO_SHARE).coerceIn(TWO_COLUMN_HERO_MIN, TWO_COLUMN_HERO_MAX)
+        } else {
+            (maxHeight * HERO_SHARE).coerceIn(HERO_MIN, HERO_MAX)
+        }
         // A short window keeps the title logo smaller, so Play stays on the first screen.
         val logoHeight = if (roomy && maxHeight >= TALL_WINDOW) 150.dp else 120.dp
+        val titleBlock: @Composable () -> Unit = {
+            if (eyebrow.isNotEmpty()) {
+                // One line, so the episode's name arriving after its code never adds a second.
+                Text(eyebrow, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = Tone.accent, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            TitleSlot(logoHeight, hold = holdsTitle) {
+                com.tmplayer.ui.online.TitleArt(
+                    meta,
+                    maxWidth = if (roomy) 460.dp else 380.dp,
+                    maxHeight = logoHeight,
+                    settled = metaState.settled,
+                    skeletonHeight = logoHeight * 0.62f,
+                    modifier = Modifier.clearAndSetSemantics {
+                        heading()
+                        contentDescription = heading
+                    },
+                ) {
+                    val style = if (roomy) MaterialTheme.typography.displayMedium else MaterialTheme.typography.displaySmall
+                    Text(heading, style = style.trackedFor(heading), fontWeight = FontWeight.Bold, color = Tone.text, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+        val factsBlock: @Composable () -> Unit = {
+            Column(Modifier.padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                // The match's year on the facts line only when it was there on the first
+                // frame; later it opens the genres line, in its held place.
+                val matchYear = meta?.year.takeIf { parsed.year == null }
+                FactLine(
+                    listOfNotNull(
+                        (parsed.year ?: matchYear.takeIf { yearInFacts })?.let { Fact(it.toString()) },
+                        item.durationSec.takeIf { it > 0 }?.let { Fact(s.formatter.duration(it.toLong())) },
+                        // As the copy under Play names it ([VideoCopies.qualityLabel]).
+                        (com.tmplayer.data.VideoCopies.qualityLabel(item) ?: facts.resolution)?.let { Fact(it, chip = true) },
+                        item.sizeBytes.takeIf { it > 0 }?.let { Fact(com.tmplayer.data.SplitPieces.sizeFact(item, s.formatter.size(it))) },
+                        chatTitle.takeIf { it.isNotBlank() }?.let { Fact(it) },
+                        Fact(s.detailWatchedLine, accent = true).takeIf { finished },
+                    ),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                DetailMetaLines(
+                    extrasState,
+                    year = matchYear.takeIf { !yearInFacts },
+                    hold = holdMetaLines,
+                    yearPending = !yearInFacts && parsed.year == null && metaComing,
+                    // The file's own length is on the facts line already.
+                    runtime = item.durationSec <= 0,
+                )
+                ResumeLine(watched, finished, item.durationSec)
+                PiecesMissingLine(item)
+            }
+        }
+        val actionsBlock: @Composable () -> Unit = {
+            if (!item.canBeSaved) {
+                Text(
+                    s.detailProtected,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Tone.muted,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(Corner.Small))
+                        .background(Tone.surfaceHigh)
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                )
+            }
+            // Play and the round buttons share one top line: the pill is as tall as a
+            // button's circle, so a word under one button running to two lines never
+            // lowers that circle against the others.
+            Row(
+                Modifier.padding(top = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                primary?.let { HeroPill(it.label, it.icon, it.onSelect, focusRequester = firstAction, large = true) }
+                FlowRow(
+                    Modifier.weight(1f, fill = false),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    quick.forEach {
+                        WideIconAction(
+                            it.label,
+                            it.icon,
+                            it.onSelect,
+                            destructive = it.destructive,
+                            progress = it.progress,
+                            enabled = it.enabled,
+                            ghost = it.placeholder,
+                            waiting = it.placeholder && extrasComing,
+                            short = roundLabel(it, s),
+                        )
+                    }
+                }
+            }
+            trailers.unopened?.let { TrailerQr(it, Modifier.padding(vertical = 4.dp)) }
+        }
+        val overviewBlock: @Composable () -> Unit = {
+            if (overview != null || holdSynopsis) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    SynopsisSlot(overview, waiting = metaComing, hold = holdSynopsis, style = MaterialTheme.typography.bodyLarge, lines = SYNOPSIS_LINES)
+                    if (metaOverview != null && meta != null) MetaCredit(meta)
+                    // In two columns the credit line opens the About block instead.
+                    if (!twoColumn) MetaPeopleLine(extras)
+                }
+            } else if (!twoColumn) {
+                MetaPeopleLine(extras)
+            }
+        }
+        val castBlock: @Composable () -> Unit = {
+            when {
+                meta != null && extras != null -> MetaCastRow(extras.cast)
+                holdCast && extrasComing -> com.tmplayer.ui.online.MetaCastPlaceholder()
+            }
+        }
+        val copiesBlock: @Composable () -> Unit = {
+            Versions(item, onPickCopy, chatTitle, copyStarted)
+            TelegramQualityLine(item)
+            DetailBookmarks(bookmarks, onOpenBookmark)
+        }
         // The sheet's own ground and Close, for the moment the caches are asked.
         if (firstPaint) Column(Modifier.fillMaxSize().verticalScroll(scroll)) {
             Box(Modifier.fillMaxWidth().heightIn(min = heroHeight)) {
@@ -211,137 +339,61 @@ fun WideDetailPanel(
                     Modifier
                         .align(Alignment.BottomStart)
                         .fillMaxWidth()
-                        .padding(start = side, end = side, top = HERO_TOP, bottom = 12.dp)
+                        .padding(start = gutter, end = gutter, top = HERO_TOP, bottom = 12.dp)
                         .widthIn(max = HERO_TEXT),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    if (eyebrow.isNotEmpty()) {
-                        // One line, so the episode's name arriving after its code never adds a second.
-                        Text(eyebrow, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = Tone.accent, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    titleBlock()
+                    if (!twoColumn) {
+                        factsBlock()
+                        actionsBlock()
                     }
-                    TitleSlot(logoHeight, hold = holdsTitle) {
-                        com.tmplayer.ui.online.TitleArt(
-                            meta,
-                            maxWidth = if (roomy) 460.dp else 380.dp,
-                            maxHeight = logoHeight,
-                            settled = metaState.settled,
-                            skeletonHeight = logoHeight * 0.62f,
-                            modifier = Modifier.clearAndSetSemantics {
-                                heading()
-                                contentDescription = heading
-                            },
-                        ) {
-                            val style = if (roomy) MaterialTheme.typography.displayMedium else MaterialTheme.typography.displaySmall
-                            Text(heading, style = style.trackedFor(heading), fontWeight = FontWeight.Bold, color = Tone.text, maxLines = 3, overflow = TextOverflow.Ellipsis)
-                        }
-                    }
-                    Column(Modifier.padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        // The match's year on the facts line only when it was there on the first
-                        // frame; later it opens the genres line, in its held place.
-                        val matchYear = meta?.year.takeIf { parsed.year == null }
-                        FactLine(
-                            listOfNotNull(
-                                (parsed.year ?: matchYear.takeIf { yearInFacts })?.let { Fact(it.toString()) },
-                                item.durationSec.takeIf { it > 0 }?.let { Fact(s.formatter.duration(it.toLong())) },
-                                // As the copy under Play names it ([VideoCopies.qualityLabel]).
-                                (com.tmplayer.data.VideoCopies.qualityLabel(item) ?: facts.resolution)?.let { Fact(it, chip = true) },
-                                item.sizeBytes.takeIf { it > 0 }?.let { Fact(com.tmplayer.data.SplitPieces.sizeFact(item, s.formatter.size(it))) },
-                                chatTitle.takeIf { it.isNotBlank() }?.let { Fact(it) },
-                                Fact(s.detailWatchedLine, accent = true).takeIf { finished },
-                            ),
-                            style = MaterialTheme.typography.titleSmall,
-                        )
-                        DetailMetaLines(
-                            extrasState,
-                            year = matchYear.takeIf { !yearInFacts },
-                            hold = holdMetaLines,
-                            yearPending = !yearInFacts && parsed.year == null && metaComing,
-                            // The file's own length is on the facts line already.
-                            runtime = item.durationSec <= 0,
-                        )
-                        ResumeLine(watched, finished, item.durationSec)
-                        PiecesMissingLine(item)
-                    }
-                    if (!item.canBeSaved) {
-                        Text(
-                            s.detailProtected,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Tone.muted,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(Corner.Small))
-                                .background(Tone.surfaceHigh)
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
-                        )
-                    }
-                    // Play and the round buttons share one top line: the pill is as tall as a
-                    // button's circle, so a word under one button running to two lines never
-                    // lowers that circle against the others.
-                    Row(
-                        Modifier.padding(top = 10.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.Top,
-                    ) {
-                        primary?.let { HeroPill(it.label, it.icon, it.onSelect, focusRequester = firstAction, large = true) }
-                        FlowRow(
-                            Modifier.weight(1f, fill = false),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp),
-                        ) {
-                            quick.forEach {
-                                WideIconAction(
-                                    it.label,
-                                    it.icon,
-                                    it.onSelect,
-                                    destructive = it.destructive,
-                                    progress = it.progress,
-                                    enabled = it.enabled,
-                                    ghost = it.placeholder,
-                                    waiting = it.placeholder && extrasComing,
-                                    short = roundLabel(it, s),
-                                )
-                            }
-                        }
-                    }
-                    trailers.unopened?.let { TrailerQr(it, Modifier.padding(vertical = 4.dp)) }
                 }
             }
 
             Column(
-                Modifier.fillMaxWidth().padding(start = side, end = side, top = 24.dp, bottom = 40.dp),
+                Modifier.fillMaxWidth().padding(start = gutter, end = gutter, top = 24.dp, bottom = 40.dp),
                 verticalArrangement = Arrangement.spacedBy(36.dp),
             ) {
-                // The overview at a reading measure with the copies and bookmarks under it, and
-                // the file's own facts beside it where the window is wide enough, else under it.
-                StoryBesideFacts(
-                    story = {
-                        Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
-                            if (overview != null || holdSynopsis) {
-                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    SynopsisSlot(overview, waiting = metaComing, hold = holdSynopsis, style = MaterialTheme.typography.bodyLarge, lines = SYNOPSIS_LINES)
-                                    if (metaOverview != null && meta != null) MetaCredit(meta)
-                                    MetaPeopleLine(extras)
-                                }
-                            } else {
-                                MetaPeopleLine(extras)
-                            }
-                            Versions(item, onPickCopy, chatTitle, copyStarted)
-                            TelegramQualityLine(item)
-                            DetailBookmarks(bookmarks, onOpenBookmark)
+                if (twoColumn) {
+                    // Two balanced columns, top aligned: the video's words (facts, the actions,
+                    // the overview, the cast) and the About block (the credit line and the file's
+                    // own facts, whose values use the whole column and wrap a long name anywhere).
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(COLUMN_GAP_WIDE), verticalAlignment = Alignment.Top) {
+                        Column(Modifier.weight(MAIN_SHARE), verticalArrangement = Arrangement.spacedBy(24.dp)) {
+                            factsBlock()
+                            actionsBlock()
+                            overviewBlock()
+                            castBlock()
                         }
-                    },
-                    facts = {
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Column(Modifier.weight(1f - MAIN_SHARE), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(s.detailHeading, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = Tone.text)
-                            DetailFacts(item, facts, s, overview = null, showSynopsis = false, large = roomy)
+                            MetaPeopleLine(extras)
+                            DetailFacts(item, facts, s, overview = null, showSynopsis = false, large = true, wrapName = true)
                         }
-                    },
-                )
-
-                when {
-                    meta != null && extras != null -> MetaCastRow(extras.cast)
-                    holdCast && extrasComing -> com.tmplayer.ui.online.MetaCastPlaceholder()
+                    }
+                    Column(verticalArrangement = Arrangement.spacedBy(20.dp)) { copiesBlock() }
+                } else {
+                    // The overview at a reading measure with the copies and bookmarks under it, and
+                    // the file's own facts beside it where the window is wide enough, else under it.
+                    StoryBesideFacts(
+                        story = {
+                            Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                                overviewBlock()
+                                copiesBlock()
+                            }
+                        },
+                        facts = {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(s.detailHeading, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = Tone.text)
+                                DetailFacts(item, facts, s, overview = null, showSynopsis = false, large = roomy, wrapName = true)
+                            }
+                        },
+                    )
+                    castBlock()
                 }
-                SeasonsSection(item, meta, extras, onOpenItem, Modifier.bringIntoViewRequester(episodesAt))
+
+                SeasonsSection(item, meta, extras, onOpenItem, Modifier.bringIntoViewRequester(episodesAt), listMax = if (twoColumn) TitlePageContentMax else SEASONS_LIST_MAX)
                 if (meta != null && extras != null) MoreLikeThisRow(meta, extras, onOpenItem)
 
                 if (rest.isNotEmpty()) {
@@ -566,6 +618,26 @@ private fun StoryBesideFacts(story: @Composable () -> Unit, facts: @Composable (
         }
     }
 }
+
+/** The content column's widest: on a wider window the words keep to it, centred, with equal gutters. */
+val TitlePageContentMax = 1280.dp
+
+/** From this window width the body is two columns: the video's words and the About block. */
+private val TWO_COLUMN = 1100.dp
+
+/** The main column's share of the two columns (the About block takes the rest). */
+private const val MAIN_SHARE = 0.6f
+
+/** Between the main column and the About block. */
+private val COLUMN_GAP_WIDE = 32.dp
+
+/** The hero over the two columns holds the title alone: shorter, so the facts and Play follow it at once. */
+private const val TWO_COLUMN_HERO_SHARE = 0.46f
+private val TWO_COLUMN_HERO_MIN = 320.dp
+private val TWO_COLUMN_HERO_MAX = 560.dp
+
+/** The episode list's widest on a window too narrow for two columns. */
+private val SEASONS_LIST_MAX = 860.dp
 
 /** The round actions beside Play: as tall as the large pill. */
 internal val WIDE_ACTION = 56.dp

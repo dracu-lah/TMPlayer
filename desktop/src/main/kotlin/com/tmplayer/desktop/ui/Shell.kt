@@ -331,6 +331,12 @@ private fun Browse(state: ShellState, player: PlayerContent) {
     // the chat list) it covers the window, and no notice, tour or support prompt shows with it.
     val chatsGate = com.tmplayer.ui.browse.rememberChatsGate(chats, setupPending)
     val gateUp = com.tmplayer.data.ChatsGate.up(chatsGate)
+    // The Choose chats button and its key stand down while the setup or the gate (the chooser
+    // itself) is up.
+    androidx.compose.runtime.DisposableEffect(setupPending, gateUp) {
+        state.chooseChatsAllowed = !setupPending && !gateUp
+        onDispose { state.chooseChatsAllowed = false }
+    }
     val chatsUi by chats.state.collectAsState()
     DownloadToasts(state)
     // Half watched entries that can no longer become a card are swept once per sign in, as on the
