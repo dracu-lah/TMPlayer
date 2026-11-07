@@ -33,6 +33,11 @@ data class ParsedName(
      * file of one episode, which is nearly every file.
      */
     val lastEpisode: Int? = null,
+    /**
+     * Which half of a split episode this file is: 1 for "S08 E06a", 2 for "S08 E06b" (a double
+     * length episode a broadcaster cut in two). Null for an episode written with no letter.
+     */
+    val episodePart: Int? = null,
 ) {
     /**
      * [SeriesShelf.keyOf] of [title], worked out once: a parse is kept on its [MediaItem], and the
@@ -239,6 +244,7 @@ object MediaName {
                 season = episode?.season,
                 episode = episode?.number,
                 lastEpisode = episode?.last,
+                episodePart = episode?.part,
                 part = part?.number,
                 extra = (extra ?: leadingExtra)?.let { extraOf(it.value) },
                 airDate = date?.text,
@@ -365,7 +371,7 @@ object MediaName {
     }
 
     /** A season and episode number, and where in the name the code starts. */
-    private data class Episode(val season: Int?, val number: Int?, val at: Int, val last: Int? = null)
+    private data class Episode(val season: Int?, val number: Int?, val at: Int, val last: Int? = null, val part: Int? = null)
 
     /**
      * Finds an episode however the uploader chose to write it.
@@ -390,6 +396,7 @@ object MediaName {
                     // A second code straight after the first, the file's last episode.
                     last = (it.groupValues.getOrNull(3)?.toIntOrNull() ?: it.groupValues.getOrNull(4)?.toIntOrNull())
                         ?.takeIf { last -> number != null && last > number },
+                    part = it.groupValues.getOrNull(5)?.firstOrNull()?.lowercaseChar()?.let { c -> c - 'a' + 1 },
                 )
             }
 
@@ -810,7 +817,8 @@ object MediaName {
      */
     private val PAIRED_EPISODE = listOf(
         // "S01E01-06" as well, the range a season split in two files writes (not "S01E05-720p").
-        Regex("""\bs(\d{1,2})[\s.-]?e(\d{1,3})(?:-?e(\d{1,3})|-(\d{1,3})(?![\dpPiI]))?\b""", RegexOption.IGNORE_CASE),
+        // A letter right after the number is the half of a split episode ("S08 E06b").
+        Regex("""\bs(\d{1,2})[\s.-]?e(\d{1,3})(?:-?e(\d{1,3})|-(\d{1,3})(?![\dpPiI]))?([a-d])?\b""", RegexOption.IGNORE_CASE),
         Regex("""\b(\d{1,2})x(\d{1,3})\b""", RegexOption.IGNORE_CASE),
         Regex("""\bseason\s?(\d{1,2})\s?episode\s?(\d{1,3})\b""", RegexOption.IGNORE_CASE),
     )

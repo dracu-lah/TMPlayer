@@ -47,7 +47,7 @@ object SameTitle {
             else -> MediaName.parse(item.fileName, item.caption)
         }
         if (name.isSeries || name.extra != null) return null
-        val title = name.titleKey.ifEmpty { return null }
+        val title = SeriesShelf.foldAccents(name.titleKey).ifEmpty { return null }
         val year = name.year ?: if (renamed == null) captionYear(item.caption, title) else null
         if (year == null) return null
         // As [SeriesShelf.episodeOf] reads it: the viewer's title where they gave one.

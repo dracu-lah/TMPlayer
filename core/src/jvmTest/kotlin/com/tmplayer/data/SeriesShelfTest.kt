@@ -389,4 +389,40 @@ class SeriesShelfTest {
         assertEquals(2, entries.size)
         assertTrue(entries.filterIsInstance<ShelfEntry.File>().all { it.item.versions.isEmpty() })
     }
+
+    /** The Die Bergretter chat (2026-11-07): "S08 E06b" files were loose tiles beside the series card. */
+    @Test
+    fun `the halves of a split episode join the series as rows of their own`() {
+        val names = listOf(
+            "Die Bergretter - S08 E04a - Der Termin Teil 1.mp4",
+            "Die Bergretter - S08 E04b - Der Termin Teil 2.mp4",
+            "Die Bergretter - S08 E05.mp4",
+            "Die Bergretter - S08 E06b - Schneeblind Teil 2.mp4",
+            "Die Bergretter - S08 E06a - Schneeblind Teil 1.mp4",
+        ).map { video(it) }
+        val entries = SeriesShelf.arrange(names)
+        assertEquals(emptyList<String>(), files(entries))
+        val series = shows(entries).single()
+        val season = series.seasons.single()
+        assertEquals(listOf("S08E04a", "S08E04b", "S08E05", "S08E06a", "S08E06b"), season.episodes.map { it.code })
+        // The halves are not copies of one episode: each keeps its own file.
+        assertEquals(listOf(1, 1, 1, 1, 1), season.episodes.map { it.copies.size })
+        assertFalse(season.episodes[0].sameAs(season.episodes[1]))
+        // A letter that is no half stays out of the code: a codec after the number is not one.
+        assertNull(MediaName.parse("Show.S01E02x264.mkv").episodePart)
+        assertEquals(2, MediaName.parse("Show - S08 E06b.mp4").episodePart)
+        assertNull(MediaName.parse("Show - S08 E06.mp4").episodePart)
+    }
+
+    /** The same film written with and without its accent is one film (2026-11-07, "Am\u00e9lie" and "Amelie"). */
+    @Test
+    fun `a film's accent does not make two tiles`() {
+        val a = video("Am\u00e9lie 2001 1080p BluRay.mkv", size = 2L * 1024 * 1024 * 1024)
+        val b = video("Amelie 2001 720p BluRay.mkv", size = 1L * 1024 * 1024 * 1024)
+        assertEquals(SeriesShelf.sameVideoKey(a), SeriesShelf.sameVideoKey(b))
+        assertEquals(1, files(SeriesShelf.arrange(listOf(a, b))).size)
+        assertEquals("amelie", SeriesShelf.foldAccents("am\u00e9lie"))
+        // Another script is left alone.
+        assertEquals("\u0b87\u0b9f\u0bbf\u0baf\u0b9f\u0bcd", SeriesShelf.foldAccents("\u0b87\u0b9f\u0bbf\u0baf\u0b9f\u0bcd"))
+    }
 }

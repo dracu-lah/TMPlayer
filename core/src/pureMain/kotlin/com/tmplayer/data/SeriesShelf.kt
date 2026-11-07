@@ -24,16 +24,18 @@ data class SeriesEpisode(
      * "S01E01E02" file for episode two. Watching one counts as watching this episode.
      */
     val alsoIn: List<MediaItem> = emptyList(),
+    /** Which half of a split episode this is (1 for "E06a", 2 for "E06b"); 0 for a whole episode. */
+    val part: Int = 0,
 ) {
     /** Watched when any copy is, or any file of several episodes that holds it. */
     fun watched(finished: (MediaItem) -> Boolean): Boolean = copies.any(finished) || alsoIn.any(finished)
 
     /** "S01E02"; a release with no season of its own counts as season one. */
     val code: String
-        get() = "S${season.toString().padStart(2, '0')}E${episode.toString().padStart(2, '0')}"
+        get() = "S${season.toString().padStart(2, '0')}E${episode.toString().padStart(2, '0')}" + if (part > 0) ('a' + part - 1).toString() else ""
 
     /** The same episode, whichever copy each of the two stands for. */
-    fun sameAs(other: SeriesEpisode): Boolean = season == other.season && episode == other.episode
+    fun sameAs(other: SeriesEpisode): Boolean = season == other.season && episode == other.episode && part == other.part
 }
 
 /** One season's episodes, in watching order. */
@@ -148,7 +150,7 @@ object SeriesShelf {
         // pieces make ([SplitPieces.join]) is keyed as any other.
         if (item.splitPiece?.certain == true && item.pieces.isEmpty()) return null
         filmKeyOf(item, name)?.let { return it }
-        val key = name.titleKey.ifEmpty { return null }
+        val key = foldAccents(name.titleKey).ifEmpty { return null }
         name.airDate?.let { return "date:$key|$it" }
         val episode = name.episode ?: return null
         return "episode:$key|${name.season ?: 1}|$episode"
@@ -183,6 +185,44 @@ object SeriesShelf {
             }
         }
         return out.toString()
+    }
+
+    /**
+     * [key] with the accents of Latin letters taken off, for the keys that fold copies of one film
+     * ("Am\u00e9lie" and "Amelie" are one film in two names). Only film copies use it: a show's key
+     * is stored on the device ([WatchLaterRecord]) and stays as it was.
+     */
+    internal fun foldAccents(key: String): String {
+        if (key.all { it < '\u00c0' }) return key
+        val out = StringBuilder(key.length)
+        for (char in key) {
+            when {
+                char in '\u0300'..'\u036f' -> Unit
+                char < '\u00c0' -> out.append(char)
+                else -> out.append(LATIN_BASE[char] ?: char)
+            }
+        }
+        return out.toString()
+    }
+
+    private val LATIN_BASE: Map<Char, Char> = buildMap {
+        for ((base, accented) in listOf(
+            'a' to "\u00e0\u00e1\u00e2\u00e3\u00e4\u00e5\u0101\u0103\u0105",
+            'c' to "\u00e7\u0107\u010d",
+            'd' to "\u010f\u0111",
+            'e' to "\u00e8\u00e9\u00ea\u00eb\u0113\u0117\u0119\u011b",
+            'g' to "\u011f",
+            'i' to "\u00ec\u00ed\u00ee\u00ef\u012b\u0131",
+            'l' to "\u0142",
+            'n' to "\u00f1\u0144\u0148",
+            'o' to "\u00f2\u00f3\u00f4\u00f5\u00f6\u00f8\u014d\u0151",
+            'r' to "\u0159",
+            's' to "\u015b\u0161\u015f\u00df",
+            't' to "\u0165\u021b",
+            'u' to "\u00f9\u00fa\u00fb\u00fc\u016b\u016f\u0171",
+            'y' to "\u00fd\u00ff",
+            'z' to "\u017a\u017c\u017e",
+        )) for (c in accented) put(c, base)
     }
 
     private fun isWordChar(char: Char): Boolean = if (char < '\u0080') {
@@ -544,7 +584,7 @@ object SeriesShelf {
      */
     private fun filmKeyOf(item: MediaItem, name: ParsedName): String? {
         if (name.isSeries) return null
-        val key = name.titleKey
+        val key = foldAccents(name.titleKey)
         if (key.isEmpty()) return null
         if (name.year == null && item.nameMarkers.isEmpty() && (item.genericFileName || ' ' !in key)) return null
         return "$key|${name.year ?: ""}"
@@ -610,7 +650,8 @@ object SeriesShelf {
         val named = files.mapNotNull { it.name.season }.distinct()
         val defaultSeason = named.singleOrNull() ?: 1
         val episodes = files
-            .groupBy { (it.name.season ?: defaultSeason) to it.episode }
+            // A split episode's halves ("E06a", "E06b") are rows of their own: they are not copies.
+            .groupBy { Triple(it.name.season ?: defaultSeason, it.episode, it.name.episodePart ?: 0) }
             .flatMap { (number, copies) ->
                 // Copies of one episode (720p and 1080p) under one row, the newer first; a copy
                 // whose length says it is something else, or that the viewer set apart, a row of
@@ -620,14 +661,14 @@ object SeriesShelf {
                     apart.map { listOf(it.item) }
                 rows.filter { it.isNotEmpty() }.map { members ->
                     val sorted = members.sortedWith(compareByDescending<MediaItem> { it.date }.thenBy { it.messageId })
-                    SeriesEpisode(sorted.first(), number.first, number.second, sorted)
+                    SeriesEpisode(sorted.first(), number.first, number.second, sorted, part = number.third)
                 }
             }
             .let { rows -> withMultiEpisodeFiles(rows, files, defaultSeason) }
         val seasons = episodes
             .groupBy { it.season }
             .sortedByKey()
-            .map { (number, list) -> SeriesSeason(number, list.sortedBy { it.episode }) }
+            .map { (number, list) -> SeriesSeason(number, list.sortedWith(compareBy({ it.episode }, { it.part }))) }
         // "harbour_notes_720p" is the same show as "Harbour.Notes", but the second is how to write it.
         // A file that joined under another name is a last resort for the title.
         // Each title keyed once, not once per comparison of a sort.
