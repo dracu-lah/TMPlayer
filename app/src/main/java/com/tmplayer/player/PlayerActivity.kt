@@ -2040,8 +2040,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     }
 
     /**
-     * Whether the file plays with no seek index: Media3 knows its length but cannot seek in it,
-     * an MKV written without its Cues most often ([noteSeekIndex]).
+     * Whether the file plays with no seek index: Media3 knows its length but cannot seek in it
+     * ([noteSeekIndex]). An MKV without Cues seeks by estimate instead ([CuelessMatroskaSeek]), so
+     * this is what is left: one whose size or head could not be read.
      */
     private var noSeekIndex = false
 
@@ -3609,17 +3610,24 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         // picture; and a long GOP pushed the timestamps a seek searches for past Media3's window,
         // so seeking landed far from the asked place. Jellyfin and Just Player set the same.
         //
+        // An MKV without Cues (ffmpeg writing to a pipe, cam rips) seeks by estimate and a scan to
+        // the next Cluster instead of not at all ([CuelessMatroskaSeek]); Telegram's duration
+        // stands in for one the file leaves out.
+        //
         // Wrapped last so a Dolby Vision track this device would not show as Dolby Vision reaches
         // the player as its HEVC base layer, which both decoders take ([DolbyVisionBaseLayer]).
         val extractors = DolbyVisionBaseLayer(
             this,
-            DefaultExtractorsFactory()
-                .setConstantBitrateSeekingEnabled(true)
-                .setTsExtractorFlags(
-                    androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory.FLAG_ENABLE_HDMV_DTS_AUDIO_STREAMS or
-                        androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES,
-                )
-                .setTsExtractorTimestampSearchBytes(TS_TIMESTAMP_SEARCH_BYTES),
+            CuelessMatroskaSeek(
+                DefaultExtractorsFactory()
+                    .setConstantBitrateSeekingEnabled(true)
+                    .setTsExtractorFlags(
+                        androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory.FLAG_ENABLE_HDMV_DTS_AUDIO_STREAMS or
+                            androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES,
+                    )
+                    .setTsExtractorTimestampSearchBytes(TS_TIMESTAMP_SEARCH_BYTES),
+                durationHintUs = { durationSec.takeIf { it > 0 }?.let { it * 1_000_000L } ?: C.TIME_UNSET },
+            ),
         )
 
         return ExoPlayer.Builder(this, renderers)
