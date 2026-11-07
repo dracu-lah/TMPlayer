@@ -129,6 +129,7 @@ ICONS: list[tuple[str, list[Icon]]] = [
         Icon("Account", "UserCircle", "An account.", "Material AccountCircle"),
         Icon("Person", "User", "A person.", "Material Person"),
         Icon("Group", "UserGroup", "A group.", "TmIcons.Group"),
+        Icon("PersonAdd", "UserAdd01", "Choose chats: a person with a plus.", ""),
         Icon("Channel", "Megaphone02", "A broadcast channel.", "TmIcons.Channel"),
         Icon("Phone", "SmartPhone01", "A phone.", "Material Phone"),
         Icon("Email", "Mail01", "Email.", "Material Email"),

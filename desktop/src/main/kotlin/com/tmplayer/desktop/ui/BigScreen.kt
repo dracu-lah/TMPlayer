@@ -122,6 +122,12 @@ class TvBarFocus {
     val home = FocusRequester()
     val chats = FocusRequester()
 
+    /** The Choose chats button, after the places: Back from that screen puts the remote on it. */
+    val chooseChats = FocusRequester()
+
+    /** The button opened Choose chats, so closing it returns the remote to the button. */
+    var chooseChatsPressed = false
+
     /** Whether the remote is on the bar. */
     var focused by mutableStateOf(false)
         internal set

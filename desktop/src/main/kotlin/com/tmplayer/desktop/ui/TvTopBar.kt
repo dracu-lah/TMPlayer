@@ -120,6 +120,19 @@ internal fun TvTopBar(
         Motion.standard(Motion.Fast),
         label = "tvBarGround",
     )
+    // Back from Choose chats lands on the button that opened it, not on the page behind. Opened
+    // from Settings' row it is left alone: Settings has the remote back.
+    var chooseChatsWasOpen by remember { mutableStateOf(false) }
+    val chooseChatsOpen = com.tmplayer.ui.browse.AddChatsState.open
+    LaunchedEffect(chooseChatsOpen) {
+        if (chooseChatsWasOpen && !chooseChatsOpen && bar.chooseChatsPressed) {
+            bar.chooseChatsPressed = false
+            // A frame for the page behind to settle first, then the button takes the remote.
+            androidx.compose.runtime.withFrameNanos { }
+            runCatching { bar.chooseChats.requestFocus() }
+        }
+        chooseChatsWasOpen = chooseChatsOpen
+    }
     Box(
         modifier
             .fillMaxWidth()
@@ -183,6 +196,18 @@ internal fun TvTopBar(
                 TvTab(s.navChats, TmIcons.Chats, current == NavPlace.Chats, Modifier.focusRequester(bar.chats)) {
                     val open = state.chatSection
                     state.showChats(if (open.onChatsPage) open else BrowseSection.of(BrowseTab.Chats))
+                }
+                // Add or remove chats: an action rather than a place, so an icon named under the
+                // remote's focus, a Right from Chats away. Not while the setup or the gate is up.
+                if (state.chooseChatsAllowed) {
+                    com.tmplayer.ui.components.ChooseChatsButton(
+                        focus = bar.chooseChats,
+                        size = TV_CLUSTER_ITEM,
+                        shortcut = CHOOSE_CHATS_SHORTCUT,
+                        onClick = {
+                            bar.chooseChatsPressed = state.chooseChats()
+                        },
+                    )
                 }
             }
             Spacer(Modifier.width(18.dp))
