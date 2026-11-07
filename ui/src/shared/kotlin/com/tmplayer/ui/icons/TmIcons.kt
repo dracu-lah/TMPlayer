@@ -535,6 +535,16 @@ object TmIcons {
         )
     }
 
+    /** Choose chats: a person with a plus. Hugeicons UserAdd01. */
+    val PersonAdd: ImageVector by lazy {
+        icon(
+            "PersonAdd",
+            s("M3 20.5002C3.28417 16.8058 6.3 13.7193 10.0008 13.5379C10.3134 13.5226 10.6446 13.5097 11 13.5L11.995 13.5663C12.6939 13.6129 13.3665 13.7543 14 13.9777"),
+            s("M18 15.5V21.5M21 18.5L15 18.5"),
+            s("M7 6.5a4 4 0 1 0 8 0a4 4 0 1 0 -8 0Z"),
+        )
+    }
+
     /** A broadcast channel. Hugeicons Megaphone02. */
     val Channel: ImageVector by lazy {
         icon(
