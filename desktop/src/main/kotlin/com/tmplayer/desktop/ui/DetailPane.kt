@@ -209,7 +209,8 @@ private fun DetailPane(state: ShellState, request: DetailRequest) {
     // The viewer's corrections to this file, and whether a provider's match is showing for it.
     val corrections by com.tmplayer.data.VideoCorrections.state.collectAsState()
     val correction = corrections[item.id]
-    val matched = com.tmplayer.ui.online.rememberMatched(item) != null
+    val shownMatch = com.tmplayer.ui.online.rememberMatched(item)?.info
+    val matched = shownMatch != null
     // The comments under a channel post (CP81).
     val comments = com.tmplayer.ui.browse.rememberCommentCount(item)
 
@@ -248,6 +249,8 @@ private fun DetailPane(state: ShellState, request: DetailRequest) {
     var confirmingRemove by remember(item.id) { mutableStateOf(false) }
     // "Rename" is asked over the pane too, which closes once the title is saved.
     var renaming by remember(item.id) { mutableStateOf(false) }
+    // "Choose the right poster" is asked over the pane too; the pane stays open under it.
+    var choosingPoster by remember(item.id) { mutableStateOf(false) }
     // The comments' videos open over the pane, which stays until they close.
     var commentsOpen by remember(item.id) { mutableStateOf(false) }
 
@@ -258,6 +261,10 @@ private fun DetailPane(state: ShellState, request: DetailRequest) {
         }
         if (action == DetailAction.Rename) {
             renaming = true
+            return
+        }
+        if (action == DetailAction.ChoosePoster) {
+            choosingPoster = true
             return
         }
         if (action == DetailAction.CommentVideos) {
@@ -356,10 +363,10 @@ private fun DetailPane(state: ShellState, request: DetailRequest) {
             DetailAction.WrongMatch, DetailAction.UseMatch -> {
                 val wrong = action == DetailAction.WrongMatch
                 outlives.launch {
-                    runCatching { state.settings.correct(com.tmplayer.data.VideoCorrections.filesOf(item)) { it.copy(wrongMatch = wrong) } }
+                    runCatching { state.settings.correct(com.tmplayer.data.VideoCorrections.filesOf(item)) { it.withWrongMatch(wrong) } }
                 }
             }
-            DetailAction.Rename, DetailAction.CommentVideos -> Unit
+            DetailAction.Rename, DetailAction.CommentVideos, DetailAction.ChoosePoster -> Unit
             DetailAction.ExportCopy -> outlives.launch {
                 val file = record?.localPath?.let(::File)?.takeIf { it.isFile }
                 if (file == null) {
@@ -465,6 +472,34 @@ private fun DetailPane(state: ShellState, request: DetailRequest) {
             // closes (or stays, should the video be refused).
             onPlay = { video -> com.tmplayer.ui.browse.LinkRequests.play(video) },
             onDismiss = { commentsOpen = false },
+        )
+    }
+
+    if (choosingPoster) {
+        PosterPickerDialog(
+            item = item,
+            correction = correction,
+            shown = shownMatch,
+            onPick = { pick, others ->
+                choosingPoster = false
+                // Every copy of the tile, so the pick holds whichever one it shows; the others of the
+                // title in this chat only when the viewer ticked the box.
+                outlives.launch {
+                    runCatching {
+                        state.settings.correct(
+                            com.tmplayer.data.VideoCorrections.filesOf(item) + others.flatMap { com.tmplayer.data.VideoCorrections.filesOf(it) },
+                            com.tmplayer.ui.browse.correctionFor(pick),
+                        )
+                    }
+                }
+            },
+            onReset = {
+                choosingPoster = false
+                outlives.launch {
+                    runCatching { state.settings.correct(com.tmplayer.data.VideoCorrections.filesOf(item), com.tmplayer.ui.browse.correctionFor(null)) }
+                }
+            },
+            onDismiss = { choosingPoster = false },
         )
     }
 

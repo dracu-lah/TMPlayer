@@ -106,6 +106,8 @@ fun rememberMatchedState(item: MediaItem, showOnly: Boolean = false): MetaState<
         // The item's own question, read once per video and mostly already read off the main
         // thread by Home's rows: asked afresh per tile as a TV row scrolled, it held the main thread.
         known = if (renamed == null) item.metaQuery else null,
+        // The title the viewer picked ("Choose the right poster"), asked for by its id.
+        pick = correction?.pick,
     )
     val found = lookup.value
     val name = remember(item, renamed) { com.tmplayer.data.SeriesShelf.episodeOf(item, onlyThis(item, correction)) }
@@ -153,14 +155,21 @@ class MetaState<out T>(val value: T?, val settled: Boolean) {
 
 /** The provider's answer for a name, before anything checks that it is the right one. */
 @Composable
-private fun rememberLookup(fileName: String, caption: String?, showOnly: Boolean, known: MetaQuery? = null): MetaState<MetaInfo> {
+private fun rememberLookup(
+    fileName: String,
+    caption: String?,
+    showOnly: Boolean,
+    known: MetaQuery? = null,
+    pick: com.tmplayer.data.PosterPick? = null,
+): MetaState<MetaInfo> {
     val online = OnlineMetadata.current ?: return MetaState(null, true)
     // The screen's own collectors where it provides them ([com.tmplayer.ui.components.LocalTileShared]).
     val settings by com.tmplayer.ui.components.rememberMetaSettings(online)
     if (!settings.enabled) return MetaState(null, true)
     val language by com.tmplayer.ui.components.rememberLanguage()
-    val query = remember(fileName, caption, showOnly) {
-        (known ?: MetaQuery.of(fileName, caption))?.let { if (showOnly) it.showOnly() else it }
+    val query = remember(fileName, caption, showOnly, pick) {
+        val base = known ?: MetaQuery.of(fileName, caption)
+        (if (pick != null) pick.forcing(base, fileName) else base)?.let { if (showOnly) it.showOnly() else it }
     } ?: return MetaState(null, true)
     // Any answer in memory, "nothing matched" included, is a settled one.
     val peeked = remember(query, language.tag, settings) { online.peek(query) }
@@ -661,8 +670,10 @@ private const val BACKDROPS_AHEAD = 2
 private suspend fun metaFor(item: MediaItem, showOnly: Boolean): MetaInfo? {
     val online = OnlineMetadata.current ?: return null
     if (!online.settings.value.enabled) return null
-    val renamed = com.tmplayer.data.VideoCorrections.state.value[item.id]?.title
-    val query = MetaQuery.of(renamed ?: item.nameForParsing, if (renamed != null) null else item.caption)
+    val correction = com.tmplayer.data.VideoCorrections.state.value[item.id]
+    val renamed = correction?.title
+    val base = MetaQuery.of(renamed ?: item.nameForParsing, if (renamed != null) null else item.caption)
+    val query = (correction?.pick?.forcing(base, renamed ?: item.title) ?: base)
         ?.let { if (showOnly) it.showOnly() else it } ?: return null
     return (online.peek(query) as? MetaResult.Found)?.info
         ?: (withContext(Dispatchers.IO) { runCatching { online.lookup(query) }.getOrNull() } as? MetaResult.Found)?.info
@@ -754,7 +765,8 @@ private class FeaturedTarget(val item: MediaItem, val query: MetaQuery?, val nam
 private fun featuredTarget(pick: com.tmplayer.data.FeaturedPick, correction: com.tmplayer.data.VideoCorrection?): FeaturedTarget {
     val item = pick.item
     val renamed = correction?.title
-    val query = (if (renamed == null) item.metaQuery else MetaQuery.of(renamed, null))?.let { if (pick.isShow) it.showOnly() else it }
+    val base = if (renamed == null) item.metaQuery else MetaQuery.of(renamed, null)
+    val query = (correction?.pick?.forcing(base, renamed ?: item.title) ?: base)?.let { if (pick.isShow) it.showOnly() else it }
     val name = com.tmplayer.data.SeriesShelf.episodeOf(item, onlyThis(item, correction))
     return FeaturedTarget(item, query, name, correction?.wrongMatch == true)
 }

@@ -923,6 +923,16 @@ class MediaListViewModel(
      * by the size limits. An empty listing already says so in its own words, so it is not told
      * twice; a search ignores the limits.
      */
+    private fun watchSiblings() {
+        viewModelScope.launch {
+            _state.collect { state ->
+                // The videos this chat's grid holds, for "Choose the right poster" to offer the same
+                // pick to the others of a title. A search's narrowed list is not the chat.
+                if (state is UiState.Content && query.isBlank()) com.tmplayer.data.SiblingVideos.note(chatId, state.value.items)
+            }
+        }
+    }
+
     private fun watchHidden() {
         viewModelScope.launch {
             _state.collect { state ->
@@ -994,6 +1004,7 @@ class MediaListViewModel(
         loadTopics()
         followChanges()
         watchHidden()
+        watchSiblings()
         // Nothing but the videos is listed over a chat's grid any more (user, 2026-10-22: TMPlayer
         // plays videos): its audio, its round video messages and its pinned post (CP81) are not
         // fetched, so no request is spent on them and every platform's grid starts with the videos.

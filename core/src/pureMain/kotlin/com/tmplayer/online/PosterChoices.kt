@@ -45,7 +45,7 @@ object PosterChoiceRules {
     const val LIMIT = 10
 
     /** The longest overview line kept per title. */
-    const val OVERVIEW_MAX = 220
+    const val OVERVIEW_MAX = 140
 
     /**
      * [lists] (each the answer of one search, films or shows, with the year or without it) merged

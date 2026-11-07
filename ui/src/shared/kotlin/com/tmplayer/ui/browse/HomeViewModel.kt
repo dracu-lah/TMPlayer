@@ -1200,7 +1200,7 @@ private fun PrefetchHomeArt(rows: List<HomeRow>, model: HomeViewModel) {
                         // row that changed meanwhile set off lookups, downloads and decodes that
                         // took the line and a weak CPU from playback. They go on once it stops.
                         model.untilIdle()
-                        val query = item.metaQuery
+                        val query = com.tmplayer.data.VideoCorrections.queryOf(item)
                             ?.let { if (show) it.showOnly() else it } ?: return@withPermit
                         val known = (online.peek(query) as? com.tmplayer.online.MetaResult.Found)?.info
                         if (known != null && !logo) return@withPermit

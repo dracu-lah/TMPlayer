@@ -216,7 +216,36 @@ internal fun MediaDetailOpened(
     // The viewer's corrections to this file, and whether a provider's match is showing for it.
     val corrections by com.tmplayer.data.VideoCorrections.state.collectAsStateWithLifecycle()
     val correction = corrections[item.id]
-    val matched = com.tmplayer.ui.online.rememberMatched(item) != null
+    val shownMatch = com.tmplayer.ui.online.rememberMatched(item)?.info
+    val matched = shownMatch != null
+    // "Choose the right poster" is a window over the page (or the hold menu), so the focus the
+    // row had is where the remote is back to when it closes.
+    var choosingPoster by remember { mutableStateOf(false) }
+    if (choosingPoster) {
+        val closePicker: () -> Unit = { choosingPoster = false; if (asMenu) onDismiss() }
+        PosterPickerSheet(
+            item = item,
+            correction = correction,
+            shown = shownMatch,
+            onPick = { pick, others ->
+                // Every copy of the tile, so the pick holds whichever one it shows; the others of the
+                // title in this chat only when the viewer ticked it.
+                App.backgroundScope.launch {
+                    runCatching {
+                        settings.correct(com.tmplayer.data.VideoCorrections.filesOf(item) + others.flatMap { com.tmplayer.data.VideoCorrections.filesOf(it) }, correctionFor(pick))
+                    }
+                }
+                closePicker()
+            },
+            onReset = {
+                App.backgroundScope.launch {
+                    runCatching { settings.correct(com.tmplayer.data.VideoCorrections.filesOf(item), correctionFor(null)) }
+                }
+                closePicker()
+            },
+            onDismiss = closePicker,
+        )
+    }
     var renaming by remember { mutableStateOf(false) }
     if (renaming) {
         com.tmplayer.player.BookmarkNoteSheet(
@@ -371,9 +400,10 @@ internal fun MediaDetailOpened(
             } }
             DetailAction.WrongMatch, DetailAction.UseMatch -> { {
                 val wrong = action == DetailAction.WrongMatch
-                App.backgroundScope.launch { runCatching { settings.correct(com.tmplayer.data.VideoCorrections.filesOf(item)) { it.copy(wrongMatch = wrong) } } }
+                App.backgroundScope.launch { runCatching { settings.correct(com.tmplayer.data.VideoCorrections.filesOf(item)) { it.withWrongMatch(wrong) } } }
                 leave()
             } }
+            DetailAction.ChoosePoster -> { { choosingPoster = true } }
             DetailAction.Rename -> { { renaming = true } }
             DetailAction.CommentVideos -> { { commentsOpen = true } }
             DetailAction.ExportCopy -> { {
