@@ -32,8 +32,8 @@ import java.io.File
 import java.nio.file.Files
 
 /**
- * A video's detail sheet floating over Home, a show's page, at the two common window sizes
- * (1280x800 and 1920x1080), in both themes: the sheet over a scrim with Home unmoved under it, a
+ * A video's detail sheet floating over Home, a show's page, at 900, 1280, 1920 and 2560 dp wide
+ * in both themes: the sheet over a scrim with Home unmoved under it, a
  * film and an episode, and the sheet's whole length drawn in a tall window. With
  * TMPLAYER_SHOTS=<dir> the frames are written there.
  */
@@ -99,7 +99,7 @@ class DetailSheetRenderTest {
             val home: @androidx.compose.runtime.Composable () -> Unit = {
                 HomeRowsView(shell, rows, chats, emptyMap(), onRowShown = {}, onArtWanted = {}, onRefresh = {})
             }
-            for ((w, h) in listOf(1280 to 800, 1920 to 1080)) {
+            for ((w, h) in listOf(900 to 700, 1280 to 800, 1920 to 1080, 2560 to 1440)) {
                 for (dark in listOf(true, false)) {
                     val theme = if (dark) "dark" else "light"
                     shell.openDetail(DetailRequest(bunny, "Film Club", outsideChat = true))

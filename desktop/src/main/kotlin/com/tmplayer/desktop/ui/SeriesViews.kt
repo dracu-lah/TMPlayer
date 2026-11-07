@@ -219,7 +219,10 @@ internal fun SeriesPage(
     CoverWindowControls()
     // The same margin as a video's page, so the two title pages start on one line.
     val margin = titlePageMargin()
-    Box(Modifier.fillMaxSize()) {
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
+        // A window wider than the content column keeps the words and the episodes in a centred
+        // column with equal gutters, as a video's page does; the backdrop still runs full bleed.
+        val gutter = maxOf(margin, (maxWidth - com.tmplayer.ui.browse.TitlePageContentMax) / 2)
         SeriesPanel(
             series = series,
             watch = watch,
@@ -236,7 +239,7 @@ internal fun SeriesPage(
             } else {
                 null
             },
-            contentPadding = PaddingValues(start = margin, end = margin, bottom = 24.dp),
+            contentPadding = PaddingValues(start = gutter, end = gutter, bottom = 24.dp),
             modifier = Modifier.fillMaxSize(),
             seasonPicker = { selected, onSelect ->
                 SeasonDropdown(series.seasons, selected, onSelect, startOpen)

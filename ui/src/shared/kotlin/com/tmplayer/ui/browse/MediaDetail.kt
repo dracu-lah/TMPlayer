@@ -454,6 +454,8 @@ internal fun DetailFacts(
     credit: MetaInfo? = null,
     showSynopsis: Boolean = true,
     large: Boolean = false,
+    /** A long file name may run to more lines, breaking anywhere, rather than be cut at three (a wide page's About block). */
+    wrapName: Boolean = false,
 ) {
     val factStyle = if (large) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodySmall
     val interactions = remember { MutableInteractionSource() }
@@ -507,7 +509,7 @@ internal fun DetailFacts(
                     value,
                     style = factStyle,
                     color = Tone.text,
-                    maxLines = 3,
+                    maxLines = if (wrapName && label == s.detailFileName) FILE_NAME_LINES else 3,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
@@ -579,6 +581,9 @@ val DETAIL_PANE_WIDTH = 440.dp
 private val DETAIL_POSTER = 84.dp
 private val DETAIL_POSTER_TV = 72.dp
 private val FACT_LABEL = 112.dp
+
+/** Lines a long file name may take in a wide page's About block before it is cut. */
+private const val FILE_NAME_LINES = 6
 
 /** The facts table's labels on a large window's page, where they are set a size up. */
 private val FACT_LABEL_LARGE = 132.dp
