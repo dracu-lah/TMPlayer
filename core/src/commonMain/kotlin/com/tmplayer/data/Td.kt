@@ -1099,9 +1099,26 @@ object Td {
      * the stall sheet's Try again does, before the sheet is shown at all. TDLib's download carries
      * on over the new connections by itself.
      */
-    fun nudgeForStream() {
+    fun nudgeForStream(fileId: Int = 0) {
         Logger.i(TAG, "a video's bytes stopped; reopening connections")
-        scope.launch { runCatching { retryConnecting() } }
+        scope.launch {
+            runCatching { retryConnecting() }
+            runCatching { dropStalledDownload(fileId) }
+        }
+    }
+
+    /**
+     * Drops TDLib's download of [fileId], so that the next open asks for the bytes afresh. A
+     * download TDLib still calls active but that sends nothing (a video left part way, opened
+     * again later: "This video hasn't started", and Try again, which only reopened the connections,
+     * did the same until another video was watched) is taken by the stream's open as running, and
+     * never asked for again. A file the viewer is downloading is not ours to cancel.
+     */
+    suspend fun dropStalledDownload(fileId: Int) {
+        if (fileId <= 0 || OfflineDownloads.isDownloading(fileId)) return
+        val td = current ?: return
+        Logger.i(TAG, "dropping the stalled download of file $fileId")
+        td.cancelDownloadFile(fileId, onlyIfPending = false)
     }
 
     /**

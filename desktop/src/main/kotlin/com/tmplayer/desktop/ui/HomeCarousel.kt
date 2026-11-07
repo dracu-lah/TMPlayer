@@ -624,9 +624,17 @@ internal fun rememberFeatured(recent: HomeRow.Recent?, resume: HomeRow.Continue?
     return if (!enabled) emptyList() else decided
 }
 
-/** How tall the carousel is in a page [width] by [height]: wide, never most of the window. */
+/**
+ * How tall the carousel is in a page [width] by [height]: [FEATURED_WIDTH_SHARE] of the width, never
+ * more than [FEATURED_HEIGHT_SHARE] of the window (it was 0.34 and 0.5, which read as a strip on a
+ * big window; user, 2026-11-07). The first row of Recently added still peeks in above the fold of
+ * a 1080p window. The same figure sizes the skeleton, so nothing on Home moves when pages load.
+ */
 internal fun featuredHeight(width: Dp, height: Dp): Dp =
-    (width * 0.34f).coerceAtMost(height * 0.5f).coerceAtLeast(MIN_HEIGHT)
+    (width * FEATURED_WIDTH_SHARE).coerceAtMost(height * FEATURED_HEIGHT_SHARE).coerceAtLeast(MIN_HEIGHT)
+
+internal const val FEATURED_WIDTH_SHARE = 0.42f
+internal const val FEATURED_HEIGHT_SHARE = 0.62f
 
 private const val ADVANCE_MS = 6_000
 

@@ -57,6 +57,14 @@ object Thumbnails {
     private var memoryClass = 0
 
     /**
+     * Whether [mini] blurs the inline preview. Always on, except in the promo build, whose demo
+     * pictures are full size: blurred, the screenshots' chat photos read as a smudge, where a
+     * real account's are sharp the moment their own file arrives.
+     */
+    @Volatile
+    var softenMini: Boolean = true
+
+    /**
      * The "Lighter pictures" setting (CP68): half the usual share of the heap for pictures, and
      * thumbnails, posters and stills decoded at [lighter] widths. Set from the stored choice; a
      * change empties the cache, since what is in it was decoded at the other size. Snapshot
@@ -101,7 +109,7 @@ object Thumbnails {
         cache.get(key)?.let { return it }
         val raw = decodeImage(data) ?: return null
         // Not on a television: the preview stretched with low filtering is soft already.
-        if (com.tmplayer.ui.theme.Motion.television) return raw.also { cache.put(key, it) }
+        if (!softenMini || com.tmplayer.ui.theme.Motion.television) return raw.also { cache.put(key, it) }
         return (runCatching { MiniBlur.soften(raw) }.getOrNull() ?: raw).also { cache.put(key, it) }
     }
 

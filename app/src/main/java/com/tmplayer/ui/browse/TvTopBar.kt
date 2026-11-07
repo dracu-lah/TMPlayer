@@ -142,6 +142,13 @@ internal fun TvTopBar(
     onDown: (() -> Boolean)? = null,
     /** Also on the account's picture, for Back from Settings to put the remote back where it opened. */
     profileFocus: FocusRequester? = null,
+    /**
+     * Opens the Choose chats screen; null leaves the button off the bar (a page outside the
+     * browser, the setup before any chat is chosen).
+     */
+    onChooseChats: (() -> Unit)? = null,
+    /** On the Choose chats button, for Back from that screen to put the remote back on it. */
+    chooseChatsFocus: FocusRequester? = null,
 ) {
     val s = LocalStrings.current
     var profileOpen by remember { mutableStateOf(false) }
@@ -209,6 +216,15 @@ internal fun TvTopBar(
                 BarTab(s.commonSearch, TmIcons.Search, searchOpen, onSearch, Modifier.focusRequester(searchRequester).tvReturnPoint(searchRequester))
                 BarTab(s.browseTabHome, TmIcons.Home, current == TvBarTab.Home && !searchOpen, onHome, Modifier.focusRequester(focusOf(TvBarTab.Home, homeFocus)).tvReturnPoint(focusOf(TvBarTab.Home, homeFocus)))
                 BarTab(s.browseTabChats, TmIcons.Chats, current == TvBarTab.Chats && !searchOpen, onChats, Modifier.focusRequester(focusOf(TvBarTab.Chats, chatsFocus)).tvReturnPoint(focusOf(TvBarTab.Chats, chatsFocus)))
+                // Add or remove chats, a Right from Chats away: an action, not a page, so it is
+                // only an icon (named under the remote's focus) after the places.
+                if (onChooseChats != null) {
+                    com.tmplayer.ui.components.ChooseChatsButton(
+                        focus = chooseChatsFocus,
+                        size = CLUSTER_ITEM,
+                        onClick = onChooseChats,
+                    )
+                }
             }
             Spacer(Modifier.width(18.dp))
             // The app's own mark and its name, the way a television's home screen signs itself:

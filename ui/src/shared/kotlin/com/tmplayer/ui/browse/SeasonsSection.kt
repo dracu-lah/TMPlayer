@@ -94,6 +94,8 @@ fun SeasonsSection(
     extras: MetaExtras?,
     onOpenItem: ((MediaItem) -> Unit)?,
     modifier: Modifier = Modifier,
+    /** The episode list's widest; a wide desktop page lets it run the width of its column. */
+    listMax: androidx.compose.ui.unit.Dp = 860.dp,
 ) {
     val s = LocalStrings.current
     val tv = !isTouch()
@@ -161,7 +163,7 @@ fun SeasonsSection(
             Text(s.detailNotInChatHint, style = MaterialTheme.typography.bodySmall, color = Tone.muted)
         }
 
-        Column(Modifier.widthIn(max = 860.dp), verticalArrangement = Arrangement.spacedBy(if (tv) 8.dp else 4.dp)) {
+        Column(Modifier.widthIn(max = listMax), verticalArrangement = Arrangement.spacedBy(if (tv) 8.dp else 4.dp)) {
             episodes.forEach { episode ->
                 GuideRow(
                     episode = episode,

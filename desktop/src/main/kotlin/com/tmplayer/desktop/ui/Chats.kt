@@ -152,6 +152,14 @@ fun ChatsPage(
         PageHeader(
             title = if (favouritesOnly) s.navFavourites else section.heading,
             actions = {
+                // Add or remove chats in one click; not while the setup or the gate is up.
+                if (state.chooseChatsAllowed) {
+                    com.tmplayer.ui.components.ChooseChatsButton(
+                        size = CHOOSE_CHATS_SIZE,
+                        shortcut = CHOOSE_CHATS_SHORTCUT,
+                        onClick = { state.chooseChats() },
+                    )
+                }
                 SearchField(
                     query = query,
                     onQuery = { query = it },

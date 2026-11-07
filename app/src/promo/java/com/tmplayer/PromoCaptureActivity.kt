@@ -135,6 +135,8 @@ class PromoCaptureActivity : ComponentActivity() {
         val tv = intent.getBooleanExtra("tv", false)
         // Before setContent, because the whole tree branches on it during the first composition.
         FormFactor.override(tv)
+        // The demo pictures are full size, not Telegram's 40 px previews: no blur over them.
+        com.tmplayer.data.Thumbnails.softenMini = false
         // `--es fire tv|tablet` answers the Fire OS question as that device would, so the Fire
         // differences (no Watch Next switch, the keyboard's dictation hint) can be seen without one.
         promoFireOs(intent.getStringExtra("fire"))

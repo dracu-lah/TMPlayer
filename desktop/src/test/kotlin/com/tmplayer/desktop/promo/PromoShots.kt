@@ -141,6 +141,11 @@ class PromoShots {
         ChatSummary(chat.id, chat.title, chat.avatar?.let(pictures::bytes), 0, chat.kind, unreadCount = UNREAD[chat.id] ?: 0, isPinned = chat.id == PromoCatalog.CINEMA)
     }
 
+    init {
+        // The shell sets this once signed in and past the setup; the shots show the button.
+        shell.chooseChatsAllowed = true
+    }
+
     private val cinema = chats.first { it.id == PromoCatalog.CINEMA }
 
     /** The demo's posters and overviews, over the shared canned TMDB, warmed so a frame shows them rather than the wait. */
@@ -188,6 +193,11 @@ class PromoShots {
                 PageHeader(
                     title = section.heading,
                     actions = {
+                        com.tmplayer.ui.components.ChooseChatsButton(
+                            size = com.tmplayer.desktop.ui.CHOOSE_CHATS_SIZE,
+                            shortcut = com.tmplayer.desktop.ui.CHOOSE_CHATS_SHORTCUT,
+                            onClick = {},
+                        )
                         SearchField("", {}, "Search chats", shell.searchFocus, Modifier.widthIn(min = 160.dp, max = 280.dp))
                         IconButton(onClick = {}) { Icon(TmIcons.Refresh, contentDescription = "Refresh") }
                     },

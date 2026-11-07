@@ -431,7 +431,7 @@ internal val LocalPageOnScreen = androidx.compose.runtime.compositionLocalOf { t
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PhonePageFrame(
+internal fun PhonePageFrame(
     section: BrowseSection,
     count: Int,
     refresh: (() -> Unit)?,
@@ -451,7 +451,11 @@ private fun PhonePageFrame(
                 // No title: Home's featured carousel is the top of the page.
             } else if (pinned) {
                 // From the start, in the same bar and type as Settings' title.
-                TopAppBar(title = { Text(s.browseTabChats, maxLines = 1, overflow = TextOverflow.Ellipsis) })
+                // Choose chats at its end: add or remove chats in one tap from the list they fill.
+                TopAppBar(
+                    title = { Text(s.browseTabChats, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    actions = { com.tmplayer.ui.components.ChooseChatsButton() },
+                )
             } else {
                 TopAppBar(
                     scrollBehavior = scrollBehavior,

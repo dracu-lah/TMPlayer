@@ -86,3 +86,27 @@ test('a show: Mark episodes names its count and ticks the season, and the whole 
     await page.goto('/history/later')
     await expect(page.locator('.card-name', { hasText: 'Harbour Notes' })).toBeVisible()
 })
+
+test('a wide desktop page is one centred column with equal gutters: the words and About stand side by side, the episodes under both', async ({ page }) => {
+    await mockTmdb(page)
+    await page.setViewportSize({ width: 1920, height: 1000 })
+    await page.goto('/video/-1001/1')
+    const form = await page.evaluate(() => document.documentElement.dataset.form)
+    test.skip(form !== 'desktop', 'the two columns are the desktop layout')
+    await expect(page.locator('.detail-title')).toHaveText('Big Buck Bunny')
+    const box = async (sel: string) => (await page.locator(sel).first().boundingBox())!
+    const width = await page.evaluate(() => document.documentElement.clientWidth)
+    const head = await box('.detail-head')
+    const side = await box('.detail-about')
+    const main = await box('.detail-overview')
+    // Symmetric: the space before the first column equals the space after the last, within a pixel.
+    expect(Math.abs(head.x - (width - (side.x + side.width)))).toBeLessThanOrEqual(1)
+    expect(side.x + side.width - head.x).toBeLessThanOrEqual(1280)
+    // Two columns: About starts to the right of the overview's end, level with the actions and above the overview.
+    expect(side.x).toBeGreaterThan(main.x + main.width)
+    const actions = await box('.detail-actions')
+    expect(Math.abs(side.y - actions.y)).toBeLessThanOrEqual(8)
+    // The file name has room: its value is not squeezed into a narrow column.
+    const value = await box('.detail-about dd')
+    expect(value.width).toBeGreaterThan(200)
+})

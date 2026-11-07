@@ -61,6 +61,15 @@ html[data-form=tv] .offline-line { bottom: var(--tv-safe-v); }
 .tv-tab .icon { width: calc(var(--dp) * 20); height: calc(var(--dp) * 20); }
 .tv-tab[aria-current] { color: var(--fg); font-weight: 600; }
 html[data-tv-keys] .tv-tab:focus { outline: none; background: var(--focus-fill); color: var(--on-focus-fill); font-weight: 600; transform: scale(var(--focus-scale)); }
+/* Choose chats: a round button at the bar's end, as the fullscreen toggle's colours. */
+.tv-choose {
+  flex: none; width: calc(var(--dp) * 40); height: calc(var(--dp) * 40); border-radius: 50%;
+  display: grid; place-items: center; color: var(--muted); text-decoration: none;
+  transition: transform var(--fast) var(--ease), background-color var(--fast), color var(--fast);
+}
+.tv-choose .icon { width: calc(var(--dp) * 20); height: calc(var(--dp) * 20); }
+html[data-tv-keys] .tv-choose:focus { outline: none; background: var(--focus-fill); color: var(--on-focus-fill); transform: scale(var(--focus-scale)); }
+html[data-theme=light][data-tv-keys] .tv-choose:focus { box-shadow: 0 0 0 calc(var(--dp) * 2) var(--accent); }
 /* The account's picture: a thin ring in the accent while Settings is shown; under the remote a
    wider ring a little way out, with a halo of the page's own ground so it reads over the carousel. */
 .tv-picture {
@@ -90,7 +99,7 @@ html[data-theme=light][data-tv-keys] .tv-fullscreen:focus { box-shadow: 0 0 0 ca
 
 /* ---- Home's carousel (TvHomeCarousel): 232 dp under the bar, its picture up behind it ---- */
 /* Home has no heading on a TV: the carousel, or the rows, start under the bar. */
-html[data-form=tv] .page > .page-title.home-title { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+html[data-form=tv] .page .page-title.home-title { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 .tv-hero {
   position: relative; height: calc(var(--tv-bar-h) + var(--dp) * 232);
   margin: calc(-1 * var(--tv-bar-h)) calc(-1 * var(--tv-end)) calc(var(--dp) * 16) calc(-1 * var(--tv-safe-h));
@@ -359,7 +368,12 @@ html[data-form=tv] .detail-close { display: none; }
 html[data-form=tv] .detail-body {
   margin-top: 0; padding: 40vh calc(var(--dp) * 56) 0; gap: calc(var(--dp) * 16);
 }
-html[data-form=tv] .detail-body > * { order: 3; }
+/* The cols and main wrappers pass their children to the body (display: contents), so the order is set on the children. */
+html[data-form=tv] .detail-body > *, html[data-form=tv] .detail-main > *, html[data-form=tv] .detail-side > * { order: 3; }
+html[data-form=tv] .detail-body > .detail-episodes { order: 4; }
+html[data-form=tv] .detail-side > .detail-about { order: 5; }
+html[data-form=tv] .detail-main > .detail-cast { order: 6; }
+html[data-form=tv] .detail-body > .more-from { order: 7; }
 html[data-form=tv] .detail-head { order: 0; max-width: 55%; gap: calc(var(--dp) * 8); }
 html[data-form=tv] .detail-overview { order: 1; max-width: 55%; }
 html[data-form=tv] .detail-actions { order: 2; flex-direction: row; align-items: flex-start; gap: calc(var(--dp) * 12); margin-top: calc(var(--dp) * 4); }

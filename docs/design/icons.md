@@ -89,6 +89,7 @@ shows through in the background. They are listed under Selected twins below.
 | `Account` | UserCircle |  | Material AccountCircle | An account. |
 | `Person` | User |  | Material Person | A person. |
 | `Group` | UserGroup |  | TmIcons.Group | A group. |
+| `PersonAdd` | UserAdd01 |  |  | Choose chats: a person with a plus. |
 | `Channel` | Megaphone02 |  | TmIcons.Channel | A broadcast channel. |
 | `Phone` | SmartPhone01 |  | Material Phone | A phone. |
 | `Email` | Mail01 |  | Material Email | Email. |
