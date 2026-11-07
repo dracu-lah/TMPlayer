@@ -7,6 +7,7 @@ import { createEffect, createSignal, For, on, onCleanup, onMount, Show } from 's
 import { A, useLocation, useNavigate } from '@solidjs/router'
 import { ArrowExpandIcon, ArrowShrinkIcon, Home03Icon, InformationCircleIcon, Message01Icon, PlayIcon, Search01Icon } from '@hugeicons/core-free-icons'
 import { Icon, type IconData } from '../ui/Icon'
+import { ChooseChatsButton } from '../ui/ChooseChatsButton'
 import { initialOf } from '../ui/initial'
 import { nameArt } from '../ui/colour'
 import { me, back } from '../session'
@@ -157,6 +158,10 @@ export function TvBar() {
                         )}
                     </For>
                 </nav>
+                {/* The way into Choose chats, on the two pages that list what was chosen. */}
+                <Show when={location.pathname === '/' || location.pathname === '/chats'}>
+                    <ChooseChatsButton class="tv-choose" size={20} />
+                </Show>
                 <TvFullscreenToggle />
                 <div class="tv-brand" aria-hidden="true">
                     <img src="/icon.svg" alt="" width="40" height="40" />

@@ -130,6 +130,32 @@ for (const size of [
             await expect.poll(() => focused(page)).toBe(row)
         })
 
+        test('Choose chats: the bar holds a button on Home and Chats, OK opens the picker on its page, Back returns the remote to the button', async ({ page }) => {
+            await page.goto('/')
+            await expect.poll(() => focused(page)).toContain('card|/video/')
+            await press(page, 'ArrowUp')
+            await press(page, 'ArrowRight')
+            await press(page, 'Enter')
+            await expect(page).toHaveURL(/\/chats$/)
+            await expect.poll(() => focused(page)).toBe('tv-tab|/chats')
+            await press(page, 'ArrowRight')
+            expect(await focused(page)).toBe('choose-chats|/added-chats')
+            await expect(page.locator('.list-head .choose-chats')).toHaveCount(0)
+            await press(page, 'Enter')
+            await expect(page).toHaveURL(/\/added-chats$/)
+            // The picker takes the remote, not the bar.
+            await expect.poll(() => page.evaluate(() => !!document.activeElement?.closest('.page'))).toBe(true)
+            await press(page, 'Backspace')
+            await expect(page).toHaveURL(/\/chats$/)
+            await expect.poll(() => focused(page)).toBe('choose-chats|/added-chats')
+            await press(page, 'ArrowLeft')
+            expect(await focused(page)).toBe('tv-tab|/chats')
+            // Home has it too, and its first focus stays on the content.
+            await page.goto('/')
+            await expect.poll(() => focused(page)).toContain('card|/video/')
+            await expect(page.locator('.tv-bar .choose-chats')).toHaveCount(1)
+        })
+
         test('Settings: a choice is made with OK, not by moving; Sign out asks, Back closes the question onto it', async ({ page }) => {
             await page.goto('/')
             await expect.poll(() => focused(page)).toContain('card|/video/')
