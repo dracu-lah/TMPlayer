@@ -5702,7 +5702,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             // Back peels the overlays off in the order they were put on: the row first, and only
             // then is the film what Back was aimed at.
             KeyEvent.KEYCODE_BACK -> {
-                if (statusOverlay.visibility != View.VISIBLE && controlsUp) {
+                if (statusOverlay.visibility != View.VISIBLE && controlsUp && backPeelsTheRow()) {
                     controls?.hideAnimated()
                     return true
                 }
@@ -5803,12 +5803,22 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             hideNextUp()
             return true
         }
-        if (statusOverlay.visibility != View.VISIBLE && controlsUp) {
+        if (statusOverlay.visibility != View.VISIBLE && controlsUp && backPeelsTheRow()) {
             controls?.hideAnimated()
             return true
         }
         return false
     }
+
+    /**
+     * Whether Back takes the transport row down before it leaves the film. On a television yes: the
+     * remote has no other way to clear the picture. On a phone no: with three-button navigation the
+     * Back button is on screen only because the row is up, and hiding the row first looked like
+     * nothing happened and took the button away with it (a webOS tester, 2026-11-07). A sheet opened
+     * from the row still gets its press first.
+     */
+    private fun backPeelsTheRow(): Boolean =
+        FormFactor.isTv(this) || menuOpen || detailsOpen || pickerOpen || episodesOpen || morePanel?.isOpen == true
 
     /** The number row and the numpad, as one digit; null for every other key. */
     private fun digitOf(keyCode: Int): Int? = when (keyCode) {
