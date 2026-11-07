@@ -9,7 +9,8 @@ import java.security.MessageDigest
  * once: the rate limits stay untouched while scrolling, and what was found keeps showing with no
  * connection at all.
  *
- * Answers are keyed by [MetaQuery.cacheKey] (the cleaned title, year, episode and language),
+ * Answers are keyed by [MetaQuery.cacheKey] (the cleaned title, year, episode, the UI language and, when the name lists any, the audio
+ * languages),
  * pictures by their address. Nothing is kept longer than [MAX_TTL_MS], six months, which is
  * TMDB's limit; a "nothing matched" is kept for [MISS_TTL_MS] only, so a show that is new to the
  * providers turns up within the week. [purge] empties it all, which Settings offers.

@@ -32,7 +32,9 @@ data class MetaQuery(
     /**
      * The audio languages the name lists after its title, ISO 639-1 ("Tamil-Hindi" gives `ta`,
      * `hi`): a hint for which of two titles of the same name and year is meant, never a reason to
-     * take one. Not part of [cacheKey], so answers already kept stand.
+     * take one. Part of [cacheKey] when the list is not empty (a Tamil and a Hindi copy of the
+     * same name can be two films, and an answer chosen without the hint must not stand for one
+     * with it); a name that lists none keeps its old key, so answers already kept for it stand.
      */
     val languages: List<String> = emptyList(),
 ) {
@@ -46,9 +48,10 @@ data class MetaQuery(
      * What the cache files the answer under: the cleaned title, never the file's own name. In a
      * language other than English the answer has been asked in English too and its poster chosen
      * by [MetaRules.poster], which "+en" marks, so answers kept from before either (a title not
-     * found in Arabic, a poster TMDB named) are asked again rather than kept for months.
+     * found in Arabic, a poster TMDB named) are asked again rather than kept for months. The
+     * audio [languages] (sorted, joined with "-") come last and only when there are some.
      */
-    fun cacheKey(language: String): String = listOf(
+    fun cacheKey(language: String): String = listOfNotNull(
         kind.name,
         MetaMatch.normalise(title),
         year?.toString().orEmpty(),
@@ -56,6 +59,7 @@ data class MetaQuery(
         if (anime) "anime" else "",
         tmdbId?.toString().orEmpty(),
         if (language.startsWith("en")) language else "$language+en",
+        languages.takeIf { it.isNotEmpty() }?.sorted()?.joinToString("-"),
     ).joinToString("|")
 
     companion object {
