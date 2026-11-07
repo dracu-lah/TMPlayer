@@ -371,7 +371,9 @@ fun tileTitle(video: Video): String = SeriesShelf.tileTitle(toItem(video))
 fun continueTitle(video: Video): String {
     val item = toItem(video)
     val parsed = SeriesShelf.episodeOf(item)
-    val episode = parsed.episode?.let { number -> parsed.season?.let { L.seriesEpisodeShort(it, number) } ?: L.seriesEpisode(number) }
+    // The half of a split episode keeps its letter ("S8 E6b"), so the two halves read apart.
+    val half = parsed.episodePart?.let { ('a' + it - 1).toString() }.orEmpty()
+    val episode = parsed.episode?.let { number -> (parsed.season?.let { L.seriesEpisodeShort(it, number) } ?: L.seriesEpisode(number)) + half }
     val (label, title) = if (episode != null) {
         val name = parsed.title.ifBlank { SeriesShelf.tileTitle(item) }
         // A file named by its episode alone ("Episode 1") is not given the label twice.
