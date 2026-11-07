@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createResource, createSignal, For, Match, onCleanup, onMount, Show, Switch, type JSX } from 'solid-js'
 import { A, useLocation, useNavigate, useParams } from '@solidjs/router'
-import { ArrowLeft02Icon, Cancel01Icon, ClapperboardIcon, Clock01Icon, ListVideoIcon, PlayIcon, RepeatIcon, Tick02Icon } from '@hugeicons/core-free-icons'
+import { ArrowLeft02Icon, Cancel01Icon, ClapperboardIcon, Clock01Icon, ListVideoIcon, PlayIcon, RepeatIcon, Search01Icon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { api, errorText } from '../tg/rpc'
 import { back } from '../session'
 import { t } from '../i18n'
@@ -10,10 +10,11 @@ import { showChoices, type MarkChoice } from './showMarks'
 import { Icon, type IconData } from '../ui/Icon'
 import { TmdbMark } from '../ui/TmdbMark'
 import { TitleLogo } from '../ui/TitleLogo'
+import { openPosterPicker } from '../ui/PosterPicker'
 import { initialOf } from '../ui/initial'
 import { StarButton } from './Chats'
 import { loadThumb } from './thumbs'
-import { answer, loadBackdropLightFirst, loadExtras, loadFile, loadPoster, type Answer, type Extras } from './posters'
+import { answer, askOf, loadBackdropLightFirst, loadExtras, loadFile, loadPoster, type Answer, type Extras } from './posters'
 import { coverBackground } from './cover'
 import { Card, clock, detailPath, shortLength, size, tileCard, useProgress, watchPath } from './VideoList'
 import { warmFile } from '../stream/reader'
@@ -117,7 +118,7 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
     })
     // TMDB's picture of the title and its words, once the page knows which episode it is (a show's own words are the episode's).
     const [meta] = createResource(
-        () => (settings().posters && item.poster && props.infoSettled ? { ask: item.poster, code: props.info?.episode?.code ?? null } : null),
+        () => (settings().posters && askOf(item) && props.infoSettled ? { ask: askOf(item)!, code: props.info?.episode?.code ?? null } : null),
         async ({ ask, code }): Promise<Meta | null> => {
             // A failed lookup (no key, TMDB down) is "nothing known": thrown here it would reach the page's
             // error boundary, which mounts the page again and asks again, over and over.
@@ -136,20 +137,33 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
     // picture then replaces. The wide picture comes light first (w300), then whole (w780).
     const [kind, setKind] = createSignal<'film' | 'show' | null | undefined>(undefined)
     const film = () => kind() === 'film'
-    onMount(() => {
-        const ask = item.poster
-        if (!ask || !settings().posters) return void setKind(null)
+    // An effect, not a mount: choosing another title ('Choose the right poster') asks again at once.
+    let asked = false
+    createEffect(() => {
+        const ask = askOf(item)
+        let live = true
         let stop = () => {}
+        onCleanup(() => {
+            live = false
+            stop()
+        })
+        if (asked) {
+            setKind(undefined)
+            setPoster(null)
+            setBackdrop(null)
+        }
+        asked = true
+        if (!ask || !settings().posters) return void setKind(null)
         answer(ask).then(
             (f) => {
+                if (!live) return
                 const k = f.match ? (f.kind ?? null) : null
                 setKind(k)
-                if (k === 'film' && f.backdrop) stop = loadBackdropLightFirst(ask, setBackdrop)
-                else if (f.poster) loadPoster(ask, 'w342', { priority: true }).then((u) => u && setPoster(u), () => {})
+                if (k === 'film' && f.backdrop) stop = loadBackdropLightFirst(ask, (u) => live && setBackdrop(u))
+                else if (f.poster) loadPoster(ask, 'w342', { priority: true }).then((u) => live && u && setPoster(u), () => {})
             },
-            () => setKind(null),
+            () => live && setKind(null),
         )
-        onCleanup(() => stop())
     })
     const title = () => found()?.title || props.info?.title || item.title
     const ep = () => props.info?.episode ?? null
@@ -274,7 +288,7 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
                         class="detail-title"
                         name={title()}
                         extras={extras()}
-                        pending={!!(settings().posters && item.poster) && (!props.infoSettled || meta.loading)}
+                        pending={!!(settings().posters && askOf(item)) && (!props.infoSettled || meta.loading)}
                     />
                     <p class="detail-facts">
                         <For each={facts()}>
@@ -327,6 +341,10 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
                         </Show>
                         <Round icon={Tick02Icon} label={t('detail.round_watched')} on={!!watched()} onClick={() => setWatched(item.chatId, item.messageId, !watched())} />
                         <Round icon={Clock01Icon} label={t('detail.round_watch_later')} on={later()} onClick={() => setLater(item, !later())} />
+                        {/* Beside the other repairs a wrong poster is fixed by: TMDB's titles for this name, one chosen. */}
+                        <Show when={settings().posters}>
+                            <Round icon={Search01Icon} label={t('poster.round')} onClick={() => openPosterPicker(item, props.info?.seasons.flatMap((s) => s.episodes.map((e) => e.item)) ?? [])} />
+                        </Show>
                         {/* The trailer plays on YouTube, in another tab: the page keeps no key and embeds nothing. */}
                         <Show when={extras()?.trailer}>
                             <Round icon={ClapperboardIcon} label={t('detail.round_trailer')} href={`https://www.youtube.com/watch?v=${extras()!.trailer}`} />

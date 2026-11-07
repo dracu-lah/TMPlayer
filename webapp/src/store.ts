@@ -7,6 +7,7 @@ import { clear, createStore, del, entries, get, set, type UseStore } from 'idb-k
 import type { Sort, VideoItem } from './tg/types'
 import { clearIndex, POSTERS as POSTER_CACHE, THUMBS, touch } from './cacheBounds'
 import { cleanHome } from './ui/homeSettings'
+import { decodePick, encodePick, type Pick } from './pick'
 
 export type Theme = 'system' | 'dark' | 'light' | 'black'
 
@@ -213,6 +214,7 @@ export async function loadSettings() {
     setAddedModeSignal(readMode(mode))
     setStarredIds(new Set(stars))
     setLaterIds(new Set(later.map(laterId)))
+    await loadPicks()
     applyTheme(settings().theme)
 }
 
@@ -595,6 +597,43 @@ function readMode(raw: unknown): AddedMode {
     return raw === 'all' || raw === 'picked' ? raw : 'unanswered'
 }
 
+// "Choose the right poster": the TMDB title picked for a video, one stored line per video as the
+// apps keep a correction (`fix:<chat>:<message>` = `tmdb=film:123`), on this device only.
+
+const [picks, setPicks] = createSignal<ReadonlyMap<string, Pick>>(new Map())
+export { picks }
+
+/** The title picked for a video, or undefined for none. Reactive: a pick redraws what read it. */
+export const pickOf = (chatId: number, messageId: number): Pick | undefined => picks().get(id(chatId, messageId))
+
+/**
+ * Picks `pick` for each of `videos` (the video, its copies, and the others of its title when the
+ * viewer asked for them), or takes the picks off with null: back to the name's own match.
+ */
+export function setPick(videos: readonly { chatId: number; messageId: number }[], pick: Pick | null) {
+    const next = new Map(picks())
+    for (const v of videos) {
+        const key = id(v.chatId, v.messageId)
+        if (pick) {
+            next.set(key, pick)
+            write(`fix:${key}`, encodePick(pick))
+        } else if (next.delete(key)) {
+            remove(`fix:${key}`)
+        }
+    }
+    setPicks(next)
+}
+
+async function loadPicks() {
+    const stored = await allEntries<unknown>('fix:')
+    const found = new Map<string, Pick>()
+    for (const [key, text] of stored) {
+        const pick = decodePick(text)
+        if (pick) found.set(key.slice('fix:'.length), pick)
+    }
+    setPicks(found)
+}
+
 // Thumbnails
 
 /** The Cache API's store for poster answers and pictures (screens/posters.ts). */
@@ -629,6 +668,7 @@ export async function clearAll() {
     setSettings({ ...DEFAULTS })
     setStarredIds(new Set<number>())
     setLaterIds(new Set<string>())
+    setPicks(new Map())
     // The added chats are the account's, not the device's, so signing out leaves none of them
     // behind and the next account is asked for itself (as the apps' clearEverything does).
     setAddedIdsSignal(new Set<number>())

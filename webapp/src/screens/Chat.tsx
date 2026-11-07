@@ -8,6 +8,7 @@ import { progress as readProgress, settings, setSetting, setStarred, starredIds 
 import { form } from '../form'
 import { Icon } from '../ui/Icon'
 import { PageBar } from '../ui/PageBar'
+import { notePool } from '../ui/PosterPicker'
 import { ChatPicture } from './ChatPicture'
 import { chatName, StarButton } from './Chats'
 import { noVideosWithin, sizeLabel, sizeScale } from './sizes'
@@ -113,6 +114,11 @@ export function Chat() {
 
     const title = () => (page() ? chatName(page()!) : '')
     const cards = () => page()?.tiles.map((tile) => tileCard(tile)) ?? []
+    // The videos on screen, so "Choose the right poster" can offer a pick to the others of its title.
+    createEffect(() => {
+        const p = page()
+        if (p && !view().query) notePool(chatId(), p.tiles.map((tile) => tile.item))
+    })
     const empty = () => {
         const p = page()
         if (!p || p.tiles.length || !p.done) return null

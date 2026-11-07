@@ -9,6 +9,7 @@ export const PAGE_STRINGS = [
     'format',
     'login',
     'msone',
+    'poster',
     'size',
     'sponsored',
     'theme',

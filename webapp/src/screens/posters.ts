@@ -1,4 +1,5 @@
-import { POSTERS } from '../store'
+import { pickOf, POSTERS } from '../store'
+import { isPick, withPick, type PickedAsk } from '../pick'
 import { touch } from '../cacheBounds'
 import type { PosterAsk } from '../rules'
 
@@ -28,14 +29,66 @@ export interface Want {
     priority?: boolean
 }
 
+/**
+ * The poster question for `item`: the one its name asks (item.poster), or, where the viewer chose
+ * a title for it ("Choose the right poster"), that title by its id. Read in an effect or a memo it
+ * tracks the picks, so a card, the hero and the video's page redraw at once with the pick. Null when
+ * the name asks nothing and nothing was picked.
+ */
+export function askOf(item: { chatId: number; messageId: number; poster: PosterAsk | null; title: string }): PickedAsk | null {
+    const pick = pickOf(item.chatId, item.messageId)
+    return pick ? withPick(item.poster, pick, item.title) : item.poster
+}
+
 /** The question as the worker takes it. */
-function query(a: PosterAsk): string {
+function query(a: PickedAsk): string {
     const q = new URLSearchParams({ k: a.kind, t: a.title })
+    if (a.picked && a.tmdbId) q.set('p', '1')
     if (a.year) q.set('y', String(a.year))
     if (a.tmdbId) q.set('id', String(a.tmdbId))
     if (a.series) q.set('s', '1')
     if (a.languages.length) q.set('l', a.languages.join(','))
     return q.toString()
+}
+
+/** One title the picker lists, as /tmdb/search answers it (tmdb/choices.ts). */
+export interface Choice {
+    id: number
+    kind: 'film' | 'show'
+    title: string
+    year: number | null
+    language: string
+    overview: string
+    poster: string | null
+}
+
+/** Why the picker has no list to show: TMDB could not be asked or answered nothing usable (Try again). */
+export class ChoicesError extends Error {}
+
+/**
+ * The titles TMDB has that `a`'s name could mean, for "Choose the right poster". Not kept: asked
+ * when the picker opens, by the cleaned title, never per card. Rejects with a ChoicesError.
+ */
+export async function loadChoices(a: Pick<PosterAsk, 'kind' | 'title' | 'year' | 'languages'>): Promise<Choice[]> {
+    if (Date.now() < pausedUntil) throw new ChoicesError('paused')
+    const q = new URLSearchParams({ k: a.kind, t: a.title })
+    if (a.year) q.set('y', String(a.year))
+    if (a.languages.length) q.set('l', a.languages.join(','))
+    let response: Response
+    try {
+        response = await fetch(`/tmdb/search?${q}`)
+    } catch {
+        throw new ChoicesError('offline')
+    }
+    if (response.status === 503 || response.status === 429) {
+        // The picker's own Try again is the viewer's choice; the page-wide pause is for the cards.
+        pause(Math.max(5, Number(response.headers.get('retry-after')) || 0) * 1000)
+        throw new ChoicesError('unavailable')
+    }
+    if (!response.ok) throw new ChoicesError(`status ${response.status}`)
+    const body = (await response.json().catch(() => null)) as { choices?: unknown } | null
+    if (!body || !Array.isArray(body.choices)) throw new ChoicesError('bad answer')
+    return (body.choices as Choice[]).filter((c) => c && isPick({ id: c.id, kind: c.kind }) && typeof c.title === 'string')
 }
 
 /** The worker's poster answer: the title it matched, and what MetaInfo keeps of it. */

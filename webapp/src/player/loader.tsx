@@ -1,6 +1,6 @@
 import { createSignal, onCleanup, onMount, Show } from 'solid-js'
 import { ArrowLeft02Icon } from '@hugeicons/core-free-icons'
-import { answer, keptExtras, keptLogo, loadBackdropLightFirst, loadPoster, type Extras } from '../screens/posters'
+import { answer, askOf, keptExtras, keptLogo, loadBackdropLightFirst, loadPoster, type Extras } from '../screens/posters'
 import { TmdbMark } from '../ui/TmdbMark'
 import { loadThumb } from '../screens/thumbs'
 import { shortLength } from '../screens/VideoList'
@@ -30,7 +30,7 @@ export function OpeningLoader(props: { item: VideoItem; info: WatchInfo | null; 
     let wide = false
     onMount(() => {
         if (item.thumb) loadThumb(item.thumb).then((u) => !wide && setArt(u), () => {})
-        const ask = item.poster
+        const ask = askOf(item)
         if (!ask || !settings().posters) return
         let stop = () => {}
         answer(ask).then(

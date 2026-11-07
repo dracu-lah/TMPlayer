@@ -12,7 +12,7 @@ import { nameArt } from '../ui/colour'
 import { me, back } from '../session'
 import { t } from '../i18n'
 import { loadThumb } from '../screens/thumbs'
-import { loadBackdropLightFirst } from '../screens/posters'
+import { askOf, loadBackdropLightFirst } from '../screens/posters'
 import { coverBackground } from '../screens/cover'
 import { settings } from '../store'
 import { detailPath, tileCard, useProgress, watchPath } from '../screens/VideoList'
@@ -222,7 +222,8 @@ export function TvHero(props: { rows: HomeRow[] | undefined }) {
     // neither does.
     const [wide, setWide] = createSignal<string | null>(null)
     createEffect(() => {
-        const ask = pick()?.item.poster
+        const it = pick()?.item
+        const ask = it ? askOf(it) : null
         setWide(null)
         if (!ask || !settings().posters) return
         onCleanup(loadBackdropLightFirst(ask, setWide))
