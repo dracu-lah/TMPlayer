@@ -208,6 +208,12 @@ class GarbageInputTest {
                 }
             }
             survive("Backups.decode", text) { Backups.decode(text) }
+            survive("VideoCorrection.decode", text) {
+                VideoCorrection.decode(text).encode()
+                VideoCorrection.decode("tmdb=film:$text").encode()
+                VideoCorrection.decode("wrong\n$text\ntmdb=show:12").pick
+                VideoCorrections.idOf(text)
+            }
             survive("WebVtt.parseSrt", text) { WebVtt.parseSrt(text) }
             survive("WebVtt.parseAss", text) { WebVtt.parseAss(text) }
             survive("WebVtt.parseVtt", text) { WebVtt.parseVtt(text) }

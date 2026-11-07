@@ -2104,6 +2104,21 @@
     "wifi_only": "This video isn't downloaded yet, and Wi-Fi only is on, so it won't play on mobile data. Connect to Wi-Fi, or turn Wi-Fi only off in Settings.",
     "zoom_percent": "Zoom {percent}"
   },
+  "poster": {
+    "choose": "Choose the right poster",
+    "choose_detail": "Pick the title this video really is",
+    "current": "Showing now",
+    "failed": "TMDB could not be reached. Check the connection, then try again.",
+    "film": "Film",
+    "no_key": "TMDB did not accept the key, so its titles cannot be listed right now.",
+    "none": "TMDB has no title like this one.",
+    "note": "Pick the title this video is. The choice stays on this device.",
+    "off": "Posters and overviews are off. Turn them on in Settings to choose a poster.",
+    "others": "Also use it for {count, plural, one {# other video} other {# other videos}} of this title in this chat",
+    "reset": "Back to automatic",
+    "round": "Poster",
+    "show": "Show"
+  },
   "profile": {
     "heading": "Your viewing",
     "starred": "Starred",

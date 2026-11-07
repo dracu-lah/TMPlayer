@@ -2,6 +2,8 @@ package com.tmplayer.data
 
 import kotlin.concurrent.Volatile
 
+import com.tmplayer.online.MetaKind
+import com.tmplayer.online.MetaQuery
 import com.tmplayer.platform.Background
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -23,16 +25,29 @@ data class VideoCorrection(
     val wrongMatch: Boolean = false,
     /** "Rename": the title to read in place of the file name, for the tile and for grouping. */
     val title: String? = null,
+    /** "Choose the right poster": the TMDB title the viewer picked, followed on every screen. */
+    val pick: PosterPick? = null,
 ) {
-    val isEmpty: Boolean get() = !separate && !wrongMatch && title.isNullOrBlank()
+    val isEmpty: Boolean get() = !separate && !wrongMatch && title.isNullOrBlank() && pick == null
+
+    /** The viewer's pick of a poster. Picking one lifts a "Wrong match", which it answers. */
+    fun withPick(chosen: PosterPick?): VideoCorrection = copy(pick = chosen, wrongMatch = if (chosen != null) false else wrongMatch)
+
+    /** "Wrong match" (or its undo). Turning a match down drops a pick: nothing is shown for it. */
+    fun withWrongMatch(wrong: Boolean): VideoCorrection = copy(wrongMatch = wrong, pick = if (wrong) null else pick)
+
+    /** Back to automatic: no pick and no "Wrong match"; a rename and "Not the same video" stay. */
+    fun resetMatch(): VideoCorrection = copy(pick = null, wrongMatch = false)
 
     /**
      * One line per correction, so the stored value reads as what it means: `separate`, `wrong`,
-     * `title=Night Train (2019)`. A title is the last line and keeps any characters it has.
+     * `tmdb=film:123`, `title=Night Train (2019)`. A title is the last line and keeps any
+     * characters it has.
      */
     fun encode(): String = buildList {
         if (separate) add(SEPARATE)
         if (wrongMatch) add(WRONG)
+        pick?.let { add("$TMDB${if (it.show) SHOW else FILM}:${it.tmdbId}") }
         title?.trim()?.takeIf { it.isNotEmpty() }?.let { add("$TITLE${it.replace('\n', ' ')}") }
     }.joinToString("\n")
 
@@ -40,6 +55,10 @@ data class VideoCorrection(
         private const val SEPARATE = "separate"
         private const val WRONG = "wrong"
         private const val TITLE = "title="
+        private const val TMDB = "tmdb="
+        private const val FILM = "film"
+        private const val SHOW = "show"
+        private val PICK = Regex("""tmdb=(film|show):(\d{1,9})""")
 
         fun decode(text: String?): VideoCorrection {
             if (text.isNullOrBlank()) return VideoCorrection()
@@ -48,8 +67,28 @@ data class VideoCorrection(
                 separate = SEPARATE in lines,
                 wrongMatch = WRONG in lines,
                 title = lines.firstOrNull { it.startsWith(TITLE) }?.removePrefix(TITLE)?.trim()?.ifEmpty { null },
+                // Anything but `tmdb=film:<id>` or `tmdb=show:<id>` is no pick, and the rest still reads.
+                pick = lines.firstNotNullOfOrNull { line ->
+                    val found = PICK.matchEntire(line.trim()) ?: return@firstNotNullOfOrNull null
+                    val id = found.groupValues[2].toIntOrNull()?.takeIf { it > 0 } ?: return@firstNotNullOfOrNull null
+                    PosterPick(id, show = found.groupValues[1] == SHOW)
+                },
             )
         }
+    }
+}
+
+/** A TMDB title the viewer chose for a video: its id, and whether it is a show (else a film). */
+data class PosterPick(val tmdbId: Int, val show: Boolean = false) {
+    val kind: MetaKind get() = if (show) MetaKind.Show else MetaKind.Film
+
+    /** The `{tmdb-123}` question this pick forces: the title and year of [base] kept where it has them. */
+    fun forcing(base: MetaQuery?, fallbackTitle: String = ""): MetaQuery {
+        val query = base ?: MetaQuery(title = fallbackTitle)
+        // A film pick drops the episode code the file's name carried: a film has none.
+        val season = if (show) query.season else null
+        val episode = if (show) query.episode else null
+        return query.copy(season = season, episode = episode, tmdbId = tmdbId, kind = kind, anime = false)
     }
 }
 
@@ -93,6 +132,38 @@ object VideoCorrections {
     }
 
     fun of(item: MediaItem, all: Map<String, VideoCorrection> = current): VideoCorrection? = all[item.id]
+
+    /**
+     * The lookup's question for [item] ([MediaItem.metaQuery]), forced to the title the viewer
+     * picked for it where they did ("Choose the right poster"); [base] otherwise. A pick holds
+     * even for a file whose name asks nothing by itself.
+     */
+    fun queryOf(item: MediaItem, base: MetaQuery? = item.metaQuery, all: Map<String, VideoCorrection> = current): MetaQuery? {
+        val correction = all[item.id]
+        val pick = correction?.pick ?: return base
+        return pick.forcing(base, correction.title ?: item.title)
+    }
+
+    /**
+     * Other files in [pool] that stand for the same title as [item] in its chat and are not its
+     * own copies: the ones "Also use it for the others" reaches. A film needs the same year, a
+     * show the same name. Never a file that is an extra (a trailer, a sample).
+     */
+    fun sameTitleIn(item: MediaItem, pool: Collection<MediaItem>): List<MediaItem> {
+        val own = filesOf(item).mapTo(HashSet()) { it.id }
+        val wanted = item.parsedName
+        if (wanted.titleKey.isEmpty() || wanted.extra != null) return emptyList()
+        return pool.asSequence()
+            .flatMap { filesOf(it).asSequence() }
+            .filter { it.chatId == item.chatId && it.id !in own && it.extra == null }
+            .filter { other ->
+                val read = other.parsedName
+                read.extra == null && read.titleKey == wanted.titleKey && read.isSeries == wanted.isSeries &&
+                    (wanted.isSeries || read.year == wanted.year)
+            }
+            .distinctBy { it.id }
+            .toList()
+    }
 
     /** The longest title a rename keeps. */
     const val TITLE_MAX = 120
