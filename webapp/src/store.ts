@@ -546,6 +546,8 @@ export { addedIds, addedMode }
  */
 const [chatsGateWaived, setChatsGateWaived] = createSignal(false)
 export { chatsGateWaived, setChatsGateWaived }
+/** A signed in visitor who has never chosen which chats to watch meets the chooser first (the gate). */
+export const chatsGated = () => addedMode() === 'unanswered' && !chatsGateWaived()
 
 /**
  * The chats a list may draw from, or null for every chat: the same shape the apps' gate has, so
