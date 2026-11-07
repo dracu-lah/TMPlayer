@@ -18,7 +18,7 @@ internal object TourBadges {
         (TourPage.Videos to DeviceForm.Desktop) to listOf(Offset(0.016f, 0.185f), Offset(0.016f, 0.273f), Offset(0.714f, 0.023f)),
         (TourPage.Home to DeviceForm.Phone) to listOf(Offset(0.033f, 0.625f), Offset(0.102f, 0.487f), Offset(0.282f, 0.926f)),
         (TourPage.Home to DeviceForm.Tv) to listOf(Offset(0.047f, 0.611f), Offset(0.047f, 0.339f), Offset(0.342f, 0.065f)),
-        (TourPage.Home to DeviceForm.Desktop) to listOf(Offset(0.016f, 0.652f), Offset(0.016f, 0.46f), Offset(0.426f, 0.91f)),
+        (TourPage.Home to DeviceForm.Desktop) to listOf(Offset(0.016f, 0.65f), Offset(0.021f, 0.37f), Offset(0.45f, 0.9f)),
         (TourPage.Player to DeviceForm.Phone) to listOf(Offset(0.468f, 0.822f), Offset(0.093f, 0.895f), Offset(0.633f, 0.036f)),
         (TourPage.Player to DeviceForm.Tv) to listOf(Offset(0.471f, 0.839f), Offset(0.044f, 0.915f), Offset(0.734f, 0.909f)),
         (TourPage.Player to DeviceForm.Desktop) to listOf(Offset(0.562f, 0.887f), Offset(0.023f, 0.932f), Offset(0.885f, 0.802f)),
