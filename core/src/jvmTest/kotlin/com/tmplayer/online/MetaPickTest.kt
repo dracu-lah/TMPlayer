@@ -76,4 +76,16 @@ class MetaPickTest {
         val q = of("Coast walk day 2 2023.mp4")
         assertNull(MetaPick.best(q, listOf(candidate("x", "Coastal Walks", 2023)), show = false))
     }
+
+    /** Two films called "Idiot" in 2022 (Czech and Tamil, 2026-11-07): the channel's handle must not eat the language. */
+    @Test
+    fun aLanguageAfterTheChannelHandleBreaksATieBetweenTwoFilmsOfTheSameNameAndYear() {
+        val q = of("Idiot_2022_@Cinemahub182_Tamil_HQ_HDRip_1080p_HEVC_DD5_1_192Kbp.mkv")
+        assertEquals("Idiot", q.title)
+        assertEquals(2022, q.year)
+        assertEquals(listOf("ta"), q.languages)
+        val czech = MetaCandidate("959848", listOf("Idiot"), 2022, "", null, null, originalLanguage = "cs")
+        val tamil = MetaCandidate("880780", listOf("Idiot", "\u0b87\u0b9f\u0bbf\u0baf\u0b9f\u0bcd"), 2022, "", null, null, originalLanguage = "ta")
+        assertEquals("880780", MetaPick.best(q, listOf(czech, tamil), show = false)?.id)
+    }
 }

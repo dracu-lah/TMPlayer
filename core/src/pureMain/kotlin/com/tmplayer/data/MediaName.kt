@@ -580,7 +580,14 @@ object MediaName {
     private fun handleOf(match: String, before: String, after: String): String {
         val words = match.removePrefix("@").split('_').filter { it.isNotEmpty() }
         val runsOn = words.drop(1).any { BARE_YEAR.matches(it) || TAGS.matches(it) }
-        if (runsOn) return if (words.size > 2) " " + words.drop(2).joinToString(" ") else " "
+        if (runsOn) {
+            // A language right after the channel word is the audio's, not a second word of the handle:
+            // "@Cinemahub182_Tamil_HQ_HDRip" is Tamil, and it is what tells "Idiot" of 2022 in Tamil from
+            // the Czech one of the same year (a Tamil Idiot showed the Czech poster).
+            val language = words.size > 1 && words[1].lowercase() in LANGUAGE_CODES
+            val rest = words.drop(if (language) 1 else 2)
+            return if (rest.isNotEmpty()) " " + rest.joinToString(" ") else " "
+        }
         if (words.size < 2) return " "
         val opensName = before.all { it.isWhitespace() || it in TRIM_CHARS }
         if (!opensName || !(after.isBlank() || startsWithMarker(after))) return " "
