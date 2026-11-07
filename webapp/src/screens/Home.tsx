@@ -7,6 +7,7 @@ import { t } from '../i18n'
 import { addedIds, addedMode, addedView, progress, resumes, settings, starredIds, watchedTick } from '../store'
 import { forgetGone } from '../goneVideos'
 import { Icon } from '../ui/Icon'
+import { useObservedCovers } from './promo'
 import { Card, ContinueCard, tileCard, useLeft, useProgress, useWarmDataCentres, videoCard, type CardData } from './VideoList'
 import { form } from '../form'
 import type { HomePage, HomeRow, HomeView } from '../tg/types'
@@ -162,6 +163,7 @@ function Row(props: { row: HomeRow; selfId: number | null }) {
     const leftOf = useLeft()
     const cards = () => cardsOf(props.row)
     useWarmDataCentres(() => cards().map((c) => c.item))
+    useObservedCovers(() => cards().map((c) => c.item))
     const edges = () => {
         if (!strip) return
         setAtStart(strip.scrollLeft <= 1)

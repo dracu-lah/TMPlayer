@@ -59,6 +59,12 @@ export interface VideoItem extends FileRef {
     date: number
     /** Key of the thumbnail, for `thumb`. */
     thumb: string | null
+    /**
+     * A hash of Telegram's inline preview of the cover (the apps' miniThumbnail), the same for the
+     * same picture: lets the page tell an uploader's advert, one cover on many videos, from a
+     * video's own. Null where Telegram sent none; absent in items kept before this existed.
+     */
+    cover?: string | null
     /** Telegram's own lighter MP4 copies, best first, when the video was posted as a video. */
     copies: VideoCopy[]
     storyboard: Storyboard | null
