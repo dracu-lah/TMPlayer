@@ -31,6 +31,7 @@ import com.tmplayer.online.TvMazeApi
 import com.tmplayer.online.WikidataApi
 import com.tmplayer.platform.IOException
 import com.tmplayer.player.MkvChapters
+import com.tmplayer.player.MkvClusters
 import com.tmplayer.player.Mp4Chapters
 import com.tmplayer.player.TimeEntry
 import kotlinx.coroutines.runBlocking
@@ -286,6 +287,11 @@ class GarbageInputTest {
             val shown = data.take(24).joinToString(",")
             survive("Mp4Chapters.parseChpl", shown) { Mp4Chapters.parseChpl(data) }
             survive("MkvChapters.parseElement", shown) { MkvChapters.parseElement(data) }
+            survive("MkvClusters.find", shown) {
+                MkvClusters.find(data, data.size, atEnd = false)
+                MkvClusters.find(data, data.size, atEnd = true, bytesLeft = data.size / 2L)
+                MkvClusters.timecodeScale(data)
+            }
             survive("Mp4Probe.parseMoov", shown) { Mp4Probe.parseMoov(data) }
             survive("JpegSize.read", shown) { JpegSize.read(data) }
             survive("SubtitleText.decode", shown) { SubtitleText.decode(data); SubtitleText.decode(data, "ar") }
