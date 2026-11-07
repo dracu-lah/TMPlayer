@@ -963,6 +963,18 @@ class MediaListViewModel(
     private val _state = MutableStateFlow<UiState<MediaListState>>(UiState.Loading(L.browseFindingVideos))
     val state: StateFlow<UiState<MediaListState>> = _state.asStateFlow()
 
+    init {
+        // Each settled listing is read once for covers that are an uploader's advert
+        // ([com.tmplayer.data.PromoCovers]), off the main thread, so the tiles can draw the generated
+        // cover over them. A state flow keeps only the newest, so a listing replaced meanwhile is the one read next.
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.Default) {
+            _state.collect { state ->
+                val items = (state as? UiState.Content)?.value?.items ?: return@collect
+                runCatching { com.tmplayer.ui.components.PromoCoverBook.observe(items) }
+            }
+        }
+    }
+
     /** The chat held open in TDLib for as long as this listing lives; see [Td.watchChat]. */
     private var watching: AutoCloseable? = null
 
