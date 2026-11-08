@@ -121,6 +121,8 @@ cache, which GitHub never sees, so the worker counts those itself and answers th
 which `stats.ts` adds to GitHub's count. It only ever proxies TMPlayer's own release assets (its
 path has to match the worker's own pattern): never make it a general-purpose GitHub proxy.
 Deploys manually, same as the web player: Actions, "Download mirror", Run workflow.
+Always deploy with `--config wrangler.toml` from `workers/download-mirror`: the root `wrangler.jsonc`
+(worker `layer`) wins otherwise, and the deploy fails or goes to the wrong worker.
 
 ## Performance
 

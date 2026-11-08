@@ -34,9 +34,13 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         # pipefail: without it tee's exit status hides a failed deploy and the run shows green.
+        # --config: the repository root has a wrangler.jsonc (worker "layer", the web player's
+        # assets) that wrangler picks over this folder's wrangler.toml. Without the flag every
+        # deploy since 2026-11-02 went to "layer" and failed with "No access to the specified
+        # resource" (found 2026-11-08).
         run: |
           set -o pipefail
-          npx --yes wrangler@4.149.0 deploy | tee "$RUNNER_TEMP/deploy.log"
+          npx --yes wrangler@4.149.0 deploy --config wrangler.toml | tee "$RUNNER_TEMP/deploy.log"
 
   dry-run:
     name: Dry run
