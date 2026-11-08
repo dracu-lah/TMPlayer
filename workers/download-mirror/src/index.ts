@@ -40,6 +40,10 @@ const REPO = 'dracu-lah/TMPlayer'
 const PATH =
   /^\/download\/(v\d+\.\d+\.\d+(?:-beta\.\d+)?)\/(TMPlayer-[A-Za-z0-9._-]+\.(?:apk|msi|dmg|AppImage|tar\.xz|ipk|wgt))$/
 const COUNTER_KEY = 'hits'
+// Part of the cache key of the subrequest to github.com. Bump it to abandon everything cached so
+// far (a cached bad answer cannot be purged from here). 2 on 2026-11-08: the 1.28.4 AppImage had
+// an error answer cached for a year by the old cacheTtl, which applied to every status.
+const CACHE_GEN = '2'
 
 async function bumpCounter(env: Env): Promise<void> {
   await counter(env).fetch('https://counter/hit')
@@ -69,7 +73,7 @@ export default {
       return new Response('Not found', { status: 404 })
     }
     const [, tag, name] = match
-    const origin = `https://github.com/${REPO}/releases/download/${tag}/${name}`
+    const origin = `https://github.com/${REPO}/releases/download/${tag}/${name}?gen=${CACHE_GEN}`
 
     // Range and If-Range carry through so a resumed download still works once the file is cached.
     const headers = new Headers()
@@ -78,20 +82,33 @@ export default {
     const ifRange = request.headers.get('If-Range')
     if (ifRange) headers.set('If-Range', ifRange)
 
-    const upstream = await fetch(origin, {
-      method: request.method,
-      headers,
-      redirect: 'follow',
-      // Tells Cloudflare's edge cache to keep this response a year: release files are named with
-      // their version (TMPlayer-1.28.3-universal.apk), so a given URL never changes under us.
-      // cacheEverything also applies to a cross-origin subrequest like this one, and the Response
-      // it returns carries Cloudflare's own cf-cache-status, which is how bumpCounter below knows
-      // this request never reached github.com.
-      cf: { cacheEverything: true, cacheTtl: 31536000 },
-    })
+    // Only a good answer is cached, and for a year: release files are named with their version
+    // (TMPlayer-1.28.3-universal.apk), so a given URL never changes under us. A plain cacheTtl
+    // caches every status, so one failed first fetch (a GitHub hiccup, a rate limit) became that
+    // file's answer for a year. -1 means do not store. cacheEverything also applies to a
+    // cross-origin subrequest like this one, and the Response it returns carries Cloudflare's own
+    // cf-cache-status, which is how bumpCounter below knows this request never reached github.com.
+    const fetchOrigin = () =>
+      fetch(origin, {
+        method: request.method,
+        headers,
+        redirect: 'follow',
+        cf: { cacheEverything: true, cacheTtlByStatus: { '200-299': 31536000, '300-599': -1 } },
+      })
+
+    // One retry for a passing GitHub error (5xx or 429) before the visitor sees a failure.
+    let upstream = await fetchOrigin()
+    if (upstream.status >= 500 || upstream.status === 429) {
+      await upstream.body?.cancel()
+      upstream = await fetchOrigin()
+    }
 
     if (upstream.status >= 400) {
-      return new Response('Upstream error', { status: upstream.status === 404 ? 404 : 502 })
+      console.log(`mirror: upstream ${upstream.status} for ${tag}/${name}`)
+      return new Response('Upstream error', {
+        status: upstream.status === 404 ? 404 : 502,
+        headers: { 'Cache-Control': 'no-store', 'X-Upstream-Status': String(upstream.status) },
+      })
     }
 
     if (request.method === 'GET' && upstream.headers.get('cf-cache-status') === 'HIT') {

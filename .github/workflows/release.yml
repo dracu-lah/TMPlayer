@@ -685,6 +685,13 @@ jobs:
 
             Installed copies offer each update. [How to install](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/INSTALL.md) · [Moving from the deb, rpm, Flatpak or Windows zip](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/INSTALL.md#moving-from-a-format-that-is-no-longer-published) · [GPL-3.0](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/LICENSE) · [Third party notices](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/THIRD_PARTY_NOTICES.md) · [nextlib source](${{ steps.nextlib.outputs.url }}) · [mediamp source](${{ steps.mediamp.outputs.url }}) · [mediamp macOS source](${{ steps.mediamp.outputs.url_mac }})
 
+      # Every file the feed names must come out of the download mirror before the feed goes live
+      # (scripts/check-mirror.py). 1.28.4's AppImage did not: the worker had cached an error from
+      # GitHub for a year, and the download page and the updater pointed at it until a person tried.
+      - name: Check the download mirror serves every file
+        if: needs.version.outputs.prerelease != 'true'
+        run: python3 scripts/check-mirror.py "$RUNNER_TEMP/latest.json"
+
       # tmplayer.org is deployed by Vercel's git integration from main, which builds the Astro site
       # in site/ for every push, so a commit to main is the one way the site learns of the release:
       # Vercel builds it like any other push and the feed is live a couple of minutes later. Pushed with this
