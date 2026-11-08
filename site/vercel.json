@@ -245,12 +245,12 @@
   "redirects": [
     {
       "source": "/apk",
-      "destination": "https://tmplayer-download-mirror.dracu.workers.dev/download/v1.28.3/TMPlayer-1.28.3-universal.apk",
+      "destination": "https://tmplayer-download-mirror.dracu.workers.dev/download/v1.28.4/TMPlayer-1.28.4-universal.apk",
       "permanent": false
     },
     {
       "source": "/apk/",
-      "destination": "https://tmplayer-download-mirror.dracu.workers.dev/download/v1.28.3/TMPlayer-1.28.3-universal.apk",
+      "destination": "https://tmplayer-download-mirror.dracu.workers.dev/download/v1.28.4/TMPlayer-1.28.4-universal.apk",
       "permanent": false
     },
     {
