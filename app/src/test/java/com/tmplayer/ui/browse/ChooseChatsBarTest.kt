@@ -50,8 +50,8 @@ import org.robolectric.annotation.GraphicsMode
 import java.io.File
 
 /**
- * The Choose chats button (a person with a plus) on the phone's Chats bar and over Home's picture,
- * and on the television's top bar: where it stands at the smallest width, on its side, at a large
+ * The Choose chats button (a person with a plus) on the phone's Chats bar and on the
+ * television's top bar (Chats only; Home's corner has none): where it stands at the smallest width, on its side, at a large
  * font and right to left (never over the name or off the screen), and the remote reaching it,
  * pressing it, and coming back to it. Pictures go to `build/device-test/review/`.
  */
@@ -184,14 +184,14 @@ class ChooseChatsBarTest {
 
     // Home's corner over the picture --------------------------------------------------------
 
-    private fun homeCorner(sideways: Boolean, chooseChats: Boolean, fontScale: Float = 1f) = open {
+    private fun homeCorner(sideways: Boolean, fontScale: Float = 1f) = open {
         val base = LocalDensity.current
         CompositionLocalProvider(
             LocalDensity provides Density(base.density, fontScale),
         ) {
             TMPlayerTheme {
                 Box(Modifier.fillMaxSize().background(Color(0xFF334455))) {
-                    PhoneHomeCorner(sideways, start = 16.dp, end = 16.dp, under = 24.dp, chooseChats = chooseChats)
+                    PhoneHomeCorner(sideways, start = 16.dp, end = 16.dp, under = 24.dp)
                 }
             }
         }
@@ -199,46 +199,18 @@ class ChooseChatsBarTest {
 
     @Test
     @Config(sdk = [35], qualifiers = "w320dp-h640dp-port-night-xhdpi")
-    fun `Home's corner at 320 dp and a 1_3 font keeps the name and the button apart on the screen`() {
-        val activity = homeCorner(sideways = false, chooseChats = true, fontScale = 1.3f)
-        val node = button(activity)!!
-        val name = brand(activity)!!
-        assertInside(activity, node.boundsInRoot)
-        assertInside(activity, name.boundsInRoot)
-        assertApart(node.boundsInRoot, name.boundsInRoot)
-        draw(activity, "choose-chats-phone-home-320-font13.png")
+    fun `Home's corner has the name and no button, Choose chats is on Chats and in Settings`() {
+        val activity = homeCorner(sideways = false, fontScale = 1.3f)
+        assertNull(button(activity))
+        assertInside(activity, brand(activity)!!.boundsInRoot)
     }
 
     @Test
     @Config(sdk = [35], qualifiers = "w640dp-h320dp-land-night-xhdpi")
-    fun `Home's corner on its side puts the button beside the name at the right`() {
-        val activity = homeCorner(sideways = true, chooseChats = true, fontScale = 1.3f)
-        val node = button(activity)!!
-        val name = brand(activity)!!
-        assertInside(activity, node.boundsInRoot)
-        assertInside(activity, name.boundsInRoot)
-        assertApart(node.boundsInRoot, name.boundsInRoot)
-        assertTrue(node.boundsInRoot.left >= name.boundsInRoot.right)
-        draw(activity, "choose-chats-phone-home-landscape.png")
-    }
-
-    @Test
-    @Config(sdk = [35], qualifiers = "ar-ldrtl-w320dp-h640dp-port-night-xhdpi")
-    fun `Home's corner right to left mirrors the pair and stays on the screen`() {
-        val activity = homeCorner(sideways = false, chooseChats = true)
-        val node = button(activity)!!
-        val name = brand(activity)!!
-        assertInside(activity, node.boundsInRoot)
-        assertApart(node.boundsInRoot, name.boundsInRoot)
-        assertTrue(node.boundsInRoot.center.x < name.boundsInRoot.center.x)
-    }
-
-    @Test
-    @Config(sdk = [35], qualifiers = "w320dp-h640dp-port-night-xhdpi")
-    fun `Home with no chat chosen has no button, the card below has its own`() {
-        val activity = homeCorner(sideways = false, chooseChats = false)
+    fun `Home's corner on its side keeps the name on the screen with no button`() {
+        val activity = homeCorner(sideways = true, fontScale = 1.3f)
         assertNull(button(activity))
-        assertNotNull(brand(activity))
+        assertInside(activity, brand(activity)!!.boundsInRoot)
     }
 
     // The television's top bar --------------------------------------------------------------

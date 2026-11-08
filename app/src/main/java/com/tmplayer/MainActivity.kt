@@ -2192,7 +2192,7 @@ private fun Root() {
                     run = addChatsRun,
                     onClose = {
                         // On a television the remote goes back to the bar's Choose chats button
-                        // when the picker was opened over Home or Chats; from Settings, Back
+                        // when the picker was opened over Chats; from Settings, Back
                         // returns to Settings as before.
                         if (tvBar && addChatsCameFrom is Screen.Chats) railReturn = com.tmplayer.ui.browse.RailReturn.ChooseChats
                         screen = addChatsCameFrom

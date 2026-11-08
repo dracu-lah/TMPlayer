@@ -130,7 +130,7 @@ for (const size of [
             await expect.poll(() => focused(page)).toBe(row)
         })
 
-        test('Choose chats: the bar holds a button on Home and Chats, OK opens the picker on its page, Back returns the remote to the button', async ({ page }) => {
+        test('Choose chats: the bar holds a button on Chats only, OK opens the picker on its page, Back returns the remote to the button', async ({ page }) => {
             await page.goto('/')
             await expect.poll(() => focused(page)).toContain('card|/video/')
             await press(page, 'ArrowUp')
@@ -150,10 +150,10 @@ for (const size of [
             await expect.poll(() => focused(page)).toBe('choose-chats|/added-chats')
             await press(page, 'ArrowLeft')
             expect(await focused(page)).toBe('tv-tab|/chats')
-            // Home has it too, and its first focus stays on the content.
+            // Home has none, and its first focus stays on the content.
             await page.goto('/')
             await expect.poll(() => focused(page)).toContain('card|/video/')
-            await expect(page.locator('.tv-bar .choose-chats')).toHaveCount(1)
+            await expect(page.locator('.tv-bar .choose-chats')).toHaveCount(0)
         })
 
         test('Settings: a choice is made with OK, not by moving; Sign out asks, Back closes the question onto it', async ({ page }) => {

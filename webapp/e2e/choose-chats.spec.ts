@@ -1,11 +1,15 @@
-// The one-tap Choose chats button in the header of Home and Chats, in the phone and desktop layouts
-// (the TV's is walked in tv.spec.ts). It goes where the Settings row goes, /added-chats.
+// The one-tap Choose chats button in the header of Chats, in the phone and desktop layouts (the
+// TV's is walked in tv.spec.ts). Home has none: it is on Chats and in Settings. It goes where the
+// Settings row goes, /added-chats.
 import { expect, test } from '@playwright/test'
 
-for (const [name, path] of [
-    ['Home', '/'],
-    ['Chats', '/chats'],
-] as const) {
+test('Home has no Choose chats button', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.locator('.home-title')).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Choose chats' })).toHaveCount(0)
+})
+
+for (const [name, path] of [['Chats', '/chats']] as const) {
     test.describe(name, () => {
         test('has a named button that opens the picker once, even on a double click', async ({ page }) => {
             await page.goto(path)
@@ -41,7 +45,7 @@ for (const [name, path] of [
             expect(box.x).toBeGreaterThanOrEqual(0)
             expect(box.x + box.width).toBeLessThanOrEqual(320)
             expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
-            const title = page.locator(path === '/' ? '.home-title' : '.list-head .page-title')
+            const title = page.locator('.list-head .page-title')
             const t = (await title.boundingBox())!
             expect(t.x + t.width).toBeLessThanOrEqual(box.x + 1)
         })

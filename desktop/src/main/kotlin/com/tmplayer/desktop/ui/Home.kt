@@ -273,8 +273,6 @@ internal fun HomeRowsView(
         rows.filter { it !is HomeRow.Recent || it.asRow || it.noneChosen }.mapNotNull { HomeRows.withArt(it, art) }
     }
     val watch = rememberSeriesWatch(state)
-    // Choose chats beside the name, unless no chat is chosen yet: the card says so with its own button.
-    val chooseChatsShown = rows.none { it is HomeRow.Recent && it.noneChosen }
     // In line with the page header's title, whatever the window's width.
     val side = pageMargin()
     // The big-screen mode's bar is drawn over Home while its carousel is up: the picture runs up
@@ -355,7 +353,7 @@ internal fun HomeRowsView(
                             }
                             // The name in the strip the window is dragged by, where the carousel would set it.
                             Box(Modifier.fillMaxWidth().height(TOP_DRAG).windowDrag()) {
-                                HomeBrand(Modifier.align(Alignment.TopStart).padding(start = side, top = BRAND_TOP), chooseChats = chooseChatsShown, state = state)
+                                HomeBrand(Modifier.align(Alignment.TopStart).padding(start = side, top = BRAND_TOP))
                             }
                         } else {
                             // The app's name over the carousel's empty top corner, as the side bar sets it
@@ -386,7 +384,7 @@ internal fun HomeRowsView(
                                         }
                                     },
                                 )
-                                HomeBrand(Modifier.align(Alignment.TopStart).padding(start = side, top = BRAND_TOP), chooseChats = chooseChatsShown, state = state, onArt = true)
+                                HomeBrand(Modifier.align(Alignment.TopStart).padding(start = side, top = BRAND_TOP))
                             }
                         }
                     }
@@ -910,26 +908,17 @@ private val TOP_DRAG = 56.dp
 /** The name's distance from the top of the carousel: level with the window's buttons. */
 private val BRAND_TOP = 14.dp
 
-/** The mark and "TMPlayer" over the carousel's picture or the top strip; the browser's Beta word is the nav bar's, on every page. */
+/** The mark and "TMPlayer" over the carousel's picture or the top strip; the browser's Beta word is the nav bar's, on every page. Choose chats is on Chats and in Settings, not here. */
 @Composable
-private fun HomeBrand(modifier: Modifier = Modifier, chooseChats: Boolean = false, state: ShellState? = null, onArt: Boolean = false) {
-    // The big-screen mode's bar signs the window at its end already, and carries Choose chats.
+private fun HomeBrand(modifier: Modifier = Modifier) {
+    // The big-screen mode's bar signs the window at its end already.
     if (BigScreen.on) return
-    // Choose chats beside the name, not at the window's end, which is the window buttons' place.
-    Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         com.tmplayer.ui.components.BrandLockup(
             size = HOME_BRAND,
             layout = com.tmplayer.ui.components.BrandLayout.Row,
             badge = false,
         )
-        if (chooseChats && state != null && state.chooseChatsAllowed) {
-            com.tmplayer.ui.components.ChooseChatsButton(
-                size = CHOOSE_CHATS_SIZE,
-                onArt = onArt,
-                shortcut = CHOOSE_CHATS_SHORTCUT,
-                onClick = { state.chooseChats() },
-            )
-        }
     }
 }
 

@@ -1140,7 +1140,8 @@ internal fun BrowseScreen(
                 solid = { barGround },
                 onDown = { homeShown && runCatching { tvPlayFocus.requestFocus(FocusDirection.Enter) }.getOrDefault(false) },
                 profileFocus = profileFocus,
-                onChooseChats = { AddChatsRequest.ask() },
+                // Only on Chats (and in Settings): Home and the other pages do not carry it.
+                onChooseChats = if (tab.onChatsPage) ({ AddChatsRequest.ask() }) else null,
                 chooseChatsFocus = chooseChatsFocus,
             )
         }

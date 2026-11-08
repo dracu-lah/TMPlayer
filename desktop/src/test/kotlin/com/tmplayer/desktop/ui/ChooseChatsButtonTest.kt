@@ -60,7 +60,7 @@ import java.nio.file.Files
  * The person-with-a-plus button (Choose chats) on the desktop: reached and pressed from the
  * keyboard, named for a screen reader, hidden while the setup or the gate is up, answering its
  * key, never stacking a second page on a double press, keeping its size at a large font, and on
- * the big-screen mode's bar reached by the remote with Back landing on it again.
+ * the big-screen mode's bar (on Chats only, not Home) reached by the remote with Back landing on it again.
  */
 @OptIn(ExperimentalTestApi::class)
 class ChooseChatsButtonTest {
@@ -181,9 +181,10 @@ class ChooseChatsButtonTest {
         onNodeWithText("Chats").assertExists()
     }
 
-    private fun television() {
+    private fun television(onChats: Boolean = true) {
         BigScreen.layout = DesktopLayout.Desktop
         BigScreen.override = DesktopLayout.Tv
+        if (onChats) shell.showChats(shell.chatSection)
     }
 
     @Composable
@@ -220,6 +221,16 @@ class ChooseChatsButtonTest {
         onNode(button).assertIsFocused()
 
         press(Key.DirectionLeft)
+        onNode(tab(L.navChats)).assertIsFocused()
+    }
+
+    @Test
+    fun `the big-screen bar has no button on Home, only on Chats`() = runComposeUiTest {
+        television(onChats = false)
+        setContent { Window { Box(Modifier.size(10.dp)) } }
+        onNode(button).assertDoesNotExist()
+        onNode(tab(L.navChats)).requestFocus()
+        press(Key.DirectionRight)
         onNode(tab(L.navChats)).assertIsFocused()
     }
 

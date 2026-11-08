@@ -198,8 +198,9 @@ internal fun TvTopBar(
                     state.showChats(if (open.onChatsPage) open else BrowseSection.of(BrowseTab.Chats))
                 }
                 // Add or remove chats: an action rather than a place, so an icon named under the
-                // remote's focus, a Right from Chats away. Not while the setup or the gate is up.
-                if (state.chooseChatsAllowed) {
+                // remote's focus, a Right from Chats away. Only on Chats (and in Settings), not on
+                // Home; not while the setup or the gate is up.
+                if (state.chooseChatsAllowed && current == NavPlace.Chats) {
                     com.tmplayer.ui.components.ChooseChatsButton(
                         focus = bar.chooseChats,
                         size = TV_CLUSTER_ITEM,

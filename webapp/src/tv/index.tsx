@@ -158,8 +158,8 @@ export function TvBar() {
                         )}
                     </For>
                 </nav>
-                {/* The way into Choose chats, on the two pages that list what was chosen. */}
-                <Show when={location.pathname === '/' || location.pathname === '/chats'}>
+                {/* The way into Choose chats, on Chats only (and in Settings), not on Home. */}
+                <Show when={location.pathname === '/chats'}>
                     <ChooseChatsButton class="tv-choose" size={20} />
                 </Show>
                 <TvFullscreenToggle />
