@@ -31,6 +31,10 @@ LANGS = ["es-419", "pt-BR", "fr", "de", "it", "pl", "ru", "uk", "tr", "id", "vi"
          "zh-TW", "ja", "ko", "hi", "bn", "ml"]
 # Strings the layout keeps for languages that still carry them, though no page shows them today.
 UNUSED_OK = {"build.languages"}
+# The support popup (SupportPopup.astro) is switched off by SHOW_SUPPORT_POPUP in Base.astro since
+# 2026-11-03, so the build never looks these up. Its strings stay translated for when it comes
+# back; delete these four lines then. (They failed the Style job on every push until 2026-11-08.)
+UNUSED_OK |= {"home.bmc_pop_title", "home.bmc_pop_line", "home.bmc_pop_note", "home.bmc_pop_later"}
 # Keys of the English-only pages that read their text from en.json (the one-app comparisons under
 # /alternatives/). They do not count towards a language's share, as in site/src/i18n/t.ts.
 ENGLISH_ONLY = ("vs.",)
