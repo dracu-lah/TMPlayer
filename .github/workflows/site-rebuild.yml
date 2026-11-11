@@ -1,0 +1,33 @@
+name: Site rebuild
+
+# The home page's download total, the "new in" pill and the release list are worked out when the
+# site is built (site/src/lib/stats.ts), and Vercel only builds on a push to main. This asks
+# Vercel for a fresh build once a day so those figures follow the downloads between pushes
+# (2026-11-11: the page showed 17,755 while the real total was about 20,700).
+#
+# Needs one repository secret, VERCEL_DEPLOY_HOOK_URL: Vercel, the TMPlayer site project,
+# Settings, Git, Deploy Hooks, create one for branch main. Without the secret the job says so and
+# ends green, so nothing breaks before the secret exists.
+on:
+  schedule:
+    - cron: "17 5 * * *"
+  workflow_dispatch: {}
+
+permissions: {}
+
+jobs:
+  rebuild:
+    name: Ask Vercel for a build
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Trigger the deploy hook
+        env:
+          HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "VERCEL_DEPLOY_HOOK_URL is not set: skipping. See the comment at the top of this file."
+            exit 0
+          fi
+          curl -fsS -X POST --retry 3 --retry-delay 10 "$HOOK" > /dev/null
+          echo "Vercel build requested."
