@@ -111,7 +111,10 @@ export default {
       })
     }
 
-    if (request.method === 'GET' && upstream.headers.get('cf-cache-status') === 'HIT') {
+    // A resumed or split download sends several ranged GETs for one file; only the request that
+    // starts at the first byte (or has no Range at all) is one download, so the rest are not counted.
+    const startsAtZero = !range || /^bytes=0-/.test(range.trim())
+    if (request.method === 'GET' && startsAtZero && upstream.headers.get('cf-cache-status') === 'HIT') {
       ctx.waitUntil(bumpCounter(env))
     }
 
