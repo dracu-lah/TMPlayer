@@ -3,8 +3,8 @@
 // the final numbers in its first paint: no call to GitHub from the reader's browser, no figure
 // arriving late and moving the hero, and no use of the 60 unauthenticated calls an hour.
 //
-// Downloads are the app files downloaded from GitHub across every release (scripts/release-data.py
-// says which files count). The build asks GitHub for the current figure, since Vercel builds on
+// Downloads are the app files downloaded from GitHub across every release, betas included (the
+// mirror counts those too, so both halves agree; scripts/release-data.py says which files count). The build asks GitHub for the current figure, since Vercel builds on
 // every push to main; when that call fails or is rate limited it adds up the counts the release job
 // stored in releases.json, which are at most one release old. The in-app updater fetches the same
 // files, so the page says "downloads", never users or installs.
@@ -17,7 +17,7 @@ import { releases } from './releases';
 import { published } from '../i18n/t';
 
 interface Asset { name: string; download_count: number }
-interface GitHubRelease { draft: boolean; prerelease: boolean; assets: Asset[] }
+interface GitHubRelease { draft: boolean; assets: Asset[] }
 
 // The same files as APP_FILE in scripts/release-data.py.
 const APP_FILE = /^tmplayer(?!.*-source\.)(?:[-_.].*)?\.(apk|msi|dmg|appimage|deb|rpm|flatpak|zip|tar\.xz|tar\.gz)$/i;
@@ -37,7 +37,7 @@ async function liveDownloads(): Promise<number | null> {
     if (!res.ok) return null;
     const list = (await res.json()) as GitHubRelease[];
     return list
-      .filter((r) => !r.draft && !r.prerelease)
+      .filter((r) => !r.draft)
       .flatMap((r) => r.assets)
       .filter((a) => APP_FILE.test(a.name))
       .reduce((total, a) => total + a.download_count, 0);
