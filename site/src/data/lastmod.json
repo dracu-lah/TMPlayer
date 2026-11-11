@@ -1,7 +1,7 @@
 [
   {
     "path": "/",
-    "lastmod": "2026-10-29",
+    "lastmod": "2026-11-11",
     "changefreq": "weekly",
     "priority": "1.0",
     "images": [
@@ -69,7 +69,7 @@
   },
   {
     "path": "/features/",
-    "lastmod": "2026-10-29",
+    "lastmod": "2026-11-11",
     "changefreq": "monthly",
     "priority": "0.9",
     "images": [
@@ -199,7 +199,7 @@
   },
   {
     "path": "/android-tv/",
-    "lastmod": "2026-10-29",
+    "lastmod": "2026-11-11",
     "changefreq": "monthly",
     "priority": "0.8",
     "images": [
@@ -295,7 +295,7 @@
   },
   {
     "path": "/faq/",
-    "lastmod": "2026-10-29",
+    "lastmod": "2026-11-11",
     "changefreq": "monthly",
     "priority": "0.7"
   },
@@ -331,7 +331,7 @@
   },
   {
     "path": "/fire-tv/",
-    "lastmod": "2026-10-29",
+    "lastmod": "2026-11-11",
     "changefreq": "monthly",
     "priority": "0.8"
   },
@@ -361,7 +361,7 @@
   },
   {
     "path": "/guides/telegram-videos-on-android-tv/",
-    "lastmod": "2026-10-24",
+    "lastmod": "2026-11-11",
     "changefreq": "monthly",
     "priority": "0.7"
   },
@@ -373,13 +373,13 @@
   },
   {
     "path": "/guides/telegram-on-tv-without-casting/",
-    "lastmod": "2026-10-24",
+    "lastmod": "2026-11-11",
     "changefreq": "monthly",
     "priority": "0.7"
   },
   {
     "path": "/guides/telegram-on-samsung-or-lg-tv/",
-    "lastmod": "2026-10-29",
+    "lastmod": "2026-11-11",
     "changefreq": "monthly",
     "priority": "0.7",
     "images": [
@@ -411,7 +411,7 @@
   },
   {
     "path": "/guides/cast-telegram-videos-to-chromecast/",
-    "lastmod": "2026-10-24",
+    "lastmod": "2026-11-11",
     "changefreq": "monthly",
     "priority": "0.7",
     "images": [
@@ -471,7 +471,7 @@
   },
   {
     "path": "/alternatives/tmp-telegram-media-player/",
-    "lastmod": "2026-10-29",
+    "lastmod": "2026-11-11",
     "changefreq": "monthly",
     "priority": "0.6",
     "images": [
@@ -515,7 +515,7 @@
   },
   {
     "path": "/translate/",
-    "lastmod": "2026-10-20",
+    "lastmod": "2026-11-11",
     "changefreq": "monthly",
     "priority": "0.5"
   }

@@ -126,7 +126,7 @@ def page(downloads: str, languages: int) -> str:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument('--downloads', default='10,000')
-    ap.add_argument('--languages', type=int, default=21)
+    ap.add_argument('--languages', type=int, default=22)
     ap.add_argument('--name', default='milestone-10k')
     args = ap.parse_args()
 

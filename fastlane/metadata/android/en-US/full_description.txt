@@ -17,7 +17,7 @@ Everywhere:
 - Resume where you stopped, series pages that put episodes in order, skip intro and next episode, and course progress for numbered lessons.
 - Night mode for sound keeps dialogue clear and loud scenes quiet; volume boost for quiet files.
 - Videos posted in pieces play as one video; archives that cannot be played are listed with the reason.
-- Light and Dark themes with a Pure black switch for OLED screens, nine accent colours, and 21 languages.
+- Light and Dark themes with a Pure black switch for OLED screens, nine accent colours, and 22 languages.
 - No ads of its own, no analytics, no server run by the developer. TMPlayer talks to Telegram directly through TDLib, Telegram's own library, and your data stays on your devices.
 
 TMPlayer only plays what is already in your chats. Use it with videos you are allowed to watch.

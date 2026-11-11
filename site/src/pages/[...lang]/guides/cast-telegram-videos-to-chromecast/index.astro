@@ -91,6 +91,9 @@ const table = [
     <Cards>
       {handles.map((h) => <Card title={g(`${h}_h`)}>{g(`${h}_p`)}</Card>)}
     </Cards>
+    <div class="section-body prose-band" data-reveal>
+      <p>{g('dlna_p')}</p>
+    </div>
   </Band>
 
   <Band wave id="limits" title={g('limits_h')}>

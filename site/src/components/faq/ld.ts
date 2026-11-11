@@ -57,7 +57,7 @@ export const faqLd = {
       "name": "Can I cast Telegram videos to a Chromecast or Google TV?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Yes, from TMPlayer on an Android phone or on a computer. Press the Cast button in the player, pick the TV on the same Wi-Fi, and the video plays on the TV while your phone or computer keeps the controls: pause, seek, audio tracks, subtitles and the TV's volume. TMPlayer sends the video from Telegram to the TV itself, so MKV videos play, and on a phone a soundtrack the TV cannot play is converted on the way. When you stop, your place is kept for Continue watching. It works with a Chromecast, a Chromecast with Google TV and televisions with Google Cast built in; AirPlay to an Apple TV is not supported. On an Android TV or Google TV you can also install TMPlayer on the TV itself, which leaves the phone free."
+        "text": "Yes, from TMPlayer on an Android phone or on a computer. Press the Cast button in the player, pick the TV on the same Wi-Fi, and the video plays on the TV while your phone or computer keeps the controls: pause, seek, audio tracks, subtitles and the TV's volume. TMPlayer sends the video from Telegram to the TV itself, so MKV videos play, and on a phone a soundtrack the TV cannot play is converted on the way. When you stop, your place is kept for Continue watching. It works with a Chromecast, a Chromecast with Google TV and televisions with Google Cast built in, and since 1.28.4 with DLNA TVs and speakers on the same Wi-Fi; AirPlay to an Apple TV is not supported. On an Android TV or Google TV you can also install TMPlayer on the TV itself, which leaves the phone free."
       }
     },
     {
@@ -153,7 +153,7 @@ export const faqLd = {
       "name": "How much storage does it need?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "On a phone or TV, playing a video keeps only that one: the one before it is cleared, so an 8 GB TV stick is enough. Videos you download stay until you delete them. On a computer, recently played videos are kept up to a size you set in Settings."
+        "text": "On a phone or TV, playing a video keeps only that one: the one before it is cleared, so an 8 GB TV stick is enough. Videos you download stay until you delete them, and on Android you can choose where they are saved: internal storage, an SD card or USB drive, or a folder you pick, with the free space shown. On a computer, recently played videos are kept up to a size you set in Settings."
       }
     },
     {
