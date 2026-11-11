@@ -33,7 +33,7 @@ const cur = (id: PageId) => (id === page ? 'page' : undefined);
         how hard the install is, and the questions about trust. The icons and the GitHub row show
         only in the phone's menu card. */}
     <nav class="nav-links" id="site-nav" aria-label={t('common.primary')}>
-        <a class="nav-home" href={l(lang, '/')} aria-current={cur('home')}><span class="nav-ico" aria-hidden="true"><Icon name="home" /></span><span><T k="common.home" /></span></a>
+        <a href={l(lang, '/')} aria-current={cur('home')}><span class="nav-ico" aria-hidden="true"><Icon name="home" /></span><span><T k="common.home" /></span></a>
         <a href={l(lang, '/android-tv/')} aria-current={cur('android_tv')}><span class="nav-ico" aria-hidden="true"><Icon name="tv-card" /></span><span>Android TV</span></a>
         <a href={l(lang, '/features/')} aria-current={cur('features')}><span class="nav-ico" aria-hidden="true"><Icon name="play-card" /></span><span><T k="common.features" /></span></a>
         <a href={l(lang, '/install/')} aria-current={cur('install')}><span class="nav-ico" aria-hidden="true"><Icon name="spec-tested-on" /></span><span><T k="common.install" /></span></a>
