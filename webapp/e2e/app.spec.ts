@@ -6,7 +6,7 @@ test('signed out: sign in, with the unofficial line and the legal link', async (
     await fakeCase(context, 'signedout')
     await page.goto('/chats')
     await expect(page).toHaveURL(/\/signin\?next=%2Fchats/)
-    await expect(page).toHaveTitle('TMPlayer')
+    await expect(page).toHaveTitle('TMPlayer Web: Telegram video player in your browser')
     await expect(page.getByText('TMPlayer is an unofficial app that uses the Telegram API. It is not made by Telegram.')).toBeVisible()
     await expect(page.locator('a[href="https://tmplayer.org/legal"]')).toBeVisible()
 })

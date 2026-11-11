@@ -148,7 +148,9 @@ export function notesHtml(r: Release, indent: string): string {
 
 /** The notes cut at a word to a search snippet's length, for the description tag. */
 export function summary(r: Release, limit = 155): string {
-  const text = plain(r.notes);
+  // One sentence per note line, so a snippet reads "A. B." and not "A B" run together.
+  const text = r.notes.split('\n').map((line) => plain(line).replace(/[,;:.\s]+$/, '')).filter(Boolean)
+    .map((line, i, all) => (i < all.length - 1 ? `${line}.` : line)).join(' ');
   if (!text) return `TMPlayer ${r.version}, released ${humanDate(r.date)}, a release of the free Telegram video player. No notes were written for it; its files are on GitHub.`;
   const chars = Array.from(text);
   if (chars.length <= limit) return text;
