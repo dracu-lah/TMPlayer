@@ -586,6 +586,11 @@ summary {
   box-shadow: none;
 }
 .nav-links a.nav-dl { display: none; }
+/* The brand already links home, so the wide bar drops its Home link; the menu card and the
+   tray below 1080px keep it. */
+@media (min-width: 1081px) {
+  .nav-links a.nav-home { display: none; }
+}
 @media (max-width: 639px) {
   .nav a.nav-cta { display: none; }
   .nav-links a.nav-dl { display: block; }
