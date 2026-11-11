@@ -8,7 +8,7 @@
 #   cd desktop/packaging/aur && makepkg -si
 pkgname=tmplayer-bin
 _appid=io.github.dracu_lah.TMPlayer
-pkgver=1.28.4
+pkgver=1.28.5
 pkgrel=1
 pkgdesc="Watch the videos in your Telegram chats while they download (unofficial client)"
 arch=('x86_64')
@@ -23,7 +23,7 @@ depends=('glibc>=2.38' 'gcc-libs' 'openssl' 'zlib' 'alsa-lib' 'libpulse' 'libglv
 # Prebuilt and already stripped; stripping would also break libskiko's checksum.
 options=('!strip' '!debug')
 source=("https://github.com/dracu-lah/TMPlayer/releases/download/v${pkgver}/TMPlayer-${pkgver}-linux-x64.tar.xz")
-sha256sums=('f4bfffe37ee55e5500315507e8230fe18034bdde2a0c8f9e325d6141af9020bb')
+sha256sums=('d49455ca61512c057bd909a8bc3976d9209657b68fb399f8250aa3d8495d0b7a')
 
 package() {
   cd "TMPlayer-${pkgver}"

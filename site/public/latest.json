@@ -1,48 +1,40 @@
 {
   "schema": 1,
-  "version": "1.28.4",
-  "versionCode": 1280499,
-  "published": "2026-11-08T08:23:01Z",
-  "releaseUrl": "https://github.com/dracu-lah/TMPlayer/releases/tag/v1.28.4",
-  "notes": "Choose chats button on Chats, on phone, TV, desktop and the web player. Choose the right poster: pick the correct match for a video, kept in backups and restored. MKV files without a seek index now seek instead of playing only from the start. Split episodes (S08 E06a, S08 E06b) are listed in order as rows of their own. Covers shared by many videos of a chat are replaced by a generated cover. Desktop and web Home: a taller carousel with a facts line. Desktop and web detail pages: a centred column with equal gutters. Web player: HEVC and AV1 on LG and Samsung TVs, faster HEVC conversion in the browser, and a loader that says the picture is being converted. Web player: one menu on right click and long press of every video card. Show page: season tabs and episode ranges step into view under the remote. Translations for the new text in all 20 languages.",
+  "version": "1.28.5",
+  "versionCode": 1280599,
+  "published": "2026-11-11T09:50:47Z",
+  "releaseUrl": "https://github.com/dracu-lah/TMPlayer/releases/tag/v1.28.5",
+  "notes": "Czech (\u010ce\u0161tina) added: the app, the site and its pages are translated. Russian wording and grammar fixed throughout, and the button is \u0421\u043c\u043e\u0442\u0440\u0435\u0442\u044c everywhere. Polish and Czech letters now draw in the site's fallback font.",
   "changes": [
-    "Choose chats button on Chats, on phone, TV, desktop and the web player",
-    "Choose the right poster: pick the correct match for a video, kept in backups and restored",
-    "MKV files without a seek index now seek instead of playing only from the start",
-    "Split episodes (S08 E06a, S08 E06b) are listed in order as rows of their own",
-    "Covers shared by many videos of a chat are replaced by a generated cover",
-    "Desktop and web Home: a taller carousel with a facts line",
-    "Desktop and web detail pages: a centred column with equal gutters",
-    "Web player: HEVC and AV1 on LG and Samsung TVs, faster HEVC conversion in the browser, and a loader that says the picture is being converted",
-    "Web player: one menu on right click and long press of every video card",
-    "Show page: season tabs and episode ranges step into view under the remote",
-    "Translations for the new text in all 20 languages"
+    "Czech (\u010ce\u0161tina) added: the app, the site and its pages are translated",
+    "Russian wording and grammar fixed throughout, and the button is \u0421\u043c\u043e\u0442\u0440\u0435\u0442\u044c everywhere",
+    "Polish and Czech letters now draw in the site's fallback font"
   ],
   "assets": {
     "android-universal": {
-      "url": "https://tmplayer-download-mirror.dracu.workers.dev/download/v1.28.4/TMPlayer-1.28.4-universal.apk",
-      "sha256": "26f6e8e223e12bdd91567a5bc33e36f04fd2174a1faa095d12716c5d2e6352c0",
-      "size": 34353833
+      "url": "https://tmplayer-download-mirror.dracu.workers.dev/download/v1.28.5/TMPlayer-1.28.5-universal.apk",
+      "sha256": "90a37a3f7abd3a86f1d6208bf970e6a65c5bfbf4c1b0ad71ce70a66a35c63fe3",
+      "size": 34417672
     },
     "windows-x64-msi-v2": {
-      "url": "https://tmplayer-download-mirror.dracu.workers.dev/download/v1.28.4/TMPlayer-1.28.4-windows-x64.msi",
-      "sha256": "0949b52d02a2901a37afe903c59d8ac0111c271d0f378789f36101eec1b3b7e5",
-      "size": 111506576
+      "url": "https://tmplayer-download-mirror.dracu.workers.dev/download/v1.28.5/TMPlayer-1.28.5-windows-x64.msi",
+      "sha256": "2ab7d12f2b27f7f77e0b2455b35974b97e64d114619e6eacf53b12a2fa06d903",
+      "size": 111572112
     },
     "macos-arm64-dmg": {
-      "url": "https://tmplayer-download-mirror.dracu.workers.dev/download/v1.28.4/TMPlayer-1.28.4-macos-arm64.dmg",
-      "sha256": "739f5edcb0b835b602cdf6c0f9380096bf65a4932360e50a6fd9e52d3cee8134",
-      "size": 118859280
+      "url": "https://tmplayer-download-mirror.dracu.workers.dev/download/v1.28.5/TMPlayer-1.28.5-macos-arm64.dmg",
+      "sha256": "364c6b903d82b3b2a86efa329b0c83183dc7eddea68522a39a92e76eac687cd4",
+      "size": 118953392
     },
     "linux-x64-appimage": {
-      "url": "https://tmplayer-download-mirror.dracu.workers.dev/download/v1.28.4/TMPlayer-1.28.4-x86_64.AppImage",
-      "sha256": "873a472963dbf979372551fadd0bbbffa28d4225f964ddb1db5292b0a4c17991",
-      "size": 104585720
+      "url": "https://tmplayer-download-mirror.dracu.workers.dev/download/v1.28.5/TMPlayer-1.28.5-x86_64.AppImage",
+      "sha256": "46d75c6d3615a375fce6f6b5198042d5e03b4a45290f5c2b8ef8630058273155",
+      "size": 104634872
     },
     "linux-x64-tarball": {
-      "url": "https://tmplayer-download-mirror.dracu.workers.dev/download/v1.28.4/TMPlayer-1.28.4-linux-x64.tar.xz",
-      "sha256": "f4bfffe37ee55e5500315507e8230fe18034bdde2a0c8f9e325d6141af9020bb",
-      "size": 74944920
+      "url": "https://tmplayer-download-mirror.dracu.workers.dev/download/v1.28.5/TMPlayer-1.28.5-linux-x64.tar.xz",
+      "sha256": "d49455ca61512c057bd909a8bc3976d9209657b68fb399f8250aa3d8495d0b7a",
+      "size": 74883432
     }
   }
 }
