@@ -212,9 +212,18 @@ jobs:
       - name: The poster proxy and the TV page answer
         run: |
           url=$(grep -oE 'https://[0-9a-f]+\.tmplayer-webapp\.pages\.dev' "$RUNNER_TEMP/deploy.log" | head -1)
-          type=$(curl -sS -o /dev/null -w '%{content_type}' "$url/tmdb/poster?k=film&t=Test&y=2020")
-          echo "$url/tmdb/poster: $type"
-          case "$type" in application/json*) ;; *) echo "::error::/tmdb/ is not the proxy on $url"; exit 1 ;; esac
-          # And a TV's browser gets the TV build's page (it loads assets from /tv/).
-          curl -sS -H 'Accept: text/html' -A 'Mozilla/5.0 (Web0S; Linux/SmartTV) Chrome/68.0.3440.106' "$url/" | grep -q '/tv/assets/' \
-            || { echo "::error::a TV's page load on $url is not the TV build"; exit 1; }
+          # A fresh deployment can take a few seconds to answer with its Functions (the first
+          # check once ran 0.7 s after the deploy and failed on a good build): try 5 times, 5 s apart.
+          for try in 1 2 3 4 5; do
+            type=$(curl -sS -o /dev/null -w '%{content_type}' "$url/tmdb/poster?k=film&t=Test&y=2020" || true)
+            echo "try $try, $url/tmdb/poster: $type"
+            case "$type" in application/json*) proxy=ok ;; *) proxy=no ;; esac
+            # And a TV's browser gets the TV build's page (it loads assets from /tv/).
+            if curl -sS -H 'Accept: text/html' -A 'Mozilla/5.0 (Web0S; Linux/SmartTV) Chrome/68.0.3440.106' "$url/" | grep -q '/tv/assets/'; then tv=ok; else tv=no; fi
+            echo "try $try, TV page: $tv"
+            [ "$proxy" = ok ] && [ "$tv" = ok ] && exit 0
+            sleep 5
+          done
+          [ "$proxy" = ok ] || echo "::error::/tmdb/ is not the proxy on $url"
+          [ "$tv" = ok ] || echo "::error::a TV's page load on $url is not the TV build"
+          exit 1
