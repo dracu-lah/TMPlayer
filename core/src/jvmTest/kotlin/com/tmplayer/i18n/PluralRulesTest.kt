@@ -96,6 +96,19 @@ class PluralRulesTest {
     }
 
     @Test
+    fun `czech has one few many and other`() {
+        check(
+            "cs",
+            mapOf(
+                "one" to listOf(1),
+                "few" to listOf(2, 3, 4),
+                "many" to listOf(0.5, 1.5, 2.5, 10.5),
+                "other" to listOf(0, 5, 11, 12, 14, 21, 22, 100, 102, 1000),
+            ),
+        )
+    }
+
+    @Test
     fun `chinese, japanese, korean, vietnamese and indonesian have one form`() {
         for (language in listOf("zh", "zh-CN", "zh-TW", "ja", "ko", "vi", "id", "in")) {
             check(language, mapOf("other" to listOf(0, 1, 2, 5, 11, 21, 100, 1_000_000, 1.5)))
@@ -114,6 +127,7 @@ class PluralRulesTest {
         }
         assertEquals(6, PluralRules.categories("ar").size)
         assertEquals(listOf("one", "few", "many", "other"), PluralRules.categories("uk"))
+        assertEquals(listOf("one", "few", "many", "other"), PluralRules.categories("cs"))
     }
 
     @Test

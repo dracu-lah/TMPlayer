@@ -3167,12 +3167,12 @@ a.card:hover { text-decoration: none; color: var(--on-surface); border-color: va
 
 
 /* Fonts. Poppins is served from this domain as a Latin subset, so it covers English, Spanish,
-   Portuguese, French, German, Italian and Indonesian. Turkish, Vietnamese and the Cyrillic
-   languages would mix two fonts inside one word, so they skip it. The other scripts get the
+   Portuguese, French, German, Italian and Indonesian. Turkish, Vietnamese, Polish, Czech and the
+   Cyrillic languages (the subset lacks their letters, 2026-11-11) would mix two fonts inside one word, so they skip it. The other scripts get the
    faces every system already has for them: Noto on Android and Linux, the system's own faces on
    Windows and Apple devices. Nothing extra is downloaded. Headings set a tight negative tracking
    for Poppins, which breaks Arabic joining and crowds the other scripts, so those reset it. */
-:root:lang(tr), :root:lang(vi), :root:lang(ru), :root:lang(uk) {
+:root:lang(tr), :root:lang(vi), :root:lang(ru), :root:lang(uk), :root:lang(pl), :root:lang(cs) {
   --sans: "Noto Sans", Roboto, "Segoe UI", "Helvetica Neue", system-ui, Arial, sans-serif;
 }
 :root:lang(ar) {

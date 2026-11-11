@@ -27,7 +27,7 @@ I18N = SITE / "i18n"
 APP_JS = SITE / "src" / "scripts" / "app.js"
 USED = SITE / ".astro" / "used-keys.json"
 PUBLISH_THRESHOLD = 0.95
-LANGS = ["es-419", "pt-BR", "fr", "de", "it", "pl", "ru", "uk", "tr", "id", "vi", "ar", "fa", "zh-CN",
+LANGS = ["es-419", "pt-BR", "fr", "de", "it", "pl", "cs", "ru", "uk", "tr", "id", "vi", "ar", "fa", "zh-CN",
          "zh-TW", "ja", "ko", "hi", "bn", "ml"]
 # Strings the layout keeps for languages that still carry them, though no page shows them today.
 UNUSED_OK = {"build.languages"}

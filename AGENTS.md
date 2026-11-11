@@ -77,7 +77,7 @@ the happy path alone. The kinds of cases that keep coming up:
 Then test on the real devices (phone, TV) with small videos before calling it done.
 
 New user-visible text goes into `core/src/commonMain/resources/i18n/en.json` (keys sorted; the
-catalog test fails otherwise) and is translated into the other 20 catalogs before a release.
+catalog test fails otherwise) and is translated into the other 21 catalogs before a release.
 
 ## Error handling
 

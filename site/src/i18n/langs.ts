@@ -50,6 +50,7 @@ export const LANGS: Lang[] = [
   { tag: 'de', path: 'de', hreflang: 'de', og: 'de_DE', name: 'Deutsch', flag: '🇩🇪' },
   { tag: 'it', path: 'it', hreflang: 'it', og: 'it_IT', name: 'Italiano', flag: '🇮🇹' },
   { tag: 'pl', path: 'pl', hreflang: 'pl', og: 'pl_PL', name: 'Polski', flag: '🇵🇱' },
+  { tag: 'cs', path: 'cs', hreflang: 'cs', og: 'cs_CZ', name: 'Čeština', flag: '🇨🇿' },
   { tag: 'ru', path: 'ru', hreflang: 'ru', og: 'ru_RU', name: 'Русский', flag: '🇷🇺' },
   { tag: 'uk', path: 'uk', hreflang: 'uk', og: 'uk_UA', name: 'Українська', flag: '🇺🇦' },
   { tag: 'tr', path: 'tr', hreflang: 'tr', og: 'tr_TR', name: 'Türkçe', flag: '🇹🇷' },

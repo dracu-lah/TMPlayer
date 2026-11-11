@@ -24,6 +24,7 @@ object Languages {
         AppLanguage("de", "Deutsch"),
         AppLanguage("it", "Italiano"),
         AppLanguage("pl", "Polski"),
+        AppLanguage("cs", "Čeština"),
         AppLanguage("ru", "Русский"),
         AppLanguage("uk", "Українська"),
         AppLanguage("tr", "Türkçe"),

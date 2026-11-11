@@ -39,7 +39,7 @@ object PluralRules {
     /** Every category [language] can produce, `other` last. */
     fun categories(language: String): List<String> = when (base(language)) {
         "ar" -> listOf("zero", "one", "two", "few", "many", "other")
-        "ru", "uk", "pl" -> listOf("one", "few", "many", "other")
+        "ru", "uk", "pl", "cs" -> listOf("one", "few", "many", "other")
         "es", "pt", "fr", "it" -> listOf("one", "many", "other")
         "ja", "ko", "zh", "vi", "id" -> listOf("other")
         else -> listOf("one", "other")
@@ -56,6 +56,7 @@ object PluralRules {
         "pt", "fr" -> { o -> if (o.i == 0L || o.i == 1L) "one" else if (millions(o)) "many" else "other" }
         "ru", "uk" -> ::eastSlavic
         "pl" -> ::polish
+        "cs" -> ::czech
         "tr", "ml" -> { o -> if (o.n.compareTo(Decimal.ONE) == 0) "one" else "other" }
         "hi", "bn", "fa" -> { o -> if (o.i == 0L || o.n.compareTo(Decimal.ONE) == 0) "one" else "other" }
         "ar" -> ::arabic
@@ -88,6 +89,16 @@ object PluralRules {
             mod10 in 2..4 && mod100 !in 12..14 -> "few"
             // 0, 5 to 9 and 11 to 14 in every decade, plus 12 to 14 itself: `many`, as CLDR has it.
             else -> "many"
+        }
+    }
+
+    /** `one`: 1; `few`: 2 to 4; `many`: any number with fraction digits ("1,5 videa"); else `other`. */
+    private fun czech(o: Operands): String {
+        if (o.v != 0) return "many"
+        return when (o.i) {
+            1L -> "one"
+            in 2L..4L -> "few"
+            else -> "other"
         }
     }
 

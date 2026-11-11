@@ -95,6 +95,15 @@ class TranslatorTest {
     }
 
     @Test
+    fun `czech picks one, few and other`() {
+        val m = translate("cs", "a.videos" to "{count, plural, one {# video1} few {# video2} many {# video3} other {# videí}}")
+        assertEquals("1 video1", m.format("a.videos", "count" to 1))
+        assertEquals("3 video2", m.format("a.videos", "count" to 3))
+        assertEquals("5 videí", m.format("a.videos", "count" to 5))
+        assertEquals("21 videí", m.format("a.videos", "count" to 21))
+    }
+
+    @Test
     fun `arabic picks all six categories`() {
         val m = translate("ar", "a.videos" to "{count, plural, zero {z} one {o} two {t} few {f #} many {m #} other {x #}}")
         assertEquals("z", m.format("a.videos", "count" to 0))

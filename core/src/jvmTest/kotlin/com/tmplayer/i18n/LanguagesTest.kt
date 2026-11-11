@@ -9,11 +9,11 @@ import org.junit.Test
 class LanguagesTest {
 
     @Test
-    fun `twenty languages ship beside english`() {
-        assertEquals(21, Languages.tags.size)
+    fun `twenty-one languages ship beside english`() {
+        assertEquals(22, Languages.tags.size)
         assertEquals(
             listOf(
-                "en", "es-419", "pt-BR", "fr", "de", "it", "pl", "ru", "uk", "tr", "id", "vi", "ar", "fa",
+                "en", "es-419", "pt-BR", "fr", "de", "it", "pl", "cs", "ru", "uk", "tr", "id", "vi", "ar", "fa",
                 "zh-CN", "zh-TW", "ja", "ko", "hi", "bn", "ml",
             ),
             Languages.tags,

@@ -21,7 +21,7 @@ from pathlib import Path
 from urllib.parse import unquote, urljoin, urlsplit
 
 ROOT = Path(__file__).resolve().parent.parent
-PREFIXES = ["es", "pt", "fr", "de", "it", "pl", "ru", "uk", "tr", "id", "vi", "ar", "fa", "zh", "zh-tw",
+PREFIXES = ["es", "pt", "fr", "de", "it", "pl", "cs", "ru", "uk", "tr", "id", "vi", "ar", "fa", "zh", "zh-tw",
             "ja", "ko", "hi", "bn", "ml"]
 LOCALIZED = {"/", "/features/", "/download/", "/install/", "/android-tv/", "/desktop/", "/fire-tv/", "/faq/",
              "/formats/", "/translate/","/guides/telegram-videos-on-android-tv/", "/guides/telegram-videos-on-fire-tv/",

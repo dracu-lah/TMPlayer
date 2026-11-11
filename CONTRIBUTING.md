@@ -44,7 +44,7 @@ Never commit credentials.
 
 ## Translations
 
-TMPlayer ships in 21 languages. English is the source; the other 20 start as machine translations
+TMPlayer ships in 22 languages. English is the source; the other 21 start as machine translations
 and get better as people who speak them correct them. Fixing a few words you noticed is as welcome
 as reviewing a whole language.
 
@@ -53,8 +53,8 @@ as reviewing a whole language.
   `en.json`. The website's text is in [`site/i18n/`](site/i18n), laid out the same way.
 - Change the value, never the key. Keep every `{placeholder}` exactly as it is in English. Plurals
   are ICU messages: `{count, plural, one {# video} other {# videos}}`. Keep the structure, translate
-  the words inside the braces, and add the forms your language needs (Russian, Ukrainian and Arabic
-  need `few` and `many`); the tests name any that are missing.
+  the words inside the braces, and add the forms your language needs (Russian, Ukrainian, Polish, Czech and
+  Arabic need `few` and `many`); the tests name any that are missing.
 - Keep it short where English is short: the TV shows labels at a large size on a narrow rail.
 - Leave names as they are: TMPlayer, Telegram, Android TV, TDLib, mpv, APK and the like.
 - A key you leave out reads in English, so a partial file is fine.
