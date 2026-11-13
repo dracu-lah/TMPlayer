@@ -1,4 +1,6 @@
 import { api, call } from '../tg/rpc'
+import type { PieceSet } from '../tg/types'
+import { JoinedFile } from './joined'
 
 const KiB = 1024
 const MiB = 1024 * KiB
@@ -28,7 +30,33 @@ interface Job {
  * What the player waits on goes first; read-ahead covers about 30 s of the file's bitrate (6 to
  * 16 MiB) and is dropped when the player seeks elsewhere, pauses for long or closes.
  */
-export class TgFile {
+/**
+ * What the player reads of a file: a Telegram file (TgFile), or several joined into one (JoinedFile,
+ * a video cut into pieces or kept in a ZIP). The engines and the Service Worker's answers use only this.
+ */
+export interface MediaFile {
+    /** The address the Service Worker serves this file under (`/stream/<key>`). */
+    readonly key: string
+    readonly size: number
+    /** The size of a read the network serves at once; reads near the head and tail are the cheap ones. */
+    readonly chunk: number
+    /** Set by the player for a file with no index (MPEG-TS), see TgFile.searched. */
+    searched: boolean
+    /** Set by the player: read-ahead runs only while it plays (or is about to). */
+    wantAhead: boolean
+    /** Bytes received, for the details panel. */
+    readonly received: number
+    /** How much of the file has arrived so far, 0 to 1. */
+    readonly loaded: number
+    /** Whether a read someone waits on is still on its way. */
+    readonly waiting: boolean
+    warmUp(): void
+    /** Bytes [start, end) of the file. */
+    read(start: number, end: number): Promise<Uint8Array>
+    close(): void
+}
+
+export class TgFile implements MediaFile {
     readonly chunk: number
     readonly chunks: number
     private cache = new Map<number, Uint8Array>()
@@ -253,13 +281,26 @@ export interface FileRef {
     key: string
     size: number
     duration: number
+    /** A video cut into pieces: the pieces that play as one (joined.ts), the item's own key and size being the lead piece's alone. */
+    joined?: PieceSet
+    /** A ZIP, one file or the first piece of a split one: the video inside it plays out of the archive. */
+    zip?: boolean
+}
+
+/** What a card or the player starts fetching for `ref`: the first piece of a set, which is where its header is, else the file. */
+function head(ref: FileRef): FileRef {
+    const first = ref.joined?.files[0]
+    if (!first) return ref
+    const total = ref.joined!.files.reduce((n, f) => n + f.size, 0)
+    return { key: first.key, size: first.size, duration: total > 0 ? (ref.duration * first.size) / total : 0 }
 }
 
 /** Warmed files kept at once: each holds 2 to 3 MiB that the memory budget never evicts. */
 const MAX_WARM = 3
 
 /** Starts fetching a file's head and tail before Play is pressed; dropped after 60 s unused, or when a fourth is warmed. */
-export function warmFile(ref: FileRef) {
+export function warmFile(item: FileRef) {
+    const ref = head(item)
     const existing = warm.get(ref.key)
     if (existing) {
         clearTimeout(existing.timer)
@@ -285,8 +326,20 @@ function dropWarm(key: string) {
     warm.delete(key)
 }
 
+/**
+ * The player's file for a video in pieces, or a ZIP: its pieces are opened as the reads need them
+ * (the first one is the warmed one when there is one), so only a few are open at once whatever
+ * their number, and they share the memory budget below with every other open file. A set missing
+ * its first piece has none to open: the caller says so before it asks.
+ */
+export function openJoined(ref: FileRef): JoinedFile {
+    const files = ref.joined?.files.length ? ref.joined.files : [{ key: ref.key, size: ref.size }]
+    const total = files.reduce((n, f) => n + Math.max(0, f.size), 0)
+    return new JoinedFile(files, (piece) => openFile({ key: piece.key, size: piece.size, duration: total > 0 ? (ref.duration * piece.size) / total : 0 }))
+}
+
 /** The player's file: the warmed one when there is one, else a new one. */
-export function openFile(ref: FileRef): TgFile {
+export function openFile(ref: Pick<FileRef, 'key' | 'size' | 'duration'>): TgFile {
     const w = warm.get(ref.key)
     if (w) {
         clearTimeout(w.timer)
@@ -318,7 +371,7 @@ function evict() {
 }
 
 /** Files the Service Worker may read, by the key in their /stream/ URL. */
-export const streams = new Map<string, TgFile>()
+export const streams = new Map<string, MediaFile>()
 
 /** Keys the Service Worker has asked bytes for, so the player knows the `<video>` reached it (player/tvnative.ts). */
 const asked = new Set<string>()
