@@ -15,8 +15,10 @@ sealed interface ChatCount {
     data object Unknown : ChatCount
 
     /**
-     * [videos] videos, as Telegram counts them. Video files sent as documents are not among them,
-     * which is why the row says "about": the scan that reads file names finds those later.
+     * [videos] videos, as Telegram counts them, plus the videos kept in ZIPs when the chat has few
+     * enough videos for them to matter ([ChatVideoCount.ZIP_PROBE_BELOW]). Video files sent as
+     * other documents are not among them, which is why the row says "about": the scan that reads
+     * file names finds those later.
      */
     data class Known(val videos: Int) : ChatCount
 }
@@ -39,4 +41,11 @@ interface ChatCountCalls {
      * once and may say -1 for "I do not know"; false asks the server.
      */
     suspend fun videoCount(chatId: Long, localOnly: Boolean): CountAnswer
+
+    /**
+     * How many videos [chatId] keeps inside ZIPs ([ZippedVideos]), which Telegram's video count
+     * does not see because they are documents. One bounded page of a document search; a counter
+     * that has no such search says none.
+     */
+    suspend fun zippedVideos(chatId: Long): CountAnswer = CountAnswer.Counted(0)
 }

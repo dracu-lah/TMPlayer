@@ -1446,6 +1446,11 @@ private class LiveCounts : ChatCountCalls {
         val live = calls ?: AddChatsViewModel.calls()?.also { calls = it } ?: return CountAnswer.Failed(null)
         return live.videoCount(chatId, localOnly)
     }
+
+    override suspend fun zippedVideos(chatId: Long): CountAnswer {
+        val live = calls ?: AddChatsViewModel.calls()?.also { calls = it } ?: return CountAnswer.Failed(null)
+        return live.zippedVideos(chatId)
+    }
 }
 
 /**

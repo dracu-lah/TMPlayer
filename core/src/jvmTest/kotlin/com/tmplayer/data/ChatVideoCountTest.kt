@@ -137,4 +137,55 @@ class ChatVideoCountTest {
         counts.awaitAll()
         assertEquals(ChatVideoCount.AT_ONCE, most.get())
     }
+
+    /** Answers the video count, and the zip probe with [zipped] (null: the probe fails). */
+    private class ZipCalls(private val videos: Int, private val zipped: Int?) : ChatCountCalls {
+        val probes = AtomicInteger()
+        override suspend fun videoCount(chatId: Long, localOnly: Boolean): CountAnswer = CountAnswer.Counted(videos)
+        override suspend fun zippedVideos(chatId: Long): CountAnswer {
+            probes.incrementAndGet()
+            return zipped?.let { CountAnswer.Counted(it) } ?: CountAnswer.Failed("Internal Server Error")
+        }
+    }
+
+    @Test
+    fun `a chat with only zipped videos counts them instead of zero`() = runTest {
+        val calls = ZipCalls(videos = 0, zipped = 2)
+        assertEquals(ChatCount.Known(2), ChatVideoCount.of(calls, 1, now = { currentTime }))
+    }
+
+    @Test
+    fun `zipped videos add to the few a chat has`() = runTest {
+        val calls = ZipCalls(videos = 3, zipped = 2)
+        assertEquals(ChatCount.Known(5), ChatVideoCount.of(calls, 1, now = { currentTime }))
+    }
+
+    @Test
+    fun `a chat with plenty of videos is not probed for zips`() = runTest {
+        val calls = ZipCalls(videos = ChatVideoCount.ZIP_PROBE_BELOW, zipped = 9)
+        assertEquals(ChatCount.Known(ChatVideoCount.ZIP_PROBE_BELOW), ChatVideoCount.of(calls, 1, now = { currentTime }))
+        assertEquals(0, calls.probes.get())
+    }
+
+    @Test
+    fun `a probe that fails leaves the video count and is asked again next time`() = runTest {
+        val calls = ZipCalls(videos = 0, zipped = null)
+        assertEquals(ChatCount.Known(0), ChatVideoCount.of(calls, 1, now = { currentTime }))
+        assertEquals(ChatCount.Known(0), ChatVideoCount.of(calls, 1, now = { currentTime }))
+        assertEquals(2, calls.probes.get())
+    }
+
+    @Test
+    fun `a probed answer is remembered like any other`() = runTest {
+        val calls = ZipCalls(videos = 0, zipped = 1)
+        ChatVideoCount.of(calls, 1, now = { currentTime })
+        ChatVideoCount.of(calls, 1, now = { currentTime })
+        assertEquals(1, calls.probes.get())
+    }
+
+    @Test
+    fun `a counter with no zip search says none, so the figure is as it was`() = runTest {
+        val calls = Calls(listOf(CountAnswer.Counted(4)))
+        assertEquals(ChatCount.Known(4), ChatVideoCount.of(calls, 1, now = { currentTime }))
+    }
 }

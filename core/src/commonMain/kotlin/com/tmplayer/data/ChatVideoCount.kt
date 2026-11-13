@@ -2,6 +2,8 @@ package com.tmplayer.data
 
 import dev.g000sha256.tdl.TdlClient
 import dev.g000sha256.tdl.TdlResult
+import dev.g000sha256.tdl.dto.MessageDocument
+import dev.g000sha256.tdl.dto.SearchMessagesFilterDocument
 import dev.g000sha256.tdl.dto.SearchMessagesFilterVideo
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.Dispatchers
@@ -47,6 +49,13 @@ object ChatVideoCount {
     /** A wait longer than this is not waited out: Telegram is asking for too much to hold a row. */
     const val MAX_FLOOD_WAIT_S = 60
 
+    /**
+     * A chat with this many videos or more is not asked about ZIPs: a few more would change
+     * neither its place in the picker nor its row ("About 120 videos"), and the extra call is
+     * saved for the many chats that hold few or none. Below it, one document search per chat.
+     */
+    const val ZIP_PROBE_BELOW = 20
+
     /** How long an answer is kept. Long enough for a session with the picker, short enough to be fresh. */
     const val TTL_MS = 10 * 60 * 1000L
 
@@ -67,17 +76,31 @@ object ChatVideoCount {
      */
     suspend fun of(calls: ChatCountCalls, chatId: Long, now: () -> Long = { nowMs() }): ChatCount {
         cached(chatId, now())?.let { return it }
-        val answer = gate.withPermit { ask(calls, chatId) }
-        if (answer is ChatCount.Known) cache[chatId] = Pair(now(), answer)
+        val (answer, whole) = gate.withPermit { ask(calls, chatId) }
+        if (answer is ChatCount.Known && whole) cache[chatId] = Pair(now(), answer)
         return answer
     }
 
-    private suspend fun ask(calls: ChatCountCalls, chatId: Long): ChatCount {
+    /** The count, and whether it is the whole answer (a probe that failed leaves it not worth remembering). */
+    private suspend fun ask(calls: ChatCountCalls, chatId: Long): Pair<ChatCount, Boolean> {
         // TDLib's own figure first: it costs no round trip, and for a chat the app has opened
         // before it is the right number already.
-        local(calls, chatId)?.let { return ChatCount.Known(it) }
-        return server(calls, chatId)?.let { ChatCount.Known(it) } ?: ChatCount.Unknown
+        val videos = local(calls, chatId) ?: server(calls, chatId) ?: return Pair(ChatCount.Unknown, false)
+        if (videos >= ZIP_PROBE_BELOW) return Pair(ChatCount.Known(videos), true)
+        // A few videos or none: the chat may keep its videos in ZIPs, which are documents, so the
+        // video filter above never saw them. The probe is one bounded search, under the permit the
+        // count already holds. If it will not answer, the row says what it knows (never worse than
+        // before), and that answer is not remembered, so the next ask tries the probe again.
+        val zipped = zipped(calls, chatId)
+        return Pair(ChatCount.Known(videos + (zipped ?: 0)), zipped != null)
     }
+
+    private suspend fun zipped(calls: ChatCountCalls, chatId: Long): Int? =
+        when (val answer = withTimeoutOrNull(TIMEOUT_MS) { calls.zippedVideos(chatId) }) {
+            is CountAnswer.Counted -> answer.count.coerceAtLeast(0)
+            // One try: a flood wait is not worth holding the permit for a refinement.
+            is CountAnswer.Failed, null -> null
+        }
 
     private suspend fun local(calls: ChatCountCalls, chatId: Long): Int? {
         // One try, no waiting: the database either knows or it does not.
@@ -120,6 +143,22 @@ object ChatVideoCount {
                 when (val answer = td.getChatMessageCount(chatId, null, SearchMessagesFilterVideo(), localOnly)) {
                     is TdlResult.Success -> CountAnswer.Counted(answer.result.count)
                     is TdlResult.Failure -> CountAnswer.Failed(answer.message)
+                }
+            }
+
+        override suspend fun zippedVideos(chatId: Long): CountAnswer =
+            withContext(Dispatchers.IO) {
+                val found = td.searchChatMessages(
+                    chatId, null, ZippedVideos.QUERY, null, 0, 0, ZippedVideos.PAGE, SearchMessagesFilterDocument(),
+                )
+                when (found) {
+                    is TdlResult.Success -> CountAnswer.Counted(
+                        ZippedVideos.count(
+                            found.result.messages.orEmpty().mapNotNull { (it.content as? MessageDocument)?.document }
+                                .map { ZippedVideos.Named(it.fileName.orEmpty(), MediaText.fileSize(it.document.size, it.document.expectedSize)) },
+                        ),
+                    )
+                    is TdlResult.Failure -> CountAnswer.Failed(found.message)
                 }
             }
     }
