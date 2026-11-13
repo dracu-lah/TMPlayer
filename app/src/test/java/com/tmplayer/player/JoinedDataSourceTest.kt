@@ -99,4 +99,29 @@ class JoinedDataSourceTest {
         assertArrayEquals(byteArrayOf(9, 9, 9), readAll(source))
         source.close()
     }
+
+    private fun windowed(start: Long, length: Long) =
+        joinedUri(uris.mapIndexed { i, uri -> uri to cuts[i].count().toLong() }, start to length)
+
+    @Test
+    fun `a window shows the bytes inside it as the whole file, across a seam`() {
+        // A stored video 150 bytes long, starting 70 bytes into the archive: through the seam at 100 and 200.
+        val source = source()
+        assertEquals(150L, source.open(DataSpec(windowed(70, 150))))
+        assertArrayEquals(whole.copyOfRange(70, 220), readAll(source))
+        source.close()
+        // A seek inside the window is relative to its start.
+        assertEquals(40L, source.open(DataSpec.Builder().setUri(windowed(70, 150)).setPosition(110).build()))
+        assertArrayEquals(whole.copyOfRange(180, 220), readAll(source))
+        source.close()
+        // A bounded read stops where told, and never runs past the window's end.
+        assertEquals(10L, source.open(DataSpec.Builder().setUri(windowed(70, 150)).setPosition(140).setLength(500).build()))
+        assertArrayEquals(whole.copyOfRange(210, 220), readAll(source))
+        source.close()
+    }
+
+    @Test(expected = java.io.IOException::class)
+    fun `a window that leaves the pieces is refused`() {
+        source().open(DataSpec(windowed(200, 100)))
+    }
 }

@@ -16,11 +16,17 @@ const val JOINED_SCHEME = "tdjoin"
  * One URI for a video cut into raw byte pieces ([com.tmplayer.data.SplitPieces]): each piece's
  * own URI (`tdfile://<id>` for a stream, `file://` for a download) with its exact length, in order.
  */
-fun joinedUri(pieces: List<Pair<Uri, Long>>): Uri {
+fun joinedUri(pieces: List<Pair<Uri, Long>>, window: Pair<Long, Long>? = null): Uri {
     val builder = Uri.Builder().scheme(JOINED_SCHEME).authority("pieces")
     pieces.forEach { (uri, size) ->
         builder.appendQueryParameter("p", uri.toString())
         builder.appendQueryParameter("s", size.toString())
+    }
+    // A stored video inside a ZIP: the stream seen through a window of its start and length, so the
+    // player meets the video's own bytes as if it were the whole file ([ZipArchive]).
+    window?.let { (start, length) ->
+        builder.appendQueryParameter("zo", start.toString())
+        builder.appendQueryParameter("zl", length.toString())
     }
     return builder.build()
 }
@@ -58,7 +64,8 @@ class JoinedDataSource(
     private var position = 0L
     private var bytesRemaining = 0L
 
-    private class Joined(val uris: List<Uri>, val map: PieceMap)
+    /** [windowStart] and [windowLength] are the slice of the joined bytes shown as the whole file, or 0 and the total. */
+    private class Joined(val uris: List<Uri>, val map: PieceMap, val windowStart: Long, val windowLength: Long)
 
     override fun addTransferListener(transferListener: TransferListener) {
         direct.addTransferListener(transferListener)
@@ -73,10 +80,11 @@ class JoinedDataSource(
         }
         val video = parse(dataSpec.uri)
         joined = video
-        position = dataSpec.position
-        val total = video.map.total
-        if (position > total) throw DataSourceException(androidx.media3.common.PlaybackException.ERROR_CODE_IO_READ_POSITION_OUT_OF_RANGE)
-        bytesRemaining = if (dataSpec.length == C.LENGTH_UNSET.toLong()) total - position else minOf(dataSpec.length, total - position)
+        // Positions asked for are in the window; the pieces are read at the window's start plus that.
+        val total = video.windowLength
+        if (dataSpec.position > total) throw DataSourceException(androidx.media3.common.PlaybackException.ERROR_CODE_IO_READ_POSITION_OUT_OF_RANGE)
+        position = video.windowStart + dataSpec.position
+        bytesRemaining = if (dataSpec.length == C.LENGTH_UNSET.toLong()) total - dataSpec.position else minOf(dataSpec.length, total - dataSpec.position)
         if (bytesRemaining > 0) openPieceAt(position)
         return bytesRemaining
     }
@@ -155,7 +163,12 @@ class JoinedDataSource(
         val uris = uri.getQueryParameters("p").map(Uri::parse)
         val sizes = uri.getQueryParameters("s").map { it.toLongOrNull() ?: throw IOException("Bad piece size in $uri") }
         if (uris.isEmpty() || uris.size != sizes.size) throw IOException("Not a joined video: $uri")
-        return Joined(uris, PieceMap(sizes))
+        val map = PieceMap(sizes)
+        val start = uri.getQueryParameter("zo")?.let { it.toLongOrNull() ?: throw IOException("Bad window in $uri") } ?: 0L
+        val length = uri.getQueryParameter("zl")?.let { it.toLongOrNull() ?: throw IOException("Bad window in $uri") } ?: map.total
+        // A window that leaves the pieces is a bad archive, not something to read past the end of.
+        if (start < 0 || length < 0 || start + length > map.total) throw IOException("Window outside the pieces in $uri")
+        return Joined(uris, map, start, length)
     }
 
     class Factory(
