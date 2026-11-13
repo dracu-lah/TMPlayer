@@ -70,6 +70,8 @@ object SplitPieces {
             val inner = base.substringAfterLast('.', "").lowercase()
             return when {
                 inner in MediaText.VIDEO_EXTENSIONS -> piece(base, digits, certain = true)
+                // "Name.1080p.zip.001": a splitter's own suffix on a zip, whatever the digits.
+                inner == "zip" -> piece(base, digits, certain = true)
                 // "Night.Train.2019.001": a splitter that kept no extension pads to three digits;
                 // "Night.Train.1080" or "Movie.720" is a height, not a piece.
                 digits.length >= 3 && padded(digits) -> piece(base, digits, certain = false)
@@ -294,7 +296,10 @@ object SplitPieces {
 
     private fun piece(base: String, digits: String, certain: Boolean): SplitPiece? {
         if (base.isBlank()) return null
-        if (base.substringAfterLast('.', "").lowercase() in ARCHIVES) return null
+        // 7z, RAR and the rest are never a video's pieces. A ZIP's are: its pieces join into the one
+        // archive a stored video is played out of ([ZipArchive]).
+        val extension = base.substringAfterLast('.', "").lowercase()
+        if (extension in ARCHIVES && extension != "zip") return null
         val number = digits.toIntOrNull() ?: return null
         return SplitPiece(base = base, number = number, certain = certain)
     }

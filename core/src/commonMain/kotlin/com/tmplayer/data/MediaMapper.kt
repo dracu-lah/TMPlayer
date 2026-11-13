@@ -45,7 +45,10 @@ object MediaMapper {
     fun isVideoContent(content: dev.g000sha256.tdl.dto.MessageContent): Boolean = when (content) {
         is MessageVideo, is MessageAnimation -> true
         is dev.g000sha256.tdl.dto.MessagePaidMedia -> content.media.any { it is dev.g000sha256.tdl.dto.PaidMediaVideo }
-        is MessageDocument -> looksLikeVideo(content.document.fileName.orEmpty(), content.document.mimeType.orEmpty())
+        is MessageDocument -> content.document.fileName.orEmpty().let { name ->
+            looksLikeVideo(name, content.document.mimeType.orEmpty()) ||
+                MediaText.looksLikeVideoArchive(name, content.document.document.size)
+        }
         else -> false
     }
 
@@ -135,7 +138,9 @@ object MediaMapper {
         is MessageDocument -> {
             val document = content.document
             val name = document.fileName.orEmpty()
-            if (!looksLikeVideo(name, document.mimeType.orEmpty())) null
+            if (!looksLikeVideo(name, document.mimeType.orEmpty()) &&
+                !MediaText.looksLikeVideoArchive(name, fileSize(document.document.size, document.document.expectedSize))
+            ) null
             else MediaItem(
                 chatId = message.chatId,
                 messageId = message.id,

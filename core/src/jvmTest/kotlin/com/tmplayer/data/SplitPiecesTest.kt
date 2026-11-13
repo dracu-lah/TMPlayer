@@ -83,9 +83,59 @@ class SplitPiecesTest {
             "Night.Train.Part1.mkv",
             "Lecture 07.mp4",
             "Night.Train.2019.7z.001",
-            "Night.Train.2019.zip.002",
             "Night.Train.2019.rar.part001",
         ).forEach { assertNull(it, SplitPieces.pieceOf(it)) }
+        // A zip's pieces are the one archive kind that is a video's: its stored video plays out of it.
+        assertEquals(2, SplitPieces.pieceOf("Night.Train.2019.zip.002")?.number)
+    }
+
+    @Test
+    fun `a release kept in a zip is listed, a backup or a module is not`() {
+        val gb4 = 4_194_304_000L
+        // The names from a real chat: pieces of one zipped release, the name cut short by Telegram.
+        listOf(
+            "Avengers.Endgame.Encore.2026.IMAX.1080p.DSNP.WEB-DL..zip.001",
+            "Avengers.Endgame.Encore.2026.IMAX.1080p.DSNP.WEB-DL..zip.003",
+            "Colony (2026) UHD 2160p BluRay SDR HEVC [(Hindi + Tamil .zip.018",
+        ).forEach { assertTrue(it, MediaText.looksLikeVideoArchive(it, if (it.endsWith("003") || it.endsWith("018")) 1_233_811_809L else gb4)) }
+        // The last piece is the remainder, however small.
+        assertTrue(MediaText.looksLikeVideoArchive("Colony (2026) UHD 2160p BluRay SDR HEVC [(Hindi + Tamil .zip.019", 5_000_000L))
+        // One zip as large as a video, named like a release.
+        assertTrue(MediaText.looksLikeVideoArchive("Night.Train.2019.1080p.BluRay.mkv.zip", 2_000 * MB))
+        // What else is in a chat of files: nothing to play.
+        listOf(
+            "IvyWalletBackup_20260930-1830.zip" to 165_710L,
+            "ReZygisk-v1.0.0-release.zip" to 506_334L,
+            "Zenith-KSU-Miatoll-20260820-2142.zip" to 15_407_567L,
+            "signed-ota_update.zip" to 2_152_708_427L,
+            "Night.Train.2019.1080p.BluRay.zip" to 3_000_000L,
+            "Film.mkv" to 2_000 * MB,
+            "" to 0L,
+        ).forEach { (name, size) -> assertFalse(name, MediaText.looksLikeVideoArchive(name, size)) }
+    }
+
+    @Test
+    fun `eighteen zip pieces are one video, not eighteen`() {
+        val gb4 = 4_194_304_000L
+        val name = "Colony (2026) UHD 2160p BluRay SDR HEVC [(Hindi + Tamil .zip"
+        val pieces = (1..18).map { n -> file("$name.%03d".format(n), size = if (n == 18) 3_769_561_462L else gb4, mime = "application/zip") }
+        // Listed newest piece first, as a chat is.
+        val listed = SplitPieces.join(pieces.reversed())
+        assertEquals(1, listed.size)
+        val joined = listed.single()
+        assertEquals(18, joined.pieces.size)
+        assertEquals((1..18).map { "$name.%03d".format(it) }, joined.pieces.map { it.fileName })
+        assertEquals(17 * gb4 + 3_769_561_462L, joined.sizeBytes)
+        assertEquals(0, SplitPieces.report(joined.pieces).missing.size)
+    }
+
+    @Test
+    fun `a zip set with a piece missing reports it`() {
+        val gb4 = 4_194_304_000L
+        val name = "Avengers.Endgame.Encore.2026.IMAX.1080p.DSNP.WEB-DL..zip"
+        val pieces = listOf(1, 3).map { n -> file("$name.%03d".format(n), size = gb4, mime = "application/zip") }
+        val joined = SplitPieces.join(pieces).single()
+        assertEquals(listOf(2), SplitPieces.report(joined.pieces).missing)
     }
 
     @Test

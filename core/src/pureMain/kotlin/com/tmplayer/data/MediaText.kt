@@ -49,6 +49,38 @@ object MediaText {
         return inner in VIDEO_EXTENSIONS || EpisodeCopies.markers(piece.base).isNotEmpty() || qualityTags(piece.base).isNotEmpty()
     }
 
+    /** The smallest plain `.zip` that is a video in a box: phone backups and mod zips are smaller or unnamed like a release. */
+    const val MIN_ZIP_VIDEO_BYTES = 100L * 1024 * 1024
+
+    /**
+     * Whether a document is a video kept in a ZIP, to be played out of it ([ZipArchive]): the
+     * pieces of a split archive (`Name.1080p.zip.001`, `.002`, which join like any cut video), or
+     * one `.zip` as large as a video whose name reads like a release (a resolution, an episode
+     * mark, a video extension inside). Anything else in a chat (a backup, a Magisk module, an OTA
+     * zip, a photo pack) stays out of the grid, as it always did.
+     *
+     * Whether the video inside can play is not known from the name: a stored (uncompressed) one
+     * streams, a compressed one is told so when opened.
+     */
+    fun looksLikeVideoArchive(fileName: String, sizeBytes: Long): Boolean {
+        val name = fileName.trim()
+        if (name.isEmpty()) return false
+        val piece = SplitPieces.pieceOf(name)
+        val whole = name.endsWith(".zip", ignoreCase = true)
+        val base = when {
+            piece != null && piece.base.endsWith(".zip", ignoreCase = true) -> piece.base
+            whole -> name
+            else -> return false
+        }
+        val stem = base.dropLast(4)
+        val release = stem.substringAfterLast('.', "").lowercase() in VIDEO_EXTENSIONS ||
+            qualityTags(stem).isNotEmpty() || EpisodeCopies.markers(stem).isNotEmpty()
+        if (!release) return false
+        // A piece of a numbered set is one whatever its size (the last is the remainder); a lone
+        // .zip has to be as large as a video to be taken for one.
+        return piece != null || sizeBytes >= MIN_ZIP_VIDEO_BYTES
+    }
+
     /**
      * The one marker worth a badge: how sharp the file is.
      *
