@@ -304,6 +304,137 @@ class SplitPiecesTest {
         assertNull(SplitPieces.lookUp(unrelated) { _, _ -> null })
     }
 
+    // The Optimus Prime chat on the stick: two sets of ZIP pieces, listed newest first as a window
+    // of the chat's newest messages gives them (Home read to Colony's piece 2 and stopped).
+
+    private fun colony(numbers: List<Int> = (1..18).toList()) = numbers.map { n ->
+        file("$COLONY.zip.%03d".format(n), size = if (n == 18) 3_769_561_462 else 4_194_304_000, mime = "application/zip", date = 1_794_572_403)
+    }
+
+    private fun avengers() = (1..3).map { n ->
+        file("$AVENGERS.zip.%03d".format(n), size = if (n == 3) 1_233_811_809 else 4_194_304_000, mime = "application/zip", date = 1_794_580_475)
+    }
+
+    /** Pages of [all] as the chat's search answers them: newest first, [size] a page. */
+    private fun pagesOf(all: List<MediaItem>, size: Int = 5): suspend (String, MediaCursors) -> MediaPage? {
+        val newest = all.sortedByDescending { it.messageId }
+        return { _, cursors ->
+            val from = cursors.document.toInt()
+            val page = newest.drop(from).take(size)
+            val end = from + size >= newest.size
+            MediaPage(page, cursors.copy(document = (from + size).toLong(), videoDone = true, animationDone = true, documentDone = end), endReached = end)
+        }
+    }
+
+    @Test
+    fun `a window that ends at Colony's second piece is an open set and the Avengers are whole`() {
+        val colony = colony()
+        val window = (avengers() + colony.drop(1)).sortedByDescending { it.messageId }
+        val open = SplitPieces.openSets(window)
+        assertEquals(1, open.size)
+        assertTrue(open.single().fileName.startsWith("Colony"))
+        // Joined as it is, the set has 17 pieces and says its first is missing.
+        val joined = SplitPieces.join(window).filter { it.fileName.startsWith("Colony") }.single()
+        assertEquals(17, joined.pieces.size)
+        assertEquals(1, SplitPieces.report(joined)!!.firstMissing)
+        assertEquals(18, SplitPieces.report(joined)!!.total)
+    }
+
+    @Test
+    fun `a lone piece 2 of Colony finds all 18 pieces including the first over several pages`() = runBlocking {
+        val colony = colony()
+        val chat = avengers() + colony + (1..6).map { file("Holiday.$it.mp4") }
+        val found = SplitPieces.lookUp(colony[1], fetch = pagesOf(chat))!!
+        assertEquals(colony.map { it.id }, found.map { it.id })
+        assertTrue(SplitPieces.report(found).complete)
+        assertEquals(1, found.first().splitPiece!!.number)
+    }
+
+    @Test
+    fun `pieces handed over without the first are completed from the chat`() = runBlocking {
+        val colony = colony()
+        val chat = avengers() + colony
+        val found = SplitPieces.lookUp(colony[1], known = colony.drop(1), fetch = pagesOf(chat))!!
+        assertEquals(18, found.size)
+        assertNull(SplitPieces.report(found).firstMissing)
+    }
+
+    @Test
+    fun `a whole set is returned as handed over with no search`() = runBlocking {
+        val colony = colony()
+        var asked = 0
+        val found = SplitPieces.lookUp(colony[3], known = colony) { _, _ -> asked++; null }!!
+        assertEquals(18, found.size)
+        assertEquals(0, asked)
+    }
+
+    @Test
+    fun `the plain listing finds a first piece the title search does not match`() = runBlocking {
+        val colony = colony()
+        // Telegram's name search answers the pieces whose name it matched: here not the first.
+        val byName = pagesOf(colony.drop(1))
+        val listing = pagesOf(colony)
+        val fetch: suspend (String, MediaCursors) -> MediaPage? = { query, cursors -> if (query.isEmpty()) listing(query, cursors) else byName(query, cursors) }
+        val deep = SplitPieces.lookUp(colony[1], known = colony.drop(1), fetch = fetch)!!
+        assertEquals(18, deep.size)
+        // Home searches by the title only, and leaves the rest to the player.
+        val shallow = SplitPieces.lookUp(colony[1], known = colony.drop(1), deep = false, fetch = fetch)!!
+        assertEquals(17, shallow.size)
+        assertEquals(1, SplitPieces.report(shallow).firstMissing)
+    }
+
+    @Test
+    fun `a chat without the first piece still says it is missing`() = runBlocking {
+        val colony = colony(numbers = (2..18).toList())
+        val found = SplitPieces.lookUp(colony[0], fetch = pagesOf(colony))!!
+        assertEquals(17, found.size)
+        assertEquals(1, SplitPieces.report(found).firstMissing)
+    }
+
+    @Test
+    fun `missingFrom adds the pieces a window lacks and so the shelf folds each set into one video`() = runBlocking {
+        val colony = colony()
+        val avengers = avengers()
+        val window = (avengers + colony.drop(1)).sortedByDescending { it.messageId }
+        val extra = SplitPieces.missingFrom(window) { lead, known ->
+            SplitPieces.lookUp(lead, known = known, deep = false, fetch = pagesOf(avengers + colony))
+        }
+        assertEquals(listOf(colony[0].id), extra.map { it.id })
+        val entries = SeriesShelf.arrange(window + extra).filterIsInstance<ShelfEntry.File>().map { it.item }
+        // One entry for each video, each carrying all its pieces: what Play hands the player.
+        assertEquals(2, entries.size)
+        val colonyEntry = entries.single { it.fileName.startsWith("Colony") }
+        assertEquals(18, colonyEntry.pieces.size)
+        assertNull(SplitPieces.report(colonyEntry)!!.firstMissing)
+        assertEquals(3, entries.single { it.fileName.startsWith("Avengers") }.pieces.size)
+        assertTrue(SplitPieces.openSets(window + extra).isEmpty())
+    }
+
+    @Test
+    fun `missingFrom looks at the newest sets only and survives a failing search`() = runBlocking {
+        val sets = (1..5).map { n -> (2..4).map { file("Film.$n.2020.1080p.mkv.%03d".format(it), size = PIECE, date = 100 + n) } }
+        var looked = 0
+        val extra = SplitPieces.missingFrom(sets.flatten(), limit = 2) { _, _ -> looked++; error("offline") }
+        assertEquals(2, looked)
+        assertTrue(extra.isEmpty())
+    }
+
+    @Test
+    fun `best prefers the reading that plays furthest`() {
+        val colony = colony()
+        assertEquals(colony.map { it.id }, SplitPieces.best(colony.drop(1), colony, null).map { it.id })
+        assertEquals(colony.drop(1).map { it.id }, SplitPieces.best(colony.drop(1), listOf(colony[5])).map { it.id })
+        assertTrue(SplitPieces.best(null, emptyList()).isEmpty())
+    }
+
+    @Test
+    fun `lookUp takes whatever a garbage page holds`() = runBlocking {
+        val colony = colony()
+        val junk = listOf(file(""), file("."), file("zip.001"), file("x.zip.99999999999999999999"))
+        val found = SplitPieces.lookUp(colony[1]) { _, cursors -> MediaPage(junk, cursors.copy(documentDone = true, videoDone = true, animationDone = true), endReached = true) }!!
+        assertEquals(1, found.size)
+    }
+
     @Test
     fun `a position in the joined stream maps to its piece`() {
         val map = PieceMap(listOf(100, 100, 40))
@@ -324,6 +455,8 @@ class SplitPiecesTest {
     private companion object {
         const val MB = 1024L * 1024
         const val PIECE = 3_900 * MB
+        const val COLONY = "Colony (2026) UHD 2160p BluRay SDR HEVC [(Hindi + Tamil "
+        const val AVENGERS = "Avengers.Endgame.Encore.2026.IMAX.1080p.DSNP.WEB-DL."
         const val SPIDER =
             "Spider Man Brand New Day 2026 TRUE WEB-DL - 4K HDR - 2160p HQ - HEVC - TAM + TEL + HIN + MAL + KAN + ENG ATMOS"
     }

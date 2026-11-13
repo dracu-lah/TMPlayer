@@ -5017,17 +5017,23 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * file after all, which then plays as any other.
      */
     private suspend fun findPieces(client: TdlClient): Boolean {
-        if (pieces.isEmpty()) {
+        // Pieces the intent carried may be a window's worth (Home lists the newest messages of a
+        // chat, so a set of 18 can arrive as the last 17): a set with its first piece or a number
+        // missing is looked for in the chat before it is said to be missing.
+        val given = pieces
+        val whole = given.size > 1 && com.tmplayer.data.SplitPieces.report(given).complete
+        if (!whole && (given.isNotEmpty() || com.tmplayer.data.SplitPieces.pieceOf(mediaFileName) != null)) {
             val repository = ChatRepository(client)
             val found = runCatching {
-                com.tmplayer.data.SplitPieces.lookUp(currentItem()) { query, cursors ->
+                com.tmplayer.data.SplitPieces.lookUp(currentItem(), known = given) { query, cursors ->
                     runCatching { repository.mediaPage(chatId, cursors, query = query, topicId = mediaTopicId) }.getOrNull()
                 }
             }.getOrNull().orEmpty()
             // With no connection to search the chat with, the pieces kept in Downloads.
-            pieces = found.takeIf { it.size > 1 } ?: runCatching {
+            val kept = runCatching {
                 com.tmplayer.data.SplitPieces.among(currentItem(), settings.downloadsNow().map { it.toMediaItem() })
-            }.getOrNull()?.takeIf { it.size > 1 } ?: found
+            }.getOrNull()?.takeIf { it.size > 1 }
+            pieces = com.tmplayer.data.SplitPieces.best(given, found, kept)
         }
         // A ZIP that is not split plays through the same stream, as a set of one.
         if (pieces.isEmpty() && isZipName(mediaFileName)) pieces = listOf(currentItem())

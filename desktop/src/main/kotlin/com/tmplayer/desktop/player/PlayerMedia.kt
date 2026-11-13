@@ -268,19 +268,21 @@ class TelegramPlayerMedia(
      */
     private suspend fun joinedPieces(): List<MediaItem>? {
         if (item.chatId == 0L) return null
-        if (item.isJoined) return item.pieces
+        // A joined set may be a window's worth (Home lists a chat's newest messages): one whole
+        // from its first piece plays as handed, else the chat is searched for the rest.
+        val given = item.pieces
+        if (given.size > 1 && SplitPieces.report(given).complete) return given
         // A ZIP that is not split plays through the same stream, as a set of one.
         if (item.splitPiece == null && SplitPieces.baseOf(item.fileName).endsWith(".zip", ignoreCase = true)) return listOf(item)
         if (item.splitPiece?.certain != true) return null
         val found = runCatching {
             val repository = ChatRepository(Td.awaitAuthorizedSession().client)
-            SplitPieces.lookUp(item) { query, cursors ->
+            SplitPieces.lookUp(item, known = given) { query, cursors ->
                 runCatching { repository.mediaPage(item.chatId, cursors, query = query, topicId = item.topicId) }.getOrNull()
             }
         }.getOrNull().orEmpty()
-        if (found.size > 1) return found
-        val kept = runCatching { SplitPieces.among(item, DesktopServices.settings.downloadsNow().map { it.toMediaItem() }) }.getOrNull()
-        return kept?.takeIf { it.size > 1 } ?: found.ifEmpty { null }
+        val kept = runCatching { SplitPieces.among(item, DesktopServices.settings.downloadsNow().map { it.toMediaItem() }) }.getOrNull()?.takeIf { it.size > 1 }
+        return SplitPieces.best(given, found, kept).ifEmpty { null }
     }
 
     /**

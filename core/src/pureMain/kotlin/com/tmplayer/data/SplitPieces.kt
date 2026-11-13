@@ -255,34 +255,108 @@ object SplitPieces {
         countLabel(item)?.let { count -> if (size.isEmpty()) count else "$count  ·  $size" } ?: size
 
     /**
-     * Every piece of [lead]'s video found by [fetch], which answers a page of the chat's videos for
-     * a search, a page at a time: for a player opened on one piece (Continue watching, a link, a
-     * copy chosen elsewhere) that was not handed the rest. Null when [lead] is not a piece.
+     * Every piece of [lead]'s video found by [fetch], which answers a page of the chat's videos and
+     * documents for a search, a page at a time: for a player opened on one piece (Continue
+     * watching, a link, a copy chosen elsewhere) or on a set a window of the chat cut short (Home
+     * lists the newest messages only, so a set posted as 18 pieces can arrive as the last 17).
+     * Null when [lead] is not a piece.
+     *
+     * [known] are the pieces already in hand (the set the grid or Home handed over): returned as
+     * they are when nothing is missing from them, else searched for what is. The search by the
+     * video's title goes first; one that does not bring every piece (Telegram matches a name by
+     * its words, and a splitter's first piece can be named differently) is followed by the chat's
+     * plain listing, unless [deep] is false: Home asks for the title search only, the player for
+     * both. Stops once the first piece is met and the pieces from it run on without a gap.
      */
     suspend fun lookUp(
         lead: MediaItem,
+        known: List<MediaItem> = lead.pieces,
+        deep: Boolean = true,
         fetch: suspend (query: String, cursors: MediaCursors) -> MediaPage?,
     ): List<MediaItem>? {
         val wanted = lead.splitPiece ?: return null
-        if (lead.pieces.isNotEmpty()) return lead.pieces
+        if (known.size > 1 && report(known).complete) return ordered(known)
         val query = MediaName.parse(lead.fileName).title.ifBlank { wanted.key }
         val found = LinkedHashMap<String, MediaItem>()
         found[lead.id] = lead
-        for (search in listOf(query, "")) {
+        known.forEach { found[it.id] = it }
+        fun whole() = found.size > 1 && report(ordered(found.values.toList())).complete
+        // Searches run newest first, so once the first piece is met every newer one was passed.
+        var metFirst = false
+        val searches = if (deep) listOf(query, "") else listOf(query)
+        for (search in searches) {
             var cursors = MediaCursors()
             for (read in 0 until EpisodeNeighbours.MAX_PAGES) {
                 val page = fetch(search, cursors) ?: break
-                page.items.filter { it.chatId == lead.chatId && it.splitPiece?.key == wanted.key }
-                    .forEach { found.putIfMissing(it.id, it) }
-                if (page.endReached || page.cursors.allDone || page.cursors == cursors) break
+                val same = page.items.filter { it.chatId == lead.chatId && it.splitPiece?.key == wanted.key }
+                same.forEach { found.putIfMissing(it.id, it) }
+                if (same.any { (it.splitPiece?.number ?: 2) <= 1 }) metFirst = true
+                if ((metFirst && whole()) || page.endReached || page.cursors.allDone || page.cursors == cursors) break
                 cursors = page.cursors
             }
-            // The search found more than the piece itself: Telegram matched the name, and the plain
-            // listing would only read the same files again more slowly.
-            if (found.size > 1) break
+            if (whole()) break
         }
         return ordered(found.values.toList())
     }
+
+    /**
+     * The sets among [items] (a window of one chat's newest messages) that are not whole there: a
+     * first piece missing or a gap in the numbers, a window having cut the set where it ends. One
+     * lead for each, the set's newest piece, newest set first. Only sets named by a splitter
+     * beyond doubt ([SplitPiece.certain]) count, as a set that could be ordinary files is
+     * judged by [join] on what it has.
+     */
+    fun openSets(items: List<MediaItem>): List<MediaItem> {
+        if (items.none { it.splitPiece?.certain == true && it.pieces.isEmpty() }) return emptyList()
+        val whole = items.filter { it.isJoined }.mapNotNullTo(HashSet()) { item -> item.splitPiece?.let { item.chatId to it.key } }
+        return items.asSequence()
+            .filter { it.pieces.isEmpty() && it.splitPiece?.certain == true }
+            .groupBy { it.chatId to it.splitPiece!!.key }
+            .filterKeys { it !in whole }
+            .values
+            .filter { members -> !report(ordered(members)).complete }
+            .map { members -> members.maxWith(compareBy<MediaItem> { it.date }.thenBy { it.messageId }) }
+            .sortedWith(compareByDescending<MediaItem> { it.date }.thenByDescending { it.messageId })
+    }
+
+    /**
+     * The pieces [find] answers for the [openSets] of [items], that [items] does not hold: what a
+     * window of a chat needs added so its sets are whole. At most [limit] sets are looked at, the
+     * newest first; [find] gets the set's lead and the pieces [items] holds of it, and is where a
+     * caller bounds the cost ([lookUp] with deep off, a memory of sets already searched). A set
+     * whose search fails is left as it is.
+     */
+    suspend fun missingFrom(
+        items: List<MediaItem>,
+        limit: Int = 3,
+        find: suspend (lead: MediaItem, known: List<MediaItem>) -> List<MediaItem>?,
+    ): List<MediaItem> {
+        val have = items.mapTo(HashSet()) { it.id }
+        val extra = ArrayList<MediaItem>()
+        for (lead in openSets(items).take(limit)) {
+            val key = lead.splitPiece?.key
+            val known = items.filter { it.chatId == lead.chatId && it.splitPiece?.key == key }
+            val found = try {
+                find(lead, known).orEmpty()
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (failure: Throwable) {
+                emptyList()
+            }
+            found.filter { have.add(it.id) }.forEach { extra += it }
+        }
+        return extra
+    }
+
+    /**
+     * The best of several readings of one video's pieces: the one that plays furthest from the
+     * first piece, then the one with most pieces; the earlier of two equal ones. Empty when none has any.
+     */
+    fun best(vararg candidates: List<MediaItem>?): List<MediaItem> =
+        candidates.filterNotNull()
+            .filter { it.isNotEmpty() }
+            .maxWithOrNull(compareBy<List<MediaItem>> { report(it).playable }.thenBy { it.size })
+            .orEmpty()
 
     /**
      * The pieces of [lead]'s video among [items] (the Downloads list, for a player with no
