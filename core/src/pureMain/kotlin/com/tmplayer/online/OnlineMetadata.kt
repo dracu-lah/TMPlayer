@@ -149,10 +149,28 @@ class OnlineMetadata(
     private fun print(key: String): String =
         sha256(key.encodeToByteArray()).take(6).joinToString("") { (it.toInt() and 0xFF).toString(16).padStart(2, '0') }
 
-    /** The language tag TMDB is asked in: the UI's, with the pseudo-locales and plain English as en-US. */
-    fun tmdbLanguage(tag: String = language()): String = when {
-        tag.isBlank() || tag.startsWith("en") -> ENGLISH
-        else -> tag
+    /**
+     * The language tag TMDB is asked in: the UI's as a BCP 47 tag with its region, the pseudo-locales
+     * and plain English as en-US. The region matters: bare `pt` returns Portugal's titles (Vaiana),
+     * `pt-BR` Brazil's (Moana), and TMDB has no `es-419`, only `es-MX` and `es-ES`. Underscored
+     * (`pt_BR`) and lower case (`pt-br`) spellings are put right, and a tag that already has a
+     * region is kept.
+     */
+    fun tmdbLanguage(tag: String = language()): String {
+        val parts = tag.trim().replace('_', '-').split('-').filter { it.isNotEmpty() }
+        val language = parts.firstOrNull()?.lowercase() ?: return ENGLISH
+        if (language.startsWith("en")) return ENGLISH
+        val region = parts.drop(1).firstOrNull { it.length == 2 || (it.length == 3 && it.all(Char::isDigit)) }?.uppercase()
+        val script = parts.drop(1).firstOrNull { it.length == 4 }?.lowercase()
+        return when {
+            // Latin America has one Spanish catalogue and TMDB no tag for it: Mexico's is its biggest.
+            language == "es" && (region == null || region == "419") -> "es-MX"
+            language == "pt" && region == null -> "pt-BR"
+            // Hans and Hant without a region: the mainland's and Taiwan's.
+            language == "zh" && region == null -> if (script == "hant") "zh-TW" else "zh-CN"
+            region != null -> "$language-$region"
+            else -> language
+        }
     }
 
     // ---- lookups ------------------------------------------------------------------------------

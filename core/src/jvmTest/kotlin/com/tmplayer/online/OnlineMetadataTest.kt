@@ -437,7 +437,10 @@ class OnlineMetadataTest {
         http.on("search/movie") { bunnySearch.replace("A giant rabbit has had enough.", "Un conejo gigante.") }
         val info = (metadata(lang = "es").lookup(query("Big.Buck.Bunny.2008.mkv")) as MetaResult.Found).info
         assertEquals("Un conejo gigante.", info.overview)
-        assertEquals("es", info.language)
+        // Asked with a region, as TMDB wants: bare Spanish is es-MX here (the app's own es-419
+        // has no TMDB tag).
+        assertEquals("es-MX", info.language)
+        assertTrue(http.requests.all { "language=es-MX" in it.url || "language=" !in it.url })
         // The search, then the title in Spanish with its posters; no English call.
         assertEquals(2, http.requests.size)
         assertEquals(0, http.count("language=en-US"))
@@ -555,6 +558,25 @@ class OnlineMetadataTest {
         assertEquals("en-US", online.tmdbLanguage(""))
         assertEquals("ml", online.tmdbLanguage("ml"))
         assertEquals("pt-BR", online.tmdbLanguage("pt-BR"))
+    }
+
+    @Test
+    fun tmdbAlwaysGetsTheRegionalTag() {
+        val online = metadata()
+        // Bare Portuguese is Portugal's (Vaiana); Brazil's (Moana) needs the region.
+        assertEquals("pt-BR", online.tmdbLanguage("pt"))
+        assertEquals("pt-BR", online.tmdbLanguage("pt_br"))
+        assertEquals("pt-PT", online.tmdbLanguage("pt-PT"))
+        // TMDB has no es-419: the Latin American catalogue asks in Mexico's Spanish.
+        assertEquals("es-MX", online.tmdbLanguage("es-419"))
+        assertEquals("es-MX", online.tmdbLanguage("es"))
+        assertEquals("es-ES", online.tmdbLanguage("es-ES"))
+        assertEquals("zh-CN", online.tmdbLanguage("zh"))
+        assertEquals("zh-TW", online.tmdbLanguage("zh-Hant"))
+        assertEquals("zh-TW", online.tmdbLanguage("zh-TW"))
+        assertEquals("fr-CA", online.tmdbLanguage("fr_ca"))
+        assertEquals("de", online.tmdbLanguage("de"))
+        assertEquals("en-US", online.tmdbLanguage("en-GB"))
     }
 
     @Test
