@@ -2102,6 +2102,10 @@
     "volume_boost_on_detail": "On: quiet speech lifted, loud scenes held back",
     "watch_again": "Watch again",
     "wifi_only": "This video isn't downloaded yet, and Wi-Fi only is on, so it won't play on mobile data. Connect to Wi-Fi, or turn Wi-Fi only off in Settings.",
+    "zip_compressed": "The video in this ZIP is compressed, so it cannot play from the archive. Only a ZIP that stores its video uncompressed can play.",
+    "zip_encrypted": "This ZIP is password protected, so its video cannot play.",
+    "zip_no_video": "No video found inside this ZIP.",
+    "zip_unreadable": "This ZIP could not be read. A part may be missing or damaged.",
     "zoom_percent": "Zoom {percent}"
   },
   "poster": {

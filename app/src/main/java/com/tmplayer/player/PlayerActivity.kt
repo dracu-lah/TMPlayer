@@ -1683,7 +1683,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             val joined = joinedSource
             val uri = joined ?: downloadedVideo?.uri() ?: tdFileUri(fileId)
             val length = when {
-                joined != null -> joined.getQueryParameters("s").sumOf { it.toLongOrNull() ?: 0L }
+                joined != null -> joined.getQueryParameter("zl")?.toLongOrNull() ?: joined.getQueryParameters("s").sumOf { it.toLongOrNull() ?: 0L }
                 downloadedVideo != null -> downloadedVideo?.length() ?: 0L
                 else -> fileSizeBytes
             }
@@ -4990,7 +4990,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
     /** Whether the video may be one cut into byte pieces: the grid said so, or its name does. */
     private fun mayBeJoined(): Boolean =
-        hasMessage() && (pieces.isNotEmpty() || com.tmplayer.data.SplitPieces.pieceOf(mediaFileName)?.certain == true)
+        hasMessage() && (pieces.isNotEmpty() || com.tmplayer.data.SplitPieces.pieceOf(mediaFileName)?.certain == true || isZipName(mediaFileName))
+
+    /** A video kept in a ZIP: the one file, or the pieces of a split one ([ZipArchive]). */
+    private fun isZipName(name: String): Boolean = com.tmplayer.data.SplitPieces.baseOf(name).endsWith(".zip", ignoreCase = true)
 
     /**
      * The pieces of the video, from the intent or else from the chat ([SplitPieces.lookUp]), for a
@@ -5010,6 +5013,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 com.tmplayer.data.SplitPieces.among(currentItem(), settings.downloadsNow().map { it.toMediaItem() })
             }.getOrNull()?.takeIf { it.size > 1 } ?: found
         }
+        // A ZIP that is not split plays through the same stream, as a set of one.
+        if (pieces.isEmpty() && isZipName(mediaFileName)) pieces = listOf(currentItem())
         return pieces.isNotEmpty()
     }
 
@@ -5022,13 +5027,14 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      */
     private suspend fun prepareJoined(client: TdlClient): Boolean {
         val all = pieces
-        val notice = com.tmplayer.data.SplitPieces.playerNotice(all)
-        val playable = com.tmplayer.data.SplitPieces.playablePieces(all)
+        val loneZip = all.size == 1 && all[0].splitPiece == null
+        val notice = if (loneZip) null else com.tmplayer.data.SplitPieces.playerNotice(all)
+        val playable = if (loneZip) all else com.tmplayer.data.SplitPieces.playablePieces(all)
         // A piece missing is remembered, so "Missing parts of a video" can say when it is posted
         // (CP76); a video found whole is forgotten.
         val store = settings
         val chat = chatTitle
-        com.tmplayer.App.backgroundScope.launch { runCatching { com.tmplayer.data.PieceAlerts.notePlayed(store, all, chat) } }
+        if (!loneZip) com.tmplayer.App.backgroundScope.launch { runCatching { com.tmplayer.data.PieceAlerts.notePlayed(store, all, chat) } }
         if (playable.isEmpty()) {
             showError(notice ?: L.playerNothingToPlay, retryable = false)
             return false
@@ -5070,8 +5076,81 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             App.backgroundScope.launch { runCatching { WatchCache.claimAll(context, claimed, title) } }
         }
         boundPieces(streamed)
+        if (isZipName(all.first().fileName)) {
+            // The zip's directory is in its last piece: a missing piece means it cannot be read.
+            if (notice != null) {
+                showError(notice, retryable = false)
+                return false
+            }
+            val window = zipWindow(client, sources) ?: return false
+            fileSizeBytes = window.second
+            joinedSource = joinedUri(sources, window)
+            return true
+        }
         joinedSource = joinedUri(sources)
         return true
+    }
+
+    /**
+     * Reads the ZIP's directory from the end of the joined pieces and finds the stored video in it:
+     * its start and length in the joined bytes, which [joinedUri] shows to the player as the whole
+     * file. Null with the reason on screen when the archive cannot be read, holds no video, or its
+     * video is compressed or locked and so cannot stream.
+     */
+    private suspend fun zipWindow(client: TdlClient, sources: List<Pair<android.net.Uri, Long>>): Pair<Long, Long>? {
+        val whole = joinedUri(sources)
+        val total = sources.sumOf { it.second }
+        val factory = JoinedDataSource.Factory(
+            TdDataSource.Factory(client),
+            DefaultDataSource.Factory(this, TdDataSource.Factory(client)),
+            ::leftPiece,
+        )
+        val archive = object : com.tmplayer.data.ZipSource {
+            override val size: Long = total
+            override suspend fun read(offset: Long, length: Int): ByteArray? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                val want = minOf(length.toLong(), total - offset).toInt()
+                if (want <= 0) return@withContext ByteArray(0)
+                val data = factory.createDataSource()
+                try {
+                    data.open(
+                        androidx.media3.datasource.DataSpec.Builder().setUri(whole).setPosition(offset).setLength(want.toLong()).build(),
+                    )
+                    val out = ByteArray(want)
+                    var got = 0
+                    while (got < want) {
+                        val n = data.read(out, got, want - got)
+                        if (n == C.RESULT_END_OF_INPUT) break
+                        got += n
+                    }
+                    if (got == want) out else out.copyOf(got)
+                } catch (e: java.io.IOException) {
+                    null
+                } finally {
+                    runCatching { data.close() }
+                }
+            }
+        }
+        val entries = com.tmplayer.data.ZipArchive.entries(archive)
+        if (entries == null) {
+            showError(L.playerZipUnreadable, retryable = true)
+            return null
+        }
+        val video = com.tmplayer.data.ZipArchive.bestVideo(entries)
+        if (video == null) {
+            val message = when (com.tmplayer.data.ZipArchive.blockedVideo(entries)?.blocker) {
+                com.tmplayer.data.ZipBlocker.Compressed -> L.playerZipCompressed
+                com.tmplayer.data.ZipBlocker.Encrypted -> L.playerZipEncrypted
+                null -> L.playerZipNoVideo
+            }
+            showError(message, retryable = false)
+            return null
+        }
+        val start = com.tmplayer.data.ZipArchive.dataOffset(archive, video)
+        if (start == null) {
+            showError(L.playerZipUnreadable, retryable = true)
+            return null
+        }
+        return start to video.uncompressedSize
     }
 
     private fun holdPieces(ids: List<Int>) {
