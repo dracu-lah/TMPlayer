@@ -1386,6 +1386,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     private var lastProgressAtMs = 0L
     private var lastProgressBytes = -1L
     private var lastBufferedMs = -1L
+    private var lastReadBytes = -1L
     private var slowStartUp = false
 
     /**
@@ -8148,6 +8149,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         if (rebufferWatch?.isActive == true) return
         lastProgressAtMs = SystemClock.elapsedRealtime()
         lastBufferedMs = -1L
+        lastReadBytes = -1L
         rebufferWatch = lifecycleScope.launch {
             // Telegram's connections reopened once per wait (OpeningStall.NUDGE_MS).
             var nudged = false
@@ -8160,6 +8162,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                     if (lastBufferedMs >= 0) noteOpeningProgress()
                     lastBufferedMs = buffered
                 }
+                noteBytesRead()
                 val local = downloadComplete || downloadedVideo != null || (joinedSource != null && joinedAllLocal)
                 // Offline has its own words on the chip, and carries on by itself once back.
                 if (networkOffline) {
@@ -8530,6 +8533,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         if (openingWatch?.isActive == true) return
         lastProgressAtMs = SystemClock.elapsedRealtime()
         lastBufferedMs = -1L
+        lastReadBytes = -1L
         openingWatch = lifecycleScope.launch {
             // Telegram's connections reopened once per wait (OpeningStall.NUDGE_MS).
             var nudged = false
@@ -8541,6 +8545,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                     if (lastBufferedMs >= 0) noteOpeningProgress()
                     lastBufferedMs = buffered
                 }
+                noteBytesRead()
                 val local = downloadComplete || downloadedVideo != null || (joinedSource != null && joinedAllLocal)
                 if (networkOffline) {
                     noteOpeningProgress()
@@ -8555,6 +8560,20 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                     return@launch
                 }
             }
+        }
+    }
+
+    /**
+     * Bytes the player read since the last look count as arriving. TDLib's updates follow [fileId]
+     * alone, not the other pieces of a joined video, and a soundtrack that starts late in the file
+     * holds the buffered position at zero while a hundred megabytes come in: either way the wait
+     * read as "hasn't started" with the video on its way.
+     */
+    private fun noteBytesRead() {
+        val read = readBytes.get()
+        if (read > lastReadBytes) {
+            if (lastReadBytes >= 0) noteOpeningProgress()
+            lastReadBytes = read
         }
     }
 
