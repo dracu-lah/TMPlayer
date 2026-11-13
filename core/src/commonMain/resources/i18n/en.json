@@ -1788,6 +1788,7 @@
     "error_container": "TMPlayer can't play this file. A different copy may work.",
     "error_dolby_vision": "This video is Dolby Vision profile 5, which plays only where both the device and the screen take Dolby Vision. An HDR10 or SDR copy will play here.",
     "error_format": "This device can't play this video's format. A different copy may work.",
+    "error_memory": "This video can't start here: its sound is stored too far from its picture for the memory this device gives TMPlayer. A different copy may work.",
     "error_other": "This video wouldn't play. Try a different copy of it.",
     "error_uhd": "This video is {height}p, which this device's decoder can't manage. A 1080p copy will play.",
     "even_volume": "Even out volume",

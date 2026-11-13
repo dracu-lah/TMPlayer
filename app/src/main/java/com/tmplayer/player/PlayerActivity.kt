@@ -3573,6 +3573,15 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             // the last keyframe, because this is memory on a 1 GB stick.
             .setBackBuffer(backBufferMs, /* retainBackBufferFromKeyframe = */ true)
             .build()
+        // The byte target never stops loading, or starts playback, with less than the time it needs
+        // ahead: a soundtrack starting 14 s into an 80 Mbps file, or a back buffer bigger than the
+        // budget, left the player stuck ([AheadFirstLoadControl]). A ceiling from the heap's size bounds it.
+        val aheadFirst = AheadFirstLoadControl(
+            loadControl,
+            playbackUs = BUFFER_PLAYBACK_MS * 1000L,
+            rebufferUs = BUFFER_REBUFFER_MS * 1000L,
+            ceilingBytes = AheadFirstLoadControl.ceilingFor(bufferBytes, lowMemory = bufferBytes <= LOW_RAM_BUFFER_BYTES),
+        )
 
         val plan = trackPlan
         val subtitles = plan.subtitles
@@ -3631,7 +3640,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         )
 
         return ExoPlayer.Builder(this, renderers)
-            .setLoadControl(loadControl)
+            .setLoadControl(aheadFirst)
             .setTrackSelector(trackSelector)
             // tdfile:// goes to TDLib; DefaultDataSource sends file:// (a subtitle file loaded from
             // the phone, copied into the cache) to the disk and passes every other scheme down.
@@ -4287,6 +4296,12 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 return
             }
             if (switchDecoderByItself(error)) return
+            // Waited with nothing to play and no room to load more ([AheadFirstLoadControl]): the
+            // file, not the line or the decoder, so "Can't play this" would send nobody anywhere.
+            if (AheadFirstLoadControl.isStuckAtCeiling(error)) {
+                showError(L.playerErrorMemory, retryable = true)
+                return
+            }
             // A file TDLib cannot size is a stale id, not a slow network: retrying the same id
             // only spins for a minute, while asking for the message again fixes it in a second.
             if (staleFileId(error) && resourceAgain(error, sameId = { if (!recoverFrom(error)) showError(friendlyError(error), retryable = !isHopeless(error)) })) return
