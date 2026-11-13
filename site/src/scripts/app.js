@@ -1650,6 +1650,42 @@ var tmT = (function () {
   if (document.readyState === 'complete') { go(); } else { window.addEventListener('load', go); }
 })();
 
+/* The downloads figure is final in the HTML as of the last site build. This asks the download
+   mirror for the live total (GitHub's count plus the mirror's own hits, cached 15 minutes at the
+   edge) and raises the figure to it, so the page follows the downloads between builds without a
+   rebuild. Never lowers it, and a failed or odd answer leaves the build's figure as it was. The
+   count-up below reads data-count-to when it runs, so it counts up to whichever figure is current. */
+(function () {
+  'use strict';
+
+  var node = document.querySelector('.stat-n[data-count-to]');
+  if (!node || typeof fetch !== 'function' || typeof Intl === 'undefined') { return; }
+  var fmt;
+  try {
+    fmt = new Intl.NumberFormat(document.documentElement.lang || 'en', { notation: 'compact', maximumFractionDigits: 1 });
+  } catch (e) { return; }
+
+  function refresh() {
+    fetch('https://tmplayer-download-mirror.dracu.workers.dev/total')
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (body) {
+        var n = body && Number(body.downloads);
+        var built = Number(node.getAttribute('data-count-to'));
+        if (!(n > built) || !isFinite(n)) { return; }
+        node.setAttribute('data-count-to', String(n));
+        var text = fmt.format(n);
+        var ghost = node.querySelector('.stat-ghost');
+        var live = node.querySelector('.stat-live');
+        if (ghost) { ghost.textContent = text; }
+        // Mid count-up the animation finishes on the new figure by itself.
+        if (live && !node.hasAttribute('data-counting')) { live.textContent = text; }
+      })
+      .catch(function () {});
+  }
+
+  if (document.readyState === 'complete') { refresh(); } else { window.addEventListener('load', refresh); }
+})();
+
 /* The home page's stats row counts up once, as it comes into view (an IntersectionObserver, no
    layout reads). The final figures are already in the HTML; under reduced motion, or without
    the observer, they simply stay. Each figure is drawn in the page's own short form of a number,
@@ -1667,18 +1703,19 @@ var tmT = (function () {
 
   function run(node) {
     var live = node.querySelector('.stat-live');
-    var to = Number(node.getAttribute('data-count-to'));
-    if (!live || !(to > 0)) { return; }
-    var done = live.textContent;
+    if (!live || !(Number(node.getAttribute('data-count-to')) > 0)) { return; }
     var start = null;
+    node.setAttribute('data-counting', '');
     var span = 1100;
     function frame(now) {
       if (start === null) { start = now; }
       var p = Math.min(1, (now - start) / span);
       // Ease out, so the figure slows into its final value.
       var eased = 1 - Math.pow(1 - p, 3);
-      live.textContent = p < 1 ? fmt.format(Math.round(to * eased)) : done;
-      if (p < 1) { requestAnimationFrame(frame); }
+      // Read each frame: the live total may arrive while this runs.
+      var to = Number(node.getAttribute('data-count-to'));
+      live.textContent = fmt.format(Math.round(to * eased));
+      if (p < 1) { requestAnimationFrame(frame); } else { node.removeAttribute('data-counting'); }
     }
     requestAnimationFrame(frame);
   }

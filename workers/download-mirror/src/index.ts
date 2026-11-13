@@ -57,9 +57,61 @@ async function stats(env: Env): Promise<Response> {
   })
 }
 
+// The home page's downloads figure, kept fresh without a site rebuild: GitHub's count over every
+// release's app files (the same files as APP_FILE in site/src/lib/stats.ts) plus this worker's own
+// hits. The page draws the build's figure first and raises it to this one when it arrives (never
+// lowers it). GitHub is asked at most once per TOTAL_TTL per edge location, so the 60 unauthenticated
+// calls an hour are not used up; when GitHub fails, the answer is a 503 and the page keeps what it has.
+const APP_FILE = /^tmplayer(?!.*-source\.)(?:[-_.].*)?\.(apk|msi|dmg|appimage|deb|rpm|flatpak|zip|tar\.xz|tar\.gz)$/i
+const TOTAL_TTL = 900
+
+async function githubDownloads(): Promise<number | null> {
+  try {
+    const res = await fetch(`https://api.github.com/repos/${REPO}/releases?per_page=100`, {
+      headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'tmplayer-download-mirror' },
+      signal: AbortSignal.timeout(8000),
+    })
+    if (!res.ok) return null
+    const list = (await res.json()) as { draft?: boolean; assets?: { name?: string; download_count?: number }[] }[]
+    if (!Array.isArray(list)) return null
+    let total = 0
+    for (const r of list) {
+      if (r.draft) continue
+      for (const a of r.assets ?? []) {
+        if (typeof a.name === 'string' && APP_FILE.test(a.name)) total += Number(a.download_count) || 0
+      }
+    }
+    return total
+  } catch {
+    return null
+  }
+}
+
+async function total(env: Env, request: Request, ctx: ExecutionContext): Promise<Response> {
+  const cache = caches.default
+  const key = new Request(new URL('/total', request.url).toString())
+  const cached = await cache.match(key)
+  if (cached) return cached
+  const github = await githubDownloads()
+  const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+  if (github === null) {
+    return new Response('{}', { status: 503, headers: { ...headers, 'Cache-Control': 'no-store' } })
+  }
+  const hits = (await (await stats(env)).json()) as { hits: number }
+  const res = new Response(JSON.stringify({ downloads: github + hits.hits }), {
+    headers: { ...headers, 'Cache-Control': `public, max-age=${TOTAL_TTL}` },
+  })
+  ctx.waitUntil(cache.put(key, res.clone()))
+  return res
+}
+
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url)
+
+    if (request.method === 'GET' && url.pathname === '/total') {
+      return total(env, request, ctx)
+    }
 
     if (request.method === 'GET' && url.pathname === '/stats') {
       return stats(env)

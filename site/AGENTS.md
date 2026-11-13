@@ -110,6 +110,11 @@ app files downloaded from GitHub and from the download mirror (below) across rel
 are "downloads", never users or installs. The build logs `[tm-stats]` with its source (GitHub,
 else `releases.json`) and the mirror's own count.
 
+The figure also follows the downloads between builds (user, 2026-11-13): after load, app.js asks
+the mirror's `/total` (GitHub's count plus the mirror's hits, cached 15 minutes at the edge) and
+raises the figure to it, never lowers it, and keeps the build's figure when the call fails. The
+daily `site-rebuild` workflow stays as the fallback for the HTML itself.
+
 ## Download mirror
 
 Every binary download (`app.js`, `scripts/write-latest-json.py`'s `latest.json`, the `/apk`
