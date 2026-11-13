@@ -7,7 +7,6 @@ import android.os.SystemClock
 import android.provider.Settings
 import android.view.GestureDetector
 import android.view.MotionEvent
-import android.view.ScaleGestureDetector
 import android.view.Window
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -251,10 +250,8 @@ class PlayerGestures(
     /** True from a pinch's start to the end of the touch it was part of. */
     private var pinched = false
 
-    /** True while the pinch under way drives the free zoom, and where its fingers' centre was last. */
+    /** True while the pinch under way drives the free zoom. */
     private var zooming = false
-    private var lastFocusX = 0f
-    private var lastFocusY = 0f
 
     private fun endZoom() {
         if (!zooming) return
@@ -262,52 +259,43 @@ class PlayerGestures(
         onZoomEnd()
     }
 
-    private val scaleDetector = ScaleGestureDetector(
+    /**
+     * Not [android.view.ScaleGestureDetector]: its 27 mm minimum span made a pinch in end early (or
+     * never begin) on an enlarged picture, so the picture could not be zoomed back out ([PinchTracker]).
+     */
+    private val pinch = PinchTracker(
         context,
-        object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
-
-            override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
-                scaling = true
-                pinched = true
-                dragKind = DRAG_NONE
-                zooming = zoomAllowed()
-                lastFocusX = detector.focusX
-                lastFocusY = detector.focusY
-                return true
-            }
-
-            override fun onScale(detector: ScaleGestureDetector): Boolean {
-                if (zooming) {
-                    // Every step, so the picture follows the fingers; true resets the factor.
-                    onZoom(detector.scaleFactor, detector.focusX, detector.focusY, detector.focusX - lastFocusX, detector.focusY - lastFocusY)
-                    lastFocusX = detector.focusX
-                    lastFocusY = detector.focusY
-                    return true
-                }
+        onBegin = { _, _ ->
+            scaling = true
+            pinched = true
+            dragKind = DRAG_NONE
+            // An enlarged picture is always zoomed by the pinch that is on it: a pinch that stepped
+            // the shape under it instead would leave the viewer unable to get back to 100 per cent.
+            zooming = zoomAllowed() || zoomed()
+        },
+        onStep = { factor, focusX, focusY, dx, dy ->
+            if (zooming) {
+                // Every step, so the picture follows the fingers.
+                onZoom(factor, focusX, focusY, dx, dy)
+                true
+            } else if (factor > 1f + PINCH_THRESHOLD) {
                 // One step per pinch, not one per frame: the control has three stops, and
                 // reporting every intermediate scale factor would run through all of them
                 // before the fingers finished moving.
-                if (detector.scaleFactor > 1f + PINCH_THRESHOLD) {
-                    onPinch(true)
-                    return true
-                }
-                if (detector.scaleFactor < 1f - PINCH_THRESHOLD) {
-                    onPinch(false)
-                    return true
-                }
-                return false
-            }
-
-            override fun onScaleEnd(detector: ScaleGestureDetector) {
-                scaling = false
-                endZoom()
+                onPinch(true)
+                true
+            } else if (factor < 1f - PINCH_THRESHOLD) {
+                onPinch(false)
+                true
+            } else {
+                false
             }
         },
-    ).apply {
-        // A double tap held and dragged would zoom, and the second tap of a run of double tap
-        // seeks lands exactly like that: the run keeps its taps.
-        isQuickScaleEnabled = false
-    }
+        onEnd = {
+            scaling = false
+            endZoom()
+        },
+    )
 
     /**
      * Offers one touch event to the gestures. Whether the event goes on to the views underneath is
@@ -329,7 +317,7 @@ class PlayerGestures(
             if (finished) onChrome = false
             return false
         }
-        scaleDetector.onTouchEvent(event)
+        pinch.onTouchEvent(event)
         detector.onTouchEvent(event)
         if (finished) {
             if (dragKind == DRAG_SEEK) onScrubEnd()
