@@ -25,13 +25,14 @@ class WebRulesTest {
         selfDestructs: Boolean = false,
         withheld: Boolean = false,
         albumId: String? = null,
+        mime: String? = null,
     ): RawVideo {
         val o: dynamic = js("({})")
         o.chatId = -1001234567890.0
         o.messageId = id.toDouble()
         o.kind = kind
         o.fileName = fileName
-        o.mimeType = if (fileName.endsWith(".pdf")) "application/pdf" else "video/x-matroska"
+        o.mimeType = mime ?: if (fileName.endsWith(".pdf")) "application/pdf" else "video/x-matroska"
         o.caption = caption
         o.size = size
         o.duration = 0.0
@@ -218,6 +219,60 @@ class WebRulesTest {
         assertEquals("7z", archive("notes", "application/x-7z-compressed")!!.kind)
         assertNull(archive("Harbour.Notes.S01E02.mkv", "video/x-matroska"))
         assertTrue(sizeLabel(50 * mb).isNotBlank())
+    }
+
+    @Test
+    fun `a video kept in a zip is listed, its pieces fold into one card with the summed size`() {
+        val gb4 = 4_194_304_000.0
+        val zip = "application/zip"
+        val name = "Colony (2026) UHD 2160p BluRay SDR HEVC [(Hindi + Tamil .zip"
+        val pieces = (1..18).map { n -> raw(n, "$name.${n.toString().padStart(3, '0')}", size = if (n == 18) 3_769_561_462.0 else gb4, mime = zip) }
+        val endgame = listOf(
+            "Avengers.Endgame.Encore.2026.IMAX.1080p.DSNP.WEB-DL..zip.001" to gb4,
+            "Avengers.Endgame.Encore.2026.IMAX.1080p.DSNP.WEB-DL..zip.002" to gb4,
+            "Avengers.Endgame.Encore.2026.IMAX.1080p.DSNP.WEB-DL..zip.003" to 1_233_811_809.0,
+        ).mapIndexed { i, (n, size) -> raw(100 + i, n, size = size, mime = zip) }
+        val others = listOf(
+            raw(200, "IvyWalletBackup_20260930-1830.zip", size = 165_710.0, mime = zip),
+            raw(201, "signed-ota_update.zip", size = 2_152_708_427.0, mime = zip),
+        )
+        assertTrue(looksLikeVideoArchive("Night.Train.2019.1080p.BluRay.mkv.zip", 2_000 * mb))
+        assertFalse(looksLikeVideoArchive("signed-ota_update.zip", 2_152_708_427.0))
+        val kept = screen((pieces + endgame + others).toTypedArray()).videos
+        assertEquals(21, kept.size)
+        assertFalse(kept.any { it.fileName.startsWith("Ivy") || it.fileName.startsWith("signed") })
+        val shelf = shelf(kept, "Newest", 0.0, 64 * 1024 * mb, emptyArray(), emptyArray())
+        assertEquals(2, shelf.tiles.size)
+        val colony = shelf.tiles.single { it.video!!.fileName.startsWith("Colony") }
+        assertEquals(18, colony.pieces.size)
+        assertEquals(17 * gb4 + 3_769_561_462.0, colony.video!!.size)
+        assertEquals(18, colony.piecesTotal)
+        assertEquals(0, colony.piecesFirstMissing)
+        assertEquals(18, colony.piecesPlayable)
+        val endgameTile = shelf.tiles.single { it.video!!.fileName.startsWith("Avengers") }
+        assertEquals(3, endgameTile.pieces.size)
+        assertEquals(2 * gb4 + 1_233_811_809.0, endgameTile.video!!.size)
+        // Pieces come in order, whatever order the chat listed them in.
+        assertEquals(listOf("-1001234567890:100", "-1001234567890:101", "-1001234567890:102"), endgameTile.pieces.toList())
+        isPlain(endgameTile)
+    }
+
+    @Test
+    fun `a gap in a set of pieces says where it plays up to`() {
+        val gb4 = 4_194_304_000.0
+        val zip = "application/zip"
+        val base = "Night.Train.2019.1080p.BluRay.mkv"
+        val kept = screen(
+            listOf(1, 2, 4).map { n -> raw(n, "$base.00$n", size = gb4, mime = zip) }.toTypedArray(),
+        ).videos
+        val tile = shelf(kept, "Newest", 0.0, 64 * 1024 * mb, emptyArray(), emptyArray()).tiles.single()
+        assertEquals(4, tile.piecesTotal)
+        assertEquals(3, tile.piecesFirstMissing)
+        assertEquals(2, tile.piecesPlayable)
+        val lone = screen(arrayOf(raw(9, "Harbour.Notes.S01E01.mkv"))).videos
+        val one = shelf(lone, "Newest", 0.0, 64 * 1024 * mb, emptyArray(), emptyArray()).tiles.single()
+        assertEquals(0, one.piecesTotal)
+        assertEquals(0, one.piecesPlayable)
     }
 
     private fun chat(id: Double, title: String, saved: Boolean = false, pinned: Boolean = false): WebChat {

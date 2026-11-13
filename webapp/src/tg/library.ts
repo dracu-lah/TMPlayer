@@ -116,7 +116,8 @@ async function loadPage(tg: TelegramClient, s: ChatState): Promise<void> {
         const raw = rawOf(msg, s.protected)
         if (!raw) continue
         if (raw.kind === 'document' && raw.fileName && !raw.withheld) {
-            const archive = r.archive(raw.fileName, raw.mimeType)
+            // A release-named zip (or one piece of a split one) is a video kept in a box: listed, and played out of the archive.
+            const archive = r.looksLikeVideoArchive(raw.fileName, raw.size) ? null : r.archive(raw.fileName, raw.mimeType)
             if (archive) {
                 s.archives.set(msg.id, raw.fileName)
                 continue
@@ -150,6 +151,29 @@ function upNext(tile: ShelfTile, watched: Set<string>, started: Set<string>): Vi
     return episodes.find((v) => started.has(v.id)) ?? episodes.find((v) => !watched.has(v.id)) ?? episodes[0] ?? tile.video ?? null
 }
 
+/**
+ * The item a tile plays. A set of pieces (a video cut up, or a ZIP split up) plays as one stream of
+ * every piece from the first up to the first gap, its size the pieces added up; anything else
+ * plays the item as it is.
+ */
+export function joinedItem(t: Pick<ShelfTile, 'pieces' | 'piecesTotal' | 'piecesFirstMissing' | 'piecesPlayable'>, item: VideoItem, items: Map<string, VideoItem>): VideoItem {
+    if (!t.pieces.length) return item
+    const found: VideoItem[] = []
+    for (const id of t.pieces) {
+        const piece = items.get(id)
+        if (piece) found.push(piece)
+    }
+    // A piece the page does not know (it left the list part way): the lead plays as it is, never half a set.
+    if (found.length !== t.pieces.length) return item
+    const playable = found.slice(0, Math.max(0, t.piecesPlayable || found.length))
+    return {
+        ...item,
+        size: found.reduce((n, p) => n + Math.max(0, p.size), 0),
+        zip: item.zip || found.some((p) => p.zip) || undefined,
+        joined: { files: playable.map((p) => ({ key: p.key, size: p.size })), total: t.piecesTotal || found.length, firstMissing: t.piecesFirstMissing },
+    }
+}
+
 /** The page's cards for the rules' tiles, each playing an item `items` holds; a show plays its episode up next. */
 export function tilesOf(shelf: Pick<Shelf, 'tiles'>, items: Map<string, VideoItem>, view: Pick<ListView, 'watched' | 'started'>): Tile[] {
     const watched = new Set(view.watched)
@@ -157,8 +181,9 @@ export function tilesOf(shelf: Pick<Shelf, 'tiles'>, items: Map<string, VideoIte
     const tiles: Tile[] = []
     for (const t of shelf.tiles) {
         const video = t.kind === 'show' ? upNext(t, watched, started) : t.video
-        const item = video && items.get(video.id)
-        if (!item) continue
+        const lead = video && items.get(video.id)
+        if (!lead) continue
+        const item = t.kind === 'show' ? lead : joinedItem(t, lead, items)
         tiles.push({
             key: t.key,
             kind: t.kind === 'show' ? 'show' : 'file',
@@ -694,6 +719,31 @@ async function addMessage(tg: TelegramClient, s: ChatState, messageId: number): 
     s.items.set(v.id, item)
     s.version++
     return v
+}
+
+/** Pages of a chat read further to find the rest of a set of pieces that has a gap, before it counts as missing. */
+const MORE_PAGES = 4
+
+/**
+ * The item for one message of a video cut into pieces (or a split ZIP), with every piece of it in
+ * the chat: for a player opened on one message (Continue watching, an address) that was not handed
+ * the set. A gap in the numbers reads a few more pages of the chat first, as the apps' lookUp
+ * does. Null when the message is not one piece of a set.
+ */
+export async function joinedFor(tg: TelegramClient, chatId: number, messageId: number): Promise<VideoItem | null> {
+    const r = await rules()
+    rulesNow = r
+    const s = await stateFor(tg, chatId)
+    const id = `${chatId}:${messageId}`
+    if (!s.videos.get(id) && !(await addMessage(tg, s, messageId))) return null
+    for (let round = 0; ; round++) {
+        const shelf = r.shelf([...s.videos.values()], 'Newest', 0, r.sizeLimits().ceiling, [], [])
+        const tile = shelf.tiles.find((t) => t.kind === 'file' && t.pieces.includes(id))
+        const own = s.items.get(id)
+        if (!tile || !own) return null
+        if (!tile.piecesFirstMissing || done(s) || round >= MORE_PAGES) return joinedItem(tile, own, s.items)
+        await load(s, () => loadPage(tg, s))
+    }
 }
 
 const watchKept = new Map<string, { version: number; view: string; info: WatchInfo }>()

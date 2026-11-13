@@ -26,6 +26,7 @@ import com.tmplayer.data.SeriesShelf
 import com.tmplayer.data.copyQuality
 import com.tmplayer.data.ShelfEntry
 import com.tmplayer.data.SizeFilter
+import com.tmplayer.data.SplitPieces
 import com.tmplayer.data.VideoCopies
 import com.tmplayer.data.VideoSort
 import com.tmplayer.data.VideoSorting
@@ -111,6 +112,14 @@ interface ShelfTile {
     val copies: Array<String>
     val parts: Array<String>
     val pieces: Array<String>
+    /**
+     * What the numbers of [pieces] say (SplitPieces.report): how many there were, the first one
+     * missing counted from 1 (0 when none is), and how many play from the first without a gap.
+     * All 0 for a tile that is not a set of pieces.
+     */
+    val piecesTotal: Int
+    val piecesFirstMissing: Int
+    val piecesPlayable: Int
     val extra: String?
     val seasons: Array<WebSeason>
 }
@@ -616,6 +625,14 @@ private fun summary(chat: WebChat) = ChatSummary(
     isPinned = chat.pinned,
 )
 
+/**
+ * Whether a document is a video kept in a ZIP (one release-named .zip as large as a video, or the
+ * pieces of a split one), which the chat lists as a video and plays out of the archive, and not as
+ * an archive for the listing's foot. MediaText.looksLikeVideoArchive.
+ */
+fun looksLikeVideoArchive(fileName: String, size: Double): Boolean =
+    MediaText.looksLikeVideoArchive(fileName, size.toLong())
+
 /** Whether [fileName] (or [mimeType]) is an archive, and what kind, as a chat lists it; null when not. */
 fun archive(fileName: String, mimeType: String?): Archive? {
     val kind: ArchiveKind = Archives.kindOf(fileName, mimeType.orEmpty()) ?: return null
@@ -633,7 +650,7 @@ private fun mapped(raw: RawVideo): MediaItem? {
     val name = raw.fileName.orEmpty()
     val mime = raw.mimeType.orEmpty()
     val round = raw.kind == "round"
-    if (raw.kind == "document" && !MediaText.looksLikeVideo(name, mime)) return null
+    if (raw.kind == "document" && !MediaText.looksLikeVideo(name, mime) && !MediaText.looksLikeVideoArchive(name, raw.size.toLong())) return null
     val fallback = when (raw.kind) {
         "document" -> L.mediaUntitledFile
         "animation" -> L.mediaUntitledClip
@@ -708,6 +725,7 @@ private fun tile(entry: ShelfEntry): ShelfTile = when (entry) {
     is ShelfEntry.Show -> show(entry.key, entry.series)
     is ShelfEntry.File -> {
         val item = entry.item
+        val report = SplitPieces.report(item)
         plain(
             "key" to entry.key,
             "kind" to "file",
@@ -716,6 +734,9 @@ private fun tile(entry: ShelfEntry): ShelfTile = when (entry) {
             "copies" to ids(item.versions),
             "parts" to ids(item.parts),
             "pieces" to ids(item.pieces),
+            "piecesTotal" to (report?.total ?: 0),
+            "piecesFirstMissing" to (report?.firstMissing ?: 0),
+            "piecesPlayable" to (report?.playable ?: 0),
             "extra" to item.extra?.name,
             "seasons" to emptyArray<WebSeason>(),
         )
@@ -730,6 +751,9 @@ private fun show(key: String, series: Series): ShelfTile = plain(
     "copies" to emptyArray<String>(),
     "parts" to emptyArray<String>(),
     "pieces" to emptyArray<String>(),
+    "piecesTotal" to 0,
+    "piecesFirstMissing" to 0,
+    "piecesPlayable" to 0,
     "extra" to null,
     "seasons" to series.seasons.map { season ->
         plain<WebSeason>(

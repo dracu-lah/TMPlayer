@@ -49,6 +49,9 @@ function alternatives(msg: Message, media: tl.TypeMessageMedia | undefined): { c
     return { copies, storyboard: sprite && map ? { sprite, map } : null }
 }
 
+/** A ZIP's name, or one piece of a split ZIP ("Name.1080p.zip.001"). */
+const ZIP_NAME = /\.zip(?:\.[^.]{0,8})?$/i
+
 const VIDEO_NAME = /\.(mkv|mp4|m4v|mov|webm|avi|ts|m2ts|wmv|flv|3gp)$/i
 
 /** A message's video, posted as a video or as a file, or null. Restricted messages are skipped. */
@@ -109,6 +112,8 @@ export function itemOf(msg: Message, title: string, poster: PosterAsk | null | u
         date: msg.date.getTime(),
         thumb: thumb?.uniqueFileId ?? null,
         cover: coverKey(m),
+        fileName: m.fileName ?? undefined,
+        zip: ZIP_NAME.test(m.fileName ?? '') || undefined,
         ...alternatives(msg, raw?.media),
         canBeSaved: !raw?.noforwards && !chatProtects(msg),
         poster: poster ?? null,

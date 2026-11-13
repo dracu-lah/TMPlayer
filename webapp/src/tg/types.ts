@@ -47,6 +47,19 @@ export interface Storyboard {
     map: FileRef
 }
 
+/**
+ * A video cut into raw byte pieces (Name.mkv.001, Name.part001) or kept in a ZIP split the same
+ * way (Name.1080p.zip.001): the pieces that play as one stream, in order, from the first up to the
+ * first one missing. `size` of the item is every piece present added up (what a card shows).
+ */
+export interface PieceSet {
+    files: FileRef[]
+    /** How many pieces the numbers say there are. */
+    total: number
+    /** The first piece missing, counted from 1; 0 when every piece is here. */
+    firstMissing: number
+}
+
 export interface VideoItem extends FileRef {
     chatId: number
     messageId: number
@@ -65,6 +78,12 @@ export interface VideoItem extends FileRef {
      * video's own. Null where Telegram sent none; absent in items kept before this existed.
      */
     cover?: string | null
+    /** The document's file name; absent in items kept before this existed. */
+    fileName?: string
+    /** A ZIP (one file, or a piece of a split one): the video inside it plays out of the archive when it is stored uncompressed. */
+    zip?: boolean
+    /** Set when the video is one cut into pieces (the lead piece's item stands for them all); see PieceSet. */
+    joined?: PieceSet
     /** Telegram's own lighter MP4 copies, best first, when the video was posted as a video. */
     copies: VideoCopy[]
     storyboard: Storyboard | null
