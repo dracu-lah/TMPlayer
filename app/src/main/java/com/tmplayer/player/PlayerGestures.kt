@@ -191,9 +191,25 @@ class PlayerGestures(
                 val from = start ?: return false
                 if (viewHeight <= 0) return false
                 if (controlsVisible || scaling || holding) return false
-                // Enlarged, a drag moves the picture (VLC's way): brightness, volume and the
-                // sideways scrub wait until it is back at 100 per cent, where they work as ever.
-                if (dragKind == DRAG_PAN || (dragKind == DRAG_NONE && zoomed())) {
+                // Enlarged, a drag moves the picture (VLC's way) and the sideways scrub waits until
+                // it is back at 100 per cent. Brightness and volume do not wait: an up or down drag
+                // that starts in the left or right strip still sets them, so zooming in never costs
+                // the viewer the two controls they use most. Anything else in the strip pans.
+                if (dragKind == DRAG_NONE && zoomed() && startsInLevelStrip(from)) {
+                    val travelX = event.x - from.x
+                    val travelY = event.y - from.y
+                    val arm = viewHeight * ARM_FRACTION
+                    // Not yet far enough to say which it is: the picture holds still for those pixels.
+                    if (abs(travelY) < arm && abs(travelX) < arm) return true
+                    if (abs(travelY) > abs(travelX) * VERTICAL_RATIO && begin(from, event)) {
+                        // A level drag: carry on below.
+                    } else {
+                        dragKind = DRAG_PAN
+                        // Catch up on the pixels held back, then follow the finger.
+                        onPan(travelX, travelY)
+                        return true
+                    }
+                } else if (dragKind == DRAG_PAN || (dragKind == DRAG_NONE && zoomed())) {
                     dragKind = DRAG_PAN
                     onPan(-distanceX, -distanceY)
                     return true
@@ -354,6 +370,15 @@ class PlayerGestures(
     }
 
     /**
+     * Whether a touch that went down at [start] is in the narrow strip down the left (brightness) or
+     * right (volume) edge that keeps those controls while the picture is enlarged. Narrow on
+     * purpose: the rest of the picture has to stay free to pan, and the strip is what is given up.
+     */
+    private fun startsInLevelStrip(start: MotionEvent): Boolean =
+        (start.x < viewWidth * ZOOMED_STRIP && prefs.brightnessGesture) ||
+            (start.x > viewWidth * (1f - ZOOMED_STRIP) && prefs.volumeGesture)
+
+    /**
      * Decides what a drag is for, once, and then stops asking.
      *
      * Measured from where the finger went down rather than from the last few pixels of travel,
@@ -483,6 +508,8 @@ class PlayerGestures(
         private const val VERTICAL_RATIO = 2f
 
         /** The two sides a vertical drag belongs to, with a dead band between them. */
+        /** The outer fraction of the width, each side, where brightness and volume survive a zoom. */
+        private const val ZOOMED_STRIP = 0.2f
         private const val LEFT_EDGE = 3f / 7f
         private const val RIGHT_EDGE = 4f / 7f
 
