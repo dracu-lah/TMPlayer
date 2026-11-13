@@ -44,6 +44,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.foundation.focusGroup
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
@@ -62,6 +64,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -95,8 +98,12 @@ import com.tmplayer.ui.theme.rememberReducedMotion
  * - One page is composed at a time, cross-faded to the next: no pager, so only one picture is
  *   fetched and held, a w780 backdrop of about 0.7 MB.
  * - Play and Details stay put while the pages change under them, so the remote never loses its
- *   place. Left on Play goes back a page (from the first, on to the rail as anywhere else), Right
- *   on Details goes on a page; OK on Play plays; Down goes to the rows.
+ *   place. Left on Play goes back a page, Right on Details goes on a page (both round the ends),
+ *   Right on Play and Left on Details move between the two buttons; OK on Play plays; Down goes
+ *   to the rows and Up from them comes back to the button the remote was on.
+ * - One thing says "the remote is here": the focused button's bright fill. Unfocused, Play is a
+ *   calm tint ([HeroPill] `calm`), so it never reads as selected while the remote is in a row.
+ *   Where the carousel is stands beside the buttons ([TvCarouselPager]): dots and "2 / 5".
  * - It moves on by itself every [ADVANCE_MS] only while the remote is elsewhere on Home and
  *   nothing is over it ([active]), and never with motion off. After [IDLE_MS] with no key pressed
  *   on Home ([idle]) it stops on the page it is on, so a television left on Home is not decoding a
@@ -104,6 +111,7 @@ import com.tmplayer.ui.theme.rememberReducedMotion
  * - It is [height] tall from the first frame, a stand-in shimmering until the pages arrive, so
  *   Home never jumps.
  */
+@OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
 internal fun TvFeaturedCarousel(
     picks: List<FeaturedPick>?,
@@ -122,6 +130,13 @@ internal fun TvFeaturedCarousel(
     playFocus: androidx.compose.ui.focus.FocusRequester? = null,
     /** When the remote was last pressed on Home; null keeps the pages moving for as long as [active]. */
     idle: HomeIdle? = null,
+    /** On Details, for putting the remote back on it after the rows or the player. */
+    detailsFocus: androidx.compose.ui.focus.FocusRequester = remember { androidx.compose.ui.focus.FocusRequester() },
+    /**
+     * Which banner button the remote was last on (0 Play, 1 Details), held by Home so it outlives
+     * this item when the list scrolls it away: Up from the rows goes back to that button.
+     */
+    spot: androidx.compose.runtime.MutableIntState = remember { mutableIntStateOf(0) },
 ) {
     var headerPx by remember { mutableIntStateOf(0) }
     // Home gives the carousel the whole width to the screen's edge, as a backdrop should have;
@@ -206,49 +221,78 @@ internal fun TvFeaturedCarousel(
         val back = if (rtl) Key.DirectionRight else Key.DirectionLeft
         val forward = if (rtl) Key.DirectionLeft else Key.DirectionRight
 
+        // The remote's way back in from the rows (Up) or the top bar: onto the button it was on.
+        val playRequester = playFocus ?: remember { androidx.compose.ui.focus.FocusRequester() }
         Row(
             Modifier
                 .align(Alignment.BottomStart)
                 .padding(start = start + HERO_START_EXTRA, bottom = PAGE_PAD)
-                .onFocusChanged { focusedIn.value = it.hasFocus },
+                .onFocusChanged { focusedIn.value = it.hasFocus }
+                .focusProperties { enter = { if (spot.intValue == 1) detailsFocus else playRequester } }
+                .focusGroup(),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             HeroPill(
                 label = playLabel,
                 onClick = { onPlay(playItem, chatTitle(playItem.chatId)) },
-                modifier = Modifier.then(if (playFocus != null) Modifier.focusRequester(playFocus) else Modifier).warmUpOnIntent(playItem).onPreviewKeyEvent { event ->
-                    // Back a page; from the first page Left carries on to the rail as usual.
-                    if (event.type == KeyEventType.KeyDown && event.key == back && count > 1 && index > 0) {
-                        go(index - 1)
-                        true
-                    } else {
-                        false
-                    }
-                },
+                // Calm until the remote is on it: the one bright fill on Home is the focused one.
+                calm = true,
+                modifier = Modifier.focusRequester(playRequester)
+                    .onFocusChanged { if (it.isFocused) spot.intValue = 0 }
+                    .warmUpOnIntent(playItem)
+                    .onPreviewKeyEvent { event ->
+                        // Back a page, round to the last from the first (as Right on Details goes
+                        // round the other way): one press turns the page, the place stays.
+                        if (event.type == KeyEventType.KeyDown && event.key == back && count > 1) {
+                            go(index - 1)
+                            true
+                        } else {
+                            false
+                        }
+                    },
             )
             TvDetailsPill(
                 label = s.detailOpenDetails,
                 onClick = { onDetails(pick) },
-                modifier = Modifier.onPreviewKeyEvent { event ->
-                    if (event.type == KeyEventType.KeyDown && event.key == forward && count > 1) {
-                        go(index + 1)
-                        true
-                    } else {
-                        false
-                    }
-                },
+                modifier = Modifier.focusRequester(detailsFocus)
+                    .onFocusChanged { if (it.isFocused) spot.intValue = 1 }
+                    .onPreviewKeyEvent { event ->
+                        if (event.type == KeyEventType.KeyDown && event.key == forward && count > 1) {
+                            go(index + 1)
+                            true
+                        } else {
+                            false
+                        }
+                    },
             )
+            // Which page is up, beside the buttons where the eyes are: ten-foot dots and "2 / 5".
+            // Only a mark, not a stop: Left on Play and Right on Details already turn the pages.
+            TvCarouselPager(count = count, current = index, modifier = Modifier.padding(start = 12.dp))
         }
-        // Which page is up, at the foot of the end, level with Play. Only a mark: Left on Play
-        // and Right on Details already turn the pages, and a stop for the dots would come
-        // between Details and its Right.
-        CarouselDots(
-            count = count,
-            current = index,
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(end = end, bottom = PAGE_PAD + (HERO_PILL_HEIGHT - TV_DOTS_HEIGHT) / 2),
+    }
+}
+
+/**
+ * Where the carousel is, drawn for a sofa: the page up a wide pill among ten-foot dots, and the
+ * number of it and of all ("2 / 5") in type. Nothing here takes the remote; the page's own
+ * description says "Page 2 of 5" for a screen reader. Nothing at all for a carousel of one page.
+ */
+@Composable
+internal fun TvCarouselPager(count: Int, current: Int, modifier: Modifier = Modifier) {
+    if (count < 2) return
+    val s = LocalStrings.current
+    Row(
+        modifier.clearAndSetSemantics { contentDescription = s.homeFeaturedPage(current + 1, count) },
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        CarouselDots(count = count, current = current, large = true)
+        Text(
+            "${current + 1} / $count",
+            style = MaterialTheme.typography.titleSmall,
+            color = Tone.text,
+            maxLines = 1,
         )
     }
 }
@@ -519,5 +563,3 @@ private val TV_LOGO_MAX_HEIGHT = 56.dp
 /** The least room between the TV top bar and the carousel's title block. */
 private val TITLE_TOP_GAP = 32.dp
 
-/** The row of dots' own height: a 6 dp mark with room above and below. */
-private val TV_DOTS_HEIGHT = 22.dp

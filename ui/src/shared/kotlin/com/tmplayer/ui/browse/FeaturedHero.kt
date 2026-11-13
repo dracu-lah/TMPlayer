@@ -139,6 +139,8 @@ fun CarouselDots(
     modifier: Modifier = Modifier,
     onPick: ((Int) -> Unit)? = null,
     focusable: Boolean = true,
+    /** Ten-foot marks for a television, where a 6 dp dot is lost: 10 dp dots, a 36 dp pill, the others clearer. */
+    large: Boolean = false,
 ) {
     if (count < 2) return
     val s = LocalStrings.current
@@ -153,18 +155,21 @@ fun CarouselDots(
                 label = s.homeFeaturedPage(page + 1, count),
                 onClick = onPick?.let { pick -> { pick(page) } },
                 focusable = focusable,
+                large = large,
             )
         }
     }
 }
 
 @Composable
-private fun Dot(on: Boolean, label: String, onClick: (() -> Unit)?, focusable: Boolean) {
+private fun Dot(on: Boolean, label: String, onClick: (() -> Unit)?, focusable: Boolean, large: Boolean) {
+    val size = if (large) TV_DOT_SIZE else DOT_SIZE
+    val pill = if (large) TV_PILL_WIDTH else PILL_WIDTH
     val still = rememberReducedMotion() || Motion.reduced
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
     val width by animateDpAsState(
-        if (on) PILL_WIDTH else DOT_SIZE,
+        if (on) pill else size,
         Motion.standard(if (still) 0 else Motion.Slow),
         label = "dotWidth",
     )
@@ -172,7 +177,7 @@ private fun Dot(on: Boolean, label: String, onClick: (() -> Unit)?, focusable: B
         when {
             on -> Tone.text
             focused -> Tone.text.copy(alpha = 0.7f)
-            else -> Tone.text.copy(alpha = OFF_ALPHA)
+            else -> Tone.text.copy(alpha = if (large) TV_OFF_ALPHA else OFF_ALPHA)
         },
         Motion.standard(Motion.Fast),
         label = "dotInk",
@@ -201,7 +206,7 @@ private fun Dot(on: Boolean, label: String, onClick: (() -> Unit)?, focusable: B
         Box(
             Modifier
                 .width(width)
-                .height(DOT_SIZE)
+                .height(size)
                 .clip(CircleShape)
                 .background(ink),
         )
@@ -216,6 +221,11 @@ private const val OFF_ALPHA = 0.32f
 private val DOT_SIZE = 6.dp
 private val PILL_WIDTH = 24.dp
 private val DOT_GAP = 6.dp
+
+/** The television's marks, seen from the sofa. */
+private val TV_DOT_SIZE = 10.dp
+private val TV_PILL_WIDTH = 36.dp
+private const val TV_OFF_ALPHA = 0.5f
 
 /** Above and below each mark, so a pointer or a finger has something to hit. */
 private val TARGET_PAD = 8.dp

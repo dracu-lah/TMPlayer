@@ -26,6 +26,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -51,6 +52,12 @@ fun HeroPill(
     stretch: Boolean = false,
     focus: FocusRequester? = null,
     icon: androidx.compose.ui.graphics.vector.ImageVector? = TmIcons.Play,
+    /**
+     * For a pill that shares the screen with a remote's focus (the television's banner): unfocused
+     * it is a calm tinted fill, not the bright [Tone.hero], so the bright fill of [Tone.focusFill]
+     * is the only thing on the page that says "the remote is here".
+     */
+    calm: Boolean = false,
 ) {
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusVisibleAsState()
@@ -58,6 +65,7 @@ fun HeroPill(
     val fill by animateColorAsState(
         when {
             focused -> Tone.focusFill
+            calm -> Tone.hero.copy(alpha = CALM_TINT).compositeOver(Tone.surfaceHigh)
             hovered -> Tone.hero.copy(alpha = 0.88f)
             else -> Tone.hero
         },
@@ -65,7 +73,11 @@ fun HeroPill(
         label = "heroPillFill",
     )
     val ink by animateColorAsState(
-        if (focused) Tone.onFocusFill else Tone.onHero,
+        when {
+            focused -> Tone.onFocusFill
+            calm -> Tone.text
+            else -> Tone.onHero
+        },
         Motion.standard(Motion.Fast),
         label = "heroPillInk",
     )
@@ -99,3 +111,6 @@ val HERO_PILL_HEIGHT = 52.dp
 
 /** On a tablet or a phone on its side, a full-width pill would be a bar; this is its widest. */
 private val HERO_PILL_MAX = 420.dp
+
+/** How much of [Tone.hero] tints a calm pill over the raised surface: Play still reads above Details, nowhere near the focus fill. */
+private const val CALM_TINT = 0.2f

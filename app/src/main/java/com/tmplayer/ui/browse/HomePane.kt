@@ -261,6 +261,12 @@ internal fun HomePane(
     // line shows either way, so the carousel's empty place is explained.
     val listed = remember(rows) { rows.filter { it !is HomeRow.Recent || it.asRow || it.noneChosen } }
     val first = remember { FocusRequester() }
+    // The TV banner's Details button and which of its buttons the remote was last on, held here
+    // so the place survives the banner scrolling out of the list and coming back.
+    val bannerDetails = remember { FocusRequester() }
+    val bannerSpot = remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    // Whether a key has been pressed on Home yet: until then the remote may still be put on the banner.
+    val keyed = remember { booleanArrayOf(false) }
     val scope = rememberCoroutineScope()
     // Kept across a turn of the phone: the show is looked up again in the rows once they are back.
     val opened = rememberOpenSeries { key, chatId -> HomeLaunch.find(key, chatId, rows) }
@@ -438,6 +444,11 @@ internal fun HomePane(
                     // The item's offset counts from inside the list's top padding; the request's from the list's top.
                     val top = (row.offset - info.viewportStartOffset).toFloat()
                     if (offset < top - 1f || offset + size > top + row.size + 1f) continue
+                    // The banner's own buttons: the list goes whole back to its top and stays there.
+                    // Play stands low in the banner (past the band's sixty per cent), so the band's
+                    // rule took the whole page up by about a third of the screen every time the
+                    // remote reached Play, banner half gone.
+                    if (row.key == FEATURED_KEY) return@calmVertical minOf(top, 0f)
                     if (row.key !in rowKeys) return@calmVertical null
                     return@calmVertical top - rowLine
                 }
@@ -465,6 +476,7 @@ internal fun HomePane(
                       } else {
                           Modifier.onPreviewKeyEvent {
                               homeIdle.touched()
+                              keyed[0] = true
                               false
                           }.onFocusChanged { state ->
                               if (state.hasFocus) {
@@ -555,6 +567,8 @@ internal fun HomePane(
                             },
                             header = tvHeader?.let { heading -> { heading(true) } },
                             playFocus = tvPlayFocus,
+                            detailsFocus = bannerDetails,
+                            spot = bannerSpot,
                             idle = homeIdle,
                             modifier = Modifier.onFocusChanged { state ->
                                 if (state.hasFocus) {
@@ -790,6 +804,16 @@ internal fun HomePane(
 
     // Somewhere for the remote to stand the moment Home opens. Keyed on the first row, so a row
     // arriving above (Continue appearing after a first play) moves focus to the new top.
+    // The banner arriving after the first row has taken the remote (the starred chats are read
+    // last): the remote moves up onto its Play, but only while nothing has been pressed yet.
+    val bannerUp = !touch && carousel && !featured.isNullOrEmpty()
+    LaunchedEffect(bannerUp) {
+        if (!bannerUp || keyed[0] || HomeFocusMemory.away || restored[0] || !mayTakeFocus()) return@LaunchedEffect
+        withFrameNanos { }
+        if (keyed[0] || focusedSpot[0] == FEATURED_KEY) return@LaunchedEffect
+        runCatching { tvPlayFocus?.requestFocus() }
+        listState.scrollToItem(0)
+    }
     val firstKey = listed.firstOrNull()?.key
     val firstReady = listed.firstOrNull()?.isLoaded == true
     LaunchedEffect(firstKey, firstReady) {
@@ -797,7 +821,10 @@ internal fun HomePane(
         // above afterwards (Continue watching after a first play) does not move it.
         if (!touch && (HomeFocusMemory.away || (restored[0] && focusedSpot[0] != null))) return@LaunchedEffect
         if (!touch && firstReady && mayTakeFocus()) {
-            runCatching { first.requestFocus() }
+            // The banner first when there is one: the top of the page is where the remote starts,
+            // and a ring on a card under a whole banner was a second thing that looked selected.
+            val onBanner = carousel && !featured.isNullOrEmpty() && tvPlayFocus != null
+            runCatching { if (onBanner) tvPlayFocus!!.requestFocus() else first.requestFocus() }
             // The focused row asks to be brought into view with room round it, which scrolled the
             // carousel above it half away; Home opens at its top, the carousel whole over the row.
             if (carousel) {
@@ -827,7 +854,8 @@ internal fun HomePane(
                 // Offset too: Down from Play moves a tall carousel up inside item 0, which the
                 // index alone does not show, and Play came back with the carousel shifted.
                 if (listState.firstVisibleItemIndex != 0 || listState.firstVisibleItemScrollOffset != 0) listState.scrollToItem(0)
-                return runCatching { play.requestFocus() }.isSuccess
+                // The button it was on: Details when that was it.
+                return runCatching { if (bannerSpot.intValue == 1) bannerDetails.requestFocus() else play.requestFocus() }.isSuccess
             }
             val at = listed.indexOfFirst { it.key == spot }
             if (at < 0) return false
