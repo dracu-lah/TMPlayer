@@ -82,6 +82,8 @@ interface Opts {
     duration?: number
     ttl?: number
     withheld?: boolean
+    /** What Telegram says the file is (a document's mime type), else it is told from the name. */
+    mime?: string
 }
 
 let n = 0
@@ -98,7 +100,7 @@ function msg(chat: Peer, name: string, o: Opts = {}) {
         media: {
             type: o.video ? 'video' : 'document',
             fileName: name,
-            mimeType: name.endsWith('.pdf') ? 'application/pdf' : 'video/mp4',
+            mimeType: o.mime ?? (name.endsWith('.pdf') ? 'application/pdf' : 'video/mp4'),
             // `big`: every video says 1.5 GB, past the carousel's 400 MB floor (its bytes stay the real file's).
             fileSize: flags.has('big') && o.file ? 1_500_000_000 : size,
             uniqueFileId: `file${id}`,
@@ -175,6 +177,21 @@ messages.set(
     lighthouse.id,
     ['Lighthouse.S01E01.mkv', 'Lighthouse.S01E02.mkv'].map((name) => msg(lighthouse, name, { file: 'chapters.mkv', video: true, duration: 20 })),
 )
+
+// `zipped`: a chat of its own (/chat/-1007, in no list, and in no search unless asked for) of videos in pieces: a stored
+// ZIP cut into four, a deflated one, a ZIP with a piece missing, a video cut into three raw pieces, and a phone backup.
+const zipped = peer(-1007, 'Zipped Room', 'chat')
+if (flags.has('zipped')) {
+    const zip = 'application/zip'
+    messages.set(zipped.id, [
+        ...[1, 2, 3, 4].map((i) => msg(zipped, `Zipped.Clip.2026.1080p.WEB-DL.zip.00${i}`, { file: `zipped.zip.00${i}`, mime: zip })),
+        msg(zipped, 'Deflated.Clip.2026.1080p.WEB-DL.zip.001', { file: 'deflated.zip.001', mime: zip }),
+        // Pieces 1, 2 and 4 of a ZIP: the directory is in the last, and the third is not in the chat.
+        ...[1, 2, 4].map((i) => msg(zipped, `Gap.Clip.2026.1080p.WEB-DL.zip.00${i}`, { file: `zipped.zip.00${i}`, mime: zip })),
+        ...[1, 2, 3].map((i) => msg(zipped, `Raw.Clip.2026.1080p.mkv.00${i}`, { file: `raw.mkv.00${i}`, mime: 'application/octet-stream' })),
+        msg(zipped, 'IvyWalletBackup_20260930-1830.zip', { size: 165_710, mime: zip }),
+    ])
+}
 
 const dialogs: Peer[] = [me, clips, shows, locked, quiet, copies]
 for (let i = 0; i < 1500; i++) dialogs.push(peer(-5000 - i, `Group ${i}`, 'chat'))

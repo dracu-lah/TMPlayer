@@ -32,3 +32,16 @@ rm chapters.txt
 # An AVI whose header is cut off after the first 4 KiB: FFmpeg cannot read it.
 head -c 4096 divx3.avi > broken.avi
 ffmpeg $q -f lavfi -i testsrc2=size=160x240:rate=1 -frames:v 1 -q:v 6 $out thumb.jpg
+# A video kept in a ZIP and cut into three pieces (Name.zip.001 and on, as a chat holds them): stored, so it plays out of the
+# archive; and the same in a deflated one (which cannot). The MKV cut into three raw pieces is the other way a video is split.
+python3 - <<'PY'
+import zipfile
+for name, method in (("zipped", zipfile.ZIP_STORED), ("deflated", zipfile.ZIP_DEFLATED)):
+    with zipfile.ZipFile(name + ".zip", "w", method) as z:
+        z.write("h264-aac.mp4", "Clip.1080p.mp4")
+        z.writestr("readme.txt", "A video in a box.\n")
+PY
+split -b 40000 -d -a 3 --numeric-suffixes=1 zipped.zip zipped.zip.
+split -b 50000 -d -a 3 --numeric-suffixes=1 h264-aac.mkv raw.mkv.
+mv deflated.zip deflated.zip.001
+rm zipped.zip
