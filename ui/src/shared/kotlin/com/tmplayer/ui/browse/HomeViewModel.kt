@@ -26,6 +26,7 @@ import com.tmplayer.data.ResumeRecord
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.ShowReached
 import com.tmplayer.data.SizeFilter
+import com.tmplayer.data.SplitPieces
 import com.tmplayer.data.Td
 import com.tmplayer.data.WatchedRecord
 import androidx.compose.runtime.LaunchedEffect
@@ -77,6 +78,13 @@ interface HomeSource {
     /** One page of [chatId]'s videos from [cursors], newest first, for a See all page reading on. */
     suspend fun chatMediaFrom(chatId: Long, cursors: MediaCursors): MediaPage =
         MediaPage(emptyList(), cursors, endReached = true)
+
+    /**
+     * One page of [chatId]'s videos and documents that Telegram matches to [query], from [cursors],
+     * for finding the rest of a video cut into pieces that Home's window of the chat cut short
+     * ([SplitPieces.missingFrom]). Null where a source cannot search.
+     */
+    suspend fun searchPage(chatId: Long, topicId: Int, query: String, cursors: MediaCursors): MediaPage? = null
 
     /** The newest videos across every chat. */
     suspend fun recentMedia(): List<MediaItem>
@@ -154,6 +162,9 @@ object TdHomeSource : HomeSource {
 
     override suspend fun chatMediaFrom(chatId: Long, cursors: MediaCursors): MediaPage =
         repository().mediaPage(chatId, cursors, pageSize = MORE_PAGE)
+
+    override suspend fun searchPage(chatId: Long, topicId: Int, query: String, cursors: MediaCursors): MediaPage =
+        repository().mediaPage(chatId, cursors, query = query, topicId = topicId)
 
     override suspend fun recentMedia(): List<MediaItem> = repository().recentMedia()
 
@@ -628,7 +639,7 @@ class HomeViewModel(
         val ended = lane?.done == true
         // Where the read stopped, for a See all page to read on from.
         if (lane == null) reads.remove(chatId) else reads[chatId] = lane
-        val kept = carryReads(withinLimits(items).take(ROW_KEEP), _loaded.value[chatId].orEmpty() + _recent.value.orEmpty())
+        val kept = carryReads(withinLimits(items).take(ROW_KEEP).let { it + piecesBeyond(it) }, _loaded.value[chatId].orEmpty() + _recent.value.orEmpty())
         _partial.update { if (ended && kept.size == items.size) it - chatId else it + chatId }
         // Unchanged rows are not written again, so nothing recomposes for an answer that is the same.
         _loaded.update { if (it[chatId] == kept) it else it + (chatId to kept) }
@@ -680,7 +691,7 @@ class HomeViewModel(
                 if (_recent.value == null) _recent.value = emptyList()
                 return@ask HomeFetches.Outcome.of(failure)
             }
-            val kept = carryReads(withinLimits(items), _recent.value.orEmpty() + _loaded.value.values.flatten())
+            val kept = carryReads(withinLimits(items).let { it + piecesBeyond(it) }, _recent.value.orEmpty() + _loaded.value.values.flatten())
             if (_recent.value != kept) _recent.value = kept
             noteFresh()
             HomeFetches.Outcome.Done
@@ -866,6 +877,41 @@ class HomeViewModel(
         return feed
     }
 
+    /**
+     * The pieces of a video cut into pieces that [items], a window of a chat's newest messages,
+     * ends before reaching (a set of 18 whose first piece is older than the window): Home joins
+     * pieces into one video ([SplitPieces.join]), and a set short of its first piece would play
+     * as "Part 1 of 18 is not in this chat". Found by the video's title, at most
+     * [PIECE_SETS] sets a read, and each set only once in [PIECES_TTL_MS] (a set really missing a
+     * piece is not searched for on every refresh). Nothing found, or Telegram not answering,
+     * leaves the window as it was.
+     */
+    private suspend fun piecesBeyond(items: List<MediaItem>): List<MediaItem> {
+        val extra = try {
+            SplitPieces.missingFrom(items, PIECE_SETS) { lead, known ->
+                val key = "${lead.chatId}:${lead.splitPiece?.key}"
+                val now = System.currentTimeMillis()
+                val earlier = pieceSearches[key]
+                if (earlier != null && now - earlier.first < PIECES_TTL_MS) {
+                    earlier.second
+                } else {
+                    var answered = false
+                    SplitPieces.lookUp(lead, known = known, deep = false) { query, cursors ->
+                        runCatching { source.searchPage(lead.chatId, lead.topicId, query, cursors) }.getOrNull()?.also { answered = true }
+                    }.orEmpty().also { found ->
+                        // Only an answer from Telegram is remembered, never a missing connection.
+                        if (answered) pieceSearches[key] = now to found
+                    }
+                }
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Throwable) {
+            emptyList()
+        }
+        return if (extra.isEmpty()) extra else withinLimits(extra)
+    }
+
     private suspend fun withinLimits(items: List<MediaItem>): List<MediaItem> {
         val (min, max) = runCatching { sizeLimits() }.getOrDefault(SizeFilter.DEFAULT_MIN to SizeFilter.DEFAULT_MAX)
         return items.filter { SizeFilter.matches(it.sizeBytes, min, max) }
@@ -886,6 +932,12 @@ class HomeViewModel(
 
         /** The least time between two fetches of one row set off by posts in its chat. */
         const val LIVE_GAP_MS = 120_000L
+
+        /** Sets of pieces looked for per read of a chat or of Recently added ([piecesBeyond]). */
+        const val PIECE_SETS = 3
+
+        /** How long a search for the rest of a set of pieces is remembered. */
+        const val PIECES_TTL_MS = 10 * 60 * 1000L
 
         /** Videos kept per row: a row shows ten, and See all reads on from Telegram. */
         const val ROW_KEEP = 60
@@ -958,6 +1010,11 @@ class HomeViewModel(
          * Each show's search, by [ShowReached.key], with when it was made. For the process, not
          * the screen: Home is built again on every visit and its searches should not be.
          */
+        private val pieceSearches = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, List<MediaItem>>>()
+
+        /** Forgets the sets searched for ([piecesBeyond]), for tests that read the same set twice. */
+        internal fun forgetPieceSearches() = pieceSearches.clear()
+
         private val showCache = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, List<MediaItem>>>()
     }
 }
