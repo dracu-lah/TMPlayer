@@ -269,6 +269,8 @@ class TelegramPlayerMedia(
     private suspend fun joinedPieces(): List<MediaItem>? {
         if (item.chatId == 0L) return null
         if (item.isJoined) return item.pieces
+        // A ZIP that is not split plays through the same stream, as a set of one.
+        if (item.splitPiece == null && SplitPieces.baseOf(item.fileName).endsWith(".zip", ignoreCase = true)) return listOf(item)
         if (item.splitPiece?.certain != true) return null
         val found = runCatching {
             val repository = ChatRepository(Td.awaitAuthorizedSession().client)
@@ -288,14 +290,15 @@ class TelegramPlayerMedia(
      * Low storage mode, and a piece a seek leaves behind stops downloading.
      */
     private suspend fun openJoined(all: List<MediaItem>): MediaData {
-        val notice = SplitPieces.playerNotice(all)
-        val playable = SplitPieces.playablePieces(all)
+        val loneZip = all.size == 1 && all[0].splitPiece == null
+        val notice = if (loneZip) null else SplitPieces.playerNotice(all)
+        val playable = if (loneZip) all else SplitPieces.playablePieces(all)
         // Remembered for "Missing parts of a video" (CP76); a video found whole is forgotten.
-        background.launch { runCatching { com.tmplayer.data.PieceAlerts.notePlayed(DesktopServices.settings, all, chatTitle) } }
+        if (!loneZip) background.launch { runCatching { com.tmplayer.data.PieceAlerts.notePlayed(DesktopServices.settings, all, chatTitle) } }
         if (playable.isEmpty()) throw IOException(notice ?: L.playerNothingToPlay)
         joinedNotice = notice
         joinedIncomplete = notice != null
-        joinedItem = SplitPieces.joined(all)
+        joinedItem = if (loneZip) all.first() else SplitPieces.joined(all)
         ensureRoom()
         val session = Td.awaitAuthorizedSession()
         val client = session.client
@@ -343,9 +346,22 @@ class TelegramPlayerMedia(
                 }
             },
         )
-        val name = SplitPieces.baseOf(playable.first().fileName.ifBlank { item.fileName })
+        var name = SplitPieces.baseOf(playable.first().fileName.ifBlank { item.fileName })
+        var played: StreamBytes = bytes
+        if (name.endsWith(".zip", ignoreCase = true)) {
+            // The zip's directory is in its last piece: a missing piece means it cannot be read.
+            if (notice != null) throw IOException(notice)
+            val (window, inner) = try {
+                zipWindow(bytes)
+            } catch (e: IOException) {
+                bytes.close()
+                throw e
+            }
+            played = window
+            name = inner
+        }
         return TdMediaData(
-            bytes = bytes,
+            bytes = played,
             uri = "tdjoin/${playable.first().fileId}/" + name.replace(Regex("[^A-Za-z0-9._-]"), "_").ifBlank { "video" },
             onClose = {
                 open.toList().forEach(::stopDownload)
@@ -353,6 +369,28 @@ class TelegramPlayerMedia(
                 letGoOfPieceBounds()
             },
         )
+    }
+
+    /**
+     * Reads the ZIP's directory from the end of [bytes] and finds the stored video in it: the bytes
+     * seen through a window of that video, and its name. Throws an IOException with the reason when
+     * the archive cannot be read, holds no video, or its video is compressed or locked and so cannot stream.
+     */
+    private suspend fun zipWindow(bytes: StreamBytes): Pair<StreamBytes, String> {
+        val archive = object : com.tmplayer.data.ZipSource {
+            override val size: Long = bytes.size
+            override suspend fun read(offset: Long, length: Int): ByteArray? = bytes.readRange(offset, length)
+        }
+        val entries = com.tmplayer.data.ZipArchive.entries(archive) ?: throw IOException(L.playerZipUnreadable)
+        val video = com.tmplayer.data.ZipArchive.bestVideo(entries) ?: throw IOException(
+            when (com.tmplayer.data.ZipArchive.blockedVideo(entries)?.blocker) {
+                com.tmplayer.data.ZipBlocker.Compressed -> L.playerZipCompressed
+                com.tmplayer.data.ZipBlocker.Encrypted -> L.playerZipEncrypted
+                null -> L.playerZipNoVideo
+            },
+        )
+        val start = com.tmplayer.data.ZipArchive.dataOffset(archive, video) ?: throw IOException(L.playerZipUnreadable)
+        return WindowedBytes(bytes, start, video.uncompressedSize) to video.name.substringAfterLast('/')
     }
 
     /** What [LowStorageStreams] gave each streamed piece, taken back once the bytes are closed. */

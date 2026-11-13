@@ -116,3 +116,66 @@ class LocalFileBytes(private val file: java.io.File) : StreamBytes {
         runCatching { channel.close() }
     }
 }
+
+/**
+ * A slice of [inner] shown as the whole file: a stored video inside a ZIP ([com.tmplayer.data.ZipArchive]),
+ * whose bytes start [start] bytes into the archive and run [length] bytes, so mpv meets the video's
+ * own bytes and seeks within them. Positions are the slice's; the archive's are [start] more.
+ */
+class WindowedBytes(
+    private val inner: StreamBytes,
+    private val start: Long,
+    private val length: Long,
+) : StreamBytes {
+
+    init {
+        require(start >= 0 && length >= 0 && start + length <= inner.size) { "Window outside the archive" }
+    }
+
+    override val size: Long get() = length
+
+    override fun cachedAvailable(position: Long): Long? {
+        if (position < 0 || position >= length) return null
+        return inner.cachedAvailable(start + position)?.let { minOf(it, length - position) }
+    }
+
+    override suspend fun awaitBytesAt(position: Long): Long {
+        if (position < 0 || position >= length) throw IOException("Read past the end at $position")
+        return minOf(inner.awaitBytesAt(start + position), length - position)
+    }
+
+    override fun read(position: Long, buffer: ByteArray, offset: Int, length: Int): Int {
+        if (position < 0 || position >= this.length) return -1
+        return inner.read(start + position, buffer, offset, minOf(length.toLong(), this.length - position).toInt())
+    }
+
+    override suspend fun askAgain(position: Long) {
+        if (position in 0 until length) inner.askAgain(start + position)
+    }
+
+    override fun close() = inner.close()
+}
+
+/**
+ * [length] bytes at [offset] of these bytes, waiting for each to arrive, or null when they cannot
+ * be had (a piece missing, the network gone); fewer only at the end. Reads a ZIP's directory
+ * through [com.tmplayer.data.ZipArchive].
+ */
+suspend fun StreamBytes.readRange(offset: Long, length: Int): ByteArray? {
+    if (offset < 0 || length < 0) return null
+    if (offset >= size) return ByteArray(0)
+    val want = minOf(length.toLong(), size - offset).toInt()
+    val out = ByteArray(want)
+    var got = 0
+    try {
+        while (got < want) {
+            val here = awaitBytesAt(offset + got)
+            val n = read(offset + got, out, got, minOf(here, (want - got).toLong()).toInt())
+            if (n <= 0) break
+            got += n
+        }
+    } catch (e: IOException) {
+        return null
+    }
+    return if (got == want) out else out.copyOf(got)
+}
