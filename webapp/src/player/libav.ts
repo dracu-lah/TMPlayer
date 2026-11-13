@@ -11,7 +11,7 @@ import {
     VideoSampleSource,
     type AudioCodec,
 } from 'mediabunny'
-import type { TgFile } from '../stream/reader'
+import type { MediaFile } from '../stream/reader'
 
 type AudioSampleFormat = Extract<ConstructorParameters<typeof AudioSample>[0], { numberOfChannels: number; data: unknown }>['format']
 import type * as LibAVTypes from '../../libav/libav.types'
@@ -188,7 +188,7 @@ export class LibavEngine extends FeedEngine {
      * Reads the header of `file` and plays it from `start` with the first sound it decodes; with
      * `start` null it only reads the header (the survey), and the caller destroys it.
      */
-    static async open(file: TgFile, video: HTMLVideoElement, container: string, durationHint: number, start: number | null, ev: EngineEvents): Promise<LibavEngine> {
+    static async open(file: MediaFile, video: HTMLVideoElement, container: string, durationHint: number, start: number | null, ev: EngineEvents): Promise<LibavEngine> {
         const t0 = performance.now()
         const L = await startLibav()
         /** A read that failed (a lost connection), so the failure is not taken for a damaged file. */

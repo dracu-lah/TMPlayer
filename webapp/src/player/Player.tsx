@@ -2,7 +2,8 @@ import { createEffect, createSignal, onCleanup, onMount, Show, type JSX } from '
 import '@videojs/html/video/player'
 import '@videojs/html/ui/container'
 import { Alert02Icon, Cancel01Icon } from '@hugeicons/core-free-icons'
-import { openFile, streams, warmFile, workerAsked, type TgFile } from '../stream/reader'
+import { openFile, openJoined, streams, warmFile, workerAsked, type MediaFile } from '../stream/reader'
+import { mountZip, PiecesProblem, ZipProblem } from '../stream/joined'
 import { bridgeAsked, tvServiceUrl } from '../stream/tvservice'
 import { noteTvNative, TV_BROWSER } from './tvnative'
 import { codecName, keyFrames, nativeEngine, playableSound, probe, RemuxEngine, route, Unplayable, type Engine, type Probe, type SoundTrack, type Why } from './engines'
@@ -23,7 +24,7 @@ import { routeCrashes } from '../crash'
 import { form } from '../form'
 import { Icon } from '../ui/Icon'
 import { dropResume, getResume, isWatched, saveResume as storeResume, setWatched, settings } from '../store'
-import type { VideoCopy, VideoItem, WatchInfo } from '../tg/types'
+import type { PieceSet, VideoCopy, VideoItem, WatchInfo } from '../tg/types'
 
 /** What plays: the posted file, or one of Telegram's lighter copies of it. */
 interface Source {
@@ -32,6 +33,10 @@ interface Source {
     duration: number
     /** A copy's picture height; 0 for the posted file. */
     height: number
+    /** The posted file is a video cut into pieces: they play as one (stream/joined.ts). */
+    joined?: PieceSet
+    /** The posted file is a ZIP: the video stored inside it plays out of the archive. */
+    zip?: boolean
 }
 
 /** Seconds before the end at which the next episode is fetched ahead and its card comes up. */
@@ -98,12 +103,14 @@ export function Player(props: {
     let framed = false
     let seekStarted = 0
 
-    let file: TgFile | null = null
+    let file: MediaFile | null = null
     let engine: Engine | null = null
     let probed: Probe | null = null
     /** Bumped on each load, so a slow probe of an abandoned source does nothing. */
     let generation = 0
-    const [source, setSource] = createSignal<Source>({ key: item.key, size: item.size, duration: item.duration, height: 0 })
+    /** The posted file as a source: the pieces it is cut into, or the ZIP it is kept in, with it. */
+    const original = (): Source => ({ key: item.key, size: item.size, duration: item.duration, height: 0, joined: item.joined, zip: item.zip })
+    const [source, setSource] = createSignal<Source>(original())
     const [error, setError] = createSignal<string | null>(null)
     const [needsApp, setNeedsApp] = createSignal<Why | null>(null)
     /** The picture is converted here (HEVC with no decoder), which makes the opening slow: the loader says so. */
@@ -160,11 +167,16 @@ export function Player(props: {
             retryOnline = true
             setStall('offline')
         }
+        else if (e instanceof PiecesProblem) setError(t(e.number === 1 ? 'player.pieces_first_missing' : 'player.pieces_up_to', { number: e.number, total: e.total }))
+        else if (e instanceof ZipProblem) setError(t(`player.zip_${e.kind}`))
         else if (/\bgone\b/.test(String((e as Error)?.message ?? e))) {
             dropResume(item.chatId, item.messageId)
             setError(t('web.gone_from_chat'))
         } else setError(t('player.error_other'))
     }
+
+    /** The address the stream is served under: the file's own key (a joined one has its own, see JoinedFile.key). */
+    const streamKey = () => file?.key ?? source().key
 
     /** Said once per video: the picture is made here more slowly than it plays. */
     let saidSlow = ''
@@ -203,6 +215,33 @@ export function Player(props: {
     /** A load failed for want of a connection: it runs again once the browser is back online. */
     let retryOnline = false
 
+    /**
+     * The file `src` plays from: a Telegram file, or its pieces joined (a video cut up, a ZIP
+     * split up), with a ZIP's stored video shown through a window as the whole file. Throws
+     * PiecesProblem or ZipProblem with the reason when it cannot, which `fail` says; null when a
+     * newer load took over meanwhile.
+     */
+    const openSource = async (src: Source, gen: number): Promise<MediaFile | null> => {
+        if (!src.joined && !src.zip) return openFile(src)
+        const set = src.joined
+        // Nothing starts without the first piece; a ZIP's directory is in the last, so a gap anywhere ends it too.
+        if (set && (!set.files.length || (src.zip && set.firstMissing))) throw new PiecesProblem(set.firstMissing || 1, set.total)
+        const j = openJoined(src)
+        try {
+            const zipped = await mountZip(j, !!src.zip)
+            if (gen !== generation) {
+                j.close()
+                return null
+            }
+            // Cut up with a piece missing later on: it plays up to the gap.
+            if (set?.firstMissing && !zipped) setNotice(t('player.pieces_up_to', { number: set.firstMissing, total: set.total }))
+        } catch (e) {
+            j.close()
+            throw e
+        }
+        return j
+    }
+
     /** Opens `src` at `at` seconds; `play` starts it once it can. */
     const load = async (src: Source, at: number, play: boolean) => {
         const gen = ++generation
@@ -218,9 +257,17 @@ export function Player(props: {
         setError(null)
         setStall(null)
         setSource(src)
-        const f = openFile(src)
+        let f: MediaFile
+        try {
+            const opened = await openSource(src, gen)
+            if (!opened) return
+            f = opened
+        } catch (e) {
+            if (gen === generation) fail(e)
+            return
+        }
         file = f
-        streams.set(src.key, f)
+        streams.set(f.key, f)
         f.warmUp()
         try {
             // Local testing: ?engine=movi plays the file through movi whatever the browser could do.
@@ -247,8 +294,8 @@ export function Player(props: {
             }
             if (way === 'native') {
                 // On the webOS .ipk the loopback bridge wins over the Service Worker address (tvservice.ts).
-                const bridged = tvServiceUrl(src.key, src.size, p.mime)
-                const url = bridged ?? `/stream/${encodeURIComponent(src.key)}?size=${src.size}&mime=${encodeURIComponent(p.mime.split(';')[0])}`
+                const bridged = tvServiceUrl(f.key, f.size, p.mime)
+                const url = bridged ?? `/stream/${encodeURIComponent(f.key)}?size=${f.size}&mime=${encodeURIComponent(p.mime.split(';')[0])}`
                 // Says which route fed the player, so a tester's screenshot tells R4 (bridge) from R3 (worker).
                 const how = bridged ? 'Played by the TV player through the TMPlayer service' : form() === 'tv' ? 'Played by the TV player through the Service Worker' : 'Played by the browser'
                 engine = nativeEngine(video, url, at, how)
@@ -282,7 +329,7 @@ export function Player(props: {
      * then the reason the video needs the app. A loader stays up throughout; only the last step
      * shows anything else.
      */
-    const fallback = async (why: unknown, f: TgFile, at: number, play: boolean, gen: number, rate: number, p: Probe | null = null) => {
+    const fallback = async (why: unknown, f: MediaFile, at: number, play: boolean, gen: number, rate: number, p: Probe | null = null) => {
         const container = why instanceof Unplayable && why.why.kind === 'format' ? why.why.format : null
         // AVI: libav.js first, which plays through the element (picture in picture, AirPlay); movi when it cannot.
         if (container && LIBAV_FORMATS.has(container)) {
@@ -307,7 +354,7 @@ export function Player(props: {
     }
 
     /** movi on `f`; mediabunny's reading of the file (`p`), when there is one, finds its key frames and goes with the engine. */
-    const viaMovi = async (f: TgFile, at: number, play: boolean, gen: number, rate: number, p: Probe | null) => {
+    const viaMovi = async (f: MediaFile, at: number, play: boolean, gen: number, rate: number, p: Probe | null) => {
         const e = await MoviEngine.open(
             f,
             video,
@@ -372,7 +419,7 @@ export function Player(props: {
         const at = video.currentTime
         // A TV whose media server fetched /stream/ itself, around the worker: counted, and after two the TV stays on the repack.
         if (onTv) {
-            const reached = workerAsked(source().key) || bridgeAsked(source().key)
+            const reached = workerAsked(streamKey()) || bridgeAsked(streamKey())
             noteTvNative(reached)
             if (!reached) console.warn('[player] the TV player did not go through the stream worker')
         }
@@ -397,7 +444,7 @@ export function Player(props: {
     }
 
     /** A file only libav.js opens (AVI): its own engine, which reads the header itself. */
-    const software = async (f: TgFile, container: string, at: number, play: boolean, gen: number, rate: number) => {
+    const software = async (f: MediaFile, container: string, at: number, play: boolean, gen: number, rate: number) => {
         const e = await LibavEngine.open(f, video, container, source().duration, at, {
             onError: fail,
             onDetail: (d) => setDetails(`${container}. ${d}`),
@@ -416,7 +463,7 @@ export function Player(props: {
     }
 
     /** The file's chapter marks, read from its head or tail, which the opening has fetched already. */
-    const findChapters = async (f: TgFile, gen: number) => {
+    const findChapters = async (f: MediaFile, gen: number) => {
         setChapters([])
         const list = await readChapters(f, navigator.language)
         if (gen === generation && list.length) setChapters(list)
@@ -509,7 +556,7 @@ export function Player(props: {
     const pickQuality = (key: string) => {
         if (key === source().key) return
         const copy = copies.find((c) => c.key === key)
-        const src: Source = copy ? { key: copy.key, size: copy.size, duration: item.duration, height: copy.height } : { key: item.key, size: item.size, duration: item.duration, height: 0 }
+        const src: Source = copy ? { key: copy.key, size: copy.size, duration: item.duration, height: copy.height } : original()
         setNotice(t('player.quality_switched', { quality: qualityLabel(src.height) }))
         reload(src)
     }
@@ -707,7 +754,7 @@ export function Player(props: {
                     poster={BLANK_POSTER}
                     onLoadedMetadata={() => {
                         // The TV's own player read the file through the worker: the route works on this TV.
-                        if (onTv && engine?.name === 'native' && (workerAsked(source().key) || bridgeAsked(source().key))) noteTvNative(true)
+                        if (onTv && engine?.name === 'native' && (workerAsked(streamKey()) || bridgeAsked(streamKey()))) noteTvNative(true)
                         advance(1)
                     }}
                     onCanPlay={() => {

@@ -7,6 +7,7 @@ import { progress as readProgress, settings } from '../store'
 import { chatGone, forgetGone } from '../goneVideos'
 import { watchPath } from './VideoList'
 import { warmFile } from '../stream/reader'
+import { looksSplit } from '../stream/joined'
 import type { ChatView, VideoItem } from '../tg/types'
 
 /** The player's code (the engines and the controls), also fetched while idle once signed in (App.tsx). */
@@ -36,6 +37,8 @@ export function Watch() {
             if (chatGone(e)) void forgetGone([{ chatId, messageId }], false)
             throw e
         }
+        // Opened on one piece of a video cut into pieces (Continue watching, an address): the rest of its pieces are found in the chat.
+        if (found && !found.joined && found.fileName && looksSplit(found.fileName)) found = (await api.joined(chatId, messageId).catch(() => null)) ?? found
         // Gone from the chat: it leaves Continue watching, Watched and Watch later (HX21), which
         // the page need not say on top of saying the video is gone.
         if (found === null) void forgetGone([{ chatId, messageId }], false)

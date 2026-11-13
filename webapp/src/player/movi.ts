@@ -4,7 +4,7 @@
 // the stall watch and the keys read: its properties and events are taken over for as long as
 // this engine runs (see [takeOver]) and given back on destroy.
 import type { MoviPlayer, PlayerState, SourceAdapter, AudioTrack } from 'movi-player/player'
-import type { TgFile } from '../stream/reader'
+import type { MediaFile } from '../stream/reader'
 import { Unplayable, type Engine, type EngineEvents, type SoundTrack } from './engines'
 
 const debug = location.hostname === 'localhost' || location.hostname === '127.0.0.1'
@@ -19,7 +19,7 @@ class TgSource implements SourceAdapter {
     private position = 0
     private failure: Error | null = null
 
-    constructor(private readonly file: TgFile) {}
+    constructor(private readonly file: MediaFile) {}
 
     getSize() {
         return Promise.resolve(this.file.size)
@@ -106,7 +106,7 @@ export class MoviEngine implements Engine {
      * back or says the video needs the app); nothing is left behind then.
      */
     static async open(
-        file: TgFile,
+        file: MediaFile,
         video: HTMLVideoElement,
         at: number,
         events: EngineEvents,
@@ -165,7 +165,7 @@ export class MoviEngine implements Engine {
      * movi can open a file and then decode nothing (a codec its build lacks): no frame and no
      * movement for 10 s while no read is outstanding is said as "needs the app", never a spinner.
      */
-    watchStart(file: TgFile, events: EngineEvents, codec: string) {
+    watchStart(file: MediaFile, events: EngineEvents, codec: string) {
         let still = 0
         let last = -1
         this.startWatch = setInterval(() => {

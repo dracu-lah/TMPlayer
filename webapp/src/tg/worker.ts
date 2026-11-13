@@ -5,7 +5,7 @@ import { BaseTelegramClient, SentCode as MtSentCode, TelegramClient, User, type 
 import { rules } from '../rules'
 import { cryptoProvider } from './crypto'
 import { homePage } from './home'
-import { archivedList, chatList, chatPage, forgetAll, rankChats, recentPage, searchAll, videoCounts, watchInfo } from './library'
+import { archivedList, chatList, chatPage, forgetAll, joinedFor, rankChats, recentPage, searchAll, videoCounts, watchInfo } from './library'
 import { clickSponsored, reportSponsored, viewSponsored } from './sponsored'
 import { chatProtects, files, itemOf, rawOf, thumbnails, toItem } from './media'
 import type { ChatInfo, ChatItem, ChatPage, ChatsEvent, ChatView, Country, Found, HomePage, HomeView, ListView, Me, RecentPage, QrEvent, RpcError, SentCode, SponsoredReport, VideoItem, WatchInfo } from './types'
@@ -366,6 +366,11 @@ export const api = {
         const raw = rawOf(msg as Message, chatProtects(msg as Message))
         const [v] = raw ? r.screen([raw]).videos : []
         return (v && itemOf(msg as Message, v.title, r.posterAsk(v), r.continueTitle(v))) || toItem(msg as Message)
+    },
+
+    /** The pieces of the video a message is one piece of (a cut video, a split ZIP), for a player opened on that message alone. Null when it is not a set. */
+    async joined(_: Ctx, chatId: number, messageId: number): Promise<VideoItem | null> {
+        return joinedFor(tg, chatId, messageId)
     },
 
     /** The watch page's parts round the player: episodes and the ones either side, or more from the chat. Null when the message is gone. */

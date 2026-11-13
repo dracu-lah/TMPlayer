@@ -4,7 +4,7 @@
 // has already fetched. Nothing is asked of the middle of a file: that would move the window the
 // player is streaming from. QuickTime chapter tracks (a text track whose samples are the titles)
 // are not read here; the apps do (session 13b).
-import type { TgFile } from '../stream/reader'
+import type { MediaFile } from '../stream/reader'
 
 export interface Chapter {
     /** Seconds from the start. */
@@ -53,7 +53,7 @@ const finish = (list: Chapter[]): Chapter[] => {
 // ---- the file ------------------------------------------------------------------------------
 
 /** The chapters of a file; empty for one with none, one this does not read, or a part not at hand. */
-export async function readChapters(file: TgFile, language?: string): Promise<Chapter[]> {
+export async function readChapters(file: MediaFile, language?: string): Promise<Chapter[]> {
     // Only the head and the tail are cheap: the middle is a network seek.
     const near = file.chunk * 4
     const cheap = (offset: number, length: number) => offset + length <= near || offset >= file.size - file.chunk * 2

@@ -18,7 +18,7 @@ import {
     type InputVideoTrack,
     type StreamTargetChunk,
 } from 'mediabunny'
-import type { TgFile } from '../stream/reader'
+import type { MediaFile } from '../stream/reader'
 import type { HevcTranscoder, Transcoded } from './hevc'
 import { hevcAccepted, pictureNames, tvDecodesHevc, withHevc } from './hevcnames'
 import { tvServiceUp } from '../stream/tvservice'
@@ -123,7 +123,7 @@ export function codecName(track: { codec: string | null; internalCodecId: unknow
 }
 
 /** Names the containers mediabunny does not open, from their first bytes. */
-async function sniff(file: TgFile): Promise<string> {
+async function sniff(file: MediaFile): Promise<string> {
     const h = await file.read(0, 12).catch(() => new Uint8Array(0))
     const text = (from: number, to: number) => String.fromCharCode(...h.subarray(from, to))
     if (text(0, 4) === 'RIFF' && text(8, 11) === 'AVI') return 'AVI'
@@ -135,7 +135,7 @@ async function sniff(file: TgFile): Promise<string> {
 }
 
 /** Reads the file's header (not its name) to learn the container and codecs. */
-export async function probe(file: TgFile, durationHint: number): Promise<Probe> {
+export async function probe(file: MediaFile, durationHint: number): Promise<Probe> {
     const input = new Input({
         formats: ALL_FORMATS,
         source: new CustomSource({
