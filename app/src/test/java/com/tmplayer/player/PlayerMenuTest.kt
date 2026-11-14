@@ -121,6 +121,7 @@ class PlayerMenuTest {
             stereo = true,
             pictureShape = true,
             reportStutter = true,
+            copyLinkAtTime = true,
         )
         assertFalse(PlayerMenuEntry.PictureInPicture in entries)
         assertEquals(PlayerMenuEntry.entries.size - 1, entries.size)
@@ -140,6 +141,7 @@ class PlayerMenuTest {
                 stereo = true,
                 pictureShape = true,
                 reportStutter = true,
+                copyLinkAtTime = true,
             ).toSet(),
         )
     }
@@ -176,6 +178,7 @@ class PlayerMenuTest {
                 PhoneMenuEntry.AddBookmark,
                 PhoneMenuEntry.Bookmarks,
                 PhoneMenuEntry.OpenInAnotherApp,
+                PhoneMenuEntry.CopyLinkAtTime,
                 PhoneMenuEntry.LoadSubtitleFile,
                 PhoneMenuEntry.SaveToDownloads,
                 PhoneMenuEntry.MarkWatched,
@@ -192,9 +195,10 @@ class PlayerMenuTest {
                 chapters = true,
                 saveFrame = true,
                 reportStutter = true,
+                copyLinkAtTime = true,
             ),
         )
-        assertEquals(PhoneMenuEntry.entries.toSet(), PlayerMenu.phoneEntries(true, true, true, true, paused = true, bookmarks = true, chapters = true, saveFrame = true, pictureShape = true, stereo = true, zoomed = true, reportStutter = true).toSet())
+        assertEquals(PhoneMenuEntry.entries.toSet(), PlayerMenu.phoneEntries(true, true, true, true, paused = true, bookmarks = true, chapters = true, saveFrame = true, pictureShape = true, stereo = true, zoomed = true, reportStutter = true, copyLinkAtTime = true).toSet())
     }
 
     @Test
@@ -289,5 +293,16 @@ class PlayerMenuTest {
     @Test
     fun `the phone entry has its words`() {
         assertEquals(com.tmplayer.i18n.L.playerReportStutter, PhoneMenuEntry.ReportStutter.label())
+    }
+
+    @Test
+    fun `copy link at this time sits after open in another app on both, and only when asked`() {
+        val phone = PlayerMenu.phoneEntries(true, true, true, true, copyLinkAtTime = true)
+        assertEquals(phone.indexOf(PhoneMenuEntry.OpenInAnotherApp) + 1, phone.indexOf(PhoneMenuEntry.CopyLinkAtTime))
+        assertFalse(PhoneMenuEntry.CopyLinkAtTime in PlayerMenu.phoneEntries(true, true, true, true))
+        val tv = PlayerMenu.tvEntries(pictureInPicture = true, copyLinkAtTime = true)
+        assertEquals(tv.indexOf(PlayerMenuEntry.OpenInAnotherApp) + 1, tv.indexOf(PlayerMenuEntry.CopyLinkAtTime))
+        assertFalse(PlayerMenuEntry.CopyLinkAtTime in PlayerMenu.tvEntries(pictureInPicture = true))
+        assertEquals(com.tmplayer.i18n.L.playerCopyLinkAtTime, PhoneMenuEntry.CopyLinkAtTime.label())
     }
 }

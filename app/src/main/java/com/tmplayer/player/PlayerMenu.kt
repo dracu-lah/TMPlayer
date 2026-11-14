@@ -59,6 +59,8 @@ enum class PlayerMenuEntry {
     MarkWatched,
     PictureInPicture,
     OpenInAnotherApp,
+    /** The video's Telegram link with the time playing (U9); not for a protected chat or a video of pieces. */
+    CopyLinkAtTime,
     /**
      * Marks the moment as stuttering and keeps the last minute of the playback trace for Send logs
      * (L3). Also a held Info key on the remote. Not offered on a cast, which plays on the other TV.
@@ -112,6 +114,8 @@ enum class PhoneMenuEntry {
     AddBookmark,
     Bookmarks,
     OpenInAnotherApp,
+    /** The video's Telegram link with the time playing (U9), as the television's. */
+    CopyLinkAtTime,
     LoadSubtitleFile,
     SaveToDownloads,
     MarkWatched,
@@ -151,6 +155,7 @@ fun PhoneMenuEntry.label(
     PhoneMenuEntry.PreviousFrame -> L.playerFramePrevious
     PhoneMenuEntry.SaveFrame -> L.playerSaveFrame
     PhoneMenuEntry.OpenInAnotherApp -> L.playerOpenInAnotherApp
+    PhoneMenuEntry.CopyLinkAtTime -> L.playerCopyLinkAtTime
     PhoneMenuEntry.LoadSubtitleFile -> L.playerLoadSubtitleFile
     PhoneMenuEntry.SaveToDownloads -> L.playerSaveToDownloads
     PhoneMenuEntry.MarkWatched -> if (watched) L.playerMarkUnwatched else L.playerMarkWatched
@@ -196,7 +201,7 @@ object PlayerMenu {
      * [chapters] is whether the file has chapter marks, which adds the chapter steps.
      *
      * [stereo] is whether 3D video is offered: a picture to draw, not sound alone, and
-     * [pictureShape] the same for the shapes' page. [reportStutter] is false on a cast.
+     * [pictureShape] the same for the shapes' page. [reportStutter] is false on a cast. [copyLinkAtTime] is false for a chat that restricts saving, a video with no message and one built from pieces.
      */
     fun tvEntries(
         pictureInPicture: Boolean,
@@ -209,6 +214,7 @@ object PlayerMenu {
         stereo: Boolean = false,
         pictureShape: Boolean = false,
         reportStutter: Boolean = false,
+        copyLinkAtTime: Boolean = false,
     ): List<PlayerMenuEntry> = buildList {
         add(PlayerMenuEntry.LockScreen)
         add(PlayerMenuEntry.PlaybackDetails)
@@ -237,6 +243,7 @@ object PlayerMenu {
         if (markWatched) add(PlayerMenuEntry.MarkWatched)
         if (pictureInPicture) add(PlayerMenuEntry.PictureInPicture)
         if (openInAnotherApp) add(PlayerMenuEntry.OpenInAnotherApp)
+        if (copyLinkAtTime) add(PlayerMenuEntry.CopyLinkAtTime)
         if (reportStutter) add(PlayerMenuEntry.ReportStutter)
         add(PlayerMenuEntry.RemoteKeys)
     }
@@ -250,7 +257,8 @@ object PlayerMenu {
      * chat that restricts saving (or while that is still being asked), whose frames stay in it.
      * [pictureShape] is whether there is a picture to shape (not sound alone, not a cast), and
      * [stereo] offers 3D video beside it; Speed follows them. [reportStutter] adds Report stutter
-     * (false on a cast, which plays on the other screen). [zoomed] adds Reset zoom under the
+     * (false on a cast, which plays on the other screen). [copyLinkAtTime] is false for a chat that
+     * restricts saving, a video with no message and one built from pieces. [zoomed] adds Reset zoom under the
      * shape while a pinch has the picture enlarged. The lock stays first: the line people come
      * here for.
      */
@@ -267,6 +275,7 @@ object PlayerMenu {
         stereo: Boolean = false,
         zoomed: Boolean = false,
         reportStutter: Boolean = false,
+        copyLinkAtTime: Boolean = false,
     ): List<PhoneMenuEntry> = buildList {
         add(PhoneMenuEntry.LockScreen)
         if (pictureInPicture) add(PhoneMenuEntry.PictureInPicture)
@@ -293,6 +302,7 @@ object PlayerMenu {
             add(PhoneMenuEntry.Bookmarks)
         }
         if (openInAnotherApp) add(PhoneMenuEntry.OpenInAnotherApp)
+        if (copyLinkAtTime) add(PhoneMenuEntry.CopyLinkAtTime)
         add(PhoneMenuEntry.LoadSubtitleFile)
         if (saveToDownloads) add(PhoneMenuEntry.SaveToDownloads)
         if (markWatched) add(PhoneMenuEntry.MarkWatched)

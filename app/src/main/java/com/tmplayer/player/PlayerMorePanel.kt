@@ -384,7 +384,7 @@ class PlayerMorePanel(
         LockScreen, PictureInPicture, PlaybackDetails, StartOver, PictureShape, ResetZoom, Stereo, Speed,
         VolumeBoost, NightMode, EvenVolume, SleepTimer, AbLoop, NextChapter, PreviousChapter,
         NextFrame, PreviousFrame, SaveFrame, AddBookmark, Bookmarks, OpenInAnotherApp,
-        LoadSubtitleFile, SaveToDownloads, MarkWatched, ReportStutter, RemoteKeys,
+        CopyLinkAtTime, LoadSubtitleFile, SaveToDownloads, MarkWatched, ReportStutter, RemoteKeys,
     }
 
     private class Line(val kind: Kind, val label: String, val icon: ImageVector, val detail: String?)
@@ -464,6 +464,7 @@ class PlayerMorePanel(
             Kind.AddBookmark -> Line(kind, s.playerAddBookmark, TmIcons.Add, null)
             Kind.Bookmarks -> Line(kind, s.playerBookmarks, TmIcons.Bookmark, bookmarkCount.takeIf { it > 0 }?.let { s.playerBookmarksCount(it) })
             Kind.OpenInAnotherApp -> Line(kind, s.playerOpenInAnotherApp, TmIcons.OpenExternal, null)
+            Kind.CopyLinkAtTime -> Line(kind, s.playerCopyLinkAtTime, TmIcons.Copy, null)
             Kind.LoadSubtitleFile -> Line(kind, s.playerLoadSubtitleFile, TmIcons.Subtitles, null)
             Kind.SaveToDownloads -> Line(kind, s.playerSaveToDownloads, TmIcons.Download, s.playerSaveToDownloadsDetail)
             Kind.MarkWatched -> if (host.watched()) {

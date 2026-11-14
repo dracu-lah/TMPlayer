@@ -6460,6 +6460,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             pictureShape = stereoOffered(),
             stereo = stereoOffered(),
             zoomed = zoom.zoomed,
+            reportStutter = stutterReportable(),
+            copyLinkAtTime = linkAtTimeOffered(),
         )
         override fun zoomDetail(): String? =
             zoom.takeIf { it.zoomed }?.let { L.messages.formatter.scalePercent(it.percent) }
@@ -6474,6 +6476,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             stereo = stereoOffered(),
             pictureShape = stereoOffered(),
             reportStutter = stutterReportable(),
+            copyLinkAtTime = linkAtTimeOffered(),
         )
         override fun shape() = videoScale
         override fun speed() = playbackSpeed
@@ -6531,6 +6534,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             PhoneMenuEntry.MarkWatched -> toggleWatched()
             PhoneMenuEntry.ResetZoom -> resetZoom()
             PhoneMenuEntry.ReportStutter -> reportStutter()
+            PhoneMenuEntry.CopyLinkAtTime -> copyLinkAtTime()
             // Pages of the panel itself, opened there.
             PhoneMenuEntry.PictureShape, PhoneMenuEntry.Stereo, PhoneMenuEntry.Speed, PhoneMenuEntry.SleepTimer,
             PhoneMenuEntry.AddBookmark, PhoneMenuEntry.Bookmarks, PhoneMenuEntry.PlaybackDetails,
@@ -6560,8 +6564,40 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             PlayerMenuEntry.AddBookmark -> addBookmark(player?.currentPosition ?: 0L, "")
             PlayerMenuEntry.Bookmarks -> showSheet { it.showBookmarks(bookmarkActions()) }
             PlayerMenuEntry.ReportStutter -> reportStutter()
+            PlayerMenuEntry.CopyLinkAtTime -> copyLinkAtTime()
             // Pages of the panel itself, opened there.
             PlayerMenuEntry.SleepTimer, PlayerMenuEntry.RemoteKeys, PlayerMenuEntry.Speed, PlayerMenuEntry.PictureShape -> Unit
+        }
+    }
+
+    /**
+     * Copy link at this time is offered for a video from a message in a chat that allows sharing
+     * (the same gate as Open in another app: a protected chat's video is not passed on, nor its
+     * link), and not for one played from pieces, which has no single message to point at.
+     */
+    private fun linkAtTimeOffered(): Boolean =
+        LinkAtTime.offered(hasMessage(), mayShare = savable == true, fromPieces = joinedSource != null)
+
+    /**
+     * The video's Telegram link with the moment playing, on the clipboard ([LinkAtTime]). A chat
+     * with no message links (a secret chat) says so instead of copying nothing; a failed lookup
+     * says the same, since either way there is no link to give.
+     */
+    private fun copyLinkAtTime() {
+        if (!linkAtTimeOffered()) return
+        val at = player?.currentPosition ?: 0L
+        val chat = chatId
+        val message = messageId
+        lifecycleScope.launch {
+            val link = LinkAtTime.of(runCatching { com.tmplayer.data.MessageLink.of(chat, message) }.getOrNull(), at)
+            if (isFinishing || isDestroyed) return@launch
+            if (link == null) {
+                showGestureFeedback(L.shareNoMessageLinks)
+                return@launch
+            }
+            val clipboard = getSystemService(android.content.ClipboardManager::class.java)
+            val copied = runCatching { clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("Telegram link", link)) }.isSuccess
+            showGestureFeedback(if (copied) L.shareLinkCopied else L.shareNoMessageLinks)
         }
     }
 
