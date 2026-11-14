@@ -136,6 +136,14 @@ data class MediaItem(
     @Volatile private var markersRead: Set<String>? = null
     @Volatile private var captionLinesRead: Set<String>? = null
     @Volatile private var miniKeyRead: Long = 0
+    @Volatile private var traitsRead: VideoTraits? = null
+
+    /**
+     * What this video is by its names and stated size ([VideoTraits]): the picture, HDR, subtitles
+     * and languages a chat's filters screen by (U6), read once and kept.
+     */
+    val traits: VideoTraits
+        get() = traitsRead ?: VideoTraits.of(this).also { traitsRead = it }
 
     /**
      * This item, made by [from]'s copy(), with what was read off [from]'s names kept where the
@@ -157,6 +165,7 @@ data class MediaItem(
         looseHintRead = from.looseHintRead
         markersRead = from.markersRead
         captionLinesRead = from.captionLinesRead
+        if (width == from.width && height == from.height) traitsRead = from.traitsRead
         if (chatId == from.chatId && messageId == from.messageId) progressKeyRead = from.progressKeyRead
         // The keys also read whether it is an extra, and whether it stands for a cut video's pieces.
         if (extra == from.extra && pieces.isEmpty() == from.pieces.isEmpty()) {

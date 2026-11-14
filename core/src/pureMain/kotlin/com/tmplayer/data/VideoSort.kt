@@ -25,6 +25,8 @@ enum class VideoSort {
     Size,
     /** By running time, the longest first; a show by all its episodes, a video of unknown length last. */
     Longest,
+    /** The one watched most recently first; a show by its latest episode, never played last. */
+    LastPlayed,
     Unwatched,
     ;
 
@@ -63,12 +65,15 @@ object VideoSorting {
      *
      * @param progress where the viewer is with one file; a copy counts for its whole video.
      * @param locale the app's language, for the order of names.
+     * @param lastPlayed when one file was last watched, in any unit that grows with time, or null
+     *   for never ([NewEpisodes.touchTimes]); for [VideoSort.LastPlayed].
      */
     fun sort(
         entries: List<ShelfEntry>,
         sort: VideoSort,
         progress: (MediaItem) -> Progress = { Progress.Untouched },
         locale: TmLocale = L.messages.locale,
+        lastPlayed: (MediaItem) -> Long? = { null },
     ): List<ShelfEntry> {
         if (sort == VideoSort.Newest || entries.size < 2) return entries
         val indexed = entries.withIndex().toList()
@@ -94,6 +99,10 @@ object VideoSorting {
                 val lengths = indexed.map { lengthOf(it.value) }
                 compareBy<IndexedValue<ShelfEntry>> { lengths[it.index] <= 0 }.thenByDescending { lengths[it.index] }
             }
+            VideoSort.LastPlayed -> {
+                val played = indexed.map { entry -> items(entry.value).mapNotNull(lastPlayed).maxOrNull() }
+                compareBy<IndexedValue<ShelfEntry>> { played[it.index] == null }.thenByDescending { played[it.index] ?: 0L }
+            }
             VideoSort.Unwatched -> compareBy { progressOf(it.value, progress) }
         }
         // sortedWith is stable, and the index as the last word makes it so whatever the order says.
@@ -113,7 +122,7 @@ object VideoSorting {
      * a post date in seconds for [VideoSort.Newest] (its newest file) and [VideoSort.Oldest] (its
      * first), the listed name without a leading article for [VideoSort.Name], the year (or null)
      * for [VideoSort.Year], bytes for [VideoSort.Size], seconds for [VideoSort.Longest], and null
-     * for [VideoSort.Unwatched], whose groups say nothing worth a bubble.
+     * for [VideoSort.Unwatched] and [VideoSort.LastPlayed], whose groups say nothing worth a bubble.
      */
     fun placedBy(entry: ShelfEntry, sort: VideoSort): Any? = when (sort) {
         VideoSort.Newest -> items(entry).maxOf { it.date }
@@ -122,6 +131,7 @@ object VideoSorting {
         VideoSort.Year -> yearOf(entry)
         VideoSort.Size -> sizeOf(entry)
         VideoSort.Longest -> lengthOf(entry)
+        VideoSort.LastPlayed -> null
         VideoSort.Unwatched -> null
     }
 

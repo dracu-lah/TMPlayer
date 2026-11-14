@@ -360,6 +360,7 @@ private fun videoSortKey(chatId: Long) = stringPreferencesKey("vsort_$chatId")
 
 /** Which of a chat's videos are listed, per chat. See [VideoFilter]. */
 private fun videoFilterKey(chatId: Long) = stringPreferencesKey("vfilter_$chatId")
+private fun videoFacetsKey(chatId: Long) = stringPreferencesKey("vfacets_$chatId")
 
 /** The subtitle and audio offsets the viewer set for one file. See [SyncDelays]. */
 private fun delayKey(chatId: Long, messageId: Long) =
@@ -663,6 +664,24 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
 
     suspend fun setVideoFilter(chatId: Long, filter: VideoFilter) {
         prefs.edit { if (filter == VideoFilter.DEFAULT) it.remove(videoFilterKey(chatId)) else it[videoFilterKey(chatId)] = filter.name }
+    }
+
+    /**
+     * [chatId]'s filters by what a video is ([VideoFacets], U6): none until the viewer picks one.
+     * A stored line from another version reads part by part, an unknown part as that filter off.
+     */
+    fun videoFacets(chatId: Long): Flow<VideoFacets> = read { VideoFacets.decode(it[videoFacetsKey(chatId)]) }
+
+    suspend fun setVideoFacets(chatId: Long, facets: VideoFacets) {
+        prefs.edit { if (facets.isDefault) it.remove(videoFacetsKey(chatId)) else it[videoFacetsKey(chatId)] = facets.encode() }
+    }
+
+    /** Show, and every filter by what a video is, back to none for [chatId]: the empty state's Clear filters. */
+    suspend fun clearVideoFilters(chatId: Long) {
+        prefs.edit {
+            it.remove(videoFilterKey(chatId))
+            it.remove(videoFacetsKey(chatId))
+        }
     }
 
     /**

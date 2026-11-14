@@ -216,7 +216,16 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
         val sortScope = rememberCoroutineScope()
         // Which of its videos are listed (see VideoFilter), remembered per chat beside the order.
         val filter by remember(chat.id) { state.settings.videoFilter(chat.id) }.collectAsState(initial = com.tmplayer.data.VideoFilter.DEFAULT)
-        val clearFilter: () -> Unit = { sortScope.launch { state.settings.setVideoFilter(chat.id, com.tmplayer.data.VideoFilter.All) } }
+        // And what a video is (U6): length, picture, HDR, subtitles, language, when added; per chat.
+        val facets by remember(chat.id) { state.settings.videoFacets(chat.id) }.collectAsState(initial = com.tmplayer.data.VideoFacets.NONE)
+        // "Show them" over the grid: the filters set aside while this chat is open, kept for next time.
+        var filterPaused by remember(chat.id) { mutableStateOf(false) }
+        val clearFilter: () -> Unit = {
+            filterPaused = false
+            sortScope.launch { state.settings.clearVideoFilters(chat.id) }
+        }
+        val filtersOn = filter != com.tmplayer.data.VideoFilter.All || !facets.isDefault
+        var gridLanguages by remember(chat.id) { mutableStateOf(emptyList<String>()) }
         // Videos outside the size limits, said by an "n hidden" button in the bar for as long as
         // the chat is open, which changes the smallest size there. A search ignores the limits.
         val sizeHidden by model.sizeHidden.collectAsState()
@@ -267,7 +276,7 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
                 onToggleFavourite = { scope.launch { state.settings.toggleFavorite(chat.id) } },
                 onSort = { sorting = true },
                 sortAnchor = sortAnchor,
-                filtered = filter != com.tmplayer.data.VideoFilter.All,
+                filtered = filtersOn,
                 sizeHidden = shownHidden,
                 onSizeHidden = { sizePicking = true },
                 sizeAnchor = sizeAnchor,
@@ -309,7 +318,7 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
             DisposableEffect(model, grid) {
                 onDispose { model.rememberScroll(grid.firstVisibleItemIndex, grid.firstVisibleItemScrollOffset) }
             }
-            LoadMoreNearEnd(grid, enabled = !content.endReached && !content.loadingMore) { model.loadMore() }
+            // The next page is asked for further down, once the filters have been applied.
             val ad = content.sponsored?.messages?.firstOrNull()
             // A show as one poster that opens its seasons, and copies of one film (720p, 1080p,
             // HEVC) as one poster with the rest a pick in its details. While searching, every
@@ -321,7 +330,9 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
             val progress by state.settings.watchProgress.collectAsState(initial = emptyMap())
             val watchedList by state.watched.watched.collectAsState(initial = emptyMap())
             val shownSort = if (grouping) sort else com.tmplayer.data.VideoSort.DEFAULT
-            val shownFilter = if (grouping) filter else com.tmplayer.data.VideoFilter.All
+            val shownFilter = if (grouping && !filterPaused) filter else com.tmplayer.data.VideoFilter.All
+            val shownFacets = if (grouping && !filterPaused) facets else com.tmplayer.data.VideoFacets.NONE
+            val resumes by state.settings.continueWatching.collectAsState(initial = emptyList())
             val progressOf: (com.tmplayer.data.MediaItem) -> com.tmplayer.data.VideoSorting.Progress = { item ->
                 val key = SettingsStore.progressKey(item.chatId, item.messageId)
                 when {
@@ -330,16 +341,39 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
                     else -> com.tmplayer.data.VideoSorting.Progress.Untouched
                 }
             }
-            val sortedAll = remember(content.items, grouping, corrections, shownSort, progress, watchedList) {
+            val touchTimes = remember(resumes, watchedList) { com.tmplayer.data.NewEpisodes.touchTimes(resumes, watchedList.values) }
+            val sortedAll = remember(content.items, grouping, corrections, shownSort, progress, watchedList, touchTimes) {
                 val entries = if (grouping) {
                     com.tmplayer.data.SeriesShelf.arrange(content.items, corrections)
                 } else {
                     com.tmplayer.data.SeriesShelf.foldFilmCopies(content.items, corrections).map { com.tmplayer.data.ShelfEntry.File(it) }
                 }
-                com.tmplayer.data.VideoSorting.sort(entries, shownSort, progressOf)
+                com.tmplayer.data.VideoSorting.sort(entries, shownSort, progressOf, lastPlayed = { touchTimes[SettingsStore.progressKey(it.chatId, it.messageId)] })
             }
-            val arranged = remember(sortedAll, shownFilter, progress, watchedList) {
-                com.tmplayer.data.VideoFiltering.filter(sortedAll, shownFilter, progressOf)
+            val screened = remember(sortedAll, shownFilter, shownFacets, progress, watchedList) {
+                com.tmplayer.data.VideoFaceting.screen(
+                    com.tmplayer.data.VideoFiltering.filter(sortedAll, shownFilter, progressOf),
+                    shownFacets,
+                    System.currentTimeMillis() / 1000,
+                )
+            }
+            val arranged = screened.shown
+            // With a filter on, a grid too short to scroll pages by itself only a few times
+            // ([com.tmplayer.data.VideoFaceting.mayAutoLoad]), never a whole chat of thousands.
+            val autoFiltering = com.tmplayer.ui.browse.videoFiltersLabel(shownFilter, shownFacets, s) != null
+            var autoPages by remember(chat.id, shownFilter, shownFacets) { mutableStateOf(0) }
+            val shortGrid = arranged.size < AUTO_SCREENFUL
+            LoadMoreNearEnd(
+                grid,
+                enabled = !content.endReached && !content.loadingMore &&
+                    com.tmplayer.data.VideoFaceting.mayAutoLoad(autoFiltering, arranged.size, AUTO_SCREENFUL, autoPages),
+            ) {
+                if (autoFiltering && shortGrid) autoPages++
+                model.loadMore()
+            }
+            val keepLooking = autoFiltering && !content.endReached && autoPages >= com.tmplayer.data.VideoFaceting.AUTO_PAGES
+            LaunchedEffect(sortedAll, grouping, facets.language) {
+                if (grouping) gridLanguages = com.tmplayer.data.VideoFaceting.languagesIn(sortedAll, keep = facets.language)
             }
             // The newest listing of a chat the kids lock allows, for the name check in Settings.
             LaunchedEffect(content.items) { com.tmplayer.data.NameReport.remember(chat.id, content.items) }
@@ -384,8 +418,28 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
             }
             // An order other than Newest is of the videos loaded so far while older pages remain.
             val sortedLoaded = com.tmplayer.data.VideoSorting.sortsLoadedOnly(shownSort, content.endReached)
-            // A filter in force says so, with Clear filter; when it hides all, it says that instead.
-            val filterNote = shownFilter != com.tmplayer.data.VideoFilter.All
+            // A filter in force says what it hid, with Show them and Clear filter; when it hides
+            // everything loaded, the empty state with Clear filters takes the grid's place.
+            val filterLabel = com.tmplayer.ui.browse.videoFiltersLabel(shownFilter, shownFacets, s)
+            val hidesAll = filterLabel != null && arranged.isEmpty() && sortedAll.isNotEmpty()
+            val filterNote = (filterLabel != null && !hidesAll && (screened.hidden > 0 || screened.unknown > 0 || sortedAll.size > arranged.size)) ||
+                (filterPaused && filtersOn && grouping)
+            if (hidesAll) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        StateBox(
+                            UiState.Empty(s.gridFilterHidesAll(sortedAll.size, filterLabel.orEmpty()), com.tmplayer.ui.components.StateAction.ClearFilters),
+                            onRetry = {},
+                            onAction = { clearFilter() },
+                            skeleton = skeleton,
+                        ) { _: Unit -> }
+                        if (keepLooking) TextButton(onClick = { autoPages = 0; model.loadMore() }) { Text(s.commonKeepLooking) }
+                    }
+                    // No grid to carry the bar: it stands on its own, so Sort is still in reach.
+                    Box(Modifier.align(Alignment.BottomCenter)) { chatBar() }
+                }
+                return@StateBox
+            }
             // Self-destructing videos are left out (only Telegram opens them), said in a quiet line.
             val selfDestructing by model.selfDestructing.collectAsState()
             val selfDestructNote = query.isBlank() && selfDestructing > 0
@@ -408,13 +462,23 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
                     {
                         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                             if (filterNote) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    val label = com.tmplayer.ui.browse.videoFilterLabel(shownFilter, s)
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    val hidden = sortedAll.size - arranged.size
                                     Text(
-                                        if (arranged.isEmpty() && sortedAll.isNotEmpty()) s.gridFilterHidesAll(sortedAll.size, label) else s.gridFilterShowing(label, arranged.size, sortedAll.size),
+                                        when {
+                                            filterPaused -> s.gridFilterPaused
+                                            screened.unknown > 0 && hidden > 0 -> "${s.gridFilterHidden(hidden)}. ${s.gridFilterUnknown(screened.unknown)}"
+                                            screened.unknown > 0 -> s.gridFilterUnknown(screened.unknown)
+                                            else -> s.gridFilterHidden(hidden)
+                                        },
                                         color = Tone.muted,
                                     )
-                                    Spacer(Modifier.width(12.dp))
+                                    if (filterPaused) {
+                                        OutlinedButton(onClick = { filterPaused = false }) { Text(s.gridFilterAgain) }
+                                    } else {
+                                        if (hidden > 0) OutlinedButton(onClick = { filterPaused = true }) { Text(s.gridFilterShowThem) }
+                                        if (keepLooking) OutlinedButton(onClick = { autoPages = 0; model.loadMore() }) { Text(s.commonKeepLooking) }
+                                    }
                                     OutlinedButton(onClick = clearFilter) { Text(s.gridFilterClear) }
                                 }
                             }
@@ -481,6 +545,7 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
                 },
                 onFilter = { picked ->
                     sorting = false
+                    filterPaused = false
                     if (picked != filter) sortScope.launch { state.settings.setVideoFilter(chat.id, picked) }
                 },
                 // One of the videos loaded so far, never a whole chat fetched for it (PlayRandom).
@@ -494,6 +559,13 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
                             watched = { SettingsStore.progressKey(it.chatId, it.messageId) in watchedForRandom },
                         )?.let { state.openPlayer(it, startFromBeginning = false) }
                     }
+                },
+                facets = facets,
+                languages = gridLanguages,
+                onFacets = { picked ->
+                    sorting = false
+                    filterPaused = false
+                    if (picked != facets) sortScope.launch { state.settings.setVideoFacets(chat.id, picked) }
                 },
             ),
             onDismiss = { sorting = false },
@@ -1472,6 +1544,9 @@ private val PLAY_KEYS = setOf(Key.Enter, Key.NumPadEnter, Key.Spacebar, Key.P)
 private val IS_MAC: Boolean get() = com.tmplayer.desktop.os.OsInfo.isMac
 private const val HOVER_INTENT_MS = 300L
 private const val LOAD_AHEAD = 8
+
+/** Posters a filtered grid lists before it counts as long enough to scroll ([com.tmplayer.data.VideoFaceting.mayAutoLoad]). */
+private const val AUTO_SCREENFUL = 12
 
 /**
  * The width a tile asks for on a chat's page: a step larger than the other grids' default, since

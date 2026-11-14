@@ -36,6 +36,7 @@ sealed interface UiState<out T> {
             StateAction.SearchAllChats -> TmIcons.SearchRemove
             StateAction.Refresh -> TmIcons.Refresh
             StateAction.AddChats -> TmIcons.ChatsMany
+            StateAction.ClearFilters -> TmIcons.FilterHorizontal
             null -> TmIcons.VideoOff
         }
     }
@@ -65,6 +66,12 @@ enum class StateAction {
      * so the way on is a choice, not a retry.
      */
     AddChats,
+
+    /**
+     * A chat's filters hide every video loaded so far (U6): turn them all off, Show and what a
+     * video is, rather than leave the viewer facing an empty grid of a full chat.
+     */
+    ClearFilters,
     ;
 
     /** The button's words. */
@@ -73,6 +80,7 @@ enum class StateAction {
         SearchAllChats -> L.searchAllChats
         Refresh -> L.commonRefresh
         AddChats -> L.pickerChooseChats
+        ClearFilters -> L.searchClearFilters
     }
 
     /**

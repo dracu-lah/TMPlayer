@@ -237,9 +237,10 @@ object Backups {
         "speed_" to Kind.FLOAT,
         "delay_" to Kind.TEXT,
         "topic_" to Kind.LONG,
-        // A chat's own order ([VideoSort]) and filter ([VideoFilter]), and the viewer's corrections to names ([VideoCorrection]).
+        // A chat's own order ([VideoSort]), filters ([VideoFilter], [VideoFacets]), and the viewer's corrections to names ([VideoCorrection]).
         "vsort_" to Kind.TEXT,
         "vfilter_" to Kind.TEXT,
+        "vfacets_" to Kind.TEXT,
         VideoCorrections.PREFIX to Kind.TEXT,
         "copy_pick_" to Kind.TEXT,
     )

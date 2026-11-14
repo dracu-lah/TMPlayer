@@ -1206,6 +1206,8 @@ class MediaListViewModel(
         StateAction.SearchAllChats -> SearchRequest.ask(query)
         // Opens the picker, which each platform hosts itself (HX27).
         StateAction.AddChats -> AddChatsRequest.ask()
+        // The filters are the screen's, kept in its settings: it clears them itself.
+        StateAction.ClearFilters -> Unit
     }
 
     /** What the viewer searched this chat for, for a screen offering the same words everywhere. */

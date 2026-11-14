@@ -2,6 +2,7 @@ package com.tmplayer.ui.browse
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.vector.ImageVector
+import com.tmplayer.data.VideoFacets
 import com.tmplayer.data.VideoFilter
 import com.tmplayer.data.VideoSort
 import com.tmplayer.i18n.Messages
@@ -20,6 +21,7 @@ fun videoSortLabel(sort: VideoSort, s: Messages): String = when (sort) {
     VideoSort.Year -> s.gridSortYear
     VideoSort.Size -> s.gridSortSize
     VideoSort.Longest -> s.gridSortLongest
+    VideoSort.LastPlayed -> s.gridSortLastPlayed
     VideoSort.Unwatched -> s.gridSortUnwatched
 }
 
@@ -31,6 +33,7 @@ fun videoSortIcon(sort: VideoSort): ImageVector = when (sort) {
     VideoSort.Year -> TmIcons.Trailer
     VideoSort.Size -> TmIcons.Download
     VideoSort.Longest -> TmIcons.Frames
+    VideoSort.LastPlayed -> TmIcons.History
     VideoSort.Unwatched -> TmIcons.Play
 }
 
@@ -58,10 +61,55 @@ fun videoFilterIcon(filter: VideoFilter): ImageVector = when (filter) {
     VideoFilter.HighDefinition -> TmIcons.AspectRatio
 }
 
+/** What [length] is called in the Length group. */
+fun videoLengthLabel(length: VideoFacets.Length, s: Messages): String = when (length) {
+    VideoFacets.Length.Any -> s.gridFilterAny
+    VideoFacets.Length.Short -> s.gridFilterLengthShort
+    VideoFacets.Length.Long -> s.gridFilterLengthLong
+}
+
+/** What [picture] is called in the Picture group: at least that sharp. */
+fun videoPictureLabel(picture: VideoFacets.Picture, s: Messages): String = when (picture) {
+    VideoFacets.Picture.Any -> s.gridFilterAny
+    VideoFacets.Picture.Uhd -> s.gridFilterPicture4k
+    VideoFacets.Picture.FullHd -> s.gridFilterHd
+    VideoFacets.Picture.Hd -> s.gridFilterPicture720
+}
+
+/** What [added] is called in the Added group. */
+fun videoAddedLabel(added: VideoFacets.Added, s: Messages): String = when (added) {
+    VideoFacets.Added.Any -> s.gridFilterAny
+    VideoFacets.Added.Week -> s.gridFilterAddedWeek
+    VideoFacets.Added.Month -> s.gridFilterAddedMonth
+    VideoFacets.Added.Year -> s.gridFilterAddedYear
+}
+
+/** A language code ("ml") in the app's language ("Malayalam"), or the code when it has no name. */
+fun videoLanguageLabel(code: String, s: Messages): String = s.formatter.trackLanguage(code) ?: code
+
+/**
+ * Every filter in force, in words, for the lines over the grid ("Unwatched, Under 20 minutes,
+ * HDR"), or null when none is.
+ */
+fun videoFiltersLabel(filter: VideoFilter, facets: VideoFacets, s: Messages): String? = buildList {
+    if (filter != VideoFilter.All) add(videoFilterLabel(filter, s))
+    if (facets.length != VideoFacets.Length.Any) add(videoLengthLabel(facets.length, s))
+    if (facets.picture != VideoFacets.Picture.Any) add(videoPictureLabel(facets.picture, s))
+    if (facets.hdr) add(s.gridFilterHdr)
+    if (facets.subtitles) add(s.gridFilterSubtitles)
+    facets.language?.let { add(videoLanguageLabel(it, s)) }
+    if (facets.added != VideoFacets.Added.Any) add(videoAddedLabel(facets.added, s))
+}.takeIf { it.isNotEmpty() }?.joinToString(", ")
+
 /**
  * What a chat's Sort menu holds, the same on a phone, a television and a computer: the order
- * ([VideoSort]) and which videos show ([VideoFilter]). Each pick applies at once. The size
- * limits are not here: they are set in Settings only, and a chat says when they hid something.
+ * ([VideoSort]), which videos show ([VideoFilter]) and the filters by what a video is
+ * ([VideoFacets]: length, picture, HDR and subtitles, language, when added), which combine. Each
+ * pick applies at once. The size limits are not here: they are set in Settings only, and a chat
+ * says when they hid something.
+ *
+ * @param languages the languages the loaded videos' names state ([VideoFaceting.languagesIn]);
+ *   the Language group is left out while there are none.
  */
 class VideoMenuState(
     val sort: VideoSort,
@@ -73,16 +121,46 @@ class VideoMenuState(
      * Null leaves the line out: an empty list has nothing to pick.
      */
     val onPlayRandom: (() -> Unit)? = null,
+    val facets: VideoFacets = VideoFacets.NONE,
+    val languages: List<String> = emptyList(),
+    val onFacets: (VideoFacets) -> Unit = {},
 )
 
-/** The menu's two groups, as [GroupedChoicePopover] draws them and the television's sheet lists them. */
+/**
+ * The menu's groups, as [GroupedChoicePopover] draws them and the television's sheet lists them:
+ * Play random first where there is something to pick, then
+ * Sort videos by, Show, Length, Picture, With (HDR and Subtitles, each on or off), Language
+ * and Added. "1080p and up" lives in Picture now; a chat that kept it under Show from an earlier
+ * version still lists it there until another is picked.
+ */
 fun videoMenuGroups(state: VideoMenuState, s: Messages): List<ChoiceGroup> = buildList {
     // First, where the thumb and the remote land: one press away from the Sort button.
     state.onPlayRandom?.let { play ->
         add(ChoiceGroup(s.commonPlay, listOf(GroupedChoice(s.gridPlayRandom, TmIcons.Shuffle, false, play))))
     }
+    val facets = state.facets
+    val pick: (VideoFacets) -> Unit = state.onFacets
     add(ChoiceGroup(s.gridSortLabel, VideoSort.entries.map { sort -> GroupedChoice(videoSortLabel(sort, s), videoSortIcon(sort), sort == state.sort) { state.onSort(sort) } }))
-    add(ChoiceGroup(s.gridFilterLabel, VideoFilter.entries.map { filter -> GroupedChoice(videoFilterLabel(filter, s), videoFilterIcon(filter), filter == state.filter) { state.onFilter(filter) } }))
+    val shows = VideoFilter.entries.filter { it != VideoFilter.HighDefinition || state.filter == VideoFilter.HighDefinition }
+    add(ChoiceGroup(s.gridFilterLabel, shows.map { filter -> GroupedChoice(videoFilterLabel(filter, s), videoFilterIcon(filter), filter == state.filter) { state.onFilter(filter) } }))
+    add(ChoiceGroup(s.gridFilterLengthLabel, VideoFacets.Length.entries.map { length ->
+        GroupedChoice(videoLengthLabel(length, s), if (length == VideoFacets.Length.Any) TmIcons.Grid else TmIcons.Clock, facets.length == length) { pick(facets.copy(length = length)) }
+    }))
+    add(ChoiceGroup(s.gridFilterPictureLabel, VideoFacets.Picture.entries.map { picture ->
+        GroupedChoice(videoPictureLabel(picture, s), if (picture == VideoFacets.Picture.Any) TmIcons.Grid else TmIcons.AspectRatio, facets.picture == picture) { pick(facets.copy(picture = picture)) }
+    }))
+    add(ChoiceGroup(s.gridFilterWithLabel, listOf(
+        GroupedChoice(s.gridFilterHdr, TmIcons.Theme, facets.hdr) { pick(facets.copy(hdr = !facets.hdr)) },
+        GroupedChoice(s.gridFilterSubtitles, TmIcons.Subtitles, facets.subtitles) { pick(facets.copy(subtitles = !facets.subtitles)) },
+    )))
+    val languages = state.languages.let { found -> facets.language?.let { if (it in found) found else listOf(it) + found } ?: found }
+    if (languages.isNotEmpty()) {
+        add(ChoiceGroup(s.gridFilterLanguageLabel, listOf(GroupedChoice(s.gridFilterAny, TmIcons.Grid, facets.language == null) { pick(facets.copy(language = null)) }) +
+            languages.map { code -> GroupedChoice(videoLanguageLabel(code, s), TmIcons.Language, facets.language == code) { pick(facets.copy(language = code)) } }))
+    }
+    add(ChoiceGroup(s.gridFilterAddedLabel, VideoFacets.Added.entries.map { added ->
+        GroupedChoice(videoAddedLabel(added, s), if (added == VideoFacets.Added.Any) TmIcons.Grid else TmIcons.History, facets.added == added) { pick(facets.copy(added = added)) }
+    }))
 }
 
 /**

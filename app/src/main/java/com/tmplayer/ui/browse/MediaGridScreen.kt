@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -340,7 +341,16 @@ fun MediaGridScreen(
     var sorting by remember { mutableStateOf(false) }
     // Which of the chat's videos are listed (see VideoFilter), remembered per chat beside its order.
     val filter by remember(chatId) { recentStore.videoFilter(chatId) }.collectAsStateWithLifecycle(initialValue = com.tmplayer.data.VideoFilter.DEFAULT)
-    val clearFilter: () -> Unit = { recentScope.launch { recentStore.setVideoFilter(chatId, com.tmplayer.data.VideoFilter.All) } }
+    // And what a video is (U6): length, picture, HDR, subtitles, language, when added; per chat.
+    val facets by remember(chatId) { recentStore.videoFacets(chatId) }.collectAsStateWithLifecycle(initialValue = com.tmplayer.data.VideoFacets.NONE)
+    // "Show them" over the grid: the filters set aside while this chat is open, kept for next time.
+    var filterPaused by remember(chatId) { mutableStateOf(false) }
+    val clearFilter: () -> Unit = {
+        filterPaused = false
+        recentScope.launch { recentStore.clearVideoFilters(chatId) }
+    }
+    val filtersOn = filter != com.tmplayer.data.VideoFilter.All || !facets.isDefault
+    var gridLanguages by remember(chatId) { mutableStateOf(emptyList<String>()) }
     // One menu for the order and the Show filter, the same groups on every device. The size limits
     // have their own "n hidden" button (sizeHidden below) and the full pair is in Settings.
     // What "Select all" and "Play random" mean, which is every video the listing has fetched so far. The bar lives
@@ -355,6 +365,7 @@ fun MediaGridScreen(
         },
         onFilter = { picked ->
             sorting = false
+            filterPaused = false
             if (picked != filter) recentScope.launch { recentStore.setVideoFilter(chatId, picked) }
         },
         // One of the videos loaded so far, never a whole chat fetched for it (PlayRandom).
@@ -367,6 +378,13 @@ fun MediaGridScreen(
                 watched = { SettingsStore.progressKey(it.chatId, it.messageId) in watchedVideos },
             )?.let(onPlay)
         }),
+        facets = facets,
+        languages = gridLanguages,
+        onFacets = { picked ->
+            sorting = false
+            filterPaused = false
+            if (picked != facets) recentScope.launch { recentStore.setVideoFacets(chatId, picked) }
+        },
     )
     // Videos outside the size limits, said by an "n hidden" button for as long as the chat is open
     // and changed from there (SizeQuickSheet). A search ignores the limits, so it hides nothing.
@@ -601,18 +619,19 @@ fun MediaGridScreen(
             // Sorted only outside a search, whose order is its ranking.
             val order = if (query.isBlank()) sort else com.tmplayer.data.VideoSort.Newest
             // Filtered too, outside a search and outside ticking, where every video has to be reachable.
-            val shownFilter = if (grouping) filter else com.tmplayer.data.VideoFilter.All
+            val shownFilter = if (grouping && !filterPaused) filter else com.tmplayer.data.VideoFilter.All
+            val shownFacets = if (grouping && !filterPaused) facets else com.tmplayer.data.VideoFacets.NONE
             // A chat opened again from the page cache lists what it listed last time: the shelf laid
             // out from those same videos then is used for the first frame, rather than a frame or
             // two of skeleton while it is worked out again.
-            val shelfInputs = listOf(list.items, watchProgress, grouping, order, corrections, watchedVideos, shownFilter)
+            val shelfInputs = listOf(list.items, watchProgress, grouping, order, corrections, watchedVideos, shownFilter, shownFacets, touchTimes)
             val shelfBefore = remember(chatId) { ShelfMemo.match(chatId, shelfInputs) }
-            val arrangedShelf by produceState(shelfBefore, list.items, watchProgress, grouping, order, corrections, watchedVideos, shownFilter) {
+            val arrangedShelf by produceState(shelfBefore, list.items, watchProgress, grouping, order, corrections, watchedVideos, shownFilter, shownFacets, touchTimes) {
                 value = withContext(Dispatchers.Default) {
                     // Each tile's online question read here, off the main thread, where the tiles
                     // would otherwise each read it as they scroll in ([MediaItem.metaQuery]).
                     if (com.tmplayer.online.OnlineMetadata.current != null) list.items.forEach { it.metaQuery }
-                    arrangeShelf(list.items, watchProgress, grouping, order, watchedVideos.keys, corrections, shownFilter)
+                    arrangeShelf(list.items, watchProgress, grouping, order, watchedVideos.keys, corrections, shownFilter, shownFacets, touchTimes = touchTimes)
                 }.also { ShelfMemo.keep(chatId, shelfInputs, it) }
             }
             val (shelf, repeatedCaptions, posterKeys) = arrangedShelf ?: run {
@@ -634,18 +653,30 @@ fun MediaGridScreen(
             val loadedOnly = com.tmplayer.data.VideoSorting.sortsLoadedOnly(order, list.endReached)
             // A filter in force says so over the listing, with the way out, so a chat that seems to
             // have lost half its videos never reads as TMPlayer losing them.
-            val filterNote = shownFilter != com.tmplayer.data.VideoFilter.All
             val filterTotal = arrangedShelf?.total ?: 0
+            val filterHidden = arrangedShelf?.hidden ?: 0
+            val filterUnknown = arrangedShelf?.unknown ?: 0
+            val filterLabel = videoFiltersLabel(shownFilter, shownFacets, s)
+            LaunchedEffect(arrangedShelf?.languages) { arrangedShelf?.languages?.let { if (grouping) gridLanguages = it } }
+            // Every loaded video hidden: the empty state with Clear filters, in the grid's place.
+            val hidesAll = filterLabel != null && shelf.isEmpty() && filterTotal > 0
+            // Pages the grid asked for by itself while the filters kept it short (U6): a few, then Keep looking.
+            var autoPages by remember(chatId, shownFilter, shownFacets) { mutableIntStateOf(0) }
+            val keepLooking = filterLabel != null && !list.endReached && autoPages >= com.tmplayer.data.VideoFaceting.AUTO_PAGES
+            val filterNote = (filterLabel != null && !hidesAll && (filterHidden > 0 || filterUnknown > 0)) || (filterPaused && filtersOn && grouping)
             // Self-destructing videos are left out (only Telegram opens them): a quiet line says so.
             val selfDestructing by viewModel.selfDestructing.collectAsStateWithLifecycle()
             val selfDestructNote = query.isBlank() && selfDestructing > 0
             val courseHeader: @Composable () -> Unit = {
                 if (filterNote) {
                     FilterNote(
-                        label = videoFilterLabel(shownFilter, s),
-                        shown = shelf.size,
-                        total = filterTotal,
+                        hidden = filterHidden,
+                        unknown = filterUnknown,
+                        paused = filterPaused,
+                        onShowThem = { filterPaused = true },
+                        onFilterAgain = { filterPaused = false },
                         onClear = clearFilter,
+                        onKeepLooking = if (keepLooking) ({ autoPages = 0; viewModel.loadMore() }) else null,
                         modifier = Modifier.padding(horizontal = if (touch) 4.dp else 0.dp).padding(bottom = 6.dp),
                     )
                 }
@@ -788,6 +819,16 @@ fun MediaGridScreen(
                     }
                     if (course != null || loadedOnly || filterNote || selfDestructNote) {
                         item(key = "course", span = { GridItemSpan(maxLineSpan) }) { courseHeader() }
+                    }
+                    if (hidesAll) {
+                        item(key = "filter-hides-all", span = { GridItemSpan(maxLineSpan) }) {
+                            FilterHidesAll(
+                                message = s.gridFilterHidesAll(filterTotal, filterLabel.orEmpty()),
+                                onClear = clearFilter,
+                                onKeepLooking = if (keepLooking) ({ autoPages = 0; viewModel.loadMore() }) else null,
+                                takeFocus = !typingNow,
+                            )
+                        }
                     }
                     shelfGrid(
                         feed = feed,
@@ -1018,7 +1059,8 @@ fun MediaGridScreen(
                 if (at < 0) return@ReturnToTile false
                 // The notes the listing may start with are items of their own.
                 val lead = (if (metaNotice) 1 else 0) +
-                    (if (course != null || loadedOnly || filterNote || selfDestructNote) 1 else 0)
+                    (if (course != null || loadedOnly || filterNote || selfDestructNote) 1 else 0) +
+                    (if (hidesAll) 1 else 0)
                 gridState.scrollToItem(lead + at)
                 true
             }
@@ -1032,8 +1074,16 @@ fun MediaGridScreen(
             }
             // Keyed on the feed as well: a filter, a search or the grouping changes it without a page
             // arriving, and a short grid left that way has to ask for more by itself.
+            // With a filter on, a grid too short to scroll asks by itself only a few times
+            // ([com.tmplayer.data.VideoFaceting.mayAutoLoad]), never a whole chat of thousands.
             LaunchedEffect(gridState, list.items.size, columns, feed) {
-                snapshotFlow { nearEnd }.collect { if (it) viewModel.loadMore() }
+                snapshotFlow { nearEnd }.collect { near ->
+                    if (!near) return@collect
+                    val filtering = filterLabel != null
+                    if (!com.tmplayer.data.VideoFaceting.mayAutoLoad(filtering, shelf.size, columns * 3, autoPages)) return@collect
+                    if (filtering && shelf.size < columns * 3) autoPages++
+                    viewModel.loadMore()
+                }
             }
             }
         }
@@ -1069,7 +1119,7 @@ fun MediaGridScreen(
             sortPopover = { anchor ->
                 VideoMenuPopover(open = sorting, anchor = anchor, state = menu, onDismiss = { sorting = false })
             },
-            filtered = filter != com.tmplayer.data.VideoFilter.All,
+            filtered = filtersOn,
             sizeHidden = shownHidden,
             onSizeHidden = { sizePicking = true },
             topicTabs = topicBar?.let { bar ->
@@ -1131,7 +1181,7 @@ fun MediaGridScreen(
                     recentSearches = recentSearches,
                     onClearRecent = clearRecent,
                     onSort = { sorting = true },
-                    filtered = filter != com.tmplayer.data.VideoFilter.All,
+                    filtered = filtersOn,
                     sizeHidden = shownHidden,
                     onSizeHidden = { sizePicking = true },
                     onChatInfo = { chatInfoOpen = true },
@@ -2789,6 +2839,12 @@ internal data class Shelved(
     val posterKeys: Set<String>,
     /** How many entries there were before the filter, for "Showing Unwatched: 3 of 40". */
     val total: Int = shelf.size,
+    /** Of [total], screened out by Show or by what a video is ([com.tmplayer.data.VideoFaceting]). */
+    val hidden: Int = total - shelf.size,
+    /** Of [shelf], listed although their length or picture size is not known. */
+    val unknown: Int = 0,
+    /** The languages the loaded names state, for the Language group ([com.tmplayer.data.VideoFaceting.languagesIn]). */
+    val languages: List<String> = emptyList(),
 )
 
 /**
@@ -2809,6 +2865,12 @@ internal fun arrangeShelf(
     corrections: Map<String, com.tmplayer.data.VideoCorrection> = com.tmplayer.data.VideoCorrections.current,
     /** Which entries are listed (see [com.tmplayer.data.VideoFiltering]); every one by default. */
     filter: com.tmplayer.data.VideoFilter = com.tmplayer.data.VideoFilter.All,
+    /** The filters by what a video is (U6, [com.tmplayer.data.VideoFaceting]); none by default. */
+    facets: com.tmplayer.data.VideoFacets = com.tmplayer.data.VideoFacets.NONE,
+    /** Now, in seconds, for the Added filter. */
+    nowSec: Long = System.currentTimeMillis() / 1000,
+    /** When each video was last watched, keyed like [watchProgress], for Last played. */
+    touchTimes: Map<String, Long> = emptyMap(),
 ): Shelved {
     val progressOf: (MediaItem) -> com.tmplayer.data.VideoSorting.Progress = { item ->
         val key = SettingsStore.progressKey(item.chatId, item.messageId)
@@ -2831,10 +2893,13 @@ internal fun arrangeShelf(
         },
         sort,
         progress = progressOf,
+        lastPlayed = { touchTimes[SettingsStore.progressKey(it.chatId, it.messageId)] },
     )
-    val shown = com.tmplayer.data.VideoFiltering.filter(led, filter, progressOf)
+    val faceted = com.tmplayer.data.VideoFaceting.screen(com.tmplayer.data.VideoFiltering.filter(led, filter, progressOf), facets, nowSec)
+    val shown = faceted.shown
     val posters = SeriesShelf.posterKeys(shown)
-    return Shelved(shown, MediaMapper.repeatedCaptionLines(items), posters, total = led.size)
+    val languages = if (grouping) com.tmplayer.data.VideoFaceting.languagesIn(led, keep = facets.language) else emptyList()
+    return Shelved(shown, MediaMapper.repeatedCaptionLines(items), posters, total = led.size, unknown = faceted.unknown, languages = languages)
 }
 
 /**
@@ -2883,21 +2948,61 @@ internal fun LazyGridScope.shelfGrid(
  * ("Unwatched hides all 40 videos loaded so far."), so an empty grid is never taken for an empty
  * chat; the pages go on loading under it, and each one is screened as it comes.
  */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-internal fun FilterNote(label: String, shown: Int, total: Int, onClear: () -> Unit, modifier: Modifier = Modifier) {
+internal fun FilterNote(
+    hidden: Int,
+    unknown: Int,
+    paused: Boolean,
+    onShowThem: () -> Unit,
+    onFilterAgain: () -> Unit,
+    onClear: () -> Unit,
+    /** Set once the grid has paged by itself as far as it may ([com.tmplayer.data.VideoFaceting.AUTO_PAGES]). */
+    onKeepLooking: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
+) {
     val s = LocalStrings.current
-    Row(
+    androidx.compose.foundation.layout.FlowRow(
         modifier.padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(
-            if (shown == 0 && total > 0) s.gridFilterHidesAll(total, label) else s.gridFilterShowing(label, shown, total),
-            style = MaterialTheme.typography.bodyMedium,
-            color = Tone.muted,
-            modifier = Modifier.weight(1f, fill = false),
-        )
+        val line = when {
+            paused -> s.gridFilterPaused
+            unknown > 0 && hidden > 0 -> "${s.gridFilterHidden(hidden)}. ${s.gridFilterUnknown(unknown)}"
+            unknown > 0 -> s.gridFilterUnknown(unknown)
+            else -> s.gridFilterHidden(hidden)
+        }
+        Text(line, style = MaterialTheme.typography.bodyMedium, color = Tone.muted, modifier = Modifier.align(Alignment.CenterVertically))
+        if (paused) {
+            com.tmplayer.ui.components.TmSecondaryButton(onClick = onFilterAgain) { Text(s.gridFilterAgain) }
+        } else {
+            if (hidden > 0) com.tmplayer.ui.components.TmSecondaryButton(onClick = onShowThem) { Text(s.gridFilterShowThem) }
+            onKeepLooking?.let { com.tmplayer.ui.components.TmSecondaryButton(onClick = it) { Text(s.commonKeepLooking) } }
+        }
         com.tmplayer.ui.components.TmSecondaryButton(onClick = onClear) { Text(s.gridFilterClear) }
+    }
+}
+
+/**
+ * Every video loaded so far hidden by the filters: the empty pages' picture and words with Clear
+ * filters ([com.tmplayer.ui.components.StateAction.ClearFilters]), the remote on the button, and
+ * Keep looking under it once the grid has paged by itself as far as it may.
+ */
+@Composable
+internal fun FilterHidesAll(message: String, onClear: () -> Unit, onKeepLooking: (() -> Unit)?, takeFocus: Boolean) {
+    val action = com.tmplayer.ui.components.StateAction.ClearFilters
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp)) {
+        com.tmplayer.ui.components.BigEmpty(
+            message,
+            icon = com.tmplayer.ui.components.UiState.Empty(message, action).picture,
+            actionLabel = action.label,
+            onAction = onClear,
+            takeFocus = takeFocus,
+        )
+        onKeepLooking?.let {
+            androidx.compose.material3.TextButton(onClick = it) { Text(com.tmplayer.ui.components.StateAction.KeepLooking.label) }
+        }
     }
 }
 

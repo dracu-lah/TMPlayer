@@ -23,7 +23,8 @@ class VideoMenuRandomTest {
     @Test
     fun `an empty list has no Play random line`() {
         val groups = videoMenuGroups(state(null), Translator.messages)
-        assertEquals(listOf(Translator.messages.gridSortLabel, Translator.messages.gridFilterLabel), groups.map { it.title })
+        // The order and Show first, then the filters by what a video is (U6).
+        assertEquals(listOf(Translator.messages.gridSortLabel, Translator.messages.gridFilterLabel), groups.map { it.title }.take(2))
         assertTrue(groups.flatMap { it.choices }.none { it.label == Translator.messages.gridPlayRandom })
     }
 
@@ -43,9 +44,14 @@ class VideoMenuRandomTest {
     @Test
     fun `the order and the filter keep their place after it`() {
         val groups = videoMenuGroups(state {}, Translator.messages)
-        assertEquals(3, groups.size)
         assertEquals(Translator.messages.gridSortLabel, groups[1].title)
         assertEquals(VideoSort.entries.size, groups[1].choices.size)
-        assertNull(groups.getOrNull(3))
+        assertEquals(Translator.messages.gridFilterLabel, groups[2].title)
+        // Then Length, Picture, With and Added; Language only once the loaded names state one.
+        assertEquals(
+            listOf(Translator.messages.gridFilterLengthLabel, Translator.messages.gridFilterPictureLabel, Translator.messages.gridFilterWithLabel, Translator.messages.gridFilterAddedLabel),
+            groups.drop(3).map { it.title },
+        )
+        assertNull(groups.getOrNull(7))
     }
 }
