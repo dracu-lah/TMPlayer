@@ -1342,6 +1342,9 @@
     "wrong_number": "Wrong number? Edit"
   },
   "logs": {
+    "detailed": "Keep detailed logs",
+    "detailed_off": "Only warnings and the start-up summary are kept in the log on this device. Turn on to keep more, for a problem that is hard to repeat.",
+    "detailed_on": "More of what the app does is kept in a log on this device, to attach to a report. It stays here and goes when you sign out.",
     "developer_on": "Developer options are on. Save name check is in Settings, under Save logs.",
     "empty": "There are no logs to save yet.",
     "failed": "The logs could not be saved.",
@@ -2063,6 +2066,7 @@
     "speed_limited": "Telegram limits download speed for accounts without Premium, so this video arrives slowly.",
     "speed_slower": "Slower",
     "stalled_download_hint": "Or download it, and watch once it is on this device.",
+    "stalled_flood_wait": "Too many requests went out from this device in a short time, so the app is pausing for {wait}. It carries on by itself.",
     "stalled_mid_slow": "Telegram has stopped sending this video for now.",
     "stalled_mid_title": "The video stopped arriving",
     "stalled_no_line": "Can't reach Telegram. The network may be blocking it, so check the connection or try a proxy, then try again.",

@@ -3,6 +3,7 @@ package com.tmplayer.ui.settings
 import android.content.Context
 import com.tmplayer.data.BookmarkStore
 import com.tmplayer.data.CrashReports
+import com.tmplayer.data.DiagnosticFiles
 import com.tmplayer.data.LocalDownloads
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.Td
@@ -33,6 +34,9 @@ suspend fun forgetAccount(context: Context, settings: SettingsStore, watchedStor
     runCatching { watchedStore.watchLater.clear() }
     // The bookmarks go with it, for the same reason.
     runCatching { BookmarkStore(context).clear() }
+    // And what was kept to help with a bug report: the playback trace and its marks, the last
+    // Playback test, the app log and a report waiting to be shared. They hold what was watched.
+    withContext(Dispatchers.IO) { runCatching { DiagnosticFiles.forget(context) } }
 }
 
 /**

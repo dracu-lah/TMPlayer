@@ -77,11 +77,12 @@ object TraceCadence {
      * what the project tells builds apart by: `preview` is the testers' build (version name ends in
      * `-test`), a pre-release is `vX.Y.Z-beta.N`.
      */
-    fun intervalMs(buildType: String, versionName: String): Long {
-        val tester = buildType == "preview" || buildType == "debug" || buildType == "promo" ||
+    fun intervalMs(buildType: String, versionName: String): Long = if (isTesterBuild(buildType, versionName)) TESTER_MS else NORMAL_MS
+
+    /** A preview, beta, promo or debug build: the ones that log and trace more (also the app log, L4). */
+    fun isTesterBuild(buildType: String, versionName: String): Boolean =
+        buildType == "preview" || buildType == "debug" || buildType == "promo" ||
             versionName.contains("-beta", ignoreCase = true) || versionName.endsWith("-test")
-        return if (tester) TESTER_MS else NORMAL_MS
-    }
 }
 
 /** Which of Android's decoders run on the CPU, by name. */

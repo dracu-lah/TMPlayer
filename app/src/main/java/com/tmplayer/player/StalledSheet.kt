@@ -35,6 +35,16 @@ object StalledSheet {
      */
     const val OPEN_IN_ANOTHER_APP_ON_SHEET = false
 
+    /** A wait longer than this is not said on the sheet: the app's own hold-off is never that long. */
+    const val MAX_FLOOD_NOTE_S = 2 * 86_400
+
+    /**
+     * The seconds to name on the sheet when the app is holding its requests back (the flood-wait
+     * signal, [com.tmplayer.data.Td.floodWaitRemainingSeconds]), or null when nothing is. Said as
+     * the app's own pause, never as Telegram's fault.
+     */
+    fun floodWaitSeconds(remainingSeconds: Int): Int? = remainingSeconds.takeIf { it in 1..MAX_FLOOD_NOTE_S }
+
     /**
      * The buttons, top to bottom. [reason] is why nothing arrives: with no line to Telegram a lighter
      * copy cannot help, so it is only offered for [OpeningStall.Reason.Slow].

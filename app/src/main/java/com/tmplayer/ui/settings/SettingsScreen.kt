@@ -374,6 +374,11 @@ fun SettingsScreen(
     val lighterPictures by settings.lighterPictures.collectAsStateWithLifecycle(initialValue = false)
     val reduceMotion by settings.reduceMotion.collectAsStateWithLifecycle(initialValue = false)
     val crashReports by settings.crashReports.collectAsStateWithLifecycle(initialValue = false)
+    // "Keep detailed logs" (L4): the viewer's own choice, else the build's (on in a beta, off in a stable).
+    val detailedChoice by settings.detailedLogs.collectAsStateWithLifecycle(initialValue = null)
+    val detailedLogs = detailedChoice ?: com.tmplayer.data.AppLogPolicy.defaultDetailed(
+        com.tmplayer.BuildConfig.BUILD_TYPE, com.tmplayer.BuildConfig.VERSION_NAME,
+    )
     // The app lock and the kids lock (CP57).
     val appLock by settings.appLock.collectAsStateWithLifecycle(initialValue = AppLockSettings())
     var pinFlow by remember { mutableStateOf<PinFlow?>(null) }
@@ -1853,6 +1858,16 @@ fun SettingsScreen(
                         subtitle = s.logsSaveDetail,
                         icon = TmIcons.Logs,
                         onClick = saveLogs,
+                    )
+                }
+                // How much the app keeps in its own log on this device (L4); beside Save logs, which reads it.
+                item {
+                    ToggleRow(
+                        title = s.logsDetailed,
+                        subtitle = if (detailedLogs) s.logsDetailedOn else s.logsDetailedOff,
+                        icon = TmIcons.Logs,
+                        checked = detailedLogs,
+                        onToggle = { scope.launch { settings.setDetailedLogs(!detailedLogs) } },
                     )
                 }
                 // Hidden until a chat's search turns it on (see DEVELOPER_PHRASE): how the app read

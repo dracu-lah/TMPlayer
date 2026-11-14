@@ -84,6 +84,7 @@ private val HOME_CONTINUE = booleanPreferencesKey("home_continue")
 private val HOME_RECENT = booleanPreferencesKey("home_recent")
 private val HOME_STARRED_ROWS = booleanPreferencesKey("home_starred_rows")
 private val CRASH_REPORTS = booleanPreferencesKey("crash_reports")
+private val DETAILED_LOGS = booleanPreferencesKey("detailed_logs")
 private val LAST_CHAT = longPreferencesKey("last_chat")
 private val MIN_SIZE = longPreferencesKey("min_size_bytes")
 private val MAX_SIZE = longPreferencesKey("max_size_bytes")
@@ -1519,6 +1520,18 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
 
     suspend fun setCrashReports(value: Boolean) {
         prefs.edit { it[CRASH_REPORTS] = value }
+    }
+
+    /**
+     * "Keep detailed logs" (reliability plan L4): what the viewer chose, or null when they never
+     * chose, so the build decides (on in a beta, preview or debug build, off in a stable one, see
+     * `AppLogPolicy`). Kept as a choice, not a value, so a stable build that later turns into a beta
+     * does not carry a default that was never anyone's decision.
+     */
+    val detailedLogs: Flow<Boolean?> = read { it[DETAILED_LOGS] }
+
+    suspend fun setDetailedLogs(value: Boolean) {
+        prefs.edit { it[DETAILED_LOGS] = value }
     }
 
     /** Read once during startup, before anything has had a chance to crash. */

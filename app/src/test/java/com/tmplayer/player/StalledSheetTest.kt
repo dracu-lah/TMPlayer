@@ -38,6 +38,15 @@ class StalledSheetTest {
     }
 
     @Test
+    fun `the flood wait line names the hold-off only while there is one`() {
+        assertEquals(null, StalledSheet.floodWaitSeconds(0))
+        assertEquals(null, StalledSheet.floodWaitSeconds(-5))
+        assertEquals(42, StalledSheet.floodWaitSeconds(42))
+        assertEquals(StalledSheet.MAX_FLOOD_NOTE_S, StalledSheet.floodWaitSeconds(StalledSheet.MAX_FLOOD_NOTE_S))
+        assertEquals(null, StalledSheet.floodWaitSeconds(Int.MAX_VALUE))
+    }
+
+    @Test
     fun `a slow line that keeps sending never reaches the sheet`() {
         // A byte every 4 s for a minute: the count starts again with each, so it is never ten seconds old.
         var last = 0L

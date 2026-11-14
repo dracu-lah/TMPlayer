@@ -58,6 +58,11 @@ class App : Application() {
         com.tmplayer.data.SettingsDefaults.evenVolume = !com.tmplayer.data.FormFactor.isTv(this)
         // The shared code logs through a facade; on Android it goes to logcat as it always has.
         Logger.sink = AndroidLogSink
+        // And into the app's own log file (L4), written off the main thread; the file only starts when a line arrives.
+        com.tmplayer.data.AppLog.install(
+            this, AndroidLogSink, BuildConfig.BUILD_TYPE, BuildConfig.VERSION_NAME,
+            SettingsStore(this).detailedLogs, backgroundScope,
+        )
         if (safe) Logger.w("tm-safe", "Safe mode: the last two runs crashed soon after opening, so Home and the background loading are off for this run")
         // A run that stays up this long ends a loop: the next start is an ordinary one.
         backgroundScope.launch {

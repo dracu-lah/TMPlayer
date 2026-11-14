@@ -8777,6 +8777,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         )
         val canDownload = StalledSheet.Action.DownloadFirst in actions
         val detail = listOfNotNull(
+            // The app is holding its requests back for a flood wait: say for how long (the one line this sheet gained from the L4 follow-ups).
+            StalledSheet.floodWaitSeconds(Td.floodWaitRemainingSeconds())
+                ?.let { L.playerStalledFloodWait(com.tmplayer.data.Failures.waitPhrase(it)) },
             L.playerLighterHint.takeIf { StalledSheet.Action.LighterCopy in actions },
             L.playerStalledDownloadHint.takeIf { canDownload },
         ).joinToString("\n")
