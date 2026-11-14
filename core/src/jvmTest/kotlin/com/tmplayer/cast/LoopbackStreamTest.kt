@@ -221,7 +221,10 @@ class LoopbackStreamTest {
         now += 3_600_000
         assertTrue(stream.sweep())
         assertFalse(stream.running)
-        assertTrue("the port is closed", runCatching { Socket(loopback, port).close() }.isFailure)
+        // Another process (a test run in a second checkout, say) may take the freed port at once, so ask
+        // for the session's own URL: a closed port refuses, and a stranger on it does not know the token.
+        val after = runCatching { request(port, p).code }.getOrNull()
+        assertTrue("the session no longer serves", after == null || (after != 200 && after != 206))
     }
 
     @Test
