@@ -80,6 +80,41 @@ class EmptyStateFocusTest {
     }
 
     @Test
+    fun `an empty Downloads tab puts the focus on Go to Chats, and Right reaches Download a season`() {
+        FormFactor.override(true)
+        Motion.reduced = true
+        var browsed = 0
+        var seasons = 0
+        rule.setContent {
+            TMPlayerTheme {
+                BigEmpty(
+                    L.downloadsEmptyDownloaded("Downloads"),
+                    actionLabel = L.browseGoToChats,
+                    onAction = { browsed++ },
+                    secondLabel = L.downloadsEmptySeason,
+                    onSecondAction = { seasons++ },
+                )
+            }
+        }
+        rule.waitForIdle()
+        rule.onNodeWithText(L.browseGoToChats).assertIsFocused()
+        rule.onNodeWithText(L.browseGoToChats).performKeyInput { pressKey(Key.DirectionRight) }
+        rule.onNodeWithText(L.downloadsEmptySeason).assertIsFocused()
+        rule.onNodeWithText(L.downloadsEmptySeason).performKeyInput { pressKey(Key.DirectionCenter) }
+        assertEquals(0, browsed)
+        assertEquals(1, seasons)
+    }
+
+    @Test
+    fun `without the second action only the first button is drawn`() {
+        FormFactor.override(true)
+        rule.setContent { TMPlayerTheme { BigEmpty("Nothing", actionLabel = L.browseGoToChats, onAction = {}) } }
+        rule.waitForIdle()
+        rule.onNodeWithText(L.browseGoToChats).assertIsFocused()
+        rule.onNodeWithText(L.downloadsEmptySeason).assertDoesNotExist()
+    }
+
+    @Test
     fun `typing into a search does not take the focus from the field`() {
         show(UiState.Empty(L.browseNoMatch("zeb"), StateAction.SearchAllChats), takeFocus = false)
         rule.onNodeWithText(StateAction.SearchAllChats.label).assertExists()

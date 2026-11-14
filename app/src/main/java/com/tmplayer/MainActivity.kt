@@ -2133,6 +2133,11 @@ private fun Root() {
                             pickedTabKey = BrowseSection.encode(BrowseSection.of(BrowseTab.Chats))
                             screen = Screen.Chats
                         },
+                        // Download season is on a show's page, which Home opens.
+                        onDownloadSeason = {
+                            pickedTabKey = BrowseSection.encode(BrowseSection.of(BrowseTab.Home))
+                            screen = Screen.Chats
+                        },
                     )
                 }
             }

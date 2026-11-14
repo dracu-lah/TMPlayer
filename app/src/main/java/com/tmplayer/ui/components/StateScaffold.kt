@@ -313,6 +313,9 @@ fun BigEmpty(
     actionIcon: ImageVector? = null,
     /** Puts the remote on the button; see [StateScaffold]'s takeFocus. */
     takeFocus: Boolean = true,
+    /** A second way on beside [actionLabel] (Downloads: Go to Chats, and Download a season). */
+    secondLabel: String? = null,
+    onSecondAction: (() -> Unit)? = null,
 ) {
     val touch = isTouch()
     val muted = Tone.muted
@@ -346,12 +349,22 @@ fun BigEmpty(
             if (actionLabel != null && onAction != null) {
                 val focus = remember { FocusRequester() }
                 Spacer(Modifier.size(4.dp))
-                TmButton(onClick = onAction, modifier = Modifier.focusRequester(focus)) {
-                    if (actionIcon != null) {
-                        Icon(actionIcon, contentDescription = null, modifier = Modifier.size(20.dp))
-                        Spacer(Modifier.width(8.dp))
+                // Wrapped rather than squeezed, for a narrow phone and the longer languages.
+                @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+                androidx.compose.foundation.layout.FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    TmButton(onClick = onAction, modifier = Modifier.focusRequester(focus)) {
+                        if (actionIcon != null) {
+                            Icon(actionIcon, contentDescription = null, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(8.dp))
+                        }
+                        Text(actionLabel)
                     }
-                    Text(actionLabel)
+                    if (secondLabel != null && onSecondAction != null) {
+                        TmButton(onClick = onSecondAction) { Text(secondLabel) }
+                    }
                 }
                 if (!touch && takeFocus) {
                     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }

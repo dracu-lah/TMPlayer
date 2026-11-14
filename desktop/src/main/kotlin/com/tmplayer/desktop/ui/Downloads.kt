@@ -426,9 +426,16 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
                     }
                     if (history.isEmpty()) {
                         item(key = "e-done") {
-                            Empty(s.downloadsEmptyDone(downloadsDir.path), s.browseGoToChats) {
-                                state.showChats(com.tmplayer.ui.browse.BrowseSection.of(com.tmplayer.ui.browse.BrowseTab.Chats))
-                            }
+                            Empty(
+                                s.downloadsEmptyDone(downloadsDir.path),
+                                s.browseGoToChats,
+                                onAction = {
+                                    state.showChats(com.tmplayer.ui.browse.BrowseSection.of(com.tmplayer.ui.browse.BrowseTab.Chats))
+                                },
+                                // Download season is on a show's page, which Home opens.
+                                secondLabel = s.downloadsEmptySeason,
+                                onSecondAction = { state.go(Destination.Home) },
+                            )
                         }
                         at += 1
                     }
@@ -892,7 +899,13 @@ private fun ShowHeading(title: String, detail: String) {
 
 /** An empty section: the phone's download mark and its words, on the card's fill. */
 @Composable
-private fun Empty(text: String, actionLabel: String? = null, onAction: (() -> Unit)? = null) {
+private fun Empty(
+    text: String,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null,
+    secondLabel: String? = null,
+    onSecondAction: (() -> Unit)? = null,
+) {
     Surface(
         shape = RoundedCornerShape(Corner.Large),
         color = Tone.surface,
@@ -906,6 +919,10 @@ private fun Empty(text: String, actionLabel: String? = null, onAction: (() -> Un
             if (actionLabel != null && onAction != null) {
                 Spacer(Modifier.width(16.dp))
                 androidx.compose.material3.OutlinedButton(onClick = onAction) { Text(actionLabel) }
+                if (secondLabel != null && onSecondAction != null) {
+                    Spacer(Modifier.width(8.dp))
+                    androidx.compose.material3.OutlinedButton(onClick = onSecondAction) { Text(secondLabel) }
+                }
             }
         }
     }

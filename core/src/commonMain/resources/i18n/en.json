@@ -587,6 +587,7 @@
     "empty_done": "Nothing downloaded yet. Downloads are kept in {folder} until you delete them.",
     "empty_downloaded": "Nothing downloaded yet. Downloads are kept in {folder} until you delete them.",
     "empty_downloading": "Nothing downloading. Choose Download on a video and it queues here.",
+    "empty_season": "Download a season",
     "failed": "The download did not finish. Try again.",
     "file_gone": "The file is not here any more",
     "file_missing": "File missing",

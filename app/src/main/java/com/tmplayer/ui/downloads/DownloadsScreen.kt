@@ -234,6 +234,8 @@ fun DownloadsScreen(
     askedForRoom: Boolean = openFreeUp,
     /** The way on from an empty page: the chats, where every video has its Download. */
     onBrowse: (() -> Unit)? = null,
+    /** Beside it: Home, where a show's page has Download season. */
+    onDownloadSeason: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -1021,6 +1023,10 @@ fun DownloadsScreen(
                         BigEmpty(
                             L.downloadsEmptyDownloading,
                             icon = TmIcons.Download,
+                            actionLabel = onBrowse?.let { L.browseGoToChats },
+                            onAction = onBrowse,
+                            secondLabel = onDownloadSeason?.let { L.downloadsEmptySeason },
+                            onSecondAction = onDownloadSeason,
                         )
                     }
                 }
@@ -1094,6 +1100,8 @@ fun DownloadsScreen(
                         icon = TmIcons.Download,
                         actionLabel = onBrowse?.let { L.browseGoToChats },
                         onAction = onBrowse,
+                        secondLabel = onDownloadSeason?.let { L.downloadsEmptySeason },
+                        onSecondAction = onDownloadSeason,
                     )
                 }
             }
@@ -1169,6 +1177,8 @@ fun DownloadsScreen(
                         icon = TmIcons.Download,
                         actionLabel = onBrowse?.let { L.browseGoToChats },
                         onAction = onBrowse,
+                        secondLabel = onDownloadSeason?.let { L.downloadsEmptySeason },
+                        onSecondAction = onDownloadSeason,
                     )
                 }
             }
