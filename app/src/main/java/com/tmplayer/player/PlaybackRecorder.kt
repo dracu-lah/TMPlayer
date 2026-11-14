@@ -13,6 +13,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DecoderReuseEvaluation
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
+import com.tmplayer.data.DiagnosticFiles
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
@@ -81,6 +82,8 @@ class PlaybackRecorder(
         override fun onVideoInputFormatChanged(eventTime: AnalyticsListener.EventTime, format: Format, decoderReuseEvaluation: DecoderReuseEvaluation?) {
             val rate = maxOf(format.averageBitrate, format.bitrate)
             if (rate > 0) bitrateKbps = rate / 1000
+            // The codec, kept for Send logs' list of the decoders the device has for it (L5).
+            format.sampleMimeType?.let { mime -> writer?.let { w -> runCatching { w.execute { LastVideoCodec.remember(DiagnosticFiles.codecFile(context), mime) } } } }
         }
 
         override fun onPlaybackStateChanged(eventTime: AnalyticsListener.EventTime, state: Int) = playStateChanged()

@@ -2,7 +2,6 @@ package com.tmplayer.ui.settings
 
 import android.content.Context
 import android.content.Intent
-import android.os.Process
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -39,10 +38,11 @@ import androidx.core.content.FileProvider
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import com.tmplayer.data.CrashReports
 import com.tmplayer.data.Feedback
 import com.tmplayer.data.FormFactor
+import com.tmplayer.data.LogBundle
 import com.tmplayer.data.LogExport
+import com.tmplayer.data.LogReport
 import com.tmplayer.data.NameReport
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.WatchedStore
@@ -63,7 +63,6 @@ import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.util.concurrent.TimeUnit
 
 /**
  * "Save logs" (CP59), beside "Report a problem": this app's own recent logcat, scrubbed by
@@ -265,36 +264,18 @@ internal fun rememberSaveNameCheck(say: (String) -> Unit): () -> Unit {
 }
 
 /**
- * The file's text: the facts a bug report carries (version, model, Android version, TV or
- * phone), then this process's last [LogExport.MAX_LINES] logcat lines with the names this device
- * has seen, ids, phone numbers, usernames and file names taken out.
- *
- * An app may read its own log lines without any permission; `--pid` keeps it to this process,
- * which is all it could read anyway, and the player runs in the same one.
+ * The file's text (L5): one bundle of what a bug report needs, built by [LogReport] and
+ * [LogBundle]: the earlier run's crash, the device's facts, the decoders it lists for the last
+ * video's codec, the last playback sessions and marks, the last Playback test, the app's own log
+ * and this process's logcat, every line scrubbed (names this device has seen, ids, phone numbers,
+ * usernames and file names), and the whole under [LogBundle.MAX_BYTES], oldest sessions first out.
  */
-private suspend fun logReport(context: Context): String {
-    val lines = runCatching { ownLogcat() }
-        .onFailure { Logger.w(TAG, "logcat could not be read", it) }
-        .getOrDefault(emptyList())
+internal suspend fun logBundle(context: Context): LogBundle.Result {
     val known = LogExport.knownNames(SettingsStore(context), WatchedStore(context))
-    return LogExport.report(feedbackFacts(context), lines, known, extra = runCatching { CrashReports.logLines() }.getOrDefault(emptyList()) +
-        // The moments the viewer marked with Report stutter, with the trace around each (L3).
-        runCatching { com.tmplayer.player.PlaybackMarks(com.tmplayer.player.PlaybackMarks.fileIn(context)).reportLines() }.getOrDefault(emptyList()))
+    return withContext(Dispatchers.IO) { LogReport.build(context, known) }
 }
 
-private fun ownLogcat(): List<String> {
-    val process = ProcessBuilder(
-        "logcat", "-d", "-v", "threadtime", "-t", LogExport.MAX_LINES.toString(), "--pid=${Process.myPid()}",
-    ).redirectErrorStream(true).start()
-    return try {
-        process.inputStream.bufferedReader().useLines { it.toList() }.takeLast(LogExport.MAX_LINES)
-    } finally {
-        // The timed wait is Android 8's. Earlier the output has already been read to its end,
-        // which logcat -d reaches only as it exits, so destroying it straight away loses nothing.
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) process.waitFor(2, TimeUnit.SECONDS)
-        process.destroy()
-    }
-}
+private suspend fun logReport(context: Context): String = logBundle(context).text
 
 private const val MIME = "text/plain"
 private const val TAG = "Logs"

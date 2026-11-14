@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.tmplayer.data.Feedback
+import com.tmplayer.data.LogBundle
 import com.tmplayer.data.LogExport
 import com.tmplayer.desktop.DesktopServices
 import com.tmplayer.desktop.os.DesktopLog
@@ -53,8 +54,25 @@ object SendLogs {
             if (lines.isEmpty()) return@runCatching null
             val known = LogExport.knownNames(DesktopServices.settings, DesktopServices.watched)
             folder.mkdirs()
-            File(folder, LogExport.fileName()).apply { writeText(LogExport.report(desktopFeedbackFacts(), lines, known)) }
+            File(folder, LogExport.fileName()).apply { writeText(bundle(lines, known).text) }
         }.onFailure { Logger.w(TAG, "Logs not saved", it) }.getOrNull()
+    }
+
+    /**
+     * The same bundle as the phone's (L5), from the desktop's own log file: the facts of this machine
+     * and the log's last lines, scrubbed and under the cap. The desktop keeps no playback trace.
+     */
+    fun bundle(lines: List<String>, known: Collection<String>): LogBundle.Result = LogBundle.build(
+        desktopFeedbackFacts(),
+        LogBundle.Parts(device = machineLines(), appLog = lines),
+        known,
+    )
+
+    private fun machineLines(): List<String> = buildList {
+        val rt = Runtime.getRuntime()
+        add("Operating system: ${System.getProperty("os.name")} ${System.getProperty("os.version")} (${System.getProperty("os.arch")})")
+        add("Java: ${System.getProperty("java.vendor")} ${System.getProperty("java.version")}")
+        add("CPU cores: ${rt.availableProcessors()}, memory limit of the app ${rt.maxMemory() / (1024 * 1024)} MB")
     }
 
     /** A new issue on GitHub, with the version, the system and the language filled in. */
