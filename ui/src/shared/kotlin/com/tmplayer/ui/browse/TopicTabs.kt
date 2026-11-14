@@ -40,6 +40,21 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.tmplayer.data.ForumTopicSummary
+import com.tmplayer.data.TopicSearch
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalFocusManager
 import com.tmplayer.ui.components.isTouch
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.icons.TmIcons
@@ -57,6 +72,10 @@ import com.tmplayer.ui.theme.focusRing
  * The chosen tab is scrolled into view when the row appears, so a group remembered on its
  * twentieth topic does not open with the chosen one off the edge of the screen. Coming back up
  * into the row from the grid lands on the tab last left, which is the chosen one after a pick.
+ *
+ * A group of more than [TopicSearch.CHIP_SEARCH_FROM] topics gets a "Find a topic" field after
+ * All topics (U14): what is typed narrows the tabs to the names that answer it, best first, the
+ * chosen tab always kept ([TopicSearch.chips]). Nothing is asked of Telegram: the names are here.
  */
 @Composable
 fun TopicTabs(
@@ -68,8 +87,14 @@ fun TopicTabs(
 ) {
     val s = LocalStrings.current
     val tv = !isTouch()
-    val entries = remember(bar.topics) { listOf<ForumTopicSummary?>(null) + bar.topics }
-    val chosenAt = entries.indexOfFirst { (it?.id ?: 0) == bar.selected }.coerceAtLeast(0)
+    val searchable = TopicSearch.chipSearchWanted(bar.topics.size)
+    var find by remember(searchable) { mutableStateOf("") }
+    val shown = remember(bar.topics, bar.selected, find) {
+        if (searchable) TopicSearch.chips(bar.topics, find, bar.selected) else bar.topics
+    }
+    // Where the chosen tab stands in the row: All topics first, then the field, then the topics.
+    val lead = if (searchable) 2 else 1
+    val chosenAt = if (bar.selected == 0) 0 else shown.indexOfFirst { it.id == bar.selected }.let { if (it < 0) 0 else it + lead }
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = (chosenAt - 1).coerceAtLeast(0))
     val chosenFocus = remember { FocusRequester() }
     LaunchedEffect(chosenAt) { listState.animateScrollToItem((chosenAt - 1).coerceAtLeast(0)) }
@@ -84,13 +109,117 @@ fun TopicTabs(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        itemsIndexed(entries, key = { _, topic -> topic?.id ?: 0 }) { index, topic ->
+        item(key = 0) {
+            TopicTab(
+                topic = null,
+                chosen = chosenAt == 0,
+                tv = tv,
+                onClick = { onSelect(0) },
+                modifier = if (chosenAt == 0) Modifier.focusRequester(chosenFocus) else Modifier,
+            )
+        }
+        if (searchable) item(key = "find") { TopicFindField(find, { find = it }, tv) }
+        itemsIndexed(shown, key = { _, topic -> topic.id }) { index, topic ->
+            val chosen = index + lead == chosenAt
             TopicTab(
                 topic = topic,
-                chosen = index == chosenAt,
+                chosen = chosen,
                 tv = tv,
-                onClick = { onSelect(topic?.id ?: 0) },
-                modifier = if (index == chosenAt) Modifier.focusRequester(chosenFocus) else Modifier,
+                onClick = { onSelect(topic.id) },
+                modifier = if (chosen) Modifier.focusRequester(chosenFocus) else Modifier,
+            )
+        }
+        if (searchable && find.isNotBlank() && shown.none { it.id != bar.selected }) {
+            item(key = "find-none") {
+                Text(s.gridTopicFindNone(find.trim()), style = MaterialTheme.typography.bodyMedium, color = Tone.muted, maxLines = 1)
+            }
+        }
+    }
+}
+
+/**
+ * "Find a topic": a pill the size of a tab with a magnifier, where typing narrows the row, and a
+ * cross that empties it.
+ *
+ * On a television focus alone never starts editing, as the TV search box does: the remote
+ * passes over the pill like any tab, OK opens the keyboard, and an arrow
+ * while typing leaves for the neighbouring tab (a remote does not move a cursor mid-word). The
+ * pill keeps the focus while the field comes and goes, so it is never lost to the window.
+ */
+@Composable
+private fun TopicFindField(value: String, onValue: (String) -> Unit, tv: Boolean) {
+    val s = LocalStrings.current
+    val interactions = remember { MutableInteractionSource() }
+    val focused by interactions.collectIsFocusVisibleAsState()
+    var editing by remember(tv) { mutableStateOf(!tv) }
+    val field = remember { FocusRequester() }
+    val pill = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
+    val shape = CircleShape
+    val style = if (tv) MaterialTheme.typography.titleSmall else MaterialTheme.typography.labelLarge
+    LaunchedEffect(editing) { if (editing && tv) runCatching { field.requestFocus() } }
+    Row(
+        Modifier
+            .focusRequester(pill)
+            .heightIn(min = if (tv) TV_HEIGHT else TOUCH_HEIGHT)
+            .widthIn(min = 140.dp, max = if (tv) 260.dp else 200.dp)
+            .clip(shape)
+            .background(if (editing && tv) Tone.surfaceHigh else Tone.surface)
+            .focusRing(focused || (editing && tv), shape)
+            .then(
+                if (tv) {
+                    Modifier
+                        .semantics(mergeDescendants = !editing) { contentDescription = s.gridTopicFind }
+                        .clickable(interactionSource = interactions, indication = null) { editing = true }
+                } else {
+                    Modifier.semantics { contentDescription = s.gridTopicFind }
+                },
+            )
+            .padding(horizontal = if (tv) 18.dp else 14.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Icon(TmIcons.Search, contentDescription = null, tint = Tone.muted, modifier = Modifier.size(if (tv) 18.dp else 16.dp))
+        Box(Modifier.weight(1f, fill = false)) {
+            if (value.isEmpty()) Text(s.gridTopicFind, style = style, color = Tone.muted, maxLines = 1)
+            if (editing) {
+                BasicTextField(
+                    value = value,
+                    onValueChange = onValue,
+                    singleLine = true,
+                    textStyle = style.copy(color = Tone.text),
+                    cursorBrush = SolidColor(Tone.accent),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = { if (tv) { runCatching { pill.requestFocus() }; editing = false } }),
+                    modifier = Modifier
+                        .focusRequester(field)
+                        .onPreviewKeyEvent { event ->
+                            if (!tv || event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                            val direction = when (event.key) {
+                                Key.DirectionLeft -> FocusDirection.Left
+                                Key.DirectionRight -> FocusDirection.Right
+                                Key.DirectionUp -> FocusDirection.Up
+                                Key.DirectionDown -> FocusDirection.Down
+                                Key.Back, Key.Escape -> null
+                                else -> return@onPreviewKeyEvent false
+                            }
+                            // The pill takes the focus first, so the field leaves with none on it.
+                            runCatching { pill.requestFocus() }
+                            editing = false
+                            if (direction != null) focusManager.moveFocus(direction)
+                            true
+                        },
+                )
+            } else if (value.isNotEmpty()) {
+                Text(value, style = style, color = Tone.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        if (value.isNotEmpty()) {
+            Icon(
+                TmIcons.Close,
+                contentDescription = s.commonClear,
+                tint = Tone.muted,
+                modifier = Modifier.size(if (tv) 18.dp else 16.dp).clickable(onClickLabel = s.commonClear) { onValue("") },
             )
         }
     }

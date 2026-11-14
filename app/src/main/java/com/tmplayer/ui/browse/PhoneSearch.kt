@@ -97,6 +97,8 @@ import com.tmplayer.data.SearchChatType
 import com.tmplayer.data.SearchFilters
 import com.tmplayer.data.SearchQuality
 import com.tmplayer.data.SearchSort
+import com.tmplayer.data.TopicHit
+import androidx.compose.ui.graphics.graphicsLayer
 import com.tmplayer.ui.components.PhoneSheet
 import com.tmplayer.ui.components.Spinner
 import com.tmplayer.ui.components.secondaryPress
@@ -146,6 +148,10 @@ internal fun PhoneSearchScreen(
     continueArt: (ResumeRecord) -> MediaItem,
     progress: (MediaItem) -> Float?,
     onOpenChat: (ChatSummary) -> Unit,
+    /** A topic found by its name: its chat, opened on it ([openOnTopic]). */
+    onOpenTopic: (TopicHit) -> Unit = {},
+    /** The topics' own Try again ([GlobalSearchViewModel.retryTopics]). */
+    onRetryTopics: () -> Unit = {},
     onOpenGroup: (ResultGroup) -> Unit,
     onResume: (ResumeRecord) -> Unit,
     onFilters: (SearchFilters) -> Unit,
@@ -166,6 +172,7 @@ internal fun PhoneSearchScreen(
     val keyboard = LocalSoftwareKeyboardController.current
     var sheetOpen by rememberSaveable { mutableStateOf(false) }
     var allChats by rememberSaveable(state.query.text) { mutableStateOf(false) }
+    var allTopics by rememberSaveable(state.query.text) { mutableStateOf(false) }
 
     BackHandler(enabled = !sheetOpen) { onClose() }
 
@@ -238,6 +245,10 @@ internal fun PhoneSearchScreen(
                         chatMatches = chatMatches,
                         allChats = allChats,
                         onShowAllChats = { allChats = true },
+                        allTopics = allTopics,
+                        onShowAllTopics = { allTopics = true },
+                        onOpenTopic = { keyboard?.hide(); onOpenTopic(it) },
+                        onRetryTopics = onRetryTopics,
                         briefs = briefs,
                         progress = progress,
                         onOpenChat = onOpenChat,
@@ -504,6 +515,10 @@ private fun androidx.compose.foundation.lazy.LazyListScope.results(
     chatMatches: List<ChatSummary>,
     allChats: Boolean,
     onShowAllChats: () -> Unit,
+    allTopics: Boolean,
+    onShowAllTopics: () -> Unit,
+    onOpenTopic: (TopicHit) -> Unit,
+    onRetryTopics: () -> Unit,
     briefs: Map<Long, ChatBrief>,
     progress: (MediaItem) -> Float?,
     onOpenChat: (ChatSummary) -> Unit,
@@ -533,6 +548,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.results(
             }
         }
     }
+    topicResults(state, allTopics, onShowAllTopics, briefs, onOpenTopic, onRetryTopics)
     item(key = "videos-h") { Heading(LocalStrings.current.searchVideosHeading) }
     searchStatus(state)?.let { status ->
         item(key = "status") {
@@ -597,6 +613,79 @@ private fun androidx.compose.foundation.lazy.LazyListScope.results(
         }
     }
     if (state.loadingMore) item(key = "more") { Note(LocalStrings.current.gridLoadingMore, spinner = true) }
+}
+
+/**
+ * The Topics group (U14): "Chat > Topic" rows, a few at first and the rest behind Show all, a
+ * topic with no videos dimmed and saying so, pinned and closed ones marked. While Telegram is asked
+ * a quiet spinner line; when every group refused, the reason with Try again and Send logs; when
+ * the budget stopped short of every group, a line saying which were searched.
+ */
+private fun androidx.compose.foundation.lazy.LazyListScope.topicResults(
+    state: GlobalSearchState,
+    allTopics: Boolean,
+    onShowAllTopics: () -> Unit,
+    briefs: Map<Long, ChatBrief>,
+    onOpenTopic: (TopicHit) -> Unit,
+    onRetryTopics: () -> Unit,
+) {
+    val hits = state.topics
+    val failed = state.topicsError
+    if (hits.isEmpty() && failed == null) return
+    item(key = "topics-h") { Heading(LocalStrings.current.searchTopicsHeading) }
+    val shown = if (allTopics) hits else hits.take(TOPIC_PREVIEW)
+    items(shown, key = { "topic-${it.key}" }) { hit -> TopicRow(hit, briefs[hit.chatId]) { onOpenTopic(hit) } }
+    if (!allTopics && hits.size > TOPIC_PREVIEW) {
+        item(key = "topics-all") {
+            TextButton(onClick = onShowAllTopics, modifier = Modifier.padding(start = 8.dp)) {
+                Text(LocalStrings.current.searchShowAllTopics(hits.size))
+            }
+        }
+    }
+    when {
+        failed != null -> item(key = "topics-failed") {
+            val s = LocalStrings.current
+            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(s.searchTopicsFailed(failed), style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TmSecondaryButton(onClick = onRetryTopics) { Text(s.commonRetry) }
+                    com.tmplayer.ui.settings.SendLogsButton()
+                }
+            }
+        }
+        state.topicsSearching -> item(key = "topics-busy") { Note(LocalStrings.current.searchStillSearching, spinner = true) }
+        state.topicsPartial -> item(key = "topics-partial") {
+            Note(LocalStrings.current.searchTopicsPartial(com.tmplayer.data.TopicSearch.CHATS_PER_SEARCH))
+        }
+    }
+}
+
+/** One topic found by its name: the chat's picture, "Chat > Topic", and why it may not be worth a tap. */
+@Composable
+private fun TopicRow(hit: TopicHit, chat: ChatBrief?, onClick: () -> Unit) {
+    val s = LocalStrings.current
+    val empty = !hit.topic.hasVideos
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Box(Modifier.size(40.dp).graphicsLayer { alpha = if (empty) 0.5f else 1f }, contentAlignment = Alignment.Center) {
+            if (chat != null) ChatAvatar(chat, 40.dp) else Icon(TmIcons.ChatsMany, contentDescription = null, tint = Tone.muted)
+        }
+        Column(Modifier.weight(1f)) {
+            Text(
+                topicHitLabel(hit, s),
+                style = MaterialTheme.typography.bodyLarge,
+                color = if (empty) Tone.muted else Tone.text,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (empty) Text(s.searchTopicNoVideos, style = MaterialTheme.typography.bodySmall, color = Tone.muted, maxLines = 1)
+        }
+        if (hit.topic.isPinned) Icon(TmIcons.Pin, contentDescription = s.gridTopicPinned, tint = Tone.muted, modifier = Modifier.size(18.dp))
+        if (hit.topic.isClosed) Icon(TmIcons.Lock, contentDescription = s.gridTopicClosed, tint = Tone.muted, modifier = Modifier.size(18.dp))
+    }
 }
 
 /** The quick filters over the field: the kind of chat, and the rest behind Filters. */
@@ -692,6 +781,9 @@ private fun Note(text: String, spinner: Boolean = false, action: (@Composable ()
         action?.invoke()
     }
 }
+
+/** Topics listed before Show all: the group is a way into a chat, not a second results list. */
+private const val TOPIC_PREVIEW = 4
 
 /** Videos to carry on with on an empty search: three is a glance, more is History. */
 private const val CONTINUE_SHOWN = 3

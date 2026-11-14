@@ -159,6 +159,9 @@ internal fun PhoneBrowse(
     LaunchedEffect(continueWatching, watchLater, downloads) {
         search.alsoKnown = (continueWatching + downloads).map { it.toMediaItem() } + watchLater.map { it.toMediaItem() }
     }
+    // Which groups the search by topic name may ask, in the chat list's order (U14).
+    LaunchedEffect(chats) { search.chatList = chats }
+    val topicMemory = remember(settings) { settings.topicMemory() }
     val recent by remember(settings) { settings.recentSearches }.collectAsState(initial = emptyList())
     val allowed by ChatGate.allowed.collectAsState()
     val keepsSearches by remember(settings) { settings.rememberSearches }.collectAsState(initial = true)
@@ -246,6 +249,16 @@ internal fun PhoneBrowse(
                 continueArt = { record -> homeArt[SettingsStore.progressKey(record.chatId, record.messageId)] ?: record.toMediaItem() },
                 progress = { item -> watch.point(item)?.fraction },
                 onOpenChat = { chat -> search.remember(); onOpenChat(chat) },
+                onOpenTopic = { hit ->
+                    chats.firstOrNull { it.id == hit.chatId }?.let { chat ->
+                        scope.launch {
+                            openOnTopic(topicMemory, hit.chatId, hit.topic.id)
+                            search.remember()
+                            onOpenChat(chat)
+                        }
+                    }
+                },
+                onRetryTopics = search::retryTopics,
                 onOpenGroup = openGroup,
                 onResume = onResume,
                 onFilters = search::setFilters,

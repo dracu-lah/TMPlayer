@@ -116,6 +116,10 @@ internal fun TvSearchScreen(
     onRetry: () -> Unit,
     /** Whose Telegram this is, for the picture beside the clock every rail page carries. */
     account: com.tmplayer.data.Account? = null,
+    /** A topic found by its name: its chat, opened on it ([openOnTopic]). */
+    onOpenTopic: (com.tmplayer.data.TopicHit) -> Unit = {},
+    /** The topics' own Try again ([GlobalSearchViewModel.retryTopics]). */
+    onRetryTopics: () -> Unit = {},
 ) {
     val s = LocalStrings.current
     val reduced = rememberReducedMotion() || Motion.reduced
@@ -256,6 +260,37 @@ internal fun TvSearchScreen(
                             contentPadding = PaddingValues(end = Tv.SafeH),
                         ) {
                             items(chatMatches, key = { it.id }) { chat -> ChatCard(chat, reduced) { onOpenChat(chat) } }
+                        }
+                    }
+                }
+
+                // Topics found by their names (U14): one row of pills under the chats, each
+                // "Chat > Topic"; Left and Right walk it, OK opens the chat on that topic.
+                if (text.isNotBlank() && (state.topics.isNotEmpty() || state.topicsError != null)) {
+                    item(span = full, key = "topics") {
+                        Column(Modifier.bleedEnd(Tv.SafeH), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(s.searchTopicsHeading, style = MaterialTheme.typography.titleSmall, color = Tone.muted)
+                            state.topicsError?.let { failed ->
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Text(s.searchTopicsFailed(failed), style = MaterialTheme.typography.bodyLarge, color = Tone.muted, modifier = Modifier.weight(1f, fill = false))
+                                    TvPill(s.commonRetry, TmIcons.Refresh, onClick = onRetryTopics)
+                                    com.tmplayer.ui.settings.SendLogsButton()
+                                }
+                            }
+                            if (state.topics.isNotEmpty()) {
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(end = Tv.SafeH)) {
+                                    items(state.topics, key = { it.key }) { hit ->
+                                        TvPill(
+                                            if (hit.topic.hasVideos) topicHitLabel(hit, s) else "${topicHitLabel(hit, s)}, ${s.searchTopicNoVideos}",
+                                            if (hit.topic.isClosed) TmIcons.Lock else if (hit.topic.isPinned) TmIcons.Pin else TmIcons.ChatsMany,
+                                            plain = !hit.topic.hasVideos,
+                                        ) { onOpenTopic(hit) }
+                                    }
+                                }
+                            }
+                            if (state.topicsPartial && !state.topicsSearching) {
+                                Text(s.searchTopicsPartial(com.tmplayer.data.TopicSearch.CHATS_PER_SEARCH), style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
+                            }
                         }
                     }
                 }
@@ -588,6 +623,9 @@ internal fun TvSearchPage(
     }
     var opened by remember { mutableStateOf<Pair<com.tmplayer.data.Series, String>?>(null) }
     val titleOf: (Long) -> String = { id -> state.chats[id]?.title ?: chats.firstOrNull { it.id == id }?.title.orEmpty() }
+    // Which groups the search by topic name may ask, in the chat list's order (U14).
+    LaunchedEffect(chats) { search.chatList = chats }
+    val topicMemory = remember(settings) { settings.topicMemory() }
 
     TvSearchScreen(
         state = state,
@@ -620,6 +658,16 @@ internal fun TvSearchPage(
         onLoadMore = search::loadMore,
         onRetry = search::retry,
         account = account,
+        onOpenTopic = { hit ->
+            chats.firstOrNull { it.id == hit.chatId }?.let { chat ->
+                scope.launch {
+                    openOnTopic(topicMemory, hit.chatId, hit.topic.id)
+                    search.remember()
+                    onOpenChat(chat)
+                }
+            }
+        },
+        onRetryTopics = search::retryTopics,
     )
     opened?.let { (series, chatTitle) ->
         SeriesOpened(

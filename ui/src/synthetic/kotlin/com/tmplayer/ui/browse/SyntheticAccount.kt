@@ -481,7 +481,50 @@ class SyntheticAccount(
         }
     }
 
+    // ---- topics (U14) ---------------------------------------------------------------------------
+
+    /** A group with Telegram's topics turned on: one group in seven. */
+    fun isForumChat(chatId: Long): Boolean = summary(chatId).kind == ChatKind.Group && chatId % 7 == 2L
+
+    /**
+     * Forty topics in each forum: the same "Season n" names in every one, accented and emoji
+     * names, a pinned first topic, some closed and some with no videos.
+     */
+    fun forumTopics(chatId: Long): List<com.tmplayer.data.ForumTopicSummary> = (1..TOPICS_PER_FORUM).map { i ->
+        com.tmplayer.data.ForumTopicSummary(
+            id = i,
+            name = when (i % 4) {
+                0 -> "Season ${i / 4}"
+                1 -> "Café $chatId-$i"
+                2 -> "🎬 Movies $i"
+                else -> "Lesson $i"
+            },
+            isPinned = i == 1,
+            isClosed = i % 9 == 0,
+            hasVideos = i % 5 != 0,
+        )
+    }
+
+    /**
+     * The search by topic name against this account: telling a forum is a read of TDLib's memory
+     * (counted, no latency), a topic search is a server call under the "search" flood bucket.
+     */
+    val topics: TopicSource = object : TopicSource {
+        override suspend fun isForum(chatId: Long): Boolean? {
+            count("isForum")
+            return isForumChat(chatId)
+        }
+
+        override suspend fun search(chatId: Long, query: String, limit: Int): List<com.tmplayer.data.ForumTopicSummary> =
+            server("getForumTopics", "search", latencyMs = 300) {
+                forumTopics(chatId).filter { com.tmplayer.data.TopicSearch.score(it.name, query) > 0 }.take(limit)
+            }
+    }
+
     companion object {
+        /** Topics in each synthetic forum. */
+        const val TOPICS_PER_FORUM = 40
+
         /** How long TDLib waits flood waits out for one request before handing back a 429. */
         const val TDLIB_WAIT_LIMIT_S = 60
     }

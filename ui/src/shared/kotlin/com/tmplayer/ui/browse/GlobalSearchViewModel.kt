@@ -6,6 +6,12 @@ import com.tmplayer.data.AllChatsCursor
 import com.tmplayer.data.AllChatsPage
 import com.tmplayer.data.ChatBrief
 import com.tmplayer.data.ChatGate
+import com.tmplayer.data.ChatSummary
+import com.tmplayer.data.TopicHit
+import com.tmplayer.data.TopicSearch
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import com.tmplayer.data.ChatRepository
 import com.tmplayer.data.Failures
 import com.tmplayer.data.GlobalSearch
@@ -111,6 +117,17 @@ data class GlobalSearchState(
     val floodWait: Int = 0,
     /** The search failed, in words; null when it did not. */
     val error: String? = null,
+    /**
+     * Topics of groups whose names answer the words (U14), best first ([TopicSearch.rank]): a
+     * group of its own over the videos, "Chat > Topic", the kids lock already applied.
+     */
+    val topics: List<TopicHit> = emptyList(),
+    /** Telegram is being asked for topics, or is about to be once the typing settles. */
+    val topicsSearching: Boolean = false,
+    /** Every group asked for topics refused, in words; null otherwise. With Try again and Send logs. */
+    val topicsError: String? = null,
+    /** More groups could have topics than one search asks ([TopicSearch.CHATS_PER_SEARCH]): the heading says so. */
+    val topicsPartial: Boolean = false,
 ) {
     /** What the list shows: [groups] through the filters, the kids lock already applied. */
     val shown: List<ResultGroup> by lazy(LazyThreadSafetyMode.PUBLICATION) { GlobalSearch.filter(groups, filters, query) }
@@ -149,6 +166,8 @@ class GlobalSearchViewModel(
     private val rememberMs: Long = REMEMBER_MS,
     /** What makes two results one card: see [SearchIdentity]. */
     private val identity: SearchIdentity = SearchIdentity.Default,
+    /** Where topics are found by their names (U14); none for a fixture that does not offer it. */
+    private val topicSource: TopicSource? = if (source === VideoSearchSource.Telegram) TopicSource.Telegram else null,
     /**
      * Where Telegram's pages are kept by query ([PageQueries]), so searching the same words again
      * lists them at once and asks again only once they are [PageQueries.SEARCH_STALE_MS] old.
@@ -188,6 +207,22 @@ class GlobalSearchViewModel(
     @Volatile
     var alsoKnown: List<MediaItem> = emptyList()
 
+    /**
+     * The chat list as the screen holds it, in its order: which groups the topic search may ask
+     * ([TopicSearch.candidates]). Set by the screen as the list changes; only loaded chats are
+     * ever asked, so a very large account searches the topics of the chats it has loaded.
+     */
+    @Volatile
+    var chatList: List<ChatSummary> = emptyList()
+
+    private var topicJob: Job? = null
+
+    /** The words the topics on screen answer (or are being found for); blank for none. */
+    private var topicWords = ""
+
+    /** Whether each chat has topics, as [TopicSource.isForum] said this run, so a chat is looked at once. */
+    private val forums = java.util.concurrent.ConcurrentHashMap<Long, Boolean>()
+
     private var job: Job? = null
     private var localJob: Job? = null
     private var rememberJob: Job? = null
@@ -211,7 +246,12 @@ class GlobalSearchViewModel(
         // takes its chats out of them at once.
         viewModelScope.launch {
             ChatGate.browsing.collect { allowed ->
-                if (allowed != null) _state.update { s -> s.copy(groups = s.groups.filter { g -> g.copies.all { KidsLock.allows(allowed, it.chatId) } }) }
+                if (allowed != null) _state.update { s ->
+                    s.copy(
+                        groups = s.groups.filter { g -> g.copies.all { KidsLock.allows(allowed, it.chatId) } },
+                        topics = s.topics.filter { KidsLock.allows(allowed, it.chatId) },
+                    )
+                }
             }
         }
     }
@@ -282,6 +322,12 @@ class GlobalSearchViewModel(
         if (text.isNotBlank()) start(text, settle = 0, force = true)
     }
 
+    /** The topics' own Try again: only the topics are asked again, the videos stay. */
+    fun retryTopics() {
+        val text = _state.value.query.text
+        if (text.isNotBlank()) findTopics(GlobalSearch.clean(text), settle = 0, force = true)
+    }
+
     /** The connection came back: a search that could only list this device's videos asks Telegram. */
     fun reconnected() {
         if (_state.value.offline) retry()
@@ -305,6 +351,11 @@ class GlobalSearchViewModel(
     }
 
     private fun start(text: String, settle: Long, force: Boolean = false) {
+        startVideos(text, settle, force)
+        findTopics(GlobalSearch.clean(text), settle, force)
+    }
+
+    private fun startVideos(text: String, settle: Long, force: Boolean) {
         val query = GlobalSearch.parse(text)
         val now = _state.value
         if (!force && query == now.query) return
@@ -333,7 +384,10 @@ class GlobalSearchViewModel(
             // Cleared, or down to one letter: whatever was waiting to be asked is dropped, and the
             // screen goes back to its recent searches.
             localNow = emptyList()
-            _state.value = GlobalSearchState(query = query, filters = now.filters, sort = now.sort)
+            _state.value = GlobalSearchState(
+                query = query, filters = now.filters, sort = now.sort,
+                topics = now.topics, topicsSearching = now.topicsSearching, topicsError = now.topicsError, topicsPartial = now.topicsPartial,
+            )
             return
         }
         localNow = emptyList()
@@ -347,6 +401,10 @@ class GlobalSearchViewModel(
             chats = now.chats,
             searching = settle <= 0,
             settling = settle > 0,
+            topics = now.topics,
+            topicsSearching = now.topicsSearching,
+            topicsError = now.topicsError,
+            topicsPartial = now.topicsPartial,
         )
         val kept = cache?.peek<Answer>(keyOf(query, now.filters), PageQueries.SEARCH_STALE_MS)
         if (kept != null) {
@@ -383,6 +441,96 @@ class GlobalSearchViewModel(
                 _state.update { it.copy(settling = false, searching = kept == null) }
             }
             firstAnswer(query, fresh = kept == null)
+        }
+    }
+
+    /**
+     * Topics whose names answer [words] (U14), into [GlobalSearchState.topics].
+     *
+     * What this device already holds first and at once: the topics of the groups whose tabs were
+     * opened. Then, once the typing has settled for [settle], Telegram, within [TopicSearch]'s
+     * budget: the chat list's groups in order, looked up in TDLib's memory until
+     * [TopicSearch.CHATS_PER_SEARCH] with topics are found (at most
+     * [TopicSearch.FORUM_CHECKS_PER_SEARCH] looked at), [TopicSearch.AT_ONCE] asked at a time.
+     * A new letter cancels it all; a FLOOD_WAIT is waited out by the call that got it while the
+     * others go on ([ChatRepository.searchForumTopics]). Only when every group asked refused, and
+     * nothing was found, does the group say it failed.
+     */
+    private fun findTopics(words: String, settle: Long, force: Boolean) {
+        val source = topicSource ?: return
+        if (!force && words == topicWords) return
+        topicJob?.cancel()
+        topicWords = words
+        val chats = chatList
+        if (!GlobalSearch.searchable(words) || chats.isEmpty()) {
+            _state.update { it.copy(topics = emptyList(), topicsSearching = false, topicsError = null, topicsPartial = false) }
+            return
+        }
+        val allowed = ChatGate.browsing.value
+        val includeArchived = _state.value.filters.includeArchived
+        topicJob = viewModelScope.launch {
+            val order = withContext(work) { chats.withIndex().associate { it.value.id to it.index } }
+            val candidates = withContext(work) {
+                TopicSearch.candidates(chats, words, { KidsLock.allows(allowed, it) }, forums::get, includeArchived)
+            }
+            // The groups whose topics are kept from an earlier visit are matched from them, for free.
+            val kept = candidates.mapNotNull { chat -> source.known(chat.id)?.let { chat to it } }
+            val local = withContext(work) {
+                kept.flatMap { (chat, topics) -> TopicSearch.hits(chat.id, chat.title, topics, words, fromTelegram = false) }
+            }
+            val keptIds = kept.mapTo(HashSet()) { it.first.id }
+            _state.update { it.copy(topics = TopicSearch.rank(local, order), topicsSearching = true, topicsError = null, topicsPartial = false) }
+            if (settle > 0) delay(settle)
+
+            // The groups with topics, from TDLib's memory, within the budget.
+            val asking = mutableListOf<ChatSummary>()
+            var looked = 0
+            var partial = false
+            for (chat in candidates) {
+                if (chat.id in keptIds) continue
+                if (asking.size >= TopicSearch.CHATS_PER_SEARCH || looked >= TopicSearch.FORUM_CHECKS_PER_SEARCH) {
+                    partial = true
+                    break
+                }
+                val forum = forums[chat.id] ?: run {
+                    looked++
+                    runCatching { source.isForum(chat.id) }.onFailure { if (it is CancellationException) throw it }.getOrNull()
+                        ?.also { forums[chat.id] = it }
+                }
+                if (forum == true) asking += chat
+            }
+
+            val found = java.util.Collections.synchronizedList(ArrayList(local))
+            val failures = java.util.concurrent.atomic.AtomicInteger()
+            var failure: Throwable? = null
+            val gate = Semaphore(TopicSearch.AT_ONCE)
+            coroutineScope {
+                asking.forEach { chat ->
+                    launch {
+                        gate.withPermit {
+                            try {
+                                val topics = source.search(chat.id, words, TopicSearch.TOPICS_PER_CHAT)
+                                found += TopicSearch.hits(chat.id, chat.title, topics, words, fromTelegram = true)
+                                val ranked = withContext(work) { TopicSearch.rank(found.toList(), order) }
+                                _state.update { it.copy(topics = ranked) }
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                failures.incrementAndGet()
+                                failure = e
+                            }
+                        }
+                    }
+                }
+            }
+            val failed = failure?.takeIf { asking.isNotEmpty() && failures.get() == asking.size && found.isEmpty() }
+            _state.update {
+                it.copy(
+                    topicsSearching = false,
+                    topicsError = failed?.let { e -> Failures.humanise(e) },
+                    topicsPartial = partial,
+                )
+            }
         }
     }
 

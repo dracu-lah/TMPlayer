@@ -288,6 +288,68 @@ class ChatRepository(private val td: TdlClient) {
         return found
     }
 
+    /**
+     * Whether [chatId] is a group with Telegram's topics turned on, read from TDLib's memory alone
+     * (no server call), or null when TDLib does not hold the chat. Kept for the process: a group
+     * rarely turns topics on or off, and the search by topic name asks it of many chats (U14).
+     */
+    suspend fun isForum(chatId: Long): Boolean? = withContext(Dispatchers.IO) {
+        forumChats[chatId]?.let { return@withContext it }
+        val chat = td.getChat(chatId).valueOrNull ?: return@withContext null
+        val type = chat.type as? ChatTypeSupergroup
+        val answer = if (type == null || type.isChannel) {
+            false
+        } else {
+            td.getSupergroup(type.supergroupId).valueOrNull?.isForum ?: return@withContext null
+        }
+        forumChats[chatId] = answer
+        answer
+    }
+
+    /**
+     * The topics of forum [chatId] whose names answer [query], Telegram's matches, at most
+     * [limit]: one server call, the search by topic name (U14). Whether each holds videos comes
+     * from what [forumTopics] counted earlier or TDLib's local count, never a server count, so a
+     * search costs one call per group; a topic nothing is known of counts as holding videos.
+     *
+     * A FLOOD_WAIT is waited out here, by the call that got it, once and for at most
+     * [TOPIC_FLOOD_WAIT_S]; past that, or on any other refusal, it throws [TdlError].
+     */
+    suspend fun searchForumTopics(chatId: Long, query: String, limit: Int = TopicSearch.TOPICS_PER_CHAT): List<ForumTopicSummary> = withContext(Dispatchers.IO) {
+        var waited = false
+        var found: List<ForumTopicSummary>? = null
+        while (found == null) {
+            when (val answer = td.getForumTopics(chatId, query, 0, 0L, 0, limit)) {
+                is TdlResult.Success -> found = answer.result.topics.distinctBy { it.info.forumTopicId }.map { topic ->
+                    val id = topic.info.forumTopicId
+                    val known = countedTopics["$chatId:$id"]?.second
+                    val hasVideos = known ?: run {
+                        suspend fun local(filter: dev.g000sha256.tdl.dto.SearchMessagesFilter): Int? =
+                            td.getChatMessageCount(chatId, MessageTopicForum(id), filter, true).valueOrNull?.count?.takeIf { it >= 0 }
+                        val videos = local(SearchMessagesFilterVideo())
+                        val files = if (videos == 0) local(SearchMessagesFilterDocument()) else null
+                        !(videos == 0 && files == 0)
+                    }
+                    ForumTopicSummary(
+                        id = id,
+                        name = topic.info.name.ifBlank { L.gridTopicUntitled },
+                        isPinned = topic.isPinned,
+                        isClosed = topic.info.isClosed,
+                        unreadCount = topic.unreadCount,
+                        hasVideos = hasVideos,
+                    )
+                }
+                is TdlResult.Failure -> {
+                    val wait = Failures.floodWaitSeconds(answer.message)
+                    if (wait == null || waited || wait > TOPIC_FLOOD_WAIT_S) throw TdlError(answer.code, answer.message)
+                    waited = true
+                    kotlinx.coroutines.delay(wait * 1000L + 250L)
+                }
+            }
+        }
+        found.orEmpty()
+    }
+
     /** The forum topic [messageId] was posted in, or 0, for a player handed only the two ids. */
     suspend fun topicOf(chatId: Long, messageId: Long): Int = withContext(Dispatchers.IO) {
         val message = td.getMessage(chatId, messageId).valueOrNull ?: return@withContext 0
@@ -685,6 +747,12 @@ class ChatRepository(private val td: TdlClient) {
         private val heldCounts = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, ChatHolds>>()
         private const val HOLDS_KEPT = 64
         private const val HOLDS_TIMEOUT_MS = 6_000L
+
+        /** Whether each chat is a group with topics, by id, as [isForum] learnt it. For the process. */
+        private val forumChats = java.util.concurrent.ConcurrentHashMap<Long, Boolean>()
+
+        /** The longest FLOOD_WAIT a topic search sits out before it says it failed. */
+        const val TOPIC_FLOOD_WAIT_S = 30
         private fun now() = System.currentTimeMillis()
     }
 }

@@ -86,6 +86,8 @@ import com.tmplayer.desktop.os.OsInfo
 import com.tmplayer.ui.browse.BrowseSection
 import com.tmplayer.ui.browse.BrowseTab
 import com.tmplayer.ui.browse.ChatAvatar
+import com.tmplayer.ui.browse.topicMemory
+import androidx.compose.ui.draw.alpha
 import com.tmplayer.ui.browse.GlobalSearchState
 import com.tmplayer.ui.browse.GlobalSearchViewModel
 import com.tmplayer.ui.browse.SearchResultCard
@@ -129,6 +131,21 @@ private sealed interface PaletteRow {
 
     data class MoreChats(val count: Int) : PaletteRow {
         override val key get() = "more-chats"
+    }
+
+    /** A topic found by its name (U14): "Chat > Topic", opening the chat on it. */
+    data class Topic(val hit: com.tmplayer.data.TopicHit) : PaletteRow {
+        override val key get() = "t-${hit.key}"
+    }
+
+    data class MoreTopics(val count: Int) : PaletteRow {
+        override val key get() = "more-topics"
+    }
+
+    /** Every group asked for topics refused: the reason, Try again and the log buttons. */
+    data class TopicsFailed(val text: String) : PaletteRow {
+        override val key get() = "topics-failed"
+        override val pickable get() = false
     }
 
     data class Video(val group: ResultGroup) : PaletteRow {
@@ -221,7 +238,11 @@ internal fun BoxScope.SearchPalette(
     val toast = rememberToast()
     val field = remember { FocusRequester() }
     var allChats by remember { mutableStateOf(false) }
+    var allTopics by remember { mutableStateOf(false) }
     var selected by remember { mutableIntStateOf(-1) }
+    // Which groups the search by topic name may ask, in the chat list's order (U14).
+    LaunchedEffect(chats) { search.chatList = chats }
+    val topicMemory = remember(state.settings) { state.settings.topicMemory() }
     val text = state.paletteQuery
     val query = ui.query
 
@@ -237,7 +258,7 @@ internal fun BoxScope.SearchPalette(
         }
         runCatching { field.requestFocus() }
     }
-    LaunchedEffect(query.text) { allChats = false }
+    LaunchedEffect(query.text) { allChats = false; allTopics = false }
 
     fun close() {
         state.paletteOpen = false
@@ -281,11 +302,11 @@ internal fun BoxScope.SearchPalette(
             slow = true
         }
     }
-    val rows = remember(ui, chats, favourites, recents, allowed, allChats, query.text, byUsername, slow, offer) {
+    val rows = remember(ui, chats, favourites, recents, allowed, allChats, allTopics, query.text, byUsername, slow, offer) {
         listOfNotNull(offer?.let { PaletteRow.Link(it) }) + buildRows(ui, chats, favourites, if (allowed != null) emptyList() else recents, allChats, search, byUsername, onSearchWord = { word ->
             state.paletteQuery = TextFieldValue(word, TextRange(word.length))
             search.submit(word)
-        }, slow = slow)
+        }, slow = slow, allTopics = allTopics)
     }
 
     fun pick(row: PaletteRow, play: Boolean = false) {
@@ -300,6 +321,15 @@ internal fun BoxScope.SearchPalette(
                 state.openChat(row.chat)
             }
             is PaletteRow.MoreChats -> allChats = true
+            is PaletteRow.Topic -> chats.firstOrNull { it.id == row.hit.chatId }?.let { chat ->
+                scope.launch {
+                    com.tmplayer.ui.browse.openOnTopic(topicMemory, row.hit.chatId, row.hit.topic.id)
+                    search.remember()
+                    close()
+                    state.openChat(chat)
+                }
+            }
+            is PaletteRow.MoreTopics -> allTopics = true
             is PaletteRow.Video -> openVideo(row.group, play)
             is PaletteRow.Action -> row.run()
             is PaletteRow.Link -> {
@@ -310,7 +340,7 @@ internal fun BoxScope.SearchPalette(
                 close()
                 row.place.go(state)
             }
-            is PaletteRow.Heading, is PaletteRow.Skeleton, is PaletteRow.Note -> Unit
+            is PaletteRow.Heading, is PaletteRow.Skeleton, is PaletteRow.Note, is PaletteRow.TopicsFailed -> Unit
         }
     }
 
@@ -431,6 +461,7 @@ internal fun BoxScope.SearchPalette(
                             onClick = { pick(row) },
                             onRemove = (row as? PaletteRow.Recent)?.let { r -> { scope.launch { state.settings.removeRecentSearch(r.query) } } },
                             onRetry = search::retry,
+                            onRetryTopics = search::retryTopics,
                         )
                     }
                 }
@@ -460,6 +491,8 @@ private fun buildRows(
     onSearchWord: (String) -> Unit,
     /** The first page has been on its way past [com.tmplayer.ui.components.SlowAnswer.AFTER_MS]. */
     slow: Boolean = false,
+    /** Every topic found is listed, not only the first few. */
+    allTopics: Boolean = false,
 ): List<PaletteRow> = buildList {
     val s = com.tmplayer.i18n.L
     val query = ui.query
@@ -483,6 +516,15 @@ private fun buildRows(
         val shown = if (allChats) matching else matching.take(GlobalSearch.CHAT_PREVIEW)
         shown.forEach { add(PaletteRow.Chat(it)) }
         if (shown.size < matching.size) add(PaletteRow.MoreChats(matching.size))
+    }
+    // Topics found by their names (U14), a few, then Show all; a group that holds no videos says so.
+    if (ui.topics.isNotEmpty() || ui.topicsError != null) {
+        add(PaletteRow.Heading(s.searchTopicsHeading))
+        val shownTopics = if (allTopics) ui.topics else ui.topics.take(GlobalSearch.CHAT_PREVIEW)
+        shownTopics.forEach { add(PaletteRow.Topic(it)) }
+        if (shownTopics.size < ui.topics.size) add(PaletteRow.MoreTopics(ui.topics.size))
+        ui.topicsError?.let { add(PaletteRow.TopicsFailed(s.searchTopicsFailed(it))) }
+        if (ui.topicsPartial && !ui.topicsSearching) add(PaletteRow.Note(s.searchTopicsPartial(com.tmplayer.data.TopicSearch.CHATS_PER_SEARCH)))
     }
     val videos = ui.shown
     if (videos.isNotEmpty() || ui.searching) add(PaletteRow.Heading(s.searchVideosHeading))
@@ -525,6 +567,7 @@ private fun PaletteLine(
     onClick: () -> Unit,
     onRemove: (() -> Unit)?,
     onRetry: () -> Unit,
+    onRetryTopics: () -> Unit = onRetry,
 ) {
     val s = LocalStrings.current
     val pickable = Modifier
@@ -576,6 +619,42 @@ private fun PaletteLine(
             }
         }
         is PaletteRow.MoreChats -> SimpleLine(TmIcons.ChevronDown, s.searchShowAllChats(row.count), selected, pickable)
+        is PaletteRow.Topic -> {
+            val empty = !row.hit.topic.hasVideos
+            Row(
+                pickable.background(if (selected) Tone.focusFill.copy(alpha = 0.18f) else Color.Transparent).padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                val chat = ui.chats[row.hit.chatId]
+                Box(Modifier.size(32.dp).alpha(if (empty) 0.5f else 1f), contentAlignment = Alignment.Center) {
+                    if (chat != null) ChatAvatar(chat, 32.dp) else Icon(TmIcons.ChatsMany, contentDescription = null, tint = Tone.muted, modifier = Modifier.size(20.dp))
+                }
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        com.tmplayer.ui.browse.topicHitLabel(row.hit, s),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = if (empty) Tone.muted else Tone.text,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (empty) Text(s.searchTopicNoVideos, style = MaterialTheme.typography.bodySmall, color = Tone.muted, maxLines = 1)
+                }
+                if (row.hit.topic.isPinned) Icon(TmIcons.Pin, contentDescription = s.gridTopicPinned, tint = Tone.muted, modifier = Modifier.size(16.dp))
+                if (row.hit.topic.isClosed) Icon(TmIcons.Lock, contentDescription = s.gridTopicClosed, tint = Tone.muted, modifier = Modifier.size(16.dp))
+            }
+        }
+        is PaletteRow.MoreTopics -> SimpleLine(TmIcons.ChevronDown, s.searchShowAllTopics(row.count), selected, pickable)
+        is PaletteRow.TopicsFailed -> Column(
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(row.text, style = MaterialTheme.typography.bodyMedium, color = Tone.muted, modifier = Modifier.weight(1f))
+                TextButton(onClick = onRetryTopics) { Text(s.commonRetry) }
+            }
+            SendLogsActions()
+        }
         is PaletteRow.Action -> SimpleLine(TmIcons.Search, row.text, selected, pickable)
         is PaletteRow.GoTo -> SimpleLine(row.place.icon, row.place.label, selected, pickable)
         is PaletteRow.Link -> SimpleLine(TmIcons.Send, row.offer.label, selected, pickable) {
