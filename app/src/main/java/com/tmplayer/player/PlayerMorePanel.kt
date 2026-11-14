@@ -384,7 +384,7 @@ class PlayerMorePanel(
         LockScreen, PictureInPicture, PlaybackDetails, StartOver, PictureShape, ResetZoom, Stereo, Speed,
         VolumeBoost, NightMode, EvenVolume, SleepTimer, AbLoop, NextChapter, PreviousChapter,
         NextFrame, PreviousFrame, SaveFrame, AddBookmark, Bookmarks, OpenInAnotherApp,
-        LoadSubtitleFile, SaveToDownloads, MarkWatched, RemoteKeys,
+        LoadSubtitleFile, SaveToDownloads, MarkWatched, ReportStutter, RemoteKeys,
     }
 
     private class Line(val kind: Kind, val label: String, val icon: ImageVector, val detail: String?)
@@ -471,6 +471,7 @@ class PlayerMorePanel(
             } else {
                 Line(kind, s.playerMarkWatched, TmIcons.Check, s.playerMarkWatchedDetail)
             }
+            Kind.ReportStutter -> Line(kind, s.playerReportStutter, TmIcons.Info, if (host.tv) s.playerReportStutterDetailTv else s.playerReportStutterDetail)
             Kind.RemoteKeys -> Line(kind, s.playerRemoteKeys, TmIcons.Remote, s.playerRemoteKeysDetail)
         }
     }

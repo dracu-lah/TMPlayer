@@ -120,6 +120,7 @@ class PlayerMenuTest {
             chapters = true,
             stereo = true,
             pictureShape = true,
+            reportStutter = true,
         )
         assertFalse(PlayerMenuEntry.PictureInPicture in entries)
         assertEquals(PlayerMenuEntry.entries.size - 1, entries.size)
@@ -138,6 +139,7 @@ class PlayerMenuTest {
                 chapters = true,
                 stereo = true,
                 pictureShape = true,
+                reportStutter = true,
             ).toSet(),
         )
     }
@@ -177,6 +179,7 @@ class PlayerMenuTest {
                 PhoneMenuEntry.LoadSubtitleFile,
                 PhoneMenuEntry.SaveToDownloads,
                 PhoneMenuEntry.MarkWatched,
+                PhoneMenuEntry.ReportStutter,
                 PhoneMenuEntry.PlaybackDetails,
             ),
             PlayerMenu.phoneEntries(
@@ -188,9 +191,10 @@ class PlayerMenuTest {
                 bookmarks = true,
                 chapters = true,
                 saveFrame = true,
+                reportStutter = true,
             ),
         )
-        assertEquals(PhoneMenuEntry.entries.toSet(), PlayerMenu.phoneEntries(true, true, true, true, paused = true, bookmarks = true, chapters = true, saveFrame = true, pictureShape = true, stereo = true, zoomed = true).toSet())
+        assertEquals(PhoneMenuEntry.entries.toSet(), PlayerMenu.phoneEntries(true, true, true, true, paused = true, bookmarks = true, chapters = true, saveFrame = true, pictureShape = true, stereo = true, zoomed = true, reportStutter = true).toSet())
     }
 
     @Test
@@ -267,5 +271,23 @@ class PlayerMenuTest {
             assertTrue("missing $it", it in keys)
         }
         assertTrue(RemoteKeys.ROWS.all { (key, does) -> key.isNotBlank() && does.isNotBlank() })
+    }
+
+    @Test
+    fun `report stutter is offered when asked, last before the details on the phone and before the keys on the television`() {
+        val phone = PlayerMenu.phoneEntries(true, true, true, true, reportStutter = true)
+        assertEquals(PhoneMenuEntry.ReportStutter, phone[phone.size - 2])
+        assertEquals(PhoneMenuEntry.PlaybackDetails, phone.last())
+        assertFalse(PhoneMenuEntry.ReportStutter in PlayerMenu.phoneEntries(true, true, true, true))
+
+        val tv = PlayerMenu.tvEntries(pictureInPicture = true, reportStutter = true)
+        assertEquals(PlayerMenuEntry.ReportStutter, tv[tv.size - 2])
+        assertEquals(PlayerMenuEntry.RemoteKeys, tv.last())
+        assertFalse(PlayerMenuEntry.ReportStutter in PlayerMenu.tvEntries(pictureInPicture = true))
+    }
+
+    @Test
+    fun `the phone entry has its words`() {
+        assertEquals(com.tmplayer.i18n.L.playerReportStutter, PhoneMenuEntry.ReportStutter.label())
     }
 }

@@ -59,6 +59,11 @@ enum class PlayerMenuEntry {
     MarkWatched,
     PictureInPicture,
     OpenInAnotherApp,
+    /**
+     * Marks the moment as stuttering and keeps the last minute of the playback trace for Send logs
+     * (L3). Also a held Info key on the remote. Not offered on a cast, which plays on the other TV.
+     */
+    ReportStutter,
     RemoteKeys,
 }
 
@@ -110,6 +115,8 @@ enum class PhoneMenuEntry {
     LoadSubtitleFile,
     SaveToDownloads,
     MarkWatched,
+    /** The moment marked as stuttering, with the last minute of the trace kept for Send logs (L3). */
+    ReportStutter,
     /** Last: a line for bug reports, not for watching. */
     PlaybackDetails,
 }
@@ -149,6 +156,7 @@ fun PhoneMenuEntry.label(
     PhoneMenuEntry.MarkWatched -> if (watched) L.playerMarkUnwatched else L.playerMarkWatched
     PhoneMenuEntry.AddBookmark -> L.playerAddBookmark
     PhoneMenuEntry.Bookmarks -> if (bookmarks > 0) L.commonWithDetail(L.playerBookmarks, L.messages.formatter.number(bookmarks)) else L.playerBookmarks
+    PhoneMenuEntry.ReportStutter -> L.playerReportStutter
     PhoneMenuEntry.PlaybackDetails -> L.playerPlaybackDetails
 }
 
@@ -188,7 +196,7 @@ object PlayerMenu {
      * [chapters] is whether the file has chapter marks, which adds the chapter steps.
      *
      * [stereo] is whether 3D video is offered: a picture to draw, not sound alone, and
-     * [pictureShape] the same for the shapes' page.
+     * [pictureShape] the same for the shapes' page. [reportStutter] is false on a cast.
      */
     fun tvEntries(
         pictureInPicture: Boolean,
@@ -200,6 +208,7 @@ object PlayerMenu {
         chapters: Boolean = false,
         stereo: Boolean = false,
         pictureShape: Boolean = false,
+        reportStutter: Boolean = false,
     ): List<PlayerMenuEntry> = buildList {
         add(PlayerMenuEntry.LockScreen)
         add(PlayerMenuEntry.PlaybackDetails)
@@ -228,6 +237,7 @@ object PlayerMenu {
         if (markWatched) add(PlayerMenuEntry.MarkWatched)
         if (pictureInPicture) add(PlayerMenuEntry.PictureInPicture)
         if (openInAnotherApp) add(PlayerMenuEntry.OpenInAnotherApp)
+        if (reportStutter) add(PlayerMenuEntry.ReportStutter)
         add(PlayerMenuEntry.RemoteKeys)
     }
 
@@ -239,7 +249,8 @@ object PlayerMenu {
      * CP37 cleared stays clear. [chapters] adds the chapter steps. [saveFrame] is false for a
      * chat that restricts saving (or while that is still being asked), whose frames stay in it.
      * [pictureShape] is whether there is a picture to shape (not sound alone, not a cast), and
-     * [stereo] offers 3D video beside it; Speed follows them. [zoomed] adds Reset zoom under the
+     * [stereo] offers 3D video beside it; Speed follows them. [reportStutter] adds Report stutter
+     * (false on a cast, which plays on the other screen). [zoomed] adds Reset zoom under the
      * shape while a pinch has the picture enlarged. The lock stays first: the line people come
      * here for.
      */
@@ -255,6 +266,7 @@ object PlayerMenu {
         pictureShape: Boolean = false,
         stereo: Boolean = false,
         zoomed: Boolean = false,
+        reportStutter: Boolean = false,
     ): List<PhoneMenuEntry> = buildList {
         add(PhoneMenuEntry.LockScreen)
         if (pictureInPicture) add(PhoneMenuEntry.PictureInPicture)
@@ -284,6 +296,7 @@ object PlayerMenu {
         add(PhoneMenuEntry.LoadSubtitleFile)
         if (saveToDownloads) add(PhoneMenuEntry.SaveToDownloads)
         if (markWatched) add(PhoneMenuEntry.MarkWatched)
+        if (reportStutter) add(PhoneMenuEntry.ReportStutter)
         add(PhoneMenuEntry.PlaybackDetails)
     }
 }

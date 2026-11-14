@@ -5714,6 +5714,13 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         // Before anything else claims the same key. A held select on a remote, or the menu key, is
         // the long press the browse grid answers with a menu; here the only entry that menu would
         // carry which the player has no other route to is the handover.
+        // Hold Info: Report stutter (L3), on a television, where there is no menu in reach of a thumb.
+        if (FormFactor.isTv(this) && statusOverlay.visibility != View.VISIBLE &&
+            PlaybackMarks.isMarkKey(event.keyCode, event.isLongPress)
+        ) {
+            reportStutter()
+            return true
+        }
         if (isLongPressOnTheVideo(event)) {
             if (event.keyCode == KeyEvent.KEYCODE_MENU) menuHeld = true
             openInAnotherApp()
@@ -6444,6 +6451,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             chapters = chapters.isNotEmpty(),
             stereo = stereoOffered(),
             pictureShape = stereoOffered(),
+            reportStutter = stutterReportable(),
         )
         override fun shape() = videoScale
         override fun speed() = playbackSpeed
@@ -6500,6 +6508,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             PhoneMenuEntry.SaveToDownloads -> saveToDownloads()
             PhoneMenuEntry.MarkWatched -> toggleWatched()
             PhoneMenuEntry.ResetZoom -> resetZoom()
+            PhoneMenuEntry.ReportStutter -> reportStutter()
             // Pages of the panel itself, opened there.
             PhoneMenuEntry.PictureShape, PhoneMenuEntry.Stereo, PhoneMenuEntry.Speed, PhoneMenuEntry.SleepTimer,
             PhoneMenuEntry.AddBookmark, PhoneMenuEntry.Bookmarks, PhoneMenuEntry.PlaybackDetails,
@@ -6528,8 +6537,31 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             PlayerMenuEntry.PreviousFrame -> frameStep(forward = false)
             PlayerMenuEntry.AddBookmark -> addBookmark(player?.currentPosition ?: 0L, "")
             PlayerMenuEntry.Bookmarks -> showSheet { it.showBookmarks(bookmarkActions()) }
+            PlayerMenuEntry.ReportStutter -> reportStutter()
             // Pages of the panel itself, opened there.
             PlayerMenuEntry.SleepTimer, PlayerMenuEntry.RemoteKeys, PlayerMenuEntry.Speed, PlayerMenuEntry.PictureShape -> Unit
+        }
+    }
+
+    /** The trace's marks, kept for the next Send logs (L3). */
+    private val stutterMarks by lazy { PlaybackMarks(PlaybackMarks.fileIn(this)) }
+
+    /** Report stutter is offered while this device plays the video: the other screen's decoder is not in the trace. */
+    private fun stutterReportable(): Boolean = player != null && !castUp()
+
+    /**
+     * Report stutter (L3): marks this moment and keeps the last minute of the playback trace for
+     * the next Send logs, and says so. A second press within [PlaybackMarks.DEBOUNCE_MS], a press in
+     * the middle of a seek, one with no reading yet or on a cast never throws: the first two say
+     * "Already marked", the others mark with what there is or do nothing.
+     */
+    private fun reportStutter() {
+        if (!stutterReportable()) return
+        val window = runCatching { traceRecorder.momentWindow(PlaybackMarks.WINDOW_MS) }.getOrDefault(emptyList())
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) { runCatching { stutterMarks.mark(window) }.getOrDefault(PlaybackMarks.Result.FAILED) }
+            if (isFinishing || isDestroyed) return@launch
+            showGestureFeedback(if (result == PlaybackMarks.Result.ALREADY) L.playerStutterMarkedAlready else L.playerStutterMarked)
         }
     }
 

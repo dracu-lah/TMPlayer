@@ -164,6 +164,15 @@ class PlaybackRecorder(
         return all.filter { it.atMs > newest - windowMs }
     }
 
+    /**
+     * A reading of this moment, then the last [windowMs] of the session: what "Report stutter"
+     * keeps (L3). Pressed twice, during a seek or before the first reading it gives what there is.
+     */
+    fun momentWindow(windowMs: Long): List<TraceSample> {
+        if (windowOpen) takeSample()
+        return lastWindow(windowMs)
+    }
+
     /** What the verdict says about this session so far. */
     fun verdict(): StutterCause = StutterVerdict.classify(ring.currentSamples())
 

@@ -141,6 +141,7 @@ class PlayerMoreRenderTest {
             stereo = true,
             // Pinched larger, so the phone's shots show Reset zoom under the shape.
             zoomed = true,
+            reportStutter = true,
         )
         override fun zoomDetail() = "135%"
         override fun tvEntries() = PlayerMenu.tvEntries(
@@ -149,6 +150,7 @@ class PlayerMoreRenderTest {
             markWatched = true,
             stereo = true,
             pictureShape = true,
+            reportStutter = true,
         )
         override fun shape() = VideoScale.entries.getOrElse(3) { VideoScale.Fit }
         override fun speed() = 1.25f

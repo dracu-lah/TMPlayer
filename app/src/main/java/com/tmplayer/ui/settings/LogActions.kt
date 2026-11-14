@@ -277,7 +277,9 @@ private suspend fun logReport(context: Context): String {
         .onFailure { Logger.w(TAG, "logcat could not be read", it) }
         .getOrDefault(emptyList())
     val known = LogExport.knownNames(SettingsStore(context), WatchedStore(context))
-    return LogExport.report(feedbackFacts(context), lines, known, extra = runCatching { CrashReports.logLines() }.getOrDefault(emptyList()))
+    return LogExport.report(feedbackFacts(context), lines, known, extra = runCatching { CrashReports.logLines() }.getOrDefault(emptyList()) +
+        // The moments the viewer marked with Report stutter, with the trace around each (L3).
+        runCatching { com.tmplayer.player.PlaybackMarks(com.tmplayer.player.PlaybackMarks.fileIn(context)).reportLines() }.getOrDefault(emptyList()))
 }
 
 private fun ownLogcat(): List<String> {
