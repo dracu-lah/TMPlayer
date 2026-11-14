@@ -30,8 +30,8 @@ class BackupCoverageTest {
         // Whether this device was signed in: a session belongs to the device, and a restore on
         // another one must not read as "Telegram signed you out" there (HX23).
         "signed_in",
-        // Consent is given on the device that sends.
-        "crash_reports",
+        // Consent is given on the device that sends, and so is asking for it (S1).
+        "crash_reports", "crash_ask_done",
         // How much this device writes to its own log file: the device's, like the consent above.
         "detailed_logs",
         // Test versions are asked for on each device, never brought along by a restore.
