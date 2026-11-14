@@ -266,6 +266,30 @@ class StutterGateTest {
     }
 
     @Test
+    fun `the report carries the trace's verdict as one tag, and only a cause's name can be in it`() {
+        for (cause in StutterCause.entries) {
+            val tags = StutterReport.tagsOf(facts().copy(verdict = StutterReport.verdictName(cause)))
+            assertEquals(cause.name.lowercase(), tags["verdict"])
+            assertEquals(StutterReport.ALLOWED_TAGS, tags.keys)
+        }
+        assertEquals("unknown", StutterReport.tagsOf(facts()).getValue("verdict"), "no verdict is unknown")
+        for (dirty in listOf("", "decoder bound", "/sdcard/Secret.mkv", "NETWORK_BOUND ".repeat(50), "\u0000")) {
+            val v = StutterReport.tagsOf(facts().copy(verdict = dirty)).getValue("verdict")
+            assertTrue(v in StutterReport.VERDICTS, "'$dirty' became '$v'")
+        }
+        assertEquals("network_bound", StutterReport.tagsOf(facts().copy(verdict = "NETWORK_BOUND")).getValue("verdict"))
+    }
+
+    @Test
+    fun `the verdict tag survives the gate's scrub and nothing else is added`() {
+        val event = StutterReport.build(facts().copy(verdict = "decoder_bound"))
+        event.tags = (event.tags.orEmpty() + ("title" to "Secret Show")).toMutableMap()
+        val scrubbed = StutterReport.scrub(event)
+        assertEquals("decoder_bound", scrubbed.tags!!["verdict"])
+        assertEquals(StutterReport.ALLOWED_TAGS, scrubbed.tags!!.keys)
+    }
+
+    @Test
     fun `the report carries the symptom and where the frame rate came from`() {
         val tags = StutterReport.tagsOf(facts(speed = 50, symptom = PlaybackWatch.SLOW).copy(fpsSource = "unknown"))
         assertEquals("slow", tags["symptom"])

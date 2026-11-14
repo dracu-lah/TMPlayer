@@ -534,6 +534,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             fpsSource = FrameRates.source(containerFps, derivedFps),
             source = runCatching { currentItem().locality.name.lowercase() }.getOrDefault("unknown"),
             bufferedAheadMs = runCatching { player?.let { (it.bufferedPosition - it.currentPosition).coerceAtLeast(0).toInt() } ?: -1 }.getOrDefault(-1),
+            // What the playback trace of this session says (L2): decoder, line, render path, heat or memory.
+            verdict = runCatching { com.tmplayer.data.StutterReport.verdictName(traceRecorder.verdict()) }.getOrDefault(com.tmplayer.data.StutterReport.UNKNOWN_VERDICT),
         )
         Thread { runCatching { com.tmplayer.data.CrashReports.reportStutter(facts) } }.start()
     }

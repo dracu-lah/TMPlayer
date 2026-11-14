@@ -2,6 +2,7 @@ package com.tmplayer.data
 
 import com.tmplayer.player.FrameRates
 import com.tmplayer.player.PlaybackWatch
+import com.tmplayer.player.StutterCause
 import io.sentry.Sentry
 import io.sentry.SentryEvent
 import io.sentry.SentryLevel
@@ -69,6 +70,12 @@ object StutterReport {
         val source: String = "unknown",
         /** Milliseconds of video buffered ahead of the playhead when the report was made, or -1 when not known. */
         val bufferedAheadMs: Int = -1,
+        /**
+         * What the playback trace says caused it ([StutterCause], L2): `decoder_bound`,
+         * `network_bound`, `render_or_sync`, `thermal`, `memory` or `unknown`. Anything else is
+         * reported as `unknown` ([verdictOf]).
+         */
+        val verdict: String = UNKNOWN_VERDICT,
     ) {
         /** What the daily limit counts: codec, bit depth and size bucket. */
         val kind: String get() = "${clean(codec)}:${if (bitDepth > 8) 10 else 8}:$sizeBucket"
@@ -79,8 +86,18 @@ object StutterReport {
         "codec", "profile", "bit_depth", "width", "height", "fps", "bitrate_kbps", "container",
         "decoder", "decoder_type", "prediction", "speed_percent", "dropped_frames", "frames", "underruns",
         "manufacturer", "model", "android", "cores", "abi", "app_version", "symptom", "fps_source",
-        "source", "buffered_ahead_ms",
+        "source", "buffered_ahead_ms", "verdict",
     )
+
+    /** The words a verdict may be reported as: the causes of [StutterCause], lower case. */
+    val VERDICTS: Set<String> = StutterCause.entries.map { verdictName(it) }.toSet()
+
+    const val UNKNOWN_VERDICT = "unknown"
+
+    fun verdictName(cause: StutterCause): String = cause.name.lowercase()
+
+    /** [text] when it is one of [VERDICTS], else `unknown`: nothing but a cause's name rides in this tag. */
+    fun verdictOf(text: String): String = text.lowercase().takeIf { it in VERDICTS } ?: UNKNOWN_VERDICT
 
     /** The event, with the facts as tags. The SDK adds the device, OS and app contexts when it captures. */
     fun build(facts: Facts): SentryEvent = SentryEvent().apply {
@@ -118,6 +135,7 @@ object StutterReport {
         "fps_source" to clean(facts.fpsSource),
         "source" to clean(facts.source),
         "buffered_ahead_ms" to facts.bufferedAheadMs.coerceIn(-1, 3_600_000).toString(),
+        "verdict" to verdictOf(facts.verdict),
     )
 
     /**
