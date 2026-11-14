@@ -2902,6 +2902,15 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * It returns to the speed the viewer chose, not 1x: somebody watching at 1.5x who holds to skip
      * an aside expects to be back at 1.5x when they let go.
      */
+    /** True while the fast-forward key is held down at the hold speed (U3, television and keyboards). */
+    private var remoteHolding = false
+
+    private fun endRemoteHold() {
+        if (!remoteHolding) return
+        remoteHolding = false
+        holdFastForward(false)
+    }
+
     private fun holdFastForward(holding: Boolean) {
         val exo = player ?: return
         if (holding) {
@@ -5701,6 +5710,11 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 return true
             }
         }
+        // The fast-forward key let go (or cancelled): the held speed ends and the viewer's own returns (U3).
+        if (remoteHolding && event.keyCode == KeyEvent.KEYCODE_MEDIA_FAST_FORWARD && event.action != KeyEvent.ACTION_DOWN) {
+            endRemoteHold()
+            return true
+        }
         if (event.action != KeyEvent.ACTION_DOWN) return super.dispatchKeyEvent(event)
         // The quiet line about software decoding goes with the next press, which still does what
         // it does: the line asks nothing, so it never holds a key back.
@@ -5820,6 +5834,14 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             // and pause the centre disc or glyph. With no buttons for them on a television's row,
             // the cue is the only sign the press landed.
             KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> {
+                // Held (U3): from the long press the video plays at the hold speed until the key
+                // lets go, as holding a finger does on the phone; the repeats do not also jump.
+                if (HoldSpeedKey.startsHold(event.keyCode, event.repeatCount, event.isLongPress, remoteHolding, touchPrefs.holdSpeed, remoteQuirks.holdSeekAccelerates) && !castUp()) {
+                    remoteHolding = true
+                    holdFastForward(true)
+                    return true
+                }
+                if (remoteHolding) return true
                 jumpFromRemote(forward = true, repeatCount = event.repeatCount)
                 return true
             }
@@ -8855,6 +8877,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
     override fun onStop() {
         super.onStop()
+        // A key that was held when the window went away never reports its release.
+        endRemoteHold()
         // Counted again from the start when the viewer is back ([onStart]).
         openingWatch?.cancel()
         rebufferWatch?.cancel()

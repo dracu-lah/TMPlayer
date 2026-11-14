@@ -1858,7 +1858,7 @@
     "key_play_pause": "Play / Pause",
     "key_play_pause_does": "Play or pause; paused, the controls stay up with a pause sign in the middle",
     "key_rewind": "Rewind / Fast forward",
-    "key_rewind_does": "Jump back 5 or forward 10 seconds",
+    "key_rewind_does": "Jump back 5 or forward 10 seconds. Hold Fast forward to play faster until you let go",
     "key_seek_bar": "Left / Right on the seek bar",
     "key_seek_bar_does": "Travel 30 seconds a press; presses pile up and land as one seek a moment after the last",
     "key_time": "OK on the time",
