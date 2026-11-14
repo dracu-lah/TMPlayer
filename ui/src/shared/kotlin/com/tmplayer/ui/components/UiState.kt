@@ -75,6 +75,14 @@ enum class StateAction {
         AddChats -> L.pickerChooseChats
     }
 
+    /**
+     * What pressing the button does on the Chats list: Choose chats opens the picker (a reload would
+     * find the same empty list), every other action asks the list again through [reload].
+     */
+    fun runOnChatsList(reload: () -> Unit) {
+        if (this == AddChats) com.tmplayer.ui.browse.AddChatsRequest.ask() else reload()
+    }
+
     /** The glyph before the button's words, where the action has one (the Choose chats button's person with a plus). */
     val buttonIcon: ImageVector? get() = when (this) {
         AddChats -> TmIcons.PersonAdd
