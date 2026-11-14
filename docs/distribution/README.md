@@ -12,6 +12,7 @@ those steps use.
 | [aur.md](aur.md) | The AUR package `tmplayer-bin`: one-time setup, then published by the release job |
 | [amazon.md](amazon.md) | U23 Amazon Appstore listing (text, images, content rating) |
 | [play.md](play.md) | Phase G Google Play (set aside), and Android developer verification for every APK |
+| [crash-consent.md](crash-consent.md) | S1: crash reports asked once at first run, and what an opt-out default would change |
 
 IzzyOnDroid was decided against (see PLAN); Obtainium installs straight from the GitHub releases.
 

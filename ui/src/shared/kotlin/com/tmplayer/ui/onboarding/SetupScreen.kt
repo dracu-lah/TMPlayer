@@ -148,6 +148,10 @@ fun SetupScreen(
     val page = state.page
     val step = state.step
     val switches = page.size > 1
+    // The crash report question seen here counts as asked (S1): the card after the setup is only
+    // for the installs that never reached it, and Done on it untouched is an answer of No.
+    val crashAsked = SetupStep.CrashReports in page
+    LaunchedEffect(crashAsked) { if (crashAsked) runCatching { settings.markCrashReportsAsked() } }
     // What is marked on each step of this page: the viewer's pick, or until there is one, what is
     // set now. Keyed by the page, so walking back finds the answers that were written.
     var picks by remember(state.index) { mutableStateOf<Map<SetupStep, SetupChoice>>(emptyMap()) }

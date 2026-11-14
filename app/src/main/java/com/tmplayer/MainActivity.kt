@@ -2474,6 +2474,27 @@ private fun Root() {
         }
         supporting?.let { from -> SupportDialog(from = from, onClose = { supporting = null }) }
 
+        // S1: "Help fix crashes?", once, for an install never asked (the setup's step was skipped,
+        // or it was signed in before the step existed). On the chat list, behind every other card.
+        val crashAskReporting = remember {
+            com.tmplayer.ui.onboarding.CrashReporting(CrashReports.available) { on ->
+                if (on) CrashReports.start(context, true) else CrashReports.stop()
+            }
+        }
+        val struggleHintUp by com.tmplayer.data.DeviceFitHint.raised.collectAsStateWithLifecycle()
+        com.tmplayer.ui.onboarding.CrashAskHost(
+            settings = settings,
+            reporting = crashAskReporting,
+            inShell = inShell && screen is Screen.Chats,
+            otherUp = showUpdate || noticeLanguage != null || whatsNew.showing || supportRung != 0 || supporting != null ||
+                crashPending || newVideoOffer || struggleHintUp || tourState == SettingsStore.TourState.Never || changelogQr,
+            safeMode = com.tmplayer.data.SafeMode.active,
+            modifier = Modifier
+                .align(if (FormFactor.isTv(context)) Alignment.BottomEnd else Alignment.BottomCenter)
+                .windowInsetsPadding(WindowInsets.safeDrawing)
+                .padding(if (FormFactor.isTv(context)) 40.dp else 16.dp),
+        )
+
         ConnectionStatus(
             notice = connectionNotice,
             modifier = Modifier

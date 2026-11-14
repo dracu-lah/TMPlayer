@@ -85,6 +85,10 @@ private val HOME_RECENT = booleanPreferencesKey("home_recent")
 private val HOME_STARRED_ROWS = booleanPreferencesKey("home_starred_rows")
 private val CRASH_REPORTS = booleanPreferencesKey("crash_reports")
 private val DETAILED_LOGS = booleanPreferencesKey("detailed_logs")
+
+// Whether the crash report question was put to this install (S1, [CrashAsk]). Not in a backup:
+// like the answer, it is per device.
+private val CRASH_ASKED = booleanPreferencesKey("crash_ask_done")
 private val LAST_CHAT = longPreferencesKey("last_chat")
 private val MIN_SIZE = longPreferencesKey("min_size_bytes")
 private val MAX_SIZE = longPreferencesKey("max_size_bytes")
@@ -1516,10 +1520,14 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
      * Off, on a fresh install and after signing out. Nothing is initialised until this is true: see
      * [com.tmplayer.data.CrashReports] for what a report does and does not carry.
      */
-    val crashReports: Flow<Boolean> = read { it[CRASH_REPORTS] ?: false }
+    val crashReports: Flow<Boolean> = read { it[CRASH_REPORTS] ?: CrashAsk.OPT_OUT_DEFAULT_ON }
 
+    /** Writes the answer, from wherever it was given, and with it that the question was put (S1). */
     suspend fun setCrashReports(value: Boolean) {
-        prefs.edit { it[CRASH_REPORTS] = value }
+        prefs.edit {
+            it[CRASH_REPORTS] = value
+            it[CRASH_ASKED] = true
+        }
     }
 
     /**
@@ -1535,7 +1543,20 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
     }
 
     /** Read once during startup, before anything has had a chance to crash. */
-    suspend fun crashReportsNow(): Boolean = prefs.data.first()[CRASH_REPORTS] ?: false
+    suspend fun crashReportsNow(): Boolean = prefs.data.first()[CRASH_REPORTS] ?: CrashAsk.OPT_OUT_DEFAULT_ON
+
+    /**
+     * Whether the crash report question was ever put to this install (S1, [CrashAsk]): the
+     * first-run card or the setup's step shown, or an answer stored either way (Settings' switch,
+     * the setup, the question after a crash). An install updated from before the flag existed
+     * counts as asked once it has any answer stored.
+     */
+    val crashReportsAsked: Flow<Boolean> = read { it[CRASH_ASKED] == true || it[CRASH_REPORTS] != null }
+
+    /** Writes down that the question was shown, answered or not. */
+    suspend fun markCrashReportsAsked() {
+        prefs.edit { it[CRASH_ASKED] = true }
+    }
 
     /**
      * How the picture was last fitted to the screen.

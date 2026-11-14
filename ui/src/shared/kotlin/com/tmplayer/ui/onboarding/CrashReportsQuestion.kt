@@ -84,7 +84,7 @@ fun CrashReportsQuestion(
 
 /** The privacy page's address as a QR code on a white plate, with the address in words beside it. */
 @Composable
-private fun PrivacyQr() {
+internal fun PrivacyQr() {
     val s = LocalStrings.current
     val bitmap: ImageBitmap? by produceState<ImageBitmap?>(null) {
         value = withContext(Dispatchers.Default) { QrCode.render(About.PRIVACY, QR_PIXELS) }

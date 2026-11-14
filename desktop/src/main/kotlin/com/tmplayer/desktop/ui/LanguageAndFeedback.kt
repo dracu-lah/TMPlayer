@@ -290,5 +290,20 @@ fun ShellNotices(state: ShellState, modifier: Modifier = Modifier) {
             onDismiss = { scope.launch { runCatching { state.settings.markTourDone() } } },
         )
     }
+    // S1: "Help fix crashes?", once, for an install never asked, behind every other notice.
+    val crashAsking by com.tmplayer.desktop.DesktopCrashReports.pending.collectAsState()
+    val reporting = remember {
+        com.tmplayer.ui.onboarding.CrashReporting(com.tmplayer.desktop.DesktopCrashReports.available) { on ->
+            if (on) com.tmplayer.desktop.DesktopCrashReports.start(true) else com.tmplayer.desktop.DesktopCrashReports.stop()
+        }
+    }
+    com.tmplayer.ui.onboarding.CrashAskHost(
+        settings = state.settings,
+        reporting = reporting,
+        inShell = true,
+        otherUp = language != null || picking || whatsNew.showing || playing || state.updatePopup || crashAsking ||
+            tour == SettingsStore.TourState.Never,
+        modifier = modifier,
+    )
 }
 
