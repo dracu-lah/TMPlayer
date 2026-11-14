@@ -234,6 +234,11 @@ class App : Application() {
                 PlayerActivity.primeOrientation(SettingsStore(this@App).screenOrientationNow())
             }
         }
+        // Settings, Playback, Advanced, frame-rate matching: followed for the life of the process, so
+        // the player (which cannot wait for a disk read) and a backup restore both see the setting.
+        backgroundScope.launch {
+            runCatching { SettingsStore(this@App).frameRateMatching.collect { com.tmplayer.player.FrameRateMatch.enabled = it } }
+        }
         // "Remove after watching". Here, for the life of the process, rather than on a screen or in
         // the player: a video is marked watched from the grid, from the player's own button and by
         // the player reaching the end, and all three write the one list this reads.

@@ -319,3 +319,19 @@ enum class TunneledMode(val key: String) {
         }
     }
 }
+
+/**
+ * The engines Settings, Playback offers (PR5): Automatic and ExoPlayer always, VLC only where
+ * [EngineSelector] could run it ([EngineInput.vlcAvailable], the native library). A stored VLC on a
+ * device without it stays stored (a backup from another phone, a build that gains the library
+ * later) and plays in ExoPlayer meanwhile ([EngineReason.VlcUnavailable]); Settings says so.
+ */
+object EngineOptions {
+
+    fun offered(vlcAvailable: Boolean): List<EngineChoice> =
+        if (vlcAvailable) listOf(EngineChoice.Automatic, EngineChoice.ExoPlayer, EngineChoice.Vlc)
+        else listOf(EngineChoice.Automatic, EngineChoice.ExoPlayer)
+
+    /** True when the viewer's stored VLC cannot be honoured here, so the row has to say what plays instead. */
+    fun storedButUnavailable(stored: EngineChoice, vlcAvailable: Boolean): Boolean = stored == EngineChoice.Vlc && !vlcAvailable
+}

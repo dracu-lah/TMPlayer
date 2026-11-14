@@ -22,8 +22,17 @@ import com.tmplayer.data.FormFactor
  */
 object FrameRateMatch {
 
+    /**
+     * Settings, Playback, Advanced, "Match the video's frame rate" (PR5). On by default; off leaves
+     * Media3's own seamless switches alone and sends no request of ours. Kept up to date from the
+     * stored setting by the application, so a restore from a backup reaches the player too.
+     */
+    @Volatile
+    var enabled: Boolean = true
+
     /** Whether this device wants the app, not Media3, to speak to the display. */
     fun shouldTakeOver(context: Context): Boolean {
+        if (!enabled) return false
         if (!FormFactor.isTv(context)) return false
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return false
         val displays = context.getSystemService(DisplayManager::class.java) ?: return false

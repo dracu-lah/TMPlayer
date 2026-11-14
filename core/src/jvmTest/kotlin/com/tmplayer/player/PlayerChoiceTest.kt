@@ -164,6 +164,17 @@ class PlayerChoiceTest {
     }
 
     @Test
+    fun `VLC is offered only where its library is, and a stored VLC without it is named`() {
+        assertEquals(listOf(EngineChoice.Automatic, EngineChoice.ExoPlayer), EngineOptions.offered(vlcAvailable = false))
+        assertEquals(listOf(EngineChoice.Automatic, EngineChoice.ExoPlayer, EngineChoice.Vlc), EngineOptions.offered(vlcAvailable = true))
+        assertTrue(EngineOptions.storedButUnavailable(EngineChoice.Vlc, vlcAvailable = false))
+        assertFalse(EngineOptions.storedButUnavailable(EngineChoice.Vlc, vlcAvailable = true))
+        assertFalse(EngineOptions.storedButUnavailable(EngineChoice.Automatic, vlcAvailable = false))
+        // A stored value from a newer build reads as Automatic.
+        assertEquals(EngineChoice.Automatic, EngineChoice.from("quantum"))
+    }
+
+    @Test
     fun `tunneled mode reads its stored name and falls back to Auto`() {
         assertEquals(TunneledMode.On, TunneledMode.from("on"))
         assertEquals(TunneledMode.Off, TunneledMode.from(" OFF "))

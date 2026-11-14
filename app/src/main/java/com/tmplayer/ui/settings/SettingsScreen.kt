@@ -395,6 +395,8 @@ fun SettingsScreen(
     var showingLearnt by remember { mutableStateOf(false) }
     var trackPicker by remember { mutableStateOf<TrackLanguagePicker?>(null) }
     var pickingDecoder by remember { mutableStateOf(false) }
+    // Playback's Advanced group, collapsed until asked for (PR5).
+    var playbackAdvancedOpen by rememberSaveable { mutableStateOf(false) }
     var editingSizes by remember { mutableStateOf(false) }
     var whatsNew by remember { mutableStateOf(false) }
     var reporting by remember { mutableStateOf(false) }
@@ -910,6 +912,9 @@ fun SettingsScreen(
                         onClick = { pickingDecoder = true },
                     )
                 }
+                // The default player (which absorbs "Open videos in another app"), the engine and
+                // its two switches, and the collapsed Advanced group (PR4, PR5).
+                playerRows(settings, touch, playbackAdvancedOpen) { playbackAdvancedOpen = !playbackAdvancedOpen }
                 item {
                     ToggleRow(
                         title = s.settingsDetailFirst,
@@ -2983,7 +2988,7 @@ internal fun TickRow(label: String, checked: Boolean, onToggle: () -> Unit) {
  * greyed at the ends, because they are what says the row can be moved at all.
  */
 @Composable
-private fun StepperRow(
+internal fun StepperRow(
     title: String,
     subtitle: String,
     value: String,
