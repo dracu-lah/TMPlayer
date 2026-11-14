@@ -13,6 +13,7 @@ those steps use.
 | [amazon.md](amazon.md) | U23 Amazon Appstore listing (text, images, content rating) |
 | [play.md](play.md) | Phase G Google Play (set aside), and Android developer verification for every APK |
 | [crash-consent.md](crash-consent.md) | S1: crash reports asked once at first run, and what an opt-out default would change |
+| [crash-visibility.md](crash-visibility.md) | S3: Android vitals, Sentry and the log upload; the weekly stutter list; Sentry quota |
 
 IzzyOnDroid was decided against (see PLAN); Obtainium installs straight from the GitHub releases.
 

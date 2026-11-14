@@ -139,4 +139,15 @@ class StutterReportTest {
         on = true
         assertTrue(later.report(facts()))
     }
+
+    /** S3: the chipset goes on after the scrub, checked, and a value that does not fit is left off. */
+    @Test
+    fun chipsetIsAddedCheckedAfterTheScrub() {
+        val event = StutterReport.withChipset(StutterReport.scrub(StutterReport.build(facts())), "Mediatek MT8695")
+        assertEquals("Mediatek MT8695", event.tags?.get("chipset"))
+        assertEquals(StutterReport.ALLOWED_TAGS + "chipset", event.tags.orEmpty().keys)
+        val bad = StutterReport.withChipset(StutterReport.scrub(StutterReport.build(facts())), "/proc/cpuinfo")
+        assertNull(bad.tags?.get("chipset"))
+        assertEquals(StutterReport.ALLOWED_TAGS, bad.tags.orEmpty().keys)
+    }
 }

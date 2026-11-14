@@ -143,7 +143,10 @@ object CrashReports {
     private fun gate(event: SentryEvent, hint: Hint?): SentryEvent? {
         // The "could not keep up" report (HX2b): only with the switch on, scrubbed the same way,
         // and under its own daily limit rather than the crash budget.
-        if (StutterReport.isStutter(event)) return if (enabledNow) StutterReport.scrub(event) else null
+        // The chipset goes on it too (S3), so the weekly list can group stutters by chipset.
+        if (StutterReport.isStutter(event)) {
+            return if (enabledNow) StutterReport.withChipset(StutterReport.scrub(event), chipset) else null
+        }
         return gateCrash(event, hint)
     }
 

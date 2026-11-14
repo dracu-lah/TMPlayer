@@ -171,6 +171,17 @@ object StutterReport {
         return event
     }
 
+    /**
+     * Adds the device's chipset to a scrubbed stutter event (S3), checked as a crash's is
+     * ([CrashContext.tagsOf]): left off when it does not fit. Not one of [ALLOWED_TAGS], which
+     * the facts fill: the platform adds it after the scrub.
+     */
+    fun withChipset(event: SentryEvent, chipset: String): SentryEvent {
+        val checked = CrashContext.tagsOf(chipset, playback = null)[CrashContext.CHIPSET] ?: return event
+        event.tags = (event.tags.orEmpty() + (CrashContext.CHIPSET to checked)).toMutableMap()
+        return event
+    }
+
     /** Letters, digits and `. - _ + :` and spaces, at most 64 characters: no path survives a cut like this. */
     fun clean(text: String): String = text.filter { it.isLetterOrDigit() || it in ".-_+: " }.trim().take(MAX_TEXT)
 
