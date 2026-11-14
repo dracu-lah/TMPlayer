@@ -203,7 +203,7 @@ class TrackPickerFragment : Fragment() {
 
     private fun trackLines(onOnline: () -> Unit, onMsone: () -> Unit, onInPlace: () -> Unit, lookIcon: ImageVector): List<Line> {
         val host = host ?: return emptyList()
-        val player = host.player ?: return emptyList()
+        val player = host.trackPlayer ?: return emptyList()
         val options = buildList {
             // Subtitles need an explicit "off"; audio always has at least one track playing.
             if (trackType == C.TRACK_TYPE_TEXT) add(Option(null, -1, L.commonOff))
@@ -323,7 +323,7 @@ class TrackPickerFragment : Fragment() {
     }
 
     private fun choose(option: Option) {
-        val player = host?.player
+        val player = host?.trackPlayer
         if (player != null) {
             val builder = player.trackSelectionParameters.buildUpon().clearOverridesOfType(trackType)
             if (option.group == null) {

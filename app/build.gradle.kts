@@ -47,6 +47,16 @@ val releaseAbis: List<String> = (findProperty("tmAbis") as String?)
 // Off, which is every other build, nothing changes.
 val fdroidBuild: Boolean = (findProperty("tmFdroid") as String?)?.trim()?.toBoolean() ?: false
 
+// libVLC as a second engine (PR2), off unless asked for:
+//
+//     ./gradlew :app:assembleDebug -PtmVlc=true
+//
+// It adds 20 to 24 MB per architecture (45 MB to the universal APK) and is a prebuilt native
+// binary, which F-Droid does not take, so the F-Droid build never has it whatever is passed. Off,
+// the VLC code is a stand-in that offers nothing (src/novlc) and Settings shows no VLC. See
+// docs/distribution/libvlc-spike.md.
+val vlcBuild: Boolean = !fdroidBuild && ((findProperty("tmVlc") as String?)?.trim()?.toBoolean() ?: false)
+
 // versionCode from the version name, under the release numbering (docs/RELEASING.md, and
 // ReleaseVersion.androidCode in :core, which an app test holds this to): major*1000000 +
 // minor*10000 + patch*100 + stage, where a test version x.y.z-beta.N is stage N, the release 99
@@ -175,6 +185,10 @@ android {
         // The update check and the APK install that follows it, off in the F-Droid build (see
         // fdroidBuild above): F-Droid is what updates that build.
         buildConfigField("boolean", "UPDATE_CHECK", "${!fdroidBuild}")
+
+        // libVLC is in this build (see vlcBuild above); whether it loads on the device is
+        // EngineAvailability's question.
+        buildConfigField("boolean", "VLC_ENGINE", "$vlcBuild")
 
         // English only. Every androidx and Media3 dependency ships translations for ~80
         // locales, and none of this app's own strings are translated, so the rest is dead
@@ -305,6 +319,8 @@ android {
     // Casting (CP73): Google's Cast framework behind CastBuild in the regular build, a stand-in
     // with no Google code in the F-Droid one. Every build type of one build gets the same side.
     sourceSets.getByName("main").kotlin.directories += if (fdroidBuild) "src/nocast/java" else "src/cast/java"
+    // The VLC engine (PR2): libVLC behind VlcRuntime in a build with it, a stand-in without.
+    sourceSets.getByName("main").kotlin.directories += if (vlcBuild) "src/vlc/java" else "src/novlc/java"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -411,6 +427,13 @@ dependencies {
         // SMS User Consent for the sign in code (ui/auth/SmsCodeConsent.kt in src/cast): no SMS
         // permission, the viewer allows each message in a system prompt.
         implementation(catalog.findLibrary("play-services-auth-api-phone").get())
+    }
+
+    // libVLC (PR2), only with -PtmVlc=true: see vlcBuild. Looked up by name, as the Cast library
+    // is, so a recipe that deletes its catalog line still has a script that compiles.
+    if (vlcBuild) {
+        val catalog = project.extensions.getByType<VersionCatalogsExtension>().named("libs")
+        implementation(catalog.findLibrary("libvlc-all").get())
     }
 
     // Crash reporting, off unless the viewer turns it on in Settings. Nothing here runs at

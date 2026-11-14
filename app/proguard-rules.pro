@@ -26,3 +26,9 @@
 # The Cast framework makes its options provider from the class name in the manifest (CP73). The
 # F-Droid build has neither the framework nor the class, and the rule then matches nothing.
 -keep class com.tmplayer.cast.CastOptionsProvider { <init>(); }
+
+# libVLC (PR2, only in a -PtmVlc=true build): its native code calls back into these classes by
+# name (events, dialogs, the video output), and the AAR brings no rules of its own. Without the
+# library the rule matches nothing.
+-keep class org.videolan.libvlc.** { *; }
+-dontwarn org.videolan.libvlc.**

@@ -25,6 +25,9 @@ zxing = "3.5.4"
 # and adds VP8, VP9 and AV1 (dav1d) software decoders, which is why its natives are larger.
 media3 = "1.11.1"
 nextlib = "1.11.1-0.16.0"
+# libVLC, the second Android engine (PR2): only in a build made with -PtmVlc=true, never in the
+# F-Droid one (docs/distribution/libvlc-spike.md says why). 3.7.7 carries libVLC 3.0.25.
+libvlc = "3.7.7"
 leanback = "1.0.0"
 fragment = "1.9.1"
 datastore = "1.2.1"
@@ -114,6 +117,7 @@ androidx-media3-session = { group = "androidx.media3", name = "media3-session", 
 androidx-leanback = { group = "androidx.leanback", name = "leanback", version.ref = "leanback" }
 androidx-fragment-ktx = { group = "androidx.fragment", name = "fragment-ktx", version.ref = "fragment" }
 nextlib-media3ext = { group = "io.github.anilbeesetti", name = "nextlib-media3ext", version.ref = "nextlib" }
+libvlc-all = { group = "org.videolan.android", name = "libvlc-all", version.ref = "libvlc" }
 # What nextlib-media3ext's POM depends on, for the AAR scripts/build-media3ext.sh builds from source.
 androidx-annotation = { group = "androidx.annotation", name = "annotation", version = "1.10.0" }
 errorprone-annotations = { group = "com.google.errorprone", name = "error_prone_annotations", version = "2.50.0" }

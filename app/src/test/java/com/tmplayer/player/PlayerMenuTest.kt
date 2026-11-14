@@ -122,6 +122,7 @@ class PlayerMenuTest {
             pictureShape = true,
             reportStutter = true,
             copyLinkAtTime = true,
+            otherEngine = true,
         )
         assertFalse(PlayerMenuEntry.PictureInPicture in entries)
         assertEquals(PlayerMenuEntry.entries.size - 1, entries.size)
@@ -142,6 +143,7 @@ class PlayerMenuTest {
                 pictureShape = true,
                 reportStutter = true,
                 copyLinkAtTime = true,
+                otherEngine = true,
             ).toSet(),
         )
     }
@@ -198,7 +200,7 @@ class PlayerMenuTest {
                 copyLinkAtTime = true,
             ),
         )
-        assertEquals(PhoneMenuEntry.entries.toSet(), PlayerMenu.phoneEntries(true, true, true, true, paused = true, bookmarks = true, chapters = true, saveFrame = true, pictureShape = true, stereo = true, zoomed = true, reportStutter = true, copyLinkAtTime = true).toSet())
+        assertEquals(PhoneMenuEntry.entries.toSet(), PlayerMenu.phoneEntries(true, true, true, true, paused = true, bookmarks = true, chapters = true, saveFrame = true, pictureShape = true, stereo = true, zoomed = true, reportStutter = true, copyLinkAtTime = true, otherEngine = true).toSet())
     }
 
     @Test
@@ -304,5 +306,18 @@ class PlayerMenuTest {
         assertEquals(tv.indexOf(PlayerMenuEntry.OpenInAnotherApp) + 1, tv.indexOf(PlayerMenuEntry.CopyLinkAtTime))
         assertFalse(PlayerMenuEntry.CopyLinkAtTime in PlayerMenu.tvEntries(pictureInPicture = true))
         assertEquals(com.tmplayer.i18n.L.playerCopyLinkAtTime, PhoneMenuEntry.CopyLinkAtTime.label())
+    }
+
+    @Test
+    fun `try the other engine sits just above open in another app on both, and only when offered`() {
+        val phone = PlayerMenu.phoneEntries(true, true, true, true, otherEngine = true)
+        assertEquals(phone.indexOf(PhoneMenuEntry.OtherEngine) + 1, phone.indexOf(PhoneMenuEntry.OpenInAnotherApp))
+        assertFalse(PhoneMenuEntry.OtherEngine in PlayerMenu.phoneEntries(true, true, true, true))
+        val tv = PlayerMenu.tvEntries(pictureInPicture = true, otherEngine = true)
+        assertEquals(tv.indexOf(PlayerMenuEntry.OtherEngine) + 1, tv.indexOf(PlayerMenuEntry.OpenInAnotherApp))
+        assertFalse(PlayerMenuEntry.OtherEngine in PlayerMenu.tvEntries(pictureInPicture = true))
+        // A protected chat leaves Open in another app off; the other engine is still TMPlayer's own player.
+        assertTrue(PlayerMenuEntry.OtherEngine in PlayerMenu.tvEntries(pictureInPicture = true, openInAnotherApp = false, otherEngine = true))
+        assertEquals(com.tmplayer.i18n.L.playerEngineOther, PhoneMenuEntry.OtherEngine.label())
     }
 }

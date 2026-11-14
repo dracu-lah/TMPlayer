@@ -12,6 +12,9 @@ import java.io.File
 interface TrackPickerHost {
     val player: Player?
 
+    /** The player whose tracks the picker lists and picks: [player], or the VLC engine's when VLC plays (PR2). */
+    val trackPlayer: Player? get() = player
+
     fun syncDelaysNow(): SyncDelays
 
     fun stepDelay(trackType: Int, direction: Int)

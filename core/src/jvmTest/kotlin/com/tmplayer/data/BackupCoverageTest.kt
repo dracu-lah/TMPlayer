@@ -62,6 +62,8 @@ class BackupCoverageTest {
         // Which kinds of picture this device kept up with in software, and whose "may stutter"
         // question was turned off (HX2): about this device's CPU and decoders, not another's.
         "decode_memory", "heavy_ask_skip",
+        // How each player engine did here (PR2), from this device's decoders and native library.
+        "engine_history",
         // Records of files on this device's disk, and what Telegram said about them.
         "cached_video", "cached_video_ids", "wc_", "dl_", "duration_", "meta_",
         // Android's chosen downloads folder (HX26): a path on this device's disk (an SD card or a

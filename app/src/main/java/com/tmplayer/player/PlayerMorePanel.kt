@@ -136,6 +136,9 @@ interface PlayerMoreHost {
     fun chapter(): String?
     fun watched(): Boolean
 
+    /** The engine playing now ("ExoPlayer", "VLC"), the Try the other engine line's detail (PR2). */
+    fun engineNow(): String? = null
+
     /** The video's bookmarks and what to do with them, or null for a video with no message. */
     fun bookmarks(): BookmarkSheetActions?
 
@@ -383,7 +386,7 @@ class PlayerMorePanel(
     private enum class Kind {
         LockScreen, PictureInPicture, PlaybackDetails, StartOver, PictureShape, ResetZoom, Stereo, Speed,
         VolumeBoost, NightMode, EvenVolume, SleepTimer, AbLoop, NextChapter, PreviousChapter,
-        NextFrame, PreviousFrame, SaveFrame, AddBookmark, Bookmarks, OpenInAnotherApp,
+        NextFrame, PreviousFrame, SaveFrame, AddBookmark, Bookmarks, OtherEngine, OpenInAnotherApp,
         CopyLinkAtTime, LoadSubtitleFile, SaveToDownloads, MarkWatched, ReportStutter, RemoteKeys,
     }
 
@@ -463,6 +466,7 @@ class PlayerMorePanel(
             Kind.SaveFrame -> Line(kind, s.playerSaveFrame, TmIcons.Image, null)
             Kind.AddBookmark -> Line(kind, s.playerAddBookmark, TmIcons.Add, null)
             Kind.Bookmarks -> Line(kind, s.playerBookmarks, TmIcons.Bookmark, bookmarkCount.takeIf { it > 0 }?.let { s.playerBookmarksCount(it) })
+            Kind.OtherEngine -> Line(kind, s.playerEngineOther, TmIcons.Play, host.engineNow()?.let { s.playerEngineOtherDetail(it) })
             Kind.OpenInAnotherApp -> Line(kind, s.playerOpenInAnotherApp, TmIcons.OpenExternal, null)
             Kind.CopyLinkAtTime -> Line(kind, s.playerCopyLinkAtTime, TmIcons.Copy, null)
             Kind.LoadSubtitleFile -> Line(kind, s.playerLoadSubtitleFile, TmIcons.Subtitles, null)

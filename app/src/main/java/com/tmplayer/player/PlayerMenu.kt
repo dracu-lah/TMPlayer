@@ -58,6 +58,11 @@ enum class PlayerMenuEntry {
     /** "Mark as watched", or "Mark as unwatched" once it is on the list. */
     MarkWatched,
     PictureInPicture,
+    /**
+     * The same video in the other engine (PR2), at the same place with the same tracks: ExoPlayer
+     * to VLC or back. Only where the VLC library loads, never for 3D, sound alone or a cast.
+     */
+    OtherEngine,
     OpenInAnotherApp,
     /** The video's Telegram link with the time playing (U9); not for a protected chat or a video of pieces. */
     CopyLinkAtTime,
@@ -113,6 +118,8 @@ enum class PhoneMenuEntry {
     /** Asks for an optional note, then saves the moment the note was asked at. */
     AddBookmark,
     Bookmarks,
+    /** The other engine, as on the television. */
+    OtherEngine,
     OpenInAnotherApp,
     /** The video's Telegram link with the time playing (U9), as the television's. */
     CopyLinkAtTime,
@@ -154,6 +161,7 @@ fun PhoneMenuEntry.label(
     PhoneMenuEntry.NextFrame -> L.playerFrameNext
     PhoneMenuEntry.PreviousFrame -> L.playerFramePrevious
     PhoneMenuEntry.SaveFrame -> L.playerSaveFrame
+    PhoneMenuEntry.OtherEngine -> L.playerEngineOther
     PhoneMenuEntry.OpenInAnotherApp -> L.playerOpenInAnotherApp
     PhoneMenuEntry.CopyLinkAtTime -> L.playerCopyLinkAtTime
     PhoneMenuEntry.LoadSubtitleFile -> L.playerLoadSubtitleFile
@@ -202,6 +210,10 @@ object PlayerMenu {
      *
      * [stereo] is whether 3D video is offered: a picture to draw, not sound alone, and
      * [pictureShape] the same for the shapes' page. [reportStutter] is false on a cast. [copyLinkAtTime] is false for a chat that restricts saving, a video with no message and one built from pieces.
+     *
+     * [otherEngine] is whether the video can move to the other engine (PR2): a build whose VLC
+     * library loads here, a picture that is not 3D, no cast. It sits just above Open in another
+     * app, the other way to a different player.
      */
     fun tvEntries(
         pictureInPicture: Boolean,
@@ -215,6 +227,7 @@ object PlayerMenu {
         pictureShape: Boolean = false,
         reportStutter: Boolean = false,
         copyLinkAtTime: Boolean = false,
+        otherEngine: Boolean = false,
     ): List<PlayerMenuEntry> = buildList {
         add(PlayerMenuEntry.LockScreen)
         add(PlayerMenuEntry.PlaybackDetails)
@@ -242,6 +255,7 @@ object PlayerMenu {
         if (saveToDownloads) add(PlayerMenuEntry.SaveToDownloads)
         if (markWatched) add(PlayerMenuEntry.MarkWatched)
         if (pictureInPicture) add(PlayerMenuEntry.PictureInPicture)
+        if (otherEngine) add(PlayerMenuEntry.OtherEngine)
         if (openInAnotherApp) add(PlayerMenuEntry.OpenInAnotherApp)
         if (copyLinkAtTime) add(PlayerMenuEntry.CopyLinkAtTime)
         if (reportStutter) add(PlayerMenuEntry.ReportStutter)
@@ -259,8 +273,8 @@ object PlayerMenu {
      * [stereo] offers 3D video beside it; Speed follows them. [reportStutter] adds Report stutter
      * (false on a cast, which plays on the other screen). [copyLinkAtTime] is false for a chat that
      * restricts saving, a video with no message and one built from pieces. [zoomed] adds Reset zoom under the
-     * shape while a pinch has the picture enlarged. The lock stays first: the line people come
-     * here for.
+     * shape while a pinch has the picture enlarged. [otherEngine] adds Try the other engine, as on
+     * the television. The lock stays first: the line people come here for.
      */
     fun phoneEntries(
         pictureInPicture: Boolean,
@@ -276,6 +290,7 @@ object PlayerMenu {
         zoomed: Boolean = false,
         reportStutter: Boolean = false,
         copyLinkAtTime: Boolean = false,
+        otherEngine: Boolean = false,
     ): List<PhoneMenuEntry> = buildList {
         add(PhoneMenuEntry.LockScreen)
         if (pictureInPicture) add(PhoneMenuEntry.PictureInPicture)
@@ -301,6 +316,7 @@ object PlayerMenu {
             add(PhoneMenuEntry.AddBookmark)
             add(PhoneMenuEntry.Bookmarks)
         }
+        if (otherEngine) add(PhoneMenuEntry.OtherEngine)
         if (openInAnotherApp) add(PhoneMenuEntry.OpenInAnotherApp)
         if (copyLinkAtTime) add(PhoneMenuEntry.CopyLinkAtTime)
         add(PhoneMenuEntry.LoadSubtitleFile)

@@ -300,6 +300,30 @@
                     android:text="Try the other decoder"
                     android:visibility="gone" />
 
+                <!--
+                  On a decoding failure with a second engine in the app (PR2): the same video in
+                  VLC, or back in ExoPlayer after VLC failed. The second line keeps VLC for every
+                  video on this device, offered only after ExoPlayer failed and never under the
+                  kids lock, which keeps Settings as they are.
+                -->
+                <Button
+                    android:id="@+id/status_engine"
+                    style="@style/PlayerSheetButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:text="Play in VLC"
+                    android:visibility="gone" />
+
+                <Button
+                    android:id="@+id/status_engine_always"
+                    style="@style/PlayerSheetButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:text="Always use VLC on this device"
+                    android:visibility="gone" />
+
                 <Button
                     android:id="@+id/status_reload"
                     style="@style/PlayerSheetButton"

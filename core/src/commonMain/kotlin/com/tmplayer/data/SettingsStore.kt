@@ -284,6 +284,9 @@ private val EXTERNAL_HINT_SEEN = booleanPreferencesKey("external_hint_seen")
 private val PLAYER_ENGINE = stringPreferencesKey("player_engine")
 private val ENGINE_SWITCH_ON_ERROR = booleanPreferencesKey("engine_switch_on_error")
 private val SUGGEST_VLC = booleanPreferencesKey("suggest_vlc")
+// How each engine has done on this device (PR2, [com.tmplayer.player.EngineHistory]): this device's
+// decoders, so it stays behind in a backup.
+private val ENGINE_HISTORY = stringPreferencesKey("engine_history")
 private val FRAME_RATE_MATCHING = booleanPreferencesKey("frame_rate_matching")
 private val TUNNELED_PLAYBACK = stringPreferencesKey("tunneled_playback")
 private val PLAYBACK_STATS = booleanPreferencesKey("playback_stats")
@@ -1743,7 +1746,20 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
     suspend fun engineChoiceNow(): com.tmplayer.player.EngineChoice = com.tmplayer.player.EngineChoice.from(prefs.data.first()[PLAYER_ENGINE])
 
     suspend fun setEngineChoice(choice: com.tmplayer.player.EngineChoice) {
-        prefs.edit { it[PLAYER_ENGINE] = choice.key }
+        prefs.edit {
+            // The failure counts are since the viewer last chose ([com.tmplayer.player.EngineHistory]).
+            if (com.tmplayer.player.EngineChoice.from(it[PLAYER_ENGINE]) != choice) it.remove(ENGINE_HISTORY)
+            it[PLAYER_ENGINE] = choice.key
+        }
+    }
+
+    /** Decoding failures of each engine on this device since the engine setting last changed. */
+    suspend fun engineHistoryNow(): com.tmplayer.player.EngineHistory =
+        com.tmplayer.player.EngineHistory.decode(prefs.data.first()[ENGINE_HISTORY])
+
+    /** Counts one decoding failure of [engine] on this device. */
+    suspend fun noteEngineFailure(engine: PlayerEngine) {
+        prefs.edit { it[ENGINE_HISTORY] = com.tmplayer.player.EngineHistory.decode(it[ENGINE_HISTORY]).failed(engine).encode() }
     }
 
     /** Switch to the other engine by itself when a decoder gives up (on), or only suggest it (off). */
