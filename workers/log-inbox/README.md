@@ -30,6 +30,23 @@ What the report holds is decided by the app and listed on the privacy page
 the earlier run's crash, device facts and the decoders the device lists. Names, ids, phone numbers
 and file names are taken out on the device before it is sent.
 
+## Title reports ("Wrong title?", plan N1)
+
+`POST /v1/titles`, `Content-Type: text/plain`, at most 2 KB, the same rate limits. The body is the
+app's JSON for one pair: `{"v":1,"name":"<file name>","title":"<the title the viewer chose>","chat":"<only if they ticked it>","hash":"..."}`.
+The viewer saw exactly that pair, and ticked the box, before the app sent it.
+
+- Scrubbed again here (phone numbers, e-mail addresses, t.me links, @usernames), capped, and the
+  hash is worked out here (`src/titles.ts`, the same rules as `TitleReport` in core), never taken
+  from the sender.
+- Stored as `titles/<hash>.txt`: one line `name TAB title`, plus `# chat: ...` only when the viewer
+  ticked it. That is the format `scripts/names/ingest.mjs` reads: `wrangler r2 object get` a few
+  and point the script at the folder. The same pair twice (any case or spacing) is one object.
+- Answers `201 {"code":"NAME-7K3Q","duplicate":false,"keepDays":30}`, or `200` with `duplicate:true`.
+  The code is derived from the hash, so the app shows it too and a viewer can read it out (a TV).
+- Nothing else is kept: no address, user agent or header. 30 days, by the daily cron (`sweep`
+  covers `reports/` and `titles/`) and by a second lifecycle rule (step 2 below).
+
 ## Deploying (the maintainer, once)
 
 From this folder, with a Cloudflare login that may create R2 buckets. The deploy names
@@ -42,6 +59,7 @@ npx wrangler r2 bucket create tmplayer-log-inbox
 
 # 2. The 30 day lifecycle rule, as a second guard beside the daily cron
 npx wrangler r2 bucket lifecycle add tmplayer-log-inbox expire-30d reports/ --expire-days 30
+npx wrangler r2 bucket lifecycle add tmplayer-log-inbox expire-titles-30d titles/ --expire-days 30
 
 # 3. The worker
 npx wrangler deploy --config wrangler.jsonc

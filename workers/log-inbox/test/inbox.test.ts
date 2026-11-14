@@ -16,6 +16,18 @@ import {
   type Deps,
   type Env,
 } from '../src/inbox.ts'
+import {
+  MAX_NAME,
+  MAX_TITLE,
+  MAX_TITLE_BYTES,
+  NAME_CODE,
+  TITLES_PATH,
+  TITLE_PREFIX,
+  codeOf,
+  hashOf,
+  parsePair,
+  scrub,
+} from '../src/titles.ts'
 
 class FakeBucket implements Bucket {
   objects = new Map<string, { bytes: Uint8Array; uploaded: Date }>()
@@ -194,4 +206,173 @@ test('the sweep removes reports older than 30 days and keeps the rest, across pa
   assert.equal(removed, 1250)
   assert.equal(bucket.objects.size, 1250 + 1)
   assert.ok(bucket.objects.has('other/keep.txt'))
+})
+
+// ---- title reports (N1) ----------------------------------------------------------------------
+
+const pair = (name: string, title: string, extra: Record<string, unknown> = {}) =>
+  JSON.stringify({ v: 1, name, title, hash: 'ignored', ...extra })
+const postTitle = (body: BodyInit | null, headers: Record<string, string> = { 'Content-Type': 'text/plain; charset=utf-8' }) =>
+  post(body, headers, TITLES_PATH)
+const stored = (e: { bucket: FakeBucket }, hash: string) =>
+  new TextDecoder().decode(e.bucket.objects.get(`${TITLE_PREFIX}${hash}.txt`)!.bytes)
+const everything = (e: { bucket: FakeBucket }) => [...e.bucket.objects.values()].map((o) => new TextDecoder().decode(o.bytes)).join()
+
+test('a title report is stored once under its hash, as a line the ingest script reads', async () => {
+  const e = env()
+  const res = await handle(postTitle(pair('Night.Train.2024.mkv', 'Night Train')), e, deps)
+  assert.equal(res.status, 201)
+  const body = (await res.json()) as { code: string; duplicate: boolean; keepDays: number }
+  assert.match(body.code, NAME_CODE)
+  assert.equal(body.duplicate, false)
+  assert.equal(body.keepDays, KEEP_DAYS)
+  assert.equal(stored(e, '3742ef92863ebf19'), 'Night.Train.2024.mkv\tNight Train\n')
+  assert.equal(body.code, 'NAME-2PGE')
+})
+
+test('the same pair again, in another case or spacing, is held already and stored once', async () => {
+  const e = env()
+  await handle(postTitle(pair('Night.Train.2024.mkv', 'Night Train')), e, deps)
+  const again = await handle(postTitle(pair(' NIGHT.TRAIN.2024.MKV ', 'night   train')), e, deps)
+  assert.equal(again.status, 200)
+  assert.equal(((await again.json()) as { duplicate: boolean }).duplicate, true)
+  assert.equal(e.bucket.objects.size, 1)
+  // The first copy stays as it was.
+  assert.equal(stored(e, '3742ef92863ebf19'), 'Night.Train.2024.mkv\tNight Train\n')
+})
+
+test('the hash and the code agree with the app (TitleReport.hash)', () => {
+  assert.equal(hashOf('Night.Train.2024.mkv', 'Night Train'), '3742ef92863ebf19')
+  assert.equal(hashOf('Ñandú Ünï 夜行列車 😀.mkv', 'Night Train'), '99d103d629d04c7e')
+  assert.equal(hashOf(' NIGHT.TRAIN.2024.MKV ', 'night   train'), '3742ef92863ebf19')
+  assert.notEqual(hashOf('ab', 'c'), hashOf('a', 'bc'))
+  assert.match(codeOf('0000000000000000'), NAME_CODE)
+  assert.match(codeOf('ffffffffffffffff'), NAME_CODE)
+})
+
+test('a phone number, an address and a username are taken out again here', async () => {
+  const e = env()
+  const res = await handle(
+    postTitle(pair('Night Train +91 98765 43210 @someone mail me a@b.example t.me/joinchat/xyz.mkv', 'Night Train @CC_Night')),
+    e,
+    deps,
+  )
+  assert.equal(res.status, 201)
+  const text = everything(e)
+  assert.ok(!text.includes('98765'))
+  assert.ok(!text.includes('someone'))
+  assert.ok(!text.includes('a@b'))
+  assert.ok(!text.includes('t.me'))
+  assert.ok(text.includes('@user'))
+  assert.equal(scrub(scrub('x +91 98765 43210 @abc')), scrub('x +91 98765 43210 @abc'))
+})
+
+test('a year, a resolution and an air date are not phone numbers', () => {
+  assert.equal(scrub('Night.Train.2024.1080p.mkv'), 'Night.Train.2024.1080p.mkv')
+  assert.equal(scrub('News 2024-10-14 1080p'), 'News 2024-10-14 1080p')
+})
+
+test('the chat name is stored only when the sender included it, on a comment line', async () => {
+  const e = env()
+  await handle(postTitle(pair('A.mkv', 'A title', { chat: 'My Videos' })), e, deps)
+  assert.equal(everything(e), 'A.mkv\tA title\n# chat: My Videos\n')
+  const without = env()
+  await handle(postTitle(pair('A.mkv', 'A title')), without, deps)
+  assert.ok(!everything(without).includes('chat'))
+})
+
+test('a title report over 2 KB is refused, by its header and by what arrives', async () => {
+  const e = env()
+  const big = pair('A.mkv', 'x'.repeat(MAX_TITLE_BYTES))
+  const declared = await handle(postTitle(big, { 'Content-Type': 'text/plain', 'Content-Length': String(big.length) }), e, deps)
+  assert.equal(declared.status, 413)
+  assert.equal(((await declared.json()) as { maxBytes: number }).maxBytes, MAX_TITLE_BYTES)
+  const chunked = await handle(
+    new Request(`https://inbox.example${TITLES_PATH}`, {
+      method: 'POST',
+      body: new ReadableStream<Uint8Array>({
+        start(c) {
+          c.enqueue(new TextEncoder().encode(big))
+          c.close()
+        },
+      }),
+      headers: { 'Content-Type': 'text/plain' },
+      duplex: 'half',
+    } as RequestInit),
+    e,
+    deps,
+  )
+  assert.equal(chunked.status, 413)
+  assert.equal(e.bucket.objects.size, 0)
+})
+
+test('what is not a pair is refused: not JSON, wrong types, a blank name, a list, a log report', async () => {
+  const e = env()
+  for (const body of [
+    'hello',
+    '[]',
+    '"text"',
+    JSON.stringify({ name: 1, title: 'x' }),
+    JSON.stringify({ name: 'a.mkv' }),
+    JSON.stringify({ name: '   ', title: 'x' }),
+    JSON.stringify({ name: '+91 98765 43210', title: 'x' }),
+    JSON.stringify({ name: 'a.mkv', title: 'a@b.example' }),
+    report,
+  ]) {
+    assert.equal((await handle(postTitle(body), e, deps)).status, 400, body)
+  }
+  assert.equal((await handle(postTitle(''), e, deps)).status, 400)
+  assert.equal((await handle(postTitle(new Uint8Array([0xff, 0xfe, 0x00, 0x80])), e, deps)).status, 400)
+  assert.equal(e.bucket.objects.size, 0)
+})
+
+test('a title report needs plain text, POST and the same limits as a log report', async () => {
+  const e = env()
+  assert.equal((await handle(postTitle(pair('A.mkv', 'A'), { 'Content-Type': 'application/json' }), e, deps)).status, 415)
+  assert.equal((await handle(new Request(`https://inbox.example${TITLES_PATH}`), e, deps)).status, 405)
+  const limited = env({ LIMITER: { limit: async () => ({ success: false }) } })
+  const res = await handle(postTitle(pair('A.mkv', 'A')), limited, deps)
+  assert.equal(res.status, 429)
+  assert.equal(res.headers.get('Retry-After'), '60')
+  const all = env({ GLOBAL: { limit: async () => ({ success: false }) } })
+  assert.equal((await handle(postTitle(pair('A.mkv', 'A')), all, deps)).status, 429)
+  assert.equal(e.bucket.objects.size + limited.bucket.objects.size + all.bucket.objects.size, 0)
+})
+
+test('a name and a title are capped, never through a surrogate pair', () => {
+  const long = parsePair(pair('😀'.repeat(300), 'T'.repeat(500)))!
+  assert.ok(long.name.length <= MAX_NAME)
+  assert.ok(long.title.length <= MAX_TITLE)
+  assert.ok(!/[\ud800-\udbff]$/u.test(long.name))
+})
+
+test('a title report keeps no address, no user agent and no header', async () => {
+  const e = env()
+  const res = await handle(
+    postTitle(pair('A.mkv', 'A'), { 'Content-Type': 'text/plain', 'CF-Connecting-IP': '203.0.113.9', 'User-Agent': 'TMPlayer/1.30' }),
+    e,
+    deps,
+  )
+  const text = JSON.stringify(await res.json()) + everything(e)
+  assert.ok(!text.includes('203.0.113.9'))
+  assert.ok(!text.includes('TMPlayer/1.30'))
+})
+
+test('storage that fails is a 503 for a title report too', async () => {
+  const e = env()
+  e.bucket.put = async () => {
+    throw new Error('R2 is down')
+  }
+  assert.equal((await handle(postTitle(pair('A.mkv', 'A')), e, deps)).status, 503)
+})
+
+test('the sweep clears old title reports with the old logs', async () => {
+  const bucket = new FakeBucket()
+  const now = Date.UTC(2026, 11, 15)
+  for (let i = 0; i < 10; i++) {
+    bucket.objects.set(`${TITLE_PREFIX}${i}.txt`, { bytes: new Uint8Array(1), uploaded: new Date(now - (i % 2 === 0 ? 31 : 3) * 86_400_000) })
+  }
+  bucket.objects.set(`${PREFIX}TMP-2222.txt`, { bytes: new Uint8Array(1), uploaded: new Date(now - 40 * 86_400_000) })
+  assert.equal(await sweep(bucket, now), 6)
+  assert.equal(bucket.objects.size, 5)
 })

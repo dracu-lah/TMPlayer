@@ -5,9 +5,11 @@
    short code (TMP-7K3Q) that the viewer says in the group or an issue.
 
    What this never does: log or store an address, a user agent or any header; accept more than
-   2 MB; accept anything but plain text that starts with the app's own header; keep a report past
+   2 MB (2 KB for a title report, see titles.ts); accept anything but plain text that starts with the app's own header; keep a report past
    30 days; list or serve a report to anyone (there is no read route; the developer reads them in
    the Cloudflare dashboard or with wrangler). */
+
+import { MAX_TITLE_BYTES, TITLES_PATH, TITLE_PREFIX, storePair } from './titles.ts'
 
 export interface StoredObject {
   key: string
@@ -127,19 +129,22 @@ async function addressKey(request: Request): Promise<string> {
 
 export async function handle(request: Request, env: Env, deps: Deps = realDeps): Promise<Response> {
   const url = new URL(request.url)
-  if (url.pathname !== '/v1/report') return json(404, { error: 'not_found' })
+  const titles = url.pathname === TITLES_PATH
+  if (url.pathname !== '/v1/report' && !titles) return json(404, { error: 'not_found' })
   if (request.method !== 'POST') return json(405, { error: 'method_not_allowed' }, { Allow: 'POST' })
   if (!isPlainText(request.headers.get('Content-Type'))) return json(415, { error: 'plain_text_only' })
 
+  // A title report is a pair of short lines, so its cap is tiny; a log report may be big.
+  const max = titles ? MAX_TITLE_BYTES : MAX_BYTES
   const declared = Number(request.headers.get('Content-Length'))
-  if (Number.isFinite(declared) && declared > MAX_BYTES) return json(413, { error: 'too_large', maxBytes: MAX_BYTES })
+  if (Number.isFinite(declared) && declared > max) return json(413, { error: 'too_large', maxBytes: max })
 
   const mine = await env.LIMITER.limit({ key: await addressKey(request) })
   const all = await env.GLOBAL.limit({ key: 'all' })
   if (!mine.success || !all.success) return json(429, { error: 'slow_down' }, { 'Retry-After': '60' })
 
-  const bytes = await readLimited(request.body, MAX_BYTES)
-  if (bytes === null) return json(413, { error: 'too_large', maxBytes: MAX_BYTES })
+  const bytes = await readLimited(request.body, max)
+  if (bytes === null) return json(413, { error: 'too_large', maxBytes: max })
   if (bytes.byteLength === 0) return json(400, { error: 'empty' })
 
   let text: string
@@ -147,6 +152,12 @@ export async function handle(request: Request, env: Env, deps: Deps = realDeps):
     text = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
   } catch {
     return json(400, { error: 'not_utf8' })
+  }
+
+  if (titles) {
+    const stored = await storePair(env.REPORTS, text)
+    if (stored.status === 400 || stored.status === 503) return json(stored.status, { error: stored.error })
+    return json(stored.status, { code: stored.code, duplicate: stored.status === 200, keepDays: KEEP_DAYS })
   }
   if (!text.startsWith(HEADER)) return json(400, { error: 'not_a_report' })
 
@@ -166,20 +177,22 @@ export async function handle(request: Request, env: Env, deps: Deps = realDeps):
   return json(503, { error: 'unavailable' })
 }
 
-/** Deletes reports older than [KEEP_DAYS]; run daily, and the bucket's own lifecycle rule backs it up. Returns how many went. */
+/** Deletes reports and title reports older than [KEEP_DAYS]; run daily, and the bucket's own lifecycle rules back it up. Returns how many went. */
 export async function sweep(bucket: Bucket, nowMs: number, pages = 20): Promise<number> {
   const cutoff = nowMs - KEEP_DAYS * DAY_MS
   let removed = 0
-  let cursor: string | undefined
-  for (let i = 0; i < pages; i++) {
-    const page = await bucket.list({ prefix: PREFIX, cursor, limit: 1000 })
-    const old = page.objects.filter((o) => o.uploaded.getTime() < cutoff).map((o) => o.key)
-    if (old.length > 0) {
-      await bucket.delete(old)
-      removed += old.length
+  for (const prefix of [PREFIX, TITLE_PREFIX]) {
+    let cursor: string | undefined
+    for (let i = 0; i < pages; i++) {
+      const page = await bucket.list({ prefix, cursor, limit: 1000 })
+      const old = page.objects.filter((o) => o.uploaded.getTime() < cutoff).map((o) => o.key)
+      if (old.length > 0) {
+        await bucket.delete(old)
+        removed += old.length
+      }
+      if (!page.truncated) break
+      cursor = page.cursor
     }
-    if (!page.truncated) break
-    cursor = page.cursor
   }
   return removed
 }
