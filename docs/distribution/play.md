@@ -28,7 +28,8 @@ before acting on them.
   in for the last 14 days without a break, before production opens.
   <https://support.google.com/googleplay/android-developer/answer/14151465>
 - Data safety form: nothing collected by the developer; crash reports opt-in (Sentry); the
-  Telegram session stays on the device. It must match `site/src/pages/privacy/`.
+  Telegram session stays on the device. It must match `site/src/pages/privacy/`. What to fill in
+  since S1 and S2 is in "Data safety after S1" below.
 - Reviewers need to get in without a Telegram code, hence CP35's demo mode with openly licensed
   clips.
 
@@ -130,6 +131,27 @@ play, and the user generated content rules. A removal can also come without a st
   account with demo chats.
 - **Don't let a release silently change the store build.** Every Play update re-reads this list
   and the Telegram terms check in [telegram-apps.md](telegram-apps.md).
+
+## Data safety after S1 (2026-11-15)
+
+What the form says once crash reports are asked at first run (S1) and carry the player's tags
+(S2). Not legal advice; check it against the privacy page before every submission.
+
+- **Does the app collect or share user data?** Yes, collected: crash reports leave the device for
+  Sentry, which processes them for the developer. Sentry is a service provider, so nothing is
+  "shared".
+- **Data types:** App info and performance, **Crash logs** (the stack trace) and **Diagnostics**
+  (app and OS version, device model, chipset, and during a video the engine, decoder, codec, size
+  class and stutter verdict). Nothing else: no personal info, no device or other IDs (the
+  installation ID is removed), no location, no app activity, no files.
+- **Collection is optional:** yes. Off until the user answers Yes (setup, first-run card, Settings,
+  or Send on one crash).
+- **Processed ephemerally:** no, kept up to 90 days.
+- **Purpose:** Analytics (crash diagnosis) only. Not advertising, not personalisation.
+- **Encrypted in transit:** yes (HTTPS to Sentry).
+- **Deletion:** users can ask by email (hello@tmplayer.org), as the privacy page says.
+- If the opt-out default in [crash-consent.md](crash-consent.md) is ever turned on, "optional"
+  still holds, but the form and the privacy page change together, in the same release.
 
 ## Developer verification (also for the GitHub APK)
 
