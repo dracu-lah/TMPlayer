@@ -343,7 +343,9 @@ class LoopbackStreamTest {
         val p = path(stream)
         stream.close()
         assertFalse(stream.running)
-        assertTrue(runCatching { request(port, p) }.isFailure)
+        // A stranger may take the freed port at once, and it does not know the token.
+        val after = runCatching { request(port, p).code }.getOrNull()
+        assertTrue("the session no longer serves", after == null || (after != 200 && after != 206))
         stream.close()
     }
 }
