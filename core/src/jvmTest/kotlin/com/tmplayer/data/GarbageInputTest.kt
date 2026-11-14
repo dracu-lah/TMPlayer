@@ -272,6 +272,13 @@ class GarbageInputTest {
             survive("PostStart.parse", text) { PostStart.parse(text) }
             survive("Decimal.parse", text) { Decimal.parse(text) }
             survive("MediaName.parse", text) { MediaName.parse(text); MediaName.parse(text, text) }
+            survive("MediaName.spellingKey", text) { MediaName.spellingKey(text) }
+            survive("TitleShape.of", text) { TitleShape.of(text) }
+            survive("TitleReport.parse", text) { TitleReport.parse(text) }
+            survive("TitleReport.of", text) {
+                TitleReport.of(text, text, text, includeChat = true)?.let { TitleReport.parse(it.toJson()) }
+                TitleReport.scrub(text)
+            }
             survive("MediaText.overviewOf", text) {
                 MediaText.overviewOf(text, text, text)
                 MediaText.overviewOf(text, null, "")

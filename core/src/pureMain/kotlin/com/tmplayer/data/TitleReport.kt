@@ -1,0 +1,150 @@
+package com.tmplayer.data
+
+import com.tmplayer.json.JSONObject
+
+/**
+ * What may leave the device when a viewer says "this title is wrong" (N1): the video's file name
+ * after [scrub], the title the viewer chose for it, and the chat's name only when they ticked it.
+ * Nothing else: no message or chat id, no caption, no size, no account. The sheet shows exactly
+ * [toJson] before anything is sent, and the viewer can drop the report.
+ *
+ * [hash] is for the inbox and the queue: the same pair reported twice (twice by one viewer, or by
+ * two) has one hash, whatever the case, spacing or chat, so it is stored once.
+ *
+ * Built by [of], which returns null when there is nothing worth sending (no name left after the
+ * scrub, or no title), and read back by [parse], which trusts nothing in the text it is given.
+ */
+class TitleReport private constructor(
+    /** The original file name, scrubbed and capped. Never empty. */
+    val fileName: String,
+    /** The title the viewer chose. Never empty. */
+    val title: String,
+    /** The chat's name, only when the viewer ticked it. */
+    val chatName: String?,
+) {
+
+    /** The same for the same [fileName] and [title], whatever their case or spacing; the chat is not in it. */
+    val hash: String get() = hashOf(fileName, title)
+
+    /** One JSON object, the whole of what is sent. */
+    fun toJson(): String {
+        val json = JSONObject()
+        json.put("v", VERSION)
+        json.put("name", fileName)
+        json.put("title", title)
+        if (chatName != null) json.put("chat", chatName)
+        json.put("hash", hash)
+        return json.toString()
+    }
+
+    override fun equals(other: Any?): Boolean =
+        other is TitleReport && other.fileName == fileName && other.title == title && other.chatName == chatName
+
+    override fun hashCode(): Int = (fileName.hashCode() * 31 + title.hashCode()) * 31 + (chatName?.hashCode() ?: 0)
+
+    override fun toString(): String = "TitleReport(${toJson()})"
+
+    companion object {
+        const val VERSION = 1
+
+        /** A file name is 255 characters at most on every file system; more is not a name. */
+        const val MAX_NAME = 255
+        const val MAX_TITLE = 200
+        const val MAX_CHAT = 100
+
+        /** The most a stored or received report text is read from: a bigger body is not one of ours. */
+        const val MAX_JSON = 2_048
+
+        /**
+         * The report for [fileName] renamed to [title], or null when there is nothing to send: a
+         * title that is blank, or a name that is blank once [scrub] has taken the private parts
+         * off. [chatName] goes in only when [includeChat] (the viewer ticked it) and is not blank.
+         */
+        fun of(fileName: String, title: String, chatName: String? = null, includeChat: Boolean = false): TitleReport? {
+            val name = capped(scrub(fileName), MAX_NAME)
+            val chosen = capped(scrub(title), MAX_TITLE)
+            if (name.isEmpty() || chosen.isEmpty()) return null
+            val chat = if (includeChat) chatName?.let { capped(scrub(it), MAX_CHAT) }?.ifEmpty { null } else null
+            return TitleReport(name, chosen, chat)
+        }
+
+        /**
+         * [text] without what identifies a person: phone numbers, e-mail addresses, t.me links and
+         * @usernames (each gone, or "@user" for a username so the name still shows where it was),
+         * with the spaces they leave tidied. Runs before the viewer sees the report, and again on
+         * the receiving side, so what arrives is scrubbed whatever sent it. Doing it twice changes
+         * nothing more.
+         *
+         * A phone number is ten digits or more with the usual separators between them, or a "+"
+         * and eight or more; a year and a resolution ("2024 1080p") are not one. A username that
+         * holds a title ("@CC_Night_Train") goes whole: the viewer's own title says what it was.
+         */
+        fun scrub(text: String): String {
+            if (text.isEmpty()) return text
+            var out = text.replace(EMAIL, " ").replace(TELEGRAM_LINK, " ")
+            out = out.replace(PHONE_CANDIDATE) { if (digitsIn(it.value.replace(DATE, "")) >= minDigits(it.value)) " " else it.value }
+            out = out.replace(USERNAME, "@user")
+            return out.replace(SPACES, " ").trim()
+        }
+
+        /** [fileName] and [title] as the inbox counts them: case and spacing do not make two reports. */
+        internal fun hashOf(fileName: String, title: String): String {
+            val key = normalised(fileName) + "\u0000" + normalised(title)
+            // FNV-1a over the UTF-8 bytes, 64 bits: a key for dedupe, not a secret.
+            var hash = -3750763034362895579L // 0xcbf29ce484222325
+            for (byte in key.encodeToByteArray()) {
+                hash = (hash xor (byte.toLong() and 0xff)) * 1099511628211L
+            }
+            return hash.toULong().toString(16).padStart(16, '0')
+        }
+
+        /**
+         * The report [text] holds (as [toJson] writes it), or null when it is not one: not JSON, the
+         * wrong type in a field, a name or a title missing, a body past [MAX_JSON]. Fields are
+         * scrubbed and capped again and the hash is worked out afresh, never taken from the text.
+         */
+        fun parse(text: String): TitleReport? {
+            if (text.length > MAX_JSON) return null
+            val json = try {
+                JSONObject(text)
+            } catch (e: Exception) {
+                return null
+            }
+            val name = json.opt("name") as? String ?: return null
+            val title = json.opt("title") as? String ?: return null
+            val chat = json.opt("chat") as? String
+            return of(name, title, chat, includeChat = chat != null)
+        }
+
+        private fun normalised(text: String): String =
+            text.trim().lowercase().replace(SPACES, " ")
+
+        /** [text] cut to [max] characters, not through a surrogate pair, and trimmed. */
+        private fun capped(text: String, max: Int): String {
+            val trimmed = text.trim()
+            if (trimmed.length <= max) return trimmed
+            var end = max
+            if (trimmed[end - 1].isHighSurrogate()) end--
+            return trimmed.substring(0, end).trim()
+        }
+
+        private fun digitsIn(text: String): Int = text.count { it.isDigit() }
+
+        private fun minDigits(candidate: String): Int = if (candidate.trimStart().startsWith("+")) 8 else 10
+
+        private val SPACES = Regex("""\s+""")
+
+        // A run that starts and ends on a digit, with the separators phone numbers are written
+        // with between: "+91 98765 43210", "(555) 123-4567", "98765.43210".
+        private val PHONE_CANDIDATE = Regex("""(?<![\p{L}\p{N}])\+?\(?\p{Nd}[\p{Nd}\s().\-]{6,}\p{Nd}(?![\p{L}\p{N}])""")
+
+        // "2024-10-14" and "14.10.2024" in a daily show's name are dates, not digits to scrub.
+        private val DATE = Regex("""(?:19|20)\d{2}[ .\-]\d{2}[ .\-]\d{2}|\d{2}[ .\-]\d{2}[ .\-](?:19|20)\d{2}""")
+
+        private val EMAIL = Regex("""[\p{L}\p{N}._%+\-]+@[\p{L}\p{N}.\-]+\.\p{L}{2,}""")
+
+        private val TELEGRAM_LINK = Regex("""(?:https?://)?(?:t\.me|telegram\.me|telegram\.dog)/\S*""", RegexOption.IGNORE_CASE)
+
+        private val USERNAME = Regex("""@[\p{L}\p{N}_]{2,}""")
+    }
+}

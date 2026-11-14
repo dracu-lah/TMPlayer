@@ -115,6 +115,74 @@ object MediaName {
     }
 
     /**
+     * One key for the spellings a title goes by when it is romanised by ear (N3): "Aniyathipraavu",
+     * "Aniyathi Pravu" and "Aniyathipravu" are one title, "Kathanayakan", "Kadhanayakan" and
+     * "Katha Nayagan" are one, "Aarya 2" and "Arya 2" are one. It is a key for a [SeriesShelf]-style
+     * grouping to match on, never a title to show.
+     *
+     * [SeriesShelf.keyOf] and [SeriesShelf.foldAccents] first, then, for a Latin title only: no
+     * space between two words of letters (a number keeps its own), the h of an aspirated
+     * consonant dropped (th, dh, kh, gh, bh, ph), the voiced and plain of a pair as one (g with k,
+     * d with t, b with p) and each run of one letter as one letter (aa, oo, kk). Two different
+     * titles stay apart: a number is a word of its own and never folded ("Aarya 2" is not
+     * "Aarya"), and the letters that tell two names apart in the same language (l and r, m and n,
+     * the vowels that differ) are left alone.
+     *
+     * The voiced and plain pair would make "Bad" and "Pad" one, so a title of fewer than
+     * [MIN_FOLDED_LETTERS] letters as written is returned as [SeriesShelf.keyOf] reads it. A caller still
+     * has to weigh the facts as it does for any name ([SameVideo]): the same year, a length that
+     * agrees. A title in another script is left as its key, accents folded.
+     */
+    fun spellingKey(title: String): String {
+        val key = SeriesShelf.foldAccents(SeriesShelf.keyOf(title))
+        // Only a plain Latin title is folded; any other script (or a letter past Latin) is left.
+        if (key.any { it !in 'a'..'z' && it !in '0'..'9' && it != ' ' }) return key
+        // A short title is as it is read: the fold would make "Bad" and "Pad", "Thor" and "Tor" one.
+        if (key.count { it in 'a'..'z' } < MIN_FOLDED_LETTERS) return key
+        val tokens = ArrayList<String>()
+        val letters = StringBuilder()
+        val numbers = StringBuilder()
+        for (char in key) {
+            if (char in '0'..'9') {
+                if (letters.isNotEmpty()) tokens += foldedSpelling(letters).also { letters.setLength(0) }
+                numbers.append(char)
+            } else {
+                if (numbers.isNotEmpty()) tokens += numbers.toString().also { numbers.setLength(0) }
+                // A space between two words of letters is no part of the key; between a number and a word it ended the number.
+                if (char != ' ') letters.append(char)
+            }
+        }
+        if (letters.isNotEmpty()) tokens += foldedSpelling(letters)
+        if (numbers.isNotEmpty()) tokens += numbers.toString()
+        return tokens.joinToString(" ")
+    }
+
+    /** [letters] (a to z only) with its aspirates dropped, its voiced letters made plain and its runs collapsed. */
+    private fun foldedSpelling(letters: CharSequence): String {
+        val out = StringBuilder(letters.length)
+        for (index in letters.indices) {
+            val char = letters[index]
+            // The h of "th", "dh", "kh", "gh", "bh", "ph" is breath, not a letter of its own.
+            if (char == 'h' && index > 0 && letters[index - 1] in ASPIRATED) continue
+            val plain = when (char) {
+                'g' -> 'k'
+                'd' -> 't'
+                'b' -> 'p'
+                else -> char
+            }
+            if (out.isNotEmpty() && out.last() == plain) continue
+            out.append(plain)
+        }
+        return out.toString()
+    }
+
+    /** The consonants whose "h" [spellingKey] drops. */
+    private const val ASPIRATED = "kgtdpb"
+
+    /** Fewer letters than this and [spellingKey] folds nothing: "Bad" and "Pad" are two titles. */
+    const val MIN_FOLDED_LETTERS = 5
+
+    /**
      * The lenient reading of [text], for a file whose chat has already established the show: a
      * bare "E05" or "E5" after the title, which [parse] turns down because, with nothing else to
      * go on, it is too easy to find inside a title. Null unless there is a title before it and an
@@ -514,7 +582,7 @@ object MediaName {
      * a title written in Tamil or Malayalam is a title.
      */
     private fun stripDecoration(name: String): String {
-        val visible = withoutInvisibles(name)
+        val visible = withoutInvisibles(decodedAscii(name))
         // Most names carry no symbol at all, and are not copied out a character at a time.
         val withoutSymbols = if (!hasOtherSymbol(visible)) visible else buildString(visible.length) {
             var i = 0
@@ -533,6 +601,21 @@ object MediaName {
             .replace(SITE, " ")
             // Whatever the signature was attached with, once it is gone.
             .trimStart { it.isWhitespace() || it in TRIM_CHARS }
+            .replace(LEADING_RELEASE_TAG, "")
+    }
+
+    /**
+     * [name] with its percent-encoded printable ASCII read as the characters ("Romeo %26 Juliets"
+     * is "Romeo & Juliets", "%20" a space): a name that went through a link on its way. Only the
+     * single byte escapes, 20 to 7E; a multi-byte sequence or an escape that is no escape ("100%
+     * Wolf", "%ZZ") stays as written.
+     */
+    private fun decodedAscii(name: String): String {
+        if ('%' !in name) return name
+        return name.replace(PERCENT_ESCAPE) {
+            val code = it.groupValues[1].toIntOrNull(16)
+            if (code == null || code !in 0x20..0x7e) it.value else code.toChar().toString()
+        }
     }
 
     /**
@@ -788,6 +871,14 @@ object MediaName {
 
     private const val ZWNJ = '\u200c'
     private const val ZWJ = '\u200d'
+
+    private val PERCENT_ESCAPE = Regex("""%([0-9A-Fa-f]{2})""")
+
+    /**
+     * "DVDWO " at the very front: a release group's tag stapled on the title ("DVDWO Aniyathipraavu"),
+     * which says where the file came from and is never the first word of one. Only when a name follows it.
+     */
+    private val LEADING_RELEASE_TAG = Regex("""^dvdwo[\s._-]+(?=\S)""", RegexOption.IGNORE_CASE)
 
     /** An uploader's Telegram handle, wherever in the name they put it. "@CC" is one. */
     private val HANDLE = Regex("""@[A-Za-z0-9_]{2,}""")

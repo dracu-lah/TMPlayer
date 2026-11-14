@@ -1,0 +1,18 @@
+# Names with two defensible readings. Listed in the test output with what the parser says now, never asserted.
+# Columns as corpus.tsv, plus an eighth: why it is ambiguous. The expected cells are the more likely reading.
+# Decide one, then move the row to corpus.tsv.
+1994.mp4	1994						a file named only a year: the title is the year, but is it also the year of the video?
+1992 Malayalam WebHD.mkv	1992						year plus tags and no title: title 1992 with no year, or title 1992 and year 1992
+1993 Malayalam TVRip.mkv	1993						as 1992 Malayalam WebHD
+Amen 20130.mkv	Amen 20130						20130 is no year; may be Amen 2013 with a stray 0 (a truncated tag), which would be Amen with year 2013
+916 nine one six.mkv	916 nine one six						a number spelled out after itself: the whole name, or just 916
+Anantaram AKA Monologue.mkv	Anantaram						an alias: the parser has no alias field, so the title may be the first name or the whole text
+Kouravar A K A Kauravar.mkv	Kouravar						an alias, with the letters spaced
+Godzilla Minus One A K A Gojira -1 0.mkv	Godzilla Minus One						an alias; the -1 0 is Gojira -1.0, the film's own title
+𝙰𝚜𝙷 Hitler.mkv	Hitler						mathematical monospace AsH is a tag (like DVDWO) or part of the title; the same name also appears as plain AsH Hitler
+AsH Hitler.mkv	Hitler						see the mathematical monospace row
+G D N.mkv	G D N						three letters, or three letters of a longer name cut off
+MM Premalu.mkv	Premalu						MM is a channel's tag in the survey, but a bare two letter word before a title is also a title's first word
+MM Salaar Tam.mkv	Salaar						as MM Premalu, plus the short language word
+Superhit Malayalam Movie Thenkasipattanam.mkv	Thenkasipattanam						Superhit Malayalam Movie is the uploader's wording; how much of it to drop is a policy
+@CC AK Ayyappanum Koshiyum.mkv	AK Ayyappanum Koshiyum						AK may be the channel's second tag or the first word of the title (Ayyappanum Koshiyum is a film of its own)

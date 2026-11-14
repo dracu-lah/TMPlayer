@@ -1,0 +1,12 @@
+# Names whose right answer is certain from what they say, which MediaName does not give yet. Listed in the test output
+# with what the parser says now and never asserted: this file is the to-do list of the parser. Columns as corpus.tsv,
+# plus an eighth: what is missing. When the parser reads a row right the test output says so: move it to corpus.tsv.
+Akasathinte Niram XEjHWs39Z6A 22.mkv	Akasathinte Niram						a YouTube id (11 characters of letters and digits) and a number after the title
+Mithunam മിഥുനം Malayalam Full M.mkv	Mithunam മിഥുനം						a description cut off in the middle of Full Movie
+Kallukondoru Pennu Malayalam Ful.mkv	Kallukondoru Pennu						a description cut off in the middle of Full
+Veendum Chila Veettukaryangal Ma.mkv	Veendum Chila Veettukaryangal						a description cut off in the middle of Malayalam
+Nayakan malayalam action comedy.mkv	Nayakan						a language word followed by genre words, which are tags too
+Cinema company Spirit.mkv	Spirit						the channel's name spelled out in front
+cinemaa company Arabikkatha.mkv	Arabikkatha						the channel's name spelled out in front, with a typo
+Movie Hub Narivetta.mkv	Narivetta						a channel's name in front
+wWw CineMaSite Co Nirnayakam.mkv	Nirnayakam						a site's name in front, written as words with a space for the dot

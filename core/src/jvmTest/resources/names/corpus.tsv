@@ -1,0 +1,82 @@
+# The golden corpus of file names: what MediaName must read from each one. One row per name, tab separated:
+#   raw name <TAB> title <TAB> year <TAB> season <TAB> episode <TAB> part <TAB> extra
+# An empty column means "none" (no year, not an episode, not a part, not an extra); it is checked, not skipped.
+# extra is an ExtraKind: Trailer, Teaser, Promo, Sample or Extra. In a raw name, \uXXXX is the character with that code.
+# A line starting with # is a comment, a blank line is ignored.
+#
+# A row goes in only when the right answer is certain from what the name says (the survey in private/name-survey,
+# or a report a person sent). The expected value is written from the name, never copied from what the parser says.
+# A name with two defensible readings goes in ambiguous.tsv; one whose answer is certain but the parser misses
+# goes in known-gaps.tsv. NameGoldenCorpusTest runs this file and fails with a diff of every row that differs.
+#
+# A channel's handle in front, in every shape real chats post it (HX31; names from MSB and Cinema Paradiso, 2026-10-31)
+@CC_Action_Killadi_Krishnam_Vande.mp4	Action Killadi Krishnam Vande
+@CC_ALL_Abrahaminte_Santhathikal.mkv	Abrahaminte Santhathikal
+@CC_ALL_Kuttanpillayude_Sivarath.mkv	Kuttanpillayude Sivarath
+_@CC_Baahubali_2_The_Conclusion.mkv	Baahubali 2 The Conclusion
+@CC_Hareendran_oru_nishkalankan.mp4	Hareendran oru nishkalankan
+@CC_Malappuram_Haji_Mahanaya_Joji.mp4	Malappuram Haji Mahanaya Joji
+@CC_MAL_Argentina_Fans_Kaattoorkadavu.mkv	Argentina Fans Kaattoorkadavu
+@CC_Njandukalude_Naattil_Oridavela.mkv	Njandukalude Naattil Oridavela
+@CC_Sathyam_Paranja_Vishwasikuvo.mkv	Sathyam Paranja Vishwasikuvo
+@CC_Thondimuthalum_Driksakshiyum.mkv	Thondimuthalum Driksakshiyum
+@cinema_company_Ee_Adutha_Kaalathu.mkv	Ee Adutha Kaalathu
+@cinema_company_Honey_Bee_2_Celebrations.mkv	Honey Bee 2 Celebrations
+@cinema_company_Left_Right_Left.mp4	Left Right Left
+@cinema_company_Munthiri_Vallikal.mkv	Munthiri Vallikal
+@cinema_company_The_Great_Father.mkv	The Great Father
+@Cinematic_World_Aalibabayum_Aar.mp4	Aalibabayum Aar
+@Cinematic_world_Vellaripravinte.mkv	Vellaripravinte
+@Mallu_Movies_Aravindante_Athidhikal.mkv	Aravindante Athidhikal
+@MM_New_Aravindante_Athidhikal2018MlyMDVDRip.mkv	Aravindante Athidhikal	2018
+# The same handle with a space, as it reads in a grid
+@CC Nikkah.mkv	Nikkah
+@CC Aadu 2.mkv	Aadu 2
+@CC 96.mkv	96
+@CC 7 Aum Arivu.mkv	7 Aum Arivu
+@CC Padheyam (1993).mkv	Padheyam	1993
+Padheyam (1993).mkv	Padheyam	1993
+# DVDWO in front of the title is a release tag, not a word of it
+DVDWO Aniyathipraavu.mkv	Aniyathipraavu
+DVDWO_Sooryaputhran.mkv	Sooryaputhran
+DVDWO Meenathil Thalikettu.mkv	Meenathil Thalikettu
+DVDWO_Aniyathipraavu_1997.mkv	Aniyathipraavu	1997
+# A zero width space and a variation selector in front of a title
+​️Mimics Super 1000.mp4	Mimics Super 1000
+# A percent-encoded character is the character
+Romeo_%26_Juliets.mkv	Romeo & Juliets
+Romeo %26 Juliets (1999).mkv	Romeo & Juliets	1999
+# A year run into its resolution
+Kanguva 20241080p.mkv	Kanguva	2024
+Kanguva 2024720p.mkv	Kanguva	2024
+# A channel's language word after the title
+Bramayugam #Hin.mkv	Bramayugam
+Salaar Mal.mkv	Salaar
+Hi Nanna Mal.mkv	Hi Nanna
+# A tilde in front, and titles that are only a name
+~SAW X.mkv	SAW X
+Malayalam.mkv	Malayalam
+Cinema Company.mkv	Cinema Company
+parvathi Parinayam.mkv	parvathi Parinayam
+MAANTHRIKAM.mkv	MAANTHRIKAM
+10 30Am Local Call.mkv	10 30Am Local Call
+# A title in its own script survives beside a Latin one
+Mithunam മിഥുനം (1993).mkv	Mithunam മിഥുനം	1993
+# The spellings one title goes by are each read as written (N3 folds them, the parser does not)
+Aniyathi Pravu.mkv	Aniyathi Pravu
+Kathanayakan.mkv	Kathanayakan
+Katha Nayagan.mkv	Katha Nayagan
+Swapnakkoodu (2003).mkv	Swapnakkoodu	2003
+Swapnakoodu (2003).mkv	Swapnakoodu	2003
+Aarya 2 (2009).mkv	Aarya 2	2009
+Arya 2 (2009).mkv	Arya 2	2009
+Aaram Thamburan (1997).mkv	Aaram Thamburan	1997
+Thalayana Manthram.mkv	Thalayana Manthram
+Thalayanamanthram.mkv	Thalayanamanthram
+Salam.mkv	Salam
+Lal Salam.mkv	Lal Salam
+# What the other columns read
+Harbour.Notes.S01E02.1080p.mkv	Harbour Notes		1	2
+Night.Train.Official.Trailer.mp4	Night Train					Trailer
+Night Train CD2 (1998).avi	Night Train	1998			2
+Night Train (2024) 1080p WEB-DL x265.mkv	Night Train	2024
