@@ -414,3 +414,38 @@ fun emptyTabIcon(
     tab.isChats -> filter.emptyIcon
     else -> tab.icon
 }
+
+/** The one button under an empty tab, decided in one place for the phone, the television and the desktop. */
+enum class EmptyTabNext {
+    /** Nothing to press: the page says where to go (a folder) or there is nowhere else to go. */
+    None,
+
+    /** The same words across every chat ([SearchRequest]); also asks Telegram for that @username. */
+    SearchAllChats,
+
+    /** A folder that could not be read is not an empty one: read the folders again. */
+    ReadFoldersAgain,
+
+    /** Back to every chat, with Telegram's filters cleared. */
+    GoToChats,
+}
+
+/**
+ * What an empty tab offers (U18): a search that found nothing offers Search all chats, a folder
+ * that could not be read offers Try again, every other empty tab (Favourites, Watch later, Unread,
+ * Archived, Saved, the History tabs) offers Go to Chats, and a page that is already every chat,
+ * or a folder still reading or really empty (made and filled in Telegram), offers nothing.
+ */
+fun emptyTabNext(
+    tab: BrowseSection,
+    query: String,
+    filter: ChatFilter = ChatFilter.All,
+    history: HistoryTab? = null,
+    folderRead: FolderRead = FolderRead.Loaded,
+): EmptyTabNext = when {
+    query.isNotBlank() -> EmptyTabNext.SearchAllChats
+    tab is BrowseSection.Folder -> if (folderRead == FolderRead.NotLoaded) EmptyTabNext.ReadFoldersAgain else EmptyTabNext.None
+    history != null -> EmptyTabNext.GoToChats
+    tab.isChats && filter == ChatFilter.All -> EmptyTabNext.None
+    else -> EmptyTabNext.GoToChats
+}

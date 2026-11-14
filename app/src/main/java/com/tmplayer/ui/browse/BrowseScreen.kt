@@ -3062,17 +3062,16 @@ private fun EmptyTab(
     // the glyph follows whichever one the viewer is looking at, drawn for the empty page where the
     // tab's own icon would say less (an open folder, a ticked bubble for nothing unread).
     val icon = emptyTabIcon(tab, query, filter, history)
-    when {
-        // Nothing in the list by that name: the same words across every chat, which also asks
-        // Telegram for a chat with that @username.
-        query.isNotBlank() -> BigEmpty(message, icon = icon, actionLabel = s.searchAllChats, onAction = { SearchRequest.ask(query) })
-        // A folder that could not be read is not an empty one: it says so, and reads again.
-        tab is BrowseSection.Folder && folderRead == com.tmplayer.ui.browse.FolderRead.NotLoaded ->
+    // One decision for the three platforms (emptyTabNext): Search all chats for a search, Try again
+    // for a folder that could not be read, Go to Chats for every other tab that fills from them.
+    when (com.tmplayer.ui.browse.emptyTabNext(tab, query, filter, history, folderRead)) {
+        com.tmplayer.ui.browse.EmptyTabNext.SearchAllChats ->
+            BigEmpty(message, icon = icon, actionLabel = s.searchAllChats, onAction = { SearchRequest.ask(query) })
+        com.tmplayer.ui.browse.EmptyTabNext.ReadFoldersAgain ->
             BigEmpty(message, icon = icon, actionLabel = s.commonTryAgain, onAction = onRetryFolders)
-        // A folder fills in Telegram and Saved Messages by forwarding, both said in the message.
-        tab is BrowseSection.Folder || tab == BrowseSection.of(BrowseTab.Saved) -> BigEmpty(message, icon = icon)
-        tab.isChats && filter == ChatFilter.All -> BigEmpty(message, icon = icon)
-        else -> BigEmpty(message, icon = icon, actionLabel = onGoToChats?.let { s.browseGoToChats }, onAction = onGoToChats)
+        com.tmplayer.ui.browse.EmptyTabNext.GoToChats ->
+            BigEmpty(message, icon = icon, actionLabel = onGoToChats?.let { s.browseGoToChats }, onAction = onGoToChats)
+        com.tmplayer.ui.browse.EmptyTabNext.None -> BigEmpty(message, icon = icon)
     }
 }
 

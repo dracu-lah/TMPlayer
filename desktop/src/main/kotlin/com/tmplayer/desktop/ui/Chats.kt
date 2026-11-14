@@ -209,7 +209,7 @@ fun ChatsPage(
             if (visible.isEmpty()) {
                 // A folder whose members are not known is not an empty one (HX32).
                 val folderRead = (section as? BrowseSection.Folder)?.let { data.folderRead(it.id) } ?: com.tmplayer.ui.browse.FolderRead.Loaded
-                val folderUnknown = query.isBlank() && folderRead != com.tmplayer.ui.browse.FolderRead.Loaded
+                val next = com.tmplayer.ui.browse.emptyTabNext(section, query, filter, folderRead = folderRead)
                 EmptyNote(
                     icon = when {
                         favouritesOnly && query.isBlank() -> TmIcons.StarOutline
@@ -223,25 +223,23 @@ fun ChatsPage(
                         section.isChats && filter != ChatFilter.All -> s.chatsSectionEmpty(filter.label)
                         else -> s.chatsSectionEmpty(section.label)
                     },
-                    // No chat by that name in the list: the same words across every chat, which
-                    // also asks Telegram for a chat with that @username.
-                    actionLabel = when {
-                        query.isNotBlank() -> s.searchAllChats
-                        folderRead == com.tmplayer.ui.browse.FolderRead.Loading -> null
-                        folderRead == com.tmplayer.ui.browse.FolderRead.NotLoaded -> s.commonTryAgain
-                        // An empty filter or folder of the chats: back to all of them.
-                        section.isChats && filter != ChatFilter.All -> s.browseGoToChats
-                        favouritesOnly -> s.browseGoToChats
-                        else -> null
+                    // One decision for the three platforms: Search all chats for a search, Try again
+                    // for a folder that could not be read, Go to Chats for Favourites, Unread,
+                    // Archived and Saved (emptyTabNext).
+                    actionLabel = when (next) {
+                        com.tmplayer.ui.browse.EmptyTabNext.SearchAllChats -> s.searchAllChats
+                        com.tmplayer.ui.browse.EmptyTabNext.ReadFoldersAgain -> s.commonTryAgain
+                        com.tmplayer.ui.browse.EmptyTabNext.GoToChats -> s.browseGoToChats
+                        com.tmplayer.ui.browse.EmptyTabNext.None -> null
                     },
                     onAction = {
-                        if (folderUnknown) {
-                            model.retryFolders()
-                        } else if (query.isNotBlank()) {
-                            state.searchEverywhere(query)
-                        } else {
-                            state.chatFilter = ChatFilter.All
-                            state.showChats(BrowseSection.of(BrowseTab.Chats))
+                        when (next) {
+                            com.tmplayer.ui.browse.EmptyTabNext.ReadFoldersAgain -> model.retryFolders()
+                            com.tmplayer.ui.browse.EmptyTabNext.SearchAllChats -> state.searchEverywhere(query)
+                            else -> {
+                                state.chatFilter = ChatFilter.All
+                                state.showChats(BrowseSection.of(BrowseTab.Chats))
+                            }
                         }
                     },
                 )
