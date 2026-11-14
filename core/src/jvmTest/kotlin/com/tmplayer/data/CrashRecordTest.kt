@@ -162,6 +162,28 @@ class CrashRecordTest {
         assertFalse("a crash with no start time is not counted", unknown.startupLoop)
     }
 
+    @Test
+    fun `the log carries the crash of the earlier run, with its build, its mapping and its frames`() {
+        val first = CrashRecord.of(crash(), "1.28.5", 1280599, listOf(UUID_A), sinceStartMillis = 3_200)
+        val record = CrashRecord.of(crash(), "1.28.5", 1280599, listOf(UUID_A), sinceStartMillis = 3_200, previous = first)
+        val lines = record.describe()
+        assertTrue(lines.first().startsWith("Last crash"))
+        assertTrue(lines.any { it.contains("Build 1.28.5 (1280599)") && it.contains("3.2 s into the run") && it.contains("number 2 in a row") })
+        assertTrue(lines.any { it.contains("Mapping ids: $UUID_A") })
+        assertTrue(lines.any { it.trim() == "java.lang.IllegalStateException: outer" })
+        assertTrue(lines.any { it.trim() == "java.lang.IllegalArgumentException: inner" })
+        assertTrue(lines.any { it.startsWith("    at ") && it.contains("CrashRecordTest") })
+    }
+
+    @Test
+    fun `the log's crash is cut to a few lines however deep and long the crash is`() {
+        fun deep(n: Int): Throwable = if (n == 0) RuntimeException("x".repeat(5_000)) else deep(n - 1)
+        val chain = (1..30).fold(deep(40) as Throwable) { cause, i -> RuntimeException("cause $i", cause) }
+        val lines = CrashRecord.of(chain, "1.28.5", 1280599).describe()
+        assertTrue("got ${lines.size}", lines.size <= 62)
+        assertTrue(lines.all { it.length < 400 })
+    }
+
     private companion object {
         const val UUID_A = "6f1c9e2a-0b3d-4c7e-9a51-2d8f4b6e1a01"
         const val UUID_B = "0d4e7b1c-5a2f-4e93-8c60-7b1a9d3f2e02"

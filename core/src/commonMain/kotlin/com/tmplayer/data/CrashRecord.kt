@@ -116,6 +116,33 @@ class CrashRecord(
         event.contexts.setApp(app)
     }
 
+    /**
+     * The crash as lines for the log a viewer sends ([LogExport.report]): the logcat of the run
+     * that is open cannot hold the run that crashed, and the crash is what the maintainer needs.
+     * Types, messages and frames only, [MAX_LINES] of them at most; the log's scrubber takes names
+     * out of each line after. The mapping ids let an obfuscated frame be read with the mapping of
+     * the build that crashed, which is not always the one running now.
+     */
+    fun describe(): List<String> = buildList {
+        add("Last crash, from an earlier run (not in the lines below)")
+        val moment = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss 'UTC'", java.util.Locale.ROOT)
+            .apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }
+            .format(Date(time))
+        val after = if (sinceStartMillis >= 0) ", ${sinceStartMillis / 100 / 10.0} s into the run" else ""
+        val loop = if (startupRun > 0) ", start-up crash number $startupRun in a row" else ""
+        add("  Build $versionName ($versionCode), $moment$after$loop")
+        if (proguardUuids.isNotEmpty()) add("  Mapping ids: ${proguardUuids.joinToString(" ")}")
+        for (link in chain) {
+            if (size >= MAX_LINES) break
+            add("  ${link.type}: ${link.message.orEmpty().take(MAX_MESSAGE)}")
+            for (frame in link.frames.take(MAX_FRAMES)) {
+                if (size >= MAX_LINES) break
+                add("    at $frame")
+            }
+        }
+        add("")
+    }
+
     fun write(file: File) {
         val json = JSONObject()
             .put("time", time)
@@ -164,6 +191,11 @@ class CrashRecord(
 
         /** Start-up crashes in a row that make a loop. One could be anything; two is a pattern. */
         const val LOOP_RUNS = 2
+
+        /** The most lines [describe] gives the log, and the most of each cause's stack and message in them. */
+        private const val MAX_LINES = 60
+        private const val MAX_FRAMES = 25
+        private const val MAX_MESSAGE = 300
 
         /**
          * The record of [error], [sinceStartMillis] into the run. [previous] is the record still

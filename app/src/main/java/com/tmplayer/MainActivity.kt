@@ -34,6 +34,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.material3.Text
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
@@ -386,6 +387,8 @@ class MainActivity : ComponentActivity() {
                         // On a remote, a list keeps still while the focused item is in full view.
                         com.tmplayer.ui.components.StillWhenVisible(enabled = !com.tmplayer.ui.components.isTouch()) {
                             if (holding) StartupCrashQuestion() else Root()
+                            // Once per safe start, over the shell, after any crash question is answered.
+                            if (!holding) SafeModeNotice()
                         }
                         // Messages at the top, clear of the floating bar and the buttons at the foot.
                         TopMessageHost()
@@ -1134,7 +1137,10 @@ private fun Root() {
     //
     // Saved as a string rather than as the value itself: a folder is not an enum constant, it is
     // whatever this account happens to have, so there is nothing for the default saver to write.
-    var pickedTabKey by rememberSaveable { mutableStateOf("") }
+    // Safe mode (two crashes in a row soon after opening) opens on Chats, not Home.
+    var pickedTabKey by rememberSaveable {
+        mutableStateOf(if (com.tmplayer.data.SafeMode.active) BrowseSection.encode(BrowseSection.of(BrowseTab.Chats)) else "")
+    }
     val pickedTab = remember(pickedTabKey) { BrowseSection.decode(pickedTabKey) }
     // The Chats page's chip (a folder or one of Telegram's filters) last open, for the bar's Chats.
     var lastChatsKey by rememberSaveable { mutableStateOf("") }
@@ -1825,7 +1831,8 @@ private fun Root() {
             chats = chats,
             watchProgress = watchProgress,
             signedIn = auth is AuthState.Ready,
-            enabled = tvChannelsOn,
+            // Safe mode leaves the channels as they are: null is "not known yet", which does nothing.
+            enabled = if (com.tmplayer.data.SafeMode.active) null else tvChannelsOn,
         )
         // A show's card on the home screen: Home, where its page opens over the rows (HomePane
         // reads the ask). Given up after a minute, so a show that never turns up in the rows does
@@ -2558,6 +2565,38 @@ private fun CrashQuestion(question: CrashReports.Question, settings: SettingsSto
             }
         },
         onDismiss = { CrashReports.discardPending() },
+    )
+}
+
+/**
+ * Says once that this run is a safe one ([com.tmplayer.data.SafeMode]): the last two runs crashed
+ * soon after opening, so it opened on Chats with Home and the background loading off. Continue
+ * (or Back) keeps it; "Open normally next time" forgets the crashes now; Send logs shares the log
+ * with the last crash in it. The same dialog on a phone and a television, as the crash question is.
+ */
+@Composable
+private fun SafeModeNotice() {
+    if (!com.tmplayer.data.SafeMode.active) return
+    var open by rememberSaveable { mutableStateOf(true) }
+    if (!open) return
+    val s = LocalStrings.current
+    TvConfirm(
+        title = s.mainSafeTitle,
+        message = s.mainSafeMessage,
+        confirmLabel = s.mainSafeContinue,
+        destructive = false,
+        focusConfirm = true,
+        extra = {
+            com.tmplayer.ui.components.TmSecondaryButton(
+                onClick = {
+                    com.tmplayer.data.SafeMode.openNormallyNextTime()
+                    open = false
+                },
+            ) { Text(s.mainSafeNormal) }
+            com.tmplayer.ui.settings.SendLogsButton()
+        },
+        onConfirm = { open = false },
+        onDismiss = { open = false },
     )
 }
 

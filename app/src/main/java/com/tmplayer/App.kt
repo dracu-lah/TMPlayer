@@ -48,6 +48,9 @@ class App : Application() {
         super.onCreate()
         // The layout switch's own process only reopens the app (HX78): nothing to start there.
         if (FormRestart.inRestartProcess(this)) return
+        // Before that: two crashes in a row soon after opening make this start a safe one (SafeMode).
+        com.tmplayer.data.SafeMode.watch(this)
+        val safe = com.tmplayer.data.SafeMode.active
         // First of all, so a crash anywhere below is written down for the next start to offer.
         CrashReports.watch(this)
         // Before anything reads them: a television trades looks for speed (see [Motion.television]).
@@ -55,6 +58,12 @@ class App : Application() {
         com.tmplayer.data.SettingsDefaults.evenVolume = !com.tmplayer.data.FormFactor.isTv(this)
         // The shared code logs through a facade; on Android it goes to logcat as it always has.
         Logger.sink = AndroidLogSink
+        if (safe) Logger.w("tm-safe", "Safe mode: the last two runs crashed soon after opening, so Home and the background loading are off for this run")
+        // A run that stays up this long ends a loop: the next start is an ordinary one.
+        backgroundScope.launch {
+            delay(com.tmplayer.data.CrashLoop.EARLY_MS)
+            com.tmplayer.data.SafeMode.stayedUp()
+        }
         // Why this device got the TV or the phone layout, for a generic box's report (HX78).
         Logger.i("tm-form", com.tmplayer.data.FormFactor.describe(this))
         // A background job or a view model's job that throws is logged and reported (with the
@@ -199,17 +208,17 @@ class App : Application() {
         // and pictures under the app's cache. Off until the viewer turns it on in Settings.
         // Home as it was last built, read now so its first frame finds it in memory (HomeCache).
         com.tmplayer.data.HomeCache.file = java.io.File(filesDir, "home/home-cache.json")
-        backgroundScope.launch { runCatching { com.tmplayer.data.HomeCache.preload() } }
+        if (!safe) backgroundScope.launch { runCatching { com.tmplayer.data.HomeCache.preload() } }
         // And the chats opened most recently, so a cold start opens one of them at once (PageQueries).
         com.tmplayer.data.PageQueries.store = com.tmplayer.data.ChatGridDisk(java.io.File(filesDir, "home/chat-grids.json"))
-        backgroundScope.launch { runCatching { com.tmplayer.data.PageQueries.preload() } }
+        if (!safe) backgroundScope.launch { runCatching { com.tmplayer.data.PageQueries.preload() } }
         OnlineMetadata.current = OnlineMetadata(
             buildKey = BuildConfig.TMDB_API_KEY,
             store = MetadataStore(java.io.File(filesDir, "online/metadata.properties")),
             cache = MetadataCache(java.io.File(cacheDir, "online-metadata")),
             appVersion = BuildConfig.VERSION_NAME,
             omdbKey = BuildConfig.OMDB_API_KEY,
-        ).also { metadata -> backgroundScope.launch { runCatching { metadata.warmUp() }; runCatching { metadata.cache.prune() } } }
+        ).also { metadata -> if (!safe) backgroundScope.launch { runCatching { metadata.warmUp() }; runCatching { metadata.cache.prune() } } }
         Thumbnails.connectivity = NetworkMonitor
         NetworkMonitor.start(this)
         // TDLib takes a moment to open its database; starting here means the login screen is
@@ -239,7 +248,7 @@ class App : Application() {
         }
         // The checks a phone makes while the app is closed (new videos in starred chats, the
         // sponsor reminder), scheduled or cancelled to match the settings.
-        backgroundScope.launch { runCatching { com.tmplayer.data.BackgroundChecks.schedule(this@App) } }
+        if (!safe) backgroundScope.launch { runCatching { com.tmplayer.data.BackgroundChecks.schedule(this@App) } }
         // Kept off the launch path: the storage ceiling is about tomorrow's disk, not this frame,
         // and TDLib has a database to open first. Waits for an authorized session, so on a device
         // nobody has signed into yet it never runs.

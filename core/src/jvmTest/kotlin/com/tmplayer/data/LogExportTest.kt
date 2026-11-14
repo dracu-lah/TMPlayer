@@ -77,6 +77,28 @@ class LogExportTest {
     }
 
     @Test
+    fun anEarlierRunsCrashSitsBeforeTheLinesAndIsScrubbedLikeThem() {
+        val facts = Feedback.Facts("1.28.5", Feedback.Platform.Phone, "OnePlus, Android 13", "en")
+        val text = LogExport.report(
+            facts,
+            listOf("I/Td: running"),
+            known = listOf("Kerala Crime Files"),
+            now = LocalDateTime.of(2026, 11, 14, 13, 57),
+            extra = listOf(
+                "Safe mode: on, the last two runs crashed soon after opening",
+                "Last crash, from an earlier run (not in the lines below)",
+                "  java.lang.IllegalStateException: no row for Kerala Crime Files",
+                "    at com.tmplayer.ui.browse.HomeScreen.build(HomeScreen.kt:88)",
+            ),
+        )
+        val at = { needle: String -> text.indexOf(needle).also { assertTrue("missing: $needle", it >= 0) } }
+        assertTrue(at("Safe mode: on") < at("Last crash"))
+        assertTrue(at("Last crash") < at("I/Td: running"))
+        assertTrue("the frame stays readable", "HomeScreen.build(HomeScreen.kt:88)" in text)
+        assertFalse("a name in the message goes", "Kerala Crime Files" in text)
+    }
+
+    @Test
     fun theReportHasTheFactsAndOnlyTheLastLines() {
         val facts = Feedback.Facts("1.24.0", Feedback.Platform.AndroidTv, "Xiaomi MiBox, Android 9", "en")
         val lines = (1..LogExport.MAX_LINES + 10).map { "line $it from chat 987654321" }

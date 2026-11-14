@@ -39,6 +39,7 @@ import androidx.core.content.FileProvider
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.tmplayer.data.CrashReports
 import com.tmplayer.data.Feedback
 import com.tmplayer.data.FormFactor
 import com.tmplayer.data.LogExport
@@ -276,7 +277,7 @@ private suspend fun logReport(context: Context): String {
         .onFailure { Logger.w(TAG, "logcat could not be read", it) }
         .getOrDefault(emptyList())
     val known = LogExport.knownNames(SettingsStore(context), WatchedStore(context))
-    return LogExport.report(feedbackFacts(context), lines, known)
+    return LogExport.report(feedbackFacts(context), lines, known, extra = runCatching { CrashReports.logLines() }.getOrDefault(emptyList()))
 }
 
 private fun ownLogcat(): List<String> {

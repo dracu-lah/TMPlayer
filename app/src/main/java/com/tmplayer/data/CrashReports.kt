@@ -217,6 +217,16 @@ object CrashReports {
 
     private var file: File? = null
 
+    /**
+     * Lines for a log the viewer sends (Save logs, Send logs): whether this run is a safe one, and
+     * the crash waiting from an earlier run, which the run's own logcat cannot hold. Empty when
+     * there is neither. Reads a small file, so off the main thread.
+     */
+    fun logLines(): List<String> = buildList {
+        if (SafeMode.active) add("Safe mode: on, the last two runs crashed soon after opening")
+        file?.let { CrashRecord.read(it) }?.let { addAll(it.describe()) }
+    }
+
     /** The daily limit of "could not keep up" reports. Set by [watch]. */
     @Volatile
     private var stutterReporter: StutterReporter? = null

@@ -34,6 +34,8 @@ object LogExport {
         lines: List<String>,
         known: Collection<String> = emptyList(),
         now: LocalDateTime = LocalDateTime.now(),
+        /** What the lines cannot hold, written before them: an earlier run's crash, whether this run is a safe one. */
+        extra: List<String> = emptyList(),
     ): String {
         val scrubber = LogScrubber(known)
         return buildString {
@@ -48,6 +50,7 @@ object LogExport {
                     "with placeholders such as [name] and [number].",
             )
             appendLine()
+            for (line in extra) appendLine(scrubber.scrub(line))
             for (line in lines.takeLast(MAX_LINES)) appendLine(scrubber.scrub(line))
         }
     }
