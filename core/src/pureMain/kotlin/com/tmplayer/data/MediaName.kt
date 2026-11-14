@@ -128,7 +128,9 @@ object MediaName {
         val match = BARE_EPISODE.find(normalised)?.takeIf { it.range.first > 0 } ?: return null
         val title = clean(read(normalised.substring(0, match.range.first), maxYear).parsed.title)
         if (title.isEmpty()) return null
-        return ParsedName(title = title, year = strict.year, season = null, episode = match.groupValues[1].toInt())
+        // \d also matches digits of other scripts, some of which no integer parser reads (a name with "𝟎𝟐").
+        val episode = match.groupValues[1].toIntOrNull() ?: return null
+        return ParsedName(title = title, year = strict.year, season = null, episode = episode)
     }
 
     /**
@@ -422,7 +424,7 @@ object MediaName {
     private fun notAnEpisode(match: MatchResult, text: String): Boolean {
         if (TAGS.containsMatchIn(text.substring(0, match.range.first))) return true
         val digits = match.groupValues[1]
-        return digits.length == 4 && digits.toInt() in MIN_YEAR..2099
+        return digits.length == 4 && digits.toIntOrNull() in MIN_YEAR..2099
     }
 
     /** A year and where in the name it was found, so the title can be cut at that point. */
@@ -436,7 +438,7 @@ object MediaName {
     private fun findYear(text: String, maxYear: Int): Year? {
         // A bracketed year is unambiguous, so it wins outright over anything bare.
         BRACKETED_YEAR.findAll(text)
-            .mapNotNull { match -> match.groups[1]?.let { Year(it.value.toInt(), match.range.first) } }
+            .mapNotNull { match -> match.groups[1]?.value?.toIntOrNull()?.let { Year(it, match.range.first) } }
             .lastOrNull { it.value in MIN_YEAR..maxYear }
             ?.let { return it }
 
@@ -446,7 +448,7 @@ object MediaName {
         // never stands in front of the title it dates. "[2014] Garden Notes" arrives here with
         // its opening bracket trimmed off, and the closing one still says it is a year.
         return BARE_YEAR.findAll(text)
-            .mapNotNull { match -> match.groups[1]?.let { Year(it.value.toInt(), match.range.first) } }
+            .mapNotNull { match -> match.groups[1]?.value?.toIntOrNull()?.let { Year(it, match.range.first) } }
             .lastOrNull { it.value in MIN_YEAR..maxYear && (it.at > 0 || text.getOrNull(4) in CLOSING) }
     }
 
@@ -491,11 +493,11 @@ object MediaName {
     private fun findAirDate(text: String): AirDate? {
         ISO_DATE.find(text)?.takeIf { it.range.first > 0 }?.let { m ->
             val (y, mo, d) = m.destructured
-            return AirDate("$y-$mo-$d", y.toInt(), m.range.first)
+            return AirDate("$y-$mo-$d", y.toIntOrNull() ?: return null, m.range.first)
         }
         DAY_FIRST_DATE.find(text)?.takeIf { it.range.first > 0 }?.let { m ->
             val (d, mo, y) = m.destructured
-            return AirDate("$y-$mo-$d", y.toInt(), m.range.first)
+            return AirDate("$y-$mo-$d", y.toIntOrNull() ?: return null, m.range.first)
         }
         return null
     }

@@ -457,4 +457,21 @@ class MediaNameTest {
             assertEquals(name, 2, parsed.episode)
         }
     }
+
+    @Test
+    fun `digits of other scripts never throw, whatever the name`() {
+        // Seen in the field (Sentry, 2026-11-12): \d matches a mathematical bold 02, which Int parsing refuses.
+        val names = listOf(
+            "Show - \uD835\uDFCE\uD835\uDFD0.mkv",
+            "Show \uD835\uDFD0\uD835\uDFCE\uD835\uDFCF\uD835\uDFD7 HDRip.mkv",
+            "Show [\uD835\uDFD0\uD835\uDFCE\uD835\uDFCF\uD835\uDFD7].mkv",
+            "Show 2024 \uD835\uDFCF\uD835\uDFCE 14.mkv",
+            "Show \uFF10\uFF12 - \uFF12\uFF10\uFF11\uFF19.mkv",
+            "\u0660\u0662 \u06F0\u06F2 \u0966\u0968.mp4",
+        )
+        for (name in names) {
+            MediaName.parse(name, maxYear = 2027)
+            MediaName.looseEpisode(name, maxYear = 2027)
+        }
+    }
 }
