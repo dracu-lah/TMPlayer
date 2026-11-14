@@ -85,6 +85,13 @@ class DownloadService : Service() {
     @Volatile
     private var holdReason: OfflineDownloads.Stage? = null
 
+    /**
+     * Steps downloads aside for a video playing from the network ([DownloadYield]). Started in
+     * [onCreate] with the service and ended with its scope, so it exists exactly while there is a
+     * queue to hold.
+     */
+    private var yielding: DownloadYieldController? = null
+
     /** What each video's own notification last said, so an unchanged one is not posted again. */
     private val lines = java.util.concurrent.ConcurrentHashMap<Int, String>()
 
@@ -126,6 +133,71 @@ class DownloadService : Service() {
         // download is exactly the thing that wants to know about the signal after the app is gone.
         NetworkMonitor.start(this)
         watchTheNetwork()
+        yieldToPlayback()
+    }
+
+    /**
+     * Streaming comes first: while a video plays from the network the other downloads wait, and
+     * they carry on when it stops or has been paused for long. See [DownloadYield] for the rule.
+     * Held rows exist only in memory, so a service the system kills leaves them [Stage.Paused]
+     * through [onDestroy] and [OfflineDownloads.restore], never waiting for a player that is gone.
+     */
+    private fun yieldToPlayback() {
+        val settings = SettingsStore(applicationContext)
+        yielding = DownloadYieldController(
+            scope = scope,
+            enabled = settings.pauseDownloadsWhilePlaying,
+            hold = ::holdForPlayback,
+            release = ::releaseFromPlayback,
+        ).also { it.start() }
+    }
+
+    /** Stops the named downloads where they are, keeping the bytes, and says why on their rows. */
+    private fun holdForPlayback(ids: List<Int>) {
+        val jobs = ArrayList<Job>()
+        val held = ArrayList<Int>()
+        synchronized(lock) {
+            for (id in ids) {
+                val row = OfflineDownloads.active.value[id] ?: continue
+                if (row.stage != OfflineDownloads.Stage.Running && row.stage != OfflineDownloads.Stage.Queued) continue
+                waiting.remove(id)
+                running.remove(id)?.let { jobs.add(it) }
+                held.add(id)
+            }
+        }
+        if (held.isEmpty()) return
+        // The rows first, so a fetch that notices it was cancelled finds a row that is not its to
+        // write over (the same order [hold] keeps).
+        held.forEach { OfflineDownloads.stage(it, OfflineDownloads.Stage.Yielding) }
+        jobs.forEach { it.cancel() }
+        held.forEach { Td.cancelDownloadInBackground(it) }
+        Log.i(TAG, "Holding ${held.size} download(s) while a video plays")
+        refresh()
+    }
+
+    /** The video is over (or paused for long): the held rows go back on the queue in their order. */
+    private fun releaseFromPlayback(ids: List<Int>) {
+        val back = ids.mapNotNull { OfflineDownloads.active.value[it] }
+            .filter { it.stage == OfflineDownloads.Stage.Yielding }
+            .sortedBy { it.order }
+        if (back.isEmpty()) return
+        back.forEach { progress ->
+            // No signal, or mobile data with Wi-Fi only on: still waiting, for that instead.
+            val stillWaitingFor = holdReason
+            if (stillWaitingFor != null) {
+                OfflineDownloads.stage(progress.fileId, stillWaitingFor)
+                return@forEach
+            }
+            synchronized(lock) {
+                if (running.containsKey(progress.fileId) || waiting.contains(progress.fileId)) return@forEach
+                requests[progress.fileId] = progress.request
+                waiting.addLast(progress.fileId)
+            }
+            OfflineDownloads.stage(progress.fileId, OfflineDownloads.Stage.Queued)
+        }
+        Log.i(TAG, "Putting back ${back.size} download(s)")
+        pump()
+        refresh()
     }
 
     /**
@@ -233,6 +305,11 @@ class DownloadService : Service() {
             ids
         }
         stopped.forEach { OfflineDownloads.stage(it, OfflineDownloads.Stage.Paused) }
+        // Rows held for a video that is playing are in none of those lists, and the thing that
+        // would have put them back goes with this service: Paused, so Resume is offered.
+        OfflineDownloads.active.value.values
+            .filter { it.stage == OfflineDownloads.Stage.Yielding }
+            .forEach { OfflineDownloads.stage(it.fileId, OfflineDownloads.Stage.Paused) }
         scope.cancel()
         super.onDestroy()
     }
@@ -254,6 +331,9 @@ class DownloadService : Service() {
         // Paused and failed rows do fall through here, which is what makes Resume and Try again
         // the same intent as the original press.
         if (known != null && known.busy) return
+        // A paused or failed row started again by hand is the viewer's decision, and it carries on
+        // beside a playing video rather than being held again a second later.
+        if (known != null) yielding?.exempt(request.fileId)
 
         // A video asked for while the phone has no signal, or has only the mobile data the viewer
         // said not to use, joins the list already waiting for that to change rather than being
@@ -839,7 +919,8 @@ class DownloadService : Service() {
             return
         }
         val waitingOnTheWorld = OfflineDownloads.active.value.values.any {
-            it.stage == OfflineDownloads.Stage.Offline || it.stage == OfflineDownloads.Stage.NoWifi
+            it.stage == OfflineDownloads.Stage.Offline || it.stage == OfflineDownloads.Stage.NoWifi ||
+                it.stage == OfflineDownloads.Stage.Yielding
         }
         if (waitingOnTheWorld) {
             refresh()
@@ -959,6 +1040,7 @@ class DownloadService : Service() {
                 OfflineDownloads.Stage.Paused -> L.downloadsPaused
                 OfflineDownloads.Stage.Offline -> L.downloadsWaitingConnection
                 OfflineDownloads.Stage.NoWifi -> L.downloadsWaitingWifi
+                OfflineDownloads.Stage.Yielding -> L.downloadsWaitingPlayback
                 OfflineDownloads.Stage.Moving ->
                     if (row.heldByPlayer) L.downloadsFinishesAfterPlayback else L.downloadsMovingIntoDownloads
                 OfflineDownloads.Stage.Failed -> continue
@@ -1041,6 +1123,7 @@ class DownloadService : Service() {
         val paused = rows.count { it.stage == OfflineDownloads.Stage.Paused }
         val offline = rows.count { it.stage == OfflineDownloads.Stage.Offline }
         val noWifi = rows.count { it.stage == OfflineDownloads.Stage.NoWifi }
+        val yielded = rows.count { it.stage == OfflineDownloads.Stage.Yielding }
         val moving = rows.count { it.stage == OfflineDownloads.Stage.Moving }
         val builder = builder().setOngoing(true).setGroup(GROUP).setGroupSummary(true)
 
@@ -1081,6 +1164,16 @@ class DownloadService : Service() {
                     .addAction(cancelAction(rows.size))
                     .build()
             }
+            // Stepped aside for the video on screen: the one wait that ends by itself the moment
+            // the viewer stops watching, and the only one that says so.
+            if (yielded > 0 && paused == 0 && queued == 0) {
+                return builder
+                    .setContentTitle(L.downloadsWaitingPlayback)
+                    .setContentText(L.gridYieldingDetail)
+                    .setProgress(0, 0, false)
+                    .addAction(cancelAction(rows.size))
+                    .build()
+            }
             val title = when {
                 paused > 0 -> L.notifyPaused(count = paused)
                 queued > 0 -> L.notifyStarting(count = queued)
@@ -1112,7 +1205,7 @@ class DownloadService : Service() {
                 bytes(current.downloadedBytes)
             },
             Translator.messages.formatter.speed(current.bytesPerSecond).takeIf { current.bytesPerSecond >= 1024 },
-            waitingLine(queued + paused + offline + noWifi),
+            waitingLine(queued + paused + offline + noWifi + yielded),
         ).joinToString(DOT)
 
         return builder

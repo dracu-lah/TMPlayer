@@ -1538,6 +1538,7 @@ private fun queueHeading(active: List<OfflineDownloads.Progress>): String {
             L.downloadsHeadingRunningWaiting(count = waiting)
         active.any { it.stage == OfflineDownloads.Stage.Running } -> L.downloadsHeadingRunning
         active.all { it.stage == OfflineDownloads.Stage.NoWifi } -> L.downloadsWaitingWifi
+        active.all { it.stage == OfflineDownloads.Stage.Yielding } -> L.downloadsWaitingPlayback
         active.all { it.stage == OfflineDownloads.Stage.Offline } -> L.downloadsWaitingConnection
         active.all { it.stage == OfflineDownloads.Stage.Paused } -> L.downloadsPaused
         else -> L.downloadsHeadingQueued
@@ -2105,6 +2106,13 @@ private fun ActiveDownloadCard(
             fraction?.let { s.formatter.percent(it.toDouble()) },
             size,
         ).joinToString(DOT)
+        // Why it is not moving, in the same place the other waits say it, so a viewer who sees a
+        // stalled queue while watching something knows the stream has the line.
+        OfflineDownloads.Stage.Yielding -> listOfNotNull(
+            s.downloadsWaitingPlayback,
+            fraction?.let { s.formatter.percent(it.toDouble()) },
+            size,
+        ).joinToString(DOT)
         OfflineDownloads.Stage.Moving ->
             if (progress.heldByPlayer) s.downloadsFinishesAfterPlayback else s.downloadsMovingIntoDownloads
         OfflineDownloads.Stage.Running -> listOfNotNull(
@@ -2189,7 +2197,7 @@ private fun ActiveDownloadCard(
                     }
                 // It will start itself the moment the signal is back, so the useful offer is the
                 // other one: hold it, and do not.
-                OfflineDownloads.Stage.Offline, OfflineDownloads.Stage.NoWifi ->
+                OfflineDownloads.Stage.Offline, OfflineDownloads.Stage.NoWifi, OfflineDownloads.Stage.Yielding ->
                     PrimaryAction(s.commonPause, TmIcons.Pause, onPause)
                 // Nothing to pause that has not started. Cancel below fills the row on its own.
                 OfflineDownloads.Stage.Queued -> Unit

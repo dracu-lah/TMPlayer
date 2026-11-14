@@ -297,6 +297,13 @@ fun PlayerScreen(
     val castState by com.tmplayer.desktop.cast.DesktopCast.state.collectAsState()
 
     var current by remember(media) { mutableStateOf(media) }
+    // Whether this video is being watched, for the downloads that step aside while one plays from
+    // the network (DownloadYield). A cast counts, as its engine reports playing too.
+    val watching = status.playing && !status.ended
+    LaunchedEffect(watching, current) {
+        val ids = listOf(current.item.fileId) + current.item.pieces.map { it.fileId }
+        com.tmplayer.data.StreamingPlays.setPlaying(ids, watching)
+    }
     var ignoreSavedPosition by remember(media) { mutableStateOf(startFromBeginning) }
     var attempt by remember { mutableIntStateOf(0) }
     var phase by remember { mutableStateOf<Phase>(Phase.Loading(s.playerOpeningVideo)) }

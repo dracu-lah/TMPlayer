@@ -519,7 +519,7 @@ private fun cancelRow(s: Messages, entry: OfflineDownloads.Progress, run: () -> 
     val base = detailRow(DetailAction.CancelDownload, s, null, "", run)
     return base.copy(
         label = when (entry.stage) {
-            OfflineDownloads.Stage.Queued -> s.gridCancelQueued
+            OfflineDownloads.Stage.Queued, OfflineDownloads.Stage.Yielding -> s.gridCancelQueued
             OfflineDownloads.Stage.Paused -> s.gridCancelPaused
             OfflineDownloads.Stage.Failed -> s.gridCancelFailed
             OfflineDownloads.Stage.Offline -> s.gridCancelOffline
@@ -531,6 +531,7 @@ private fun cancelRow(s: Messages, entry: OfflineDownloads.Progress, run: () -> 
             OfflineDownloads.Stage.Queued -> s.gridQueuedDetail
             OfflineDownloads.Stage.Offline -> s.gridOfflineDetail
             OfflineDownloads.Stage.NoWifi -> s.gridNoWifiDetail
+            OfflineDownloads.Stage.Yielding -> s.gridYieldingDetail
             else -> entry.fraction?.let { s.gridProgressKept(s.formatter.percent(it.toDouble())) }
         },
         // The ring round the button, for the download that is actually moving.

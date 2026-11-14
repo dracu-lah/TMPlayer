@@ -175,6 +175,7 @@ object Backups {
         "notify_pieces" to Kind.BOOL,
         "notify_update" to Kind.BOOL,
         "open_last_chat" to Kind.BOOL,
+        "pause_downloads_while_playing" to Kind.BOOL,
         "preferred_audio_language" to Kind.TEXT,
         "preferred_subtitle_language" to Kind.TEXT,
         "player_haptics" to Kind.BOOL,

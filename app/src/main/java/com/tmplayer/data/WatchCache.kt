@@ -70,6 +70,8 @@ object WatchCache {
     fun startedPlaying(fileId: Int) {
         if (fileId <= 0) return
         synchronized(playing) { playing[fileId] = (playing[fileId] ?: 0) + 1 }
+        // The same fact for the downloads, which step aside for a video playing from the network.
+        StreamingPlays.begin(fileId)
     }
 
     fun stoppedPlaying(fileId: Int) {
@@ -78,6 +80,7 @@ object WatchCache {
             val left = (playing[fileId] ?: 0) - 1
             if (left > 0) playing[fileId] = left else playing.remove(fileId)
         }
+        StreamingPlays.end(fileId)
     }
 
     fun isPlaying(fileId: Int): Boolean = synchronized(playing) { fileId in playing }

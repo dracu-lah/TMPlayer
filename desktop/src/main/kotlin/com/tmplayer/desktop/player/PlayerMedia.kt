@@ -140,8 +140,25 @@ private val NO_RESTRICTION: StateFlow<Boolean> = MutableStateFlow(true)
 /** Which Telegram files a player currently has open, so a late cancel never stops a new playback. */
 internal object ActiveStreams {
     private val open = ConcurrentHashMap<Int, Int>()
-    fun opened(fileId: Int) { open.merge(fileId, 1, Int::plus) }
-    fun closed(fileId: Int) { open.computeIfPresent(fileId) { _, n -> (n - 1).takeIf { it > 0 } } }
+
+    /** The open files that are read from the network, which other downloads step aside for. */
+    private val streamed = ConcurrentHashMap<Int, Int>()
+
+    fun opened(fileId: Int, streaming: Boolean = false) {
+        open.merge(fileId, 1, Int::plus)
+        if (streaming) {
+            streamed.merge(fileId, 1, Int::plus)
+            com.tmplayer.data.StreamingPlays.begin(fileId)
+        }
+    }
+
+    fun closed(fileId: Int) {
+        open.computeIfPresent(fileId) { _, n -> (n - 1).takeIf { it > 0 } }
+        if (streamed.containsKey(fileId)) {
+            streamed.computeIfPresent(fileId) { _, n -> (n - 1).takeIf { it > 0 } }
+            com.tmplayer.data.StreamingPlays.end(fileId)
+        }
+    }
     fun isOpen(fileId: Int): Boolean = open.containsKey(fileId)
     fun openIds(): Set<Int> = open.keys.toSet()
 }
@@ -231,7 +248,7 @@ class TelegramPlayerMedia(
         // The first read says where the download starts: a resumed video is not asked for from
         // byte 0 and then sought away from.
         bytes.start()
-        ActiveStreams.opened(fileId)
+        ActiveStreams.opened(fileId, streaming = true)
         val name = item.fileName.ifBlank { item.title }
         return TdMediaData(
             bytes = bytes,
@@ -334,7 +351,7 @@ class TelegramPlayerMedia(
                 } else {
                     TdStreamBytes(client, source.fileId).also {
                         it.start(from)
-                        if (open.add(source.fileId)) ActiveStreams.opened(source.fileId)
+                        if (open.add(source.fileId)) ActiveStreams.opened(source.fileId, streaming = true)
                     }
                 }
             },

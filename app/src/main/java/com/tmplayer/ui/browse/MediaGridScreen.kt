@@ -2551,7 +2551,7 @@ private fun MediaArt(
                         waiting.fraction?.let { s.formatter.percent(it.toDouble()) } ?: s.gridStageDownloading
                     OfflineDownloads.Stage.Queued -> s.gridStageQueued
                     OfflineDownloads.Stage.Paused -> s.gridStagePaused
-                    OfflineDownloads.Stage.Offline -> s.gridStageWaiting
+                    OfflineDownloads.Stage.Offline, OfflineDownloads.Stage.Yielding -> s.gridStageWaiting
                     OfflineDownloads.Stage.NoWifi -> s.gridStageNoWifi
                     OfflineDownloads.Stage.Moving -> s.gridStageMoving
                     OfflineDownloads.Stage.Failed -> s.gridStageFailed

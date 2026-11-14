@@ -63,6 +63,7 @@ private val PIP_ON_LEAVE = booleanPreferencesKey("pip_on_leave")
 // broken-history prune at launch, Clear history) would take this setting with them.
 private val RESUME_REWIND = longPreferencesKey("rewind_on_resume_ms")
 private val WIFI_ONLY = booleanPreferencesKey("wifi_only_downloads")
+private val PAUSE_DOWNLOADS_WHILE_PLAYING = booleanPreferencesKey("pause_downloads_while_playing")
 private val SAVE_MOBILE_DATA = booleanPreferencesKey("save_mobile_data")
 private val REMOVE_AFTER_WATCHING = booleanPreferencesKey("remove_after_watching")
 private val LOW_STORAGE_MODE = booleanPreferencesKey("low_storage_mode")
@@ -1110,6 +1111,18 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
 
     suspend fun setWifiOnlyDownloads(value: Boolean) {
         prefs.edit { it[WIFI_ONLY] = value }
+    }
+
+    /**
+     * "Pause downloads while playing": the other downloads wait while a video plays from the
+     * network, so they do not share its line, and carry on when it ends or has been paused for
+     * long ([DownloadYield]). On by default: a stream that stutters beside a download looks like a
+     * slow video, and nobody has to remember to turn this on to be spared it.
+     */
+    val pauseDownloadsWhilePlaying: Flow<Boolean> = read { it[PAUSE_DOWNLOADS_WHILE_PLAYING] ?: true }
+
+    suspend fun setPauseDownloadsWhilePlaying(value: Boolean) {
+        prefs.edit { it[PAUSE_DOWNLOADS_WHILE_PLAYING] = value }
     }
 
     /** Read at the start of playback, where the flow's first emission has not arrived yet. */

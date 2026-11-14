@@ -1739,6 +1739,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         override fun onEnded() = onVideoEnded()
 
         override fun onCasting(casting: Boolean) {
+            reportWatching()
             if (casting) {
                 hideStatus()
                 controls?.hideNow()
@@ -4199,6 +4200,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             // the foreground at once, so the paused notification can be swiped away.
             if (inBackgroundAudio) PlaybackService.setPlayWhenReady(playWhenReady)
             onPauseChanged(playWhenReady, reason)
+            reportWatching()
         }
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -8994,6 +8996,18 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
     /** The file this player has told [WatchCache] it is playing, so the sweep leaves it be. */
     private var heldFileId = 0
+
+    /**
+     * Tells [StreamingPlays] whether this screen is being watched, which is what lets other
+     * downloads yield to it and come back when it has been paused long ([DownloadYield]). A cast
+     * counts as watching: the phone is then the one feeding the TV.
+     */
+    private fun reportWatching() {
+        com.tmplayer.data.StreamingPlays.setPlaying(
+            listOf(heldFileId) + heldPieceIds,
+            playing = player?.playWhenReady == true || cast?.casting == true,
+        )
+    }
 
     private fun holdFile(id: Int) {
         if (id == 0) holdPieces(emptyList())

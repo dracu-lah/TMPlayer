@@ -765,6 +765,7 @@
     "unlisted_detail": "{size}  ·  In the folder, not in TMPlayer's list",
     "unmatched_note": "Video files on this device that TMPlayer can no longer match to a message, such as one left behind after a failed video. Removing one frees its space; nothing is removed from Telegram.",
     "waiting_connection": "Waiting for a connection",
+    "waiting_playback": "Paused while a video plays",
     "waiting_wifi": "Waiting for Wi-Fi"
   },
   "episodes": {
@@ -1015,7 +1016,8 @@
     "videos_from_chat": "Videos from this chat",
     "voice_prompt_video": "Say a video name",
     "wrong_match": "Wrong match",
-    "wrong_match_detail": "Show this video with its own name and picture instead"
+    "wrong_match_detail": "Show this video with its own name and picture instead",
+    "yielding_detail": "Resumes when the video stops"
   },
   "groups": {
     "favourites_untouched": "The chats themselves stay where they are, in your folders.",
@@ -2578,6 +2580,9 @@
     "page_subtitles_summary_online": "{style}, and online subtitles",
     "page_tv_home": "Launcher",
     "page_tv_home_summary": "The Play Next row and the TMPlayer channel on your TV's launcher",
+    "pause_downloads_while_playing": "Pause downloads while playing",
+    "pause_downloads_while_playing_off": "Off: downloads keep going while you watch, and can slow the video",
+    "pause_downloads_while_playing_on": "Other downloads wait while a video plays from the network, and carry on when it stops or has been paused for a while",
     "picture_in_picture_leave": "Picture in picture when leaving the app",
     "picture_in_picture_leave_off": "Off: leaving the app pauses the video, or keeps only the sound going if background audio is on. The Picture in picture button still works",
     "picture_in_picture_leave_on": "On: going Home or to another app while a video plays shrinks it into a small window",

@@ -51,6 +51,14 @@ object OfflineDownloads {
          */
         NoWifi,
 
+        /**
+         * Held because a video is playing from the network and the line is the stream's first
+         * ([DownloadYield]). Waits for the playback to end, or to stay paused long, in the way
+         * [Offline] waits for a signal, and is never written to disk: a crash brings the row back
+         * as [Paused] like every other, so nothing here can be left waiting for a player that is gone.
+         */
+        Yielding,
+
         /** Stopped by something that went wrong. Resumable in exactly the same way as paused. */
         Failed,
 
@@ -111,7 +119,8 @@ object OfflineDownloads {
          */
         val busy: Boolean
             get() = stage == Stage.Running || stage == Stage.Queued ||
-                stage == Stage.Offline || stage == Stage.NoWifi || stage == Stage.Moving
+                stage == Stage.Offline || stage == Stage.NoWifi || stage == Stage.Yielding ||
+                stage == Stage.Moving
     }
 
     private val _active = MutableStateFlow<Map<Int, Progress>>(emptyMap())

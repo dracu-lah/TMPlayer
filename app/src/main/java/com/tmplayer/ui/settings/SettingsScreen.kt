@@ -315,6 +315,7 @@ fun SettingsScreen(
     val rememberSearches by settings.rememberSearches.collectAsStateWithLifecycle(initialValue = true)
     val resumeSync by settings.resumeSync.collectAsStateWithLifecycle(initialValue = false)
     val wifiOnly by settings.wifiOnlyDownloads.collectAsStateWithLifecycle(initialValue = false)
+    val pauseWhilePlaying by settings.pauseDownloadsWhilePlaying.collectAsStateWithLifecycle(initialValue = true)
     val saveMobileData by settings.saveMobileData.collectAsStateWithLifecycle(initialValue = false)
     val trickplayOn by settings.trickplay.collectAsStateWithLifecycle(initialValue = true)
     val watchNextOn by settings.watchNext.collectAsStateWithLifecycle(initialValue = false)
@@ -1558,6 +1559,21 @@ fun SettingsScreen(
                             onToggle = { scope.launch { settings.setSaveMobileData(!saveMobileData) } },
                         )
                     }
+                }
+                // On a TV as well as a phone: the line is shared whatever the screen. A stream first,
+                // then the downloads, and the Downloads screen says why they wait.
+                item {
+                    ToggleRow(
+                        title = s.settingsPauseDownloadsWhilePlaying,
+                        subtitle = if (pauseWhilePlaying) {
+                            s.settingsPauseDownloadsWhilePlayingOn
+                        } else {
+                            s.settingsPauseDownloadsWhilePlayingOff
+                        },
+                        icon = TmIcons.Pause,
+                        checked = pauseWhilePlaying,
+                        onToggle = { scope.launch { settings.setPauseDownloadsWhilePlaying(!pauseWhilePlaying) } },
+                    )
                 }
             }
 

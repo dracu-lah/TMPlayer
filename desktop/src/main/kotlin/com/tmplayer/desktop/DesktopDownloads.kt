@@ -11,6 +11,7 @@ import com.tmplayer.data.DiskInfo
 import com.tmplayer.data.DownloadFiles
 import com.tmplayer.data.DownloadRequest
 import com.tmplayer.data.DownloadRunner
+import com.tmplayer.data.DownloadYieldController
 import com.tmplayer.data.Failures
 import com.tmplayer.data.LocalFileAvailability
 import com.tmplayer.data.OfflineDownloads
@@ -113,7 +114,20 @@ class DesktopDownloadRunner(
     private var arrivals = 0L
     private val persistLock = Mutex()
 
+    /**
+     * Steps downloads aside for a video playing from the network ([DownloadYield]). Held rows are
+     * in memory only, so a crash restores them paused like every other, never waiting for a
+     * player that is gone.
+     */
+    private val yielding = DownloadYieldController(
+        scope = scope,
+        enabled = settings.pauseDownloadsWhilePlaying,
+        hold = ::holdForPlayback,
+        release = ::releaseFromPlayback,
+    )
+
     init {
+        yielding.start()
         // A download that stopped because the network did waits rather than failing, and goes
         // back on the queue by itself when the network returns: nobody asked for it to stop.
         connectivity?.let { net ->
@@ -131,6 +145,8 @@ class DesktopDownloadRunner(
         val known = OfflineDownloads.active.value[request.fileId]
         // Already coming down or already waiting: pressing download twice is not two downloads.
         if (known != null && known.busy) return
+        // Started again by hand: the viewer's decision, which carries on beside a playing video.
+        if (known != null) yielding.exempt(request.fileId)
         val position = synchronized(lock) {
             adoptExistingQueue()
             if (running.containsKey(request.fileId) || waiting.contains(request.fileId)) return
@@ -149,6 +165,42 @@ class DesktopDownloadRunner(
         )
         persist()
         pump()
+    }
+
+    /** Stops the named downloads where they are, keeping the bytes, and says why on their rows. */
+    private fun holdForPlayback(ids: List<Int>) {
+        val jobs = ArrayList<Job>()
+        val held = ArrayList<Int>()
+        synchronized(lock) {
+            for (id in ids) {
+                val stage = OfflineDownloads.active.value[id]?.stage
+                if (stage != OfflineDownloads.Stage.Running && stage != OfflineDownloads.Stage.Queued) continue
+                waiting.remove(id)
+                running.remove(id)?.let { jobs.add(it) }
+                held.add(id)
+            }
+        }
+        if (held.isEmpty()) return
+        // The rows first, so a fetch that notices it was cancelled finds a row that is not its to
+        // write over.
+        held.forEach { OfflineDownloads.stage(it, OfflineDownloads.Stage.Yielding) }
+        jobs.forEach { it.cancel() }
+        held.forEach {
+            Td.cancelDownloadInBackground(it)
+            notifier.cancel(it.toLong())
+        }
+        pump()
+    }
+
+    /** The video is over, or paused for long: the held rows go back on the queue in their order. */
+    private fun releaseFromPlayback(ids: List<Int>) {
+        ids.mapNotNull { OfflineDownloads.active.value[it] }
+            .filter { it.stage == OfflineDownloads.Stage.Yielding }
+            .sortedBy { it.order }
+            .forEach { row ->
+                // Still no network: waiting for that instead, and the network's own watcher puts it back.
+                if (offline()) OfflineDownloads.stage(row.fileId, OfflineDownloads.Stage.Offline) else requeue(row.fileId)
+            }
     }
 
     override fun cancel(fileId: Int) {
