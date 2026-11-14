@@ -31,8 +31,9 @@ import java.util.concurrent.TimeUnit
  * crash in native code are offered the same way, from Android's own list of how the app's
  * processes ended (see [CrashExits]), since no code of the app's runs as they happen.
  *
- * A report contains the stack trace, the app version, the Android version and the device model,
- * and nothing else: no breadcrumbs, sessions, screen names, filenames or chat names. Every
+ * A report contains the stack trace, the app version, the Android version, the device model and
+ * its chipset, and for a crash during a video the engine, decoder, codec, size class and any
+ * stutter verdict ([CrashContext]), and nothing else: no breadcrumbs, sessions, screen names, filenames or chat names. Every
  * automatic breadcrumb source is off, because a breadcrumb is exactly where the name of the video
  * somebody was watching would otherwise turn up.
  *
@@ -155,6 +156,7 @@ object CrashReports {
         // out passes as the viewer's answer.
         if (record != null && event.eventId == record.second) {
             return CrashReportScrubber.scrub(event.apply { threads = null }).also { record.first.stampBuild(it) }
+                .let { CrashContext.tag(it, CrashContext.tagsOf(chipset, playback = null)) }
         }
         val exitTime = CrashExits.exitTime(hint)
         if (exitTime != null) {
@@ -163,11 +165,35 @@ object CrashReports {
             if (!CrashExits.allows(exitTime, declined, accepted, enabledNow)) return null
             // The threads stay: an ANR's report is the main thread's stack among the others, and
             // a tombstone's is every thread's, with names and frames only (see the scrubber).
-            return CrashReportScrubber.scrub(event).also { if (exitTime == accepted) exitSent?.countDown() }
+            return CrashReportScrubber.scrub(event)
+                .let { CrashContext.tag(it, CrashContext.tagsOf(chipset, playback = null)) }
+                .also { if (exitTime == accepted) exitSent?.countDown() }
         }
         if (!enabledNow) return null
-        return CrashReportScrubber.scrub(event)
+        // A crash or a handled error of this run: what was playing, if anything (S2).
+        return CrashContext.tag(CrashReportScrubber.scrub(event), CrashContext.tagsOf(chipset, CrashContext.playbackNow()))
     }
+
+    /**
+     * The device's chipset for a report (S2): the maker and model Android 12 and newer name
+     * (`Qualcomm SM8550`), else the board's hardware name (`mt8695`, `amlogic`). The same on every
+     * device of that model, so it tells nothing about the viewer.
+     */
+    private val chipset: String by lazy {
+        runCatching {
+            val soc = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                listOf(android.os.Build.SOC_MANUFACTURER, android.os.Build.SOC_MODEL)
+                    .filter { !it.isNullOrBlank() && it != android.os.Build.UNKNOWN }
+                    .joinToString(" ")
+            } else {
+                ""
+            }
+            soc.ifBlank { android.os.Build.HARDWARE.orEmpty() }
+        }.getOrDefault("")
+    }
+
+    /** The in-app engine on Android, as a report names it: Media3's ExoPlayer. */
+    private const val ENGINE = "media3"
 
     /**
      * Writes a crash down on the device while the switch is off, before the process dies.
@@ -238,6 +264,8 @@ object CrashReports {
      */
     fun reportStutter(facts: StutterReport.Facts): Boolean {
         if (!available) return false
+        // Kept in memory for a crash that follows (S2); sent only on one, with the switch on.
+        CrashContext.stuttered(facts, ENGINE)
         return stutterReporter?.report(facts) == true
     }
 

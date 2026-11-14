@@ -137,6 +137,52 @@ class CrashReportScrubberTest {
         assertEquals("Could not open [file]", event.message!!.formatted)
     }
 
+    /**
+     * S2: the player's tags are the only ones a crash keeps, by an exact list. The SDK's own tags
+     * and one a future SDK might add are gone, since the scrubber empties the tags before ours go
+     * back on; a key or a value outside the list is refused rather than cleaned.
+     */
+    @Test
+    fun keepsExactlyThePlayerTagsAndFailsClosed() {
+        val event = fullEvent().apply {
+            tags = tags.orEmpty().toMutableMap().apply {
+                put("future_sdk_field", "something new")
+                put("title", "Secret Show")
+            }
+        }
+        CrashReportScrubber.scrub(event)
+        val playback = CrashContext.Playback(
+            engine = "media3",
+            decoder = "c2.mtk.hevc.decoder",
+            codec = "HEVC",
+            width = 3840,
+            height = 2160,
+            stutter = "dropped",
+            atMillis = 0,
+        )
+        CrashContext.tag(event, CrashContext.tagsOf("Mediatek MT8695", playback) + mapOf("title" to "Secret Show", "chat" to "x"))
+
+        assertEquals(
+            listOf("engine", "chipset", "decoder", "codec", "size_class", "stutter"),
+            CrashContext.ALLOWED_TAGS,
+        )
+        assertEquals(
+            mapOf(
+                "engine" to "media3",
+                "chipset" to "Mediatek MT8695",
+                "decoder" to "c2.mtk.hevc.decoder",
+                "codec" to "hevc",
+                "size_class" to "uhd",
+                "stutter" to "dropped",
+            ),
+            event.tags,
+        )
+        // Everything else CP01 allows is as it was.
+        assertEquals(setOf("device", "os", "app"), event.contexts.keys().toList().toSet())
+        assertNull(event.extras)
+        assertNull(event.breadcrumbs)
+    }
+
     @Test
     fun keepsTheStackTraceButNotTheFileNames() {
         val event = CrashReportScrubber.scrub(fullEvent())
