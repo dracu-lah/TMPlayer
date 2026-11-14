@@ -78,6 +78,29 @@ class DetailActionsTest {
     }
 
     @Test
+    fun `a default player other than TMPlayer keeps Play in TMPlayer right under Play`() {
+        val external = DetailActions.of(phoneGrid.copy(externalDefault = true))
+        assertEquals(listOf(Play, DetailAction.PlayInTmPlayer), external.take(2))
+        val resuming = DetailActions.of(phoneGrid.copy(externalDefault = true, resumeMs = 5_000))
+        assertEquals(listOf(Resume, StartOver, DetailAction.PlayInTmPlayer), resuming.take(3))
+        // With TMPlayer as the player there is no way back to offer.
+        assertFalse(DetailAction.PlayInTmPlayer in DetailActions.of(phoneGrid))
+    }
+
+    @Test
+    fun `another app can take a video still coming down only where it can be streamed`() {
+        val streaming = phoneGrid.copy(canStreamElsewhere = true)
+        val actions = DetailActions.of(streaming)
+        assertTrue(OpenElsewhere in actions)
+        // Sharing a file needs the whole file; a stream is not a file to send.
+        assertFalse(Share in actions)
+        assertFalse(OpenElsewhere in DetailActions.of(phoneGrid))
+        // Never for a chat that restricts saving, and never where nothing can be handed over.
+        assertFalse(OpenElsewhere in DetailActions.of(streaming.copy(canBeSaved = false)))
+        assertFalse(OpenElsewhere in DetailActions.of(streaming.copy(canHandOff = false)))
+    }
+
+    @Test
     fun `whole in the cache saves to Downloads rather than fetching`() {
         val actions = DetailActions.of(phoneGrid.copy(cached = true))
         assertTrue(SaveToDownloads in actions)

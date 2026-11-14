@@ -40,7 +40,7 @@ class BackupCoverageTest {
         // Hints, walkthroughs and notices already seen.
         "device_card_dismissed", "device_hint_shown", "first_video_tip_dismissed", "online_meta_invite_seen",
         "online_meta_notice_dismissed", "player_hint_seen", "tv_browse_hint_seen", "setup", "tour",
-        "hide_default_groups",
+        "hide_default_groups", "external_hint_seen",
         // The update check's and the support card's bookkeeping.
         "update_last_check", "update_popup_shown", "update_skipped_version", "update_snoozed_until",
         "support_asked", "support_first_seen", "support_never", "support_recent", "support_snoozed_until",

@@ -289,6 +289,7 @@ internal fun MediaDetailOpened(
         return
     }
 
+    val defaultPlayer by settings.defaultPlayer.collectAsStateWithLifecycle(initialValue = com.tmplayer.player.PlayerChoice.TmPlayer)
     val actions = DetailActions.of(
         DetailContext(
             canBeSaved = item.canBeSaved,
@@ -314,6 +315,8 @@ internal fun MediaDetailOpened(
             // television has no gallery anyone looks at.
             canExport = touch && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q,
             canRemoveFromHistory = true,
+            externalDefault = defaultPlayer != com.tmplayer.player.PlayerChoice.TmPlayer,
+            canStreamElsewhere = touch,
         ),
     )
     val free = DiskInfo.freeLabel(freeBytes)
@@ -390,7 +393,11 @@ internal fun MediaDetailOpened(
             DetailAction.SelectVideos -> { { onDismiss(); onSelectVideos?.invoke() } }
             // Back from the other app, or after the copy, the page is still there.
             DetailAction.Share -> { { scope.launch { shareVideo(context, item, send = true); if (asMenu) onDismiss() } } }
-            DetailAction.OpenElsewhere -> { { scope.launch { shareVideo(context, item, send = false); if (asMenu) onDismiss() } } }
+            // Our own chooser (PR4): the apps found on the device, Always or Just once, a video still
+            // coming down streamed to the app. The window opens over this page.
+            DetailAction.OpenElsewhere -> { { scope.launch { com.tmplayer.player.ExternalPlayRouter.take(context, settings, item, "", forceAsk = true); if (asMenu) onDismiss() } } }
+            // The way back from a default player (PR4): this once, TMPlayer's own player.
+            DetailAction.PlayInTmPlayer -> { { if (asMenu) onDismiss(); com.tmplayer.player.ExternalPlayRouter.bypassNext(item); onPlay() } }
             DetailAction.CopyLink -> { { scope.launch { MessageLink.copy(context, item.chatId, item.messageId); if (asMenu) onDismiss() } } }
             DetailAction.OpenChat -> { { onDismiss(); onOpenChat?.invoke() } }
             DetailAction.SplitCopy, DetailAction.JoinCopies -> { {

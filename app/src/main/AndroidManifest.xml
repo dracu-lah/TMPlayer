@@ -74,6 +74,17 @@
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="vnd.youtube" />
         </intent>
+        <!-- Which video players are installed (InstalledPlayers, PR4): the default player's list and
+             chooser. A finished file goes to an app as a content address, a video still coming down
+             as a stream on 127.0.0.1, so both are asked. Never QUERY_ALL_PACKAGES. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="content" android:mimeType="video/*" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="http" android:mimeType="video/*" />
+        </intent>
     </queries>
 
     <application
@@ -240,6 +251,16 @@
         -->
         <service
             android:name=".cast.DlnaCastService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
+
+        <!--
+          Keeps the process in the foreground while a video that is still downloading is served to
+          another app on 127.0.0.1 (PR4, ExternalStreams), so a low-memory TV does not end TMPlayer
+          with the other player still reading. Stops with the stream. Not exported.
+        -->
+        <service
+            android:name=".player.ExternalStreamService"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
 

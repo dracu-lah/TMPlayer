@@ -205,6 +205,9 @@ class GarbageInputTest {
                 KnownDevices.find(KnownDevices.effective(list), DeviceFacts(hardware = text, model = text, sdk = text.length), text)
             }
             survive("EngineChoice.from", text) { com.tmplayer.player.EngineChoice.from(text) }
+            survive("PlayerChoice.parse", text) { com.tmplayer.player.PlayerChoice.parse(text) }
+            survive("TunneledMode.from", text) { com.tmplayer.player.TunneledMode.from(text) }
+            survive("ExternalExtras.forApp", text) { com.tmplayer.player.ExternalExtras.forApp(text, text, text.length.toLong() - 5, text) }
             survive("EngineHistory.decode", text) { com.tmplayer.player.EngineHistory.decode(text) }
             survive("UpdateFeed.parseGitHub", text) { UpdateFeed.parseGitHub(text) }
             survive("UpdateFeed.parseGitHubList", text) { UpdateFeed.parseGitHubList(text) }

@@ -271,6 +271,17 @@ private val SUBTITLE_BOLD = booleanPreferencesKey("subtitle_bold")
 // Android's video decoder choice. See [VideoDecoder].
 private val VIDEO_DECODER = stringPreferencesKey("video_decoder")
 
+// Which player opens a video (PR4, [com.tmplayer.player.PlayerChoice]) and the engine and
+// playback switches of Settings, Playback (PR5). Every value is read back through an OrNull form.
+private val DEFAULT_PLAYER = stringPreferencesKey("default_player")
+private val EXTERNAL_HINT_SEEN = booleanPreferencesKey("external_hint_seen")
+private val PLAYER_ENGINE = stringPreferencesKey("player_engine")
+private val ENGINE_SWITCH_ON_ERROR = booleanPreferencesKey("engine_switch_on_error")
+private val SUGGEST_VLC = booleanPreferencesKey("suggest_vlc")
+private val FRAME_RATE_MATCHING = booleanPreferencesKey("frame_rate_matching")
+private val TUNNELED_PLAYBACK = stringPreferencesKey("tunneled_playback")
+private val PLAYBACK_STATS = booleanPreferencesKey("playback_stats")
+
 // The app-wide languages, under the series memory. See [TrackPreferences].
 private val PREFERRED_AUDIO = stringPreferencesKey("preferred_audio_language")
 private val PREFERRED_SUBTITLE = stringPreferencesKey("preferred_subtitle_language")
@@ -1656,6 +1667,80 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
 
     suspend fun setVideoDecoder(decoder: VideoDecoder) {
         prefs.edit { it[VIDEO_DECODER] = decoder.name }
+    }
+
+    // ---- default player and engine (Android, PR4 and PR5) -------------------------------------
+
+    /** The player a press on a video opens: TMPlayer's own unless the viewer chose otherwise. */
+    val defaultPlayer: Flow<com.tmplayer.player.PlayerChoice> = read { com.tmplayer.player.PlayerChoice.parse(it[DEFAULT_PLAYER]) }
+
+    suspend fun defaultPlayerNow(): com.tmplayer.player.PlayerChoice =
+        com.tmplayer.player.PlayerChoice.parse(prefs.data.first()[DEFAULT_PLAYER])
+
+    suspend fun setDefaultPlayer(choice: com.tmplayer.player.PlayerChoice) {
+        prefs.edit {
+            if (choice == com.tmplayer.player.PlayerChoice.TmPlayer) it.remove(DEFAULT_PLAYER) else it[DEFAULT_PLAYER] = choice.encode()
+        }
+    }
+
+    /** Whether the one line that says where "Play in TMPlayer" is has been shown (this device only). */
+    suspend fun externalHintSeenNow(): Boolean = prefs.data.first()[EXTERNAL_HINT_SEEN] ?: false
+
+    suspend fun markExternalHintSeen() {
+        prefs.edit { it[EXTERNAL_HINT_SEEN] = true }
+    }
+
+    /** Automatic, ExoPlayer or VLC. Stored whatever this build can run; [com.tmplayer.player.EngineSelector] decides what it can honour. */
+    val engineChoice: Flow<com.tmplayer.player.EngineChoice> = read { com.tmplayer.player.EngineChoice.from(it[PLAYER_ENGINE]) }
+
+    suspend fun engineChoiceNow(): com.tmplayer.player.EngineChoice = com.tmplayer.player.EngineChoice.from(prefs.data.first()[PLAYER_ENGINE])
+
+    suspend fun setEngineChoice(choice: com.tmplayer.player.EngineChoice) {
+        prefs.edit { it[PLAYER_ENGINE] = choice.key }
+    }
+
+    /** Switch to the other engine by itself when a decoder gives up (on), or only suggest it (off). */
+    val switchEngineOnError: Flow<Boolean> = read { it[ENGINE_SWITCH_ON_ERROR] ?: true }
+
+    suspend fun switchEngineOnErrorNow(): Boolean = prefs.data.first()[ENGINE_SWITCH_ON_ERROR] ?: true
+
+    suspend fun setSwitchEngineOnError(value: Boolean) {
+        prefs.edit { it[ENGINE_SWITCH_ON_ERROR] = value }
+    }
+
+    /** Offer VLC when playback cannot keep up (on by default). */
+    val suggestVlc: Flow<Boolean> = read { it[SUGGEST_VLC] ?: true }
+
+    suspend fun suggestVlcNow(): Boolean = prefs.data.first()[SUGGEST_VLC] ?: true
+
+    suspend fun setSuggestVlc(value: Boolean) {
+        prefs.edit { it[SUGGEST_VLC] = value }
+    }
+
+    /** Frame-rate matching on a television (on by default; it still follows the TV's own setting). */
+    val frameRateMatching: Flow<Boolean> = read { it[FRAME_RATE_MATCHING] ?: true }
+
+    suspend fun frameRateMatchingNow(): Boolean = prefs.data.first()[FRAME_RATE_MATCHING] ?: true
+
+    suspend fun setFrameRateMatching(value: Boolean) {
+        prefs.edit { it[FRAME_RATE_MATCHING] = value }
+    }
+
+    val tunneledMode: Flow<com.tmplayer.player.TunneledMode> = read { com.tmplayer.player.TunneledMode.from(it[TUNNELED_PLAYBACK]) }
+
+    suspend fun tunneledModeNow(): com.tmplayer.player.TunneledMode = com.tmplayer.player.TunneledMode.from(prefs.data.first()[TUNNELED_PLAYBACK])
+
+    suspend fun setTunneledMode(mode: com.tmplayer.player.TunneledMode) {
+        prefs.edit { it[TUNNELED_PLAYBACK] = mode.key }
+    }
+
+    /** The playback stats overlay (off). Stored now; the overlay itself comes later. */
+    val playbackStats: Flow<Boolean> = read { it[PLAYBACK_STATS] ?: false }
+
+    suspend fun playbackStatsNow(): Boolean = prefs.data.first()[PLAYBACK_STATS] ?: false
+
+    suspend fun setPlaybackStats(value: Boolean) {
+        prefs.edit { it[PLAYBACK_STATS] = value }
     }
 
     /**

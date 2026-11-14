@@ -286,7 +286,7 @@ private fun DetailPane(state: ShellState, request: DetailRequest) {
             }
             // The player puts the pane away and brings it back when it closes (see
             // ShellState.openPlayer), so leaving the video lands here, not on the page behind.
-            DetailAction.Resume, DetailAction.Play, DetailAction.StartOver -> {
+            DetailAction.Resume, DetailAction.Play, DetailAction.PlayInTmPlayer, DetailAction.StartOver -> {
                 state.openPlayer(item, startFromBeginning = action == DetailAction.StartOver)
                 return
             }
@@ -326,7 +326,7 @@ private fun DetailPane(state: ShellState, request: DetailRequest) {
         if (!staysOpen) close()
         when (action) {
             // Handled above, with the pane left open.
-            DetailAction.Resume, DetailAction.Play, DetailAction.StartOver -> Unit
+            DetailAction.Resume, DetailAction.Play, DetailAction.PlayInTmPlayer, DetailAction.StartOver -> Unit
             DetailAction.MarkWatched, DetailAction.MarkUnwatched -> Unit
             DetailAction.AddWatchLater, DetailAction.RemoveWatchLater, DetailAction.RemoveFromHistory -> Unit
             DetailAction.Download, DetailAction.SaveToDownloads, DetailAction.CancelDownload -> Unit

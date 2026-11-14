@@ -12,6 +12,12 @@ enum class DetailAction {
     Resume,
     Play,
 
+    /**
+     * Plays in TMPlayer's own player although another app is the default player (PR4): the way
+     * back, offered whenever the Default player setting is not TMPlayer. See [DetailContext.externalDefault].
+     */
+    PlayInTmPlayer,
+
     /** From the first frame, forgetting the saved position. Only beside [Resume]. */
     StartOver,
     MarkWatched,
@@ -122,6 +128,10 @@ data class DetailContext(
     val canExport: Boolean = false,
     /** The panel can take the video out of History ([DetailAction.RemoveFromHistory]). */
     val canRemoveFromHistory: Boolean = false,
+    /** The Default player setting names another app or asks (PR4), so TMPlayer's own player is one line away. */
+    val externalDefault: Boolean = false,
+    /** Another app can be fed a video that is not all here, as a stream (the phone), so Open in another app need not wait for the whole file. */
+    val canStreamElsewhere: Boolean = false,
 )
 
 object DetailActions {
@@ -134,6 +144,8 @@ object DetailActions {
         } else {
             add(DetailAction.Play)
         }
+        // Never locked into another app: the way back sits right under Play.
+        if (context.externalDefault) add(DetailAction.PlayInTmPlayer)
         add(if (context.finished) DetailAction.MarkUnwatched else DetailAction.MarkWatched)
         // Nothing is copied, only remembered, so a chat that restricts saving keeps this too.
         context.watchLater?.let { add(if (it) DetailAction.RemoveWatchLater else DetailAction.AddWatchLater) }
@@ -153,12 +165,13 @@ object DetailActions {
             context.cached -> add(DetailAction.SaveToDownloads)
             else -> add(DetailAction.Download)
         }
-        // Both pass the file to somebody else's app, which is a copy leaving Telegram's hands, and
-        // only once the whole file is here: half a file opened elsewhere stops after two minutes.
+        // Both pass the file to somebody else's app, which is a copy leaving Telegram's hands. Share
+        // only once the whole file is here; Open in another app also for a video still coming down
+        // where the platform can stream it to the app (half a file handed over stops after two minutes).
         val whole = context.inDownloads || context.cached
-        if (context.canHandOff && context.canBeSaved && whole) {
-            add(DetailAction.Share)
-            add(DetailAction.OpenElsewhere)
+        if (context.canHandOff && context.canBeSaved) {
+            if (whole) add(DetailAction.Share)
+            if (whole || context.canStreamElsewhere) add(DetailAction.OpenElsewhere)
         }
         if (context.canExport && KeepRules.mayExport(context.canBeSaved, context.inDownloads)) add(DetailAction.ExportCopy)
         if (context.comments > 0) add(DetailAction.CommentVideos)

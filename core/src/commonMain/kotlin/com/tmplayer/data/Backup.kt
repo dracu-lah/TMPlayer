@@ -206,6 +206,15 @@ object Backups {
         "ui_scale" to Kind.TEXT,
         "update_notify" to Kind.BOOL,
         "video_decoder" to Kind.TEXT,
+        // The default player is checked against what is installed when it is used, so a package
+        // this phone lacks asks again instead of failing (PlayerChoice, ExternalPlay.plan).
+        "default_player" to Kind.TEXT,
+        "player_engine" to Kind.TEXT,
+        "engine_switch_on_error" to Kind.BOOL,
+        "suggest_vlc" to Kind.BOOL,
+        "frame_rate_matching" to Kind.BOOL,
+        "tunneled_playback" to Kind.TEXT,
+        "playback_stats" to Kind.BOOL,
         "video_scale" to Kind.TEXT,
         "volume_boost" to Kind.BOOL,
         "watch_next" to Kind.BOOL,

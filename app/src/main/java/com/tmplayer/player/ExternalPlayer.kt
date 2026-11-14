@@ -2,6 +2,7 @@ package com.tmplayer.player
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.util.Log
 import com.tmplayer.data.LocalFileAvailability
 import com.tmplayer.data.Td
@@ -126,6 +127,47 @@ object ExternalPlayer {
             // grant has to survive being handed on to whichever app is picked.
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
+    }
+
+    /**
+     * An explicit `ACTION_VIEW` for one chosen app (PR4): aimed at the component the viewer picked,
+     * never at "whoever wins", so the app that opens is the one they chose and TMPlayer cannot win
+     * its own handover. [uri] is a `content://` address (a finished file, with a read grant for
+     * that package) or the `http://127.0.0.1` address of an [ExternalStreams] session. The extras
+     * are each app's own ([ExternalExtras.forApp]); [subtitle] goes only where it can be named.
+     */
+    fun viewIntent(
+        context: Context,
+        app: ExternalApp,
+        uri: Uri,
+        mimeType: String,
+        title: String,
+        positionMs: Long,
+        subtitle: Uri? = null,
+    ): Intent {
+        val intent = Intent(Intent.ACTION_VIEW)
+            .setDataAndType(uri, mimeType.ifBlank { "video/*" })
+            .setClassName(app.packageName, app.className)
+            .putExtra(Intent.EXTRA_TITLE, title)
+        for (extra in ExternalExtras.forApp(app.packageName, title, positionMs, subtitle?.toString())) {
+            when (extra) {
+                is ExternalExtra.Text -> intent.putExtra(extra.key, extra.value)
+                is ExternalExtra.Whole -> intent.putExtra(extra.key, extra.value)
+                is ExternalExtra.Long64 -> intent.putExtra(extra.key, extra.value)
+                is ExternalExtra.Flag -> intent.putExtra(extra.key, extra.value)
+            }
+        }
+        if (subtitle != null && ExternalExtras.takesSubtitleArray(app.packageName)) {
+            // MX Player: `subs` is a Uri array and `subs.enable` the ones shown at once. UNVERIFIED on a real install.
+            intent.putExtra("subs", arrayOf(subtitle)).putExtra("subs.enable", arrayOf(subtitle))
+        }
+        if (uri.scheme == "content") {
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            // The explicit grant too, for an app that reads on another thread after its activity is gone.
+            runCatching { context.grantUriPermission(app.packageName, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+        }
+        if (context !is android.app.Activity) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        return intent
     }
 
     /**

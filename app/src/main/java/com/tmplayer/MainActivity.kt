@@ -1211,6 +1211,9 @@ private fun Root() {
             return
         }
         val chatTitle = if (item.chatId == requested.chatId) requestedChat else CopyHandoff.chatTitleOf(item) ?: requestedChat
+        // The default player (PR4): another app, our chooser, or on as always. A press that came
+        // back from the room prompt ([confirmed]) was routed already.
+        if (!confirmed && com.tmplayer.player.ExternalPlayRouter.take(context, settings, item, chatTitle)) return
         // Off the main thread for the whole of the decision. Everything between here and the plan
         // is blocking work: two stat() calls to see whether the file is on disk, a statvfs() for
         // the free space, a walk of every download record, and a TDLib round trip per record to
@@ -1344,6 +1347,9 @@ private fun Root() {
             }
         }
     }
+
+    // The default player's windows and plumbing (PR4); "Play in TMPlayer" and every fall back land in play().
+    com.tmplayer.player.ExternalPlayHost(settings) { video, chat -> play(video, chatTitle = chat) }
 
     /** Opening a chat is what makes it the one to reopen on the next launch. */
     fun openChat(chat: ChatSummary) {
