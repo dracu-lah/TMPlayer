@@ -7,7 +7,6 @@ import com.tmplayer.data.ForumTopicSummary
 import com.tmplayer.data.TopicSearch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -120,15 +119,14 @@ class TopicSearchScaleTest {
                 return listOf(ForumTopicSummary(1, "Movies"))
             }
         }
-        ChatGate.set(setOf(2L, 3L))
-        gateIs(setOf(2L, 3L))
-        val search = model(source, settle = 0)
+        // The search's own gate, as ChatGate.browsing hands it over, set by the test in step.
+        val gate = kotlinx.coroutines.flow.MutableStateFlow<Set<Long>?>(setOf(2L, 3L))
+        val search = GlobalSearchViewModel(noVideos, known = { emptyList() }, work = dispatcher, settleMs = 0, topicSource = source, gate = gate)
         search.chatList = listOf(group(1), group(2), group(3))
         search.type("movies")
         advanceUntilIdle()
         assertEquals(setOf(2L, 3L), asked.toSet())
-        ChatGate.set(setOf(3L))
-        gateIs(setOf(3L))
+        gate.value = setOf(3L)
         advanceUntilIdle()
         assertEquals(listOf(3L), search.state.value.topics.map { it.chatId })
     }
@@ -175,11 +173,6 @@ class TopicSearchScaleTest {
         advanceUntilIdle()
         assertEquals(0, asked)
         assertEquals(listOf(4), search.state.value.topics.map { it.topic.id })
-    }
-
-    /** [ChatGate.browsing] follows the lock on the app's own background scope, in real time. */
-    private suspend fun gateIs(chats: Set<Long>) = kotlinx.coroutines.withContext(Dispatchers.Default) {
-        kotlinx.coroutines.withTimeout(5_000) { ChatGate.browsing.first { it == chats } }
     }
 
     private fun group(id: Long) = com.tmplayer.data.ChatSummary(

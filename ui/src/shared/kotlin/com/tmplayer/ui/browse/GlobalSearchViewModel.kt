@@ -168,6 +168,8 @@ class GlobalSearchViewModel(
     private val identity: SearchIdentity = SearchIdentity.Default,
     /** Where topics are found by their names (U14); none for a fixture that does not offer it. */
     private val topicSource: TopicSource? = if (source === VideoSearchSource.Telegram) TopicSource.Telegram else null,
+    /** The chats search may list: the kids lock and the added chats ([ChatGate.browsing]); a test's own. */
+    private val gate: StateFlow<Set<Long>?> = ChatGate.browsing,
     /**
      * Where Telegram's pages are kept by query ([PageQueries]), so searching the same words again
      * lists them at once and asks again only once they are [PageQueries.SEARCH_STALE_MS] old.
@@ -245,7 +247,7 @@ class GlobalSearchViewModel(
         // The kids lock coming on, or a chat removed in the picker, while results are listed
         // takes its chats out of them at once.
         viewModelScope.launch {
-            ChatGate.browsing.collect { allowed ->
+            gate.collect { allowed ->
                 if (allowed != null) _state.update { s ->
                     s.copy(
                         groups = s.groups.filter { g -> g.copies.all { KidsLock.allows(allowed, it.chatId) } },
@@ -360,7 +362,7 @@ class GlobalSearchViewModel(
         val now = _state.value
         if (!force && query == now.query) return
         // The kids lock and the added chats (HX27): search lists videos from the added chats alone.
-        val allowed = ChatGate.browsing.value
+        val allowed = gate.value
         // Only the words around Telegram's part changed (a quality marker, a space): the answer
         // asked for, or about to be, stands, and the new words only screen and rank it.
         if (!force && !query.isEmpty && query.server == now.query.server && (asked == query.server || now.settling) &&
@@ -466,7 +468,7 @@ class GlobalSearchViewModel(
             _state.update { it.copy(topics = emptyList(), topicsSearching = false, topicsError = null, topicsPartial = false) }
             return
         }
-        val allowed = ChatGate.browsing.value
+        val allowed = gate.value
         val includeArchived = _state.value.filters.includeArchived
         topicJob = viewModelScope.launch {
             val order = withContext(work) { chats.withIndex().associate { it.value.id to it.index } }
@@ -503,11 +505,11 @@ class GlobalSearchViewModel(
             val found = java.util.Collections.synchronizedList(ArrayList(local))
             val failures = java.util.concurrent.atomic.AtomicInteger()
             var failure: Throwable? = null
-            val gate = Semaphore(TopicSearch.AT_ONCE)
+            val permits = Semaphore(TopicSearch.AT_ONCE)
             coroutineScope {
                 asking.forEach { chat ->
                     launch {
-                        gate.withPermit {
+                        permits.withPermit {
                             try {
                                 val topics = source.search(chat.id, words, TopicSearch.TOPICS_PER_CHAT)
                                 found += TopicSearch.hits(chat.id, chat.title, topics, words, fromTelegram = true)
