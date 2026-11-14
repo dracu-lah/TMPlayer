@@ -1,6 +1,7 @@
 package com.tmplayer.data
 
 import com.tmplayer.online.MetaSettings
+import com.tmplayer.platform.RotatingLog
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
@@ -54,6 +55,19 @@ object LogExport {
             for (line in lines.takeLast(MAX_LINES)) appendLine(scrubber.scrub(line))
         }
     }
+
+    /**
+     * The same report from the app's own rotating log file ([RotatingLog], L4): both files, the
+     * older first, every line scrubbed like any other. A log that cannot be read gives a report with
+     * no lines rather than an error.
+     */
+    fun report(
+        facts: Feedback.Facts,
+        log: RotatingLog,
+        known: Collection<String> = emptyList(),
+        now: LocalDateTime = LocalDateTime.now(),
+        extra: List<String> = emptyList(),
+    ): String = report(facts, log.readLines(), known, now, extra)
 
     /**
      * The titles this device has seen, from Continue watching, the watched list, Watch later,

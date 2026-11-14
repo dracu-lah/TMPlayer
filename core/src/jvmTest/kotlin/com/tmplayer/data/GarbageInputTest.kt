@@ -33,6 +33,9 @@ import com.tmplayer.platform.IOException
 import com.tmplayer.player.MkvChapters
 import com.tmplayer.player.MkvClusters
 import com.tmplayer.player.Mp4Chapters
+import com.tmplayer.player.PlaybackTrace
+import com.tmplayer.player.PlaybackTraceRing
+import com.tmplayer.player.StutterVerdict
 import com.tmplayer.player.TimeEntry
 import kotlinx.coroutines.runBlocking
 import java.io.File
@@ -223,6 +226,11 @@ class GarbageInputTest {
             survive("ChatGridDisk.decode", text) { ChatGridDisk.decode(text) }
             survive("ChatSnapshot.decode", text) { ChatSnapshot.decode(text) }
             survive("ResumeSyncDoc.decode", text) { ResumeSyncDoc.decode(text) }
+            survive("PlaybackTrace.read", text) {
+                for (session in PlaybackTrace.read(text)) StutterVerdict.analyse(session.samples)
+                PlaybackTrace.read(text + "\n" + PlaybackTrace.sampleLine(com.tmplayer.player.TraceSample(atMs = 1)))
+                PlaybackTraceRing.from(text).sessions()
+            }
             survive("ResumeState.decode", text) { ResumeState.decode(text) }
             survive("ResumeRecord.decode", text) {
                 ResumeRecord.decode("1_2", text, 0, 0)
