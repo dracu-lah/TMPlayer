@@ -25,6 +25,8 @@ internal fun VideoSortSheet(state: VideoMenuState, onDismiss: () -> Unit) {
     // The remote opens on the order in force, not on the first line, as every other picker does.
     val chosen = remember { FocusRequester() }
     val groups = videoMenuGroups(state, s)
+    // Play random, when offered, is the first group; the remote still opens on the order in force.
+    val orderGroup = groups.indexOfFirst { it.title == s.gridSortLabel }
     ChoiceSheet(title = s.gridSort, onDismiss = onDismiss, onClose = onDismiss, ignoreRelease = !isTouch()) {
         ChoiceList {
             groups.forEachIndexed { index, group ->
@@ -32,7 +34,7 @@ internal fun VideoSortSheet(state: VideoMenuState, onDismiss: () -> Unit) {
                 group.choices.forEach { choice ->
                     ChoiceLine(
                         choice.label,
-                        modifier = if (index == 0 && choice.chosen) Modifier.focusRequester(chosen) else Modifier,
+                        modifier = if (index == orderGroup && choice.chosen) Modifier.focusRequester(chosen) else Modifier,
                         selected = choice.chosen,
                         icon = choice.icon,
                         onClick = choice.onPick,

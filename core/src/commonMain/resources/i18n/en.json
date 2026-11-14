@@ -938,6 +938,7 @@
     "pinned_link_detail": "The pinned post links to a video",
     "pinned_open": "Open the pinned post",
     "play_from_start": "Play from the start",
+    "play_random": "Play random",
     "progress_kept": "{percent} so far, and kept",
     "queued_detail": "Waiting its turn",
     "queued_many": "{count, plural, one {Queued # videos. They download one at a time.} other {Queued # videos. They download one at a time.}}",

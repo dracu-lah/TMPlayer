@@ -68,10 +68,19 @@ class VideoMenuState(
     val filter: VideoFilter,
     val onSort: (VideoSort) -> Unit,
     val onFilter: (VideoFilter) -> Unit,
+    /**
+     * Plays one of the videos already loaded, picked at random ([com.tmplayer.data.PlayRandom]).
+     * Null leaves the line out: an empty list has nothing to pick.
+     */
+    val onPlayRandom: (() -> Unit)? = null,
 )
 
 /** The menu's two groups, as [GroupedChoicePopover] draws them and the television's sheet lists them. */
 fun videoMenuGroups(state: VideoMenuState, s: Messages): List<ChoiceGroup> = buildList {
+    // First, where the thumb and the remote land: one press away from the Sort button.
+    state.onPlayRandom?.let { play ->
+        add(ChoiceGroup(s.commonPlay, listOf(GroupedChoice(s.gridPlayRandom, TmIcons.Shuffle, false, play))))
+    }
     add(ChoiceGroup(s.gridSortLabel, VideoSort.entries.map { sort -> GroupedChoice(videoSortLabel(sort, s), videoSortIcon(sort), sort == state.sort) { state.onSort(sort) } }))
     add(ChoiceGroup(s.gridFilterLabel, VideoFilter.entries.map { filter -> GroupedChoice(videoFilterLabel(filter, s), videoFilterIcon(filter), filter == state.filter) { state.onFilter(filter) } }))
 }

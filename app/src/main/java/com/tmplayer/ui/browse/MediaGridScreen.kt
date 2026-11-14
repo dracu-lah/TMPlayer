@@ -343,6 +343,9 @@ fun MediaGridScreen(
     val clearFilter: () -> Unit = { recentScope.launch { recentStore.setVideoFilter(chatId, com.tmplayer.data.VideoFilter.All) } }
     // One menu for the order and the Show filter, the same groups on every device. The size limits
     // have their own "n hidden" button (sizeHidden below) and the full pair is in Settings.
+    // What "Select all" and "Play random" mean, which is every video the listing has fetched so far. The bar lives
+    // above the listing and cannot see inside it, so the loaded page is passed out to here.
+    var listedItems by remember(chatId) { mutableStateOf<List<MediaItem>>(emptyList()) }
     val menu = VideoMenuState(
         sort = sort,
         filter = filter,
@@ -354,6 +357,16 @@ fun MediaGridScreen(
             sorting = false
             if (picked != filter) recentScope.launch { recentStore.setVideoFilter(chatId, picked) }
         },
+        // One of the videos loaded so far, never a whole chat fetched for it (PlayRandom).
+        onPlayRandom = if (listedItems.isEmpty()) null else ({
+            sorting = false
+            com.tmplayer.data.PlayRandom.next(
+                scope = com.tmplayer.data.PlayRandom.chatScope(chatId, topicBar?.selected ?: 0),
+                items = listedItems,
+                id = { it.id },
+                watched = { SettingsStore.progressKey(it.chatId, it.messageId) in watchedVideos },
+            )?.let(onPlay)
+        }),
     )
     // Videos outside the size limits, said by an "n hidden" button for as long as the chat is open
     // and changed from there (SizeQuickSheet). A search ignores the limits, so it hides nothing.
@@ -498,9 +511,6 @@ fun MediaGridScreen(
     // handed the listing a fresh list, and an id with nothing to look it up in is not a video.
     var selected by remember(chatId) { mutableStateOf<Map<String, MediaItem>>(emptyMap()) }
     var selecting by remember(chatId) { mutableStateOf(false) }
-    // What "Select all" means, which is every video the listing has fetched so far. The bar lives
-    // above the listing and cannot see inside it, so the loaded page is passed out to here.
-    var listedItems by remember(chatId) { mutableStateOf<List<MediaItem>>(emptyList()) }
     val scope = rememberCoroutineScope()
     val settings = remember(context) { SettingsStore(context) }
     val detailFirst by settings.detailFirst.collectAsState(initial = true)

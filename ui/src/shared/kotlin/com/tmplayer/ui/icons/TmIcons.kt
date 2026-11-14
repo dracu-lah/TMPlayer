@@ -809,6 +809,19 @@ object TmIcons {
         )
     }
 
+    /** Play random: two lines that cross, each ending in an arrow (drawn here, in the same 24 grid and stroke). */
+    val Shuffle: ImageVector by lazy {
+        icon(
+            "Shuffle",
+            s("M3 7H5.5C8 7 9.5 8.5 11 10.5"),
+            s("M13 13.5C14.5 15.5 16 17 18.5 17H21"),
+            s("M3 17H5.5C8 17 9.5 15.5 11 13.5"),
+            s("M13 10.5C14.5 8.5 16 7 18.5 7H21"),
+            s("M19 5L21 7L19 9"),
+            s("M19 15L21 17L19 19"),
+        )
+    }
+
     /** The season's episodes. Hugeicons ListVideo. */
     val Episodes: ImageVector by lazy {
         icon(

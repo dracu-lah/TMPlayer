@@ -298,6 +298,21 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
                 com.tmplayer.data.MessageLookup.Unreachable -> toast(s.errorsOffline)
             }
         }
+        val watchedNow by state.watched.watched.collectAsState(initial = emptyMap())
+        val playRandom: (() -> Unit)? = history.filter { DownloadIndex.state(it) != DownloadIndex.FileState.Missing }
+            .takeIf { it.isNotEmpty() }?.let { playable ->
+                {
+                    com.tmplayer.data.PlayRandom.next(
+                        scope = com.tmplayer.data.PlayRandom.DOWNLOADS_SCOPE,
+                        items = playable,
+                        id = { it.key },
+                        watched = { com.tmplayer.data.SettingsStore.progressKey(it.chatId, it.messageId) in watchedNow },
+                    )?.let { record ->
+                        state.noteChatTitle(record.chatId, record.chatTitle)
+                        state.openPlayer(record.toMediaItem(), startFromBeginning = false)
+                    }
+                }
+            }
         val keptRow: @Composable (ResumeRecord) -> Unit = { record ->
             KeptRow(
                 record = record,
@@ -392,6 +407,8 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
                                 // Starts a selection with everything in it, for Save to folder or
                                 // Delete. Delete all went: this and Delete, or the review, say it.
                                 if (history.isNotEmpty()) TextButton(onClick = selectAll) { Text(s.downloadsSelectAll) }
+                                // One of the finished downloads, unwatched first, never the one that just played.
+                                if (playRandom != null) TextButton(onClick = playRandom) { Text(s.gridPlayRandom) }
                             }
                         }
                     }

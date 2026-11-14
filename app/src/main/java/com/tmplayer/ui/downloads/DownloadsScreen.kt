@@ -930,8 +930,22 @@ fun DownloadsScreen(
         }
     }
     // Newest, Name and Largest over the downloads, once there are two to put in order.
+    // Play random, beside them: one of the finished downloads, unwatched first, never the one that
+    // just played (PlayRandom). Nothing for a list with no finished video.
+    val watchedStore = remember(context) { com.tmplayer.data.WatchedStore(context) }
+    val watchedNow by remember(watchedStore) { watchedStore.watched }.collectAsStateWithLifecycle(initialValue = emptyMap())
+    val playRandom: (() -> Unit)? = rows.filter { it.complete && !it.missing && it.bytes > 0 }.takeIf { it.isNotEmpty() }?.let { playable ->
+        {
+            com.tmplayer.data.PlayRandom.next(
+                scope = com.tmplayer.data.PlayRandom.DOWNLOADS_SCOPE,
+                items = playable,
+                id = { it.key },
+                watched = { SettingsStore.progressKey(it.record.chatId, it.record.messageId) in watchedNow },
+            )?.let { onPlay(it.record) }
+        }
+    }
     val sortChips: @Composable () -> Unit = {
-        DownloadsSortChips(downloadsSort) { picked -> scope.launch { settings.setDownloadsSort(picked) } }
+        DownloadsSortChips(downloadsSort, playRandom) { picked -> scope.launch { settings.setDownloadsSort(picked) } }
     }
     val keptCard: @Composable (DownloadRow) -> Unit = { row -> focusTarget(row.key) {
         DownloadCard(
@@ -1618,7 +1632,11 @@ internal fun StorageSummary(
  * device: Newest, Name, and Largest, which is the one for making room.
  */
 @Composable
-private fun DownloadsSortChips(current: com.tmplayer.data.DownloadShelf.Sort, onPick: (com.tmplayer.data.DownloadShelf.Sort) -> Unit) {
+private fun DownloadsSortChips(
+    current: com.tmplayer.data.DownloadShelf.Sort,
+    onPlayRandom: (() -> Unit)?,
+    onPick: (com.tmplayer.data.DownloadShelf.Sort) -> Unit,
+) {
     val s = LocalStrings.current
     com.tmplayer.ui.browse.OrderChips(
         com.tmplayer.data.DownloadShelf.Sort.entries.map { sort ->
@@ -1637,7 +1655,10 @@ private fun DownloadsSortChips(current: com.tmplayer.data.DownloadShelf.Sort, on
                 selected = sort == current,
                 onClick = { onPick(sort) },
             )
-        },
+        } + listOfNotNull(
+            // Not an order: a press plays one video, so it is never the chip in force.
+            onPlayRandom?.let { play -> com.tmplayer.ui.browse.OrderChip("random", s.gridPlayRandom, TmIcons.Shuffle, false, play) },
+        ),
         description = s.downloadsSortLabel,
         modifier = Modifier.padding(start = TEXT_EDGE, end = TEXT_EDGE, top = 8.dp, bottom = 4.dp),
     )

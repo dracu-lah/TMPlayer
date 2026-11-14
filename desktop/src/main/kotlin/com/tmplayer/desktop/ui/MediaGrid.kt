@@ -466,6 +466,8 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
         }
         // While there is no grid to carry it (loading, empty, an error), the bar stands on its own.
         if (ui !is UiState.Content) Box(Modifier.align(Alignment.BottomCenter)) { chatBar() }
+        val loadedForRandom = (ui as? UiState.Content)?.value?.items.orEmpty()
+        val watchedForRandom by state.watched.watched.collectAsState(initial = emptyMap())
         // The order and the Show filter in one card, as on the phone.
         com.tmplayer.ui.browse.VideoMenuPopover(
             open = sorting,
@@ -480,6 +482,18 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
                 onFilter = { picked ->
                     sorting = false
                     if (picked != filter) sortScope.launch { state.settings.setVideoFilter(chat.id, picked) }
+                },
+                // One of the videos loaded so far, never a whole chat fetched for it (PlayRandom).
+                onPlayRandom = loadedForRandom.takeIf { it.isNotEmpty() }?.let { loaded ->
+                    {
+                        sorting = false
+                        com.tmplayer.data.PlayRandom.next(
+                            scope = com.tmplayer.data.PlayRandom.chatScope(chat.id, topicBar?.selected ?: 0),
+                            items = loaded,
+                            id = { it.id },
+                            watched = { SettingsStore.progressKey(it.chatId, it.messageId) in watchedForRandom },
+                        )?.let { state.openPlayer(it, startFromBeginning = false) }
+                    }
                 },
             ),
             onDismiss = { sorting = false },
