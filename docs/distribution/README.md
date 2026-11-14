@@ -14,6 +14,7 @@ those steps use.
 | [play.md](play.md) | Phase G Google Play (set aside), and Android developer verification for every APK |
 | [crash-consent.md](crash-consent.md) | S1: crash reports asked once at first run, and what an opt-out default would change |
 | [crash-visibility.md](crash-visibility.md) | S3: Android vitals, Sentry and the log upload; the weekly stutter list; Sentry quota |
+| [libvlc-spike.md](libvlc-spike.md) | PR2 and PR7: libVLC's version, size, 16 KB, licence, F-Droid and Play answers |
 
 IzzyOnDroid was decided against (see PLAN); Obtainium installs straight from the GitHub releases.
 
