@@ -8704,22 +8704,29 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             OpeningStall.Reason.NoLine -> L.playerStalledNoLine
             OpeningStall.Reason.Slow -> if (stalledMidPlay) L.playerStalledMidSlow else L.playerStalledSlow
         }
-        val canDownload = canSaveToDownloads()
         // Telegram's lighter copy (CP80), said where it applies. Not Telegram's cap on an account
         // without Premium (CP83): the cap slows a download and never stops it, and this sheet is
         // for nothing arriving at all, so it is said on the slow line only.
         val lighter = if (OpeningStall.reason(Td.link.value) == OpeningStall.Reason.Slow) lighterQuality() else null
+        // Which buttons, in one place for every screen (U1); the hook for "Open in another app" is there.
+        val actions = StalledSheet.actions(
+            reason = OpeningStall.reason(Td.link.value),
+            canDownload = canSaveToDownloads(),
+            lighterCopy = lighter != null,
+            canOpenInAnotherApp = savable == true,
+        )
+        val canDownload = StalledSheet.Action.DownloadFirst in actions
         val detail = listOfNotNull(
-            L.playerLighterHint.takeIf { lighter != null },
+            L.playerLighterHint.takeIf { StalledSheet.Action.LighterCopy in actions },
             L.playerStalledDownloadHint.takeIf { canDownload },
         ).joinToString("\n")
         statusDetail.visibility = if (detail.isNotEmpty()) View.VISIBLE else View.GONE
         statusDetail.text = detail
         statusLighter?.apply {
             text = lighter?.let { L.playerLighter(com.tmplayer.data.TelegramQualities.label(it.height)) }.orEmpty()
-            visibility = if (lighter != null) View.VISIBLE else View.GONE
+            visibility = if (StalledSheet.Action.LighterCopy in actions) View.VISIBLE else View.GONE
         }
-        statusBack?.visibility = View.VISIBLE
+        statusBack?.visibility = if (StalledSheet.Action.Back in actions) View.VISIBLE else View.GONE
         statusOpenWith?.apply {
             text = L.playerDownloadFirst
             visibility = if (canDownload) View.VISIBLE else View.GONE
