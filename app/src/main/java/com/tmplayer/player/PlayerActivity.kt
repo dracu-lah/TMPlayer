@@ -542,6 +542,20 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
     private val watch = PlaybackWatch()
 
+    /**
+     * The playback trace (reliability plan L1): dropped frames, underruns, buffer, decoder and the
+     * data source's waits for TDLib, every few seconds while the video plays. Ticks on [loopHandler]
+     * and writes on its own thread; stopped by [letGoOfPlayer].
+     */
+    private val traceRecorder: PlaybackRecorder by lazy {
+        PlaybackRecorder(
+            context = this,
+            file = PlaybackRecorder.fileIn(this),
+            handler = loopHandler,
+            intervalMs = TraceCadence.intervalMs(com.tmplayer.BuildConfig.BUILD_TYPE, com.tmplayer.BuildConfig.VERSION_NAME),
+        )
+    }
+
     /** Frames dropped and audio underruns since this player started, as Media3 reports them. */
     private var watchDropped = 0
     private var watchUnderruns = 0
@@ -2109,6 +2123,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             }
         }
         player = exo
+        traceRecorder.attach(exo)
         wakeEndWatch()
         castClient = client
         attachMediaSession(exo)
@@ -4586,6 +4601,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     private fun letGoOfPlayer() {
         val exo = player ?: return
         player = null
+        // The recorder stops with the player, before the release (its last reading reads the player).
+        runCatching { traceRecorder.stop() }
         runCatching { exo.removeListener(playerListener) }
         if (!exo.isReleased) {
             runCatching { exo.stop() }

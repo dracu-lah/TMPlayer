@@ -123,6 +123,9 @@ class TdDataSource(td: TdlClient) : BaseDataSource(true) {
         // Only a slow one is written down: the opens of a demuxer jumping to an index and back are
         // where a start's seconds can hide, and a fast open is not news.
         val took = SystemClock.elapsedRealtime() - startedAt
+        // Counted for the playback trace (L1): an open is a reopen or a seek, and its wait is TDLib's.
+        TdReadCounters.opened()
+        TdReadCounters.waited(took)
         if (took >= SLOW_LOG_MS) Log.i(LOG_TAG, "open of file $fileId at $position took $took ms")
         return bytesRemaining
     }
@@ -180,6 +183,7 @@ class TdDataSource(td: TdlClient) : BaseDataSource(true) {
         val startedAt = SystemClock.elapsedRealtime()
         val available = blocking(READ_TIMEOUT_MS) { bytes.awaitBytesAt(position) }
         val took = SystemClock.elapsedRealtime() - startedAt
+        TdReadCounters.waited(took)
         if (took >= SLOW_LOG_MS) Log.i(LOG_TAG, "waited $took ms for bytes at $position of file ${bytes.fileId}")
         return available
     }
