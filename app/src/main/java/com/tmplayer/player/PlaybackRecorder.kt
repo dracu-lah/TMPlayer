@@ -51,6 +51,13 @@ class PlaybackRecorder(
     private var scheduled = false
     private var windowOpen = false
 
+    /** Keeps [playing] at the number of recorders whose player is playing or buffering now. */
+    private fun setWindow(open: Boolean) {
+        if (open == windowOpen) return
+        windowOpen = open
+        if (open) playing.incrementAndGet() else playing.decrementAndGet()
+    }
+
     private var dropped = 0
     private var underruns = 0
     private var decoder = ""
@@ -146,7 +153,7 @@ class PlaybackRecorder(
         handler.removeCallbacks(tick)
         scheduled = false
         if (windowOpen) takeSample()
-        windowOpen = false
+        setWindow(false)
         runCatching { exo.removeAnalyticsListener(listener) }
         if (registered) {
             runCatching { context.applicationContext.unregisterComponentCallbacks(trimCallbacks) }
@@ -187,7 +194,7 @@ class PlaybackRecorder(
         val exo = player ?: return
         if (running(exo)) {
             if (!windowOpen) {
-                windowOpen = true
+                setWindow(true)
                 sampler.rebase(elapsedClock(), cpuTimeMs())
             }
             schedule()
@@ -195,7 +202,7 @@ class PlaybackRecorder(
             handler.removeCallbacks(tick)
             scheduled = false
             takeSample()
-            windowOpen = false
+            setWindow(false)
         }
     }
 
@@ -248,6 +255,9 @@ class PlaybackRecorder(
     }
 
     companion object {
+        /** Recorders whose player plays or buffers now: above zero, a video is playing (Playback test refuses then). */
+        val playing = java.util.concurrent.atomic.AtomicInteger(0)
+
         /** A window shorter than this with nothing in it is dropped. */
         const val MIN_WINDOW_MS = 1_000L
 

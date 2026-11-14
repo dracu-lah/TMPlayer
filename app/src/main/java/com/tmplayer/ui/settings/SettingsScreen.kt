@@ -427,6 +427,8 @@ fun SettingsScreen(
     val saveLogs = rememberSaveLogs(say = { toast(it) })
     // Send to developer (L5): null in a build with no log inbox, so the row is not drawn.
     val sendToDeveloper = rememberSendToDeveloper()
+    // Playback test (L6): 30 seconds from the disk, to tell the decoder from the line.
+    val playbackTest = rememberPlaybackTest()
     val saveNameCheck = rememberSaveNameCheck(say = { toast(it) })
     val developerOptions by settings.developerOptions.collectAsStateWithLifecycle(initialValue = false)
     // The sign out dialog's tick box. Off every time the dialog opens: downloads are the viewer's
@@ -1860,6 +1862,15 @@ fun SettingsScreen(
                         subtitle = s.logsSaveDetail,
                         icon = TmIcons.Logs,
                         onClick = saveLogs,
+                    )
+                }
+                // Plays 30 seconds from the disk and says whether the decoder or the line is the trouble (L6).
+                item {
+                    ActionRow(
+                        title = s.playbacktestTitle,
+                        subtitle = s.playbacktestDetail,
+                        icon = TmIcons.Play,
+                        onClick = playbackTest,
                     )
                 }
                 // Uploads one report after showing what is in it (L5); not drawn in a build with no inbox.
