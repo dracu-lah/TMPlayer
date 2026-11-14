@@ -255,6 +255,17 @@ class StutterGateTest {
     }
 
     @Test
+    fun `the report says where the bytes came from and how much was buffered, so a slow line is told from a slow decoder`() {
+        val tags = StutterReport.tagsOf(facts(speed = 82, symptom = PlaybackWatch.SLOW).copy(source = "remote", bufferedAheadMs = 1_250))
+        assertEquals("remote", tags["source"])
+        assertEquals("1250", tags["buffered_ahead_ms"])
+        assertEquals("unknown", StutterReport.tagsOf(facts()).getValue("source"))
+        assertEquals("-1", StutterReport.tagsOf(facts()).getValue("buffered_ahead_ms"))
+        assertEquals("remotesecret name", StutterReport.tagsOf(facts().copy(source = "remote/secret name!"))["source"], "only plain words ride in the source")
+        assertEquals(StutterReport.ALLOWED_TAGS, tags.keys)
+    }
+
+    @Test
     fun `the report carries the symptom and where the frame rate came from`() {
         val tags = StutterReport.tagsOf(facts(speed = 50, symptom = PlaybackWatch.SLOW).copy(fpsSource = "unknown"))
         assertEquals("slow", tags["symptom"])

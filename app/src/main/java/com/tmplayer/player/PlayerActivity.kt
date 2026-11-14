@@ -532,6 +532,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             sizeBucket = picture.sizeBucket,
             symptom = figures.symptom,
             fpsSource = FrameRates.source(containerFps, derivedFps),
+            source = runCatching { currentItem().locality.name.lowercase() }.getOrDefault("unknown"),
+            bufferedAheadMs = runCatching { player?.let { (it.bufferedPosition - it.currentPosition).coerceAtLeast(0).toInt() } ?: -1 }.getOrDefault(-1),
         )
         Thread { runCatching { com.tmplayer.data.CrashReports.reportStutter(facts) } }.start()
     }
@@ -1563,7 +1565,13 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 controls?.focusEpisodes()
             },
         )
-        buildNextUpCard()
+        // The next-up card, the skip pill and the undo chip are three views built in code, and
+        // nothing shows one before the video has played for a while. Built after the first frame
+        // rather than in onCreate, which an ANR report from a MiTV caught inside their Buttons
+        // (they are all null-safe until then).
+        findViewById<View>(R.id.player_root).doOnPreDraw {
+            if (!isFinishing && !isDestroyed) buildNextUpCard()
+        }
         startTrickplay()
         startStillWatchingCounts()
         // Followed rather than read once, so turning it on in Settings with a video open applies
@@ -7861,7 +7869,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             // The notification's and the lock screen's picture too: an image encode, which a
             // television leaves until the video is up ([afterOpening]).
             afterOpening()
-            sessionArtwork = withContext(Dispatchers.Default) { artworkOf(full) }
+            sessionArtwork = if (tinyHeap) null else withContext(Dispatchers.Default) { artworkOf(full) }
             refreshSessionMetadata()
         }
     }
@@ -7871,11 +7879,31 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * already the size a notification draws.
      */
     private fun artworkOf(bitmap: android.graphics.Bitmap): ByteArray? = runCatching {
-        java.io.ByteArrayOutputStream().use { out ->
-            bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
-            out.toByteArray()
+        // ExoPlayer copies these bytes into every metadata update, on the main thread (Sentry: an
+        // out of memory error in MediaMetadata.setArtworkData on a 48 MB heap), so the smaller the
+        // better: a JPEG of at most 512 px, a few kilobytes rather than a full-size PNG.
+        val longest = maxOf(bitmap.width, bitmap.height).coerceAtLeast(1)
+        val scale = (SESSION_ART_MAX_PX.toFloat() / longest).coerceAtMost(1f)
+        val source = if (scale < 1f) {
+            android.graphics.Bitmap.createScaledBitmap(
+                bitmap, (bitmap.width * scale).toInt().coerceAtLeast(1), (bitmap.height * scale).toInt().coerceAtLeast(1), true,
+            )
+        } else bitmap
+        try {
+            java.io.ByteArrayOutputStream().use { out ->
+                source.compress(android.graphics.Bitmap.CompressFormat.JPEG, SESSION_ART_QUALITY, out)
+                out.toByteArray()
+            }
+        } finally {
+            if (source !== bitmap) source.recycle()
         }
     }.getOrNull()
+
+    /** A device with a heap this small keeps no session picture at all: the lock screen does without. */
+    private val tinyHeap: Boolean by lazy {
+        val am = getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager
+        am.isLowRamDevice || am.memoryClass <= TINY_HEAP_MB
+    }
 
     /**
      * Brings the artwork up, and keeps the backdrop moving while the viewer waits.
@@ -9199,6 +9227,13 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
         /** A thumbnail at least this wide for its height is a frame of the film, not a logo. */
         private const val REAL_FRAME_ASPECT = 1.3f
+
+        /** The session picture's longest edge and JPEG quality: a lock screen and a notification need no more. */
+        private const val SESSION_ART_MAX_PX = 512
+        private const val SESSION_ART_QUALITY = 85
+
+        /** A Java heap limit this small (MB) or less leaves the session picture out. */
+        private const val TINY_HEAP_MB = 64
 
         /** How long the opening wait runs before the loader adds the speed. */
         private const val LOADER_SLOW_MS = OpeningProgress.SPEED_NOTE_AFTER_MS

@@ -61,6 +61,14 @@ object StutterReport {
         val symptom: String = "",
         /** Where [fps] came from ([FrameRates.source]): `container`, `derived` or `unknown`. */
         val fpsSource: String = "unknown",
+        /**
+         * Where the bytes came from, `remote` (streamed from Telegram), `cached` or `downloaded`, or
+         * `unknown`: four of the first reports had a hardware decoder, no dropped frame and a slow
+         * clock, which a slow line explains and a slow decoder does not.
+         */
+        val source: String = "unknown",
+        /** Milliseconds of video buffered ahead of the playhead when the report was made, or -1 when not known. */
+        val bufferedAheadMs: Int = -1,
     ) {
         /** What the daily limit counts: codec, bit depth and size bucket. */
         val kind: String get() = "${clean(codec)}:${if (bitDepth > 8) 10 else 8}:$sizeBucket"
@@ -71,6 +79,7 @@ object StutterReport {
         "codec", "profile", "bit_depth", "width", "height", "fps", "bitrate_kbps", "container",
         "decoder", "decoder_type", "prediction", "speed_percent", "dropped_frames", "frames", "underruns",
         "manufacturer", "model", "android", "cores", "abi", "app_version", "symptom", "fps_source",
+        "source", "buffered_ahead_ms",
     )
 
     /** The event, with the facts as tags. The SDK adds the device, OS and app contexts when it captures. */
@@ -107,6 +116,8 @@ object StutterReport {
         "app_version" to clean(facts.appVersion),
         "symptom" to clean(facts.symptom),
         "fps_source" to clean(facts.fpsSource),
+        "source" to clean(facts.source),
+        "buffered_ahead_ms" to facts.bufferedAheadMs.coerceIn(-1, 3_600_000).toString(),
     )
 
     /**
