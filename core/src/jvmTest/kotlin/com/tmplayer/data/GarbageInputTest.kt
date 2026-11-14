@@ -242,6 +242,19 @@ class GarbageInputTest {
                 PlaybackTrace.read(text + "\n" + PlaybackTrace.sampleLine(com.tmplayer.player.TraceSample(atMs = 1)))
                 PlaybackTraceRing.from(text).sessions()
             }
+            survive("LogUpload.outcome", text) {
+                LogUpload.parseCode(text)
+                LogUpload.outcome(201, text, text)
+                LogUpload.outcome(429, text, text)
+                LogUpload.outcome(-1, text)
+            }
+            survive("LogBundle.build", text) {
+                LogBundle.build(
+                    Feedback.Facts(text, Feedback.Platform.Phone, text, text),
+                    LogBundle.Parts(crash = listOf(text), sessions = listOf(listOf(text)), appLog = text.lines()),
+                    known = listOf(text), maxBytes = 5_000,
+                )
+            }
             survive("ResumeState.decode", text) { ResumeState.decode(text) }
             survive("ResumeRecord.decode", text) {
                 ResumeRecord.decode("1_2", text, 0, 0)

@@ -130,6 +130,14 @@ android {
             ?: ""
         buildConfigField("String", "SENTRY_DSN", "\"$sentryDsn\"")
 
+        // Where "Send to developer" posts a report (workers/log-inbox, deployed by the maintainer).
+        // Empty is the normal case: the button is not drawn, and a fork or a CI build carries no
+        // address of mine. Set LOG_UPLOAD_URL in local.properties or in the environment.
+        val logUploadUrl = localProps.getProperty("LOG_UPLOAD_URL")
+            ?: System.getenv("LOG_UPLOAD_URL")
+            ?: ""
+        buildConfigField("String", "LOG_UPLOAD_URL", "\"$logUploadUrl\"")
+
         // The OpenSubtitles app key for online subtitles. Like the DSN, optional: a build without
         // it hides the feature (OnlineSubtitles.inBuild). Set OPENSUBTITLES_API_KEY in
         // local.properties or the environment; CI takes it from the repository secret.

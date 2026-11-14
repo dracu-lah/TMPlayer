@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "tmplayer-log-inbox",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+
+  // Off on purpose: Workers Logs would record each request, and this inbox keeps no address.
+  "observability": { "enabled": false },
+
+  // The private bucket the reports go to. Create it first (README.md); it has no public access.
+  "r2_buckets": [{ "binding": "REPORTS", "bucket_name": "tmplayer-log-inbox" }],
+
+  // A few reports a minute from one address, and a ceiling for everyone together.
+  "ratelimits": [
+    { "name": "LIMITER", "namespace_id": "17011", "simple": { "limit": 6, "period": 60 } },
+    { "name": "GLOBAL", "namespace_id": "17012", "simple": { "limit": 60, "period": 60 } }
+  ],
+
+  // Deletes reports older than 30 days, daily.
+  "triggers": { "crons": ["23 3 * * *"] }
+}

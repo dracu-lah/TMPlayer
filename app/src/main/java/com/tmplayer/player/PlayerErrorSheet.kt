@@ -29,6 +29,7 @@ object PlayerErrorSheet {
                 TMPlayerTheme {
                     androidx.compose.foundation.layout.Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
                         SendLogsButton()
+                        com.tmplayer.ui.settings.SendToDeveloperButton()
                         // What went wrong, in words a report or a forum post can carry: a phone
                         // has a clipboard to put it on; a television does not.
                         if (touch && details != null) CopyDetailsButton(details)

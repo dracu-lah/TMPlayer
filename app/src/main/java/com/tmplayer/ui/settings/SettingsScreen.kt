@@ -425,6 +425,8 @@ fun SettingsScreen(
     var prompt by remember { mutableStateOf<Prompt?>(null) }
     val backup = rememberBackupActions(onPlan = { prompt = Prompt.Restore(it) }, say = { toast(it) })
     val saveLogs = rememberSaveLogs(say = { toast(it) })
+    // Send to developer (L5): null in a build with no log inbox, so the row is not drawn.
+    val sendToDeveloper = rememberSendToDeveloper()
     val saveNameCheck = rememberSaveNameCheck(say = { toast(it) })
     val developerOptions by settings.developerOptions.collectAsStateWithLifecycle(initialValue = false)
     // The sign out dialog's tick box. Off every time the dialog opens: downloads are the viewer's
@@ -1859,6 +1861,17 @@ fun SettingsScreen(
                         icon = TmIcons.Logs,
                         onClick = saveLogs,
                     )
+                }
+                // Uploads one report after showing what is in it (L5); not drawn in a build with no inbox.
+                if (sendToDeveloper != null) {
+                    item {
+                        ActionRow(
+                            title = s.logsSendDev,
+                            subtitle = s.logsSendDevDetail,
+                            icon = TmIcons.Send,
+                            onClick = sendToDeveloper,
+                        )
+                    }
                 }
                 // How much the app keeps in its own log on this device (L4); beside Save logs, which reads it.
                 item {

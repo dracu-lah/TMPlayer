@@ -434,7 +434,11 @@ fun BigError(message: String, onRetry: (() -> Unit)?, sendLogs: Boolean = true, 
                         LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
                     }
                 }
-                if (sendLogs) SendLogsButton()
+                if (sendLogs) {
+                    SendLogsButton()
+                    // Beside it where the build has a log inbox (L5); nothing otherwise.
+                    com.tmplayer.ui.settings.SendToDeveloperButton()
+                }
             }
         }
     }

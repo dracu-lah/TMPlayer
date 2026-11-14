@@ -1,0 +1,8 @@
+{
+  "name": "tmplayer-log-inbox",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/inbox.test.ts"
+  }
+}

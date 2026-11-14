@@ -1,0 +1,81 @@
+package com.tmplayer.data
+
+import java.io.IOException
+import java.net.HttpURLConnection
+import java.net.URL
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+
+/**
+ * Posts one report to the log inbox (`workers/log-inbox`) after the viewer said yes ([LogUpload]
+ * says how the answer reads). One request, nothing kept: no cookies, no redirects followed (a
+ * captive portal's answer is a failure, not a code), no retry on its own, and the connection is
+ * closed the moment the viewer cancels.
+ */
+object LogUploader {
+
+    private const val CONNECT_MS = 15_000
+    private const val READ_MS = 30_000
+    private const val MAX_REPLY_BYTES = 4_096
+
+    /**
+     * Never throws except for cancellation. Any trouble reaching the inbox, including a connection
+     * that dies part way through the body, is [LogUpload.Outcome.NoConnection]; the caller keeps the
+     * file instead.
+     */
+    suspend fun send(url: String, text: String): LogUpload.Outcome {
+        if (!LogUpload.fits(text)) return LogUpload.Outcome.Failed(413)
+        val bytes = text.toByteArray(Charsets.UTF_8)
+        val connection = try {
+            URL(url).openConnection() as HttpURLConnection
+        } catch (e: Exception) {
+            return LogUpload.Outcome.Failed(0)
+        }
+        return coroutineScope {
+            val job = async(Dispatchers.IO) { post(connection, bytes) }
+            try {
+                job.await()
+            } catch (e: CancellationException) {
+                // Closing the socket is what makes the blocked write or read return.
+                runCatching { connection.disconnect() }
+                throw e
+            }
+        }
+    }
+
+    private fun post(connection: HttpURLConnection, bytes: ByteArray): LogUpload.Outcome = try {
+        connection.requestMethod = "POST"
+        connection.connectTimeout = CONNECT_MS
+        connection.readTimeout = READ_MS
+        connection.instanceFollowRedirects = false
+        connection.useCaches = false
+        connection.doOutput = true
+        connection.setFixedLengthStreamingMode(bytes.size)
+        connection.setRequestProperty("Content-Type", "text/plain; charset=utf-8")
+        connection.setRequestProperty("User-Agent", "TMPlayer")
+        connection.outputStream.use { it.write(bytes) }
+        val status = connection.responseCode
+        val stream = if (status >= 400) connection.errorStream else connection.inputStream
+        val reply = stream?.use { readSmall(it) }
+        LogUpload.outcome(status, reply, connection.getHeaderField("Retry-After"))
+    } catch (e: IOException) {
+        LogUpload.Outcome.NoConnection
+    } catch (e: Exception) {
+        LogUpload.Outcome.Failed(0)
+    } finally {
+        runCatching { connection.disconnect() }
+    }
+
+    private fun readSmall(input: java.io.InputStream): String {
+        val out = java.io.ByteArrayOutputStream()
+        val chunk = ByteArray(1024)
+        while (out.size() < MAX_REPLY_BYTES) {
+            val n = input.read(chunk, 0, minOf(chunk.size, MAX_REPLY_BYTES - out.size()))
+            if (n < 0) break
+            out.write(chunk, 0, n)
+        }
+        return out.toString(Charsets.UTF_8.name())
+    }
+}

@@ -1,0 +1,69 @@
+# TMPlayer log inbox
+
+The receiving end of the app's "Send to developer" button (reliability plan L5). The app shows what
+a report holds and its size, asks first, and only then POSTs it here. The report is stored privately
+for 30 days under a short code such as `TMP-7K3Q`, which the person says in the group or in an issue.
+
+**Nothing here is deployed. The maintainer deploys it** (wrangler is a user-only action in this
+repository, see the root `AGENTS.md`): no script, CI job or agent runs `wrangler` for this worker.
+Until it is deployed and its address is put in the build, the app's button stays hidden.
+
+## What it does
+
+- `POST /v1/report`, `Content-Type: text/plain` (UTF-8), at most 2 MB (checked from the header and
+  again on the bytes that arrive). Anything else is refused: 404, 405, 413, 415, 400.
+- The body must start with `TMPlayer logs`, the app's own header, and be valid UTF-8.
+- Rate limits: 6 a minute per address and 60 a minute for everyone together (429 with `Retry-After`).
+  The address is hashed before it reaches the limiter, never stored and never logged.
+- Stores `reports/TMP-XXXX.txt` in a private R2 bucket with a conditional put, so a code is never
+  reused. The code uses an alphabet without 0, 1, I, L or O.
+- Answers `201 {"code":"TMP-7K3Q","keepDays":30}`.
+- Keeps nothing but the report: no address, no user agent, no headers, no metadata. Workers Logs is
+  off (`observability` in `wrangler.jsonc`), so the platform does not record requests either.
+- 30 days: a daily cron deletes older reports (`sweep` in `src/inbox.ts`) and the bucket's lifecycle
+  rule below does the same, so a failed cron does not keep anything longer.
+- There is no read route. Reports are read from the Cloudflare dashboard or with
+  `wrangler r2 object get`.
+
+What the report holds is decided by the app and listed on the privacy page
+(`site/src/pages/privacy/index.astro`): the scrubbed app log and logcat, the last playback sessions,
+the earlier run's crash, device facts and the decoders the device lists. Names, ids, phone numbers
+and file names are taken out on the device before it is sent.
+
+## Deploying (the maintainer, once)
+
+From this folder, with a Cloudflare login that may create R2 buckets. The deploy names
+`--config wrangler.jsonc`: the repository root has a `wrangler.jsonc` of its own (worker `layer`)
+that wins otherwise, as it does for the download mirror.
+
+```sh
+# 1. The private bucket (no public access, no custom domain)
+npx wrangler r2 bucket create tmplayer-log-inbox
+
+# 2. The 30 day lifecycle rule, as a second guard beside the daily cron
+npx wrangler r2 bucket lifecycle add tmplayer-log-inbox expire-30d reports/ --expire-days 30
+
+# 3. The worker
+npx wrangler deploy --config wrangler.jsonc
+```
+
+Then build the app with the worker's address (see below), for example
+`https://tmplayer-log-inbox.<account>.workers.dev/v1/report`.
+
+Check afterwards: a `curl -X POST -H 'Content-Type: text/plain' --data 'TMPlayer logs' <address>`
+answers a code; the same without the header answers 400; a 3 MB body answers 413; the object is in
+the bucket and no request appears in the worker's logs.
+
+## The app's side
+
+`LOG_UPLOAD_URL` is a build value (`app/build.gradle.kts`): a line in
+`local.properties`, or the `LOG_UPLOAD_URL` environment variable.
+Empty (the default, and what forks and CI build with) hides "Send to developer".
+
+## Tests
+
+Pure rules, no Cloudflare and nothing to install (Node 22.6 or newer):
+
+```sh
+npm test
+```
