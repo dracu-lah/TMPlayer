@@ -86,6 +86,8 @@ class GarbageInputTest {
         "{\"version\":99,\"settings\":[],\"watched\":{\"a\":\"b\"},\"bookmarks\":[null,{}]}",
         "{\"format\":\"tmplayer-backup\",\"version\":-1}", "{\"format\":\"tmplayer-backup\",\"version\":1e20}",
         "{\"rows\":[{\"items\":[null,{\"chatId\":\"x\"}]}]}", "{\"grids\":{\"1\":[{}]}}",
+        "{\"devices\":{}}", "{\"devices\":[{\"engine\":\"vlc\",\"chipsets\":[1e999,null,{},\"\"],\"sdkMin\":-1e999,\"sdkMax\":1e999}]}",
+        "[{\"engine\":[],\"decoder\":{},\"models\":\"x\"}]", "[{\"engine\":\"vlc\",\"models\":[\"\",\"tx6\"],\"codecs\":[null],\"sdkMin\":24.5}]",
         "1:2:3", "-->", "a|b|c", "|", "||||", "1|", "|1", "9999999999999999999999", "-9223372036854775808",
         "9223372036854775807", "1.2.3.4.5", "v", "v1", "1.", ".1", "beta.", "1.2.3-beta.", "1.2.3-beta.99999999999",
         "00:00:01,000 --> 00:00:00,000\nbackwards\n",
@@ -198,6 +200,12 @@ class GarbageInputTest {
     fun textParsersNeverThrow() {
         for (text in texts) {
             survive("UpdateFeed.parseFeed", text) { UpdateFeed.parseFeed(text) }
+            survive("KnownDevices.parse", text) {
+                val list = KnownDevices.parse(text)
+                KnownDevices.find(KnownDevices.effective(list), DeviceFacts(hardware = text, model = text, sdk = text.length), text)
+            }
+            survive("EngineChoice.from", text) { com.tmplayer.player.EngineChoice.from(text) }
+            survive("EngineHistory.decode", text) { com.tmplayer.player.EngineHistory.decode(text) }
             survive("UpdateFeed.parseGitHub", text) { UpdateFeed.parseGitHub(text) }
             survive("UpdateFeed.parseGitHubList", text) { UpdateFeed.parseGitHubList(text) }
             survive("UpdateFeed.keyFor", text) { UpdateFeed.keyFor(text) }
