@@ -95,6 +95,7 @@ fun <T> StateScaffold(
             state.message,
             icon = state.picture,
             actionLabel = state.action?.label,
+            actionIcon = state.action?.buttonIcon,
             onAction = state.action?.let { action -> onAction?.let { { it(action) } } },
             takeFocus = takeFocus,
         )
@@ -308,6 +309,8 @@ fun BigEmpty(
     /** The one button worth offering, such as Keep looking when a chat's walk back gave up. */
     actionLabel: String? = null,
     onAction: (() -> Unit)? = null,
+    /** A glyph before [actionLabel], where the action has one. */
+    actionIcon: ImageVector? = null,
     /** Puts the remote on the button; see [StateScaffold]'s takeFocus. */
     takeFocus: Boolean = true,
 ) {
@@ -344,6 +347,10 @@ fun BigEmpty(
                 val focus = remember { FocusRequester() }
                 Spacer(Modifier.size(4.dp))
                 TmButton(onClick = onAction, modifier = Modifier.focusRequester(focus)) {
+                    if (actionIcon != null) {
+                        Icon(actionIcon, contentDescription = null, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(8.dp))
+                    }
                     Text(actionLabel)
                 }
                 if (!touch && takeFocus) {

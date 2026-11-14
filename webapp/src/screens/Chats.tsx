@@ -1,6 +1,6 @@
 import { createEffect, createResource, createSignal, on, onCleanup, Show } from 'solid-js'
 import { A, useSearchParams } from '@solidjs/router'
-import { PinIcon, Search01Icon, StarIcon } from '@hugeicons/core-free-icons'
+import { PinIcon, Search01Icon, StarIcon, UserAdd01Icon } from '@hugeicons/core-free-icons'
 import { api, call, errorText } from '../tg/rpc'
 import { onBackOnline } from '../net'
 import { t } from '../i18n'
@@ -102,8 +102,17 @@ export function Chats() {
             <Show when={chats.loading && !list().length}>
                 <p class="muted">{t('browse.loading_chats')}</p>
             </Show>
+            {/* Every chat removed from the picked set: a choice to make, not Telegram still sending the list. */}
             <Show when={!chats.loading && !chats.error && !list().length}>
-                <p class="muted">{t('browse.no_chats')}</p>
+                <Show when={addedGate()?.size === 0 && chats()?.length} fallback={<p class="muted">{t('browse.no_chats')}</p>}>
+                    <div class="notice home-none-chosen">
+                        <p>{t('browse.no_chats_added')}</p>
+                        <A class="outline-button" href="/added-chats" data-tv-first>
+                            <Icon icon={UserAdd01Icon} size={18} />
+                            {t('picker.choose_chats')}
+                        </A>
+                    </div>
+                </Show>
             </Show>
             <Show when={query() && ranked() && !shown().length}>
                 <p class="muted">{t('chats.no_match', { query: query() })}</p>

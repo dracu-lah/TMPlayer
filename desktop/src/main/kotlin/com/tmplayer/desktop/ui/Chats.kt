@@ -199,7 +199,7 @@ fun ChatsPage(
                 },
             )
         }
-        StateBox(ui, onRetry = { model.retry() }, onAction = { model.load() }, skeleton = { ChatListSkeleton() }) { data ->
+        StateBox(ui, onRetry = { model.retry() }, onAction = { action -> if (action == com.tmplayer.ui.components.StateAction.AddChats) com.tmplayer.ui.browse.AddChatsRequest.ask() else model.load() }, skeleton = { ChatListSkeleton() }) { data ->
             LaunchedEffect(data.chats) { state.noteChatTitles(data.chats) }
             val filter = state.chatFilter
             val sort = state.chatSort

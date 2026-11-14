@@ -638,7 +638,8 @@ internal fun BrowseScreen(
             onRetry = onRetry,
             loading = { ChatListSkeleton(columns = if (touch) 1 else TV_CHAT_COLUMNS) },
             // "No chats yet" offers Refresh: the list may still be on its way after a sign in.
-            onAction = { onRetry() },
+            // "No chats added" offers Choose chats: the picker, not a reload that finds the same empty list.
+            onAction = { action -> if (action == com.tmplayer.ui.components.StateAction.AddChats) AddChatsRequest.ask() else onRetry() },
         ) { data ->
             val visible = remember(data.chats, tab, favorites, query, chatFilter, chatSort) {
                 filterChats(data.chats, tab, favorites, query, chatFilter, chatSort)

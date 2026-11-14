@@ -1,6 +1,6 @@
 import { createEffect, createSignal, For, Index, lazy, Match, on, onCleanup, Show, Switch } from 'solid-js'
 import { A } from '@solidjs/router'
-import { ArrowLeft01Icon, ArrowRight01Icon } from '@hugeicons/core-free-icons'
+import { ArrowLeft01Icon, ArrowRight01Icon, UserAdd01Icon } from '@hugeicons/core-free-icons'
 import { call, errorText } from '../tg/rpc'
 import { onBackOnline } from '../net'
 import { t } from '../i18n'
@@ -117,7 +117,10 @@ export function Home() {
                                 </div>
                                 <div class="notice home-none-chosen">
                                     <p>{t('home.none_added')}</p>
-                                    <A class="link" href="/added-chats" data-tv-first>{t('picker.choose_chats')}</A>
+                                    <A class="outline-button" href="/added-chats" data-tv-first>
+                                        <Icon icon={UserAdd01Icon} size={18} />
+                                        {t('picker.choose_chats')}
+                                    </A>
                                 </div>
                             </section>
                         </Match>

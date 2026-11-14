@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
@@ -116,7 +118,13 @@ fun <T> StateBox(
             EmptyArt(state.picture, modifier = Modifier.padding(bottom = 4.dp))
             Text(state.message, color = Tone.muted, textAlign = TextAlign.Center)
             val action = state.action
-            if (action != null && onAction != null) OutlinedButton(onClick = { onAction(action) }) { Text(action.label) }
+            if (action != null && onAction != null) OutlinedButton(onClick = { onAction(action) }) {
+                action.buttonIcon?.let {
+                    Icon(it, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text(action.label)
+            }
         }
         is UiState.Error -> Centred {
             EmptyArt(TmIcons.Warning, tone = Tone.danger, modifier = Modifier.padding(bottom = 4.dp))

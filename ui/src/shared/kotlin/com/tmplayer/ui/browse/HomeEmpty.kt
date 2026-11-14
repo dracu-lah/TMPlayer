@@ -193,7 +193,7 @@ fun HomeNoneChosenCard(start: Dp, end: Dp, modifier: Modifier = Modifier, focus:
                 modifier = Modifier.weight(1f),
             )
         }
-        HeroPill(label = s.pickerChooseChats, onClick = onAddChats, focus = focus, icon = TmIcons.Add)
+        HeroPill(label = s.pickerChooseChats, onClick = onAddChats, focus = focus, icon = TmIcons.PersonAdd)
     }
 }
 

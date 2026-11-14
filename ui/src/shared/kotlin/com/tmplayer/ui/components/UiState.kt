@@ -74,6 +74,12 @@ enum class StateAction {
         Refresh -> L.commonRefresh
         AddChats -> L.pickerChooseChats
     }
+
+    /** The glyph before the button's words, where the action has one (the Choose chats button's person with a plus). */
+    val buttonIcon: ImageVector? get() = when (this) {
+        AddChats -> TmIcons.PersonAdd
+        else -> null
+    }
 }
 
 /** What every platform says when a load runs on for too long, and when it starts saying it. */

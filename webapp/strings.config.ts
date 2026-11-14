@@ -44,6 +44,7 @@ export const PAGE_STRINGS = [
     'browse.history_cleared',
     'browse.loading_chats',
     'browse.no_chats',
+    'browse.no_chats_added',
     'browse.no_match',
     'browse.no_playable_videos',
     'browse.no_videos_between',
