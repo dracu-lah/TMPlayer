@@ -201,6 +201,22 @@ class DownloadService : Service() {
         return START_NOT_STICKY
     }
 
+    /**
+     * Android 15 and later give a data sync service six hours a day, then call this and expect the
+     * service to have stopped within seconds; if it has not, the system throws a
+     * RemoteServiceException and the whole app crashes (Sentry, a Redmi on Android 17). So the
+     * notification comes down and the service stops at once. [onDestroy] marks everything that
+     * was moving as paused, so the Downloads screen offers Resume, which starts the service again
+     * with the viewer in the app, as the platform requires.
+     */
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        Log.w(TAG, "The system's time for this foreground service is up, stopping (type $fgsType)")
+        stopping = true
+        runCatching { stopForegroundRemoving() }
+        runCatching { notifier().cancel(SUMMARY_ID) }
+        stopSelf()
+    }
+
     override fun onDestroy() {
         // Nothing draws the summary from here on, whichever thread is part way through something.
         stopping = true
