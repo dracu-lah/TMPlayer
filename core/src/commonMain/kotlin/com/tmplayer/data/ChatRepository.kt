@@ -257,6 +257,37 @@ class ChatRepository(private val td: TdlClient) {
         }
     }
 
+    /**
+     * What [chatId] (or one of its topics) holds besides videos, for the line under "No playable
+     * videos". Three counts at once, each TDLib's own figure first and the server only for what
+     * it cannot say (-1), each given [HOLDS_TIMEOUT_MS]; a kind that does not answer is left out.
+     * Asked once per chat and topic for [COUNT_TTL_MS], and only when an empty page is drawn.
+     */
+    suspend fun holds(chatId: Long, topicId: Int = 0): ChatHolds {
+        val key = "$chatId:$topicId"
+        heldCounts[key]?.takeIf { now() - it.first < COUNT_TTL_MS }?.let { return it.second }
+        val found = withContext(Dispatchers.IO) {
+            val topic = if (topicId != 0) MessageTopicForum(topicId) else null
+            suspend fun count(filter: dev.g000sha256.tdl.dto.SearchMessagesFilter): Int? =
+                kotlinx.coroutines.withTimeoutOrNull(HOLDS_TIMEOUT_MS) {
+                    ChatHolds.known(td.getChatMessageCount(chatId, topic, filter, true).valueOrNull?.count)
+                        ?: ChatHolds.known(td.getChatMessageCount(chatId, topic, filter, false).valueOrNull?.count)
+                }
+            coroutineScope {
+                val photos = async { count(dev.g000sha256.tdl.dto.SearchMessagesFilterPhoto()) }
+                val audio = async { count(dev.g000sha256.tdl.dto.SearchMessagesFilterAudio()) }
+                val files = async { count(SearchMessagesFilterDocument()) }
+                ChatHolds(photos.await(), audio.await(), files.await())
+            }
+        }
+        // Only a whole answer is kept, so a timeout is asked again next time; bounded, for a long session.
+        if (found.photos != null && found.audio != null && found.files != null) {
+            if (heldCounts.size >= HOLDS_KEPT) heldCounts.clear()
+            heldCounts[key] = now() to found
+        }
+        return found
+    }
+
     /** The forum topic [messageId] was posted in, or 0, for a player handed only the two ids. */
     suspend fun topicOf(chatId: Long, messageId: Long): Int = withContext(Dispatchers.IO) {
         val message = td.getMessage(chatId, messageId).valueOrNull ?: return@withContext 0
@@ -649,6 +680,11 @@ class ChatRepository(private val td: TdlClient) {
          */
         private val countedTopics = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, Boolean>>()
         private const val COUNT_TTL_MS = 10 * 60 * 1000L
+
+        /** What [holds] learnt, by `chatId:topicId`, at most [HOLDS_KEPT] of them. */
+        private val heldCounts = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, ChatHolds>>()
+        private const val HOLDS_KEPT = 64
+        private const val HOLDS_TIMEOUT_MS = 6_000L
         private fun now() = System.currentTimeMillis()
     }
 }

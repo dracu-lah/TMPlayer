@@ -1550,7 +1550,31 @@ class MediaListViewModel(
      * emptied it, it says so and points to Settings, where they are changed.
      */
     /** [emptyState]: with nothing listed over the videos, an empty chat always says why. */
-    private fun nothingFound(reachedEnd: Boolean = true): UiState<MediaListState> = emptyState(reachedEnd)
+    private fun nothingFound(reachedEnd: Boolean = true): UiState<MediaListState> {
+        val empty = emptyState(reachedEnd)
+        // "No playable videos" with nothing hiding any: say what the chat does hold (U18).
+        if (query.isBlank() && reachedEnd && hiddenBySize == 0) sayWhatItHolds(empty)
+        return empty
+    }
+
+    private var holdsJob: Job? = null
+
+    /**
+     * Adds what the chat holds besides videos under [empty], once the three counts are in and only
+     * if that very page is still the one on screen. Nothing is added when it holds none of them
+     * or the counts did not come back: the plain message stands.
+     */
+    private fun sayWhatItHolds(empty: UiState.Empty) {
+        holdsJob?.cancel()
+        val chat = chatId
+        val topic = topicId
+        holdsJob = viewModelScope.launch {
+            val session = runCatching { Td.awaitAuthorizedSession() }.getOrNull() ?: return@launch
+            val held = runCatching { ChatRepository(session.client).holds(chat, topic) }.getOrNull() ?: return@launch
+            val said = held.under(empty.message)
+            if (said != empty.message && _state.value == empty) _state.value = empty.copy(message = said)
+        }
+    }
 
     private fun emptyState(reachedEnd: Boolean = true): UiState.Empty {
         // Say which knob is hiding things, rather than claiming the chat is empty when it is the
