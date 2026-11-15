@@ -339,6 +339,30 @@ class SyntheticAccount(
         }
     }
 
+    /** The album a video of [chatId] was posted in: every four videos from the newest are one album with a photo before it. */
+    fun albumOf(index: Int): Long = (index / 4 + 1).toLong()
+
+    /** Video [index] of [chatId] as an album member, before any photo is folded in. */
+    fun albumItem(chatId: Long, index: Int): MediaItem =
+        item(chatId, index).copy(albumId = albumOf(index), fileName = "video$index.mp4", title = "video$index.mp4")
+
+    /**
+     * `getChatHistory` around one hit, as [com.tmplayer.data.AlbumPosts.enrich] asks for an album:
+     * its four videos and its photo (the photo's caption names the show), on the "search" budget like
+     * every other history read. Counts under `getChatHistory`.
+     */
+    fun albumReader(chatId: Long): com.tmplayer.data.AlbumReader = com.tmplayer.data.AlbumReader { _, anchorMessageId ->
+        server("getChatHistory", "search", latencyMs = 150) {
+            val count = videoCount(chatId)
+            val index = count - (anchorMessageId / 16).toInt()
+            val album = albumOf(index)
+            val first = ((album - 1) * 4).toInt()
+            val members = (first until minOf(count, first + 4)).map { albumItem(chatId, it) }
+            val photo = com.tmplayer.data.AlbumPhoto(chatId, album, members.last().messageId - 8, 500 + album.toInt(), null, "Show $chatId season one")
+            com.tmplayer.data.AlbumWindow(com.tmplayer.data.AlbumPosts.fold(members, com.tmplayer.data.AlbumPosts.pick(listOf(photo))), photo)
+        }
+    }
+
     /** Home's source over this account, reading a chat as [TdHomeSource] does ([HomeReads]). */
     /** The chats Home holds open for their new posts. */
     val followed = HashSet<Long>()
