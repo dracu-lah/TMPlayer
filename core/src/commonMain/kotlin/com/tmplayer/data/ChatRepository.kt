@@ -192,6 +192,23 @@ class ChatRepository(private val td: TdlClient) {
         }
 
     /**
+     * One page of [chatId]'s history, read back from [fromMessageId] (0 for the newest), for a
+     * search Telegram's word search could not answer ([ChatSearchRun]): the videos among the
+     * messages, how many messages were read, and where the next page starts (0 at the chat's
+     * start). [onlyLocal] reads only what TDLib keeps on this device, for a search offline.
+     */
+    suspend fun historyPage(chatId: Long, fromMessageId: Long, limit: Int, onlyLocal: Boolean): ChatHistoryPage =
+        withContext(Dispatchers.IO) {
+            val chatProtected = td.getChat(chatId).valueOrNull?.hasProtectedContent ?: false
+            val found = td.getChatHistory(chatId, fromMessageId, 0, limit.coerceIn(1, 100), onlyLocal).value()
+            // TDLib leaves a hole for a message it could not read: skipped, and counted as read.
+            val read = found.messages.size
+            val messages = found.messages.filterNotNull()
+            val items = MediaMapper.screen(messages, chatProtected).items.let(MediaMapper::shareAlbumCaptions)
+            ChatHistoryPage(items, read, messages.minOfOrNull { it.id } ?: 0L)
+        }
+
+    /**
      * The topics of [chatId] when it is a group with Telegram's topics turned on, in Telegram's own
      * order (pinned first, then by latest post), or an empty list for any other chat.
      *

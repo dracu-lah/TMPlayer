@@ -231,6 +231,11 @@ class GarbageInputTest {
     fun textParsersNeverThrow() {
         for (text in texts) {
             survive("UpdateFeed.parseFeed", text) { UpdateFeed.parseFeed(text) }
+            survive("ChatSearch.spellings", text) {
+                ChatSearch.spellings(text)
+                ChatSearch.matches(text, text)
+                ChatSearch.matches("Resident.Evil.2021.mkv", text)
+            }
             survive("KnownDevices.parse", text) {
                 val list = KnownDevices.parse(text)
                 KnownDevices.find(KnownDevices.effective(list), DeviceFacts(hardware = text, model = text, sdk = text.length), text)
