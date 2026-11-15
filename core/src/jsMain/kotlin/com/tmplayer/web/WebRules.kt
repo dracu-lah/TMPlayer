@@ -3,6 +3,7 @@
 
 package com.tmplayer.web
 
+import com.tmplayer.data.ArchiveFile
 import com.tmplayer.data.ArchiveKind
 import com.tmplayer.data.Archives
 import com.tmplayer.data.ChatKind
@@ -640,7 +641,9 @@ fun archive(fileName: String, mimeType: String?): Archive? {
     return plain(
         "kind" to kind.label,
         "volume" to volume,
-        "reason" to if (volume) L.gridArchiveVolumeReason(kind.label) else L.gridArchiveReason(kind.label),
+        "reason" to Archives.reason(
+            ArchiveFile(0, 0, 0, fileName, 0, 0, kind, volume = volume, locked = Archives.looksLocked(fileName)),
+        ),
     )
 }
 

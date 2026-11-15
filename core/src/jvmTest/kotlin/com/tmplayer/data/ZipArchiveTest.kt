@@ -13,6 +13,8 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
+private const val MAX_ENTRIES_PLUS_ONE = ZipArchive.MAX_ENTRIES + 1
+
 /** A video inside a ZIP: found from the tail, stored or not, split or not, and never trusted. */
 class ZipArchiveTest {
 
@@ -152,6 +154,81 @@ class ZipArchiveTest {
         val liar = zip { stored("a.mkv", payload(100), it) }
         liar[liar.size - 22 + 20] = 0x7F
         assertNull(ZipArchive.entries(Bytes(liar)))
+    }
+
+    private fun patch16(archive: ByteArray, at: Int, value: Int) {
+        archive[at] = (value and 0xFF).toByte()
+        archive[at + 1] = ((value shr 8) and 0xFF).toByte()
+    }
+
+    private fun patch32(archive: ByteArray, at: Int, value: Long) {
+        for (i in 0 until 4) archive[at + i] = ((value shr (8 * i)) and 0xFF).toByte()
+    }
+
+    @Test
+    fun `inspect says playable for a stored video`() = runBlocking {
+        val archive = zip { stored("Movie.mkv", payload(50_000), it) }
+        val verdict = ZipArchive.inspect(Bytes(archive))
+        assertEquals(ZipVerdict.Kind.Playable, verdict.kind)
+        assertEquals("Movie.mkv", verdict.entry?.name)
+    }
+
+    @Test
+    fun `inspect names a compressed video and a locked one`() = runBlocking {
+        val deflated = zip { out ->
+            out.putNextEntry(JdkEntry("Movie.mkv"))
+            out.write(ByteArray(100_000))
+            out.closeEntry()
+        }
+        assertEquals(ZipVerdict.Kind.Compressed, ZipArchive.inspect(Bytes(deflated)).kind)
+
+        val locked = zip { stored("Movie.mkv", payload(5_000), it) }
+        // General purpose flag bit 0 of the one central directory record is "encrypted".
+        val directoryAt = readInt(locked, locked.size - 22 + 16)
+        locked[directoryAt + 8] = (locked[directoryAt + 8].toInt() or 1).toByte()
+        val verdict = ZipArchive.inspect(Bytes(locked))
+        assertEquals(ZipVerdict.Kind.Encrypted, verdict.kind)
+        assertNull(ZipArchive.dataOffset(Bytes(locked), verdict.entry!!))
+    }
+
+    @Test
+    fun `inspect names a zip without a video and one that is cut short`() = runBlocking {
+        assertEquals(ZipVerdict.Kind.NoVideo, ZipArchive.inspect(Bytes(zip { stored("readme.txt", payload(100), it) })).kind)
+        val archive = zip { stored("v.mkv", payload(250_000), it) }
+        assertEquals(ZipVerdict.Kind.Unreadable, ZipArchive.inspect(Bytes(archive.copyOfRange(0, archive.size - 400))).kind)
+        assertEquals(ZipVerdict.Kind.Unreadable, ZipArchive.inspect(Bytes(archive, fail = true)).kind)
+        assertEquals(ZipVerdict.Kind.Unreadable, ZipArchive.inspect(Bytes(ByteArray(0))).kind)
+    }
+
+    @Test
+    fun `a huge directory is named and never read`() = runBlocking {
+        val reads = ArrayList<Pair<Long, Int>>()
+        val many = zip { stored("v.mkv", payload(1_000), it) }
+        patch16(many, many.size - 22 + 10, MAX_ENTRIES_PLUS_ONE)
+        val spy = object : ZipSource {
+            val inner = Bytes(many)
+            override val size get() = inner.size
+            override suspend fun read(offset: Long, length: Int): ByteArray? = inner.read(offset, length).also { reads += offset to length }
+        }
+        assertEquals(ZipVerdict.Kind.TooLarge, ZipArchive.inspect(spy).kind)
+        // Only the tail was read: the directory itself was never asked for.
+        assertTrue(reads.all { (_, length) -> length <= 22 + 65_535 })
+        assertEquals(1, reads.size)
+
+        val wide = zip { stored("v.mkv", payload(1_000), it) }
+        patch32(wide, wide.size - 22 + 12, ZipArchive.MAX_DIRECTORY + 1)
+        assertEquals(ZipVerdict.Kind.TooLarge, ZipArchive.inspect(Bytes(wide)).kind)
+        // The same count that is only just allowed is not called huge.
+        val allowed = zip { stored("v.mkv", payload(1_000), it) }
+        patch16(allowed, allowed.size - 22 + 10, ZipArchive.MAX_ENTRIES)
+        assertTrue(ZipArchive.inspect(Bytes(allowed)).kind != ZipVerdict.Kind.TooLarge)
+    }
+
+    @Test
+    fun `a zip64 archive is inspected like any other`() = runBlocking {
+        val verdict = ZipArchive.inspect(Bytes(zip64Archive("Big.mkv", payload(10_000))))
+        assertEquals(ZipVerdict.Kind.Playable, verdict.kind)
+        assertEquals("Big.mkv", verdict.entry?.name)
     }
 
     @Test

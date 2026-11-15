@@ -903,6 +903,13 @@ fun MediaGridScreen(
                             com.tmplayer.ui.components.MediaGridSkeletonRow(wideColumns, gap, dense)
                         }
                     }
+                    // The chat's compressed files named like videos, greyed, each with why (U10).
+                    archiveItems(
+                        list.archives,
+                        noVideos = feed.isEmpty(),
+                        first = if (feed.isEmpty()) firstItem else null,
+                        onExplain = onOfflineAction,
+                    )
                 }
                 ScrollToTop(gridState)
                 // The hold to scroll handle, its bubble saying where the grid is in the chat's order.

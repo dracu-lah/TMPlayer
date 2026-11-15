@@ -1,8 +1,5 @@
 package com.tmplayer.ui.browse
 
-// Not shown since 2026-10-19 (user: a chat lists its videos only); kept for when an archive can be
-// opened in place (a stored ZIP, CP85).
-
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -11,6 +8,7 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridScope
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.unit.dp
@@ -25,7 +23,10 @@ import com.tmplayer.ui.theme.Tone
 
 /*
  * A chat's compressed files at the foot of its listing: what TMPlayer met among the chat's
- * documents and cannot play, each with why, so a chat of ZIPs is not a chat that looks empty.
+ * documents and cannot play, each with why, so a chat of archives is not a chat that looks empty.
+ * Only archives named like a video or large enough to be one (Archives.worthListing): a chat that
+ * lists its videos (user, 2026-10-19) is not buried under backups and mod packs. Shown again from
+ * 2026-11-15 (U10), greyed, with the reason and what to do.
  */
 
 /** The heading over the archives: how many, and, in a chat with no videos at all, that too. */
@@ -51,7 +52,8 @@ private fun ArchiveRow(file: ArchiveFile, onExplain: (String) -> Unit, modifier:
         detail = file.reason,
         trailing = listOfNotNull(file.kind.label, size).joinToString(" · "),
         icon = TmIcons.Archive,
-        modifier = modifier,
+        // Greyed: it is listed so a chat of archives is not read as empty, but it cannot be played.
+        modifier = modifier.alpha(0.78f),
         onClick = { onExplain(file.reason) },
     )
 }

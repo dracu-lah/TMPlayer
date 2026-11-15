@@ -39,6 +39,32 @@ data class ZipEntry(
 enum class ZipBlocker { Compressed, Encrypted }
 
 /**
+ * The answer [ZipArchive.inspect] gives: [entry] is the video to play for [Kind.Playable], and the
+ * entry that would have been (the reason) for a compressed or locked archive.
+ */
+data class ZipVerdict(val kind: Kind, val entry: ZipEntry? = null) {
+    enum class Kind {
+        /** A stored video: it plays straight out of the archive. */
+        Playable,
+
+        /** The video is deflated or otherwise packed: it needs unpacking first. */
+        Compressed,
+
+        /** A password protects it. */
+        Encrypted,
+
+        /** A directory of more files, or a larger one, than is worth reading: named, never opened. */
+        TooLarge,
+
+        /** A ZIP with no video in it. */
+        NoVideo,
+
+        /** Not a ZIP, cut short, a piece missing or the bytes unreachable. */
+        Unreadable,
+    }
+}
+
+/**
  * Reads a ZIP's directory from its tail and finds where a stored (uncompressed) video's bytes
  * sit, so the video can play straight out of the archive, split or not, with seeking. Nothing
  * here unpacks: a compressed entry is named as such and left alone.
@@ -82,15 +108,47 @@ object ZipArchive {
      * directory is unreadable. [diskStarts] maps a multi-disk archive's disk numbers into the
      * joined stream; leave it empty for a single file or raw byte pieces.
      */
-    suspend fun entries(source: ZipSource, diskStarts: List<Long> = emptyList()): List<ZipEntry>? {
+    suspend fun entries(source: ZipSource, diskStarts: List<Long> = emptyList()): List<ZipEntry>? =
+        load(source, diskStarts).entries
+
+    /**
+     * What the player says about [source]: the one video it can stream, or the reason it cannot,
+     * in a word each ([ZipVerdict]). Reads only the directory (a bounded tail and the directory
+     * itself), never the archive's contents: a password protected archive, a compressed one, one
+     * listing more files than [MAX_ENTRIES] or a directory larger than [MAX_DIRECTORY] are named
+     * and left unopened.
+     */
+    suspend fun inspect(source: ZipSource, diskStarts: List<Long> = emptyList()): ZipVerdict {
+        val loaded = try {
+            load(source, diskStarts)
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (failure: Throwable) {
+            return ZipVerdict(ZipVerdict.Kind.Unreadable)
+        }
+        if (loaded.huge) return ZipVerdict(ZipVerdict.Kind.TooLarge)
+        val entries = loaded.entries ?: return ZipVerdict(ZipVerdict.Kind.Unreadable)
+        bestVideo(entries)?.let { return ZipVerdict(ZipVerdict.Kind.Playable, it) }
+        val blocked = blockedVideo(entries)
+        return when (blocked?.blocker) {
+            ZipBlocker.Encrypted -> ZipVerdict(ZipVerdict.Kind.Encrypted, blocked)
+            ZipBlocker.Compressed -> ZipVerdict(ZipVerdict.Kind.Compressed, blocked)
+            null -> ZipVerdict(ZipVerdict.Kind.NoVideo)
+        }
+    }
+
+    /** The directory read, or why it was not: [huge] is an archive named and left alone, not a broken one. */
+    private class Loaded(val entries: List<ZipEntry>?, val huge: Boolean = false)
+
+    private suspend fun load(source: ZipSource, diskStarts: List<Long>): Loaded {
         val total = source.size
-        if (total < EOCD_MIN) return null
+        if (total < EOCD_MIN) return Loaded(null)
         val tailLength = minOf(total, (EOCD_MIN + MAX_COMMENT).toLong()).toInt()
         val tailStart = total - tailLength
-        val tail = source.read(tailStart, tailLength) ?: return null
-        if (tail.size < EOCD_MIN) return null
+        val tail = source.read(tailStart, tailLength) ?: return Loaded(null)
+        if (tail.size < EOCD_MIN) return Loaded(null)
 
-        val at = findEocd(tail) ?: return null
+        val at = findEocd(tail) ?: return Loaded(null)
         var entryCount = u16(tail, at + 10).toLong()
         var directorySize = u32(tail, at + 12)
         var directoryOffset = u32(tail, at + 16)
@@ -100,24 +158,25 @@ object ZipArchive {
         if (needsZip64) {
             // The ZIP64 locator sits right before the end record, and points at the ZIP64 end record.
             val locator = tailStart + at - LOCATOR64
-            if (locator < 0) return null
-            val loc = source.read(locator, LOCATOR64) ?: return null
-            if (loc.size < LOCATOR64 || u32(loc, 0) != SIG_LOCATOR64) return null
+            if (locator < 0) return Loaded(null)
+            val loc = source.read(locator, LOCATOR64) ?: return Loaded(null)
+            if (loc.size < LOCATOR64 || u32(loc, 0) != SIG_LOCATOR64) return Loaded(null)
             val recordDisk = u32(loc, 4).toInt()
-            val recordOffset = joined(recordDisk, u64(loc, 8), diskStarts, total) ?: return null
-            val record = source.read(recordOffset, EOCD64_MIN) ?: return null
-            if (record.size < EOCD64_MIN || u32(record, 0) != SIG_EOCD64) return null
+            val recordOffset = joined(recordDisk, u64(loc, 8), diskStarts, total) ?: return Loaded(null)
+            val record = source.read(recordOffset, EOCD64_MIN) ?: return Loaded(null)
+            if (record.size < EOCD64_MIN || u32(record, 0) != SIG_EOCD64) return Loaded(null)
             directoryDisk = u32(record, 20).toInt()
             entryCount = u64(record, 32)
             directorySize = u64(record, 40)
             directoryOffset = u64(record, 48)
         }
-        if (entryCount < 0 || entryCount > MAX_ENTRIES || directorySize < 0 || directorySize > MAX_DIRECTORY) return null
-        if (entryCount == 0L) return emptyList()
-        val directoryAt = joined(directoryDisk, directoryOffset, diskStarts, total) ?: return null
-        if (directoryAt + directorySize > total) return null
-        val directory = source.read(directoryAt, directorySize.toInt()) ?: return null
-        if (directory.size < directorySize) return null
+        if (entryCount < 0 || directorySize < 0) return Loaded(null)
+        if (entryCount > MAX_ENTRIES || directorySize > MAX_DIRECTORY) return Loaded(null, huge = true)
+        if (entryCount == 0L) return Loaded(emptyList())
+        val directoryAt = joined(directoryDisk, directoryOffset, diskStarts, total) ?: return Loaded(null)
+        if (directoryAt + directorySize > total) return Loaded(null)
+        val directory = source.read(directoryAt, directorySize.toInt()) ?: return Loaded(null)
+        if (directory.size < directorySize) return Loaded(null)
 
         val found = ArrayList<ZipEntry>()
         var cursor = 0
@@ -169,7 +228,7 @@ object ZipArchive {
             }
             cursor = next
         }
-        return found
+        return Loaded(found)
     }
 
     /**

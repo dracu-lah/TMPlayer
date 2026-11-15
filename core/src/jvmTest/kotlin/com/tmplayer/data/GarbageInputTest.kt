@@ -347,6 +347,51 @@ class GarbageInputTest {
             survive("Mp4Probe.parseMoov", shown) { Mp4Probe.parseMoov(data) }
             survive("JpegSize.read", shown) { JpegSize.read(data) }
             survive("SubtitleText.decode", shown) { SubtitleText.decode(data); SubtitleText.decode(data, "ar") }
+            survive("ZipArchive.inspect", shown) {
+                runBlocking {
+                    val source = object : ZipSource {
+                        override val size get() = data.size.toLong()
+                        override suspend fun read(offset: Long, length: Int): ByteArray? =
+                            if (offset < 0 || offset > data.size) null else data.copyOfRange(offset.toInt(), minOf(data.size.toLong(), offset + length).toInt())
+                    }
+                    ZipArchive.inspect(source)
+                    ZipArchive.inspect(source, diskStarts = listOf(0L, 7L))
+                    ZipArchive.looksLikeZip(data)
+                }
+            }
+        }
+        assertNoFailures()
+    }
+
+    /** A real end record with every count, size and offset field set to nonsense (HX10, ZIP). */
+    @Test
+    fun zipDirectoriesWithLyingFieldsNeverThrow() {
+        val base = java.io.ByteArrayOutputStream().also { bytes ->
+            java.util.zip.ZipOutputStream(bytes).use { out ->
+                out.putNextEntry(java.util.zip.ZipEntry("a.mkv"))
+                out.write(ByteArray(2000))
+                out.closeEntry()
+            }
+        }.toByteArray()
+        val end = base.size - 22
+        val random = Random(41)
+        val values = listOf(0, 1, 0x7F, 0xFF)
+        repeat(600) { round ->
+            val copy = base.copyOf()
+            // One to four bytes of the end record or the central directory record are overwritten.
+            repeat(1 + round % 4) {
+                val at = if (round % 2 == 0) end + random.nextInt(22) else (copy.size - 22 - 80 + random.nextInt(80)).coerceAtLeast(0)
+                copy[at] = values[random.nextInt(values.size)].toByte()
+            }
+            survive("ZipArchive.inspect (lying fields)", round) {
+                runBlocking {
+                    ZipArchive.inspect(object : ZipSource {
+                        override val size get() = copy.size.toLong()
+                        override suspend fun read(offset: Long, length: Int): ByteArray? =
+                            if (offset < 0 || offset > copy.size) null else copy.copyOfRange(offset.toInt(), minOf(copy.size.toLong(), offset + length).toInt())
+                    })
+                }
+            }
         }
         assertNoFailures()
     }

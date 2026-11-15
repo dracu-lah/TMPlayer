@@ -85,6 +85,7 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import com.tmplayer.ui.components.loadWhenShown
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.layout.onSizeChanged
@@ -496,8 +497,8 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
                 loadingMore = content.loadingMore,
                 footerSlow = { SlowAnswerLine(content.items.size, onRetry = model::retryMore) },
                 scrollLabel = { key -> entryByKey[key]?.let { com.tmplayer.ui.browse.ScrollLabels.video(it, shownSort, s) } },
-                // A chat lists its videos only: compressed files are not shown (user, 2026-10-19).
-                footer = if (!content.moreFailed) null else {
+                // Compressed files named like videos follow the videos, greyed with why (U10).
+                footer = if (!content.moreFailed && content.archives.isEmpty()) null else {
                     {
                         Column(Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             // The last page failed: said, with Try again, not a listing that stops short.
@@ -508,6 +509,7 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
                                     OutlinedButton(onClick = model::retryMore) { Text(s.commonTryAgain) }
                                 }
                             }
+                            ArchiveList(content.archives, noVideos = content.items.isEmpty(), onExplain = { toast(it) })
                         }
                     }
                 },
@@ -1592,7 +1594,7 @@ internal fun ArchiveList(archives: List<com.tmplayer.data.ArchiveFile>, noVideos
                 onClick = { onExplain(file.reason) },
                 shape = MaterialTheme.shapes.medium,
                 color = Tone.surface,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().alpha(0.78f),
             ) {
                 Row(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(TmIcons.Archive, contentDescription = null, tint = Tone.muted, modifier = Modifier.size(22.dp))

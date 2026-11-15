@@ -228,6 +228,8 @@ class SelectedAndEmptyShotsTest {
                     listOf(
                         com.tmplayer.data.ArchiveFile(1, 3, 3, "Lectures 2024.zip", 734_003_200, 0, com.tmplayer.data.ArchiveKind.Zip),
                         com.tmplayer.data.ArchiveFile(1, 2, 2, "Course.part2.rar", 2_000_000_000, 0, com.tmplayer.data.ArchiveKind.Rar, volume = true),
+                        com.tmplayer.data.ArchiveFile(1, 1, 1, "Season.1.1080p.7z", 400_000_000, 0, com.tmplayer.data.ArchiveKind.SevenZip, locked = true),
+                        com.tmplayer.data.ArchiveFile(1, 0, 0, "Collection.2160p.rar", 3_500_000_000, 0, com.tmplayer.data.ArchiveKind.Rar),
                     ),
                     noVideos = true,
                     onExplain = {},
