@@ -50,6 +50,7 @@ import com.tmplayer.ui.theme.Tone
 @Composable
 fun ContinueCardArt(record: ResumeRecord, item: MediaItem, modifier: Modifier = Modifier) {
     val s = LocalStrings.current
+    val downloaded = com.tmplayer.data.SettingsStore.progressKey(record.chatId, record.messageId) in LocalOfflineDownloads.current
     val cover = rememberCover(item)
     Box(modifier) {
         OnlineArt(item, Modifier.fillMaxSize()) {
@@ -58,6 +59,8 @@ fun ContinueCardArt(record: ResumeRecord, item: MediaItem, modifier: Modifier = 
             }
         }
         Box(Modifier.fillMaxSize().tileFootScrim())
+        // Offline: the cards that play without a line say so (PL-13).
+        if (downloaded) TileBadge(s.gridBadgeDownloaded, Modifier.align(Alignment.TopStart).padding(TileBadgeInset))
         if (record.remainingMs > 0) {
             TileBadge(
                 s.browseTimeLeft(s.formatter.duration(record.remainingMs / 1000)),
@@ -73,6 +76,13 @@ fun ContinueCardArt(record: ResumeRecord, item: MediaItem, modifier: Modifier = 
         )
     }
 }
+
+/**
+ * The videos in Downloads ([com.tmplayer.data.SettingsStore.progressKey]s), filled only while there
+ * is no line to Telegram and empty otherwise, so Home can mark which cards still play offline
+ * without asking per card. Read once per offline stretch, never polled.
+ */
+val LocalOfflineDownloads = androidx.compose.runtime.staticCompositionLocalOf<Set<String>> { emptySet() }
 
 /**
  * The name a Continue watching card writes under its picture: "S1 E3  ·  Harbour Notes" for an

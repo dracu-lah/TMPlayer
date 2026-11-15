@@ -4,6 +4,11 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
@@ -39,9 +44,14 @@ enum class ConnectionNotice {
     Connecting,
 }
 
-/** A passive status only. It never takes focus or blocks saved content and playback. */
+/**
+ * A status that never takes focus or blocks saved content and playback. Offline on a touch screen
+ * can also lead on: [onOpenDownloads] makes the pill a button to Downloads, the one place a
+ * video plays without a line (PL-13). A remote cannot reach it, so a television's pill stays
+ * passive, and its tiles carry the Downloaded mark instead.
+ */
 @Composable
-fun ConnectionStatus(notice: ConnectionNotice, modifier: Modifier = Modifier) {
+fun ConnectionStatus(notice: ConnectionNotice, modifier: Modifier = Modifier, onOpenDownloads: (() -> Unit)? = null) {
     val s = LocalStrings.current
     AnimatedVisibility(
         visible = notice != ConnectionNotice.Hidden,
@@ -55,8 +65,11 @@ fun ConnectionStatus(notice: ConnectionNotice, modifier: Modifier = Modifier) {
         // legible when the scheme underneath is a light one, or the wallpaper's.
         val container = if (touch) SnackbarDefaults.color else Tone.surfaceHigh.copy(alpha = 0.96f)
         val onContainer = if (touch) SnackbarDefaults.contentColor else Tone.text
+        val leads = touch && notice == ConnectionNotice.Offline && onOpenDownloads != null
         Row(
             Modifier
+                .clip(if (touch) M3.shapes.extraSmall else CircleShape)
+                .then(if (leads) Modifier.clickable(role = Role.Button, onClickLabel = s.downloadsTitle, onClick = { onOpenDownloads?.invoke() }) else Modifier)
                 .background(container, if (touch) M3.shapes.extraSmall else CircleShape)
                 .padding(
                     horizontal = if (touch) 12.dp else 16.dp,
@@ -96,6 +109,13 @@ fun ConnectionStatus(notice: ConnectionNotice, modifier: Modifier = Modifier) {
                 },
                 color = onContainer,
             )
+            if (leads) {
+                Text(
+                    text = s.downloadsTitle,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold, textDecoration = TextDecoration.Underline),
+                    color = SnackbarDefaults.actionColor,
+                )
+            }
         }
     }
 }

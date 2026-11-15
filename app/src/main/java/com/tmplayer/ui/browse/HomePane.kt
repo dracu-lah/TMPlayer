@@ -697,7 +697,10 @@ internal fun HomePane(
                             is HomeRow.WatchLater -> TileRow(start, end, rowTiles, seeAll = seeAllEnd?.copy(width = wideWidth(touch))) {
                                 items(row.records, key = { "l-${it.id}" }) { record ->
                                     LaunchedEffect(record.key) { onLaterArtWanted(record) }
-                                    val item = art[record.key] ?: remember(record) { record.toMediaItem() }
+                                    val known = art[record.key] ?: remember(record) { record.toMediaItem() }
+                                    // Offline: a video in Downloads says so, as every grid tile does (PL-13).
+                                    val downloaded = record.key in LocalOfflineDownloads.current
+                                    val item = remember(known, downloaded) { if (downloaded) known.withLocality(MediaItem.Locality.Downloaded) else known }
                                     val holdShow = LocalSeriesHold.current
                                     val stub = remember(record) { record.stubSeries() }
                                     MediaCard(

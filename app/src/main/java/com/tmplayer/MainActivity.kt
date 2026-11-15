@@ -389,7 +389,7 @@ class MainActivity : ComponentActivity() {
                         val holding by CrashReports.holdShell.collectAsStateWithLifecycle()
                         // On a remote, a list keeps still while the focused item is in full view.
                         com.tmplayer.ui.components.StillWhenVisible(enabled = !com.tmplayer.ui.components.isTouch()) {
-                            if (holding) StartupCrashQuestion() else Root()
+                            if (holding) StartupCrashQuestion() else com.tmplayer.ui.browse.OfflineDownloadsHost { Root() }
                             // Once per safe start, over the shell, after any crash question is answered.
                             if (!holding) SafeModeNotice()
                         }
@@ -2595,6 +2595,8 @@ private fun Root() {
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 20.dp),
+            // Offline, the way to a video that plays: Downloads (not from Downloads itself).
+            onOpenDownloads = openDownloads.takeIf { screen !is Screen.Downloads && auth is AuthState.Ready },
         )
         // Over the connection notice's place, a little higher when both are up.
         com.tmplayer.ui.components.StartingStatus(
