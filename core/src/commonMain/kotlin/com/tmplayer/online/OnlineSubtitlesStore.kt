@@ -25,6 +25,11 @@ data class OnlineAccount(
     /** Signed in once, then OpenSubtitles stopped taking the token. */
     val expired: Boolean = false,
     val includeMachine: Boolean = false,
+    /**
+     * Find subtitles for the viewer (U5): a video with none in their subtitle language gets the
+     * best match fetched by itself. Off until the viewer turns it on.
+     */
+    val suggest: Boolean = false,
     val subdlKey: String = "",
     val subdlRefused: Boolean = false,
     val rejectedKey: String = "",
@@ -85,6 +90,7 @@ class OnlineSubtitlesStore(private val file: File) {
             resetAt = l("reset_at"),
             expired = s("expired") == "true",
             includeMachine = s("include_machine") == "true",
+            suggest = s("suggest") == "true",
             subdlKey = s("subdl_key"),
             subdlRefused = s("subdl_refused") == "true",
             rejectedKey = s("rejected_key"),
@@ -109,6 +115,7 @@ class OnlineSubtitlesStore(private val file: File) {
         p["reset_at"] = a.resetAt.toString()
         p["expired"] = a.expired.toString()
         p["include_machine"] = a.includeMachine.toString()
+        p["suggest"] = a.suggest.toString()
         p["subdl_key"] = a.subdlKey
         p["subdl_refused"] = a.subdlRefused.toString()
         p["rejected_key"] = a.rejectedKey

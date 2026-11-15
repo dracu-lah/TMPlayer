@@ -20,6 +20,8 @@ class SubtitleCache(
     private val now: () -> Long = System::currentTimeMillis,
     private val searchTtlMs: Long = SEARCH_TTL_MS,
     private val fileTtlMs: Long = MAX_TTL_MS,
+    /** The most the cache keeps on the disk; once over it the oldest files go, searches first. */
+    private val maxBytes: Long = MAX_BYTES,
 ) {
     init {
         require(searchTtlMs in 1..MAX_TTL_MS && fileTtlMs in 1..MAX_TTL_MS) { "a cache TTL may not exceed six months" }
@@ -74,7 +76,26 @@ class SubtitleCache(
         val file = File(files, fileStem(provider, id) + "." + text.extension)
         write(file, text.text)
         file.setLastModified(now())
+        trim(keep = file)
         return file
+    }
+
+    /**
+     * Brings the cache under [maxBytes]: the oldest searches go first (they are asked again for
+     * nothing), then the oldest files, never [keep], the one just written. A subtitle is a few tens of
+     * kilobytes, so this seldom does anything; it is the bound the cache promises on a full disk.
+     */
+    @Synchronized
+    fun trim(keep: File? = null) {
+        var total = bytes()
+        if (total <= maxBytes) return
+        val order = (searches.listFiles().orEmpty().sortedBy { it.lastModified() }) +
+            (files.listFiles().orEmpty().filter { it != keep }.sortedBy { it.lastModified() })
+        for (f in order) {
+            if (total <= maxBytes) break
+            val size = f.length()
+            if (f.delete()) total -= size
+        }
     }
 
     /** Every entry older than its TTL, deleted. Cheap: a cache of subtitles is a few hundred files. */
@@ -85,6 +106,7 @@ class SubtitleCache(
             if (now() - saved > searchTtlMs) f.delete()
         }
         files.listFiles()?.forEach { f -> if (now() - f.lastModified() > fileTtlMs) f.delete() }
+        trim()
     }
 
     /** What the cache holds on the disk, in bytes. */
@@ -122,5 +144,8 @@ class SubtitleCache(
         const val DAY_MS = 24L * 60 * 60 * 1000
         const val MAX_TTL_MS = 180 * DAY_MS
         const val SEARCH_TTL_MS = 30 * DAY_MS
+
+        /** 20 MB: some thousands of subtitle files and their searches. */
+        const val MAX_BYTES = 20L * 1024 * 1024
     }
 }

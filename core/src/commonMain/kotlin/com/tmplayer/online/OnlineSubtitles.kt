@@ -135,6 +135,9 @@ class OnlineSubtitles(
 
     fun setIncludeMachine(value: Boolean) = store.update { it.copy(includeMachine = value) }
 
+    /** Settings' "Find subtitles for me" (U5): off by default, and a viewer's own choice to turn on. */
+    fun setSuggest(value: Boolean) = store.update { it.copy(suggest = value) }
+
     /**
      * Keeps [key] as the viewer's SubDL key. The word `msone` is not a key: it hides MSone's search
      * on this device, or shows it again, and the answer is whether MSone is now shown; null for an

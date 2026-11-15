@@ -52,6 +52,7 @@ enum class OnlineDialog { SignIn, SignOut, SubdlKey }
 internal fun LazyListScope.onlineSubtitlesSection(onDialog: (OnlineDialog) -> Unit) {
     sectionTitle { LocalStrings.current.onlineTitle }
     item { AccountRow(onDialog) }
+    item { SuggestRow() }
     item { MachineRow() }
     item { SubdlRow(onDialog) }
     item { MsoneRow() }
@@ -125,6 +126,24 @@ private fun AccountRow(onDialog: (OnlineDialog) -> Unit) {
             onClick = { onDialog(OnlineDialog.SignOut) },
         )
     }
+}
+
+/**
+ * "Find subtitles for me" (U5): off until the viewer turns it on. The player then fetches the best
+ * match when a video has none in the subtitle language set above, and asks first on mobile data.
+ */
+@Composable
+private fun SuggestRow() {
+    val s = LocalStrings.current
+    val online = OnlineSubtitles.current ?: return
+    val account by online.account.collectAsState()
+    ToggleRow(
+        title = s.onlineSuggestToggle,
+        subtitle = if (account.suggest) s.onlineSuggestOn else s.onlineSuggestOff,
+        icon = TmIcons.Search,
+        checked = account.suggest,
+        onToggle = { online.setSuggest(!account.suggest) },
+    )
 }
 
 @Composable

@@ -583,6 +583,214 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
     private var statsOn = false
 
+    // ---- subtitles found for you (U5): off unless Settings, Online subtitles has it on -----------------
+
+    private var suggestChip: SubtitleOfferChip? = null
+
+    /** The viewer's subtitle language for this video, or null when none can be told. */
+    private var suggestLanguage: String? = null
+
+    /** Looked at already for this video (once, whatever came of it), or the viewer let the question lapse. */
+    private var suggestHandled = false
+    private var suggestMeteredOk = false
+    private var suggestBusy = false
+    private var suggestHits: List<com.tmplayer.online.SubtitleHit> = emptyList()
+    private var suggestTarget: SubtitleTarget? = null
+    private var suggestCurrent: com.tmplayer.online.SubtitleHit? = null
+    private val suggestRejected = mutableSetOf<String>()
+
+    /** What a tap or Up does on the chip: the metered question's yes, or "Not this one, try the next". */
+    private var suggestAction: (() -> Unit)? = null
+
+    private val suggestStart = Runnable { maybeSuggestSubtitles() }
+    private val suggestExpiry = Runnable {
+        // A question left unanswered is not asked again for this video.
+        if (suggestAction != null && !suggestMeteredOk && suggestCurrent == null) suggestHandled = true
+        suggestAction = null
+        suggestChip?.hide()
+    }
+
+    /** A new video: nothing of the last one's search is kept. */
+    private fun resetSuggestions(plan: TrackPlan, prefs: com.tmplayer.player.TrackPreferences) {
+        loopHandler.removeCallbacks(suggestStart)
+        loopHandler.removeCallbacks(suggestExpiry)
+        suggestChip?.hide()
+        suggestAction = null
+        suggestHandled = false
+        suggestMeteredOk = false
+        suggestBusy = false
+        suggestHits = emptyList()
+        suggestTarget = null
+        suggestCurrent = null
+        suggestRejected.clear()
+        suggestLanguage = (plan.subtitles as? SubtitlePlan.On)?.language
+            ?: (plan.subtitles as? SubtitlePlan.IfForeignAudio)?.language
+            ?: prefs.subtitleLanguage
+            ?: com.tmplayer.player.TrackLanguages.normalise(Translator.messages.tag)
+    }
+
+    /** Whether the line in use costs the viewer by the byte (mobile data, a hotspot). Unknown reads as no. */
+    private fun onMeteredLine(): Boolean = runCatching {
+        (getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager)?.isActiveNetworkMetered == true
+    }.getOrDefault(false)
+
+    /**
+     * A few seconds into a video: with the switch on, a video that has no subtitle in the viewer's
+     * language gets the best match fetched, or the viewer is asked first on a metered line. ExoPlayer only
+     * (the files are laid over its media item); never on the TV's cast, under the kids lock or when the
+     * viewer plays without subtitles.
+     */
+    private fun maybeSuggestSubtitles() {
+        val online = OnlineSubtitles.current ?: return
+        val exo = player ?: return
+        if (isFinishing || isDestroyed || castUp() || exo.playbackState == Player.STATE_IDLE) return
+        val current = exo.currentTracks
+        val textLanguages = tracksOfType(current, C.TRACK_TYPE_TEXT).map { (group, index) -> group.getTrackFormat(index).language }
+        val audio = tracksOfType(current, C.TRACK_TYPE_AUDIO)
+            .firstOrNull { (group, index) -> group.isTrackSelected(index) }
+            ?.let { (group, index) -> group.getTrackFormat(index).language }
+        val plan = trackPlan.subtitles
+        val wantsNone = plan is SubtitlePlan.Off ||
+            (plan is SubtitlePlan.IfForeignAudio && com.tmplayer.player.TrackLanguages.normalise(audio).let { it == null || it in plan.viewerLanguages })
+        val gate = com.tmplayer.online.SubtitleSuggestion.Gate(
+            enabled = online.store.now.suggest,
+            available = online.inBuild && !online.keyRefused(),
+            kidsLock = com.tmplayer.data.ChatGate.allowed.value != null,
+            viewerWantsNone = wantsNone,
+            language = suggestLanguage,
+            trackLanguages = textLanguages,
+            handled = suggestHandled,
+            metered = onMeteredLine(),
+            meteredAccepted = suggestMeteredOk,
+        )
+        when (val decision = com.tmplayer.online.SubtitleSuggestion.decide(gate)) {
+            is com.tmplayer.online.SubtitleSuggestion.Decision.Skipped -> Unit
+            com.tmplayer.online.SubtitleSuggestion.Decision.AskMetered -> {
+                suggestAction = {
+                    suggestMeteredOk = true
+                    suggestAction = null
+                    suggestChip?.hide()
+                    loopHandler.removeCallbacks(suggestExpiry)
+                    maybeSuggestSubtitles()
+                }
+                showSuggestChip(L.onlineOfferMetered, L.onlineOfferMeteredYes)
+            }
+            com.tmplayer.online.SubtitleSuggestion.Decision.Fetch -> fetchSuggestion(online)
+        }
+    }
+
+    private fun showSuggestChip(message: String, action: String) {
+        val chip = suggestChip ?: return
+        val wasShown = chip.isShown
+        chip.show(message, action)
+        if (!wasShown) liftCornerOffers()
+        loopHandler.removeCallbacks(suggestExpiry)
+        loopHandler.postDelayed(suggestExpiry, SubtitleOfferChip.SHOW_MS)
+    }
+
+    /** One quiet line, never a sheet: a rate limit, no key or a miss says so and the video plays on. */
+    private fun suggestNote(text: String) {
+        suggestAction = null
+        suggestChip?.hide()
+        showGestureFeedback(text)
+    }
+
+    private fun fetchSuggestion(online: OnlineSubtitles) {
+        if (suggestBusy) return
+        suggestBusy = true
+        suggestHandled = true
+        lifecycleScope.launch {
+            try {
+                val language = suggestLanguage ?: return@launch
+                var target = suggestTarget
+                if (target == null) {
+                    // The viewer's language first, so the search asks for it whatever the series was last watched in.
+                    val base = onlineTarget()
+                    target = base?.copy(languages = (listOf(language) + base.languages).distinct())
+                    suggestTarget = target
+                }
+                if (target == null) {
+                    suggestNote(L.onlineOfferNone)
+                    return@launch
+                }
+                if (suggestHits.isEmpty()) {
+                    val found = online.search(target)
+                    if (found.hits.isEmpty()) {
+                        suggestNote(found.notice?.let(com.tmplayer.online.OnlineWords::notice) ?: L.onlineOfferNone)
+                        return@launch
+                    }
+                    suggestHits = found.hits
+                }
+                tryNextSuggestion(online, target, language)
+            } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Whatever went wrong, the video plays on and says so in one line (HX10).
+                com.tmplayer.platform.JobFailures.handle("suggestSubtitles", e)
+                runCatching { suggestNote(L.onlineNoticeOffline) }
+            } finally {
+                suggestBusy = false
+            }
+        }
+    }
+
+    /** Downloads and lays over the video the best hit not turned down yet; the chip says where it came from. */
+    private suspend fun tryNextSuggestion(online: OnlineSubtitles, target: SubtitleTarget, language: String) {
+        val candidates = com.tmplayer.online.SubtitleSuggestion.candidates(
+            suggestHits, language, suggestRejected, allowMachine = online.store.now.includeMachine,
+        )
+        val hit = candidates.firstOrNull()
+        if (hit == null) {
+            suggestCurrent = null
+            suggestNote(if (suggestRejected.isEmpty()) L.onlineOfferNone else L.onlineOfferNoMore)
+            return
+        }
+        online.blockedFor(hit)?.let {
+            suggestNote(com.tmplayer.online.OnlineWords.notice(it))
+            return
+        }
+        when (val done = online.download(hit, target)) {
+            is com.tmplayer.online.DownloadResult.Done -> {
+                if (isFinishing || isDestroyed || player == null) return
+                subtitleFiles.attachFile(done.file, done.label)
+                suggestCurrent = hit
+                val source = com.tmplayer.online.SubtitleSuggestion.sourceOf(hit)
+                val name = OnlineSubtitles.languageName(hit.language)
+                suggestAction = ::nextSuggestion
+                showSuggestChip(
+                    if (source.byFile) L.onlineOfferFoundFile(language = name, source = source.provider) else L.onlineOfferFound(language = name, source = source.provider),
+                    L.onlineOfferNext,
+                )
+            }
+            is com.tmplayer.online.DownloadResult.Failed -> suggestNote(com.tmplayer.online.OnlineWords.notice(done.notice))
+        }
+    }
+
+    /** "Not this one, try the next": the shown hit is turned down for this video, and the next best is laid over. */
+    private fun nextSuggestion() {
+        val online = OnlineSubtitles.current ?: return
+        val shown = suggestCurrent ?: return
+        val target = suggestTarget ?: return
+        val language = suggestLanguage ?: return
+        if (suggestBusy) return
+        suggestRejected += com.tmplayer.online.SubtitleSuggestion.keyOf(shown)
+        suggestBusy = true
+        suggestAction = null
+        suggestChip?.hide()
+        lifecycleScope.launch {
+            try {
+                tryNextSuggestion(online, target, language)
+            } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                com.tmplayer.platform.JobFailures.handle("nextSubtitle", e)
+                runCatching { suggestNote(L.onlineNoticeOffline) }
+            } finally {
+                suggestBusy = false
+            }
+        }
+    }
+
     // ---- tunneled playback (PR5), on a television only ----------------------------------------------
 
     /** Settings, Playback, Advanced, Tunneled playback; read as the video opens. */
@@ -2192,6 +2400,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             tracks = tracksRead.await()
             val trackPrefs = trackPrefsRead.await()
             trackPlan = TrackRules.plan(resumed, tracks, trackPrefs, Translator.messages.tag)
+            resetSuggestions(trackPlan, trackPrefs)
             settingsSubtitlesPending = trackPlan.subtitleSource == TrackSource.Settings &&
                 (trackPlan.subtitles is SubtitlePlan.On || trackPlan.subtitles is SubtitlePlan.IfForeignAudio)
             downmixChoice = downmixRead.await()
@@ -2789,6 +2998,11 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 leftMargin = safe.left + NextUpCard.marginPx(root)
                 marginStart = safe.left + NextUpCard.marginPx(root)
                 bottomMargin = safe.bottom + NextUpCard.bottomPx(root)
+            }
+            suggestChip?.view?.updateLayoutParams<FrameLayout.LayoutParams> {
+                leftMargin = safe.left + NextUpCard.marginPx(root)
+                marginStart = safe.left + NextUpCard.marginPx(root)
+                bottomMargin = safe.bottom + SubtitleOfferChip.bottomOver(root)
             }
             insets
         }
@@ -4699,6 +4913,11 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
         override fun onRenderedFirstFrame() {
             logFirstFrame()
+            // A few seconds in, once the picture and the tracks have settled: subtitles found for the viewer (U5).
+            if (OnlineSubtitles.current?.store?.now?.suggest == true) {
+                loopHandler.removeCallbacks(suggestStart)
+                loopHandler.postDelayed(suggestStart, SUGGEST_DELAY_MS)
+            }
             hintStereo()
             // The decoder is known by now: FFmpeg's frames skip the pipeline, so the shape moves.
             renderShape()
@@ -5151,6 +5370,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         // A crash after this is not about the video that was playing (S2).
         crashNote.ended()
         stopStats()
+        loopHandler.removeCallbacks(suggestStart)
+        loopHandler.removeCallbacks(suggestExpiry)
+        suggestChip?.hide()
         // The VLC engine when it plays (PR2): its native player, surface and stream, all of it.
         releaseVlc()
         val exo = player ?: return
@@ -6450,6 +6672,14 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                     undoChip?.isShown == true && statusOverlay.visibility != View.VISIBLE
                 ) {
                     if (event.repeatCount == 0) undoSeek()
+                    return true
+                }
+                // The same for the subtitle offer ("Not this one, try the next", the mobile data
+                // question): Up takes it when "Back to" is not standing in its way.
+                if (event.keyCode == KeyEvent.KEYCODE_DPAD_UP && FormFactor.isTv(this) &&
+                    suggestChip?.isShown == true && suggestAction != null && statusOverlay.visibility != View.VISIBLE
+                ) {
+                    if (event.repeatCount == 0) suggestAction?.invoke()
                     return true
                 }
                 // Any other press over the bare picture asks for the row rather than doing
@@ -8029,6 +8259,12 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             tv = FormFactor.isTv(this),
             onUndo = ::undoSeek,
         )
+        suggestChip = SubtitleOfferChip(
+            root = findViewById(R.id.player_root),
+            below = findViewById(R.id.overlay_container),
+            tv = FormFactor.isTv(this),
+            onAction = { suggestAction?.invoke() },
+        )
         watchForTheEnd()
     }
 
@@ -8311,7 +8547,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         val tv = FormFactor.isTv(this)
         val cluster = findViewById<View>(R.id.controls_cluster)
         val root = findViewById<View>(R.id.player_root)
-        val offers = if (tv) listOfNotNull(undoChip?.view) else listOfNotNull(skipPill?.view, nextUpCard?.view, undoChip?.view)
+        val offers = if (tv) listOfNotNull(undoChip?.view, suggestChip?.view) else listOfNotNull(skipPill?.view, nextUpCard?.view, undoChip?.view, suggestChip?.view)
         offers.forEach { offer ->
             // After the next layout, so an offer that has only just been shown has a height.
             offer.doOnPreDraw {
@@ -9772,6 +10008,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
         /** The longest a release may hold the main thread: see [letGoOfPlayer] (HX35). */
         private const val RELEASE_TIMEOUT_MS = 500L
+
+        /** How long into a video the subtitles found for the viewer are looked for (U5): after the picture has settled. */
+        private const val SUGGEST_DELAY_MS = 4_000L
         private const val EXTRA_CHAT_ID = "chat_id"
         private const val EXTRA_MESSAGE_ID = "message_id"
         private const val EXTRA_TITLE = "title"
