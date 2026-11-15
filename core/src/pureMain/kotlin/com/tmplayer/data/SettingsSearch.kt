@@ -37,8 +37,9 @@ object SettingsSearch {
                 val detail = row.details.asSequence().map { read(text, it) }.firstOrNull { it.isNotBlank() }.orEmpty()
                 val page = read(text, row.group.title)
                 val titleWords = words(title)
+                val also = words(row.keywords?.let { read(text, it) }.orEmpty())
                 val rest = words(row.details.joinToString(" ") { read(text, it) } + " " + page + " " + row.drawnAs.joinToString(" ") { read(text, it) })
-                if (!words.all { word -> titleWords.any { it.startsWith(word) } || rest.any { it.startsWith(word) } }) {
+                if (!words.all { word -> titleWords.any { it.startsWith(word) } || also.any { it.startsWith(word) } || rest.any { it.startsWith(word) } }) {
                     return@mapIndexedNotNull null
                 }
                 val titleText = titleWords.joinToString(" ")
@@ -46,7 +47,9 @@ object SettingsSearch {
                     titleText.startsWith(phrase) -> 0
                     words.all { word -> titleWords.any { it.startsWith(word) } } -> 1
                     titleText.contains(phrase) -> 2
-                    else -> 3
+                    // The words a person types for the row beat a line that happens to hold one.
+                    words.all { word -> titleWords.any { it.startsWith(word) } || also.any { it.startsWith(word) } } -> 3
+                    else -> 4
                 }
                 Triple(rank, index, Hit(row, title, detail, page))
             }
