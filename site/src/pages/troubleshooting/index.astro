@@ -1,0 +1,66 @@
+---
+// /troubleshooting/: the three guides for the reports people send. English only.
+import Base from '../../layouts/Base.astro';
+import BgArt from '../../components/BgArt.astro';
+import Header from '../../components/Header.astro';
+import Footer from '../../components/Footer.astro';
+import ToTop from '../../components/ToTop.astro';
+import PageHead from '../../components/PageHead.astro';
+import JsonLd from '../../components/JsonLd.astro';
+import { breadcrumb } from '../../components/breadcrumb';
+import Band from '../../components/Band.astro';
+import Cards from '../../components/Cards.astro';
+import LinkCard from '../../components/LinkCard.astro';
+import Action from '../../components/guides/Action.astro';
+import MoreHelp from '../../components/guides/MoreHelp.astro';
+import StarBand from '../../components/StarBand.astro';
+import { ENGLISH } from '../../i18n/langs';
+import { text } from '../../i18n/t';
+import { GUIDES } from '../../data/troubleshooting';
+
+Astro.locals.lang = ENGLISH;
+const itemList = {
+  '@context': 'https://schema.org',
+  '@type': 'ItemList',
+  itemListElement: GUIDES.map((g, i) => ({
+    '@type': 'ListItem', position: i + 1, name: g.crumb, url: `https://tmplayer.org/troubleshooting/${g.slug}/`,
+  })),
+};
+---
+<Base path="/troubleshooting/" title="Troubleshooting TMPlayer: video, network and storage" description="Fixes for the problems people report: a Telegram video that will not start or keeps buffering, Telegram blocked on the network, and a phone or TV stick with no space left." getBar>
+  <Fragment slot="head">
+    <JsonLd data={breadcrumb(['Troubleshooting', '/troubleshooting/'])} />
+    <JsonLd data={itemList} />
+  </Fragment>
+<BgArt />
+
+<Header page="guides" />
+
+<main id="main">
+
+  <PageHead lede="The three problems people report most, with the quickest fix first." updated="/troubleshooting/">
+    <Fragment slot="crumbs"><a href="/">{text(ENGLISH, 'common.home')}</a><span aria-hidden="true">/</span>Troubleshooting</Fragment>
+    <Fragment slot="title">When something{' '}<em>does not work</em></Fragment>
+    <Fragment slot="actions">
+      <Action filled href="/download/">{text(ENGLISH, 'home.download_tmplayer')}</Action>
+    </Fragment>
+  </PageHead>
+
+  <Band wave tonal id="guides" title="Pick the problem">
+    <Cards>
+      {GUIDES.map((g) => <LinkCard href={`/troubleshooting/${g.slug}/`} icon={g.icon} title={g.crumb} body={g.card} go="Read the steps" />)}
+    </Cards>
+  </Band>
+
+  <StarBand lede={text(ENGLISH, 'features.every_feature_here_started_as')} />
+
+  <MoreHelp download={{ href: '/install/', label: text(ENGLISH, 'download.how_to_install_it') }}>
+    Not on the list? <a href="/faq/">The questions page</a> covers the rest.
+  </MoreHelp>
+
+</main>
+
+<ToTop />
+
+<Footer />
+</Base>

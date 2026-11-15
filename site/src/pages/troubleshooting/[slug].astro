@@ -1,0 +1,97 @@
+---
+// /troubleshooting/<guide>/: what to try when a video will not start, Telegram is blocked on the
+// network, or the phone is full. English only, in literal English from src/data/troubleshooting.ts
+// (no catalog strings, so a new guide never lowers a language's share).
+import Base from '../../layouts/Base.astro';
+import BgArt from '../../components/BgArt.astro';
+import Header from '../../components/Header.astro';
+import Footer from '../../components/Footer.astro';
+import ToTop from '../../components/ToTop.astro';
+import PageHead from '../../components/PageHead.astro';
+import JsonLd from '../../components/JsonLd.astro';
+import { breadcrumb } from '../../components/breadcrumb';
+import Band from '../../components/Band.astro';
+import Cards from '../../components/Cards.astro';
+import LinkCard from '../../components/LinkCard.astro';
+import Steps from '../../components/Steps.astro';
+import Step from '../../components/Step.astro';
+import Action from '../../components/guides/Action.astro';
+import MoreHelp from '../../components/guides/MoreHelp.astro';
+import StarBand from '../../components/StarBand.astro';
+import { ENGLISH } from '../../i18n/langs';
+import { text } from '../../i18n/t';
+import { GUIDES, type Guide } from '../../data/troubleshooting';
+
+export function getStaticPaths() {
+  return GUIDES.map((g) => ({ params: { slug: g.slug }, props: { g } }));
+}
+
+const { g } = Astro.props as { g: Guide };
+Astro.locals.lang = ENGLISH;
+const path = `/troubleshooting/${g.slug}/`;
+const others = GUIDES.filter((o) => o.slug !== g.slug);
+const howTo = {
+  '@context': 'https://schema.org',
+  '@type': 'HowTo',
+  name: g.title,
+  description: g.description,
+  inLanguage: 'en',
+  step: g.steps.map((s, i) => ({ '@type': 'HowToStep', position: i + 1, name: s.h, text: s.p })),
+};
+---
+<Base path={path} title={g.title} description={g.description} getBar>
+  <Fragment slot="head">
+    <JsonLd data={breadcrumb(['Troubleshooting', '/troubleshooting/'], [g.crumb, path])} />
+    <JsonLd data={howTo} />
+  </Fragment>
+<BgArt />
+
+<Header page="guides" />
+
+<main id="main">
+
+  <PageHead lede={g.lede} updated={path}>
+    <Fragment slot="crumbs"><a href="/">{text(ENGLISH, 'common.home')}</a><span aria-hidden="true">/</span><a href="/troubleshooting/">Troubleshooting</a><span aria-hidden="true">/</span>{g.crumb}</Fragment>
+    <Fragment slot="title">{g.h1[0]}{' '}<em>{g.h1[1]}</em></Fragment>
+    <Fragment slot="actions">
+      <Action filled href="#steps">Show me the steps</Action>
+      <Action href="/download/">{text(ENGLISH, 'home.download_tmplayer')}</Action>
+    </Fragment>
+  </PageHead>
+
+  <Band wave body tonal id="steps" title="What to try, in order">
+    <Steps>
+      {g.steps.map((s, i) => <Step id={`try-${i + 1}`} title={s.h} p>{s.p}</Step>)}
+    </Steps>
+  </Band>
+
+  <StarBand lede={text(ENGLISH, 'features.every_feature_here_started_as')} />
+
+  <Band wave id="why" title={g.whyH}>
+    <div class="section-body prose-band" data-reveal>
+      <ul class="fact-list">
+        {g.why.map((w) => <li>{w}</li>)}
+      </ul>
+    </div>
+  </Band>
+
+  <Band wave tonal id="still" title={g.stillH}>
+    <div class="section-body prose-band" data-reveal>
+      <p>{g.still}</p>
+      <p>The <a href="/faq/">questions page</a> has more, and <a href="https://t.me/tmplayer_chat" rel="noopener">the Telegram group</a> and <a href="https://github.com/dracu-lah/TMPlayer/issues" rel="noopener">GitHub issues</a> are where to ask.</p>
+    </div>
+    <Cards>
+      {others.map((o) => <LinkCard href={`/troubleshooting/${o.slug}/`} icon={o.icon} title={o.crumb} body={o.card} go="Read the steps" />)}
+    </Cards>
+  </Band>
+
+  <MoreHelp download={{ href: '/install/', label: text(ENGLISH, 'download.how_to_install_it') }}>
+    Nothing here fixed it? <a href="/faq/">The questions page</a> covers the rest.
+  </MoreHelp>
+
+</main>
+
+<ToTop />
+
+<Footer />
+</Base>

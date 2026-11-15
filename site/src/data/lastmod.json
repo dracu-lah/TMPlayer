@@ -295,7 +295,7 @@
   },
   {
     "path": "/faq/",
-    "lastmod": "2026-11-11",
+    "lastmod": "2026-11-15",
     "changefreq": "monthly",
     "priority": "0.7"
   },
@@ -322,6 +322,30 @@
     "lastmod": "2026-10-18",
     "changefreq": "monthly",
     "priority": "0.5"
+  },
+  {
+    "path": "/troubleshooting/",
+    "lastmod": "2026-11-15",
+    "changefreq": "monthly",
+    "priority": "0.6"
+  },
+  {
+    "path": "/troubleshooting/video-will-not-start/",
+    "lastmod": "2026-11-15",
+    "changefreq": "monthly",
+    "priority": "0.6"
+  },
+  {
+    "path": "/troubleshooting/telegram-blocked-on-this-network/",
+    "lastmod": "2026-11-15",
+    "changefreq": "monthly",
+    "priority": "0.6"
+  },
+  {
+    "path": "/troubleshooting/phone-storage-full/",
+    "lastmod": "2026-11-15",
+    "changefreq": "monthly",
+    "priority": "0.6"
   },
   {
     "path": "/changelog/",

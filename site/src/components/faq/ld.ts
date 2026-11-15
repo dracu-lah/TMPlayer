@@ -166,6 +166,14 @@ export const faqLd = {
     },
     {
       "@type": "Question",
+      "name": "Video stutters? Try another player or the VLC engine",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Try these in order. In the player's menu choose Try the other decoder, or turn on Prefer software video under Settings, Playback: on some chips the hardware decoder draws green, blocky or frozen frames without any error, and the app's own decoder does not. If it still stutters, choose Open in another app and play the video in VLC or MX Player (on a phone or TV; a video still downloading goes over as far as it has got, and videos from chats that do not allow saving stay in TMPlayer). A version of TMPlayer with the VLC engine also offers it inside the app, under Settings, Playback, Player engine. If it keeps happening, Send logs tells the developer which device and codec it was, which is what lets a stutter be fixed."
+      }
+    },
+    {
+      "@type": "Question",
       "name": "Can I search for a video across all my chats?",
       "acceptedAnswer": {
         "@type": "Answer",
