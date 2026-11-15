@@ -176,10 +176,19 @@
           Picture in picture so leaving the app pauses nothing: before this, pressing Home during a
           video stopped it outright.
         -->
+        <!--
+          The mini player (U8, docs/mini-player-phone.md): an affinity of its own, which only a
+          launch with FLAG_ACTIVITY_NEW_TASK reads (PlayerLaunch, a phone with the setting on), so
+          Back can leave the player alive behind the browse shell. Every other launch (the TV, the
+          next episode) still lands in its caller's task. A player task leaves Recents with its
+          last player.
+        -->
         <activity
             android:name=".player.PlayerActivity"
+            android:autoRemoveFromRecents="true"
             android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout|smallestScreenSize|uiMode|locale|layoutDirection"
             android:exported="false"
+            android:taskAffinity="${applicationId}.player"
             android:screenOrientation="fullUser"
             android:supportsPictureInPicture="true"
             android:theme="@style/Theme.TMPlayer.Player" />

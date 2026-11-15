@@ -373,6 +373,7 @@ class MainActivity : ComponentActivity() {
             }
         }
         noteRequestedScreen(intent)
+        followMiniPlayer()
         setContent {
             TMPlayerTheme {
                 // Shared screens (a video's copies) open their sheets as the phone's own sheet.
@@ -444,7 +445,7 @@ class MainActivity : ComponentActivity() {
                     return@launch
                 }
             }
-            startActivity(PlayerActivity.intent(this@MainActivity, video.toMediaItem(), video.chatTitle))
+            startActivity(com.tmplayer.player.PlayerLaunch.fromBrowse(this@MainActivity, PlayerActivity.intent(this@MainActivity, video.toMediaItem(), video.chatTitle)))
         }
     }
 
@@ -456,6 +457,39 @@ class MainActivity : ComponentActivity() {
     override fun onStop() {
         super.onStop()
         com.tmplayer.ui.components.PlayPress.end()
+        // Leaving the app from here leaves a docked video too; a rotation is not leaving.
+        if (!isChangingConfigurations) com.tmplayer.player.MiniDock.shellHidden()
+    }
+
+    /**
+     * The mini player (U8): the setting for the launch flags ([com.tmplayer.player.PlayerLaunch]),
+     * the notification's tap through here ([com.tmplayer.player.MiniDock.EXTRA_EXPAND]), and Back
+     * on the first page while a video is docked. Registered before the screens' own Back
+     * handlers, so it only hears a Back none of them took: it goes to the launcher as Home would,
+     * because Android left alone may bring the player's task forward instead.
+     */
+    private fun followMiniPlayer() {
+        expandDockedPlayer(intent)
+        lifecycleScope.launch {
+            runCatching { SettingsStore(this@MainActivity).miniPlayer.collect { com.tmplayer.player.MiniDock.enabled = it } }
+        }
+        val leave = object : androidx.activity.OnBackPressedCallback(false) {
+            override fun handleOnBackPressed() {
+                val home = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                if (runCatching { startActivity(home) }.isFailure) moveTaskToBack(true)
+            }
+        }
+        onBackPressedDispatcher.addCallback(this, leave)
+        lifecycleScope.launch {
+            com.tmplayer.player.MiniDock.docked.collect { leave.isEnabled = it != null }
+        }
+    }
+
+    /** A tap on the media notification with the player in a task of its own: the player comes back. */
+    private fun expandDockedPlayer(intent: Intent?) {
+        if (intent?.getBooleanExtra(com.tmplayer.player.MiniDock.EXTRA_EXPAND, false) != true) return
+        intent.removeExtra(com.tmplayer.player.MiniDock.EXTRA_EXPAND)
+        com.tmplayer.player.MiniDock.expand(this)
     }
 
     override fun onUserInteraction() {
@@ -530,6 +564,7 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        expandDockedPlayer(intent)
         noteRequestedScreen(intent)
         playFromHomeScreen(intent)
     }
@@ -1234,7 +1269,7 @@ private fun Root() {
             if (LocalDownloads.videoFor(settings, item.chatId, item.messageId) != null) {
                 withContext(Dispatchers.Main) {
                     com.tmplayer.ui.components.PlayPress.open()
-                    context.startActivity(PlayerActivity.intent(context, item, chatTitle))
+                    context.startActivity(com.tmplayer.player.PlayerLaunch.fromBrowse(context, PlayerActivity.intent(context, item, chatTitle)))
                 }
                 return@withContext
             }
@@ -1292,8 +1327,11 @@ private fun Root() {
                 com.tmplayer.ui.components.PlayPress.open()
                 // The room was decided just above, so the player need not measure it again.
                 context.startActivity(
-                    PlayerActivity.intent(context, item, chatTitle)
-                        .putExtra(PlayerActivity.EXTRA_ROOM_DECIDED, item.fileId),
+                    com.tmplayer.player.PlayerLaunch.fromBrowse(
+                        context,
+                        PlayerActivity.intent(context, item, chatTitle)
+                            .putExtra(PlayerActivity.EXTRA_ROOM_DECIDED, item.fileId),
+                    ),
                 )
             }
 

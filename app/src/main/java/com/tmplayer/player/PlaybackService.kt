@@ -133,6 +133,13 @@ class PlaybackService : MediaSessionService() {
         @Volatile
         private var live: PlaybackService? = null
 
+        /**
+         * The player is in a task of its own (the mini player, U8): the launcher's task is the
+         * browse shell's, so a tap goes there and asks it to bring the docked player back.
+         */
+        @Volatile
+        private var tapExpandsDock = false
+
         /** What the player last meant to do, for the foreground's grace ([setPlayWhenReady]). */
         @Volatile
         private var meansToPlay = true
@@ -155,7 +162,9 @@ class PlaybackService : MediaSessionService() {
             playWhenReady: Boolean,
             onStop: () -> Unit,
             onCannotContinue: () -> Unit,
+            tapExpandsDock: Boolean = false,
         ): Boolean {
+            this.tapExpandsDock = tapExpandsDock
             pending = session
             onStopRequested = onStop
             this.onCannotContinue = onCannotContinue
@@ -227,8 +236,18 @@ class PlaybackService : MediaSessionService() {
             runCatching { manager(context).cancel(STOPPED_ID) }
         }
 
-        /** Brings the app's task back as it was left, which has the player on top. */
+        /**
+         * Brings the app's task back as it was left, which has the player on top. With the player
+         * in a task of its own, the shell's task with [MiniDock.EXTRA_EXPAND], which brings the
+         * docked player to the front.
+         */
         private fun launchIntent(context: Context): PendingIntent? {
+            if (tapExpandsDock) {
+                val shell = Intent(context, com.tmplayer.MainActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    .putExtra(MiniDock.EXTRA_EXPAND, true)
+                return PendingIntent.getActivity(context, 1, shell, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+            }
             val launch = context.packageManager.getLaunchIntentForPackage(context.packageName) ?: return null
             launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
             return PendingIntent.getActivity(context, 0, launch, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)

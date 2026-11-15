@@ -43,8 +43,10 @@ What changes is which task the player opens in and what Back does.
   With the setting off nothing is added and the phone behaves exactly as before.
 - **Back docks.** Back with nothing left to peel asks `MiniPlayerState.verdict` (core, shared
   with the desktop). Dock needs: a phone, the setting on, the player root of its own task, a video
-  open, not ended, not failed, no question up, not casting, the screen lock off, not in picture in
-  picture. Anything else closes the player as today. Docking starts `MainActivity` with
+  open, not ended, not failed, no sheet up (the player's status sheet also carries "Starting" and
+  "Trying again", so a video still opening closes on Back as today, unlike the desktop), not
+  casting, the screen lock off, not in picture in picture. Anything else closes the player as
+  today. Docking starts `MainActivity` with
   `FLAG_ACTIVITY_NO_USER_ACTION` (so leaving is not taken as the viewer going Home: no picture in
   picture by itself) and the player's `onStop` hands its session to `PlaybackService` exactly as
   background audio does, whatever the background audio setting, because the viewer is still in
@@ -89,7 +91,7 @@ decoder, and comes back on through the path background audio already uses.
 | Rotation | The shell is recreated, `MiniDock` is process wide, the bar comes back. The docked player handles its own configuration changes as it does today. |
 | Android 6 floor | `AppTask.moveToFront` and `RecentTaskInfo.id` are API 23; `taskId` is read from API 29. Nothing newer is needed. |
 | 1 GB phone | Docked means the video track is off (its decoder released) and one player at most: a new video dismisses the docked one first, and `CLEAR_TASK` finishes any player left in the task. The bar's read is once a second and only while drawn. |
-| Cast | No dock while casting; a docked handle that reports casting hides the bar (`MiniPlayerState.casting`). |
+| Cast | Back while casting closes the player as today. Home while casting docks it (the cast carries on, the video track stays as the cast left it), and the bar's tap and play both open the player's cast controls: on the phone the bar is the only way back to them from the launcher, so it shows rather than hides. |
 | Kids lock | A docked video whose chat the kids lock no longer allows is dismissed. The player's screen lock refuses Back, so a locked video never docks. |
 | App lock | The pad replaces the shell, so the bar is not drawn while locked. Expanding runs the player's `onStart`, which still steps aside when the lock asks on open. The notification keeps showing only the app's name with the lock on. |
 | Engine switch | The handle reads whichever engine is playing (`ExoEngine` or `VlcEngine`) each time; a switch puts the new player into the same session. With VLC the video track cannot be turned off, so it plays with no surface. |
