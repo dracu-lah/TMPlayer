@@ -11,6 +11,15 @@
 # NextLib's FFmpeg renderers are looked up reflectively by DefaultRenderersFactory.
 -keep class io.github.anilbeesetti.nextlib.media3ext.** { *; }
 
+# The container reader's JNI (tm4, ffdemux.cpp) is bound by this class's name, and calls back
+# read(int) and seek(long) on the ReaderIo it is handed, by name.
+-keep class com.tmplayer.player.demux.FfmpegDemuxNative { *; }
+-keep interface com.tmplayer.player.demux.ReaderIo { *; }
+-keepclassmembers class * implements com.tmplayer.player.demux.ReaderIo {
+    int read(int);
+    long seek(long);
+}
+
 # Media3 does the same for its own extension renderers and extractors.
 -dontwarn androidx.media3.**
 

@@ -46,10 +46,26 @@ extension's video renderer first (`EXTENSION_RENDERER_MODE_PREFER`); sound keeps
 whatever the setting says. Where neither side can decode the track the player ends in its
 unsupported-picture status sheet, with Try the other decoder and Open in another app. The order is
 pinned by `RendererOrderTest`; a format reaching the extension on a real device is a device check.
-Media3 has MIME types for only some old codecs, so a source that reads the others (C2's
-libavformat-backed extractor) names the decoder in the MIME type, `video/x-ffmpeg-<decoder>` or
+Media3 has MIME types for only some old codecs, so a source that reads the others (the
+container reader below) names the decoder in the MIME type, `video/x-ffmpeg-<decoder>` or
 `audio/x-ffmpeg-<decoder>`, with the container's extra data in the format's initialization data
 (`FfmpegLibrary.ffmpegMimeType` documents the layout).
+
+### Container reader
+
+A file none of Media3's extractors sniffs (ASF/WMV/WMA, RealMedia, an MPEG-1 system stream, an Ogg
+with Theora, NUT, MXF, DV, WTV and the rest of the list in docs/BUILDING.md) goes to
+`FfmpegExtractor`, which `FfmpegExtractors` adds after Media3's own, never instead of them:
+FFmpeg's libavformat, in the extension's native library (tm4), through `FfmpegDemuxNative`. The
+demuxer runs on a thread of its own and reads through two callbacks that Media3's loading thread
+answers from its `ExtractorInput`: a read at the input's position, or up to 256 KB ahead of it,
+comes from the input; a read anywhere else is `RESULT_SEEK` there, so `TdDataSource` reopens at
+that byte and TDLib moves its download (the way Media3's binary-search seekers work). The seek
+map is the container's index (ASF's is read once at open from the end of the file, RealMedia's
+with its header) or a byte estimate, and the demuxer's own seek goes on from the first reopen.
+Nothing is read that the demuxer does not ask for: opening a 47 MB VOB-like file reads about
+1.2 MB, a seek to its middle about 130 KB. The playback details say "Container: ASF (Windows
+Media), read by FFmpeg" and name both decoders.
 
 ## Modules
 
@@ -106,7 +122,8 @@ holds the arithmetic side of it.
 2. Seek back into a part already watched: resumes in under 1 s, from disk.
 3. Ten rapid alternating fast forward and rewind presses: no crash, no stuck buffer, ends playing
    at the final position.
-4. An MP4 with its index at the end plays and seeks correctly.
+4. An MP4 with its index at the end plays and seeks correctly; so do an ASF/WMV and a RealMedia
+   file (the container reader: index at the end, read at open).
 5. Seek to the last 30 s of a file: plays to the end, the player exits cleanly.
 6. Network cut during a seek: the buffering overlay shows speed 0 and playback recovers when the
    network returns (TDLib reconnects by itself).

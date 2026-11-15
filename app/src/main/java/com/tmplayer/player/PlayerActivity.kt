@@ -937,6 +937,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     /** The video format watched, for the same report. */
     private var watchFormat: androidx.media3.common.Format? = null
 
+    /** The sound's decoder, for the playback details (the picture's is [watchDecoder]). */
+    private var audioDecoderName: String? = null
+
     /** Whether this video got its "Stuttering?" offer or line: once per video. */
     private var stutterOffered = false
 
@@ -4421,18 +4424,24 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         // the next Cluster instead of not at all ([CuelessMatroskaSeek]); Telegram's duration
         // stands in for one the file leaves out.
         //
+        // A file none of Media3's extractors reads (ASF/WMV, RealMedia, an MPEG-1 system stream,
+        // an Ogg with Theora) goes to FFmpeg's libavformat last ([FfmpegExtractors]), still read
+        // from TDLib's window at the offsets the demuxer asks for.
+        //
         // Wrapped last so a Dolby Vision track this device would not show as Dolby Vision reaches
         // the player as its HEVC base layer, which both decoders take ([DolbyVisionBaseLayer]).
         val extractors = DolbyVisionBaseLayer(
             this,
             CuelessMatroskaSeek(
-                DefaultExtractorsFactory()
-                    .setConstantBitrateSeekingEnabled(true)
-                    .setTsExtractorFlags(
-                        androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory.FLAG_ENABLE_HDMV_DTS_AUDIO_STREAMS or
-                            androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES,
-                    )
-                    .setTsExtractorTimestampSearchBytes(TS_TIMESTAMP_SEARCH_BYTES),
+                com.tmplayer.player.demux.FfmpegExtractors(
+                    DefaultExtractorsFactory()
+                        .setConstantBitrateSeekingEnabled(true)
+                        .setTsExtractorFlags(
+                            androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory.FLAG_ENABLE_HDMV_DTS_AUDIO_STREAMS or
+                                androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES,
+                        )
+                        .setTsExtractorTimestampSearchBytes(TS_TIMESTAMP_SEARCH_BYTES),
+                ),
                 durationHintUs = { durationSec.takeIf { it > 0 }?.let { it * 1_000_000L } ?: C.TIME_UNSET },
             ),
         )
@@ -4518,6 +4527,15 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                     ) {
                         watchDecoder = decoderName
                         crashNote.decoder(decoderName)
+                    }
+
+                    override fun onAudioDecoderInitialized(
+                        eventTime: AnalyticsListener.EventTime,
+                        decoderName: String,
+                        initializedTimestampMs: Long,
+                        initializationDurationMs: Long,
+                    ) {
+                        audioDecoderName = decoderName
                     }
 
                     override fun onVideoInputFormatChanged(
@@ -8311,11 +8329,24 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                         ?.let { L.playerDetailsPictureFps(width, height, "%.3g".format(it)) }
                         ?: L.playerDetailsPicture(width, height),
                 )
-                video.sampleMimeType?.let { add(L.playerDetailsVideoCodec(it.substringAfter('/'))) }
+                video.sampleMimeType?.let { add(L.playerDetailsVideoCodec(com.tmplayer.player.demux.FfmpegFormats.codecLabel(it))) }
+                watchDecoder.takeIf { it.isNotEmpty() }?.let { add(L.playerDetailsVideoDecoder(it)) }
             }
             if (audio != null) {
                 add(L.playerDetailsSound(audio.channelCount.toString(), audio.sampleRate.toString()))
-                audio.sampleMimeType?.let { add(L.playerDetailsAudioCodec(it.substringAfter('/'))) }
+                audio.sampleMimeType?.let { add(L.playerDetailsAudioCodec(com.tmplayer.player.demux.FfmpegFormats.codecLabel(it))) }
+                audioDecoderName?.let { add(L.playerDetailsAudioDecoder(it)) }
+            }
+            // The container, and whether FFmpeg read it (a file Media3's own extractors do not read).
+            (video?.containerMimeType ?: audio?.containerMimeType)?.let { container ->
+                val demuxer = com.tmplayer.player.demux.FfmpegFormats.demuxerOf(container)
+                add(
+                    if (demuxer != null) {
+                        L.playerDetailsContainerFfmpeg(com.tmplayer.player.demux.FfmpegFormats.containerLabel(demuxer))
+                    } else {
+                        L.playerDetailsContainerValue(container.substringAfter('/'))
+                    },
+                )
             }
             if (fileSizeBytes > 0) add(L.playerDetailsFile(Translator.messages.formatter.bytes(fileSizeBytes)))
             val here = Translator.messages.formatter.percent(downloadedFraction.toDouble())
