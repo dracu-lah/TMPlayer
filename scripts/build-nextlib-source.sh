@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Builds nextlib-corresponding-source-1.11.1-0.16.0-tm2.tar.gz: the complete corresponding source
+# Builds nextlib-corresponding-source-1.11.1-0.16.0-tm3.tar.gz: the complete corresponding source
 # of the FFmpeg extension that the Android build bundles through nextlib-media3ext 1.11.1-0.16.0
 # (io.github.anilbeesetti, by Anil Beesetti, GPL-3.0), as scripts/build-media3ext.sh builds it:
 # nextlib's tree at its tag, plus tmplayer/ holding TMPlayer's patch (five more FFmpeg video
 # decoders and their mappings, and the light video mode for weak devices) and that build script.
-# The "-tm2" is TM_REVISION in scripts/build-media3ext.sh, read from there, so the archive always
+# The "-tm3" is TM_REVISION in scripts/build-media3ext.sh, read from there, so the archive always
 # names the patch revision it holds. Up to 1.27.x the app shipped nextlib's own AAR from Maven
 # Central, whose source is the archive without the suffix (attached to v1.27.0); 1.28.x shipped
 # tm1, the decoders alone, which this script at a commit before HX2c packs.
