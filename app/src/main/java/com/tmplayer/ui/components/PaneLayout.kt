@@ -1,5 +1,6 @@
 package com.tmplayer.ui.components
 
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -32,10 +33,17 @@ import com.tmplayer.ui.theme.Tv
  *
  * Scrolls in both cases: a small screen in landscape leaves too little height, and a pane that
  * cannot scroll loses its button off the bottom.
+ *
+ * [topOnTv] starts the television's column under the overscan margin instead of centring it: a
+ * pane with a text field opens the on-screen keyboard over the lower half of the screen, and a
+ * centred column put its buttons under it (D-3). [scroll] lets the caller scroll the pane, which a
+ * phone's typed pane does to keep its buttons above the keyboard.
  */
 @Composable
 fun Pane(
     modifier: Modifier = Modifier,
+    topOnTv: Boolean = false,
+    scroll: ScrollState = rememberScrollState(),
     /** Vertical gap between the pane's children, since every caller wants an even rhythm. */
     spacing: Dp = 14.dp,
     horizontalAlignment: Alignment.Horizontal = Alignment.CenterHorizontally,
@@ -48,9 +56,9 @@ fun Pane(
             modifier
                 .fillMaxSize()
                 .imePadding()
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scroll)
                 .padding(vertical = Tv.SafeV),
-            contentAlignment = Alignment.Center,
+            contentAlignment = if (topOnTv) Alignment.TopCenter else Alignment.Center,
         ) {
             Column(
                 Modifier.width(TV_COLUMN),
@@ -79,7 +87,7 @@ fun Pane(
             Modifier
                 .width(measure)
                 .align(Alignment.TopCenter)
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scroll)
                 .padding(horizontal = PhonePad.Side, vertical = PhonePad.Top),
             horizontalAlignment = Alignment.Start,
             verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(spacing),

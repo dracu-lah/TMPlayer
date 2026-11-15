@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -22,6 +24,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -1328,7 +1331,7 @@ private fun EmailCodePane(
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun LoginForm(
+internal fun LoginForm(
     title: String,
     blurb: String,
     note: String?,
@@ -1360,8 +1363,19 @@ private fun LoginForm(
     // and a screen with nothing focused leaves the D-pad with nowhere to start from.
     val waitFocus = remember { FocusRequester() }
     val touch = isTouch()
+    // D-3: with the keyboard up the buttons stay in sight. A television opens it over the lower half
+    // of the screen without moving the page, so its column starts at the top (the buttons end
+    // above the keyboard); a phone scrolls to the buttons when the keyboard comes up, the field
+    // staying in view above them.
+    val scroll = rememberScrollState()
+    val keyboardUp = WindowInsets.isImeVisible
+    if (touch) {
+        LaunchedEffect(keyboardUp, scroll.maxValue) {
+            if (keyboardUp) runCatching { scroll.animateScrollTo(scroll.maxValue) }
+        }
+    }
 
-    Pane {
+    Pane(topOnTv = true, scroll = scroll) {
         PaneHeader(onBack = onBack)
         Text(title, style = MaterialTheme.typography.headlineLarge)
         Text(blurb, style = MaterialTheme.typography.bodyLarge)
