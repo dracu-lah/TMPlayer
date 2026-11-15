@@ -152,6 +152,23 @@ object TranscodePlanner {
     }
 
     /**
+     * [route] made again with the link and the receiver's wrappers as they are now: a stream that
+     * starts later (a seek, a reload, another soundtrack) plans from what has been learned since
+     * the cast was planned. The soundtrack and the copy-or-convert choice stay as they were.
+     */
+    fun retarget(
+        route: CastRoute.Transcode,
+        probe: MediaProbe,
+        caps: ReceiverCaps,
+        ability: TranscodeAbility,
+        linkKbps: Int?,
+        receiverContainers: Set<Container>?,
+    ): CastRoute.Transcode {
+        val track = route.audioTrack?.let { n -> probe.audio.firstOrNull { it.number == n } }
+        return route.copy(target = target(probe, caps, ability, track, route.target.copyVideo, linkKbps, receiverContainers))
+    }
+
+    /**
      * The output size: the source's, scaled down to fit 1080p, the encoder's limit and the rung the
      * link allows, sides even and the shape kept. A source of unknown size gets the rung's 16:9.
      */

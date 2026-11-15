@@ -16,6 +16,8 @@ import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
 import com.tmplayer.cast.AndroidAudioConverter
 import com.tmplayer.cast.AndroidDeviceHealth
+import com.tmplayer.cast.AndroidLinkSpeed
+import com.tmplayer.cast.LinkEstimator
 import com.tmplayer.cast.AndroidTranscodeAbility
 import com.tmplayer.cast.EngineTranscoder
 import com.tmplayer.cast.TranscodeAbility
@@ -205,6 +207,12 @@ class PlayerCast(
     )
 
     /**
+     * How fast the link to the TV is, for a transcode's bitrate: this phone's Wi-Fi rate until the
+     * cast server has timed the TV taking a file's bytes. Held steady between askings.
+     */
+    private val link = LinkEstimator(AndroidLinkSpeed(activity))
+
+    /**
      * Codecs this TV was seen to turn away: an HLS soundtrack sent as it is that the receiver left
      * out of its track list (E-AC-3 on the Mi TV Stick). A fallback to the rewrap converts them.
      */
@@ -312,6 +320,7 @@ class PlayerCast(
         published = null
         place = CastPlace(startMs ?: 0L)
         device = connectedState.name
+        link.reset()
         view = CastView(CastPhase.Starting, lastKnownMs, true)
         refresh()
         composeView.visibility = View.VISIBLE
@@ -329,7 +338,7 @@ class PlayerCast(
                 probe = p
                 val preferred = hooks.audioLanguage()?.let { lang -> p.audio.firstOrNull { sameLanguage(it.language, lang) }?.number }
                 val caps = capsFor(connectedState.model)
-                val pl = support.adapt(CastFormats.plan(p, caps, preferred, canConvertAudio = canConvert, transcoder = transcodeAbility))
+                val pl = support.adapt(CastFormats.plan(p, caps, preferred, canConvertAudio = canConvert, transcoder = transcodeAbility, linkKbps = link.estimate().kbps))
                 plan = pl
                 Log.i(TAG, "Plan for $file on ${connectedState.model}: $pl ($p)")
                 if (!pl.castable) {
@@ -384,7 +393,7 @@ class PlayerCast(
         val access = support.serverAccess
         if (server?.running == true && serverBind == bind && serverDlna == (access != null)) return
         runCatching { server?.stop() }
-        val s = if (access != null) CastServer(bind, allowed = access.allowed) else CastServer(bind)
+        val s = if (access != null) CastServer(bind, allowed = access.allowed, meter = link.meter) else CastServer(bind, meter = link.meter)
         s.start()
         server = s
         serverBind = bind
@@ -418,6 +427,12 @@ class PlayerCast(
         throw IOException(failureText())
     }
 
+    private fun retarget(r: CastRoute.Transcode, p: MediaProbe): CastRoute.Transcode {
+        val ability = transcodeAbility ?: return r
+        val caps = capsFor((support.session.value as? CastSessionState.Connected)?.model)
+        return TranscodePlanner.retarget(r, p, caps, ability, link.estimate().kbps, null)
+    }
+
     private suspend fun load(r: CastRoute, atMs: Long): Boolean {
         val st = streams ?: return false
         val src = source ?: return false
@@ -437,6 +452,8 @@ class PlayerCast(
                     else r.copy(audioTrack = number?.takeIf { codec in CastFormats.MP4_AUDIO })
                 }
                 is CastRoute.ConvertAudio -> audio?.let { CastRoute.ConvertAudio(it) } ?: r
+                // Planned again with the link as it is now (it may have been measured since the cast began).
+                is CastRoute.Transcode -> retarget(r, p)
                 else -> r
             }
             val pub = withContext(Dispatchers.IO) { st.publish(src, p, chosen, atMs, name) }
@@ -817,10 +834,7 @@ class PlayerCast(
         val ability = transcodeAbility
         val next = when {
             // A transcode goes on as one, its sound made for the new track.
-            r is CastRoute.Transcode && p != null && ability != null -> {
-                val caps = capsFor((support.session.value as? CastSessionState.Connected)?.model)
-                r.copy(audioTrack = number, target = TranscodePlanner.target(p, caps, ability, track, r.target.copyVideo))
-            }
+            r is CastRoute.Transcode && p != null && ability != null -> retarget(r.copy(audioTrack = number), p)
             codec != null && codec in CastFormats.MP4_AUDIO -> CastRoute.Remux(number)
             else -> CastRoute.ConvertAudio(number)
         }

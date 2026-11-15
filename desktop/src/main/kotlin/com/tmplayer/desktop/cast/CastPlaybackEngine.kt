@@ -15,6 +15,7 @@ import com.tmplayer.cast.HlsTrackMatch
 import com.tmplayer.cast.LanAddress
 import com.tmplayer.cast.MediaProbe
 import com.tmplayer.cast.MkvHls
+import com.tmplayer.cast.LinkEstimator
 import com.tmplayer.cast.TranscodePlanner
 import com.tmplayer.cast.TranscodeProgress
 import com.tmplayer.cast.TranscodeSlot
@@ -118,6 +119,12 @@ class CastPlaybackEngine(
     /** One transcode at a time; its progress drives the casting panel's card. */
     private val transcodes = TranscodeSlot({ FfmpegTranscoder(ffmpeg ?: throw IOException(L.castTranscodeNeedsFfmpeg)) })
 
+    /**
+     * How fast the link to the receiver is, for a transcode's bitrate: the OS's word on the
+     * interface the server is bound to until the server has timed the receiver taking a file's bytes.
+     */
+    private val link = LinkEstimator(DesktopLinkSpeed(local = { LanAddress.forReceiver(receiver.address) }))
+
     /** The running or last transcode, for the casting panel; null when the cast is not converted. */
     val transcode: StateFlow<TranscodeProgress?> = transcodes.progress
 
@@ -141,7 +148,7 @@ class CastPlaybackEngine(
                 probe = p
                 val preferred = prefs.audioLanguage?.let { lang -> p.audio.firstOrNull { sameLanguage(it.language, lang) }?.number }
                 ffmpeg = DesktopFfmpeg.detect()
-                val pl = receiver.adapt(CastFormats.plan(p, receiver.caps, preferred, canConvertAudio = false, transcoder = ffmpeg?.ability))
+                val pl = receiver.adapt(CastFormats.plan(p, receiver.caps, preferred, canConvertAudio = false, transcoder = ffmpeg?.ability, linkKbps = link.estimate().kbps))
                 plan = pl
                 Logger.i(TAG, "Plan for $name on ${receiver.model} (${receiver.kind}): $pl ($p)")
                 if (!pl.castable) {
@@ -178,7 +185,7 @@ class CastPlaybackEngine(
     private fun ensureServer() {
         if (server?.running == true) return
         val bind = LanAddress.forReceiver(receiver.address) ?: throw IOException(L.castConnectFailed(receiver.name))
-        val s = receiver.allowedClient?.let { CastServer(bind, allowed = it) } ?: CastServer(bind)
+        val s = receiver.allowedClient?.let { CastServer(bind, allowed = it, meter = link.meter) } ?: CastServer(bind, meter = link.meter)
         s.start()
         server = s
         streams = if (receiver.kind == ReceiverKind.Dlna) CastStreams(s, serving = ::dlnaServing, transcodes = transcodes) else CastStreams(s, transcodes = transcodes)
@@ -207,6 +214,8 @@ class CastPlaybackEngine(
             val chosen = when (r) {
                 is CastRoute.Hls -> r.copy(audioTrack = audio?.takeIf { a -> r.audio.any { it.number == a } } ?: r.audioTrack)
                 is CastRoute.Remux -> r.copy(audioTrack = audio?.takeIf { a -> p.audio.firstOrNull { it.number == a }?.codec in CastFormats.MP4_AUDIO })
+                // Planned again with the link as it is now (it may have been measured since the cast began).
+                is CastRoute.Transcode -> ffmpeg?.ability?.let { TranscodePlanner.retarget(r, p, receiver.caps, it, link.estimate().kbps, null) } ?: r
                 else -> r
             }
             val pub = st.publish(src, p, chosen, atMs, name)
@@ -546,9 +555,8 @@ class CastPlaybackEngine(
                 val at = _state.value.positionMs
                 val p = probe
                 val next = if (r is CastRoute.Transcode && p != null) {
-                    val track = p.audio.firstOrNull { it.number == id }
                     val ability = ffmpeg?.ability
-                    if (ability == null) r else r.copy(audioTrack = id, target = TranscodePlanner.target(p, receiver.caps, ability, track, r.target.copyVideo))
+                    if (ability == null) r else TranscodePlanner.retarget(r.copy(audioTrack = id), p, receiver.caps, ability, link.estimate().kbps, null)
                 } else CastRoute.Remux(id)
                 scope.launch { load(next, at) }
             }

@@ -5,9 +5,12 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.media.MediaCodecInfo
 import android.media.MediaCodecList
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.BatteryManager
 import android.os.Build
+import android.net.wifi.WifiInfo
 import android.os.PowerManager
 import android.util.Log
 import androidx.media3.common.C
@@ -174,5 +177,28 @@ class CastSourceDataSource(private val source: CastSource) : BaseDataSource(fals
 
     class Factory(private val source: CastSource) : DataSource.Factory {
         override fun createDataSource(): DataSource = CastSourceDataSource(source)
+    }
+}
+
+/**
+ * The local link's speed for the transcode's bitrate ([LinkEstimator]): the connected Wi-Fi's own
+ * link rate (Android 10 and later, from the network's capabilities, which needs no extra
+ * permission), scaled down to what a stream gets. Ethernet and mobile data say nothing here, and
+ * before Android 10 nothing is read (the older call needs a permission the app does not ask for):
+ * the plan then keeps 1080p 8 Mb/s until the cast server has measured the receiver.
+ */
+class AndroidLinkSpeed(context: Context) : LinkSpeedSource {
+    private val app = context.applicationContext
+
+    override fun effectiveKbps(): Int? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
+        return runCatching {
+            val cm = app.getSystemService(ConnectivityManager::class.java) ?: return null
+            val caps = cm.getNetworkCapabilities(cm.activeNetwork ?: return null) ?: return null
+            if (!caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) return null
+            val info = caps.transportInfo as? WifiInfo ?: return null
+            // -1 when Android does not know it.
+            LinkSpeeds.wifiEffectiveKbps(info.linkSpeed.toDouble())
+        }.getOrNull()
     }
 }

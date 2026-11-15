@@ -42,6 +42,8 @@ class CastServer(
     /** Who may ask; the private and link local ranges by default. Tests on loopback widen it. */
     private val allowed: (InetAddress) -> Boolean = ::isLocalNetwork,
     private val clock: () -> Long = { System.nanoTime() / 1_000_000 },
+    /** Hears how fast the receiver takes bytes of a file sent as it is, for the transcode's bitrate ([LinkEstimator]). */
+    private val meter: LinkMeter? = null,
 ) {
 
     /** This session's secret: the first segment of every path. */
@@ -290,11 +292,15 @@ class CastServer(
         track(name, socket)
         resource.source.open(start).use { reader ->
             val buffer = ByteArray(COPY_BUFFER)
+            val burst = meter?.burst()
             var left = length
             while (left > 0) {
                 val n = reader.read(buffer, 0, minOf(buffer.size.toLong(), left).toInt())
                 if (n < 0) throw IOException("Source ended $left bytes early")
+                // Only the write is timed: the read is the source's speed, not the link's.
+                val wrote = System.nanoTime()
                 out.write(buffer, 0, n)
+                burst?.add(n, System.nanoTime() - wrote)
                 lastActivityMs = clock()
                 left -= n
             }
