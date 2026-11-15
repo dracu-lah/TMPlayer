@@ -1,16 +1,54 @@
 --- a/ffmpeg/setup.sh
 +++ b/ffmpeg/setup.sh
-@@ -18,8 +18,8 @@
+@@ -16,10 +16,32 @@
+ MBEDTLS_DIR=$SOURCES_DIR/mbedtls-$MBEDTLS_VERSION
+ 
  # Configuration
- ANDROID_ABIS="x86 x86_64 armeabi-v7a arm64-v8a"
+-ANDROID_ABIS="x86 x86_64 armeabi-v7a arm64-v8a"
++# TMPlayer (tm3): TM_ABIS (space or comma separated) builds some of the ABIs, for a first quick
++# check of a change; scripts/build-media3ext.sh names such an AAR "partial".
++ANDROID_ABIS="$(echo "${TM_ABIS:-x86 x86_64 armeabi-v7a arm64-v8a}" | tr ',' ' ')"
  ANDROID_PLATFORM=21
 -ENABLED_DECODERS="vorbis opus flac alac pcm_mulaw pcm_alaw mp3 amrnb amrwb aac ac3 eac3 dca mlp truehd h264 hevc mpeg2video mpegvideo vp8 vp9 libdav1d"
 -JOBS=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || sysctl -n hw.physicalcpu 2>/dev/null || echo 4)
-+ENABLED_DECODERS="vorbis opus flac alac pcm_mulaw pcm_alaw mp3 amrnb amrwb aac ac3 eac3 dca mlp truehd h264 hevc mpeg2video mpegvideo mpeg4 msmpeg4v2 msmpeg4v3 vc1 mjpeg vp8 vp9 libdav1d"
++# TMPlayer (tm3): every line below is LGPL in FFmpeg 9.0.1; the build stays --enable-version3 with no
++# --enable-gpl and nothing non-free. Left out on purpose: adpcm_circus, adpcm_ima_escape,
++# adpcm_ima_hvqm2, adpcm_ima_hvqm4, adpcm_ima_magix, adpcm_ima_pda, adpcm_n64, adpcm_psxc and ahx
++# (marked LGPL but only built with --enable-gpl), and the *_at decoders (Apple's AudioToolbox).
++ENABLED_DECODERS="vorbis opus flac alac pcm_mulaw pcm_alaw mp3 amrnb amrwb aac ac3 eac3 dca mlp truehd h264 hevc mpeg2video mpegvideo mpeg4 msmpeg4v2 msmpeg4v3 vc1 mjpeg vp8 vp9 libdav1d
++  mpeg1video wmv1 wmv2 wmv3 h263 h263p flv theora dvvideo svq1 svq3 vp6 vp6f rv10 rv20 rv30 rv40 cinepak
++  prores ffv1 huffyuv ffvhuff utvideo mjpegb
++  wmav1 wmav2 wmapro wmalossless mp1 mp2 cook ra_144 ra_288 qcelp gsm gsm_ms sipr atrac3 atrac3p speex
++  wavpack tta ape nellymoser
++  adpcm_4xm adpcm_adx adpcm_afc adpcm_agm adpcm_aica adpcm_argo adpcm_ct adpcm_dtk adpcm_ea
++  adpcm_ea_maxis_xa adpcm_ea_r1 adpcm_ea_r2 adpcm_ea_r3 adpcm_ea_xas adpcm_g722 adpcm_g726
++  adpcm_g726le adpcm_ima_acorn adpcm_ima_alp adpcm_ima_amv adpcm_ima_apc adpcm_ima_apm
++  adpcm_ima_cunning adpcm_ima_dat4 adpcm_ima_dk3 adpcm_ima_dk4 adpcm_ima_ea_eacs
++  adpcm_ima_ea_sead adpcm_ima_iss adpcm_ima_moflex adpcm_ima_mtf adpcm_ima_oki adpcm_ima_qt
++  adpcm_ima_rad adpcm_ima_smjpeg adpcm_ima_ssi adpcm_ima_wav adpcm_ima_ws adpcm_ima_xbox adpcm_ms
++  adpcm_mtaf adpcm_psx adpcm_sanyo adpcm_sbpro_2 adpcm_sbpro_3 adpcm_sbpro_4 adpcm_swf adpcm_thp
++  adpcm_thp_le adpcm_vima adpcm_xa adpcm_xmd adpcm_yamaha adpcm_zork
++  pcm_bluray pcm_dvd pcm_f16le pcm_f24le pcm_f32be pcm_f32le pcm_f64be pcm_f64le pcm_lxf pcm_s16be
++  pcm_s16be_planar pcm_s16le pcm_s16le_planar pcm_s24be pcm_s24daud pcm_s24le pcm_s24le_planar
++  pcm_s32be pcm_s32le pcm_s32le_planar pcm_s64be pcm_s64le pcm_s8 pcm_s8_planar pcm_sga pcm_u16be
++  pcm_u16le pcm_u24be pcm_u24le pcm_u32be pcm_u32le pcm_u8 pcm_vidc"
 +JOBS=${JOBS:-$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || sysctl -n hw.physicalcpu 2>/dev/null || echo 4)}
  
  # Gradle supplies these; standalone callers use the same pinned versions.
  CATALOG="$BASE_DIR/../gradle/libs.versions.toml"
+--- a/media3ext/build.gradle.kts
++++ b/media3ext/build.gradle.kts
+@@ -22,7 +22,9 @@
+         }
+ 
+         ndk {
+-            abiFilters += listOf("x86", "x86_64", "armeabi-v7a", "arm64-v8a")
++            // TMPlayer (tm3): TM_ABIS builds some of the ABIs (see ffmpeg/setup.sh).
++            abiFilters += (System.getenv("TM_ABIS") ?: "x86 x86_64 armeabi-v7a arm64-v8a")
++                .split(' ', ',').filter { it.isNotBlank() }
+         }
+     }
+ 
 --- a/media3ext/consumer-rules.pro
 +++ b/media3ext/consumer-rules.pro
 @@ -4,4 +4,9 @@
@@ -25,6 +63,196 @@
 +-keep class io.github.anilbeesetti.nextlib.media3ext.ffdecoder.FfmpegLibrary {
 +    public static void setLightVideoPolicy(com.google.common.base.Predicate);
 +}
+--- a/media3ext/src/main/cpp/ffaudio.cpp
++++ b/media3ext/src/main/cpp/ffaudio.cpp
+@@ -5,6 +5,7 @@
+ #include <android/native_window_jni.h>
+ #include <algorithm>
+ #include "ffcommon.h"
++#include "ffcodecparams.h"
+ 
+ extern "C" {
+ #ifdef __cplusplus
+@@ -41,7 +42,8 @@
+  */
+ AVCodecContext *createContext(JNIEnv *env, AVCodec *codec, jbyteArray extraData,
+                               jboolean outputFloat, jint rawSampleRate,
+-                              jint rawChannelCount);
++                              jint rawChannelCount, jint blockAlign, jint bitRate,
++                              jint bitsPerCodedSample);
+ 
+ /**
+  * Decodes the packet into the output buffer, returning the number of bytes
+@@ -76,7 +78,8 @@
+ 
+ AVCodecContext *createContext(JNIEnv *env, AVCodec *codec, jbyteArray extraData,
+                               jboolean outputFloat, jint rawSampleRate,
+-                              jint rawChannelCount) {
++                              jint rawChannelCount, jint blockAlign, jint bitRate,
++                              jint bitsPerCodedSample) {
+     AVCodecContext *context = avcodec_alloc_context3(codec);
+     if (!context) {
+         LOGE("Failed to allocate context.");
+@@ -86,14 +89,16 @@
+             outputFloat ? OUTPUT_FORMAT_PCM_FLOAT : OUTPUT_FORMAT_PCM_16BIT;
+     if (extraData) {
+         jsize size = env->GetArrayLength(extraData);
+-        context->extradata_size = size;
++        // TMPlayer (tm3): zeroed padding, which FFmpeg's bit readers rely on (the WMA, Cook and
++        // RealAudio decoders read past the end of short extra data otherwise).
+         context->extradata =
+-                (uint8_t *) av_malloc(size + AV_INPUT_BUFFER_PADDING_SIZE);
++                (uint8_t *) av_mallocz((size_t) size + AV_INPUT_BUFFER_PADDING_SIZE);
+         if (!context->extradata) {
+             LOGE("Failed to allocate extra data.");
+             releaseContext(context);
+             return nullptr;
+         }
++        context->extradata_size = size;
+         env->GetByteArrayRegion(extraData, 0, size, (jbyte *) context->extradata);
+     }
+     if (context->codec_id == AV_CODEC_ID_PCM_MULAW ||
+@@ -102,6 +107,9 @@
+         context->ch_layout.nb_channels = rawChannelCount;
+         av_channel_layout_default(&context->ch_layout, rawChannelCount);
+     }
++    // TMPlayer (tm3): what the container says, for the decoders that need it (ffcodecparams.h).
++    ffparams::ApplyAudio(context, rawSampleRate, rawChannelCount, blockAlign, bitRate,
++                         bitsPerCodedSample);
+     context->err_recognition = AV_EF_IGNORE_ERR;
+     int result = avcodec_open2(context, codec, nullptr);
+     if (result < 0) {
+@@ -218,7 +226,10 @@
+                                                                         jbyteArray extra_data,
+                                                                         jboolean output_float,
+                                                                         jint raw_sample_rate,
+-                                                                        jint raw_channel_count) {
++                                                                        jint raw_channel_count,
++                                                                        jint block_align,
++                                                                        jint bit_rate,
++                                                                        jint bits_per_coded_sample) {
+     AVCodec *codec = getCodecByName(env, codec_name);
+     if (!codec) {
+         LOGE("Codec not found.");
+@@ -227,7 +238,8 @@
+     jclass clazz = env->FindClass("io/github/anilbeesetti/nextlib/media3ext/ffdecoder/FfmpegAudioDecoder");
+     growOutputBufferMethod = env->GetMethodID(clazz, "growOutputBuffer","(Landroidx/media3/decoder/SimpleDecoderOutputBuffer;I)Ljava/nio/ByteBuffer;");
+     return (jlong) createContext(env, codec, extra_data, output_float, raw_sample_rate,
+-                                 raw_channel_count);
++                                 raw_channel_count, block_align, bit_rate,
++                                 bits_per_coded_sample);
+ }
+ 
+ extern "C"
+@@ -323,7 +335,8 @@
+         }
+         return (jlong) createContext(env, codec, extra_data, outputFloat,
+                 /* rawSampleRate= */ -1,
+-                /* rawChannelCount= */ -1);
++                /* rawChannelCount= */ -1, /* blockAlign= */ 0, /* bitRate= */ 0,
++                /* bitsPerCodedSample= */ 0);
+     }
+ 
+     avcodec_flush_buffers(context);
+--- /dev/null
++++ b/media3ext/src/main/cpp/ffcodecparams.h
+@@ -0,0 +1,96 @@
++// TMPlayer (tm3): what a container tells a decoder before the first packet, for the decoders
++// TMPlayer's patch adds. Kept apart, and free of JNI, so the host test (TMPlayer's
++// scripts/media3ext/bench, "codec" mode) runs the very code the app runs.
++//
++// Nextlib's own decoders (H.264, HEVC, AAC, AC-3, ...) work from their in-band headers and from the
++// extra data alone, and are left exactly as they were: Legacy*() names them. The old and the
++// exotic formats added in tm3 mostly cannot: a WMA or ADPCM stream has its sample rate, channel
++// count and block size only in the container, and a Cinepak, RealVideo or WMV picture its size.
++#ifndef TMPLAYER_FFCODECPARAMS_H
++#define TMPLAYER_FFCODECPARAMS_H
++
++#include <cstdint>
++
++extern "C" {
++#include <libavcodec/avcodec.h>
++#include <libavutil/channel_layout.h>
++}
++
++namespace ffparams {
++
++// Decoders nextlib and TMPlayer's earlier revisions (tm1, tm2) already ran: untouched.
++inline bool LegacyAudio(AVCodecID id) {
++    switch (id) {
++        case AV_CODEC_ID_AAC:
++        case AV_CODEC_ID_MP3:
++        case AV_CODEC_ID_AC3:
++        case AV_CODEC_ID_EAC3:
++        case AV_CODEC_ID_TRUEHD:
++        case AV_CODEC_ID_MLP:
++        case AV_CODEC_ID_DTS:
++        case AV_CODEC_ID_VORBIS:
++        case AV_CODEC_ID_OPUS:
++        case AV_CODEC_ID_AMR_NB:
++        case AV_CODEC_ID_AMR_WB:
++        case AV_CODEC_ID_FLAC:
++        case AV_CODEC_ID_ALAC:
++        case AV_CODEC_ID_PCM_MULAW:
++        case AV_CODEC_ID_PCM_ALAW:
++            return true;
++        default:
++            return false;
++    }
++}
++
++inline bool LegacyVideo(AVCodecID id) {
++    switch (id) {
++        case AV_CODEC_ID_H264:
++        case AV_CODEC_ID_HEVC:
++        case AV_CODEC_ID_AV1:
++        case AV_CODEC_ID_VP8:
++        case AV_CODEC_ID_VP9:
++        case AV_CODEC_ID_MPEG1VIDEO:
++        case AV_CODEC_ID_MPEG2VIDEO:
++        case AV_CODEC_ID_MPEG4:
++        case AV_CODEC_ID_MSMPEG4V2:
++        case AV_CODEC_ID_MSMPEG4V3:
++        case AV_CODEC_ID_VC1:
++        case AV_CODEC_ID_MJPEG:
++            return true;
++        default:
++            return false;
++    }
++}
++
++// Sample rate, channel count, block size, bit rate and bits per coded sample, each used only
++// when it is positive. Returns whether the decoder is one this applies to.
++inline bool ApplyAudio(AVCodecContext *context, int sampleRate, int channels, int blockAlign,
++                       int64_t bitRate, int bitsPerCodedSample) {
++    if (LegacyAudio(context->codec_id)) return false;
++    if (sampleRate > 0) context->sample_rate = sampleRate;
++    if (channels > 0 && channels <= 64) av_channel_layout_default(&context->ch_layout, channels);
++    if (blockAlign > 0) context->block_align = blockAlign;
++    if (bitRate > 0) context->bit_rate = bitRate;
++    if (bitsPerCodedSample > 0 && bitsPerCodedSample <= 64) {
++        context->bits_per_coded_sample = bitsPerCodedSample;
++    }
++    return true;
++}
++
++// The picture's size and bits per coded sample, each used only when it is positive and sane (a
++// container's field is outside data, so the size is capped at 16384 on each side).
++inline bool ApplyVideo(AVCodecContext *context, int width, int height, int bitsPerCodedSample) {
++    if (LegacyVideo(context->codec_id)) return false;
++    if (width > 0 && height > 0 && width <= 16384 && height <= 16384) {
++        context->width = context->coded_width = width;
++        context->height = context->coded_height = height;
++    }
++    if (bitsPerCodedSample > 0 && bitsPerCodedSample <= 64) {
++        context->bits_per_coded_sample = bitsPerCodedSample;
++    }
++    return true;
++}
++
++}  // namespace ffparams
++
++#endif  // TMPLAYER_FFCODECPARAMS_H
 --- /dev/null
 +++ b/media3ext/src/main/cpp/fflight.h
 @@ -0,0 +1,70 @@
@@ -100,13 +328,14 @@
 +#endif  // TMPLAYER_FFLIGHT_H
 --- a/media3ext/src/main/cpp/ffvideo.cpp
 +++ b/media3ext/src/main/cpp/ffvideo.cpp
-@@ -26,9 +26,69 @@
+@@ -26,9 +26,70 @@
  #include <libswresample/swresample.h>
  #include <libswscale/swscale.h>
  }
 +#include <dlfcn.h>
 +#include <sys/system_properties.h>
 +#include "fflight.h"
++#include "ffcodecparams.h"
  
  #define ALIGN(x, a) (((x) + ((a) - 1)) & ~((a) - 1))
  
@@ -170,7 +399,7 @@
  // ANativeWindow_lock() implicitly connects the Surface's BufferQueue to the CPU
  // producer API. Since this Surface is shared with ExoPlayer's
  // MediaCodecVideoRenderer, that connection must be released once we are done, or
-@@ -176,6 +236,38 @@
+@@ -176,6 +237,38 @@
      std::array<int, 6> cached_configuration{};
  };
  
@@ -209,7 +438,7 @@
  // Surface::disconnect clears its buffer slots. Unlocking afterwards releases the
  // CPU mapping, but queueBuffer rejects the removed slot instead of displaying it.
  // The public NDK has no unlock-without-post operation.
-@@ -251,6 +343,8 @@
+@@ -251,6 +344,8 @@
          connected_as_cpu = false;
          native_window_width = 0;
          native_window_height = 0;
@@ -218,7 +447,7 @@
      }
  
      bool MaybeAcquireNativeWindow(JNIEnv *env, jobject new_surface) {
-@@ -277,19 +371,30 @@
+@@ -277,19 +372,33 @@
      // Decoding and rendering run on different threads.
      ScaleContext renderContext;
      ScaleContext yuvContext;
@@ -243,16 +472,24 @@
                                 jbyteArray extraData,
 -                               jint threads) {
 +                               jint threads,
-+                               jint flags) {
++                               jint flags,
++                               jint width,
++                               jint height,
++                               jint bitsPerCodedSample) {
      auto jniContext = std::make_unique<JniContext>();
 +    jniContext->light = (flags & kFlagLight) != 0;
 +    jniContext->yv12 = jniContext->light && (flags & kFlagYv12) != 0;
  
      AVCodecContext *codecContext = avcodec_alloc_context3(codec);
      if (!codecContext) {
-@@ -311,11 +416,27 @@
+@@ -310,12 +419,32 @@
+         env->GetByteArrayRegion(extraData, 0, size, (jbyte *) codecContext->extradata);
      }
  
++    // TMPlayer (tm3): the picture's size and depth from the container, for the old and exotic
++    // decoders that cannot read them from the stream (ffcodecparams.h).
++    ffparams::ApplyVideo(codecContext, width, height, bitsPerCodedSample);
++
      codecContext->thread_count = threads;
 -    if (codec->id == AV_CODEC_ID_AV1) {
 +    int frameDelay = 0;  // 0: the codec's own
@@ -279,7 +516,7 @@
      codecContext->err_recognition = AV_EF_IGNORE_ERR;
      int result = avcodec_open2(codecContext, codec, nullptr);
      if (result < 0) {
-@@ -336,20 +457,115 @@
+@@ -336,20 +465,119 @@
  }
  
  
@@ -385,7 +622,10 @@
                                                                                   jbyteArray extra_data,
 -                                                                                 jint threads) {
 +                                                                                 jint threads,
-+                                                                                 jint flags) {
++                                                                                 jint flags,
++                                                                                 jint width,
++                                                                                 jint height,
++                                                                                 jint bits_per_coded_sample) {
      AVCodec *codec = getCodecByName(env, codec_name);
      if (!codec) {
          LOGE("Codec not found.");
@@ -393,24 +633,18 @@
      }
  
 -    return (jlong) createVideoContext(env, codec, extra_data, threads);
-+    return (jlong) createVideoContext(env, codec, extra_data, threads, flags);
++    return (jlong) createVideoContext(env, codec, extra_data, threads, flags, width, height,
++                                      bits_per_coded_sample);
  }
  
  extern "C"
-@@ -400,47 +616,15 @@
+@@ -400,47 +628,15 @@
      auto *const jniContext = reinterpret_cast<JniContext *>(jContext);
      auto *frame = reinterpret_cast<AVFrame *>(
              env->GetLongField(output_buffer, jniContext->decoder_private_field));
 -    if (!frame || !jniContext->MaybeAcquireNativeWindow(env, surface)) {
 -        return VIDEO_DECODER_ERROR_OTHER;
-+    if (!frame) return VIDEO_DECODER_ERROR_OTHER;
-+    // TMPlayer (HX2c): a window that refuses YV12 is released and the frame drawn again in RGBA.
-+    int result = RenderFrame(env, jniContext, surface, frame, displayed_width, displayed_height,
-+                             rotation_degrees);
-+    if (result == kRenderRetryRgba) {
-+        result = RenderFrame(env, jniContext, surface, frame, displayed_width, displayed_height,
-+                             rotation_degrees);
-     }
+-    }
 -
 -    if (jniContext->native_window_width != displayed_width ||
 -        jniContext->native_window_height != displayed_height) {
@@ -446,14 +680,21 @@
 -        jniContext->connected_as_cpu = DiscardLockedBuffer(jniContext->native_window) != 0;
 -        jniContext->ReleaseSurface(env);
 -        return VIDEO_DECODER_ERROR_OTHER;
--    }
++    if (!frame) return VIDEO_DECODER_ERROR_OTHER;
++    // TMPlayer (HX2c): a window that refuses YV12 is released and the frame drawn again in RGBA.
++    int result = RenderFrame(env, jniContext, surface, frame, displayed_width, displayed_height,
++                             rotation_degrees);
++    if (result == kRenderRetryRgba) {
++        result = RenderFrame(env, jniContext, surface, frame, displayed_width, displayed_height,
++                             rotation_degrees);
+     }
 -    result = ANativeWindow_unlockAndPost(jniContext->native_window);
 -    return !result ? VIDEO_DECODER_SUCCESS : VIDEO_DECODER_ERROR_OTHER;
 +    return result == kRenderRetryRgba ? VIDEO_DECODER_ERROR_OTHER : result;
  }
  
  extern "C"
-@@ -538,7 +722,10 @@
+@@ -538,7 +734,10 @@
      const size_t uvLength = static_cast<size_t>(uvStride) * ((height + 1) / 2);
      uint8_t *dest[] = {data, data + yLength, data + yLength + uvLength, nullptr};
      int strides[] = {yStride, uvStride, uvStride, 0};
@@ -465,6 +706,60 @@
              dest, strides, rotation_degrees);
      av_frame_free(&frame);
      return success ? VIDEO_DECODER_SUCCESS : VIDEO_DECODER_ERROR_OTHER;
+--- a/media3ext/src/main/java/io/github/anilbeesetti/nextlib/media3ext/ffdecoder/FfmpegAudioDecoder.java
++++ b/media3ext/src/main/java/io/github/anilbeesetti/nextlib/media3ext/ffdecoder/FfmpegAudioDecoder.java
+@@ -57,8 +57,23 @@
+     extraData = getExtraData(format.sampleMimeType, format.initializationData);
+     encoding = outputFloat ? C.ENCODING_PCM_FLOAT : C.ENCODING_PCM_16BIT;
+     outputBufferSize = outputFloat ? INITIAL_OUTPUT_BUFFER_SIZE_32BIT : INITIAL_OUTPUT_BUFFER_SIZE_16BIT;
++    // TMPlayer (tm3): block size and bits per coded sample ride in the initialization data of a
++    // format named by an FFmpeg MIME type (FfmpegLibrary.ffmpegMimeType); the bit rate is the
++    // format's average. Each is 0 when unknown, and the native side then leaves it alone.
++    boolean ffmpegMime = FfmpegLibrary.decoderNameOfFfmpegMimeType(format.sampleMimeType) != null;
++    int blockAlign = ffmpegMime ? FfmpegLibrary.ffmpegParam(format.initializationData, 0) : 0;
++    int bitsPerCodedSample = ffmpegMime ? FfmpegLibrary.ffmpegParam(format.initializationData, 1) : 0;
++    int bitRate = format.averageBitrate > 0 ? format.averageBitrate : 0;
+     nativeContext =
+-        ffmpegInitialize(codecName, extraData, outputFloat, format.sampleRate, format.channelCount);
++        ffmpegInitialize(
++            codecName,
++            extraData,
++            outputFloat,
++            format.sampleRate,
++            format.channelCount,
++            blockAlign,
++            bitRate,
++            bitsPerCodedSample);
+     if (nativeContext == 0) {
+       throw new FfmpegDecoderException("Initialization failed.");
+     }
+@@ -177,8 +192,12 @@
+       case MimeTypes.AUDIO_AAC, MimeTypes.AUDIO_OPUS -> initializationData.get(0);
+       case MimeTypes.AUDIO_ALAC -> getAlacExtraData(initializationData);
+       case MimeTypes.AUDIO_VORBIS -> getVorbisExtraData(initializationData);
+-      // Other codecs do not require extra data.
+-      default -> null;
++      // TMPlayer (tm3): a format named by an FFmpeg MIME type carries the container's extra data
++      // as it is (WMA, Cook, RealAudio, APE, TTA, ...). Other codecs do not require extra data.
++      default ->
++          FfmpegLibrary.decoderNameOfFfmpegMimeType(mimeType) != null
++              ? FfmpegLibrary.ffmpegExtraData(initializationData)
++              : null;
+     };
+   }
+ 
+@@ -218,7 +237,10 @@
+       @Nullable byte[] extraData,
+       boolean outputFloat,
+       int rawSampleRate,
+-      int rawChannelCount);
++      int rawChannelCount,
++      int blockAlign,
++      int bitRate,
++      int bitsPerCodedSample);
+ 
+   private native int ffmpegDecode(
+       long context, ByteBuffer inputData, int inputSize, SimpleDecoderOutputBuffer decoderOutputBuffer, ByteBuffer outputData, int outputSize);
 --- a/media3ext/src/main/java/io/github/anilbeesetti/nextlib/media3ext/ffdecoder/FfmpegLibrary.java
 +++ b/media3ext/src/main/java/io/github/anilbeesetti/nextlib/media3ext/ffdecoder/FfmpegLibrary.java
 @@ -2,11 +2,13 @@
@@ -518,7 +813,19 @@
     * Override the names of the FFmpeg native libraries. If an application wishes to call this
     * method, it must do so before calling any other method defined by this class, and before
     * instantiating a {@link FfmpegAudioRenderer} instance.
-@@ -123,6 +152,11 @@
+@@ -103,7 +132,10 @@
+     return switch (mimeType) {
+       // Audio codecs
+       case MimeTypes.AUDIO_AAC -> "aac";
+-      case MimeTypes.AUDIO_MPEG, MimeTypes.AUDIO_MPEG_L1, MimeTypes.AUDIO_MPEG_L2 -> "mp3";
++      case MimeTypes.AUDIO_MPEG -> "mp3";
++      case MimeTypes.AUDIO_MPEG_L1 -> "mp1";
++      case MimeTypes.AUDIO_MPEG_L2 -> "mp2";
++      case MimeTypes.AUDIO_MSGSM -> "gsm_ms";
+       case MimeTypes.AUDIO_AC3 -> "ac3";
+       case MimeTypes.AUDIO_E_AC3, MimeTypes.AUDIO_E_AC3_JOC -> "eac3";
+       case MimeTypes.AUDIO_TRUEHD -> "truehd";
+@@ -123,12 +155,95 @@
        case MimeTypes.VIDEO_AV1 -> "libdav1d";
        case MimeTypes.VIDEO_MPEG -> "mpegvideo";
        case MimeTypes.VIDEO_MPEG2 -> "mpeg2video";
@@ -527,9 +834,94 @@
 +      case MimeTypes.VIDEO_MP43 -> "msmpeg4";
 +      case MimeTypes.VIDEO_VC1 -> "vc1";
 +      case MimeTypes.VIDEO_MJPEG -> "mjpeg";
++      case MimeTypes.VIDEO_H263 -> "h263";
        case MimeTypes.VIDEO_VP8 -> "vp8";
        case MimeTypes.VIDEO_VP9 -> "vp9";
-       default -> null;
+-      default -> null;
++      // TMPlayer (tm3): Media3 has no MIME type for most old or exotic codecs, so a source that
++      // reads them (an extractor on libavformat) names the decoder in the MIME type itself.
++      default -> decoderNameOfFfmpegMimeType(mimeType);
+     };
+   }
+ 
++  /** TMPlayer (tm3): the MIME type prefix for a video decoder named by FFmpeg, e.g. {@code video/x-ffmpeg-rv40}. */
++  public static final String VIDEO_MIME_PREFIX = "video/x-ffmpeg-";
++
++  /** TMPlayer (tm3): the MIME type prefix for an audio decoder named by FFmpeg, e.g. {@code audio/x-ffmpeg-wmav2}. */
++  public static final String AUDIO_MIME_PREFIX = "audio/x-ffmpeg-";
++
++  /**
++   * TMPlayer (tm3): the MIME type that names FFmpeg's decoder {@code decoder} ("wmv2", "rv40",
++   * "wmav2", "adpcm_ms"), for a {@link Format} whose codec Media3 has no MIME type for.
++   *
++   * <p>Such a format's {@code initializationData} is: [0] the codec's extra data as FFmpeg expects
++   * it (the container's, as it is; empty or absent when the codec has none); audio only, [1] eight
++   * bytes: the block size and the bits per coded sample, each a big-endian int32 (0 when unknown);
++   * video only, [1] four bytes: the bits per coded sample as a big-endian int32. The sample rate,
++   * channel count, bit rate (average bitrate) and picture size come from the {@link Format}.
++   * {@link #audioInitializationData} and {@link #videoInitializationData} build the lists.
++   */
++  public static String ffmpegMimeType(boolean video, String decoder) {
++    return (video ? VIDEO_MIME_PREFIX : AUDIO_MIME_PREFIX) + decoder;
++  }
++
++  /** TMPlayer (tm3): see {@link #ffmpegMimeType}. */
++  public static java.util.List<byte[]> audioInitializationData(
++      @Nullable byte[] extraData, int blockAlign, int bitsPerCodedSample) {
++    byte[] params = java.nio.ByteBuffer.allocate(8).putInt(blockAlign).putInt(bitsPerCodedSample).array();
++    return java.util.Arrays.asList(extraData == null ? new byte[0] : extraData, params);
++  }
++
++  /** TMPlayer (tm3): see {@link #ffmpegMimeType}. */
++  public static java.util.List<byte[]> videoInitializationData(
++      @Nullable byte[] extraData, int bitsPerCodedSample) {
++    byte[] params = java.nio.ByteBuffer.allocate(4).putInt(bitsPerCodedSample).array();
++    return java.util.Arrays.asList(extraData == null ? new byte[0] : extraData, params);
++  }
++
++  /** The decoder a {@code video/x-ffmpeg-*} or {@code audio/x-ffmpeg-*} MIME type names, or null. */
++  @Nullable
++  /* package */ static String decoderNameOfFfmpegMimeType(String mimeType) {
++    String name;
++    if (mimeType.startsWith(VIDEO_MIME_PREFIX)) {
++      name = mimeType.substring(VIDEO_MIME_PREFIX.length());
++    } else if (mimeType.startsWith(AUDIO_MIME_PREFIX)) {
++      name = mimeType.substring(AUDIO_MIME_PREFIX.length());
++    } else {
++      return null;
++    }
++    // Outside data: only what an FFmpeg decoder name can be.
++    if (name.isEmpty() || name.length() > 40) return null;
++    for (int i = 0; i < name.length(); i++) {
++      char c = name.charAt(i);
++      if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_')) return null;
++    }
++    return name;
++  }
++
++  /** The extra data of a Format built with {@link #ffmpegMimeType}, or null when it has none. */
++  @Nullable
++  /* package */ static byte[] ffmpegExtraData(java.util.List<byte[]> initializationData) {
++    if (initializationData.isEmpty()) return null;
++    byte[] extraData = initializationData.get(0);
++    return extraData.length == 0 ? null : extraData;
++  }
++
++  /**
++   * The int32 at {@code index} of {@code params} (element 1 of a Format's initialization data), or
++   * 0 when the list or the element is too short.
++   */
++  /* package */ static int ffmpegParam(java.util.List<byte[]> initializationData, int index) {
++    if (initializationData.size() < 2) return 0;
++    byte[] params = initializationData.get(1);
++    int offset = index * 4;
++    if (params.length < offset + 4) return 0;
++    return java.nio.ByteBuffer.wrap(params, offset, 4).getInt();
++  }
++
+   private static native String ffmpegGetVersion();
+ 
+   private static native int ffmpegGetInputBufferPaddingSize();
 --- a/media3ext/src/main/java/io/github/anilbeesetti/nextlib/media3ext/ffdecoder/FfmpegVideoDecoder.java
 +++ b/media3ext/src/main/java/io/github/anilbeesetti/nextlib/media3ext/ffdecoder/FfmpegVideoDecoder.java
 @@ -1,5 +1,6 @@
@@ -550,7 +942,7 @@
      private final String codecName;
      private long nativeContext;
      // Initialized by createOutputBuffer() during the SimpleDecoder constructor.
-@@ -64,13 +69,23 @@
+@@ -64,13 +69,28 @@
          // Format uses clockwise degrees. Ignore unsupported non-right-angle rotations.
          int rotation = format.rotationDegrees % 360;
          rotationDegrees = rotation % 90 == 0 ? (rotation + 360) % 360 : 0;
@@ -560,7 +952,12 @@
 +            // An emulator's graphics backend shows YV12 CPU buffers wrongly: RGBA there.
 +            flags = FLAG_LIGHT | (isEmulator() ? 0 : FLAG_YV12);
 +        }
-+        nativeContext = ffmpegInitialize(codecName, extraData, threads, flags);
++        // TMPlayer (tm3): the picture's size and the bits per coded sample, for the old and exotic
++        // decoders that cannot read them from the stream (see FfmpegLibrary.ffmpegMimeType).
++        int bitsPerCodedSample = FfmpegLibrary.decoderNameOfFfmpegMimeType(format.sampleMimeType) != null
++                ? FfmpegLibrary.ffmpegParam(format.initializationData, 0) : 0;
++        nativeContext = ffmpegInitialize(codecName, extraData, threads, flags,
++                Math.max(format.width, 0), Math.max(format.height, 0), bitsPerCodedSample);
          if (nativeContext == 0) {
              throw new FfmpegDecoderException("Failed to initialize decoder.");
          }
@@ -575,7 +972,7 @@
      /**
       * Returns FFmpeg-compatible codec-specific initialization data ("extra data"), or {@code null} if
       * not required.
-@@ -87,7 +102,8 @@
+@@ -87,11 +107,17 @@
                  System.arraycopy(pps, 0, extraData, sps.length, pps.length);
                  return extraData;
              }
@@ -585,12 +982,23 @@
                  return initializationData.get(0);
              }
              default -> {
-@@ -223,7 +239,7 @@
+-                // Other codecs do not require extra data.
++                // TMPlayer (tm3): a format named by an FFmpeg MIME type carries the container's
++                // extra data as it is (RealVideo, Theora, SVQ3, WMV, FFV1, Huffyuv, ...). Other
++                // codecs do not require extra data.
++                if (FfmpegLibrary.decoderNameOfFfmpegMimeType(mimeType) != null) {
++                    return FfmpegLibrary.ffmpegExtraData(initializationData);
++                }
+                 return null;
+             }
+         }
+@@ -223,7 +249,8 @@
          }
      }
  
 -    private native long ffmpegInitialize(String codecName, @Nullable byte[] extraData, int threads);
-+    private native long ffmpegInitialize(String codecName, @Nullable byte[] extraData, int threads, int flags);
++    private native long ffmpegInitialize(String codecName, @Nullable byte[] extraData, int threads, int flags,
++                                         int width, int height, int bitsPerCodedSample);
  
      private native long ffmpegReset(long context);
  

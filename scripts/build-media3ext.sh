@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Builds the Android FFmpeg extension from source: nextlib-media3ext 1.11.1-0.16.0 (by Anil
 # Beesetti, GPL-3.0) at its release commit, with TMPlayer's patch, into
-# build/media3ext/nextlib-media3ext-1.11.1-0.16.0-tm2.aar. app/build.gradle.kts uses that AAR when
+# build/media3ext/nextlib-media3ext-1.11.1-0.16.0-tm3.aar. app/build.gradle.kts uses that AAR when
 # it is there, and the Maven Central one (without the decoders and the light mode below) when it
-# is not. "tm2" is the patch's revision: tm1 had the decoders alone, tm2 adds the light mode, and
-# the release notes link the corresponding source of the same revision.
+# is not. "tm3" is the patch's revision: tm1 had the decoders alone, tm2 added the light mode, tm3
+# adds the old, exotic and extra-audio decoders below, and the release notes link the corresponding
+# source of the same revision.
 #
 # What the patch (scripts/media3ext/tmplayer-decoders.patch) changes, and nothing else:
 #   - FFmpeg is configured with five more video decoders, all for formats Media3's extractors
@@ -21,6 +22,17 @@
 #   - FfmpegLibrary maps Media3's video/mp4v-es, video/divx, video/mp42, video/mp43, video/wvc1
 #     and video/mjpeg to them, and FfmpegVideoDecoder hands MPEG-4 and VC-1 their codec private
 #     data (the VOL header, VC-1's sequence header).
+#   - tm3: FFmpeg is configured with the decoders of old video (MPEG-1, WMV 1/2/3, H.263 and H.263+,
+#     Sorenson/FLV, Theora, DV, Sorenson SVQ1 and SVQ3, VP6 and VP6F, RealVideo 1 to 4, Cinepak),
+#     exotic video (ProRes, FFV1, Huffyuv, FFVHuff, Ut Video, MJPEG-B) and audio (WMA 1, 2, Pro and
+#     Lossless, MP1, MP2, Cook, RealAudio 1.0 and 2.0, QCELP, GSM and MS GSM, SIPR, ATRAC3 and
+#     ATRAC3+, Speex, WavPack, TTA, Monkey's Audio, Nellymoser, and every PCM and ADPCM variant that
+#     is LGPL). The decoder list is in the patch's ffmpeg/setup.sh; the ones left out and why are
+#     in the comment above it. Still LGPL v3, no --enable-gpl, nothing non-free. Nextlib's JNI glue
+#     passes the sample rate, channel count, block size, bit rate, bits per coded sample and
+#     picture size of those streams to FFmpeg (ffcodecparams.h), and FfmpegLibrary maps Media3's
+#     MPEG-1 and MPEG-2 audio layers, H.263 and MS GSM, and names every other decoder through the
+#     MIME types video/x-ffmpeg-<decoder> and audio/x-ffmpeg-<decoder>.
 #   - setup.sh takes JOBS from the environment, so a small machine can build with JOBS=2.
 #   - A light video mode (HX2c) for pictures the device cannot decode in software in real time,
 #     chosen per format by the app through FfmpegLibrary.setLightVideoPolicy (TMPlayer passes
@@ -40,11 +52,12 @@
 # ninja, nasm and pkg-config on the PATH. Takes about an hour for the four ABIs with JOBS=2.
 #
 # Usage: JOBS=2 scripts/build-media3ext.sh      (nothing is rebuilt when the AAR is up to date)
+#        TM_ABIS=armeabi-v7a JOBS=4 scripts/build-media3ext.sh   (one ABI, a "partial" AAR)
 # JOBS is make's and ninja's -j and, unless GRADLE_WORKERS says otherwise, Gradle's --max-workers.
 set -euo pipefail
 
 VERSION="1.11.1-0.16.0"
-TM_REVISION="tm2"
+TM_REVISION="tm3"
 COMMIT="2dc77cd2d9352bc308aa26782f9c77a320df510b"
 SHA256="e80b3c90a3a72611f6ef62edc91255343da9eca0dbd7283049ebd751f88cc1b9"
 
@@ -55,6 +68,16 @@ aar="$out/nextlib-media3ext-$VERSION-$TM_REVISION.aar"
 stamp="$out/stamp"
 tree="$out/nextlib-$VERSION"
 
+# TM_ABIS=armeabi-v7a (space or comma separated) builds only those ABIs, for a first check of a
+# change in about a quarter of the time. Such an AAR is named "partial" and is never the AAR :app
+# uses, and the stamp stays as it was, so the next run without TM_ABIS builds all four.
+partial=""
+if [ -n "${TM_ABIS:-}" ]; then
+  export TM_ABIS
+  partial="-partial-$(echo "$TM_ABIS" | tr ', ' '__')"
+  aar="$out/nextlib-media3ext-$VERSION-$TM_REVISION$partial.aar"
+fi
+
 used="$(sed -n 's/^nextlib = "\(.*\)"$/\1/p' "$root/gradle/libs.versions.toml")"
 if [ "$used" != "$VERSION" ]; then
   echo "nextlib is $used in libs.versions.toml, but this script builds $VERSION" >&2
@@ -63,7 +86,7 @@ fi
 
 # The AAR is current when it was built from this script and this patch.
 want="$(cat "$0" "$patch_file" | sha256sum | cut -d' ' -f1)"
-if [ -f "$aar" ] && [ "$(cat "$stamp" 2>/dev/null)" = "$want" ]; then
+if [ -z "$partial" ] && [ -f "$aar" ] && [ "$(cat "$stamp" 2>/dev/null)" = "$want" ]; then
   echo "up to date: $aar"
   exit 0
 fi
@@ -101,7 +124,8 @@ if command -v patch >/dev/null; then
 else
   (cd "$tree" && GIT_CEILING_DIRECTORIES="$out" git apply -p1 "$patch_file")
 fi
-grep -q 'mpeg4 msmpeg4v2 msmpeg4v3 vc1 mjpeg' "$tree/ffmpeg/setup.sh" || { echo "the patch did not apply" >&2; exit 1; }
+grep -q 'wmapro wmalossless' "$tree/ffmpeg/setup.sh" || { echo "the patch did not apply" >&2; exit 1; }
+[ -f "$tree/media3ext/src/main/cpp/ffcodecparams.h" ] || { echo "the patch did not apply" >&2; exit 1; }
 [ -f "$tree/media3ext/src/main/cpp/fflight.h" ] || { echo "the patch did not apply" >&2; exit 1; }
 printf 'sdk.dir=%s\n' "$ANDROID_HOME" > "$tree/local.properties"
 
@@ -110,5 +134,5 @@ printf 'sdk.dir=%s\n' "$ANDROID_HOME" > "$tree/local.properties"
 "$root/gradlew" -p "$tree" --no-daemon --max-workers="${GRADLE_WORKERS:-${JOBS:-2}}" :media3ext:assembleRelease
 
 cp "$tree/media3ext/build/outputs/aar/media3ext-release.aar" "$aar"
-echo "$want" > "$stamp"
+[ -n "$partial" ] || echo "$want" > "$stamp"
 echo "wrote $aar ($(du -h "$aar" | cut -f1))"
