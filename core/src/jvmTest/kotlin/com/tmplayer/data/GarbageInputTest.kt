@@ -256,7 +256,6 @@ class GarbageInputTest {
                     LogBundle.Parts(crash = listOf(text), sessions = listOf(listOf(text)), appLog = text.lines()),
                     known = listOf(text), maxBytes = 5_000,
                 )
-                )
             }
             survive("SyncDocuments.decode", text) {
                 SyncDocuments.decode(text.encodeToByteArray(), account = 5)
