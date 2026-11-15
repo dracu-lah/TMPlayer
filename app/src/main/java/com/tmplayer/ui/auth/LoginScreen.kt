@@ -232,17 +232,32 @@ private fun FailedPane(state: AuthState.Failed, onStartOver: () -> Unit) {
  * is a second code sent to the user.
  */
 @Stable
-private class Submission {
+internal class Submission {
     var busy by mutableStateOf(false)
+        private set
+
+    /**
+     * The answer has not come within the ceiling ([PENDING_CEILING_MS]): on a network that blocks
+     * Telegram the code never arrives, and the proxy settings (hidden under the keyboard in the
+     * footer) are offered in the pane itself (ON-17). Cleared by the next press.
+     */
+    var slow by mutableStateOf(false)
         private set
 
     fun start(send: () -> Unit) {
         if (busy) return
         busy = true
+        slow = false
         send()
     }
 
     fun finish() {
+        busy = false
+    }
+
+    /** The ceiling passed with the answer still out. */
+    fun giveUp() {
+        if (busy) slow = true
         busy = false
     }
 }
@@ -264,7 +279,7 @@ private fun rememberSubmission(state: AuthState, error: String?): Submission {
     LaunchedEffect(submission.busy) {
         if (!submission.busy) return@LaunchedEffect
         delay(PENDING_CEILING_MS)
-        submission.finish()
+        submission.giveUp()
     }
     return submission
 }
@@ -380,6 +395,7 @@ private fun PhonePane(
         onBack = onBack ?: onUseQr,
         extras = {
             TmSecondaryButton(onClick = { picking = true }, enabled = !detecting) { Text(s.loginChooseCountry) }
+            if (submission.slow) ProxyLink()
             // Reached from the QR pane, Back already returns there; from the code pane it does
             // not, so the other way in gets its own button.
             if (onBack != null) TmSecondaryButton(onClick = onUseQr) { Text(s.loginUseQr) }
@@ -543,6 +559,9 @@ private fun TouchPhonePane(
         ) {
             Text(s.loginSendCode)
         }
+        // No code after the wait: the network may block Telegram, and the footer's proxy entry is
+        // hidden while the keyboard is up, so the way to it is here (ON-17).
+        if (submission.slow) ProxyLink()
         TmSecondaryButton(onClick = onUseQr, modifier = Modifier.paneAction()) {
             Text(s.loginUseQr)
         }
@@ -551,6 +570,24 @@ private fun TouchPhonePane(
     // The keyboard is up either way on this pane, so it may as well be pointed at the field the
     // user came here to fill, the moment it opens.
     LaunchedEffect(detecting) { if (!detecting) runCatching { field.requestFocus() } }
+}
+
+/**
+ * "Proxy settings" in the pane, once Send code has had no answer for the ceiling (ON-17): the same
+ * [com.tmplayer.ui.connect.ProxyScreenState] the footer opens. A plain secondary button on a
+ * television so the remote reaches it, a quiet text link under the button on a phone.
+ */
+@Composable
+private fun ProxyLink() {
+    val s = LocalStrings.current
+    val open = { com.tmplayer.ui.connect.ProxyScreenState.open = true }
+    if (isTouch()) {
+        androidx.compose.material3.TextButton(onClick = open, modifier = Modifier.paneAction()) {
+            Text(s.loginProxySettings)
+        }
+    } else {
+        TmSecondaryButton(onClick = open) { Text(s.loginProxySettings) }
+    }
 }
 
 @Composable
