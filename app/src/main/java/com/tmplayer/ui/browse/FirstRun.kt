@@ -26,6 +26,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -52,7 +54,9 @@ import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.floatingSurface
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Home on a first run, before anything has been played or starred: how to get a first video in
@@ -307,23 +311,32 @@ class KeyPresses {
  * The television's one-time browse hint: OK opens, hold OK for favourites, Back goes up a level.
  * The tour no longer teaches the remote; this says it once, over the first chat list, and goes
  * after a while, or at a key pressed once it has been up long enough to read the start of it.
- * It never takes focus.
+ * It never takes focus. [onBusy] is true from the start until the hint is over (or was seen on an
+ * earlier run, or is left), so a card that would stack with it (the tour offer, D-1) waits its turn.
  */
 @Composable
-internal fun TvBrowseHint(keys: KeyPresses, modifier: Modifier = Modifier) {
+internal fun TvBrowseHint(keys: KeyPresses, modifier: Modifier = Modifier, onBusy: (Boolean) -> Unit = {}) {
     val context = LocalContext.current
     val settings = remember { SettingsStore(context.applicationContext) }
     var showing by remember { mutableStateOf(false) }
     var shownAt by remember { mutableStateOf(0L) }
+    val busy by rememberUpdatedState(onBusy)
     LaunchedEffect(Unit) {
-        if (runCatching { settings.tvBrowseHintSeenNow() }.getOrDefault(true)) return@LaunchedEffect
-        // After the chat list has drawn, so it does not land on a loading screen.
-        delay(TV_HINT_DELAY_MS)
-        runCatching { settings.markTvBrowseHintSeen() }
-        shownAt = System.currentTimeMillis()
-        showing = true
-        delay(TV_HINT_MS)
-        showing = false
+        onBusy(true)
+        try {
+            if (runCatching { settings.tvBrowseHintSeenNow() }.getOrDefault(true)) return@LaunchedEffect
+            // After the chat list has drawn, so it does not land on a loading screen.
+            delay(TV_HINT_DELAY_MS)
+            runCatching { settings.markTvBrowseHintSeen() }
+            shownAt = System.currentTimeMillis()
+            showing = true
+            // Up for TV_HINT_MS, or until a key put it away.
+            withTimeoutOrNull(TV_HINT_MS) { snapshotFlow { showing }.first { !it } }
+            showing = false
+        } finally {
+            // Done, or left before it finished: either way nothing is waiting on it any more.
+            busy(false)
+        }
     }
     DisposableEffect(keys) {
         val hide = { if (showing && System.currentTimeMillis() - shownAt > TV_HINT_MIN_MS) showing = false }

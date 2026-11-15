@@ -2297,79 +2297,105 @@ private fun Root() {
         }
         }
 
-        if (FormFactor.isTv(context)) {
-            val tvPageFocus = remember { androidx.compose.ui.focus.FocusRequester() }
-            com.tmplayer.ui.browse.TvBarFrame(
-                shown = tvBarShown,
-                holdBar = tvBarHold,
-                barFocus = tvBarFocus,
-                contentFocus = tvPageFocus,
-                bar = {
-                    // A tab picked here lands in the browser with the remote still on the bar.
-                    val stayOnBar = { railReturn = com.tmplayer.ui.browse.RailReturn.Settings }
-                    com.tmplayer.ui.browse.TvTopBar(
-                        nav = touchNav,
-                        current = null,
-                        inProfile = screen is Screen.Downloads,
-                        searchOpen = false,
-                        onHome = { stayOnBar(); touchNav.onHome() },
-                        onChats = { stayOnBar(); touchNav.onChats() },
-                        onSearch = {
-                            com.tmplayer.ui.browse.TvBarSignals.searchAsked.value = true
-                            screen = Screen.Chats
-                        },
-                        beforeProfile = stayOnBar,
-                        onRefresh = null,
-                        currentFocus = tvBarFocus,
-                        contentFocus = tvPageFocus,
-                        overArt = false,
-                        modifier = Modifier.onFocusChanged { tvBarFocused = it.hasFocus },
-                    )
-                },
-            ) { screens(screen) }
-        } else {
-            // The phone: one floating bar over every page it belongs to, and the pages changing
-            // under it the way Home and Chats do (see PhoneBrowse), each keeping its scroll.
-            val holder = rememberSaveableStateHolder()
-            // The end a pushed screen comes in from: the right, or the left in a right to left language.
-            val endSign = if (androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl) -1 else 1
-            TouchNavHost(nav = touchNav, chrome = touchChrome, pageKey = TouchScreens.key(screen)) {
-                AnimatedContent(
-                    targetState = screen,
-                    contentKey = { TouchScreens.key(it) },
-                    transitionSpec = {
-                        val from = TouchScreens.order(initialState, pickedTab)
-                        val to = TouchScreens.order(targetState, pickedTab)
-                        val push = TouchScreens.isPushed(targetState) && initialState !is Screen.About && initialState !is Screen.AddChats
-                        val pop = TouchScreens.isPushed(initialState) && targetState !is Screen.About && targetState !is Screen.AddChats
-                        when {
-                            // Settings, pushed over the page that opened it and popped back off:
-                            // in from the end and out towards it, the way a pushed screen moves.
-                            (push || pop) && reducedMotion -> fadeIn(Motion.standard(Motion.Fast)) togetherWith fadeOut(Motion.standard(Motion.Fast))
-                            push || pop -> {
-                                val sign = if (push) endSign else -endSign
-                                (
-                                    fadeIn(Motion.standard(Motion.Normal)) +
-                                        slideInHorizontally(Motion.standard(Motion.Normal)) { width -> sign * width / TouchScreens.PUSH_PART }
-                                    ) togetherWith (
-                                    fadeOut(Motion.standard(Motion.Fast)) +
-                                        slideOutHorizontally(Motion.standard(Motion.Normal)) { width -> -sign * width / TouchScreens.PUSH_PART }
-                                    )
-                            }
-                            // A chat and About open as they always have, at once.
-                            from == null || to == null -> EnterTransition.None togetherWith ExitTransition.None
-                            reducedMotion -> fadeIn(Motion.standard(Motion.Fast)) togetherWith fadeOut(Motion.standard(Motion.Fast))
-                            else -> (
-                                fadeIn(Motion.standard(Motion.Normal)) +
-                                    slideInHorizontally(Motion.standard(Motion.Normal)) { width -> (if (to >= from) width else -width) / TouchScreens.SLIDE_PART }
-                                ) togetherWith fadeOut(Motion.standard(Motion.Fast))
-                        }
+        // The quick tour's offer (CP69, ON-11, D-1): a quiet card in a row of its own under the
+        // page, so it never covers a row or stacks with the television's browse hint. Offered once
+        // to a fresh sign in after the setup, and to an install that was signed in before it
+        // existed. Behind every other card, on the chat list only. Not now brings it back once
+        // after a week; the second time it says No thanks.
+        val crashQuestion by CrashReports.pending.collectAsStateWithLifecycle()
+        val crashPending = crashQuestion != null
+        val noticeLanguage = languageNotice.language
+        var tvHintUp by remember { mutableStateOf(FormFactor.isTv(context)) }
+        val tourOffer = SettingsStore.tourOfferDue(tourState, tourOfferAfter, System.currentTimeMillis()) && inShell &&
+            screen is Screen.Chats && !showUpdate && noticeLanguage == null && !pickingLanguage &&
+            !whatsNew.showing && supportRung == 0 && !crashPending
+        com.tmplayer.ui.settings.TourOfferFrame(
+            offer = tourOffer,
+            hintUp = tvHintUp && FormFactor.isTv(context) && inShell && screen is Screen.Chats,
+            card = { cardModifier ->
+                TourOfferCard(
+                    again = tourOfferAfter != 0L,
+                    onTake = { scope.launch { runCatching { settings.openTour() } } },
+                    onDecline = { scope.launch { runCatching { settings.putOffTourOffer(System.currentTimeMillis()) } } },
+                    modifier = cardModifier,
+                )
+            },
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            if (FormFactor.isTv(context)) {
+                val tvPageFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+                com.tmplayer.ui.browse.TvBarFrame(
+                    shown = tvBarShown,
+                    holdBar = tvBarHold,
+                    barFocus = tvBarFocus,
+                    contentFocus = tvPageFocus,
+                    bar = {
+                        // A tab picked here lands in the browser with the remote still on the bar.
+                        val stayOnBar = { railReturn = com.tmplayer.ui.browse.RailReturn.Settings }
+                        com.tmplayer.ui.browse.TvTopBar(
+                            nav = touchNav,
+                            current = null,
+                            inProfile = screen is Screen.Downloads,
+                            searchOpen = false,
+                            onHome = { stayOnBar(); touchNav.onHome() },
+                            onChats = { stayOnBar(); touchNav.onChats() },
+                            onSearch = {
+                                com.tmplayer.ui.browse.TvBarSignals.searchAsked.value = true
+                                screen = Screen.Chats
+                            },
+                            beforeProfile = stayOnBar,
+                            onRefresh = null,
+                            currentFocus = tvBarFocus,
+                            contentFocus = tvPageFocus,
+                            overArt = false,
+                            modifier = Modifier.onFocusChanged { tvBarFocused = it.hasFocus },
+                        )
                     },
-                    label = "phoneScreen",
-                ) { shown ->
-                    val key = TouchScreens.key(shown)
-                    holder.SaveableStateProvider(key) {
-                        CompositionLocalProvider(LocalTouchPageKey provides key) { screens(shown) }
+                ) { screens(screen) }
+            } else {
+                // The phone: one floating bar over every page it belongs to, and the pages changing
+                // under it the way Home and Chats do (see PhoneBrowse), each keeping its scroll.
+                val holder = rememberSaveableStateHolder()
+                // The end a pushed screen comes in from: the right, or the left in a right to left language.
+                val endSign = if (androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl) -1 else 1
+                TouchNavHost(nav = touchNav, chrome = touchChrome, pageKey = TouchScreens.key(screen)) {
+                    AnimatedContent(
+                        targetState = screen,
+                        contentKey = { TouchScreens.key(it) },
+                        transitionSpec = {
+                            val from = TouchScreens.order(initialState, pickedTab)
+                            val to = TouchScreens.order(targetState, pickedTab)
+                            val push = TouchScreens.isPushed(targetState) && initialState !is Screen.About && initialState !is Screen.AddChats
+                            val pop = TouchScreens.isPushed(initialState) && targetState !is Screen.About && targetState !is Screen.AddChats
+                            when {
+                                // Settings, pushed over the page that opened it and popped back off:
+                                // in from the end and out towards it, the way a pushed screen moves.
+                                (push || pop) && reducedMotion -> fadeIn(Motion.standard(Motion.Fast)) togetherWith fadeOut(Motion.standard(Motion.Fast))
+                                push || pop -> {
+                                    val sign = if (push) endSign else -endSign
+                                    (
+                                        fadeIn(Motion.standard(Motion.Normal)) +
+                                            slideInHorizontally(Motion.standard(Motion.Normal)) { width -> sign * width / TouchScreens.PUSH_PART }
+                                        ) togetherWith (
+                                        fadeOut(Motion.standard(Motion.Fast)) +
+                                            slideOutHorizontally(Motion.standard(Motion.Normal)) { width -> -sign * width / TouchScreens.PUSH_PART }
+                                        )
+                                }
+                                // A chat and About open as they always have, at once.
+                                from == null || to == null -> EnterTransition.None togetherWith ExitTransition.None
+                                reducedMotion -> fadeIn(Motion.standard(Motion.Fast)) togetherWith fadeOut(Motion.standard(Motion.Fast))
+                                else -> (
+                                    fadeIn(Motion.standard(Motion.Normal)) +
+                                        slideInHorizontally(Motion.standard(Motion.Normal)) { width -> (if (to >= from) width else -width) / TouchScreens.SLIDE_PART }
+                                    ) togetherWith fadeOut(Motion.standard(Motion.Fast))
+                            }
+                        },
+                        label = "phoneScreen",
+                    ) { shown ->
+                        val key = TouchScreens.key(shown)
+                        holder.SaveableStateProvider(key) {
+                            CompositionLocalProvider(LocalTouchPageKey provides key) { screens(shown) }
+                        }
                     }
                 }
             }
@@ -2471,11 +2497,8 @@ private fun Root() {
             UpdateDialog(onDismiss = { showUpdate = false; Updates.dismiss() })
         }
 
-        val crashQuestion by CrashReports.pending.collectAsStateWithLifecycle()
-        val crashPending = crashQuestion != null
         crashQuestion?.let { question -> if (!showUpdate) CrashQuestion(question, settings) }
 
-        val noticeLanguage = languageNotice.language
         if (noticeLanguage != null && inShell && screen is Screen.Chats && !showUpdate) {
             LanguageNoticeCard(
                 language = noticeLanguage,
@@ -2499,6 +2522,7 @@ private fun Root() {
             TvBrowseHint(
                 keys = remoteKeys,
                 modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 40.dp),
+                onBusy = { tvHintUp = it },
             )
         }
         if (whatsNew.showing && !showUpdate) {
@@ -2508,24 +2532,6 @@ private fun Root() {
                     whatsNew.showing = false
                     if (!openLink(context, WhatsNew.CHANGELOG)) changelogQr = true
                 },
-            )
-        }
-        // The quick tour's offer (CP69, ON-11): a quiet card in the language card's place, not a
-        // dialog over the first Home. Offered once to a fresh sign in after the setup, and to an
-        // install that was signed in before it existed. Behind every other card, on the chat list
-        // only. Not now brings it back once after a week; the second time it says No thanks.
-        if (SettingsStore.tourOfferDue(tourState, tourOfferAfter, System.currentTimeMillis()) && inShell &&
-            screen is Screen.Chats && !showUpdate && noticeLanguage == null && !pickingLanguage &&
-            !whatsNew.showing && supportRung == 0 && !crashPending
-        ) {
-            TourOfferCard(
-                again = tourOfferAfter != 0L,
-                onTake = { scope.launch { runCatching { settings.openTour() } } },
-                onDecline = { scope.launch { runCatching { settings.putOffTourOffer(System.currentTimeMillis()) } } },
-                modifier = Modifier
-                    .align(if (FormFactor.isTv(context)) Alignment.BottomEnd else Alignment.BottomCenter)
-                    .windowInsetsPadding(WindowInsets.safeDrawing)
-                    .padding(if (FormFactor.isTv(context)) 40.dp else 16.dp),
             )
         }
         if (changelogQr) LinkQrDialog(WhatsNew.CHANGELOG, s.settingsQrChangelogPage, onClose = { changelogQr = false })

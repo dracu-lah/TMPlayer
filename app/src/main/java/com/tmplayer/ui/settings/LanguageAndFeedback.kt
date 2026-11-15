@@ -12,15 +12,21 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -133,10 +139,13 @@ fun LanguageNoticeCard(language: String, onKeep: () -> Unit, onChange: () -> Uni
 }
 
 /**
- * The quick tour's offer (CP69, ON-11): a quiet card at the foot of the chat list, in the language
- * card's place, not a dialog over the first Home, so the videos stay in reach. [again] is true
- * when "Not now" already brought it back once: the second decline says "No thanks", which is what
- * it means (the offer is turned down for good), where the first only puts it off for a week.
+ * The quick tour's offer (CP69, ON-11, D-1): a quiet card at the foot of the chat list, not a
+ * dialog over the first Home. [TourOfferFrame] gives it a row of its own under the page, so it
+ * never covers a row title or a tile, and holds it back while the television's browse hint is up
+ * (the two used to stack). [again] is true when "Not now" already brought it back once: the second
+ * decline says "No thanks", which is what it means (the offer is turned down for good), where the
+ * first only puts it off for a week. On a television it is one slim line (text left, buttons
+ * right); on a phone the text sits over the buttons.
  */
 @Composable
 fun TourOfferCard(again: Boolean, onTake: () -> Unit, onDecline: () -> Unit, modifier: Modifier = Modifier) {
@@ -144,30 +153,74 @@ fun TourOfferCard(again: Boolean, onTake: () -> Unit, onDecline: () -> Unit, mod
     val touch = isTouch()
     val take = remember { FocusRequester() }
     if (!touch) BackHandler(onBack = onDecline)
-    Column(
-        modifier
-            // On a TV it takes the remote on Take the tour and gives it back where it was (HX22);
-            // Back declines.
-            .tvHoldsFocus(take)
-            .widthIn(max = if (touch) 520.dp else 560.dp)
-            .floatingSurface()
-            .padding(if (touch) 16.dp else 24.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Icon(TmIcons.Info, contentDescription = null, tint = Tone.accent, modifier = Modifier.size(24.dp))
-            Text(s.tourOfferTitle, style = MaterialTheme.typography.titleMedium, color = Tone.text)
-        }
-        Text(s.tourOfferBody, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
+    val buttons: @Composable () -> Unit = {
         CompositionLocalProvider(LocalOnFloating provides true) {
             Row(
-                Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 TmSecondaryButton(onClick = onDecline) { Label(if (again) s.tourOfferNoThanks else s.deviceNotNow) }
                 TmButton(onClick = onTake, modifier = Modifier.focusRequester(take)) { Label(s.tourOfferTake) }
             }
+        }
+    }
+    val text: @Composable (Modifier) -> Unit = { m ->
+        Column(m, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Icon(TmIcons.Info, contentDescription = null, tint = Tone.accent, modifier = Modifier.size(24.dp))
+                Text(s.tourOfferTitle, style = MaterialTheme.typography.titleMedium, color = Tone.text)
+            }
+            Text(s.tourOfferBody, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
+        }
+    }
+    Box(
+        modifier
+            // On a TV it takes the remote on Take the tour and gives it back where it was (HX22);
+            // Back declines.
+            .tvHoldsFocus(take)
+            .floatingSurface()
+            .padding(if (touch) PaddingValues(16.dp) else PaddingValues(horizontal = 24.dp, vertical = 14.dp)),
+    ) {
+        if (touch) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                text(Modifier)
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) { buttons() }
+            }
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                text(Modifier.weight(1f))
+                buttons()
+            }
+        }
+    }
+}
+
+/**
+ * The page and, under it, the tour offer in a row of its own (D-1): the page shrinks by the card's
+ * height rather than the card covering its bottom edge. [offer] is whether the card is due and
+ * allowed; [hintUp] is true while the television's browse hint is on screen or still to come, and
+ * holds the card back so the two never show together. The card appears the moment the hint is gone.
+ */
+@Composable
+fun TourOfferFrame(
+    offer: Boolean,
+    hintUp: Boolean,
+    card: @Composable (Modifier) -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    Column(modifier) {
+        Box(Modifier.weight(1f).fillMaxWidth()) { content() }
+        if (offer && !hintUp) {
+            val tv = !isTouch()
+            card(
+                Modifier
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
+                    .padding(horizontal = if (tv) 48.dp else 16.dp, vertical = if (tv) 16.dp else 8.dp)
+                    .align(Alignment.CenterHorizontally)
+                    .widthIn(max = if (tv) 1100.dp else 520.dp)
+                    .fillMaxWidth(),
+            )
         }
     }
 }
