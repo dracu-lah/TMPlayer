@@ -20,6 +20,7 @@ import com.tmplayer.i18n.L
 import com.tmplayer.i18n.Translator
 import com.tmplayer.platform.JobFailures
 import com.tmplayer.ui.components.showMessage
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -115,9 +116,15 @@ object ExternalPlayRouter {
         forceAsk: Boolean = false,
     ): Boolean {
         if (!forceAsk && bypass.remove(key(item))) return false
-        return runCatching { takeNow(context, settings, item, chatTitle, forceAsk) }
-            .onFailure { Log.w(TAG, "Could not route the press", it) }
-            .getOrDefault(false)
+        return try {
+            takeNow(context, settings, item, chatTitle, forceAsk)
+        } catch (e: CancellationException) {
+            // The screen left while this ran: the press is abandoned, so TMPlayer's player must not start for it.
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not route the press", e)
+            false
+        }
     }
 
     private suspend fun takeNow(context: Context, settings: SettingsStore, item: MediaItem, chatTitle: String, forceAsk: Boolean): Boolean {
@@ -258,6 +265,7 @@ object ExternalPlayRouter {
         val name = item.fileName.ifBlank { item.title }
         val mime = item.mimeType.ifBlank { "video/*" }
         val uri: Uri
+        var streamOpened = false
         if (readiness.complete && readiness.local != null && app.acceptsFile) {
             // A finished video: the file handoff that already exists, aimed at the one app.
             val path = readiness.file?.absolutePath ?: readiness.local.uri().toString()
@@ -288,15 +296,23 @@ object ExternalPlayRouter {
                 Log.w(TAG, "No stream", e)
                 return Prepared(null, L.externalNotHanded(app = app.label))
             }
+            streamOpened = true
             uri = Uri.parse(address)
         }
-        // The subtitle the viewer loaded or had fetched for this video, or one beside the downloaded file
-        // (a file that is gone is skipped, and so is one the app cannot hand out).
-        val language = runCatching { settings.trackPreferencesNow().subtitleKey }.getOrNull()
-        val subtitle = runCatching {
-            ExternalSubtitleFile.forVideo(context, SubtitleMemory.keyOf(item.chatId, item.messageId), readiness.file, language)
-        }.getOrNull()
-        return Prepared(ExternalPlayer.viewIntent(context, app, uri, mime, item.title, positionMs, subtitle))
+        // The loopback stream is open from here on: whatever fails below closes it again, so no
+        // server, download window or notification is left up for an app that never got the address.
+        try {
+            // The subtitle the viewer loaded or had fetched for this video, or one beside the downloaded file
+            // (a file that is gone is skipped, and so is one the app cannot hand out).
+            val language = runCatching { settings.trackPreferencesNow().subtitleKey }.getOrNull()
+            val subtitle = runCatching {
+                ExternalSubtitleFile.forVideo(context, SubtitleMemory.keyOf(item.chatId, item.messageId), readiness.file, language)
+            }.getOrNull()
+            return Prepared(ExternalPlayer.viewIntent(context, app, uri, mime, item.title, positionMs, subtitle))
+        } catch (e: Throwable) {
+            if (streamOpened) runCatching { ExternalStreams.close(context) }
+            throw e
+        }
     }
 
     // ---- coming back ----------------------------------------------------------------------------
