@@ -857,7 +857,8 @@ fun SettingsScreen(
                     ToggleRow(
                         title = s.settingsHighContrast,
                         subtitle = s.settingsHighContrastDetail,
-                        icon = TmIcons.Theme,
+                        // An eye, not the moon Pure black wears one row above.
+                        icon = TmIcons.Visibility,
                         checked = highContrast,
                         onToggle = { scope.launch { settings.setHighContrast(!highContrast) } },
                     )

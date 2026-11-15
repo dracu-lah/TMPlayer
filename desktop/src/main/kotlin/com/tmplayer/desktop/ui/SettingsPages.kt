@@ -116,7 +116,7 @@ internal fun AppearanceRows(state: ShellState) {
     Setting(s.settingsTypeface, s.settingsTypefaceDetail, icon = TmIcons.TextSize) {
         Segments(com.tmplayer.data.AppTypeface.entries, typeface, { it.label }) { scope.launch { settings.setTypeface(it) } }
     }
-    Toggle(s.settingsHighContrast, s.settingsHighContrastDetail, highContrast, icon = TmIcons.Theme) { on ->
+    Toggle(s.settingsHighContrast, s.settingsHighContrastDetail, highContrast, icon = TmIcons.Visibility) { on ->
         scope.launch { settings.setHighContrast(on) }
     }
     Action(s.settingsLanguage, s.languageRowDetail(language), TmIcons.Language) { pickingLanguage = true }
