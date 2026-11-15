@@ -3275,6 +3275,7 @@
     "home_title": "Home",
     "label": "Quick tour",
     "offer_body": "A few pages on where your videos come from, the player, downloads and Settings.",
+    "offer_no_thanks": "No thanks",
     "offer_take": "Take the tour",
     "offer_title": "Take a quick tour?",
     "player_lock": "{form, select, tv {Lock the screen, first in the More menu, ignores every key until you hold OK.} desktop {Lock the screen, first in the player menu, holds off clicks and keys until you unlock it.} other {Lock the screen, first in the player menu, ignores stray taps until you tap to unlock.}}",

@@ -152,6 +152,7 @@ import com.tmplayer.ui.settings.SettingsScreen
 import com.tmplayer.ui.settings.CoffeeDialog
 import com.tmplayer.ui.settings.LanguageDialog
 import com.tmplayer.ui.settings.LanguageNoticeCard
+import com.tmplayer.ui.settings.TourOfferCard
 import com.tmplayer.ui.settings.LayoutNudgeHost
 import com.tmplayer.ui.settings.WhatsNewDialog
 import com.tmplayer.ui.i18n.rememberLanguageNotice
@@ -720,6 +721,8 @@ private fun Root() {
     val setupPending by settings.setupPending.collectAsStateWithLifecycle(initialValue = false)
     // The quick tour (CP69). Done until the store answers, so the offer never flashes up.
     val tourState by settings.tourState.collectAsStateWithLifecycle(initialValue = SettingsStore.TourState.Done)
+    // Null until read, so the offer cannot flash up before Not now's week is known (ON-11).
+    val tourOfferAfter by settings.tourOfferAfter.collectAsStateWithLifecycle(initialValue = Long.MAX_VALUE)
     // The favourites the kids lock lets through, as the Favourites tab lists them, so every count
     // of them (the badge, Clear all) says the same number.
     val storedFavorites by settings.favorites.collectAsStateWithLifecycle(initialValue = emptySet())
@@ -2463,20 +2466,22 @@ private fun Root() {
                 },
             )
         }
-        // The quick tour, offered once to an install that was signed in before it existed (CP69): a
-        // fresh sign in has it after the setup. Behind every other card, and on the chat list only.
-        if (tourState == SettingsStore.TourState.Never && inShell && screen is Screen.Chats && !showUpdate &&
-            noticeLanguage == null && !whatsNew.showing && supportRung == 0 && !crashPending
+        // The quick tour's offer (CP69, ON-11): a quiet card in the language card's place, not a
+        // dialog over the first Home. Offered once to a fresh sign in after the setup, and to an
+        // install that was signed in before it existed. Behind every other card, on the chat list
+        // only. Not now brings it back once after a week; the second time it says No thanks.
+        if (SettingsStore.tourOfferDue(tourState, tourOfferAfter, System.currentTimeMillis()) && inShell &&
+            screen is Screen.Chats && !showUpdate && noticeLanguage == null && !pickingLanguage &&
+            !whatsNew.showing && supportRung == 0 && !crashPending
         ) {
-            TvConfirm(
-                title = s.tourOfferTitle,
-                message = s.tourOfferBody,
-                confirmLabel = s.tourOfferTake,
-                cancelLabel = s.deviceNotNow,
-                destructive = false,
-                focusConfirm = true,
-                onConfirm = { scope.launch { runCatching { settings.openTour() } } },
-                onDismiss = { scope.launch { runCatching { settings.markTourDone() } } },
+            TourOfferCard(
+                again = tourOfferAfter != 0L,
+                onTake = { scope.launch { runCatching { settings.openTour() } } },
+                onDecline = { scope.launch { runCatching { settings.putOffTourOffer(System.currentTimeMillis()) } } },
+                modifier = Modifier
+                    .align(if (FormFactor.isTv(context)) Alignment.BottomEnd else Alignment.BottomCenter)
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
+                    .padding(if (FormFactor.isTv(context)) 40.dp else 16.dp),
             )
         }
         if (changelogQr) LinkQrDialog(WhatsNew.CHANGELOG, s.settingsQrChangelogPage, onClose = { changelogQr = false })

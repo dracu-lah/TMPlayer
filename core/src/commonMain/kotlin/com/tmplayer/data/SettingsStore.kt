@@ -138,6 +138,7 @@ private val KIDS_CHATS = stringSetPreferencesKey("kids_chats")
 
 private val SETUP = stringPreferencesKey("setup")
 private val TOUR = stringPreferencesKey("tour")
+private val TOUR_OFFER_AFTER = longPreferencesKey("tour_offer_after")
 private val HISTORY_TAB = stringPreferencesKey("history_tab")
 private val HISTORY_SORT = stringPreferencesKey("history_sort")
 private val DOWNLOADS_SORT = stringPreferencesKey("downloads_sort")
@@ -2443,6 +2444,31 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
         prefs.edit { it[TOUR] = TOUR_DONE }
     }
 
+    /**
+     * When the tour offer may come back after "Not now" (epoch ms), or 0 while it was never put
+     * off. "Not now" must not mean "never": the first one brings the offer back once, after
+     * [Companion.TOUR_OFFER_PAUSE_MS]; asked again, [putOffTourOffer] turns it down for good.
+     */
+    val tourOfferAfter: Flow<Long> = read { it[TOUR_OFFER_AFTER] ?: 0L }
+
+    /**
+     * "Not now" on the tour offer: the first time it comes back once, after [Companion.TOUR_OFFER_PAUSE_MS]
+     * from [now]; the second time (the offer had already come back) it is marked done, as "No
+     * thanks". Returns true when the offer will come again.
+     */
+    suspend fun putOffTourOffer(now: Long): Boolean {
+        var again = false
+        prefs.edit {
+            if ((it[TOUR_OFFER_AFTER] ?: 0L) == 0L) {
+                it[TOUR_OFFER_AFTER] = now + Companion.TOUR_OFFER_PAUSE_MS
+                again = true
+            } else {
+                it[TOUR] = TOUR_DONE
+            }
+        }
+        return again
+    }
+
     enum class TourState { Never, Pending, Done }
 
     /** Which tab of History was last open, `HistoryTab` by name. */
@@ -3197,6 +3223,13 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
          * `filesDir/datastore/`. Keeping it is what keeps an upgraded install's settings.
          */
         const val FILE_NAME = "tmplayer.preferences_pb"
+
+        /** How long "Not now" on the tour offer waits before the offer comes back, once: seven days. */
+        const val TOUR_OFFER_PAUSE_MS = 7L * 24 * 60 * 60 * 1000
+
+        /** Whether the tour offer may show at [now]: not taken or turned down, and not put off for later. */
+        fun tourOfferDue(state: TourState, after: Long, now: Long): Boolean =
+            state == TourState.Never && now >= after
 
         /** Opens the store at [file]. Call once per process and share the result. */
         fun openDataStore(file: File): DataStore<Preferences> = openSafeDataStore(file)

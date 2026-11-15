@@ -87,6 +87,34 @@ class SetupFlagTest {
     }
 
     @Test
+    fun `Not now on the tour offer brings it back once after a week, then it is turned down`() = runBlocking {
+        val settings = store()
+        val day = 24L * 60 * 60 * 1000
+        settings.armSetup()
+        settings.markSetupDone()
+        assertEquals(0L, settings.tourOfferAfter.first())
+        assertTrue(SettingsStore.tourOfferDue(settings.tourState.first(), settings.tourOfferAfter.first(), now = 1_000L))
+
+        // The first Not now: still not done, and held back for seven days.
+        assertTrue(settings.putOffTourOffer(now = 1_000L))
+        assertEquals(SettingsStore.TourState.Never, settings.tourState.first())
+        val after = settings.tourOfferAfter.first()
+        assertEquals(1_000L + SettingsStore.TOUR_OFFER_PAUSE_MS, after)
+        assertFalse(SettingsStore.tourOfferDue(SettingsStore.TourState.Never, after, now = 1_000L + 6 * day))
+        assertTrue(SettingsStore.tourOfferDue(SettingsStore.TourState.Never, after, now = 1_000L + 7 * day))
+
+        // Offered again and turned down: now it stays done, and the setup rerun does not bring it back.
+        assertFalse(settings.putOffTourOffer(now = 1_000L + 8 * day))
+        assertEquals(SettingsStore.TourState.Done, settings.tourState.first())
+        settings.replaySetup()
+        settings.markSetupDone()
+        assertEquals(SettingsStore.TourState.Done, settings.tourState.first())
+        // Taking it, or having done it, is never due.
+        assertFalse(SettingsStore.tourOfferDue(SettingsStore.TourState.Pending, 0L, now = 1L))
+        assertFalse(SettingsStore.tourOfferDue(SettingsStore.TourState.Done, 0L, now = 1L))
+    }
+
+    @Test
     fun `only my folders is read once and forgotten`() = runBlocking {
         val settings = store()
         assertFalse(settings.takeOnlyFolders())

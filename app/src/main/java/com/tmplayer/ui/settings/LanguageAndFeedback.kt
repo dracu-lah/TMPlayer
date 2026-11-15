@@ -133,6 +133,46 @@ fun LanguageNoticeCard(language: String, onKeep: () -> Unit, onChange: () -> Uni
 }
 
 /**
+ * The quick tour's offer (CP69, ON-11): a quiet card at the foot of the chat list, in the language
+ * card's place, not a dialog over the first Home, so the videos stay in reach. [again] is true
+ * when "Not now" already brought it back once: the second decline says "No thanks", which is what
+ * it means (the offer is turned down for good), where the first only puts it off for a week.
+ */
+@Composable
+fun TourOfferCard(again: Boolean, onTake: () -> Unit, onDecline: () -> Unit, modifier: Modifier = Modifier) {
+    val s = LocalStrings.current
+    val touch = isTouch()
+    val take = remember { FocusRequester() }
+    if (!touch) BackHandler(onBack = onDecline)
+    Column(
+        modifier
+            // On a TV it takes the remote on Take the tour and gives it back where it was (HX22);
+            // Back declines.
+            .tvHoldsFocus(take)
+            .widthIn(max = if (touch) 520.dp else 560.dp)
+            .floatingSurface()
+            .padding(if (touch) 16.dp else 24.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Icon(TmIcons.Info, contentDescription = null, tint = Tone.accent, modifier = Modifier.size(24.dp))
+            Text(s.tourOfferTitle, style = MaterialTheme.typography.titleMedium, color = Tone.text)
+        }
+        Text(s.tourOfferBody, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
+        CompositionLocalProvider(LocalOnFloating provides true) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TmSecondaryButton(onClick = onDecline) { Label(if (again) s.tourOfferNoThanks else s.deviceNotNow) }
+                TmButton(onClick = onTake, modifier = Modifier.focusRequester(take)) { Label(s.tourOfferTake) }
+            }
+        }
+    }
+}
+
+/**
  * "What's new": the bundled highlights of [WhatsNew.VERSION], on the first run of that version and
  * from Settings. "Full changelog" opens the site's changelog, or its QR code on a TV.
  */
