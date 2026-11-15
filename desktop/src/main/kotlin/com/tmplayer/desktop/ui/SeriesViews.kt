@@ -46,6 +46,12 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import com.tmplayer.data.EpisodeGuide
+import com.tmplayer.ui.browse.seasonName
 import com.tmplayer.data.OfflineDownloads
 import com.tmplayer.data.Series
 import com.tmplayer.data.SeriesSeason
@@ -214,6 +220,7 @@ internal fun SeriesPage(
     val scope = rememberCoroutineScope()
     val toast = rememberToast()
     val history by state.settings.downloadHistory.collectAsState(initial = emptyList())
+    val onlyMine by state.settings.seriesOnlyMine.collectAsState(initial = false)
     val index = remember(history) { history.associateBy { "${it.chatId}:${it.messageId}" } }
     // Over the page and its header, with none of its own: the window's buttons show on their own.
     CoverWindowControls()
@@ -241,9 +248,14 @@ internal fun SeriesPage(
             },
             contentPadding = PaddingValues(start = gutter, end = gutter, bottom = 24.dp),
             modifier = Modifier.fillMaxSize(),
-            seasonPicker = { selected, onSelect ->
-                SeasonDropdown(series.seasons, selected, onSelect, startOpen)
+            seasonPicker = { stops, selected, guide, onSelect ->
+                SeasonDropdown(stops, selected, guide, onSelect, startOpen)
             },
+            // Every season the metadata knows, or only the viewer's own: kept for the next show too.
+            onlyMine = onlyMine,
+            onOnlyMine = { on -> scope.launch { state.settings.setSeriesOnlyMine(on) } },
+            // The search palette on the show and the episode's code, over this page.
+            onFindElsewhere = { words -> state.searchEverywhere(words) },
             onOpenItem = { state.openDetail(DetailRequest(it, state.chatTitleOf(it.chatId), outsideChat = true)) },
             onDownload = { request ->
                 scope.launch {
@@ -274,11 +286,12 @@ internal fun SeriesPage(
     }
 }
 
-/** "Season 2 · 4 episodes" on a button, and every season in the menu under it. */
+/** "Season 2 · 4 episodes" on a button, and every season in the menu under it, those held with a dot. */
 @Composable
 internal fun SeasonDropdown(
-    seasons: List<SeriesSeason>,
+    seasons: List<EpisodeGuide.Season>,
     selected: Int,
+    guide: Boolean,
     onSelect: (Int) -> Unit,
     startOpen: Boolean = false,
 ) {
@@ -288,25 +301,33 @@ internal fun SeasonDropdown(
     Box {
         OutlinedButton(onClick = { open = true }) {
             Text(
-                s.seriesSeason(current.number) + "  ·  " + s.seriesEpisodesCount(current.episodes.size),
+                seasonName(current.number, s) + (seasonLine(current, guide, s)?.let { "  ·  $it" } ?: ""),
                 style = MaterialTheme.typography.labelLarge,
             )
             Icon(TmIcons.ChevronDown, contentDescription = s.seriesSeasonPicker, modifier = Modifier.size(20.dp))
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             seasons.forEach { season ->
+                val held = season.state == EpisodeGuide.State.InChat
                 DropdownMenuItem(
                     text = {
-                        Column {
-                            Text(
-                                s.seriesSeason(season.number),
-                                color = if (season.number == selected) Tone.accent else Color.Unspecified,
-                            )
-                            Text(
-                                s.seriesEpisodesCount(season.episodes.size),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Tone.muted,
-                            )
+                        Column(Modifier.alpha(if (held || season.number == selected) 1f else 0.62f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                // "In your chats" by presence, not by a count that may be wrong.
+                                if (guide && held) {
+                                    Box(
+                                        Modifier.size(7.dp).clip(CircleShape).background(Tone.accent)
+                                            .clearAndSetSemantics { contentDescription = s.seriesInYourChats },
+                                    )
+                                }
+                                Text(
+                                    seasonName(season.number, s),
+                                    color = if (season.number == selected) Tone.accent else Color.Unspecified,
+                                )
+                            }
+                            seasonLine(season, guide, s)?.let {
+                                Text(it, style = MaterialTheme.typography.bodySmall, color = Tone.muted)
+                            }
                         }
                     },
                     onClick = {
@@ -317,4 +338,12 @@ internal fun SeasonDropdown(
             }
         }
     }
+}
+
+/** The line under a season's name: the metadata's count, "Not in your chats yet", or when it airs. */
+private fun seasonLine(season: EpisodeGuide.Season, guide: Boolean, s: com.tmplayer.i18n.Messages): String? = when {
+    !guide -> s.seriesEpisodesCount(season.inChat)
+    season.state == EpisodeGuide.State.Missing -> s.seriesNotInChats
+    season.state == EpisodeGuide.State.Upcoming -> season.airDate?.let { s.detailAirsOn(com.tmplayer.ui.browse.day(it, s)) } ?: s.detailUpcoming
+    else -> season.total?.let { s.seriesEpisodesCount(it) }
 }

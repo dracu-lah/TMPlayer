@@ -88,6 +88,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -112,6 +113,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.tmplayer.data.CourseProgress
 import com.tmplayer.data.EpisodeCopies
+import com.tmplayer.data.EpisodeGuide
 import com.tmplayer.data.FeaturedPick
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.MediaMapper
@@ -262,6 +264,25 @@ fun SeasonTabs(
     modifier: Modifier = Modifier,
     focusRequester: FocusRequester? = null,
 ) {
+    val stops = remember(seasons) { seasons.map { EpisodeGuide.Season(it.number, it.episodes.size, null, EpisodeGuide.State.InChat) } }
+    SeasonStopTabs(stops, selected, onSelect, modifier, focusRequester, guide = false)
+}
+
+/**
+ * [SeasonTabs] for the series page's list of seasons ([EpisodeGuide.Season]): the ones the chats
+ * hold carry a dot and, from the metadata, how many episodes the season has; the ones they lack
+ * are quiet, with "Not in your chats yet" or the day it airs. With [guide] off (no metadata) it is
+ * the plain tabs of what the chats hold, with their own count.
+ */
+@Composable
+fun SeasonStopTabs(
+    stops: List<EpisodeGuide.Season>,
+    selected: Int,
+    onSelect: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    focusRequester: FocusRequester? = null,
+    guide: Boolean = true,
+) {
     val s = LocalStrings.current
     val tv = !isTouch()
     // Up or Down into the row lands on the season shown, not on whichever tab sits nearest the
@@ -277,10 +298,11 @@ fun SeasonTabs(
             .horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        seasons.forEach { season ->
+        stops.forEach { season ->
             val interactions = remember { MutableInteractionSource() }
             val focused by interactions.collectIsFocusVisibleAsState()
             val chosen = season.number == selected
+            val held = season.state == EpisodeGuide.State.InChat
             LaunchedEffect(focused) { if (focused && tv) onSelect(season.number) }
             val fill = when {
                 focused -> Tone.focusFill
@@ -290,6 +312,7 @@ fun SeasonTabs(
             Column(
                 Modifier
                     .then(if (chosen) Modifier.focusRequester(chosenFocus) else Modifier)
+                    .alpha(if (held || focused || chosen) 1f else QUIET_SEASON)
                     .clip(RoundedCornerShape(Corner.Small))
                     .background(fill)
                     .border(
@@ -306,23 +329,43 @@ fun SeasonTabs(
                     .padding(horizontal = if (tv) 20.dp else 16.dp, vertical = if (tv) 10.dp else 8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Text(
-                    s.seriesSeason(season.number),
-                    style = if (tv) MaterialTheme.typography.titleMedium else MaterialTheme.typography.labelLarge,
-                    fontWeight = if (chosen) FontWeight.SemiBold else FontWeight.Normal,
-                    color = when {
-                        focused -> Tone.onFocusFill
-                        chosen -> Tone.accent
-                        else -> Tone.text
-                    },
-                    maxLines = 1,
-                )
-                Text(
-                    s.seriesEpisodesCount(season.episodes.size),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (focused) Tone.onFocusFill.copy(alpha = 0.85f) else Tone.muted,
-                    maxLines = 1,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    // The dot says "in your chats" by presence, not by a number that may be wrong.
+                    if (guide && held) {
+                        Box(
+                            Modifier
+                                .size(7.dp)
+                                .clip(CircleShape)
+                                .background(if (focused) Tone.onFocusFill else Tone.accent)
+                                .clearAndSetSemantics { contentDescription = s.seriesInYourChats },
+                        )
+                    }
+                    Text(
+                        seasonName(season.number, s),
+                        style = if (tv) MaterialTheme.typography.titleMedium else MaterialTheme.typography.labelLarge,
+                        fontWeight = if (chosen) FontWeight.SemiBold else FontWeight.Normal,
+                        color = when {
+                            focused -> Tone.onFocusFill
+                            chosen -> Tone.accent
+                            else -> Tone.text
+                        },
+                        maxLines = 1,
+                    )
+                }
+                val sub = when {
+                    !guide -> s.seriesEpisodesCount(season.inChat)
+                    season.state == EpisodeGuide.State.Missing -> s.seriesNotInChats
+                    season.state == EpisodeGuide.State.Upcoming -> season.airDate?.let { s.detailAirsOn(day(it, s)) } ?: s.detailUpcoming
+                    else -> season.total?.let { s.seriesEpisodesCount(it) }
+                }
+                if (sub != null) {
+                    Text(
+                        sub,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (focused) Tone.onFocusFill.copy(alpha = 0.85f) else Tone.muted,
+                        maxLines = 1,
+                    )
+                }
             }
         }
     } }
@@ -739,8 +782,8 @@ fun SeriesPanel(
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(0.dp),
     onLongClick: ((MediaItem) -> Unit)? = null,
-    seasonPicker: @Composable (selected: Int, onSelect: (Int) -> Unit) -> Unit = { selected, onSelect ->
-        SeasonTabs(series.seasons, selected, onSelect)
+    seasonPicker: @Composable (stops: List<EpisodeGuide.Season>, selected: Int, guide: Boolean, onSelect: (Int) -> Unit) -> Unit = { stops, selected, guide, onSelect ->
+        SeasonStopTabs(stops, selected, onSelect, guide = guide)
     },
     /** At the top end over the backdrop, for the platform's own close or back control. */
     trailing: @Composable () -> Unit = {},
@@ -783,6 +826,18 @@ fun SeriesPanel(
      * Go to the chat, as round buttons after Play (HX20); null leaves them out.
      */
     showActions: ShowActions? = null,
+    /**
+     * "Only show what I have" (T9): on, the page lists the seasons and episodes the chats hold and
+     * nothing else; off, it lists everything the metadata knows. [onOnlyMine] flips it and keeps the
+     * choice; null leaves the button out. Shown only for a show with something missing.
+     */
+    onlyMine: Boolean = false,
+    onOnlyMine: ((Boolean) -> Unit)? = null,
+    /**
+     * "Find in other chats": searches the words (the show and the episode's code) across the
+     * viewer's other chats. Null leaves that button out of a missing episode's card.
+     */
+    onFindElsewhere: ((String) -> Unit)? = null,
 ) {
     val s = LocalStrings.current
     val tv = !isTouch()
@@ -790,10 +845,20 @@ fun SeriesPanel(
     val marking = remember(series.key) { mutableStateOf(false) }
     val progress = watch.progress(series)
     val next = progress.next
+    val metaState = com.tmplayer.ui.online.rememberMetaState(series.cover, showOnly = true)
+    val meta = metaState.value
+    val extrasState = com.tmplayer.ui.online.rememberMetaExtrasState(meta, metaState.settled)
+    val extras = extrasState.value
+    // Every season and episode the metadata knows, with the chats' videos laid over them; null
+    // (the page as it always was) with no metadata, for a wrong match, or while it is switched off.
+    val today = remember { SeriesGuideRows.today() }
+    val full = remember(series, meta, extras, today) { SeriesGuideRows.full(series, meta, extras, today) }
+    val guide = if (onlyMine) null else full
+    val stops = remember(series, guide) { guide ?: SeriesGuideRows.held(series) }
     var season by rememberSaveable(series.key) {
         mutableIntStateOf(next?.season ?: series.seasons.first().number)
     }
-    val shown = series.seasons.firstOrNull { it.number == season } ?: series.seasons.first()
+    val shown = SeriesGuideRows.seasonOf(series, SeriesGuideRows.shownNumber(season, series, stops))
     // The qualities the show was posted in, highest first, and the one its episodes play: the
     // viewer's pick here, else that of the copy they watched last, else of the newest upload.
     val heights = remember(series) {
@@ -842,11 +907,9 @@ fun SeriesPanel(
     val buttons = rememberSeasonButtons(downloads, watch, series, shown, downloadedIds)
     val bothDownloads = downloads && SeasonDownload.unwatchedDiffers(shown, watch.finished)
 
-    val metaState = com.tmplayer.ui.online.rememberMetaState(series.cover, showOnly = true)
-    val meta = metaState.value
-    val extrasState = com.tmplayer.ui.online.rememberMetaExtrasState(meta, metaState.settled)
-    val extras = extrasState.value
     val names = rememberSeasonEpisodes(meta, shown.number)
+    val rows = remember(series, shown, guide, names, extras, today) { SeriesGuideRows.rows(series, shown, guide, names, extras, today) }
+    val gapPrompt = remember(series.key) { GapPrompt() }
     // The first frame waits a moment for what the caches hold, so a show seen before is drawn
     // whole at once; what is still coming after that has its place held (DetailSlots.kt).
     val namesSettled = meta == null || meta.kind != com.tmplayer.online.MetaKind.Show || names != null
@@ -877,20 +940,20 @@ fun SeriesPanel(
     // An anime season runs to hundreds of episodes, and scrolling to the 850th is no way to find
     // it. Past [EPISODE_RANGE] the season is cut into ranges, opened on the one holding the next
     // episode to watch.
-    val ranges = remember(shown) {
-        if (shown.episodes.size > EPISODE_RANGE) shown.episodes.chunked(EPISODE_RANGE) else emptyList()
+    val ranges = remember(rows) {
+        if (rows.size > EPISODE_RANGE) rows.chunked(EPISODE_RANGE) else emptyList()
     }
     var rangeAt by remember(shown) {
-        mutableIntStateOf(ranges.indexOfFirst { range -> next != null && range.any { it.sameAs(next) } }.coerceAtLeast(0))
+        mutableIntStateOf(ranges.indexOfFirst { range -> next != null && range.any { it is EpisodeGuide.Row.Have && it.episode.sameAs(next) } }.coerceAtLeast(0))
     }
-    val listed = ranges.getOrNull(rangeAt) ?: shown.episodes
+    val listed = ranges.getOrNull(rangeAt) ?: rows
     val list = rememberLazyListState()
     // Another season or range picked while the episodes fill the screen: back up to the picker,
     // with the new list under it. Opening is its own case, below. Saved, so a page brought back
     // after the phone is turned keeps where it was scrolled to rather than opening again.
     var opened by rememberSaveable(series.key) { mutableStateOf(false) }
     // Where the up-next episode sits in the list shown, or -1 when it is in another season or range.
-    val upNextAt = if (next != null) listed.indexOfFirst { it.sameAs(next) } else -1
+    val upNextAt = if (next != null) listed.indexOfFirst { it is EpisodeGuide.Row.Have && it.episode.sameAs(next) } else -1
     val upNextFocus = remember(series.key) { FocusRequester() }
     // Episode cards a row on a large window (see the grid below); one elsewhere.
     val episodeColumns = remember(series.key) { mutableIntStateOf(1) }
@@ -930,12 +993,12 @@ fun SeriesPanel(
             }
             settled = 0
             if (episodeFocus.request(id)) continue
-            val at = listedNow.indexOfFirst { it.item.id == id }
+            val at = listedNow.indexOfFirst { it.key == id }
             if (at >= 0) {
                 list.scrollToItem(FIRST_EPISODE_ITEM + at)
                 continue
             }
-            val range = ranged.indexOfFirst { members -> members.any { it.item.id == id } }
+            val range = ranged.indexOfFirst { members -> members.any { it.key == id } }
             if (range < 0 || range == rangeAt) break
             rangeAt = range
         }
@@ -1089,6 +1152,18 @@ fun SeriesPanel(
                 }
                 // What a video's page offers beside its pill, for the show (HX20).
                 showActions?.let { addAll(showPageActions(it, progress.finished, marking, s)) }
+                // The honest full list is the default; this is the way back to only the viewer's own.
+                if (onOnlyMine != null && SeriesGuideRows.hasGaps(full)) {
+                    add(
+                        PageAction(
+                            if (onlyMine) s.seriesShowAll else s.seriesOnlyMine,
+                            TmIcons.FilterHorizontal,
+                            { onOnlyMine(!onlyMine) },
+                            short = if (onlyMine) s.seriesShowAllShort else s.seriesOnlyMineShort,
+                            toggles = !onlyMine,
+                        ),
+                    )
+                }
                 if (trailer != null || holdTrailer) add(PageAction(s.metadataTrailer, TrailerIcon, { trailer?.let(trailers::open); Unit }))
                 if (downloads) {
                     add(
@@ -1262,6 +1337,22 @@ fun SeriesPanel(
                     )
             }
         }
+        // A line of the list: a video the chats hold, or an episode they lack (quiet, never plays).
+        val rowCard: @Composable (EpisodeGuide.Row, Modifier) -> Unit = { row, cardModifier ->
+            when (row) {
+                is EpisodeGuide.Row.Have -> episodeCard(row.episode, cardModifier)
+                is EpisodeGuide.Row.Gap -> androidx.compose.runtime.key(row.key) {
+                    val gapFocus = remember { FocusRequester() }
+                    GapRow(
+                        row.episode,
+                        large = large,
+                        onClick = { gapPrompt.show(row.episode) { runCatching { gapFocus.requestFocus() } } },
+                        modifier = cardModifier,
+                        focusRequester = gapFocus,
+                    )
+                }
+            }
+        }
         // A large window lays the episodes side by side where two (or three) cards fit at a
         // width that still reads well, rather than one narrow column with the rest of the
         // window bare (user, 2026-11-01). A phone and a television keep their single list.
@@ -1328,7 +1419,11 @@ fun SeriesPanel(
             }
             item(key = "seasons") {
                 Column(Modifier.fillMaxWidth().padding(pad), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    seasonPicker(shown.number) { season = it }
+                    seasonPicker(stops, shown.number, guide != null) { season = it }
+                    if (guide != null && shown.episodes.isEmpty()) {
+                        val stop = stops.firstOrNull { it.number == shown.number }
+                        SeasonGapNote(shown.number, series.title, stop?.state ?: EpisodeGuide.State.Missing, stop?.airDate, onFindElsewhere)
+                    }
                     if (ranges.isNotEmpty()) EpisodeRanges(ranges = ranges, selected = rangeAt, onSelect = { rangeAt = it })
                     QualityPicker(heights, selected = height?.takeIf { it in heights }, onSelect = { pickedHeight = it })
                     Spacer(Modifier.height(2.dp))
@@ -1336,18 +1431,18 @@ fun SeriesPanel(
             }
             if (columns > 1) {
                 // Keyed by a row's first episode, so the fast scroller's bubble still names it.
-                items(listed.chunked(columns), key = { it.first().item.id }) { row ->
+                items(listed.chunked(columns), key = { it.first().key }) { row ->
                     Row(
                         Modifier.fillMaxWidth().padding(pad).padding(bottom = EPISODE_GAP - 6.dp),
                         horizontalArrangement = Arrangement.spacedBy(EPISODE_GAP),
                     ) {
-                        row.forEach { episodeCard(it, Modifier.weight(1f)) }
+                        row.forEach { rowCard(it, Modifier.weight(1f)) }
                         repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
                     }
                 }
             } else {
-                items(listed, key = { it.item.id }) { episode ->
-                    episodeCard(episode, Modifier.padding(pad).widthIn(max = if (large) EPISODES_MAX_LARGE else EPISODES_MAX))
+                items(listed, key = { it.key }) { row ->
+                    rowCard(row, Modifier.padding(pad).widthIn(max = if (large) EPISODES_MAX_LARGE else EPISODES_MAX))
                 }
             }
             // The cast and "More like this" after the episodes: composed only once scrolled to.
@@ -1364,13 +1459,21 @@ fun SeriesPanel(
         if (firstPaint) {
             ScrollToTop(list)
             // A long season is one hold from its end; the bubble names the episode on screen.
-            val episodeLabels = remember(listed) { listed.associate { it.item.id to s.seriesEpisodeShort(it.season, it.episode) + it.partLetter } }
+            val episodeLabels = remember(listed) {
+                listed.associate { row ->
+                    row.key to when (row) {
+                        is EpisodeGuide.Row.Have -> s.seriesEpisodeShort(row.episode.season, row.episode.episode) + row.episode.partLetter
+                        is EpisodeGuide.Row.Gap -> s.seriesEpisodeShort(row.episode.season, row.episode.number)
+                    }
+                }
+            }
             FastScroller(list, label = { key -> episodeLabels[key] })
         }
         onBack?.let { back ->
             PageBackBand(list, meta?.title?.takeIf { it.isNotBlank() } ?: series.title, back, barInsets, Modifier.align(Alignment.TopStart))
         }
     }
+    GapPromptHost(gapPrompt, series.title, onFindElsewhere)
     if (showActions != null && marking.value) {
         ShowMenu(series, watch, showActions, onDismiss = { marking.value = false }, season = shown, marksOnly = true)
     }
@@ -1550,7 +1653,7 @@ private val BAND_FILL = 72.dp
  */
 @Composable
 private fun EpisodeRanges(
-    ranges: List<List<SeriesEpisode>>,
+    ranges: List<List<EpisodeGuide.Row>>,
     selected: Int,
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
@@ -1566,7 +1669,7 @@ private fun EpisodeRanges(
             val chosen = index == selected
             val shape = RoundedCornerShape(Corner.Small)
             Text(
-                "${range.first().episode}-${range.last().episode}",
+                "${range.first().number}-${range.last().number}",
                 style = if (tv) MaterialTheme.typography.titleSmall else MaterialTheme.typography.labelLarge,
                 fontWeight = if (chosen) FontWeight.SemiBold else FontWeight.Normal,
                 color = when {
@@ -1599,6 +1702,9 @@ private fun EpisodeRanges(
 
 /** Episodes per range once a season is longer than this; see [EpisodeRanges]. */
 private const val EPISODE_RANGE = 100
+
+/** A season tab the chats hold none of, drawn quieter than the ones they do. */
+private const val QUIET_SEASON = 0.62f
 
 /**
  * A thin rounded bar of how much of a show or a course is watched, for the top of its list: the

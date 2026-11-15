@@ -949,6 +949,8 @@ fun MediaGridScreen(
                             scope.launch { queueSeason(context, settings, request) { chatTitle }?.let(onOfflineAction) }
                         },
                         chatTitle = chatTitle,
+                        // The search across every chat lives with the chat list: back there, where it opens.
+                        onSearchOpened = onBack,
                     )
                 }
 
