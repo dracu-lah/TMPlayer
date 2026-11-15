@@ -151,6 +151,8 @@ data class ChatHistoryPage(
     val read: Int,
     /** Where the next page starts (the oldest message read), 0 once the chat's start is reached. */
     val next: Long,
+    /** The photos of albums among the messages read, so an album split across two pages is still put together. */
+    val photos: List<AlbumPhoto> = emptyList(),
 )
 
 /** What a chat search asks TDLib for. Each call throws when it fails. */
@@ -194,6 +196,10 @@ class ChatSearchRun(
     private var scanned = 0
     private var scanDone = false
     private var floodWaited = false
+
+    /** The albums' photos met while reading the history, and the albumed videos still waiting for theirs. */
+    private val albumPhotos = HashMap<Long, AlbumPhoto>()
+    private var pendingAlbumVideos: List<MediaItem> = emptyList()
 
     /** Whether this search is reading the chat's history rather than paging Telegram's answer. */
     val readingHistory: Boolean get() = how == ChatSearchHow.Scanned || how == ChatSearchHow.Offline
@@ -312,7 +318,13 @@ class ChatSearchRun(
             pages++
             read += page.read.coerceAtLeast(0)
             scanned += page.read.coerceAtLeast(0)
-            found = ChatSearch.merge(found, ChatSearch.local(page.items, chatId, query, topicId))
+            // An album's photo may sit on the page before or after its videos: the videos of earlier
+            // pages that waited for theirs are folded again with every page's photos.
+            if (page.photos.isNotEmpty()) albumPhotos.putAll(AlbumPosts.pick(page.photos))
+            val folded = AlbumPosts.fold(page.items + pendingAlbumVideos, albumPhotos)
+            pendingAlbumVideos = folded.filter { it.albumId != 0L && it.albumPhotoFileId == 0 && !it.hasCover }
+                .sortedByDescending { it.messageId }.take(PENDING_ALBUM_VIDEOS)
+            found = ChatSearch.merge(found, ChatSearch.local(folded, chatId, query, topicId))
             // An empty page, or one that does not move back, is the chat's start: never asked again.
             if (page.read <= 0 || page.next <= 0L || (scanFrom != 0L && page.next >= scanFrom)) {
                 scanDone = true
@@ -321,6 +333,11 @@ class ChatSearchRun(
             }
         }
         return found to (if (pages == 0) failure else null)
+    }
+
+    private companion object {
+        /** Albumed videos kept to meet their photo on a page read later; the oldest are let go. */
+        const val PENDING_ALBUM_VIDEOS = 200
     }
 
     private fun answer(): ChatSearchAnswer = when (how) {

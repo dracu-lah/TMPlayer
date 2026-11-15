@@ -185,6 +185,12 @@ data class MediaCursors(
     val videoDone: Boolean = false,
     val documentDone: Boolean = false,
     val animationDone: Boolean = false,
+    /**
+     * Where the photo search stands, asked only beside a query (a photo's caption names the album's
+     * videos, [AlbumPosts]). Not part of [allDone] and not kept on the disk: a listing never asks it.
+     */
+    val photo: Long = 0,
+    val photoDone: Boolean = false,
 ) {
     val allDone: Boolean get() = videoDone && documentDone && animationDone
 }

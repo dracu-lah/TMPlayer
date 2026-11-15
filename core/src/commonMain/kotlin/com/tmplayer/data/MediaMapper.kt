@@ -32,8 +32,34 @@ object MediaMapper {
         if (selfDestructs(message)) null else mapped(message, chatProtected)
 
     /** A page of search results, with the self-destructing videos left out and counted. */
-    fun screen(messages: List<Message>, chatProtected: Boolean): ContentProtection.Screened =
-        ContentProtection.screen(messages, ::selfDestructs) { mapped(it, chatProtected) }
+    fun screen(messages: List<Message>, chatProtected: Boolean): ContentProtection.Screened {
+        val screened = ContentProtection.screen(messages, ::selfDestructs) { mapped(it, chatProtected) }
+        // An album's photo, where the page holds it (a history window does, a video search does not),
+        // gives its videos a caption and a picture. See [AlbumPosts].
+        val photos = AlbumPosts.pick(messages.mapNotNull(::albumPhotoOf))
+        return if (photos.isEmpty()) screened else screened.copy(items = AlbumPosts.fold(screened.items, photos))
+    }
+
+    /**
+     * The photo of an album in [message], or null for anything else: not a photo, not in an album,
+     * timed, withheld, or still being sent. A photo with no size Telegram listed keeps its caption
+     * with no picture. The photo is shown only: nothing here saves it, so a protected chat's photo
+     * is as safe as its videos' covers.
+     */
+    fun albumPhotoOf(message: Message): AlbumPhoto? {
+        val content = message.content as? dev.g000sha256.tdl.dto.MessagePhoto ?: return null
+        if (message.mediaAlbumId == 0L || selfDestructs(message)) return null
+        if (message.schedulingState != null || message.sendingState != null) return null
+        if (!message.restrictionInfo?.restrictionReason.isNullOrEmpty()) return null
+        return AlbumPhoto(
+            chatId = message.chatId,
+            albumId = message.mediaAlbumId,
+            messageId = message.id,
+            fileId = coverSize(content.photo)?.photo?.id ?: 0,
+            mini = content.photo.minithumbnail?.data,
+            caption = captionOf(content.caption.text),
+        )
+    }
 
     /** Media Telegram means to be seen once, in Telegram: a timer, or "view once". */
     fun selfDestructs(message: Message): Boolean = message.selfDestructType != null
@@ -70,6 +96,7 @@ object MediaMapper {
             qualities = TelegramQualities.fromTdlib(post.alternativeVideos.orEmpty().toList(), video.height, size),
             startSec = post.startTimestamp.coerceAtLeast(0),
             storyboard = storyboardOf(post.storyboards.orEmpty().toList()),
+            hasCover = cover != null,
         )
     }
 

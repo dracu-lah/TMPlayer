@@ -16,6 +16,7 @@ import dev.g000sha256.tdl.dto.SearchMessagesChatTypeFilterGroup
 import dev.g000sha256.tdl.dto.SearchMessagesChatTypeFilterPrivate
 import dev.g000sha256.tdl.dto.SearchMessagesFilterAnimation
 import dev.g000sha256.tdl.dto.SearchMessagesFilterDocument
+import dev.g000sha256.tdl.dto.SearchMessagesFilterPhoto
 import dev.g000sha256.tdl.dto.SearchMessagesFilterVideo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -160,6 +161,12 @@ class ChatRepository(private val td: TdlClient) {
                 else attempt { search(chatId, cursors.animation, SearchMessagesFilterAnimation(), query, chatProtected, pageSize, topicId) }
             }
 
+            // A photo whose caption names the title leads to its album's videos ([AlbumPosts]); only
+            // beside a query, and never failing the page: a photo search that fails is asked again.
+            val photos = async {
+                if (query.isBlank() || cursors.photoDone) null
+                else attempt { search(chatId, cursors.photo, SearchMessagesFilterPhoto(), query, chatProtected, pageSize, topicId) }
+            }
             val attempts = listOf(videos.await(), documents.await(), animations.await())
             // One of the three failing is not the page failing: whatever the others found is still
             // shown, and the failed one keeps its cursor to be asked again on the next page. Only
@@ -168,11 +175,16 @@ class ChatRepository(private val td: TdlClient) {
             if (asked.isNotEmpty() && asked.all { it.isFailure }) throw asked.first().exceptionOrNull()!!
             val (videoResult, documentResult, animationResult) = attempts.map { it?.getOrNull() }
 
-            val items = buildList {
+            val photoResult = photos.await()?.getOrNull()
+            val found = buildList {
                 videoResult?.let { addAll(it.items) }
                 documentResult?.let { addAll(it.items) }
                 animationResult?.let { addAll(it.items) }
-            }.distinctBy { it.messageId }.sortedByDescending { it.messageId }
+            }
+            // Search hits only: one read of each album's neighbourhood, a few a page, never per item
+            // of a listing.
+            val items = (if (query.isBlank()) found else AlbumPosts.enrich(found, photoResult?.photos.orEmpty(), albumReader))
+                .distinctBy { it.messageId }.sortedByDescending { it.messageId }
                 // An album's videos without a caption of their own read as the album's.
                 .let(MediaMapper::shareAlbumCaptions)
 
@@ -183,6 +195,8 @@ class ChatRepository(private val td: TdlClient) {
                 videoDone = cursors.videoDone || videoResult?.done ?: (attempts[0] == null),
                 documentDone = cursors.documentDone || documentResult?.done ?: (attempts[1] == null),
                 animationDone = cursors.animationDone || animationResult?.done ?: (attempts[2] == null),
+                photo = photoResult?.next ?: cursors.photo,
+                photoDone = cursors.photoDone || photoResult?.done ?: false,
             )
             val hidden = listOfNotNull(videoResult, documentResult, animationResult).sumOf { it.selfDestructing }
             // "More like this" offers only titles the viewer has; this is how it knows them.
@@ -205,8 +219,24 @@ class ChatRepository(private val td: TdlClient) {
             val read = found.messages.size
             val messages = found.messages.filterNotNull()
             val items = MediaMapper.screen(messages, chatProtected).items.let(MediaMapper::shareAlbumCaptions)
-            ChatHistoryPage(items, read, messages.minOfOrNull { it.id } ?: 0L)
+            ChatHistoryPage(items, read, messages.minOfOrNull { it.id } ?: 0L, messages.mapNotNull(MediaMapper::albumPhotoOf))
         }
+
+    /**
+     * The album [anchorMessageId] is in, read from the messages around it: one `getChatHistory`
+     * window of [AlbumPosts.WINDOW] (a whole album ten long, wherever the hit falls in it), the
+     * videos among them with the album's photo folded in. Throws when TDLib fails, so the caller
+     * waits out a FLOOD_WAIT or leaves the album as the hit showed it.
+     */
+    private val albumReader = AlbumReader { chatId, anchorMessageId ->
+        withContext(Dispatchers.IO) {
+            val chatProtected = td.getChat(chatId).valueOrNull?.hasProtectedContent ?: false
+            val found = td.getChatHistory(chatId, anchorMessageId, -AlbumPosts.MAX_MEMBERS, AlbumPosts.WINDOW, false).value()
+            val messages = found.messages.filterNotNull()
+            val photo = AlbumPosts.pick(messages.mapNotNull(MediaMapper::albumPhotoOf)).values.firstOrNull()
+            AlbumWindow(MediaMapper.screen(messages, chatProtected).items, photo)
+        }
+    }
 
     /**
      * The topics of [chatId] when it is a group with Telegram's topics turned on, in Telegram's own
@@ -439,32 +469,48 @@ class ChatRepository(private val td: TdlClient) {
                 if (done) null else async { td.searchMessages(list, query, offset, limit, filter, chatType, 0, 0).value() }
             val videos = ask(SearchMessagesFilterVideo(), cursor.videoOffset, cursor.videoDone)
             val documents = ask(SearchMessagesFilterDocument(), cursor.documentOffset, cursor.documentDone)
+            // A photo whose caption names the title leads to its album's videos ([AlbumPosts]). Beside a
+            // query only, and a failure of this one search is not the page failing.
+            val photos = if (query.isBlank() || cursor.photoDone) null else async {
+                try {
+                    td.searchMessages(list, query, cursor.photoOffset, limit, SearchMessagesFilterPhoto(), chatType, 0, 0).value()
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    null
+                }
+            }
             val videoFound = videos?.await()
             val documentFound = documents?.await()
+            val photoFound = photos?.await()
             val allowed = ChatGate.awaitBrowsing()
             val messages = listOfNotNull(videoFound, documentFound).flatMap { it.messages.toList() }
                 .filter { KidsLock.allows(allowed, it.chatId) }
-            val myId = if (messages.isEmpty()) 0L else Td.myId()
+            val photoHits = photoFound?.messages?.toList().orEmpty()
+                .filter { KidsLock.allows(allowed, it.chatId) }.mapNotNull(MediaMapper::albumPhotoOf)
+            val myId = if (messages.isEmpty() && photoHits.isEmpty()) 0L else Td.myId()
+            val screened = messages.groupBy { it.chatId }.flatMap { (chatId, inChat) ->
+                MediaMapper.screen(inChat, td.getChat(chatId).valueOrNull?.hasProtectedContent ?: false).items
+            }
+            // One read of each hit's album, a few a page, never one per item.
+            val items = (if (query.isBlank()) screened else AlbumPosts.enrich(screened, photoHits, albumReader)).distinctBy { it.id }
             val briefs = ArrayList<ChatBrief>()
-            val items = messages.groupBy { it.chatId }.flatMap { (chatId, inChat) ->
-                val chat = td.getChat(chatId).valueOrNull
-                val screened = MediaMapper.screen(inChat, chat?.hasProtectedContent ?: false).items
-                if (chat != null && screened.isNotEmpty()) {
-                    val summary = summarise(chat, myId)
-                    briefs += ChatBrief(summary.id, summary.title, summary.kind, summary.photoFileId, summary.miniThumbnail)
-                }
-                screened
+            for (chatId in items.map { it.chatId }.distinct()) {
+                val chat = td.getChat(chatId).valueOrNull ?: continue
+                val summary = summarise(chat, myId)
+                briefs += ChatBrief(summary.id, summary.title, summary.kind, summary.photoFileId, summary.miniThumbnail)
             }
             fun finished(found: dev.g000sha256.tdl.dto.FoundMessages?, was: Boolean) =
                 was || found == null || found.messages.isEmpty() || found.nextOffset.isEmpty()
             AllChatsPage(
-                items = items.distinctBy { it.id }
-                    .sortedWith(compareByDescending<MediaItem> { it.date }.thenByDescending { it.messageId }),
+                items = items.sortedWith(compareByDescending<MediaItem> { it.date }.thenByDescending { it.messageId }),
                 cursor = AllChatsCursor(
                     videoOffset = videoFound?.nextOffset ?: cursor.videoOffset,
                     documentOffset = documentFound?.nextOffset ?: cursor.documentOffset,
                     videoDone = finished(videoFound, cursor.videoDone),
                     documentDone = finished(documentFound, cursor.documentDone),
+                    photoOffset = photoFound?.nextOffset ?: cursor.photoOffset,
+                    photoDone = finished(photoFound, cursor.photoDone),
                 ),
                 chats = briefs,
             )
@@ -500,8 +546,9 @@ class ChatRepository(private val td: TdlClient) {
         val ran = cursor.copy(chatsSearched = reached, videoDone = reached >= order.size, documentDone = reached >= order.size)
         if (window.isEmpty()) return@withContext AllChatsPage(emptyList(), ran)
         val myId = Td.myId()
-        val briefs = ArrayList<ChatBrief>()
-        val items = ArrayList<MediaItem>()
+        val briefs = LinkedHashMap<Long, ChatBrief>()
+        val found = ArrayList<MediaItem>()
+        val photoHits = ArrayList<AlbumPhoto>()
         for (chunk in window.chunked(CHATS_AT_ONCE)) {
             val pages = coroutineScope {
                 chunk.map { chatId ->
@@ -513,25 +560,31 @@ class ChatRepository(private val td: TdlClient) {
                         if (!filters.includeArchived && summary.isArchived) return@async null
                         if (!matchesType(filters.chatType, summary.kind)) return@async null
                         val protected = chat.hasProtectedContent
-                        val found = coroutineScope {
+                        coroutineScope {
                             val videos = async { search(chatId, 0, SearchMessagesFilterVideo(), query, protected, limit) }
                             val documents = async { search(chatId, 0, SearchMessagesFilterDocument(), query, protected, limit) }
-                            videos.await().items + documents.await().items
+                            // A photo whose caption names the title leads to its album's videos; a failed
+                            // photo search leaves the others' answer standing.
+                            val photos = async { if (query.isBlank()) null else attempt { search(chatId, 0, SearchMessagesFilterPhoto(), query, protected, limit) }.getOrNull() }
+                            Triple(summary, videos.await().items + documents.await().items, photos.await()?.photos.orEmpty())
                         }
-                        if (found.isEmpty()) null else Pair(summary, found)
                     }
                 }.awaitAll()
             }
-            for ((summary, found) in pages.filterNotNull()) {
-                briefs += ChatBrief(summary.id, summary.title, summary.kind, summary.photoFileId, summary.miniThumbnail)
-                items += found
+            for (page in pages.filterNotNull()) {
+                val (summary, videos, photos) = page
+                briefs[summary.id] = ChatBrief(summary.id, summary.title, summary.kind, summary.photoFileId, summary.miniThumbnail)
+                found += videos
+                photoHits += photos
             }
         }
+        // One read of each hit's album, a few a page, never one per item.
+        val items = (if (query.isBlank()) found else AlbumPosts.enrich(found, photoHits, albumReader)).distinctBy { it.id }
+        val inItems = items.mapTo(HashSet()) { it.chatId }
         AllChatsPage(
-            items = items.distinctBy { it.id }
-                .sortedWith(compareByDescending<MediaItem> { it.date }.thenByDescending { it.messageId }),
+            items = items.sortedWith(compareByDescending<MediaItem> { it.date }.thenByDescending { it.messageId }),
             cursor = ran,
-            chats = briefs,
+            chats = briefs.values.filter { it.id in inItems },
         )
     }
 
@@ -679,6 +732,8 @@ class ChatRepository(private val td: TdlClient) {
         val done: Boolean,
         val selfDestructing: Int,
         val archives: List<ArchiveFile> = emptyList(),
+        /** The photos of albums among the hits (a search with the photo filter), for [AlbumPosts.enrich]. */
+        val photos: List<AlbumPhoto> = emptyList(),
     )
 
     private suspend fun search(
@@ -714,7 +769,8 @@ class ChatRepository(private val td: TdlClient) {
         } else {
             emptyList()
         }
-        return SearchResult(screened.items, found.nextFromMessageId, done, screened.selfDestructing, archives)
+        val photos = if (filter is SearchMessagesFilterPhoto) found.messages.mapNotNull(MediaMapper::albumPhotoOf) else emptyList()
+        return SearchResult(screened.items, found.nextFromMessageId, done, screened.selfDestructing, archives, photos)
     }
 
     companion object {

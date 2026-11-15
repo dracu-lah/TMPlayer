@@ -18,6 +18,13 @@ data class AllChatsCursor(
      * chats, so [done] means the same thing whichever search ran.
      */
     val chatsSearched: Int = 0,
+    /**
+     * The search of photos beside the two (only with a query): a photo whose caption names the
+     * title leads to its album's videos ([AlbumPosts]). It pages with the others and is not part
+     * of [done], so a query that ends the videos ends the search.
+     */
+    val photoOffset: String = "",
+    val photoDone: Boolean = false,
 ) {
     val done: Boolean get() = videoDone && documentDone
 }
