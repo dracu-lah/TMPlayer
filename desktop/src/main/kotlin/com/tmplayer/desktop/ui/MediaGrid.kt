@@ -651,7 +651,9 @@ internal fun VideoGrid(
     val index = remember(history) { history.associateBy { "${it.chatId}:${it.messageId}" } }
     val selection = remember(grid) { GridSelection { cells.getOrNull(it)?.id } }
     BackHandler(enabled = selection.active) { selection.clear() }
-    Box(Modifier.fillMaxSize()) {
+    // Ctrl+A picks every video the chat lets anyone keep, as Select all in the bar does.
+    val pickable = { cells.filter { it.canBeSaved }.map { it.id } }
+    Box(Modifier.fillMaxSize().selectAllKey({ pickable().isNotEmpty() }) { selection.selectAll(pickable()) }) {
       CompositionLocalProvider(LocalGridSelection provides selection, LocalDownloadIndex provides index) {
         LazyVerticalGrid(
             columns = when {
@@ -1059,7 +1061,9 @@ internal fun Poster(
     // poster instead of playing it.
     var picking by remember { mutableStateOf(false) }
     // On a History page in select mode a plain click ticks the card, as a tap does on the phone.
-    val ticksOnClick = selection?.history == true && selection.active
+    // Once anything is picked a click, Enter or Space picks too, as the phone's tap does: the
+    // keyboard has no other way to add the next one.
+    val ticksOnClick = selection != null && selection.active
     val play: () -> Unit = {
         if (picking && selection != null) {
             picking = false
@@ -1122,6 +1126,17 @@ internal fun Poster(
                 when {
                     GridNav.isMenuKey(event) -> {
                         openMenu()
+                        true
+                    }
+                    // Ctrl+Space: this poster in or out of the selection, as Ctrl+click does.
+                    selection != null && isToggleChord(event) -> {
+                        selection.toggle(index)
+                        true
+                    }
+                    // Enter or Space with a selection up adds or drops this one rather than playing it.
+                    ticksOnClick && event.type == KeyEventType.KeyDown && event.key in TICK_KEYS && !event.keyCtrl &&
+                        !event.isAltPressed && !event.isMetaPressed && !event.isShiftPressed -> {
+                        selection?.toggle(index)
                         true
                     }
                     // I for "info", the detail pane, as the remote's info key opens it on a TV.
@@ -1571,6 +1586,9 @@ internal fun MetaNoticeCard(state: ShellState, modifier: Modifier = Modifier) {
 }
 
 private val PLAY_KEYS = setOf(Key.Enter, Key.NumPadEnter, Key.Spacebar, Key.P)
+
+/** The keys that tick a poster while a selection is up, instead of playing it. */
+private val TICK_KEYS = setOf(Key.Enter, Key.NumPadEnter, Key.Spacebar)
 // From OsInfo rather than os.name, which the browser build has no answer for: a Mac browser
 // gets Cmd+click and Ctrl+click as the Mac app does.
 private val IS_MAC: Boolean get() = com.tmplayer.desktop.os.OsInfo.isMac

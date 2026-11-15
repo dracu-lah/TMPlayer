@@ -18,6 +18,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
 import com.tmplayer.data.CacheShelf
 import com.tmplayer.data.DownloadRunner
@@ -95,6 +105,31 @@ class GridSelection(
         if (ids.any { it !in present }) ids = ids.filterTo(HashSet()) { it in present }
     }
 }
+
+/** Ctrl+A, or Cmd+A on a Mac: the chord every list answers with "pick everything". */
+internal fun isSelectAllChord(event: KeyEvent): Boolean =
+    event.type == KeyEventType.KeyDown && event.key == Key.A && !event.isAltPressed && !event.isShiftPressed &&
+        (event.isCtrlPressed || event.isMetaPressed)
+
+/**
+ * Ctrl+Space (Cmd+Space is the system's, so Ctrl there too): one row in or out, the keyboard's way
+ * of the Ctrl+click, as a list box does it (WAI-ARIA).
+ */
+internal fun isToggleChord(event: KeyEvent): Boolean =
+    event.type == KeyEventType.KeyDown && event.key == Key.Spacebar && event.isCtrlPressed && !event.isAltPressed &&
+        !event.isShiftPressed && !event.isMetaPressed
+
+/**
+ * Ctrl+A over a grid or list: [onSelectAll] is told, and the key is taken only when [hasRows] says
+ * there is something to pick, so on an empty page it is left to whatever has focus. Read on the
+ * way down, before a text field inside could take it.
+ */
+internal fun Modifier.selectAllKey(hasRows: () -> Boolean, onSelectAll: () -> Unit): Modifier =
+    onPreviewKeyEvent { event ->
+        if (!isSelectAllChord(event) || !hasRows()) return@onPreviewKeyEvent false
+        onSelectAll()
+        true
+    }
 
 /** The grid's selection, for the posters inside it; null where nothing can be picked. */
 internal val LocalGridSelection = compositionLocalOf<GridSelection?> { null }
