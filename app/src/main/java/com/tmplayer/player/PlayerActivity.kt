@@ -4216,6 +4216,12 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         .setUsage(C.USAGE_MEDIA)
         .build()
 
+    /** The path the next player is built on ([DecoderPolicy]): the known device list's decoder names and queueing. */
+    private fun decoderPolicyForBuild(): DecoderPolicy {
+        val known = com.tmplayer.data.KnownDevices.remediesFor(com.tmplayer.data.KnownDevices.builtIn, EngineDevice.facts(), mediaMime.ifBlank { null })
+        return DecoderPolicy.of(RemedyPath(excluded = known.exclude.toSet()), known.async, android.os.Build.VERSION.SDK_INT)
+    }
+
     private fun buildPlayer(client: TdlClient): ExoPlayer {
         failurePinned = false
         stereoPipeline = false
@@ -4228,6 +4234,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         // constructor gets round to it.
         val maskHdr10Plus = HevcHdr10PlusMasker.affectedDevice(android.os.Build.MANUFACTURER, android.os.Build.MODEL)
         val fireTv = DeviceQuirks.isFireTv(this@PlayerActivity)
+        // The remedy ladder's path for this build: decoder names left out, queueing, software first ([DecoderPolicy]).
+        val policy = decoderPolicyForBuild().also { Log.i(START_TAG, "${it.describe()} (file $fileId)") }
         val renderers = object : NextRenderersFactory(this@PlayerActivity) {
             /**
              * The stock codec adapters, except on the Fire TV sticks with the MediaTek MT8696
@@ -4402,14 +4410,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         }
             // Prefer software video puts the app's FFmpeg video decoder ahead of the device's;
             // a format FFmpeg has no decoder for still goes to the device's.
-            .setExtensionRendererMode(
-                if (videoDecoder == com.tmplayer.data.VideoDecoder.Software) {
-                    DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
-                } else {
-                    DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON
-                },
-            )
-            .setEnableDecoderFallback(true)
+            .setExtensionRendererMode(policy.extensionMode(preferSoftwareVideo = videoDecoder == com.tmplayer.data.VideoDecoder.Software))
+            // Decoder fallback on, the codec list without the decoders that failed, the queueing mode.
+            .let(policy::applyTo)
 
         // Sized by the memory the system gives the app ([targetBufferBytes]): small on a 1 GB
         // stick, where a generous buffer is what gets the app killed, generous elsewhere.
@@ -4454,7 +4457,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
         val plan = trackPlan
         val subtitles = plan.subtitles
-        val tunneling = tunnelingDecision()
+        val tunneling = tunnelingDecision().let {
+            if (policy.tunnelingOff && it.tunneled) TunnelingPolicy.Decision(false, TunnelingPolicy.Reason.FailedBefore) else it
+        }
         val trackSelector = DefaultTrackSelector(this).apply {
             parameters = buildUponParameters()
                 // Off stays off, so a series watched without captions does not get them back on an
