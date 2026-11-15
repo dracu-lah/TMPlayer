@@ -149,6 +149,8 @@ internal fun HomePane(
      * Not needed when [rows] is empty: the empty state already says the same.
      */
     noFavourites: Boolean = false,
+    /** The phone's "Choose favourites": the chat list, its rows answering a tap with a star. Null leaves the card without a button. */
+    onChooseFavourites: (() -> Unit)? = null,
     /** False when Settings turned the carousel off: Home opens on its rows, Recently added among them. */
     carouselOn: Boolean = true,
     /** Every row of Home off in Settings ([com.tmplayer.data.HomeLayout.allOff]): a card says so, with the way back. */
@@ -781,7 +783,19 @@ internal fun HomePane(
                 // the chat list, which the hint names.
                 if (noFavourites) {
                     item(key = "favourites-hint", contentType = "favourites-hint") {
-                        FavouritesHintCard(s.homeFavouritesHint(if (touch) "phone" else "tv"), start = start, end = end)
+                        if (touch && onChooseFavourites != null) {
+                            // A phone's card has a button: "press and hold" in a card was an
+                            // instruction to find a gesture (Raju 4.4).
+                            FavouritesHintCard(
+                                s.homeFavouritesStar,
+                                start = start,
+                                end = end,
+                                buttonLabel = s.homeFavouritesChoose,
+                                onChoose = onChooseFavourites,
+                            )
+                        } else {
+                            FavouritesHintCard(s.homeFavouritesHint(if (touch) "phone" else "tv"), start = start, end = end)
+                        }
                     }
                 }
             }

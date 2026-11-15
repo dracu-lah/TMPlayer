@@ -74,6 +74,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme as M3MaterialTheme
 import androidx.compose.material3.Text as M3Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -356,6 +357,8 @@ internal fun BrowseScreen(
     var chatMenu by remember { mutableStateOf<ChatSummary?>(null) }
     // The chat just starred from its menu, whose row's star pops in rather than simply appearing.
     var justStarred by remember { mutableStateOf<Long?>(null) }
+    // Home's "Choose favourites" (phone): the chat list answers a tap with a star until Done.
+    var starMode by rememberSaveable { mutableStateOf(false) }
     var mediaMenu by remember { mutableStateOf<ResumeRecord?>(null) }
     var watchedMenu by remember { mutableStateOf<WatchedRecord?>(null) }
     var laterMenu by remember { mutableStateOf<WatchLaterRecord?>(null) }
@@ -643,6 +646,9 @@ internal fun BrowseScreen(
         onPickTab(BrowseSection.of(BrowseTab.Chats))
         query = ""
     }
+    // Star mode lives on the chat list: leaving it (another tab, a folder) ends the mode, and Back does.
+    LaunchedEffect(tab) { if (!tab.isChats) starMode = false }
+    BackHandler(enabled = starMode) { starMode = false }
     val paneOf: @Composable (BrowseSection) -> Unit = { tab ->
         val showsContinue = tab.listsVideos && historyTab == HistoryTab.Continue
         val showsWatched = tab.listsVideos && historyTab == HistoryTab.Watched
@@ -706,6 +712,14 @@ internal fun BrowseScreen(
                                 // with none the hint says how to add them; only once the rows are
                                 // built, since it flashed up while they were still coming in.
                                 noFavourites = favorites.isEmpty() && homeRowsReady && homeLayout.starredRows,
+                                onChooseFavourites = if (touch) {
+                                    {
+                                        starMode = true
+                                        goToChats()
+                                    }
+                                } else {
+                                    null
+                                },
                                 onOpenSection = { onPickTab(it); query = "" },
                                 onOpenWatchLater = openLater,
                                 onLaterArtWanted = onHomeLaterArtWanted,
@@ -876,7 +890,7 @@ internal fun BrowseScreen(
                                 sort = chatSort,
                                 // Recency order comes straight from Telegram, so the top of the
                                 // unfiltered list already is "recent".
-                                recent = if (
+                                recentChats = if (
                                     tab.isChats &&
                                     chatFilter == ChatFilter.All &&
                                     chatSort == ChatSort.Recent &&
@@ -894,6 +908,12 @@ internal fun BrowseScreen(
                                 launchChatId = launchChatId,
                                 paging = chatPaging,
                                 onMoreChats = onMoreChats,
+                                starMode = starMode,
+                                onStar = { chat ->
+                                    justStarred = if (chat.id in favorites) null else chat.id
+                                    onToggleFavorite(chat)
+                                },
+                                onStarDone = { starMode = false },
                             )
                         }
                     }
@@ -2394,14 +2414,33 @@ private fun MoreChatsFoot(paging: com.tmplayer.ui.browse.ChatPaging, onRetry: ()
     }
 }
 
+/**
+ * The line over the chat list while it is in star mode: what a tap does, and Done to leave. The
+ * mode ends by itself on leaving the list, and Back ends it too.
+ */
+@Composable
+internal fun StarModeBar(onDone: () -> Unit, modifier: Modifier = Modifier) {
+    val s = LocalStrings.current
+    Row(
+        modifier.fillMaxWidth().padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Icon(TmIcons.StarOutline, contentDescription = null, tint = Tone.accent, modifier = Modifier.size(20.dp))
+        Text(s.browseStarModeHint, style = MaterialTheme.typography.bodyMedium, color = Tone.muted, modifier = Modifier.weight(1f))
+        TextButton(onClick = onDone) { M3Text(s.commonDone) }
+    }
+}
+
 /** Placeholder rows at the chat list's foot while its older chats are read. */
 private const val MORE_CHATS_PLACEHOLDERS = 2
 
 @Composable
-private fun ChatSection(
+internal fun ChatSection(
     chats: List<ChatSummary>,
     favorites: Set<Long>,
-    recent: List<ChatSummary>,
+    /** The strip's chats ([JUMP_BACK_IN_COUNT] of them); it shows only over a list longer than that ([jumpBackInShown]). */
+    recentChats: List<ChatSummary>,
     insets: BrowseInsets,
     /** Only a remote needs somewhere to stand; on a phone a stolen focus only opens the keyboard. */
     autoFocus: Boolean,
@@ -2416,9 +2455,19 @@ private fun ChatSection(
     paging: com.tmplayer.ui.browse.ChatPaging = com.tmplayer.ui.browse.ChatPaging(),
     /** Reads the next chats, as the list's end comes near. */
     onMoreChats: () -> Unit = {},
+    /**
+     * The phone's star mode (Raju 4.4, Home's "Choose favourites"): a tap on a chat stars or
+     * unstars it ([onStar]) instead of opening it, under a line that says so with a Done
+     * ([onStarDone]). A touch screen only: a remote has the hold menu.
+     */
+    starMode: Boolean = false,
+    onStar: (ChatSummary) -> Unit = {},
+    onStarDone: () -> Unit = {},
 ) {
     val s = LocalStrings.current
     val rowsAreFullBleed = isTouch()
+    val recent = if (jumpBackInShown(chats.size)) recentChats else emptyList()
+    val starring = starMode && rowsAreFullBleed
     // Around the strip's tiles, for the television's focus scale. A phone does not grow them.
     val clearance = if (rowsAreFullBleed) 0.dp else Tv.FocusClearance
     val first = remember { FocusRequester() }
@@ -2460,12 +2509,16 @@ private fun ChatSection(
     val shownGrid: LazyGridState? = if (twoColumns) rowsState else null
     // Opening a chat on a television notes which card it was and where the list stood.
     val open: (ChatSummary, Any) -> Unit = { chat, key ->
-        if (autoFocus && shownGrid != null) {
-            ChatListReturn.key = key
-            ChatListReturn.firstIndex = shownGrid.firstVisibleItemIndex
-            ChatListReturn.firstOffset = shownGrid.firstVisibleItemScrollOffset
+        if (starring) {
+            onStar(chat)
+        } else {
+            if (autoFocus && shownGrid != null) {
+                ChatListReturn.key = key
+                ChatListReturn.firstIndex = shownGrid.firstVisibleItemIndex
+                ChatListReturn.firstOffset = shownGrid.firstVisibleItemScrollOffset
+            }
+            onOpenChat(chat)
         }
-        onOpenChat(chat)
     }
     // The strip of recent chats is the grid's first line, across both columns.
     val stripLines = if (recent.isNotEmpty()) 1 else 0
@@ -2577,6 +2630,9 @@ private fun ChatSection(
                 },
                 verticalArrangement = Arrangement.spacedBy(if (rowsAreFullBleed) 0.dp else 14.dp),
             ) {
+                if (starring) {
+                    item(key = "star-mode", contentType = "star-mode") { StarModeBar(onStarDone, Modifier.padding(horizontal = insets.start)) }
+                }
                 if (recent.isNotEmpty()) {
                     item(key = "recent-strip") { strip() }
                 }
@@ -3118,6 +3174,13 @@ private fun EmptyTab(
 }
 
 private const val RECENT_COUNT = 8
+
+/**
+ * Whether the "Jump back in" strip is worth its place over a list of [chatCount] chats. A strip
+ * that is the list's first [RECENT_COUNT] chats shows the same chats twice when the list is no
+ * longer than that, so it appears only once the list has chats the strip leaves out (Raju 4.2).
+ */
+internal fun jumpBackInShown(chatCount: Int): Boolean = chatCount > RECENT_COUNT
 private const val FOCUS_FADE_MS = 140
 
 /**
@@ -3160,14 +3223,14 @@ private fun Modifier.bleed(by: Dp): Modifier = layout { measurable, constraints 
     layout(constraints.maxWidth, placeable.height - extra * 2) { placeable.place(-extra, -extra) }
 }
 
-private class BrowseInsets(val start: Dp, val end: Dp, val top: Dp, val bottom: Dp) {
+internal class BrowseInsets(val start: Dp, val end: Dp, val top: Dp, val bottom: Dp) {
     /** The same insets with [extra] more at the bottom, for something floating over the end of the list. */
     fun clearing(extra: Dp) = BrowseInsets(start, end, top, bottom + extra)
 }
 
 /** Under the top bar: the page starts at the bar's first item, right under the bar. */
 private val TvInsets = BrowseInsets(start = TV_START, end = Tv.FocusClearance, top = 4.dp, bottom = Tv.SafeV)
-private val TouchInsets = BrowseInsets(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp)
+internal val TouchInsets = BrowseInsets(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp)
 
 /** The longest chat list whose rows move to a new order rather than being redrawn in it. */
 private const val ANIMATED_ROWS_MAX = 300

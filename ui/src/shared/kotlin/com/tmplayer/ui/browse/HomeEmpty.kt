@@ -138,29 +138,42 @@ fun HomeEmptyCard(onOpenSaved: () -> Unit, modifier: Modifier = Modifier, focus:
 
 /**
  * The quiet card under Home's rows when no chat is starred: a star in an icon chip and how to
- * add one. Never focusable: the remote has nothing to do here, and the way to star a chat is in
- * the chat list, which the words name.
+ * add one. Without [onChoose] (the television) it is never focusable: the remote has nothing to
+ * do here, and the way to star a chat is in the chat list, which the words name. With [onChoose]
+ * (the phone) a button takes the viewer to the chats to star them, so the card is not an
+ * instruction to find a gesture (Raju 4.4).
  */
 @Composable
-fun FavouritesHintCard(text: String, start: Dp, end: Dp, modifier: Modifier = Modifier) {
+fun FavouritesHintCard(
+    text: String,
+    start: Dp,
+    end: Dp,
+    modifier: Modifier = Modifier,
+    buttonLabel: String? = null,
+    onChoose: (() -> Unit)? = null,
+) {
     val touch = isTouch()
-    Row(
+    Column(
         modifier
             .fillMaxWidth()
             .padding(start = start, end = end)
             .clip(RoundedCornerShape(Corner.Large))
             .background(Tone.surface)
             .padding(horizontal = 16.dp, vertical = if (touch) 14.dp else 18.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(if (touch) 14.dp else 18.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        IconChip(TmIcons.StarOutline, size = if (touch) 36.dp else 44.dp)
-        Text(
-            text,
-            style = if (touch) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge,
-            color = Tone.muted,
-            modifier = Modifier.weight(1f),
-        )
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(if (touch) 14.dp else 18.dp)) {
+            IconChip(TmIcons.StarOutline, size = if (touch) 36.dp else 44.dp)
+            Text(
+                text,
+                style = if (touch) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge,
+                color = Tone.muted,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        if (onChoose != null && buttonLabel != null) {
+            HeroPill(label = buttonLabel, onClick = onChoose, icon = TmIcons.StarOutline)
+        }
     }
 }
 

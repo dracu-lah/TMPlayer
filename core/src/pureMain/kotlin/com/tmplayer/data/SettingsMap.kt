@@ -96,6 +96,12 @@ class SettingsRow(
     val need: SettingsNeed? = null,
     val desktopTitle: String? = null,
     val drawnAs: List<String> = emptyList(),
+    /**
+     * A catalog key whose text is the other words a person types for this row ("bigger", "font",
+     * "log out"): the search matches meanings, not only titles (Raju 11.2). In the viewer's
+     * language, so each locale lists its own; a locale without the key falls back to English.
+     */
+    val keywords: String? = null,
 ) {
     fun titleOn(form: DeviceForm): String = if (form == Desktop) desktopTitle ?: title else title
 
@@ -131,8 +137,9 @@ object SettingsMap {
         need: SettingsNeed? = null,
         desktopTitle: String? = null,
         drawnAs: List<String> = emptyList(),
+        keywords: Boolean = false,
     ) {
-        add(SettingsRow(id, group, title, forms, details, need, desktopTitle, drawnAs))
+        add(SettingsRow(id, group, title, forms, details, need, desktopTitle, drawnAs, if (keywords) "settings.keywords_$id" else null))
     }
 
     private fun onOff(key: String) = listOf("${key}_on", "${key}_off")
@@ -186,15 +193,15 @@ object SettingsMap {
         row("online_cache", sub, "online.clear_cache", PTD, need = SettingsNeed.OnlineSubtitles)
 
         val st = SettingsGroup.Storage
-        row("free_up_space", st, "downloads.free_up_space", PTD)
+        row("free_up_space", st, "downloads.free_up_space", PTD, keywords = true)
         row("download_location", st, "storage.location", PTD)
         row("cache_limit", st, "storage.cache_limit", D)
         row("download_first", st, "settings.download_first", PTD, onOff("settings.download_first"))
-        row("remove_after_watching", st, "downloads.remove_after_watching", PTD, listOf("downloads.remove_after_watching_body"))
-        row("low_storage", st, "settings.stream_title", PTD, listOf("settings.stream_keep_detail", "settings.stream_save_detail"))
+        row("remove_after_watching", st, "downloads.remove_after_watching", PTD, listOf("downloads.remove_after_watching_body"), keywords = true)
+        row("low_storage", st, "settings.stream_title", PTD, listOf("settings.stream_keep_detail", "settings.stream_save_detail"), keywords = true)
         row("low_storage_alert", st, "settings.low_storage_alert", PD, listOf("settings.alert_low_storage_detail"))
-        row("wifi_only", st, "settings.wifi_only", P, onOff("settings.wifi_only"))
-        row("save_mobile_data", st, "settings.save_mobile_data", P, onOff("settings.save_mobile_data"))
+        row("wifi_only", st, "settings.wifi_only", P, onOff("settings.wifi_only"), keywords = true)
+        row("save_mobile_data", st, "settings.save_mobile_data", P, onOff("settings.save_mobile_data"), keywords = true)
         row("pause_downloads", st, "settings.pause_downloads_while_playing", PTD, onOff("settings.pause_downloads_while_playing"))
         row("scan_folder", st, "storage.scan", D)
 
@@ -212,11 +219,11 @@ object SettingsMap {
         row("theme", a, "settings.theme", PTD)
         row("pure_black", a, "settings.pure_black", PTD, listOf("theme.black_detail"))
         row("accent", a, "settings.accent", PTD, listOf("settings.accent_detail"))
-        row("typeface", a, "settings.typeface", PTD, listOf("settings.typeface_detail"))
+        row("typeface", a, "settings.typeface", PTD, listOf("settings.typeface_detail"), keywords = true)
         row("high_contrast", a, "settings.high_contrast", PTD, listOf("settings.high_contrast_detail"))
         row("language", a, "settings.language", PTD)
         row("layout", a, "interface.layout", PTD, desktopTitle = "settings.layout")
-        row("interface_size", a, "interface.size", PTD, listOf("interface.size_detail"))
+        row("interface_size", a, "interface.size", PTD, listOf("interface.size_detail"), keywords = true)
         row("lighter_pictures", a, "settings.lighter_pictures", PT, onOff("settings.lighter_pictures"))
         row("reduce_motion", a, "settings.reduce_motion", PT, onOff("settings.reduce_motion"))
         row("high_contrast_focus", a, "settings.high_contrast_focus", T, listOf("settings.high_contrast_focus_detail"))
@@ -235,7 +242,7 @@ object SettingsMap {
         row("privacy_page", lock, "about.privacy", PTD, listOf("settings.privacy_detail"), desktopTitle = "settings.privacy")
         row("crash_reports", lock, "settings.crash_reports", PTD, onOff("settings.crash_reports"), SettingsNeed.CrashReports)
         row("devices", lock, "settings.devices", PTD, listOf("settings.devices_detail"))
-        row("sign_out", lock, "settings.sign_out", PTD)
+        row("sign_out", lock, "settings.sign_out", PTD, keywords = true)
 
         val lib = SettingsGroup.Library
         row("size_limits", lib, "settings.size_limits", PTD, desktopTitle = "settings.smallest", drawnAs = listOf("settings.largest"))
