@@ -115,4 +115,17 @@ class SeekChromeRenderTest {
         val time = root.findViewById<TextView>(R.id.controls_time).text.toString()
         assertTrue(time, "Night Train" in time)
     }
+
+    // Large screens (U17): the phone's controls on a tablet lying down and an unfolded foldable.
+    @Test
+    @Config(sdk = [35], qualifiers = "w1280dp-h800dp-land-night-xhdpi")
+    fun tabletLyingDown() {
+        render("seek-tablet-land.png", tv = false)
+    }
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w841dp-h673dp-land-night-xhdpi")
+    fun foldableSideways() {
+        render("seek-foldable-land.png", tv = false)
+    }
 }

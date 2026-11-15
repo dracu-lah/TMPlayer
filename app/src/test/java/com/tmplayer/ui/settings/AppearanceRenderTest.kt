@@ -62,6 +62,19 @@ class AppearanceRenderTest {
     @Config(sdk = [28], qualifiers = "w960dp-h540dp-land-television-night-xhdpi")
     fun tv() = pass(tv = true, form = "tv")
 
+    // Large screens (U17): the Settings page on a tablet each way up and an unfolded foldable.
+    @Test
+    @Config(sdk = [35], qualifiers = "w1280dp-h800dp-land-night-xhdpi")
+    fun tabletLyingDown() = render(tv = false) { save("settings-tablet-land.png", it) }
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w800dp-h1280dp-port-night-xhdpi")
+    fun tabletUpright() = render(tv = false) { save("settings-tablet-port.png", it) }
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w673dp-h841dp-port-night-xhdpi")
+    fun foldableOpen() = render(tv = false) { save("settings-foldable.png", it) }
+
     private fun pass(tv: Boolean, form: String) {
         // Still, so the switch folds away at once under Light: its fold is an animation whose frames
         // depend on what ran before in the same process.

@@ -226,6 +226,10 @@ class FeaturedCarouselRenderTest {
     fun `tablet upright`() = render("tablet-port")
 
     @Test
+    @Config(sdk = [35], qualifiers = "w673dp-h841dp-port-night-xhdpi")
+    fun `foldable open`() = render("foldable")
+
+    @Test
     fun `on its side Continue watching shows under the carousel`() {
         // A phone held sideways, about 914 by 411 dp, 24 dp of it the status bar.
         val under = 24.dp

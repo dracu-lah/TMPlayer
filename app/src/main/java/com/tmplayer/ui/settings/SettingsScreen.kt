@@ -670,6 +670,15 @@ fun SettingsScreen(
     // in landscape, a notch down one side. The list itself still runs the full height, so content
     // scrolls under the bars rather than stopping short of them.
     val insets = WindowInsets.safeDrawing.asPaddingValues()
+    // A tablet or an open foldable centres the rows at a readable width (U17), the list still
+    // scrolling from anywhere across the screen; a phone either way up adds nothing.
+    val largeGutter = if (touch) {
+        androidx.compose.ui.platform.LocalConfiguration.current.let {
+            com.tmplayer.ui.components.LargeScreen.extraGutter(it.screenWidthDp.dp, it.screenHeightDp.dp, PhonePad.Side)
+        }
+    } else {
+        0.dp
+    }
 
     val list: @Composable () -> Unit = { androidx.compose.runtime.CompositionLocalProvider(LocalSettingsSeek provides seek) {
     // The category list keeps one state for as long as Settings is open, so coming back from
@@ -692,6 +701,8 @@ fun SettingsScreen(
             )
             .padding(horizontal = if (touch) PhonePad.Side else Tv.SafeH),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(
+            start = largeGutter,
+            end = largeGutter,
             // The app bar already clears the status bar on a phone, so the list only owes the
             // gesture bar at the bottom.
             // A television's Settings opens from the account menu without the top bar over it.

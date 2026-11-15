@@ -196,4 +196,18 @@ class TileGridRenderTest {
     @Test
     @Config(sdk = [35], qualifiers = "w960dp-h540dp-land-television-night-mdpi")
     fun television() = render(tv = true, out = "tiles-tv.png")
+
+    // Large screens (U17): a tablet each way up and an unfolded foldable, laid out by the phone's
+    // touch grid, which picks its columns from the width.
+    @Test
+    @Config(sdk = [35], qualifiers = "w800dp-h1280dp-port-night-xhdpi")
+    fun tabletUpright() = render(tv = false, out = "tiles-tablet-port.png")
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w1280dp-h800dp-land-night-xhdpi")
+    fun tabletLyingDown() = render(tv = false, out = "tiles-tablet-land.png")
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w673dp-h841dp-port-night-xhdpi")
+    fun foldableOpen() = render(tv = false, out = "tiles-foldable.png")
 }

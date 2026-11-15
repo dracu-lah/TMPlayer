@@ -148,6 +148,28 @@ class TouchChromeRenderTest {
         render("chrome-chat-land.png", TouchChrome(), "media") { chatPage() }
     }
 
+    // Large screens (U17): the bar over Chats and a chat's own chrome on a tablet and a foldable.
+    @Test
+    @Config(sdk = [35], qualifiers = "w1280dp-h800dp-land-night-xhdpi")
+    fun barOnATablet() {
+        render("chrome-chats-tablet-land.png", TouchChrome(), "chats") {
+            TouchPage(TouchPageSpec(current = TouchDestination.Chats))
+            rows()()
+        }
+    }
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w1280dp-h800dp-land-night-xhdpi")
+    fun chatPageOnATablet() {
+        render("chrome-chat-tablet-land.png", TouchChrome(), "media") { chatPage() }
+    }
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w673dp-h841dp-port-night-xhdpi")
+    fun chatPageOnAFoldable() {
+        render("chrome-chat-foldable.png", TouchChrome(), "media") { chatPage() }
+    }
+
     @androidx.compose.runtime.Composable
     private fun chatPage() {
         TouchMediaScaffold(
