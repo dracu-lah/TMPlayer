@@ -59,6 +59,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.tmplayer.data.AllChatsSearch
@@ -119,6 +121,10 @@ internal fun TvSearchScreen(
     /** The Try again pill after a page failed to load. */
     onRetryMore: () -> Unit = {},
     onRetry: () -> Unit,
+    /** The poster a result's page was opened from, which the remote goes back to when the page closes. */
+    tileReturn: TileReturn = rememberTileReturn(),
+    /** A result's page is up over the list (the shell's page, or a show's episodes). */
+    pageOpen: Boolean = false,
     /** Whose Telegram this is, for the picture beside the clock every rail page carries. */
     account: com.tmplayer.data.Account? = null,
     /** A topic found by its name: its chat, opened on it ([openOnTopic]). */
@@ -152,6 +158,18 @@ internal fun TvSearchScreen(
     val briefs = remember(state.chats, chats) { state.chats + chats.associate { it.id to ChatBrief.of(it) } }
     var focusedGroup by remember { mutableStateOf<ResultGroup?>(null) }
     val grid = com.tmplayer.ui.components.rememberAheadGridState()
+    // Back from a result's page the remote lands on the poster it was opened from, as in a chat's
+    // grid: results arriving meanwhile must not leave it on the field (Mi TV, 2026-10-23). A poster
+    // scrolled out of the list comes back through its index, which follows the header items.
+    ReturnToTile(tileReturn, pageOpen) { key ->
+        val at = state.shown.indexOfFirst { it.key == key }
+        if (at < 0) return@ReturnToTile false
+        val tail = (if (state.loadingMore) 1 else 0) + (if (state.moreFailed && !state.loadingMore) 1 else 0)
+        val head = grid.layoutInfo.totalItemsCount - state.shown.size - tail
+        if (head < 0) return@ReturnToTile false
+        grid.scrollToItem(head + at)
+        true
+    }
 
     // The field, the pills, the chats and the results scroll as one list, with the details strip
     // fixed under it. They used to be a header over a grid of whatever height was left, which on
@@ -345,6 +363,7 @@ internal fun TvSearchScreen(
                                 chats = briefs,
                                 fraction = group.copies.firstNotNullOfOrNull { progress(it) },
                                 reduced = reduced,
+                                tileReturn = tileReturn,
                                 onFocused = {
                                     focusedGroup = group
                                     // The next page well before the last row.
@@ -545,6 +564,7 @@ private fun PosterCard(
     chats: Map<Long, ChatBrief>,
     fraction: Float?,
     reduced: Boolean,
+    tileReturn: TileReturn,
     onFocused: () -> Unit,
     onClick: () -> Unit,
     onHold: () -> Unit,
@@ -553,12 +573,15 @@ private fun PosterCard(
     val focused by interactions.collectIsFocusedAsState()
     val scale by animateFloatAsState(if (focused && !reduced) Motion.FocusScale else 1f, Motion.standard(Motion.Fast), label = "poster")
     val item = remember(group) { group.asItem() }
+    val title = remember(group) { GlobalSearch.titleOf(group) }
     Box(
         Modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(RoundedCornerShape(12.dp))
             .border(if (focused) 3.dp else 0.dp, if (focused) Tone.accent else Color.Transparent, RoundedCornerShape(12.dp))
+            .returnTile(tileReturn, group.key)
             .onFocusChanged { if (it.isFocused) onFocused() }
+            .semantics { contentDescription = title }
             .holdable(interactionSource = interactions, onClick = onClick, onHold = onHold),
     ) {
         ResultPoster(item, Modifier.fillMaxWidth(), fraction)
@@ -616,9 +639,12 @@ internal fun TvSearchPage(
     onOpenMedia: (MediaItem, String) -> Unit,
     onPlayMedia: (MediaItem, String) -> Unit,
     onMessage: (String) -> Unit,
+    /** A video's page is up over the search (the shell's detail page). */
+    pageOpen: Boolean = false,
     account: com.tmplayer.data.Account? = null,
 ) {
     val s = LocalStrings.current
+    val tileReturn = rememberTileReturn()
     val context = androidx.compose.ui.platform.LocalContext.current
     val settings = remember(context) { com.tmplayer.data.SettingsStore(context) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
@@ -658,6 +684,8 @@ internal fun TvSearchPage(
             scope.launch {
                 search.openResult(group.lead, GlobalSearch.titleOf(group), onGone = { onMessage(s.searchNoLongerThere) }) {
                     search.remember()
+                    // Only once it opens: a result that turned out gone leaves nothing to come back to.
+                    tileReturn.open(group.key)
                     val series = if (group.isShow) {
                         com.tmplayer.data.SeriesShelf.arrange(group.copies).firstNotNullOfOrNull { (it as? com.tmplayer.data.ShelfEntry.Show)?.series }
                     } else {
@@ -681,6 +709,8 @@ internal fun TvSearchPage(
         onLoadMore = search::loadMore,
         onRetryMore = search::retryMore,
         onRetry = search::retry,
+        tileReturn = tileReturn,
+        pageOpen = pageOpen || opened != null,
         account = account,
         onOpenTopic = { hit ->
             chats.firstOrNull { it.id == hit.chatId }?.let { chat ->

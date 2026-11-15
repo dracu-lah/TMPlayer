@@ -1095,6 +1095,7 @@ internal fun BrowseScreen(
                         onOpenMedia = openMedia,
                         onPlayMedia = onPlayMedia,
                         onMessage = onMessage,
+                        pageOpen = details.top != null,
                         account = (state as? UiState.Content)?.value?.account ?: account,
                     )
                 } else {
