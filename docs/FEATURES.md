@@ -31,6 +31,13 @@ as a file is not missed.
 re-aims the download rather than waiting for it. This is the whole reason the app exists. Bring the
 controls up and the corner says how much of the video has arrived, and how quickly.
 
+**Back means stop.** On a phone, Back from the player pauses the video, saves where you were,
+releases the player and returns to the page that opened it (there is no in-app mini player bar
+there). Home or the Picture in picture button shrinks the video to a system window, and background
+audio, when it is on, keeps the sound in the notification; Back while casting also stops the TV. The
+desktop keeps its own mini player (Back docks a playing video into a bar, Ctrl+P makes the small
+always on top window).
+
 **Or waits, if your connection would rather.** Settings has a *Download the whole video first*
 switch, off by default. On, the video is fetched in full before it starts, which beats being
 stopped every few minutes on a line that cannot keep up with playback.

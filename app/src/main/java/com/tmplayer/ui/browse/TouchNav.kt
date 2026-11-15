@@ -313,33 +313,10 @@ internal fun TouchNavHost(
             animationSpec = Motion.standard(if (reduced) 0 else Motion.Normal),
             label = "railRoom",
         )
-        // The mini player (U8): a docked video's bar, over every page, above the floating bar
-        // when that is out and at the foot when it is not. Out of the way while typing.
-        val docked by com.tmplayer.player.MiniDock.docked.collectAsStateWithLifecycle()
-        val miniShown = docked != null && !keyboard
-        // The kids lock stays in force: a docked video from a chat it now leaves out goes.
-        val kidsAllowed by com.tmplayer.data.ChatGate.allowed.collectAsStateWithLifecycle()
-        LaunchedEffect(docked, kidsAllowed) {
-            val player = docked ?: return@LaunchedEffect
-            if (!com.tmplayer.data.KidsLock.allows(kidsAllowed, player.chatId)) com.tmplayer.player.MiniDock.dismiss()
-        }
-        val miniFoot by animateDpAsState(
-            targetValue = miniFootOf(
-                navigationBar = navigationBar,
-                rail = rail,
-                barShown = barShown,
-                withActions = spec?.actions != null,
-                room = room,
-            ),
-            animationSpec = Motion.standard(if (reduced) 0 else Motion.Normal),
-            label = "miniFoot",
-        )
-        val miniRoom = if (miniShown) MINI_DOCK_HEIGHT + BAR_GAP + if (spec == null) BAR_MARGIN else 0.dp else 0.dp
-
         SharedTransitionLayout(Modifier.fillMaxSize()) {
             Box(Modifier.fillMaxSize()) {
                 CompositionLocalProvider(
-                    LocalBottomChrome provides room + miniRoom,
+                    LocalBottomChrome provides room,
                     LocalTouchChrome provides chrome,
                     LocalTouchShared provides this@SharedTransitionLayout,
                     LocalTouchRail provides rail,
@@ -427,21 +404,6 @@ internal fun TouchNavHost(
                             )
                         }
                     }
-                }
-
-                AnimatedVisibility(
-                    visible = miniShown,
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(start = 16.dp + railRoom, end = 16.dp, bottom = miniFoot)
-                        .widthIn(max = MINI_DOCK_MAX_WIDTH),
-                    enter = if (reduced) fadeIn(Motion.standard(0)) else slideInVertically(BAR_SPRING) { it / 2 } + fadeIn(Motion.standard(Motion.Fast)),
-                    exit = if (reduced) fadeOut(Motion.standard(0)) else slideOutVertically(Motion.standard(Motion.Normal)) { it / 2 } + fadeOut(Motion.standard(Motion.Fast)),
-                ) {
-                    // The last player docked, so the bar does not redraw empty on its way out.
-                    val shownPlayer = remember { arrayOf<com.tmplayer.player.DockedPlayer?>(null) }
-                    docked?.let { shownPlayer[0] = it }
-                    shownPlayer[0]?.let { MiniDockBar(it) }
                 }
 
                 ProfilePopover(
@@ -621,20 +583,6 @@ internal val LocalSearchEntered = staticCompositionLocalOf<() -> Boolean> { { tr
  * the bar, its margin and gap, and the pill of the page's own buttons when it has one. Beside a
  * [rail] the foot keeps only that pill, on its margin.
  */
-/** The mini player bar's widest, on a tablet or a phone on its side. */
-internal val MINI_DOCK_MAX_WIDTH = 560.dp
-
-/**
- * How far above the window's foot the mini player's bar sits: over the floating bar and the
- * page's pill of buttons while they are out ([room]), at the foot beside a rail (over its pill
- * when there is one), and at the foot when the bar is away.
- */
-internal fun miniFootOf(navigationBar: Dp, rail: Boolean, barShown: Boolean, withActions: Boolean, room: Dp): Dp = when {
-    rail -> navigationBar + maxOf(BAR_MARGIN, touchShellClearance(withActions = withActions, rail = true))
-    barShown -> room
-    else -> navigationBar + BAR_MARGIN
-}
-
 internal fun touchShellClearance(withActions: Boolean, rail: Boolean = false): Dp = when {
     !rail -> BAR_MARGIN + BAR_HEIGHT + BAR_GAP + if (withActions) ACTIONS_HEIGHT + BAR_GAP else 0.dp
     withActions -> BAR_MARGIN + ACTIONS_HEIGHT + BAR_GAP
