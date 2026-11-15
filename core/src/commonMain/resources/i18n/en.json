@@ -1087,6 +1087,8 @@
     "none_added": "None of the chats you added has videos to show here yet. Pick more in Add chats.",
     "none_added_chosen": "None of your chosen chats has videos to show here yet. TMPlayer shows videos only from the chats you choose, so choose more to see more.",
     "none_chosen": "No chosen chats to show here. Pick the chats for Recently added in Home settings.",
+    "nothing_picked_body": "The chats you chose have no videos to show yet. If Hide small clips is on, it may be hiding some. Choose more chats to see more.",
+    "nothing_picked_title": "Nothing to show from your chosen chats yet",
     "off_body": "Every row of Home is turned off in Settings.",
     "off_title": "Home is empty",
     "open_settings": "Home settings",

@@ -73,14 +73,7 @@ internal fun FirstVideoEmpty(onOpen: (BrowseSection) -> Unit) {
             .padding(horizontal = if (touch) PhonePad.Side else 72.dp, vertical = 24.dp),
         contentAlignment = Alignment.Center,
     ) {
-        FirstVideoCard(
-            title = s.homeFirstTitle,
-            body = s.homeFirstBody,
-            more = s.homeFirstMore,
-            button = s.homeFirstOpenSaved,
-            onButton = { onOpen(BrowseSection.of(BrowseTab.Saved)) },
-            focus = focus,
-        )
+        com.tmplayer.ui.browse.HomeEmptyCard(onOpenSaved = { onOpen(BrowseSection.of(BrowseTab.Saved)) }, focus = focus)
     }
     if (!touch) LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
 }
@@ -99,6 +92,9 @@ object FirstVideoTipOverride {
 @Composable
 internal fun FirstVideoTip(nothingPlayed: Boolean, start: Dp, end: Dp) {
     if (!nothingPlayed) return
+    // Chats already chosen: forwarding a video to Saved Messages is not the advice (ON-15).
+    val picked by com.tmplayer.data.AddedChats.choice.collectAsState()
+    if (picked.mode == com.tmplayer.data.AddedMode.Picked) return
     val context = LocalContext.current
     val settings = remember { SettingsStore(context.applicationContext) }
     val stored by settings.firstVideoTipDismissed.collectAsState(initial = true)

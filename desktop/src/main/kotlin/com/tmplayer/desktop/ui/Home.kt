@@ -325,13 +325,7 @@ internal fun HomeRowsView(
                     Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(32.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    FirstVideoCard(
-                        title = s.homeFirstTitle,
-                        body = s.homeFirstBody,
-                        more = s.homeFirstMore,
-                        button = s.homeFirstOpenSaved,
-                        onButton = { state.showChats(BrowseSection.of(BrowseTab.Saved)) },
-                    )
+                    com.tmplayer.ui.browse.HomeEmptyCard(onOpenSaved = { state.showChats(BrowseSection.of(BrowseTab.Saved)) })
                 }
                 return@Column
             }

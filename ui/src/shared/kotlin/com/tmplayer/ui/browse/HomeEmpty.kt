@@ -16,6 +16,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -97,6 +99,40 @@ fun FirstVideoCard(
                 modifier = Modifier.weight(1f),
             )
         }
+    }
+}
+
+/**
+ * Home's empty page, worded for the viewer: the first run's card (forward a video to Saved
+ * Messages) for an account that has not chosen its chats, and, once chats are chosen
+ * ([AddedMode.Picked]), "Nothing to show from your chosen chats yet" with the way to
+ * [AddChatsRequest] (ON-15): the forwarding advice would contradict the choice just made. The
+ * phone, the television and the desktop all draw this one.
+ */
+@Composable
+fun HomeEmptyCard(onOpenSaved: () -> Unit, modifier: Modifier = Modifier, focus: FocusRequester? = null) {
+    val s = com.tmplayer.ui.i18n.LocalStrings.current
+    val picked = com.tmplayer.data.AddedChats.choice.collectAsState().value.mode == com.tmplayer.data.AddedMode.Picked
+    if (picked) {
+        FirstVideoCard(
+            title = s.homeNothingPickedTitle,
+            body = s.homeNothingPickedBody,
+            more = s.homeFirstMore,
+            button = s.pickerChooseChats,
+            onButton = { AddChatsRequest.ask() },
+            modifier = modifier,
+            focus = focus,
+        )
+    } else {
+        FirstVideoCard(
+            title = s.homeFirstTitle,
+            body = s.homeFirstBody,
+            more = s.homeFirstMore,
+            button = s.homeFirstOpenSaved,
+            onButton = onOpenSaved,
+            modifier = modifier,
+            focus = focus,
+        )
     }
 }
 
