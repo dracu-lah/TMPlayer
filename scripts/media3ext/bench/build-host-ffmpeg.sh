@@ -33,8 +33,11 @@ if [ ! -f "$prefix/lib/libdav1d.a" ]; then
   ninja -C "$work/dav1d-build" install
 fi
 
-# The decoder list of the patched setup.sh.
-decoders="vorbis opus flac alac pcm_mulaw pcm_alaw mp3 amrnb amrwb aac ac3 eac3 dca mlp truehd h264 hevc mpeg2video mpegvideo mpeg4 msmpeg4v2 msmpeg4v3 vc1 mjpeg vp8 vp9 libdav1d"
+# The decoder list of the patched setup.sh, read from the patch itself so the two cannot drift
+# (the list runs over several lines, from `+ENABLED_DECODERS="` to the line that ends in `"`).
+decoders=$(awk '/^\+ENABLED_DECODERS="/{f=1} f{print} f && /"$/{exit}' "$root/scripts/media3ext/tmplayer-decoders.patch" \
+  | sed 's/^+//; s/^ENABLED_DECODERS="//; s/"$//')
+[ -n "$decoders" ] || { echo "no decoder list in the patch" >&2; exit 1; }
 opts=""
 for d in $decoders; do opts="$opts --enable-decoder=$d"; done
 
@@ -52,4 +55,18 @@ if [ ! -f "$prefix/lib/libavcodec.a" ]; then
   make -j"$jobs"
   make install
 fi
-echo "host FFmpeg in $prefix"
+# The same FFmpeg 9.0.1 with every native decoder and the ffmpeg program, kept apart: the reference
+# run-codec-tests.sh decodes the test clips with, so the AAR's decoders are compared with the same
+# version's own, not another version's (7.1 and 9.0 differ in the last bit of some ADPCM and Speex
+# output). Native decoders and demuxers only: no external library, no GPL part.
+if [ ! -x "$work/ref/bin/ffmpeg" ]; then
+  # A second copy of the source: FFmpeg refuses an out-of-tree build next to a configured tree.
+  mkdir -p "$work/ref-src"
+  [ -d "$work/ref-src/ffmpeg-9.0.1" ] || tar -xzf "$downloads/ffmpeg-9.0.1.tar.gz" -C "$work/ref-src"
+  cd "$work/ref-src/ffmpeg-9.0.1"
+  ./configure --prefix="$work/ref" --disable-autodetect --disable-doc --disable-ffplay \
+    --disable-ffprobe --disable-debug --disable-vulkan --extra-cflags="-O2"
+  make -j"$jobs"
+  make install
+fi
+echo "host FFmpeg in $prefix, reference ffmpeg in $work/ref/bin"
