@@ -76,8 +76,10 @@ internal fun HomeLayoutRows(state: ShellState, chatList: List<com.tmplayer.data.
     val favourites by settings.favorites.collectAsState(initial = emptySet())
     // The live chat list is what the kids lock already filters, so its stars are the ones Home shows.
     val starred = remember(chatList, favourites) { HomeRows.favouriteChats(chatList, favourites) }
+    // The named lists with a row on Home (HX43) move like any row.
+    val namedLists by remember { state.watched.lists.visible }.collectAsState(initial = emptyList())
     HomeOrderSection(
-        rows = rememberHomeOrderRows(layout, starred),
+        rows = rememberHomeOrderRows(layout, starred, remember(namedLists) { com.tmplayer.ui.settings.homeListInfos(namedLists) }),
         hasOrder = layout.order.isNotEmpty(),
         onOrder = { next -> scope.launch { settings.setHomeOrder(next) } },
         onReset = { scope.launch { settings.setHomeOrder(emptyList()) } },

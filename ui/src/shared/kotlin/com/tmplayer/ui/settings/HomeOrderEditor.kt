@@ -324,21 +324,27 @@ fun HomeOrderSection(
 
 /**
  * What Settings lists for Home's order: [HomeOrder.editorRows] over the starred chats, each named
- * as its switch is (a chat by its title) and marked Off where its switch is off.
+ * as its switch is (a chat by its title) and marked Off where its switch is off, then the named
+ * lists on Home (HX43, [lists]: the ones with a row), by their names.
  */
 @Composable
-fun rememberHomeOrderRows(layout: HomeLayout, starred: List<ChatSummary>): List<HomeOrderRow> {
+fun rememberHomeOrderRows(layout: HomeLayout, starred: List<ChatSummary>, lists: List<com.tmplayer.data.ListInfo> = emptyList()): List<HomeOrderRow> {
     val s = LocalStrings.current
     val continueTitle = s.settingsHomeContinue
     val recentTitle = s.settingsHomeRecent
     val off = s.commonOff
-    return remember(layout, starred, continueTitle, recentTitle, off) {
-        HomeOrder.editorRows(starred, layout.order).map { entry ->
-            when (entry.key) {
-                HomeOrder.CONTINUE -> HomeOrderRow(entry.key, continueTitle, off.takeIf { !layout.continueWatching })
-                HomeOrder.RECENT -> HomeOrderRow(entry.key, recentTitle, off.takeIf { !layout.recentlyAdded })
+    return remember(layout, starred, lists, continueTitle, recentTitle, off) {
+        HomeOrder.editorRows(starred, layout.order, lists).map { entry ->
+            when {
+                entry.key == HomeOrder.CONTINUE -> HomeOrderRow(entry.key, continueTitle, off.takeIf { !layout.continueWatching })
+                entry.key == HomeOrder.RECENT -> HomeOrderRow(entry.key, recentTitle, off.takeIf { !layout.recentlyAdded })
+                entry.listName != null -> HomeOrderRow(entry.key, entry.listName.orEmpty())
                 else -> HomeOrderRow(entry.key, entry.chatTitle?.ifBlank { null } ?: entry.key, off.takeIf { !layout.starredRows })
             }
         }
     }
 }
+
+/** The named lists that have a row on Home (on Home, and something in them the kids lock shows). */
+fun homeListInfos(lists: List<com.tmplayer.data.VisibleList>): List<com.tmplayer.data.ListInfo> =
+    lists.filter { it.info.home && it.records.isNotEmpty() }.map { it.info }

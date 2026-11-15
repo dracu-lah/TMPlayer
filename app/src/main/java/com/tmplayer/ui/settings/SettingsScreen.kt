@@ -1549,7 +1549,9 @@ fun SettingsScreen(
                 sectionTitle { s.settingsHomeOrder }
                 settingsNote(key = "home_order") {
                     val starredChats = remember(chats, favorites) { com.tmplayer.data.HomeRows.favouriteChats(chats, favorites) }
-                    val orderRows = rememberHomeOrderRows(homeLayout, starredChats)
+                    val orderContext = androidx.compose.ui.platform.LocalContext.current
+                    val homeLists by remember(orderContext) { com.tmplayer.data.WatchedStore(orderContext).lists.visible }.collectAsStateWithLifecycle(initialValue = emptyList())
+                    val orderRows = rememberHomeOrderRows(homeLayout, starredChats, remember(homeLists) { homeListInfos(homeLists) })
                     HomeOrderSection(
                         rows = orderRows,
                         hasOrder = homeLayout.order.isNotEmpty(),
