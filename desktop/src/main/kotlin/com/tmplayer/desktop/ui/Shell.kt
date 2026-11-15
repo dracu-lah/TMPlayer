@@ -471,6 +471,10 @@ private fun Browse(state: ShellState, player: PlayerContent) {
         }
         LaunchedEffect(telegramConnected) { if (telegramConnected) searchModel.reconnected() }
         // Resume across devices, when turned on (ResumeSync): in and out once Telegram is reachable.
+        // The desktop has no metered state to read, so Save mobile data never holds it back here.
+        LaunchedEffect(Unit) {
+            com.tmplayer.data.ResumeSync.install(state.watched, connectivity = null, television = false, appVersion = com.tmplayer.desktop.BuildInfo.VERSION)
+        }
         LaunchedEffect(telegramConnected) { if (telegramConnected) com.tmplayer.data.ResumeSync.syncSoon(state.settings) }
         var searchSeries by remember { mutableStateOf<com.tmplayer.data.Series?>(null) }
         searchSeries?.let { shown ->

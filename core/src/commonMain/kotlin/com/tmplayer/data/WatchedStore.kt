@@ -71,6 +71,7 @@ class WatchedStore(private val store: DataStore<Preferences>) {
             val before = WatchedRecord.decode(record.key, prefs[key])
             val kept = if (before?.manual == true && !record.manual) record.copy(manual = true) else record
             prefs[key] = kept.encode()
+            SyncRemovals.forgetWatched(prefs, record.key)
             prefs.remove(WatchLaterStore.keyOf(record.chatId, record.messageId))
             for (copy in copies) prefs.remove(WatchLaterStore.keyOf(copy.chatId, copy.messageId))
             evictOldest(prefs)
@@ -86,8 +87,12 @@ class WatchedStore(private val store: DataStore<Preferences>) {
      */
     suspend fun markUnwatched(chatId: Long, messageId: Long, copies: List<MediaItem> = emptyList()) {
         store.edit { prefs ->
-            prefs.remove(keyOf(chatId, messageId))
-            for (copy in copies) prefs.remove(keyOf(copy.chatId, copy.messageId))
+            // Noted for resume on other devices, so their older copies of the marks go too.
+            for ((chat, message) in listOf(chatId to messageId) + copies.map { it.chatId to it.messageId }) {
+                if (prefs[keyOf(chat, message)] != null) SyncRemovals.watched(prefs, SettingsStore.progressKey(chat, message))
+                prefs.remove(keyOf(chat, message))
+            }
+            SyncRemovals.prune(prefs)
         }
     }
 
@@ -103,7 +108,10 @@ class WatchedStore(private val store: DataStore<Preferences>) {
                 val key = keyOf(record.chatId, record.messageId)
                 val before = WatchedRecord.decode(record.key, prefs[key])
                 // Already watched: kept as it was, so the Watched list keeps the day it was seen.
-                if (before == null) prefs[key] = record.encode()
+                if (before == null) {
+                    prefs[key] = record.encode()
+                    SyncRemovals.forgetWatched(prefs, record.key)
+                }
                 prefs.remove(WatchLaterStore.keyOf(record.chatId, record.messageId))
             }
             for (copy in copies) prefs.remove(WatchLaterStore.keyOf(copy.chatId, copy.messageId))
@@ -115,7 +123,12 @@ class WatchedStore(private val store: DataStore<Preferences>) {
     suspend fun clear() {
         store.edit { prefs ->
             val doomed = prefs.asMap().keys.filter { it.name.startsWith(PREFIX) }
-            for (key in doomed) prefs.remove(key)
+            val at = System.currentTimeMillis()
+            for (key in doomed) {
+                prefs.remove(key)
+                SyncRemovals.watched(prefs, key.name.removePrefix(PREFIX), at)
+            }
+            SyncRemovals.prune(prefs, at)
         }
     }
 
@@ -130,9 +143,13 @@ class WatchedStore(private val store: DataStore<Preferences>) {
             for (id in ids.toSet()) {
                 val key = stringPreferencesKey(PREFIX + id)
                 val record = WatchedRecord.decode(id, prefs[key])
-                if (prefs[key] != null) prefs.remove(key)
+                if (prefs[key] != null) {
+                    prefs.remove(key)
+                    SyncRemovals.watched(prefs, id)
+                }
                 if (record != null) taken += record
             }
+            SyncRemovals.prune(prefs)
         }
         return taken
     }
@@ -144,6 +161,7 @@ class WatchedStore(private val store: DataStore<Preferences>) {
             for (record in records) {
                 val key = keyOf(record.chatId, record.messageId)
                 if (prefs[key] == null) prefs[key] = record.encode()
+                SyncRemovals.forgetWatched(prefs, record.key)
             }
             evictOldest(prefs)
         }
@@ -162,6 +180,69 @@ class WatchedStore(private val store: DataStore<Preferences>) {
             for ((name, value) in writes(now)) prefs.putRaw(name, value)
             evictOldest(prefs)
             watchLater.evictOldest(prefs)
+        }
+    }
+
+    /**
+     * What resume on other devices ([ResumeSync]) takes in, in one edit, each entry checked again
+     * against the file as it is then: a mark made or a line saved here while the sync ran is never
+     * overwritten by an older one, and nothing goes that is newer here than the removal.
+     * Returns how many entries changed.
+     */
+    suspend fun applySync(apply: SyncApply): Int {
+        var changed = 0
+        store.edit { prefs ->
+            for (record in apply.watchedIn) {
+                val key = keyOf(record.chatId, record.messageId)
+                val mine = WatchedRecord.decode(record.key, prefs[key])
+                if (mine != null && mine.watchedAt > record.watchedAt) continue
+                if (mine != null && mine.watchedAt == record.watchedAt && (mine.manual || !record.manual)) continue
+                prefs[key] = (if (mine?.manual == true) record.copy(manual = true) else record).encode()
+                SyncRemovals.forgetWatched(prefs, record.key)
+                changed++
+            }
+            for ((id, at) in apply.watchedOut) {
+                val key = stringPreferencesKey(PREFIX + id)
+                val mine = WatchedRecord.decode(id, prefs[key]) ?: continue
+                if (mine.watchedAt >= at) continue
+                prefs.remove(key)
+                changed++
+            }
+            changed += watchLater.applySync(prefs, apply)
+            evictOldest(prefs)
+            watchLater.evictOldest(prefs)
+        }
+        return changed
+    }
+
+    /** Marks and Watch later lines that came from another device without this device's file id, at most [limit]. */
+    suspend fun withoutFile(limit: Int): List<Pair<Long, Long>> {
+        val prefs = store.data.first()
+        val marks = decodeAll(prefs).filter { it.fileId <= 0 }.sortedByDescending { it.watchedAt }.map { it.chatId to it.messageId }
+        val later = watchLater.withoutFile(prefs)
+        return (later + marks).distinct().take(limit)
+    }
+
+    /**
+     * Gives entries that came without a file id ([withoutFile]) this device's own, read from the
+     * message, with its title and chat name where the entry had none.
+     */
+    suspend fun healFiles(found: Map<String, Pair<MediaItem, String>>) {
+        if (found.isEmpty()) return
+        store.edit { prefs ->
+            for ((id, pair) in found) {
+                val (item, chatTitle) = pair
+                val key = stringPreferencesKey(PREFIX + id)
+                val mine = WatchedRecord.decode(id, prefs[key]) ?: continue
+                if (mine.fileId > 0 || item.fileId <= 0) continue
+                prefs[key] = mine.copy(
+                    fileId = item.fileId,
+                    title = mine.title.ifBlank { item.title },
+                    chatTitle = mine.chatTitle.ifBlank { chatTitle },
+                    fileName = mine.fileName ?: item.fileName.ifBlank { null },
+                ).encode()
+            }
+            watchLater.healFiles(prefs, found)
         }
     }
 

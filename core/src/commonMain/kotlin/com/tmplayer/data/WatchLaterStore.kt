@@ -63,22 +63,23 @@ class WatchLaterStore internal constructor(private val store: DataStore<Preferen
     suspend fun add(record: WatchLaterRecord) {
         store.edit { prefs ->
             prefs[keyOf(record)] = record.encode()
+            SyncRemovals.forgetLater(prefs, record.id)
             evictOldest(prefs)
         }
     }
 
     suspend fun remove(chatId: Long, messageId: Long) {
-        store.edit { it.remove(keyOf(chatId, messageId)) }
+        store.edit { removeNoted(it, SettingsStore.progressKey(chatId, messageId)); SyncRemovals.prune(it) }
     }
 
     /** Takes [record]'s line off the list, a video's or a show's alike. */
     suspend fun remove(record: WatchLaterRecord) {
-        store.edit { it.remove(keyOf(record)) }
+        store.edit { removeNoted(it, record.id); SyncRemovals.prune(it) }
     }
 
     /** Takes the show [seriesKey] of [chatId] off the list; its episodes saved one by one stay. */
     suspend fun removeShow(chatId: Long, seriesKey: String) {
-        store.edit { it.remove(stringPreferencesKey(PREFIX + WatchLaterRecord.showId(chatId, seriesKey))) }
+        store.edit { removeNoted(it, WatchLaterRecord.showId(chatId, seriesKey)); SyncRemovals.prune(it) }
     }
 
     /** Takes [ids] ([SettingsStore.progressKey]s) off the list in one edit, handed back for Undo ([putBack]). */
@@ -89,9 +90,10 @@ class WatchLaterStore internal constructor(private val store: DataStore<Preferen
             for (id in ids.toSet()) {
                 val key = stringPreferencesKey(PREFIX + id)
                 val record = WatchLaterRecord.decode(id, prefs[key])
-                if (prefs[key] != null) prefs.remove(key)
+                if (prefs[key] != null) removeNoted(prefs, id)
                 if (record != null) taken += record
             }
+            SyncRemovals.prune(prefs)
         }
         return taken
     }
@@ -103,6 +105,7 @@ class WatchLaterStore internal constructor(private val store: DataStore<Preferen
             for (record in records) {
                 val key = keyOf(record)
                 if (prefs[key] == null) prefs[key] = record.encode()
+                SyncRemovals.forgetLater(prefs, record.id)
             }
             evictOldest(prefs)
         }
@@ -112,7 +115,64 @@ class WatchLaterStore internal constructor(private val store: DataStore<Preferen
     suspend fun clear() {
         store.edit { prefs ->
             val doomed = prefs.asMap().keys.filter { it.name.startsWith(PREFIX) }
-            for (key in doomed) prefs.remove(key)
+            val at = System.currentTimeMillis()
+            for (key in doomed) {
+                prefs.remove(key)
+                SyncRemovals.later(prefs, key.name.removePrefix(PREFIX), at)
+            }
+            SyncRemovals.prune(prefs, at)
+        }
+    }
+
+    /** Takes line [id] off, noting it for resume on other devices ([SyncRemovals]) when it was there. */
+    private fun removeNoted(prefs: MutablePreferences, id: String) {
+        val key = stringPreferencesKey(PREFIX + id)
+        if (prefs[key] == null) return
+        prefs.remove(key)
+        SyncRemovals.later(prefs, id)
+    }
+
+    /** [WatchedStore.applySync]'s Watch later half, inside its edit. */
+    internal fun applySync(prefs: MutablePreferences, apply: SyncApply): Int {
+        var changed = 0
+        for (record in apply.laterIn) {
+            val key = keyOf(record)
+            val mine = WatchLaterRecord.decode(record.id, prefs[key])
+            if (mine != null && mine.addedAt >= record.addedAt) continue
+            prefs[key] = record.encode()
+            SyncRemovals.forgetLater(prefs, record.id)
+            changed++
+        }
+        for ((id, at) in apply.laterOut) {
+            val key = stringPreferencesKey(PREFIX + id)
+            val mine = WatchLaterRecord.decode(id, prefs[key]) ?: continue
+            if (mine.addedAt > at) continue
+            prefs.remove(key)
+            changed++
+        }
+        return changed
+    }
+
+    /** Lines without this device's file id, newest first, as chat and message. */
+    internal fun withoutFile(prefs: Preferences): List<Pair<Long, Long>> =
+        decodeAll(prefs).filter { it.fileId <= 0 }.sortedByDescending { it.addedAt }.map { it.chatId to it.messageId }
+
+    /** [WatchedStore.healFiles]'s Watch later half: a video's line, by its key, gets the file id read. */
+    internal fun healFiles(prefs: MutablePreferences, found: Map<String, Pair<MediaItem, String>>) {
+        for ((key, value) in prefs.asMap().toList()) {
+            val name = key.name
+            if (!name.startsWith(PREFIX)) continue
+            val record = WatchLaterRecord.decode(name.removePrefix(PREFIX), value as? String) ?: continue
+            if (record.fileId > 0) continue
+            val (item, chatTitle) = found[record.key] ?: continue
+            if (item.fileId <= 0) continue
+            prefs[stringPreferencesKey(name)] = record.copy(
+                fileId = item.fileId,
+                title = record.title.ifBlank { item.title },
+                fileName = record.fileName.ifBlank { item.fileName },
+                chatTitle = record.chatTitle.ifBlank { chatTitle },
+                mimeType = record.mimeType.ifBlank { item.mimeType },
+            ).encode()
         }
     }
 

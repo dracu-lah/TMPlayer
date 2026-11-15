@@ -229,6 +229,14 @@ class App : Application() {
             omdbKey = BuildConfig.OMDB_API_KEY,
         ).also { metadata -> if (!safe) backgroundScope.launch { runCatching { metadata.warmUp() }; runCatching { metadata.cache.prune() } } }
         Thumbnails.connectivity = NetworkMonitor
+        // Resume on other devices (ResumeSync): the shared watched file, the line's metered state for
+        // Save mobile data, and whether this is a TV, where that switch holds nothing back.
+        com.tmplayer.data.ResumeSync.install(
+            watched = com.tmplayer.data.WatchedStore(this),
+            connectivity = NetworkMonitor,
+            television = com.tmplayer.data.FormFactor.isTv(this),
+            appVersion = BuildConfig.VERSION_NAME,
+        )
         NetworkMonitor.start(this)
         // TDLib takes a moment to open its database; starting here means the login screen is
         // already showing a QR code by the time the user has finished reading the first line.

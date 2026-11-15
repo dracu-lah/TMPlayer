@@ -46,7 +46,7 @@ object HistoryEdits {
     suspend fun remove(settings: SettingsStore, watched: WatchedStore, ids: Collection<String>, count: Int): HistoryUndo {
         val resume = settings.takeResume(ids)
         val marks = watched.takeMarks(ids)
-        pushLater(settings, resume.isNotEmpty())
+        pushLater(settings, resume.isNotEmpty() || marks.isNotEmpty())
         return HistoryUndo(resume, marks, emptyList(), count)
     }
 
@@ -102,7 +102,7 @@ object HistoryEdits {
         settings.putBackResume(undo.resume)
         watched.putBackMarks(undo.marks)
         watched.watchLater.putBack(undo.later)
-        pushLater(settings, undo.resume.isNotEmpty())
+        pushLater(settings, !undo.isEmpty)
     }
 
     internal suspend fun pushLater(settings: SettingsStore, changed: Boolean) {

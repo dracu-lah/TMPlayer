@@ -56,6 +56,14 @@ object SettingsDefaults {
 private val RESUME_SYNC = booleanPreferencesKey("resume_sync")
 private val RESUME_SYNC_MESSAGE = longPreferencesKey("resume_sync_message")
 private val RESUME_SYNC_KEYS = stringPreferencesKey("resume_sync_keys")
+// Resume on other devices' file (U7): which message it is, what this device held after its last
+// sync, whose account that was, when a new file was last sent, and what the last try came to.
+private val RESUME_SYNC_FILE = longPreferencesKey("resume_sync_file")
+private val RESUME_SYNC_FAVOURITES = stringPreferencesKey("resume_sync_favourites")
+private val RESUME_SYNC_AT = longPreferencesKey("resume_sync_at")
+private val RESUME_SYNC_ACCOUNT = longPreferencesKey("resume_sync_account")
+private val RESUME_SYNC_SENT_AT = longPreferencesKey("resume_sync_sent_at")
+private val RESUME_SYNC_STATUS = stringPreferencesKey("resume_sync_status")
 private val SKIP_SILENCE = booleanPreferencesKey("skip_silence")
 private val BACKGROUND_AUDIO = booleanPreferencesKey("background_audio")
 private val PIP_ON_LEAVE = booleanPreferencesKey("pip_on_leave")
@@ -924,6 +932,11 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
             if (!value) {
                 it.remove(RESUME_SYNC_MESSAGE)
                 it.remove(RESUME_SYNC_KEYS)
+                it.remove(RESUME_SYNC_FILE)
+                it.remove(RESUME_SYNC_FAVOURITES)
+                it.remove(RESUME_SYNC_AT)
+                it.remove(RESUME_SYNC_ACCOUNT)
+                it.remove(RESUME_SYNC_STATUS)
             }
         }
     }
@@ -943,6 +956,111 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
 
     suspend fun setResumeSyncKeys(keys: Set<String>) {
         prefs.edit { it[RESUME_SYNC_KEYS] = keys.joinToString(",") }
+    }
+
+    /** The sync file's message in Saved Messages, once found or confirmed sent; 0 before. */
+    suspend fun resumeSyncFileNow(): Long = prefs.data.first()[RESUME_SYNC_FILE] ?: 0L
+
+    suspend fun setResumeSyncFile(id: Long) {
+        prefs.edit { it[RESUME_SYNC_FILE] = id }
+    }
+
+    /** What this device held after its last sync ([SyncBase]), for telling what it removed since. */
+    suspend fun resumeSyncBaseNow(): SyncBase {
+        val p = prefs.data.first()
+        return SyncBase(
+            resumeKeys = p[RESUME_SYNC_KEYS].orEmpty().split(',').filter { it.isNotBlank() }.toSet(),
+            favourites = p[RESUME_SYNC_FAVOURITES].orEmpty().split(',').mapNotNull { it.trim().toLongOrNull() }.toSet(),
+            at = p[RESUME_SYNC_AT] ?: 0L,
+        )
+    }
+
+    suspend fun setResumeSyncBase(base: SyncBase) {
+        prefs.edit {
+            it[RESUME_SYNC_KEYS] = base.resumeKeys.joinToString(",")
+            it[RESUME_SYNC_FAVOURITES] = base.favourites.joinToString(",")
+            it[RESUME_SYNC_AT] = base.at
+        }
+    }
+
+    /** The account the last sync was for; 0 before the first. Another account stops the sync. */
+    suspend fun resumeSyncAccountNow(): Long = prefs.data.first()[RESUME_SYNC_ACCOUNT] ?: 0L
+
+    suspend fun setResumeSyncAccount(id: Long) {
+        prefs.edit { it[RESUME_SYNC_ACCOUNT] = id }
+    }
+
+    /**
+     * When this device last sent a new sync file. Kept across restarts, so a file Telegram has not
+     * confirmed yet is never sent a second time by the next start.
+     */
+    suspend fun resumeSyncSentAtNow(): Long = prefs.data.first()[RESUME_SYNC_SENT_AT] ?: 0L
+
+    suspend fun setResumeSyncSentAt(at: Long) {
+        prefs.edit { it[RESUME_SYNC_SENT_AT] = at }
+    }
+
+    /** What the last sync came to, for the Settings row; null before the first or on a line it cannot read. */
+    val resumeSyncStatus: Flow<SyncStatus?> = read { SyncStatus.decode(it[RESUME_SYNC_STATUS]) }
+
+    /** When the last sync that went through was; 0 before the first. */
+    val resumeSyncAt: Flow<Long> = read { it[RESUME_SYNC_AT] ?: 0L }
+
+    suspend fun setResumeSyncStatus(status: SyncStatus) {
+        prefs.edit { it[RESUME_SYNC_STATUS] = status.encode() }
+    }
+
+    /**
+     * A place another device saved, from the sync file ([ResumeSync]), written as this device's own
+     * would be when it is newer than whatever is here. [fileId] and [title] are read from the
+     * message on this device: TDLib's file ids differ from one device to the next.
+     */
+    suspend fun importSyncedResume(record: ResumeRecord, fileId: Int, title: String, chatTitle: String): Boolean {
+        if (fileId <= 0) return false
+        var wrote = false
+        prefs.edit { prefs ->
+            val local = ResumeRecord.updatedAtOf(prefs[metaKey(record.chatId, record.messageId)]) ?: Long.MIN_VALUE
+            if (local >= record.updatedAt && prefs[resumeKey(record.chatId, record.messageId)] != null) return@edit
+            prefs[resumeKey(record.chatId, record.messageId)] = record.positionMs
+            if (record.durationMs > 0) prefs[durationKey(record.chatId, record.messageId)] = record.durationMs
+            prefs[metaKey(record.chatId, record.messageId)] = ResumeRecord.encode(
+                fileId = fileId,
+                title = title.ifBlank { record.title },
+                chatTitle = chatTitle,
+                sizeBytes = record.sizeBytes,
+                durationSec = record.durationSec,
+                updatedAt = record.updatedAt,
+                state = record.state,
+            )
+            evictOldestHistory(prefs)
+            wrote = true
+        }
+        return wrote
+    }
+
+    /** A place another device removed at [at], after this one last saved it: gone here too. */
+    suspend fun dropSyncedResume(key: String, at: Long) {
+        val ids = key.split('_')
+        val chatId = ids.getOrNull(0)?.toLongOrNull() ?: return
+        val messageId = ids.getOrNull(1)?.toLongOrNull() ?: return
+        prefs.edit { prefs ->
+            val local = ResumeRecord.updatedAtOf(prefs[metaKey(chatId, messageId)]) ?: return@edit
+            if (local >= at) return@edit
+            prefs.remove(resumeKey(chatId, messageId))
+            prefs.remove(durationKey(chatId, messageId))
+            prefs.remove(metaKey(chatId, messageId))
+        }
+    }
+
+    /** Favourite chats starred or unstarred on another device, in one edit. */
+    suspend fun applySyncedFavourites(add: Set<Long>, remove: Set<Long>) {
+        if (add.isEmpty() && remove.isEmpty()) return
+        prefs.edit { prefs ->
+            val current = prefs[FAVORITES].orEmpty().toMutableSet()
+            current.removeAll(remove.map(Long::toString).toSet())
+            current.addAll(add.map(Long::toString))
+            prefs[FAVORITES] = current
+        }
     }
 
     /**

@@ -263,6 +263,7 @@ class GarbageInputTest {
                 SyncDocuments.decode("{\"format\":\"tmplayer-sync\",\"version\":1,\"watched\":[$text],\"removed\":[$text]}".encodeToByteArray(), 0)
             }
             survive("ResumeState.decode", text) { ResumeState.decode(text) }
+            survive("SyncStatus.decode", text) { SyncStatus.decode(text); SyncStatus.decode("done\u001F$text\u001F$text\u001F$text\u001F$text") }
             survive("ResumeRecord.decode", text) {
                 ResumeRecord.decode("1_2", text, 0, 0)
                 ResumeRecord.decode(text, text, -1, -1)
