@@ -311,6 +311,7 @@
     "transcode_slow": "Converting runs slower than the video plays, so the TV pauses now and then to catch up.",
     "transcode_title": "Converting for the TV",
     "transcode_too_hot": "Converting stopped because the phone got too hot. Let it cool down and try again, or play it here.",
+    "transcode_too_hot_computer": "Converting stopped because this computer got too hot. Let it cool down and try again, or play it here.",
     "tv_volume": "TV volume",
     "unmute_tv": "Unmute the TV",
     "volume_fixed": "The TV sets its own volume: use its remote",

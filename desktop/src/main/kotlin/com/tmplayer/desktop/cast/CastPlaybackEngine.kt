@@ -117,7 +117,10 @@ class CastPlaybackEngine(
     private var ffmpeg: DesktopFfmpeg? = null
 
     /** One transcode at a time; its progress drives the casting panel's card. */
-    private val transcodes = TranscodeSlot({ FfmpegTranscoder(ffmpeg ?: throw IOException(L.castTranscodeNeedsFfmpeg)) })
+    private val transcodes = TranscodeSlot(
+        factory = { FfmpegTranscoder(ffmpeg ?: throw IOException(L.castTranscodeNeedsFfmpeg)) },
+        health = DesktopDeviceHealth()::read,
+    )
 
     /**
      * How fast the link to the receiver is, for a transcode's bitrate: the OS's word on the
@@ -314,7 +317,7 @@ class CastPlaybackEngine(
     /** What the panel says for a transcode that stopped; null for one that needs no word (replaced, or the TV hung up). */
     private fun transcodeStopText(stop: TranscodeStop, message: String?): String? = when (stop) {
         TranscodeStop.Cancelled -> L.castTranscodeCancelled
-        TranscodeStop.TooHot -> L.castTranscodeTooHot
+        TranscodeStop.TooHot -> L.castTranscodeTooHotComputer
         TranscodeStop.BatteryLow -> L.castTranscodeBatteryLow
         TranscodeStop.NoEncoder -> L.castTranscodeNeedsFfmpeg
         TranscodeStop.Failed -> L.castTranscodeFailed

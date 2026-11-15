@@ -74,10 +74,14 @@ interface SysFiles {
     fun read(path: String): String?
     fun exists(path: String): Boolean
 
+    /** The names in a folder, or none. */
+    fun list(path: String): List<String> = emptyList()
+
     companion object {
         val Default = object : SysFiles {
             override fun read(path: String): String? = runCatching { File(path).takeIf { it.isFile }?.readText()?.take(4096) }.getOrNull()
             override fun exists(path: String): Boolean = runCatching { File(path).exists() }.getOrDefault(false)
+            override fun list(path: String): List<String> = runCatching { File(path).list()?.sorted()?.take(64) }.getOrNull().orEmpty()
         }
     }
 }
