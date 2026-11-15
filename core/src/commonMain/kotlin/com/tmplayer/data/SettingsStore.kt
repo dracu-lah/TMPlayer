@@ -92,6 +92,7 @@ private val HOME_CAROUSEL = booleanPreferencesKey("home_carousel")
 private val HOME_CONTINUE = booleanPreferencesKey("home_continue")
 private val HOME_RECENT = booleanPreferencesKey("home_recent")
 private val HOME_STARRED_ROWS = booleanPreferencesKey("home_starred_rows")
+private val HOME_ORDER = stringPreferencesKey("home_order") // HomeOrder: row keys, comma separated
 private val CRASH_REPORTS = booleanPreferencesKey("crash_reports")
 private val DETAILED_LOGS = booleanPreferencesKey("detailed_logs")
 
@@ -1379,7 +1380,20 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
             continueWatching = it[HOME_CONTINUE],
             recentlyAdded = it[HOME_RECENT],
             starredRows = it[HOME_STARRED_ROWS],
+            order = it[HOME_ORDER],
         )
+    }
+
+    /**
+     * Settings, Home: the rows in the order the viewer gave them ([HomeOrder.encode]). Empty puts
+     * the rows back in Home's own order. Carried in a backup, not in the sync file: settings
+     * never travel by it (SyncDocument).
+     */
+    suspend fun setHomeOrder(order: List<String>) {
+        prefs.edit {
+            val text = HomeOrder.encode(order)
+            if (text.isEmpty()) it.remove(HOME_ORDER) else it[HOME_ORDER] = text
+        }
     }
 
     suspend fun setHomeContinue(value: Boolean) {

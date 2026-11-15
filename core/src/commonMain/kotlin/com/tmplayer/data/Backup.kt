@@ -162,6 +162,9 @@ object Backups {
         "home_continue" to Kind.BOOL,
         "home_recent" to Kind.BOOL,
         "home_starred_rows" to Kind.BOOL,
+        // The order of Home's rows (HomeOrder): row keys, comma separated. A key this version
+        // does not know is ignored, so a backup from a newer build restores cleanly.
+        "home_order" to Kind.TEXT,
         "language" to Kind.TEXT,
         "lighter_pictures" to Kind.BOOL,
         "low_storage_mode" to Kind.BOOL,

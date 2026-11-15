@@ -128,6 +128,8 @@ sealed interface HomeRow {
  * - A video appears once among Continue, Watch later and the chat rows: something part way
  *   through is in Continue and nowhere else, something saved for later is in Watch later. Recently added is the starred chats' videos again, merged into one
  *   timeline, so it leaves out only what is in Continue.
+ * - The viewer's order ([HomeLayout.order], [HomeOrder]) moves the finished rows: a row it does
+ *   not name keeps its default place, a name no row has is ignored.
  * - A row that has loaded and found nothing is left out rather than drawn as an empty strip.
  * - New episodes are not taken out of the chat rows: a starred chat's show tile stands for the
  *   whole show, and losing its newest episodes there would make it look further behind.
@@ -233,6 +235,30 @@ object HomeRows {
         layout: HomeLayout = HomeLayout(),
         recentFrom: List<Long>? = null,
         noneChosen: Boolean = false,
+    ): List<HomeRow> = HomeOrder.sort(buildDefault(
+        continueWatching, favourites, loaded, recent, partial, watchLater, fresh, recentMinStarred,
+        starred, autoFill, chatsPending, layout, recentFrom, noneChosen,
+    ), layout.order)
+
+    /**
+     * The rows in Home's own order. Built in this order whatever the viewer's order is, since each
+     * row leaves out what an earlier one showed ([seen]); [build] only moves the finished rows.
+     */
+    private fun buildDefault(
+        continueWatching: List<ResumeRecord>,
+        favourites: List<ChatSummary>,
+        loaded: Map<Long, List<MediaItem>>,
+        recent: List<MediaItem>?,
+        partial: Set<Long>,
+        watchLater: List<WatchLaterRecord>,
+        fresh: List<NewEpisode>,
+        recentMinStarred: Int,
+        starred: Set<Long>?,
+        autoFill: Boolean,
+        chatsPending: Boolean,
+        layout: HomeLayout,
+        recentFrom: List<Long>?,
+        noneChosen: Boolean,
     ): List<HomeRow> = buildList<HomeRow> {
         val seen = HashSet<String>()
         // Continue watching off: nothing is in progress as far as Home goes, so a film part way

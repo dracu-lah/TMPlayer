@@ -365,6 +365,12 @@ class GarbageInputTest {
             }
             survive("HomeLayout.of", text) {
                 HomeLayout.of(null, false, null, true)
+                HomeLayout.of(null, null, null, null, text)
+            }
+            survive("HomeOrder.parse", text) {
+                val order = HomeOrder.parse(text)
+                HomeOrder.arrange(listOf("continue", "recent", "chat-1"), order)
+                HomeOrder.encode(order)
             }
             survive("PieceAlerts.decode", text) { PieceAlerts.decode(text) }
             survive("SupportReminder.decodeRecent", text) { SupportReminder.decodeRecent(text) }

@@ -13,6 +13,9 @@ package com.tmplayer.data
  * chats one by one ([chosenChats]); before that it is Home's own pick ([HomeRows.homeChats]). Home
  * once had a "Chosen chats" list of its own here, which repeated the picker and is gone.
  *
+ * The viewer's order of the rows (2026-11-15) is [order]: Settings, Home, moves a row up or down,
+ * and [HomeRows.build] puts the rows it built in that order.
+ *
  * Watch later and New episodes have no switch: Home has not shown them since it fills itself
  * (2026-10-23), they live on the History page.
  */
@@ -21,6 +24,11 @@ data class HomeLayout(
     val continueWatching: Boolean = true,
     val recentlyAdded: Boolean = true,
     val starredRows: Boolean = true,
+    /**
+     * The order the viewer gave the rows ([HomeOrder]), as row keys; empty is Home's own order.
+     * Not a switch: it changes where a row stands, never whether it is built or read.
+     */
+    val order: List<String> = emptyList(),
 ) {
     /** Whether Recently added's videos are wanted at all: for its row or for the carousel. */
     val needsRecent: Boolean get() = carousel || recentlyAdded
@@ -43,11 +51,13 @@ data class HomeLayout(
             continueWatching: Boolean?,
             recentlyAdded: Boolean?,
             starredRows: Boolean?,
+            order: String? = null,
         ): HomeLayout = HomeLayout(
             carousel = carousel ?: true,
             continueWatching = continueWatching ?: true,
             recentlyAdded = recentlyAdded ?: true,
             starredRows = starredRows ?: true,
+            order = HomeOrder.parse(order),
         )
 
         /**
