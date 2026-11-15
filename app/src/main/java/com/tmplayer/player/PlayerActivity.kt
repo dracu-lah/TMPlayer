@@ -4840,7 +4840,18 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         casting = cast?.casting == true,
         locked = locked,
         inPictureInPicture = inPictureInPicture || pictureInPictureJustEnded(),
+        pausedForMs = pausedForMs(),
     )
+
+    /** When the viewer's pause began ([SystemClock.elapsedRealtime]), 0 while the video plays. */
+    private var pausedSince = 0L
+
+    /** How long the video has been paused, for [MiniContext.pausedForMs]: 0 while it plays or is still opening. */
+    private fun pausedForMs(): Long {
+        val exo = playing ?: return 0L
+        if (exo.playWhenReady || pausedSince == 0L || exo.playbackState == Player.STATE_IDLE) return 0L
+        return SystemClock.elapsedRealtime() - pausedSince
+    }
 
     /**
      * Back with nothing left to peel: docks the video into the browse shell's bar when
@@ -5146,6 +5157,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             // Heard here before Media3's notification hears it: a pause lets the service out of
             // the foreground at once, so the paused notification can be swiped away.
             if (inBackgroundAudio) PlaybackService.setPlayWhenReady(playWhenReady)
+            // Back on a video paused for a few seconds closes it instead of docking it (PL-18).
+            pausedSince = if (playWhenReady) 0L else SystemClock.elapsedRealtime()
             onPauseChanged(playWhenReady, reason)
             reportWatching()
         }

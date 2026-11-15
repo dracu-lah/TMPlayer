@@ -42,10 +42,16 @@ data class MiniContext(
     val locked: Boolean = false,
     /** Picture in picture is up: it is the mini window already. */
     val inPictureInPicture: Boolean = false,
+    /**
+     * How long the viewer has had the video paused, 0 while it plays. Back on a video left paused
+     * for [MiniPlayerState.PAUSED_CLOSES_AFTER_MS] or more means done, so it closes (the resume
+     * point is kept) rather than holding a decoder, a session and a notification behind a bar.
+     */
+    val pausedForMs: Long = 0L,
 )
 
 /** Why Back closes the player rather than docking it; [Dock] means it docks. */
-enum class MiniVerdict { Dock, Disabled, Ended, Failed, Asking, Casting, Locked, PictureInPicture, NotOpened }
+enum class MiniVerdict { Dock, Disabled, Ended, Failed, Asking, Casting, Locked, PictureInPicture, NotOpened, Paused }
 
 data class MiniPlayerState(
     val phase: MiniPhase = MiniPhase.Closed,
@@ -96,6 +102,7 @@ data class MiniPlayerState(
             context.asking -> MiniVerdict.Asking
             context.ended -> MiniVerdict.Ended
             !context.opened -> MiniVerdict.NotOpened
+            context.pausedForMs >= PAUSED_CLOSES_AFTER_MS -> MiniVerdict.Paused
             else -> MiniVerdict.Dock
         }
 
@@ -104,6 +111,13 @@ data class MiniPlayerState(
             if (durationMs <= 0L || positionMs <= 0L) return 0f
             return (positionMs.toDouble() / durationMs.toDouble()).toFloat().coerceIn(0f, 1f)
         }
+
+        /**
+         * A video paused this long (a few seconds, so a tap on pause and straight Back still
+         * docks) is closed by Back instead of docked (PL-18, 2026-11-15): Back on a paused video
+         * usually means done, and the bar has no X on a phone that is quick to find.
+         */
+        const val PAUSED_CLOSES_AFTER_MS = 4_000L
 
         /** A swipe down of at least this many dp dismisses the bar. */
         const val DISMISS_SWIPE_DP = 36

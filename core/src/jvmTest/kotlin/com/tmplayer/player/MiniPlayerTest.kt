@@ -30,6 +30,8 @@ class MiniPlayerTest {
             MiniContext(locked = true) to MiniVerdict.Locked,
             MiniContext(inPictureInPicture = true) to MiniVerdict.PictureInPicture,
             MiniContext(opened = false) to MiniVerdict.NotOpened,
+            MiniContext(pausedForMs = MiniPlayerState.PAUSED_CLOSES_AFTER_MS) to MiniVerdict.Paused,
+            MiniContext(pausedForMs = 10 * 60_000L) to MiniVerdict.Paused,
         )
         for ((context, why) in table) {
             assertEquals(why, MiniPlayerState.verdict(context))
@@ -37,6 +39,25 @@ class MiniPlayerTest {
             assertEquals("$why", MiniPhase.Closed, after.phase)
             assertFalse("$why", after.holdsPlayer)
         }
+    }
+
+    @Test
+    fun `a video paused for a few seconds closes on back, a playing or just paused one docks`() {
+        val justPaused = MiniContext(pausedForMs = MiniPlayerState.PAUSED_CLOSES_AFTER_MS - 1)
+        assertEquals(MiniVerdict.Dock, MiniPlayerState.verdict(justPaused))
+        assertEquals(MiniVerdict.Dock, MiniPlayerState.verdict(MiniContext(pausedForMs = 0)))
+        val closed = full.leave(MiniContext(pausedForMs = MiniPlayerState.PAUSED_CLOSES_AFTER_MS))
+        assertEquals(MiniPhase.Closed, closed.phase)
+        assertFalse(closed.holdsPlayer)
+    }
+
+    @Test
+    fun `a stronger reason is named before the pause`() {
+        val long = MiniPlayerState.PAUSED_CLOSES_AFTER_MS
+        assertEquals(MiniVerdict.Casting, MiniPlayerState.verdict(MiniContext(casting = true, pausedForMs = long)))
+        assertEquals(MiniVerdict.Locked, MiniPlayerState.verdict(MiniContext(locked = true, pausedForMs = long)))
+        assertEquals(MiniVerdict.Disabled, MiniPlayerState.verdict(MiniContext(enabled = false, pausedForMs = long)))
+        assertEquals(MiniVerdict.PictureInPicture, MiniPlayerState.verdict(MiniContext(inPictureInPicture = true, pausedForMs = long)))
     }
 
     @Test

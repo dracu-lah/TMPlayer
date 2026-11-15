@@ -98,6 +98,7 @@ import com.tmplayer.player.TrackPreferences
 import com.tmplayer.player.TrackRules
 import com.tmplayer.player.VideoScale
 import com.tmplayer.platform.Logger
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -325,6 +326,14 @@ fun PlayerScreen(
             if (error != null && phase == Phase.Playing && engine.cast == null) phase = Phase.Failed(error)
         }
     }
+    // When the viewer's pause began, 0 while it plays: Back on a video paused for a few seconds
+    // closes it instead of docking it (PL-18, [MiniContext.pausedForMs]).
+    val pausedAt = remember { longArrayOf(0L) }
+    LaunchedEffect(engine) {
+        engine.state.map { it.playing }.distinctUntilChanged().collect { on ->
+            pausedAt[0] = if (on) 0L else System.currentTimeMillis()
+        }
+    }
     // The opening's start point and [StreamReads] when it began, for the loader's staged line.
     var openingStartMs by remember { mutableStateOf(0L) }
     val openingBytesAt = remember { longArrayOf(0L) }
@@ -544,6 +553,9 @@ fun PlayerScreen(
                 asking = phase is Phase.StillWatching,
                 casting = castState is com.tmplayer.desktop.cast.DesktopCast.State.Connected,
                 locked = screenLocked,
+                pausedForMs = engine.state.value.let { st ->
+                    if (st.opened && !st.playing && !st.ended && pausedAt[0] > 0L) System.currentTimeMillis() - pausedAt[0] else 0L
+                },
             ),
         )
     }
