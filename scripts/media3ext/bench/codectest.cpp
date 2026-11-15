@@ -113,7 +113,10 @@ int main(int argc, char **argv) {
     if (avformat_find_stream_info(format, nullptr) < 0) return Fail(name, "no stream info");
     int stream = -1;
     for (unsigned i = 0; i < format->nb_streams; i++) {
-        if (format->streams[i]->codecpar->codec_id == codec->id) {
+        // TM_ANYSTREAM: the first stream of the decoder's kind, whatever codec the container names
+        // (a real H.263+ file is labelled H.263, so h263p only sees it this way).
+        if (format->streams[i]->codecpar->codec_id == codec->id ||
+            (getenv("TM_ANYSTREAM") && format->streams[i]->codecpar->codec_type == codec->type)) {
             stream = static_cast<int>(i);
             break;
         }
@@ -169,6 +172,7 @@ int main(int argc, char **argv) {
                 av_image_copy_to_buffer(pcm.data(), size, frame->data, frame->linesize,
                                         static_cast<AVPixelFormat>(frame->format), frame->width, frame->height, 1);
                 hasher.Update(pcm.data(), size);
+                if (dump) fwrite(pcm.data(), 1, static_cast<size_t>(size), dump);
                 units++;
             } else {
                 if (!swr) {

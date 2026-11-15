@@ -186,5 +186,5 @@ for d in $list; do
   esac
   case " $tests_ran " in *" $n "*) ;; *) untested="$untested $d" ;; esac
 done
-echo "decoders in the patch with no passing host test:$untested"
+echo "decoders in the patch with no passing host test (WMV 3, VP6, RealVideo 3 and 4 and the others without an encoder are covered by real files: run-sample-tests.sh, SAMPLES.md):$untested"
 [ "$failed" -eq 0 ]

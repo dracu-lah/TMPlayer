@@ -7,6 +7,9 @@
 //                                  stream with the decoder the app would name, seeks to the middle and
 //                                  prints one line: "OK <demuxer> streams=... packets=... open_bytes=...
 //                                  seek_bytes=... seek_reopens=... landed=<us> asked=<us>"
+// demuxtest <clip> info            what the demuxer says about the clip (for a sample that fails or
+//                                  lands far from the seek): per stream the packet count, the first key
+//                                  packet times and the last packet time, then the demuxer and duration
 // demuxtest <clip> garbage <seed>  the clip truncated, flipped, zeroed or padded with random bytes (by
 //                                  a generator seeded with <seed>), with a lying size; any outcome but
 //                                  a crash or a hang passes ("GARBAGE-OK ...")
@@ -149,6 +152,7 @@ int main(int argc, char **argv) {
     return 1;
   }
   bool garbage = argc >= 4 && strcmp(argv[2], "garbage") == 0;
+  bool info = argc >= 3 && strcmp(argv[2], "info") == 0;
   int64_t claimedSize = (int64_t) source.bytes.size();
   if (garbage) damage(&source.bytes, strtoull(argv[3], nullptr, 10), &claimedSize);
 
@@ -189,6 +193,39 @@ int main(int argc, char **argv) {
     packets++;
     if (packets > 10000000) break;
   }
+  if (info) {
+    // Back to the start (what a replay or a seek to 0 asks for, with the byte where the data starts
+    // as the app hands it): after the whole file was read, and after only 100 packets of it.
+    long restarts[2] = {0, 0};
+    for (int round = 0; round < 2; round++) {
+      if (round == 1) {
+        tmdemux::seek(d, 0, d->dataStart);
+        for (int i = 0; i < 100 && tmdemux::read(d, &p) == 0; i++) {}
+      }
+      tmdemux::seek(d, 0, d->dataStart);
+      while (tmdemux::read(d, &p) == 0) restarts[round]++;
+    }
+    printf("packets=%ld, after a seek to 0 following the whole file: %ld, following 100 packets: %ld\n", packets,
+           restarts[0], restarts[1]);
+    // Read again from the start, per stream: the key packets' times tell a sparse GOP from a bad seek.
+    tmdemux::seek(d, 0, d->dataStart);
+    std::vector<long> count(streams, 0), keys(streams, 0);
+    std::vector<int64_t> last(streams, INT64_MIN);
+    std::vector<std::string> firstKeys(streams);
+    while (tmdemux::read(d, &p) == 0) {
+      if (p.stream < 0 || p.stream >= streams) continue;
+      count[p.stream]++;
+      if (p.timeUs != INT64_MIN) last[p.stream] = p.timeUs;
+      if (p.key && keys[p.stream]++ < 12) firstKeys[p.stream] += " " + std::to_string(p.timeUs / 1000);
+    }
+    for (int i = 0; i < streams; i++) {
+      printf("stream %d [%s]: packets=%ld keys=%ld last_ms=%lld first keys (ms):%s\n", i, names.c_str(), count[i],
+             keys[i], last[i] == INT64_MIN ? -1LL : (long long) (last[i] / 1000), firstKeys[i].c_str());
+    }
+    printf("%s duration_ms=%lld main=%d\n", format, (long long) (tmdemux::durationUs(d) / 1000), tmdemux::mainStream(d));
+    tmdemux::close(d);
+    return 0;
+  }
   if (garbage) {
     // A seek in a damaged file must come back too.
     tmdemux::seek(d, tmdemux::durationUs(d) > 0 ? tmdemux::durationUs(d) / 2 : 0, claimedSize / 2);
@@ -202,8 +239,8 @@ int main(int argc, char **argv) {
   std::string decoded;
   int primary = tmdemux::mainStream(d);
   for (int i = 0; i < streams; i++) {
-    if (tmdemux::seek(d, 0, 0) < 0) ok = false;
-    int frames = decodeSome(d, i, 40);
+    if (tmdemux::seek(d, 0, d->dataStart) < 0) ok = false;
+    int frames = decodeSome(d, i, getenv("TM_DECODE_PACKETS") ? atoi(getenv("TM_DECODE_PACKETS")) : 40);
     decoded += std::string(i ? "," : "") + std::to_string(frames);
     if (frames <= 0) ok = false;
   }

@@ -118,5 +118,5 @@ sound tta tta -c:a tta
 echo
 echo "passed $passed, failed $failed"
 [ -n "$skipped" ] && echo "skipped:$skipped"
-echo "untested (no host muxer or encoder): ivr, xwma, nsv, vivo, smjpeg, ape, RealMedia with RealVideo 3/4, Cook, SIPR or ATRAC3"
+echo "untested here (no host muxer or encoder), covered by real files in run-sample-tests.sh (SAMPLES.md): ivr, xwma, nsv, vivo, smjpeg, ape, RealMedia with RealVideo 3/4, Cook, SIPR or ATRAC3"
 [ "$failed" -eq 0 ]

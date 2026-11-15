@@ -1,0 +1,53 @@
+# Real sample files for the decoders and containers the host ffmpeg cannot write (no encoder or
+# muxer), from FFmpeg's public sample suite https://samples.ffmpeg.org/. Read by
+# run-sample-tests.sh; the results are in SAMPLES.md. Columns, tab separated:
+#   name        a directory name of its own under the samples dir
+#   path        below https://samples.ffmpeg.org/ (the file itself is never committed)
+#   prepare     "-" or "gunzip" (the server keeps that file gzipped)
+#   decoders    comma list of decoder:kind (v video, a audio, V video forced onto the first picture
+#               stream whatever codec the container names, for h263p), "-" for none; a trailing "!"
+#               marks a decoder this build is known not to have (the test expects "no such decoder")
+#   demux       "yes" when the container is read by FfmpegExtractor (ffdemux.h), "-" when Media3's own
+#               extractor (MP4, AVI, FLV, WAV, MP3) or nothing in the app reads it
+wmv3-main	V-codecs/WMV9/wmv-samples/sample-wmv9-main-MP@LL.wmv	-	wmv3:v	yes
+wmv3-simple	V-codecs/WMV9/wmv-samples/sample-wmv9-simple-SP@ML.wmv	-	wmv3:v	yes
+vc1-advanced	V-codecs/WMV9/interlaced/480i30__codec_WVC1__mode_2__framerate_29.970__type_2__preproc_17.wmv	-	vc1:v	yes
+svq3-gl2	V-codecs/SVQ3/gl2.mov	-	svq3:v	-
+svq3-blade	V-codecs/SVQ3/blade_2_m480.mov	-	svq3:v	-
+vp60-avi	V-codecs/VP6/vp6-test/predator2_vp60.avi	-	vp6:v	-
+vp61-avi	V-codecs/VP6/vp6-test/predator2_vp61.avi	-	vp6:v	-
+vp6f-flv	archive/all/flv+vp6f+nellymoser++nellymosertag.flv	-	vp6f:v,nellymoser:a	-
+vp6f-flv-small	FLV/flash8/clip1024.flv	-	vp6f:v	-
+rv30-eiqu	real/VC-RV30/eiqu-56k.rm	-	rv30:v,cook:a	yes
+rv30-sample	real/VC-RV30/sample.rm	-	rv30:v,cook:a	yes
+rv40-2004	real/VC-RV40/20040506.rm	-	rv40:v,cook:a	yes
+mjpegb-mov	V-codecs/MJPEGs/mjpa-b.mov/mjpegb_2.mov	-	mjpegb:v	-
+h263p-more	archive/all/avi+h263+++h263p_more_artifacts.avi	-	h263:v,h263p:V	-
+h263p-aic	archive/all/avi+h263+++h263p_aic_mqm.avi	-	h263:v,h263p:V	-
+wmapro-8k	A-codecs/WMA9/wmapro/classical_16_16_1_8000_off_0_off_1_29.wma	-	wmapro:a	yes
+wmapro-22k	A-codecs/WMA9/wmapro/classical_22_16_1_14000_v3c_0_extend_0_29.wma	-	wmapro:a	yes
+wmalossless	A-codecs/lossless/luckynight.wma	-	wmalossless:a	yes
+mp1-raw	A-codecs/mp1-sample.mp1	-	mp1:a	-
+mp1-mpeg-ps	A-codecs/MP3/mpeg_layer1_audio.mpg	-	mp1:a,mpeg1video:v	yes
+cook-32k	real/AC-cook/FUN_RM_32.rm	-	cook:a	yes
+cook-ra8	real/AC-cook/mc_sich_ra8_20.rm	-	cook:a	yes
+ra288-ra	real/AC-28_8/luckynightmono2.ra	-	real_288:a	yes
+ra288-rm	real/AC-28_8/A0000040.rm	-	real_288:a,rv10:v	yes
+qcelp-3g2	A-codecs/qclp/test.3g2	-	qcelp:a	-
+qcelp-qcp	A-codecs/qcp/qcpclip.qcp	-	qcelp:a	-
+sipr-intro	real/AC-sipr/intro.rm	-	sipr:a	yes
+sipr-plumbbob	real/AC-sipr/plumbbob1_hi.rm	-	sipr:a,rv10:v	yes
+atrac3-wav	A-codecs/ATRAC3/mc_sich_at3_066.wav	-	atrac3:a	-
+atrac3-rm	real/AC-atrc/mc_sich_ra8_105.rm	-	atrac3:a	yes
+atrac3p-at3	A-codecs/ATRAC3/SND0.AT3	-	atrac3plus:a	-
+atrac3p-oma	A-codecs/ATRAC3+/at3p_sample5.oma	-	atrac3plus:a	-
+ape	monkeyaudio/sh3.ape	-	ape:a	yes
+ivr	real/ivr/SherwinWilliamsCommercial.ivr	-	rv40:v,cook:a	yes
+xwma	xwma/ergon.xwma	-	wmav2:a	yes
+nsv-witchblade	nsv/witchblade-51kbps.nsv	-	vp3:v,mp3:a	yes
+nsv-solo	nsv/NullsoftBand-SoloMeansOne.nsv	-	vp3:v,mp3:a	yes
+nsv-vp6	nsv/64vp6.nsv	-	vp6:v,aac:a	yes
+nsv-sample	nsv/sample.nsv	-	vp6:v,aac:a	yes
+vivo-bush	vivo/bush.viv	-	h263:v,g723_1:a!	yes
+vivo-gclinton	vivo/gclinton.viv	-	siren:a!	yes
+smjpeg	game-formats/smjpeg/scenwin.mjpg	gunzip	mjpeg:v,adpcm_ima_smjpeg:a	yes
