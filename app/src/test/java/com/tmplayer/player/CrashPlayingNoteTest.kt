@@ -92,5 +92,11 @@ class CrashPlayingNoteTest {
         assertEquals("", CrashPlayingNote.codecOf("video/x-secret-show-s01e01"))
         assertEquals("", CrashPlayingNote.codecOf(null))
         assertEquals("av1", CrashPlayingNote.codecOf("VIDEO/AV01"))
+        // The FFmpeg extension's old-codec decoders are named in their MIME types.
+        assertEquals("rv40", CrashPlayingNote.codecOf("video/x-ffmpeg-rv40"))
+        assertEquals("wmav2", CrashPlayingNote.codecOf("audio/x-ffmpeg-wmav2"))
+        assertEquals("", CrashPlayingNote.codecOf("video/x-ffmpeg-"))
+        assertEquals("", CrashPlayingNote.codecOf("video/x-ffmpeg-Some Show S01E01"))
+        assertEquals("", CrashPlayingNote.codecOf("video/x-ffmpeg-" + "a".repeat(40)))
     }
 }

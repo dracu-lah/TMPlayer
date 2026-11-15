@@ -86,7 +86,25 @@ internal class CrashPlayingNote(private val sink: Sink = Sink.Real) {
             "video/mp4v-es" -> "mpeg4"
             "video/dolby-vision" -> "dolby"
             "video/x-ms-wmv", "video/wmv3" -> "wmv"
-            else -> ""
+            else -> ffmpegDecoderOf(mimeType)
         }
+
+        /**
+         * The decoder an FFmpeg-named MIME type stands for (`video/x-ffmpeg-rv40` is `rv40`, see
+         * `FfmpegLibrary.ffmpegMimeType`), so a crash in one of the extension's old-codec decoders
+         * names the codec; empty for anything else, or a name no FFmpeg decoder has.
+         */
+        private fun ffmpegDecoderOf(mimeType: String?): String {
+            val mime = mimeType?.lowercase()?.trim() ?: return ""
+            val name = when {
+                mime.startsWith("video/x-ffmpeg-") -> mime.removePrefix("video/x-ffmpeg-")
+                mime.startsWith("audio/x-ffmpeg-") -> mime.removePrefix("audio/x-ffmpeg-")
+                else -> return ""
+            }
+            val plain = name.all { it in 'a'..'z' || it in '0'..'9' || it == '_' }
+            return if (plain && name.length in 1..MAX_DECODER_NAME) name else ""
+        }
+
+        private const val MAX_DECODER_NAME = 24
     }
 }
