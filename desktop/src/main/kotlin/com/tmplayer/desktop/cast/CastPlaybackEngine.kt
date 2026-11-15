@@ -15,6 +15,10 @@ import com.tmplayer.cast.HlsTrackMatch
 import com.tmplayer.cast.LanAddress
 import com.tmplayer.cast.MediaProbe
 import com.tmplayer.cast.MkvHls
+import com.tmplayer.cast.TranscodePlanner
+import com.tmplayer.cast.TranscodeProgress
+import com.tmplayer.cast.TranscodeSlot
+import com.tmplayer.cast.TranscodeStop
 import com.tmplayer.cast.dlna.dlnaServing
 import com.tmplayer.desktop.player.AbLoop
 import com.tmplayer.desktop.player.MediaTrack
@@ -108,6 +112,15 @@ class CastPlaybackEngine(
     private val targetMs: Long get() = place.ms
     private var watcher: Job? = null
 
+    /** The user's ffmpeg, for a video the receiver cannot play otherwise; null when there is none. */
+    private var ffmpeg: DesktopFfmpeg? = null
+
+    /** One transcode at a time; its progress drives the casting panel's card. */
+    private val transcodes = TranscodeSlot({ FfmpegTranscoder(ffmpeg ?: throw IOException(L.castTranscodeNeedsFfmpeg)) })
+
+    /** The running or last transcode, for the casting panel; null when the cast is not converted. */
+    val transcode: StateFlow<TranscodeProgress?> = transcodes.progress
+
     private fun nowMs() = System.nanoTime() / 1_000_000
 
     override suspend fun open(data: MediaData, startAtMs: Long, prefs: OpenPrefs) {
@@ -127,14 +140,17 @@ class CastPlaybackEngine(
                 val p = MediaProbe.of(src, name)
                 probe = p
                 val preferred = prefs.audioLanguage?.let { lang -> p.audio.firstOrNull { sameLanguage(it.language, lang) }?.number }
-                val pl = receiver.adapt(CastFormats.plan(p, receiver.caps, preferred, canConvertAudio = false))
+                ffmpeg = DesktopFfmpeg.detect()
+                val pl = receiver.adapt(CastFormats.plan(p, receiver.caps, preferred, canConvertAudio = false, transcoder = ffmpeg?.ability))
                 plan = pl
                 Logger.i(TAG, "Plan for $name on ${receiver.model} (${receiver.kind}): $pl ($p)")
                 if (!pl.castable) {
                     throw IOException(
-                        when (pl.refusal) {
-                            CastRefusal.VideoCodec -> L.castCannotCastPicture
-                            CastRefusal.Resolution -> L.castPictureTooLarge
+                        when {
+                            // ffmpeg on this computer would have converted it: say so.
+                            ffmpeg?.ability == null && pl.refusal != CastRefusal.Pictures -> L.castTranscodeNeedsFfmpeg
+                            pl.refusal == CastRefusal.VideoCodec -> L.castCannotCastPicture
+                            pl.refusal == CastRefusal.Resolution -> L.castPictureTooLarge
                             else -> L.castCannotCastContainer
                         },
                     )
@@ -165,7 +181,7 @@ class CastPlaybackEngine(
         val s = receiver.allowedClient?.let { CastServer(bind, allowed = it) } ?: CastServer(bind)
         s.start()
         server = s
-        streams = if (receiver.kind == ReceiverKind.Dlna) CastStreams(s, serving = ::dlnaServing) else CastStreams(s)
+        streams = if (receiver.kind == ReceiverKind.Dlna) CastStreams(s, serving = ::dlnaServing, transcodes = transcodes) else CastStreams(s, transcodes = transcodes)
     }
 
     /** Loads the plan's current route at [atMs], moving down the plan while the receiver refuses. */
@@ -218,6 +234,7 @@ class CastPlaybackEngine(
             published = pub
             route = chosen
             loadedAt = System.nanoTime()
+            if (chosen !is CastRoute.Transcode) transcodes.clear()
             mapper.loaded(nowMs(), wantPlaying)
             if (pub.hls) {
                 hlsAudio = pub.renditions.firstOrNull { it.kind == HlsRendition.Kind.Audio && it.trackNumber == audio }
@@ -262,12 +279,44 @@ class CastPlaybackEngine(
         watcher = scope.launch {
             launch { receiver.volume.collect { publishState() } }
             launch { receiver.media.collect { m -> onMedia(m) } }
+            launch { transcodes.progress.collect { t -> onTranscode(t) } }
             while (true) {
                 delay(TICK_MS)
                 publishState()
                 closeIfIdle()
             }
         }
+    }
+
+    /**
+     * A transcode stopped by itself (too hot, a failure): the TV's player is stopped before it
+     * plays the cut stream to its end, and the panel says why with Try again and Play here.
+     */
+    private fun onTranscode(t: TranscodeProgress?) {
+        val stop = t?.stop ?: return
+        if (route !is CastRoute.Transcode) return
+        val text = transcodeStopText(stop, t.message) ?: return
+        Logger.w(TAG, "Transcode stopped: $stop (${t.message})")
+        runCatching { receiver.stopMedia() }
+        _state.value = _state.value.copy(error = text)
+        _phase.value = CastPhase.Failed
+    }
+
+    /** What the panel says for a transcode that stopped; null for one that needs no word (replaced, or the TV hung up). */
+    private fun transcodeStopText(stop: TranscodeStop, message: String?): String? = when (stop) {
+        TranscodeStop.Cancelled -> L.castTranscodeCancelled
+        TranscodeStop.TooHot -> L.castTranscodeTooHot
+        TranscodeStop.BatteryLow -> L.castTranscodeBatteryLow
+        TranscodeStop.NoEncoder -> L.castTranscodeNeedsFfmpeg
+        TranscodeStop.Failed -> L.castTranscodeFailed
+        TranscodeStop.ReceiverGone -> null
+    }
+
+    /** The panel's Stop converting: the TV's player stops and the transcode with it. */
+    fun cancelTranscode() {
+        if (!transcodes.running) return
+        runCatching { receiver.stopMedia() }
+        transcodes.cancel()
     }
 
     /** A DLNA cast paused with no request from the TV for its limit closes the port; Play starts it again at the place. */
@@ -347,7 +396,8 @@ class CastPlaybackEngine(
             playing = view.showsPause,
             buffering = view.busy,
             seekPending = loading,
-            ended = view.phase == CastPhase.Ended,
+            // A transcode cut short ends the TV's stream early: that is not the end of the video.
+            ended = view.phase == CastPhase.Ended && (route !is CastRoute.Transcode || transcodes.progress.value?.stop == null),
             error = error,
             volume = (v.level * 100).toInt(),
             muted = v.muted,
@@ -494,7 +544,13 @@ class CastPlaybackEngine(
                 audio = id
                 publishTracks()
                 val at = _state.value.positionMs
-                scope.launch { load(CastRoute.Remux(id), at) }
+                val p = probe
+                val next = if (r is CastRoute.Transcode && p != null) {
+                    val track = p.audio.firstOrNull { it.number == id }
+                    val ability = ffmpeg?.ability
+                    if (ability == null) r else r.copy(audioTrack = id, target = TranscodePlanner.target(p, receiver.caps, ability, track, r.target.copyVideo))
+                } else CastRoute.Remux(id)
+                scope.launch { load(next, at) }
             }
             TrackType.Subtitle -> {
                 if (pub?.hls == true) {
@@ -555,6 +611,7 @@ class CastPlaybackEngine(
     val positionMs: Long get() = _state.value.positionMs
 
     override fun close() {
+        transcodes.clear()
         watcher?.cancel()
         runCatching { receiver.stopMedia() }
         scope.cancel()
@@ -565,6 +622,7 @@ class CastPlaybackEngine(
 
     /** Lets go of the stream and the server without telling the receiver anything (it is gone). */
     fun abandon() {
+        transcodes.clear()
         watcher?.cancel()
         scope.cancel()
         runCatching { server?.stop() }

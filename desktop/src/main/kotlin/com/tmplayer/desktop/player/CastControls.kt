@@ -167,6 +167,7 @@ internal fun BoxScope.CastingPanel(
     val note by cast.note.collectAsState()
     val phase by cast.phase.collectAsState()
     val volume by cast.receiver.volume.collectAsState()
+    val converting by cast.transcode.collectAsState()
     val name = cast.receiver.name
     val lost = state is DesktopCast.State.Lost || state is DesktopCast.State.Failed
     val trouble = lost || status.error != null || phase == CastPhase.Stopped || phase == CastPhase.Failed
@@ -219,6 +220,7 @@ internal fun BoxScope.CastingPanel(
         }
         note?.takeIf { !lost }?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Tone.muted) }
         if (volume.fixed && !lost) Text(s.castVolumeFixed, style = MaterialTheme.typography.bodySmall, color = Tone.muted)
+        if (!trouble) com.tmplayer.ui.player.CastConvertingCard(converting, onCancel = cast::cancelTranscode)
         if (trouble) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (lost) Button(onClick = { DesktopCast.reconnect() }) { Text(s.castReconnect) }
