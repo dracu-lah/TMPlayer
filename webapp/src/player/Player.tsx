@@ -6,7 +6,7 @@ import { openFile, openJoined, streams, warmFile, workerAsked, type MediaFile } 
 import { mountZip, PiecesProblem, ZipProblem } from '../stream/joined'
 import { bridgeAsked, tvServiceUrl } from '../stream/tvservice'
 import { noteTvNative, TV_BROWSER } from './tvnative'
-import { codecName, keyFrames, nativeEngine, playableSound, probe, RemuxEngine, route, Unplayable, type Engine, type Probe, type SoundTrack, type Why } from './engines'
+import { codecName, keyFrames, nativeEngine, pictureForLibav, playableSound, probe, RemuxEngine, route, soundForLibav, Unplayable, type Engine, type Probe, type SoundTrack, type Why } from './engines'
 import { LIBAV_FORMATS, LibavEngine } from './libav'
 import { MoviEngine, moviSupported } from './movi'
 import { storyboardFrames, type Frames } from './storyboard'
@@ -302,6 +302,8 @@ export function Player(props: {
                 // A second element on the same stream for the seek bar's frames; not on an iPhone or
                 // iPad (Safari's memory and range limits) nor on the TV layout.
                 if (PICTURES_SHOWN && !appleTouch && form() !== 'tv') setGrabber(new FrameGrabber(url))
+            } else if (soundForLibav(p) && !(await playableSound(p.audios)) && (await soundByLibav(f, p, at, play, gen, rate))) {
+                return
             } else engine = await remux(p, at)
             if (gen !== generation) return
             video.playbackRate = rate
@@ -325,16 +327,40 @@ export function Player(props: {
     let moviTried = ''
 
     /**
+     * H.264 whose only sound is one mediabunny cannot name (TrueHD, WMA, RealAudio): libav.js reads
+     * the file, copies the picture and decodes the sound. False when it cannot, and the repack then
+     * plays the picture without sound as before.
+     */
+    const soundByLibav = async (f: MediaFile, p: Probe, at: number, play: boolean, gen: number, rate: number): Promise<boolean> => {
+        try {
+            await software(f, p.container, at, play, gen, rate)
+        } catch (e) {
+            console.warn('[player] libav.js could not play the sound', e)
+            return false
+        }
+        if (gen !== generation) return true
+        probed = null
+        p.input.dispose()
+        return true
+    }
+
+    /**
      * What the browser cannot play: movi (FFmpeg and WebCodecs), then libav.js for its containers,
      * then the reason the video needs the app. A loader stays up throughout; only the last step
      * shows anything else.
      */
     const fallback = async (why: unknown, f: MediaFile, at: number, play: boolean, gen: number, rate: number, p: Probe | null = null) => {
         const container = why instanceof Unplayable && why.why.kind === 'format' ? why.why.format : null
-        // AVI: libav.js first, which plays through the element (picture in picture, AirPlay); movi when it cannot.
-        if (container && LIBAV_FORMATS.has(container)) {
+        // A picture mediabunny reads but cannot name (MPEG-4 Part 2, MPEG-2, VC-1, H.263 in MP4, 3GP,
+        // Matroska or MPEG-TS), or does not find (MPEG-2 in MPEG-TS, Theora in Ogg), goes to libav.js too.
+        const picture = !container && !!p && why instanceof Unplayable && pictureForLibav(p, why.why)
+        // AVI, FLV, WMV, RealMedia, VOB: libav.js first, which plays through the element (picture in
+        // picture, AirPlay); movi when it cannot.
+        if ((container && LIBAV_FORMATS.has(container)) || picture) {
             try {
-                return await software(f, container, at, play, gen, rate)
+                await software(f, container ?? p!.container, at, play, gen, rate)
+                p?.input.dispose()
+                return
             } catch (e) {
                 if (gen !== generation) return
                 console.warn('[player] libav.js could not play it', e)
@@ -479,7 +505,9 @@ export function Player(props: {
               ? t('web.needs_app_picture', { codec: why.codec })
               : why.kind === 'no-mse'
                 ? t('web.needs_app_no_mse')
-                : t('web.needs_app_codec')
+                : why.kind === 'too-heavy'
+                  ? t('web.needs_app_too_heavy')
+                  : t('web.needs_app_codec')
 
     // Telegram's storyboard for the seek bar's preview card, fetched once the picture is up.
     let storyboardAsked = false

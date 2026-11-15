@@ -148,8 +148,8 @@ const messages = new Map<number, Msg[]>([
             msg(clips, 'Avc Avi Clip.avi', { file: 'h264-mp3.avi' }),
             msg(clips, 'Windows Clip.wmv', { file: 'wmv2.wmv' }),
             msg(clips, 'Broken Clip.avi', { file: 'broken.avi' }),
-            msg(clips, 'Odd Picture Clip.avi', { file: 'wmv2.avi' }),
-            msg(clips, 'Odd Sound Clip.avi', { file: 'mpeg4-wma.avi' }),
+            msg(clips, 'Odd Picture Clip.avi', { file: 'msvideo1.avi' }),
+            msg(clips, 'Odd Sound Clip.avi', { file: 'mpeg4-g723.avi' }),
             msg(clips, 'Cut Clip.avi', { file: 'cut.avi' }),
             msg(clips, 'Burning Clip.mp4', { file: 'h264-aac.mp4', ttl: 30 }),
             msg(clips, 'Withheld Clip.mp4', { file: 'h264-aac.mp4', withheld: true }),
@@ -190,6 +190,20 @@ if (flags.has('zipped')) {
         ...[1, 2, 4].map((i) => msg(zipped, `Gap.Clip.2026.1080p.WEB-DL.zip.00${i}`, { file: `zipped.zip.00${i}`, mime: zip })),
         ...[1, 2, 3].map((i) => msg(zipped, `Raw.Clip.2026.1080p.mkv.00${i}`, { file: `raw.mkv.00${i}`, mime: 'application/octet-stream' })),
         msg(zipped, 'IvyWalletBackup_20260930-1830.zip', { size: 165_710, mime: zip }),
+    ])
+}
+
+// `oldformats`: a chat of its own (/chat/-1008, in no list) of the formats libav.js plays beyond AVI (player/libav.ts).
+const oldFormats = peer(-1008, 'Old Formats', 'chat')
+if (flags.has('oldformats')) {
+    messages.set(oldFormats.id, [
+        msg(oldFormats, 'Flash Clip.flv', { file: 'flv-mp3.flv' }),
+        msg(oldFormats, 'Real Clip.rm', { file: 'rv20-ac3.rm' }),
+        msg(oldFormats, 'Dvd Clip.vob', { file: 'mpeg2-mp2.vob' }),
+        msg(oldFormats, 'Broadcast Clip.ts', { file: 'mpeg2-mp2.ts' }),
+        msg(oldFormats, 'Part Two Clip.mkv', { file: 'mpeg4-aac.mkv' }),
+        msg(oldFormats, 'Lossless Sound Clip.mkv', { file: 'h264-truehd.mkv' }),
+        msg(oldFormats, 'Theora Clip.ogv', { file: 'theora-vorbis.ogv' }),
     ])
 }
 

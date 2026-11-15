@@ -1,9 +1,10 @@
-// Every way a file plays (plan section 3): native, repacked, sound converted, AVI through libav.js
-// (MPEG-4 Part 2 and DivX 3 decoded, H.264 copied), and one that needs the app, from e2e/media.
+// Every way a file plays (plan section 3): native, repacked, sound converted, AVI and WMV through
+// libav.js (MPEG-4 Part 2, DivX 3 and WMV decoded, H.264 copied), and ones that need the app, from
+// e2e/media. The other old formats are in oldformats.spec.ts.
 import { expect, test } from '@playwright/test'
 import { noSizeFloor, openCard, openClips, playsPast } from './helpers'
 
-const PLAYS = ['Native Clip', 'Tail Index', 'Matroska Clip', 'Transport Clip', 'Surround Clip', 'Webm Clip', 'Old Clip', 'Xvid Clip', 'Divx Clip', 'Avc Avi Clip']
+const PLAYS = ['Native Clip', 'Tail Index', 'Matroska Clip', 'Transport Clip', 'Surround Clip', 'Webm Clip', 'Old Clip', 'Xvid Clip', 'Divx Clip', 'Avc Avi Clip', 'Windows Clip']
 
 test.beforeEach(async ({ page }) => {
     await noSizeFloor(page)
@@ -20,20 +21,16 @@ for (const name of PLAYS) {
 
 // movi (player/movi.ts) opens these after the repack and libav.js gave up, finds it decodes no
 // picture, and says so after its 10 s watch: hence the longer wait.
-test('a WMV says it needs the app', async ({ page }) => {
-    await openCard(page, 'Windows Clip')
-    await expect(page.getByText('This video needs the TMPlayer app')).toBeVisible({ timeout: 30_000 })
-    await expect(page.locator('a[href="https://tmplayer.org/#download"]')).toBeVisible()
-})
 
 test('a damaged AVI says it needs the app', async ({ page }) => {
     await openCard(page, 'Broken Clip')
     await expect(page.getByText('This video needs the TMPlayer app')).toBeVisible()
 })
 
-test('an AVI whose picture libav.js cannot decode says it needs the app', async ({ page }) => {
+test('an AVI whose picture libav.js cannot convert says it needs the app', async ({ page }) => {
     await openCard(page, 'Odd Picture Clip')
     await expect(page.getByText('This video needs the TMPlayer app')).toBeVisible({ timeout: 30_000 })
+    await expect(page.locator('a[href="https://tmplayer.org/#download"]')).toBeVisible()
 })
 
 test('an AVI with sound libav.js cannot decode plays without it, and says so', async ({ page }) => {

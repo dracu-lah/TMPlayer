@@ -539,6 +539,7 @@ export const PAGE_STRINGS = [
     'web.needs_app_picture',
     'web.needs_app_picture_subtitles',
     'web.needs_app_title',
+    'web.needs_app_too_heavy',
     'web.no_sound',
     'web.not_found',
     'web.offline',

@@ -23,6 +23,7 @@ import type { HevcTranscoder, Transcoded } from './hevc'
 import { hevcAccepted, pictureNames, tvDecodesHevc, withHevc } from './hevcnames'
 import { tvServiceUp } from '../stream/tvservice'
 import { TV_BROWSER, tvNativeOff, tvPlaysNatively } from './tvnative'
+import { mpegAudioLayer, soundDecoderFor } from './libavframes'
 
 export interface Probe {
     input: Input
@@ -59,6 +60,8 @@ export type Why =
     | { kind: 'picture'; codec: string }
     | { kind: 'no-picture' }
     | { kind: 'no-mse' }
+    /** Decoded in software here, the picture would not keep up on this device. */
+    | { kind: 'too-heavy'; codec: string }
 
 export class Unplayable extends Error {
     constructor(readonly why: Why) {
@@ -253,16 +256,32 @@ export async function encoderFor(channels: number, sampleRate = 48000): Promise<
 
 const sounds = new WeakMap<InputAudioTrack, Promise<Sound>>()
 
+/**
+ * The MPEG audio layer of a track mediabunny calls `mp3`, from its first packet (3 when it cannot
+ * say). A broadcast recording's MPEG-TS often carries Layer II, which no browser decodes as MP3.
+ */
+async function mpegLayer(track: InputAudioTrack): Promise<number> {
+    if (track.codec !== 'mp3') return 3
+    const first = await new EncodedPacketSink(track).getFirstPacket().catch(() => null)
+    return (first && mpegAudioLayer(first.data)) ?? 3
+}
+
 /** Whether this browser plays a sound track, and how. Asked once per track. */
 export function soundOf(track: InputAudioTrack): Promise<Sound> {
     let known = sounds.get(track)
     if (!known) {
         known = (async (): Promise<Sound> => {
             const codec = await track.getCodecParameterString().catch(() => null)
-            if (codec && MS?.isTypeSupported(`audio/mp4; codecs="${codec}"`)) return { kind: 'copy' }
+            const layer = await mpegLayer(track)
+            if (codec && layer === 3 && MS?.isTypeSupported(`audio/mp4; codecs="${codec}"`)) return { kind: 'copy' }
             if (!track.codec) return { kind: 'none' }
             await registerDecoders(track.codec)
-            if (!(await track.canDecode().catch(() => false))) return { kind: 'none' }
+            // What the browser cannot decode (no WebCodecs on a TV, Vorbis in old Safari, Layer II
+            // anywhere) goes to FFmpeg's decoder, loaded only now (libavsound.ts).
+            if (layer !== 3 || !(await track.canDecode().catch(() => false))) {
+                const { useLibavSound } = await import('./libavsound')
+                if (!useLibavSound(track.codec) || !(await track.canDecode().catch(() => false))) return { kind: 'none' }
+            }
             const enc = await encoderFor(Math.min(phone ? 2 : 6, track.numberOfChannels || 2))
             return enc ? { kind: 'convert', ...enc } : { kind: 'none' }
         })()
@@ -275,6 +294,27 @@ export function soundOf(track: InputAudioTrack): Promise<Sound> {
 export async function playableSound(tracks: InputAudioTrack[]): Promise<InputAudioTrack | null> {
     for (const t of tracks) if ((await soundOf(t)).kind !== 'none') return t
     return null
+}
+
+/**
+ * A file mediabunny opened whose picture it cannot name (MPEG-4 Part 2, MPEG-2, VC-1, H.263 or
+ * Theora in MP4, 3GP, Matroska, MPEG-TS or Ogg), or an MPEG-TS or Ogg file in which it finds no
+ * picture at all (it skips MPEG-2 and Theora streams there): libav.js decodes such pictures
+ * (libav.ts). HEVC, AV1 and VP9 have their own ladder (hevc.js, movi) and never come here.
+ */
+export function pictureForLibav(p: Probe, why: Why): boolean {
+    if (!MS) return false
+    if (why.kind === 'picture') return !!p.video && !p.video.codec
+    return why.kind === 'no-picture' && /Transport Stream|Ogg/.test(p.container)
+}
+
+/**
+ * An H.264 file whose sound mediabunny cannot name (TrueHD, MLP, ALAC, WMA, RealAudio, MPEG Layer
+ * II in Matroska) and none of whose tracks plays: libav.js reads it, copies the picture and decodes
+ * the sound. Asked after `playableSound` found nothing.
+ */
+export function soundForLibav(p: Probe): boolean {
+    return p.video?.codec === 'avc' && p.audios.some((a) => !a.codec && soundDecoderFor(a.internalCodecId) !== null)
 }
 
 /** A sound track as the menu shows it: mediabunny's, or one libav.js reads (libav.ts). */

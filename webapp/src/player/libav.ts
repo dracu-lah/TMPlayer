@@ -13,25 +13,17 @@ import {
 } from 'mediabunny'
 import type { MediaFile } from '../stream/reader'
 
-type AudioSampleFormat = Extract<ConstructorParameters<typeof AudioSample>[0], { numberOfChannels: number; data: unknown }>['format']
 import type * as LibAVTypes from '../../libav/libav.types'
 import { H264Order } from './h264'
 import { codecName, encoderFor, FeedEngine, Unplayable, type EngineEvents, type SoundTrack } from './engines'
+import { joinSound, SAMPLE_FORMATS, softwarePixels, toI420 } from './libavframes'
+import { startLibav, type LibAV } from './libavload'
 
-type LibAV = LibAVTypes.LibAV
 type Frame = LibAVTypes.Frame
 type Packet = LibAVTypes.Packet
 
-/**
- * TMPlayer's own libav.js build (webapp/libav/build.sh), served from public/libav/ and loaded only
- * for a file mediabunny cannot open. It runs in its own worker.
- */
-const BASE = '/libav'
-const VARIANT = 'tmplayer'
-const VERSION = '6.10.9.0'
-
-/** The containers (as `sniff` names them) this engine opens. */
-export const LIBAV_FORMATS = new Set(['AVI'])
+/** The containers (as `sniff` names them) mediabunny cannot open and this engine does. */
+export const LIBAV_FORMATS = new Set(['AVI', 'FLV', 'WMV', 'RealMedia', 'MPEG-PS (VOB)'])
 
 const debug = location.hostname === 'localhost'
 const phone = matchMedia('(pointer: coarse)').matches
@@ -53,37 +45,70 @@ const VIDEO_NAMES: Record<string, string> = {
     wmv3: 'WMV 9',
     vc1: 'VC-1',
     vp6f: 'VP6',
+    vp6: 'VP6',
+    vp6a: 'VP6',
+    flv1: 'Sorenson Spark (Flash)',
+    h263p: 'H.263+',
+    h263i: 'Intel H.263',
+    theora: 'Theora',
+    vp3: 'VP3',
+    rv10: 'RealVideo 1',
+    rv20: 'RealVideo 2',
+    rv30: 'RealVideo 3',
+    rv40: 'RealVideo 4',
+    svq1: 'Sorenson Video 1',
+    svq3: 'Sorenson Video 3',
+    dvvideo: 'DV',
+    msvideo1: 'Microsoft Video 1',
     cinepak: 'Cinepak',
+    indeo3: 'Indeo 3',
     indeo5: 'Indeo 5',
+    prores: 'ProRes',
+    vp8: 'VP8',
+    vp9: 'VP9',
+    av1: 'AV1',
     rawvideo: 'uncompressed',
 }
 
 /** FFmpeg's sound codec names that mediabunny also knows, so the menu names them the same way. */
 const SOUND_CODECS: Record<string, AudioCodec> = { mp3: 'mp3', ac3: 'ac3', eac3: 'eac3', aac: 'aac', dts: 'dts', flac: 'flac', opus: 'opus', vorbis: 'vorbis' }
 const SOUND_NAMES: Record<string, string> = {
+    mp1: 'MPEG Layer 1',
     mp2: 'MPEG Layer 2',
-    pcm_s16le: 'PCM',
-    pcm_u8: 'PCM',
     adpcm_ms: 'MS ADPCM',
     adpcm_ima_wav: 'IMA ADPCM',
+    adpcm_ima_qt: 'IMA ADPCM',
+    adpcm_swf: 'Flash ADPCM',
+    wmav1: 'WMA 1',
     wmav2: 'WMA',
+    wmapro: 'WMA Pro',
+    wmalossless: 'WMA Lossless',
+    truehd: 'Dolby TrueHD',
+    mlp: 'MLP',
+    alac: 'ALAC',
+    cook: 'RealAudio (Cook)',
+    ra_144: 'RealAudio 14.4',
+    real_144: 'RealAudio 14.4',
+    ra_288: 'RealAudio 28.8',
+    real_288: 'RealAudio 28.8',
+    sipr: 'RealAudio (Sipro)',
+    atrac3: 'ATRAC3',
+    atrac3p: 'ATRAC3+',
+    atrac3plus: 'ATRAC3+',
+    qcelp: 'QCELP',
+    gsm: 'GSM',
+    gsm_ms: 'GSM',
+    amr_nb: 'AMR',
+    amr_wb: 'AMR-WB',
+    speex: 'Speex',
+    wavpack: 'WavPack',
+    tta: 'TTA',
+    ape: "Monkey's Audio",
+    nellymoser: 'Nellymoser',
+    qdm2: 'QDesign',
+    ralf: 'RealAudio Lossless',
 }
 
-/** libav's AVSampleFormat numbers as mediabunny's formats (doubles are turned into floats). */
-const SAMPLE_FORMATS: Record<number, AudioSampleFormat> = {
-    0: 'u8',
-    1: 's16',
-    2: 's32',
-    3: 'f32',
-    4: 'f32',
-    5: 'u8-planar',
-    6: 's16-planar',
-    7: 's32-planar',
-    8: 'f32-planar',
-    9: 'f32-planar',
-}
-const YUV420P = 0
-const YUVJ420P = 12
 const AV_PKT_FLAG_KEY = 1
 
 /** A sound track libav.js reads, in the shape the player's menu shows. */
@@ -102,34 +127,22 @@ interface Picture {
     height: number
     /** H.264 is handed over as it is; everything else is decoded here and encoded again by the browser. */
     copy: boolean
+    /** H.264's avcC from the container (MP4, Matroska, FLV), whose packets then carry lengths, not start codes. */
+    avcc: Uint8Array | null
 }
 
-let loading: Promise<{ LibAV: (opts: object) => Promise<LibAV> }> | null = null
-
-async function startLibav(): Promise<LibAV> {
-    // A failed load (offline) is tried again next time.
-    loading ??= import(/* @vite-ignore */ `${BASE}/libav-${VERSION}-${VARIANT}.mjs`).then(
-        (m) => m.default ?? m,
-        (e) => {
-            loading = null
-            throw e
-        },
-    )
-    const ns = await loading
-    return ns.LibAV({ base: BASE, variant: VARIANT })
-}
-
-const seconds = (lo: number, hi: number, tb: [number, number], L: LibAV): number | null => {
+const toSeconds = (lo: number, hi: number, tb: [number, number], L: LibAV): number | null => {
     if (hi === L.AV_NOPTS_VALUE_HI && lo === L.AV_NOPTS_VALUE_LO) return null
     return (L.i64tof64(lo, hi) * tb[0]) / tb[1]
 }
 
-/** The H.264 codec string from the stream's first sequence parameter set (Annex B, as AVI keeps it). */
-function avcCodec(data: Uint8Array): string | null {
+/** The H.264 codec string from the stream's first sequence parameter set (Annex B, as AVI keeps it), or from avcC. */
+function avcCodec(data: Uint8Array, avcc: Uint8Array | null = null): string | null {
+    const hex = (b: number) => b.toString(16).padStart(2, '0')
+    if (avcc) return avcc.length > 3 ? `avc1.${hex(avcc[1])}${hex(avcc[2])}${hex(avcc[3])}` : null
     for (let i = 0; i + 7 < data.length; i++) {
         if (data[i] !== 0 || data[i + 1] !== 0 || data[i + 2] !== 1) continue
         if ((data[i + 3] & 0x1f) !== 7) continue
-        const hex = (b: number) => b.toString(16).padStart(2, '0')
         return `avc1.${hex(data[i + 4])}${hex(data[i + 5])}${hex(data[i + 6])}`
     }
     return null
@@ -224,12 +237,17 @@ export class LibavEngine extends FeedEngine {
                 width: vpar.width ?? 0,
                 height: vpar.height ?? 0,
                 copy: vname === 'h264',
+                avcc: vname === 'h264' && vpar.extradata && vpar.extradata[0] === 1 && vpar.extradata.length > 6 ? vpar.extradata.slice() : null,
             }
             const codecWords = VIDEO_NAMES[vname] ?? vname
             if (pic.copy) {
                 const MS = window.ManagedMediaSource ?? window.MediaSource
                 if (!MS?.isTypeSupported('video/mp4; codecs="avc1.4d401f"')) throw new Unplayable({ kind: 'picture', codec: codecWords })
             } else if (!(await L.avcodec_find_decoder(v.codec_id))) throw new Unplayable({ kind: 'picture', codec: codecWords })
+            else if (pic.width * pic.height > softwarePixels(navigator.hardwareConcurrency || 2, (navigator as { deviceMemory?: number }).deviceMemory, phone)) {
+                // Decoded and encoded again here, a picture this large would stutter: the app plays it.
+                throw new Unplayable({ kind: 'too-heavy', codec: `${codecWords}, ${pic.width} x ${pic.height}` })
+            }
 
             const sounds: LibavSound[] = []
             const inputs = new Map<number, { codecId: number; codecpar: number; tb: [number, number] }>()
@@ -248,10 +266,19 @@ export class LibavEngine extends FeedEngine {
                 })
                 inputs.set(s.index, { codecId: s.codec_id, codecpar: s.codecpar, tb: [s.time_base_num, s.time_base_den] })
             }
-            const lengths = streams.map((s) => s.duration).filter((d) => d > 0 && isFinite(d))
+            const lengths = streams.map((s) => s.duration).filter((d) => d > 0 && isFinite(d) && d < 1e7)
             const duration = lengths.length ? Math.max(...lengths) : durationHint
+            // Where the file's clock starts, which the player counts as 0: an MPEG-TS file starts
+            // where the broadcast clock stood (1.4 s, or hours in).
+            const startLo = await L.AVFormatContext_start_time(fmt)
+            const startHi = await L.AVFormatContext_start_timehi(fmt)
+            const start0 = startLo === L.AV_NOPTS_VALUE_LO && startHi === L.AV_NOPTS_VALUE_HI ? 0 : L.i64tof64(startLo, startHi) / 1e6
             const engine = new LibavEngine(video, L, fmt, pic, sounds, null, duration, container, ev)
             engine.streams = inputs
+            engine.size = file.size
+            // AVI keeps no showing times, so they are rebuilt from the picture's own counts.
+            engine.ordered = container === 'AVI'
+            engine.base = isFinite(start0) && start0 > 0 && start0 < 1e6 ? start0 : 0
             engine.sound = sounds.find((t) => t.decodable) ?? null
             if (!pic.copy) {
                 engine.encoder = await pictureEncoder(pic.width || 640, pic.height || 360)
@@ -332,8 +359,26 @@ export class LibavEngine extends FeedEngine {
         const pic = this.pic
         await this.openDecoders()
         if (gen !== this.gen) return
-        const target = Math.max(0, Math.floor((t * pic.tb[1]) / pic.tb[0]))
-        await L.avformat_seek_file_max(this.fmt, pic.index, target, 0, 0)
+        const base = this.base
+        /** A time in the file as the player's seconds (from `base`). */
+        const seconds = (lo: number, hi: number, tb: [number, number], L: LibAV) => {
+            const s = toSeconds(lo, hi, tb, L)
+            return s === null ? null : s - base
+        }
+        // A demuxer just opened is at the start already: seeking there would drop what it read
+        // while finding the streams (FLV, which keeps no index, then starts at its second key frame).
+        if (!(this.fresh && t === 0)) {
+            const target = Math.max(0, Math.floor(((t + base) * pic.tb[1]) / pic.tb[0]))
+            const lo = target % 2 ** 32
+            const hi = Math.floor(target / 2 ** 32)
+            if ((await L.avformat_seek_file_max(this.fmt, pic.index, lo, hi, 0)) < 0) {
+                // No index to seek by (FLV, some MPEG-PS): to the same share of the file in bytes;
+                // decoding then starts at the next key frame from there.
+                const at = this.duration > 0 ? Math.floor((this.size * Math.min(1, t / this.duration)) * 0.98) : 0
+                await L.avformat_seek_file(this.fmt, -1, 0, 0, at % 2 ** 32, Math.floor(at / 2 ** 32), at % 2 ** 32, Math.floor(at / 2 ** 32), L.AVSEEK_FLAG_BYTE)
+            }
+        }
+        this.fresh = false
         if (this.vdec) await L.avcodec_flush_buffers(this.vdec.c)
         if (this.adec) await L.avcodec_flush_buffers(this.adec.c)
         if (gen !== this.gen) return
@@ -418,18 +463,20 @@ export class LibavEngine extends FeedEngine {
                     const key = ((p.flags ?? 0) & AV_PKT_FLAG_KEY) !== 0
                     if (!keyed && !key) continue
                     keyed = true
-                    ready.push(...order.push(p.data, key, dts))
+                    const pts = this.ordered || p.pts == null ? null : seconds(p.pts, p.ptshi ?? 0, pic.tb, L)
+                    if (pts !== null) ready.push([p.data, key, pts])
+                    else ready.push(...order.push(p.data, key, dts))
                 }
                 if (end) ready.push(...order.flush())
                 for (const [data, key, at] of ready) {
                     if (from === null) {
                         from = at
-                        const codec = avcCodec(data)
+                        const codec = avcCodec(data, pic.avcc)
                         if (!codec) throw new Unplayable({ kind: 'picture', codec: this.videoCodec })
                         await startOutput({ width: pic.width, height: pic.height })
                         if (gen !== this.gen) return
                         await (pictures as unknown as EncodedVideoPacketSource).add(new EncodedPacket(data, 'key', 0, frameLength), {
-                            decoderConfig: { codec, codedWidth: pic.width, codedHeight: pic.height },
+                            decoderConfig: { codec, codedWidth: pic.width, codedHeight: pic.height, ...(pic.avcc ? { description: pic.avcc } : {}) },
                         })
                         await addSound(early)
                         early = []
@@ -450,7 +497,9 @@ export class LibavEngine extends FeedEngine {
                 const frames: Frame[] = input.length || end ? await L.ff_decode_multi(this.vdec.c, this.vdec.pkt, this.vdec.frame, input, { fin: end, ignoreErrors: true, copyoutFrame: 'video_packed' }) : []
                 if (gen !== this.gen) return
                 for (const f of frames) {
-                    if (f.format !== YUV420P && f.format !== YUVJ420P) throw new Unplayable({ kind: 'picture', codec: this.videoCodec })
+                    const i420 = toI420({ format: f.format, width: f.width ?? 0, height: f.height ?? 0, data: f.data as Uint8Array, layout: f.layout }, L)
+                    // A layout not converted here (a palette, 10 bit): the app plays it.
+                    if (!i420) throw new Unplayable({ kind: 'picture', codec: this.videoCodec })
                     const at =
                         (f.pts != null ? seconds(f.pts, f.ptshi ?? 0, pic.tb, L) : null) ??
                         (f.best_effort_timestamp != null ? seconds(f.best_effort_timestamp, f.best_effort_timestamphi ?? 0, pic.tb, L) : null)
@@ -460,16 +509,16 @@ export class LibavEngine extends FeedEngine {
                         // encoded again: the encoder starts its own key frame on the first one kept.
                         if (at < t - frameLength / 2) continue
                         from = at
-                        await startOutput({ width: f.width!, height: f.height!, sar: f.sample_aspect_ratio })
+                        await startOutput({ width: i420.width, height: i420.height, sar: f.sample_aspect_ratio })
                         if (gen !== this.gen) return
                         await addSound(early)
                         early = []
                     }
                     if (at < from) continue
-                    const sample = new VideoSample(f.data as Uint8Array, {
+                    const sample = new VideoSample(i420.data, {
                         format: 'I420',
-                        codedWidth: f.width!,
-                        codedHeight: f.height!,
+                        codedWidth: i420.width,
+                        codedHeight: i420.height,
                         timestamp: at - from,
                         duration: frameLength,
                     })
@@ -491,21 +540,21 @@ export class LibavEngine extends FeedEngine {
     }
 
     private audioTb: [number, number] = [1, 1]
+    /** The copied H.264's showing times are rebuilt (AVI) rather than read from the packets. */
+    private ordered = true
+    /** The file's first time, which the player counts as 0. */
+    private base = 0
+    /** The demuxer has not read past what opening it read. */
+    private fresh = true
+    /** The file's size in bytes, for a seek by share of the file. */
+    private size = 0
 }
 
 /** A decoded sound frame as mediabunny's sample, planes joined into one buffer. */
 function audioSample(f: Frame, timestamp: number): AudioSample | null {
-    const format = SAMPLE_FORMATS[f.format]
+    const format = SAMPLE_FORMATS[f.format as keyof typeof SAMPLE_FORMATS]
     const channels = f.channels ?? 0
-    if (!format || !channels || !f.nb_samples) return null
-    let data: Float32Array | Int16Array | Int32Array | Uint8Array
-    if (Array.isArray(f.data)) {
-        const planes = f.data as (Float32Array | Float64Array | Int16Array | Int32Array | Uint8Array)[]
-        const n = planes[0].length
-        const Ctor = planes[0] instanceof Float64Array ? Float32Array : (planes[0].constructor as typeof Float32Array)
-        const joined = new Ctor(n * planes.length)
-        planes.forEach((p, i) => joined.set(p as unknown as ArrayLike<number>, i * n))
-        data = joined
-    } else data = f.data instanceof Float64Array ? Float32Array.from(f.data) : f.data
+    const data = joinSound(f.data)
+    if (!format || !channels || !f.nb_samples || !data) return null
     return new AudioSample({ data, format, numberOfChannels: channels, sampleRate: f.sample_rate ?? 48000, timestamp })
 }

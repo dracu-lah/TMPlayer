@@ -384,11 +384,11 @@ for (const size of [
         test('Player: a file that needs the app puts the remote on its sheet, and Back leaves', async ({ page }) => {
             await page.goto('/chat/-1001')
             await expect.poll(() => focused(page)).toContain('card|/video/')
-            // Toward the WMV with the arrows, whatever the columns: the sponsored card after the third video breaks the first row.
+            // Toward the AVI whose picture is not converted (Microsoft Video 1) with the arrows, whatever the columns: the sponsored card after the third video breaks the first row.
             for (let i = 0; i < 30; i++) {
                 const way = await page.evaluate(() => {
                     const at = document.activeElement
-                    const goal = [...document.querySelectorAll('a.card')].find((c) => c.textContent?.includes('Windows Clip'))
+                    const goal = [...document.querySelectorAll('a.card')].find((c) => c.textContent?.includes('Odd Picture Clip'))
                     if (!at || !goal || at === goal) return ''
                     const f = at.getBoundingClientRect()
                     const g = goal.getBoundingClientRect()
@@ -399,14 +399,14 @@ for (const size of [
                 if (!way) break
                 await press(page, way)
             }
-            expect(await focused(page)).toBe('card|/video/-1001/11')
+            expect(await focused(page)).toBe('card|/video/-1001/13')
             await press(page, 'Enter')
             await expect.poll(() => focused(page)).toBe('detail-play|')
             await press(page, 'Enter')
             await expect(page.getByText('This video needs the TMPlayer app')).toBeVisible({ timeout: 30_000 })
             expect(await page.evaluate(() => !!document.activeElement?.closest('.pc-status'))).toBe(true)
             await press(page, 'Backspace')
-            await expect(page).toHaveURL(/\/video\/-1001\/11/)
+            await expect(page).toHaveURL(/\/video\/-1001\/13/)
         })
 
         test('Player: a paused picture with the row away stops the page\'s own timers', async ({ page }) => {
