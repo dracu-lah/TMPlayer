@@ -404,7 +404,7 @@ object ListPages {
     fun cards(records: List<WatchLaterRecord>, corrections: Map<String, VideoCorrection> = VideoCorrections.current): List<ListCard> {
         if (records.isEmpty()) return emptyList()
         val order = HashMap<String, Int>(records.size * 2)
-        records.forEachIndexed { index, r -> order.putIfAbsent(r.id, index) }
+        records.forEachIndexed { index, r -> if (r.id !in order) order[r.id] = index }
         val videos = records.filterNot { it.isShow }
         val byItem = HashMap<String, WatchLaterRecord>(videos.size * 2)
         val items = videos.map { record -> record.toMediaItem().also { byItem[it.id] = record } }
