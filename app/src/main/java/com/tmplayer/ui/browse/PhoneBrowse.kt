@@ -263,6 +263,7 @@ internal fun PhoneBrowse(
                 onFilters = search::setFilters,
                 onSort = search::setSort,
                 onLoadMore = search::loadMore,
+                onRetryMore = search::retryMore,
                 onRetry = search::retry,
                 onRemoveRecent = { entry -> scope.launch { settings.removeRecentSearch(entry) } },
                 onClearRecent = {

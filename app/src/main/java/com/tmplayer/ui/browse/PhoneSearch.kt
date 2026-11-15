@@ -157,6 +157,8 @@ internal fun PhoneSearchScreen(
     onFilters: (SearchFilters) -> Unit,
     onSort: (SearchSort) -> Unit,
     onLoadMore: () -> Unit,
+    /** The Try again row after a page failed to load. */
+    onRetryMore: () -> Unit = {},
     onRetry: () -> Unit,
     onRemoveRecent: (String) -> Unit,
     /** Clears them all and hands back what was there, for the Undo. */
@@ -254,6 +256,7 @@ internal fun PhoneSearchScreen(
                         onOpenChat = onOpenChat,
                         onOpenGroup = { keyboard?.hide(); onOpenGroup(it) },
                         onRetry = onRetry,
+                        onRetryMore = onRetryMore,
                         onClearFilters = { onFilters(SearchFilters()) },
                         onSearchWord = { word -> onText(TextFieldValue(word, TextRange(word.length))); onSubmit() },
                     )
@@ -305,7 +308,7 @@ internal fun PhoneSearchScreen(
     // The next page well before the end, the way a chat's grid pages.
     com.tmplayer.ui.components.LoadMoreAhead(
         listState,
-        enabled = state.groups.isNotEmpty() && !state.loadingMore && !state.endReached,
+        enabled = state.groups.isNotEmpty() && !state.loadingMore && !state.endReached && !state.moreFailed,
         ahead = PAGE_LEAD - 1,
         onLoadMore = onLoadMore,
     )
@@ -524,6 +527,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.results(
     onOpenChat: (ChatSummary) -> Unit,
     onOpenGroup: (ResultGroup) -> Unit,
     onRetry: () -> Unit,
+    onRetryMore: () -> Unit,
     onClearFilters: () -> Unit,
     onSearchWord: (String) -> Unit,
 ) {
@@ -613,6 +617,15 @@ private fun androidx.compose.foundation.lazy.LazyListScope.results(
         }
     }
     if (state.loadingMore) item(key = "more") { Note(LocalStrings.current.gridLoadingMore, spinner = true) }
+    // The last page failed: said where the spinner was, with Try again, rather than the list
+    // quietly stopping short (the chat grid's row, MediaGridScreen).
+    if (state.moreFailed && !state.loadingMore) {
+        item(key = "more-failed") {
+            Note(LocalStrings.current.gridMoreFailed) {
+                TmSecondaryButton(onClick = onRetryMore) { Text(LocalStrings.current.commonTryAgain) }
+            }
+        }
+    }
 }
 
 /**

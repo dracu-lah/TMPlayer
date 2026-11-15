@@ -113,6 +113,8 @@ internal fun TvSearchScreen(
     onFilters: (SearchFilters) -> Unit,
     onSort: (SearchSort) -> Unit,
     onLoadMore: () -> Unit,
+    /** The Try again pill after a page failed to load. */
+    onRetryMore: () -> Unit = {},
     onRetry: () -> Unit,
     /** Whose Telegram this is, for the picture beside the clock every rail page carries. */
     account: com.tmplayer.data.Account? = null,
@@ -351,6 +353,15 @@ internal fun TvSearchScreen(
                         if (state.loadingMore) {
                             item(span = full, key = "more") {
                                 Text(s.gridLoadingMore, style = MaterialTheme.typography.bodyLarge, color = Tone.muted)
+                            }
+                        }
+                        // The last page failed: said under the grid, with Try again for the remote.
+                        if (state.moreFailed && !state.loadingMore) {
+                            item(span = full, key = "more-failed") {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Text(s.gridMoreFailed, style = MaterialTheme.typography.bodyLarge, color = Tone.muted)
+                                    TvPill(s.commonTryAgain, TmIcons.Refresh, onClick = onRetryMore)
+                                }
                             }
                         }
                     }
@@ -654,6 +665,7 @@ internal fun TvSearchPage(
         onFilters = search::setFilters,
         onSort = search::setSort,
         onLoadMore = search::loadMore,
+        onRetryMore = search::retryMore,
         onRetry = search::retry,
         account = account,
         onOpenTopic = { hit ->

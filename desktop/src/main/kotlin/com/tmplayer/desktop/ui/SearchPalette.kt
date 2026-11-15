@@ -357,7 +357,7 @@ internal fun BoxScope.SearchPalette(
         if (selected <= first || selected >= last) list.animateScrollToItem((selected - 2).coerceAtLeast(0))
     }
     // The next page well before the end, as the grids page.
-    com.tmplayer.ui.components.LoadMoreAhead(list, enabled = !ui.loadingMore && !ui.endReached, ahead = 5) { search.loadMore() }
+    com.tmplayer.ui.components.LoadMoreAhead(list, enabled = !ui.loadingMore && !ui.endReached && !ui.moreFailed, ahead = 5) { search.loadMore() }
 
     fun move(by: Int) {
         if (pickable.isEmpty()) return
@@ -548,6 +548,11 @@ private fun buildRows(
         }
     }
     if (ui.loadingMore) add(PaletteRow.Skeleton(SKELETONS))
+    // The last page failed: said, with Try again, not a list that stops short (the chat grid's footer).
+    if (ui.moreFailed && !ui.loadingMore) {
+        add(PaletteRow.Note(s.gridMoreFailed))
+        add(PaletteRow.Action(s.commonTryAgain) { search.retryMore() })
+    }
     val places = Place.entries.filter { Fuzzy.score(it.label, query.text) > 0 }
     if (places.isNotEmpty()) {
         add(PaletteRow.Heading(s.searchGoTo))

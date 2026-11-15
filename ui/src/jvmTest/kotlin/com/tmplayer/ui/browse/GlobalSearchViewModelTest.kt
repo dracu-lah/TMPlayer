@@ -284,4 +284,38 @@ class GlobalSearchViewModelTest {
         assertEquals(before, model.state.value.groups.size)
         assertTrue(testScheduler.currentTime >= VideoSearchSource.CHECK_MS)
     }
+    @Test
+    fun `a page that fails to load says so, is not asked again by scrolling, and Try again asks once more`() = runTest(dispatcher) {
+        var failSecond = true
+        var calls = 0
+        val twoPages = VideoSearchSource { query, cursor, _ ->
+            calls++
+            when {
+                cursor.videoOffset.isEmpty() ->
+                    AllChatsPage((1L..14L).map { video(it, "Harbour.Part.$it.2019.1080p.mkv") }, AllChatsCursor(videoOffset = "2", documentDone = true))
+                failSecond -> throw java.io.IOException("down")
+                else -> AllChatsPage(listOf(video(50, "Harbour.End.2021.1080p.mkv")), done)
+            }
+        }
+        val model = GlobalSearchViewModel(twoPages, known = { emptyList() }, work = dispatcher, settleMs = 0)
+        model.type("harbour")
+        advanceUntilIdle()
+        assertFalse(model.state.value.moreFailed)
+        model.loadMore()
+        advanceUntilIdle()
+        assertTrue(model.state.value.moreFailed)
+        assertFalse(model.state.value.loadingMore)
+        assertEquals(14, model.state.value.groups.size)
+        // Scrolling to the end again does not loop on a dead line.
+        val asked = calls
+        model.loadMore()
+        advanceUntilIdle()
+        assertEquals(asked, calls)
+        failSecond = false
+        model.retryMore()
+        advanceUntilIdle()
+        assertFalse(model.state.value.moreFailed)
+        assertEquals(15, model.state.value.groups.size)
+        assertTrue(model.state.value.endReached)
+    }
 }

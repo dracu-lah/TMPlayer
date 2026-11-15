@@ -127,6 +127,11 @@ data class GlobalSearchState(
     /** The first answer is in but thin, and another page is on its way ("Still searching"). */
     val stillSearching: Boolean = false,
     val loadingMore: Boolean = false,
+    /**
+     * The next page failed: the list keeps what it has and ends in a Try again row
+     * ([GlobalSearchViewModel.retryMore]). Nothing asks again by itself while it is set.
+     */
+    val moreFailed: Boolean = false,
     /** Telegram has nothing more for this query. */
     val endReached: Boolean = false,
     /** No connection: what is listed is what this device already knew. Asked again on reconnect. */
@@ -316,6 +321,7 @@ class GlobalSearchViewModel(
     fun loadMore() {
         val now = _state.value
         if (now.query.isEmpty || now.busy || now.loadingMore || now.endReached || now.error != null || now.offline) return
+        if (now.moreFailed) return
         if (job?.isActive == true) return
         if (now.groups.size >= GlobalSearch.MAX_GROUPS) return
         _state.update { it.copy(loadingMore = true) }
@@ -325,15 +331,22 @@ class GlobalSearchViewModel(
                     cursor = page.cursor
                     keepNext(now.query, now.filters, page)
                     absorb(page)
-                    _state.update { it.copy(loadingMore = false, endReached = page.cursor.done) }
+                    _state.update { it.copy(loadingMore = false, moreFailed = false, endReached = page.cursor.done) }
                 }
                 .onFailure {
                     if (it is CancellationException) throw it
-                    // A page that failed half way down keeps what is on screen; the next scroll
-                    // to the end asks again.
-                    _state.update { s -> s.copy(loadingMore = false) }
+                    // A page that failed half way down keeps what is on screen and ends in a Try
+                    // again row; scrolling alone does not ask again (it would loop on a dead line).
+                    _state.update { s -> s.copy(loadingMore = false, moreFailed = true) }
                 }
         }
+    }
+
+    /** The Try again row after a page failed: asks for that page once more. */
+    fun retryMore() {
+        if (!_state.value.moreFailed) return
+        _state.update { it.copy(moreFailed = false) }
+        loadMore()
     }
 
     /** After a failure: the same query again, without the wait. */
