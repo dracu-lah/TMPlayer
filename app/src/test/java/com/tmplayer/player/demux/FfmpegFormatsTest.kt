@@ -48,6 +48,35 @@ class FfmpegFormatsTest {
         assertEquals(2, cook.channelCount)
     }
 
+    /**
+     * The decoders of the real sample files (scripts/media3ext/bench/SAMPLES.md): each one's name,
+     * as libavformat gives it for a stream, becomes the MIME type the extension's FfmpegLibrary
+     * resolves back to that decoder, and is a name the native side may hand over.
+     */
+    @Test
+    fun everyDecoderOfTheRealSamplesGetsItsOwnMimeType() {
+        val video = listOf("wmv3", "vc1", "svq3", "vp3", "vp6", "vp6f", "rv10", "rv30", "rv40", "mjpegb", "mjpeg", "h263", "h263p", "mpeg1video")
+        val audio = listOf(
+            "wmapro", "wmalossless", "wmav2", "mp1", "cook", "real_288", "qcelp", "sipr", "atrac3", "atrac3plus", "ape",
+            "nellymoser", "adpcm_ima_smjpeg", "aac", "g723_1", "siren",
+        )
+        for (name in video) {
+            assertTrue(ContainerValues.isName(name))
+            val mime = FfmpegFormats.sampleMimeType(stream(StreamInfo.TYPE_VIDEO, name, name))
+            // MPEG-2 is the device's; every other one is named by its decoder.
+            assertEquals("video/x-ffmpeg-$name", mime)
+            assertEquals(name, FfmpegFormats.codecLabel(mime!!))
+        }
+        for (name in audio) {
+            assertTrue(ContainerValues.isName(name))
+            val mime = FfmpegFormats.sampleMimeType(stream(StreamInfo.TYPE_AUDIO, name, name))
+            // MP1 is Media3's own layer 1 type; the rest are named by their decoder.
+            assertEquals(if (name == "mp1") MimeTypes.AUDIO_MPEG_L1 else "audio/x-ffmpeg-$name", mime)
+        }
+        // A codec this build has no decoder for (Vivo's G.723.1 and Siren) is still listed by its codec name.
+        assertEquals("audio/x-ffmpeg-g723_1", FfmpegFormats.sampleMimeType(stream(StreamInfo.TYPE_AUDIO, null, "g723_1")))
+    }
+
     @Test
     fun hardwareAndPassthroughCodecsKeepMedia3sMimeTypes() {
         assertEquals(MimeTypes.VIDEO_MPEG2, FfmpegFormats.sampleMimeType(stream(StreamInfo.TYPE_VIDEO, "mpeg2video", "mpeg2video")))

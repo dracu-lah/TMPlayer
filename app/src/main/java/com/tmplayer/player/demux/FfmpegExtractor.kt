@@ -332,13 +332,48 @@ class FfmpegExtractor internal constructor(
         }
     }
 
+    /**
+     * A new reader on the same file, from its first byte, for a demuxer that cannot go back to the
+     * start once it has read on (the real vivo, IVR and NSV files libavformat could not rewind: it
+     * lands in the middle of a packet and every read after it fails). Null when the file does not
+     * open again. The old reader is closed either way.
+     */
+    private fun reopen(format: String, size: Long, old: ContainerReader): ContainerReader? {
+        try {
+            old.close()
+        } catch (_: Throwable) {
+        }
+        val fresh = try {
+            readerFactory()
+        } catch (_: Throwable) {
+            return null
+        }
+        io.seek(0)
+        val info = try {
+            fresh.open(format, io, size)
+        } catch (_: Throwable) {
+            null
+        }
+        if (info == null) {
+            try {
+                fresh.close()
+            } catch (_: Throwable) {
+            }
+            return null
+        }
+        return fresh
+    }
+
     private fun demux(format: String, size: Long) {
-        val reader = try {
+        var reader = try {
             readerFactory()
         } catch (t: Throwable) {
             post(Failed(t))
             return
         }
+        // True from a seek to the start until the next packet: a read that fails in between is a
+        // demuxer that did not rewind, and the file is opened again once.
+        var restarting = false
         try {
             val info = try {
                 reader.open(format, io, size)
@@ -361,11 +396,20 @@ class FfmpegExtractor internal constructor(
                 if (seek != null) {
                     current = seek.generation
                     reader.seek(seek.timeUs, seek.bytePosition)
+                    restarting = seek.timeUs <= 0
                     continue
                 }
                 val n = reader.read(meta)
                 if (n < 0) {
-                    if (lock.withLock { seekRequest != null }) continue
+                    if (lock.withLock { seekRequest != null || released }) continue
+                    if (restarting) {
+                        restarting = false
+                        val fresh = reopen(format, size, reader)
+                        if (fresh != null) {
+                            reader = fresh
+                            continue
+                        }
+                    }
                     if (!post(Ended(current))) return
                     // Wait for a seek (or the end).
                     lock.withLock {
@@ -377,6 +421,7 @@ class FfmpegExtractor internal constructor(
                     }
                     continue
                 }
+                restarting = false
                 val stream = meta[0].toInt()
                 if (n > MAX_PACKET || stream < 0) continue
                 if (packetBuffer.size < n) packetBuffer = ByteArray(maxOf(n, packetBuffer.size * 2).coerceAtMost(MAX_PACKET))
@@ -411,7 +456,7 @@ class FfmpegExtractor internal constructor(
  */
 @OptIn(UnstableApi::class)
 internal class ContainerSeekMap(private val info: ContainerInfo, private val size: Long) : SeekMap {
-    override fun isSeekable(): Boolean = info.seekable && info.durationUs > 0 && size > 0
+    override fun isSeekable(): Boolean = info.seekable && info.durationUs > 0 && size > 0 && info.format !in NO_TIME_SEEK
 
     override fun getDurationUs(): Long = if (info.durationUs > 0) info.durationUs else C.TIME_UNSET
 
@@ -434,5 +479,15 @@ internal class ContainerSeekMap(private val info: ContainerInfo, private val siz
         if (info.durationUs <= 0 || size <= 0) return info.dataStart
         val share = (timeUs.coerceIn(0, info.durationUs).toDouble() / info.durationUs)
         return (info.dataStart + share * (size - info.dataStart)).toLong().coerceIn(info.dataStart, (size - 1).coerceAtLeast(info.dataStart))
+    }
+
+    companion object {
+        /**
+         * Demuxers whose seek reads nothing after it, however it is asked (libavformat's vivo has no
+         * index and no way to find a packet from the middle: all 5 sample files of the FFmpeg suite
+         * give no packet after a seek, the ffmpeg program fails the same way). Playing from the
+         * start works; the bar is shown as unseekable instead of ending the video at the first drag.
+         */
+        val NO_TIME_SEEK = setOf("vivo")
     }
 }

@@ -49,12 +49,18 @@ class FfmpegExtractorTest {
     private inner class FakeReader(
         private val refuse: Boolean = false,
         private val garbage: Boolean = false,
+        /** A demuxer that cannot go back to the start: reads fail after such a seek until it is opened again. */
+        private val stuckOnRestart: Boolean = false,
+        /** The same, and opening again does not help. */
+        private val stuckForever: Boolean = false,
     ) : ContainerReader {
         lateinit var io: ReaderIo
         var position = 0L
         var wrongBytes = 0
         var closed = false
         var seeks = 0
+        var opened = 0
+        private var stuck = false
         private var packet = 0
 
         private fun readFully(length: Int): Boolean {
@@ -75,6 +81,10 @@ class FfmpegExtractorTest {
 
         override fun open(format: String, io: ReaderIo, size: Long): ContainerInfo? {
             this.io = io
+            opened++
+            position = 0
+            stuck = stuckForever && opened > 1 && stuck
+            packet = 0
             if (!readFully(headerSize.toInt())) return null
             if (refuse) return null
             seekTo(size - indexSize)
@@ -97,6 +107,7 @@ class FfmpegExtractorTest {
         private fun timeAt(at: Long) = (at - headerSize) * durationUs / (size - indexSize - headerSize)
 
         override fun read(meta: LongArray): Int {
+            if (stuck) return -3
             if (position + packetSize > size - indexSize) return ReaderIo.END
             val at = position
             if (!readFully(packetSize)) return ReaderIo.END
@@ -117,6 +128,7 @@ class FfmpegExtractorTest {
 
         override fun seek(timeUs: Long, bytePosition: Long): Boolean {
             seeks++
+            if ((stuckOnRestart || stuckForever) && timeUs <= 0) stuck = true
             val index = (timeUs / 2_000_000L).toInt().coerceIn(0, 4)
             seekTo(headerSize + index * ((size - indexSize - headerSize) / 5))
             packet = 0
@@ -267,6 +279,63 @@ class FfmpegExtractorTest {
         load(extractor, headerSize) { output.samples.size >= 5 }
         assertEquals(0L, output.samples.first().timeUs)
         extractor.release()
+    }
+
+    @Test
+    fun aDemuxerThatCannotRewindIsOpenedAgainForASeekToTheStart() {
+        val reader = FakeReader(stuckOnRestart = true)
+        val extractor = extractor(reader)
+        assertTrue(sniffed(extractor))
+        val output = Output()
+        extractor.init(output)
+        load(extractor, 0) { output.samples.size >= 10 }
+        assertEquals(1, reader.opened)
+        output.samples.clear()
+        extractor.seek(headerSize, 0)
+        load(extractor, headerSize) { output.samples.size >= 5 }
+        assertEquals("the file is opened once more", 2, reader.opened)
+        assertEquals(0, reader.wrongBytes)
+        assertEquals(0L, output.samples.first().timeUs)
+        // A seek elsewhere never opens it again.
+        extractor.seek(headerSize, 4_000_000L)
+        output.samples.clear()
+        load(extractor, headerSize) { output.samples.size >= 5 }
+        assertEquals(2, reader.opened)
+        extractor.release()
+    }
+
+    @Test
+    fun aFileThatFailsAfterBeingOpenedAgainEndsInsteadOfLooping() {
+        val reader = FakeReader(stuckForever = true)
+        val extractor = extractor(reader)
+        assertTrue(sniffed(extractor))
+        val output = Output()
+        extractor.init(output)
+        load(extractor, 0) { output.samples.size >= 10 }
+        extractor.seek(headerSize, 0)
+        assertEquals(Extractor.RESULT_END_OF_INPUT, load(extractor, headerSize) { false })
+        assertEquals("one more open, no more", 2, reader.opened)
+        extractor.release()
+    }
+
+    @Test
+    fun aVivoFileIsShownAsUnseekable() {
+        val vivo = FakeReader()
+        val extractor = extractor(vivo, probe = "vivo")
+        assertTrue(sniffed(extractor))
+        val output = Output()
+        extractor.init(output)
+        load(extractor, 0) { output.samples.size >= 3 }
+        assertFalse(output.seekMap!!.isSeekable)
+        extractor.release()
+        val asf = FakeReader()
+        val other = extractor(asf, probe = "asf")
+        assertTrue(sniffed(other))
+        val out2 = Output()
+        other.init(out2)
+        load(other, 0) { out2.samples.size >= 3 }
+        assertTrue(out2.seekMap!!.isSeekable)
+        other.release()
     }
 
     @Test
