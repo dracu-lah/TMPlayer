@@ -262,6 +262,8 @@ export interface HomeView extends ListView {
         continueWatching: boolean
         recentlyAdded: boolean
         starredRows: boolean
+        /** The order of the rows, as stored (the apps' HomeOrder): row keys, comma separated; empty is Home's own. */
+        order: string
     }
 }
 

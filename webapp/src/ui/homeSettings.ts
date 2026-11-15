@@ -15,12 +15,15 @@ interface HomeKeys {
     homeContinue: boolean
     homeRecent: boolean
     homeStarred: boolean
+    homeOrder: string
 }
 
 /** `saved` with Settings > Home's keys that do not hold up taken out (so the defaults stand), and the retired ones dropped. */
 export function cleanHome<T extends Partial<HomeKeys>>(saved: T): T {
     const out: Record<string, unknown> = { ...saved }
     for (const k of SWITCHES) if (k in out && typeof out[k] !== 'boolean') delete out[k]
+    // The order of Home's rows (HomeOrder.kt) is text; anything else, or an absurd length, is no order.
+    if ('homeOrder' in out && (typeof out.homeOrder !== 'string' || out.homeOrder.length > 100_000)) delete out.homeOrder
     for (const k of RETIRED) delete out[k]
     return out as T
 }

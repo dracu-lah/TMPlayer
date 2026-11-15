@@ -448,6 +448,18 @@ html[data-form=tv] .panel .set-block-title { font-size: calc(var(--dp) * 16); li
 .set-sub { font-size: 14px; line-height: 20px; color: var(--muted); }
 .set-chevron { flex: none; color: var(--muted); }
 .set-block { display: flex; flex-direction: column; gap: 12px; padding: 16px; }
+/* Settings > Home, Order of rows: a row's name, then Move up and Move down. */
+.order-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.order-row { display: flex; align-items: center; gap: 4px; min-height: 56px; padding: 4px 8px 4px 16px; position: relative; }
+.order-row + .order-row::before { content: ''; position: absolute; top: 0; left: 16px; right: 0; border-top: 1px solid var(--line); }
+:root[data-form="desktop"] .order-row { cursor: grab; }
+.order-dragging { opacity: 0.5; }
+.order-move { flex: none; display: grid; place-items: center; width: 44px; height: 44px; border: 0; border-radius: 999px; background: none; color: var(--fg); cursor: pointer; }
+.order-move:hover:not(:disabled) { background: color-mix(in srgb, var(--fg) 8%, transparent); }
+.order-move:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.order-move:disabled { opacity: 0.35; cursor: default; }
+.order-hint { margin: 0; padding: 8px 16px 4px; }
+.order-reset { align-self: start; margin: 4px 16px 12px; }
 .set-block-title { font-size: 16px; line-height: 24px; font-weight: 500; }
 .set-credit { gap: 8px; }
 .set-account { display: flex; align-items: center; gap: 14px; padding: 4px 16px; }

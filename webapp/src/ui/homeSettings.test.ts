@@ -23,3 +23,10 @@ test("an older build's chosen chats are dropped", () => {
 test('other keys are left alone', () => {
     assert.deepEqual(cleanHome({ theme: 'dark' } as never), { theme: 'dark' })
 })
+
+test('the order of rows is text and nothing else', () => {
+    assert.deepEqual(cleanHome({ homeOrder: 'recent,continue' } as never), { homeOrder: 'recent,continue' })
+    for (const bad of [5, null, {}, ['recent'], true, 'x'.repeat(200_000)]) {
+        assert.equal('homeOrder' in (cleanHome({ homeOrder: bad } as never) as Record<string, unknown>), false)
+    }
+})

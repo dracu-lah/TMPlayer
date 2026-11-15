@@ -4,7 +4,7 @@ import { ArrowLeft01Icon, ArrowRight01Icon, UserAdd01Icon } from '@hugeicons/cor
 import { call, errorText } from '../tg/rpc'
 import { onBackOnline } from '../net'
 import { t } from '../i18n'
-import { addedIds, addedMode, addedView, progress, resumes, settings, starredIds, watchedTick } from '../store'
+import { addedIds, addedMode, addedView, progress, rememberHomeChats, resumes, settings, starredIds, watchedTick } from '../store'
 import { forgetGone } from '../goneVideos'
 import { Icon } from '../ui/Icon'
 import { useObservedCovers } from './promo'
@@ -31,6 +31,8 @@ export function Home() {
     const apply = (page: HomePage) => {
         setLast(page)
         setError(null)
+        // Named in Settings > Home's order list, which does not ask Telegram for them.
+        rememberHomeChats(page.rows.flatMap((row) => (row.kind === 'chat' && row.chatId !== null && row.title ? [{ chatId: row.chatId, title: row.title }] : [])))
         // A video part way whose message is gone for good leaves the lists, and the page says so (HX21).
         if (page.gone.length) void forgetGone(page.gone)
     }
@@ -137,7 +139,7 @@ export function Home() {
 /** Settings > Home as the worker reads it (HomeView.layout). */
 function homeLayout(): HomeView['layout'] {
     const s = settings()
-    return { carousel: s.carousel, continueWatching: s.homeContinue, recentlyAdded: s.homeRecent, starredRows: s.homeStarred }
+    return { carousel: s.carousel, continueWatching: s.homeContinue, recentlyAdded: s.homeRecent, starredRows: s.homeStarred, order: s.homeOrder }
 }
 
 function rowTitle(row: HomeRow, selfId: number | null): string {

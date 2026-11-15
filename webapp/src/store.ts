@@ -30,6 +30,8 @@ export interface Settings {
     homeContinue: boolean
     homeRecent: boolean
     homeStarred: boolean
+    /** The order of Home's rows (the apps' HomeOrder): row keys, comma separated; empty is Home's own order. */
+    homeOrder: string
 }
 
 export interface Resume {
@@ -56,6 +58,7 @@ const DEFAULTS: Settings = {
     homeContinue: true,
     homeRecent: true,
     homeStarred: true,
+    homeOrder: '',
 }
 
 const THEME_KEY = 'tmplayer-theme'
@@ -200,13 +203,15 @@ function applyTheme(theme: Theme) {
 }
 
 export async function loadSettings() {
-    const [saved, stars, later, added, mode] = await Promise.all([
+    const [saved, stars, later, added, mode, chatRows] = await Promise.all([
         read<Partial<Settings>>('settings'),
         starred(),
         laterList(),
         addedChats(),
         read<unknown>(ADDED_MODE),
+        read<unknown>(HOME_CHATS),
     ])
+    setHomeChatRows(cleanHomeChats(chatRows))
     // Keys of settings since removed (`rows`, the As rows layout) are dropped, so the next write leaves them behind.
     const known = Object.fromEntries(Object.entries(saved ?? {}).filter(([k]) => k in DEFAULTS)) as Partial<Settings>
     setSettings({ ...DEFAULTS, ...cleanHome(known) })
@@ -509,6 +514,32 @@ export function setStarred(chatId: number, on: boolean) {
         remove(`star:${chatId}`)
     }
     setStarredIds(next)
+}
+
+/** A starred chat's row on Home, as last drawn: Settings names it in the order list without asking Telegram. */
+export interface HomeChatRow {
+    chatId: number
+    title: string
+}
+
+const HOME_CHATS = 'home-chats'
+const [homeChatRows, setHomeChatRows] = createSignal<readonly HomeChatRow[]>([])
+export { homeChatRows }
+
+/** Checked, as everything read back is: a stored list that does not hold up is no list. */
+function cleanHomeChats(raw: unknown): HomeChatRow[] {
+    if (!Array.isArray(raw)) return []
+    return raw
+        .slice(0, 5000)
+        .flatMap((r): HomeChatRow[] => (r && typeof r.chatId === 'number' && Number.isFinite(r.chatId) && typeof r.title === 'string' ? [{ chatId: r.chatId, title: r.title.slice(0, 200) }] : []))
+}
+
+/** Home's chat rows as just drawn, kept for Settings > Home's order list. */
+export function rememberHomeChats(rows: readonly HomeChatRow[]) {
+    const next = cleanHomeChats(rows)
+    if (JSON.stringify(next) === JSON.stringify(homeChatRows())) return
+    setHomeChatRows(next)
+    write(HOME_CHATS, next)
 }
 
 export async function starred(): Promise<number[]> {

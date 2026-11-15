@@ -15,6 +15,7 @@ import com.tmplayer.data.EpisodeNeighbours
 import com.tmplayer.data.EpisodeTag
 import com.tmplayer.data.Fuzzy
 import com.tmplayer.data.HomeLayout
+import com.tmplayer.data.HomeOrder
 import com.tmplayer.data.HomeRow
 import com.tmplayer.data.HomeRows
 import com.tmplayer.data.LessonSteps
@@ -597,6 +598,8 @@ interface WebHomeLayout {
     val continueWatching: Boolean
     val recentlyAdded: Boolean
     val starredRows: Boolean
+    /** The order of the rows as stored (HomeOrder): row keys, comma separated; missing or garbage is Home's own. */
+    val order: String?
 }
 
 /** Which of Home's chats are read, and where Recently added comes from, as HomeViewModel picks them. */
@@ -618,6 +621,7 @@ private fun homeLayout(l: WebHomeLayout) = HomeLayout(
     continueWatching = l.continueWatching,
     recentlyAdded = l.recentlyAdded,
     starredRows = l.starredRows,
+    order = HomeOrder.parse(l.order),
 )
 
 /**

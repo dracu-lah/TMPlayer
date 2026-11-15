@@ -341,13 +341,33 @@ class WebRulesTest {
         continueWatching: Boolean = true,
         recentlyAdded: Boolean = true,
         starredRows: Boolean = true,
+        order: String? = null,
     ): WebHomeLayout {
         val o: dynamic = js("({})")
+        if (order != null) o.order = order
         o.carousel = carousel
         o.continueWatching = continueWatching
         o.recentlyAdded = recentlyAdded
         o.starredRows = starredRows
         return o.unsafeCast<WebHomeLayout>()
+    }
+
+    @Test
+    fun `Settings Home: the stored order moves the rows, garbage and unknown keys change nothing`() {
+        val saved = chat(1.0, "Me", saved = true)
+        val starredChat = chat(2.0, "Harbour")
+        val mine = videosIn(1.0, 10 to "Quiet.Coast.2021.1080p.mkv")
+        val harbour = videosIn(2.0, 20 to "Harbour.Notes.S01E01.mkv", 22 to "Night.Ferry.2020.mkv")
+        fun kinds(order: String?) = home(
+            emptyArray(), arrayOf(starredChat, saved), arrayOf(2.0), arrayOf(chatVideos(1.0, mine), chatVideos(2.0, harbour)),
+            emptyArray(), false, layout(order = order), null, false,
+        ).map { it.kind }
+        assertContentEquals(listOf("recent", "chat"), kinds(null))
+        assertContentEquals(listOf("chat", "recent"), kinds("chat-2,recent"))
+        assertContentEquals(listOf("chat", "recent"), kinds("future-row,chat-2,chat-99,recent"))
+        // A row the order has not heard of stands at its default place: Recently added is first by default.
+        assertContentEquals(listOf("recent", "chat"), kinds("future-row,chat-2,chat-99"))
+        assertContentEquals(listOf("recent", "chat"), kinds("!!!,,\u0000"))
     }
 
     @Test

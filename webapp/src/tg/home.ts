@@ -23,7 +23,7 @@ const LIST_ENOUGH = 300
 /** Added chats Recently added waits on, read at once (HomeRows.CHOSEN_WAIT); the rest count through the search across chats. */
 const CHOSEN_WAIT = 8
 /** Every row on: Home as it was before Settings > Home. */
-const ALL_ON: HomeView['layout'] = { carousel: true, continueWatching: true, recentlyAdded: true, starredRows: true }
+const ALL_ON: HomeView['layout'] = { carousel: true, continueWatching: true, recentlyAdded: true, starredRows: true, order: '' }
 
 /** Telegram's answer for a chat this account can no longer read: its videos are gone for it. */
 const chatGone = (e: unknown) => /^(CHANNEL_PRIVATE|CHAT_FORBIDDEN|USER_BANNED_IN_CHANNEL|PEER_ID_INVALID|CHANNEL_INVALID|CHAT_ID_INVALID)/.test(String((e as { text?: string })?.text ?? ''))
