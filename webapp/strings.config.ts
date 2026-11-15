@@ -253,7 +253,7 @@ export const PAGE_STRINGS = [
     'picker.band_gone',
     'picker.band_recommended',
     'picker.band_starred',
-    'picker.below_bar',
+    'picker.below_bar_many',
     'picker.blurb_only',
     'picker.choose_chats',
     'picker.confirm_body',

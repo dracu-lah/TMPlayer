@@ -145,7 +145,7 @@ export function AddChats() {
             last = row.band
             out.push({ row })
             // Under the last recommended row, when none cleared the bar: why these are offered unticked.
-            if (row.band === 'recommended' && belowBar() && shown[i + 1]?.band !== 'recommended') out.push({ note: t('picker.below_bar') })
+            if (row.band === 'recommended' && belowBar() && shown[i + 1]?.band !== 'recommended') out.push({ note: t('picker.below_bar_many') })
         })
         if (holding && last !== 'recommended' && out.length) hold()
         return out

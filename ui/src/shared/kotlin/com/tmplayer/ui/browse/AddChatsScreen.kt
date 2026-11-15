@@ -669,7 +669,7 @@ fun AddChatsScreen(
                         if (band == ChatPicking.Band.Recommended && state.belowBar) {
                             item(key = "below-bar") {
                                 Text(
-                                    s.pickerBelowBar,
+                                    s.pickerBelowBarMany,
                                     style = MaterialTheme.typography.bodySmall,
                                     color = Tone.muted,
                                     modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
