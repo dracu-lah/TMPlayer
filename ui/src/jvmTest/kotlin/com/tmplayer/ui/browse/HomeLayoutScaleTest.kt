@@ -118,4 +118,43 @@ class HomeLayoutScaleTest {
         // Only the chats Home reads at once, not fifty, let alone three thousand.
         assertTrue("rows held ${model.loaded.value.size}", model.loaded.value.size <= HomeViewModel.EAGER_CHATS)
     }
+
+    @Test
+    fun `forty starred chats in the opposite order, the first row is in within 3 s and nothing more is read for it`() = runTest(dispatcher, timeout = 5.minutes) {
+        val account = SyntheticAccount(backgroundScope, { testScheduler.currentTime })
+        val model = model(account)
+        val list = account.mainList()
+        val starred = HomeRows.favouriteChats(list, account.starred)
+        assertEquals(40, starred.size)
+        // The viewer's order: Home's list turned upside down, so the chat at its foot is first.
+        val layout = HomeLayout(order = starred.reversed().map { com.tmplayer.data.HomeOrder.chatKey(it.id) })
+        var lastByDefault: String? = null
+        var firstAt = -1L
+        var firstKey: String? = null
+        var requested = false
+        backgroundScope.launch {
+            model.requestRecent()
+            model.fill(starred)
+            combine(model.loaded, model.recent) { loaded, recent -> loaded to recent }.collect { (loaded, recent) ->
+                val rows = HomeRows.build(emptyList(), starred, loaded, recent, starred = account.starred, autoFill = true, recentMinStarred = 1, layout = layout)
+                // A chat with no video has no row, so "the last" is the last row Home's own order draws.
+                lastByDefault = HomeRows.build(emptyList(), starred, loaded, recent, starred = account.starred, autoFill = true, recentMinStarred = 1)
+                    .lastOrNull { it is HomeRow.Chat }?.key
+                val first = rows.firstOrNull { it is HomeRow.Chat } as HomeRow.Chat?
+                firstKey = first?.key
+                // As Home does for a row on screen that has not loaded: ask for it.
+                if (first != null && !first.loaded && !requested) {
+                    requested = true
+                    model.request(first.chatId)
+                }
+                if (firstAt < 0 && first != null && first.loaded && first.entries.isNotEmpty()) firstAt = at()
+            }
+        }
+        while (at() < 120_000L) advanceTimeBy(1_000)
+        println("T4| 40 starred chats in the opposite order: first row at ${firstAt / 1000.0} s, calls ${account.calls}")
+        assertEquals(lastByDefault, firstKey)
+        assertTrue("first at $firstAt ms", firstAt in 0..3_000)
+        // The order moves rows; it asks Telegram for nothing more than Home's own order did.
+        assertTrue("rows held ${model.loaded.value.size}", model.loaded.value.size <= HomeViewModel.EAGER_CHATS + 1)
+    }
 }
