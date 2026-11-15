@@ -797,8 +797,9 @@ fun ContinuePage(state: ShellState, tabs: @Composable () -> Unit = {}) {
                                     // On the page's scope: marking takes the card off this page,
                                     // which is all the answer it needs.
                                     val item = record.toMediaItem()
-                                    scope.launch {
-                                        runCatching { setWatched(state.watched, state.settings, item, record.chatTitle, watched = true) }
+                                    // Said with Undo, which puts the place back.
+                                    runHistoryEdit(scope, state, undoToast, toast, { _ -> s.mainMarkedWatched(com.tmplayer.ui.browse.continueCardTitle(item, s.messages).ifBlank { item.title }) }, s.browseUndo) { st, w ->
+                                        com.tmplayer.data.HistoryEdits.markWatched(st, w, item, record.chatTitle)
                                     }
                                 },
                             ) {
@@ -1261,6 +1262,7 @@ internal fun TileMenu(
     val s = LocalStrings.current
     val scope = rememberCoroutineScope()
     val toast = rememberToast()
+    val undoToast = com.tmplayer.ui.components.rememberActionToast()
     val downloads by OfflineDownloads.active.collectAsState()
     val record = LocalDownloadIndex.current[item.id]
     val row = downloads[item.fileId]
@@ -1305,8 +1307,15 @@ internal fun TileMenu(
             DropdownMenuItem(text = { Text(WatchedWords.markLabel(watchedToggle)) }, onClick = {
                 onDismiss()
                 val mark = !watchedToggle
-                // Not said: the tick on the card shows it.
-                scope.launch { runCatching { setWatched(state.watched, state.settings, item, title, mark) } }
+                if (mark) {
+                    // Marking forgets the place, so it is said with Undo, which puts it back.
+                    runHistoryEdit(scope, state, undoToast, toast, { _ -> s.mainMarkedWatched(com.tmplayer.ui.browse.continueCardTitle(item, s.messages).ifBlank { item.title }) }, s.browseUndo) { st, w ->
+                        com.tmplayer.data.HistoryEdits.markWatched(st, w, item, title)
+                    }
+                } else {
+                    // Not said: the tick on the card shows it.
+                    scope.launch { runCatching { setWatched(state.watched, state.settings, item, title, false) } }
+                }
             })
         }
         // Nothing is copied, so this stays for a chat that restricts saving.

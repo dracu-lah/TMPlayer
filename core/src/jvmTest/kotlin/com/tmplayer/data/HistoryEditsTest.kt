@@ -136,4 +136,46 @@ class HistoryEditsTest {
         HistoryEdits.undo(d.settings, d.watched, cleared)
         assertEquals(listOf(3L, 2L, 1L), d.watched.watchLater.items.first().map { it.messageId })
     }
+
+    private fun video(messageId: Long) = MediaItem(
+        chatId = -100L, messageId = messageId, fileId = 11, title = "Alpha", sizeBytes = 5_000, durationSec = 6_000,
+        mimeType = "video/mp4", thumbnailFileId = 0, miniThumbnail = null, date = 0,
+    )
+
+    @Test
+    fun `mark as watched leaves Continue watching and undo restores the exact place`() = runBlocking {
+        val d = Device()
+        d.settings.saveResumePosition(-100L, 1L, 6_000_000L, 9_000_000L, line("Alpha", 100))
+        d.watched.watchLater.add(later(1L, 90))
+        val before = d.settings.continueWatching.first()
+
+        val undo = HistoryEdits.markWatched(d.settings, d.watched, video(1L), "Films", now = 500)
+        assertTrue(d.settings.continueWatching.first().isEmpty())
+        assertTrue(d.watched.watchLater.items.first().isEmpty())
+        assertEquals(listOf(1L), d.watched.history.first().map { it.messageId })
+
+        HistoryEdits.undo(d.settings, d.watched, undo)
+        assertEquals(before, d.settings.continueWatching.first())
+        assertEquals(6_000_000L, d.settings.resumePosition(-100L, 1L))
+        assertTrue(d.watched.history.first().isEmpty())
+        assertEquals(listOf(1L), d.watched.watchLater.items.first().map { it.messageId })
+
+        // Pressed twice: what is back stays, nothing doubles.
+        HistoryEdits.undo(d.settings, d.watched, undo)
+        assertEquals(before, d.settings.continueWatching.first())
+        assertTrue(d.watched.history.first().isEmpty())
+    }
+
+    @Test
+    fun `undo of mark as watched keeps an earlier tick and a place played since`() = runBlocking {
+        val d = Device()
+        d.watched.markWatched(mark(1L, 50))
+        d.settings.saveResumePosition(-100L, 1L, 6_000_000L, 9_000_000L, line("Alpha", 100))
+        val undo = HistoryEdits.markWatched(d.settings, d.watched, video(1L), "Films", now = 500)
+        // Played again before Undo: that newer place stands.
+        d.settings.saveResumePosition(-100L, 1L, 7_000_000L, 9_000_000L, line("Alpha", 900))
+        HistoryEdits.undo(d.settings, d.watched, undo)
+        assertEquals(7_000_000L, d.settings.resumePosition(-100L, 1L))
+        assertEquals(listOf(mark(1L, 50)), d.watched.history.first())
+    }
 }

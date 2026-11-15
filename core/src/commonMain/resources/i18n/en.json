@@ -169,6 +169,8 @@
     "larger_posters": "Larger posters",
     "loading_chats": "Loading your chats…",
     "mark_watched_detail": "Moves it to your Watched list",
+    "mark_watched_message": "\"{title}\" goes to Watched, and Continue watching forgets where you stopped. Nothing is deleted from Telegram.",
+    "mark_watched_title": "Mark as watched?",
     "more_chats": "More chats",
     "muted": "Muted",
     "no_chats": "No chats yet. Just after a sign in, Telegram can take a minute to send the list.",

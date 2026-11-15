@@ -308,8 +308,21 @@ private fun DetailPane(state: ShellState, request: DetailRequest) {
             // for a change they could have seen right here.
             DetailAction.MarkWatched, DetailAction.MarkUnwatched -> {
                 val mark = action == DetailAction.MarkWatched
-                // Not said: the button and the tick on the card show it.
-                outlives.launch { runCatching { setWatched(state.watched, state.settings, item, title, mark) } }
+                if (mark) {
+                    // Marking forgets the place, so it is said with Undo, which puts the place back.
+                    outlives.launch {
+                        val undo = runCatching { com.tmplayer.data.HistoryEdits.markWatched(state.settings, state.watched, item, title) }.getOrNull()
+                        if (undo != null && !undo.isEmpty) {
+                            val name = com.tmplayer.ui.browse.continueCardTitle(item, s.messages).ifBlank { item.title }
+                            undoToast(s.mainMarkedWatched(name), s.browseUndo) {
+                                outlives.launch { runCatching { com.tmplayer.data.HistoryEdits.undo(state.settings, state.watched, undo) } }
+                            }
+                        }
+                    }
+                } else {
+                    // Not said: the button and the tick on the card show it.
+                    outlives.launch { runCatching { setWatched(state.watched, state.settings, item, title, false) } }
+                }
                 return
             }
             // The pane stays: Resume turns into Play, and the line under the title says Undo.

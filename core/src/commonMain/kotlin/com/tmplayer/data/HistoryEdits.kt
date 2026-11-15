@@ -12,9 +12,11 @@ class HistoryUndo internal constructor(
     internal val marks: List<WatchedRecord>,
     internal val later: List<WatchLaterRecord>,
     val count: Int,
+    /** The videos (chat id, message id) a Mark as watched ticked, which Undo unticks again. */
+    internal val marked: List<Pair<Long, Long>> = emptyList(),
 ) {
     /** Nothing was there to take, as when the same card is removed twice. */
-    val isEmpty: Boolean get() = resume.isEmpty() && marks.isEmpty() && later.isEmpty()
+    val isEmpty: Boolean get() = resume.isEmpty() && marks.isEmpty() && later.isEmpty() && marked.isEmpty()
 }
 
 /**
@@ -87,6 +89,32 @@ object HistoryEdits {
         return remove(settings, watched, ids.distinct(), count)
     }
 
+    /**
+     * Mark as watched for [item] and every copy of it: ticked on the Watched list, off Watch later,
+     * and its place forgotten, so it leaves Continue watching. What that took (the place as stored,
+     * the earlier tick, the Watch later lines) is handed back as a [HistoryUndo], so Undo puts the
+     * exact place back and takes the new tick off. The copies Continue watching folded into
+     * [item]'s card lose their places too, as with Remove from history.
+     */
+    suspend fun markWatched(
+        settings: SettingsStore,
+        watched: WatchedStore,
+        item: MediaItem,
+        chatTitle: String,
+        now: Long = System.currentTimeMillis(),
+    ): HistoryUndo {
+        val continuing = settings.continueWatching.first()
+        val card = continuing.firstOrNull { it.chatId == item.chatId && it.messageId == item.messageId }
+        val own = idsOf(item)
+        val resume = settings.takeResume((own + (card?.let { idsOf(it, continuing) } ?: emptyList())).distinct())
+        val later = watched.watchLater.take(own)
+        val earlier = watched.takeMarks(own)
+        watched.markWatched(WatchedRecord.of(item, chatTitle, now, manual = true), copies = item.versions)
+        pushLater(settings, resume.isNotEmpty())
+        val marked = (listOf(item) + item.versions).map { it.chatId to it.messageId }.distinct()
+        return HistoryUndo(resume, earlier, later, 1, marked)
+    }
+
     /** Takes [ids] off Watch later. */
     suspend fun removeLater(watched: WatchedStore, ids: Collection<String>, count: Int): HistoryUndo =
         HistoryUndo(emptyMap(), emptyList(), watched.watchLater.take(ids), count)
@@ -99,6 +127,8 @@ object HistoryEdits {
 
     /** Puts back what [undo] took. Safe to call twice: what is there already stays. */
     suspend fun undo(settings: SettingsStore, watched: WatchedStore, undo: HistoryUndo) {
+        // A tick Mark as watched made goes first, so the tick it replaced (if any) goes back after.
+        for ((chat, message) in undo.marked) watched.markUnwatched(chat, message)
         settings.putBackResume(undo.resume)
         watched.putBackMarks(undo.marks)
         watched.watchLater.putBack(undo.later)

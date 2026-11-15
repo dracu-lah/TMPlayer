@@ -764,6 +764,9 @@ private fun Root() {
     }
 
     val toast = rememberToast()
+    val historyRemoval = com.tmplayer.ui.browse.rememberHistoryRemoval()
+    val touch = com.tmplayer.ui.components.isTouch()
+    var markWatchedAsk by remember { mutableStateOf<Triple<MediaItem, String, () -> Unit>?>(null) }
 
     // The update check, on every launch and before sign in too: ten seconds after the first
     // frame, then every six hours (see UpdateScheduler). Nothing is said unless there is genuinely
@@ -1434,28 +1437,29 @@ private fun Root() {
      * position, which is what takes it out of Continue watching.
      */
     fun setWatched(item: MediaItem, chatTitle: String, watched: Boolean) {
+        if (watched) {
+            // A touch screen does it at once and says Undo for a few seconds ([HistoryRemoval]),
+            // which restores the exact place. A remote cannot reach that line, so a television
+            // asks first when there is a place to lose, and the card leaving is the answer.
+            val mark = {
+                historyRemoval.run({ L.mainMarkedWatched(com.tmplayer.ui.browse.continueCardTitle(item, L.messages).ifBlank { item.title }) }) { st, w ->
+                    com.tmplayer.data.HistoryEdits.markWatched(st, w, item, chatTitle)
+                }
+            }
+            if (touch) {
+                mark()
+            } else {
+                scope.launch {
+                    val hasPlace = runCatching { settings.resumePosition(item.chatId, item.messageId) > 0L }.getOrDefault(false)
+                    if (hasPlace) markWatchedAsk = Triple(item, chatTitle, mark) else mark()
+                }
+            }
+            return
+        }
         App.backgroundScope.launch {
             runCatching {
-                if (watched) {
-                    // Every copy leaves Watch later with it.
-                    watchedStore.markWatched(
-                        WatchedRecord.of(item, chatTitle, System.currentTimeMillis(), manual = true),
-                        copies = item.versions,
-                    )
-                    // Every copy of it in Continue watching, as Remove from Continue watching
-                    // does: the card stands for all of them (HomeRows.foldCopies), and clearing
-                    // only this one put the copy behind it straight back in its place.
-                    val inContinue = settings.continueWatching.first()
-                        .firstOrNull { it.chatId == item.chatId && it.messageId == item.messageId }
-                    if (inContinue != null) {
-                        settings.clearResumeCopies(inContinue)
-                    } else {
-                        settings.clearResumePosition(item.chatId, item.messageId)
-                    }
-                } else {
-                    // Every copy's mark, or one still marked keeps the folded card ticked.
-                    watchedStore.markUnwatched(item.chatId, item.messageId, copies = item.versions)
-                }
+                // Every copy's mark, or one still marked keeps the folded card ticked.
+                watchedStore.markUnwatched(item.chatId, item.messageId, copies = item.versions)
             }
         }
         // Not said: the tick on the card, or the card leaving its row, shows it.
@@ -2377,6 +2381,22 @@ private fun Root() {
             onPlay = { item, title -> play(item, chatTitle = title) },
             onOpenChat = { chat -> openChat(chat) },
         )
+
+        markWatchedAsk?.let { (item, _, mark) ->
+            // Mark as unwatched is one press away, but the place is forgotten, so it is asked, and
+            // focus starts on Cancel.
+            TvConfirm(
+                title = L.browseMarkWatchedTitle,
+                message = L.browseMarkWatchedMessage(com.tmplayer.ui.browse.continueCardTitle(item, L.messages).ifBlank { item.title }),
+                confirmLabel = L.gridMarkWatched,
+                destructive = false,
+                onConfirm = {
+                    markWatchedAsk = null
+                    mark()
+                },
+                onDismiss = { markWatchedAsk = null },
+            )
+        }
 
         lowStorageAsk?.let { (ask, refusal) ->
             // An invitation, so focus starts on "Switch and play": it does what the viewer pressed.
