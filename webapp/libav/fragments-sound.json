@@ -1,0 +1,2 @@
+["avformat","avcodec","swresample",
+ "decoder-aac","decoder-mp1","decoder-mp2","decoder-mp3","decoder-opus","decoder-vorbis","decoder-flac"]

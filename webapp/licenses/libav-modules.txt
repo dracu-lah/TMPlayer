@@ -1,0 +1,33 @@
+TMPlayer's libav.js builds (webapp/public/libav/, built by webapp/libav/build.sh): every module and
+its licence. FFmpeg 9.0 is configured without --enable-gpl, --enable-version3 or --enable-nonfree
+(its configure says "License: LGPL version 2.1 or later" for both builds), so no GPL part is in.
+The full LGPL text is LGPL-2.1.txt beside this file; the exact sources are served at /libav/sources/.
+
+Wrapper and runtime
+  libav.js 6.10.9.0 (Yahweasel)            0BSD-style wrapper; the builds carry FFmpeg's LGPL
+  emfiberthreads 1.3                       0BSD
+  Emscripten 6.0.5 runtime glue            MIT / University of Illinois NCSA (Emscripten's own)
+  Binaryen 132 (.mvp.wasm lowering)        a tool only, Apache-2.0; adds no code of its own terms
+
+FFmpeg libraries (LGPL-2.1-or-later): libavformat, libavcodec, libavutil, libswresample
+
+tmplayer (engine) build, FFmpeg components, all LGPL-2.1-or-later
+  Demuxers   avi flv asf rm mpegps mpegts mov matroska ogg mpegvideo m4v
+  Pictures   mpeg4 msmpeg4v1 msmpeg4v2 msmpeg4v3 h263 h263p h263i flv mpeg1video mpeg2video wmv1
+             wmv2 wmv3 vc1 theora vp3 vp6 vp6f vp6a rv10 rv20 rv30 rv40 cinepak svq1 mjpeg dvvideo
+             msvideo1 indeo3 indeo5
+  Parsers    mpeg4video h263 h264 hevc mpegvideo vc1 vp3 rv34 mjpeg mpegaudio aac aac_latm ac3 dca
+             mlp flac vorbis opus cook sipr gsm amr dvaudio (H.264 and HEVC are parsed, never decoded)
+  Sound      mp1 mp2 mp3 aac aac_latm ac3 eac3 dca truehd mlp flac vorbis opus alac wmav1 wmav2 wmapro
+             wmalossless cook ra_144 ra_288 sipr atrac3 atrac3p qcelp gsm gsm_ms amrnb amrwb speex
+             wavpack tta ape nellymoser qdm2 ralf
+  PCM        alaw mulaw bluray dvd f32be f32le f64be f64le s16be s16le s16le_planar s24be s24le
+             s24le_planar s32be s32le s8 u8 s24daud
+  ADPCM      ms ima_wav ima_qt ima_dk3 ima_dk4 ima_oki ima_amv swf yamaha g722 g726 g726le ct adx ea xa
+
+tmplayer-sound build, FFmpeg components, all LGPL-2.1-or-later
+  Sound      aac mp1 mp2 mp3 opus vorbis flac
+
+Left out on purpose: the H.264 and HEVC decoders (patents; the browser decodes them), and the
+FFmpeg decoders marked lgpl_gpl (adpcm_circus, adpcm_ima_escape, adpcm_ima_hvqm2, adpcm_ima_hvqm4,
+adpcm_ima_magix, adpcm_ima_pda, adpcm_n64, adpcm_psxc, ahx), which build only with --enable-gpl.
