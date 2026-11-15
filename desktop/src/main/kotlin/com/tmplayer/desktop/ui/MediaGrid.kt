@@ -1652,11 +1652,27 @@ internal fun AudioListSheet(state: ShellState, chat: ChatSummary, onDismiss: () 
             Text(s.gridAudioTitle, style = MaterialTheme.typography.headlineSmall)
             Text(chat.title, color = Tone.muted)
             Spacer(Modifier.height(8.dp))
+            var shuffle by remember { mutableStateOf(com.tmplayer.data.PlayQueue.shuffle) }
+            var repeatAll by remember { mutableStateOf(com.tmplayer.data.PlayQueue.repeatAll) }
             if (shown.items.isNotEmpty()) {
-                Button(onClick = { scope.launch { list.playAll()?.let(::play) } }) {
-                    Icon(TmIcons.Play, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text(s.gridAudioPlayAll)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { scope.launch { list.playAll()?.let(::play) } }) {
+                        Icon(TmIcons.Play, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(if (shuffle) s.gridAudioPlayAllShuffled else s.gridAudioPlayAll)
+                    }
+                    // Kept for the session in PlayQueue, so the next course starts the same way.
+                    androidx.compose.material3.FilterChip(
+                        selected = shuffle,
+                        onClick = { shuffle = !shuffle; com.tmplayer.data.PlayQueue.setShuffle(shuffle) },
+                        label = { Text(s.gridAudioShuffle) },
+                    )
+                    androidx.compose.material3.FilterChip(
+                        selected = repeatAll,
+                        onClick = { repeatAll = !repeatAll; com.tmplayer.data.PlayQueue.setRepeatAll(repeatAll) },
+                        label = { Text(s.gridAudioRepeatAll) },
+                        leadingIcon = { Icon(TmIcons.Repeat, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                    )
                 }
             }
             Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState())) {

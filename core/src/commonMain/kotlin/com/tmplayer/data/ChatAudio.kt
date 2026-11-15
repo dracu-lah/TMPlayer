@@ -10,6 +10,7 @@ import dev.g000sha256.tdl.dto.SearchMessagesFilterVoiceNote
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
@@ -128,29 +129,123 @@ object ChatAudio {
 }
 
 /**
+ * More of a chat's audio for a queue that has only the pages read so far: [more] reads the next
+ * page and answers its files, or null when there are none left (or the chat cannot be asked).
+ * Lives on past the list that started it, so a queue of thousands goes on filling while it plays.
+ */
+fun interface QueueFeed {
+    suspend fun more(): List<MediaItem>?
+}
+
+/**
  * The list a chat's audio was started from, so the player goes on to the next file when one ends
  * (and back with Previous), the way it goes on to a show's next episode. Set when a file is played
  * from the list, and left alone by everything else: a video played afterwards is not in it.
+ *
+ * The order is a [QueuePlan]: as posted (oldest first) or shuffled, and over again after the last
+ * file when repeat is on. Shuffle and repeat are kept for the session, so a choice made on the
+ * list is still there for the next course. A chat of thousands is read a page at a time: when the
+ * file playing is within [PREFETCH] of an end the queue can still grow at, the [QueueFeed] is asked
+ * for the next page in the background, so playback never waits on a whole chat.
  */
 object PlayQueue {
-    @Volatile
-    var items: List<MediaItem> = emptyList()
-        private set
+    /** How many files from the end of what is loaded the next page is asked for. */
+    const val PREFETCH = 5
 
-    /** [list] in playing order, oldest first, as a course or an album is listened to. */
-    fun set(list: List<MediaItem>) {
-        items = list
+    @Volatile
+    private var plan: QueuePlan = QueuePlan.Empty
+
+    @Volatile
+    private var shuffleOn = false
+
+    @Volatile
+    private var repeatOn = false
+
+    @Volatile
+    private var feed: QueueFeed? = null
+
+    @Volatile
+    private var filling = false
+
+    private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
+
+    /** The files in the order they play. */
+    val items: List<MediaItem> get() = plan.order
+
+    val shuffle: Boolean get() = shuffleOn
+    val repeatAll: Boolean get() = repeatOn
+
+    /**
+     * [list] as the queue, in the order posted or shuffled as set; a shuffle plays [current]
+     * first (the file the viewer chose, or a random one when null). [more] reads the pages the
+     * list has not.
+     */
+    fun set(list: List<MediaItem>, current: MediaItem? = null, more: QueueFeed? = null) {
+        feed = more
+        plan = QueuePlan.of(list, shuffle = shuffleOn, repeatAll = repeatOn, current = current)
     }
 
     fun clear() {
-        items = emptyList()
+        feed = null
+        plan = QueuePlan.Empty.withRepeatAll(repeatOn)
+    }
+
+    /** Back to nothing queued and both modes off (a sign out, a test). */
+    fun reset() {
+        shuffleOn = false
+        repeatOn = false
+        clear()
+    }
+
+    /** Shuffle on or off from here: [current] keeps playing, and the files not yet heard follow in the new order. */
+    fun setShuffle(on: Boolean, current: MediaItem? = null) {
+        shuffleOn = on
+        plan = plan.withShuffle(on, current)
+    }
+
+    fun setRepeatAll(on: Boolean) {
+        repeatOn = on
+        plan = plan.withRepeatAll(on)
+    }
+
+    /** More files of the chat joined to the queue, around [current] if it is playing. */
+    fun add(more: List<MediaItem>, current: MediaItem? = null) {
+        plan = plan.merged(more, current)
     }
 
     /** The files either side of [item], or null when it was not started from the list. */
     fun stepsFor(item: MediaItem): EpisodeSteps? {
-        val list = items
-        val at = list.indexOfFirst { it.chatId == item.chatId && it.messageId == item.messageId }
-        if (at < 0) return null
-        return EpisodeSteps(previous = list.getOrNull(at - 1), next = list.getOrNull(at + 1))
+        val now = plan
+        val steps = now.stepsFor(item) ?: return null
+        val at = now.positionOf(item)
+        // Pages come newest first, so the posted order grows at its start (older files) and a
+        // shuffle anywhere: read the next page when the file playing nears that edge, so Next
+        // never meets an end that is not one.
+        val nearEdge = if (now.shuffle) now.size - 1 - at < PREFETCH else at < PREFETCH
+        if (feed != null && nearEdge) fill(item)
+        return steps
+    }
+
+    private fun fill(current: MediaItem) {
+        val source = feed ?: return
+        if (filling) return
+        filling = true
+        scope.launch {
+            try {
+                val page = source.more()
+                // Null is the end of the chat (or no way to ask); an empty page only had nothing playable.
+                if (page == null) {
+                    if (feed === source) feed = null
+                } else if (feed === source && page.isNotEmpty()) {
+                    add(page, current)
+                }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (failure: Throwable) {
+                // The next file still plays from what is loaded; the next start of one asks again.
+            } finally {
+                filling = false
+            }
+        }
     }
 }

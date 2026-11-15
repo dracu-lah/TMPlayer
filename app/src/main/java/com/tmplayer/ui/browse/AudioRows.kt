@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -23,6 +25,7 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.tmplayer.data.MediaItem
+import com.tmplayer.data.PlayQueue
 import com.tmplayer.i18n.Translator
 import com.tmplayer.ui.components.ChoiceLine
 import com.tmplayer.ui.components.ChoiceList
@@ -69,15 +72,26 @@ internal fun AudioSheet(chatId: Long, chatTitle: String, onPlay: (MediaItem) -> 
     val list = remember(chatId) { ChatAudioList(chatId, scope) }
     val state by list.state.collectAsState()
     val first = remember { FocusRequester() }
+    var shuffle by remember { mutableStateOf(PlayQueue.shuffle) }
+    var repeatAll by remember { mutableStateOf(PlayQueue.repeatAll) }
     ChoiceSheet(title = s.gridAudioTitle, note = chatTitle.ifBlank { null }, onDismiss = onDismiss, onClose = onDismiss, fullScreen = true) {
         ChoiceList {
             if (state.items.isNotEmpty()) {
-                ChoiceLine(s.gridAudioPlayAll, modifier = Modifier.focusRequester(first), icon = TmIcons.Play) {
+                ChoiceLine(if (shuffle) s.gridAudioPlayAllShuffled else s.gridAudioPlayAll, modifier = Modifier.focusRequester(first), icon = TmIcons.Play) {
                     scope.launch {
                         val start = list.playAll() ?: return@launch
                         onDismiss()
                         onPlay(start)
                     }
+                }
+                // Kept for the session in PlayQueue, so the next course starts the same way.
+                ChoiceLine(s.gridAudioShuffle, selected = shuffle) {
+                    shuffle = !shuffle
+                    PlayQueue.setShuffle(shuffle)
+                }
+                ChoiceLine(s.gridAudioRepeatAll, selected = repeatAll, icon = TmIcons.Repeat) {
+                    repeatAll = !repeatAll
+                    PlayQueue.setRepeatAll(repeatAll)
                 }
             }
             state.items.forEach { item ->

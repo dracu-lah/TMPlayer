@@ -3,6 +3,7 @@ package com.tmplayer.ui.browse
 import com.tmplayer.data.ChatAudio
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.PlayQueue
+import com.tmplayer.data.QueueFeed
 import com.tmplayer.data.Td
 import com.tmplayer.data.Failures
 import kotlinx.coroutines.CancellationException
@@ -68,30 +69,47 @@ class ChatAudioList(private val chatId: Long, private val scope: CoroutineScope)
         }
     }
 
-    /** Plays [item] with the list behind it, oldest first, so the next one follows on. */
+    /** Plays [item] with the list behind it, oldest first (or shuffled, as chosen), so the next one follows on. */
     fun queueFrom(item: MediaItem): MediaItem {
-        PlayQueue.set(_state.value.items.sortedBy { it.messageId })
+        PlayQueue.set(_state.value.items, current = item, more = feed())
         return item
     }
 
     /**
-     * The oldest file, with the list behind it: Play all. The rest of the pages are read first
-     * (up to [ALL_MAX] files), since the oldest is the start of a course and Telegram lists the
-     * newest first.
+     * Play all: the oldest file with the list behind it, or, with shuffle on, any file with the
+     * rest following in a random order. In the order posted the pages are read first (up to
+     * [ALL_MAX] files), since the oldest is the start of a course and Telegram lists the newest
+     * first; shuffled, it starts with what is loaded and the queue reads the rest while it plays.
      */
     suspend fun playAll(): MediaItem? {
         job?.join()
-        while (!_state.value.done && _state.value.failure == null && _state.value.items.size < ALL_MAX) {
+        while (!PlayQueue.shuffle && !_state.value.done && _state.value.failure == null && _state.value.items.size < ALL_MAX) {
             loadMore()
             job?.join()
         }
-        val ordered = _state.value.items.sortedBy { it.messageId }
-        PlayQueue.set(ordered)
-        return ordered.firstOrNull()
+        PlayQueue.set(_state.value.items, current = null, more = feed())
+        return PlayQueue.items.firstOrNull()
+    }
+
+    /**
+     * The rest of the chat for a queue that outlives this list (the sheet closes when a file
+     * plays): its own reading of the pages after the ones read here, not tied to the sheet's scope.
+     */
+    private fun feed(): QueueFeed? {
+        if (_state.value.done) return null
+        val chat = chatId
+        var after = last
+        return QueueFeed {
+            val session = Td.awaitConnectedSessionOrNull() ?: return@QueueFeed null
+            val read = after?.takeUnless { it.done } ?: return@QueueFeed null
+            val page = withTimeoutOrNull(PAGE_TIMEOUT_MS) { ChatAudio.page(session.client, chat, read) } ?: return@QueueFeed null
+            after = page
+            if (page.items.isEmpty() && page.done) null else page.items
+        }
     }
 
     private companion object {
         const val PAGE_TIMEOUT_MS = 20_000L
-        const val ALL_MAX = 500
+        const val ALL_MAX = 2000
     }
 }

@@ -10,7 +10,7 @@ import org.junit.Test
 class ArchivesAndAudioTest {
 
     @After
-    fun tearDown() = PlayQueue.clear()
+    fun tearDown() = PlayQueue.reset()
 
     @Test
     fun `archives are told by their names and their volumes`() {
