@@ -43,6 +43,8 @@ class BackupCoverageTest {
         "device_card_dismissed", "device_hint_shown", "first_video_tip_dismissed", "online_meta_invite_seen",
         "online_meta_notice_dismissed", "player_hint_seen", "tv_browse_hint_seen", "setup", "tour", "tour_offer_after",
         "hide_default_groups", "external_hint_seen",
+        // The retired mini player switch (T12): removed on first read, never carried.
+        "mini_player",
         // The update check's and the support card's bookkeeping.
         "update_last_check", "update_popup_shown", "update_skipped_version", "update_snoozed_until",
         "support_asked", "support_first_seen", "support_never", "support_recent", "support_snoozed_until",
