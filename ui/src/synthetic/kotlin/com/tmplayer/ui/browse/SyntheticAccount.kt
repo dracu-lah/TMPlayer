@@ -287,6 +287,58 @@ class SyntheticAccount(
         return if (index in 0 until count) item(chatId, index) else null
     }
 
+    /**
+     * The search inside [chatId] ([com.tmplayer.data.ChatSearchRun]) over this account: a
+     * `searchChatMessages` per filter that matches the words of a file name whole, as Telegram
+     * parts them (by spaces, so `Resident.Evil.2021.mkv` is one word), and `getChatHistory` back
+     * through the chat. [named] gives videos, by index from the newest, their own file names.
+     */
+    fun chatSearch(chatId: Long, named: Map<Int, String> = emptyMap()): com.tmplayer.data.ChatSearchSource {
+        fun named(index: Int): MediaItem = item(chatId, index).let { base -> named[index]?.let { base.copy(fileName = it, title = it.substringBeforeLast('.')) } ?: base }
+        fun matches(item: MediaItem, query: String): Boolean {
+            val words = item.fileName.lowercase().split(' ').filter { it.isNotEmpty() }
+            return query.lowercase().split(' ').filter { it.isNotEmpty() }.all { it in words }
+        }
+        return object : com.tmplayer.data.ChatSearchSource {
+            suspend fun one(filter: String, query: String, from: Long, limit: Int): Pair<List<MediaItem>, Long> =
+                server("searchChatMessages", "search", latencyMs = 250) {
+                    val count = videoCount(chatId)
+                    if (filter == "animation") return@server emptyList<MediaItem>() to 0L
+                    var i = if (from == 0L) 0 else count - (from / 16).toInt() + 1
+                    val out = ArrayList<MediaItem>()
+                    while (i < count && out.size < limit) {
+                        if (isDocument(i) == (filter == "document")) named(i).takeIf { matches(it, query) }?.let { out += it }
+                        i++
+                    }
+                    out to (if (i >= count || out.size < limit) 0L else out.last().messageId)
+                }
+
+            override suspend fun search(query: String, cursors: MediaCursors, limit: Int): MediaPage = coroutineScope {
+                val v = async { if (cursors.videoDone) null else one("video", query, cursors.video, limit) }
+                val d = async { if (cursors.documentDone) null else one("document", query, cursors.document, limit) }
+                val a = async { if (cursors.animationDone) null else one("animation", query, cursors.animation, limit) }
+                val (vr, dr, ar) = listOf(v, d, a).awaitAll()
+                val items = (vr?.first.orEmpty() + dr?.first.orEmpty()).distinctBy { it.messageId }.sortedByDescending { it.messageId }
+                val next = cursors.copy(
+                    video = vr?.second ?: cursors.video, document = dr?.second ?: cursors.document,
+                    videoDone = cursors.videoDone || vr?.second == 0L, documentDone = cursors.documentDone || dr?.second == 0L,
+                    animationDone = cursors.animationDone || ar != null,
+                )
+                MediaPage(items, next, next.allDone)
+            }
+
+            override suspend fun history(fromMessageId: Long, limit: Int, onlyLocal: Boolean): com.tmplayer.data.ChatHistoryPage =
+                server("getChatHistory", "search", latencyMs = 150) {
+                    val count = videoCount(chatId)
+                    val start = if (fromMessageId == 0L) 0 else count - (fromMessageId / 16).toInt() + 1
+                    val items = (start until minOf(count, start + limit)).map(::named)
+                    com.tmplayer.data.ChatHistoryPage(items, items.size, if (start + limit >= count) 0L else items.lastOrNull()?.messageId ?: 0L)
+                }
+
+            override suspend fun online(): Boolean = !offline.value
+        }
+    }
+
     /** Home's source over this account, reading a chat as [TdHomeSource] does ([HomeReads]). */
     /** The chats Home holds open for their new posts. */
     val followed = HashSet<Long>()
