@@ -303,7 +303,7 @@ fun SupportAskHost(state: ShellState) {
     }
     val moment by SupportReminder.moment.collectAsState()
     val openRequested by SupportReminder.openRequested.collectAsState()
-    val playing = state.nowPlaying != null
+    val playing = state.playerUp
     val onGoodPage = state.destination == Destination.Home || state.destination == Destination.Chats ||
         state.destination == Destination.Downloads
     LaunchedEffect(moment, openRequested, playing, onGoodPage, state.updatePopup, asking) {

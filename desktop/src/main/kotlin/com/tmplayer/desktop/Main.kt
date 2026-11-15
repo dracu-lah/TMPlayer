@@ -443,6 +443,7 @@ fun main(args: Array<String>) {
                                             if (!com.tmplayer.desktop.ui.BigScreen.on) shell.fullscreen = false
                                             shell.freeUpSpace()
                                         },
+                                        mini = remember(shell) { com.tmplayer.desktop.ui.MiniLink(shell) },
                                     )
                                 }
                             }
@@ -450,7 +451,7 @@ fun main(args: Array<String>) {
                             com.tmplayer.ui.components.TitleReportHost()
                             // Nothing on screen with a page header (sign in, the PIN pad): the
                             // buttons on their own, top right. The player has its own in its bar.
-                            if (shell.nowPlaying == null || recovery.failure != null) WindowControlsFallback(Modifier.align(Alignment.TopEnd))
+                            if (!shell.playerUp || recovery.failure != null) WindowControlsFallback(Modifier.align(Alignment.TopEnd))
                             // A crash from the last run, signed in or not (DesktopCrashReports).
                             com.tmplayer.desktop.ui.CrashQuestionHost(settings)
                             // Undecorated and floating: a hairline for the edge the system no

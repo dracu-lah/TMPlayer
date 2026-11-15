@@ -24,6 +24,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.awt.LocalAwtWindow
 import com.tmplayer.desktop.os.MiniPlayerWindow
+import com.tmplayer.desktop.ui.MiniBarInfo
+import com.tmplayer.desktop.ui.MiniLink
+import com.tmplayer.player.MiniPlayerState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import javax.swing.SwingUtilities
@@ -48,6 +51,8 @@ fun PlayerHost(
     onRaise: () -> Unit,
     /** The player's "Not enough space": closed, and Downloads open on Free up space. */
     onFreeUpSpace: (() -> Unit)? = null,
+    /** The mini player (U8): the shell's docking, and the player drawn nowhere while docked. */
+    mini: MiniLink? = null,
 ) {
     var engine by remember { mutableStateOf<PlaybackEngine?>(null) }
     var playing by remember { mutableStateOf<MediaItem>(request.item) }
@@ -83,8 +88,8 @@ fun PlayerHost(
     }
 
     // The mini player shrinks this window; whatever closes the player puts it back.
-    val mini = remember(awtWindow) { awtWindow?.let(::MiniPlayerWindow) }
-    DisposableEffect(mini) { onDispose { mini?.leave() } }
+    val windowMini = remember(awtWindow) { awtWindow?.let(::MiniPlayerWindow) }
+    DisposableEffect(windowMini) { onDispose { windowMini?.leave() } }
     val scope = rememberCoroutineScope()
     val isFullscreen by rememberUpdatedState(fullscreen)
 
@@ -102,7 +107,7 @@ fun PlayerHost(
         bookmarks = DesktopServices.bookmarks,
         prefs = DesktopServices.prefs,
         onToggleAlwaysOnTop = onToggleAlwaysOnTop,
-        onMiniPlayer = mini?.let { m ->
+        onMiniPlayer = windowMini?.let { m ->
             {
                 scope.launch {
                     // Out of fullscreen first, and only then smaller, or the window manager
@@ -121,9 +126,18 @@ fun PlayerHost(
         onLockedChanged = locked::set,
         downloads = DesktopServices.downloads,
         onFreeUpSpace = onFreeUpSpace,
+        onDock = mini?.let { link -> { context -> link.leave(context.copy(inPictureInPicture = windowMini?.active == true)) } },
+        docked = mini?.docked == true,
+        onDockedStopped = { needsAnswer -> mini?.stopped(needsAnswer) },
     )
 
-    LaunchedEffect(engine, playing) {
+    // The bar's play and pause drives the one engine, through a cast too.
+    DisposableEffect(engine, mini) {
+        mini?.togglePlay = { engine?.togglePlay() }
+        onDispose { mini?.togglePlay = {} }
+    }
+    val dockedNow = mini?.docked == true
+    LaunchedEffect(engine, playing, dockedNow) {
         val e = engine ?: return@LaunchedEffect
         val name = playing.fileName.ifBlank { playing.title }
         val title = MediaName.parse(name).title.ifBlank { name }
@@ -131,6 +145,10 @@ fun PlayerHost(
         e.stateUpdates().collect { s ->
             if (s.playing && s.opened && !s.ended) keepAwake.acquire() else keepAwake.release()
             session.update(title, s.durationMs, s.positionMs, s.playing && !s.ended)
+            // The bar reads this, and only while it is up: no recomposition for it at other times.
+            if (dockedNow) {
+                mini?.info = MiniBarInfo(title, s.playing && !s.ended, MiniPlayerState.progress(s.positionMs, s.durationMs))
+            }
         }
     }
 }

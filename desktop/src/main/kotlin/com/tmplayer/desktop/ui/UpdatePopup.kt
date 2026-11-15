@@ -72,7 +72,7 @@ fun rememberNavUpdate(state: ShellState): NavUpdate? {
 @Composable
 fun UpdatePopupTrigger(state: ShellState, item: NavUpdate?) {
     val scheduler = state.extras.updates ?: return
-    val playing = state.nowPlaying != null
+    val playing = state.playerUp
     val version = item?.version?.takeIf { Updates.state.value.release?.version == it }
     LaunchedEffect(version, playing) {
         if (version == null || playing) return@LaunchedEffect
@@ -87,7 +87,7 @@ fun UpdatePopupTrigger(state: ShellState, item: NavUpdate?) {
 /** The popup, wired to the live update state. Closed by setting [ShellState.updatePopup] to false. */
 @Composable
 fun UpdatePopupHost(state: ShellState) {
-    if (!state.updatePopup || state.nowPlaying != null) return
+    if (!state.updatePopup || state.playerUp) return
     val update by Updates.state.collectAsState()
     val selfUpdate = state.extras.selfUpdate
     val progress = selfUpdate?.progress?.collectAsState()?.value ?: UpdateProgress.Idle

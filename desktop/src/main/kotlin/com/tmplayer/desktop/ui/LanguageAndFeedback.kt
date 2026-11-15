@@ -236,7 +236,7 @@ fun UpdateFailedCard(version: String, onOpen: () -> Unit, onDismiss: () -> Unit,
  */
 @Composable
 fun ShellNotices(state: ShellState, modifier: Modifier = Modifier) {
-    val playing = state.nowPlaying != null
+    val playing = state.playerUp
     val failed by produceState<String?>(null) { value = withContext(Dispatchers.IO) { SelfUpdate.failedUpdate() } }
     var failedSeen by remember { mutableStateOf(false) }
     val failedVersion = failed?.takeUnless { failedSeen }

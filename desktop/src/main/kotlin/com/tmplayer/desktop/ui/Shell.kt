@@ -47,6 +47,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -139,7 +140,7 @@ fun DesktopShell(
                 .onPointerEvent(PointerEventType.Press) { event ->
                     if (event.button == PointerButton.Back) state.backStack.handleBack()
                 },
-            color = if (LocalVideoBehindPage.current && state.nowPlaying != null) androidx.compose.ui.graphics.Color.Transparent else Tone.background,
+            color = if (LocalVideoBehindPage.current && state.playerUp) androidx.compose.ui.graphics.Color.Transparent else Tone.background,
         ) {
             val auth by Td.auth.collectAsState()
             Box(Modifier.fillMaxSize()) {
@@ -381,8 +382,8 @@ private fun Browse(state: ShellState, player: PlayerContent) {
     // The end of a video puts the remote back on the item it was started from, unless a detail
     // pane came back with it, which takes the keys itself.
     var wasPlaying by remember { mutableStateOf(false) }
-    LaunchedEffect(state.nowPlaying == null) {
-        val playing = state.nowPlaying != null
+    LaunchedEffect(state.playerUp) {
+        val playing = state.playerUp
         if (wasPlaying && !playing && BigScreen.on && state.detail == null) {
             androidx.compose.runtime.withFrameNanos { }
             state.focusPage()
@@ -420,7 +421,7 @@ private fun Browse(state: ShellState, player: PlayerContent) {
     }
     // With the picture under the window (LocalVideoBehindPage), the page is kept but not drawn
     // while a video plays, so the picture shows through around the player's controls.
-    val seeThrough = LocalVideoBehindPage.current && state.nowPlaying != null
+    val seeThrough = LocalVideoBehindPage.current && state.playerUp
     // Whether Compose's focus is in this page or the player over it, rather than in a dialog or a
     // popup over the window: a text field here is behind the player, so its keys are the player's.
     var pageFocused by remember { mutableStateOf(false) }
@@ -484,7 +485,7 @@ private fun Browse(state: ShellState, player: PlayerContent) {
         }
         // Over the page and over a show opened from the search, whose episodes open it too.
         DetailPaneHost(state)
-        if (state.paletteOpen && state.nowPlaying == null) {
+        if (state.paletteOpen && !state.playerUp) {
             SearchPalette(
                 state = state,
                 search = searchModel,
@@ -501,7 +502,7 @@ private fun Browse(state: ShellState, player: PlayerContent) {
         // Over the floating bar or a chat's bar: at the window's smallest width the card reaches
         // in over the bar's right end, and would hide the picture and its menu.
         if (!setupPending && !gateUp) {
-            val foot = if (BigScreen.on) 24.dp else maxOf(NavBarClearance, ChatBarClearance)
+            val foot = (if (BigScreen.on) 24.dp else maxOf(NavBarClearance, ChatBarClearance)) + (if (state.mini.barVisible) MiniBarLift else 0.dp)
             ShellNotices(state, Modifier.align(Alignment.BottomEnd).padding(start = 24.dp, top = 24.dp, end = 24.dp, bottom = foot))
         }
         if (setupPending) {
@@ -527,12 +528,24 @@ private fun Browse(state: ShellState, player: PlayerContent) {
         // Over the page rather than instead of it, so the page keeps its scroll position and its
         // search, and closing the player is simply taking this away.
         val playing = state.nowPlaying
+        val casting by com.tmplayer.desktop.cast.DesktopCast.state.collectAsState()
+        LaunchedEffect(casting) { state.miniCasting(casting is com.tmplayer.desktop.cast.DesktopCast.State.Connected) }
         if (playing != null) {
-            Box(Modifier.fillMaxSize().then(if (seeThrough) Modifier else Modifier.background(Tone.background))) {
-                BackHandler { state.closePlayer() }
+            // Docked (U8): the player stays composed, so the one engine plays on, but it is
+            // clipped to a point and draws and hears nothing; the bar below stands for it.
+            val docked = state.mini.phase == com.tmplayer.player.MiniPhase.Docked
+            Box(
+                if (docked) {
+                    Modifier.size(1.dp).clipToBounds()
+                } else {
+                    Modifier.fillMaxSize().then(if (seeThrough) Modifier else Modifier.background(Tone.background))
+                },
+            ) {
+                BackHandler(enabled = !docked) { state.closePlayer() }
                 player(playing) { state.closePlayer() }
             }
         }
+        MiniBarHost(state, foot = maxOf(NavBarClearance, ChatBarClearance))
     }
 }
 

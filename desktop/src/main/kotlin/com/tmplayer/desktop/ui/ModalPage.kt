@@ -81,7 +81,7 @@ fun ModalPageHost(state: ShellState, content: @Composable () -> Unit) {
     // Focus back on the page the panel was opened from, once it has gone.
     var wasOpen by remember { mutableStateOf(false) }
     LaunchedEffect(open) {
-        if (wasOpen && !open && state.openChat == null && state.nowPlaying == null) {
+        if (wasOpen && !open && state.openChat == null && !state.playerUp) {
             androidx.compose.runtime.withFrameNanos { }
             state.focusPage()
         }
@@ -113,7 +113,7 @@ fun ModalPageHost(state: ShellState, content: @Composable () -> Unit) {
                     .height(size.height)
                     .focusRequester(entry)
                     // Tab and the arrows stay in the panel; a video on top takes the keys, so then focus may leave.
-                    .focusProperties { onExit = { if (state.nowPlaying == null) cancelFocusChange() } }
+                    .focusProperties { onExit = { if (!state.playerUp) cancelFocusChange() } }
                     .focusGroup(),
             ) {
                 // The pages clear the floating bar by this; the panel has no bar under it.

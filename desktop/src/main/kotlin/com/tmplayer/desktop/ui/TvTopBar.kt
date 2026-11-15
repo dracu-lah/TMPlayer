@@ -108,7 +108,7 @@ internal fun TvTopBar(
     // The search across chats is the bar's Search: closing it lands back there.
     var paletteWasOpen by remember { mutableStateOf(false) }
     LaunchedEffect(state.paletteOpen) {
-        if (paletteWasOpen && !state.paletteOpen && state.nowPlaying == null) runCatching { bar.search.requestFocus() }
+        if (paletteWasOpen && !state.paletteOpen && !state.playerUp) runCatching { bar.search.requestFocus() }
         paletteWasOpen = state.paletteOpen
     }
     // Nothing is behind the bar but the page: Home's carousel picture runs up under it, and only

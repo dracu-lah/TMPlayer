@@ -2041,6 +2041,8 @@
     "mark_watched_detail": "Adds it to your Watched list",
     "marked_unwatched": "Marked as unwatched",
     "marked_watched": "Marked as watched",
+    "mini_close": "Close the player",
+    "mini_expand": "Open the player",
     "mini_hint": "Mini player ({cmd}+P)",
     "mobile_data_body": "This video is {size}. Playing it now will use that much of your allowance.",
     "mobile_data_title": "You're on mobile data",
