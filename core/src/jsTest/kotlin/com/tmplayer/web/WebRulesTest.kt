@@ -452,4 +452,33 @@ class WebRulesTest {
         val ten = Array(10) { photo(it + 1, "7", if (it == 0) big else null, hasPicture = it % 2 == 0) }
         assertEquals(0, screenAlbums(emptyArray(), ten).videos.size)
     }
+
+    private fun chatDoc(id: Int, name: String, size: Double = 40_000.0, date: Double = 1_700_000_000.0, albumId: String? = null, replyTo: Double = 0.0): ChatDoc {
+        val o: dynamic = js("({})")
+        o.messageId = id.toDouble()
+        o.fileName = name
+        o.size = size
+        o.date = date
+        o.albumId = albumId
+        o.replyToMessageId = replyTo
+        return o.unsafeCast<ChatDoc>()
+    }
+
+    @Test
+    fun `chat subtitles come back best first as plain objects pointing into the documents`() {
+        val docs = arrayOf(
+            chatDoc(101, "Show.S01E03.srt"),
+            chatDoc(102, "Show.S01E02.eng.forced.srt"),
+            chatDoc(103, "Show.S01E02.eng.srt"),
+            chatDoc(104, "Show.S01E02.srt", size = 0.0),
+            chatDoc(99, "notes.txt"),
+        )
+        val hits = chatSubtitles("Show.S01E02.1080p.mkv", null, 100.0, 1_700_000_000.0, null, 0.0, docs, arrayOf("en"))
+        assertEquals(listOf(2, 1), hits.map { it.index })
+        assertEquals("en", hits[0].language)
+        assertTrue(hits[1].forced)
+        assertEquals("Neighbour", hits[0].relation)
+        hits.forEach { isPlain(it) }
+        assertEquals(0, chatSubtitles("", null, 0.0, 0.0, null, 0.0, emptyArray(), emptyArray()).size)
+    }
 }

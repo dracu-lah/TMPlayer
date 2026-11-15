@@ -65,7 +65,11 @@ import {
     addBookmark, deleteBookmark, loadBookmarks, readAutoplay, renameBookmark, writeAutoplay, writeLook, type Bookmark, type SubtitleLook,
 } from './keep'
 import type { SoundTrack } from './engines'
-import type { VideoCopy, VideoItem, WatchInfo } from '../tg/types'
+import type { ChatSubtitle, VideoCopy, VideoItem, WatchInfo } from '../tg/types'
+import { call } from '../tg/rpc'
+import { ChatSubtitleError } from './chatsubs'
+import { readChatSubtitle } from './chatsubs-read'
+import { SubtitleError } from './subtitles'
 
 /** TmIcons.PlaySolid and PauseSolid: Hugeicons Play and Pause, filled. */
 const PLAY_PATH =
@@ -170,7 +174,7 @@ export interface Ctl {
     markWatched: (on: boolean) => void
 }
 
-type Sheet = 'subtitles' | 'audio' | 'speed' | 'copies' | 'episodes' | 'more' | 'shape' | 'details' | 'options' | 'sleep' | 'bookmarks' | 'timing' | 'shortcuts' | 'still' | 'msone' | null
+type Sheet = 'subtitles' | 'audio' | 'speed' | 'copies' | 'episodes' | 'more' | 'shape' | 'details' | 'options' | 'sleep' | 'bookmarks' | 'timing' | 'shortcuts' | 'still' | 'msone' | 'chatsubs' | null
 
 export { variant }
 
@@ -247,6 +251,45 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
     // ---- showing and hiding ------------------------------------------------------------------
     const [visible, setVisible] = createSignal(variant() !== 'tv')
     const [sheet, setSheet] = createSignal<Sheet>(null)
+    // The subtitle files posted in this video's chat (EG-F48): looked for once, when the Subtitles
+    // picker (or More options, which leads to it) first opens. One search, answered best first; the
+    // entry shows only when there are some, and a failure just leaves it out.
+    const [chatSubs, setChatSubs] = createSignal<ChatSubtitle[]>([])
+    const [chatNote, setChatNote] = createSignal('')
+    const [chatBusy, setChatBusy] = createSignal<string | null>(null)
+    let chatAsked = false
+    createEffect(() => {
+        if (chatAsked || (sheet() !== 'subtitles' && sheet() !== 'more')) return
+        chatAsked = true
+        const wanted = [navigator.language.slice(0, 2).toLowerCase(), 'en']
+        call('chatSubtitles', [c.item.chatId, c.item.messageId, c.item.fileName || c.item.title, '', wanted]).then(setChatSubs, () => {})
+    })
+    /** The listed file read and laid over the video, or the sentence saying why not (a gone file leaves the list). */
+    const pickChat = async (sub: ChatSubtitle) => {
+        if (chatBusy()) return
+        setChatBusy(sub.key)
+        setChatNote('')
+        const failed = t('player.subtitle_load_failed', { file: sub.name })
+        try {
+            const own = episodeOf(c.item.fileName ?? '') ?? (info()?.episode ? episodeOf(info()!.episode!.code) : null)
+            const file = await readChatSubtitle(sub, own)
+            await c.addSubtitle(file, { label: sub.name.replace(/\.[^.]+$/, ''), language: sub.language ?? '' })
+            setSheet(null)
+        } catch (e) {
+            if (e instanceof ChatSubtitleError) {
+                setChatNote(e.why === 'gone' ? t('tracks.in_chat_gone') : e.why === 'too-big' ? t('tracks.file_too_big') : e.why === 'offline' ? t('errors.offline') : failed)
+                if (e.why === 'gone') {
+                    setChatSubs((list) => list.filter((s) => s.key !== sub.key))
+                    void call('chatSubtitlesForget', [c.item.chatId, c.item.messageId])
+                    if (!chatSubs().length) setSheet('subtitles')
+                }
+            } else if (e instanceof SubtitleError) {
+                setChatNote(e.why === 'vobsub' ? t('web.needs_app_picture_subtitles') : e.why === 'too-big' ? t('tracks.file_too_big') : failed)
+            } else setChatNote(failed)
+        } finally {
+            setChatBusy(null)
+        }
+    }
     /** The pointer rests on the controls (desktop): they stay. */
     const [held, setHeld] = createSignal(false)
     const [locked, setLocked] = createSignal(false)
@@ -1656,10 +1699,20 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                         <Choice text={t('common.off')} on={!subOn()} phone={phone()} onClick={() => (pickSub(null), setSheet(null))} />
                         <For each={subs()}>{(tt, i) => <Choice text={subLabel(tt, i())} on={subOn() === tt} phone={phone()} onClick={() => (pickSub(tt), setSheet(null))} />}</For>
                         <Show when={!phone()}><hr /></Show>
+                        <Show when={chatSubs().length}>
+                            <Choice icon={Add01Icon} text={t('tracks.in_chat')} detail={t('tracks.in_chat_detail')} phone={phone()} onClick={() => (setChatNote(''), setSheet('chatsubs'))} />
+                        </Show>
                         <Choice icon={Add01Icon} text={t('player.load_subtitle_file')} phone={phone()} onClick={() => (setSheet(null), c.loadSubtitleFile())} />
                         <Show when={msoneOn()}>
                             <Choice icon={TranslateIcon} text={t('msone.search')} detail={t('msone.search_detail')} phone={phone()} onClick={() => setSheet('msone')} />
                         </Show>
+                    </Picker>
+                </Match>
+                <Match when={sheet() === 'chatsubs'}>
+                    <Picker title={t('tracks.in_chat')} note={chatNote() || t('tracks.in_chat_detail')} phone={phone()} panel={inPanel()} anchor={anchor()} root={c.root} onClose={() => setSheet(null)} onBack={() => setSheet('subtitles')}>
+                        <For each={chatSubs()}>
+                            {(sub) => <Choice text={sub.name} detail={chatDetail(sub, chatBusy() === sub.key)} phone={phone()} disabled={chatBusy() !== null && chatBusy() !== sub.key} onClick={() => void pickChat(sub)} />}
+                        </For>
                     </Picker>
                 </Match>
                 <Match when={sheet() === 'msone'}>
@@ -1735,6 +1788,16 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
  * What MSone is asked about the video: the title the poster lookup cleaned from its name (the
  * show's, for an episode) and its year, and the episode's season and number from its code ("S1 E3").
  */
+function chatDetail(sub: ChatSubtitle, busy: boolean): string | undefined {
+    if (busy) return t('online.downloading')
+    let language: string | undefined
+    try {
+        if (sub.language) language = new Intl.DisplayNames([navigator.language], { type: 'language' }).of(sub.language)
+    } catch {}
+    const parts = [language, sub.forced ? t('tracks.forced') : '', sub.hearing ? t('online.hearing_impaired') : '', sub.archive ? t('tracks.in_chat_compressed') : '']
+    return parts.filter((p) => p).join('  ·  ') || undefined
+}
+
 function msoneTarget(item: VideoItem, info: WatchInfo | null): MsoneTarget {
     const ep = info?.episode ? episodeOf(info.episode.code) : null
     return {

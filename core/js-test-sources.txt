@@ -21,3 +21,4 @@ com/tmplayer/data/WatchNextTest.kt
 com/tmplayer/data/GlobalSearchTest.kt
 com/tmplayer/data/AllChatsSearchTest.kt
 com/tmplayer/data/OpeningStallTest.kt
+com/tmplayer/player/ChatSubtitlesTest.kt

@@ -93,6 +93,25 @@ export interface VideoItem extends FileRef {
     poster: PosterAsk | null
 }
 
+/** A subtitle file posted in the video's chat (EG-F48), best first in the list the worker answers. */
+export interface ChatSubtitle {
+    /** The worker's file key: `chunk` reads its bytes. */
+    key: string
+    /** The file's name as it was posted. */
+    name: string
+    size: number
+    /** How it belongs to the video: the same album, a reply, next to it, or by its name. */
+    relation: 'Album' | 'Reply' | 'Neighbour' | 'Name'
+    /** The two letter code its name gives, or null. */
+    language: string | null
+    forced: boolean
+    hearing: boolean
+    /** A zip, whose subtitle entry is read when it is chosen. */
+    archive: boolean
+    /** False under "restrict saving content": the file is used here and never offered for download. */
+    canBeSaved: boolean
+}
+
 export interface ChatItem {
     id: number
     title: string

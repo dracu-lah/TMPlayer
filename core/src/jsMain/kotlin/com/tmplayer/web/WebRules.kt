@@ -835,6 +835,81 @@ private fun label(tag: EpisodeTag): EpisodeLabel = plain(
     "episode" to tag.episode,
 )
 
+// ---- subtitle files posted in the chat (EG-F48) ---------------------------------------------
+
+/** A document of the chat as the worker read it, for [chatSubtitles]. Ids are the browser client's, not TDLib's. */
+interface ChatDoc {
+    val messageId: Double
+    val fileName: String?
+    val size: Double
+    /** Seconds since the epoch. */
+    val date: Double
+    /** The album (grouped_id) as a decimal string, or null. */
+    val albumId: String?
+    /** The message this one replies to, or 0. */
+    val replyToMessageId: Double
+}
+
+/** One file of the list: [index] is its place in the documents handed in. */
+interface ChatSubtitleHit {
+    val index: Int
+    /** "Album", "Reply", "Neighbour" or "Name". */
+    val relation: String
+    /** The two letter code its name gives, or null. */
+    val language: String?
+    val forced: Boolean
+    val hearing: Boolean
+    /** A zip, whose entries are read when it is chosen. */
+    val archive: Boolean
+}
+
+/**
+ * ChatSubtitles.rank for the web player: which of [docs] (the chat's documents around the video,
+ * from one search) belong to the video, best first, at most ten. The browser client's message ids
+ * are Telegram's own; they are shifted the way TDLib's are so the neighbour rule reads the same.
+ */
+fun chatSubtitles(
+    videoName: String,
+    caption: String?,
+    messageId: Double,
+    date: Double,
+    albumId: String?,
+    replyToMessageId: Double,
+    docs: Array<ChatDoc>,
+    preferred: Array<String>,
+): Array<ChatSubtitleHit> {
+    fun tdlib(id: Double): Long = id.toLong() shl 20
+    val video = com.tmplayer.player.ChatSubtitles.Video(
+        messageId = tdlib(messageId),
+        fileName = videoName,
+        caption = caption.orEmpty(),
+        date = date.toInt(),
+        albumId = albumId?.toLongOrNull() ?: 0L,
+        replyToMessageId = if (replyToMessageId > 0) tdlib(replyToMessageId) else 0L,
+    )
+    val list = docs.mapIndexed { index, d ->
+        com.tmplayer.player.ChatSubtitles.Doc(
+            messageId = tdlib(d.messageId),
+            fileId = index,
+            fileName = d.fileName.orEmpty(),
+            size = d.size.toLong(),
+            date = d.date.toInt(),
+            albumId = d.albumId?.toLongOrNull() ?: 0L,
+            replyToMessageId = if (d.replyToMessageId > 0) tdlib(d.replyToMessageId) else 0L,
+        )
+    }
+    return com.tmplayer.player.ChatSubtitles.rank(video, list, preferred.toList()).map { hit ->
+        plain<ChatSubtitleHit>(
+            "index" to hit.doc.fileId,
+            "relation" to hit.relation.name,
+            "language" to hit.language,
+            "forced" to hit.forced,
+            "hearing" to hit.hearing,
+            "archive" to hit.archive,
+        )
+    }.toTypedArray()
+}
+
 /** A plain JS object of [fields], typed as the exported interface it stands for. */
 private fun <T> plain(vararg fields: Pair<String, Any?>): T {
     val o: dynamic = js("({})")

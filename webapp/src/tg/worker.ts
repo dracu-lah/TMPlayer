@@ -4,11 +4,12 @@
 import { BaseTelegramClient, SentCode as MtSentCode, TelegramClient, User, type Message, type tl } from '@mtcute/web'
 import { rules } from '../rules'
 import { cryptoProvider } from './crypto'
+import { findChatSubtitles, forgetChatSubtitles } from './chatsubs'
 import { homePage } from './home'
 import { archivedList, chatList, chatPage, forgetAll, joinedFor, rankChats, recentPage, searchAll, videoCounts, watchInfo } from './library'
 import { clickSponsored, reportSponsored, viewSponsored } from './sponsored'
 import { chatProtects, files, itemOf, rawOf, thumbnails, toItem } from './media'
-import type { ChatInfo, ChatItem, ChatPage, ChatsEvent, ChatView, Country, Found, HomePage, HomeView, ListView, Me, RecentPage, QrEvent, RpcError, SentCode, SponsoredReport, VideoItem, WatchInfo } from './types'
+import type { ChatInfo, ChatItem, ChatPage, ChatSubtitle, ChatsEvent, ChatView, Country, Found, HomePage, HomeView, ListView, Me, RecentPage, QrEvent, RpcError, SentCode, SponsoredReport, VideoItem, WatchInfo } from './types'
 
 // `VITE_TG_TEST=1 pnpm dev` signs in on Telegram's test servers (numbers 99966XYYYY, the code
 // is X five times), with its own storage, to try the sign in steps without a real account.
@@ -379,6 +380,16 @@ export const api = {
     },
 
     /** Where a video saved at `savedMs` opens, and what to keep when it is left at `positionMs` (the app's ResumeRewind). */
+    /** The subtitle files posted next to a video, best first (the apps' ChatSubtitles), from one search of its chat. */
+    async chatSubtitles(_: Ctx, chatId: number, messageId: number, fileName: string, caption: string, preferred: string[]): Promise<ChatSubtitle[]> {
+        return findChatSubtitles(tg, chatId, messageId, fileName, caption, preferred)
+    },
+
+    /** A listed file that is no longer there: the next lookup of this video asks again. */
+    async chatSubtitlesForget(_: Ctx, chatId: number, messageId: number): Promise<void> {
+        forgetChatSubtitles(chatId, messageId)
+    },
+
     async resumeStart(_: Ctx, savedMs: number, rewindMs: number | null): Promise<number> {
         const r = await rules()
         return r.resumeStart(savedMs, r.rewindSetting(rewindMs))
