@@ -1695,17 +1695,14 @@ fun SettingsScreen(
                         },
                     )
                 }
-                // Streams through a rolling window of the video, for a device with less room than
-                // the film. Its subtitle says the cost: going back fetches again, and a short pause
-                // comes now and then as the window moves on.
+                // "While streaming": Keep video, or Save space, which streams through a rolling window
+                // of the video for a device with less room than the film. The line under the tabs says
+                // the cost of the chosen one; a download kept on purpose is never windowed.
                 item {
-                    ToggleRow(
-                        title = s.settingsLowStorage,
+                    StreamStorageRow(
+                        saveSpace = lowStorage,
+                        onPick = { scope.launch { settings.setLowStorageMode(it) } },
                         modifier = Modifier.jumpTarget(jumps.getValue(SetupStep.Storage)),
-                        subtitle = if (lowStorage) s.settingsLowStorageOn else s.settingsLowStorageOff,
-                        icon = TmIcons.Archive,
-                        checked = lowStorage,
-                        onToggle = { scope.launch { settings.setLowStorageMode(!lowStorage) } },
                     )
                 }
                 // Its notification, beside the mode it is about rather than on the Notifications
