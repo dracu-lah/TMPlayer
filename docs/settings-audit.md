@@ -433,3 +433,27 @@ a line of help text naming "Settings, <place>").
 - The tour's Settings picture (`tour-*-settings*`) still shows the old list order and names:
   retaking it needs the promo build and `scripts/annotate-shot.py` then `scripts/tour-badges.py`.
   The tour's four lines are rewritten for the new pages and keep their badges' order.
+
+## Removed (U20, step 5), on the plan's rule only
+
+- The Suggest VLC switch (a control nothing acted on) and its three strings
+  (`settings.engine_suggest_vlc`, `_on`, `_off`), which no code and no catalog used. Its stored
+  name is still read (`suggestVlcNow`) and travels in a backup; nothing writes it now.
+- Nothing else: every other row is a live feature or the only way to a setting.
+
+## Keys U20 left unused, for the other 21 catalogs
+
+English keeps them until the user removes them from all 22 catalogs at once (`CatalogTest`):
+`settings.page_about_backup_summary`, `settings.page_account`, `settings.page_account_summary`,
+`settings.page_playback_summary`, `settings.page_playback_summary_desktop`,
+`settings.page_storage_summary`, `settings.page_subtitles_summary_online`, `settings.subtitles`,
+`tour.settings_lock`, `tour.settings_playback`, `tour.settings_storage`, `tour.settings_storage_tv`.
+
+New keys to translate: `settings.group_about_summary`, `settings.group_playback_summary`,
+`settings.group_playback_summary_desktop`, `settings.group_privacy_lock_summary`,
+`settings.group_storage_summary`, `settings.group_storage_summary_desktop`,
+`settings.group_subtitles_audio_summary`, `settings.group_subtitles_audio_summary_online`,
+`settings.page_privacy_lock`, `settings.page_subtitles_audio`, `settings.search`,
+`settings.search_clear`, `settings.search_none`, `settings.sound`,
+`tour.settings_playback_page`, `tour.settings_privacy_page`, `tour.settings_storage_page`,
+`tour.settings_storage_page_tv`.

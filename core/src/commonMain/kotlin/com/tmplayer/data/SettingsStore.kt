@@ -1911,14 +1911,13 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
         prefs.edit { it[ENGINE_SWITCH_ON_ERROR] = value }
     }
 
-    /** Offer VLC when playback cannot keep up (on by default). */
-    val suggestVlc: Flow<Boolean> = read { it[SUGGEST_VLC] ?: true }
-
+    /**
+     * "Suggest VLC when playback cannot keep up" (PR5): its switch was taken out of Settings by
+     * U20, since nothing acted on it, and nothing writes it now. The name stays, read here, so a
+     * backup that carries it restores cleanly and a player that comes to offer VLC can honour an
+     * answer already given.
+     */
     suspend fun suggestVlcNow(): Boolean = prefs.data.first()[SUGGEST_VLC] ?: true
-
-    suspend fun setSuggestVlc(value: Boolean) {
-        prefs.edit { it[SUGGEST_VLC] = value }
-    }
 
     /** Frame-rate matching on a television (on by default; it still follows the TV's own setting). */
     val frameRateMatching: Flow<Boolean> = read { it[FRAME_RATE_MATCHING] ?: true }
