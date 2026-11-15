@@ -207,6 +207,26 @@ redesigns that stop at their design notes for the user's OK:
 R5 (player labels, skip buttons) is a patch scale change and goes ahead as group G.
 Open on the phone: History shows a 20 second test play from the review; remove it if unwanted.
 
+### T9 Series: show every season and episode the data knows, not only the ones in the chats  (model: sonnet high, depends: a worker slot, T5 for shared Series files if any)
+User, 2026-11-16: a show with 6 seasons where the chats hold 2 should still list all 6 from the metadata.
+Today only `number_of_seasons` is read (`MetaApis.kt:250`) and the series page lists what the chats have.
+- Shared part first: a pure `SeriesShelf` in core merging the metadata's seasons and episodes (TMDB, TVmaze,
+  AniList, already fetched) with the videos found in the chats: each season and episode is Available (has a
+  video, plays), Missing (known to the data, not in your chats), or Unaired (air date in the future).
+  Table test with: 2 of 6 seasons present, a season with 5 of 10 episodes, specials (season 0), a two part
+  finale, anime absolute numbering, a wrong match, no metadata (falls back to today), garbage and huge data.
+- UI (phone, TV, desktop, web): Missing seasons are listed in order, quiet (lower contrast, a plain line
+  "Not in your chats yet"), episodes inside a season show gaps by episode number with their data title; a tap
+  on a missing item says what it is and offers "Find in other chats" (search by title, episode number) and
+  never a Play button. Unaired shows the date. Season picker lists all seasons with a dot on those you have.
+- Rules: no video counts as a promise (user: counts may be wrong), so the line says "6 seasons" only from the
+  metadata and marks "in your chats" by presence, not by a number; a hide switch is not needed (it is the
+  default honest view) but "Only show what I have" lives in the series sheet for people who want it.
+- Offline or no metadata: unchanged, no empty skeletons. Scale: a 20-season show with 1,000 episodes lists
+  lazily and cheaply; metadata comes from the existing cache, no new call per row.
+- Edge: the chats' episodes numbered differently from the data (absolute vs per-season) keep today's matching
+  and never show a present episode as missing twice; a mismatch shows nothing as missing for that season.
+
 ### D1 Support cards: Buy Me a Coffee and UPI  (model: sonnet, running since 2026-11-16)
 Themed cards and dialogs with the official logos, regional order (IN: UPI first), icon popup through the
 existing `SupportReminder` nag. Design note `design/redesign/support-cards.md`.
