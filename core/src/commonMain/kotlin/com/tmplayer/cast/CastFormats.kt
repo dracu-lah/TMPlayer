@@ -197,8 +197,10 @@ object CastFormats {
 
         fun transcode(reason: TranscodeReason, copyVideo: Boolean): CastRoute.Transcode? {
             val ability = transcoder ?: return null
-            if (!copyVideo && video != null && !ability.decodesVideo(video.codec)) return null
-            val target = TranscodePlanner.target(probe, caps, ability, audioTrack, copyVideo, linkKbps, receiverContainers)
+            // Passed through only where this device's muxer carries the picture; else made again.
+            val copy = copyVideo && video != null && ability.passesVideo(video.codec)
+            if (!copy && video != null && !ability.decodesVideo(video.codec)) return null
+            val target = TranscodePlanner.target(probe, caps, ability, audioTrack, copy, linkKbps, receiverContainers)
             // Made again for its sound, it must come out with sound.
             if (reason == TranscodeReason.AudioCodec && target.audio != TranscodeAudio.Aac && target.audio != TranscodeAudio.Ac3) return null
             return CastRoute.Transcode(audioTrack?.number?.takeIf { target.audio != TranscodeAudio.None }, reason, target)

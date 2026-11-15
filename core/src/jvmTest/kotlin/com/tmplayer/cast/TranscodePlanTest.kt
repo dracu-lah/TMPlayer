@@ -156,6 +156,20 @@ class TranscodePlanTest {
         }
     }
 
+    @Test
+    fun `a muxer that cannot carry the sound or the picture as they are makes them again`() {
+        val media3 = phone.copy(passVideo = setOf(Codecs.H264, Codecs.HEVC), passAudio = setOf(Codecs.AAC), audioDecoders = setOf(Codecs.AAC, Codecs.AC3, Codecs.DTS))
+        // AC-3 plays on the receiver, but Media3's fMP4 muxer has no AC-3: AAC instead.
+        val ac3 = plan(Container.Matroska, video(Codecs.MPEG2), listOf(audio(2, Codecs.AC3)), ReceiverCaps.LEGACY, ability = media3).transcode()!!
+        assertEquals(TranscodeAudio.Aac, ac3.target.audio)
+        // VP9 with DTS, the sound the trouble: the picture cannot pass through this muxer, so it is made again.
+        val vp9 = plan(Container.Mp4, video(Codecs.VP9), listOf(audio(2, Codecs.DTS)), ReceiverCaps.GOOGLE_TV, ability = media3).routes.first() as CastRoute.Transcode
+        assertEquals(TranscodeReason.AudioCodec, vp9.reason)
+        assertFalse(vp9.target.copyVideo)
+        val h264 = plan(Container.Mp4, video(Codecs.H264), listOf(audio(2, Codecs.DTS)), ReceiverCaps.GOOGLE_TV, ability = media3).routes.first() as CastRoute.Transcode
+        assertTrue(h264.target.copyVideo)
+    }
+
     // ---- what -----------------------------------------------------------------------------------
 
     @Test

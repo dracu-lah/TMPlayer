@@ -66,9 +66,15 @@ data class TranscodeAbility(
     /** An AC-3 encoder is there (ffmpeg's); Android's MediaCodec has none. */
     val ac3: Boolean = false,
     val containers: Set<TranscodeContainer> = setOf(TranscodeContainer.Fmp4),
+    /** Picture codecs its muxer carries as they are; null for every one MP4 takes (ffmpeg). */
+    val passVideo: Set<String>? = null,
+    /** Sound codecs its muxer carries as they are; null for every one MP4 takes (ffmpeg). Media3's fMP4 muxer: AAC and Opus. */
+    val passAudio: Set<String>? = null,
 ) {
     fun decodesVideo(codec: String?): Boolean = videoDecoders == null || (codec != null && codec in videoDecoders)
     fun decodesAudio(codec: String?): Boolean = audioDecoders == null || (codec != null && codec in audioDecoders)
+    fun passesVideo(codec: String?): Boolean = codec != null && codec in CastFormats.MP4_VIDEO + Codecs.VP9 && (passVideo == null || codec in passVideo)
+    fun passesAudio(codec: String?): Boolean = codec != null && codec in CastFormats.MP4_AUDIO && (passAudio == null || codec in passAudio)
 }
 
 /**
@@ -172,7 +178,7 @@ object TranscodePlanner {
      */
     fun audioFor(audio: AudioTrack?, caps: ReceiverCaps, ability: TranscodeAbility): TranscodeAudio = when {
         audio == null -> TranscodeAudio.None
-        audio.codec in CastFormats.MP4_AUDIO && CastFormats.audioSupport(audio.codec, caps) == Support.Yes -> TranscodeAudio.Copy
+        ability.passesAudio(audio.codec) && CastFormats.audioSupport(audio.codec, caps) == Support.Yes -> TranscodeAudio.Copy
         !ability.decodesAudio(audio.codec) -> TranscodeAudio.None
         ability.ac3 && caps.dolbyPassthrough == Support.Yes && audio.channels > 2 -> TranscodeAudio.Ac3
         else -> TranscodeAudio.Aac
