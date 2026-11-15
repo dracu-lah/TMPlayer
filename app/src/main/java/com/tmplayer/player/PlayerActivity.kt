@@ -8479,12 +8479,21 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     private fun watchForTheEnd() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                val autoplay = runCatching { settings.autoplayNextNow() }.getOrDefault(true)
+                autoplayNext = runCatching { settings.autoplayNextNow() }.getOrDefault(true)
                 while (true) {
                     if (playing?.isPlaying == true) delay(500) else endWatchWake.receive()
                     val exo = player ?: continue
+                    // The live copy each tick: the Episodes panel's switch changes it mid-video.
+                    val autoplay = autoplayNext
                     updateSkipPill(exo, autoplay)
-                    if (!autoplay) continue
+                    if (!autoplay) {
+                        // Switched off while the card was up: it must not promise a next episode.
+                        if (nextUpShown || nextUpCard?.isShown == true) {
+                            hideNextUp()
+                            nextUpShown = false
+                        }
+                        continue
+                    }
                     val next = _episodes.value.next ?: continue
                     val duration = exo.duration
                     if (duration <= 0 || nextUpDismissed || locked || inPictureInPicture) continue
@@ -8708,6 +8717,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     /** The list's autoplay switch: the same setting Settings shows. */
     private fun setAutoplayFromEpisodes(on: Boolean) {
         autoplayNext = on
+        // The end watch reads the live copy: a paused video's loop sleeps, so it is told.
+        endWatchWake.trySend(Unit)
         refreshEpisodes()
         lifecycleScope.launch { runCatching { settings.setAutoplayNext(on) } }
     }
