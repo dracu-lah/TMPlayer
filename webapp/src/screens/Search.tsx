@@ -60,13 +60,6 @@ export function Search() {
             <Show when={found() && !results.loading && found()!.tiles.length}>
                 <p class="muted search-count">{t('search.count', { videos: found()!.videos, chats: found()!.chats })}</p>
             </Show>
-            <Show when={found() && !results.loading && found()!.addedOnly && !everyChat()}>
-                <button class="link" type="button" onClick={() => setEveryChatFor(params.q!.trim())}>{t('search.other_chats')}</button>
-            </Show>
-            <Show when={found() && !results.loading && !found()!.addedOnly && found()!.tiles.length}>
-                <p class="muted">{t('search.every_chat_note')}</p>
-                <A class="link" href="/added-chats">{t('picker.add_more')}</A>
-            </Show>
             <Show when={found() && !results.loading && !found()!.tiles.length}>
                 <p class="muted">{t('search.none', { query: params.q!.trim() })}</p>
                 <Show when={found()!.addedOnly}>
@@ -75,6 +68,15 @@ export function Search() {
                 <A class="link" href="/added-chats">{t('picker.add_more')}</A>
             </Show>
             <VideoList cards={found()?.tiles.map((tile) => tileCard(tile, true)) ?? []} label={t('common.search')} />
+            {/* The ways to search further come after the results, so Down from the field reaches the first video on a
+                remote and nothing that can take the focus stands between them (tv.spec, Search). */}
+            <Show when={found() && !results.loading && found()!.addedOnly && !everyChat()}>
+                <button class="link" type="button" onClick={() => setEveryChatFor(params.q!.trim())}>{t('search.other_chats')}</button>
+            </Show>
+            <Show when={found() && !results.loading && !found()!.addedOnly && found()!.tiles.length}>
+                <p class="muted">{t('search.every_chat_note')}</p>
+                <A class="link" href="/added-chats">{t('picker.add_more')}</A>
+            </Show>
         </>
     )
 }
