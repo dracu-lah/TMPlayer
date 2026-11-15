@@ -256,6 +256,11 @@ class GarbageInputTest {
                     LogBundle.Parts(crash = listOf(text), sessions = listOf(listOf(text)), appLog = text.lines()),
                     known = listOf(text), maxBytes = 5_000,
                 )
+                )
+            }
+            survive("SyncDocuments.decode", text) {
+                SyncDocuments.decode(text.encodeToByteArray(), account = 5)
+                SyncDocuments.decode("{\"format\":\"tmplayer-sync\",\"version\":1,\"watched\":[$text],\"removed\":[$text]}".encodeToByteArray(), 0)
             }
             survive("ResumeState.decode", text) { ResumeState.decode(text) }
             survive("ResumeRecord.decode", text) {
@@ -338,6 +343,7 @@ class GarbageInputTest {
         for (data in bytes) {
             val shown = data.take(24).joinToString(",")
             survive("Mp4Chapters.parseChpl", shown) { Mp4Chapters.parseChpl(data) }
+            survive("SyncDocuments.decode bytes", shown) { SyncDocuments.decode(data, account = 5); SyncDocuments.decode(byteArrayOf(0x1f, 0x8b.toByte()) + data, 5) }
             survive("MkvChapters.parseElement", shown) { MkvChapters.parseElement(data) }
             survive("MkvClusters.find", shown) {
                 MkvClusters.find(data, data.size, atEnd = false)

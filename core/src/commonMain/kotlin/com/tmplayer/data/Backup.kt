@@ -281,10 +281,10 @@ object Backups {
         bookmarks = bookmarks.sortedWith(compareBy({ it.chatId }, { it.messageId }, { it.positionMs })),
     )
 
-    private fun favouritesOf(settings: Map<String, Any>): Set<Long> =
+    internal fun favouritesOf(settings: Map<String, Any>): Set<Long> =
         (settings[FAVOURITES_KEY] as? Set<*>).orEmpty().mapNotNull { it.toString().toLongOrNull() }.toSet()
 
-    private fun resumeOf(settings: Map<String, Any>): List<ResumeRecord> = settings.mapNotNull { (name, value) ->
+    internal fun resumeOf(settings: Map<String, Any>): List<ResumeRecord> = settings.mapNotNull { (name, value) ->
         if (!name.startsWith("resume_")) return@mapNotNull null
         val ids = name.removePrefix("resume_")
         ResumeRecord.decode(
@@ -295,12 +295,12 @@ object Backups {
         )?.copy(localPath = null)
     }.sortedByDescending { it.updatedAt }
 
-    private fun watchedOf(watched: Map<String, Any>): List<WatchedRecord> = watched.mapNotNull { (name, value) ->
+    internal fun watchedOf(watched: Map<String, Any>): List<WatchedRecord> = watched.mapNotNull { (name, value) ->
         if (!name.startsWith(WATCHED_PREFIX)) return@mapNotNull null
         WatchedRecord.decode(name.removePrefix(WATCHED_PREFIX), value as? String)
     }.sortedByDescending { it.watchedAt }
 
-    private fun watchLaterOf(watched: Map<String, Any>): List<WatchLaterRecord> = watched.mapNotNull { (name, value) ->
+    internal fun watchLaterOf(watched: Map<String, Any>): List<WatchLaterRecord> = watched.mapNotNull { (name, value) ->
         if (!name.startsWith(WATCH_LATER_PREFIX)) return@mapNotNull null
         WatchLaterRecord.decode(name.removePrefix(WATCH_LATER_PREFIX), value as? String)
     }.sortedByDescending { it.addedAt }
@@ -350,7 +350,7 @@ object Backups {
         }
     }
 
-    private fun resumeJson(r: ResumeRecord) = JSONObject().apply {
+    internal fun resumeJson(r: ResumeRecord) = JSONObject().apply {
         put("chat", r.chatId)
         put("message", r.messageId)
         put("file", r.fileId)
@@ -364,7 +364,7 @@ object Backups {
         r.state?.let { put("state", it.encode()) }
     }
 
-    private fun watchLaterJson(w: WatchLaterRecord) = JSONObject().apply {
+    internal fun watchLaterJson(w: WatchLaterRecord) = JSONObject().apply {
         put("chat", w.chatId)
         put("message", w.messageId)
         put("file", w.fileId)
@@ -386,7 +386,7 @@ object Backups {
         put("note", b.note)
     }
 
-    private fun watchedJson(w: WatchedRecord) = JSONObject().apply {
+    internal fun watchedJson(w: WatchedRecord) = JSONObject().apply {
         put("chat", w.chatId)
         put("message", w.messageId)
         put("file", w.fileId)
@@ -456,7 +456,7 @@ object Backups {
         }
     }
 
-    private fun objects(array: JSONArray?): List<JSONObject> =
+    internal fun objects(array: JSONArray?): List<JSONObject> =
         if (array == null) emptyList() else (0 until array.length()).mapNotNull { array.optJSONObject(it) }
 
     private fun strings(array: JSONArray?): List<String> =
@@ -468,7 +468,7 @@ object Backups {
     private fun JSONObject.longOrNull(name: String): Long? = (opt(name) as? Number)?.toLong()
 
     /** Through [ResumeRecord.decode]'s own checks, so the file can hold nothing the store would not. */
-    private fun resumeOf(json: JSONObject): ResumeRecord? {
+    internal fun resumeOf(json: JSONObject): ResumeRecord? {
         val chatId = json.longOrNull("chat") ?: return null
         val messageId = json.longOrNull("message") ?: return null
         val line = ResumeRecord.encode(
@@ -488,7 +488,7 @@ object Backups {
         )
     }
 
-    private fun watchLaterOf(json: JSONObject): WatchLaterRecord? = WatchLaterRecord(
+    internal fun watchLaterOf(json: JSONObject): WatchLaterRecord? = WatchLaterRecord(
         chatId = json.longOrNull("chat") ?: return null,
         messageId = json.longOrNull("message") ?: return null,
         fileId = json.longOrNull("file")?.toInt() ?: 0,
@@ -510,7 +510,7 @@ object Backups {
         note = BookmarkStore.cleanNote(json.optString("note")),
     )
 
-    private fun watchedOf(json: JSONObject): WatchedRecord? = WatchedRecord(
+    internal fun watchedOf(json: JSONObject): WatchedRecord? = WatchedRecord(
         chatId = json.longOrNull("chat") ?: return null,
         messageId = json.longOrNull("message") ?: return null,
         fileId = json.longOrNull("file")?.toInt() ?: 0,
