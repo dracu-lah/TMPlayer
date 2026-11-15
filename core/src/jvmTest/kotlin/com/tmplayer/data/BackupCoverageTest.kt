@@ -56,9 +56,11 @@ class BackupCoverageTest {
         // What the CP76 notifications already said and where each chat check got to: this
         // device's, started afresh on another.
         "episode_alert_seen", "episode_alert_told", "low_storage_alert", "piece_gaps", "update_alerted_version",
-        // Resume across devices: which Saved Messages message, and what this device last wrote to
-        // it. Found again by its tag on a restored device.
-        "resume_sync_message", "resume_sync_keys",
+        // Resume across devices: which Saved Messages message and file, what this device held after
+        // its last sync and for which account, when it last sent a file, and the last result. This
+        // device's bookkeeping: found again by its caption on a restored device.
+        "resume_sync_message", "resume_sync_keys", "resume_sync_file", "resume_sync_favourites", "resume_sync_at",
+        "resume_sync_account", "resume_sync_sent_at", "resume_sync_status",
         // Which kinds of picture this device kept up with in software, and whose "may stutter"
         // question was turned off (HX2): about this device's CPU and decoders, not another's.
         "decode_memory", "heavy_ask_skip",
