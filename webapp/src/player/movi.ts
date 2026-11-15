@@ -5,6 +5,7 @@
 // this engine runs (see [takeOver]) and given back on destroy.
 import type { MoviPlayer, PlayerState, SourceAdapter, AudioTrack } from 'movi-player/player'
 import type { MediaFile } from '../stream/reader'
+import { cueOverlay } from './cueoverlay'
 import { Unplayable, type Engine, type EngineEvents, type SoundTrack } from './engines'
 
 const debug = location.hostname === 'localhost' || location.hostname === '127.0.0.1'
@@ -345,33 +346,9 @@ function takeOver(video: HTMLVideoElement, player: MoviPlayer, events: EngineEve
     video.classList.add('movi-active')
     Object.defineProperties(video, own)
 
-    // Subtitles from a file: the element's own cue box does not run (its clock stays at 0), so the
-    // showing track's cues are drawn here, in the look the custom properties give `video::cue`.
-    const cues = document.createElement('div')
-    cues.className = 'movi-cues'
-    video.parentElement?.append(cues)
-    let shownCues = ''
-    const drawCues = () => {
-        const t = seekingTo ?? player.getCurrentTime()
-        const track = Array.from(video.textTracks).find((tt) => tt.mode === 'showing' && (tt.kind === 'subtitles' || tt.kind === 'captions'))
-        const active = track ? Array.from(track.cues ?? []).filter((c) => c.startTime <= t && t < c.endTime) : []
-        const key = active.map((c) => `${c.startTime}:${c.endTime}`).join('|')
-        if (key === shownCues) return
-        shownCues = key
-        // The look (size, colour, box, edge) is set on the element by Player.tsx.
-        for (const name of ['--cue-size', '--cue-colour', '--cue-box', '--cue-edge']) cues.style.setProperty(name, video.style.getPropertyValue(name))
-        cues.replaceChildren(
-            ...active.map((c) => {
-                const line = document.createElement('span')
-                line.className = 'movi-cue'
-                if (c instanceof VTTCue) line.append(c.getCueAsHTML())
-                return line
-            }),
-        )
-        const first = active[0]
-        const at = first instanceof VTTCue && typeof first.line === 'number' && !first.snapToLines ? first.line : 90
-        cues.style.paddingBottom = `${Math.max(0, 100 - at)}%`
-    }
+    // Subtitles from a file, drawn by the shared overlay (the element's own cue box does not run).
+    const overlay = cueOverlay(video, () => seekingTo ?? player.getCurrentTime())
+    const drawCues = overlay.draw
     const onTime = () => {
         if (seekingTo === null) fire('timeupdate')
         drawCues()
@@ -422,7 +399,7 @@ function takeOver(video: HTMLVideoElement, player: MoviPlayer, events: EngineEve
 
     return () => {
         clearInterval(slowWatch)
-        cues.remove()
+        overlay.remove()
         player.off('timeUpdate', onTime)
         player.off('stateChange', onState)
         player.off('durationChange', onDuration)

@@ -45,11 +45,15 @@ export class MasterClock {
     }
 
     /**
-     * After the source itself stopped (a suspended audio context takes a moment to stop): the
-     * held position is where the source stands now, so a sound scheduled against it lines up.
+     * After the source itself stopped (a suspended audio context takes a moment to stop and the
+     * sound played on meanwhile): the held position moves on by what the source ran since `hold`,
+     * so a sound already scheduled still lines up with it.
      */
     settle() {
-        if (this.held) this.anchorSource = this.source() - this.latency
+        if (!this.held) return
+        const at = this.source() - this.latency
+        this.anchorMedia += (at - this.anchorSource) * this.speed
+        this.anchorSource = at
     }
 
     /** Sets where the clock stands, held or not. */

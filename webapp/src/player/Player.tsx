@@ -356,7 +356,8 @@ export function Player(props: {
         const picture = !container && !!p && why instanceof Unplayable && pictureForLibav(p, why.why)
         // AVI, FLV, WMV, RealMedia, VOB: libav.js first, which plays through the element (picture in
         // picture, AirPlay); movi when it cannot.
-        if ((container && LIBAV_FORMATS.has(container)) || picture) {
+        const libav = (!!container && LIBAV_FORMATS.has(container)) || picture
+        if (libav) {
             try {
                 await software(f, container ?? p!.container, at, play, gen, rate)
                 p?.input.dispose()
@@ -376,8 +377,23 @@ export function Player(props: {
                 console.warn('[player] movi could not play it', e)
             }
         } else p?.input.dispose()
+        // No encoder for the picture here (a TV): libav.js decodes it and a canvas shows it, with the sound as the clock.
+        if (libav && why instanceof Unplayable && (why.why.kind === 'picture' || why.why.kind === 'no-mse' || why.why.kind === 'too-heavy') && (await canvasWanted())) {
+            try {
+                await software(f, container ?? p!.container, at, play, gen, rate, true)
+                return
+            } catch (e) {
+                if (gen !== generation) return
+                console.warn('[player] the canvas engine could not play it', e)
+                // Too large for this device says so; the other failures keep the first reason.
+                if (e instanceof Unplayable && e.why.kind === 'too-heavy') why = e
+            }
+        }
         throw why
     }
+
+    /** The canvas engine's chunk is fetched only when a file reaches it, and only where it can run. */
+    const canvasWanted = async () => (await import('./libavcanvas')).canvasSupported()
 
     /** movi on `f`; mediabunny's reading of the file (`p`), when there is one, finds its key frames and goes with the engine. */
     const viaMovi = async (f: MediaFile, at: number, play: boolean, gen: number, rate: number, p: Probe | null) => {
@@ -469,12 +485,18 @@ export function Player(props: {
         }
     }
 
-    /** A file only libav.js opens (AVI): its own engine, which reads the header itself. */
-    const software = async (f: MediaFile, container: string, at: number, play: boolean, gen: number, rate: number) => {
-        const e = await LibavEngine.open(f, video, container, source().duration, at, {
+    /**
+     * A file only libav.js opens (AVI): its own engine, which reads the header itself. With
+     * `canvas` the picture is drawn on a canvas instead of re-encoded for the Media Source (a
+     * browser with no WebCodecs encoder, the TVs): a lazy chunk, loaded only here.
+     */
+    const software = async (f: MediaFile, container: string, at: number, play: boolean, gen: number, rate: number, canvas = false) => {
+        const events = {
             onError: fail,
-            onDetail: (d) => setDetails(`${container}. ${d}`),
-        })
+            onDetail: (d: string) => setDetails(`${container}. ${d}`),
+            onSlow: slowHere,
+        }
+        const e = canvas ? await (await import('./libavcanvas')).CanvasEngine.open(f, video, container, source().duration, at, events) : await LibavEngine.open(f, video, container, source().duration, at, events)
         if (gen !== generation) return e.destroy()
         engine = e
         const sound = e.sounds.find((s) => s.decodable) ?? null

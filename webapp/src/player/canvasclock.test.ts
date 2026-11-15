@@ -78,15 +78,24 @@ test('a new speed carries on from where the picture is', () => {
     assert.equal(c.rate, 2)
 })
 
-test('settle moves a held clock onto where its source stopped', () => {
+test('settle takes in what the sound played while its context was stopping', () => {
     const s = timer()
     const c = new MasterClock(s.now)
     c.set(3)
+    c.go(false)
+    s.advance(1)
+    c.hold()
+    assert.equal(ms(c.position()), 4000)
+    // The context ran on for 20 ms before it stopped.
     s.advance(0.02)
     c.settle()
+    assert.equal(ms(c.position()), 4020)
     c.go(true)
     s.advance(1)
-    assert.equal(ms(c.position()), 4000)
+    assert.equal(ms(c.position()), 5020)
+    // Settling a running clock does nothing.
+    c.settle()
+    assert.equal(ms(c.position()), 5020)
 })
 
 test('chooseFrame shows the last frame that is due and drops the late ones before it', () => {

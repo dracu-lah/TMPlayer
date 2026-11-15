@@ -329,7 +329,7 @@ export interface EngineEvents {
 }
 
 export interface Engine {
-    readonly name: 'native' | 'remux' | 'libav' | 'movi'
+    readonly name: 'native' | 'remux' | 'libav' | 'movi' | 'canvas'
     readonly detail: string
     /** Plays another sound track; false when this browser cannot play that one. */
     setAudio?(track: SoundTrack): Promise<boolean>

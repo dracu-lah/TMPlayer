@@ -32,6 +32,9 @@
 /* movi's picture (player/movi.ts) over the element it stands in for; the element keeps its box. */
 .player .movi-canvas { position: absolute !important; inset: 0 !important; width: 100% !important; height: 100% !important; display: block; pointer-events: none; }
 .player video.movi-active { opacity: 0; }
+/* The canvas engine's picture (player/libavcanvas.ts): over the element, which wears the shape the controls chose (the engine copies its inline style). */
+.player canvas.sw-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain; display: block; pointer-events: none; }
+.player video.sw-active { opacity: 0; }
 .player .movi-cues { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; pointer-events: none; box-sizing: border-box; padding-inline: 5%; }
 .player .movi-cue { font-family: var(--font), 'TM Subtitle'; font-size: var(--cue-size, clamp(16px, 4.2cqw, 40px)); color: var(--cue-colour, #fff); background: var(--cue-box, transparent); text-shadow: var(--cue-edge, 0 0 3px #000, 0 0 3px #000, 1px 1px 2px #000); text-align: center; white-space: pre-line; line-height: 1.25; }
 /* Subtitles as the app's default draws them (medium, white, a black outline, no box); Player.tsx sets the look's custom properties. */
