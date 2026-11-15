@@ -517,12 +517,16 @@ class DlnaFlowTest {
     @Test
     fun threeSilentPollsLoseTheRendererAndClosePort() {
         val c = newCast(discover())
-        c.open(video(), 0) { }
+        // CI saw no Lost at all now and then (null after 10 s, 2026-11-14 and 15): the loss is only
+        // wired once the load went through, and only three unanswered polls in a row are one, so
+        // each of those is checked on its own and a failure names which it was.
+        assertEquals(DlnaLoad.Loaded, c.open(video(), 0) { })
         assertTrue(c.server.running)
         fake.powerOff()
-        c.renderer.pollOnce(); c.renderer.pollOnce()
+        assertNull("poll 1 after the power went", c.renderer.pollOnce())
+        assertNull("poll 2 after the power went", c.renderer.pollOnce())
         assertTrue("two misses are not a loss", c.isOpen)
-        c.renderer.pollOnce()
+        assertNull("poll 3 after the power went", c.renderer.pollOnce())
         assertEquals(DlnaClosed.Lost, closes.poll(10, TimeUnit.SECONDS))
         assertFalse(c.isOpen)
         assertFalse("port closed", c.server.running)
