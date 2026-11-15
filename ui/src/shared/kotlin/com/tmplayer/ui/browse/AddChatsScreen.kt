@@ -156,15 +156,13 @@ import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.semantics.role
 
 /**
- * "Add chats" (HX27): every chat of the account with a tick box, the videos each holds, and the
- * running total at the foot. A full screen on the phone, the television and the desktop alike, so
+ * "Add chats" (HX27): every chat of the account with a tick box and the number chosen at the foot. A full screen on the phone, the television and the desktop alike, so
  * a choice made on one reads the same on the others.
  *
  * The screen decides how things look and nothing else. Which rows there are, in which band, what
- * Select all means under a search or a filter, and what the foot adds up are [ChatPicking]'s;
- * what is recommended and how a count reads are [ChatSuggestions]'; every action is [model]'s.
- * A row never changes height as its count arrives (a placeholder bar holds the line), so nothing
- * moves under a finger or a remote.
+ * Select all means under a search or a filter are [ChatPicking]'s; what is recommended is
+ * [ChatSuggestions]'; every action is [model]'s. No video count is shown anywhere (Telegram's
+ * figure can be wrong): a Recommended row says in words why it is there, and the figures only rank.
  *
  * @param chats every chat of the account, unnarrowed ([ChatListViewModel.everything]).
  * @param listComplete whether the chat list is whole: the Gone band only stands once it is.
@@ -209,7 +207,6 @@ fun AddChatsScreen(
     onContinue: (() -> Unit)? = null,
 ) {
     val s = LocalStrings.current
-    val countWords = remember(s) { CountWords(s) }
     val form = deviceForm()
     val tv = form == DeviceForm.Tv
     val state by model.state.collectAsState()
@@ -262,7 +259,7 @@ fun AddChatsScreen(
         }
     }
     val visible = remember(items) { ChatPicking.visible(items.mapNotNull { (it as? ChatPicking.Item.Chat)?.row }) }
-    val total = ChatPicking.total(state.ticked, state.counted)
+    val chosen = state.ticked.size
 
     // The Recommended band is worked out in the first seconds and lands above every other band,
     // which moved the row under a click or a finger down a whole band. Until it is taken its place
@@ -478,7 +475,12 @@ fun AddChatsScreen(
     // LaunchedEffect(Unit), not LaunchedEffect(racing): keying on racing read it in the body, so
     // the whole screen recomposed on every settle flip (HX76); snapshotFlow reads it off-composition.
     LaunchedEffect(Unit) { snapshotFlow { racing }.collect { model.hold(it) } }
-    LaunchedEffect(chats.isNotEmpty(), listComplete) { if (tv && listComplete && chats.isNotEmpty()) model.countRest(chats, AddChatsViewModel.BACKGROUND_ON_TV, AddChatsViewModel.BATCH_ON_TV_MS) }
+    // The whole account is counted behind the first band on every platform, so the Recommended band
+    // finds a video channel however far down the list it sits (T5); the television asks one at a time.
+    LaunchedEffect(chats.isNotEmpty(), listComplete) {
+        if (!listComplete || chats.isEmpty()) return@LaunchedEffect
+        if (tv) model.countRest(chats, AddChatsViewModel.BACKGROUND_ON_TV, AddChatsViewModel.BATCH_ON_TV_MS) else model.countRest(chats)
+    }
     // The list's own end triggers the chat list's next chats, one request at a time.
     LoadMoreAhead(listState, enabled = !listComplete && !partial && !loadingMore, onLoadMore = onLoadMore)
     // Back from a question puts the remote on the button that asked it.
@@ -667,7 +669,7 @@ fun AddChatsScreen(
                         if (band == ChatPicking.Band.Recommended && state.belowBar) {
                             item(key = "below-bar") {
                                 Text(
-                                    s.pickerBelowBar(ChatSuggestions.MIN_VIDEOS),
+                                    s.pickerBelowBar,
                                     style = MaterialTheme.typography.bodySmall,
                                     color = Tone.muted,
                                     modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
@@ -715,7 +717,7 @@ fun AddChatsScreen(
                             // waits for the list to stop (a fling, a held Down), so the rows run past
                             // on the way are never counted at all, and for the row to be in sight,
                             // since the rows composed ahead of a jump run it too.
-                            if (item is ChatPicking.Item.Chat && row.band != ChatPicking.Band.Gone) LaunchedEffect(row.id) {
+                            if (tv && item is ChatPicking.Item.Chat && row.band != ChatPicking.Band.Gone) LaunchedEffect(row.id) {
                                 snapshotFlow {
                                     racing || listState.isScrollInProgress ||
                                         listState.layoutInfo.visibleItemsInfo.none { it.key == row.id }
@@ -742,16 +744,17 @@ fun AddChatsScreen(
                             } else if (row.band == ChatPicking.Band.Gone) {
                                 GoneRow(row, tv, card, onRemove = { model.toggle(row.id) })
                             } else {
-                                val shape = ChatSuggestions.shape(state.counted[row.id])
                                 PickRow(
                                     row = row,
                                     ticked = ticked,
-                                    shape = shape,
-                                    countWords = countWords,
+                                    reason = if (row.band == ChatPicking.Band.Recommended) {
+                                        if (state.belowBar) s.pickerReasonSome else s.pickerReasonMany
+                                    } else {
+                                        null
+                                    },
                                     tv = tv,
                                     modifier = card,
                                     onToggle = { tick(!ticked); model.toggle(row.id) },
-                                    onCountAgain = { model.countAgain(row.id) },
                                     onToggleStar = { model.toggleStar(row.id) },
                                 )
                             }
@@ -852,7 +855,7 @@ fun AddChatsScreen(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            totalLine(total, s),
+                            totalLine(chosen, s),
                             style = MaterialTheme.typography.bodyMedium,
                             color = Tone.text,
                             maxLines = 2,
@@ -959,7 +962,7 @@ fun AddChatsScreen(
                                 modifier = Modifier.semantics { heading() },
                             )
                             Text(
-                                totalLine(total, s),
+                                totalLine(chosen, s),
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = Tone.text,
                                 maxLines = 3,
@@ -1119,21 +1122,20 @@ private sealed interface Ask {
 }
 
 /**
- * One chat: its picture, name, how many videos it holds and a tick box, the whole row the target
- * so a thumb need not find the box and a remote can land on it. A long press (the Menu key on a
- * remote or a keyboard) counts again a chat that could not be counted, or else stars or unstars
- * it (HX30): the same star the Favourites tab reads, one press away without leaving the picker.
+ * One chat: its picture, name and a tick box, the whole row the target so a thumb need not find
+ * the box and a remote can land on it, and in the Recommended band one plain line on why it is
+ * there ([reason], never a number). A long press (the Menu key on a remote or a keyboard) stars or
+ * unstars it (HX30): the same star the Favourites tab reads, one press away without leaving the
+ * picker.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun PickRow(
     row: ChatPicking.Row,
     ticked: Boolean,
-    shape: ChatSuggestions.CountShape,
-    countWords: CountWords,
+    reason: String?,
     tv: Boolean,
     onToggle: () -> Unit,
-    onCountAgain: () -> Unit,
     onToggleStar: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -1143,7 +1145,6 @@ private fun PickRow(
     // star's colours), so a focus move draws the row it leaves and the one it reaches again and
     // composes neither (HX76: the two rows composed again were 35 of PickRow's 81 samples a hold).
     val focused = interactions.collectIsFocusVisibleAsState()
-    val unknown = shape == ChatSuggestions.CountShape.Unknown
     val round = RoundedCornerShape(12.dp)
     val onFocus = Tone.onFocusFill
     val text = Tone.text
@@ -1159,11 +1160,7 @@ private fun PickRow(
             .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 when {
-                    unknown && event.key == Key.Menu -> {
-                        onCountAgain()
-                        true
-                    }
-                    !unknown && event.key == Key.Menu -> {
+                    event.key == Key.Menu -> {
                         onToggleStar()
                         true
                     }
@@ -1177,21 +1174,17 @@ private fun PickRow(
             .semantics(mergeDescendants = true) {
                 toggleableState = ToggleableState(ticked)
                 // The words are read here, when semantics are asked for, not while the row composes.
-                customActions = if (unknown) {
-                    listOf(CustomAccessibilityAction(s.pickerCountAgain) { onCountAgain(); true })
-                } else {
-                    listOf(
-                        CustomAccessibilityAction(
-                            if (row.starred) s.browseRemoveFavourite else s.browseAddFavourite,
-                        ) { onToggleStar(); true },
-                    )
-                }
+                customActions = listOf(
+                    CustomAccessibilityAction(
+                        if (row.starred) s.browseRemoveFavourite else s.browseAddFavourite,
+                    ) { onToggleStar(); true },
+                )
             }
             .combinedClickable(
                 interactionSource = interactions,
                 indication = if (tv) null else androidx.compose.foundation.LocalIndication.current,
                 role = Role.Checkbox,
-                onLongClick = if (unknown) onCountAgain else onToggleStar,
+                onLongClick = onToggleStar,
                 onClick = onToggle,
             )
             .padding(horizontal = ROW_INSET, vertical = 10.dp),
@@ -1217,7 +1210,15 @@ private fun PickRow(
                     RowStar(focused, s.browseFavourite)
                 }
             }
-            CountLine(shape, countWords, quiet, tv)
+            if (reason != null) {
+                BasicText(
+                    reason,
+                    style = if (tv) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodySmall,
+                    color = quiet,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
         // A drawn box on TV (HX76): Material3's Checkbox ran its color and check animations on
         // every row a hold passed over (226 ms over about 40 rows), which a hold never needs to
@@ -1301,51 +1302,6 @@ private fun PickTick(ticked: Boolean) {
 }
 
 /**
- * Each count's words, formatted once for the screen rather than once per row brought into view:
- * an ICU plural and a locale number for every new row was a share of what a held Down cost on TV
- * (HX76). Bounded by itself, since a count past [ChatSuggestions.MANY] reads as "many" instead.
- */
-@Stable
-private class CountWords(private val s: Messages) {
-    private val words = HashMap<Int, String>()
-
-    fun about(videos: Int): String = words.getOrPut(videos) { s.pickerCountAbout(videos) }
-}
-
-/**
- * The count under a name. Its height is the line's own whether it holds words or a placeholder
- * bar, which is what keeps a row from changing height the moment its count lands.
- */
-@Composable
-private fun CountLine(shape: ChatSuggestions.CountShape, countWords: CountWords, ink: ColorProducer, tv: Boolean) {
-    val s = LocalStrings.current
-    val style = if (tv) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodySmall
-    val density = LocalDensity.current
-    val line: Dp = remember(style, density) {
-        with(density) { style.lineHeight.takeIf { it.isSpecified }?.toDp() } ?: 18.dp
-    }
-    Box(Modifier.fillMaxWidth().height(line), contentAlignment = Alignment.CenterStart) {
-        when (shape) {
-            ChatSuggestions.CountShape.Counting -> Box(
-                Modifier
-                    .width(if (tv) 120.dp else 96.dp)
-                    .height(line * 0.6f)
-                    .background(Tone.surfaceHigh, RoundedCornerShape(4.dp)),
-            )
-            is ChatSuggestions.CountShape.Exact -> BasicText(countWords.about(shape.videos), style = style, color = ink, maxLines = 1)
-            ChatSuggestions.CountShape.Many -> BasicText(s.pickerCountMany, style = style, color = ink, maxLines = 1)
-            ChatSuggestions.CountShape.Unknown -> BasicText(
-                if (tv) s.pickerCountUnknownKeys else s.pickerCountUnknownTouch,
-                style = style,
-                color = ink,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-    }
-}
-
-/**
  * A chat that was added and has since gone (left, deleted or banned): its remembered name, a word
  * about it and Remove, in place of a tick box. Remove unticks it, so it leaves the choice when Done
  * is pressed.
@@ -1413,7 +1369,7 @@ private fun BandLabel(label: String) {
 
 /**
  * The Recommended band's stand in: rows shaped like the real ones (a round picture, a name, a
- * count and a box) in the same card, shimmering, so the band arrives into the place it was
+ * reason line and a box) in the same card, shimmering, so the band arrives into the place it was
  * already given.
  */
 @Composable
@@ -1457,13 +1413,9 @@ private fun bandLabel(band: ChatPicking.Band, count: Int, s: com.tmplayer.i18n.M
     ChatPicking.Band.Gone -> s.pickerBandGone
 }
 
-/** The foot's line: the chats chosen and, once counted, about how many videos they hold. */
-private fun totalLine(total: ChatPicking.Total, s: com.tmplayer.i18n.Messages): String = when {
-    total.chats == 0 -> s.pickerTotalNone
-    total.counted == 0 -> s.pickerTotal(total.chats)
-    total.whole -> s.pickerTotalVideos(total.chats, s.formatter.number(total.videos))
-    else -> s.pickerTotalCounting(total.chats, s.formatter.number(total.videos))
-}
+/** The foot's line: how many chats are chosen. */
+private fun totalLine(chosen: Int, s: com.tmplayer.i18n.Messages): String =
+    if (chosen == 0) s.pickerTotalNone else s.pickerTotal(chosen)
 
 /**
  * [AddChatsScreen] fed from the shell's chat list, the same on every platform that draws it.
