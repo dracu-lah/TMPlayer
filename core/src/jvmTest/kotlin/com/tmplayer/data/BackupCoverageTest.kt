@@ -64,6 +64,9 @@ class BackupCoverageTest {
         "decode_memory", "heavy_ask_skip",
         // How each player engine did here (PR2), from this device's decoders and native library.
         "engine_history",
+        // Title reports (N1): which pairs this device sent or was asked about, and the few waiting
+        // for a connection. File names the viewer agreed to send from this device, never carried to another.
+        "title_ledger",
         // Records of files on this device's disk, and what Telegram said about them.
         "cached_video", "cached_video_ids", "wc_", "dl_", "duration_", "meta_",
         // Android's chosen downloads folder (HX26): a path on this device's disk (an SD card or a
