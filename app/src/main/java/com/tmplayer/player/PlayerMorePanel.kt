@@ -133,6 +133,9 @@ interface PlayerMoreHost {
     fun sleepDetail(): String?
     fun sleepChoice(): Int?
     fun loop(): AbLoop?
+
+    /** Whether Repeat this video is on (EG-F52), the line's detail. */
+    fun repeatVideo(): Boolean = false
     fun chapter(): String?
     fun watched(): Boolean
 
@@ -385,7 +388,7 @@ class PlayerMorePanel(
     /** Every line the panel can carry: the phone's and the television's entries share these names. */
     private enum class Kind {
         LockScreen, PictureInPicture, PlaybackDetails, StartOver, PictureShape, ResetZoom, Stereo, Speed,
-        VolumeBoost, NightMode, EvenVolume, SleepTimer, AbLoop, NextChapter, PreviousChapter,
+        VolumeBoost, NightMode, EvenVolume, SleepTimer, AbLoop, RepeatVideo, NextChapter, PreviousChapter,
         NextFrame, PreviousFrame, SaveFrame, AddBookmark, Bookmarks, OtherEngine, OpenInAnotherApp,
         CopyLinkAtTime, LoadSubtitleFile, SaveToDownloads, MarkWatched, ReportStutter, RemoteKeys,
     }
@@ -458,6 +461,7 @@ class PlayerMorePanel(
                     },
                 )
             }
+            Kind.RepeatVideo -> Line(kind, s.playerRepeatVideo, TmIcons.Repeat, if (host.repeatVideo()) s.commonOn else s.commonOff)
             // The chapter playing under the step, so a step is a choice and not a guess.
             Kind.NextChapter -> Line(kind, s.playerChapterNext, TmIcons.SkipNext, host.chapter())
             Kind.PreviousChapter -> Line(kind, s.playerChapterPrevious, TmIcons.SkipPrevious, null)
@@ -725,7 +729,7 @@ class PlayerMorePanel(
         const val SCRIM_ALPHA = 0.32f
 
         /** Lines that act and leave the panel up: the switches and the frame steps. */
-        val STAYS_OPEN = setOf(Kind.VolumeBoost, Kind.NightMode, Kind.EvenVolume, Kind.NextFrame, Kind.PreviousFrame)
+        val STAYS_OPEN = setOf(Kind.VolumeBoost, Kind.NightMode, Kind.EvenVolume, Kind.RepeatVideo, Kind.NextFrame, Kind.PreviousFrame)
     }
 }
 

@@ -340,6 +340,8 @@ fun SettingsScreen(
     val lowStorage by settings.lowStorageMode.collectAsStateWithLifecycle(initialValue = false)
     val removeAfterWatching by settings.removeAfterWatching.collectAsStateWithLifecycle(initialValue = false)
     val autoplayNext by settings.autoplayNext.collectAsStateWithLifecycle(initialValue = true)
+    val playChatOrder by settings.playChatOrder.collectAsStateWithLifecycle(initialValue = false)
+    val keepRepeat by settings.keepRepeat.collectAsStateWithLifecycle(initialValue = false)
     val resumeRewindMs by settings.resumeRewindMs.collectAsStateWithLifecycle(initialValue = ResumeRewind.DEFAULT_MS)
     val detailFirst by settings.detailFirst.collectAsStateWithLifecycle(initialValue = true)
     val rememberSearches by settings.rememberSearches.collectAsStateWithLifecycle(initialValue = true)
@@ -990,6 +992,26 @@ fun SettingsScreen(
                         icon = TmIcons.Play,
                         checked = autoplayNext,
                         onToggle = { scope.launch { settings.setAutoplayNext(!autoplayNext) } },
+                    )
+                }
+                // After a video that is not an episode, and whether Repeat this video outlasts it
+                // (EG-F30, EG-F52): two rows under the autoplay switch they belong to.
+                item {
+                    ToggleRow(
+                        title = s.settingsPlayChatOrder,
+                        subtitle = if (playChatOrder) s.settingsPlayChatOrderOn else s.settingsPlayChatOrderOff,
+                        icon = TmIcons.Play,
+                        checked = playChatOrder,
+                        onToggle = { scope.launch { settings.setPlayChatOrder(!playChatOrder) } },
+                    )
+                }
+                item {
+                    ToggleRow(
+                        title = s.settingsKeepRepeat,
+                        subtitle = if (keepRepeat) s.settingsKeepRepeatOn else s.settingsKeepRepeatOff,
+                        icon = TmIcons.Repeat,
+                        checked = keepRepeat,
+                        onToggle = { scope.launch { settings.setKeepRepeat(!keepRepeat) } },
                     )
                 }
                 // The default player (which absorbs "Open videos in another app"), the engine and

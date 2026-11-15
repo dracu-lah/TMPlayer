@@ -123,6 +123,7 @@ class PlayerMenuTest {
             reportStutter = true,
             copyLinkAtTime = true,
             otherEngine = true,
+            repeatVideo = true,
         )
         assertFalse(PlayerMenuEntry.PictureInPicture in entries)
         assertEquals(PlayerMenuEntry.entries.size - 1, entries.size)
@@ -144,6 +145,7 @@ class PlayerMenuTest {
                 reportStutter = true,
                 copyLinkAtTime = true,
                 otherEngine = true,
+                repeatVideo = true,
             ).toSet(),
         )
     }
@@ -200,7 +202,7 @@ class PlayerMenuTest {
                 copyLinkAtTime = true,
             ),
         )
-        assertEquals(PhoneMenuEntry.entries.toSet(), PlayerMenu.phoneEntries(true, true, true, true, paused = true, bookmarks = true, chapters = true, saveFrame = true, pictureShape = true, stereo = true, zoomed = true, reportStutter = true, copyLinkAtTime = true, otherEngine = true).toSet())
+        assertEquals(PhoneMenuEntry.entries.toSet(), PlayerMenu.phoneEntries(true, true, true, true, paused = true, bookmarks = true, chapters = true, saveFrame = true, pictureShape = true, stereo = true, zoomed = true, reportStutter = true, copyLinkAtTime = true, otherEngine = true, repeatVideo = true).toSet())
     }
 
     @Test
@@ -319,5 +321,16 @@ class PlayerMenuTest {
         // A protected chat leaves Open in another app off; the other engine is still TMPlayer's own player.
         assertTrue(PlayerMenuEntry.OtherEngine in PlayerMenu.tvEntries(pictureInPicture = true, openInAnotherApp = false, otherEngine = true))
         assertEquals(com.tmplayer.i18n.L.playerEngineOther, PhoneMenuEntry.OtherEngine.label())
+    }
+
+    @Test
+    fun `repeat this video sits right under the A-B repeat on both, and only for a video`() {
+        val phone = PlayerMenu.phoneEntries(true, true, true, true, repeatVideo = true)
+        assertEquals(phone.indexOf(PhoneMenuEntry.AbLoop) + 1, phone.indexOf(PhoneMenuEntry.RepeatVideo))
+        assertFalse(PhoneMenuEntry.RepeatVideo in PlayerMenu.phoneEntries(true, true, true, true))
+        val tv = PlayerMenu.tvEntries(pictureInPicture = true, repeatVideo = true)
+        assertEquals(tv.indexOf(PlayerMenuEntry.AbLoop) + 1, tv.indexOf(PlayerMenuEntry.RepeatVideo))
+        assertFalse(PlayerMenuEntry.RepeatVideo in PlayerMenu.tvEntries(pictureInPicture = true))
+        assertEquals(com.tmplayer.i18n.L.playerRepeatVideo, PhoneMenuEntry.RepeatVideo.label())
     }
 }

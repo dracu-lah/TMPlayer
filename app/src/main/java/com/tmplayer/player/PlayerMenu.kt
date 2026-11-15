@@ -41,6 +41,8 @@ enum class PlayerMenuEntry {
     SleepTimer,
     /** A-B repeat: set the start, then the end, then stop; the line says which comes next. */
     AbLoop,
+    /** Repeat this video (EG-F52): a switch; off again when another video starts, and not with the A-B repeat. */
+    RepeatVideo,
     /**
      * A chaptered file only ([MkvChapters]). Lines rather than keys, as the frame steps are: Left
      * and Right on the bare picture jump and on the bar travel, and 1.16.0's key model stays.
@@ -104,6 +106,8 @@ enum class PhoneMenuEntry {
     SleepTimer,
     /** A-B repeat, as on the television: one line that says what the next press does. */
     AbLoop,
+    /** Repeat this video, as on the television: a switch that leaves the panel up. */
+    RepeatVideo,
     /** A chaptered file only, as on the television. */
     NextChapter,
     PreviousChapter,
@@ -156,6 +160,7 @@ fun PhoneMenuEntry.label(
     PhoneMenuEntry.EvenVolume -> L.playerEvenVolume
     PhoneMenuEntry.SleepTimer -> sleepDetail?.let { L.playerSleepTimerNow(it) } ?: L.playerSleepTimer
     PhoneMenuEntry.AbLoop -> PlayerMenu.loopLabel(loop)
+    PhoneMenuEntry.RepeatVideo -> L.playerRepeatVideo
     PhoneMenuEntry.NextChapter -> L.playerChapterNext
     PhoneMenuEntry.PreviousChapter -> L.playerChapterPrevious
     PhoneMenuEntry.NextFrame -> L.playerFrameNext
@@ -228,6 +233,7 @@ object PlayerMenu {
         reportStutter: Boolean = false,
         copyLinkAtTime: Boolean = false,
         otherEngine: Boolean = false,
+        repeatVideo: Boolean = false,
     ): List<PlayerMenuEntry> = buildList {
         add(PlayerMenuEntry.LockScreen)
         add(PlayerMenuEntry.PlaybackDetails)
@@ -240,6 +246,7 @@ object PlayerMenu {
         add(PlayerMenuEntry.EvenVolume)
         add(PlayerMenuEntry.SleepTimer)
         add(PlayerMenuEntry.AbLoop)
+        if (repeatVideo) add(PlayerMenuEntry.RepeatVideo)
         if (chapters) {
             add(PlayerMenuEntry.NextChapter)
             add(PlayerMenuEntry.PreviousChapter)
@@ -274,7 +281,8 @@ object PlayerMenu {
      * (false on a cast, which plays on the other screen). [copyLinkAtTime] is false for a chat that
      * restricts saving, a video with no message and one built from pieces. [zoomed] adds Reset zoom under the
      * shape while a pinch has the picture enlarged. [otherEngine] adds Try the other engine, as on
-     * the television. The lock stays first: the line people come here for.
+     * the television. [repeatVideo] adds Repeat this video under the A-B repeat (a video, not sound
+     * alone, which has its own repeat in the list). The lock stays first: the line people come here for.
      */
     fun phoneEntries(
         pictureInPicture: Boolean,
@@ -291,6 +299,7 @@ object PlayerMenu {
         reportStutter: Boolean = false,
         copyLinkAtTime: Boolean = false,
         otherEngine: Boolean = false,
+        repeatVideo: Boolean = false,
     ): List<PhoneMenuEntry> = buildList {
         add(PhoneMenuEntry.LockScreen)
         if (pictureInPicture) add(PhoneMenuEntry.PictureInPicture)
@@ -303,6 +312,7 @@ object PlayerMenu {
         add(PhoneMenuEntry.EvenVolume)
         add(PhoneMenuEntry.SleepTimer)
         add(PhoneMenuEntry.AbLoop)
+        if (repeatVideo) add(PhoneMenuEntry.RepeatVideo)
         if (chapters) {
             add(PhoneMenuEntry.NextChapter)
             add(PhoneMenuEntry.PreviousChapter)

@@ -339,6 +339,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     /** The autoplay setting as the episode list shows it, read when the list opens. */
     private var autoplayNext = true
 
+    /** "Keep repeat on" as this video's end will find it ([repeatsAtTheEnd]), read when the video opens. */
+    private var keepRepeat = false
+
     /** The overflow or the television's More menu is open. */
     private var menuOpen = false
 
@@ -2236,6 +2239,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             if (statusMeta?.text.isNullOrBlank()) View.GONE else View.VISIBLE
         // The setting as the end of this video will find it ([endLeadsOn]).
         itemScope.launch { autoplayNext = runCatching { settings.autoplayNextNow() }.getOrDefault(true) }
+        itemScope.launch { keepRepeat = runCatching { settings.keepRepeatNow() }.getOrDefault(false) }
         if (hasMessage()) {
             itemScope.launch {
                 onWatchedList = runCatching { watchedStore.isWatched(chatId, messageId) }.getOrDefault(false)
@@ -5250,7 +5254,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 Player.STATE_ENDED -> {
                     // Said to the service before Media3's notification hears of the end: the
                     // foreground lasts through the gap only when another episode follows.
-                    val repeats = com.tmplayer.data.PlayQueue.atEnd(currentItem()) == com.tmplayer.data.QueuePlan.AtEnd.Replay
+                    val repeats = repeatsAtTheEnd()
                     if (inBackgroundAudio) PlaybackService.setPlayWhenReady(!creditsSkipped && (repeats || endLeadsOn()))
                     if (!creditsSkipped) onVideoEnded()
                 }
@@ -5787,7 +5791,12 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             _episodes.value = steps
             return
         }
-        val show = EpisodeNeighbours.showOf(here) ?: return
+        val show = EpisodeNeighbours.showOf(here)
+        if (show == null) {
+            // A video that is not an episode: the chat's own next one, where the setting asks.
+            findChatOrder(here)
+            return
+        }
         _episodes.value = EpisodeSteps(current = EpisodeNeighbours.tagOf(here))
 
         itemScope.launch {
@@ -5808,6 +5817,12 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             // failed search): the other episodes of the show kept in Downloads stand in, so Next
             // and autoplay work for a downloaded season without a connection.
             val found = if (steps.previous == null && steps.next == null) keptSteps(here, show) ?: steps else steps
+            // A name that reads as a show but has no other episode in the chat is still a video
+            // that is not an episode: the chat's order takes over.
+            if (found.previous == null && found.next == null && playsChatOrder()) {
+                findChatOrder(here)
+                return@launch
+            }
             _episodes.value = found
             refreshSessionMetadata()
             // The providers' episode names, where lookups are on: a label first, then a better one.
@@ -5816,6 +5831,42 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 _episodes.value = named
                 refreshSessionMetadata()
             }
+        }
+    }
+
+    private suspend fun playsChatOrder(): Boolean = runCatching { settings.playChatOrderNow() }.getOrDefault(false)
+
+    /**
+     * After a video that is not an episode (EG-F30): with the setting on, the chat's next video
+     * in the order its grid is sorted in is what autoplay goes on to ([com.tmplayer.data.ChatOrder]),
+     * through the same next-up card, countdown and "Still watching?" as an episode. Off the critical
+     * path like [findEpisodes]; nothing is asked of Telegram with the setting off, for sound alone,
+     * a local file or a video with no chat, and a chat that cannot be asked (offline) leaves it as
+     * it was: the video ends and stays on its last frame. The size limits the grid applies skip a
+     * video above them, and another copy of the same file is not played again.
+     */
+    private fun findChatOrder(here: MediaItem) {
+        if (chatId == 0L || com.tmplayer.data.ChatAudio.isAudio(here)) return
+        itemScope.launch {
+            if (!playsChatOrder()) return@launch
+            afterOpening()
+            val session = Td.awaitAuthorizedSession()
+            val repository = ChatRepository(session.client)
+            val sort = runCatching { settings.videoSort(chatId).first() }.getOrDefault(com.tmplayer.data.VideoSort.DEFAULT)
+            val min = runCatching { settings.minSizeBytes.first() }.getOrDefault(com.tmplayer.data.SizeFilter.DEFAULT_MIN)
+            val max = runCatching { settings.maxSizeBytes.first() }.getOrDefault(com.tmplayer.data.SizeFilter.DEFAULT_MAX)
+            val topic = here.topicId.takeIf { it != 0 }
+                ?: com.tmplayer.data.runCatchingCancellable { repository.topicOf(chatId, messageId) }.getOrDefault(0)
+            val steps = com.tmplayer.data.ChatOrder.steps(
+                current = here,
+                sort = sort,
+                fits = { com.tmplayer.data.SizeFilter.matches(it.sizeBytes, min, max) },
+            ) { anchor, newer ->
+                com.tmplayer.data.runCatchingCancellable { repository.videoWindow(chatId, anchor, newer, topic) }.getOrNull()
+            }
+            if (steps.previous == null && steps.next == null) return@launch
+            _episodes.value = steps
+            refreshSessionMetadata()
         }
     }
 
@@ -6385,12 +6436,17 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     private fun onVideoEnded() {
         // Repeat one on a chat's audio: from the start again in this same player, not marked
         // watched and no countdown to a next file; unseen too, so the sound carries on.
-        if (com.tmplayer.data.PlayQueue.atEnd(currentItem()) == com.tmplayer.data.QueuePlan.AtEnd.Replay) {
+        if (repeatsAtTheEnd()) {
             player?.let {
                 it.seekTo(0)
                 it.play()
             }
             return
+        }
+        // Repeat this video gives way to a sleep timer set for this video's end: the video ends,
+        // and Repeat is off for whatever is played next.
+        if (sleepAtTheEnd && com.tmplayer.data.PlayQueue.repeatsVideo(currentItem(), keepRepeat)) {
+            com.tmplayer.data.PlayQueue.setRepeatVideo(false)
         }
         if (piecesIncomplete) {
             // Only up to a missing piece: said again, and nothing marked or played next.
@@ -6475,6 +6531,15 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         nextUpShown = nextUpShown,
         unseen = true,
     ) is BackgroundPlayback.AtTheEnd.Next
+
+    /**
+     * Whether the end now reached plays this video again: Repeat one on a chat's audio, or Repeat
+     * this video ([com.tmplayer.data.PlayQueue.repeatsVideo]). A replay is nobody's autoplay, so it
+     * neither counts towards "Still watching?" nor shows the next-up card; the idle question still
+     * comes after two hours with nothing pressed. A sleep timer for the end of the video wins.
+     */
+    private fun repeatsAtTheEnd(): Boolean =
+        com.tmplayer.data.PlayQueue.atEnd(currentItem(), keepRepeat, sleepAtTheEnd) == com.tmplayer.data.QueuePlan.AtEnd.Replay
 
     /** [playEpisode] for an episode nobody asked for, counted towards "Still watching?". */
     private fun autoplay(next: MediaItem) {
@@ -7505,6 +7570,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             reportStutter = stutterReportable(),
             copyLinkAtTime = linkAtTimeOffered(),
             otherEngine = otherEngineOffered(),
+            repeatVideo = repeatVideoOffered(),
         )
         override fun zoomDetail(): String? =
             zoom.takeIf { it.zoomed }?.let { L.messages.formatter.scalePercent(it.percent) }
@@ -7521,6 +7587,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             reportStutter = stutterReportable(),
             copyLinkAtTime = linkAtTimeOffered(),
             otherEngine = otherEngineOffered(),
+            repeatVideo = repeatVideoOffered(),
         )
         override fun shape() = videoScale
         override fun speed() = playbackSpeed
@@ -7534,6 +7601,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         override fun sleepDetail() = sleepTimerDetail()
         override fun sleepChoice() = this@PlayerActivity.sleepChoice()
         override fun loop() = abLoop
+        override fun repeatVideo() = com.tmplayer.data.PlayQueue.repeatsVideo(currentItem(), keepRepeat)
         override fun chapter(): String? =
             if (chapters.isEmpty()) null
             else Chapters.labelAt(chapters, playing?.currentPosition ?: 0L) ?: L.playerBeforeFirstChapter
@@ -7568,6 +7636,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             PhoneMenuEntry.NightMode -> toggleNightMode()
             PhoneMenuEntry.EvenVolume -> toggleEvenVolume()
             PhoneMenuEntry.AbLoop -> pressLoop()
+            PhoneMenuEntry.RepeatVideo -> toggleRepeatVideo()
             PhoneMenuEntry.NextChapter -> stepChapter(forward = true)
             PhoneMenuEntry.PreviousChapter -> stepChapter(forward = false)
             PhoneMenuEntry.NextFrame -> frameStep(forward = true)
@@ -7604,6 +7673,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             PlayerMenuEntry.NightMode -> toggleNightMode()
             PlayerMenuEntry.EvenVolume -> toggleEvenVolume()
             PlayerMenuEntry.AbLoop -> pressLoop()
+            PlayerMenuEntry.RepeatVideo -> toggleRepeatVideo()
             PlayerMenuEntry.NextChapter -> stepChapter(forward = true)
             PlayerMenuEntry.PreviousChapter -> stepChapter(forward = false)
             PlayerMenuEntry.NextFrame -> frameStep(forward = true)
@@ -7680,6 +7750,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     private fun pressLoop() {
         val exo = player ?: return
         val clock = Translator.messages.formatter::clock
+        // The two repeats exclude each other: marking a stretch turns Repeat this video off.
+        if (com.tmplayer.data.PlayQueue.repeatsVideo(currentItem(), keepRepeat)) {
+            com.tmplayer.data.PlayQueue.setRepeatVideo(false)
+        }
         val before = abLoop
         val after = AbLoop.press(before, exo.currentPosition)
         abLoop = after
@@ -7697,6 +7771,31 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             }
             else -> showGestureFeedback(L.playerLoopStartSet(clock(after.startMs)))
         }
+    }
+
+    /** Repeat this video is offered for a video; a chat's audio has its own repeat in the list. */
+    private fun repeatVideoOffered(): Boolean = !com.tmplayer.data.ChatAudio.isAudio(currentItem())
+
+    /**
+     * Repeat this video (EG-F52): the end seeks to the start and plays on, with no next-up card and
+     * no count towards "Still watching?". Turning it on clears the A-B repeat, and it lapses by
+     * itself when another video starts unless "Keep repeat on" is set ([com.tmplayer.data.PlayQueue]).
+     * Nothing polls: the end of the video is what asks.
+     */
+    private fun toggleRepeatVideo() {
+        if (!repeatVideoOffered()) return
+        val on = !com.tmplayer.data.PlayQueue.repeatsVideo(currentItem(), keepRepeat)
+        com.tmplayer.data.PlayQueue.setRepeatVideo(on, currentItem())
+        if (on) {
+            if (abLoop != null) {
+                abLoop = null
+                controls?.loop = null
+                loopHandler.removeCallbacks(loopWatch)
+            }
+            hideNextUp()
+            nextUpShown = false
+        }
+        showGestureFeedback(if (on) L.playerRepeatVideoOn else L.playerRepeatOff)
     }
 
     /**
@@ -8596,7 +8695,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                     }
                     val next = _episodes.value.next ?: continue
                     val duration = exo.duration
-                    if (duration <= 0 || nextUpDismissed || locked || inPictureInPicture) continue
+                    if (duration <= 0 || nextUpDismissed || repeatsAtTheEnd() || locked || inPictureInPicture) continue
                     // Autoplay is going to stop and ask, or the sleep timer to stop: nothing
                     // is starting in thirty seconds, so nothing says it is.
                     if (sleepAtTheEnd || StillWatching.askBeforeAutoplay(autoplayedInARow)) continue
@@ -8680,7 +8779,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     private fun updateSkipPill(exo: ExoPlayer, autoplay: Boolean) {
         val pill = skipPill ?: return
         val duration = exo.duration
-        val cardCoversTheEnd = autoplay && !nextUpDismissed && _episodes.value.next != null
+        val cardCoversTheEnd = autoplay && !nextUpDismissed && !repeatsAtTheEnd() && _episodes.value.next != null
         val segment = if (
             skipSegments.isEmpty() || duration <= 0 || locked || inPictureInPicture ||
             statusOverlay.visibility == View.VISIBLE || nextUpCard?.isShown == true
