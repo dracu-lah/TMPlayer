@@ -302,7 +302,15 @@ class GarbageInputTest {
             }
             survive("KnownDevices.parse", text) {
                 val list = KnownDevices.parse(text)
-                KnownDevices.find(KnownDevices.effective(list), DeviceFacts(hardware = text, model = text, sdk = text.length), text)
+                val device = DeviceFacts(hardware = text, model = text, sdk = text.length)
+                KnownDevices.find(KnownDevices.effective(list), device, text)
+                KnownDevices.plan(com.tmplayer.player.RemedyPlan(), KnownDevices.remediesFor(KnownDevices.effective(list), device, text))
+                KnownDevices.startOf(text)
+            }
+            // The feed's remedy fields, each given text of every shape: bad ones are skipped.
+            survive("KnownDevices.parse remedy fields", text) {
+                val entry = com.tmplayer.json.JSONObject(mapOf("id" to text, "chipsets" to listOf(text, "abc"), "async" to text, "excludeDecoders" to listOf(text), "startRung" to text, "note" to text))
+                KnownDevices.parse("[$entry]")
             }
             survive("EngineChoice.from", text) { com.tmplayer.player.EngineChoice.from(text) }
             survive("PlayerChoice.parse", text) { com.tmplayer.player.PlayerChoice.parse(text) }
