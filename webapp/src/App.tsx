@@ -10,7 +10,7 @@ import { Nav } from './ui/Nav'
 import { Toaster } from './ui/Toast'
 import { CardMenu } from './ui/CardMenu'
 import { PosterPicker } from './ui/PosterPicker'
-import { applyUpdate, askKeepOnce, updateReady } from './install'
+import { applyUpdate, updateReady } from './install'
 import { scheduleTrim } from './cacheBounds'
 import { t } from './i18n'
 
@@ -106,12 +106,12 @@ function Shell(props: ParentProps) {
     createEffect(on(online, (now, was) => {
         if (now && was === false) setChatsGateWaived(false)
     }))
-    // Signed in: ask the browser once to keep the data, and keep the picture caches within their caps.
+    // Signed in: keep the picture caches within their caps. The browser's "keep the data" ask waits
+    // for the first video watched (Watch.tsx), so it never lands on the setup loader or the gate (ON-14).
     let kept = false
     createEffect(() => {
         if (!me() || kept) return
         kept = true
-        askKeepOnce().catch(() => {})
         scheduleTrim()
     })
 

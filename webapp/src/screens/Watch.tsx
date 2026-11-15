@@ -1,7 +1,8 @@
-import { createResource, lazy, Match, Switch } from 'solid-js'
+import { createEffect, createResource, lazy, Match, Switch } from 'solid-js'
 import { useLocation, useNavigate, useParams } from '@solidjs/router'
 import { api, errorText } from '../tg/rpc'
 import { back } from '../session'
+import { askKeepOnce } from '../install'
 import { t } from '../i18n'
 import { progress as readProgress, settings } from '../store'
 import { chatGone, forgetGone } from '../goneVideos'
@@ -45,6 +46,11 @@ export function Watch() {
         // The file's head and tail start arriving while the player's code loads; the player takes them over.
         else warmFile(found)
         return found
+    })
+    // The browser's one ask to keep the data comes with the first video watched, not at sign in,
+    // where Firefox's prompt landed over the setup loader and the chats gate before any value (ON-14).
+    createEffect(() => {
+        if (video()) askKeepOnce().catch(() => {})
     })
     const [progress] = createResource(readProgress)
     const view = (): ChatView => ({
