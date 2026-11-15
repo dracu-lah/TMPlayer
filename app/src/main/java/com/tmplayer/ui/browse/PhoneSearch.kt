@@ -25,6 +25,8 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -579,7 +581,8 @@ private fun androidx.compose.foundation.lazy.LazyListScope.results(
     searchCountLine(state)?.let { count ->
         item(key = "count") {
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                // Room under the line before the first card, with or without the button beside it.
+                Modifier.fillMaxWidth().heightIn(min = 40.dp).padding(horizontal = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
@@ -833,6 +836,23 @@ private fun Heading(text: String) {
 
 @Composable
 private fun Note(text: String, spinner: Boolean = false, action: (@Composable () -> Unit)? = null) {
+    // At a large font the words and the button no longer fit side by side: the words get the
+    // whole width and the button sits under them, at the end.
+    val stacked = action != null && LocalDensity.current.fontScale > 1.15f
+    if (stacked) {
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalAlignment = Alignment.End,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (spinner) Spinner(size = 18.dp, strokeWidth = 2.dp)
+                Text(text, style = MaterialTheme.typography.bodyMedium, color = Tone.muted, modifier = Modifier.weight(1f))
+            }
+            action?.invoke()
+        }
+        return
+    }
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,

@@ -18,6 +18,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.tmplayer.ui.icons.TmIcons
+import com.tmplayer.ui.theme.FocusVisibility
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.focusRing
 
@@ -50,10 +51,11 @@ fun ClearButton(
                 .size(disc)
                 .focusRing(focused, CircleShape)
                 .clip(CircleShape)
-                .background(Tone.text.copy(alpha = 0.12f)),
+                // Under the remote the disc fills as every focused control does, so it cannot be missed.
+                .background(if (focused && FocusVisibility.visible) Tone.focusFill else Tone.text.copy(alpha = 0.12f)),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(TmIcons.Close, contentDescription = label, tint = Tone.muted, modifier = Modifier.size(disc * 0.55f))
+            Icon(TmIcons.Close, contentDescription = label, tint = if (focused && FocusVisibility.visible) Tone.onFocusFill else Tone.muted, modifier = Modifier.size(disc * 0.55f))
         }
     }
 }
