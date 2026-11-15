@@ -149,7 +149,7 @@ internal data class Flash(val kind: Kind, val text: String, val id: Long) {
     enum class Kind { SeekBack, SeekForward, Text, Volume }
 }
 
-internal enum class MenuPage { Main, Audio, Subtitles, Speed, Shape, Sleep, Options, SubtitleStyle, Bookmarks, Copies, Stereo }
+internal enum class MenuPage { Main, Audio, Subtitles, Speed, Shape, Sleep, Options, SubtitleStyle, Bookmarks, Copies, Stereo, ChatSubtitles }
 
 /** Where an open menu hangs: at the cursor for a right click, or under a button. */
 internal data class MenuAt(val page: MenuPage, val anchor: Anchor, val at: Offset = Offset.Zero) {
@@ -174,6 +174,7 @@ internal data class MenuAt(val page: MenuPage, val anchor: Anchor, val at: Offse
         MenuPage.Sleep -> MenuPage.Options
         MenuPage.Options, MenuPage.Shape, MenuPage.Bookmarks, MenuPage.Copies, MenuPage.Stereo -> MenuPage.Main
         MenuPage.SubtitleStyle -> if (anchor == Anchor.Subtitles) MenuPage.Subtitles else MenuPage.Main
+        MenuPage.ChatSubtitles -> MenuPage.Subtitles
     }
 }
 
@@ -355,6 +356,11 @@ fun PlayerScreen(
     // The message as Telegram has it now (CP80): its lighter copies, start time and storyboard.
     // The grid's item already carries them; one rebuilt from a record is read again.
     var post by remember(current.item.chatId, current.item.messageId) { mutableStateOf<MediaItem?>(null) }
+    // The subtitle files posted in this video's chat (EG-F48), looked for once when the Subtitles menu
+    // first opens: one search, kept for the video, and nothing when offline or the kids lock leaves
+    // the chat out. The menu shows "In this chat" only when there are some.
+    var chatHits by remember(current.item.chatId, current.item.messageId) { mutableStateOf(emptyList<com.tmplayer.player.ChatSubtitles.Hit>()) }
+    var chatAsked by remember(current.item.chatId, current.item.messageId) { mutableStateOf(false) }
     // The media handed on to a Telegram copy before it ever opened, whose leaving saves nothing.
     val neverOpened = remember { arrayOfNulls<PlayerMedia>(1) }
     LaunchedEffect(current.item.chatId, current.item.messageId) {
@@ -412,6 +418,24 @@ fun PlayerScreen(
     var activity by remember { mutableLongStateOf(0L) }
     var overControls by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf(MenuPage.entries.firstOrNull { it.name.equals(menuOpen, ignoreCase = true) }?.let { MenuAt(it, MenuAt.Anchor.Cursor, Offset(240f, 120f)) }) }
+    // The files are looked for the first time the menu opens on Subtitles or the main page that leads there.
+    val subtitleMenuOpen = menu?.page == MenuPage.Subtitles || menu?.page == MenuPage.Main
+    LaunchedEffect(subtitleMenuOpen, current.item.chatId, current.item.messageId) {
+        val here = current.item
+        if (!subtitleMenuOpen || chatAsked || !hasMessage(here) || !current.fromTelegram) return@LaunchedEffect
+        chatAsked = true
+        chatHits = try {
+            (com.tmplayer.data.ChatSubtitleFinder.shared.find(
+                here.chatId, here.messageId, here.fileName.ifBlank { here.title }, here.caption,
+                OnlineSubtitles.languagesFor(null),
+            ) as? com.tmplayer.data.ChatSubtitleFound.Hits)?.hits.orEmpty()
+        } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            com.tmplayer.platform.JobFailures.handle("chatSubtitles", e)
+            emptyList()
+        }
+    }
     var showDetails by remember { mutableStateOf(detailsOpen) }
     var showOnline by remember { mutableStateOf(onlineOpen) }
     // Which search the online panel runs: OpenSubtitles and SubDL, or MSone.
@@ -1921,6 +1945,7 @@ fun PlayerScreen(
 
             CompositionLocalProvider(
                 LocalPlayerCopies provides PlayerCopies(copies, current.item.id, qualities, current.item.playingQuality),
+                LocalChatSubtitles provides chatHits,
                 LocalStoryboard provides storyboard,
                 LocalFrameSource provides frameSource,
                 LocalSeekCover provides seekCover,
@@ -2012,6 +2037,38 @@ fun PlayerScreen(
                         MenuAction.SearchMsone -> {
                             onlineMsone = true
                             showOnline = true
+                        }
+                        is MenuAction.ChatSubtitle -> scope.launch {
+                            val here = current.item
+                            showFlash(Flash.Kind.Text, L.onlineDownloading)
+                            val loaded = try {
+                                com.tmplayer.data.ChatSubtitleLoad.load(
+                                    com.tmplayer.data.LiveChatSubtitleCalls, here.chatId, action.hit, here.fileName.ifBlank { here.title },
+                                    here.caption, java.util.Locale.getDefault().language,
+                                )
+                            } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                com.tmplayer.platform.JobFailures.handle("chatSubtitles", e)
+                                com.tmplayer.data.ChatSubtitleLoaded.Refused(L.onlineNoticeUnreadable)
+                            }
+                            when (loaded) {
+                                is com.tmplayer.data.ChatSubtitleLoaded.Refused -> {
+                                    showFlash(Flash.Kind.Text, loaded.reason)
+                                    if (loaded.reason == L.tracksInChatGone) {
+                                        chatHits = chatHits - action.hit
+                                        com.tmplayer.data.ChatSubtitleFinder.shared.forget(here.chatId, here.messageId)
+                                    }
+                                }
+                                is com.tmplayer.data.ChatSubtitleLoaded.Ready -> {
+                                    // mpv reads all five formats itself, a MicroDVD sub included.
+                                    val file = kotlinx.coroutines.withContext(Dispatchers.IO) {
+                                        com.tmplayer.data.ChatSubtitleLoad.write(java.io.File(com.tmplayer.desktop.DesktopPaths.cacheDir, "chat-subtitles"), here.chatId, action.hit, loaded)
+                                    }
+                                    if (file != null && engine.addSubtitle(file.absolutePath)) showFlash(Flash.Kind.Text, L.tracksFileLoaded(loaded.label))
+                                    else showFlash(Flash.Kind.Text, L.playerSubtitleLoadFailed(loaded.label))
+                                }
+                            }
                         }
                         MenuAction.LoadSubtitleFile -> scope.launch {
                             com.tmplayer.desktop.os.FilePicker.open(s.playerLoadSubtitleFile, *SubtitleDrop.EXTENSIONS.toTypedArray())

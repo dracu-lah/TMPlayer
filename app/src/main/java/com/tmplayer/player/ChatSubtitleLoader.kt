@@ -5,9 +5,9 @@ import com.tmplayer.data.ChatSubtitleFinder
 import com.tmplayer.data.ChatSubtitleFound
 import com.tmplayer.data.ChatSubtitleLoad
 import com.tmplayer.data.ChatSubtitleLoaded
+import com.tmplayer.data.ChatSubtitleWords
 import com.tmplayer.data.LiveChatSubtitleCalls
 import com.tmplayer.i18n.L
-import com.tmplayer.online.OnlineSubtitles
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -45,15 +45,8 @@ class ChatSubtitleLoader(
     }
 
     companion object {
-        /** The row's title: the file's name as it was posted. */
-        fun title(hit: ChatSubtitles.Hit): String = hit.doc.fileName
+        fun title(hit: ChatSubtitles.Hit): String = ChatSubtitleWords.title(hit)
 
-        /** Under the title: the language its name gives, Forced, hearing impaired, and Compressed for a zip. */
-        fun detail(hit: ChatSubtitles.Hit): String? = listOfNotNull(
-            hit.language?.let { OnlineSubtitles.languageName(it) },
-            if (hit.forced) L.tracksForced else null,
-            if (hit.hearing) L.onlineHearingImpaired else null,
-            if (hit.archive) L.tracksInChatCompressed else null,
-        ).ifEmpty { null }?.joinToString("  ·  ")
+        fun detail(hit: ChatSubtitles.Hit): String? = ChatSubtitleWords.detail(hit)
     }
 }

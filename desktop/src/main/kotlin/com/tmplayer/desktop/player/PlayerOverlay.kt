@@ -155,6 +155,9 @@ internal data class PlayerCopies(
 
 internal val LocalPlayerCopies = androidx.compose.runtime.staticCompositionLocalOf { PlayerCopies() }
 
+/** The subtitle files found in this video's chat, for the Subtitles menu's In this chat page (EG-F48). */
+internal val LocalChatSubtitles = androidx.compose.runtime.staticCompositionLocalOf { emptyList<com.tmplayer.player.ChatSubtitles.Hit>() }
+
 internal sealed interface MenuAction {
     data class Do(val action: PlayerAction) : MenuAction
 
@@ -196,6 +199,9 @@ internal sealed interface MenuAction {
 
     /** The subtitle menu's "Search online", in a build with the OpenSubtitles key. */
     data object SearchOnline : MenuAction
+
+    /** A file posted in the video's chat, from the In this chat page. */
+    data class ChatSubtitle(val hit: com.tmplayer.player.ChatSubtitles.Hit) : MenuAction
 
     /** MSone's search, on a device where it was switched on by hand while MSone is being set up. */
     data object SearchMsone : MenuAction
@@ -1123,11 +1129,17 @@ internal fun PlayerMenu(
                 val list = tracks.filter { it.type == TrackType.Subtitle }
                 Entry(s.commonOff, checked = list.none { it.selected }) { pick(MenuAction.Track(TrackType.Subtitle, null)) }
                 list.forEach { t -> Entry(t.label, checked = t.selected) { pick(MenuAction.Track(TrackType.Subtitle, t)) } }
+                if (LocalChatSubtitles.current.isNotEmpty()) Entry(s.tracksInChat, detail = s.tracksInChatDetail, icon = TmIcons.Folder) { page(MenuPage.ChatSubtitles) }
                 if (com.tmplayer.online.OnlineSubtitles.available) Entry(s.onlineSearchOnline) { pick(MenuAction.SearchOnline) }
                 if (com.tmplayer.online.OnlineSubtitles.current?.msoneShown == true) Entry(s.msoneSearch) { pick(MenuAction.SearchMsone) }
                 Entry(s.playerLoadSubtitleFile) { pick(MenuAction.LoadSubtitleFile) }
                 HorizontalDivider()
                 Entry(s.playerSubtitleStyleAndTiming) { page(MenuPage.SubtitleStyle) }
+            }
+            MenuPage.ChatSubtitles -> {
+                LocalChatSubtitles.current.forEach { hit ->
+                    Entry(com.tmplayer.data.ChatSubtitleWords.title(hit), detail = com.tmplayer.data.ChatSubtitleWords.detail(hit)) { pick(MenuAction.ChatSubtitle(hit)) }
+                }
             }
             MenuPage.SubtitleStyle -> {
                 Nudge(s.playerDelay, SyncDelays.label(status.subtitleDelayMs), s.playerEarlier, s.playerLater,
@@ -1310,6 +1322,7 @@ private fun menuPageTitle(page: MenuPage, s: Strings): String = when (page) {
     MenuPage.Copies -> s.playerCopies
     MenuPage.Audio -> s.playerAudio
     MenuPage.Subtitles -> s.playerSubtitles
+    MenuPage.ChatSubtitles -> s.tracksInChat
     MenuPage.Speed -> s.playerPlaybackSpeed
 }
 

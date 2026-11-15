@@ -361,6 +361,20 @@ sealed interface ChatSubtitleLoaded {
     data class Refused(val reason: String) : ChatSubtitleLoaded
 }
 
+/** What a listed file says of itself, in the viewer's words: shared by the phone, the television and the desktop. */
+object ChatSubtitleWords {
+    /** The row's title: the file's name as it was posted. */
+    fun title(hit: ChatSubtitles.Hit): String = hit.doc.fileName
+
+    /** Under the title: the language its name gives, Forced, hearing impaired, and Compressed for a zip; null for none of them. */
+    fun detail(hit: ChatSubtitles.Hit): String? = listOfNotNull(
+        hit.language?.let { com.tmplayer.online.OnlineSubtitles.languageName(it) },
+        if (hit.forced) com.tmplayer.i18n.L.tracksForced else null,
+        if (hit.hearing) com.tmplayer.i18n.L.onlineHearingImpaired else null,
+        if (hit.archive) com.tmplayer.i18n.L.tracksInChatCompressed else null,
+    ).ifEmpty { null }?.joinToString("  ·  ")
+}
+
 /** Downloads a listed chat file and reads it, the same on phone, television and desktop. */
 object ChatSubtitleLoad {
 
