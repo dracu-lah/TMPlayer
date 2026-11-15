@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Search page review</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; padding: 24px 16px 64px; background: #0c0e10; color: #f2f4f5; font: 15px/1.5 system-ui, sans-serif; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 17px; margin: 36px 0 12px; }
+  p.lede { color: #aeb5bb; max-width: 70ch; }
+  .row { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+  figure { margin: 0; width: 230px; }
+  figure.wide { width: 460px; }
+  figure.tv { width: 400px; }
+  img { display: block; width: 100%; height: auto; border: 1px solid #23272a; border-radius: 8px; }
+  figcaption { color: #aeb5bb; font-size: 13px; margin-top: 6px; }
+  ul { max-width: 80ch; color: #d4d9dd; }
+  li { margin: 4px 0; }
+  code { background: #15181b; padding: 1px 4px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<h1>Search page review</h1>
+<p class="lede">Rendered by <code>SearchReviewShots</code> (app render tests, dark theme, no device) and the desktop <code>BrowseRenderTest.searchPalette</code>. Phone portrait 411 x 891 dp, landscape 891 x 411 dp, TV 960 x 540 dp, font scale 1.3 where marked. The keyboard is not drawn.</p>
+
+<h2>What was seen and changed</h2>
+<ul>
+  <li><b>Clear button</b>: was the plain Close X (the same glyph as dismiss). Now one shared <code>ClearButton</code>: a cross in a soft round disc (28 dp disc, 48 dp target), on the phone page, the chat grid, the desktop chat search and palette, and the web page. On the TV the disc fills with the focus colour and takes the focus ring.</li>
+  <li><b>Close button</b>: the separate round X next to the field is gone. Back clears the words first, then closes. The field now takes the full width.</li>
+  <li><b>Count line</b> ("4 videos in 3 chats") touched the first card when no "Search my other chats" button sat beside it: it now keeps a 40 dp row.</li>
+  <li><b>"Every chat was searched" note</b> at font scale 1.3: the words were squeezed to five lines beside the button. Above a 1.15 font scale the button now drops under the words.</li>
+  <li><b>TV clear focus</b>: the ring alone (dark ink) was close to invisible on the dark page; the disc now fills with the focus colour.</li>
+  <li>Looked at and left: pill height and alignment, hint text, glass colour (accent while the field has focus), the clear and mic swap, filter chips (scroll sideways, the last one is cut on purpose), results spacing, no-results page, error row with Retry.</li>
+  <li>Not changed, not verifiable here: the keyboard covering results in landscape (the page uses <code>imePadding</code>, but a phone's landscape keyboard leaves very little list), and the in-chat "newest N messages" note (a chat's search, not this page).</li>
+</ul>
+
+<h2>Phone portrait</h2>
+<div class="row">
+  <figure><img src="phone-1-empty-recents.png" alt=""><figcaption>Empty: recent chats and searches, the microphone at the field's end.</figcaption></figure>
+  <figure><img src="phone-2-typing.png" alt=""><figcaption>Typing, the answer still settling: the new clear disc, local chat matches.</figcaption></figure>
+  <figure><img src="phone-3-results.png" alt=""><figcaption>Results with the count line, filter chips and the note.</figcaption></figure>
+  <figure><img src="phone-4-no-results.png" alt=""><figcaption>No results: the picture, the two ways on.</figcaption></figure>
+  <figure><img src="phone-5-searching.png" alt=""><figcaption>Searching: skeleton rows under the chats.</figcaption></figure>
+  <figure><img src="phone-6-offline.png" alt=""><figcaption>Offline: what the device knows, with Retry.</figcaption></figure>
+  <figure><img src="phone-7-error.png" alt=""><figcaption>Error with Retry.</figcaption></figure>
+  <figure><img src="phone-8-other-chats.png" alt=""><figcaption>Search my other chats, beside the count line.</figcaption></figure>
+</div>
+
+<h2>Phone at font scale 1.3</h2>
+<div class="row">
+  <figure><img src="phone-font-1-empty.png" alt=""><figcaption>Empty.</figcaption></figure>
+  <figure><img src="phone-font-2-results.png" alt=""><figcaption>Results: the note's button under its words.</figcaption></figure>
+  <figure><img src="phone-font-3-other-chats.png" alt=""><figcaption>Other chats: the line and the link fit.</figcaption></figure>
+</div>
+
+<h2>Phone landscape</h2>
+<div class="row">
+  <figure class="wide"><img src="phone-land-1-empty.png" alt=""><figcaption>Empty.</figcaption></figure>
+  <figure class="wide"><img src="phone-land-2-results.png" alt=""><figcaption>Results: the list is short here, with the keyboard up it would be shorter.</figcaption></figure>
+  <figure class="wide"><img src="phone-land-3-error.png" alt=""><figcaption>Error.</figcaption></figure>
+</div>
+
+<h2>Television</h2>
+<div class="row">
+  <figure class="tv"><img src="tv-1-empty-recents.png" alt=""><figcaption>Empty: the recent searches under the field.</figcaption></figure>
+  <figure class="tv"><img src="tv-2-clear-focused.png" alt=""><figcaption>Right from the field reaches the clear control: filled and ringed.</figcaption></figure>
+  <figure class="tv"><img src="tv-3-results.png" alt=""><figcaption>Results header: filters, chats, the note and the count.</figcaption></figure>
+</div>
+
+<h2>Desktop palette</h2>
+<div class="row">
+  <figure class="wide"><img src="desktop-search-palette-empty.png" alt=""><figcaption>Empty.</figcaption></figure>
+  <figure class="wide"><img src="desktop-search-palette-dark.png" alt=""><figcaption>Results, dark: the clear disc at the field's end. No close button: Esc clears, then closes; a click outside closes.</figcaption></figure>
+  <figure class="wide"><img src="desktop-search-palette-light.png" alt=""><figcaption>Results, light.</figcaption></figure>
+  <figure class="wide"><img src="desktop-search-palette-none.png" alt=""><figcaption>No results.</figcaption></figure>
+</div>
+</body>
+</html>
