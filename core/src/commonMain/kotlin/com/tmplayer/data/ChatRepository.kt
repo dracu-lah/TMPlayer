@@ -223,6 +223,59 @@ class ChatRepository(private val td: TdlClient) {
         }
 
     /**
+     * A page of [chatId]'s videos around [anchorMessageId], for the player's next video in the
+     * chat's order ([ChatOrder.lookUp]): the older ones (the page a grid scrolls on to), or with
+     * [newer] the ones posted after it. The three searches of [mediaPage] (videos, silent clips and
+     * documents that look like videos) with the same screening, so the chat's grid and the player
+     * agree on what a video is. Throws when TDLib fails: the caller keeps what it had.
+     * [ChatOrder.Window.next] is where the page after this one starts, 0 at the chat's end on that
+     * side: nothing is passed over between two pages, and a search that ran out is left out of it.
+     */
+    suspend fun videoWindow(
+        chatId: Long,
+        anchorMessageId: Long,
+        newer: Boolean,
+        topicId: Int = 0,
+        pageSize: Int = PAGE_SIZE,
+    ): ChatOrder.Window = withContext(Dispatchers.IO) {
+        coroutineScope {
+            val chatProtected = td.getChat(chatId).valueOrNull?.hasProtectedContent ?: false
+            // A negative offset asks for the posts above the anchor as well: the page is the anchor
+            // and the pageSize - 1 posts after it.
+            val offset = if (newer) -(pageSize - 1) else 0
+            val filters = listOf<dev.g000sha256.tdl.dto.SearchMessagesFilter>(
+                SearchMessagesFilterVideo(), SearchMessagesFilterDocument(), SearchMessagesFilterAnimation(),
+            )
+            val answers = filters.map { filter ->
+                async {
+                    td.searchChatMessages(
+                        chatId = chatId,
+                        topicId = if (topicId != 0) MessageTopicForum(topicId) else null,
+                        query = "",
+                        senderId = null,
+                        fromMessageId = anchorMessageId,
+                        offset = offset,
+                        limit = pageSize,
+                        filter = filter,
+                    ).value().messages.toList()
+                }
+            }.awaitAll()
+            val items = MediaMapper.screen(answers.flatten(), chatProtected).items
+            // Each search that still has posts on this side ends where it stopped; the page after
+            // starts where the first of them did, so none is passed over.
+            val edges = answers.mapNotNull { messages ->
+                if (messages.isEmpty()) return@mapNotNull null
+                if (newer) {
+                    if (messages.count { it.id > anchorMessageId } < pageSize - 1) null else messages.maxOf { it.id }
+                } else {
+                    if (messages.size < pageSize) null else messages.minOf { it.id }
+                }
+            }
+            ChatOrder.Window(items, (if (newer) edges.minOrNull() else edges.maxOrNull()) ?: 0L)
+        }
+    }
+
+    /**
      * The album [anchorMessageId] is in, read from the messages around it: one `getChatHistory`
      * window of [AlbumPosts.WINDOW] (a whole album ten long, wherever the hit falls in it), the
      * videos among them with the album's photo folded in. Throws when TDLib fails, so the caller

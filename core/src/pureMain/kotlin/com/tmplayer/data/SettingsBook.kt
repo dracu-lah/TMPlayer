@@ -255,6 +255,15 @@ class SettingsBook(private val kv: KeyValueStore) : AllowedChatsSource, Correcti
 
     suspend fun setAutoplayNext(value: Boolean) = kv.edit { it[AUTOPLAY_NEXT] = value }
 
+    // Play the chat in order, and Repeat this video (EG-F30, EG-F52): the SettingsStore's keys.
+    val playChatOrder: Flow<Boolean> = read { it.flag(PLAY_CHAT_ORDER) ?: false }
+
+    suspend fun setPlayChatOrder(value: Boolean) = kv.edit { it[PLAY_CHAT_ORDER] = value }
+
+    val keepRepeat: Flow<Boolean> = read { it.flag(KEEP_REPEAT) ?: false }
+
+    suspend fun setKeepRepeat(value: Boolean) = kv.edit { it[KEEP_REPEAT] = value }
+
     val lastChatId: Flow<Long> = read { it.long(LAST_CHAT) ?: 0L }
 
     suspend fun setLastChat(chatId: Long) = kv.edit { it[LAST_CHAT] = chatId }
@@ -432,6 +441,8 @@ class SettingsBook(private val kv: KeyValueStore) : AllowedChatsSource, Correcti
         const val MIN_SIZE = "min_size_bytes"
         const val MAX_SIZE = "max_size_bytes"
         const val AUTOPLAY_NEXT = "autoplay_next"
+        const val PLAY_CHAT_ORDER = "play_chat_order"
+        const val KEEP_REPEAT = "keep_repeat"
         const val LAST_CHAT = "last_chat"
         const val RECENT_SEARCHES = "recent_searches"
         const val REMEMBER_SEARCHES = "remember_searches"

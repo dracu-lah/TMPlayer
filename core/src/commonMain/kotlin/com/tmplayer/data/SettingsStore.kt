@@ -305,6 +305,10 @@ private val FRAME_RATE_MATCHING = booleanPreferencesKey("frame_rate_matching")
 private val TUNNELED_PLAYBACK = stringPreferencesKey("tunneled_playback")
 private val PLAYBACK_STATS = booleanPreferencesKey("playback_stats")
 
+// Play the chat in order, and Repeat this video (EG-F30, EG-F52): see [ChatOrder] and [PlayQueue].
+private val PLAY_CHAT_ORDER = booleanPreferencesKey("play_chat_order")
+private val KEEP_REPEAT = booleanPreferencesKey("keep_repeat")
+
 // The app-wide languages, under the series memory. See [TrackPreferences].
 private val PREFERRED_AUDIO = stringPreferencesKey("preferred_audio_language")
 private val PREFERRED_SUBTITLE = stringPreferencesKey("preferred_subtitle_language")
@@ -622,6 +626,30 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
 
     /** Read from disk at the end of a video, where a flow's placeholder would be a wrong answer. */
     suspend fun autoplayNextNow(): Boolean = prefs.data.first()[AUTOPLAY_NEXT] ?: true
+
+    // ---- play the chat in order, repeat this video (EG-F30, EG-F52) ---------------------------
+
+    /**
+     * What follows a video that is not an episode: off stops at its end (today's way), on starts
+     * the next video of the chat in the order its grid is sorted in ([ChatOrder]), through the
+     * same countdown and "Still watching?" as the next episode.
+     */
+    val playChatOrder: Flow<Boolean> = read { it[PLAY_CHAT_ORDER] ?: false }
+
+    suspend fun setPlayChatOrder(value: Boolean) {
+        prefs.edit { it[PLAY_CHAT_ORDER] = value }
+    }
+
+    suspend fun playChatOrderNow(): Boolean = prefs.data.first()[PLAY_CHAT_ORDER] ?: false
+
+    /** Whether Repeat this video stays on when the next video starts; off by default (decision D9). */
+    val keepRepeat: Flow<Boolean> = read { it[KEEP_REPEAT] ?: false }
+
+    suspend fun setKeepRepeat(value: Boolean) {
+        prefs.edit { it[KEEP_REPEAT] = value }
+    }
+
+    suspend fun keepRepeatNow(): Boolean = prefs.data.first()[KEEP_REPEAT] ?: false
 
     /**
      * Whether a tap on a video opens its page (poster, cast, Play) before playing. On by default;

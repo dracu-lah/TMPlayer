@@ -129,6 +129,8 @@ object Backups {
         "accent_custom" to Kind.LONG,
         "app_typeface" to Kind.TEXT,
         "autoplay_next" to Kind.BOOL,
+        "play_chat_order" to Kind.BOOL,
+        "keep_repeat" to Kind.BOOL,
         "background_audio" to Kind.BOOL,
         "pip_on_leave" to Kind.BOOL,
         "mini_player" to Kind.BOOL,

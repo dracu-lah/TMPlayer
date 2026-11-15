@@ -201,6 +201,8 @@ object PlayQueue {
         shuffleOn = false
         repeatOn = false
         repeatOneOn = false
+        repeatVideoOn = false
+        repeatVideoOf = null
         clear()
     }
 
@@ -225,10 +227,39 @@ object PlayQueue {
 
     /**
      * What the player does when [item] ends: [QueuePlan.AtEnd.Replay] under Repeat one for a file
-     * of the queue (video and files from elsewhere are never repeated), else the usual next.
+     * of the queue, or under Repeat this video for a video ([repeatsVideo]), else the usual next.
+     * [keepRepeat] is the "Keep repeat on" setting and [sleepAtTheEnd] a sleep timer set for the end
+     * of this video, which wins over Repeat: the video ends and the player asks "Still watching?".
      */
-    fun atEnd(item: MediaItem): QueuePlan.AtEnd =
-        if (ChatAudio.isAudio(item)) plan.atEnd(item) else QueuePlan.AtEnd.Continue
+    fun atEnd(item: MediaItem, keepRepeat: Boolean = false, sleepAtTheEnd: Boolean = false): QueuePlan.AtEnd =
+        if (ChatAudio.isAudio(item)) plan.atEnd(item)
+        else if (!sleepAtTheEnd && repeatsVideo(item, keepRepeat)) QueuePlan.AtEnd.Replay
+        else QueuePlan.AtEnd.Continue
+
+    // ---- Repeat this video (EG-F52) -----------------------------------------------------------
+
+    @Volatile
+    private var repeatVideoOn = false
+
+    @Volatile
+    private var repeatVideoOf: String? = null
+
+    /**
+     * Whether [item] plays again when it ends: Repeat this video was switched on for this very video,
+     * or for an earlier one with "Keep repeat on" set. Without that setting it lapses by itself when
+     * another video starts, with nothing to remember to switch off. Lives with the process, since each
+     * video is a new player screen on a phone.
+     */
+    fun repeatsVideo(item: MediaItem, keepRepeat: Boolean = false): Boolean =
+        repeatVideoOn && !ChatAudio.isAudio(item) && (keepRepeat || repeatVideoOf == videoKey(item))
+
+    /** Repeat this video on for [item], or off; the A-B repeat is cleared by whoever turns this on. */
+    fun setRepeatVideo(on: Boolean, item: MediaItem? = null) {
+        repeatVideoOn = on && item != null
+        repeatVideoOf = if (repeatVideoOn) item?.let(::videoKey) else null
+    }
+
+    private fun videoKey(item: MediaItem): String = "${item.chatId}:${item.messageId}:${item.fileName}"
 
     /** More files of the chat joined to the queue, around [current] if it is playing. */
     fun add(more: List<MediaItem>, current: MediaItem? = null) {
