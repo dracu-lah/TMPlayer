@@ -133,7 +133,10 @@ class SettingsGroupsTvTest {
     @Config(sdk = [35], qualifiers = "w960dp-h540dp-land-television-night-xhdpi")
     fun `Privacy and lock reaches the privacy page under the lock`() {
         show(SettingsPage.Account)
-        walk("Allowed chats only", "Allowed chats", "Privacy", "Connected devices")
+        // A build with a crash report address (a developer's, with SENTRY_DSN in local.properties)
+        // has the crash switch under Privacy; a fork or CI build has none. Walk what this build has.
+        val crash = if (com.tmplayer.data.CrashReports.available) arrayOf("Send crash reports") else emptyArray()
+        walk("Allowed chats only", "Allowed chats", "Privacy", *crash, "Connected devices")
     }
 
     @Test
