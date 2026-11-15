@@ -131,6 +131,7 @@ object Backups {
         "autoplay_next" to Kind.BOOL,
         "background_audio" to Kind.BOOL,
         "pip_on_leave" to Kind.BOOL,
+        "mini_player" to Kind.BOOL,
         "chat_filter" to Kind.TEXT,
         "chat_sort" to Kind.TEXT,
         "controls_timeout_ms" to Kind.LONG,

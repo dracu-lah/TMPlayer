@@ -67,6 +67,7 @@ private val RESUME_SYNC_STATUS = stringPreferencesKey("resume_sync_status")
 private val SKIP_SILENCE = booleanPreferencesKey("skip_silence")
 private val BACKGROUND_AUDIO = booleanPreferencesKey("background_audio")
 private val PIP_ON_LEAVE = booleanPreferencesKey("pip_on_leave")
+private val MINI_PLAYER = booleanPreferencesKey("mini_player")
 // Not "resume_...": that prefix is a resume point's, and the sweeps over resume points (the
 // broken-history prune at launch, Clear history) would take this setting with them.
 private val RESUME_REWIND = longPreferencesKey("rewind_on_resume_ms")
@@ -1130,6 +1131,17 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
     }
 
     suspend fun backgroundAudioNow(): Boolean = prefs.data.first()[BACKGROUND_AUDIO] ?: false
+
+    /**
+     * Whether Back from a playing video keeps it going in a bar over browsing (U8, the mini
+     * player) rather than closing it. On unless turned off. Phone only on Android: the player opens
+     * in a task of its own while it is on, which is what lets it be left without being finished.
+     */
+    val miniPlayer: Flow<Boolean> = read { it[MINI_PLAYER] ?: true }
+
+    suspend fun setMiniPlayer(value: Boolean) {
+        prefs.edit { it[MINI_PLAYER] = value }
+    }
 
     /**
      * Whether going Home or to another app while a video plays shrinks it into a picture in
