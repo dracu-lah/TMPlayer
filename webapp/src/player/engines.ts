@@ -221,6 +221,51 @@ type Sound = { kind: 'copy' } | { kind: 'convert'; to: 'aac' | 'opus'; channels:
 
 let aacRegistered = false
 
+/**
+ * Whether the browser's own audio encoder gives each packet its own time. WebKit on Linux
+ * (GStreamer) stamps every packet an input chunk makes with the chunk's start and length, so the
+ * MP4 gets samples of zero length and the same element cannot seek (a flush ends in "Failed to push
+ * buffer"). A probe of what it does, run once per codec, not a guess from the browser's name: a
+ * browser that encodes right keeps its encoder.
+ */
+const encoderClocks = new Map<'aac' | 'opus', Promise<boolean>>()
+function encoderKeepsTime(codec: 'aac' | 'opus'): Promise<boolean> {
+    let known = encoderClocks.get(codec)
+    if (!known) {
+        known = probeEncoderTime(codec).catch(() => false)
+        encoderClocks.set(codec, known)
+    }
+    return known
+}
+
+async function probeEncoderTime(codec: 'aac' | 'opus'): Promise<boolean> {
+    const W = globalThis as unknown as { AudioEncoder?: typeof AudioEncoder; AudioData?: typeof AudioData }
+    if (!W.AudioEncoder || !W.AudioData) return false
+    const rate = 48000
+    const frames = 4096
+    const times: number[] = []
+    const encoder = new W.AudioEncoder({ output: (chunk) => void times.push(chunk.timestamp), error: () => {} })
+    try {
+        encoder.configure({ codec: codec === 'aac' ? 'mp4a.40.2' : 'opus', sampleRate: rate, numberOfChannels: 2, bitrate: 128000 })
+        for (let i = 0; i < 3; i++) {
+            const data = new W.AudioData({ format: 'f32-planar', sampleRate: rate, numberOfFrames: frames, numberOfChannels: 2, timestamp: Math.round((i * frames * 1e6) / rate), data: new Float32Array(frames * 2) })
+            encoder.encode(data)
+            data.close()
+        }
+        await Promise.race([encoder.flush(), new Promise((_, reject) => setTimeout(reject, 3000))])
+    } finally {
+        if (encoder.state !== 'closed') encoder.close()
+    }
+    // Packets of one input are 1024 frames (AAC) or 20 ms (Opus) apart, so every time is a new one.
+    return times.length >= 3 && times.every((t, i) => i === 0 || t > times[i - 1])
+}
+
+/** AAC that is encoded with the right times: the browser's when it keeps time, or mediabunny's once registered. */
+async function aacOk(config: { numberOfChannels: number; sampleRate: number }): Promise<boolean> {
+    if (!(await canEncodeAudio('aac', config))) return false
+    return aacRegistered || (await encoderKeepsTime('aac'))
+}
+
 /** AC-3, E-AC-3 and DTS decoders, loaded only when a file has that sound. */
 async function registerDecoders(codec: string | null) {
     if (codec === 'ac3' || codec === 'eac3') {
@@ -234,7 +279,8 @@ async function registerDecoders(codec: string | null) {
 
 /**
  * The encoder for converted sound. AAC keeps everything the native player does with the sound on
- * an iPhone (lock screen, AirPlay, background); the browser's own encoder first (Safari 26), else
+ * an iPhone (lock screen, AirPlay, background); the browser's own encoder first (Safari 26), when it
+ * stamps each packet with its own time (WebKit on Linux does not, see [encoderKeepsTime]), else
  * Opus where MP4 Opus plays and the browser encodes it (Chromium on Linux has no AAC encoder),
  * else mediabunny's AAC encoder in WebAssembly.
  */
@@ -242,14 +288,14 @@ export async function encoderFor(channels: number, sampleRate = 48000): Promise<
     const counts = channels > 2 ? [channels, 2] : [channels]
     for (const n of counts) {
         const config = { numberOfChannels: n, sampleRate }
-        if (await canEncodeAudio('aac', config)) return { to: 'aac', channels: n }
-        if (MS!.isTypeSupported('audio/mp4; codecs="opus"') && (await canEncodeAudio('opus', config))) return { to: 'opus', channels: n }
+        if (await aacOk(config)) return { to: 'aac', channels: n }
+        if (MS!.isTypeSupported('audio/mp4; codecs="opus"') && (await canEncodeAudio('opus', config)) && (await encoderKeepsTime('opus'))) return { to: 'opus', channels: n }
         if (!aacRegistered) {
             const { registerAacEncoder } = await import('@mediabunny/aac-encoder')
             registerAacEncoder()
             aacRegistered = true
         }
-        if (await canEncodeAudio('aac', config)) return { to: 'aac', channels: n }
+        if (await aacOk(config)) return { to: 'aac', channels: n }
     }
     return null
 }
@@ -892,13 +938,13 @@ export function keyFrames(p: Probe, budgetMs = 2000): ((t: number) => Promise<nu
 /** An AAC encoder for `channels`: the browser's, else mediabunny's in WebAssembly; the channels it takes, or null. */
 async function aacEncoder(channels: number): Promise<number | null> {
     const config = { numberOfChannels: channels, sampleRate: 48000 }
-    if (await canEncodeAudio('aac', config)) return channels
+    if (await aacOk(config)) return channels
     if (!aacRegistered) {
         const { registerAacEncoder } = await import('@mediabunny/aac-encoder')
         registerAacEncoder()
         aacRegistered = true
     }
-    return (await canEncodeAudio('aac', config)) ? channels : null
+    return (await aacOk(config)) ? channels : null
 }
 
 /**
