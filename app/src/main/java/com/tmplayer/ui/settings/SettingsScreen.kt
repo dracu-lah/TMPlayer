@@ -411,6 +411,7 @@ fun SettingsScreen(
     val uiScale by rememberUiScale(settings)
     val lighterPictures by settings.lighterPictures.collectAsStateWithLifecycle(initialValue = false)
     val reduceMotion by settings.reduceMotion.collectAsStateWithLifecycle(initialValue = false)
+    val highContrastFocus by settings.highContrastFocus.collectAsStateWithLifecycle(initialValue = false)
     val crashReports by settings.crashReports.collectAsStateWithLifecycle(initialValue = false)
     // "Keep detailed logs" (L4): the viewer's own choice, else the build's (on in a beta, off in a stable).
     val detailedChoice by settings.detailedLogs.collectAsStateWithLifecycle(initialValue = null)
@@ -938,6 +939,18 @@ fun SettingsScreen(
                         checked = reduceMotion,
                         onToggle = { scope.launch { settings.setReduceMotion(!reduceMotion) } },
                     )
+                }
+                // T8, television only: the focus ring thicker still, with a line round it (FocusStyle).
+                if (!touch) {
+                    item(key = "high_contrast_focus") {
+                        ToggleRow(
+                            title = s.settingsHighContrastFocus,
+                            subtitle = s.settingsHighContrastFocusDetail,
+                            icon = TmIcons.Visibility,
+                            checked = highContrastFocus,
+                            onToggle = { scope.launch { settings.setHighContrastFocus(!highContrastFocus) } },
+                        )
+                    }
                 }
                 // Back to the defaults, with Undo in its place for a few seconds after.
                 item(key = "appearance_defaults") {

@@ -1519,14 +1519,9 @@ private fun Modifier.tvFocusRing(
     if (isTouch()) return this
     val focused by interactions.collectIsFocusedAsState()
     return this
-        .focusRing(focused, shape)
-        .then(
-            if (focused && LocalDarkTheme.current) {
-                Modifier.border(Focus.Ring, Tone.accent, shape)
-            } else {
-                Modifier
-            },
-        )
+        // The accent in both themes (the dark theme's ring colour is the ink on a fill, which this
+        // row does not have).
+        .focusRing(focused, shape, Tone.accent)
 }
 
 /**

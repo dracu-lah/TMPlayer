@@ -1,6 +1,6 @@
 package com.tmplayer.ui.browse
 
-import com.tmplayer.ui.theme.focusRingOnTv
+import com.tmplayer.ui.theme.focusRingOnHighContrast
 import com.tmplayer.ui.theme.collectIsFocusVisibleAsState
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
@@ -43,7 +43,7 @@ import com.tmplayer.ui.theme.Tone
  * light, [HERO_PILL_HEIGHT] tall and at most [HERO_PILL_MAX] wide. Under the remote or the
  * keyboard, focus swaps the fill to [Tone.focusFill]: no scale and no ring (user, 2026-11-01,
  * the carousel's Play and Details pills read calmer as plain fill swaps than with HX42's scale
- * and ring on top).
+ * and ring on top). Only the television's High contrast focus switch (T8) adds the ring.
  */
 @Composable
 fun HeroPill(
@@ -89,7 +89,7 @@ fun HeroPill(
             .then(if (focus != null) Modifier.focusRequester(focus) else Modifier)
             .clip(CircleShape)
             .background(fill)
-            .focusRingOnTv(focused, CircleShape)
+            .focusRingOnHighContrast(focused, CircleShape)
             .clickable(interactionSource = interactions, indication = if (isTouch()) androidx.compose.foundation.LocalIndication.current else null, role = Role.Button, onClick = onClick)
             .padding(horizontal = 28.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.Center,

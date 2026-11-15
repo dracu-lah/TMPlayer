@@ -1,5 +1,6 @@
 package com.tmplayer.ui.browse
 
+import com.tmplayer.ui.theme.focusScale
 import com.tmplayer.ui.components.keepTopInSight
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -567,7 +568,7 @@ private fun TvPill(label: String, icon: ImageVector?, chosen: Boolean = false, p
 private fun ChatCard(chat: ChatSummary, reduced: Boolean, onClick: () -> Unit) {
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
-    val scale by animateFloatAsState(if (focused && !reduced) Motion.FocusScale else 1f, Motion.standard(Motion.Fast), label = "chatCard")
+    val scale by animateFloatAsState(if (focused && !reduced) focusScale else 1f, Motion.standard(Motion.Fast), label = "chatCard")
     Column(
         Modifier
             .width(112.dp)
@@ -607,7 +608,7 @@ private fun PosterCard(
 ) {
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
-    val scale by animateFloatAsState(if (focused && !reduced) Motion.FocusScale else 1f, Motion.standard(Motion.Fast), label = "poster")
+    val scale by animateFloatAsState(if (focused && !reduced) focusScale else 1f, Motion.standard(Motion.Fast), label = "poster")
     val item = remember(group) { group.asItem() }
     val title = remember(group) { GlobalSearch.titleOf(group) }
     Box(

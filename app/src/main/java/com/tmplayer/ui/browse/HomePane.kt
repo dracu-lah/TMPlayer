@@ -1497,7 +1497,7 @@ private fun SeeAllLink(label: String, onClick: () -> Unit, modifier: Modifier = 
         when {
             still -> 1f
             pressed -> com.tmplayer.ui.theme.Motion.PressScale
-            focused -> com.tmplayer.ui.theme.Motion.FocusScale
+            focused -> com.tmplayer.ui.theme.focusScale
             else -> 1f
         },
         com.tmplayer.ui.theme.Motion.standard(com.tmplayer.ui.theme.Motion.Fast),

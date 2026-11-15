@@ -1,5 +1,7 @@
 package com.tmplayer.ui.theme
 
+import com.tmplayer.ui.theme.FocusStyle
+import com.tmplayer.ui.theme.LocalFocusStyle
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
@@ -220,6 +222,8 @@ fun TMPlayerTheme(content: @Composable () -> Unit) {
     val customAccent by settings.customAccent.collectAsState(initial = null)
     val typeface by settings.typeface.collectAsState(initial = com.tmplayer.data.AppTypeface.Default)
     val highContrast by settings.highContrast.collectAsState(initial = false)
+    // The television's focus ring with its contrasting outer line (T8); a phone has no such switch.
+    val focusContrast by settings.highContrastFocus.collectAsState(initial = false)
     val family = typeface.family()
     // A picked accent washes in over a moment rather than snapping (animateAccentRoles).
     val scheme = animateAccentRoles(
@@ -255,6 +259,11 @@ fun TMPlayerTheme(content: @Composable () -> Unit) {
                 LocalContentColor provides scheme.onSurface,
                 LocalDarkTheme provides dark,
                 LocalPureBlack provides black,
+                // One definition of the focus ring, edge and scale: the phone's as it was, the
+                // television's thicker and bigger (FocusStyle).
+                LocalFocusStyle provides remember(touch, focusContrast) {
+                    if (touch) FocusStyle.Standard else FocusStyle.tv(focusContrast)
+                },
             ) {
                 UiScaled(scale) { ProvideStrings(content) }
             }

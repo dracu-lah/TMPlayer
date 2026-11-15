@@ -1,5 +1,7 @@
 package com.tmplayer.ui.browse
 
+import com.tmplayer.ui.theme.focusScale
+import com.tmplayer.ui.theme.focusEdge
 import androidx.compose.animation.core.snap
 import com.tmplayer.ui.components.keepTopInSight
 import androidx.compose.ui.input.key.Key
@@ -2724,14 +2726,10 @@ private fun ChatTile(
         Column(
             modifier
                 .height(RECENT_TILE_HEIGHT)
-                .focusGrow(focused, Motion.FocusScale)
+                .focusGrow(focused, focusScale)
                 .clip(RoundedCornerShape(Corner.Large))
                 .background(if (focused) Tone.surfaceHigh else Tone.surface)
-                .border(
-                    width = Focus.Edge,
-                    color = if (focused) Tone.accent else Color.Transparent,
-                    shape = RoundedCornerShape(Corner.Large),
-                )
+                .focusEdge(focused, RoundedCornerShape(Corner.Large))
                 .holdable(interactionSource = interactions, onClick = onClick, onHold = onHold)
                 .padding(16.dp),
             content = body,
@@ -2814,11 +2812,7 @@ private fun ChatRow(
             .focusGrow(focused, ROW_FOCUS_SCALE)
             .clip(RoundedCornerShape(Corner.Large))
             .background(if (focused) Tone.surfaceHigh else Tone.surface)
-            .border(
-                width = Focus.Edge,
-                color = if (focused) Tone.accent else Color.Transparent,
-                shape = RoundedCornerShape(Corner.Large),
-            )
+            .focusEdge(focused, RoundedCornerShape(Corner.Large))
             .holdable(interactionSource = interactions, onClick = onClick, onHold = onHold)
             .padding(horizontal = 24.dp),
         verticalAlignment = Alignment.CenterVertically,

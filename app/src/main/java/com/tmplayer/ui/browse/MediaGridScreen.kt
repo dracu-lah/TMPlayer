@@ -1,5 +1,7 @@
 package com.tmplayer.ui.browse
 
+import com.tmplayer.ui.theme.focusScale
+import com.tmplayer.ui.theme.focusEdge
 import com.tmplayer.ui.components.keepTopInSight
 import android.Manifest
 import android.app.Activity
@@ -2264,6 +2266,7 @@ internal fun VideoTile(
     val text = Tone.text
     val muted = Tone.muted
     val shape = RoundedCornerShape(Corner.Medium)
+    val grownTo = focusScale
     val scale: () -> Float
     val ink: androidx.compose.ui.graphics.ColorProducer
     val ring: Modifier
@@ -2273,7 +2276,7 @@ internal fun VideoTile(
         val grown = animateFloatAsState(
             targetValue = when {
                 still -> 1f
-                focused -> Motion.FocusScale
+                focused -> grownTo
                 pressed -> Motion.PressScale
                 else -> 1f
             },
@@ -2289,7 +2292,7 @@ internal fun VideoTile(
         // At once on a television, with no animation behind it: grown over a few frames, every
         // press drew the row again for each of them, which a TV stick's GPU felt more than
         // anything else on Home.
-        scale = remember(focusedState, still) { { if (!still && focusedState.value) Motion.FocusScale else 1f } }
+        scale = remember(focusedState, still, grownTo) { { if (!still && focusedState.value) grownTo else 1f } }
         ink = remember(focusedState, text, muted) { androidx.compose.ui.graphics.ColorProducer { if (focusedState.value) text else muted } }
         // Drawn only round the focused tile: a transparent ring was still a rounded stroke drawn
         // on every tile in view.
@@ -2478,11 +2481,6 @@ private fun ListRow(
 ) {
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
-    val border by animateColorAsState(
-        targetValue = if (focused) Tone.accent else Color.Transparent,
-        animationSpec = tween(140),
-        label = "rowBorder",
-    )
     LaunchedEffect(focused) { if (focused) onFocused() }
 
     val touch = isTouch()
@@ -2497,7 +2495,7 @@ private fun ListRow(
                         Modifier
                             .clip(RoundedCornerShape(Corner.Medium))
                             .background(if (focused) Tone.surfaceHigh else Color.Transparent)
-                            .border(Focus.Edge, border, RoundedCornerShape(Corner.Medium))
+                            .focusEdge(focused, RoundedCornerShape(Corner.Medium))
                             .selectionEdge(selected, RoundedCornerShape(Corner.Medium))
                             .holdOrPress(interactions, onClick, onLongClick)
                     },

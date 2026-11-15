@@ -54,6 +54,10 @@ object Floating {
  * [Tone.muted] to [Tone.text]. A row or a pill that fills under focus has its fill as the second
  * signal instead of the scale. With reduced motion ([rememberReducedMotion]) the scale is dropped
  * and the ring remains.
+ *
+ * These are the phone's and the desktop's widths. What a screen draws is [FocusStyle] (read from
+ * [LocalFocusStyle] by [focusRing], [focusEdge], [focusDrawn] and [focusScale]): these two values on a
+ * phone, a thicker ring on the television, and thicker still with its High contrast focus switch.
  */
 object Focus {
     /** Round a tile, a card or a chat row: thick enough to find from a sofa. */

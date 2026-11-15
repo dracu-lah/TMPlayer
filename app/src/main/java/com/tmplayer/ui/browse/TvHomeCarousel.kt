@@ -1,5 +1,6 @@
 package com.tmplayer.ui.browse
 
+import com.tmplayer.ui.theme.focusRingOnHighContrast
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.unit.constrainHeight
@@ -434,6 +435,7 @@ private fun TvDetailsPill(label: String, onClick: () -> Unit, modifier: Modifier
             .heightIn(min = 48.dp)
             .clip(CircleShape)
             .background(fill)
+            .focusRingOnHighContrast(focused, CircleShape)
             .clickable(interactionSource = interactions, indication = null, role = Role.Button, onClick = onClick)
             .padding(start = 16.dp, end = 20.dp),
         verticalAlignment = Alignment.CenterVertically,

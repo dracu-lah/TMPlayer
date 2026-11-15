@@ -152,6 +152,15 @@ fun Modifier.focusRingOnTv(focused: Boolean, shape: Shape): Modifier =
     if (LocalFocusStyle.current.tv) focusRing(focused, shape) else this
 
 /**
+ * [focusRing] on a television with High contrast focus on, and nothing otherwise. For the pills
+ * that are meant to read as plain fill swaps (the carousel's Play and Details, user 2026-11-01):
+ * the calm look stays unless the viewer asked for the loud one.
+ */
+@Composable
+fun Modifier.focusRingOnHighContrast(focused: Boolean, shape: Shape): Modifier =
+    if (LocalFocusStyle.current.let { it.tv && it.highContrast }) focusRing(focused, shape) else this
+
+/**
  * The same for a tile, a card or a chat row (no fill of its own under focus): [FocusStyle.edge]
  * wide, in [color]. Nothing at all when not [focused], not a transparent stroke.
  */

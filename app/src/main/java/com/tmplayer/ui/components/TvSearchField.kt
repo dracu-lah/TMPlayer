@@ -1,5 +1,6 @@
 package com.tmplayer.ui.components
 
+import com.tmplayer.ui.theme.focusEdge
 import androidx.activity.compose.BackHandler
 
 import androidx.compose.foundation.background
@@ -119,11 +120,8 @@ fun TvSearchField(
             // Focus has to be as loud here as everywhere else on this screen, where a focused
             // control either fills with Accent or draws a 3dp border.
             .background(if (active) Tone.surfaceHigh else Tone.surface)
-            .border(
-                width = if (active) Focus.Edge else Floating.Border,
-                color = if (active) Tone.accent else Tone.outline,
-                shape = CircleShape,
-            )
+            .then(if (active) Modifier else Modifier.border(Floating.Border, Tone.outline, CircleShape))
+            .focusEdge(active, CircleShape)
             .clickable(
                 interactionSource = interactions,
                 indication = null,

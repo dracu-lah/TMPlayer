@@ -1,5 +1,6 @@
 package com.tmplayer.ui.components
 
+import com.tmplayer.ui.theme.focusRingOnTv
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -274,6 +275,7 @@ private fun MenuRow(action: MenuAction, touch: Boolean, modifier: Modifier = Mod
             .fillMaxWidth()
             .clip(RoundedCornerShape(Corner.Medium))
             .background(background)
+            .focusRingOnTv(focused, RoundedCornerShape(Corner.Medium))
             .clickable(
                 interactionSource = interactions,
                 // Nothing on a TV reacts to a press with a ripple, and the focus colour is the

@@ -1,5 +1,7 @@
 package com.tmplayer.ui.browse
 
+import com.tmplayer.ui.theme.focusRingOnTv
+import com.tmplayer.ui.theme.focusScale
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -321,7 +323,7 @@ private fun BarTab(
         when {
             still -> 1f
             pressed -> Motion.PressScale
-            focused -> Motion.FocusScale
+            focused -> focusScale
             else -> 1f
         },
         Motion.standard(Motion.Fast),
@@ -348,6 +350,7 @@ private fun BarTab(
                 }
                 .clip(pill)
                 .background(fill)
+                .focusRingOnTv(focused, pill)
                 .clickable(interactionSource = interactions, indication = null, role = Role.Tab, onClick = onClick)
                 .padding(horizontal = if (compact && !focused && !selected) 10.dp else 14.dp)
                 .semantics { if (compact) contentDescription = label },
@@ -388,7 +391,7 @@ private fun ProfileButton(
         when {
             still -> 1f
             pressed -> Motion.PressScale
-            lit -> Motion.FocusScale
+            lit -> focusScale
             else -> 1f
         },
         Motion.standard(Motion.Fast),
