@@ -993,6 +993,12 @@ fun PlayerScreen(
     // The end: the next episode after a countdown, or the last frame with a way to watch again.
     LaunchedEffect(status.ended) {
         if (!status.ended || phase != Phase.Playing) return@LaunchedEffect
+        // Repeat one on a chat's audio: again from the start, not watched, not the next.
+        if (com.tmplayer.data.PlayQueue.atEnd(current.item) == com.tmplayer.data.QueuePlan.AtEnd.Replay) {
+            engine.seekToExact(0)
+            engine.play()
+            return@LaunchedEffect
+        }
         if (current.incomplete) {
             // Only up to a missing piece: said again, nothing marked, nothing played next.
             current.notice?.let { showFlash(Flash.Kind.Text, it) }

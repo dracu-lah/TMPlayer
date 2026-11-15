@@ -184,4 +184,51 @@ class QueuePlanTest {
         waitFor("the second call") { PlayQueue.stepsFor(last); PlayQueue.items.size == 31 }
         assertTrue(PlayQueue.items.any { it.messageId == 500L })
     }
+
+    @Test
+    fun `repeat one replays the file in the plan, the last one too, and nothing outside it`() {
+        val plan = QueuePlan.of(listOf(audio(1), audio(2), audio(3)))
+        assertEquals(QueuePlan.AtEnd.Continue, plan.atEnd(audio(2)))
+        val one = plan.withRepeatOne(true)
+        assertEquals(QueuePlan.AtEnd.Replay, one.atEnd(audio(2)))
+        assertEquals(QueuePlan.AtEnd.Replay, one.atEnd(audio(3)))
+        assertEquals(QueuePlan.AtEnd.Continue, one.atEnd(audio(99)))
+        assertEquals(QueuePlan.AtEnd.Continue, one.atEnd(audio(2, chat = 8)))
+        assertEquals(QueuePlan.AtEnd.Continue, one.withRepeatOne(false).atEnd(audio(2)))
+        assertEquals(QueuePlan.AtEnd.Continue, QueuePlan.Empty.withRepeatOne(true).atEnd(audio(1)))
+    }
+
+    @Test
+    fun `the three repeat modes exclude one another, and survive a shuffle and another page`() {
+        val plan = QueuePlan.of(listOf(audio(1), audio(2), audio(3))).withRepeatAll(true)
+        val one = plan.withRepeatOne(true)
+        assertTrue(one.repeatOne)
+        assertTrue(!one.repeatAll)
+        val all = one.withRepeatAll(true)
+        assertTrue(all.repeatAll)
+        assertTrue(!all.repeatOne)
+        val kept = one.withShuffle(true, audio(2)).merged(listOf(audio(10)), audio(2))
+        assertTrue(kept.repeatOne)
+        assertEquals(QueuePlan.AtEnd.Replay, kept.atEnd(audio(10)))
+        assertTrue(!QueuePlan.of(listOf(audio(1)), repeatAll = true, repeatOne = true).repeatOne)
+    }
+
+    @Test
+    fun `the queue keeps repeat one for the session, drops it for repeat all, and never repeats a video`() {
+        PlayQueue.setRepeatOne(true)
+        PlayQueue.set(listOf(audio(1), audio(2)))
+        assertTrue(PlayQueue.repeatOne)
+        assertEquals(QueuePlan.AtEnd.Replay, PlayQueue.atEnd(audio(1)))
+        assertEquals(QueuePlan.AtEnd.Continue, PlayQueue.atEnd(audio(1).copy(mimeType = "video/mp4")))
+        assertEquals(QueuePlan.AtEnd.Continue, PlayQueue.atEnd(audio(77)))
+        PlayQueue.setRepeatAll(true)
+        assertTrue(!PlayQueue.repeatOne)
+        assertEquals(QueuePlan.AtEnd.Continue, PlayQueue.atEnd(audio(1)))
+        PlayQueue.setRepeatOne(true)
+        assertTrue(!PlayQueue.repeatAll)
+        PlayQueue.clear()
+        assertTrue(PlayQueue.repeatOne)
+        PlayQueue.reset()
+        assertTrue(!PlayQueue.repeatOne)
+    }
 }

@@ -74,6 +74,7 @@ internal fun AudioSheet(chatId: Long, chatTitle: String, onPlay: (MediaItem) -> 
     val first = remember { FocusRequester() }
     var shuffle by remember { mutableStateOf(PlayQueue.shuffle) }
     var repeatAll by remember { mutableStateOf(PlayQueue.repeatAll) }
+    var repeatOne by remember { mutableStateOf(PlayQueue.repeatOne) }
     ChoiceSheet(title = s.gridAudioTitle, note = chatTitle.ifBlank { null }, onDismiss = onDismiss, onClose = onDismiss, fullScreen = true) {
         ChoiceList {
             if (state.items.isNotEmpty()) {
@@ -92,6 +93,12 @@ internal fun AudioSheet(chatId: Long, chatTitle: String, onPlay: (MediaItem) -> 
                 ChoiceLine(s.gridAudioRepeatAll, selected = repeatAll, icon = TmIcons.Repeat) {
                     repeatAll = !repeatAll
                     PlayQueue.setRepeatAll(repeatAll)
+                    repeatOne = PlayQueue.repeatOne
+                }
+                ChoiceLine(s.gridAudioRepeatOne, selected = repeatOne, icon = TmIcons.Repeat) {
+                    repeatOne = !repeatOne
+                    PlayQueue.setRepeatOne(repeatOne)
+                    repeatAll = PlayQueue.repeatAll
                 }
             }
             state.items.forEach { item ->

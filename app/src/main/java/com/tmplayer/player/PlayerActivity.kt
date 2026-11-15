@@ -5038,7 +5038,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 Player.STATE_ENDED -> {
                     // Said to the service before Media3's notification hears of the end: the
                     // foreground lasts through the gap only when another episode follows.
-                    if (inBackgroundAudio) PlaybackService.setPlayWhenReady(!creditsSkipped && endLeadsOn())
+                    val repeats = com.tmplayer.data.PlayQueue.atEnd(currentItem()) == com.tmplayer.data.QueuePlan.AtEnd.Replay
+                    if (inBackgroundAudio) PlaybackService.setPlayWhenReady(!creditsSkipped && (repeats || endLeadsOn()))
                     if (!creditsSkipped) onVideoEnded()
                 }
                 else -> Unit
@@ -6152,6 +6153,15 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * no next episode the last frame stays up with a way to watch it again.
      */
     private fun onVideoEnded() {
+        // Repeat one on a chat's audio: from the start again in this same player, not marked
+        // watched and no countdown to a next file; unseen too, so the sound carries on.
+        if (com.tmplayer.data.PlayQueue.atEnd(currentItem()) == com.tmplayer.data.QueuePlan.AtEnd.Replay) {
+            player?.let {
+                it.seekTo(0)
+                it.play()
+            }
+            return
+        }
         if (piecesIncomplete) {
             // Only up to a missing piece: said again, and nothing marked or played next.
             piecesNotice?.let { showGestureFeedback(it) }

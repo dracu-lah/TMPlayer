@@ -162,6 +162,9 @@ object PlayQueue {
     private var repeatOn = false
 
     @Volatile
+    private var repeatOneOn = false
+
+    @Volatile
     private var feed: QueueFeed? = null
 
     @Volatile
@@ -175,6 +178,9 @@ object PlayQueue {
     val shuffle: Boolean get() = shuffleOn
     val repeatAll: Boolean get() = repeatOn
 
+    /** Repeat one: the file playing plays again when it ends ([atEnd]); off when Repeat all is on. */
+    val repeatOne: Boolean get() = repeatOneOn
+
     /**
      * [list] as the queue, in the order posted or shuffled as set; a shuffle plays [current]
      * first (the file the viewer chose, or a random one when null). [more] reads the pages the
@@ -182,18 +188,19 @@ object PlayQueue {
      */
     fun set(list: List<MediaItem>, current: MediaItem? = null, more: QueueFeed? = null) {
         feed = more
-        plan = QueuePlan.of(list, shuffle = shuffleOn, repeatAll = repeatOn, current = current)
+        plan = QueuePlan.of(list, shuffle = shuffleOn, repeatAll = repeatOn, current = current, repeatOne = repeatOneOn)
     }
 
     fun clear() {
         feed = null
-        plan = QueuePlan.Empty.withRepeatAll(repeatOn)
+        plan = QueuePlan.Empty.withRepeatAll(repeatOn).withRepeatOne(repeatOneOn)
     }
 
     /** Back to nothing queued and both modes off (a sign out, a test). */
     fun reset() {
         shuffleOn = false
         repeatOn = false
+        repeatOneOn = false
         clear()
     }
 
@@ -205,8 +212,23 @@ object PlayQueue {
 
     fun setRepeatAll(on: Boolean) {
         repeatOn = on
+        if (on) repeatOneOn = false
         plan = plan.withRepeatAll(on)
     }
+
+    /** Repeat one on or off; on turns Repeat all off, the modes being off, one, all. */
+    fun setRepeatOne(on: Boolean) {
+        repeatOneOn = on
+        if (on) repeatOn = false
+        plan = plan.withRepeatOne(on)
+    }
+
+    /**
+     * What the player does when [item] ends: [QueuePlan.AtEnd.Replay] under Repeat one for a file
+     * of the queue (video and files from elsewhere are never repeated), else the usual next.
+     */
+    fun atEnd(item: MediaItem): QueuePlan.AtEnd =
+        if (ChatAudio.isAudio(item)) plan.atEnd(item) else QueuePlan.AtEnd.Continue
 
     /** More files of the chat joined to the queue, around [current] if it is playing. */
     fun add(more: List<MediaItem>, current: MediaItem? = null) {

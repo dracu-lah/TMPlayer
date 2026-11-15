@@ -1654,6 +1654,7 @@ internal fun AudioListSheet(state: ShellState, chat: ChatSummary, onDismiss: () 
             Spacer(Modifier.height(8.dp))
             var shuffle by remember { mutableStateOf(com.tmplayer.data.PlayQueue.shuffle) }
             var repeatAll by remember { mutableStateOf(com.tmplayer.data.PlayQueue.repeatAll) }
+            var repeatOne by remember { mutableStateOf(com.tmplayer.data.PlayQueue.repeatOne) }
             if (shown.items.isNotEmpty()) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = { scope.launch { list.playAll()?.let(::play) } }) {
@@ -1669,8 +1670,22 @@ internal fun AudioListSheet(state: ShellState, chat: ChatSummary, onDismiss: () 
                     )
                     androidx.compose.material3.FilterChip(
                         selected = repeatAll,
-                        onClick = { repeatAll = !repeatAll; com.tmplayer.data.PlayQueue.setRepeatAll(repeatAll) },
+                        onClick = {
+                            repeatAll = !repeatAll
+                            com.tmplayer.data.PlayQueue.setRepeatAll(repeatAll)
+                            repeatOne = com.tmplayer.data.PlayQueue.repeatOne
+                        },
                         label = { Text(s.gridAudioRepeatAll) },
+                        leadingIcon = { Icon(TmIcons.Repeat, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                    )
+                    androidx.compose.material3.FilterChip(
+                        selected = repeatOne,
+                        onClick = {
+                            repeatOne = !repeatOne
+                            com.tmplayer.data.PlayQueue.setRepeatOne(repeatOne)
+                            repeatAll = com.tmplayer.data.PlayQueue.repeatAll
+                        },
+                        label = { Text(s.gridAudioRepeatOne) },
                         leadingIcon = { Icon(TmIcons.Repeat, contentDescription = null, modifier = Modifier.size(16.dp)) },
                     )
                 }

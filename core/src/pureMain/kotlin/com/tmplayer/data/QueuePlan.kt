@@ -20,6 +20,8 @@ class QueuePlan private constructor(
     val repeatAll: Boolean,
     private val seed: Long,
     private val positions: Map<Long, Int>,
+    /** The file playing plays again when it ends, instead of going on; excludes [repeatAll]. */
+    val repeatOne: Boolean = false,
 ) {
     val size: Int get() = order.size
 
@@ -47,11 +49,23 @@ class QueuePlan private constructor(
     fun withShuffle(on: Boolean, current: MediaItem? = null): QueuePlan {
         if (on == shuffle) return this
         val files = if (on) shuffled(order, current, seed) else order.sortedWith(POSTED)
-        return build(files, shuffle = on, repeatAll = repeatAll, seed = seed)
+        return build(files, shuffle = on, repeatAll = repeatAll, seed = seed, repeatOne = repeatOne)
     }
 
+    /** Repeat this file: turning it on turns Repeat all off, the three modes being off, one, all. */
+    fun withRepeatOne(on: Boolean): QueuePlan =
+        if (on == repeatOne) this else QueuePlan(order, shuffle, repeatAll && !on, seed, positions, repeatOne = on)
+
+    /**
+     * What happens when [item] ends: [AtEnd.Replay] the same file again (Repeat one, for a file
+     * in this plan), or [AtEnd.Continue] the usual way (the next file, or the finished sheet).
+     */
+    fun atEnd(item: MediaItem): AtEnd = if (repeatOne && positionOf(item) >= 0) AtEnd.Replay else AtEnd.Continue
+
+    enum class AtEnd { Replay, Continue }
+
     fun withRepeatAll(on: Boolean): QueuePlan =
-        if (on == repeatAll) this else QueuePlan(order, shuffle, on, seed, positions)
+        if (on == repeatAll) this else QueuePlan(order, shuffle, on, seed, positions, repeatOne = repeatOne && !on)
 
     /**
      * Another page of the chat's files joined in: files already here are kept as they are (a page
@@ -63,11 +77,11 @@ class QueuePlan private constructor(
         val fresh = more.filter { positions[it.messageId]?.let { at -> order[at].chatId == it.chatId } != true }
             .distinctBy { it.chatId to it.messageId }
         if (fresh.isEmpty()) return this
-        if (!shuffle) return build((order + fresh).sortedWith(POSTED), shuffle = false, repeatAll = repeatAll, seed = seed)
+        if (!shuffle) return build((order + fresh).sortedWith(POSTED), shuffle = false, repeatAll = repeatAll, seed = seed, repeatOne = repeatOne)
         val keep = current?.let { positionOf(it) }?.takeIf { it >= 0 }?.plus(1) ?: order.size
         val head = order.subList(0, keep)
         val tail = order.subList(keep, order.size) + fresh
-        return build(head + tail.shuffled(Random(seed + order.size)), shuffle = true, repeatAll = repeatAll, seed = seed)
+        return build(head + tail.shuffled(Random(seed + order.size)), shuffle = true, repeatAll = repeatAll, seed = seed, repeatOne = repeatOne)
     }
 
     companion object {
@@ -77,9 +91,9 @@ class QueuePlan private constructor(
         val Empty = of(emptyList(), shuffle = false, repeatAll = false, seed = 0)
 
         /** A plan for [files] in the order posted, or shuffled; [seed] makes a shuffle repeatable. */
-        fun of(files: List<MediaItem>, shuffle: Boolean = false, repeatAll: Boolean = false, seed: Long = Random.nextLong(), current: MediaItem? = null): QueuePlan {
+        fun of(files: List<MediaItem>, shuffle: Boolean = false, repeatAll: Boolean = false, seed: Long = Random.nextLong(), current: MediaItem? = null, repeatOne: Boolean = false): QueuePlan {
             val ordered = if (shuffle) shuffled(files.distinctBy { it.chatId to it.messageId }, current, seed) else files.sortedWith(POSTED)
-            return build(ordered, shuffle, repeatAll, seed)
+            return build(ordered, shuffle, repeatAll, seed, repeatOne && !repeatAll)
         }
 
         private fun shuffled(files: List<MediaItem>, first: MediaItem?, seed: Long): List<MediaItem> {
@@ -90,12 +104,12 @@ class QueuePlan private constructor(
             return listOf(mixed[at]) + mixed.filterIndexed { index, _ -> index != at }
         }
 
-        private fun build(order: List<MediaItem>, shuffle: Boolean, repeatAll: Boolean, seed: Long): QueuePlan {
+        private fun build(order: List<MediaItem>, shuffle: Boolean, repeatAll: Boolean, seed: Long, repeatOne: Boolean = false): QueuePlan {
             // A queue is one chat's files: the message number alone names a file in it. A second
             // chat's file with the same number (never queued together) is found by chat as well.
             val positions = HashMap<Long, Int>(order.size * 2)
             order.forEachIndexed { index, item -> positions.putIfAbsent(item.messageId, index) }
-            return QueuePlan(order, shuffle, repeatAll, seed, positions)
+            return QueuePlan(order, shuffle, repeatAll, seed, positions, repeatOne)
         }
     }
 }
