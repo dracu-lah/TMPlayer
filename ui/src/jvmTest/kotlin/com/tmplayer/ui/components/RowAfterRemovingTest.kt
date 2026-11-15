@@ -1,4 +1,4 @@
-package com.tmplayer.ui.downloads
+package com.tmplayer.ui.components
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
