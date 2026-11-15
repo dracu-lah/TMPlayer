@@ -310,7 +310,18 @@ desktop's always on top mini window (Ctrl+P, a different feature the user did no
   works from Home, no leftover references (grep test or a compile), render tests per form factor.
 Supersedes Raju group B's "mini bar X 48 dp" and 6.4.
 
-### D1 Support cards: Buy Me a Coffee and UPI  (model: sonnet, running since 2026-11-16)
+### T7 detail: research is in, tasks RL1 to RL15 (doc: `private/PLAYER-RELIABILITY-RESEARCH.md` section 8)
+Five classes found: sound without picture (Media3 raises no error when the video track is unsupported or never
+outputs), a frozen picture after a seek, a wrong picture with no error (Allwinner H6: `enableDecoderFallback`
+only retries on init failure), hardware decoder stutter (async MediaCodec off below API 31), software decode too
+slow. Remedy ladder R0 to R4, at most 2 hops per video, a per device class memory. Order: group A pure core
+(RL1 ladder state machine, RL2 memory, RL3 first frame and frozen output watches, RL4 known devices fields) in
+parallel now-safe files; then RL5 decoder policy and RL6 the runner (hook lines only in `PlayerActivity.kt`, so
+after T12 merges), then RL8 to RL12, RL13 16 KB gate any time, RL7 green-frame spike when the TX6 is reachable.
+RL15 (device pass) is the user's. Not verified (tagged in the doc): vendor decoder internals, the current libVLC
+Android options, PixelCopy on TV overlay planes.
+
+### D1 Support cards: Buy Me a Coffee and UPI  (DONE, merged 2026-11-16)
 Themed cards and dialogs with the official logos, regional order (IN: UPI first), icon popup through the
 existing `SupportReminder` nag. Design note `design/redesign/support-cards.md`.
 
