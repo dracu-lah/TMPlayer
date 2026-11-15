@@ -263,6 +263,9 @@ class App : Application() {
         // The checks a phone makes while the app is closed (new videos in starred chats, the
         // sponsor reminder), scheduled or cancelled to match the settings.
         if (!safe) backgroundScope.launch { runCatching { com.tmplayer.data.BackgroundChecks.schedule(this@App) } }
+        // The Continue watching home screen widget (phone only), kept current while the app runs and
+        // a widget is placed: at most one redraw a minute, nothing read with none placed.
+        if (!safe) com.tmplayer.widget.ContinueWidgetFollower.start(this, backgroundScope)
         // Kept off the launch path: the storage ceiling is about tomorrow's disk, not this frame,
         // and TDLib has a database to open first. Waits for an authorized session, so on a device
         // nobody has signed into yet it never runs.

@@ -427,6 +427,11 @@ class MainActivity : ComponentActivity() {
         // An entry published before the kids lock went on (CP57) still names its chat; one the
         // lock leaves out opens the app instead of the video.
         lifecycleScope.launch {
+            // The app lock that asks when the app opens: a tap on the widget (or a Play next entry)
+            // that was drawn before the lock went on must not open a video past it. The app opens on
+            // its lock instead, and the next tap, from a widget now drawn locked, goes through it.
+            val lock = runCatching { SettingsStore(this@MainActivity).appLock.first() }.getOrNull()
+            if (lock?.onOpen == true && !AppLockSession.unlocked.value) return@launch
             if (!com.tmplayer.data.KidsLock.allows(com.tmplayer.data.ChatGate.awaitReady(), video.chatId)) return@launch
             // Known gone from Telegram this session (HX21) and not downloaded: the app says so
             // rather than opening a player that can only fail. The row itself goes with the entry.
