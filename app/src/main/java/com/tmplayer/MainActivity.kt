@@ -736,6 +736,8 @@ private fun Root() {
     val watchedVideos by watchedStore.watched.collectAsStateWithLifecycle(initialValue = emptyMap())
     val watchedHistory by watchedStore.history.collectAsStateWithLifecycle(initialValue = emptyList())
     val watchLater by watchedStore.watchLater.items.collectAsStateWithLifecycle(initialValue = emptyList())
+    // The named lists (HX43): Home's rows of them and the lists' page.
+    val namedLists by watchedStore.lists.visible.collectAsStateWithLifecycle(initialValue = null)
     val lastChatId by settings.lastChatId.collectAsStateWithLifecycle(initialValue = 0L)
     val openLastChat by settings.openLastChat.collectAsStateWithLifecycle(initialValue = false)
     val minSize by settings.minSizeBytes.collectAsStateWithLifecycle(initialValue = SizeFilter.DEFAULT_MIN)
@@ -1906,6 +1908,7 @@ private fun Root() {
             homeViewModel, chats, favorites, continueWatching, watchLater, watchedVideos.values,
             recentMinStarred = 1,
             layout = homeLayout,
+            lists = namedLists.orEmpty(),
         )
         val tvChannelsOn by settings.tvChannels.collectAsStateWithLifecycle(initialValue = null)
         TvHomeChannels(
@@ -2120,7 +2123,7 @@ private fun Root() {
                         when (row) {
                             is HomeRow.Chat -> homeViewModel.request(row.chatId)
                             is HomeRow.Recent -> homeViewModel.requestRecent()
-                            is HomeRow.Continue, is HomeRow.WatchLater, is HomeRow.NewEpisodes -> Unit
+                            is HomeRow.Continue, is HomeRow.WatchLater, is HomeRow.Listed, is HomeRow.NewEpisodes -> Unit
                         }
                     },
                     onHomeArtWanted = homeViewModel::requestArt,
@@ -2137,6 +2140,8 @@ private fun Root() {
                     onSetMediaWatched = { item, chatTitle, watched -> setWatched(item, chatTitle, watched) },
                     onMessage = toast,
                     onSearched = { settings.addRecentSearch(it) },
+                    namedLists = namedLists,
+                    listsStore = watchedStore.lists,
                 )
             }
 
@@ -2352,7 +2357,7 @@ private fun Root() {
                             modifier = Modifier.onFocusChanged { tvBarFocused = it.hasFocus },
                         )
                     },
-                ) { screens(screen) }
+                ) { com.tmplayer.ui.browse.ListPickerHost(watchedStore.lists, toast) { screens(screen) } }
             } else {
                 // The phone: one floating bar over every page it belongs to, and the pages changing
                 // under it the way Home and Chats do (see PhoneBrowse), each keeping its scroll.
@@ -2395,7 +2400,9 @@ private fun Root() {
                     ) { shown ->
                         val key = TouchScreens.key(shown)
                         holder.SaveableStateProvider(key) {
-                            CompositionLocalProvider(LocalTouchPageKey provides key) { screens(shown) }
+                            CompositionLocalProvider(LocalTouchPageKey provides key) {
+                                com.tmplayer.ui.browse.ListPickerHost(watchedStore.lists, toast) { screens(shown) }
+                            }
                         }
                     }
                 }

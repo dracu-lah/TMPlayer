@@ -309,8 +309,14 @@ internal fun BrowseScreen(
     videoSearch: VideoSearchSource = VideoSearchSource.Telegram,
     /** Remembers a search worth keeping, for the recent searches. */
     onSearched: (suspend (String) -> Unit)? = null,
+    /** The viewer's named lists (HX43) as the kids lock lets them be seen; null while read. */
+    namedLists: List<com.tmplayer.data.VisibleList>? = null,
+    /** Where they are kept; null leaves the lists' page out (a preview, a test). */
+    listsStore: com.tmplayer.data.ListsStore? = null,
 ) {
     val s = LocalStrings.current
+    // The lists' page, by the list it opens on ("" for the first); null while it is closed.
+    var openList by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
     // An unfinished video wins the landing tab, otherwise Recent, so the first screen is never
     // empty. Those are read from disk after the first frame, so the tab settles once they arrive;
     // an explicit pick always wins. [picked] is hoisted rather than remembered here because
@@ -705,6 +711,7 @@ internal fun BrowseScreen(
                                 onLaterArtWanted = onHomeLaterArtWanted,
                                 mayTakeFocus = listMayTakeFocus,
                                 tvPlayFocus = tvPlayFocus,
+                                onSeeList = { openList = it },
                                 onSeeWatchLater = {
                                     pickHistory(HistoryTab.WatchLater)
                                     onPickTab(BrowseSection.of(BrowseTab.History))
@@ -729,6 +736,8 @@ internal fun BrowseScreen(
                         // the content area starts with the content.
                         if (!touch) {
                             val historyActions: @Composable () -> Unit = {
+                                // The named lists (HX43) sit beside History's own: the same kind of keeping.
+                                if (listsStore != null) HeaderAction(label = s.listsOpen, icon = TmIcons.List, onClick = { openList = "" })
                                 // No Refresh here: History is read off this device and cannot be
                                 // behind, so the button would be one that visibly does nothing.
                                 if (historyHas) {
@@ -977,6 +986,9 @@ internal fun BrowseScreen(
                 // History's Select and Clear sit in the bar, one press each: a clear here is said
                 // with Undo, so a mis-tap costs nothing. Favourites' clear has no Undo and stays
                 // behind the overflow, asked first.
+                if (tab.listsVideos && !selecting && listsStore != null) {
+                    BarIcon(label = s.listsOpen, icon = TmIcons.List, onClick = { openList = "" })
+                }
                 if (tab.listsVideos && historyHas && !selecting) {
                     BarIcon(label = s.browseSelect, icon = TmIcons.Checklist, onClick = { startSelecting(null) })
                     BarIcon(
@@ -1343,6 +1355,20 @@ internal fun BrowseScreen(
             onOpen = { laterShow = series to title },
             onDismiss = { heldShow = null },
             onOpenChat = chatsNow.firstOrNull { it.id == series.cover.chatId }?.let { chat -> { onOpenChat(chat) } },
+        )
+    }
+
+    if (openList != null && listsStore != null) {
+        ListPage(
+            initial = openList,
+            lists = namedLists,
+            store = listsStore,
+            art = homeArt,
+            onArtWanted = onHomeLaterArtWanted,
+            onOpen = openLater,
+            onDetails = { record -> showDetail(record.toMediaItem(), record.chatTitle) },
+            onMessage = onMessage,
+            onDismiss = { openList = null },
         )
     }
 

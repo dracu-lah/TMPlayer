@@ -299,12 +299,15 @@ internal fun MediaDetailOpened(
     }
 
     val defaultPlayer by settings.defaultPlayer.collectAsStateWithLifecycle(initialValue = com.tmplayer.player.PlayerChoice.TmPlayer)
+    // The named lists' picker (HX43), held by the browse screen so it outlives this window.
+    val pickList = LocalListPicker.current
     val actions = DetailActions.of(
         DetailContext(
             canBeSaved = item.canBeSaved,
             resumeMs = watched?.positionMs ?: 0L,
             finished = finished,
             watchLater = later,
+            lists = pickList != null,
             inDownloads = inDownloads,
             copyInDownloads = kept.copy != null,
             cached = cachedHere,
@@ -376,6 +379,10 @@ internal fun MediaDetailOpened(
                 }
                 com.tmplayer.ui.components.showMessage(context, if (add) s.detailWatchLaterAdded(item.title) else s.detailWatchLaterRemoved(item.title))
                 if (asMenu) onDismiss()
+            } }
+            DetailAction.AddToList -> { {
+                if (asMenu) onDismiss()
+                pickList?.invoke(WatchLaterRecord.of(item, chatTitle, System.currentTimeMillis()))
             } }
             // The page stays where it is: the button turns into the download's state (the ring,
             // then Downloaded), the message says what happened, and a remote keeps its focus on

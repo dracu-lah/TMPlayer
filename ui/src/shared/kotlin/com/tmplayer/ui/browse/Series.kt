@@ -1405,6 +1405,7 @@ private fun showPageActions(
             },
         )
     }
+    actions.onAddToList?.let { pick -> add(PageAction(s.listsAddTo, TmIcons.List, pick, short = s.detailRoundList)) }
     actions.onOpenChat?.let { chat ->
         add(PageAction(s.detailOpenChat(actions.chatTitle), TmIcons.ArrowForward, chat, short = s.detailRoundChat))
     }

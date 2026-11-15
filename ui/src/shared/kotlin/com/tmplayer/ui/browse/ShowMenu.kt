@@ -62,6 +62,8 @@ class ShowActions(
     val onMark: ((ShowMarks.Choice) -> Unit)? = null,
     /** The chat the show was posted in, from a page or menu opened outside it; null leaves it out. */
     val onOpenChat: (() -> Unit)? = null,
+    /** Puts the whole show in one of the viewer's named lists (HX43); null leaves it out. */
+    val onAddToList: (() -> Unit)? = null,
     /** That chat's name, for "Go to" on the menu. */
     val chatTitle: String = "",
 )
@@ -105,6 +107,7 @@ fun ShowMenu(
                     },
                 )
             }
+            actions.onAddToList?.let { pick -> add(MenuLine(s.listsAddTo, TmIcons.List, s.listsAddToDetail) { onDismiss(); pick() }) }
             if (actions.onMark != null && choices.isNotEmpty()) {
                 add(MenuLine(s.seriesMarkTitle, TmIcons.Check, null) { marks = true })
             }
@@ -129,10 +132,10 @@ internal fun markLabel(choice: ShowMarks.Choice, s: Messages): String = when (ch
     ShowMarks.Scope.Show -> if (choice.watched) s.seriesMarkShowWatched else s.seriesMarkShowUnwatched
 }
 
-private class MenuLine(val label: String, val icon: ImageVector, val detail: String?, val onSelect: () -> Unit)
+internal class MenuLine(val label: String, val icon: ImageVector, val detail: String?, val onSelect: () -> Unit)
 
 @Composable
-private fun MenuCard(
+internal fun MenuCard(
     title: String,
     subtitle: String?,
     lines: List<MenuLine>,
@@ -187,7 +190,7 @@ private fun MenuCard(
 }
 
 @Composable
-private fun MenuRow(label: String, icon: ImageVector?, detail: String?, onClick: () -> Unit, modifier: Modifier) {
+internal fun MenuRow(label: String, icon: ImageVector?, detail: String?, onClick: () -> Unit, modifier: Modifier) {
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusVisibleAsState()
     val shape = RoundedCornerShape(12.dp)

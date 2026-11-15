@@ -44,7 +44,9 @@ fun rememberShowActions(
     val currentSeries by rememberUpdatedState(series)
     val currentWatch by rememberUpdatedState(watch)
     val say by rememberUpdatedState(onMessage)
-    return remember(series.key, chatId, onList, chatTitle, onOpenChat, settings, watched, s) {
+    // The host's list picker (phone, television, desktop), when there is one above.
+    val pickList = LocalListPicker.current
+    return remember(series.key, chatId, onList, chatTitle, onOpenChat, settings, watched, s, pickList) {
         ShowActions(
             watchLater = onList,
             onWatchLater = { add ->
@@ -94,6 +96,7 @@ fun rememberShowActions(
             },
             onOpenChat = onOpenChat,
             chatTitle = chatTitle,
+            onAddToList = pickList?.let { pick -> { pick(WatchLaterRecord.ofShow(currentSeries, chatTitle, System.currentTimeMillis())) } },
         )
     }
 }

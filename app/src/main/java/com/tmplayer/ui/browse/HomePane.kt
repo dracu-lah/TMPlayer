@@ -164,6 +164,8 @@ internal fun HomePane(
     onOpenWatchLater: (WatchLaterRecord) -> Unit = {},
     onLaterArtWanted: (WatchLaterRecord) -> Unit = {},
     onSeeWatchLater: () -> Unit = {},
+    /** A named list's row (HX43): its page, by the list's id. */
+    onSeeList: (String) -> Unit = {},
     /** Download season and Download unwatched on a show's page; null leaves them out. */
     onDownloadSeason: ((SeasonDownloadRequest) -> Unit)? = null,
     /**
@@ -627,10 +629,12 @@ internal fun HomePane(
                     val seeAll: (() -> Unit)? = when (row) {
                         is HomeRow.Continue -> onSeeContinue
                         is HomeRow.WatchLater -> onSeeWatchLater
+                        // Always: the list's page is also where it is renamed, taken off Home or deleted.
+                        is HomeRow.Listed -> { { onSeeList(row.listId) } }
                         is HomeRow.Chat -> { { onOpenChat(row.chatId) } }
                         is HomeRow.Recent -> { { seeAllKey = row.key } }
                         is HomeRow.NewEpisodes -> null
-                    }?.takeIf { row.hasMore }
+                    }?.takeIf { row.hasMore || row is HomeRow.Listed }
                     // On a television "See all" is the row's last tile, where Right past the last
                     // video lands, as a television's rows end (user, 2026-10-28); a phone keeps it
                     // on the heading. On the heading it took a press of its own, Up or Right, and
@@ -695,8 +699,11 @@ internal fun HomePane(
                                     }
                                 }
                             }
-                            is HomeRow.WatchLater -> TileRow(start, end, rowTiles, seeAll = seeAllEnd?.copy(width = wideWidth(touch))) {
-                                items(row.records, key = { "l-${it.id}" }) { record ->
+                            is HomeRow.WatchLater, is HomeRow.Listed -> {
+                                // A named list (HX43) draws as Watch later does: its cards are the same lines, a show as one.
+                                val laterRecords = if (row is HomeRow.WatchLater) row.records else (row as HomeRow.Listed).records
+                                TileRow(start, end, rowTiles, seeAll = seeAllEnd?.copy(width = wideWidth(touch))) {
+                                items(laterRecords, key = { "l-${it.id}" }) { record ->
                                     LaunchedEffect(record.key) { onLaterArtWanted(record) }
                                     val known = art[record.key] ?: remember(record) { record.toMediaItem() }
                                     // Offline: a video in Downloads says so, as every grid tile does (PL-13).
@@ -718,9 +725,10 @@ internal fun HomePane(
                                         },
                                         dense = touch,
                                         modifier = Modifier.width(wideWidth(touch))
-                                            .then(if (isFirst && record === row.records.first()) Modifier.focusRequester(first) else Modifier),
+                                            .then(if (isFirst && record === laterRecords.first()) Modifier.focusRequester(first) else Modifier),
                                     )
                                 }
+                            }
                             }
                             is HomeRow.NewEpisodes -> TileRow(start, end, rowTiles) {
                                 items(row.episodes, key = { "n-${it.item.id}" }) { episode ->

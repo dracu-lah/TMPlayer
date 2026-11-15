@@ -10,6 +10,7 @@ import com.tmplayer.i18n.Messages
 fun homeRowTitle(row: HomeRow, s: Messages): String = when (row) {
     is HomeRow.Continue -> s.homeRowContinue
     is HomeRow.WatchLater -> s.homeRowWatchLater
+    is HomeRow.Listed -> row.name
     is HomeRow.NewEpisodes -> s.homeRowNewEpisodes
     is HomeRow.Chat -> row.title
     is HomeRow.Recent -> if (row.starredOnly) s.homeRowRecent else s.homeRowRecentAll
@@ -18,7 +19,7 @@ fun homeRowTitle(row: HomeRow, s: Messages): String = when (row) {
 /** Whether [row] has its tiles yet; a row that has not is drawn as a placeholder strip of the same height. */
 val HomeRow.isLoaded: Boolean
     get() = when (this) {
-        is HomeRow.Continue, is HomeRow.WatchLater, is HomeRow.NewEpisodes -> true
+        is HomeRow.Continue, is HomeRow.WatchLater, is HomeRow.Listed, is HomeRow.NewEpisodes -> true
         is HomeRow.Chat -> loaded
         is HomeRow.Recent -> loaded
     }
