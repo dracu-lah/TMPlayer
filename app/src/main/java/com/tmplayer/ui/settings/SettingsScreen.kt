@@ -563,7 +563,12 @@ fun SettingsScreen(
 
     // The search box over the category list (U20): a phone's only, past 25 rows. The query is
     // kept while a page found by it is open, so Back comes back to the results.
-    var searchQuery by rememberSaveable { mutableStateOf("") }
+    // Per visit: gone once Settings is left, unless a page found by it is open (About or the cached
+    // videos from a result come back to that page, and Back returns to the results).
+    var searchQuery by com.tmplayer.ui.components.rememberVisitQuery(keep = page != null)
+    // Back empties the box before it leaves Settings (UX rule 2). Composed after the caller's own
+    // handler, so it is asked first.
+    BackHandler(enabled = page == null && searchQuery.isNotEmpty()) { searchQuery = "" }
     val seek = remember { SettingsSeek() }
     val needs = SettingsNeeds(
         vlc = vlcShown,
@@ -2674,6 +2679,7 @@ fun SettingsScreen(
                     // The downloads stay unless the box was ticked (forgetAccount says the rest).
                     forgetAccount(context, settings, watchedStore, deleteDownloads)
                     Td.logOut()
+                    searchQuery = ""
                     onLoggedOut()
                 }
             },
