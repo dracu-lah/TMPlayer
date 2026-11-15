@@ -32,6 +32,48 @@ Remote, keyboard, gestures
 15. Touch: targets 48 dp, a gesture always has a visible button twin, predictive back works,
     swipe and long-press actions are discoverable, every press answers (haptic or pressed state).
 
+## Product bar (user, 2026-11-16)
+
+"Inspect everything, beautiful looking, easy to use as a common man app." So every control is judged by
+someone who has never used a media app: plain words (no jargon, no internal names such as "TDLib" or
+"cache window"), one obvious next step per screen, defaults that work without opening Settings, big
+targets, nothing destructive without a clear sentence, and the same look and motion everywhere.
+
+## Review dimensions for every control (the exhaustive pass)
+
+Inventory: `node scripts/ux-inventory.mjs` writes `private/ux-inventory/<chunk>.md`, one checkbox per
+interactive control (about 2,000 in 11 chunks, see INDEX.md). It is generated and git-ignored: read it
+from the main tree at `/home/dracu/projects/personal/TMPlayer/private/ux-inventory/`. For each line, check:
+
+- D1 Behaviour: what it does on press, repeat, cancel, empty, huge and failing data; rules 1 to 15 above.
+- D2 Input modes: touch, D-pad (focus order, visible ring, no trap), keyboard and mouse (Tab, Enter,
+  Space, Esc, shortcuts, hover, right-click where the platform expects it), gestures with a button twin.
+- D3 Motion: every state change animates (press, focus, expand, appear, remove, navigate) using the
+  shared Motion tokens and honouring Reduce motion; no animation that blocks input or runs while idle.
+- D4 Look: spacing, type scale, radius, colour tokens, icon size and weight, alignment, truncation and
+  wrapping at the largest font, dark and light, RTL; no one-off numbers where a token exists.
+- D5 Words: plain, short, consistent term for the same thing everywhere, en.json only.
+- D6 Speed: recomposition and frame cost (use the `compose-performance` skill: stability report,
+  state reads in the frame phase, lazy keys), work on the main thread, idle CPU on the TV, startup cost.
+- D7 Access: content descriptions, 48 dp targets, contrast, focus announcements, font scale 200%.
+- D8 Common person: would a first time user know what this does without reading anything?
+
+Skills for the pass (already installed): `impeccable` (polish, animation, hierarchy), `compose-performance`,
+`visual-diff` (before and after screenshots, animation filmstrip), `web-design-guidelines` (web app and site).
+
+## Waves (user wants speed; the locked rule caps it at 3 workers at once, each in its own worktree)
+
+| Wave | Workers | Chunks |
+| --- | --- | --- |
+| 0 (running) | T1, T2, T3 | rule based pass above |
+| 1 | R1, R2, R3 | desktop-ui-1, phone-browse-1, settings |
+| 2 | R4, R5, R6 | desktop-ui-2, phone-browse-2, flows |
+| 3 | R7, R8, R9 | desktop-ui-3 + components, player, web-1 + web-2 |
+
+Each R worker writes `private/ux-review/<chunk>.md`: per control the verdict on D1 to D8, what was
+fixed (commit), what is left and why. A wave starts when the previous one is merged, so two workers
+never edit the same file. Every fix gets a machine check (render, focus, scale or unit test) first.
+
 ## Skills
 
 No install needed: `impeccable` and `web-design-guidelines` (already available) cover review and
