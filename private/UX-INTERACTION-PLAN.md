@@ -57,6 +57,43 @@ setting that should not exist, a screen that does the wrong job), do not patch i
 - Big ones (a new Home, a new player overlay, merged screens) stop at the design note for the
   user's OK; everything else goes ahead and is logged under "Decisions made by Claude".
 
+## Feature admission gate (user, 2026-11-16: "add more missing features, but make sure it will not confuse users")
+
+A feature goes in only if it passes all of these; a worker writes the answers in its design note.
+1. Raju test: a first time user can use it without reading anything, or never has to know it exists.
+2. It decides for the user: the app picks the right behaviour from facts (device, network, file); a new setting
+   is added only when two sensible people would choose differently, and it ships with a default that is right
+   for most (and a plain one line explanation). No setting for what the app can work out.
+3. Appears when relevant, not before: cast only when a cast device is found, "Play a lighter copy" only on a weak
+   line, skip pills only inside a stretch, remedies only after a failure. Nothing new on a main screen's first view
+   without removing something (one in, one out per release).
+4. One place, one name: grep first (AGENTS.md "look before adding"); extend the existing row or sheet, never a
+   parallel one; the same word everywhere.
+5. No silent change: anything that changes what existing users see is announced once in a dismissible card and
+   can be undone; stored values keep working.
+6. Plain words, no engine names (TDLib, codec, proxy, cache, MTProto) in the lead line; detail one tap away.
+7. Parity: phone, TV remote (focus), desktop keyboard, web where it applies; machine tests per form factor.
+8. Reversible and safe: nothing destructive or costly (data, space, money) without a sentence saying so.
+
+Feature queue after the gate (sizes S/M/L; status from `private/COMPETITORS.md` and the plan):
+- Invisible or automatic (do first): FQ1 say why a video is not starting after 10 s, with Try again, Download
+  first, Back (S, P T D); FQ2 "Can't reach Telegram" banner after 20 s with the network up, Retry and Proxy
+  button when proxies land (S); FQ3 the remedy ladder RL1 to RL15 (T7); FQ4 skip from chapters and more skip
+  sources (T10); FQ5 season packs, ranges, caption link match, subtitle language (TS, T9); FQ6 anime episode data
+  (T11); FQ7 Android sign in stall gets the desktop's answer (S).
+- Contextual, one control: FQ8 cast to Chromecast and Google TV (CP73) as an icon that exists only when a device
+  is found; FQ9 "Play a lighter copy" (CP80) offered only when the line is weak and a lighter copy exists; FQ10
+  night mode for sound as one switch in the player's More panel (plain name "Quiet loud scenes"), Android audio
+  processor first, desktop after a filter check (M); FQ11 a pure black theme as one more choice in Appearance (S).
+- Opt in, outside the main flow: FQ12 progress and bookmark sync through your own Saved Messages (TS5, one
+  question in the setup's end card, off until said yes); FQ13 Trakt or Simkl sync in Settings, Accounts
+  (CP62 waits for keys); FQ14 audio files as a playlist (M, after the above); FQ15 troubleshooting guides on the
+  site for "will not start", "buffering", "in pieces", "storage full" (S each; public copy: needs the user's OK).
+- Needs the user's OK (conflicts or public copy): the TV pause screen clock (removed on purpose in 1.16.0), the
+  store listing and a phone page on the site, live streams from channels (L, niche).
+Each FQ becomes a worker task only after its design note answers the gate; none is built beyond the plan above
+without it.
+
 ## Review dimensions for every control (the exhaustive pass)
 
 Inventory: `node scripts/ux-inventory.mjs` writes `private/ux-inventory/<chunk>.md`, one checkbox per
