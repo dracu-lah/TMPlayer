@@ -191,7 +191,7 @@ object SettingsMap {
         row("cache_limit", st, "storage.cache_limit", D)
         row("download_first", st, "settings.download_first", PTD, onOff("settings.download_first"))
         row("remove_after_watching", st, "downloads.remove_after_watching", PTD, listOf("downloads.remove_after_watching_body"))
-        row("low_storage", st, "settings.low_storage", PTD, onOff("settings.low_storage"))
+        row("low_storage", st, "settings.stream_title", PTD, listOf("settings.stream_keep_detail", "settings.stream_save_detail"))
         row("low_storage_alert", st, "settings.low_storage_alert", PD, listOf("settings.alert_low_storage_detail"))
         row("wifi_only", st, "settings.wifi_only", P, onOff("settings.wifi_only"))
         row("save_mobile_data", st, "settings.save_mobile_data", P, onOff("settings.save_mobile_data"))
