@@ -192,4 +192,14 @@ class PlayerKeysTest {
         assertEquals(PlayerAction.ToggleFullscreen, action(Key.F11, context = tv))
         assertEquals(PlayerAction.TogglePlay, action(Key.Enter, context = tv))
     }
+
+    @Test
+    fun `the keys everyone owns are never player keys, with Ctrl or with Cmd`() {
+        val owned = listOf(Key.C, Key.V, Key.X, Key.Z, Key.A, Key.Y, Key.F, Key.S, Key.W, Key.N)
+        for (key in owned) {
+            assertNull("Ctrl+$key", action(key, ctrl = true))
+            assertNull("Ctrl+Shift+$key", action(key, ctrl = true, shift = true))
+            assertNull("Cmd+$key", action(key, meta = true, context = KeyContext(mac = true)))
+        }
+    }
 }
