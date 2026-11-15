@@ -140,6 +140,8 @@ object SettingsMap {
     val rows: List<SettingsRow> = buildList {
         val g = SettingsGroup.Playback
         row("autoplay", g, "settings.autoplay", PTD, onOff("settings.autoplay"))
+        row("play_chat_order", g, "settings.play_chat_order", PTD, onOff("settings.play_chat_order"))
+        row("keep_repeat", g, "settings.keep_repeat", PTD, onOff("settings.keep_repeat"))
         row("default_player", g, "settings.default_player", PT, listOf("settings.default_player_ask"))
         row("player_engine", g, "settings.engine", PT, listOf("settings.engine_automatic_detail", "settings.engine_vlc_detail"), SettingsNeed.Vlc)
         row("engine_switch", g, "settings.engine_switch", PT, onOff("settings.engine_switch"), SettingsNeed.Vlc)
