@@ -407,6 +407,9 @@ dependencies {
     // The transport controls the system draws for us: notification, lock screen, headset
     // buttons and the Assistant, none of which the app has to lay out itself.
     implementation(libs.androidx.media3.session)
+    // Casting a video the TV cannot play: the device's decoders, GL and hardware H.264 and AAC
+    // encoders into a live fragmented MP4 (cast/TransformerEngine.kt). Apache 2.0, like the rest of Media3.
+    implementation(libs.androidx.media3.transformer)
     implementation(libs.androidx.leanback)
     implementation(libs.androidx.fragment.ktx)
     if (media3extAar.isFile) {

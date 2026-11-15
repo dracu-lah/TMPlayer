@@ -147,7 +147,19 @@ TMPlayer is the control point and serves only the chosen video and its subtitle,
   screen off (foreground, media session, Wi-Fi and wake locks). The F-Droid build has DLNA alone.
 - **Desktop.** `DesktopCast` holds a `Receiver` (Cast or DLNA), `CastFinder` lists both,
   `CastPlaybackEngine` plays on it.
-- **Android TV** has no casting and runs no discovery.
+- **Transcode, the last resort.** `CastPlan` gets a `Transcode` route only where no Direct, HLS,
+  Remux or ConvertAudio way plays the file with its sound: a picture codec, 10 bit or a size
+  past 1080p the receiver refuses, MPEG-TS or AVI, or sound nothing else converts (an MP4 with
+  DTS). `TranscodePlanner` picks H.264 at most 1080p (the ladder 8, 4.5, 2.5, 1.8, 1 Mb/s, within
+  60 % of the link and the encoder's limits), AAC stereo, AC-3 5.1 or the sound passed through,
+  fragmented MP4 (MPEG-TS for a DLNA TV that lists TS alone). It is streamed live from the asked
+  time, nothing written, one at a time (`TranscodeSlot`, a seek is a new stream), stopped past 15 %
+  battery off the charger or a SEVERE thermal state, with a progress card and Stop converting.
+  Phone: Media3 Transformer (MediaCodec decoders, GL, the hardware H.264 and AAC encoders, a live
+  `FragmentedMp4Muxer` on the request) behind `TranscodeEngine`. Desktop: the user's own `ffmpeg`
+  (`TMPLAYER_FFMPEG`, `<app data>/ffmpeg/`, next to the app, `PATH`) as a separate process reading
+  a `LoopbackStream`, so nothing GPL is linked or shipped; without one the route is not offered.
+- **Android TV** has no casting, runs no discovery and never transcodes.
 - **Not done yet:** subtitles to a DLNA TV, a no-seek TV greying the bar, an MPEG-TS remux
   (only if real TVs refuse fMP4). Fixtures from real renderers are in `scripts/dlna/` and the
   core tests; `scripts/dlna/capture.py` records more from any TV.

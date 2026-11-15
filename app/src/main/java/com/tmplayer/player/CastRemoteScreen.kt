@@ -64,6 +64,7 @@ internal fun CastRemoteScreen(cast: PlayerCast) {
             override fun reconnect() = cast.reconnect()
             override fun playHere() = cast.playHere()
             override fun retry() = cast.retry()
+            override fun cancelConvert() = cast.cancelConvert()
         }
     }
     CastRemote(state, actions)

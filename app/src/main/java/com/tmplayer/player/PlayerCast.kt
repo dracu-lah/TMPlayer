@@ -15,6 +15,15 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
 import com.tmplayer.cast.AndroidAudioConverter
+import com.tmplayer.cast.AndroidDeviceHealth
+import com.tmplayer.cast.AndroidTranscodeAbility
+import com.tmplayer.cast.EngineTranscoder
+import com.tmplayer.cast.TranscodeAbility
+import com.tmplayer.cast.TranscodePlanner
+import com.tmplayer.cast.TranscodeProgress
+import com.tmplayer.cast.TranscodeSlot
+import com.tmplayer.cast.TranscodeStop
+import com.tmplayer.cast.TransformerEngine
 import com.tmplayer.cast.CastFormats
 import com.tmplayer.cast.CastLoadRequest
 import com.tmplayer.cast.CastPhase
@@ -183,6 +192,18 @@ class PlayerCast(
     /** This phone turns sound into AAC (NextLib's FFmpeg decoders are there). */
     private var canConvert = false
 
+    /** What this phone transcodes with; null on a TV (never casts) or without an H.264 encoder. */
+    private var transcodeAbility: TranscodeAbility? = null
+
+    /**
+     * One transcode at a time, for a video the TV cannot play otherwise: Transformer on the
+     * phone's decoders and hardware encoders, stopped past the battery and heat limits.
+     */
+    private val transcodes = TranscodeSlot(
+        factory = { EngineTranscoder({ TransformerEngine(activity) }) },
+        health = AndroidDeviceHealth(activity)::read,
+    )
+
     /**
      * Codecs this TV was seen to turn away: an HLS soundtrack sent as it is that the receiver left
      * out of its track list (E-AC-3 on the Mi TV Stick). A fallback to the rewrap converts them.
@@ -222,6 +243,9 @@ class PlayerCast(
         root.addView(pickerView, ViewGroup.LayoutParams(0, 0))
         activity.lifecycleScope.launch { support.session.collect(::onSession) }
         activity.lifecycleScope.launch { support.remote.collect(::onRemote) }
+        activity.lifecycleScope.launch { transcodes.progress.collect(::onTranscode) }
+        // A transcode of an earlier run that died part way left nothing, but its folder goes anyway.
+        TransformerEngine.clearScratch(activity)
     }
 
     val connected: Boolean get() = support.session.value is CastSessionState.Connected
@@ -300,18 +324,21 @@ class PlayerCast(
                 source = src
                 name = file
                 canConvert = AndroidAudioConverter.available()
+                transcodeAbility = withContext(Dispatchers.IO) { AndroidTranscodeAbility.probe(activity) }
                 val p = withContext(Dispatchers.IO) { MediaProbe.of(src, file) }
                 probe = p
                 val preferred = hooks.audioLanguage()?.let { lang -> p.audio.firstOrNull { sameLanguage(it.language, lang) }?.number }
                 val caps = capsFor(connectedState.model)
-                val pl = support.adapt(CastFormats.plan(p, caps, preferred, canConvertAudio = canConvert))
+                val pl = support.adapt(CastFormats.plan(p, caps, preferred, canConvertAudio = canConvert, transcoder = transcodeAbility))
                 plan = pl
                 Log.i(TAG, "Plan for $file on ${connectedState.model}: $pl ($p)")
                 if (!pl.castable) {
                     throw IOException(
-                        when (pl.refusal) {
-                            CastRefusal.VideoCodec -> L.castCannotCastPicture
-                            CastRefusal.Resolution -> L.castPictureTooLarge
+                        when {
+                            // A phone with an encoder would have converted it: said why it cannot.
+                            transcodeAbility == null && AndroidTranscodeAbility.noEncoder && pl.refusal != CastRefusal.Pictures -> L.castTranscodeNoEncoderPhone
+                            pl.refusal == CastRefusal.VideoCodec -> L.castCannotCastPicture
+                            pl.refusal == CastRefusal.Resolution -> L.castPictureTooLarge
                             else -> L.castCannotCastContainer
                         },
                     )
@@ -362,7 +389,7 @@ class PlayerCast(
         server = s
         serverBind = bind
         serverDlna = access != null
-        streams = CastStreams(s, converterFactory = { AndroidAudioConverter() }, serving = access?.serving)
+        streams = CastStreams(s, converterFactory = { AndroidAudioConverter() }, serving = access?.serving, transcodes = transcodes)
     }
 
     /**
@@ -434,6 +461,7 @@ class PlayerCast(
             published = pub
             route = chosen
             loadedAt = System.nanoTime()
+            if (chosen !is CastRoute.Transcode) transcodes.clear()
             mapper.loaded(SystemClock.elapsedRealtime(), wantPlaying)
             if (pub.hls) {
                 val renditions = pub.renditions
@@ -551,10 +579,43 @@ class PlayerCast(
         }
         // The picker follows what the TV has on, whoever changed it.
         if (pub.hls) publishChoices()
-        if (view.phase == CastPhase.Ended && !endedReported) {
+        if (view.phase == CastPhase.Ended && !endedReported && !transcodeCut()) {
             endedReported = true
             hooks.onEnded()
         }
+    }
+
+    /** The TV's stream is a transcode that stopped before its end: an Ended from the TV is not the video's end. */
+    private fun transcodeCut(): Boolean = route is CastRoute.Transcode && transcodes.progress.value?.stop != null
+
+    /**
+     * A transcode stopped by itself (too hot, the battery low, a failure) or by Stop converting:
+     * the TV's player is stopped before it plays the cut stream to its end, and the screen says
+     * why, with Try again and Play here. A transcode replaced by a seek, or one the TV hung up on,
+     * says nothing.
+     */
+    private fun onTranscode(t: TranscodeProgress?) {
+        if (!casting || route !is CastRoute.Transcode) return
+        val text = when (t?.stop ?: return) {
+            TranscodeStop.Cancelled -> L.castTranscodeCancelled
+            TranscodeStop.TooHot -> L.castTranscodeTooHot
+            TranscodeStop.BatteryLow -> L.castTranscodeBatteryLow
+            TranscodeStop.NoEncoder -> L.castTranscodeNoEncoderPhone
+            TranscodeStop.Failed -> L.castTranscodeFailed
+            TranscodeStop.ReceiverGone -> return
+        }
+        Log.w(TAG, "Transcode stopped: ${t.stop} (${t.message})")
+        support.stopMedia()
+        wantPlaying = false
+        error = text
+        refresh()
+    }
+
+    /** Stop converting, from the progress card: the transcode and the TV's player stop. */
+    fun cancelConvert() {
+        if (!transcodes.running) return
+        support.stopMedia()
+        transcodes.cancel()
     }
 
     /**
@@ -623,6 +684,7 @@ class PlayerCast(
             hasSubtitles = CAST_SUBTITLES,
             subtitlesOn = if (pub?.hls == true) hlsText != null else activeSub != null,
             speed = if (remote.supportsRate) rate else null,
+            converting = transcodes.progress.value?.takeIf { route is CastRoute.Transcode || loading },
         )
     }
 
@@ -749,8 +811,19 @@ class PlayerCast(
         }
         audio = number
         publishChoices()
-        val codec = probe?.audio?.firstOrNull { it.number == number }?.codec
-        val next = if (codec != null && codec in CastFormats.MP4_AUDIO) CastRoute.Remux(number) else CastRoute.ConvertAudio(number)
+        val track = probe?.audio?.firstOrNull { it.number == number }
+        val codec = track?.codec
+        val p = probe
+        val ability = transcodeAbility
+        val next = when {
+            // A transcode goes on as one, its sound made for the new track.
+            r is CastRoute.Transcode && p != null && ability != null -> {
+                val caps = capsFor((support.session.value as? CastSessionState.Connected)?.model)
+                r.copy(audioTrack = number, target = TranscodePlanner.target(p, caps, ability, track, r.target.copyVideo))
+            }
+            codec != null && codec in CastFormats.MP4_AUDIO -> CastRoute.Remux(number)
+            else -> CastRoute.ConvertAudio(number)
+        }
         val at = lastKnownMs
         activity.lifecycleScope.launch {
             if (!load(next, at)) {
@@ -856,6 +929,7 @@ class PlayerCast(
         casting = false
         starting?.cancel()
         ticker?.cancel()
+        transcodes.clear()
         runCatching { server?.stop() }
         server = null
         streams = null
@@ -878,6 +952,7 @@ class PlayerCast(
         if (casting && support.serverAccess != null && (mine == null || onTv == null || onTv == mine)) support.endSession()
         casting = false
         ticker?.cancel()
+        transcodes.clear()
         runCatching { server?.stop() }
         server = null
     }
