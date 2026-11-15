@@ -73,6 +73,7 @@ class MergedCastSupport(
     }
 
     override val caps: ReceiverCaps? get() = current.caps
+    override val receiverContainers: Set<Container>? get() = current.receiverContainers
     override val serverAccess: ServerAccess? get() = current.serverAccess
     override val refusal: String? get() = current.refusal
     override fun adapt(plan: CastPlan): CastPlan = current.adapt(plan)

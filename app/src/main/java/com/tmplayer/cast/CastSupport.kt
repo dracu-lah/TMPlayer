@@ -117,6 +117,12 @@ interface CastSupport {
     /** What the connected receiver plays; null: not told, so the model name decides ([ReceiverCaps.forModel]). */
     val caps: ReceiverCaps? get() = null
 
+    /**
+     * The wrappers a DLNA TV says it plays (its Sink list), so a transcode is written as MPEG-TS
+     * for a TV that lists TS and not MP4; null for a Cast receiver, and when not told.
+     */
+    val receiverContainers: Set<Container>? get() = null
+
     /** For a DLNA receiver: the server's rules and headers. Null: a Cast receiver, the server as it always was. */
     val serverAccess: ServerAccess? get() = null
 

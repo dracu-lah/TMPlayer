@@ -22,6 +22,7 @@ class MergedCastSupportTest {
         override val session: StateFlow<CastSessionState> get() = state
         override val remote: StateFlow<RemoteStatus> get() = status
         override var caps: ReceiverCaps? = null
+        override var receiverContainers: Set<Container>? = null
         val calls = ArrayList<String>()
         var discovering = 0
         override fun startDiscovery() { discovering++ }
@@ -155,6 +156,17 @@ class MergedCastSupportTest {
         d.state.value = CastSessionState.Connected("TV", "m", ip(30), CastKind.Dlna)
         m.connect("dlna:udn:a")
         assertSame(d.caps, m.caps)
+    }
+
+    @Test
+    fun `the wrappers a TV lists come from the connected side`() {
+        val g = Fake()
+        val d = Fake().also { it.receiverContainers = setOf(Container.MpegTs) }
+        val m = merged(g, d)
+        assertNull(m.receiverContainers)
+        d.state.value = CastSessionState.Connected("TV", "m", ip(30), CastKind.Dlna)
+        m.connect("dlna:udn:a")
+        assertEquals(setOf(Container.MpegTs), m.receiverContainers)
     }
 
     @Test

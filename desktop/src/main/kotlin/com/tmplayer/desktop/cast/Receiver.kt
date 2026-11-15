@@ -1,6 +1,7 @@
 package com.tmplayer.desktop.cast
 
 import com.tmplayer.cast.CastPlan
+import com.tmplayer.cast.Container
 import com.tmplayer.cast.ReceiverCaps
 import com.tmplayer.cast.ReceiverMedia
 import com.tmplayer.cast.ReceiverState
@@ -120,6 +121,9 @@ interface Receiver {
     /** The plan as this receiver can use it (DLNA drops HLS). */
     fun adapt(plan: CastPlan): CastPlan = plan
 
+    /** The wrappers a DLNA TV lists (its Sink list), so a transcode is MPEG-TS for a TV that lists TS and not MP4; null for Cast. */
+    val containers: Set<Container>? get() = null
+
     suspend fun connect()
     suspend fun load(request: ReceiverLoad): ReceiverAnswer
     fun play()
@@ -232,6 +236,7 @@ class DlnaReceiver(
     @Volatile
     private var sink = com.tmplayer.cast.dlna.SinkCaps.SAFE
     override val caps: ReceiverCaps get() = sink.caps
+    override val containers: Set<Container>? get() = sink.containers.takeIf { sink.declared }
 
     private val _media = MutableStateFlow(RemoteMediaStatus())
     override val media: StateFlow<RemoteMediaStatus> = _media.asStateFlow()

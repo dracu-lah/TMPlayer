@@ -338,7 +338,7 @@ class PlayerCast(
                 probe = p
                 val preferred = hooks.audioLanguage()?.let { lang -> p.audio.firstOrNull { sameLanguage(it.language, lang) }?.number }
                 val caps = capsFor(connectedState.model)
-                val pl = support.adapt(CastFormats.plan(p, caps, preferred, canConvertAudio = canConvert, transcoder = transcodeAbility, linkKbps = link.estimate().kbps))
+                val pl = support.adapt(CastFormats.plan(p, caps, preferred, canConvertAudio = canConvert, transcoder = transcodeAbility, linkKbps = link.estimate().kbps, receiverContainers = support.receiverContainers))
                 plan = pl
                 Log.i(TAG, "Plan for $file on ${connectedState.model}: $pl ($p)")
                 if (!pl.castable) {
@@ -430,7 +430,7 @@ class PlayerCast(
     private fun retarget(r: CastRoute.Transcode, p: MediaProbe): CastRoute.Transcode {
         val ability = transcodeAbility ?: return r
         val caps = capsFor((support.session.value as? CastSessionState.Connected)?.model)
-        return TranscodePlanner.retarget(r, p, caps, ability, link.estimate().kbps, null)
+        return TranscodePlanner.retarget(r, p, caps, ability, link.estimate().kbps, support.receiverContainers)
     }
 
     private suspend fun load(r: CastRoute, atMs: Long): Boolean {

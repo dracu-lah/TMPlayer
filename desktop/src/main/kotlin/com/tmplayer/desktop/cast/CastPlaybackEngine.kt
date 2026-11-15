@@ -148,7 +148,7 @@ class CastPlaybackEngine(
                 probe = p
                 val preferred = prefs.audioLanguage?.let { lang -> p.audio.firstOrNull { sameLanguage(it.language, lang) }?.number }
                 ffmpeg = DesktopFfmpeg.detect()
-                val pl = receiver.adapt(CastFormats.plan(p, receiver.caps, preferred, canConvertAudio = false, transcoder = ffmpeg?.ability, linkKbps = link.estimate().kbps))
+                val pl = receiver.adapt(CastFormats.plan(p, receiver.caps, preferred, canConvertAudio = false, transcoder = ffmpeg?.ability, linkKbps = link.estimate().kbps, receiverContainers = receiver.containers))
                 plan = pl
                 Logger.i(TAG, "Plan for $name on ${receiver.model} (${receiver.kind}): $pl ($p)")
                 if (!pl.castable) {
@@ -215,7 +215,7 @@ class CastPlaybackEngine(
                 is CastRoute.Hls -> r.copy(audioTrack = audio?.takeIf { a -> r.audio.any { it.number == a } } ?: r.audioTrack)
                 is CastRoute.Remux -> r.copy(audioTrack = audio?.takeIf { a -> p.audio.firstOrNull { it.number == a }?.codec in CastFormats.MP4_AUDIO })
                 // Planned again with the link as it is now (it may have been measured since the cast began).
-                is CastRoute.Transcode -> ffmpeg?.ability?.let { TranscodePlanner.retarget(r, p, receiver.caps, it, link.estimate().kbps, null) } ?: r
+                is CastRoute.Transcode -> ffmpeg?.ability?.let { TranscodePlanner.retarget(r, p, receiver.caps, it, link.estimate().kbps, receiver.containers) } ?: r
                 else -> r
             }
             val pub = st.publish(src, p, chosen, atMs, name)
@@ -556,7 +556,7 @@ class CastPlaybackEngine(
                 val p = probe
                 val next = if (r is CastRoute.Transcode && p != null) {
                     val ability = ffmpeg?.ability
-                    if (ability == null) r else TranscodePlanner.retarget(r.copy(audioTrack = id), p, receiver.caps, ability, link.estimate().kbps, null)
+                    if (ability == null) r else TranscodePlanner.retarget(r.copy(audioTrack = id), p, receiver.caps, ability, link.estimate().kbps, receiver.containers)
                 } else CastRoute.Remux(id)
                 scope.launch { load(next, at) }
             }

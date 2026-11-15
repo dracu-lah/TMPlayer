@@ -92,6 +92,7 @@ class DlnaCastSupport(
     private var muted = false
 
     override val caps: ReceiverCaps? get() = if (connected != null) sink.caps else null
+    override val receiverContainers: Set<Container>? get() = if (connected != null && sink.declared) sink.containers else null
     override val refusal: String? get() = refused
     override val serverAccess: ServerAccess?
         get() {

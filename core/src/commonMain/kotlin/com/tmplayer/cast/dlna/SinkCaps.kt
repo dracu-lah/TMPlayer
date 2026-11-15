@@ -1,11 +1,14 @@
 package com.tmplayer.cast.dlna
 
+import com.tmplayer.cast.CastFormats
 import com.tmplayer.cast.CastPlan
 import com.tmplayer.cast.CastRefusal
 import com.tmplayer.cast.CastRoute
 import com.tmplayer.cast.Container
+import com.tmplayer.cast.MediaProbe
 import com.tmplayer.cast.ReceiverCaps
 import com.tmplayer.cast.Support
+import com.tmplayer.cast.TranscodeAbility
 import java.util.Locale
 
 /**
@@ -100,3 +103,20 @@ fun CastPlan.forDlna(): CastPlan {
     val kept = routes.filterNot { it is CastRoute.Hls }
     return if (kept.isEmpty()) copy(routes = kept, refusal = refusal ?: CastRefusal.Container) else copy(routes = kept)
 }
+
+/**
+ * The plan for [probe] on the renderer whose Sink list this is: what it plays ([SinkCaps.caps]) and
+ * the wrappers it lists ([SinkCaps.containers]) both reach the plan, so a transcode is written as
+ * MPEG-TS for a TV that lists TS and not MP4, and as fragmented MP4 for the rest, then HLS dropped
+ * ([forDlna]). A list the renderer did not give counts as none: the safe set, fragmented MP4.
+ */
+fun SinkCaps.plan(
+    probe: MediaProbe,
+    preferredAudio: Int? = null,
+    canConvertAudio: Boolean = false,
+    transcoder: TranscodeAbility? = null,
+    linkKbps: Int? = null,
+): CastPlan = CastFormats.plan(
+    probe, caps, preferredAudio, canConvertAudio, transcoder, linkKbps,
+    receiverContainers = containers.takeIf { declared },
+).forDlna()

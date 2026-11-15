@@ -1,15 +1,21 @@
 package com.tmplayer.data
 
+import com.tmplayer.cast.AudioTrack
 import com.tmplayer.cast.ByteRange
+import com.tmplayer.cast.Codecs
+import com.tmplayer.cast.Container
 import com.tmplayer.cast.Ffmpeg
 import com.tmplayer.cast.FfmpegProgress
+import com.tmplayer.cast.MediaProbe
 import com.tmplayer.cast.Mp4Probe
+import com.tmplayer.cast.VideoTrack
 import com.tmplayer.cast.WebVtt
 import com.tmplayer.cast.dlna.Didl
 import com.tmplayer.cast.dlna.DeviceDescription
 import com.tmplayer.cast.dlna.DlnaFeatures
 import com.tmplayer.cast.dlna.DlnaPlayback
 import com.tmplayer.cast.dlna.SinkCaps
+import com.tmplayer.cast.dlna.plan
 import com.tmplayer.cast.dlna.Soap
 import com.tmplayer.cast.dlna.Ssdp
 import com.tmplayer.cast.dlna.TransportActions
@@ -202,6 +208,10 @@ class GarbageInputTest {
             survive("Didl.parse", text) { Didl.parse(text) }
             survive("Didl.item", text) { Didl.parse(Didl.item(text, text, text, DlnaFeatures(profile = text), subtitleUrl = text, durationMs = text.length.toLong())) }
             survive("SinkCaps.parse", text) { SinkCaps.parse(text) }
+            survive("SinkCaps.plan", text) {
+                val probe = MediaProbe(Container.Avi, 60_000, VideoTrack(1, Codecs.H264, 1920, 1080), listOf(AudioTrack(2, Codecs.AAC, channels = 2)))
+                SinkCaps.parse(text).plan(probe, transcoder = Ffmpeg.ability(setOf("libx264", "aac")))
+            }
             survive("UpnpTime.parseMs", text) { UpnpTime.parseMs(text) }
             survive("TransportActions.parse", text) { TransportActions.parse(text) }
             survive("DlnaPlayback.update", text) {
