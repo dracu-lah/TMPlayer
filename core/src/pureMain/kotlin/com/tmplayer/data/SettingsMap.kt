@@ -256,6 +256,7 @@ object SettingsMap {
         row("home_continue", h, "settings.home_continue", PTD, onOff("settings.home_continue"))
         row("home_recent", h, "settings.home_recent", PTD, onOff("settings.home_recent"))
         row("home_starred_rows", h, "settings.home_starred_rows", PTD, onOff("settings.home_starred_rows"))
+        row("home_order", h, "settings.home_order", PTD, listOf("settings.home_order_hint", "settings.home_order_hint_tv"))
 
         val tv = SettingsGroup.TvHome
         row("watch_next", tv, "settings.watch_next", T, onOff("settings.watch_next"), SettingsNeed.LauncherPlayNext)

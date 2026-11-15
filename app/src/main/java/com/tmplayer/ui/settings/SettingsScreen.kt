@@ -1508,6 +1508,22 @@ fun SettingsScreen(
                     )
                 }
                 settingsNote { SettingsNoteText(s.settingsHomeFollowsAddedChosen) }
+                // The order Home draws its rows in (EG-F7, EG-F23): Move up and down and a drag
+                // handle on a phone, a move mode on a television (OK picks up, Up and Down move,
+                // OK drops, Back cancels). One list: starred chats come and go with their stars.
+                sectionTitle { s.settingsHomeOrder }
+                settingsNote(key = "home_order") {
+                    val starredChats = remember(chats, favorites) { com.tmplayer.data.HomeRows.favouriteChats(chats, favorites) }
+                    val orderRows = rememberHomeOrderRows(homeLayout, starredChats)
+                    HomeOrderSection(
+                        rows = orderRows,
+                        hasOrder = homeLayout.order.isNotEmpty(),
+                        onOrder = { next -> scope.launch { settings.setHomeOrder(next) } },
+                        onReset = { scope.launch { settings.setHomeOrder(emptyList()) } },
+                        remote = !isTouch(),
+                        modifier = Modifier.padding(horizontal = 16.dp).seekable(s.settingsHomeOrder),
+                    )
+                }
             }
 
             // What TMPlayer puts on the Android TV home screen, a page of its own rather than two rows

@@ -639,7 +639,7 @@ internal class SettingsPages(
                     SettingsCategory.Subtitles -> SubtitlesRows(state)
                     SettingsCategory.Mouse -> MouseRows(state)
                     SettingsCategory.Library -> LibraryRows(state, chatList, jumps)
-                    SettingsCategory.Home -> HomeLayoutRows(state)
+                    SettingsCategory.Home -> HomeLayoutRows(state, chatList)
                     SettingsCategory.Notifications -> NotificationRows(state)
                     SettingsCategory.Storage -> StorageGroup(state, jumps)
                     SettingsCategory.Account -> AccountRows(state, onPin, onKidsChats)

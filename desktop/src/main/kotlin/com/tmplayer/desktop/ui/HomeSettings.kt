@@ -6,12 +6,17 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.tmplayer.data.HomeLayout
+import com.tmplayer.data.HomeRows
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.icons.TmIcons
+import com.tmplayer.ui.settings.HomeOrderSection
+import com.tmplayer.ui.settings.rememberHomeOrderRows
+import com.tmplayer.ui.settings.seekable
 import com.tmplayer.ui.theme.Tone
 import kotlinx.coroutines.launch
 
@@ -22,7 +27,7 @@ import kotlinx.coroutines.launch
  * Add chats and is gone (2026-11-01).
  */
 @Composable
-internal fun HomeLayoutRows(state: ShellState) {
+internal fun HomeLayoutRows(state: ShellState, chatList: List<com.tmplayer.data.ChatSummary> = emptyList()) {
     val s = LocalStrings.current
     val settings = state.settings
     val scope = rememberCoroutineScope()
@@ -64,5 +69,19 @@ internal fun HomeLayoutRows(state: ShellState) {
         style = MaterialTheme.typography.bodySmall,
         color = Tone.muted,
         modifier = Modifier.padding(start = SETTING_INSET, end = SETTING_INSET, top = 4.dp),
+    )
+
+    // The order Home draws its rows in: Move up and down, or drag a row by its handle (EG-F7, EG-F23).
+    Group(s.settingsHomeOrder)
+    val favourites by settings.favorites.collectAsState(initial = emptySet())
+    // The live chat list is what the kids lock already filters, so its stars are the ones Home shows.
+    val starred = remember(chatList, favourites) { HomeRows.favouriteChats(chatList, favourites) }
+    HomeOrderSection(
+        rows = rememberHomeOrderRows(layout, starred),
+        hasOrder = layout.order.isNotEmpty(),
+        onOrder = { next -> scope.launch { settings.setHomeOrder(next) } },
+        onReset = { scope.launch { settings.setHomeOrder(emptyList()) } },
+        remote = false,
+        modifier = Modifier.padding(horizontal = SETTING_INSET).seekable(s.settingsHomeOrder),
     )
 }
