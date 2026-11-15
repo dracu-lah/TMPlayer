@@ -101,6 +101,15 @@ class SetupRenderTest {
     // What a device that is fine gets: Device takes Storage's place only on a low-end one.
     private val all = SetupStep.entries.filter { it != SetupStep.Device }
 
+    // FocusVisibility is one flag for the whole process, and a test before this one in the same
+    // JVM can leave it off (a mouse press through FocusVisible): then no focus fill is drawn here
+    // and the focus tests read the resting colour (useRecommendedStaysSecondaryUnderTheFocus on
+    // Windows CI). The setup is a keyboard and remote screen, so focus is shown, as the app starts.
+    @org.junit.Before
+    fun focusShown() {
+        com.tmplayer.ui.theme.FocusVisibility.visible = true
+    }
+
     @After
     fun reset() {
         com.tmplayer.data.DeviceFitOverride.forced = null
