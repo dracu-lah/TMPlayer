@@ -2581,7 +2581,7 @@ private fun Root() {
                 },
             )
         }
-        supporting?.let { from -> SupportDialog(from = from, onClose = { supporting = null }) }
+        supporting?.let { SupportDialog(onClose = { supporting = null }) }
 
         // S1: "Help fix crashes?", once, for an install never asked (the setup's step was skipped,
         // or it was signed in before the step existed). On the chat list, behind every other card.

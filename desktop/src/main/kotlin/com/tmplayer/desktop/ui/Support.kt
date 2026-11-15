@@ -66,7 +66,10 @@ import androidx.compose.ui.unit.dp
 import com.tmplayer.data.SupportReminder
 import com.tmplayer.desktop.os.OpenExternal
 import com.tmplayer.platform.Background
+import com.tmplayer.data.SupportRegion
 import com.tmplayer.ui.about.About
+import com.tmplayer.ui.about.SupportActions
+import com.tmplayer.ui.about.SupportDialog
 import com.tmplayer.ui.about.BmcBrand
 import com.tmplayer.ui.about.BmcCupMark
 import com.tmplayer.ui.auth.QrCode
@@ -77,64 +80,47 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * "Support TMPlayer" on the desktop: one link to the support page, which lists both donate links,
- * the star and the share, with an Open button and a QR code for paying from the phone instead.
- * [from] tags the visit (`card1`, `settings`, `about`). The words and address are [About]'s.
+ * What the shared support window does on the desktop: the browser, the clipboard (a refused one
+ * leaves the ID on screen to copy by hand) and the star being remembered. A computer has no UPI
+ * app, so there is no "Open in a UPI app": the code for the phone and the ID to copy are the way.
  */
 @Composable
-fun SupportPopup(from: String, onClose: () -> Unit) {
-    val s = LocalStrings.current
-    val link = remember(from) { About.supportLinks(from).first() }
-    TmAlertDialog(
-        onDismissRequest = onClose,
-        icon = { Icon(TmIcons.Favorite, contentDescription = null, tint = Tone.accent) },
-        title = { Text(About.SUPPORT_TITLE) },
-        text = {
-            Column(Modifier.widthIn(max = 420.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text(
-                    s.supportPopupNote(About.SUPPORT_NOTE),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                SupportCode(link, Modifier.fillMaxWidth())
-            }
-        },
-        confirmButton = { TextButton(onClick = onClose) { Text(s.commonClose) } },
+private fun rememberSupportActions(onStarred: () -> Unit = {}): SupportActions {
+    val clipboard = LocalClipboardManager.current
+    return remember(clipboard) {
+        SupportActions(
+            openLink = { url ->
+                OpenExternal.browse(url)
+                true
+            },
+            copy = { text -> runCatching { clipboard.setText(AnnotatedString(text)) }.isSuccess },
+            onStarred = onStarred,
+        )
+    }
+}
+
+/** The region's order on this computer: the language's region, since a computer has no SIM. */
+private fun desktopOrder(): SupportRegion.Order = SupportRegion.order(java.util.Locale.getDefault().country, null)
+
+/**
+ * "Support TMPlayer" on the desktop, opened from Settings and About: the shared window with Buy Me
+ * a Coffee and UPI as cards, the region's way first (D1). Nothing opens until a press.
+ */
+@Composable
+fun SupportPopup(onClose: () -> Unit, onStarred: () -> Unit = {}) {
+    SupportDialog(
+        order = remember { desktopOrder() },
+        title = About.SUPPORT_TITLE,
+        text = About.SUPPORT_NOTE,
+        actions = rememberSupportActions(onStarred = onStarred),
+        onClose = onClose,
     )
 }
 
-@Composable
-private fun SupportCode(link: About.Link, modifier: Modifier) {
-    val s = LocalStrings.current
-    val bitmap by produceState<ImageBitmap?>(initialValue = null, key1 = link.url) {
-        value = withContext(Dispatchers.Default) { QrCode.render(link.url, QR_PIXELS) }
-    }
-    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Box(
-            Modifier.size(PLATE).clip(RoundedCornerShape(Corner.Large)).background(Color.White),
-            contentAlignment = Alignment.Center,
-        ) {
-            bitmap?.let {
-                Image(it, contentDescription = s.updateQrFor(link.title), modifier = Modifier.fillMaxSize().padding(8.dp))
-            }
-        }
-        Text(link.title, style = MaterialTheme.typography.titleSmall, textAlign = TextAlign.Center)
-        Text(
-            link.url.substringBefore('?').removePrefix("https://"),
-            style = MaterialTheme.typography.bodySmall,
-            color = Tone.muted,
-            textAlign = TextAlign.Center,
-        )
-        OutlinedButton(onClick = { OpenExternal.browse(link.url) }) { Text(s.commonOpen) }
-    }
-}
-
 /**
- * The Buy Me a Coffee window on the desktop: the ask itself when [asking] (after real use, at most
- * every two weeks, see [SupportReminder]), or the same window opened from About.
- *
- * Buy Me a Coffee comes first and in its own colours: a card on their yellow with a code for paying
- * from the phone, which is also the link that opens the page in the browser. GitHub Sponsors and
- * a star on GitHub are the quieter links beside it. "Don't show again" ends the asks and the notification for good.
+ * The gentle ask on the desktop, after real use and at most every two weeks (see [SupportReminder]):
+ * the same shared window with "Maybe later" ([onLater]) and "Don't show again" ([onNever]). With
+ * [asking] false it is the plain window with Close.
  */
 @Composable
 fun CoffeeDialog(
@@ -143,57 +129,16 @@ fun CoffeeDialog(
     onLater: () -> Unit,
     onNever: () -> Unit,
     onSupporter: (() -> Unit)? = null,
+    onStarred: () -> Unit = {},
 ) {
-    val s = LocalStrings.current
-    TmAlertDialog(
-        onDismissRequest = onLater,
-        title = { Text(if (asking) About.reminderTitle(1) else About.SUPPORT_TITLE) },
-        text = {
-            Column(Modifier.widthIn(max = 480.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
-                Text(
-                    if (asking) About.reminderText(1, counters) else About.SUPPORT_NOTE,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                val links: @Composable () -> Unit = {
-                    TextButton(onClick = { OpenExternal.browse(About.SPONSORS) }) { Text(s.supportSponsorGithub) }
-                    // Buy Me a Coffee takes cards and PayPal, so UPI stands beside it for anybody
-                    // who pays that way (user, 2026-11-01). A computer has no UPI app, so it is the
-                    // code for the phone in the viewer's hand and the ID to copy, never a button
-                    // that would open nothing.
-                    UpiRow()
-                    // A star costs nothing and is worth asking for too (user, 2026-10-18).
-                    TextButton(onClick = { OpenExternal.browse(About.SOURCE) }) {
-                        Icon(TmIcons.StarOutline, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text(s.supportStarGithub)
-                    }
-                    // The browser build's way out for a viewer who already gives: no more
-                    // windows, no coffee button, and About says thank you (coffeeOffersSupporter).
-                    if (onSupporter != null) {
-                        TextButton(onClick = onSupporter) { Text(s.webCoffeeAlready) }
-                    }
-                }
-                // The card is the Buy Me a Coffee link as well as its code, so the window has one
-                // way to it rather than a card and a button saying the same (user, 2026-10-18).
-                // On a phone's width (the browser build) the links go under the card, not beside it.
-                BoxWithConstraints {
-                    if (maxWidth >= STACK_BELOW) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(20.dp), verticalAlignment = Alignment.CenterVertically) {
-                            CoffeeCode(onOpen = { OpenExternal.browse(About.COFFEE) })
-                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) { links() }
-                        }
-                    } else {
-                        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                            CoffeeCode(onOpen = { OpenExternal.browse(About.COFFEE) })
-                            Spacer(Modifier.size(8.dp))
-                            links()
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onLater) { Text(if (asking) s.supportMaybeLater else s.commonClose) } },
-        dismissButton = if (asking) ({ TextButton(onClick = onNever) { Text(s.supportDontShow) } }) else null,
+    SupportDialog(
+        order = remember { desktopOrder() },
+        title = if (asking) About.reminderTitle(1) else About.SUPPORT_TITLE,
+        text = if (asking) About.reminderText(1, counters) else About.SUPPORT_NOTE,
+        actions = rememberSupportActions(onStarred = onStarred),
+        onClose = onLater,
+        onNever = if (asking) onNever else null,
+        onSupporter = onSupporter,
     )
 }
 
@@ -209,68 +154,6 @@ fun CoffeeButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
         BmcCupMark(height = 22.dp)
         Spacer(Modifier.width(10.dp))
         Text(LocalStrings.current.supportBuyCoffee, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-    }
-}
-
-/**
- * The code for Buy Me a Coffee on their yellow, with their cup, their name and the address in
- * their ink. It is also the link: a click opens the page in the browser, and while the pointer is
- * over it or the keyboard is on it, an arrow in the top end corner says it leads out of the app and
- * the card lifts a little.
- */
-@Composable
-private fun CoffeeCode(onOpen: () -> Unit) {
-    val s = LocalStrings.current
-    val bitmap by produceState<ImageBitmap?>(initialValue = null, key1 = About.COFFEE) {
-        value = withContext(Dispatchers.Default) { QrCode.render(About.COFFEE, QR_PIXELS) }
-    }
-    val interaction = remember { MutableInteractionSource() }
-    val hovered by interaction.collectIsHoveredAsState()
-    val focused by interaction.collectIsFocusedAsState()
-    val lit = hovered || focused
-    val lift by animateFloatAsState(if (lit) 1.03f else 1f, label = "coffee-lift")
-    val shape = RoundedCornerShape(Corner.Large)
-    Box(
-        Modifier
-            .graphicsLayer { scaleX = lift; scaleY = lift }
-            .clip(shape)
-            .background(BmcBrand.Yellow)
-            .then(if (focused) Modifier.border(2.dp, BmcBrand.Ink, shape) else Modifier)
-            .hoverable(interaction)
-            .pointerHoverIcon(PointerIcon.Hand)
-            .clickable(interactionSource = interaction, indication = LocalIndication.current, role = Role.Button, onClick = onOpen)
-            .semantics { contentDescription = s.supportBuyCoffee },
-    ) {
-        Column(
-            Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                BmcCupMark(height = 18.dp)
-                Text("Buy Me a Coffee", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = BmcBrand.Ink) // i18n-ok: brand name
-            }
-            Box(
-                Modifier.size(150.dp).clip(RoundedCornerShape(Corner.Medium)).background(Color.White),
-                contentAlignment = Alignment.Center,
-            ) {
-                bitmap?.let { Image(it, contentDescription = s.supportScanCoffee, modifier = Modifier.fillMaxSize().padding(8.dp)) }
-            }
-            Text(
-                About.COFFEE.removePrefix("https://"),
-                style = MaterialTheme.typography.labelSmall,
-                color = BmcBrand.Ink,
-                textAlign = TextAlign.Center,
-            )
-        }
-        AnimatedVisibility(
-            visible = lit,
-            enter = fadeIn(),
-            exit = fadeOut(),
-            modifier = Modifier.align(Alignment.TopEnd).padding(6.dp),
-        ) {
-            Icon(TmIcons.OpenExternal, contentDescription = null, tint = BmcBrand.Ink, modifier = Modifier.size(18.dp))
-        }
     }
 }
 
@@ -346,6 +229,7 @@ fun SupportAskHost(state: ShellState) {
                 asking = false
                 if (SupportReminder.forcedRung == 0) Background.scope.launch { runCatching { settings.markSupportNever() } }
             },
+            onStarred = { Background.scope.launch { runCatching { settings.markSupportStarred() } } },
             onSupporter = if (coffeeOffersSupporter) {
                 {
                     asking = false
@@ -365,44 +249,4 @@ fun SupportAskHost(state: ShellState) {
  */
 var coffeeOffersSupporter: Boolean = false
 
-/** Below this width the coffee window's links sit under the card. */
-private val STACK_BELOW = 400.dp
-
-private val PLATE = 180.dp
-private const val QR_PIXELS = 400
 private const val CARD_DELAY_MS = 4_000L
-
-/**
- * Paying by UPI on a computer (user, 2026-11-01): the code a phone's UPI app reads, the ID beside
- * it, and a button that copies the ID for whoever would rather type it in their own app. There is
- * no `upi://` handler on Windows, Linux or macOS, so nothing here pretends to open one.
- */
-@Composable
-private fun UpiRow() {
-    val s = LocalStrings.current
-    val clipboard = LocalClipboardManager.current
-    var copied by remember { mutableStateOf(false) }
-    val bitmap by produceState<ImageBitmap?>(initialValue = null, key1 = About.UPI_LINK) {
-        value = withContext(Dispatchers.Default) { QrCode.render(About.UPI_LINK, QR_PIXELS) }
-    }
-    Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            Modifier.size(104.dp).clip(RoundedCornerShape(Corner.Small)).background(Color.White),
-            contentAlignment = Alignment.Center,
-        ) {
-            // A scanner needs a quiet margin of the code's own white to find it.
-            bitmap?.let { Image(it, contentDescription = s.supportScanUpi, modifier = Modifier.fillMaxSize().padding(8.dp)) }
-        }
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(s.supportPayUpi, style = MaterialTheme.typography.titleSmall)
-            Text(s.supportScanUpi, style = MaterialTheme.typography.bodySmall)
-            Text(About.UPI_ID, style = MaterialTheme.typography.bodyMedium)
-            TextButton(
-                onClick = {
-                    // A refused clipboard leaves the ID on screen to copy by hand.
-                    copied = runCatching { clipboard.setText(AnnotatedString(About.UPI_ID)) }.isSuccess
-                },
-            ) { Text(if (copied) s.supportUpiCopied else s.supportUpiCopy) }
-        }
-    }
-}

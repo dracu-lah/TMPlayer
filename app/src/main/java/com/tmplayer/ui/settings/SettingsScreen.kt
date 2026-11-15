@@ -2459,7 +2459,7 @@ fun SettingsScreen(
     }
 
     qrLink?.let { (url, what) -> LinkQrDialog(url = url, what = what, onClose = { qrLink = null }) }
-    if (supporting) SupportDialog(from = "settings", onClose = { supporting = false })
+    if (supporting) SupportDialog(onClose = { supporting = false })
     if (pickingLanguage) LanguageDialog(settings, onClose = { pickingLanguage = false })
     if (pickingLayout) LayoutSheet(onClose = { pickingLayout = false })
     if (showingLearnt) {

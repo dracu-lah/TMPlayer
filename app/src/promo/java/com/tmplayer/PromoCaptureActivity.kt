@@ -437,7 +437,7 @@ class PromoCaptureActivity : ComponentActivity() {
                             onNever = { supportRung = 0 },
                         )
                     }
-                    if (supporting) SupportDialog(from = "card1", onClose = { supporting = false })
+                    if (supporting) SupportDialog(onClose = { supporting = false })
                     // `--ez update_dialog true` opens the update popup over the screen, offering
                     // whatever the site's live feed names (this build calls itself x.y.z-promo).
                     if (updateDialog) {

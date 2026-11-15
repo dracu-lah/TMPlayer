@@ -9,6 +9,7 @@ import com.tmplayer.data.NewVideoAlerts
 import com.tmplayer.data.Notice
 import com.tmplayer.data.PieceAlerts
 import com.tmplayer.data.StorageAlerts
+import com.tmplayer.data.SupportRegion
 import com.tmplayer.data.SupportReminder
 import com.tmplayer.data.Td
 import com.tmplayer.data.UpdateAlerts
@@ -123,7 +124,19 @@ private suspend fun askForSupport(state: ShellState, notices: DesktopNotices, ru
     val counters = state.settings.supportCountersNow()
     val star = rung == SupportReminder.NudgeRung.Star
     val buttons = buildList {
-        if (!star) add(NoticeButton(L.supportBuyCoffee) { OpenExternal.browse(About.COFFEE) })
+        // By region (SupportRegion): in India the first button is Pay by UPI and opens the support
+        // window, where UPI is paid from; elsewhere Buy me a coffee opens its page.
+        val upiFirst = SupportRegion.order(java.util.Locale.getDefault().country, null).first == SupportRegion.Method.Upi
+        if (!star && upiFirst) {
+            add(
+                NoticeButton(L.supportPayUpi) {
+                    DesktopTransferNotifier.raise()
+                    SupportReminder.requestOpen()
+                },
+            )
+        } else if (!star) {
+            add(NoticeButton(L.supportBuyCoffee) { OpenExternal.browse(About.COFFEE) })
+        }
         if (SupportReminder.offersStar(counters, rung)) {
             add(
                 NoticeButton(L.supportStarGithub) {
