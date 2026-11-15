@@ -44,7 +44,7 @@ import com.tmplayer.ui.theme.Tone
 import kotlinx.coroutines.launch
 
 /**
- * The posters picked in a chat's grid for "Download selected": Ctrl+click (Cmd+click on macOS)
+ * The selection every list on the desktop shares (a chat's grid, History, Downloads): Ctrl+click (Cmd+click on macOS)
  * adds or takes away one, Shift+click takes in everything from the last one picked.
  *
  * Indices are the grid's, ids are [MediaItem.id]; the ids are what is kept, so a page loading
@@ -84,10 +84,24 @@ class GridSelection(
 
     /** Shift+click: everything between the last poster picked and this one, added. */
     fun extend(index: Int) {
+        if (index < 0) return
         val from = anchor ?: return toggle(index)
         val range = if (from <= index) from..index else index..from
         ids = ids + range.mapNotNull(idAt)
         anchor = index
+    }
+
+    /** This row in or out, by its index (the page's own checkbox, a menu's Select). */
+    fun pick(index: Int, on: Boolean) {
+        if (index < 0) return
+        val id = idAt(index) ?: return
+        ids = if (on) ids + id else ids - id
+        anchor = index
+    }
+
+    /** Takes [gone] out of the selection: rows deleted or moved while work ran. */
+    fun remove(gone: Set<String>) {
+        if (ids.any { it in gone }) ids = ids - gone
     }
 
     fun selectAll(all: List<String>) {

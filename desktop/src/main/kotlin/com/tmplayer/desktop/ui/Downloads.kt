@@ -25,6 +25,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.isCtrlPressed
+import androidx.compose.ui.input.pointer.isMetaPressed as pointerMeta
+import androidx.compose.ui.input.pointer.isShiftPressed
 import androidx.compose.ui.input.pointer.isPrimaryPressed
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.onPointerEvent
@@ -138,7 +140,13 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
     val toast = rememberToast()
     val queue = active.values.sortedBy { it.order }
 
-    var picked by remember { mutableStateOf<Set<String>>(emptySet()) }
+    // The kept rows as the page lists them, for the selection's indices (set where the shelf is).
+    val rowOrderRef = remember { arrayOf(emptyList<String>()) }
+    // The same selection the grids use: Ctrl+click, Shift+click's range, Ctrl+A, Esc.
+    val selection = remember { GridSelection { rowOrderRef[0].getOrNull(it) } }
+    // A deleted row hands the keyboard to the one after it, else the one before.
+    val rowHandoff = remember { RowFocusHandoff() }
+    val picked = selection.ids
     var confirm by remember { mutableStateOf<List<ResumeRecord>?>(null) }
     // The other prompts on this page: a stray file to delete.
     var confirmUnlisted by remember { mutableStateOf<File?>(null) }
@@ -158,7 +166,7 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
     var cachedOpen by remember { mutableStateOf(state.downloadsOpenRecent) }
     // Where the Recently played heading sits, for Settings' Recently played row to land on.
     val cachedHeadingAt = remember { intArrayOf(-1) }
-    BackHandler(enabled = picked.isNotEmpty()) { picked = emptySet() }
+    BackHandler(enabled = picked.isNotEmpty()) { selection.clear() }
 
     // Save to folder: the question, the progress and the result live in DesktopFolderExport, so
     // a batch keeps going while the viewer is on another page and is drawn again on return.
@@ -172,7 +180,9 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
             lastFolderFree = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { DesktopFolderExport.lastFolderFree() }
         }
     }
-    val selectAll = { picked = history.map { it.key }.toSet() }
+    val selectAll = { selection.selectAll(history.map { it.key }) }
+    // A download that went (deleted, moved, its record gone) leaves the selection at once.
+    LaunchedEffect(history) { selection.keepOnly(history.mapTo(HashSet()) { it.key }) }
 
     val reviewSections = freeUpSections(sources, unfinished, figures?.picturesBytes ?: 0L)
 
@@ -187,7 +197,7 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
         scope.launch {
             val outcome = runFreeUp(state, picks, sections, records, recents)
             // A download that went leaves the selection too.
-            picked = picked - com.tmplayer.data.FreeUpReview.downloadsPicked(picks, sections).map { it.key }.toSet()
+            selection.remove(com.tmplayer.data.FreeUpReview.downloadsPicked(picks, sections).map { it.key }.toSet())
             refresh++
             freeUpBusy = false
             // A toast, not a line inside the card.
@@ -244,10 +254,9 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
 
     Column(
         Modifier.fillMaxSize().onPreviewKeyEvent { event ->
-            // Ctrl+A (Cmd+A on a Mac) picks every download while a selection is on; with none,
-            // the key is left to whatever has focus.
-            val chord = event.isCtrlPressed || event.isMetaPressed
-            if (picked.isNotEmpty() && chord && event.key == Key.A && event.type == KeyEventType.KeyDown) {
+            // Ctrl+A (Cmd+A on a Mac) picks every download, starting a selection when none is on.
+            // The page has no text field, so the key is not taken from one.
+            if (isSelectAllChord(event) && history.isNotEmpty()) {
                 selectAll()
                 true
             } else {
@@ -268,7 +277,7 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
             },
             actions = {
                 if (picked.isNotEmpty()) {
-                    TextButton(onClick = { picked = emptySet() }) { Text(s.commonClearSelection) }
+                    TextButton(onClick = { selection.clear() }) { Text(s.commonClearSelection) }
                     TextButton(onClick = selectAll, enabled = picked.size < history.size) { Text(s.downloadsSelectAll) }
                     OutlinedButton(onClick = { saveToFolder(pickedRecords) }) {
                         Icon(TmIcons.Folder, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -313,6 +322,14 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
                     }
                 }
             }
+        val rowOrder = shelf.flatMap { entry ->
+            when (entry) {
+                is com.tmplayer.data.DownloadShelf.Entry.Single -> listOf(entry.row.key)
+                is com.tmplayer.data.DownloadShelf.Entry.Show -> entry.episodes.map { it.key }
+            }
+        }
+        rowOrderRef[0] = rowOrder
+        LaunchedEffect(rowOrder) { rowHandoff.rowsChanged(rowOrder) }
         val keptRow: @Composable (ResumeRecord) -> Unit = { record ->
             KeptRow(
                 record = record,
@@ -320,7 +337,9 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
                 legacy = legacy[record.key],
                 picked = record.key in picked,
                 picking = picked.isNotEmpty(),
-                onPick = { on -> picked = if (on) picked + record.key else picked - record.key },
+                onPick = { on -> selection.pick(rowOrder.indexOf(record.key), on) },
+                onPickRange = { selection.extend(rowOrder.indexOf(record.key)) },
+                rowModifier = Modifier.handoffRow(rowHandoff, record.key),
                 onPlay = {
                     state.noteChatTitle(record.chatId, record.chatTitle)
                     state.openPlayer(record.toMediaItem(), startFromBeginning = false)
@@ -618,7 +637,7 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
     // A whole run is a toast; the selection is left once anything was saved.
     LaunchedEffect(folder.outcome) {
         val outcome = folder.outcome ?: return@LaunchedEffect
-        if (outcome.copied > 0) picked = emptySet()
+        if (outcome.copied > 0) selection.clear()
         if (outcome.clean) {
             toast(outcome.headline + (if (outcome.moved > 0) ". " + s.downloadsSaveToFolderMoved(count = outcome.moved) else ""))
             DesktopFolderExport.consume()
@@ -636,7 +655,7 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
             onDismiss = { confirm = null },
             onConfirm = {
                 confirm = null
-                picked = picked - doomed.map { it.key }.toSet()
+                selection.remove(doomed.map { it.key }.toSet())
                 scope.launch {
                     val locked = doomed.count { !DownloadIndex.delete(state.settings, it) }
                     if (locked > 0) toast(s.downloadsLocked(locked))
@@ -962,12 +981,19 @@ private fun VideoRow(
     menu: List<RowMenuEntry>,
     start: Dp = ROW_INSET,
     more: Boolean = false,
+    /** Ctrl+click, Cmd+click on a Mac, and Ctrl+Space: this row in or out of the selection. */
+    onToggle: (() -> Unit)? = null,
+    /** Shift+click: the rows from the last one picked to this one. */
+    onRange: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
     content: @Composable RowScope.(lit: Boolean) -> Unit,
 ) {
     val interactions = remember { MutableInteractionSource() }
     val hovered by interactions.collectIsHoveredAsState()
     val ring = keyboardFocused(interactions)
     var open by remember { mutableStateOf(false) }
+    // Set by a Shift or Ctrl press just before the click it belongs to: that click picks, not plays.
+    var chorded by remember { mutableStateOf(false) }
     val shape = MaterialTheme.shapes.medium
     Box {
         Row(
@@ -981,9 +1007,36 @@ private fun VideoRow(
                     val macContext = ON_MAC && event.keyboardModifiers.isCtrlPressed && event.buttons.isPrimaryPressed
                     if (menu.isNotEmpty() && (event.buttons.isSecondaryPressed || macContext)) open = true
                 }
+                .onPointerEvent(PointerEventType.Press, androidx.compose.ui.input.pointer.PointerEventPass.Initial) { event ->
+                    chorded = false
+                    if (!event.buttons.isPrimaryPressed) return@onPointerEvent
+                    val mods = event.keyboardModifiers
+                    val toggle = if (ON_MAC) mods.pointerMeta else mods.isCtrlPressed
+                    when {
+                        mods.isShiftPressed && onRange != null -> {
+                            chorded = true
+                            onRange()
+                        }
+                        toggle && onToggle != null -> {
+                            chorded = true
+                            onToggle()
+                        }
+                    }
+                }
+                .onPreviewKeyEvent { event ->
+                    if (onToggle != null && isToggleChord(event)) {
+                        onToggle()
+                        true
+                    } else {
+                        false
+                    }
+                }
+                .then(modifier)
                 .then(
                     if (onClick != null) {
-                        Modifier.clickable(interactionSource = interactions, indication = null, role = Role.Button, onClick = onClick)
+                        Modifier.clickable(interactionSource = interactions, indication = null, role = Role.Button) {
+                            if (chorded) chorded = false else onClick()
+                        }
                     } else {
                         Modifier
                     },
@@ -1164,6 +1217,10 @@ private fun KeptRow(
     /** Something on the page is picked: a click then picks rather than plays, and every tick shows. */
     picking: Boolean,
     onPick: (Boolean) -> Unit,
+    /** Shift+click: everything from the last row picked to this one. */
+    onPickRange: () -> Unit,
+    /** What the page needs on the row's focusable (the focus handoff after a delete). */
+    rowModifier: Modifier = Modifier,
     onPlay: () -> Unit,
     onShowInFolder: () -> Unit,
     onOpenElsewhere: () -> Unit,
@@ -1220,7 +1277,14 @@ private fun KeptRow(
     // A whole download plays on a click and keeps the rest behind More (and a right click): four
     // icon buttons on every row were most of the page's clutter. A row with one thing to do (gone
     // from the folder, or part downloaded) keeps that one word.
-    VideoRow(onClick = click, menu = menu, more = playable) { lit ->
+    VideoRow(
+        onClick = click,
+        menu = menu,
+        more = playable,
+        onToggle = { onPick(!picked) },
+        onRange = onPickRange,
+        modifier = rowModifier,
+    ) { lit ->
         Thumb(
             item.copy(title = correctedTitle(record.chatId, record.messageId, record.title)),
             Pick(picked, shown = lit || picking, onPick = onPick),
