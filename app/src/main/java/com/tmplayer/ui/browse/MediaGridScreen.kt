@@ -1430,7 +1430,8 @@ internal fun TouchMediaScaffold(
                         // Only the filled star is coloured, so the outline sits with the others.
                         tint = if (isFavorite) Tone.accent else Tone.text,
                         checked = isFavorite,
-                        caption = caption(s.gridStarShort),
+                        // "Favourite", as the desktop and the web app name the same button and the list it fills.
+                        caption = caption(s.browseFavourite),
                         // The star pops as it fills and dips as it empties.
                         glyph = { StarIcon(isFavorite, TmIcons.Star, TmIcons.StarOutline, on = Tone.accent, off = Tone.text) },
                     )
