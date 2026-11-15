@@ -14,8 +14,6 @@ async function asATv(page: Page) {
 
 type Stats = { drawing: string; clock: number; shown: number | null; offset: number | null; running: boolean; queued: number; queuedBytes: number; maxFrames: number; dropped: number; underruns: number; decodeFps: number; sources: number; audio: string; contextClock: boolean }
 const stats = (page: Page) => page.evaluate(() => (window as unknown as { __canvas?: { stats(): unknown } }).__canvas?.stats() as Stats | undefined)
-/** The clock with the page's own time at the same instant: a round trip from the test, which a busy machine stretches to a third of a second, is not part of what is measured. */
-const clockAt = (page: Page) => page.evaluate(() => ({ at: performance.now() / 1000, clock: ((window as unknown as { __canvas: { stats(): { clock: number } } }).__canvas.stats()).clock }))
 
 /** How many distinct colours the canvas shows (a picture, not a blank or a single fill), read from its pixels. */
 const colours = (page: Page) =>
@@ -80,21 +78,27 @@ test.describe('clips chat, no WebCodecs', () => {
     test('the picture follows the sound within 80 ms for several seconds, and the clock keeps real time', async ({ page }) => {
         await openCard(page, 'Xvid Clip')
         await playsPast(page, 0.4)
-        const start = await clockAt(page)
-        const offsets: number[] = []
-        for (let i = 0; i < 12; i++) {
-            await page.waitForTimeout(150)
-            const s = (await stats(page))!
-            if (s.offset !== null && s.running) offsets.push(Math.abs(s.offset))
-        }
-        const s = (await stats(page))!
+        // Sampled inside the page, every 150 ms for 1.8 s: a round trip from the test per sample stretches on a busy machine
+        // until the 4 s clip has ended, and a clock that stopped at the end is not a clock that lost time.
+        const run = await page.evaluate(async () => {
+            const canvas = (window as unknown as { __canvas: { stats(): { clock: number; offset: number | null; running: boolean; underruns: number } } }).__canvas
+            const first = { at: performance.now() / 1000, clock: canvas.stats().clock }
+            const offsets: number[] = []
+            for (let i = 0; i < 12; i++) {
+                await new Promise((r) => setTimeout(r, 150))
+                const s = canvas.stats()
+                if (s.offset !== null && s.running) offsets.push(Math.abs(s.offset))
+            }
+            const s = canvas.stats()
+            return { offsets, drift: s.clock - first.clock - (performance.now() / 1000 - first.at), underruns: s.underruns }
+        })
+        const { offsets } = run
         // 1.8 s later by the page's own clock, the sound's clock says about the same.
-        const end = await clockAt(page)
-        expect(Math.abs(end.clock - start.clock - (end.at - start.at))).toBeLessThan(0.35)
+        expect(Math.abs(run.drift)).toBeLessThan(0.35)
         expect(offsets.length).toBeGreaterThan(5)
         expect(Math.max(...offsets)).toBeLessThan(0.08)
         // A 4 s clip: few frames dropped, no waiting for the decoder.
-        expect(s.underruns).toBe(0)
+        expect(run.underruns).toBe(0)
     })
 
     test('pause holds the picture and the clock, play goes on', async ({ page }) => {
