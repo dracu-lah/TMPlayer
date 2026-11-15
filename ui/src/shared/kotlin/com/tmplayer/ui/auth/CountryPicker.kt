@@ -116,11 +116,7 @@ fun CountryPicker(
                     // Two hundred rows filtered to none is a dead end, and clearing a field by
                     // holding backspace is a chore nobody should be set on a sign-in screen.
                     if (query.isNotEmpty()) {
-                        com.tmplayer.ui.components.IconTip(s.loginClearSearch) {
-                            IconButton(onClick = { query = "" }) {
-                                Icon(TmIcons.Close, contentDescription = s.loginClearSearch)
-                            }
-                        }
+                        com.tmplayer.ui.components.ClearButton(s.loginClearSearch, onClick = { query = "" })
                     }
                 },
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
