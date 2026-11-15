@@ -148,12 +148,14 @@ object SeriesShelf {
         item: MediaItem,
         corrections: Map<String, VideoCorrection> = VideoCorrections.current,
         name: ParsedName = episodeOf(item, corrections),
+        spelling: Boolean = false,
     ): String? {
         if (corrections[item.id]?.separate == true || name.extra != null) return null
         // One byte piece of a cut video is no video at all, so never a copy of one; the video the
         // pieces make ([SplitPieces.join]) is keyed as any other.
         if (item.splitPiece?.certain == true && item.pieces.isEmpty()) return null
-        filmKeyOf(item, name)?.let { return it }
+        filmKeyOf(item, name, spelling)?.let { return it }
+        // An episode's key keeps the title as it is spelt: its twins are joined as a show ([spellingTwins]), not as copies.
         val key = foldAccents(name.titleKey).ifEmpty { return null }
         name.airDate?.let { return "date:$key|$it" }
         val episode = name.episode ?: return null
@@ -321,7 +323,7 @@ object SeriesShelf {
         val trusted = items.map { item -> repeated.isEmpty() || firstLine(item)?.lowercase()?.let { it !in repeated } != false }
         val names = items.mapIndexed { index, item -> episodeOf(item, corrections, trusted[index]) }
         val separate = items.map { corrections[it.id]?.separate == true }
-        val strict = items.indices.map { index ->
+        val written = items.indices.map { index ->
             val item = items[index]
             val name = names[index]
             val key = name.titleKey
@@ -332,6 +334,11 @@ object SeriesShelf {
                 val alternates = if (corrections[item.id]?.title != null || !trusted[index]) emptyList() else alternatesOf(item, key)
                 Found(item, key, name, number, alternates)
             }
+        }
+        // One show in two spellings is one show (N3): every file of a twin goes under the key that stands for it.
+        val twins = spellingTwins(written)
+        val strict = if (twins.isEmpty()) written else written.map { file ->
+            file?.let { twins[it.key]?.let { stands -> Found(it.item, stands, it.name, it.episode, it.alternates) } ?: it }
         }
         // A show is two episodes or more, not two files: three copies of one episode are one.
         val showKeys = strict.filterNotNull()
@@ -377,7 +384,7 @@ object SeriesShelf {
         val loose = items.indices.filter { showOf[it] == null }
         val shown = HashMap<String, MediaItem>()
         val group = HashMap<String, String>()
-        loose.mapNotNull { index -> candidateKey(items[index], corrections, names[index])?.let { it to index } }
+        loose.mapNotNull { index -> candidateKey(items[index], corrections, names[index], spelling = true)?.let { it to index } }
             .groupBy({ it.first }, { it.second })
             .forEach { (key, members) ->
                 // An episode's code or its air date says which one it is as surely as a year
@@ -586,12 +593,43 @@ object SeriesShelf {
      * same multi-word title fold even when neither carries a year (a channel handle prefixed to
      * the name instead, HX45).
      */
-    private fun filmKeyOf(item: MediaItem, name: ParsedName): String? {
+    private fun filmKeyOf(item: MediaItem, name: ParsedName, spelling: Boolean = false): String? {
         if (name.isSeries) return null
+        // Whether a name is one generic word is judged on the title as it is spelt, never on its
+        // spelling key, which runs the words of a title together.
         val key = foldAccents(name.titleKey)
         if (key.isEmpty()) return null
         if (name.year == null && item.nameMarkers.isEmpty() && (item.genericFileName || ' ' !in key)) return null
-        return "$key|${name.year ?: ""}"
+        // Only a title with a year is folded with its twins: without one, two names a letter or two apart are two names.
+        return "${if (spelling && name.year != null) titlePart(name, true) else key}|${name.year ?: ""}"
+    }
+
+    /**
+     * The title as a candidate key holds it: as it is spelt (accents folded), or with its spelling
+     * twins folded in ([MediaName.spellingKey], N3), so "Aarya 2" and "Arya 2" are candidates for one video.
+     * Only [plan] asks for the second; [sameVideoKey], which others read and may print, keeps the first.
+     */
+    private fun titlePart(name: ParsedName, spelling: Boolean): String =
+        if (spelling) MediaName.spellingKey(name.title) else foldAccents(name.titleKey)
+
+    /**
+     * The show keys of [found] that are one title in two spellings (N3), each to the one the most
+     * files carry (the shorter, then the first alphabetically, on a tie): "kathanayakan" and
+     * "kadhanayakan" in one chat are one show, "aarya" and "aarya 2" are two. Only keys of the same
+     * [MediaName.spellingKey] are joined, which leaves a short title, another script and a number alone.
+     * A key stays as it was written: this only says which one stands for the rest.
+     */
+    private fun spellingTwins(found: List<Found?>): Map<String, String> {
+        val counts = HashMap<String, Int>()
+        for (file in found) if (file != null) counts[file.key] = (counts[file.key] ?: 0) + 1
+        if (counts.size < 2) return emptyMap()
+        val twins = HashMap<String, String>()
+        counts.keys.groupBy { MediaName.spellingKey(it) }.forEach { (_, keys) ->
+            if (keys.size < 2) return@forEach
+            val stands = keys.sortedWith(compareByDescending<String> { counts.getValue(it) }.thenBy { it.length }.thenBy { it }).first()
+            keys.forEach { if (it != stands) twins[it] = stands }
+        }
+        return twins
     }
 
     /**

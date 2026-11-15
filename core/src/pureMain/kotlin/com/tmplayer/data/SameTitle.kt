@@ -33,8 +33,19 @@ object SameTitle {
         return if (correction == null) item.uncorrectedFilmKey else filmKeyOf(item, correction)
     }
 
+    /**
+     * [filmKey] with the title's spelling twins folded in ([MediaName.spellingKey], N3): "Aarya 2 (2018)"
+     * and "Arya 2 (2018)" give one. Null where [filmKey] is, so a video the viewer set apart ("Not the same
+     * video") and a name with no year stay out of it. Only [keysOf] asks for it, as one more key an entry is
+     * known by (and [dedupe] holds it to the length test), so the keys everything else reads keep their words.
+     */
+    fun spellingFilmKey(item: MediaItem): String? {
+        val corrections = VideoCorrections.current
+        return filmKeyOf(item, if (corrections.isEmpty()) null else corrections[item.id], spelling = true)
+    }
+
     /** [filmKey] for [item] under [correction], the viewer's own for it or null for none. */
-    internal fun filmKeyOf(item: MediaItem, correction: VideoCorrection?): String? {
+    internal fun filmKeyOf(item: MediaItem, correction: VideoCorrection?, spelling: Boolean = false): String? {
         if (item.extra != null) return null
         if (correction?.separate == true) return null
         val renamed = correction?.title
@@ -47,8 +58,9 @@ object SameTitle {
             else -> MediaName.parse(item.fileName, item.caption)
         }
         if (name.isSeries || name.extra != null) return null
-        val title = SeriesShelf.foldAccents(name.titleKey).ifEmpty { return null }
-        val year = name.year ?: if (renamed == null) captionYear(item.caption, title) else null
+        val spelt = SeriesShelf.foldAccents(name.titleKey).ifEmpty { return null }
+        val title = if (spelling) MediaName.spellingKey(name.title).ifEmpty { return null } else spelt
+        val year = name.year ?: if (renamed == null) captionYear(item.caption, spelt) else null
         if (year == null) return null
         // As [SeriesShelf.episodeOf] reads it: the viewer's title where they gave one.
         val part = if (correction == null) item.parsedName.part else SeriesShelf.episodeOf(item).part
@@ -94,8 +106,10 @@ object SameTitle {
     fun keysOf(entry: ShelfEntry, online: (MediaItem) -> String? = ::onlineKey): List<String> = when (entry) {
         is ShelfEntry.Show -> listOfNotNull(
             "show:" + SeriesShelf.keyOf(entry.series.title),
+            // The same show spelt another way in another chat (N3): "Kathanayakan" and "Kadhanayakan".
+            "show~" + MediaName.spellingKey(entry.series.title),
             online(entry.series.cover)?.let { "online:$it" },
-        ).filter { it != "show:" }
+        ).filter { it != "show:" && it != "show~" }
         is ShelfEntry.File -> {
             val item = entry.item
             if (item.extra != null || SeriesShelf.episodeOf(item).extra != null) {
@@ -106,6 +120,8 @@ object SameTitle {
                     // An episode's online match is its show's: only a whole show is one with it.
                     if (episode) null else online(item)?.let { "online:$it" },
                     filmKey(item),
+                    // The same film with its title spelt another way (N3), the year agreeing and [dedupe] the length.
+                    spellingFilmKey(item)?.let { "film~$it" },
                     SeriesShelf.sameVideoKey(item)?.let { "copy:$it" },
                 )
             }
@@ -123,7 +139,12 @@ object SameTitle {
         val at = HashMap<String, Int>()
         for (entry in entries) {
             val keys = keysOf(entry, online)
-            val index = keys.firstNotNullOfOrNull { at[it] }
+            // A spelling twin ("film~") is a film in another spelling: it folds only into a file of about the same length.
+            val index = keys.firstNotNullOfOrNull { key ->
+                at[key]?.takeIf { held ->
+                    !key.startsWith("film~") || ((out[held] as? ShelfEntry.File)?.item?.let { a -> (entry as? ShelfEntry.File)?.item?.let { b -> sameLength(a, b) } } == true)
+                }
+            }
             if (index == null) {
                 keys.forEach { at[it] = out.size }
                 out += entry
