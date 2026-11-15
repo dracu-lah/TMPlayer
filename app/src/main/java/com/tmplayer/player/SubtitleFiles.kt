@@ -14,6 +14,8 @@ import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
+import com.tmplayer.data.ChatSubtitleLoad
+import com.tmplayer.data.ChatSubtitleLoaded
 import com.tmplayer.i18n.L
 import com.tmplayer.online.SubtitleText
 import kotlinx.coroutines.Dispatchers
@@ -112,6 +114,26 @@ class SubtitleFiles(
         attach(Copy.Done(file, mime), label)
     }
 
+    /**
+     * A subtitle file posted in the video's chat, already downloaded and read ([ChatSubtitleLoad]):
+     * written under the cache as UTF-8 (a MicroDVD `.sub` as SubRip) and laid over the video like a
+     * picked one. [handover] is false for a chat or message that withholds saving: the file plays
+     * here and is never remembered for another app. Returns false when it could not be written.
+     */
+    fun attachChat(loaded: ChatSubtitleLoaded.Ready, chatId: Long, hit: ChatSubtitles.Hit, handover: Boolean): Boolean {
+        var extension = loaded.extension
+        var text = loaded.text
+        if (extension == "sub") {
+            val fps = player()?.videoFormat?.frameRate?.let { FrameRates.plausible(it).toDouble() }?.takeIf { it > 0 } ?: ExternalSubtitle.DEFAULT_FPS
+            text = ExternalSubtitle.microDvdToSrt(text, fps)
+            extension = "srt"
+        }
+        val mime = ExternalSubtitle.mimeTypeOf(extension) ?: return false
+        val file = ChatSubtitleLoad.write(File(activity.cacheDir, "subtitles"), chatId, hit, loaded, text, extension) ?: return false
+        attach(Copy.Done(file, mime), loaded.label, handover)
+        return true
+    }
+
     private fun load(uri: Uri) {
         activity.lifecycleScope.launch {
             val name = withContext(Dispatchers.IO) { displayName(uri) } ?: L.tracksFileFallbackName
@@ -131,7 +153,7 @@ class SubtitleFiles(
         }
     }
 
-    private fun attach(copy: Copy.Done, name: String) {
+    private fun attach(copy: Copy.Done, name: String, handover: Boolean = true) {
         val exo = player() ?: return
         val video = exo.currentMediaItem?.localConfiguration?.uri ?: return
         val id = "external-${loaded.size + 1}"
@@ -143,11 +165,11 @@ class SubtitleFiles(
             .build()
         if (onCastFile?.invoke(copy.file, copy.mimeType, name) == true) {
             // Kept in [loaded] for when the video comes back here; the cast shows it now.
-            runCatching { onAttached?.invoke(copy.file) }
+            if (handover) runCatching { onAttached?.invoke(copy.file) }
             say(L.tracksFileLoaded(name))
             return
         }
-        runCatching { onAttached?.invoke(copy.file) }
+        if (handover) runCatching { onAttached?.invoke(copy.file) }
         pending = id to name
         exo.setMediaItem(item(video), exo.currentPosition)
         if (exo.playbackState == Player.STATE_IDLE) exo.prepare()

@@ -119,7 +119,7 @@ class TrackPickerFragment : Fragment() {
     /** A track to choose, its name and, under it, what tells it apart from a namesake. */
     private class Option(val group: Tracks.Group?, val trackIndex: Int, val label: String, val detail: String? = null)
 
-    private enum class Page { Tracks, Online, Msone }
+    private enum class Page { Tracks, Online, Msone, Chat }
 
     /** The groups a page's lines fall into, in order, with the heading each one carries. */
     private enum class Group(val heading: () -> String?) {
@@ -168,6 +168,21 @@ class TrackPickerFragment : Fragment() {
         // (onDismiss below), never this fragment; a BackHandler here was never asked.
         val back: () -> Unit = { if (startOnline) close() else page = Page.Tracks }
 
+        // The files posted in the chat are looked for once, as the subtitles open: the entry appears
+        // when there are some, and never moves the focus. Sound has none.
+        if (trackType == C.TRACK_TYPE_TEXT) {
+            LaunchedEffect(Unit) {
+                chatHits = try {
+                    host?.chatSubtitles().orEmpty()
+                } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    com.tmplayer.platform.JobFailures.handle("chatSubtitles", e)
+                    emptyList()
+                }
+            }
+        }
+
         when (page) {
             Page.Tracks -> {
                 // Bumped by every in-place line, so the timing and look figures under them redraw.
@@ -176,6 +191,7 @@ class TrackPickerFragment : Fragment() {
                 ChoiceSheet(title = title, onDismiss = ::close, onClose = ::close, closeFocus = closeFocus, ignoreRelease = !touch, fullScreen = true) {
                     @Suppress("UNUSED_EXPRESSION") tick
                     val lines = trackLines(
+                        onChat = { page = Page.Chat },
                         onOnline = { page = Page.Online },
                         onMsone = { page = Page.Msone },
                         onInPlace = { tick++ },
@@ -196,12 +212,13 @@ class TrackPickerFragment : Fragment() {
             }
             Page.Online -> OnlinePage(closeFocus, firstFocus, back, msone = false)
             Page.Msone -> OnlinePage(closeFocus, firstFocus, { page = Page.Tracks }, msone = true)
+            Page.Chat -> ChatPage(closeFocus, firstFocus) { if (chatHits.isEmpty() || startOnline) close() else page = Page.Tracks }
         }
     }
 
     // ---- the tracks ---------------------------------------------------------------------------
 
-    private fun trackLines(onOnline: () -> Unit, onMsone: () -> Unit, onInPlace: () -> Unit, lookIcon: ImageVector): List<Line> {
+    private fun trackLines(onChat: () -> Unit, onOnline: () -> Unit, onMsone: () -> Unit, onInPlace: () -> Unit, lookIcon: ImageVector): List<Line> {
         val host = host ?: return emptyList()
         val player = host.trackPlayer ?: return emptyList()
         // Tracks the player cannot decode on this device: listed dimmed below, so a file with only
@@ -232,6 +249,7 @@ class TrackPickerFragment : Fragment() {
                 // search is still offered since nothing here will show.
                 unsupportedLines(unsupported).forEach(::add)
                 if (trackType == C.TRACK_TYPE_TEXT) {
+                    chatLine(onChat)?.let(::add)
                     onlineLine(onOnline)?.let(::add)
                     msoneLine(onMsone)?.let(::add)
                 }
@@ -244,6 +262,7 @@ class TrackPickerFragment : Fragment() {
                 if (trackType == C.TRACK_TYPE_AUDIO && options.isNotEmpty()) addAll(timingLines(host, onInPlace))
                 // No subtitles in the file is exactly when looking online is worth it.
                 if (trackType == C.TRACK_TYPE_TEXT) {
+                    chatLine(onChat)?.let(::add)
                     onlineLine(onOnline)?.let(::add)
                     msoneLine(onMsone)?.let(::add)
                 }
@@ -263,6 +282,7 @@ class TrackPickerFragment : Fragment() {
             }
             unsupportedLines(unsupported).forEach(::add)
             if (trackType == C.TRACK_TYPE_TEXT) {
+                chatLine(onChat)?.let(::add)
                 onlineLine(onOnline)?.let(::add)
                 msoneLine(onMsone)?.let(::add)
             }
@@ -282,6 +302,15 @@ class TrackPickerFragment : Fragment() {
                 enabled = false,
             ) {}
         }
+
+    /** The subtitle files posted in this chat, found as the picker opened; empty until then and when there are none. */
+    private var chatHits by mutableStateOf<List<ChatSubtitles.Hit>>(emptyList())
+
+    /** "In this chat", once files posted next to the video have been found. */
+    private fun chatLine(onChat: () -> Unit): Line? {
+        if (trackType != C.TRACK_TYPE_TEXT || chatHits.isEmpty()) return null
+        return Line("chat", L.tracksInChat, L.tracksInChatDetail, icon = TmIcons.Folder, group = Group.Online, onClick = onChat)
+    }
 
     /** "Search online", in a build that carries the OpenSubtitles key. */
     private fun onlineLine(onOnline: () -> Unit): Line? {
@@ -485,6 +514,73 @@ class TrackPickerFragment : Fragment() {
             // The remote goes to the first result that can be fetched, or to Close when there is
             // none, so it never sits on nothing.
             FocusOnOpen(if (focusKey != null) firstFocus else closeFocus, key = shown to focusKey)
+        }
+    }
+
+    // ---- in this chat -------------------------------------------------------------------------
+
+    /**
+     * The files found in the chat, best first. Choosing one downloads it and lays it over the video
+     * (the same way a picked or online subtitle is); what goes wrong (a deleted message, no
+     * connection, a file too big, VobSub pictures, bytes that are no subtitle) is said above the
+     * list and the list stays, with the file that is gone taken out of it.
+     */
+    @Composable
+    private fun ChatPage(closeFocus: FocusRequester, firstFocus: FocusRequester, onBack: () -> Unit) {
+        val scope = rememberCoroutineScope()
+        var busy by remember { mutableStateOf<ChatSubtitles.Hit?>(null) }
+        var notice by remember { mutableStateOf<String?>(null) }
+        ChoiceSheet(
+            title = L.tracksInChat,
+            note = L.tracksInChatDetail,
+            onDismiss = onBack,
+            onClose = ::close,
+            closeFocus = closeFocus,
+            fullScreen = true,
+        ) {
+            notice?.let {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(Corner.Medium))
+                        .background(Tone.surfaceHigh)
+                        .padding(12.dp),
+                ) {
+                    Text(it, style = MaterialTheme.typography.bodyMedium, color = Tone.text)
+                }
+            }
+            val lines = chatHits.map { hit ->
+                Line(
+                    key = "chat:${hit.doc.messageId}",
+                    title = ChatSubtitleLoader.title(hit),
+                    detail = if (busy == hit) L.onlineDownloading else ChatSubtitleLoader.detail(hit),
+                ) {
+                    if (busy != null) return@Line
+                    busy = hit
+                    notice = null
+                    scope.launch {
+                        val reason = try {
+                            host?.attachChatSubtitle(hit)
+                        } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            com.tmplayer.platform.JobFailures.handle("chatSubtitles", e)
+                            L.onlineNoticeUnreadable
+                        }
+                        busy = null
+                        if (reason == null) {
+                            close()
+                        } else {
+                            notice = reason
+                            if (reason == L.tracksInChatGone) chatHits = chatHits - hit
+                            if (chatHits.isEmpty()) onBack()
+                        }
+                    }
+                }
+            }
+            val focusKey = lines.firstOrNull()?.key
+            Lines(lines, firstFocus, focusKey)
+            FocusOnOpen(if (focusKey != null) firstFocus else closeFocus, key = focusKey)
         }
     }
 

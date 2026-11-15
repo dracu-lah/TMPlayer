@@ -392,6 +392,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
     /** Subtitle files loaded from the phone; a field because its picker registers before start. */
     private val subtitleFiles = SubtitleFiles(this, { player }, { showGestureFeedback(it) })
+    private val chatSubtitleLoader = ChatSubtitleLoader(subtitleFiles)
 
     /** The viewer's Downmix to stereo answer, or null for the device default. See [AudioDownmix.wanted]. */
     private var downmixChoice: Boolean? = null
@@ -6664,6 +6665,15 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     }
 
     override fun attachOnlineSubtitle(file: File, label: String) = subtitleFiles.attachFile(file, label)
+
+    /** "In this chat" (EG-F48): the subtitle files posted next to this video, from one search, kept for the video. */
+    override suspend fun chatSubtitles(): List<ChatSubtitles.Hit> {
+        if (!hasMessage()) return emptyList()
+        return chatSubtitleLoader.find(chatId, messageId, mediaFileName.ifBlank { mediaTitle }, mediaCaption, OnlineSubtitles.languagesFor(tracks.textLanguage))
+    }
+
+    override suspend fun attachChatSubtitle(hit: ChatSubtitles.Hit): String? =
+        chatSubtitleLoader.attach(chatId, messageId, hit, mediaFileName.ifBlank { mediaTitle }, mediaCaption, handover = savable != false)
 
     override val pickSubtitleFile: (() -> Unit)?
         get() = if (FormFactor.isTv(this)) null else ({ subtitleFiles.pick() })

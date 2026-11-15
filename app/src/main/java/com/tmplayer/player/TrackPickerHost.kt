@@ -34,4 +34,14 @@ interface TrackPickerHost {
      * Null where there is no picker (a television, the fixture).
      */
     val pickSubtitleFile: (() -> Unit)? get() = null
+
+    /**
+     * Subtitle files posted in the video's chat, best first, for "In this chat" (EG-F48). Empty
+     * when there are none, the device is offline, the kids lock leaves the chat out, or the host
+     * has no chat (the fixture); the entry is then not drawn.
+     */
+    suspend fun chatSubtitles(): List<ChatSubtitles.Hit> = emptyList()
+
+    /** Downloads [hit] and lays it over the video: null when done, else the sentence to show. */
+    suspend fun attachChatSubtitle(hit: ChatSubtitles.Hit): String? = null
 }

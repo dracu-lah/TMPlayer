@@ -148,6 +148,9 @@ class ChatSubtitleFinder(
     }
 
     companion object {
+        /** The one finder of the app: its kept answers serve every picker, so a video asks Telegram once. */
+        val shared: ChatSubtitleFinder by lazy { ChatSubtitleFinder(LiveChatSubtitleCalls) }
+
         /** Documents asked for in the one search: half of them older than the video, half newer. */
         const val WINDOW = 100
 
@@ -328,4 +331,87 @@ class TdChatSubtitleCalls(private val td: TdlClient) : ChatSubtitleCalls {
         const val DOWNLOAD_TIMEOUT_MS = 20_000L
         const val PRIORITY = 16
     }
+}
+
+/**
+ * [TdChatSubtitleCalls] on whatever session is signed in and connected, waited for only a moment:
+ * a device with no connection answers "unavailable" (the entry stays hidden, the local picker is
+ * untouched) instead of holding the picker.
+ */
+object LiveChatSubtitleCalls : ChatSubtitleCalls {
+    private const val WAIT_MS = 3_000L
+
+    private suspend fun client(): TdlClient? = Td.awaitConnectedSessionOrNull(WAIT_MS)?.client
+
+    override suspend fun video(chatId: Long, messageId: Long): ChatSubtitleVideo? =
+        client()?.let { TdChatSubtitleCalls(it).video(chatId, messageId) }
+
+    override suspend fun documents(chatId: Long, topicId: Int, fromMessageId: Long, offset: Int, limit: Int): ChatSubtitleDocs =
+        client()?.let { TdChatSubtitleCalls(it).documents(chatId, topicId, fromMessageId, offset, limit) }
+            ?: ChatSubtitleDocs.Failed("offline")
+
+    override suspend fun fetch(chatId: Long, doc: ChatSubtitles.Doc, maxBytes: Long): ChatSubtitleFetch =
+        client()?.let { TdChatSubtitleCalls(it).fetch(chatId, doc, maxBytes) } ?: ChatSubtitleFetch.Offline
+}
+
+/** A chosen chat file, downloaded and read: the text to lay over the video, or the sentence saying why not. */
+sealed interface ChatSubtitleLoaded {
+    /** [extension] is `sub` for MicroDVD, which a player that cannot read it has rewritten as SubRip. */
+    data class Ready(val extension: String, val text: String, val label: String, val language: String?) : ChatSubtitleLoaded
+    data class Refused(val reason: String) : ChatSubtitleLoaded
+}
+
+/** Downloads a listed chat file and reads it, the same on phone, television and desktop. */
+object ChatSubtitleLoad {
+
+    /**
+     * The file of [hit] from [chatId], read as subtitle text. [video] is the playing video's file
+     * name and [caption], whose episode picks the entry of a season zip. Every way it can fail is a
+     * sentence in [ChatSubtitleLoaded.Refused]: a deleted message, no connection, a file that is too
+     * big, VobSub pictures, bytes that are not a subtitle.
+     */
+    suspend fun load(
+        calls: ChatSubtitleCalls,
+        chatId: Long,
+        hit: ChatSubtitles.Hit,
+        video: String,
+        caption: String = "",
+        viewerLanguage: String? = null,
+    ): ChatSubtitleLoaded {
+        val limit = if (hit.archive) ChatSubtitles.MAX_ZIP_BYTES else ChatSubtitles.MAX_BYTES
+        val bytes = when (val got = calls.fetch(chatId, hit.doc, limit)) {
+            is ChatSubtitleFetch.Bytes -> got.bytes
+            ChatSubtitleFetch.TooBig -> return ChatSubtitleLoaded.Refused(com.tmplayer.i18n.L.tracksFileTooBig)
+            ChatSubtitleFetch.Gone -> return ChatSubtitleLoaded.Refused(com.tmplayer.i18n.L.tracksInChatGone)
+            ChatSubtitleFetch.Offline -> return ChatSubtitleLoaded.Refused(com.tmplayer.i18n.L.onlineNoticeOffline)
+            is ChatSubtitleFetch.Failed -> return ChatSubtitleLoaded.Refused(Failures.humanise(got.message))
+        }
+        val parsed = MediaName.parse(video, caption)
+        return when (val read = ChatSubtitleText.read(bytes, hit.doc.fileName, parsed.season, parsed.episode, viewerLanguage)) {
+            is ChatSubtitleText.Result.Text -> ChatSubtitleLoaded.Ready(read.extension, read.text, label(hit), read.language)
+            ChatSubtitleText.Result.TooBig -> ChatSubtitleLoaded.Refused(com.tmplayer.i18n.L.tracksFileTooBig)
+            ChatSubtitleText.Result.Vobsub -> ChatSubtitleLoaded.Refused(com.tmplayer.i18n.L.tracksFileVobsub)
+            ChatSubtitleText.Result.Unreadable -> ChatSubtitleLoaded.Refused(com.tmplayer.i18n.L.onlineNoticeUnreadable)
+        }
+    }
+
+    /** The track's name: the file's name without its extension. */
+    fun label(hit: ChatSubtitles.Hit): String =
+        hit.doc.fileName.substringBeforeLast('.', hit.doc.fileName).ifBlank { hit.doc.fileName }
+
+    /**
+     * Writes [loaded] under [folder] as UTF-8 and returns the file, keeping the newest [KEEP] files
+     * there (older ones are deleted), so the copies stay bounded. Null when it cannot be written.
+     */
+    fun write(folder: java.io.File, chatId: Long, hit: ChatSubtitles.Hit, loaded: ChatSubtitleLoaded.Ready, text: String = loaded.text, extension: String = loaded.extension): java.io.File? =
+        runCatching {
+            folder.mkdirs()
+            val old = folder.listFiles { f -> f.isFile }?.sortedBy { it.lastModified() }.orEmpty()
+            old.take((old.size - KEEP + 1).coerceAtLeast(0)).forEach { it.delete() }
+            val file = java.io.File(folder, "chat${chatId}_${hit.doc.messageId}.$extension")
+            file.writeText(text, Charsets.UTF_8)
+            file
+        }.getOrNull()
+
+    private const val KEEP = 40
 }
