@@ -586,8 +586,8 @@ fun home(
                 *base, "kind" to "chat", "chatId" to row.chatId.toDouble(), "title" to row.title, "loaded" to row.loaded, "starredOnly" to true,
                 "resumes" to emptyArray<String>(), "tiles" to row.entries.map(::tile).toTypedArray(),
             )
-            // Not built where Home fills itself.
-            is HomeRow.WatchLater, is HomeRow.NewEpisodes -> null
+            // Not built where Home fills itself; the page builds its own lists' rows (lists.ts).
+            is HomeRow.WatchLater, is HomeRow.NewEpisodes, is HomeRow.Listed -> null
         }
     }.toTypedArray()
 }

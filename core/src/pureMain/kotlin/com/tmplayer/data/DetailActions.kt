@@ -27,6 +27,9 @@ enum class DetailAction {
     AddWatchLater,
     RemoveWatchLater,
 
+    /** Puts the video in one of the viewer's named lists, or makes one ([NamedLists], HX43). */
+    AddToList,
+
     /**
      * Takes the video out of History: its saved place and its watched tick, every copy of it
      * ([HistoryEdits]). Offered while it is part way through.
@@ -100,6 +103,8 @@ data class DetailContext(
     val finished: Boolean = false,
     /** On Watch later; null where the panel does not offer that list at all. */
     val watchLater: Boolean? = null,
+    /** The panel can put the video in a named list ([DetailAction.AddToList]). */
+    val lists: Boolean = false,
     /** In the Downloads folder. */
     val inDownloads: Boolean = false,
     /**
@@ -158,6 +163,8 @@ object DetailActions {
         add(if (context.finished) DetailAction.MarkUnwatched else DetailAction.MarkWatched)
         // Nothing is copied, only remembered, so a chat that restricts saving keeps this too.
         context.watchLater?.let { add(if (it) DetailAction.RemoveWatchLater else DetailAction.AddWatchLater) }
+        // A list keeps a name, never a copy: a restricted chat's video may go in one too.
+        if (context.lists) add(DetailAction.AddToList)
         when {
             // On the queue already: the one thing left to offer is taking it off again.
             context.downloading -> add(DetailAction.CancelDownload)

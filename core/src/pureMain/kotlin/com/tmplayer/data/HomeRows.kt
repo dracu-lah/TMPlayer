@@ -69,6 +69,24 @@ sealed interface HomeRow {
     }
 
     /**
+     * One of the viewer's named lists ([NamedLists], HX43) that they put on Home: its first cards in
+     * the order added, a show as one card ([ListPages.cards]).
+     *
+     * @param records the cards' tiles, at most [HomeRows.LIMIT].
+     * @param count the lines the list holds, for the See all tile.
+     */
+    data class Listed(
+        val listId: String,
+        val name: String,
+        val records: List<WatchLaterRecord>,
+        val count: Int = records.size,
+    ) : HomeRow {
+        override val key: String get() = NamedListRules.homeKey(listId)
+        override val total: Int get() = count
+        override val hasMore: Boolean get() = count > records.size
+    }
+
+    /**
      * Episodes of the shows the viewer is watching that arrived since they last watched them (see
      * [com.tmplayer.data.NewEpisodes]). Only ever built with something in it, so it has no loading
      * state: a row that may well stay empty should not hold a placeholder strip open on Home.
@@ -235,10 +253,27 @@ object HomeRows {
         layout: HomeLayout = HomeLayout(),
         recentFrom: List<Long>? = null,
         noneChosen: Boolean = false,
+        lists: List<VisibleList> = emptyList(),
     ): List<HomeRow> = HomeOrder.sort(buildDefault(
         continueWatching, favourites, loaded, recent, partial, watchLater, fresh, recentMinStarred,
         starred, autoFill, chatsPending, layout, recentFrom, noneChosen,
-    ), layout.order)
+    ) + listRows(lists), layout.order)
+
+    /** Lines read for a list's Home row: its first cards are among them however its shows fold. */
+    private const val LIST_PREFIX = LIMIT * 20
+
+    /**
+     * A row for each named list the viewer put on Home, after the chats by default, in the order
+     * the lists were made. Each holds the list's first [LIMIT] cards, read from its first lines only
+     * ([LIST_PREFIX]), so a list of 5,000 costs Home no more than one of fifty. An empty list (or one
+     * the kids lock leaves empty) has no row.
+     */
+    fun listRows(lists: List<VisibleList>): List<HomeRow> = lists.mapNotNull { list ->
+        if (!list.info.home || list.records.isEmpty()) return@mapNotNull null
+        val cards = ListPages.cards(list.records.take(LIST_PREFIX))
+        if (cards.isEmpty()) return@mapNotNull null
+        HomeRow.Listed(list.info.id, list.info.name, cards.take(LIMIT).map { it.tile }, count = list.records.size)
+    }
 
     /**
      * The rows in Home's own order. Built in this order whatever the viewer's order is, since each
@@ -555,6 +590,7 @@ object HomeRows {
         val kept = when (row) {
             is HomeRow.Continue -> row.copy(records = row.records.filterNot { gone(it.chatId, it.messageId) })
             is HomeRow.WatchLater -> row.copy(records = row.records.filterNot { gone(it.chatId, it.messageId) })
+            is HomeRow.Listed -> row.copy(records = row.records.filterNot { !it.isShow && gone(it.chatId, it.messageId) })
             is HomeRow.NewEpisodes -> row.copy(episodes = row.episodes.filter { HomeFeatured.hasArt(it.item) })
             is HomeRow.Chat -> if (!row.loaded) return row else row.copy(entries = row.entries.filter(HomeFeatured::hasArt))
             // The line saying no chosen chat is there stands as it is.
@@ -563,6 +599,7 @@ object HomeRows {
         val empty = when (kept) {
             is HomeRow.Continue -> kept.records.isEmpty()
             is HomeRow.WatchLater -> kept.records.isEmpty()
+            is HomeRow.Listed -> kept.records.isEmpty()
             is HomeRow.NewEpisodes -> kept.episodes.isEmpty()
             is HomeRow.Chat -> kept.entries.isEmpty()
             is HomeRow.Recent -> kept.entries.isEmpty()

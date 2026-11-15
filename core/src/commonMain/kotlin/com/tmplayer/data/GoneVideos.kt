@@ -42,7 +42,7 @@ object GoneVideos {
     }
 
     /** What one [forget] took out, counted per list, for the line that says so. */
-    data class Forgotten(val history: Int, val watchLater: Int, val videos: Int) {
+    data class Forgotten(val history: Int, val watchLater: Int, val videos: Int, val lists: Int = 0) {
         val isEmpty: Boolean get() = videos == 0
     }
 
@@ -87,6 +87,9 @@ object GoneVideos {
 
     /** The line for what [forget] took out of the viewer's lists. */
     fun message(forgotten: Forgotten): String = when {
+        // Watch later is one of the viewer's lists too, so "your lists" covers both.
+        forgotten.lists > 0 && forgotten.history > 0 -> L.continueGoneLeftHistoryAndYourLists(forgotten.videos)
+        forgotten.lists > 0 -> L.continueGoneLeftYourLists(forgotten.videos)
         forgotten.history > 0 && forgotten.watchLater > 0 -> L.continueGoneLeftLists(forgotten.videos)
         forgotten.watchLater > 0 -> L.continueGoneLeftWatchLater(forgotten.videos)
         else -> L.continueGoneLeftHistory(forgotten.videos)
@@ -120,7 +123,8 @@ object GoneVideos {
         val inContinue = settings.continueWatching.first().mapTo(HashSet()) { ProgressKeys.of(it.chatId, it.messageId) }
         val inWatched = watched.watched.first().keys
         val inLater = watched.watchLater.keys.first()
-        val candidates = byKey.keys.filter { it in inContinue || it in inWatched || it in inLater }
+        val inLists = watched.lists.now().entries.mapNotNullTo(HashSet()) { if (it.record.isShow) null else it.record.key }
+        val candidates = byKey.keys.filter { it in inContinue || it in inWatched || it in inLater || it in inLists }
         val doomed = candidates.filter { key ->
             val entry = byKey.getValue(key)
             val kept = runCatching { keptOnDevice(entry.chatId, entry.messageId) }.getOrDefault(true)
@@ -131,8 +135,10 @@ object GoneVideos {
         val later = doomed.filter { it in inLater }
         if (history.isNotEmpty()) HistoryEdits.remove(settings, watched, history, history.size)
         val taken = if (later.isNotEmpty()) watched.watchLater.take(later).size else 0
-        Logger.i(TAG, "Forgot ${doomed.size} gone videos: ${history.size} from history, $taken from Watch later")
-        return Forgotten(history = history.size, watchLater = taken, videos = doomed.size)
+        val listed = doomed.filter { it in inLists }
+        val fromLists = if (listed.isNotEmpty()) watched.lists.forgetVideos(listed.toSet()) else 0
+        Logger.i(TAG, "Forgot ${doomed.size} gone videos: ${history.size} from history, $taken from Watch later, $fromLists from lists")
+        return Forgotten(history = history.size, watchLater = taken, videos = doomed.size, lists = fromLists)
     }
 
     /**

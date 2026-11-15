@@ -35,6 +35,9 @@ class WatchedStore(private val store: DataStore<Preferences>) {
      */
     val watchLater: WatchLaterStore = WatchLaterStore(store)
 
+    /** The viewer's named lists (HX43), in this same file: see [ListsStore]. [clear] leaves them alone. */
+    val lists: ListsStore = ListsStore(store)
+
     private fun <T> read(transform: (Preferences) -> T): Flow<T> = store.data
         .map(transform)
         .distinctUntilChanged()

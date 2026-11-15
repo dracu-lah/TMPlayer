@@ -3,7 +3,7 @@ package com.tmplayer.data
 /**
  * The order of Home's rows, as the viewer arranged it in Settings, Home (EG-F7, EG-F23, EG-F27).
  * A row is named by its [HomeRow.key] ("continue", "recent", "watch-later", "new-episodes",
- * "chat-<id>"), and the order is the list of those keys, stored as one text setting
+ * "chat-<id>", "list-<id>" for a named list), and the order is the list of those keys, stored as one text setting
  * (`home_order`, comma separated). The one list serves Home on every platform and Settings' own
  * list of rows.
  *
@@ -113,16 +113,18 @@ object HomeOrder {
      * ([HomeRows.favouriteChats]); Watch later and New episodes are on the History page, not Home
      * (Home fills itself, [HomeRows]). Each [Entry]'s [Entry.chatTitle] is set for a chat's row only.
      */
-    fun editorRows(starred: List<ChatSummary>, stored: List<String>): List<Entry> {
+    fun editorRows(starred: List<ChatSummary>, stored: List<String>, lists: List<ListInfo> = emptyList()): List<Entry> {
         val defaults = buildList {
             add(Entry(CONTINUE))
             add(Entry(RECENT))
             starred.distinctBy { it.id }.forEach { add(Entry(chatKey(it.id), it.title)) }
+            // The named lists on Home (HX43), after the chats, as Home builds them.
+            lists.distinctBy { it.id }.forEach { add(Entry(NamedListRules.homeKey(it.id), listName = it.name)) }
         }
         val byKey = defaults.associateBy { it.key }
         return arrange(defaults.map { it.key }, stored).mapNotNull { byKey[it] }
     }
 
-    /** One row in Settings' list. */
-    data class Entry(val key: String, val chatTitle: String? = null)
+    /** One row in Settings' list: [chatTitle] set for a chat's row, [listName] for a named list's. */
+    data class Entry(val key: String, val chatTitle: String? = null, val listName: String? = null)
 }

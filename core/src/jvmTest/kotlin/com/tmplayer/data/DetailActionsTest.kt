@@ -180,4 +180,11 @@ class DetailActionsTest {
         assertTrue(CancelDownload in coming)
         assertFalse(InDownloads in coming)
     }
+
+    @Test
+    fun `a named list sits under Watch later, for a restricted chat too, and only where the panel offers it`() {
+        assertEquals(listOf(Play, MarkWatched, AddWatchLater, DetailAction.AddToList), DetailActions.of(DetailContext(canBeSaved = false, watchLater = false, lists = true)))
+        assertFalse(DetailAction.AddToList in DetailActions.of(DetailContext(canBeSaved = true)))
+        assertFalse(DetailActions.keepsACopy(DetailAction.AddToList))
+    }
 }
