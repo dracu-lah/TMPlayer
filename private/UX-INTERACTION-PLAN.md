@@ -443,11 +443,53 @@ Store text, the site.
   gotchas: copy local.properties into a worktree; the shell tool refuses long compound git commands in a
   worktree, split them; `private/` lives only in the main tree.
 
+- 2026-11-16 T12 done (worktree agent-a473246fa2c3ffd6f, local commits fa8a83a core, 6f621da phone):
+  done: Back from the player = `leaveByBack()` (pause, `finish()`; onStop/onDestroy save the place and release; a
+  second Back while finishing is ignored). Deleted MiniDock.kt, MiniDockBar.kt, PlayerLaunch, the dock paths in
+  PlayerActivity, the shell's bar and kids-lock hook in TouchNav, MainActivity's expand/Back-to-launcher hooks, the
+  notification tap's expand extra, the manifest's own task (taskAffinity, autoRemoveFromRecents: back to pre-U8),
+  the Settings row, `mini_player` in SettingsMap and Backup, docs/mini-player-phone.md (paragraph "Back means stop" in
+  docs/FEATURES.md), MiniDockTest, MiniDockBarTest. Old stored `mini_player` is removed on start
+  (`SettingsStore.dropRetiredMiniPlayer`, test in SetupFlagTest). Kept: system PiP (Home or button), background audio,
+  the desktop's Ctrl+P window.
+  checks: core jvmTest (all), app tests BackStopsThePlayerTest (leftover grep, manifest, Back source guard),
+  PlaybackServiceTest, PictureInPictureRulesTest, Settings*, Browse*; :app:compileDebugKotlin; desktop ShellMiniPlayerTest
+  and MiniPlayerBarTest. No device.
+  left: desktop still docks Back into the in-app bar (ShellState.mini, MiniPlayerHost, shared MiniPlayerState and
+  MiniPlayerBar): the user only named the phone, needs the user's OK to remove it too. No Robolectric test of
+  PlayerActivity's Back (the activity does not start there): the guard test reads the source. Strings
+  settings.mini_player* stay in en.json (DEAD-STRINGS.md). docs/ux-audit.md still links the desktop bar render.
+
+- 2026-11-16 T4 (worktree agent-aaee249e87eba5827, local commits 78cf91b, 9a193da, bfe974a, fbd57b5, aef898f, not pushed):
+  done: row "While streaming" with tabs `Keep video` | `Save space` (same boolean `low_storage_mode`, on = Save space) on phone
+  (Material segmented, as Theme), TV (new shared `TabSwitch` in ui/shared components, extracted from the setup's ChoiceSwitch:
+  one stop, Left/Right pick, OK swaps, focus ring; the setup uses it too) and desktop (`Segments`); the chosen tab's line says
+  kept downloads are never trimmed. New keys only (settings.stream_*, main.stream_*, player.not_enough_room_stream,
+  downloads.free_save_space*, free_switch, setup.stream_body, tour.settings_stream_page[_tv]); old keys listed in DEAD-STRINGS.md.
+  Setup, device card, Free up space offer, switch prompt, no-room messages, docs renamed; `Notice.LowStorage` untouched.
+  Tests: StreamStorageRowTest (app: phone, narrow phone at 2x font, TV remote, PNGs in build/device-test/stream),
+  SettingsGroupsTvTest (D-pad reaches the switch), desktop LowStorageRenderTest (tabs, keyboard Left/Right/Space),
+  SetupTest skips the Storage step in the every-locale test until the user's langsync (`awaitingSync`).
+  left: site copy and site/data still say "Low storage mode" (site has its own rules, 21 languages); the settings search
+  does not find "low storage" any more (only the new words); Setup enum names (LowStorage, KeepWhilePlaying) and many
+  code comments keep the old name; no emulator pass.
+  HX79 "film does not start with the mode on": hypothesis only (see the T4 reply): index larger than INDEX_TAIL_BYTES (8 MB)
+  and SLACK (16 MB) makes the tail probe a "seek", whose plan() deletes the head, then the head read deletes the tail: a
+  delete ping-pong. Not fixed, left for T7 (needs the film's moov/Cues size and logcat "Low storage: deleting file").
+
 ## Decisions made by Claude
 - T1: one shared `rememberVisitQuery` (not a patch per screen) so any later search box gets rule 3 by calling it; the phone keeps the query while a page is open (`keep = page != null`), the desktop while a category is open. No design note: small fix.
+- T4: the TV gets the setup's two-answer switch (`TabSwitch`, extracted and shared) because Material segments cannot be reached with a D-pad; phone keeps Material segments, desktop keeps `Segments`. Words: setup choice titles now read Keep video / Save space; device card says "While streaming: Save space". The Free up space offer's button says Switch (was Turn on). No design note: a rename plus one row.
 - Three workers, not more: the files are split by surface and `MainActivity.kt` is shared, so only
   T3 touches it and only for back handling.
 - T3: Esc handling lives in the shared `TmAlertDialog` (one place, all platforms) instead of per dialog; full screen yields to a layer over the page on the desktop; the top level's exit confirmation is deleted rather than reworded. No design note: small, clear fixes.
+
+- T12 casting: Back while casting stops the cast and leaves (no ask). It is what Back already did (`PlayerCast.release`
+  stops the TV media and the DLNA session in onDestroy), the place the TV reached is saved, and "Back means stop" stays
+  one rule on every screen; an ask on every Back would add a dialog to the most common key. Home while casting does not
+  stop it (the activity stays, the cast goes on, as before the dock). If the user wants an ask instead, it is one dialog in
+  `leaveByBack()`.
+- T12 desktop: only the phone's half removed; core `MiniPlayerState`/`MiniPlayerBar` stay for the desktop's in-app bar.
 
 ## Sources
 - Search patterns: https://carbondesignsystem.com/patterns/search-pattern ,
