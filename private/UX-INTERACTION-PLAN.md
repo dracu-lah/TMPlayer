@@ -253,6 +253,16 @@ Tests: provider answer fixtures for each API with garbage and huge answers (`Gar
 pill is focusable on TV and Back dismisses it. Privacy: lookups send only ids and episode numbers (no file
 names, no chat names), Settings explains it in one plain line, and the switch off sends nothing.
 
+### TS Telegram-Stremio gaps (user: "add all of them whatever necessary")  (doc: `private/TELEGRAM-STREMIO-GAPS.md`)
+Result of the 2026-11-16 diff: of 50 upstream features TMPlayer has 30, takes 9, later 4, skips 7 (server and
+multi-bot features dropped for Telegram's terms and the no-server promise). Takes, each a worker task TS1 to TS8
+in that doc with done-when and tests: season packs on the show page, episode ranges in names (`~`, `to`, `,`,
+en dash, `S01-S03`), a "Why no poster?" explainer (the local skip-channel idea), a preferred copy per chat
+capped by what the device decodes, a backup before sign out plus bookmarks and viewer corrections in the Saved
+Messages sync, an IMDb or TMDB link in a caption forcing the match, subtitle language from full names
+(`Hindi.srt`). Split pieces and ZIP are already done on all four platforms. TS tasks run after T9 (they share
+the series files) in waves of 3.
+
 ### D1 Support cards: Buy Me a Coffee and UPI  (model: sonnet, running since 2026-11-16)
 Themed cards and dialogs with the official logos, regional order (IN: UPI first), icon popup through the
 existing `SupportReminder` nag. Design note `design/redesign/support-cards.md`.
