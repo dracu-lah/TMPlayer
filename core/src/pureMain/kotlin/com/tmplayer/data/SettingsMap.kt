@@ -220,6 +220,7 @@ object SettingsMap {
         row("interface_size", a, "interface.size", PTD, listOf("interface.size_detail"))
         row("lighter_pictures", a, "settings.lighter_pictures", PT, onOff("settings.lighter_pictures"))
         row("reduce_motion", a, "settings.reduce_motion", PT, onOff("settings.reduce_motion"))
+        row("high_contrast_focus", a, "settings.high_contrast_focus", T, listOf("settings.high_contrast_focus_detail"))
         row("start_fullscreen", a, "settings.start_fullscreen", D, onOff("settings.start_fullscreen"))
         row("compact_nav", a, "settings.compact_nav", D)
         row("system_title_bar", a, "settings.system_title_bar", D, need = SettingsNeed.State)

@@ -72,6 +72,11 @@ class SettingsBook(private val kv: KeyValueStore) : AllowedChatsSource, Correcti
 
     suspend fun setReduceMotion(value: Boolean) = kv.edit { it[REDUCE_MOTION] = value }
 
+    /** As SettingsStore.highContrastFocus (T8): the television's thicker focus ring with an outer line. */
+    val highContrastFocus: Flow<Boolean> = read { it.flag(HIGH_CONTRAST_FOCUS) ?: false }
+
+    suspend fun setHighContrastFocus(value: Boolean) = kv.edit { it[HIGH_CONTRAST_FOCUS] = value }
+
     val uiScale: Flow<UiScale> = read { UiScale.from(it.string(UI_SCALE)) }
 
     suspend fun setUiScale(value: UiScale) = kv.edit { it[UI_SCALE] = value.name }
@@ -427,6 +432,7 @@ class SettingsBook(private val kv: KeyValueStore) : AllowedChatsSource, Correcti
         const val ACCENT = "accent"
         const val LANGUAGE = "language"
         const val REDUCE_MOTION = "reduce_motion"
+        const val HIGH_CONTRAST_FOCUS = "high_contrast_focus"
         const val UI_SCALE = "ui_scale"
         const val APP_PIN = "app_pin"
         const val PIN_FAILURES = "app_pin_failures"

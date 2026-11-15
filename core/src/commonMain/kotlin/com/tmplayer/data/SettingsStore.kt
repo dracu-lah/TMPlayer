@@ -83,6 +83,8 @@ private val DOWNLOAD_ROOT = stringPreferencesKey("download_root")
 private val DOWNLOAD_ROOT_PENDING = stringPreferencesKey("download_root_pending")
 private val LIGHTER_PICTURES = booleanPreferencesKey("lighter_pictures")
 private val REDUCE_MOTION = booleanPreferencesKey("reduce_motion")
+// T8: the television's focus ring thicker still with a contrasting outer line (HIGH_CONTRAST_FOCUS).
+private val HIGH_CONTRAST_FOCUS = booleanPreferencesKey("high_contrast_focus")
 private val DEVICE_CARD_DISMISSED = booleanPreferencesKey("device_card_dismissed")
 private val DEVICE_HINT_SHOWN = booleanPreferencesKey("device_hint_shown")
 private val TRICKPLAY = booleanPreferencesKey("trickplay")
@@ -852,6 +854,16 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
 
     suspend fun setReduceMotion(value: Boolean) {
         prefs.edit { it[REDUCE_MOTION] = value }
+    }
+
+    /**
+     * "High contrast focus" (T8, television only): the focus ring thicker still, with a white (dark
+     * themes) or black (light theme) line round it, so it shows on pale artwork. Off by default.
+     */
+    val highContrastFocus: Flow<Boolean> = read { it[HIGH_CONTRAST_FOCUS] ?: false }
+
+    suspend fun setHighContrastFocus(value: Boolean) {
+        prefs.edit { it[HIGH_CONTRAST_FOCUS] = value }
     }
 
     /** The settings a [Recommendation] is about, as they are now. */

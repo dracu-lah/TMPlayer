@@ -148,6 +148,7 @@ object Backups {
         "gesture_seek" to Kind.BOOL,
         "gesture_volume" to Kind.BOOL,
         "high_contrast" to Kind.BOOL,
+        "high_contrast_focus" to Kind.BOOL,
         "history_tab" to Kind.TEXT,
         // The retired hidden chats (AddedChats.HIDDEN_KEY). Never written now (the setting is
         // folded into the added chats and deleted), but read back from an older backup, so the

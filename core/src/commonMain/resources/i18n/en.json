@@ -2674,6 +2674,8 @@
     "hide_controls_detail": "{time} without the mouse moving. A paused video keeps them up",
     "high_contrast": "High contrast",
     "high_contrast_detail": "Second lines, hints and edges brought forward, for bright rooms and tired eyes",
+    "high_contrast_focus": "High contrast focus",
+    "high_contrast_focus_detail": "A thicker ring with a white or black line round it, so the remote's place shows on pale pictures",
     "history": "History",
     "hold_speed": "Hold to speed up",
     "hold_speed_detail": "Plays fast for as long as a finger is held on the picture",
