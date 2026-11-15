@@ -60,6 +60,7 @@ export const PAGE_STRINGS = [
     'browse.removed_from_history',
     'browse.removed_from_watch_later',
     'browse.search_chat',
+    'browse.searching',
     'browse.select',
     'browse.select_all',
     'browse.select_none',

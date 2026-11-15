@@ -423,6 +423,16 @@ private fun readable(name: String): String {
 fun rank(texts: Array<String>, query: String): Array<Int> =
     Fuzzy.rank(texts.indices.toList(), query) { texts[it] }.toTypedArray()
 
+/**
+ * What to ask Telegram for a search inside one chat, in order ([com.tmplayer.data.ChatSearch.spellings]):
+ * the words as typed, as words, joined by underscores and by dots as release names are, then the
+ * longest words alone.
+ */
+fun chatSearchSpellings(query: String): Array<String> = com.tmplayer.data.ChatSearch.spellings(query).toTypedArray()
+
+/** Whether [text] answers [query] with every word a prefix of one of its words, in any order. */
+fun chatSearchMatches(text: String, query: String): Boolean = com.tmplayer.data.ChatSearch.matches(text, query)
+
 /** "Full", "StreamOnly" or "Hidden" (ContentProtection.verdict). */
 fun protection(canBeSaved: Boolean, chatProtected: Boolean, selfDestructs: Boolean): String =
     ContentProtection.verdict(canBeSaved, chatProtected, selfDestructs).name

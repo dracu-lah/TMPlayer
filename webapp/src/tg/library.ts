@@ -9,6 +9,8 @@ import { forgetSponsored, loadSponsored } from './sponsored'
 import type { ChatItem, CopyRef, ChatPage, ChatView, Found, ListView, RecentPage, SponsoredItem, Tile, VideoItem, WatchInfo } from './types'
 
 const PAGE = 100
+/** Messages asked per filter of Telegram's search inside a chat. */
+const SEARCH_PAGE = 50
 const VIDEO_FILTER = { _: 'inputMessagesFilterVideo' } as const
 const DOC_FILTER = { _: 'inputMessagesFilterDocument' } as const
 /** Chats kept arranged at once; the oldest opened goes first. */
@@ -27,6 +29,15 @@ interface Feed {
     done: boolean
 }
 
+/** One query's search of a chat: the spelling Telegram answered (null until one did) and where its pages go on. */
+interface ChatSearch {
+    spelling: string | null
+    feeds: Feed[]
+    /** Every spelling was asked and none answered, or the pages ran out. */
+    done: boolean
+    loading: Promise<void> | null
+}
+
 interface ChatState {
     id: number
     title: string
@@ -38,6 +49,13 @@ interface ChatState {
     feeds: Feed[]
     videos: Map<string, Video>
     items: Map<string, VideoItem>
+    /**
+     * Videos Telegram's search of the chat found that its pages have not reached yet, listed only
+     * under words (a search inside the chat is no longer a filter over the pages loaded so far).
+     */
+    hits: Map<string, Video>
+    /** Telegram's search of the chat, per query (lower case): the spelling that answered and its pages. */
+    searches: Map<string, ChatSearch>
     archives: Map<number, string>
     selfDestructing: number
     /** Bumped each time videos come in, so a kept arrangement knows it is stale. */
@@ -84,6 +102,8 @@ async function openState(tg: TelegramClient, chatId: number): Promise<ChatState>
         feeds: [VIDEO_FILTER, DOC_FILTER].map((filter) => ({ filter, next: undefined, done: false })),
         videos: new Map(),
         items: new Map(),
+        hits: new Map(),
+        searches: new Map(),
         archives: new Map(),
         selfDestructing: 0,
         version: 0,
@@ -109,8 +129,14 @@ async function loadPage(tg: TelegramClient, s: ChatState): Promise<void> {
                 return res as Message[]
             }),
     )
+    absorb(r, s, pages.flat(), s.videos)
+    s.version++
+}
+
+/** Messages Telegram sent for the chat, through the rules, into `into` (and their items into the chat's). Returns the videos added. */
+function absorb(r: Awaited<ReturnType<typeof rules>>, s: ChatState, messages: Message[], into: Map<string, Video>): Video[] {
     const byId = new Map<number, Message>()
-    for (const msg of pages.flat()) byId.set(msg.id, msg)
+    for (const msg of messages) byId.set(msg.id, msg)
     const raws = []
     for (const msg of byId.values()) {
         const raw = rawOf(msg, s.protected)
@@ -126,15 +152,74 @@ async function loadPage(tg: TelegramClient, s: ChatState): Promise<void> {
         raws.push(raw)
     }
     const screened = r.screen(raws)
-    s.selfDestructing += screened.selfDestructing
+    if (into === s.videos) s.selfDestructing += screened.selfDestructing
+    const added: Video[] = []
     for (const v of screened.videos) {
         const msg = byId.get(v.messageId)
         const item = msg && itemOf(msg, v.title, r.posterAsk(v), r.continueTitle(v))
         if (!item) continue
-        s.videos.set(v.id, v)
+        into.set(v.id, v)
         s.items.set(v.id, item)
+        added.push(v)
     }
-    s.version++
+    return added
+}
+
+/**
+ * Telegram's own search of the chat for `query`, a page at a time. Telegram matches the words of a
+ * file name as it parts them, and `Resident.Evil.2021.mkv` is one word to it, so the first page
+ * tries each spelling the rules give (as typed, as words, with underscores, with dots, the longest
+ * words) until one finds a video that answers the words. A failure (a flood wait, the connection)
+ * leaves the search to be asked again on the next view, with the loaded pages still matched.
+ */
+async function searchChat(tg: TelegramClient, s: ChatState, query: string): Promise<void> {
+    const key = query.toLowerCase()
+    let state = s.searches.get(key)
+    if (!state) {
+        state = { spelling: null, feeds: [], done: false, loading: null }
+        s.searches.set(key, state)
+        // Each chat keeps a handful of queries' searches; the oldest goes first.
+        while (s.searches.size > KEEP_SEARCHES) s.searches.delete(s.searches.keys().next().value!)
+    }
+    if (state.done) return
+    const st = state
+    st.loading ??= (async () => {
+        const r = await rules()
+        const pageOf = async (spelling: string, feeds: Feed[]) => {
+            const pages = await Promise.all(
+                feeds
+                    .filter((f) => !f.done)
+                    .map(async (f) => {
+                        const res = await tg.searchMessages({ chatId: s.id, query: spelling, filter: f.filter, limit: SEARCH_PAGE, offset: f.next })
+                        f.next = res.next
+                        f.done = res.next === undefined || res.length === 0
+                        return res as Message[]
+                    }),
+            )
+            return absorb(r, s, pages.flat(), s.hits)
+        }
+        if (st.spelling === null) {
+            for (const spelling of r.chatSearchSpellings(query)) {
+                const feeds: Feed[] = [VIDEO_FILTER, DOC_FILTER].map((filter) => ({ filter, next: undefined, done: false }))
+                const added = await pageOf(spelling, feeds)
+                if (!r.rank(added.map((v) => `${v.title} ${v.fileName}`), query).length) continue
+                st.spelling = spelling
+                st.feeds = feeds
+                st.done = feeds.every((f) => f.done)
+                return
+            }
+            st.done = true
+            return
+        }
+        await pageOf(st.spelling, st.feeds)
+        st.done = st.feeds.every((f) => f.done)
+    })()
+        .catch(() => undefined)
+        .finally(() => {
+            st.loading = null
+            s.version++
+        })
+    await st.loading
 }
 
 /** Runs one load at a time per chat: a second Refresh or scroll while one runs waits for it. */
@@ -144,6 +229,12 @@ function load(s: ChatState, run: () => Promise<void>): Promise<void> {
 }
 
 const done = (s: ChatState) => s.feeds.every((f) => f.done)
+
+/** Queries whose search a chat keeps. */
+const KEEP_SEARCHES = 8
+
+/** Under words: the chat's pages are read to the end and Telegram's search has no more. */
+const searchDone = (s: ChatState, query: string) => done(s) && (s.searches.get(query.toLowerCase())?.done ?? false)
 
 /** The episode a show's card plays: the one started, else the first not watched, else the first. */
 function upNext(tile: ShelfTile, watched: Set<string>, started: Set<string>): Video | null {
@@ -204,9 +295,12 @@ function arrange(s: ChatState, view: ChatView): ChatPage {
     const key = JSON.stringify(view)
     if (s.kept && s.kept.version === s.version && s.kept.view === key) return s.kept.page
     const r = rulesNow!
-    const shelf = r.shelf([...s.videos.values()], view.sort, view.minBytes, view.maxBytes, view.watched, view.started)
-    let tiles = tilesOf(shelf, s.items, view)
     const query = view.query.trim()
+    // Under words, what Telegram's search found beyond the loaded pages is listed with them.
+    const videos = [...s.videos.values()]
+    if (query) for (const [id, v] of s.hits) if (!s.videos.has(id)) videos.push(v)
+    const shelf = r.shelf(videos, view.sort, view.minBytes, view.maxBytes, view.watched, view.started)
+    let tiles = tilesOf(shelf, s.items, view)
     if (query) {
         const texts = tiles.map((t) => (t.kind === 'show' ? t.title : `${t.title} ${s.videos.get(videoId(t.item))?.fileName ?? ''}`))
         const order = r.rank(texts, query)
@@ -219,7 +313,7 @@ function arrange(s: ChatState, view: ChatView): ChatPage {
         tiles,
         hiddenBySize: shelf.hiddenBySize,
         loaded: s.videos.size,
-        done: done(s),
+        done: query ? searchDone(s, query) : done(s),
         archives: [...s.archives.entries()].sort((a, b) => b[0] - a[0]).map(([, name]) => name),
         selfDestructing: s.selfDestructing,
         protected: s.protected,
@@ -259,11 +353,19 @@ let rulesNow: Awaited<ReturnType<typeof rules>> | null = null
 export async function chatPage(tg: TelegramClient, chatId: number, view: ChatView, mode: 'open' | 'more' | 'refresh' | 'view'): Promise<ChatPage> {
     rulesNow = await rules()
     let s = mode === 'refresh' ? undefined : chats.get(chatId)
+    const opened = !s
     if (!s) s = await fresh(tg, chatId)
-    else if (mode === 'more' && !done(s)) {
-        const st = s
+    const query = view.query.trim()
+    const st = s
+    if (query && mode !== 'more') {
+        // Words: Telegram's search of the whole chat, not only the pages loaded so far.
+        await searchChat(tg, st, query)
+    } else if (query && mode === 'more' && !(st.searches.get(query.toLowerCase())?.done ?? false)) {
+        await searchChat(tg, st, query)
+    } else if (mode === 'more' && !opened && !done(st)) {
+        // Past Telegram's answer the chat's own pages go on, matched here: the release names its search cannot see.
         await load(st, () => loadPage(tg, st))
-    } else if (s.loading) await s.loading
+    } else if (st.loading) await st.loading
     // Most recently used last, so the oldest is the one let go.
     chats.delete(chatId)
     chats.set(chatId, s)

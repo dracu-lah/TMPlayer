@@ -123,8 +123,10 @@ export function Chat() {
     })
     const empty = () => {
         const p = page()
-        if (!p || p.tiles.length || !p.done) return null
-        if (view().query) return t('browse.no_match', { query: view().query })
+        if (!p || p.tiles.length) return null
+        // Words: Telegram's search of the chat said nothing yet; Keep looking reads its pages on.
+        if (view().query) return busy() ? t('browse.searching') : t('browse.no_match', { query: view().query })
+        if (!p.done) return null
         if (p.hiddenBySize) return noVideosWithin(view().minBytes, view().maxBytes)
         return t('browse.no_playable_videos')
     }
@@ -333,6 +335,19 @@ export function Chat() {
                 <Show when={moreFailed()}>
                     <p class="error">{t('grid.more_failed')}</p>
                     <button class="link" type="button" onClick={() => run('more')}>{t('common.try_again')}</button>
+                </Show>
+                {/* A search that has not read the whole chat: the rest on a press, as the apps' Keep looking. */}
+                <Show when={view().query && page() && !page()!.done && !busy() && !moreFailed() && (idlePages() >= IDLE_PAGES || !page()!.tiles.length)}>
+                    <button
+                        class="link"
+                        type="button"
+                        onClick={() => {
+                            setIdlePages(0)
+                            run('more')
+                        }}
+                    >
+                        {t('common.keep_looking')}
+                    </button>
                 </Show>
             </div>
             <Show when={page()?.archives.length}>
