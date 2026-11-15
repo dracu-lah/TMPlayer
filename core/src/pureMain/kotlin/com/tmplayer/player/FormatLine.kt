@@ -24,6 +24,8 @@ object FormatLine {
     data class Facts(
         val videoMime: String? = null,
         val videoCodecs: String? = null,
+        /** The picture's profile in words, where the player gives one instead of a codecs string (mpv's `codec-profile`). */
+        val videoProfile: String? = null,
         val width: Int = 0,
         val height: Int = 0,
         val frameRate: Float = 0f,
@@ -56,7 +58,7 @@ object FormatLine {
      */
     fun line(facts: Facts, extras: List<String> = emptyList()): String {
         val parts = ArrayList<String>(8)
-        val video = videoName(facts.videoMime, facts.videoCodecs)
+        val video = videoName(facts.videoMime, facts.videoCodecs, facts.videoProfile)
         if (video != null) parts += video
         val w = facts.width
         val h = facts.height
@@ -97,7 +99,7 @@ object FormatLine {
     // ---- picture ---------------------------------------------------------------------------
 
     /** "HEVC Main 10 L5.0", "H.264 High L4.0", "Dolby Vision profile 5", or null when nothing is known. */
-    fun videoName(mime: String?, codecs: String?): String? {
+    fun videoName(mime: String?, codecs: String?, profile: String? = null): String? {
         val type = clean(mime, 80)?.lowercase()
         val strings = clean(codecs, 80)?.lowercase()
         val family = videoFamily(type) ?: strings?.let(::familyOfCodecs)
@@ -110,7 +112,9 @@ object FormatLine {
             Family.DolbyVision -> strings?.let(::dolbyVisionDetail)
             else -> null
         }
-        return if (detail.isNullOrEmpty()) name else "$name $detail"
+        // A profile in words (mpv's "Main 10") stands in where the codecs string said nothing.
+        val shown = detail?.takeIf { it.isNotEmpty() } ?: clean(profile, 24)
+        return if (shown.isNullOrEmpty()) name else "$name $shown"
     }
 
     private enum class Family(val label: String) {

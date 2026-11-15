@@ -1688,6 +1688,17 @@ internal fun BoxScope.DetailsPanel(rows: () -> List<Pair<String, String>>, onClo
     }
 }
 
+/**
+ * What "Copy details" puts on the clipboard for a failed video: the app and system, the sentence
+ * the sheet says, and the failed format with the decoders mpv lists for it ([MpvFormats]). Not the
+ * video's title or the chat's name (AGENTS.md privacy): a report needs the format, not the file.
+ */
+internal fun failureDetails(phase: Phase.Failed): String = buildString {
+    appendLine("TMPlayer ${com.tmplayer.desktop.BuildInfo.VERSION}, ${System.getProperty("os.name")} ${System.getProperty("os.version")} (${System.getProperty("os.arch")})")
+    appendLine(phase.message)
+    if (phase.details.isNotBlank()) appendLine(phase.details)
+}.trimEnd()
+
 /** The loading, error, countdown, "Still watching?" and finished sheets over the picture. */
 @Composable
 internal fun BoxScope.StatusSheet(
@@ -1717,6 +1728,12 @@ internal fun BoxScope.StatusSheet(
                 is Phase.Loading -> Unit
                 is Phase.Failed -> {
                     Text(phase.message, color = Color.White, fontSize = 15.sp, textAlign = TextAlign.Center)
+                    // The failed format in one plain line (EG-F37), from mpv's track list: nothing
+                    // for an error before any format was known.
+                    if (phase.format.isNotBlank()) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(phase.format, color = Color.White.copy(alpha = 0.55f), fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.testTag("failed-format"))
+                    }
                     Spacer(Modifier.height(12.dp))
                     Row {
                         // Short of room, trying again finds the same drive: the first button is
@@ -1740,14 +1757,9 @@ internal fun BoxScope.StatusSheet(
                     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
                     var copied by remember(phase) { mutableStateOf(false) }
                     TextButton(onClick = {
-                        val details = buildString {
-                            appendLine("TMPlayer ${com.tmplayer.desktop.BuildInfo.VERSION}, ${System.getProperty("os.name")} ${System.getProperty("os.version")} (${System.getProperty("os.arch")})")
-                            appendLine(if (subtitle.isNotBlank()) "$title ($subtitle)" else title)
-                            appendLine(phase.message)
-                        }
-                        clipboard.setText(androidx.compose.ui.text.AnnotatedString(details))
+                        clipboard.setText(androidx.compose.ui.text.AnnotatedString(failureDetails(phase)))
                         copied = true
-                    }) { Text(if (copied) s.playerDetailsCopied else s.playerCopyDetails) }
+                    }, modifier = Modifier.testTag("copy-details")) { Text(if (copied) s.playerDetailsCopied else s.playerCopyDetails) }
                 }
                 is Phase.Countdown -> {
                     Text(s.playerNextUp(nextLabel(phase.next)), color = Color.White, fontSize = 17.sp)

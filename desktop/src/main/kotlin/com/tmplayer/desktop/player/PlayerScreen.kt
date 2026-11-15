@@ -130,7 +130,7 @@ internal sealed interface Phase {
     data class Loading(val message: String) : Phase
     data object Playing : Phase
     /** [noRoom]: refused for space on the drive, which Free up space answers better than Try again. */
-    data class Failed(val message: String, val noRoom: Boolean = false) : Phase
+    data class Failed(val message: String, val noRoom: Boolean = false, val format: String = "", val details: String = "") : Phase
     data class Countdown(val next: MediaItem, val seconds: Int) : Phase
     data object Finished : Phase
 
@@ -324,7 +324,9 @@ fun PlayerScreen(
     // failure is read where it opens.
     LaunchedEffect(engine) {
         engine.state.map { it.error }.collect { error ->
-            if (error != null && phase == Phase.Playing && engine.cast == null) phase = Phase.Failed(error)
+            if (error != null && phase == Phase.Playing && engine.cast == null) {
+                phase = Phase.Failed(error, format = engine.state.value.failedFormat, details = engine.state.value.failedDetails)
+            }
         }
     }
     // When the viewer's pause began, 0 while it plays: Back on a video paused for a few seconds
@@ -787,7 +789,7 @@ fun PlayerScreen(
         val error = engine.state.value.error
         // On a TV the casting panel says what went wrong, with Play here beside it.
         if (error != null && engine.cast == null) {
-            phase = Phase.Failed(error)
+            phase = Phase.Failed(error, format = engine.state.value.failedFormat, details = engine.state.value.failedDetails)
             return@LaunchedEffect
         }
         ignoreSavedPosition = false

@@ -154,6 +154,9 @@ data class PlaybackStatus(
     val seekPending: Boolean = false,
     val ended: Boolean = false,
     val error: String? = null,
+    /** With [error]: the failed format in one plain line, and the block "Copy details" adds ([MpvFormats]); empty when no format was known. */
+    val failedFormat: String = "",
+    val failedDetails: String = "",
     val videoWidth: Int = 0,
     val videoHeight: Int = 0,
     val volume: Int = 100,

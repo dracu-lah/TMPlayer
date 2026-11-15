@@ -204,7 +204,8 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
                     is PlaybackEvent.MediaEnded -> _state.update { it.copy(ended = true, playing = false) }
                     is PlaybackEvent.ErrorOccurred -> {
                         Logger.w(TAG, "Playback failed: ${e.error.code} ${e.error.message}")
-                        _state.update { it.copy(error = MpvErrors.describe(e.error.message, e.error.code.toString())) }
+                        val failed = failedFormat()
+                        _state.update { it.copy(error = MpvErrors.describe(e.error.message, e.error.code.toString()), failedFormat = failed.line, failedDetails = failed.block) }
                     }
                     else -> Unit
                 }
@@ -371,9 +372,14 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
         } catch (e: Throwable) {
             Logger.w(TAG, "Open failed", e)
             val error = if (MpvErrors.codeIn(e.message) != null) MpvErrors.describe(e.message, null) else e.message ?: L.playerOpenFailed
-            _state.update { it.copy(error = error, buffering = false) }
+            val failed = failedFormat()
+            _state.update { it.copy(error = error, buffering = false, failedFormat = failed.line, failedDetails = failed.block) }
         }
     }
+
+    /** The format that would not play, from mpv's track list: see [MpvFormats]. Empty before any track was listed. */
+    private fun failedFormat(): MpvFormats.Failure =
+        runCatching { MpvFormats.describe(MpvProps(handle), L.playerErrorViaSoftware) }.getOrDefault(MpvFormats.Failure.NONE)
 
     /**
      * The subtitles [plan] wants, once the file's tracks and the soundtrack mpv chose are known.
@@ -1000,3 +1006,11 @@ private fun MPVHandle.string(name: String): String? = runCatching { getPropertyS
 private fun MPVHandle.int(name: String): Int? = runCatching { getPropertyInt(name) }.getOrNull()
 private fun MPVHandle.double(name: String): Double? = runCatching { getPropertyDouble(name) }.getOrNull()
 private fun MPVHandle.bool(name: String): Boolean? = runCatching { getPropertyBoolean(name) }.getOrNull()
+
+/** mpv's properties as [MpvFormats] reads them. */
+private class MpvProps(private val h: MPVHandle) : MpvFormats.Props {
+    override fun string(name: String) = h.string(name)
+    override fun int(name: String) = h.int(name)
+    override fun double(name: String) = h.double(name)
+    override fun bool(name: String) = h.bool(name)
+}
