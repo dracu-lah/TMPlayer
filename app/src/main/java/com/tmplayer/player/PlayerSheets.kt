@@ -277,9 +277,9 @@ class PlayerSheets(
                 val s = LocalStrings.current
                 // Focus on "Switch and play": it is the answer that does what the viewer pressed.
                 TvConfirm(
-                    title = s.settingsLowStorage,
-                    message = s.mainLowStorageAskPlay(mode = s.settingsLowStorage),
-                    detail = s.settingsLowStorageDetail,
+                    title = s.settingsStreamSwitchTitle,
+                    message = s.mainStreamAskPlay,
+                    detail = s.settingsStreamSaveDetail,
                     confirmLabel = s.mainLowStorageSwitchPlay,
                     cancelLabel = s.mainLowStorageNotNow,
                     destructive = false,

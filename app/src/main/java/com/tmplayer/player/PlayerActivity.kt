@@ -6004,7 +6004,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 val short = Translator.messages.formatter.bytes(plan.shortfallBytes)
                 showError(
                     if (lowStorageOff) {
-                        L.playerNotEnoughRoomLowStorage(size = short, mode = L.settingsLowStorage)
+                        L.playerNotEnoughRoomStream(size = short)
                     } else {
                         L.playerNotEnoughRoom(size = short)
                     },

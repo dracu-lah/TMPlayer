@@ -1479,7 +1479,6 @@ fun DownloadsScreen(
             onDismiss = { freeingUp = false },
             lowStorage = if (short && (!lowStorageOn || lowStorageTurned)) {
                 com.tmplayer.ui.components.LowStorageOffer(
-                    mode = L.settingsLowStorage,
                     windowBytes = com.tmplayer.player.LowStorageWindow.WINDOW_BYTES,
                     on = lowStorageTurned,
                 ) {

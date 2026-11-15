@@ -311,7 +311,7 @@ private data class RoomPrompt(
     val reclaimBytes: Long,
     val shortfallBytes: Long,
     val chatTitle: String,
-    /** Low storage mode is off and the video would stream, so the message names the mode. */
+    /** While streaming is on Keep video and the video would stream, so the message names Save space. */
     val lowStorageOff: Boolean = false,
 )
 
@@ -1090,7 +1090,7 @@ private fun Root() {
     // One slot for whatever the current login pane got wrong: only one of them is ever on screen.
     var signInError by rememberSaveable { mutableStateOf<String?>(null) }
     var roomPrompt by remember { mutableStateOf<RoomPrompt?>(null) }
-    // "Switch to Low storage mode?", for a video that only fits that way, and the refusal "Not now"
+    // "Switch to Save space?", for a video that only fits that way, and the refusal "Not now"
     // falls back to. A refused download leaves its question in [LowStorageOffers].
     var lowStorageAsk by remember { mutableStateOf<Pair<LowStorageOffers.Ask, RoomPrompt?>?>(null) }
     val offeredLowStorage by LowStorageOffers.pending.collectAsStateWithLifecycle()
@@ -2435,13 +2435,13 @@ private fun Root() {
         lowStorageAsk?.let { (ask, refusal) ->
             // An invitation, so focus starts on "Switch and play": it does what the viewer pressed.
             TvConfirm(
-                title = L.settingsLowStorage,
+                title = L.settingsStreamSwitchTitle,
                 message = if (ask.keep) {
-                    L.mainLowStorageAskKeep(mode = L.settingsLowStorage)
+                    L.mainStreamAskKeep
                 } else {
-                    L.mainLowStorageAskPlay(mode = L.settingsLowStorage)
+                    L.mainStreamAskPlay
                 },
-                detail = L.settingsLowStorageDetail,
+                detail = L.settingsStreamSaveDetail,
                 confirmLabel = L.mainLowStorageSwitchPlay,
                 cancelLabel = L.mainLowStorageNotNow,
                 destructive = false,
@@ -2482,7 +2482,7 @@ private fun Root() {
                         }
                         ) +
                     // A stream, with the mode off: the one answer that deletes nothing is named.
-                    if (pending.lowStorageOff) " " + L.mainNoRoomLowStorage(mode = L.settingsLowStorage, device = device) else "",
+                    if (pending.lowStorageOff) " " + L.mainStreamNoRoom(device = device) else "",
                 detail = L.mainNoRoomDetail,
                 // Straight to what can go, with the sheet that says what each line frees already up
                 // (user, 2026-10-18), rather than to a tab to work it out from.
