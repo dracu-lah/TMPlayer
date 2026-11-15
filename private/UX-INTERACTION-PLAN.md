@@ -263,6 +263,32 @@ Messages sync, an IMDb or TMDB link in a caption forcing the match, subtitle lan
 (`Hindi.srt`). Split pieces and ZIP are already done on all four platforms. TS tasks run after T9 (they share
 the series files) in waves of 3.
 
+### T11 Anime episodes: titles, images and details (absolute numbering)  (model: sonnet high, depends: T9 and T10 (same online files), a worker slot)
+User, 2026-11-16: opened a long anime (Naruto Shippuden, about 500 episodes, usually named by absolute number): the
+episode pictures, titles and details were missing. Likely cause, to CONFIRM first with a failing test using
+fixtures (a 500 episode show named `Show - 123.mkv`): `EpisodeNames.named` only accepts an episode when
+`it.season == tag.season && it.number == tag.episode`, a show matched on AniList has no episode list at all
+(AniList gives one entry per cour, no per-episode names or stills; no `streamingEpisodes` read in
+`MetaApis.kt`), and TMDB's per-season lists do not line up with absolute numbers (no `episode_groups` read).
+Fix as one redesign of anime episode data, not a patch:
+1. A pure `AnimeEpisodes` resolver in core: absolute number to (season, episode) and back, built from the best
+   available list: TMDB episode groups of type absolute order, else TMDB seasons counted in order, else Kitsu
+   (episodes with canonical title, synopsis, thumbnail, air date, absolute number; found by MAL id through
+   Kitsu mappings, no key), else Jikan (MAL episode titles and air dates), else AniList `streamingEpisodes`
+   (title and thumbnail). One answer per episode with the source named; the first source with a title wins,
+   images from the first that has one; each cached with a bound; one request per show not per row.
+2. Wire it where episode rows, the player's episode labels and the next-up card read names and stills
+   (`EpisodeNames`, `OnlineMetadata.season`, `SeriesShelf`, phone, TV, desktop, web).
+3. Filename parsing for anime: `[Group] Show - 123 [1080p].mkv`, `Show 123v2`, `S2 - 05`, season cour splits
+   (a file numbered 1 to 500 on a show with 20 seasons), batch and recap/OVA/special markers; ranges (TS2) share
+   the parser. Garbage test.
+4. UI: a missing still shows the show's own art with a dark overlay and the number, never an empty box; a missing
+   title shows "Episode 123"; both fill in when the data arrives without a layout jump (reserve the space).
+5. Show T9's missing-episode rows for anime too (a 500 episode list is lazy and cheap).
+Tests: fixtures for Naruto Shippuden (500 episodes, 21 TMDB seasons, AniList one entry, Kitsu and Jikan
+shapes) plus one cour-split show and one with a wrong match, scale (500 rows, no request per row), offline,
+garbage. Privacy: only the show id and episode numbers are sent, none of the file or chat names.
+
 ### D1 Support cards: Buy Me a Coffee and UPI  (model: sonnet, running since 2026-11-16)
 Themed cards and dialogs with the official logos, regional order (IN: UPI first), icon popup through the
 existing `SupportReminder` nag. Design note `design/redesign/support-cards.md`.
