@@ -1,6 +1,8 @@
 package com.tmplayer.data
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 
 /**
@@ -167,8 +169,8 @@ interface ChatSearchSource {
  * runs one at a time and drops it when the words change, so a stale answer never lands.
  *
  * TDLib calls are bounded: [first] makes at most [ChatSearch.spellings] searches (four to seven,
- * of three filters each) or one round of [ChatSearch.SCAN_PAGES] history pages, [more] one page,
- * [deeper] one round. A flood wait is waited out once, by this search alone; another one, or a
+ * of three filters each) and, beside them, one round of history pages (500 messages, seven calls
+ * at most), [more] one page, [deeper] one round. A flood wait is waited out once, by this search alone; another one, or a
  * longer one, reads the history instead, so retries stop by themselves.
  */
 class ChatSearchRun(
@@ -195,34 +197,54 @@ class ChatSearchRun(
     /** Whether this search is reading the chat's history rather than paging Telegram's answer. */
     val readingHistory: Boolean get() = how == ChatSearchHow.Scanned || how == ChatSearchHow.Offline
 
-    /** Telegram calls made so far, for the tests' budget. */
-    var calls = 0
-        private set
-
     /** What is listed before anything is asked: the matches among what is loaded. */
     fun local(): ChatSearchAnswer = answer()
 
     /**
-     * Telegram's first answer, added under the local one. When every spelling comes back empty, or
-     * Telegram cannot be asked, the newest part of the history is read and matched here instead.
+     * The first answer, added under the local one: Telegram's search and, beside it, the newest
+     * part of the history read and matched here, which finds the release names Telegram's word
+     * search cannot see. When Telegram finds nothing or fails, the history is the answer, and
+     * Search deeper reads on; offline it is what TDLib keeps on this device.
      */
     suspend fun first(): ChatSearchAnswer {
         if (query.isEmpty()) return answer().copy(endReached = true)
-        if (!source.online()) return scan(onlyLocal = true)
+        if (!source.online()) {
+            how = ChatSearchHow.Offline
+            val (read, failure) = round(onlyLocal = true)
+            items = ChatSearch.merge(items, read)
+            return answer().copy(failed = failure)
+        }
+        return coroutineScope {
+            val history = async { round(onlyLocal = false) }
+            val told = askTelegram()
+            val (read, failure) = history.await()
+            if (!told.isNullOrEmpty()) {
+                how = ChatSearchHow.Server
+                items = ChatSearch.merge(ChatSearch.merge(items, told), read)
+                answer()
+            } else {
+                how = ChatSearchHow.Scanned
+                items = ChatSearch.merge(items, read)
+                answer().copy(failed = failure)
+            }
+        }
+    }
+
+    /**
+     * Each spelling in turn until one finds something that answers the query: those, ranked, with
+     * the cursors kept for [more]. Empty when none did, null when Telegram could not be asked.
+     */
+    private suspend fun askTelegram(): List<MediaItem>? {
         for (word in ChatSearch.spellings(query)) {
-            val page = ask(word, MediaCursors()) ?: return scan(onlyLocal = false)
+            val page = ask(word, MediaCursors()) ?: return null
             val found = ChatSearch.rank(page.items, query)
             if (found.isEmpty()) continue
-            how = ChatSearchHow.Server
             spelling = word
             cursors = page.cursors
             serverDone = page.endReached
-            items = ChatSearch.merge(items, found)
-            return answer()
+            return found
         }
-        // Telegram's word search sees nothing of it: the file may still be in the chat under a name
-        // it does not split where the viewer typed spaces.
-        return scan(onlyLocal = false)
+        return emptyList()
     }
 
     /** The next page, as the viewer scrolls: Telegram's next one. The history goes on only by [deeper]. */
@@ -238,8 +260,10 @@ class ChatSearchRun(
     /** Search deeper: another round of the history, from where the last one stopped. */
     suspend fun deeper(): ChatSearchAnswer {
         // Only a search that is reading the history has a deeper to go to.
-        if (scanDone || (how != ChatSearchHow.Scanned && how != ChatSearchHow.Offline)) return answer()
-        return scan(onlyLocal = how == ChatSearchHow.Offline)
+        if (scanDone || !readingHistory) return answer()
+        val (read, failure) = round(onlyLocal = how == ChatSearchHow.Offline)
+        items = ChatSearch.merge(items, read)
+        return answer().copy(failed = failure)
     }
 
     private var lastFailure: Throwable? = null
@@ -248,7 +272,6 @@ class ChatSearchRun(
     private suspend fun ask(word: String, from: MediaCursors): MediaPage? {
         while (true) {
             try {
-                calls++
                 return source.search(word, from, ChatSearch.PAGE)
             } catch (e: CancellationException) {
                 throw e
@@ -265,17 +288,19 @@ class ChatSearchRun(
         }
     }
 
-    /** A round of the history, newest first from where the last round stopped, matched here. */
-    private suspend fun scan(onlyLocal: Boolean): ChatSearchAnswer {
-        if (how != ChatSearchHow.Server) how = if (onlyLocal) ChatSearchHow.Offline else ChatSearchHow.Scanned
+    /**
+     * A round of the history, newest first from where the last round stopped: the matches, and
+     * the failure when not one page could be read (said with Try again).
+     */
+    private suspend fun round(onlyLocal: Boolean): Pair<List<MediaItem>, Throwable?> {
         var failure: Throwable? = null
         var pages = 0
         var read = 0
+        var found: List<MediaItem> = emptyList()
         // Bounded by messages and by calls: TDLib's first page of a chat it has not opened is often
         // a single message, so a round counts what it read, with a couple of calls to spare.
         while (read < ChatSearch.SCAN_PAGES * ChatSearch.SCAN_PAGE && pages < ChatSearch.SCAN_PAGES + 2 && !scanDone) {
             val page = try {
-                calls++
                 source.history(scanFrom, ChatSearch.SCAN_PAGE, onlyLocal)
             } catch (e: CancellationException) {
                 throw e
@@ -286,8 +311,7 @@ class ChatSearchRun(
             pages++
             read += page.read.coerceAtLeast(0)
             scanned += page.read.coerceAtLeast(0)
-            val found = ChatSearch.local(page.items, chatId, query, topicId)
-            items = ChatSearch.merge(items, found)
+            found = ChatSearch.merge(found, ChatSearch.local(page.items, chatId, query, topicId))
             // An empty page, or one that does not move back, is the chat's start: never asked again.
             if (page.read <= 0 || page.next <= 0L || (scanFrom != 0L && page.next >= scanFrom)) {
                 scanDone = true
@@ -295,10 +319,7 @@ class ChatSearchRun(
                 scanFrom = page.next
             }
         }
-        // Nothing read this round: the failure is said, with Try again (in place of the listing
-        // when there is nothing to list).
-        val failed = if (failure != null && pages == 0) failure else null
-        return answer().copy(failed = failed)
+        return found to (if (pages == 0) failure else null)
     }
 
     private fun answer(): ChatSearchAnswer = when (how) {

@@ -153,7 +153,15 @@ class ChatSearchTest {
         while (!answer.endReached) answer = run.more()
         assertEquals(180, answer.items.size)
         assertEquals(180, answer.items.map { it.messageId }.toSet().size, "each once")
-        assertEquals(0, chat.histories)
+        assertTrue(chat.histories <= ChatSearch.SCAN_PAGES + 2, "one round of the history beside Telegram, no more")
+    }
+
+    @Test
+    fun `a dotted copy in the newest part is found beside what Telegram's search found`() = runBlocking {
+        val chat = TelegramChat(mapOf(100 to dotted, 4_500 to "Resident Evil 2002.mkv"))
+        val answer = ChatSearchRun(chat, "resident evil", emptyList(), chatId).first()
+        assertEquals(ChatSearchHow.Server, answer.how)
+        assertEquals(listOf("Resident Evil 2002.mkv", dotted), answer.items.map { it.fileName })
     }
 
     @Test
