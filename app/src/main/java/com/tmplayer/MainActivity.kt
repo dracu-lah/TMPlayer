@@ -1276,7 +1276,7 @@ private fun Root() {
                 }
                 return@withContext
             }
-            val local = runCatching { Td.localFileAvailability(item.fileId) }
+            val local = com.tmplayer.data.runCatchingCancellable { Td.localFileAvailability(item.fileId) }
                 .getOrDefault(LocalFileAvailability.Missing)
             // A stream: its head and index start coming now, while the room is measured and the
             // player is built ([com.tmplayer.player.StreamWarmup]).
@@ -1318,7 +1318,7 @@ private fun Root() {
             // it over as the cache slot would have the next play delete a video they chose to keep.
             val kept = runCatching { settings.isKeptDownload(item.chatId, item.messageId) }
                 .getOrDefault(false)
-            val lowStorageOn = runCatching { settings.lowStorageModeNow() }.getOrDefault(true)
+            val lowStorageOn = com.tmplayer.data.runCatchingCancellable { settings.lowStorageModeNow() }.getOrDefault(true)
 
             // Back on Main from here down. Everything below writes Compose state or starts an
             // activity, and neither is a thing to do from a background thread.

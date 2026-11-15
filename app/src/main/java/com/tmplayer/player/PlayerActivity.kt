@@ -5763,11 +5763,11 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             // In a group with topics the next episode is looked for in this video's own topic, or
             // the plain listing below would step into whichever section posted last.
             val topic = here.topicId.takeIf { it != 0 }
-                ?: runCatching { repository.topicOf(chatId, messageId) }.getOrDefault(0)
+                ?: com.tmplayer.data.runCatchingCancellable { repository.topicOf(chatId, messageId) }.getOrDefault(0)
             // A page at a time until both neighbours are found: an episode posted a page away
             // from this one is still the next one.
             val steps = EpisodeNeighbours.lookUp(here, show) { query, cursors ->
-                runCatching { repository.mediaPage(chatId, cursors, query = query, topicId = topic) }.getOrNull()
+                com.tmplayer.data.runCatchingCancellable { repository.mediaPage(chatId, cursors, query = query, topicId = topic) }.getOrNull()
             }
             _episodes.value = steps
             refreshSessionMetadata()
@@ -6003,13 +6003,13 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         val whole = given.size > 1 && com.tmplayer.data.SplitPieces.report(given).complete
         if (!whole && (given.isNotEmpty() || com.tmplayer.data.SplitPieces.pieceOf(mediaFileName) != null)) {
             val repository = ChatRepository(client)
-            val found = runCatching {
+            val found = com.tmplayer.data.runCatchingCancellable {
                 com.tmplayer.data.SplitPieces.lookUp(currentItem(), known = given) { query, cursors ->
-                    runCatching { repository.mediaPage(chatId, cursors, query = query, topicId = mediaTopicId) }.getOrNull()
+                    com.tmplayer.data.runCatchingCancellable { repository.mediaPage(chatId, cursors, query = query, topicId = mediaTopicId) }.getOrNull()
                 }
             }.getOrNull().orEmpty()
             // With no connection to search the chat with, the pieces kept in Downloads.
-            val kept = runCatching {
+            val kept = com.tmplayer.data.runCatchingCancellable {
                 com.tmplayer.data.SplitPieces.among(currentItem(), settings.downloadsNow().map { it.toMediaItem() })
             }.getOrNull()?.takeIf { it.size > 1 }
             pieces = com.tmplayer.data.SplitPieces.best(given, found, kept)
@@ -6264,12 +6264,20 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         // again before this screen was gone and stacked a second player that Back then landed on.
         if (handingOver) return
         handingOver = true
-        startActivity(
-            intent(this, item, inChat).putExtra(
-                EXTRA_OUTSIDE_APP_TASK,
-                inPictureInPicture || intent.getBooleanExtra(EXTRA_OUTSIDE_APP_TASK, false),
-            ),
-        )
+        val started = runCatching {
+            startActivity(
+                intent(this, item, inChat).putExtra(
+                    EXTRA_OUTSIDE_APP_TASK,
+                    inPictureInPicture || intent.getBooleanExtra(EXTRA_OUTSIDE_APP_TASK, false),
+                ),
+            )
+        }
+        if (started.isFailure) {
+            // Nothing took over: this player stays, and Next and Previous work again.
+            handingOver = false
+            showGestureFeedback(L.playerOpenFailed)
+            return
+        }
         // This screen lingers until the next one is drawn, and its player with it: still reading
         // the stream, still holding the decoders. A TV stick's hardware decoder may serve only one
         // player at a time, and its line and its cores are the new video's now. Stopped here,
