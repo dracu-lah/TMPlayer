@@ -220,6 +220,7 @@ fun AddChatsScreen(
     var asking by remember { mutableStateOf<Ask?>(null) }
     // Typed here and handed on, since a text field fed back through a flow a frame late loses keys.
     var typed by rememberSaveable { mutableStateOf(state.query) }
+    val onType: (String) -> Unit = { typed = it; model.type(it) }
 
     // A chat ticked that the list does not hold: the Gone rows' candidates. Derived, so a tick on a
     // chat that is there does not rebuild the rows.
@@ -491,6 +492,9 @@ fun AddChatsScreen(
     val leave = {
         when {
             asking != null -> asking = null
+            // Back empties the search words first (rule 2: clear, then close), and a remote only
+            // from the field: from a row it climbs to the top, as below.
+            typed.isNotEmpty() && (!tv || inSearch) -> onType("")
             // On the television Back from the list or the foot goes up to the filters first, so
             // the top of a long list is one press away; Back there leaves.
             tv && (onRow != null || inFoot || inSearch || onBandButton) -> toTop()
@@ -531,7 +535,6 @@ fun AddChatsScreen(
         val searchBox: @Composable () -> Unit = {
         val field = Modifier.fillMaxWidth().focusRequester(searchFocus).onFocusChanged { inSearch = it.hasFocus }
         Box(Modifier.padding(top = 12.dp)) {
-            val onType: (String) -> Unit = { typed = it; model.type(it) }
             if (searchField != null) {
                 searchField(typed, onType, s.commonSearch, field, toFirstRow)
             } else {
@@ -543,6 +546,14 @@ fun AddChatsScreen(
                     singleLine = true,
                     placeholder = { Text(s.commonSearch) },
                     leadingIcon = { Icon(TmIcons.Search, contentDescription = null, tint = Tone.muted) },
+                    // A cross to empty the box, on a touch screen and a pointer. Not on the television:
+                    // a second stop beside the field took the remote's Down from the rows (T1's cross
+                    // was taken back for it); there Back clears the words.
+                    trailingIcon = if (typed.isNotEmpty() && !tv) {
+                        { com.tmplayer.ui.components.ClearButton(s.browseClearSearch, onClick = { onType("") }) }
+                    } else {
+                        null
+                    },
                     shape = RoundedCornerShape(Corner.Large),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedContainerColor = Tone.surface,
