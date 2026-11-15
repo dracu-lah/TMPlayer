@@ -227,6 +227,15 @@ private sealed interface Prompt {
     data object ClearFavorites : Prompt
     data object SignOut : Prompt
 
+    /** Resume on other devices being switched on: it writes a file to Saved Messages, so it says what first. */
+    data object EnableResumeSync : Prompt
+
+    /** "Turn off and delete the sync file", which takes the file out of Saved Messages. */
+    data object DeleteResumeSync : Prompt
+
+    /** A sync file that could not be read, about to be replaced with this device's lists. */
+    data object ReplaceResumeSync : Prompt
+
     /** A backup file picked, with what restoring it would change. */
     data class Restore(val plan: RestorePlan) : Prompt
 }
@@ -314,6 +323,9 @@ fun SettingsScreen(
     val detailFirst by settings.detailFirst.collectAsStateWithLifecycle(initialValue = true)
     val rememberSearches by settings.rememberSearches.collectAsStateWithLifecycle(initialValue = true)
     val resumeSync by settings.resumeSync.collectAsStateWithLifecycle(initialValue = false)
+    val resumeSyncStatus by settings.resumeSyncStatus.collectAsStateWithLifecycle(initialValue = null)
+    val resumeSyncAt by settings.resumeSyncAt.collectAsStateWithLifecycle(initialValue = 0L)
+    val resumeSyncRunning by com.tmplayer.data.ResumeSync.running.collectAsStateWithLifecycle()
     val wifiOnly by settings.wifiOnlyDownloads.collectAsStateWithLifecycle(initialValue = false)
     val pauseWhilePlaying by settings.pauseDownloadsWhilePlaying.collectAsStateWithLifecycle(initialValue = true)
     val saveMobileData by settings.saveMobileData.collectAsStateWithLifecycle(initialValue = false)
@@ -438,6 +450,8 @@ fun SettingsScreen(
     var editingUpper by remember { mutableStateOf(false) }
     // Where focus is sent back to after a reset of the size limits.
     val rangeRow = remember { FocusRequester() }
+    // Resume on other devices' switch, where focus goes when the rows under it go (TV).
+    val resumeSyncRow = remember { FocusRequester() }
     // Where focus lands on a TV when a page opens: on every page a row that Left and Right cannot
     // change. On Appearance that is Language, not the Theme stepper above it, which once turned a
     // tester's TV to Light with a stray Left before they had even seen the screen.
@@ -1276,23 +1290,53 @@ fun SettingsScreen(
                         onToggle = { scope.launch { settings.setRememberSearches(!rememberSearches) } },
                     )
                 }
-                // Resume across devices: opt in, explained in full on the row itself, since it
-                // writes a message to the viewer's own Saved Messages.
+                // Resume on other devices (U7): opt in, the row saying what goes into the viewer's
+                // own Saved Messages. On asks first (Prompt.EnableResumeSync); off keeps the file,
+                // which "Turn off and delete the sync file" takes away.
                 item {
                     ToggleRow(
                         title = s.settingsResumeSync,
                         subtitle = if (resumeSync) s.settingsResumeSyncOn else s.settingsResumeSyncOff,
                         icon = TmIcons.History,
                         checked = resumeSync,
+                        modifier = Modifier.focusRequester(resumeSyncRow),
                         onToggle = {
-                            scope.launch {
-                                val on = !resumeSync
-                                settings.setResumeSync(on)
-                                // The switch and its line say it is on; nothing more to say.
-                                if (on) com.tmplayer.data.ResumeSync.syncSoon(settings, afterMs = 0)
+                            if (!resumeSync) {
+                                prompt = Prompt.EnableResumeSync
+                            } else {
+                                scope.launch { settings.setResumeSync(false) }
                             }
                         },
                     )
+                }
+                if (resumeSync) {
+                    // Sync now, with how the last sync went under it; Replace when the file there
+                    // could not be read, which asks first.
+                    item {
+                        ActionRow(
+                            title = com.tmplayer.data.SyncWords.action(resumeSyncStatus),
+                            subtitle = com.tmplayer.data.SyncWords.status(resumeSyncStatus, resumeSyncAt, resumeSyncRunning),
+                            icon = TmIcons.Refresh,
+                            onClick = {
+                                when {
+                                    resumeSyncRunning -> Unit
+                                    resumeSyncStatus?.kind == com.tmplayer.data.SyncStatus.Kind.Unreadable -> prompt = Prompt.ReplaceResumeSync
+                                    // In the app's own scope: leaving Settings does not stop it half way.
+                                    else -> com.tmplayer.platform.Background.scope.launch {
+                                        com.tmplayer.data.ResumeSync.sync(settings, manual = true)
+                                    }
+                                }
+                            },
+                        )
+                    }
+                    item {
+                        ActionRow(
+                            title = s.settingsResumeSyncDelete,
+                            subtitle = s.settingsResumeSyncDeleteDetail,
+                            icon = TmIcons.Delete,
+                            onClick = { prompt = Prompt.DeleteResumeSync },
+                        )
+                    }
                 }
                 // The picker, always listed: the chats added decide what Chats, Home and search
                 // show. The one list of which chats TMPlayer shows (2026-11-01): a chat's menu
@@ -2366,6 +2410,52 @@ fun SettingsScreen(
                 historyRemoval.run({ s.browseHistoryCleared }) { st, w -> com.tmplayer.data.HistoryEdits.clear(st, w) }
                 // What was cleared lives on History, not here, so the line is the only sign.
                 toast(s.browseHistoryCleared)
+            },
+            onDismiss = { prompt = null },
+        )
+
+        Prompt.EnableResumeSync -> TvConfirm(
+            title = s.settingsResumeSyncEnableTitle,
+            message = s.settingsResumeSyncEnableMessage,
+            confirmLabel = s.confirmTurnOn,
+            destructive = false,
+            onConfirm = {
+                prompt = null
+                scope.launch {
+                    settings.setResumeSync(true)
+                    com.tmplayer.data.ResumeSync.syncSoon(settings, afterMs = 0)
+                }
+            },
+            onDismiss = { prompt = null },
+        )
+
+        Prompt.DeleteResumeSync -> TvConfirm(
+            title = s.settingsResumeSyncDeleteTitle,
+            message = s.settingsResumeSyncDeleteMessage,
+            confirmLabel = s.commonDelete,
+            onConfirm = {
+                prompt = null
+                scope.launch {
+                    // The rows under the switch go: focus back on the switch on a TV.
+                    launch { resumeSyncRow.settle() }
+                    val deleted = withContext(kotlinx.coroutines.NonCancellable) {
+                        runCatching { com.tmplayer.data.ResumeSync.turnOffAndDelete(settings) }.getOrDefault(false)
+                    }
+                    toast(if (deleted) s.settingsResumeSyncDeleted else s.settingsResumeSyncDeleteFailed)
+                }
+            },
+            onDismiss = { prompt = null },
+        )
+
+        Prompt.ReplaceResumeSync -> TvConfirm(
+            title = s.settingsResumeSyncReplaceTitle,
+            message = s.settingsResumeSyncReplaceMessage,
+            confirmLabel = s.settingsResumeSyncReplace,
+            onConfirm = {
+                prompt = null
+                com.tmplayer.platform.Background.scope.launch {
+                    com.tmplayer.data.ResumeSync.sync(settings, manual = true, replace = true)
+                }
             },
             onDismiss = { prompt = null },
         )
