@@ -63,6 +63,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.Role
@@ -550,13 +551,17 @@ internal fun ChoicePicture(choice: SetupChoice, modifier: Modifier) {
 
 /**
  * A round button that fills under the focus like the cards do. [primary] is the accent-filled one:
- * the first run's Next and Done ([StepFrame]), and the low-end device card's Apply.
+ * the first run's Next and Done ([StepFrame]), and the low-end device card's Apply. [tonal] keeps a
+ * button a secondary one even under the focus (D-2): in the dark theme [Tone.focusFill] is the
+ * accent, so a focused plain button reads as a second primary beside Next. A tonal one answers the
+ * focus with a lighter fill, the text colour for the ring and the text on [Tone.surfaceHigh].
  */
 @Composable
 internal fun SetupButton(
     label: String,
     icon: Boolean = false,
     primary: Boolean = false,
+    tonal: Boolean = false,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
@@ -570,6 +575,7 @@ internal fun SetupButton(
             .clip(CircleShape)
             .background(
                 when {
+                    focused && tonal && !primary -> Tone.text.copy(alpha = TONAL_FOCUS_ALPHA).compositeOver(Tone.surfaceHigh)
                     focused -> Tone.focusFill
                     primary -> Tone.accent
                     else -> Tone.surfaceHigh
@@ -578,7 +584,7 @@ internal fun SetupButton(
             .focusRing(focused, CircleShape)
             // The accent fill and the focus fill are near one colour in the dark theme, so a
             // focused primary button also gets an outline in the text colour.
-            .then(if (primary && focused) Modifier.border(2.dp, Tone.text, CircleShape) else Modifier)
+            .then(if ((primary || tonal) && focused) Modifier.border(2.dp, Tone.text, CircleShape) else Modifier)
             .clickable(
                 interactionSource = interactions,
                 indication = if (touch) LocalIndication.current else null,
@@ -589,6 +595,7 @@ internal fun SetupButton(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         val color = when {
+            focused && tonal && !primary -> Tone.text
             focused -> Tone.onFocusFill
             primary -> Tone.onAccent
             else -> Tone.text
@@ -600,6 +607,9 @@ internal fun SetupButton(
         Text(label, style = MaterialTheme.typography.labelLarge, color = color)
     }
 }
+
+/** How much of the text colour a focused [SetupButton] with `tonal` mixes into its fill. */
+internal const val TONAL_FOCUS_ALPHA = 0.22f
 
 /**
  * The storage step's picture, drawn rather than shot, since a frame of the player says nothing

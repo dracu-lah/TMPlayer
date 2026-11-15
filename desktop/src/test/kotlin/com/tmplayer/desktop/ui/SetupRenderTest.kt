@@ -13,11 +13,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
@@ -559,6 +562,42 @@ class SetupRenderTest {
         onNode(hasText("Use recommended settings") and hasClickAction()).performClick()
         waitUntil(timeoutMillis = WRITE_MS) { done }
         assertTrue(done)
+    }
+
+    /**
+     * D-2: "Use recommended settings" stays a secondary button under the focus. In the dark theme the
+     * focus fill is the accent, so a plain focused button read as a second primary beside Next; now
+     * it gets a lighter fill of its own, and Next stays the one accent button.
+     */
+    @Test
+    fun useRecommendedStaysSecondaryUnderTheFocus() = runComposeUiTest {
+        setContent {
+            TmMaterialTheme(dark = true) {
+                Box(Modifier.size(1280.dp, 800.dp)) {
+                    SetupAndTour(settings, listOf(SetupStep.Storage), onDone = {})
+                }
+            }
+        }
+        fun button(label: String) = hasText(label) and hasClickAction()
+        waitForIdle()
+        waitUntil(timeoutMillis = WRITE_MS) { onAllNodes(button("Next") and isFocused()).fetchSemanticsNodes().isNotEmpty() }
+        // A pixel just inside the pill's left end, clear of its text and ring.
+        fun fill(label: String): Int {
+            val image = onNode(button(label)).captureToImage()
+            return image.toPixelMap()[image.height / 2, image.height / 2].toArgb()
+        }
+        fun distance(a: Int, b: Int) = listOf(16, 8, 0).sumOf { Math.abs(((a shr it) and 0xFF) - ((b shr it) and 0xFF)) }
+        val next = fill("Next")
+        val quiet = fill("Use recommended settings")
+        onNode(isFocused()).performKeyInput { pressKey(Key.DirectionLeft) }
+        waitForIdle()
+        onNode(button("Use recommended settings") and isFocused()).assertExists()
+        val focused = fill("Use recommended settings")
+        val nextAfter = fill("Next")
+        // Focused, it is nowhere near Next's accent fill, and it is lighter than when it rested.
+        assertTrue("focused ${focused.toString(16)} vs Next ${nextAfter.toString(16)}", distance(focused, nextAfter) > 150)
+        assertTrue("focused ${focused.toString(16)} vs resting ${quiet.toString(16)}", focused != quiet)
+        assertEquals("Next keeps its accent fill", next, nextAfter)
     }
 
     /** The Appearance step writes the theme and the interface size as they are picked. */

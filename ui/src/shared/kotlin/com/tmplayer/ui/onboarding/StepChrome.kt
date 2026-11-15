@@ -155,9 +155,11 @@ internal fun StepFrame(
                 if (onBack != null) QuietButton(s.setupBack, icon = true, modifier = Modifier.arrowsMoveFocus(), onClick = onBack)
                 Spacer(Modifier.weight(1f))
                 if (onUseRecommended != null) {
-                    // Beside Next, not over it: the step's one main action stays Next.
+                    // Beside Next, not over it: the step's one main action stays Next, so this one
+                    // stays tonal even under the focus (D-2).
                     SetupButton(
                         s.setupUseRecommended,
+                        tonal = true,
                         modifier = Modifier.arrowsMoveFocus(),
                         onClick = onUseRecommended,
                     )
