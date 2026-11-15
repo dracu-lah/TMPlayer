@@ -151,7 +151,7 @@ toolchain was moved forward on 2026-10-18 (Gradle 9.8.1, AGP 9.4.1, Kotlin 2.4.2
   builds nextlib-media3ext at its pinned commit with `scripts/media3ext/tmplayer-decoders.patch`
   (the extra FFmpeg decoders listed below, and the light video mode further down)
   into `build/media3ext/nextlib-media3ext-<version>-tm3.aar`, which `:app` uses when it is there.
-  It needs NDK 25.2.9519653, CMake 3.22.1, meson, ninja and nasm, and about 15 minutes with
+  It needs NDK 25.2.9519653, CMake 3.22.1, meson, ninja and nasm, and about 8 minutes for the four ABIs with
   `JOBS=4` on a 12 thread machine (one ABI takes about 4; `TM_ABIS=armeabi-v7a` builds just that
   one into a `-partial-` AAR that `:app` never uses; `GRADLE_WORKERS` sets Gradle's workers apart
   from `JOBS`). Without the AAR a debug build takes nextlib from Maven Central (only its own
