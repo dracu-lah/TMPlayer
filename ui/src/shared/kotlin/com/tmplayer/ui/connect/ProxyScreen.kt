@@ -230,24 +230,25 @@ private fun ManualProxy(busy: Boolean, onAdd: (ProxySpec) -> Unit, s: Messages) 
                 SetupButton(kindLabel(k, s), primary = k == kind, onClick = { kind = k; error = null })
             }
         }
-        val field: @Composable (String, String, KeyboardType, Boolean, (String) -> Unit) -> Unit = { label, value, type, masked, change ->
+        val field: @Composable (String, String, KeyboardType, Boolean, ImeAction, (String) -> Unit) -> Unit = { label, value, type, masked, ime, change ->
             OutlinedTextField(
                 value = value,
                 onValueChange = { change(it); error = null },
                 label = { Text(label) },
                 singleLine = true,
                 visualTransformation = if (masked) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
-                keyboardOptions = KeyboardOptions(keyboardType = type, imeAction = ImeAction.Next),
+                // Next between the fields and Done on the last; no autocorrect on an address or a secret.
+                keyboardOptions = KeyboardOptions(keyboardType = type, imeAction = ime, autoCorrectEnabled = false),
                 modifier = Modifier.fillMaxWidth(),
             )
         }
-        field(s.proxyServer, server, KeyboardType.Uri, false) { server = it.trim() }
-        field(s.proxyPort, port, KeyboardType.Number, false) { port = it.filter(Char::isDigit).take(5) }
+        field(s.proxyServer, server, KeyboardType.Uri, false, ImeAction.Next) { server = it.trim() }
+        field(s.proxyPort, port, KeyboardType.Number, false, ImeAction.Next) { port = it.filter(Char::isDigit).take(5) }
         if (kind == ProxyKind.Mtproto) {
-            field(s.proxySecret, secret, KeyboardType.Ascii, false) { secret = it.trim() }
+            field(s.proxySecret, secret, KeyboardType.Ascii, false, ImeAction.Done) { secret = it.trim() }
         } else {
-            field(s.proxyUsername, user, KeyboardType.Ascii, false) { user = it }
-            field(s.proxyPassword, pass, KeyboardType.Password, true) { pass = it }
+            field(s.proxyUsername, user, KeyboardType.Ascii, false, ImeAction.Next) { user = it }
+            field(s.proxyPassword, pass, KeyboardType.Password, true, ImeAction.Done) { pass = it }
         }
         if (error != null) Text(error!!, style = MaterialTheme.typography.bodySmall, color = Tone.danger)
         SetupButton(if (busy) s.proxyPinging else s.proxyAdd, primary = true, onClick = {

@@ -14,6 +14,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import com.tmplayer.i18n.Translator
 import com.tmplayer.online.MetaWords
@@ -175,7 +176,7 @@ fun MetadataKeyDialog(onClose: () -> Unit) {
                 onValueChange = { key = it },
                 placeholder = s.metadataKey,
                 modifier = Modifier.fillMaxWidth(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, autoCorrectEnabled = false),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, imeAction = ImeAction.Done, autoCorrectEnabled = false),
             )
         },
     )
@@ -205,7 +206,7 @@ fun OmdbKeyDialog(onClose: () -> Unit) {
                 onValueChange = { key = it },
                 placeholder = s.metadataOmdbKey,
                 modifier = Modifier.fillMaxWidth(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, autoCorrectEnabled = false),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, imeAction = ImeAction.Done, autoCorrectEnabled = false),
             )
         },
     )
