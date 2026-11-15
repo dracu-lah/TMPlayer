@@ -49,6 +49,8 @@ class DlnaFlowTest {
         val found = LinkedBlockingQueue<DlnaDevice>()
         val gone = LinkedBlockingQueue<String>()
         val finished = LinkedBlockingQueue<Int>()
+        val settled = LinkedBlockingQueue<Int>()
+        override fun onSettled(found: Int) { settled += found }
         override fun onFound(device: DlnaDevice) { found += device }
         override fun onGone(udn: String) { gone += udn }
         override fun onFinished(found: Int) { finished += found }
@@ -143,6 +145,188 @@ class DlnaFlowTest {
         repeat(3) { fake.byebye(port); Thread.sleep(50) }
         assertEquals(fake.udn, heard.gone.poll(5, TimeUnit.SECONDS))
         assertTrue(discovery!!.devices().isEmpty())
+    }
+
+    // Finding more TVs (T7)
+
+    private fun live(
+        heard: Heard,
+        notifyPort: Int,
+        clock: () -> Long = { System.nanoTime() / 1_000_000 },
+        manual: () -> List<String> = { emptyList() },
+        giveUpMs: Long = 400,
+        fetchTimeoutMs: Int = 3_000,
+    ): DlnaDiscovery =
+        DlnaDiscovery(
+            heard,
+            interfaces = { listOf(LanAddress.Candidate("lo", loopback, 8)) },
+            searchTarget = InetSocketAddress(loopback, fake.udpPort),
+            notifyPort = notifyPort,
+            allowLoopback = true,
+            repeatMs = 100,
+            quietStopMs = 300,
+            giveUpMs = giveUpMs,
+            fetchTimeoutMs = fetchTimeoutMs,
+            clock = clock,
+            live = true,
+            manual = manual,
+        ).also { discovery = it }
+
+    @Test
+    fun everyRoundAsksForRenderersAndForEverything() {
+        val heard = Heard()
+        live(heard, freeUdpPort()).start()
+        heard.found.poll(5, TimeUnit.SECONDS)!!
+        val end = System.nanoTime() + 3_000_000_000L
+        while (fake.searchTargets.count { it == Ssdp.ALL } < 3 && System.nanoTime() < end) Thread.sleep(20)
+        assertTrue("MediaRenderer asked 3 times in the first burst: ${fake.searchTargets}", fake.searchTargets.count { it == Ssdp.MEDIA_RENDERER } >= 3)
+        assertTrue("ssdp:all asked 3 times in the first burst: ${fake.searchTargets}", fake.searchTargets.count { it == Ssdp.ALL } >= 3)
+    }
+
+    @Test
+    fun anOldTvThatAnswersOnlySsdpAllIsFound() {
+        fake.answersOnly = setOf(Ssdp.ALL)
+        val heard = Heard()
+        live(heard, freeUdpPort()).start()
+        val device = heard.found.poll(5, TimeUnit.SECONDS) ?: error("nothing found")
+        assertEquals(fake.udn, device.udn)
+    }
+
+    @Test
+    fun aSlowRendererIsStillFoundAndNothingElseWaitsForIt() {
+        fake.descriptionDelayMs = 1_500
+        val heard = Heard()
+        val started = System.nanoTime()
+        live(heard, freeUdpPort()).start()
+        val device = heard.found.poll(5, TimeUnit.SECONDS) ?: error("a slow TV was not found")
+        assertEquals(fake.udn, device.udn)
+        assertTrue("found by the first description, not one per search", (System.nanoTime() - started) / 1_000_000 < 4_500)
+        assertEquals("one row however many searches it waited through", 1, discovery!!.devices().size)
+    }
+
+    @Test
+    fun aRendererThatAnswersOnlyNotifyAppearsInALiveList() {
+        fake.answersSearches = false
+        val heard = Heard()
+        val port = freeUdpPort()
+        live(heard, port).start()
+        // Nothing answers: the first sweep ends quietly and the list goes on listening.
+        assertEquals(0, heard.settled.poll(5, TimeUnit.SECONDS))
+        assertTrue("a live search does not end by itself", discovery!!.isRunning)
+        assertNull(heard.finished.poll(500, TimeUnit.MILLISECONDS))
+        // The TV is switched on with the picker open.
+        var device: DlnaDevice? = null
+        repeat(40) { if (device == null) { fake.alive(port); device = heard.found.poll(200, TimeUnit.MILLISECONDS) } }
+        assertEquals(fake.udn, device!!.udn)
+    }
+
+    @Test
+    fun aRowGoesWhenItsMaxAgeRunsOutAndAnAliveRenewsIt() {
+        var now = 0L
+        val heard = Heard()
+        val port = freeUdpPort()
+        fake.answersSearches = false
+        live(heard, port, clock = { now }).start()
+        var device: DlnaDevice? = null
+        repeat(40) { if (device == null) { fake.alive(port, maxAge = 100); device = heard.found.poll(200, TimeUnit.MILLISECONDS) } }
+        assertNotNull(device)
+        now = 90_000
+        fake.alive(port, maxAge = 100)
+        Thread.sleep(800)
+        assertTrue("renewed by an alive at 90 s", heard.gone.isEmpty())
+        now = 191_000
+        assertEquals(fake.udn, heard.gone.poll(5, TimeUnit.SECONDS))
+        assertTrue(discovery!!.devices().isEmpty())
+    }
+
+    @Test
+    fun aTvThatChangesAddressIsTheSameRow() {
+        val other = FakeRenderer(udn = fake.udn, friendlyName = "Living room TV (moved)")
+        try {
+            val heard = Heard()
+            val port = freeUdpPort()
+            fake.answersSearches = false
+            live(heard, port).start()
+            var first: DlnaDevice? = null
+            repeat(40) { if (first == null) { fake.alive(port); first = heard.found.poll(200, TimeUnit.MILLISECONDS) } }
+            assertEquals(fake.location, first!!.location)
+            // Its alive now names the new place.
+            fake.alive(port, at = other.location)
+            val moved = heard.found.poll(5, TimeUnit.SECONDS)!!
+            assertEquals(other.location, moved.location)
+            assertEquals("still one row", 1, discovery!!.devices().size)
+            assertEquals("Living room TV (moved)", discovery!!.devices().single().name)
+        } finally {
+            other.close()
+        }
+    }
+
+    @Test
+    fun aRendererWithABrokenDescriptionIsNoRowAndNoCrash() {
+        for (body in listOf("<root><device><deviceType>", "garbage", "<root/>")) {
+            val broken = FakeRenderer(udn = "uuid:fa4e0000-0000-0000-0000-0000000000b0")
+            broken.descriptionBody = body
+            try {
+                val heard = Heard()
+                DlnaDiscovery(
+                    heard, interfaces = { listOf(LanAddress.Candidate("lo", loopback, 8)) },
+                    searchTarget = InetSocketAddress(loopback, broken.udpPort), listenForNotify = false,
+                    allowLoopback = true, repeatMs = 100, giveUpMs = 600,
+                ).also { discovery = it }.start()
+                assertEquals(0, heard.finished.poll(5, TimeUnit.SECONDS))
+                assertTrue(heard.found.isEmpty())
+                assertTrue("asked once, not at every search: ${body.take(10)}", broken.searches.get() >= 2)
+            } finally {
+                broken.close()
+                discovery?.stop()
+            }
+        }
+    }
+
+    @Test
+    fun aNotifyNamingAPublicAddressIsNeverFetched() {
+        fake.answersSearches = false
+        val heard = Heard()
+        val port = freeUdpPort()
+        live(heard, port).start()
+        repeat(10) { fake.alive(port, at = "http://8.8.8.8/description.xml"); Thread.sleep(50) }
+        assertNull(heard.found.poll(500, TimeUnit.MILLISECONDS))
+        assertTrue(discovery!!.devices().isEmpty())
+    }
+
+    @Test
+    fun aSavedAddressIsListedAtOnceAndStaysWhenTheTvIsQuiet() {
+        fake.answersSearches = false
+        var now = 0L
+        val heard = Heard()
+        live(heard, freeUdpPort(), clock = { now }, manual = { listOf(fake.location, "http://8.8.8.8/description.xml", "garbage") }).start()
+        val device = heard.found.poll(5, TimeUnit.SECONDS) ?: error("the saved TV was not listed")
+        assertTrue(device.manual)
+        now = 10 * 86_400_000L
+        Thread.sleep(900)
+        assertTrue("a manual row never expires", heard.gone.isEmpty())
+        assertEquals(1, discovery!!.devices().size)
+    }
+
+    @Test
+    fun fiftyTvsAreFifty() {
+        val tvs = List(50) { FakeRenderer(udn = "uuid:fa4e0000-0000-0000-0000-%012d".format(it), friendlyName = "TV %02d".format(it)) }
+        try {
+            val heard = Heard()
+            val port = freeUdpPort()
+            fake.answersSearches = false
+            live(heard, port).start()
+            val end = System.nanoTime() + 20_000_000_000L
+            while (discovery!!.devices().size < 50 && System.nanoTime() < end) {
+                tvs.forEach { it.alive(port) }
+                Thread.sleep(100)
+            }
+            val rows = discovery!!.devices()
+            assertEquals(50, rows.size)
+            assertEquals("sorted by name", rows.map { it.name }, rows.map { it.name }.sorted())
+        } finally {
+            tvs.forEach { it.close() }
+        }
     }
 
     // The cast

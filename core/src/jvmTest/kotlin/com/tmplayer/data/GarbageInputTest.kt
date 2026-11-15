@@ -17,6 +17,7 @@ import com.tmplayer.cast.dlna.DlnaPlayback
 import com.tmplayer.cast.dlna.SinkCaps
 import com.tmplayer.cast.dlna.plan
 import com.tmplayer.cast.dlna.Soap
+import com.tmplayer.cast.dlna.ManualAddress
 import com.tmplayer.cast.dlna.Ssdp
 import com.tmplayer.cast.dlna.TransportActions
 import com.tmplayer.cast.dlna.UpnpTime
@@ -156,6 +157,11 @@ class GarbageInputTest {
         "0:00:00.", "0:00:00.99999999999999999999", "99999:59:59.999", "1:1:1:1", "+", "-", "0:0:0 F1/0", "0:00:01 F9999999999/1", "NOT_IMPLEMENTED",
         "Play,,,", "\\,\\,", "X_DLNA_PS=1/16\\,1/8\\", "PLAY,PAUSE".repeat(50_000),
         "PLAYING", "TRANSITIONING", "STOPPED", "ERROR_OCCURRED", "NO_MEDIA_PRESENT", "\u0000",
+        // Typed or pasted into "Add a TV by its address".
+        "192.168.1.20", "192.168.1.20:49152", "http://192.168.1.20:49152/description.xml", "http://8.8.8.8/description.xml", "http://[fe80::1%wlan0]:80/d.xml",
+        "fe80::1", "tv.local", "http://user:pw@192.168.1.20/d.xml", "ftp://192.168.1.20/", "192.168.1.20:99999", "192.168.1.20:", "999.1.1.1", "1.2.3", "::", ":::",
+        "http://192.168.1.20:80/" + "a/".repeat(5_000), "http://" + "9".repeat(5_000), "192.168.1.20 ", "http://192.168.1.20\r\n.evil/x", "0.0.0.0", "224.0.0.251", "127.0.0.1",
+        "http://169.254.1.1/d.xml", "http://100.64.1.1:8080/d.xml", "HTTP://10.0.0.5/D.XML",
     )
 
     /** The stored downloads location and a record's path (HX57): a path or a picked folder's content:// string. */
@@ -204,6 +210,16 @@ class GarbageInputTest {
             survive("Ssdp.udnOf", text) { Ssdp.udnOf(text); Ssdp.maxAge(text) }
             survive("DeviceDescription.parse", text) { DeviceDescription.parse(text, "http://192.168.1.2:80/d.xml") }
             survive("DeviceDescription.parse location", text) { DeviceDescription.parse("<root/>", text) }
+            survive("Ssdp.parse NT", text) {
+                Ssdp.parse("NOTIFY * HTTP/1.1\r\nNTS: ssdp:alive\r\nNT: $text\r\nUSN: uuid:x::$text\r\nLOCATION: http://192.168.1.2/d.xml\r\nCACHE-CONTROL: $text\r\n\r\n".toByteArray())?.mayBeRenderer
+            }
+            survive("ManualAddress.parse", text) {
+                for (loopback in listOf(false, true)) {
+                    (ManualAddress.parse(text, loopback) as? ManualAddress.Parsed.Target)?.let { ManualAddress.candidates(it) }
+                }
+                ManualAddress.locationOn("192.168.1.2", text)
+                ManualAddress.savedTarget(text)
+            }
             survive("Soap.parse", text) { Soap.parse(200, text); Soap.parse(500, text); Soap.parse(0, text) }
             survive("Soap.envelope", text) { Soap.parse(200, Soap.envelope("urn:x", "Act", listOf("Arg" to text))) }
             survive("Didl.parse", text) { Didl.parse(text) }

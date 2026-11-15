@@ -20,6 +20,17 @@ data class SsdpMessage(
 
     /** A renderer's own device type, not one of its services or its root device. */
     val isRendererType: Boolean get() = target?.startsWith(Ssdp.RENDERER_PREFIX, ignoreCase = true) == true
+
+    /**
+     * Worth fetching the description of: a renderer, or what an `ssdp:all` search also brings from
+     * an old TV (its root device, any device type, its AVTransport service). The description decides.
+     */
+    val mayBeRenderer: Boolean
+        get() {
+            val t = target?.trim()?.lowercase(Locale.ROOT) ?: return false
+            return t.startsWith(Ssdp.RENDERER_PREFIX.lowercase(Locale.ROOT)) || t == Ssdp.ROOT_DEVICE ||
+                t.startsWith("urn:schemas-upnp-org:device:") || t.startsWith("urn:schemas-upnp-org:service:avtransport:")
+        }
 }
 
 /**
@@ -35,6 +46,14 @@ object Ssdp {
     const val PORT = 1900
     const val MEDIA_RENDERER = "urn:schemas-upnp-org:device:MediaRenderer:1"
     const val RENDERER_PREFIX = "urn:schemas-upnp-org:device:MediaRenderer:"
+    const val ALL = "ssdp:all"
+    const val ROOT_DEVICE = "upnp:rootdevice"
+
+    /** What every search round asks for: renderers by name, and everything for the TVs that answer only that. */
+    val SEARCH_TARGETS: List<String> = listOf(MEDIA_RENDERER, ALL)
+
+    /** Seconds a device stays in the list after its last word when it names no max-age (UPnP's usual 1800). */
+    const val DEFAULT_MAX_AGE_SECONDS = 1800
 
     private const val MAX_DATAGRAM = 8 * 1024
     private const val MAX_HEADERS = 64

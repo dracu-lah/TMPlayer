@@ -13,6 +13,8 @@ data class DlnaDevice(
     val address: InetAddress,
     /** Where its description came from. */
     val location: String,
+    /** Added by hand by its address: it stays in the list however long it is quiet. */
+    val manual: Boolean = false,
 ) {
     val udn: String get() = description.udn
     val name: String get() = description.friendlyName

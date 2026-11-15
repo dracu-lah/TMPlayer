@@ -34,8 +34,17 @@ import java.util.concurrent.atomic.AtomicInteger
  * - Nothing outside the LAN is ever fetched (SSRF): a LOCATION must be an IPv4 address, in a
  *   private range, in the subnet of the interface that heard it, and the same address the datagram
  *   came from. No DNS lookups.
- * - It stops [quietStopMs] after the last new device, [giveUpMs] after the start if there was none,
- *   and on [stop] (the picker closing). [Listener.onFinished] hears the first two.
+ * - Each round asks for both `urn:schemas-upnp-org:device:MediaRenderer:1` and `ssdp:all` (an old TV
+ *   may answer only one of them); what an `ssdp:all` answer names is fetched only when it can be a
+ *   renderer ([SsdpMessage.mayBeRenderer]), once per address, and a description that is not a
+ *   renderer is not asked for again in this run.
+ * - A row lives as long as the device's max-age says (every word from it, an answer or an alive,
+ *   renews it) or until its byebye; manual rows stay. A TV that changes address is the same row
+ *   (its UDN) at the new address.
+ * - Not [live]: it stops [quietStopMs] after the last new device, [giveUpMs] after the start if
+ *   there was none, and on [stop] (the picker closing). [Listener.onFinished] hears the first two.
+ *   [live] (the picker): it goes on listening for NOTIFY and searching every 30 seconds until [stop],
+ *   so a TV switched on with the picker open appears; [Listener.onSettled] hears the first quiet spell.
  *
  * Callbacks come from background threads. The constructor's seams are for the tests, which run it
  * on loopback against a fake renderer (unicast to the fake's port instead of the multicast group).
@@ -52,6 +61,10 @@ class DlnaDiscovery(
     private val giveUpMs: Long = 20_000,
     private val fetchTimeoutMs: Int = 3_000,
     private val clock: () -> Long = { System.nanoTime() / 1_000_000 },
+    /** Stays on until [stop] (see above) instead of ending after a quiet spell. */
+    private val live: Boolean = false,
+    /** Description links of the TVs added by their address, asked for at the start. */
+    private val manual: () -> List<String> = { emptyList() },
 ) {
     interface Listener {
         fun onFound(device: DlnaDevice)
@@ -59,6 +72,23 @@ class DlnaDiscovery(
 
         /** Discovery ended by itself; [found] is how many rows there are. Not called after [stop]. */
         fun onFinished(found: Int)
+
+        /** A [live] discovery has been quiet for a while (the first sweep is over) and keeps listening. */
+        fun onSettled(found: Int) = Unit
+    }
+
+    /** What a description address answered with. */
+    sealed interface Fetch {
+        class Text(val text: String) : Fetch
+
+        /** An answer that is not 200 (a redirect included: it is never followed). */
+        class Status(val code: Int) : Fetch
+
+        /** Nothing: refused, timed out, cut, or not HTTP at all. */
+        data object Failed : Fetch
+
+        /** More than [Xml.DESCRIPTION_MAX]. */
+        data object TooBig : Fetch
     }
 
     private class Net(val candidate: LanAddress.Candidate, val socket: MulticastSocket)
@@ -66,6 +96,12 @@ class DlnaDiscovery(
     private val running = AtomicBoolean(false)
     private val devices = ConcurrentHashMap<String, DlnaDevice>()
     private val fetching: MutableSet<String> = java.util.Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
+
+    /** Locations that were fetched and are no renderer (a router, a printer): not asked again this run. */
+    private val notRenderers: MutableSet<String> = java.util.Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
+
+    /** UDN to when its row expires (the clock's ms); manual rows are not in it. */
+    private val expires = ConcurrentHashMap<String, Long>()
     private val nets = ArrayList<Net>()
     private var notifySocket: MulticastSocket? = null
     private var timers: ScheduledExecutorService? = null
@@ -78,6 +114,11 @@ class DlnaDiscovery(
     @Volatile
     private var lastNewAt = 0L
 
+    @Volatile
+    private var settled = false
+
+    private val ticks = AtomicInteger()
+
     val isRunning: Boolean get() = running.get()
 
     /** The rows so far. */
@@ -88,6 +129,10 @@ class DlnaDiscovery(
         if (!running.compareAndSet(false, true)) return
         devices.clear()
         fetching.clear()
+        notRenderers.clear()
+        expires.clear()
+        settled = false
+        ticks.set(0)
         startedAt = clock()
         lastNewAt = 0
         val timer = Executors.newSingleThreadScheduledExecutor { r -> daemon(r, "dlna-timer") }
@@ -113,8 +158,28 @@ class DlnaDiscovery(
             return
         }
         for (i in 0 until BURST) timer.schedule({ search() }, i * BURST_GAP_MS, TimeUnit.MILLISECONDS)
-        timer.scheduleWithFixedDelay({ search() }, repeatMs, repeatMs, TimeUnit.MILLISECONDS)
+        // Once a live search has settled it asks only every SLOW_EVERY rounds; the NOTIFYs carry the rest.
+        timer.scheduleWithFixedDelay({ if (!settled || ticks.incrementAndGet() % SLOW_EVERY == 0) search() }, repeatMs, repeatMs, TimeUnit.MILLISECONDS)
         timer.scheduleWithFixedDelay({ checkQuiet() }, CHECK_MS, CHECK_MS, TimeUnit.MILLISECONDS)
+        for (location in manual().take(MAX_DEVICES)) startManual(location)
+    }
+
+    /** A saved link: checked again (the file can be edited), then fetched like any other. */
+    private fun startManual(location: String) {
+        val target = ManualAddress.savedTarget(location, allowLoopback) ?: return
+        if (!fetching.add(location)) return
+        try {
+            pool?.execute { fetchAndAdd(location, target.host, manual = true) } ?: fetching.remove(location)
+        } catch (_: Exception) {
+            fetching.remove(location)
+        }
+    }
+
+    /** Puts a TV that [ManualAddress.resolve] found in the rows, so it is listed and kept. */
+    fun adopt(device: DlnaDevice) {
+        if (!running.get() || devices.size >= MAX_DEVICES && devices[device.udn] == null) return
+        devices[device.udn] = device
+        if (!device.manual) expires[device.udn] = clock() + TTL_DEFAULT_MS
     }
 
     /** Ends discovery now (the picker closed). Safe to call twice, and from a listener callback. */
@@ -141,18 +206,38 @@ class DlnaDiscovery(
 
     private fun checkQuiet() {
         val now = clock()
+        sweep(now)
         val quiet = lastNewAt != 0L && now - lastNewAt >= quietStopMs
         val gaveUp = lastNewAt == 0L && now - startedAt >= giveUpMs
-        if (quiet || gaveUp) finish()
+        if (!quiet && !gaveUp) return
+        if (!live) return finish()
+        if (!settled && running.get()) {
+            settled = true
+            runCatching { listener.onSettled(devices.size) }.onFailure { Logger.w(TAG, "Listener failed", it) }
+        }
+    }
+
+    /** Takes the rows whose max-age ran out (the TV was switched off without a byebye). */
+    private fun sweep(now: Long) {
+        for ((udn, at) in expires.entries.toList()) {
+            if (now < at) continue
+            expires.remove(udn, at)
+            if (devices[udn]?.manual == true) continue
+            if (devices.remove(udn) != null) {
+                runCatching { listener.onGone(udn) }.onFailure { Logger.w(TAG, "Listener failed", it) }
+            }
+        }
     }
 
     private fun search() {
-        val packet = Ssdp.search()
-        for (net in nets.toList()) {
-            try {
-                net.socket.send(DatagramPacket(packet, packet.size, searchTarget))
-            } catch (e: Exception) {
-                if (running.get()) Logger.i(TAG, "Search on ${net.candidate.interfaceName} failed: ${e.message}")
+        for (target in Ssdp.SEARCH_TARGETS) {
+            val packet = Ssdp.search(target)
+            for (net in nets.toList()) {
+                try {
+                    net.socket.send(DatagramPacket(packet, packet.size, searchTarget))
+                } catch (e: Exception) {
+                    if (running.get()) Logger.i(TAG, "Search on ${net.candidate.interfaceName} failed: ${e.message}")
+                }
             }
         }
     }
@@ -202,13 +287,19 @@ class DlnaDiscovery(
         val udn = message.udn ?: return
         if (message.kind == SsdpMessage.Kind.ByeBye) {
             // Any of a device's byebyes (root, uuid, type, services) means it is leaving.
+            expires.remove(udn)
             if (devices.remove(udn) != null) listener.onGone(udn)
             return
         }
-        if (!message.isRendererType) return
+        if (!message.mayBeRenderer) return
         val location = message.location ?: return
-        val known = devices[udn]
-        if (known != null && known.location == location) return
+        // A word from a device renews its row, whichever of its UDNs (root or renderer) it spoke as.
+        val known = devices[udn] ?: devices.values.firstOrNull { it.location == location }
+        if (known != null && known.location == location) {
+            if (!known.manual) expires[known.udn] = clock() + ttlMs(message.maxAgeSeconds)
+            return
+        }
+        if (location in notRenderers) return
         if (devices.size >= MAX_DEVICES && known == null) return
         if (!acceptable(location, from)) {
             Logger.i(TAG, "Ignored a LOCATION that is not on this network: ${from.hostAddress}")
@@ -216,20 +307,29 @@ class DlnaDiscovery(
         }
         if (!fetching.add(location)) return
         val fetchPool = pool ?: return
+        val ttl = ttlMs(message.maxAgeSeconds)
         try {
-            fetchPool.execute { fetchAndAdd(location, from) }
+            fetchPool.execute { fetchAndAdd(location, from, ttlMs = ttl) }
         } catch (_: Exception) {
             fetching.remove(location)
         }
     }
 
-    private fun fetchAndAdd(location: String, from: InetAddress) {
+    private fun ttlMs(maxAgeSeconds: Int?): Long =
+        (maxAgeSeconds ?: Ssdp.DEFAULT_MAX_AGE_SECONDS).coerceIn(MIN_TTL_S, MAX_TTL_S) * 1000L
+
+    private fun fetchAndAdd(location: String, from: InetAddress, manual: Boolean = false, ttlMs: Long = TTL_DEFAULT_MS) {
         try {
-            val xml = fetchDescription(location, fetchTimeoutMs) ?: return
-            val description = DeviceDescription.parse(xml, location) ?: return
+            val xml = (fetch(location, fetchTimeoutMs) as? Fetch.Text)?.text ?: return
+            val description = DeviceDescription.parse(xml, location)
+            if (description == null) {
+                if (notRenderers.size < MAX_REJECTED) notRenderers += location
+                return
+            }
             if (!running.get()) return
-            val device = DlnaDevice(description, from, location)
+            val device = DlnaDevice(description, from, location, manual = manual)
             val first = devices.put(device.udn, device) == null
+            if (!manual) expires[device.udn] = clock() + ttlMs
             if (first) lastNewAt = clock()
             listener.onFound(device)
         } catch (e: Exception) {
@@ -260,12 +360,20 @@ class DlnaDiscovery(
         private const val FETCHES = 4
         private const val BURST = 3
         private const val BURST_GAP_MS = 300L
+        private const val SLOW_EVERY = 6
+        private const val MAX_REJECTED = 512
+        private const val MIN_TTL_S = 20
+        private const val MAX_TTL_S = 86_400
+        private const val TTL_DEFAULT_MS = Ssdp.DEFAULT_MAX_AGE_SECONDS * 1000L
         private const val CHECK_MS = 500L
         private const val MAX_DATAGRAM = 8 * 1024
         private val IPV4 = Regex("""(\d{1,3}\.){3}\d{1,3}""")
 
         /** The description at [location] as text, or null for any failure; capped at [Xml.DESCRIPTION_MAX]. */
-        fun fetchDescription(location: String, timeoutMs: Int): String? {
+        fun fetchDescription(location: String, timeoutMs: Int): String? = (fetch(location, timeoutMs) as? Fetch.Text)?.text
+
+        /** One GET, never following a redirect (it could lead off the LAN), capped at [Xml.DESCRIPTION_MAX]. Never throws. */
+        fun fetch(location: String, timeoutMs: Int): Fetch {
             var connection: HttpURLConnection? = null
             return try {
                 connection = (URL(location).openConnection() as HttpURLConnection).apply {
@@ -276,7 +384,8 @@ class DlnaDiscovery(
                     setRequestProperty("User-Agent", "TMPlayer")
                     setRequestProperty("Connection", "close")
                 }
-                if (connection.responseCode != 200) return null
+                val code = connection.responseCode
+                if (code != 200) return Fetch.Status(code)
                 val out = ByteArrayOutputStream()
                 val buffer = ByteArray(8 * 1024)
                 connection.inputStream.use { input ->
@@ -284,12 +393,12 @@ class DlnaDiscovery(
                         val n = input.read(buffer)
                         if (n < 0) break
                         out.write(buffer, 0, n)
-                        if (out.size() > Xml.DESCRIPTION_MAX) return null
+                        if (out.size() > Xml.DESCRIPTION_MAX) return Fetch.TooBig
                     }
                 }
-                out.toString(Charsets.UTF_8.name())
+                Fetch.Text(out.toString(Charsets.UTF_8.name()))
             } catch (e: Exception) {
-                null
+                Fetch.Failed
             } finally {
                 connection?.disconnect()
             }

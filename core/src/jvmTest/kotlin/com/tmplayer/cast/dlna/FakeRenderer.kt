@@ -30,6 +30,7 @@ class FakeRenderer(
     /** `0:00:05.250` (Rygel) or `0:00:05` (gmrender). */
     var fractionalTimes: Boolean = true,
     var reportsDuration: Boolean = true,
+    val udn: String = "uuid:fa4e0000-0000-0000-0000-000000000001",
 ) : Closeable {
 
     private val loopback: InetAddress = InetAddress.getLoopbackAddress()
@@ -37,7 +38,6 @@ class FakeRenderer(
     private val udp = DatagramSocket(0, loopback)
     val httpPort: Int get() = http.localPort
     val udpPort: Int get() = udp.localPort
-    val udn = "uuid:fa4e0000-0000-0000-0000-000000000001"
     val location: String get() = "http://127.0.0.1:$httpPort/description.xml"
 
     /** Every SOAP action received, in order. */
@@ -54,6 +54,19 @@ class FakeRenderer(
     @Volatile var didl = ""
     @Volatile var volume = 30
     @Volatile var muted = false
+
+    /** A slow TV: its description takes this long to come. */
+    @Volatile var descriptionDelayMs = 0L
+
+    /** The description is cut off, not XML, or a redirect to [redirectTo]. */
+    @Volatile var descriptionBody: String? = null
+    @Volatile var redirectTo: String? = null
+
+    /** The ST values M-SEARCH is answered for (an old TV may answer `ssdp:all` alone); empty: any. */
+    @Volatile var answersOnly: Set<String> = emptySet()
+
+    /** The M-SEARCH targets seen, in order. */
+    val searchTargets = CopyOnWriteArrayList<String>()
 
     /** Answer the next SetAVTransportURI with 701 (busy in another app), once. */
     @Volatile var busyOnce = false
@@ -96,6 +109,14 @@ class FakeRenderer(
         udp.send(DatagramPacket(bytes, bytes.size, InetSocketAddress(loopback, port)))
     }
 
+    /** Sends an alive NOTIFY to a listener on [port], with the given max-age and an optional other LOCATION. */
+    fun alive(port: Int, maxAge: Int = 1800, at: String = location) {
+        val text = "NOTIFY * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nCACHE-CONTROL: max-age=$maxAge\r\nLOCATION: $at\r\n" +
+            "NT: ${Ssdp.MEDIA_RENDERER}\r\nNTS: ssdp:alive\r\nSERVER: Linux/0 UPnP/1.0 FakeRenderer/1\r\nUSN: $udn::${Ssdp.MEDIA_RENDERER}\r\n\r\n"
+        val bytes = text.toByteArray()
+        udp.send(DatagramPacket(bytes, bytes.size, InetSocketAddress(loopback, port)))
+    }
+
     /** The TV is switched off: nothing answers on HTTP any more. */
     fun powerOff() {
         runCatching { http.close() }
@@ -120,11 +141,15 @@ class FakeRenderer(
             } catch (e: Exception) {
                 return
             }
-            if (!String(packet.data, 0, packet.length).startsWith("M-SEARCH")) continue
+            val text = String(packet.data, 0, packet.length)
+            if (!text.startsWith("M-SEARCH")) continue
             searches.incrementAndGet()
+            val st = text.lineSequence().firstOrNull { it.startsWith("ST:", ignoreCase = true) }?.substringAfter(':')?.trim().orEmpty()
+            searchTargets += st
             if (!answersSearches) continue
+            if (answersOnly.isNotEmpty() && st !in answersOnly) continue
             val answer = "HTTP/1.1 200 OK\r\nCACHE-CONTROL: max-age=1800\r\nEXT:\r\nLOCATION: $location\r\n" +
-                "SERVER: Linux/0 UPnP/1.0 FakeRenderer/1\r\nST: ${Ssdp.MEDIA_RENDERER}\r\nUSN: $udn::${Ssdp.MEDIA_RENDERER}\r\n\r\n"
+                "SERVER: Linux/0 UPnP/1.0 FakeRenderer/1\r\nST: ${if (st == Ssdp.ALL) Ssdp.ROOT_DEVICE else Ssdp.MEDIA_RENDERER}\r\nUSN: $udn::${if (st == Ssdp.ALL) Ssdp.ROOT_DEVICE else Ssdp.MEDIA_RENDERER}\r\n\r\n"
             val bytes = answer.toByteArray()
             runCatching { udp.send(DatagramPacket(bytes, bytes.size, packet.socketAddress)) }
         }
@@ -164,7 +189,14 @@ class FakeRenderer(
         }
         val path = requestLine.split(' ').getOrNull(1).orEmpty()
         val (status, type, payload) = when {
-            path == "/description.xml" -> Triple(200, "text/xml", description().toByteArray())
+            path == "/description.xml" && redirectTo != null -> {
+                s.getOutputStream().apply { write("HTTP/1.1 302 Found\r\nLocation: ${redirectTo}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".toByteArray()); flush() }
+                return
+            }
+            path == "/description.xml" -> {
+                if (descriptionDelayMs > 0) Thread.sleep(descriptionDelayMs)
+                Triple(200, "text/xml", (descriptionBody ?: description()).toByteArray())
+            }
             path.startsWith("/ctl/") -> control(path.removePrefix("/ctl/"), headers["soapaction"].orEmpty(), String(body, Charsets.UTF_8))
             else -> Triple(404, "text/plain", ByteArray(0))
         }
