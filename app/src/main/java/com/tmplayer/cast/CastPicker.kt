@@ -1,6 +1,8 @@
 package com.tmplayer.cast
 
 import androidx.compose.runtime.Composable
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -11,6 +13,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.tmplayer.ui.browse.PageDiscButton
+import com.tmplayer.ui.components.AddTvDialog
 import com.tmplayer.ui.components.ChoiceLine
 import com.tmplayer.ui.components.ChoiceSheet
 import com.tmplayer.ui.i18n.LocalStrings
@@ -29,10 +32,21 @@ import kotlinx.coroutines.delay
 @Composable
 fun CastPickerSheet(support: CastSupport, onDismiss: () -> Unit) {
     val s = LocalStrings.current
-    DisposableEffect(support) {
-        support.startDiscovery()
-        onDispose { support.stopDiscovery() }
+    val context = LocalContext.current
+    // Android 17 and an app that targets it: the local network permission first. Everywhere else
+    // (today's target 35 included) it is granted from the start and nothing is asked.
+    var allowed by remember { mutableStateOf(LocalNetworkPermission.granted(context)) }
+    var denied by remember { mutableStateOf(false) }
+    val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
+        allowed = ok
+        denied = !ok
     }
+    LaunchedEffect(Unit) { if (!allowed) runCatching { ask.launch(LocalNetworkPermission.NAME) }.onFailure { denied = true } }
+    DisposableEffect(support, allowed) {
+        if (allowed) support.startDiscovery()
+        onDispose { if (allowed) support.stopDiscovery() }
+    }
+    var adding by remember { mutableStateOf(false) }
     val devices by support.devices.collectAsState()
     val session by support.session.collectAsState()
     val offLan by support.offLan.collectAsState()
@@ -54,7 +68,8 @@ fun CastPickerSheet(support: CastSupport, onDismiss: () -> Unit) {
         onClose = onDismiss,
         note = when {
             failed != null -> s.castConnectFailed(failed.name)
-            devices.isNotEmpty() -> null
+            denied -> s.castLocalNetworkDenied
+            devices.isNotEmpty() -> deviceCounts(devices).let { s.castCounts(cast = it.first, dlna = it.second) }
             offLan -> s.castWifiOnly
             waitedLong -> s.castNoneFoundPhone
             else -> s.castSearching
@@ -75,6 +90,9 @@ fun CastPickerSheet(support: CastSupport, onDismiss: () -> Unit) {
                 }
             }
         }
+        if (support.manualTvs != null && allowed) {
+            ChoiceLine(title = s.castAddEntry, icon = TmIcons.Add) { adding = true }
+        }
         if (connected) {
             ChoiceLine(title = s.castStop, icon = TmIcons.Close) {
                 support.endSession()
@@ -82,6 +100,17 @@ fun CastPickerSheet(support: CastSupport, onDismiss: () -> Unit) {
             }
         }
     }
+    val manual = support.manualTvs
+    if (adding && manual != null) {
+        val saved by manual.saved.collectAsState()
+        AddTvDialog(saved = saved, onAdd = manual::add, onRemove = manual::remove, onDismiss = { adding = false })
+    }
+}
+
+/** How many Cast TVs and how many DLNA ones are listed: "Cast 1 · DLNA 0" tells a person DLNA found nothing. */
+internal fun deviceCounts(devices: List<CastDeviceInfo>): Pair<Int, Int> {
+    val dlna = devices.count { it.kind == CastKind.Dlna }
+    return (devices.size - dlna) to dlna
 }
 
 /**

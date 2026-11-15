@@ -10,12 +10,15 @@ import com.tmplayer.cast.dlna.DlnaFeatures
 import com.tmplayer.cast.dlna.DlnaLoad
 import com.tmplayer.cast.dlna.DlnaRenderer
 import com.tmplayer.cast.dlna.LoadRefusal
+import com.tmplayer.cast.dlna.ManualAddress
+import com.tmplayer.cast.dlna.ManualTvStore
 import com.tmplayer.cast.dlna.SeekOutcome
 import com.tmplayer.cast.dlna.SinkCaps
 import com.tmplayer.cast.dlna.dlnaServing
 import com.tmplayer.cast.dlna.forDlna
 import com.tmplayer.i18n.L
 import com.tmplayer.platform.JobFailures
+import com.tmplayer.ui.components.SavedTv
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -43,7 +46,10 @@ import kotlinx.coroutines.isActive
  */
 class DlnaCastSupport(
     private val platform: DlnaPlatform,
-    private val discovery: (DlnaDiscovery.Listener) -> DlnaDiscovery = { DlnaDiscovery(it) },
+    private val store: ManualTvStore? = null,
+    /** Asks the TV at an address who it is; a seam for the tests. */
+    private val resolve: (String) -> ManualAddress.Outcome = { ManualAddress.resolve(it) },
+    private val discovery: (DlnaDiscovery.Listener) -> DlnaDiscovery = { DlnaDiscovery(it, live = true, manual = { store?.locations().orEmpty() }) },
     private val rendererFor: (DlnaDevice) -> DlnaRenderer = { DlnaRenderer(it, clock = { SystemClock.elapsedRealtime() }) },
     dispatcher: kotlinx.coroutines.CoroutineDispatcher = Dispatchers.IO,
 ) : CastSupport {
@@ -102,6 +108,37 @@ class DlnaCastSupport(
 
     override fun adapt(plan: CastPlan): CastPlan = plan.forDlna()
 
+    private val savedTvs = MutableStateFlow(readSaved())
+
+    private fun readSaved(): List<SavedTv> = store?.load().orEmpty().map { SavedTv(it.location, it.name, it.address) }
+
+    /** "Add a TV by its address": a TV found is saved, put in the list at once and kept by the running search. */
+    override val manualTvs: ManualTvs? = store?.let {
+        object : ManualTvs {
+            override val saved: StateFlow<List<SavedTv>> get() = savedTvs
+
+            override fun add(address: String): ManualAddress.Outcome {
+                val outcome = resolve(address)
+                if (outcome is ManualAddress.Outcome.Found) {
+                    val device = outcome.device
+                    it.add(device.location, device.udn, device.name)
+                    synchronized(found) { found[ID_PREFIX + device.udn] = device }
+                    searching?.adopt(device)
+                    savedTvs.value = readSaved()
+                    publishDevices()
+                }
+                return outcome
+            }
+
+            override fun remove(key: String) {
+                it.remove(key)
+                val gone = synchronized(found) { found.entries.firstOrNull { (_, d) -> d.manual && d.location == key }?.also { e -> found.remove(e.key) } }
+                savedTvs.value = readSaved()
+                if (gone != null) publishDevices()
+            }
+        }
+    }
+
     private val listener = object : DlnaDiscovery.Listener {
         override fun onFound(device: DlnaDevice) {
             synchronized(found) { found[ID_PREFIX + device.udn] = device }
@@ -113,7 +150,8 @@ class DlnaCastSupport(
             publishDevices()
         }
 
-        // Ended by itself (quiet for 10 s, or nothing for 20 s): the Wi-Fi lock is not needed any longer.
+        // The search ended by itself (there is no network to search on): the Wi-Fi lock is not needed any longer.
+        // A live search does not end after a quiet spell; the picker closing ends it ([stopDiscovery]).
         override fun onFinished(found: Int) = platform.releaseMulticast()
     }
 
@@ -333,6 +371,7 @@ class DlnaCastSupport(
         /** Paused with no request from the TV for this long closes the port; Play opens it again at the place. */
         const val IDLE_LIMIT_MS = 30 * 60_000L
 
-        fun create(context: Context): DlnaCastSupport = DlnaCastSupport(AndroidDlnaPlatform(context))
+        fun create(context: Context): DlnaCastSupport =
+            DlnaCastSupport(AndroidDlnaPlatform(context), ManualTvStore(java.io.File(context.applicationContext.filesDir, "dlna-manual-tvs.txt")))
     }
 }

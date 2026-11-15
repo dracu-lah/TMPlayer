@@ -43,6 +43,7 @@ class MergedCastSupport(
     override val remote: StateFlow<RemoteStatus> = _remote.asStateFlow()
 
     override val offLan: StateFlow<Boolean> get() = dlna.offLan
+    override val manualTvs: ManualTvs? get() = dlna.manualTvs
 
     init {
         for (side in listOf(google, dlna)) {

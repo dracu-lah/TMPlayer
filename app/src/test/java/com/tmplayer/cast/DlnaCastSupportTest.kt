@@ -5,6 +5,8 @@ import com.tmplayer.cast.dlna.DlnaDevice
 import com.tmplayer.cast.dlna.DlnaDiscovery
 import com.tmplayer.cast.dlna.DlnaRenderer
 import com.tmplayer.cast.dlna.DlnaService
+import com.tmplayer.cast.dlna.ManualAddress
+import com.tmplayer.cast.dlna.ManualTvStore
 import com.tmplayer.cast.dlna.SoapResult
 import com.tmplayer.cast.dlna.SoapTransport
 import com.tmplayer.i18n.L
@@ -281,5 +283,66 @@ class DlnaCastSupportTest {
         assertEquals(0, platform.multicast)
         waitFor(10_000) { Thread.getAllStackTraces().keys.none { it.isAlive && (it.name.startsWith("dlna-search") || it.name.startsWith("dlna-timer") || it.name.startsWith("dlna-fetch")) } }
         assertTrue((System.nanoTime() - closedAt) / 1_000_000 < 10_000)
+    }
+
+    @Test
+    fun `a live search stays on after a quiet spell and the lock is held until the picker closes`() {
+        val platform = Platform()
+        val lo = com.tmplayer.cast.LanAddress.Candidate("lo", InetAddress.getLoopbackAddress(), 8)
+        var real: DlnaDiscovery? = null
+        val s = DlnaCastSupport(
+            platform,
+            discovery = { l ->
+                DlnaDiscovery(
+                    l, interfaces = { listOf(lo) }, searchTarget = java.net.InetSocketAddress(InetAddress.getLoopbackAddress(), 9),
+                    listenForNotify = false, allowLoopback = true, repeatMs = 100, quietStopMs = 200, giveUpMs = 300, live = true,
+                ).also { real = it }
+            },
+            dispatcher = Dispatchers.Unconfined,
+        )
+        made += s
+        s.startDiscovery()
+        waitFor { real?.isRunning == true }
+        Thread.sleep(1_200)
+        assertTrue("past the give-up time a live search still listens", real!!.isRunning)
+        assertEquals("and the lock is still held", 1, platform.multicast)
+        s.stopDiscovery()
+        assertFalse(real!!.isRunning)
+        assertEquals(0, platform.multicast)
+    }
+
+    private fun tempStore(): ManualTvStore {
+        val file = java.io.File.createTempFile("tvs", ".txt").also { it.delete(); it.deleteOnExit() }
+        return ManualTvStore(file)
+    }
+
+    @Test
+    fun `a TV added by its address is listed, remembered and can be removed`() {
+        val store = tempStore()
+        val platform = Platform()
+        val found = device()
+        val s = DlnaCastSupport(
+            platform, store = store,
+            resolve = { if (it == "192.168.1.50") ManualAddress.Outcome.Found(found.copy(manual = true)) else ManualAddress.Outcome.Silent(it) },
+            discovery = { l -> listener = l; DlnaDiscovery(l, interfaces = { emptyList() }, listenForNotify = false) },
+            dispatcher = Dispatchers.Unconfined,
+        )
+        made += s
+        s.startDiscovery()
+        val manual = s.manualTvs!!
+        assertTrue(manual.add("192.168.1.99") is ManualAddress.Outcome.Silent)
+        assertTrue("nothing answered: no row, nothing saved", s.devices.value.isEmpty() && manual.saved.value.isEmpty())
+        assertTrue(manual.add("192.168.1.50") is ManualAddress.Outcome.Found)
+        assertEquals(id, s.devices.value.single().id)
+        assertEquals("Living room TV", manual.saved.value.single().name)
+        assertEquals("a new run still has it", listOf("http://192.168.1.50/description.xml"), store.locations())
+        manual.remove("http://192.168.1.50/description.xml")
+        assertTrue(s.devices.value.isEmpty() && manual.saved.value.isEmpty() && store.locations().isEmpty())
+    }
+
+    @Test
+    fun `without a store there is no add a TV`() {
+        val s = DlnaCastSupport(Platform(), discovery = { DlnaDiscovery(it, interfaces = { emptyList() }, listenForNotify = false) }, dispatcher = Dispatchers.Unconfined)
+        assertNull(s.manualTvs)
     }
 }

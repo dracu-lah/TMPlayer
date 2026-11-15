@@ -1,7 +1,9 @@
 package com.tmplayer.cast
 
 import android.content.Context
+import com.tmplayer.cast.dlna.ManualAddress
 import com.tmplayer.data.FormFactor
+import com.tmplayer.ui.components.SavedTv
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import java.net.InetAddress
@@ -135,6 +137,9 @@ interface CastSupport {
     /** True while there is no Wi-Fi or Ethernet to find a TV on (mobile data alone): the picker says to join the TV's Wi-Fi. */
     val offLan: StateFlow<Boolean> get() = NO
 
+    /** TVs added by their address ("Add a TV by its address"); null where that has no meaning (Google Cast alone). */
+    val manualTvs: ManualTvs? get() = null
+
     /** Starts looking for receivers, for a picker that is open; [stopDiscovery] when it closes. */
     fun startDiscovery()
     fun stopDiscovery()
@@ -158,6 +163,17 @@ interface CastSupport {
 }
 
 private val NO = MutableStateFlow(false)
+
+/**
+ * The TVs the person added by their address, remembered across runs. [add] asks the TV who it is and
+ * blocks for a few seconds: call it off the main thread. A TV found is saved, listed at once, and
+ * kept in the list while discovery runs.
+ */
+interface ManualTvs {
+    val saved: StateFlow<List<SavedTv>>
+    fun add(address: String): ManualAddress.Outcome
+    fun remove(key: String)
+}
 
 /** The one [CastSupport] of the process, made on first use from the main thread. */
 object Cast {
