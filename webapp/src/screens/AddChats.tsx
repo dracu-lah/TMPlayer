@@ -18,21 +18,21 @@ import { form } from '../form'
 import { Icon } from '../ui/Icon'
 import { PageBar } from '../ui/PageBar'
 import { VirtualGrid, type GridLayout } from '../ui/VirtualGrid'
-import { adding, allTicked, changed, clearVisible, counted, headStart, MIN_VIDEOS, needsConfirm, pickRows, recommend, RECOMMEND_BY_MS, SCOPES, selectAll, visibleIds, type Band, type PickRow, type Scope } from '../ui/picking'
+import { adding, allTicked, changed, clearVisible, counted, headStart, needsConfirm, pickRows, refine, RECOMMEND_BY_MS, scanOrder, SCOPES, selectAll, visibleIds, type Band, type PickRow, type Scope, type Suggestion } from '../ui/picking'
 import { ChatPicture } from './ChatPicture'
 import { chatName } from './Chats'
 import { gateNext } from './SetupChats'
 import type { ChatItem, ChatsEvent } from '../tg/types'
 
-/** One row at a time, as wide as the list: a tick, the picture, the name and its rough count. */
+/** One row at a time, as wide as the list: a tick, the picture and the name, and in Recommended a line on why it is there. */
 const ROW_LAYOUT: GridLayout = { cols: 1, estimate: 72 }
 
-/** Counts are asked for three chats at a time (library.ts videoCounts); -1 is "could not be read". */
+/** Counts are asked for three chats at a time (library.ts videoCounts); -1 is "could not be read". They only rank the Recommended band: no figure is shown. */
 const UNKNOWN = -1
-/** Past this the exact figure is not worth a longer phrase. */
-const MANY = 1000
-/** The head start is counted this many chats at a time, so the band can be made from what answered by its deadline. */
-const HEAD_BATCH = 3
+/** Chats are counted this many at a time, the head start so the band can be made from what answered by its deadline, the rest of the account behind it. */
+const BATCH = 3
+/** Chats that could not be counted are asked once more at the end of the pass, at most this many. */
+const RETRY_MAX = 100
 
 type Key = Parameters<typeof t>[0]
 
@@ -106,7 +106,8 @@ export function AddChats() {
 
     const [text, setText] = createSignal('')
     const [scope, setScope] = createSignal<Scope>('all')
-    // The Recommended band, taken once and then left alone, so no row moves under a finger as later counts arrive.
+    // The Recommended band: taken within seconds from the head start, ranked again as the rest of the
+    // account is counted until the viewer touches the list, then only added to (core's ChatSuggestions.refine).
     const [recommended, setRecommended] = createSignal<number[]>([])
     const [belowBar, setBelowBar] = createSignal(false)
     const [recommending, setRecommending] = createSignal(false)
@@ -144,17 +145,15 @@ export function AddChats() {
             last = row.band
             out.push({ row })
             // Under the last recommended row, when none cleared the bar: why these are offered unticked.
-            if (row.band === 'recommended' && belowBar() && shown[i + 1]?.band !== 'recommended') out.push({ note: t('picker.below_bar', { minimum: MIN_VIDEOS }) })
+            if (row.band === 'recommended' && belowBar() && shown[i + 1]?.band !== 'recommended') out.push({ note: t('picker.below_bar') })
         })
         if (holding && last !== 'recommended' && out.length) hold()
         return out
     })
 
-    // Each row's rough video count, asked for three chats at a time as it comes on screen.
+    // Each chat's rough video count, asked for three chats at a time. It ranks the band and is never shown.
     const [known, setKnown] = createSignal<ReadonlyMap<number, number>>(new Map())
     const requested = new Set<number>()
-    let pendingIds: number[] = []
-    let flush = 0
     async function resolveCounts(ids: number[]) {
         try {
             const counts = await api.videoCounts(ids)
@@ -167,80 +166,94 @@ export function AddChats() {
             ids.forEach((id) => requested.delete(id))
         }
     }
-    const wantCount = (id: number) => {
-        if (requested.has(id)) return
-        requested.add(id)
-        pendingIds.push(id)
-        clearTimeout(flush)
-        flush = window.setTimeout(() => {
-            const ids = pendingIds
-            pendingIds = []
-            void resolveCounts(ids)
-        }, 80)
-    }
-    const retryCount = (id: number) => {
-        requested.delete(id)
-        wantCount(id)
-    }
+    // True once the viewer has done anything to the list (ticked, starred, searched, filtered): from
+    // then on no row of the band moves under a finger.
+    let touched = false
     let closed = false
     let recommendBy = 0
     onCleanup(() => {
         closed = true
-        clearTimeout(flush)
         clearTimeout(recommendBy)
     })
 
-    // The head of the list is counted once, as soon as the first chats and the stored choice are
-    // in, so the Recommended band shows within the first seconds rather than after the whole
-    // account is read (core's ChatPicking.headStart). Three at a time, as the rows' own counts go,
-    // and it stops when the picker closes.
-    let started = false
-    let taken = false
-    const takeRecommendation = () => {
-        if (taken) return
-        const answer = recommend(counted(list(), known()))
-        if (!answer.ids.length) return
-        taken = true
-        setRecommended(answer.ids)
-        setBelowBar(answer.belowBar)
+    const current = (): Suggestion => ({ ids: recommended(), belowBar: belowBar() })
+    // Ranks the band from the counts in hand.
+    const rank = () => {
+        const next = refine(current(), counted(list(), known()), touched, ticked())
+        if (next.ids.length === recommended().length && next.ids.every((id, i) => id === recommended()[i]) && next.belowBar === belowBar()) return
+        setRecommended(next.ids)
+        setBelowBar(next.belowBar)
         // Recommended rows are shown, never ticked for the viewer (2026-11-04).
     }
+    const countAll = async (ids: number[]) => {
+        for (let i = 0; i < ids.length && !closed; i += BATCH) await resolveCounts(ids.slice(i, i + BATCH))
+    }
+
+    // The head of the list is counted once, as soon as the first chats and the stored choice are
+    // in, so the Recommended band shows within the first seconds rather than after the whole
+    // account is read (core's ChatPicking.headStart). Once the list is whole, the rest of the account
+    // is counted behind it, channels first, so a video channel is found however far down it sits
+    // (T5). Three at a time, and it stops when the picker closes.
+    let started = false
+    let scanning = false
+    const [headDone, setHeadDone] = createSignal(false)
     createEffect(() => {
         if (started || !seededNow() || !list().length) return
         started = true
         const ids = untrack(() => headStart(list())).filter((id) => !requested.has(id))
         ids.forEach((id) => requested.add(id))
         setRecommending(true)
-        const counting = (async () => {
-            for (let i = 0; i < ids.length && !closed; i += HEAD_BATCH) await resolveCounts(ids.slice(i, i + HEAD_BATCH))
-        })()
+        const counting = countAll(ids)
         // The band is made from whatever answered by the deadline: one slow chat must not hold back the other fifty nine.
         let settled = false
         const settle = () => {
             if (settled || closed) return
             settled = true
             clearTimeout(recommendBy)
-            takeRecommendation()
+            rank()
             setRecommending(false)
             // Nothing answered in time at all (offline, a cold start): the band waits for the head start instead of staying empty.
-            if (!taken) void counting.then(() => !closed && takeRecommendation())
+            if (!recommended().length) void counting.then(() => !closed && rank())
         }
         recommendBy = window.setTimeout(settle, RECOMMEND_BY_MS)
-        void counting.then(settle)
+        void counting.then(() => {
+            settle()
+            setHeadDone(true)
+        })
+    })
+    createEffect(() => {
+        if (scanning || !headDone() || !loaded()) return
+        scanning = true
+        const rest = untrack(() => scanOrder(list())).map((c) => c.id).filter((id) => !requested.has(id))
+        void (async () => {
+            for (let i = 0; i < rest.length && !closed; i += BATCH) {
+                const batch = rest.slice(i, i + BATCH)
+                batch.forEach((id) => requested.add(id))
+                await resolveCounts(batch)
+                rank()
+            }
+            // A chat that could not be counted is asked once more, at the end.
+            const failed = [...known()].filter(([, n]) => n === UNKNOWN).map(([id]) => id).slice(0, RETRY_MAX)
+            await countAll(failed)
+            rank()
+        })()
     })
 
-    const toggle = (id: number) =>
+    const toggle = (id: number) => {
+        touched = true
         setTicked((t) => {
             const next = new Set(t)
             if (next.has(id)) next.delete(id)
             else next.add(id)
             return next
         })
+    }
 
     // Select all over the rows shown, with a word first when it is a lot; Clear once all are ticked. Ctrl+A runs the same.
     let confirmAll!: HTMLDialogElement
     const [asking, setAsking] = createSignal(0)
     const selectAllNow = () => {
+        touched = true
         const n = adding(ticked(), visible())
         if (!n) return
         if (needsConfirm(n)) {
@@ -261,14 +274,9 @@ export function AddChats() {
         onCleanup(() => removeEventListener('keydown', keys))
     })
 
-    const countOf = (id: number) => known().get(id)
-    const totalVideos = () => [...ticked()].reduce((sum, id) => sum + Math.max(0, countOf(id) ?? 0), 0)
-    const stillCounting = () => [...ticked()].some((id) => countOf(id) === undefined)
     const footer = () => {
         const n = ticked().size
-        if (!n) return t('picker.total_none')
-        if (stillCounting()) return t('picker.total_counting', { chats: n, videos: totalVideos() })
-        return t('picker.total_videos', { chats: n, videos: totalVideos() })
+        return n ? t('picker.total', { chats: n }) : t('picker.total_none')
     }
 
     // Leaving with ticks not saved asks first, whichever way it leaves (Back, the browser, the remote).
@@ -319,19 +327,19 @@ export function AddChats() {
             <label class="search-field">
                 <Icon icon={Search01Icon} size={20} />
                 {/* The TV's remote starts here, as the apps' picker does; the field stays read only until OK. */}
-                <input type="search" placeholder={t('chats.search')} aria-label={t('chats.search')} value={text()} onInput={(e) => setText(e.currentTarget.value)} data-tv-first />
+                <input type="search" placeholder={t('chats.search')} aria-label={t('chats.search')} value={text()} onInput={(e) => { touched = true; setText(e.currentTarget.value) }} data-tv-first />
             </label>
             <div class="picker-actions">
                 <div class="picker-scopes" role="group" aria-label={t('picker.choose_chats')}>
                     <For each={SCOPES}>
                         {(s) => (
-                            <button class="history-tab" type="button" aria-pressed={scope() === s} onClick={() => setScope(s)}>
+                            <button class="history-tab" type="button" aria-pressed={scope() === s} onClick={() => { touched = true; setScope(s) }}>
                                 {t(SCOPE_LABEL[s])}
                             </button>
                         )}
                     </For>
                 </div>
-                <button class="link" type="button" onClick={() => (allOn() ? setTicked(clearVisible(ticked(), visible())) : selectAllNow())} disabled={!visible().length}>
+                <button class="link" type="button" onClick={() => { touched = true; if (allOn()) setTicked(clearVisible(ticked(), visible())); else selectAllNow() }} disabled={!visible().length}>
                     {allOn() ? t('common.clear') : t('browse.select_all')}
                 </button>
             </div>
@@ -354,7 +362,7 @@ export function AddChats() {
                     ) : 'note' in item ? (
                         <p class="muted small picker-note">{item.note}</p>
                     ) : item.row.chat ? (
-                        <PickRowView chat={item.row.chat} on={ticked().has(item.row.id)} onToggle={() => toggle(item.row.id)} count={countOf(item.row.id)} onWant={() => wantCount(item.row.id)} onRetry={() => retryCount(item.row.id)} />
+                        <PickRowView chat={item.row.chat} on={ticked().has(item.row.id)} onToggle={() => toggle(item.row.id)} onStar={() => (touched = true)} reason={item.row.band === 'recommended' ? t(belowBar() ? 'picker.reason_some' : 'picker.reason_many') : ''} />
                     ) : (
                         <div class="picker-gone-row">
                             <span class="chat-name">{item.row.title}</span>
@@ -412,58 +420,30 @@ export function AddChats() {
     )
 }
 
-function PickRowView(props: { chat: ChatItem; on: boolean; onToggle: () => void; count: number | undefined; onWant: () => void; onRetry: () => void }) {
-    let el!: HTMLDivElement
-    onMount(() => {
-        const io = new IntersectionObserver((entries) => {
-            if (!entries.some((e) => e.isIntersecting)) return
-            io.disconnect()
-            props.onWant()
-        })
-        io.observe(el)
-        onCleanup(() => io.disconnect())
-    })
+function PickRowView(props: { chat: ChatItem; on: boolean; onToggle: () => void; onStar: () => void; reason: string }) {
     return (
-        <div ref={el} class="chat-row">
+        <div class="chat-row">
             <label class="pick-chat">
                 <input type="checkbox" class="chat-tick" checked={props.on} onChange={props.onToggle} aria-label={chatName(props.chat)} />
                 <ChatPicture photo={props.chat.photo} name={chatName(props.chat)} self={props.chat.self} />
                 <span class="chat-text">
                     <span class="chat-name">{chatName(props.chat)}</span>
-                    <CountLabel count={props.count} onRetry={props.onRetry} />
+                    {/* Why a Recommended chat is there, in words; the other rows keep the line's height so the list lays out the same. */}
+                    <span class="muted chat-count">{props.reason || ' '}</span>
                 </span>
             </label>
-            <PickerStar chatId={props.chat.id} />
+            <PickerStar chatId={props.chat.id} onStar={props.onStar} />
         </div>
     )
 }
 
 /** A chat's star, as Chats.tsx's own StarButton has it (kept here too: that one is this file's own screen, not a shared component). */
-function PickerStar(props: { chatId: number }) {
+function PickerStar(props: { chatId: number; onStar: () => void }) {
     const on = () => starredIds().has(props.chatId)
     const label = () => (on() ? t('chats.unfavourite') : t('chats.favourite'))
     return (
-        <button class="icon-button star" classList={{ on: on() }} type="button" aria-pressed={on()} aria-label={label()} title={label()} onClick={() => setStarred(props.chatId, !on())}>
+        <button class="icon-button star" classList={{ on: on() }} type="button" aria-pressed={on()} aria-label={label()} title={label()} onClick={() => { props.onStar(); setStarred(props.chatId, !on()) }}>
             <Icon icon={StarIcon} size={22} selected={on()} />
         </button>
-    )
-}
-
-function CountLabel(props: { count: number | undefined; onRetry: () => void }) {
-    return (
-        <span class="muted chat-count">
-            <Show
-                when={props.count !== UNKNOWN}
-                fallback={
-                    <button class="link" type="button" onClick={(e) => { e.preventDefault(); props.onRetry() }}>
-                        {t('picker.count_again')}
-                    </button>
-                }
-            >
-                <Show when={props.count !== undefined} fallback=" ">
-                    {(props.count ?? 0) >= MANY ? t('picker.count_many') : t('picker.count_about', { count: props.count ?? 0 })}
-                </Show>
-            </Show>
-        </span>
     )
 }

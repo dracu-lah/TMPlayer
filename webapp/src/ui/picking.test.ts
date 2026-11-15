@@ -1,7 +1,7 @@
 // The Add chats picker's rules, the web twin of core's ChatPickingTest. `node --test src/ui/picking.test.ts`
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { adding, allTicked, changed, clearVisible, counted, FALLBACK, headStart, MAX_PRETICKED, MIN_VIDEOS, needsConfirm, pickRows, recommend, selectAll, visibleIds, type PickChat } from './picking.ts'
+import { adding, allTicked, changed, clearVisible, counted, FALLBACK, headStart, MAX_BAND, MIN_VIDEOS, needsConfirm, pickRows, recommend, refine, scanOrder, selectAll, visibleIds, type PickChat } from './picking.ts'
 
 type Chat = PickChat & { title: string }
 const chat = (id: number, title: string, more: Partial<Chat> = {}): Chat => ({ id, title, kind: 'channel', self: false, ...more })
@@ -79,25 +79,22 @@ const c = (id: number, order: number, videos: number | null, savedMessages = fal
 test('recommend: fullest first over the bar, ties to the chat listed first, uncounted and Saved Messages left out', () => {
     const s = recommend([c(1, 0, 500, true), c(2, 1, 40), c(3, 2, null), c(4, 3, 90), c(5, 4, 40), c(6, 5, 3)])
     assert.deepEqual(s.ids, [4, 2, 5])
-    assert.deepEqual([...s.ticked], [4, 2, 5])
     assert.equal(s.belowBar, false)
 })
 
-test('recommend ticks at most MAX_PRETICKED, and lists every chat over the bar', () => {
-    const many = Array.from({ length: MAX_PRETICKED + 10 }, (_, i) => c(i + 10, i, MIN_VIDEOS + i))
+test('recommend lists at most MAX_BAND chats, the fullest', () => {
+    const many = Array.from({ length: MAX_BAND + 10 }, (_, i) => c(i + 10, i, MIN_VIDEOS + i))
     const s = recommend(many)
-    assert.equal(s.ids.length, MAX_PRETICKED + 10)
-    assert.equal(s.ticked.size, MAX_PRETICKED)
-    for (const id of s.ticked) assert.ok(s.ids.slice(0, MAX_PRETICKED).includes(id))
+    assert.equal(s.ids.length, MAX_BAND)
+    assert.equal(s.ids[0], MAX_BAND + 9 + 10)
 })
 
 test('recommend: nothing over the bar offers the fullest few, unticked; nothing counted offers nothing', () => {
     const s = recommend(Array.from({ length: 9 }, (_, i) => c(i + 1, i, i + 1)))
     assert.equal(s.ids.length, FALLBACK)
     assert.deepEqual(s.ids, [9, 8, 7, 6, 5])
-    assert.equal(s.ticked.size, 0)
     assert.equal(s.belowBar, true)
-    assert.deepEqual(recommend([c(1, 0, 0), c(2, 1, null), c(3, 2, -1)]), { ids: [], ticked: new Set(), belowBar: false })
+    assert.deepEqual(recommend([c(1, 0, 0), c(2, 1, null), c(3, 2, -1)]), { ids: [], belowBar: false })
 })
 
 test('headStart counts Saved Messages and the head of the list, no more than asked', () => {
@@ -113,4 +110,41 @@ test('headStart counts Saved Messages and the head of the list, no more than ask
 test('counted reads unknown and failed counts as not known', () => {
     const got = counted(all, new Map([[2, 30], [3, -1]]))
     assert.deepEqual(got.map((x) => [x.id, x.order, x.videos, x.savedMessages]), [[1, 0, null, true], [2, 1, 30, false], [3, 2, null, false], [4, 3, null, false], [5, 4, null, false]])
+})
+
+test('refine: an untouched band is ranked again, so a channel found late leads', () => {
+    const first = recommend([c(1, 0, 40), c(2, 1, 60)])
+    const later = refine(first, [c(1, 0, 40), c(2, 1, 60), c(900, 900, 20000)], false)
+    assert.deepEqual(later.ids, [900, 2, 1])
+})
+
+test('refine: a touched band moves nothing, adds at the end, and a full one gives its last outranked row away unless ticked', () => {
+    const first = { ids: [2, 1], belowBar: false }
+    const grown = refine(first, [c(1, 0, 40), c(2, 1, 60), c(900, 900, 20000)], true)
+    assert.deepEqual(grown.ids, [2, 1, 900])
+    const all = Array.from({ length: MAX_BAND }, (_, i) => c(i + 1, i, 100 + i + 1))
+    const full = recommend(all)
+    const withBig = [...all, c(900, 900, 20000)]
+    const swapped = refine(full, withBig, true)
+    assert.deepEqual(swapped.ids, [...full.ids.slice(0, -1), 900])
+    assert.equal(refine(full, withBig, true, new Set([1])), full)
+})
+
+test('refine: a fallback band is replaced by a real one, never by another fallback; nothing new keeps it', () => {
+    const fallback = recommend([c(1, 0, 3), c(2, 1, 4)])
+    assert.equal(fallback.belowBar, true)
+    assert.deepEqual(refine(fallback, [c(1, 0, 3), c(2, 1, 4), c(900, 2, 20000)], true), { ids: [900], belowBar: false })
+    assert.equal(refine(fallback, [c(1, 0, 3), c(2, 1, 4), c(3, 2, 5)], true), fallback)
+    assert.equal(refine(fallback, [c(3, 0, null)], false), fallback)
+})
+
+test('scanOrder reads channels before groups before people, recency inside each', () => {
+    const list: PickChat[] = [
+        { id: 1, kind: 'user', self: false },
+        { id: 2, kind: 'group', self: false },
+        { id: 3, kind: 'channel', self: false },
+        { id: 4, kind: 'user', self: true },
+        { id: 5, kind: 'channel', self: false },
+    ]
+    assert.deepEqual(scanOrder(list).map((x) => x.id), [4, 3, 5, 2, 1])
 })
