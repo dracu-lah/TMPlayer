@@ -331,8 +331,9 @@ class SyncDocumentTest {
         val doc = SyncDocument(account = 5, watched = listOf(mark(1, now)))
         val bytes = SyncDocuments.encode(doc).bytes
         assertEquals(SyncRead.OtherAccount(5), SyncDocuments.decode(bytes, account = 6))
-        val newer = SyncDocuments.json(doc).put("version", 2).toString().encodeToByteArray()
-        assertEquals(SyncRead.TooNew(2), SyncDocuments.decode(newer, account = 5))
+        val past = SyncDocuments.VERSION + 1
+        val newer = SyncDocuments.json(doc).put("version", past).toString().encodeToByteArray()
+        assertEquals(SyncRead.TooNew(past), SyncDocuments.decode(newer, account = 5))
     }
 
     @Test

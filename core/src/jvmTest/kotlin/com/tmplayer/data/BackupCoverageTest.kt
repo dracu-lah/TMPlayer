@@ -99,6 +99,27 @@ class BackupCoverageTest {
         assertTrue("Add these to Backups.SETTINGS or MEMORY, or to leftBehind here with a reason: $unaccounted", unaccounted.isEmpty())
     }
 
+    /**
+     * The watched store's file holds more than the watched marks: Watch later ("l_") and the named
+     * lists (HX43: "nm_" names, "n_" lines) travel as fields of their own; the removals ("xw_",
+     * "xl_", "xn_") are left behind on purpose, being the sync file's bookkeeping, and a restore
+     * adds and never takes away.
+     */
+    @Test
+    fun `the watched file's lists travel in a backup`() {
+        val (state, info) = NamedListRules.create(NamedLists(), "Tutorials", 1_000)!!
+        val record = WatchLaterRecord(-100, 5, 7, "Clip", "clip.mp4", "Chat", 10, 60, "video/mp4", 2_000)
+        val withLine = NamedListRules.add(state, info.id, record, 2_000).first
+        val removed = NamedListRules.remove(NamedListRules.add(withLine, info.id, record.copy(messageId = 6), 3_000).first, info.id, "-100_6", 4_000)
+        val raw = NamedListKeys.encode(removed)
+        val travelled = NamedListKeys.LINE to NamedListKeys.INFO
+        assertTrue(raw.keys.all { it.startsWith(travelled.first) || it.startsWith(travelled.second) || it.startsWith(NamedListKeys.REMOVED) })
+        val backup = (Backups.decode(Backups.encode(Backups.collect(emptyMap(), raw, com.tmplayer.online.MetaSettings(), 5_000, "t"))) as BackupRead.Ok).backup
+        assertTrue(backup.lists.list(info.id)?.name == "Tutorials")
+        assertTrue(backup.lists.entries.map { it.record } == listOf(record.copy(addedAt = 2_000)))
+        assertTrue("removals stay behind", backup.lists.removed.isEmpty())
+    }
+
     @Test
     fun `nothing is both carried and left behind, and every listed name is still written`() {
         val both = Backups.SETTINGS.keys.intersect(leftBehind)

@@ -251,7 +251,7 @@ object ResumeSync {
                 }
             }
             for ((key, at) in apply.resumeOut) settings.dropSyncedResume(key, at)
-            val listChanges = watched.applySync(apply)
+            val listChanges = watched.applySync(apply) + watched.lists.mergeIn(merged.lists)
             settings.applySyncedFavourites(apply.favouritesIn, apply.favouritesOut)
             received += imported.size + listChanges + apply.favouritesIn.size + apply.favouritesOut.size
             heal(watched, repository, budget, ::chatTitle)

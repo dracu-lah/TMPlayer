@@ -168,9 +168,10 @@ class BackupTest {
 
     @Test
     fun `a file from a newer TMPlayer is refused politely`() {
-        val newer = Backups.encode(backup()).replace("\"version\": 1", "\"version\": 2")
+        val past = Backups.VERSION + 1
+        val newer = Backups.encode(backup()).replace("\"version\": 1", "\"version\": $past")
         val read = Backups.decode(newer)
-        assertEquals(BackupRead.TooNew(2), read)
+        assertEquals(BackupRead.TooNew(past), read)
         assertEquals(com.tmplayer.i18n.L.backupTooNew, BackupWords.refusal(read))
     }
 

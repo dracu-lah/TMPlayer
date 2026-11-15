@@ -49,6 +49,7 @@ class BackupService(
     suspend fun restore(backup: Backup) {
         settings.restoreEntries { device -> Backups.settingsWrites(device, backup) }
         watched.restoreEntries { device -> Backups.watchedWrites(device, backup) }
+        watched.lists.restore(backup.lists)
         metadata?.update { Backups.metadataAfter(it, backup) }
         bookmarks?.let { store -> store.restore(Backups.bookmarksToAdd(store.all(), backup)) }
     }
@@ -66,6 +67,7 @@ object BackupWords {
             if (plan.watchedAdded > 0) add(L.backupRestoreWatched(plan.watchedAdded))
             if (plan.watchLaterAdded > 0) add(L.backupRestoreWatchLater(plan.watchLaterAdded))
             if (plan.bookmarksAdded > 0) add(L.backupRestoreBookmarks(plan.bookmarksAdded))
+            if (plan.listsAdded > 0) add(L.backupRestoreLists(plan.listsAdded))
             if (plan.resumeAdded > 0) add(L.backupRestoreResume(plan.resumeAdded))
             if (plan.memoryAdded > 0) add(L.backupRestoreMemory(plan.memoryAdded))
             if (plan.searchesAdded > 0) add(L.backupRestoreSearches(plan.searchesAdded))

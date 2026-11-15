@@ -49,6 +49,11 @@ data class SyncDocument(
     /** A favourite chat's id to when it was starred, as far as the devices know. */
     val favourites: Map<Long, Long> = emptyMap(),
     val removed: List<SyncRemoval> = emptyList(),
+    /**
+     * The viewer's named lists (HX43) with their own removals ([NamedListRules.merge]). A file that
+     * has any is written as [SyncDocuments.VERSION]; one without stays readable by older builds.
+     */
+    val lists: NamedLists = NamedLists(),
     val version: Int = SyncDocuments.VERSION,
 )
 
@@ -67,14 +72,22 @@ sealed interface SyncRead {
 }
 
 /** How many entries a cap left out, by list, so the viewer can be told. */
-data class SyncDropped(val resume: Int = 0, val watched: Int = 0, val watchLater: Int = 0, val removals: Int = 0) {
-    val total: Int get() = resume + watched + watchLater + removals
+data class SyncDropped(
+    val resume: Int = 0,
+    val watched: Int = 0,
+    val watchLater: Int = 0,
+    val removals: Int = 0,
+    /** Lines of the named lists, the oldest added first: the last thing cut to fit. */
+    val listEntries: Int = 0,
+) {
+    val total: Int get() = resume + watched + watchLater + removals + listEntries
 
     operator fun plus(other: SyncDropped) = SyncDropped(
         resume + other.resume,
         watched + other.watched,
         watchLater + other.watchLater,
         removals + other.removals,
+        listEntries + other.listEntries,
     )
 }
 
@@ -126,8 +139,16 @@ data class SyncBase(
  */
 object SyncDocuments {
 
-    /** Raised whenever a file this build writes could not be read by an older one. */
-    const val VERSION = 1
+    /**
+     * Raised whenever a file this build writes could not be read by an older one. 2 added the named
+     * lists (HX43): a file with lists in it is version 2, which an older build reads as too new and
+     * leaves alone; a file without them is still written as [LISTLESS_VERSION], so devices on older
+     * builds keep syncing until somebody makes a list.
+     */
+    const val VERSION = 2
+
+    /** What a file without named lists is written as: what every build since CP89 reads. */
+    const val LISTLESS_VERSION = 1
 
     /** The first field of every file, so a backup or any other JSON is told apart from it. */
     const val FORMAT = "tmplayer-sync"
@@ -200,8 +221,13 @@ object SyncDocuments {
             watchLater = Backups.watchLaterOf(watched).map(::strip),
             favourites = favourites,
             removed = removed,
+            lists = strip(NamedListKeys.read(watched)),
         )
     }
+
+    /** The lists as they travel: each line with only what a card needs, as Watch later's do. */
+    internal fun strip(lists: NamedLists): NamedLists =
+        if (lists.isEmpty) lists else lists.copy(entries = lists.entries.map { it.copy(record = strip(it.record)) })
 
     /** The removals the watched store keeps under [WATCHED_REMOVAL_PREFIX] and [LATER_REMOVAL_PREFIX]. */
     fun storedRemovals(watched: Map<String, Any>): List<SyncRemoval> = watched.mapNotNull { (name, value) ->
@@ -305,6 +331,7 @@ object SyncDocuments {
             .sortedWith(compareByDescending<SyncRemoval> { it.at }.thenBy { it.list.ordinal }.thenBy { it.key })
         val removed = removalsAll.take(MAX_REMOVALS)
 
+        val lists = NamedListRules.merge(a.lists, b.lists, now)
         val newest = listOf(a, b).maxWith(compareBy<SyncDocument>({ it.updatedAt }, { it.appVersion }))
         val doc = SyncDocument(
             account = maxOf(a.account, b.account),
@@ -315,6 +342,7 @@ object SyncDocuments {
             watchLater = later,
             favourites = favourites,
             removed = removed,
+            lists = lists,
         )
         val dropped = SyncDropped(
             resume = resumeAll.size - resume.size,
@@ -442,13 +470,23 @@ object SyncDocuments {
                 val n = quarter(doc.watched.size)
                 doc.copy(watched = doc.watched.sortedByDescending { it.watchedAt }.dropLast(n)) to SyncDropped(watched = n)
             }
+            // The viewer's own lists go last, the oldest added lines first; the lists themselves stay.
+            doc.lists.entries.isNotEmpty() -> {
+                val n = quarter(doc.lists.entries.size)
+                val kept = doc.lists.entries.sortedWith(compareByDescending<ListEntry> { it.at }.thenBy { it.listId }.thenBy { it.id }).dropLast(n)
+                doc.copy(lists = doc.lists.copy(entries = kept)) to SyncDropped(listEntries = n)
+            }
+            doc.lists.removed.isNotEmpty() -> {
+                val n = quarter(doc.lists.removed.size)
+                doc.copy(lists = doc.lists.copy(removed = doc.lists.removed.sortedByDescending { it.at }.dropLast(n))) to SyncDropped(removals = n)
+            }
             else -> null
         }
     }
 
     internal fun json(doc: SyncDocument): JSONObject = JSONObject().apply {
         put("format", FORMAT)
-        put("version", doc.version)
+        put("version", if (doc.lists.isEmpty) LISTLESS_VERSION else VERSION)
         put("account", doc.account)
         put("updatedAt", doc.updatedAt)
         put("app", doc.appVersion)
@@ -463,6 +501,7 @@ object SyncDocuments {
             "removed",
             JSONArray(doc.removed.map { JSONObject().put("list", it.list.code).put("key", it.key).put("at", it.at) }),
         )
+        if (!doc.lists.isEmpty) put("lists", NamedListsJson.json(doc.lists))
     }
 
     private fun gzip(bytes: ByteArray): ByteArray {
@@ -520,6 +559,8 @@ object SyncDocuments {
                     val at = (json.opt("at") as? Number)?.toLong() ?: return@mapNotNull null
                     SyncRemoval(list, key, at).takeIf { validKey(list, key) }
                 },
+                // A version 1 file has none: the field is new with version 2.
+                lists = strip(NamedListsJson.of(root.optJSONObject("lists"))),
                 version = VERSION,
             ),
         )

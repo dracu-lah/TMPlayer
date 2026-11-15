@@ -47,6 +47,8 @@ data class Backup(
     val watchLater: List<WatchLaterRecord> = emptyList(),
     /** Every video's bookmarks, from [BookmarkStore]. */
     val bookmarks: List<Bookmark> = emptyList(),
+    /** The named lists (HX43), without their removals: a restore adds and never takes away. */
+    val lists: NamedLists = NamedLists(),
     val version: Int = Backups.VERSION,
 )
 
@@ -78,14 +80,16 @@ data class RestorePlan(
     val watchLaterAdded: Int = 0,
     /** Bookmarks in the backup at a moment this device has none at, in the same video. */
     val bookmarksAdded: Int = 0,
+    /** Named lists and lines of them in the backup that this device lacks. */
+    val listsAdded: Int = 0,
     /** Resume points this device does not have, or has an older one of. */
     val resumeAdded: Int,
     val memoryAdded: Int,
     val searchesAdded: Int,
 ) {
     val nothing: Boolean
-        get() = settingsChanged + favouritesAdded + watchedAdded + watchLaterAdded + bookmarksAdded + resumeAdded + memoryAdded +
-            searchesAdded == 0
+        get() = settingsChanged + favouritesAdded + watchedAdded + watchLaterAdded + bookmarksAdded + listsAdded + resumeAdded +
+            memoryAdded + searchesAdded == 0
 }
 
 /**
@@ -101,8 +105,14 @@ data class RestorePlan(
  */
 object Backups {
 
-    /** Raised whenever a file this build writes could not be read by an older one. */
-    const val VERSION = 1
+    /**
+     * Raised whenever a file this build writes could not be read by an older one. 2 added the named
+     * lists (HX43): a backup with lists in it is version 2, which an older build refuses rather than
+     * restore without them; one without is still [LISTLESS_VERSION].
+     */
+    const val VERSION = 2
+
+    const val LISTLESS_VERSION = 1
 
     /** The first field of every file, so a random JSON file is told apart from a backup. */
     const val FORMAT = "tmplayer-backup"
@@ -286,6 +296,7 @@ object Backups {
         watched = watchedOf(watched),
         watchLater = watchLaterOf(watched),
         bookmarks = bookmarks.sortedWith(compareBy({ it.chatId }, { it.messageId }, { it.positionMs })),
+        lists = NamedListKeys.read(watched).copy(removed = emptyList()),
     )
 
     internal fun favouritesOf(settings: Map<String, Any>): Set<Long> =
@@ -328,7 +339,7 @@ object Backups {
     fun encode(backup: Backup): String {
         val root = JSONObject()
         root.put("format", FORMAT)
-        root.put("version", backup.version)
+        root.put("version", if (backup.lists.lists.isEmpty() && backup.lists.entries.isEmpty()) LISTLESS_VERSION else VERSION)
         root.put("createdAt", backup.createdAt)
         root.put("app", backup.appVersion)
         root.put("settings", valuesJson(backup.settings))
@@ -340,6 +351,9 @@ object Backups {
         root.put("watched", JSONArray(backup.watched.map(::watchedJson)))
         root.put("watchLater", JSONArray(backup.watchLater.map(::watchLaterJson)))
         root.put("bookmarks", JSONArray(backup.bookmarks.map(::bookmarkJson)))
+        if (backup.lists.lists.isNotEmpty() || backup.lists.entries.isNotEmpty()) {
+            root.put("lists", NamedListsJson.json(backup.lists, removals = false))
+        }
         return root.toString(2)
     }
 
@@ -443,7 +457,9 @@ object Backups {
                 watched = objects(root.optJSONArray("watched")).mapNotNull(::watchedOf),
                 watchLater = objects(root.optJSONArray("watchLater")).mapNotNull(::watchLaterOf),
                 bookmarks = objects(root.optJSONArray("bookmarks")).mapNotNull(::bookmarkOf),
-                version = version,
+                lists = NamedListsJson.of(root.optJSONObject("lists"), removals = false),
+                // Read into this build's model, whichever version wrote it.
+                version = VERSION,
             ),
         )
     }
@@ -554,6 +570,7 @@ object Backups {
             watchedAdded = backup.watched.count { "$WATCHED_PREFIX${it.key}" !in watched },
             watchLaterAdded = backup.watchLater.count { "$WATCH_LATER_PREFIX${it.id}" !in watched },
             bookmarksAdded = bookmarksToAdd(bookmarks, backup).size,
+            listsAdded = listsAdded(NamedListKeys.read(watched), backup.lists),
             resumeAdded = writes.keys.count { it.startsWith("resume_") },
             memoryAdded = writes.keys.count { memoryKind(it) != null },
             searchesAdded = searchesAfter.count { found -> searchesBefore.none { it.equals(found, ignoreCase = true) } },
@@ -625,6 +642,13 @@ object Backups {
             val mine = WatchLaterRecord.decode(record.id, device[name] as? String)
             if (mine == null || record.addedAt > mine.addedAt) put(name, record.encode())
         }
+    }
+
+    /** The lists and lines of [backup] that [device] lacks, by id. */
+    fun listsAdded(device: NamedLists, backup: NamedLists): Int {
+        val lists = device.lists.mapTo(HashSet()) { it.id }
+        val lines = device.entries.mapTo(HashSet()) { it.listId to it.id }
+        return backup.lists.count { it.id !in lists } + backup.entries.count { (it.listId to it.id) !in lines }
     }
 
     /**

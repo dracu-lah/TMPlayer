@@ -52,6 +52,7 @@ import kotlinx.coroutines.runBlocking
 import java.io.File
 import kotlin.random.Random
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
@@ -532,6 +533,68 @@ class GarbageInputTest {
                             if (offset < 0 || offset > copy.size) null else copy.copyOfRange(offset.toInt(), minOf(copy.size.toLong(), offset + length).toInt())
                     })
                 }
+            }
+        }
+        assertNoFailures()
+    }
+
+    /**
+     * The named lists in the sync file, a backup and the store (HX43): wrong types, huge arrays,
+     * lines naming a list that is not there or each other's ids, missing ids and a 10 MB name.
+     */
+    @Test
+    fun namedListsNeverThrow() {
+        fun sync(lists: String) = "{\"format\":\"tmplayer-sync\",\"version\":2,\"lists\":$lists}"
+        fun backup(lists: String) = "{\"format\":\"tmplayer-backup\",\"version\":2,\"lists\":$lists}"
+        val line = "{\"list\":\"abcd1234\",\"chat\":-100,\"message\":5,\"title\":\"x\",\"addedAt\":1}"
+        val shapes = texts.take(200).flatMap { t ->
+            listOf(t, "{\"lists\":$t}", "{\"entries\":$t}", "{\"removed\":$t}", "{\"lists\":[$t],\"entries\":[$t],\"removed\":[$t]}")
+        } + listOf(
+            "[]", "\"lists\"", "{\"lists\":{},\"entries\":\"x\",\"removed\":7}",
+            "{\"lists\":[{\"id\":5,\"name\":[],\"at\":\"now\"},{\"id\":\"ABC\",\"name\":\"x\",\"at\":1},{\"id\":\"\",\"name\":\"x\",\"at\":1},{\"id\":null}]}",
+            "{\"lists\":[{\"id\":\"abcd1234\",\"name\":\"" + "\u0000".repeat(500) + "\",\"at\":1}]}",
+            "{\"lists\":[{\"id\":\"abcd1234\",\"name\":\"a\",\"at\":1e999}],\"entries\":[{\"list\":\"abcd1234\",\"chat\":1e999,\"message\":-1e999,\"addedAt\":\"x\"}]}",
+            // Lines that point at a list that is not there, at one another, or at nothing.
+            "{\"lists\":[],\"entries\":[$line,{\"list\":\"nolist000\",\"chat\":1,\"message\":1,\"addedAt\":1},{\"chat\":1,\"message\":1,\"addedAt\":1},{\"list\":\"abcd1234\"}]}",
+            "{\"lists\":[{\"id\":\"abcd1234\",\"name\":\"a\",\"at\":1},{\"id\":\"abcd1234\",\"name\":\"b\",\"at\":1}],\"entries\":[$line,$line],\"removed\":[{\"list\":\"abcd1234\",\"at\":1},{\"list\":\"abcd1234\",\"entry\":\"-100_5\",\"at\":1},{\"list\":\"abcd1234\",\"entry\":{},\"at\":null}]}",
+            "{\"entries\":[{\"list\":\"abcd1234\",\"chat\":-100,\"message\":5,\"series\":\"" + "s".repeat(100_000) + "\",\"addedAt\":1}]}",
+            "{\"entries\":[" + List(30_000) { line }.joinToString(",") + "]}",
+            "{\"lists\":[" + List(5_000) { "{\"id\":\"l${it.toString().padStart(6, '0')}\",\"name\":\"n\",\"at\":1}" }.joinToString(",") + "]}",
+            "{\"removed\":[" + List(10_000) { "{\"list\":\"abcd1234\",\"entry\":\"-100_$it\",\"at\":1}" }.joinToString(",") + "]}",
+        )
+        for (shape in shapes) {
+            survive("SyncDocuments.decode lists", shape) {
+                val read = SyncDocuments.decode(sync(shape).encodeToByteArray(), 0)
+                if (read is SyncRead.Ok) {
+                    val lists = read.doc.lists
+                    assertTrue(lists.lists.size <= NamedListRules.MAX_LISTS * 2 && lists.entries.size <= NamedListRules.MAX_ENTRIES * 2)
+                    assertTrue(lists.lists.all { NamedListRules.isId(it.id) && it.name.length <= NamedListRules.NAME_MAX })
+                    val merged = SyncDocuments.merge(read.doc, SyncDocument(), 1_800_000_000_000L)
+                    assertTrue(merged.lists.lists.size <= NamedListRules.MAX_LISTS && merged.lists.removed.size <= NamedListRules.MAX_REMOVALS)
+                    assertTrue(merged.lists.entries.all { e -> merged.lists.lists.any { it.id == e.listId } })
+                    SyncDocuments.encode(merged)
+                }
+            }
+            survive("Backups.decode lists", shape) { Backups.decode(backup(shape)) }
+        }
+        // A name of ten million characters: cut at once, never read whole.
+        val huge = "x".repeat(10_000_000)
+        survive("NamedListRules.cleanName huge", "10 MB") {
+            assertEquals("x".repeat(NamedListRules.NAME_MAX), NamedListRules.cleanName(huge))
+        }
+        survive("SyncDocuments.decode huge name", "10 MB") {
+            SyncDocuments.decode(sync("{\"lists\":[{\"id\":\"abcd1234\",\"name\":\"$huge\",\"at\":1}]}").encodeToByteArray(), 0)
+        }
+        for (text in texts) {
+            survive("NamedListRules.cleanName", text) { NamedListRules.cleanName(text)?.let { assertTrue(it.length <= NamedListRules.NAME_MAX) } }
+            survive("NamedListRules.idOfHomeKey", text) { NamedListRules.idOfHomeKey(text); NamedListRules.idOfHomeKey("list-$text") }
+            survive("NamedListKeys.read", text) {
+                NamedListKeys.read(
+                    mapOf(
+                        "nm_$text" to text, "nm_abcd1234" to text, "n_abcd1234_$text" to text, "n_$text" to text,
+                        "xn_$text" to 5L, "xn_abcd1234" to text, "xn_abcd1234_$text" to -1L, "n_abcd1234_-100_5" to text,
+                    ),
+                )
             }
         }
         assertNoFailures()
