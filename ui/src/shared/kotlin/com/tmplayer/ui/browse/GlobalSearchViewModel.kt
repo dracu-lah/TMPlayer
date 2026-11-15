@@ -18,6 +18,7 @@ import com.tmplayer.data.GlobalSearch
 import com.tmplayer.data.HidingFilter
 import com.tmplayer.data.KidsLock
 import com.tmplayer.data.MediaItem
+import com.tmplayer.data.MessageLookup
 import com.tmplayer.data.PageQueries
 import com.tmplayer.data.QueryCache
 import com.tmplayer.data.QueryKey
@@ -52,15 +53,30 @@ fun interface VideoSearchSource {
     suspend fun page(query: String, cursor: AllChatsCursor, filters: SearchFilters): AllChatsPage
 
     /**
-     * Whether [item] is still there to open: its message not deleted, its chat not left since the
-     * search. Null when that cannot be told (offline, the fixture), which opens it as found.
+     * What Telegram says of [item]'s message now: found, gone for good (deleted, its chat left
+     * since the search) or [MessageLookup.Unreachable] (a flood wait, a server error, a post held
+     * back). Null when it cannot be asked (offline, the fixture).
      */
-    suspend fun stillThere(item: MediaItem): Boolean? = null
+    suspend fun lookup(item: MediaItem): MessageLookup? = null
+
+    /**
+     * Whether [item] is still there to open. False only when its message is gone for good; null
+     * when that cannot be told (offline, the fixture, an answer that did not come), which opens it
+     * as found. An unreachable lookup is not a gone video: its card stays and the page opens.
+     */
+    suspend fun stillThere(item: MediaItem): Boolean? = when (lookup(item)) {
+        is MessageLookup.Found -> true
+        is MessageLookup.Gone -> false
+        MessageLookup.Unreachable, null -> null
+    }
 
     /** No connection to ask Telegram over. */
     class Offline : java.io.IOException()
 
     companion object {
+        /** How long a tap on a result waits to learn it is still there before the page opens anyway. */
+        const val CHECK_MS = 2_000L
+
         /**
          * The signed in account, through TDLib's `searchMessages`. Only once there is a
          * connection: TDLib holds a search until it can reach Telegram, and offline that left
@@ -81,10 +97,12 @@ fun interface VideoSearchSource {
                 }
             }
 
-            override suspend fun stillThere(item: MediaItem): Boolean? {
-                val session = Td.awaitConnectedSessionOrNull() ?: return null
-                return ChatRepository(session.client).mediaItem(item.chatId, item.messageId) != null
-            }
+            /**
+             * Asked of TDLib's own database first, within [VideoSearchSource.CHECK_MS]: a message
+             * the search just listed answers at once, and no wait for a connection.
+             */
+            override suspend fun lookup(item: MediaItem): MessageLookup =
+                Td.lookupMedia(item.chatId, item.messageId, CHECK_MS)
         }
     }
 }
@@ -337,10 +355,19 @@ class GlobalSearchViewModel(
 
     /**
      * Whether [item] can still be opened: false when its message was deleted or its chat left
-     * since the search, and then its card goes. Null and true both open it.
+     * since the search, and then its card goes. Unreachable, no answer within
+     * [VideoSearchSource.CHECK_MS], a copy on this device and a search that is offline all open
+     * it: the page handles a video that turns out to be gone.
      */
     suspend fun check(item: MediaItem): Boolean {
-        val there = runCatching { source.stillThere(item) }.getOrNull()
+        if (item.onDevice || _state.value.offline) return true
+        val there = try {
+            kotlinx.coroutines.withTimeoutOrNull(VideoSearchSource.CHECK_MS) { source.stillThere(item) }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            null
+        }
         if (there == false) {
             _state.update { s ->
                 s.copy(groups = s.groups.mapNotNull { g ->

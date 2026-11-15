@@ -233,4 +233,55 @@ class GlobalSearchViewModelTest {
         assertFalse(model.check(first))
         assertFalse(model.state.value.groups.any { g -> g.copies.any { it.messageId == 1L } })
     }
+    private fun withLookup(answer: suspend (MediaItem) -> com.tmplayer.data.MessageLookup?) = object : VideoSearchSource {
+        override suspend fun page(query: String, cursor: AllChatsCursor, filters: SearchFilters) = source.page(query, cursor, filters)
+        override suspend fun lookup(item: MediaItem) = answer(item)
+    }
+
+    @Test
+    fun `an unreachable lookup opens the page and keeps the card`() = runTest(dispatcher) {
+        val model = GlobalSearchViewModel(
+            withLookup { com.tmplayer.data.MessageLookup.Unreachable },
+            known = { emptyList() }, work = dispatcher, settleMs = 0,
+        )
+        model.type("harbour")
+        advanceUntilIdle()
+        val before = model.state.value.groups.size
+        assertTrue(before > 0)
+        assertTrue(model.check(model.state.value.groups.first().lead))
+        assertEquals(before, model.state.value.groups.size)
+    }
+
+    @Test
+    fun `a gone lookup still removes the card and a found one keeps it`() = runTest(dispatcher) {
+        val model = GlobalSearchViewModel(
+            withLookup { item ->
+                if (item.messageId == 1L) com.tmplayer.data.MessageLookup.Gone(com.tmplayer.data.GoneReason.Deleted)
+                else com.tmplayer.data.MessageLookup.Found(item)
+            },
+            known = { emptyList() }, work = dispatcher, settleMs = 0,
+        )
+        model.type("harbour")
+        advanceUntilIdle()
+        val groups = model.state.value.groups
+        val first = groups.first { g -> g.copies.any { it.messageId == 1L } }.lead
+        val other = groups.first { g -> g.copies.none { it.messageId == 1L } }.lead
+        assertTrue(model.check(other))
+        assertFalse(model.check(first))
+        assertFalse(model.state.value.groups.any { g -> g.copies.any { it.messageId == 1L } })
+    }
+
+    @Test
+    fun `a lookup that does not answer in time opens the page after the bound`() = runTest(dispatcher) {
+        val model = GlobalSearchViewModel(
+            withLookup { kotlinx.coroutines.awaitCancellation() },
+            known = { emptyList() }, work = dispatcher, settleMs = 0,
+        )
+        model.type("harbour")
+        advanceUntilIdle()
+        val before = model.state.value.groups.size
+        assertTrue(model.check(model.state.value.groups.first().lead))
+        assertEquals(before, model.state.value.groups.size)
+        assertTrue(testScheduler.currentTime >= VideoSearchSource.CHECK_MS)
+    }
 }
