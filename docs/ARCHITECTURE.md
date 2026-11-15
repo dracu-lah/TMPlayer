@@ -17,7 +17,10 @@ the same APK draws a Material 3 layout on a phone, so there is one library, one 
 presentations of it.
 
 Audio the device cannot decode in hardware (DTS, TrueHD, E-AC3 on a cheap stick) falls back to
-software decoders from NextLib, while video stays on the hardware decoder.
+software decoders from NextLib, while video stays on the hardware decoder unless the device has no
+decoder for the picture, refuses it or fails to start it: then the FFmpeg extension takes it by
+itself (see "Decoder fallback" below). The extension carries software decoders for old and exotic
+formats too (docs/BUILDING.md lists them).
 
 A build made with `-PtmVlc=true` (never F-Droid's) adds libVLC as a second engine (PR2): the
 `Engine` interface (`ExoEngine`, `VlcEngine`) behind the same overlay, with `VlcEngine` also a
@@ -26,6 +29,27 @@ unchanged. `EngineSelector` (core) picks the engine; VLC reads a stream from `Lo
 127.0.0.1 and a download by path. libVLC is loaded by the first video that plays in it, never at
 start, and `EngineCrashWatch` marks the time it plays so a native crash is known at the next start
 (PR6). See `docs/distribution/libvlc-spike.md`.
+
+### Decoder fallback
+
+The player's renderers are `NextRenderersFactory`'s (Media3's `DefaultRenderersFactory` plus NextLib's
+FFmpeg renderers), in the order the device's MediaCodec renderer first and the FFmpeg extension
+right behind it (`EXTENSION_RENDERER_MODE_ON`, with Media3's decoder fallback on). Media3 gives each
+track to the renderer that reports it best supported, so no setting is needed for the common
+cases: a format the device has no decoder for (WMV, RealVideo, WMA, Theora) goes to the extension,
+and so does one the device's decoder refuses as beyond its capabilities (the extension reports it
+handled). A decoder that claims the format and then fails to start or choke on it goes through
+`PlayerActivity.switchDecoderByItself`, once per track type: the failed side's renderers are turned
+off (`DecoderSwitch`) and the player is prepared again from the same position, never to software
+for a 4K picture on a weak device (`SoftwareDecode.unwatchable`). "Prefer software video" puts the
+extension's video renderer first (`EXTENSION_RENDERER_MODE_PREFER`); sound keeps the device first
+whatever the setting says. Where neither side can decode the track the player ends in its
+unsupported-picture status sheet, with Try the other decoder and Open in another app. The order is
+pinned by `RendererOrderTest`; a format reaching the extension on a real device is a device check.
+Media3 has MIME types for only some old codecs, so a source that reads the others (C2's
+libavformat-backed extractor) names the decoder in the MIME type, `video/x-ffmpeg-<decoder>` or
+`audio/x-ffmpeg-<decoder>`, with the container's extra data in the format's initialization data
+(`FfmpegLibrary.ffmpegMimeType` documents the layout).
 
 ## Modules
 
@@ -121,7 +145,8 @@ in a release yet: keep this table in step with the code when it ships.
 | Player | Media3 ExoPlayer, NextLib for audio the chip cannot decode | the same player, one overlay walked with the remote | libmpv through mediamp | the browser's own player | no app: the web app opens in the TV's browser (beta) |
 | Second engine (VLC) | built with `-PtmVlc=true` only, off in released builds and in F-Droid (see `docs/distribution/libvlc-spike.md`), chosen per device, ExoPlayer stays the default; never run on a real device yet | the same as the phone | not applicable, mpv is already the second family | not applicable | not applicable |
 | Open in another app | player menu: a downloaded video, or a partial one as far as it has got; a video still downloading streams to the other app through a loopback server (Settings, Playback, Default player) | hold OK on a video, same hand over | open a downloaded video in the computer's default player | not applicable | not applicable |
-| Software video fallback | Settings, Playback, Prefer software video; Try the other decoder in the player menu | the same | not needed, mpv decides | not applicable | not applicable |
+| Software video fallback | automatic: the device's decoder first, the FFmpeg extension when it is missing, refuses the picture or fails to start (no setting); Settings, Playback, Prefer software video puts the extension first; Try the other decoder in the player menu | the same | not needed, mpv decides | not applicable | not applicable |
+| Software decoders in the app | FFmpeg extension: H.264, HEVC, AV1, VP8, VP9, MPEG-1, 2 and 4, DivX 3, VC-1, Motion JPEG, WMV 1 to 3, H.263, Sorenson, Theora, DV, SVQ1, SVQ3, VP6, RealVideo 1 to 4, Cinepak, ProRes, FFV1, Huffyuv, Ut Video, MJPEG-B; audio from DTS and TrueHD to WMA, RealAudio, GSM, ATRAC3, Speex, WavPack, TTA, Monkey's Audio and every PCM and ADPCM kind (a container Media3 cannot read is C2) | the same | mpv's own | not applicable | not applicable |
 | Stutter diagnostics | could-not-keep-up card with codec, decoder, dropped frames and whether the video streamed | the same card | none yet | none | none |
 | Logs and upload | Send logs shares a scrubbed file; crash reports go to Sentry only when the viewer agrees; nothing is uploaded on its own | saves the file to the Download folder (no share sheet on every TV) | saves the file | none | none |
 | Filters | Night mode for sound, Volume boost, audio delay | the same | the same, through mpv's filters | none | none |

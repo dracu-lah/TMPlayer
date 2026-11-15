@@ -149,15 +149,45 @@ toolchain was moved forward on 2026-10-18 (Gradle 9.8.1, AGP 9.4.1, Kotlin 2.4.2
   The manifest holds `CHANGE_WIFI_MULTICAST_STATE` for SSDP.
 - **The FFmpeg extension is built from source** for releases: `scripts/build-media3ext.sh`
   builds nextlib-media3ext at its pinned commit with `scripts/media3ext/tmplayer-decoders.patch`
-  (FFmpeg's mpeg4, msmpeg4v2, msmpeg4v3, vc1 and mjpeg decoders, and the light video mode below)
-  into `build/media3ext/nextlib-media3ext-<version>-tm2.aar`, which `:app` uses when it is there.
-  It needs NDK 25.2.9519653, CMake 3.22.1, meson, ninja and nasm, and about an hour with
-  `JOBS=2` (`GRADLE_WORKERS` sets Gradle's workers apart from `JOBS`). Without the AAR a debug
-  build takes nextlib from Maven Central (the same decoders minus those five, no light mode) and
-  says so; the release job and F-Droid's recipe pass `-PtmRequireMedia3ext=true`, which fails
-  instead. A nextlib bump means checking that the patch still applies. Any change to the patch
-  bumps `TM_REVISION` (`tm2` now), which renames the AAR and the corresponding source archive
-  the release notes link (see RELEASING.md).
+  (the extra FFmpeg decoders listed below, and the light video mode further down)
+  into `build/media3ext/nextlib-media3ext-<version>-tm3.aar`, which `:app` uses when it is there.
+  It needs NDK 25.2.9519653, CMake 3.22.1, meson, ninja and nasm, and about 15 minutes with
+  `JOBS=4` on a 12 thread machine (one ABI takes about 4; `TM_ABIS=armeabi-v7a` builds just that
+  one into a `-partial-` AAR that `:app` never uses; `GRADLE_WORKERS` sets Gradle's workers apart
+  from `JOBS`). Without the AAR a debug build takes nextlib from Maven Central (only its own
+  decoders, no light mode) and says so; the release job and F-Droid's recipe pass
+  `-PtmRequireMedia3ext=true`, which fails instead. A nextlib bump means checking that the patch
+  still applies. Any change to the patch bumps `TM_REVISION` (`tm3` now), which renames the AAR
+  and the corresponding source archive the release notes link (see RELEASING.md).
+- **The decoders in the AAR** (tm3; the list is `ENABLED_DECODERS` in the patch's `ffmpeg/setup.sh`,
+  the single source the host test reads too). Nextlib's own: Vorbis, Opus, FLAC, ALAC, PCM A-law and
+  mu-law, MP3, AMR-NB and WB, AAC, AC-3, E-AC-3, DTS, MLP, TrueHD, H.264, HEVC, MPEG-1 and 2 video,
+  VP8, VP9 and AV1 (dav1d); tm1's MPEG-4 Part 2, DivX 3 (msmpeg4), VC-1 and Motion JPEG. tm3 adds:
+  old video, MPEG-1 (explicit), WMV 1, 2 and 3, H.263 and H.263+, Sorenson/FLV, Theora, DV,
+  SVQ1, SVQ3, VP6 and VP6F, RealVideo 1 to 4, Cinepak; exotic video, ProRes, FFV1, Huffyuv,
+  FFVHuff, Ut Video, MJPEG-B; audio, WMA 1 and 2, WMA Pro, WMA Lossless, MP1, MP2, Cook,
+  RealAudio 1.0 and 2.0 (`real_144`, `real_288`), QCELP, GSM and MS GSM, SIPR, ATRAC3 and
+  ATRAC3+, Speex, WavPack, TTA, Monkey's Audio, Nellymoser, all 35 PCM kinds and 54 ADPCM kinds
+  that are LGPL. Left out: the eight ADPCM decoders and AHX that FFmpeg builds only with
+  `--enable-gpl` (circus, ima_escape, ima_hvqm2, ima_hvqm4, ima_magix, ima_pda, n64, psxc), and the
+  `*_at` decoders (Apple's AudioToolbox). The AAR stays LGPL v3: no `--enable-gpl`, nothing
+  non-free. The build also has every FFmpeg demuxer and parser nextlib enables (367 demuxers, 68
+  parsers) and no encoder, muxer or filter. Media3's extractors name only some of these codecs, so
+  `FfmpegLibrary` maps Media3's MIME types where they exist (MPEG-1 audio layers to mp1 and mp2,
+  H.263, MS GSM) and takes every other decoder by the MIME type `video/x-ffmpeg-<decoder>` or
+  `audio/x-ffmpeg-<decoder>` (the decoder's own name: `real_144`, `atrac3plus`, `g722`, `msmpeg4`
+  differ from the configure names), with the container's extra data in the format's
+  initialization data; the sample rate, channels, block size, bit rate, bits per coded sample,
+  FourCC and picture size reach FFmpeg through `ffcodecparams.h`. Until C2 lands a libavformat-backed
+  extractor, only the formats Media3's extractors already read reach the new audio and video
+  decoders by MIME (MPEG-1, H.263, MP2, MS GSM); the rest are ready for that extractor.
+- **Host tests of the decoders** run without a device: `scripts/media3ext/bench/build-host-ffmpeg.sh
+  <dir>` builds the AAR's FFmpeg 9.0.1 for the host plus a reference `ffmpeg` of the same version,
+  then `run-codec-tests.sh <dir>` makes a clip per decoder with the host's ffmpeg, decodes it the
+  way the JNI glue sets a decoder up (`codectest.cpp` with the patch's own `ffcodecparams.h`) and
+  compares the md5 with the reference's. It lists the decoders no clip could be made for (no host
+  encoder: WMV 3, VP6, RealVideo 3 and 4, SVQ3, MJPEG-B, MP1, WMA Pro and Lossless, Cook, RealAudio
+  2.0, QCELP, SIPR, ATRAC3, Monkey's Audio and most rare ADPCM and PCM kinds) as untested.
 - **The light video mode** (HX2c) is for pictures the device decodes in software and cannot keep
   up with: `DeviceDecode` hands NextLib `DecodeJudge.wantsLightDecode` through
   `FfmpegLibrary.setLightVideoPolicy` (by reflection, so the Maven Central fallback still
