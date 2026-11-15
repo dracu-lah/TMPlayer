@@ -205,6 +205,8 @@ class SetupRenderTest {
         assertFalse(runBlocking { settings.lowStorageMode.first() })
         onNode(button("Done")).performClick()
         waitForIdle()
+        // Done on the last page reports once its answers are written (ON-16), off the UI thread.
+        waitUntil(timeoutMillis = WRITE_MS) { done }
         assertTrue("finished after the last step", done)
     }
 
@@ -341,6 +343,8 @@ class SetupRenderTest {
         assertFalse("marked, not yet written", runBlocking { settings.lowStorageMode.first() })
         onNode(hasText("Done") and hasClickAction()).performClick()
         waitForIdle()
+        // Done on the last page reports once its answers are written (ON-16), off the UI thread.
+        waitUntil(timeoutMillis = WRITE_MS) { done }
         assertTrue("one page, so Done finished it", done)
         waitUntil(timeoutMillis = WRITE_MS) {
             runBlocking { settings.lowStorageMode.first() && settings.saveMobileData.first() && settings.crashReportsNow() } && started == true
@@ -414,6 +418,8 @@ class SetupRenderTest {
         assertFalse("marked, not yet written", runBlocking { settings.crashReportsNow() })
         onNode(hasText("Done") and hasClickAction()).performClick()
         waitForIdle()
+        // Done on the last page reports once its answers are written (ON-16), off the UI thread.
+        waitUntil(timeoutMillis = WRITE_MS) { done }
         assertTrue(done)
         waitUntil(timeoutMillis = WRITE_MS) { runBlocking { settings.crashReportsNow() } && started == true }
     }
@@ -437,6 +443,8 @@ class SetupRenderTest {
         }
         onNode(hasText("Done") and hasClickAction()).performClick()
         waitForIdle()
+        // Done on the last page reports once its answers are written (ON-16), off the UI thread.
+        waitUntil(timeoutMillis = WRITE_MS) { done }
         assertTrue(done)
         assertFalse(runBlocking { settings.crashReportsNow() })
         assertEquals(null, started)
@@ -515,6 +523,8 @@ class SetupRenderTest {
             onNode(isFocused()).performKeyInput { pressKey(Key.Enter) }
             waitForIdle()
         }
+        // Done on the last page reports once its answers are written (ON-16), off the UI thread.
+        waitUntil(timeoutMillis = WRITE_MS) { done }
         assertTrue(done)
     }
 
@@ -544,6 +554,9 @@ class SetupRenderTest {
         onNode(hasText("Next") and hasClickAction()).performClick()
         waitForIdle()
         onNode(hasText("Done") and hasClickAction()).performClick()
+        waitForIdle()
+        // Done on the last page reports once its answers are written (ON-16), off the UI thread.
+        waitUntil(timeoutMillis = WRITE_MS) { done > 0 }
         waitForIdle()
         assertEquals(1, done)
         onNode(hasText("Quick tour")).assertDoesNotExist()

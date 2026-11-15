@@ -78,6 +78,8 @@ class SetupFirstRunTest {
         onNode(button("Lighter")).performClick()
         onNode(button("Done")).performClick()
         waitForIdle()
+        // Done reports once the answer is written (ON-16), off the UI thread, so the screen leaves then.
+        waitUntil(timeoutMillis = WRITE_MS) { !showing }
         assertFalse(showing)
         waitUntil(timeoutMillis = WRITE_MS) {
             runBlocking { settings.lighterPictures.first() && settings.reduceMotion.first() && !settings.trickplay.first() }
