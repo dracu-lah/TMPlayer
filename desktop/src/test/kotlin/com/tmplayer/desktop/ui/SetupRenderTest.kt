@@ -103,8 +103,8 @@ class SetupRenderTest {
 
     // FocusVisibility is one flag for the whole process, and a test before this one in the same
     // JVM can leave it off (a mouse press through FocusVisible): then no focus fill is drawn here
-    // and the focus tests read the resting colour (useRecommendedStaysSecondaryUnderTheFocus on
-    // Windows CI). The setup is a keyboard and remote screen, so focus is shown, as the app starts.
+    // and the focus tests read the resting colour. The setup is a keyboard and remote screen, so
+    // focus is shown, as the app starts.
     @org.junit.Before
     fun focusShown() {
         com.tmplayer.ui.theme.FocusVisibility.visible = true
@@ -605,10 +605,13 @@ class SetupRenderTest {
         fun button(label: String) = hasText(label) and hasClickAction()
         waitForIdle()
         waitUntil(timeoutMillis = WRITE_MS) { onAllNodes(button("Next") and isFocused()).fetchSemanticsNodes().isNotEmpty() }
-        // A pixel just inside the pill's left end, clear of its text and ring.
+        // A pixel of the pill's fill, halfway across its 18 dp start padding: clear of the ring at
+        // the edge and of the label. The old spot, half the pill's height (19 px) in, is the first
+        // letter's stem: on Linux and macOS its smoothed edge mixed in some fill, so the two reads
+        // differed, and Windows draws the stem solid, so both were the text colour (CI, 2026-11-15).
         fun fill(label: String): Int {
             val image = onNode(button(label)).captureToImage()
-            return image.toPixelMap()[image.height / 2, image.height / 2].toArgb()
+            return image.toPixelMap()[with(density) { 9.dp.roundToPx() }, image.height / 2].toArgb()
         }
         fun distance(a: Int, b: Int) = listOf(16, 8, 0).sumOf { Math.abs(((a shr it) and 0xFF) - ((b shr it) and 0xFF)) }
         val next = fill("Next")
