@@ -180,4 +180,25 @@ class DlnaReceiverTest {
         assertEquals("dlna:uuid:other", rows.first { it.name == "Bedroom" }.id)
         finder.stop()
     }
+
+    @Test
+    fun `a TV added by its address is listed, remembered and removed`() {
+        val file = java.io.File.createTempFile("tvs", ".txt").also { it.delete(); it.deleteOnExit() }
+        val store = com.tmplayer.cast.dlna.ManualTvStore(file)
+        val finder = CastFinder(
+            MutableStateFlow(emptyList<CastDevice>()), {}, {},
+            store,
+            resolve = { if (it == "192.168.1.50") com.tmplayer.cast.dlna.ManualAddress.Outcome.Found(device().copy(manual = true)) else com.tmplayer.cast.dlna.ManualAddress.Outcome.Broken(it) },
+        ) { l -> DlnaDiscovery(l, interfaces = { emptyList() }) }
+        finder.start()
+        assertTrue(finder.add("192.168.1.9") is com.tmplayer.cast.dlna.ManualAddress.Outcome.Broken)
+        assertTrue(finder.devices.value.isEmpty())
+        assertTrue(finder.add("192.168.1.50") is com.tmplayer.cast.dlna.ManualAddress.Outcome.Found)
+        assertEquals(listOf("Living room TV"), finder.devices.value.map { it.name })
+        assertEquals(listOf("192.168.1.50"), finder.saved.value.map { it.address })
+        assertEquals(listOf("http://192.168.1.50/description.xml"), store.locations())
+        finder.remove("http://192.168.1.50/description.xml")
+        assertTrue(finder.devices.value.isEmpty() && finder.saved.value.isEmpty() && store.locations().isEmpty())
+        finder.stop()
+    }
 }

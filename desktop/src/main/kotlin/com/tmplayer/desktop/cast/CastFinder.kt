@@ -2,6 +2,11 @@ package com.tmplayer.desktop.cast
 
 import com.tmplayer.cast.dlna.DlnaDevice
 import com.tmplayer.cast.dlna.DlnaDiscovery
+import com.tmplayer.cast.dlna.ManualAddress
+import com.tmplayer.cast.dlna.ManualTvStore
+import com.tmplayer.desktop.DesktopPaths
+import com.tmplayer.ui.components.SavedTv
+import java.io.File
 import com.tmplayer.platform.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -24,13 +29,18 @@ class CastFinder(
     private val castDevices: StateFlow<List<CastDevice>>,
     private val startCast: () -> Unit,
     private val stopCast: () -> Unit,
+    /** The TVs added by their address; null where none are remembered (the tests that need none). */
+    private val store: ManualTvStore? = null,
+    /** Asks the TV at an address who it is; a seam for the tests. */
+    private val resolve: (String) -> ManualAddress.Outcome = { ManualAddress.resolve(it) },
     dlna: (DlnaDiscovery.Listener) -> DlnaDiscovery,
 ) {
 
     constructor(
         cast: CastDiscovery = CastDiscovery(),
-        dlna: (DlnaDiscovery.Listener) -> DlnaDiscovery = { DlnaDiscovery(it) },
-    ) : this(cast.devices, cast::start, cast::stop, dlna)
+        store: ManualTvStore? = ManualTvStore(File(DesktopPaths.dataDir, "dlna-manual-tvs.txt")),
+        dlna: (DlnaDiscovery.Listener) -> DlnaDiscovery = { DlnaDiscovery(it, live = true, manual = { store?.locations().orEmpty() }) },
+    ) : this(cast.devices, cast::start, cast::stop, store, dlna = dlna)
 
     private val dlnaFound = LinkedHashMap<String, DlnaDevice>()
     private val _devices = MutableStateFlow<List<CastTarget>>(emptyList())
@@ -58,6 +68,42 @@ class CastFinder(
         override fun onFinished(found: Int) {
             _searching.value = false
         }
+
+        // The first sweep is over; a live search goes on listening, quietly.
+        override fun onSettled(found: Int) {
+            _searching.value = false
+        }
+    }
+
+    private val savedTvs = MutableStateFlow(readSaved())
+
+    /** The TVs added by their address and remembered, for the dialog's list. */
+    val saved: StateFlow<List<SavedTv>> = savedTvs.asStateFlow()
+
+    private fun readSaved(): List<SavedTv> = store?.load().orEmpty().map { SavedTv(it.location, it.name, it.address) }
+
+    /**
+     * "Add a TV by its address": asks the TV who it is (blocks for a few seconds, call it off the
+     * UI thread), and a TV found is saved, listed at once and kept by the running search.
+     */
+    fun add(address: String): ManualAddress.Outcome {
+        val outcome = resolve(address)
+        if (outcome is ManualAddress.Outcome.Found) {
+            val device = outcome.device
+            store?.add(device.location, device.udn, device.name)
+            synchronized(dlnaFound) { dlnaFound[device.udn] = device }
+            runCatching { discovery?.adopt(device) }
+            savedTvs.value = readSaved()
+            publish()
+        }
+        return outcome
+    }
+
+    fun remove(key: String) {
+        store?.remove(key)
+        val removed = synchronized(dlnaFound) { dlnaFound.entries.firstOrNull { (_, d) -> d.manual && d.location == key }?.also { dlnaFound.remove(it.key) } }
+        savedTvs.value = readSaved()
+        if (removed != null) publish()
     }
 
     private val discovery = runCatching { dlna(listener) }.onFailure { Logger.w(TAG, "No DLNA discovery", it) }.getOrNull()

@@ -40,6 +40,7 @@ import com.tmplayer.cast.CastPhase
 import com.tmplayer.desktop.cast.CastPlaybackEngine
 import com.tmplayer.desktop.cast.DesktopCast
 import com.tmplayer.desktop.cast.ReceiverKind
+import com.tmplayer.ui.components.AddTvDialog
 import com.tmplayer.ui.components.TmDropdownMenu
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.icons.TmIcons
@@ -56,11 +57,14 @@ internal fun CastButton() {
     val state by DesktopCast.state.collectAsState()
     val devices by DesktopCast.discovery.devices.collectAsState()
     var open by remember { mutableStateOf(false) }
+    var adding by remember { mutableStateOf(false) }
     var waitedLong by remember { mutableStateOf(false) }
     var tries by remember { mutableStateOf(0) }
-    DisposableEffect(open) {
-        if (open) DesktopCast.discovery.start()
-        onDispose { if (open) DesktopCast.discovery.stop() }
+    // Searching goes on while the add dialog is up too, so a TV added there is listed at once.
+    val searching = open || adding
+    DisposableEffect(searching) {
+        if (searching) DesktopCast.discovery.start()
+        onDispose { if (searching) DesktopCast.discovery.stop() }
     }
     LaunchedEffect(open, tries) {
         waitedLong = false
@@ -87,6 +91,15 @@ internal fun CastButton() {
                     color = Color.White.copy(alpha = 0.7f),
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 )
+                if (devices.isNotEmpty()) {
+                    val dlna = devices.count { it.kind == ReceiverKind.Dlna }
+                    Text(
+                        s.castCounts(cast = devices.size - dlna, dlna = dlna),
+                        fontSize = 12.sp,
+                        color = Color.White.copy(alpha = 0.6f),
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
+                    )
+                }
                 if (devices.isEmpty()) {
                     Row(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                         if (!waitedLong) {
@@ -132,8 +145,16 @@ internal fun CastButton() {
                         },
                     )
                 }
+                HorizontalDivider()
+                DropdownMenuItem(
+                    text = { Text(s.castAddEntry) },
+                    leadingIcon = { Icon(TmIcons.Add, null, Modifier.size(18.dp)) },
+                    onClick = {
+                        adding = true
+                        open = false
+                    },
+                )
                 if (connected != null) {
-                    HorizontalDivider()
                     DropdownMenuItem(
                         text = { Text(s.castStop) },
                         leadingIcon = { Icon(TmIcons.Close, null, Modifier.size(18.dp)) },
@@ -144,6 +165,10 @@ internal fun CastButton() {
                     )
                 }
             }
+        }
+        if (adding) {
+            val saved by DesktopCast.discovery.saved.collectAsState()
+            AddTvDialog(saved = saved, onAdd = DesktopCast.discovery::add, onRemove = DesktopCast.discovery::remove, onDismiss = { adding = false })
         }
     }
 }
