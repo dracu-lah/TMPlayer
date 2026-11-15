@@ -196,8 +196,8 @@ fun freeUpResult(outcome: FreeUpReview.Outcome): String {
     return if (outcome.skipped > 0) freed + ". " + com.tmplayer.i18n.L.downloadsReviewSkipped(count = outcome.skipped) else freed
 }
 
-/** Low storage mode as the review offers it: [on] once it has been turned on from here. */
-class LowStorageOffer(val mode: String, val windowBytes: Long, val on: Boolean, val onTurnOn: () -> Unit)
+/** "While streaming: Save space" as the review offers it: [on] once it has been switched on from here. */
+class LowStorageOffer(val windowBytes: Long, val on: Boolean, val onTurnOn: () -> Unit)
 
 /**
  * The review's panel without its window, so a test can draw it as it stands. [confirming] is the
@@ -531,7 +531,7 @@ private fun TickLine(
     }
 }
 
-/** Low storage mode at the head of the review, while it is off and the device is short of room. */
+/** Save space at the head of the review, while While streaming is on Keep video and the device is short of room. */
 @Composable
 private fun LowStorageLine(offer: LowStorageOffer, pad: Dp, focus: FocusRequester?) {
     val s = LocalStrings.current
@@ -545,17 +545,17 @@ private fun LowStorageLine(offer: LowStorageOffer, pad: Dp, focus: FocusRequeste
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         if (offer.on) {
-            Text(s.downloadsFreeLowStorageDone(mode = offer.mode), style = MaterialTheme.typography.bodyMedium, color = Tone.text)
+            Text(s.downloadsFreeSaveSpaceDone, style = MaterialTheme.typography.bodyMedium, color = Tone.text)
             return@Column
         }
-        Text(s.downloadsFreeLowStorage(mode = offer.mode), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = Tone.text)
+        Text(s.downloadsFreeSaveSpace, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = Tone.text)
         Text(
             s.downloadsFreeLowStorageDetail(size = s.formatter.bytes(offer.windowBytes)),
             style = MaterialTheme.typography.bodySmall,
             color = Tone.muted,
         )
         ReviewButton(
-            s.confirmTurnOn,
+            s.downloadsFreeSwitch,
             null,
             offer.onTurnOn,
             ButtonKind.Quiet,

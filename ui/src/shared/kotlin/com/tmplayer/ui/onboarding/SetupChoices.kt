@@ -4,19 +4,14 @@ import com.tmplayer.ui.theme.collectIsFocusVisibleAsState
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.focusable
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -36,20 +31,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onKeyEvent
-import androidx.compose.ui.input.key.type
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.tmplayer.data.DeviceFit
@@ -58,6 +45,7 @@ import com.tmplayer.data.DeviceForm
 import com.tmplayer.data.Recommendation
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.online.OnlineMetadata
+import com.tmplayer.ui.components.TabSwitch
 import com.tmplayer.ui.components.deviceForm
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.icons.TmIcons
@@ -243,9 +231,9 @@ private fun StepRow(
 }
 
 /**
- * The step's two answers as one segmented control. A touch or a click picks the answer under it;
- * on a remote or a keyboard the control is one stop, where Left and Right pick the answer on that
- * side and OK swaps to the other.
+ * The step's two answers as one segmented control ([TabSwitch], also Settings' "While streaming"
+ * row on a television): a touch or a click picks the answer under it; on a remote or a keyboard
+ * the control is one stop, where Left and Right pick the answer on that side and OK swaps.
  */
 @Composable
 private fun ChoiceSwitch(
@@ -255,75 +243,14 @@ private fun ChoiceSwitch(
     modifier: Modifier,
 ) {
     val s = LocalStrings.current
-    // A new side taken is one tick, as a choice in a list is.
-    val stepTick = com.tmplayer.ui.components.rememberStepTick()
-    val picked: (SetupChoice) -> Unit = { choice -> if (choice != selected) stepTick(); onPick(choice) }
-    val interactions = remember { MutableInteractionSource() }
-    val focused by interactions.collectIsFocusVisibleAsState()
-    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
-    val outer = RoundedCornerShape(Corner.Medium)
-    val inner = RoundedCornerShape(Corner.Small)
-    Row(
-        modifier
-            .fillMaxWidth()
-            .height(IntrinsicSize.Min)
-            .clip(outer)
-            .background(if (focused) Tone.focusFill.copy(alpha = 0.35f) else Tone.background)
-            .focusRing(focused, outer)
-            .onKeyEvent { event ->
-                if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
-                val other = choices.firstOrNull { it != selected } ?: choices.first()
-                val pick = when (event.key) {
-                    Key.DirectionLeft -> choices[if (rtl) 1 else 0]
-                    Key.DirectionRight -> choices[if (rtl) 0 else 1]
-                    Key.DirectionCenter, Key.Enter, Key.NumPadEnter, Key.Spacebar -> other
-                    else -> return@onKeyEvent false
-                }
-                if (pick != selected) picked(pick)
-                true
-            }
-            .focusable(interactionSource = interactions)
-            .padding(4.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        for (choice in choices) {
-            val on = choice == selected
-            val title = s.choiceCopy(choice).title
-            Box(
-                Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .clip(inner)
-                    .background(if (on) Tone.accent else Color.Transparent)
-                    .semantics {
-                        role = Role.RadioButton
-                        this.selected = on
-                        onClick(label = title) {
-                            picked(choice)
-                            true
-                        }
-                    }
-                    .pointerInput(choice) { detectTapGestures { picked(choice) } }
-                    .testTag("setup-answer-${choice.name}")
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (on) {
-                        Icon(TmIcons.Check, contentDescription = null, tint = Tone.onAccent, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                    }
-                    Text(
-                        title,
-                        style = MaterialTheme.typography.labelLarge,
-                        color = if (on) Tone.onAccent else Tone.text,
-                        textAlign = TextAlign.Center,
-                        maxLines = 2,
-                    )
-                }
-            }
-        }
-    }
+    TabSwitch(
+        choices = choices,
+        selected = selected,
+        title = { s.choiceCopy(it).title },
+        tag = { "setup-answer-${it.name}" },
+        onPick = onPick,
+        modifier = modifier,
+    )
 }
 
 /** "Also in Playback": a quiet link that fills under the focus like the setup's buttons. */

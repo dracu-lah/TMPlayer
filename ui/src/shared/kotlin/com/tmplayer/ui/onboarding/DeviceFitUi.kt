@@ -42,7 +42,7 @@ import kotlinx.coroutines.launch
 data class RecommendationCopy(val title: String, val detail: String)
 
 fun Strings.recommendationCopy(recommendation: Recommendation): RecommendationCopy = when (recommendation) {
-    Recommendation.LowStorageMode -> RecommendationCopy(settingsLowStorage, settingsLowStorageOn)
+    Recommendation.LowStorageMode -> RecommendationCopy(settingsStreamRecommended, settingsStreamSaveDetail)
     Recommendation.NoSeekThumbnails -> RecommendationCopy(settingsTrickplay, settingsTrickplayOff)
     Recommendation.LighterPictures -> RecommendationCopy(settingsLighterPictures, settingsLighterPicturesOn)
     Recommendation.ReduceMotion -> RecommendationCopy(settingsReduceMotion, settingsReduceMotionOn)
