@@ -12,15 +12,24 @@ class FirstRunHintTest {
     @Test
     fun `every gesture on by default, one line each`() {
         val lines = FirstRunHint.phone(TouchPrefs(), s)
-        assertEquals(4, lines.size)
+        assertEquals(5, lines.size)
         assertTrue(lines[0].startsWith("Double tap"))
-        assertEquals(listOf(s.settingsSeekGesture, s.settingsBrightnessGesture, s.settingsVolumeGesture), lines.drop(1))
+        assertEquals(
+            listOf(s.settingsSeekGesture, s.settingsBrightnessGesture, s.settingsVolumeGesture, s.playerHoldSpeedHint),
+            lines.drop(1),
+        )
     }
 
     @Test
     fun `a swipe switched off in Settings is not taught`() {
         val lines = FirstRunHint.phone(TouchPrefs(seekGesture = false, volumeGesture = false), s)
-        assertEquals(listOf(s.settingsBrightnessGesture), lines.drop(1))
+        assertEquals(listOf(s.settingsBrightnessGesture, s.playerHoldSpeedHint), lines.drop(1))
+    }
+
+    @Test
+    fun `the hold to play faster is taught only while it is on`() {
+        assertTrue(FirstRunHint.phone(TouchPrefs(), s).contains(s.playerHoldSpeedHint))
+        assertTrue(!FirstRunHint.phone(TouchPrefs(holdSpeed = 0f), s).contains(s.playerHoldSpeedHint))
     }
 
     @Test

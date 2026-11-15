@@ -79,6 +79,11 @@ class PlayerControls(
     private val onCycleShape: () -> Unit = {},
     /** The phone row's lock, shown while the row has room for it. */
     private val onLock: () -> Unit = {},
+    /**
+     * A tap on the phone's speed button: swaps between the last two speeds. Null, or returning
+     * false for nothing to swap to, opens the list as before; a long press always opens it.
+     */
+    private val onQuickSpeed: (() -> Boolean)? = null,
 ) {
 
     private val container: View = root.findViewById(R.id.player_controls)
@@ -118,6 +123,9 @@ class PlayerControls(
     private val buttons: View = root.findViewById(R.id.controls_buttons)
     private val episodesButton: TextView = root.findViewById(R.id.control_episodes)
     private val copyButton: TextView = root.findViewById(R.id.control_copy)
+    private val speedButton: ImageButton = root.findViewById(R.id.control_speed)
+    private val speedIcon = speedButton.drawable
+    private val speedPadding = speedButton.paddingLeft
 
     /** The television's Next episode button; shown only while there is a next episode. */
     private val nextEpisodeButton: View = root.findViewById(R.id.control_tv_next_episode)
@@ -274,7 +282,18 @@ class PlayerControls(
     init {
         wire(root.findViewById(R.id.control_subtitles)) { onPickSubtitles() }
         wire(root.findViewById(R.id.control_audio)) { onPickAudio() }
-        wire(root.findViewById(R.id.control_speed)) { onPickSpeed() }
+        wire(speedButton) {
+            // A tap swaps between the last two speeds on a phone; a television's OK opens the
+            // list (a held OK there is the hand-over to another app).
+            if (isTv || onQuickSpeed?.invoke() != true) onPickSpeed()
+        }
+        if (!isTv) {
+            speedButton.setOnLongClickListener {
+                onPickSpeed()
+                poke()
+                true
+            }
+        }
         wire(rotate) { onCycleOrientation() }
         wire(shapeButton) {
             onCycleShape()
@@ -699,7 +718,7 @@ class PlayerControls(
         tipOnFocus(
             root.findViewById(R.id.control_subtitles),
             root.findViewById(R.id.control_audio),
-            root.findViewById(R.id.control_speed),
+            speedButton,
             shapeButton,
             nextEpisodeButton,
             more,
@@ -830,6 +849,25 @@ class PlayerControls(
         describe(centerNext, nextLabel)
         centerNext.setOnClickListener { nextEpisode?.let(onPlayEpisode) }
         caption(centerNextCaption, nextCaption.takeIf { nextEpisode != null })
+    }
+
+    /**
+     * Writes the speed in force on the speed button: the figure ("1.25x") where the icon is while
+     * it is not 1x, the icon at 1x. The button's name carries it for TalkBack and the tip.
+     */
+    fun showSpeed(speed: Float) {
+        val label = PlaybackSpeed.label(speed)
+        val normal = kotlin.math.abs(speed - PlaybackSpeed.DEFAULT) < 0.001f
+        val name = if (normal) L.playerPlaybackSpeed else "${L.playerPlaybackSpeed}: $label"
+        describe(speedButton, name)
+        if (normal) {
+            speedButton.setImageDrawable(speedIcon)
+            speedButton.setPadding(speedPadding, speedPadding, speedPadding, speedPadding)
+        } else {
+            speedButton.setImageDrawable(SpeedLabelDrawable(label))
+            val tight = (6 * speedButton.resources.displayMetrics.density).toInt()
+            speedButton.setPadding(tight, tight, tight, tight)
+        }
     }
 
     /**

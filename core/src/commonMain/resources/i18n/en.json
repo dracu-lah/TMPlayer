@@ -1978,6 +1978,7 @@
     "heavy_copy_note_others": "This copy is {codec}, which this {device, select, tv {TV} computer {computer} other {phone}} can only decode slowly, so it may stutter. Copies has smoother ones.",
     "help": "Help",
     "hold_ok_to_unlock": "Hold OK to unlock",
+    "hold_speed_hint": "Hold the picture to play faster",
     "ignore_clicks": "Ignore clicks on the video",
     "keep_awake_reason": "Playing a video",
     "keep_holding_to_unlock": "Keep holding to unlock",

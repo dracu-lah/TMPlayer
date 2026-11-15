@@ -1919,6 +1919,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             onPickSubtitles = { showTrackPicker(C.TRACK_TYPE_TEXT) },
             onPickAudio = { showTrackPicker(C.TRACK_TYPE_AUDIO) },
             onPickSpeed = ::pickSpeed,
+            onQuickSpeed = ::swapSpeed,
             onCycleOrientation = ::cycleOrientation,
             onPlayEpisode = ::playEpisode,
             onEpisodes = ::openEpisodes,
@@ -2411,6 +2412,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             // Its own speed, else the series' or course's, else the chat's or topic's: [SpeedMemory].
             playbackSpeed = runCatching { settings.openingSpeed(resumed?.speed, speedScopes) }
                 .getOrDefault(resumed?.speed?.let(PlaybackSpeed::sanitise) ?: PlaybackSpeed.DEFAULT)
+            speedSwap.opened(playbackSpeed)
+            controls?.showSpeed(playbackSpeed)
             resumeTracks = resumed
             // A fixed shape (16:9, 4:3...) is about this player's videos: the episode that plays
             // next in it keeps it, and only a new player goes back to the remembered one.
@@ -8186,8 +8189,20 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         )
     }
 
+    /** The two speeds a tap on the speed button swaps between. */
+    private val speedSwap = SpeedSwap()
+
+    /** A tap on the phone's speed button: the other of the last two speeds, or false for the list. */
+    private fun swapSpeed(): Boolean {
+        val other = speedSwap.tap(playbackSpeed) ?: return false
+        setSpeed(other)
+        return true
+    }
+
     private fun setSpeed(value: Float) {
+        speedSwap.chose(playbackSpeed, value)
         playbackSpeed = value
+        controls?.showSpeed(value)
         playing?.setPlaybackSpeed(value)
         showGestureFeedback(PlaybackSpeed.label(value))
         // For the series, the course, the chat or the topic, not only this file: 1x forgets it.

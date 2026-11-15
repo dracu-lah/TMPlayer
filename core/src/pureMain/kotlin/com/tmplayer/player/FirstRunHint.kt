@@ -15,5 +15,7 @@ object FirstRunHint {
         if (prefs.seekGesture) add(s.settingsSeekGesture)
         if (prefs.brightnessGesture) add(s.settingsBrightnessGesture)
         if (prefs.volumeGesture) add(s.settingsVolumeGesture)
+        // The hold to play fast, off when its speed is zero in Settings.
+        if (prefs.holdSpeed > 0f) add(s.playerHoldSpeedHint)
     }
 }
