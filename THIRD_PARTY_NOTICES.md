@@ -42,7 +42,7 @@ are built by that `ffmpeg/setup.sh` from these upstream sources:
 
 The VP8 and VP9 decoders are FFmpeg's own; libvpx is no longer part of the build.
 
-The corresponding source is one archive, `nextlib-corresponding-source-1.11.1-0.16.0-tm3.tar.gz`,
+The corresponding source is one archive, `nextlib-corresponding-source-1.11.1-0.16.0-tm4.tar.gz`,
 linked as "nextlib source" from the notes of every TMPlayer release that carries this revision of
 the patched build (1.28.x carried the first, `-tm1`, without the light mode, and 1.28.2 the second, `-tm2`, without the wider decoder set). It holds the exact NextLib 1.11.1-0.16.0 source and build scripts, TMPlayer's patch and
 build script under `tmplayer/`, and the three upstream source archives above;

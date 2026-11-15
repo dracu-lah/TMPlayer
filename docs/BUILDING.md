@@ -160,7 +160,7 @@ toolchain was moved forward on 2026-10-18 (Gradle 9.8.1, AGP 9.4.1, Kotlin 2.4.2
   `-PtmRequireMedia3ext=true`, which fails instead. A nextlib bump means checking that the patch
   still applies. Any change to the patch bumps `TM_REVISION` (`tm4` now), which renames the AAR
   and the corresponding source archive the release notes link (see RELEASING.md).
-- **The decoders in the AAR** (tm3; the list is `ENABLED_DECODERS` in the patch's `ffmpeg/setup.sh`,
+- **The decoders in the AAR** (tm3 and tm4; the list is `ENABLED_DECODERS` in the patch's `ffmpeg/setup.sh`,
   the single source the host test reads too). Nextlib's own: Vorbis, Opus, FLAC, ALAC, PCM A-law and
   mu-law, MP3, AMR-NB and WB, AAC, AC-3, E-AC-3, DTS, MLP, TrueHD, H.264, HEVC, MPEG-1 and 2 video,
   VP8, VP9 and AV1 (dav1d); tm1's MPEG-4 Part 2, DivX 3 (msmpeg4), VC-1 and Motion JPEG. tm3 adds:

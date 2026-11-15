@@ -149,10 +149,10 @@ That source archive, `nextlib-corresponding-source-<nextlib>-<revision>.tar.gz` 
 `scripts/build-nextlib-source.sh`, goes up by hand once, to the first release that carries that
 nextlib version and patch revision, and is the same for every release while both stay there. The nextlib step in
 `release.yml` works as the mediamp one: an empty `TAG` links the release's own copy and warns until
-it is attached, then `TAG` names that release. `LINKED` is `1.11.1-0.16.0-tm3` (nextlib built
+it is attached, then `TAG` names that release. `LINKED` is `1.11.1-0.16.0-tm4` (nextlib built
 from source with the third revision of TMPlayer's patch: the light video mode and the wider set of
-LGPL decoders of C1). Its `nextlib-corresponding-source-1.11.1-0.16.0-tm3.tar.gz`
-(`scripts/build-nextlib-source.sh`) is attached by hand to the first release that carries tm3, so
+LGPL decoders of C1). Its `nextlib-corresponding-source-1.11.1-0.16.0-tm4.tar.gz`
+(`scripts/build-nextlib-source.sh`) is attached by hand to the first release that carries tm4, so
 `TAG` stays empty until then and is set to that release afterwards. The `tm2` archive (light mode)
 is attached to 1.28.2, the `tm1` archive (the decoders alone) is what 1.28.1 links, attached to its own release (1.21.0 to 1.26.0 linked the 1.10.1-0.13.0 archive on 1.21.0). The publish job fails if
 `gradle/libs.versions.toml` moves nextlib or mediamp on, or `TM_REVISION` in
