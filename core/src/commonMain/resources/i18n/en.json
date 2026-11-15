@@ -3325,7 +3325,8 @@
     "upi_detail": "From GPay, PhonePe, Paytm, BHIM or any UPI app.",
     "upi_id": "UPI ID",
     "upi_no_app": "No UPI app answered on this device. Scan the code from a phone, or copy the ID into your UPI app.",
-    "upi_note": "If the app that opened is not the one you use, or none opened, scan the code or copy the ID and pay in your own UPI app."
+    "upi_note": "If the app that opened is not the one you use, or none opened, scan the code or copy the ID and pay in your own UPI app.",
+    "upi_page_note": "Scan the code with a UPI app on your phone, or copy the ID and pay it in your own app."
   },
   "theme": {
     "black": "Black",

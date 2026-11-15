@@ -476,7 +476,7 @@ private fun UpiPage(
     val app = touch && actions.openUpiApp != null
     Text(s.supportPayUpi, style = MaterialTheme.typography.headlineSmall, color = Tone.text, textAlign = TextAlign.Center)
     Text(
-        if (failed) s.supportUpiNoApp else s.supportUpiNote,
+        if (failed) s.supportUpiNoApp else s.supportUpiPageNote,
         style = MaterialTheme.typography.bodyMedium,
         color = if (failed) Tone.text else Tone.muted,
         textAlign = TextAlign.Center,
