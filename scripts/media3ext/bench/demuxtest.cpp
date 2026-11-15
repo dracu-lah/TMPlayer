@@ -182,6 +182,14 @@ int main(int argc, char **argv) {
     const char *type = av_get_media_type_string(par->codec_type);
     names += std::string(i ? "," : "") + (type ? type[0] : '?') + ":" + (codec ? codec->name : avcodec_get_name(par->codec_id));
     if (par->extradata_size > tmdemux::kMaxExtraData) ok = false;
+    // MPEG-1 and MPEG-2 video in a program stream has its sequence header once, in the first packet:
+    // open() copies it into the extra data so a decoder started after a seek has it (a file whose
+    // first video packet carries no header, such as a damaged one, may have none).
+    if (strcmp(format, "mpeg") == 0 && par->codec_type == AVMEDIA_TYPE_VIDEO && par->extradata_size == 0 &&
+        (par->codec_id == AV_CODEC_ID_MPEG1VIDEO || par->codec_id == AV_CODEC_ID_MPEG2VIDEO) && !garbage) {
+      printf("note: stream %d (%s) has no sequence header in its extra data\n", i, names.c_str());
+      ok = false;
+    }
   }
 
   // Every packet, in range.

@@ -48,6 +48,6 @@ nsv-witchblade	nsv/witchblade-51kbps.nsv	-	vp3:v,mp3:a	yes
 nsv-solo	nsv/NullsoftBand-SoloMeansOne.nsv	-	vp3:v,mp3:a	yes
 nsv-vp6	nsv/64vp6.nsv	-	vp6:v,aac:a	yes
 nsv-sample	nsv/sample.nsv	-	vp6:v,aac:a	yes
-vivo-bush	vivo/bush.viv	-	h263:v,g723_1:a!	yes
-vivo-gclinton	vivo/gclinton.viv	-	siren:a!	yes
+vivo-bush	vivo/bush.viv	-	h263:v,g723_1:a	yes
+vivo-gclinton	vivo/gclinton.viv	-	siren:a	yes
 smjpeg	game-formats/smjpeg/scenwin.mjpg	gunzip	mjpeg:v,adpcm_ima_smjpeg:a	yes

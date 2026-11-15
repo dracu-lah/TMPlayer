@@ -18,7 +18,7 @@
 +ENABLED_DECODERS="vorbis opus flac alac pcm_mulaw pcm_alaw mp3 amrnb amrwb aac ac3 eac3 dca mlp truehd h264 hevc mpeg2video mpegvideo mpeg4 msmpeg4v2 msmpeg4v3 vc1 mjpeg vp8 vp9 libdav1d
 +  mpeg1video wmv1 wmv2 wmv3 h263 h263p flv theora dvvideo svq1 svq3 vp6 vp6f rv10 rv20 rv30 rv40 cinepak
 +  prores ffv1 huffyuv ffvhuff utvideo mjpegb
-+  wmav1 wmav2 wmapro wmalossless mp1 mp2 cook ra_144 ra_288 qcelp gsm gsm_ms sipr atrac3 atrac3p speex
++  wmav1 wmav2 wmapro wmalossless mp1 mp2 cook ra_144 ra_288 qcelp gsm gsm_ms sipr atrac3 atrac3p speex g723_1 siren
 +  wavpack tta ape nellymoser
 +  adpcm_4xm adpcm_adx adpcm_afc adpcm_agm adpcm_aica adpcm_argo adpcm_ct adpcm_dtk adpcm_ea
 +  adpcm_ea_maxis_xa adpcm_ea_r1 adpcm_ea_r2 adpcm_ea_r3 adpcm_ea_xas adpcm_g722 adpcm_g726
@@ -566,7 +566,7 @@
 +}
 --- a/media3ext/src/main/cpp/ffdemux.h
 +++ b/media3ext/src/main/cpp/ffdemux.h
-@@ -0,0 +1,333 @@
+@@ -0,0 +1,407 @@
 +// TMPlayer (tm4, C2): FFmpeg's libavformat as the last-resort container reader of the app's Media3
 +// extractor (com.tmplayer.player.demux.FfmpegExtractor), for the containers Media3 has no extractor
 +// for: ASF/WMV/WMA, RealMedia, MPEG-1 system streams, Ogg with Theora, NUT, MXF, DV and others (the
@@ -606,6 +606,9 @@
 +constexpr int kMaxExtraData = 1 << 20;
 +constexpr int kMaxPacket = 32 << 20;
 +constexpr int kMaxIndexEntries = 1 << 16;
++/** What fillMpegSequenceHeader reads to find the first sequence header of a stream. */
++constexpr int kMaxHeaderScanPackets = 256;
++constexpr int64_t kMaxHeaderScanBytes = 4 << 20;
 +/** The bytes the sniff hands probe(). */
 +constexpr int kProbeBytes = 32 * 1024;
 +/** A probe score below this is a guess (libavformat's own retry threshold). */
@@ -748,6 +751,76 @@
 +}
 +
 +/**
++ * An MPEG-1 or MPEG-2 video stream in a program stream has no extra data: the sequence header
++ * (00 00 01 B3, with the extension and user data that follow it) sits once in the first video
++ * packet, and a decoder started after a seek never sees it. Copies it from there into the stream's
++ * extra data, which the app hands the decoder, then goes back to where the data starts. Reads at
++ * most kMaxHeaderScanPackets packets and kMaxHeaderScanBytes bytes, and keeps nothing on failure.
++ */
++inline void fillMpegSequenceHeader(Demuxer *d) {
++  const AVStream *wanted[kMaxStreams] = {};
++  int missing = 0;
++  for (unsigned i = 0; i < d->context->nb_streams && i < (unsigned) kMaxStreams; i++) {
++    const AVStream *st = d->context->streams[i];
++    const AVCodecParameters *p = st->codecpar;
++    if (p->codec_type == AVMEDIA_TYPE_VIDEO && p->extradata_size == 0 &&
++        (p->codec_id == AV_CODEC_ID_MPEG1VIDEO || p->codec_id == AV_CODEC_ID_MPEG2VIDEO)) {
++      wanted[i] = st;
++      missing++;
++    }
++  }
++  if (missing == 0 || !d->avio->seekable) return;
++  int64_t scanned = 0;
++  for (int n = 0; n < kMaxHeaderScanPackets && missing > 0 && scanned < kMaxHeaderScanBytes; n++) {
++    int ret = av_read_frame(d->context, d->packet);
++    if (ret < 0) break;
++    const AVPacket *pk = d->packet;
++    scanned += pk->size;
++    if (pk->stream_index >= 0 && pk->stream_index < kMaxStreams && wanted[pk->stream_index] != nullptr &&
++        pk->data != nullptr && pk->size > 4) {
++      const uint8_t *data = pk->data;
++      int size = pk->size;
++      int from = -1;
++      for (int i = 0; i + 4 <= size; i++) {
++        if (data[i] == 0 && data[i + 1] == 0 && data[i + 2] == 1 && data[i + 3] == 0xB3) {
++          from = i;
++          break;
++        }
++      }
++      if (from >= 0) {
++        // Up to the group of pictures (B8) or the first picture (00), the end of the header block.
++        int to = size;
++        for (int i = from + 4; i + 4 <= size; i++) {
++          if (data[i] == 0 && data[i + 1] == 0 && data[i + 2] == 1 && (data[i + 3] == 0xB8 || data[i + 3] == 0x00)) {
++            to = i;
++            break;
++          }
++        }
++        int length = to - from;
++        AVCodecParameters *par = d->context->streams[pk->stream_index]->codecpar;
++        if (length >= 12 && length <= kMaxExtraData) {
++          uint8_t *copy = static_cast<uint8_t *>(av_mallocz(length + AV_INPUT_BUFFER_PADDING_SIZE));
++          if (copy != nullptr) {
++            memcpy(copy, data + from, length);
++            par->extradata = copy;
++            par->extradata_size = length;
++          }
++        }
++        // The first packet is the only place the header is: this stream is done, found or not.
++        wanted[pk->stream_index] = nullptr;
++        missing--;
++      }
++    }
++    av_packet_unref(d->packet);
++  }
++  av_packet_unref(d->packet);
++  // Back to the first packet (a byte seek, which the mpeg demuxer does without an index).
++  d->avio->error = 0;
++  d->avio->eof_reached = 0;
++  av_seek_frame(d->context, -1, d->dataStart, AVSEEK_FLAG_BYTE);
++}
++
++/**
 + * Opens [format] (one of kDemuxers) over [io] and reads its streams. Returns nullptr on any
 + * failure, with [error] set to libavformat's code where there is one.
 + */
@@ -812,6 +885,7 @@
 +    return nullptr;
 +  }
 +  d->startUs = context->start_time != AV_NOPTS_VALUE && context->start_time > 0 ? context->start_time : 0;
++  fillMpegSequenceHeader(d);
 +  // ASF keeps its index at the end, read only by its first seek: one tail read now (like an MP4
 +  // with its index at the end), so the SeekMap has the index from the start. Seeking to the start
 +  // also takes the reader back to the first packet, which the stream search went past.

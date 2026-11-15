@@ -11,8 +11,8 @@ a container `FfmpegExtractor` reads it also runs `demuxtest` (small reads, decod
 packets, a seek to the middle, a seek back to the start, 12 damaged copies of the file).
 
 Measured 2026-11-15 (worker w14, FFmpeg 9.0.1 host build, tm4 sources): 25 of the 25 targets have a
-real sample and decode bit for bit; 1 container (Vivo) plays but cannot seek; 3 decoders that Vivo's
-audio needs are not in the build. Details below the table.
+real sample and decode bit for bit; 1 container (Vivo) plays but cannot seek. A second pass (worker w15, same day) added the two decoders
+Vivo's sound needs (G.723.1, Siren) and the MPEG-1 sequence header fix. Details below the table.
 
 All paths are below `https://samples.ffmpeg.org/`. "match" is the md5 of the glue's decode equal to
 the reference ffmpeg's. "demux ok" is `demuxtest` passing every check (open, decode, seek to the
@@ -40,7 +40,7 @@ middle, the demuxer's own name in the list of `ffdemux.h`).
 | WMA Pro | A-codecs/WMA9/wmapro/classical_22_16_1_14000_v3c_0_extend_0_29.wma | 345 KB | wmapro in ASF | match, demux ok |
 | WMA Lossless | A-codecs/lossless/luckynight.wma | 6.3 MB | wmalossless in ASF | match, demux ok (over the 5 MB wish: no smaller one found) |
 | MP1 | A-codecs/mp1-sample.mp1 | 28 KB | mp1 raw | match |
-| MP1 | A-codecs/MP3/mpeg_layer1_audio.mpg | 3.7 MB | mp1 and mpeg1video in MPEG-PS | match (also mpeg1video), demux note 4 |
+| MP1 | A-codecs/MP3/mpeg_layer1_audio.mpg | 3.7 MB | mp1 and mpeg1video in MPEG-PS | match (also mpeg1video), demux ok after a seek (note 4) |
 | Cook | real/AC-cook/FUN_RM_32.rm | 68 KB | cook in RM | match, demux ok |
 | Cook | real/AC-cook/mc_sich_ra8_20.rm | 97 KB | cook in RM | match, demux ok |
 | RealAudio 2.0 | real/AC-28_8/luckynightmono2.ra | 115 KB | real_288 in .ra | match, demux seek note 5 |
@@ -61,8 +61,8 @@ middle, the demuxer's own name in the list of `ffdemux.h`).
 | NSV | nsv/64vp6.nsv | 438 KB | vp6 and aac | match, demux note 6 |
 | NSV | nsv/sample.nsv | 200 KB | vp6 and aac | match, demux seek note 5 and 6 |
 | NSV | nsv/deer-210.nsv | 1.4 MB | vp3 | demux ok; decode equals the reference except the last 2 frames (the file ends inside a frame, the glue conceals with err_recognition ignore) |
-| Vivo | vivo/bush.viv | 90 KB | h263 and g723_1 in Vivo | h263 match; g723_1 not in the build; demux seek note 7 |
-| Vivo | vivo/gclinton.viv | 54 KB | siren in Vivo (no picture) | siren not in the build; demux seek note 7 |
+| Vivo | vivo/bush.viv | 90 KB | h263 and g723_1 in Vivo | h263 and g723_1 match; demux seek note 7 |
+| Vivo | vivo/gclinton.viv | 54 KB | siren in Vivo (no picture) | siren matches; demux seek note 7 |
 | SMJPEG | game-formats/smjpeg/scenwin.mjpg (the server keeps it gzipped: gunzip first) | 526 KB | mjpeg and adpcm_ima_smjpeg | match (both), demux ok |
 
 Damaged-input runs on every one of these (4 seeds per decoder, 12 per container): no crash, no hang.
@@ -76,9 +76,11 @@ Damaged-input runs on every one of these (4 seeds per decoder, 12 per container)
    511). Harmless.
 3. The RM header of `sample.rm` claims 45 minutes for a 9 second clip, so the asked middle is
    22 minutes and the seek lands at 0.4 s. A lying duration is the file's, not the glue's.
-4. After any seek, `mpeg1video` of this file decodes no picture: its only sequence header is in the
-   first frame and FFmpeg gives the stream no extra data (`extradata_size` 0), so a decoder started
-   after a seek has none. Without a seek, 1375 frames match. See "Left for a rebuild".
+4. Before w15, `mpeg1video` of this file decoded no picture after any seek: its only sequence header
+   is in the first frame and FFmpeg gives the stream no extra data (`extradata_size` 0), so a
+   decoder started after a seek had none. `ffdemux.h` `open()` now copies that header into the
+   extra data (`fillMpegSequenceHeader`), and `demuxtest` fails an MPEG program stream whose video
+   has none: 23 pictures decode from the start, and 1375 frames match the reference as before.
 5. Seek to the middle lands at 0 or reads nothing: a `.ra` file and `nsv/sample.nsv` have no index
    and no duration (NSV reports 0), so the app's SeekMap is unseekable for them (duration 0) and
    Media3 does not ask for a middle seek.
@@ -97,14 +99,13 @@ Damaged-input runs on every one of these (4 seeds per decoder, 12 per container)
 * `ContainerSeekMap` reports Vivo as unseekable (`NO_TIME_SEEK`), so the bar does not offer a drag
   that ends the video.
 
-## Left for a rebuild (tm5), not changed here
+## Added in the same tm4 (never released, so no tm5), w15
 
-* `scripts/media3ext/tmplayer-decoders.patch`, `ENABLED_DECODERS`: add `g723_1` and `siren` (both
-  LGPL in FFmpeg 9.0.1) so Vivo's sound plays; today those tracks are listed by their codec name
-  and no renderer takes them. Check the size per ABI as C1 did.
-* `ffdemux.h`, `open()`, after `avformat_find_stream_info`: for a video stream of `mpeg1video` or
-  `mpeg2video` with `extradata_size == 0`, copy the first sequence header (from `00 00 01 B3` up to
-  the next start code `00 00 01 B8` or `00 00 01 00`) found in the first video packet into the
-  stream's extra data, so a decoder started after a seek has it. Media3's MPEG-2 path (the device
-  decoder) needs the same header in the packets; only files that carry it once at the start are
-  affected.
+* `ENABLED_DECODERS` has `g723_1` and `siren` (both LGPL in FFmpeg 9.0.1: no `--enable-gpl` needed).
+  Both decode the Vivo samples bit for bit against the reference ffmpeg (`bush.viv` G.723.1,
+  `gclinton.viv` Siren), and their damaged-packet runs pass. The Kotlin side names them like every
+  other decoder (`audio/x-ffmpeg-g723_1`, `audio/x-ffmpeg-siren`), nothing to map by hand.
+* `ffdemux.h` `open()` fills the extra data of an `mpeg1video` or `mpeg2video` stream that has
+  none from the first sequence header (`00 00 01 B3` up to `B8` or `00`) in its first video
+  packets (at most 256 packets or 4 MB), then goes back to where the data starts. The app hands
+  the header to the device's MPEG-2 decoder as codec data too.

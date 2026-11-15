@@ -74,6 +74,11 @@ object FfmpegFormats {
             if (stream.height > 0) builder.setHeight(stream.height)
             if (stream.frameRate > 0f) builder.setFrameRate(stream.frameRate)
             if (ffmpegNamed) builder.setInitializationData(initializationData(stream.extraData, stream.bitsPerCodedSample, stream.codecTag))
+            // The device's MPEG-2 decoder gets the sequence header as its codec data too (the reader copies
+            // it from the first packet, where a program stream carries it once), so a restart after a seek has it.
+            else if (stream.codec == "mpeg2video" && stream.extraData != null && stream.extraData.isNotEmpty()) {
+                builder.setInitializationData(listOf(stream.extraData))
+            }
         } else {
             if (stream.sampleRate > 0) builder.setSampleRate(stream.sampleRate)
             if (stream.channels > 0) builder.setChannelCount(stream.channels)

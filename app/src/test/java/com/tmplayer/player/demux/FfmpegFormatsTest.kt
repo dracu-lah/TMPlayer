@@ -73,8 +73,19 @@ class FfmpegFormatsTest {
             // MP1 is Media3's own layer 1 type; the rest are named by their decoder.
             assertEquals(if (name == "mp1") MimeTypes.AUDIO_MPEG_L1 else "audio/x-ffmpeg-$name", mime)
         }
-        // A codec this build has no decoder for (Vivo's G.723.1 and Siren) is still listed by its codec name.
+        // Vivo's G.723.1 and Siren (decoders of the build since tm4) are named by their codec name.
         assertEquals("audio/x-ffmpeg-g723_1", FfmpegFormats.sampleMimeType(stream(StreamInfo.TYPE_AUDIO, null, "g723_1")))
+    }
+
+    @Test
+    fun theDevicesMpeg2DecoderGetsTheSequenceHeaderAsCodecData() {
+        val header = byteArrayOf(0, 0, 1, 0xB3.toByte(), 0x16, 0x01, 0x20, 0x13, 0xFF.toByte(), 0xFF.toByte(), 0xE0.toByte(), 0x18)
+        val with = FfmpegFormats.format(stream(StreamInfo.TYPE_VIDEO, "mpeg2video", "mpeg2video", header), "mpeg")!!
+        assertEquals(MimeTypes.VIDEO_MPEG2, with.sampleMimeType)
+        assertEquals(1, with.initializationData.size)
+        assertArrayEquals(header, with.initializationData[0])
+        // No header found: none handed over, as before.
+        assertTrue(FfmpegFormats.format(stream(StreamInfo.TYPE_VIDEO, "mpeg2video", "mpeg2video"), "mpeg")!!.initializationData.isEmpty())
     }
 
     @Test
