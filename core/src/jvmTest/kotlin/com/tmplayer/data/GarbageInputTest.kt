@@ -381,6 +381,19 @@ class GarbageInputTest {
             survive("ProxyLinks.parse", text) { ProxyLinks.parse(text) }
             survive("TelegramLinks.parse", text) { TelegramLinks.parse(text) }
             survive("GlobalSearch.parse", text) { GlobalSearch.parse(text) }
+            // An old recent search holding an @username is an ordinary query (HX62): read, cleaned and
+            // ranked, with no lookup behind it; copies named by garbage still order.
+            survive("GlobalSearch username query", text) {
+                GlobalSearch.parse("@$text"); GlobalSearch.clean("@$text"); GlobalSearch.searchable("@$text")
+            }
+            survive("GlobalSearch.copyOrder language", text) {
+                fun copy(id: Long, name: String) = MediaItem(
+                    chatId = 1, messageId = id, fileId = id.toInt(), title = name, sizeBytes = 1, durationSec = 1, mimeType = "video/mp4",
+                    thumbnailFileId = 0, miniThumbnail = null, date = 1, fileName = name,
+                )
+                val copies = listOf(copy(1, text), copy(2, "$text Hindi"), copy(3, "Tamil $text"))
+                GlobalSearch.copyOrder(copies, "hi"); GlobalSearch.copyOrder(copies, text); GlobalSearch.tally(emptyList())
+            }
             survive("ByteRange.parse", text) { ByteRange.parse(text, 1_000); ByteRange.parse("bytes=$text", 0) }
             survive("PostStart.parse", text) { PostStart.parse(text) }
             survive("Decimal.parse", text) { Decimal.parse(text) }

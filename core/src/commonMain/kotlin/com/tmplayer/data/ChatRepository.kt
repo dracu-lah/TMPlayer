@@ -503,12 +503,16 @@ class ChatRepository(private val td: TdlClient) {
      * (from TDLib's memory, for a chat it has seen), so a result names and pictures its chat even
      * when that chat is not in the list loaded on screen. A failure is thrown, so the caller can
      * say the search failed, or wait out a flood wait, rather than say nothing matched.
+     *
+     * With [everyChat] the answer is not narrowed to the added chats (HX62's one-off "Search my
+     * other chats"); the kids lock still applies. Never called with it unless the viewer asked.
      */
     suspend fun searchAllChats(
         query: String,
         cursor: AllChatsCursor = AllChatsCursor(),
         limit: Int = AllChatsSearch.PAGE_SIZE,
         filters: SearchFilters = SearchFilters(),
+        everyChat: Boolean = false,
     ): AllChatsPage = withContext(Dispatchers.IO) {
         coroutineScope {
             val list = if (filters.includeArchived) null else ChatListMain()
@@ -536,7 +540,9 @@ class ChatRepository(private val td: TdlClient) {
             val videoFound = videos?.await()
             val documentFound = documents?.await()
             val photoFound = photos?.await()
-            val allowed = ChatGate.awaitBrowsing()
+            // The viewer's own chats only (HX62): the added chats met with the kids lock. Only the
+            // one-off "Search my other chats" ([everyChat]) reads the kids lock alone.
+            val allowed = if (everyChat) ChatGate.awaitReady() else ChatGate.awaitBrowsing()
             val messages = listOfNotNull(videoFound, documentFound).flatMap { it.messages.toList() }
                 .filter { KidsLock.allows(allowed, it.chatId) }
             val photoHits = photoFound?.messages?.toList().orEmpty()
@@ -614,8 +620,10 @@ class ChatRepository(private val td: TdlClient) {
                         if (!matchesType(filters.chatType, summary.kind)) return@async null
                         val protected = chat.hasProtectedContent
                         coroutineScope {
-                            val videos = async { search(chatId, 0, SearchMessagesFilterVideo(), query, protected, limit) }
-                            val documents = async { search(chatId, 0, SearchMessagesFilterDocument(), query, protected, limit) }
+                            // A FLOOD_WAIT is waited out by the call that got it, so one busy chat does
+                            // not fail the page the others have answered.
+                            val videos = async { floodWaited { search(chatId, 0, SearchMessagesFilterVideo(), query, protected, limit) } }
+                            val documents = async { floodWaited { search(chatId, 0, SearchMessagesFilterDocument(), query, protected, limit) } }
                             // A photo whose caption names the title leads to its album's videos; a failed
                             // photo search leaves the others' answer standing.
                             val photos = async { if (query.isBlank()) null else attempt { search(chatId, 0, SearchMessagesFilterPhoto(), query, protected, limit) }.getOrNull() }
@@ -687,6 +695,9 @@ class ChatRepository(private val td: TdlClient) {
      * The chat a public @username names, as the chat list would show it, or null when no such
      * username exists, it is not a chat (a sticker set, say), or the kids lock keeps it out. It is
      * looked up on Telegram's servers, so it finds a channel or a person that is not in the list.
+     *
+     * For a t.me link the viewer opened or pasted ([LinkFlow], HX30), never for Search: HX62 keeps
+     * search inside the viewer's own chats, so nothing typed in it is looked up by username.
      */
     suspend fun findByUsername(text: String): ChatSummary? = withContext(Dispatchers.IO) {
         val name = Usernames.clean(text) ?: return@withContext null
@@ -768,6 +779,21 @@ class ChatRepository(private val td: TdlClient) {
         is ChatTypeSupergroup -> if (type.isChannel) ChatKind.Channel else ChatKind.Group
         is ChatTypeBasicGroup -> ChatKind.Group
         else -> ChatKind.Direct
+    }
+
+    /**
+     * [block], and once more after Telegram's FLOOD_WAIT when it asked for [TOPIC_FLOOD_WAIT_S]
+     * seconds or fewer. A longer wait, a second one or any other refusal is thrown as it came.
+     */
+    private suspend fun <T> floodWaited(block: suspend () -> T): T {
+        try {
+            return block()
+        } catch (e: TdlError) {
+            val wait = Failures.floodWaitSeconds(e.message)
+            if (wait == null || wait > TOPIC_FLOOD_WAIT_S) throw e
+            kotlinx.coroutines.delay(wait * 1000L + 250L)
+            return block()
+        }
     }
 
     private suspend fun <T> attempt(block: suspend () -> T): Result<T> =

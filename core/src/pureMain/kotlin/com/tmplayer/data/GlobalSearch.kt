@@ -131,6 +131,17 @@ interface SearchIdentity {
     fun onlineKey(item: MediaItem): String? = SameTitle.onlineKey(item)
 
     companion object {
+        /**
+         * [base] with its copies led by the viewer's preferred audio [language] (a two letter code
+         * as [com.tmplayer.player.TrackLanguages.normalise] gives it): [GlobalSearch.copyOrder]'s
+         * language step. [base] itself for no language, or when it is not the shared [Default]
+         * (a fixture's own order is left alone).
+         */
+        fun preferring(base: SearchIdentity, language: String?): SearchIdentity =
+            if (language == null || base !== Default) base else object : SearchIdentity by Default {
+                override fun copyOrder(copies: List<MediaItem>): List<MediaItem> = GlobalSearch.copyOrder(copies, language)
+            }
+
         val Default: SearchIdentity = object : SearchIdentity {
             override fun sameVideo(a: MediaItem, b: MediaItem): Boolean {
                 if (a.fileId != 0 && a.fileId == b.fileId) return true
@@ -485,18 +496,49 @@ object GlobalSearch {
     /** The name a card goes by: the show's, or the tile title, never a shortened poster title. */
     fun titleOf(group: ResultGroup): String = group.show?.takeIf { group.isShow } ?: SeriesShelf.tileTitle(group.asItem())
 
-    /** On this device first, then the best picture, then the newest. */
-    fun copyOrder(copies: List<MediaItem>): List<MediaItem> {
+    /**
+     * On this device first, then the copy whose name carries the viewer's preferred audio
+     * [language] (EG-F5: "Hindi" in the name of a Hindi copy), then the best picture, then the
+     * newest. A copy whose name names no language ranks between one that names the language and
+     * one that names only others: it may well be in it. [language] null leaves this step out.
+     */
+    fun copyOrder(copies: List<MediaItem>, language: String? = null): List<MediaItem> {
         if (copies.size < 2) return copies.toList()
-        // Each copy's quality read once, not on every comparison of the sort.
-        return copies.map { it to (qualityOf(it)?.let(::qualityRank) ?: 0) }
+        // Each copy's quality and language read once, not on every comparison of the sort.
+        return copies.map { Triple(it, qualityOf(it)?.let(::qualityRank) ?: 0, languageTier(it, language)) }
             .sortedWith(
-                compareByDescending<Pair<MediaItem, Int>> { it.first.onDevice }
+                compareByDescending<Triple<MediaItem, Int, Int>> { it.first.onDevice }
+                    .thenByDescending { it.third }
                     .thenByDescending { it.second }
                     .thenByDescending { it.first.date }
                     .thenByDescending { it.first.messageId },
             )
             .map { it.first }
+    }
+
+    /** 2 when the name carries [language], 1 when it names no language, 0 when it names only others or none is wanted. */
+    private fun languageTier(item: MediaItem, language: String?): Int {
+        if (language == null) return 0
+        val named = VideoCopies.languagesOf(item)
+        return when {
+            language in named -> 2
+            named.isEmpty() -> 1
+            else -> 0
+        }
+    }
+
+    /** What the count line over the results says: how many videos, in how many chats. */
+    data class Tally(val videos: Int, val chats: Int)
+
+    /** The videos and the chats [groups] hold, a show counted by its episodes, a video once however many copies. */
+    fun tally(groups: List<ResultGroup>): Tally {
+        val chats = HashSet<Long>()
+        var videos = 0
+        for (group in groups) {
+            videos += if (group.isShow) group.episodeCount else 1
+            group.copies.forEach { chats += it.chatId }
+        }
+        return Tally(videos, chats.size)
     }
 
     /** "4K", "1080p", "720p", "SD", or null when neither the name nor the stated size says. */

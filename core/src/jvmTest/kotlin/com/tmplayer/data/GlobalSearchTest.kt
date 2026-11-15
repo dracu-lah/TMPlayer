@@ -155,6 +155,53 @@ class GlobalSearchTest {
     }
 
     @Test
+    fun `copies lead with the preferred audio language the name carries, then names with none, then other languages`() {
+        val tamil = video(1, 10, "Night.Train.2022.1080p.Tamil.WEB-DL.mkv", date = 30)
+        val hindi = video(2, 11, "Night.Train.2022.720p.Hindi.WEB-DL.mkv", date = 20)
+        val plain = video(3, 12, "Night.Train.2022.1080p.WEB-DL.mkv", date = 10)
+        val copies = listOf(tamil, plain, hindi)
+        // No preference: the best picture then the newest, as before.
+        assertEquals(listOf(10L, 12L, 11L), GlobalSearch.copyOrder(copies).map { it.messageId })
+        // Hindi wanted: the Hindi copy even at 720p, then the copy naming no language, then the Tamil one.
+        assertEquals(listOf(11L, 12L, 10L), GlobalSearch.copyOrder(copies, "hi").map { it.messageId })
+        assertEquals(listOf(10L, 12L, 11L), GlobalSearch.copyOrder(copies, "ta").map { it.messageId })
+        // A copy on this device still leads, whatever its language.
+        val local = video(4, 13, "Night.Train.2022.720p.Tamil.mkv", onDevice = true)
+        assertEquals(13L, GlobalSearch.copyOrder(copies + local, "hi").first().messageId)
+        // Two audio tracks named: either wanted language finds it.
+        val dual = video(5, 14, "Night.Train.2022.480p.Hindi.Tamil.mkv", date = 1)
+        assertEquals(listOf(10L, 14L, 12L, 11L), GlobalSearch.copyOrder(copies + dual, "ta").map { it.messageId })
+    }
+
+    @Test
+    fun `the identity with a preferred language orders merged cards by it, and without one is the default`() {
+        val tamil = video(1, 10, "Night.Train.2022.1080p.Tamil.mkv")
+        val hindi = video(2, 11, "Night.Train.2022.720p.Hindi.mkv")
+        assertTrue(SearchIdentity.preferring(SearchIdentity.Default, null) === SearchIdentity.Default)
+        val groups = GlobalSearch.merge(emptyList(), listOf(tamil, hindi), q("night train"), SearchSort.BestMatch, SearchIdentity.preferring(SearchIdentity.Default, "hi"))
+        assertEquals(1, groups.size)
+        assertEquals(11L, groups.single().lead.messageId)
+    }
+
+    @Test
+    fun `the count line counts videos once and the chats they are in, a show by its episodes`() {
+        val groups = GlobalSearch.merge(
+            emptyList(),
+            listOf(
+                video(1, 10, "Night.Train.2022.1080p.mkv"),
+                video(2, 11, "Night.Train.2022.720p.mkv"),
+                video(1, 20, "Harbour.Notes.S01E01.mkv"),
+                video(3, 21, "Harbour.Notes.S01E02.mkv"),
+            ),
+            q("night"),
+        )
+        val tally = GlobalSearch.tally(groups)
+        assertEquals(3, tally.videos)
+        assertEquals(3, tally.chats)
+        assertEquals(GlobalSearch.Tally(0, 0), GlobalSearch.tally(emptyList()))
+    }
+
+    @Test
     fun `a name alone does not make copies across chats`() {
         val groups = GlobalSearch.merge(
             emptyList(),
