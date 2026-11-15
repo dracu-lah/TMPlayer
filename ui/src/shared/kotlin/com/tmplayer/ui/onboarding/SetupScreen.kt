@@ -86,8 +86,11 @@ import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.Tv
 import com.tmplayer.ui.theme.focusRing
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * The setup's preference steps ([Setup]), the same screen on the phone, the television and the
@@ -160,27 +163,36 @@ fun SetupScreen(
     val primaryFocus = remember { FocusRequester() }
     var focusedOn by remember { mutableStateOf<Int?>(null) }
 
+    var finishing by remember { mutableStateOf(false) }
     fun next() {
-        for (on in page) {
-            val choice = selectedOn(on)
-            // Only a change is written: Next on an untouched step leaves every setting as it was,
-            // even one changed on its own in Settings since. Mobile data suggests saving although
-            // it is off, and the Device step's answer is an action, so both compare with what is
-            // really set.
-            if (choice != values.chosen(on)) {
-                scope.launch {
-                    runCatching {
-                        choice.applyTo(
-                            settings,
-                            posters = online?.let { o -> { enabled: Boolean -> o.setEnabled(enabled) } },
-                            recommendations = recommendations,
-                            crashReports = crashReporting.onChange,
-                        )
+        if (finishing) return
+        // Only a change is written: Next on an untouched step leaves every setting as it was,
+        // even one changed on its own in Settings since. Mobile data suggests saving although
+        // it is off, and the Device step's answer is an action, so both compare with what is
+        // really set.
+        val writes = page.map { selectedOn(it) to values.chosen(it) }.filter { (choice, set) -> choice != set }.map { it.first }
+        val poster = online?.let { o -> { enabled: Boolean -> o.setEnabled(enabled) } }
+        val last = state.isLast
+        if (last) finishing = true
+        scope.launch {
+            // Written to the end even if this screen leaves meanwhile: on the last page onDone
+            // takes it away, and a multi-write answer (Lighter writes three settings) must not
+            // be cut between them (ON-16).
+            withContext(NonCancellable) {
+                // A write that hangs must not hold the setup for ever: it goes on after a while.
+                withTimeoutOrNull(WRITES_MS) {
+                    for (choice in writes) {
+                        try {
+                            choice.applyTo(settings, posters = poster, recommendations = recommendations, crashReports = crashReporting.onChange)
+                        } catch (e: Exception) {
+                            // One answer that cannot be written must not stop the setup or the rest.
+                        }
                     }
                 }
             }
+            if (last) onDone()
         }
-        if (!state.next()) onDone()
+        if (!last) state.next()
     }
 
     fun mark(choice: SetupChoice) {
@@ -281,6 +293,9 @@ fun SetupScreen(
 // Three seconds in all: a television cold start can take that long to give the window its focus.
 internal const val FOCUS_TRIES = 40
 internal const val FOCUS_RETRY_MS = 75L
+
+/** The longest the last press waits for its answer to be written before the setup ends anyway. */
+internal const val WRITES_MS = 5_000L
 
 /**
  * The Device step's answers: the list of what would change, then Apply and Not now as two rows to
