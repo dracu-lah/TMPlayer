@@ -350,7 +350,27 @@ Store text, the site.
   gotchas: Compose test mouse has no modifier keys: use performKeyInput keyDown, click, keyUp;
   a removed row loses focus BEFORE and the data change lands near it, hence the 1 s window match.
 
+- 2026-11-16 T1 (worktree agent-ad837c2ce7e131651, local commits, not pushed):
+  done: 6e11c96 Settings search per visit through one shared `rememberVisitQuery(keep)` (ui/shared
+  components/VisitQuery.kt) used by phone SettingsScreen and desktop SettingsPage, tests
+  SettingsSearchLeaveTest (leave and return empty, page from a result keeps words, rotation via
+  StateRestorationTester) and SettingsSearchLeaveDesktopTest; 9e483fe Back empties the Settings box
+  before leaving, plus a clear-control focus test; e19df74 the shared ClearButton in the Settings box,
+  the country list and the topic find (three one-off crosses gone); bea77ef IME: proxy Next then Done and
+  no autocorrect, subtitle account and keys, metadata keys; 731ddb0 sign in first screen no longer asks
+  "press Back again" (rule 13, `ExitOnBack` deleted).
+  left: AddChats search box (OutlinedTextField, phone and TV) has no clear control: a trailingIcon broke
+  4 AddChatsTvKeysTest, reverted, needs its own look; desktop OnlineSubtitles/Metadata fields have no
+  keyboardOptions; rules 5, 6, 7 (no results hint, recent searches, Ctrl+F) only checked for Settings;
+  desktop test does not assert the kept query (box is not on an open page); string `login.press_back_again`
+  stays in en.json (CatalogTest fails if only English drops a key: the locale files are the user's, so
+  T3's removal of `main.back_again` from en.json will fail CatalogTest the same way, check it);
+  ListsUi rename (T2) and PlayerBookmarkSheets (T3) not touched.
+  gotchas: copy local.properties into a worktree; the shell tool refuses long compound git commands in a
+  worktree, split them; `private/` lives only in the main tree.
+
 ## Decisions made by Claude
+- T1: one shared `rememberVisitQuery` (not a patch per screen) so any later search box gets rule 3 by calling it; the phone keeps the query while a page is open (`keep = page != null`), the desktop while a category is open. No design note: small fix.
 - Three workers, not more: the files are split by surface and `MainActivity.kt` is shared, so only
   T3 touches it and only for back handling.
 - T3: Esc handling lives in the shared `TmAlertDialog` (one place, all platforms) instead of per dialog; full screen yields to a layer over the page on the desktop; the top level's exit confirmation is deleted rather than reworded. No design note: small, clear fixes.
