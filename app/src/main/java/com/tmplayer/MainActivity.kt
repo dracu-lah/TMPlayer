@@ -798,7 +798,7 @@ private fun Root() {
     // asked before the app, once the setup is done. While it is up (or briefly waits for the chat
     // list), nothing of the shell's own is offered: no update popup, What's new, language card,
     // tour offer or support prompt over or before it.
-    val chatsGate = com.tmplayer.ui.browse.rememberChatsGate(chatsViewModel, setupPending)
+    val chatsGate = com.tmplayer.ui.browse.rememberChatsGate(chatsViewModel, setupPending, signedIn = auth is AuthState.Ready)
     val gateUp = com.tmplayer.data.ChatsGate.up(chatsGate)
     // The gate's picker model lives in the activity under its run. Once the gate has been answered
     // the next one gets a new run, so a second sign in in this process (Sign out does not recreate
