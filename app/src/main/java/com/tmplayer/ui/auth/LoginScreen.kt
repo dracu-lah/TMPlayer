@@ -3,7 +3,6 @@ package com.tmplayer.ui.auth
 import com.tmplayer.i18n.L
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.nav.BackHandler
-import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.aspectRatio
@@ -88,7 +87,6 @@ import com.tmplayer.ui.components.TmButton
 import com.tmplayer.ui.components.TmSecondaryButton
 import com.tmplayer.ui.components.isTouch
 import com.tmplayer.ui.components.paneAction
-import com.tmplayer.ui.components.rememberToast
 import com.tmplayer.ui.icons.TmIcons
 import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Tone
@@ -288,33 +286,10 @@ private fun rememberSubmission(state: AuthState, error: String?): Submission {
 }
 
 /**
- * Back on the first screen of the sign-in, which means leaving the app.
- *
- * Two presses, the same guard the chat list uses: on a remote Back sits right beside the D-pad, so
- * a stray press must not drop the viewer out of the app in the middle of scanning a code.
- */
-@Composable
-private fun ExitOnBack() {
-    val s = LocalStrings.current
-    val activity = LocalActivity.current
-    val toast = rememberToast()
-    var armed by remember { mutableStateOf(false) }
-    BackHandler {
-        if (armed) activity?.finish() else { armed = true; toast(s.loginPressBackAgain) }
-    }
-    LaunchedEffect(armed) {
-        if (armed) {
-            delay(EXIT_WINDOW_MS)
-            armed = false
-        }
-    }
-}
-
-/**
  * The number pane, which is where a phone's sign-in begins.
  *
  * Back means two different things on the two devices, and both are what the viewer expects. On a
- * phone this is the first screen, so Back leaves the app, guarded the way the chat list guards it.
+ * phone this is the first screen, so Back leaves the app.
  * On a television it was reached from the QR pane, so Back goes there. The one exception is a
  * number being changed part way through a sign-in, where Back belongs to the code pane that sent
  * the viewer here, and that is what [onBack] carries. [initial] is the number being changed.
@@ -330,7 +305,8 @@ private fun PhonePane(
 ) {
     val s = LocalStrings.current
     // Nothing has been sent yet, so leaving costs nothing either way.
-    if (onBack == null) ExitOnBack() else BackHandler(onBack = onBack)
+    // On the first screen there is no handler: Back leaves the app at once (no exit confirmation).
+    if (onBack != null) BackHandler(onBack = onBack)
 
     if (isTouch()) {
         TouchPhonePane(state, error, onSubmit, onBack, onUseQr, initial)
@@ -900,13 +876,13 @@ private fun PaneHeader(onBack: () -> Unit) {
  * mind. Nothing is lost either way, because nobody is signed in yet.
  *
  * Back means two different things on the two devices, and both are what the viewer expects. On a
- * television this is the first screen, so Back leaves the app, guarded the way the chat list guards
- * it. On a phone it was reached from the number pane, so Back goes there.
+ * television this is the first screen, so Back leaves the app. On a phone it was reached from the
+ * number pane, so Back goes there.
  */
 @Composable
 private fun QrPane(link: String, scanned: Boolean, onUsePhone: () -> Unit, onRefresh: () -> Unit) {
     val s = LocalStrings.current
-    if (isTouch()) BackHandler(onBack = onUsePhone) else ExitOnBack()
+    if (isTouch()) BackHandler(onBack = onUsePhone)
 
     val bitmap by produceState<androidx.compose.ui.graphics.ImageBitmap?>(initialValue = null, key1 = link) {
         value = withContext(Dispatchers.Default) { QrCode.render(link, QR_PIXELS) }
@@ -1462,9 +1438,6 @@ internal fun LoginForm(
  * answers with a state or with an error long before this.
  */
 private const val PENDING_CEILING_MS = 8_000L
-
-/** How long a first press of Back stays armed before it is forgotten, as on the chat list. */
-private const val EXIT_WINDOW_MS = 2_000L
 
 private const val QR_PIXELS = 560
 
