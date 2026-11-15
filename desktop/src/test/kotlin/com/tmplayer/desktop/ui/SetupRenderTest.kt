@@ -268,7 +268,9 @@ class SetupRenderTest {
             onAllNodes(hasText("Done") and hasClickAction() and isFocused()).fetchSemanticsNodes().isNotEmpty()
         }
         onNode(isFocused()).performKeyInput { pressKey(Key.Enter) }
-        waitForIdle()
+        // The last page writes its answer to the end before the setup closes (ON-16), so Done
+        // reports after the write, not on the press.
+        waitUntil(timeoutMillis = WRITE_MS) { done }
         assertTrue(done)
         waitUntil(timeoutMillis = WRITE_MS) { runBlocking { settings.lowStorageMode.first() } }
     }
