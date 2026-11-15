@@ -114,9 +114,25 @@ to `docs/shortcuts.md` (it exists only if missing: read first), conflicts with t
 shortcuts fixed, Esc closes one layer at a time, focus returns to the opener after a dialog/sheet,
 predictive back and the back gesture checked, targets under 48 dp listed or fixed.
 
+### T4 Streaming storage: two tabs "Keep video" | "Save space"  (model: sonnet, depends: T1 merged)
+User picked option A on 2026-11-16, without "the": row title "While streaming", tabs `Keep video` and
+`Save space`, `Save space` selected on a fresh install (already committed, `d78d4df`). Same stored
+boolean `low_storage_mode` (on = Save space), no migration. Reuse the existing segmented control
+(`SettingsScreen.kt`, desktop `SettingsRows.kt`), do not add a new one.
+files: `app/.../ui/settings/SettingsScreen.kt` (row at ~1703), desktop `SettingsRows.kt` and
+`StorageSettings.kt`, `PlayerSheets.kt` and the `settingsLowStorage*` / `mainLowStorage*` /
+`mainNoRoomLowStorage` / `playerNotEnoughRoomLowStorage` strings in `en.json` (the prompt text names
+the mode: "Switch to Save space?"), `DownloadsScreen.kt` and desktop `Downloads.kt` call sites,
+`LowStorageRenderTest.kt`, `docs/FEATURES.md`, `docs/settings-audit.md`.
+Done when: phone, TV (D-pad Left/Right moves between tabs, focus ring visible) and desktop (arrows,
+Tab) show the control with a detail line under the active tab ("Needs room for the whole video.
+Seeking back is instant." / "Keeps only what you are watching now. Seeking back downloads it
+again."); render tests per form factor; focus test; the setup's storage step and the "Recommended
+for this device" card use the same words; `Notice.LowStorage` (the free space alert) keeps its name.
+Edge: a download kept on purpose is never windowed, whatever the tab (say so in the detail line).
+
 ## Not in this pass
-Low storage mode rename and the two-tab control (waiting for the user to pick A, B or C), store
-text, the site.
+Store text, the site.
 
 ## Progress / handoff
 - 2026-11-16: plan written. Fresh-install default for the streaming mode is committed separately
