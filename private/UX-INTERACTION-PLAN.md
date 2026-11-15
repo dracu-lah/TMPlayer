@@ -195,6 +195,18 @@ and other stuff." Today only the details sheet shows a quality label (`VideoCopi
   name; unknown shows nothing (no empty pill). Raju check: the badge must not crowd the poster at 200% font.
 - Tests: classifier table, garbage input (zero or negative size, absurd values), render per form factor.
 
+### Raju review results (2026-11-16, merged `private/ux-review/raju-journey.md`, shots in `design/ux-review/raju/`)
+Groups A to I (small fixes, own files, each with a machine test) are queued as workers W-A to W-I as slots
+free up; G (player controls) needs T3's merged files (done); I needs T4 first. Group J are four big
+redesigns that stop at their design notes for the user's OK:
+- R1 show every video by default (replaces the 400 MB floor): blocker for Raju.
+- R2 Downloads as a tab, one honest storage page (two twin switches become one 3 way control).
+- R3 a one question setup. CHANGED by the user's "no counts" rule: the chat list shows NO video counts
+  (the review proposed "120 videos"); order by evidence of videos, as T5 does. Merge R3 with T5's picker.
+- R4 offline mode that tells the truth.
+R5 (player labels, skip buttons) is a patch scale change and goes ahead as group G.
+Open on the phone: History shows a 20 second test play from the review; remove it if unwanted.
+
 ### D1 Support cards: Buy Me a Coffee and UPI  (model: sonnet, running since 2026-11-16)
 Themed cards and dialogs with the official logos, regional order (IN: UPI first), icon popup through the
 existing `SupportReminder` nag. Design note `design/redesign/support-cards.md`.
