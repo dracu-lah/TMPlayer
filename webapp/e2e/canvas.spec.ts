@@ -14,6 +14,8 @@ async function asATv(page: Page) {
 
 type Stats = { drawing: string; clock: number; shown: number | null; offset: number | null; running: boolean; queued: number; queuedBytes: number; maxFrames: number; dropped: number; underruns: number; decodeFps: number; sources: number; audio: string; contextClock: boolean }
 const stats = (page: Page) => page.evaluate(() => (window as unknown as { __canvas?: { stats(): unknown } }).__canvas?.stats() as Stats | undefined)
+/** The clock with the page's own time at the same instant: a round trip from the test, which a busy machine stretches to a third of a second, is not part of what is measured. */
+const clockAt = (page: Page) => page.evaluate(() => ({ at: performance.now() / 1000, clock: ((window as unknown as { __canvas: { stats(): { clock: number } } }).__canvas.stats()).clock }))
 
 /** How many distinct colours the canvas shows (a picture, not a blank or a single fill), read from its pixels. */
 const colours = (page: Page) =>
@@ -78,8 +80,7 @@ test.describe('clips chat, no WebCodecs', () => {
     test('the picture follows the sound within 80 ms for several seconds, and the clock keeps real time', async ({ page }) => {
         await openCard(page, 'Xvid Clip')
         await playsPast(page, 0.4)
-        const t0 = Date.now()
-        const c0 = (await stats(page))!.clock
+        const start = await clockAt(page)
         const offsets: number[] = []
         for (let i = 0; i < 12; i++) {
             await page.waitForTimeout(150)
@@ -87,9 +88,9 @@ test.describe('clips chat, no WebCodecs', () => {
             if (s.offset !== null && s.running) offsets.push(Math.abs(s.offset))
         }
         const s = (await stats(page))!
-        // 1.8 s later by the wall clock, the sound's clock says about the same.
-        const wall = (Date.now() - t0) / 1000
-        expect(Math.abs(s.clock - c0 - wall)).toBeLessThan(0.35)
+        // 1.8 s later by the page's own clock, the sound's clock says about the same.
+        const end = await clockAt(page)
+        expect(Math.abs(end.clock - start.clock - (end.at - start.at))).toBeLessThan(0.35)
         expect(offsets.length).toBeGreaterThan(5)
         expect(Math.max(...offsets)).toBeLessThan(0.08)
         // A 4 s clip: few frames dropped, no waiting for the decoder.
