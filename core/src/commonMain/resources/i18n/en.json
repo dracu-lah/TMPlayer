@@ -230,6 +230,7 @@
     "sort_by": "Sort order: {order}",
     "sort_name": "A to Z",
     "sort_recent": "Recent",
+    "star_mode_hint": "Tap a chat to star it. Tap it again to take the star off.",
     "still_more_to_search": "No videos yet in the newest part of this chat.",
     "tab_chats": "Chats",
     "tab_chats_blurb": "Your chats, channels and groups",
@@ -1107,7 +1108,9 @@
   },
   "home": {
     "channel_recent": "Recently added",
+    "favourites_choose": "Choose favourites",
     "favourites_hint": "{form, select, tv {Add chats to your favourites and their videos show here, a row for each. Hold OK on any chat in the list and pick Add to favourites.} other {Add chats to your favourites and their videos show here, a row for each. Press and hold any chat in the list and pick Add to favourites.}}",
+    "favourites_star": "Star a chat to get a row of its videos here.",
     "featured_film": "Film",
     "featured_page": "Page {index} of {count}",
     "featured_series": "Series",

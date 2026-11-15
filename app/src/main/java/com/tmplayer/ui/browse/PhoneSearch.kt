@@ -186,14 +186,19 @@ internal fun PhoneSearchScreen(
     // Clearing the box empties the results, the filters and the sort at once, back to the recent
     // searches, with the cursor in the field and the keyboard up. Back does the same while there
     // is text, and closes the page only on an empty field (there is no separate close button).
-    val clear: () -> Unit = {
+    val clear: (Boolean) -> Unit = { keyboardUp ->
         onText(TextFieldValue(""))
         onFilters(SearchFilters())
         onSort(SearchSort.BestMatch)
-        runCatching { focus.requestFocus() }
-        keyboard?.show()
+        if (keyboardUp) {
+            runCatching { focus.requestFocus() }
+            keyboard?.show()
+        }
     }
-    BackHandler(enabled = !sheetOpen) { if (text.text.isNotEmpty()) clear() else onClose() }
+    // Back is how a viewer leaves, and the keyboard is already down when Back reaches the page (the
+    // system closes it first), so clearing by Back must not raise it again: that made a typed
+    // search take four Backs to leave (Raju 4.8). The cross is a tap in the field, so it keeps it.
+    BackHandler(enabled = !sheetOpen) { if (text.text.isNotEmpty()) clear(false) else onClose() }
 
     // The keyboard comes up once the field has finished growing out of the magnifier. Asked for at
     // once, it rose during the growth, and the field chased a spot the keyboard kept moving.
@@ -300,7 +305,7 @@ internal fun PhoneSearchScreen(
                     onText = onText,
                     onSubmit = { keyboard?.hide(); onSubmit() },
                     onVoice = onVoice,
-                    onClear = clear,
+                    onClear = { clear(true) },
                     modifier = Modifier.weight(1f).then(fieldModifier).focusRequester(focus),
                 )
             }
@@ -501,7 +506,8 @@ private fun androidx.compose.foundation.lazy.LazyListScope.emptySearch(
             ) {
                 ResultPoster(item, Modifier.width(48.dp), fraction = record.fraction())
                 Column(Modifier.weight(1f)) {
-                    Text(record.title, style = MaterialTheme.typography.titleSmall, color = Tone.text, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    // The name Home's tiles use, not the file's with its dots and handle (Raju 4.6).
+                    Text(continueTitle(record), style = MaterialTheme.typography.titleSmall, color = Tone.text, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     if (record.chatTitle.isNotBlank()) {
                         Text(record.chatTitle, style = MaterialTheme.typography.bodySmall, color = Tone.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
@@ -510,6 +516,10 @@ private fun androidx.compose.foundation.lazy.LazyListScope.emptySearch(
         }
     }
 }
+
+/** What a Continue watching line calls the video: the tile's name ([SeriesShelf.tileTitle]), the stored title when that reads blank. */
+internal fun continueTitle(record: ResumeRecord): String =
+    com.tmplayer.data.SeriesShelf.tileTitle(record.toMediaItem()).ifBlank { record.title }
 
 private fun ResumeRecord.fraction(): Float? =
     if (durationMs <= 0) null else (positionMs.toFloat() / durationMs).coerceIn(0f, 1f)
