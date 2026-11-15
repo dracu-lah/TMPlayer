@@ -2973,7 +2973,7 @@
     "crash_body": "TMPlayer çökerse, sorunun giderilmesi için geliştiriciye bir rapor gönderebilir. Siz bunu açmadıkça hiçbir şey gönderilmez.",
     "crash_holds": "Bir rapor yığın izini, uygulama sürümünü, sistem sürümünü ve cihaz modelini içerir; ne izlediğinize dair hiçbir şey içermez.",
     "crash_holds_desktop": "Bir rapor yığın izini, uygulama sürümünü ve işletim sistemiyle sürümünü içerir; ne izlediğinize dair hiçbir şey içermez.",
-    "crash_privacy": "Gizlilik politikasını oku",
+    "crash_privacy": "Gizlilik politikası",
     "crash_title": "Çökme raporları",
     "data_body": "Bunların hepsini sonra Ayarlar'dan değiştirebilirsin.",
     "data_title": "Depolama, veri ve raporlar",

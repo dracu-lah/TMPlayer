@@ -2,8 +2,8 @@ package com.tmplayer.ui.onboarding
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.MaterialTheme
@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.tmplayer.data.CrashAsk
 import com.tmplayer.data.DeviceForm
@@ -46,7 +47,6 @@ import kotlinx.coroutines.withContext
  * Yes and No look the same: it is consent, so nothing marks one answer as the better one. The
  * privacy page opens in the browser, or as a QR code on a television ([PrivacyQr]).
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CrashAskCard(onAnswer: (yes: Boolean) -> Unit, modifier: Modifier = Modifier) {
     val s = LocalStrings.current
@@ -65,32 +65,34 @@ fun CrashAskCard(onAnswer: (yes: Boolean) -> Unit, modifier: Modifier = Modifier
             .floatingSurface()
             .padding(if (tv) 24.dp else 16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
     ) {
-        Text(s.setupCrashAskTitle, style = MaterialTheme.typography.titleMedium, color = Tone.text)
+        Text(s.setupCrashAskTitle, style = MaterialTheme.typography.titleMedium, color = Tone.text, textAlign = TextAlign.Center)
         // A computer's report names the operating system, not a device or a video (CP102g).
         val body = if (form == DeviceForm.Desktop) s.setupCrashAskBodyDesktop else s.setupCrashAskBody
-        Text(body, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
-        // Wraps rather than squeezes a long translation; in reading order, which is the order a
-        // remote or Tab walks.
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
+        Text(body, style = MaterialTheme.typography.bodyMedium, color = Tone.muted, textAlign = TextAlign.Center)
+        // Yes and No side by side, the same width and centred, then the privacy page under them
+        // at the full width: three buttons that are all visible at once, in reading order, which
+        // is the order a remote or Tab walks. A long translation wraps inside its button.
+        val openPrivacy = {
+            qr = when {
+                qr -> false
+                tv -> true
+                else -> runCatching { uri.openUri(About.PRIVACY) }.isFailure
+            }
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             for (control in CrashAsk.ORDER) {
                 val focus = if (control == firstControl) Modifier.focusRequester(first) else Modifier
                 when (control) {
-                    CrashAsk.Control.Yes -> SetupButton(s.setupCrashAskYes, modifier = focus) { onAnswer(true) }
-                    CrashAsk.Control.No -> SetupButton(s.setupCrashAskNo, modifier = focus) { onAnswer(false) }
-                    CrashAsk.Control.Privacy -> SetupButton(s.setupCrashPrivacy, modifier = focus) {
-                        qr = when {
-                            qr -> false
-                            tv -> true
-                            else -> runCatching { uri.openUri(About.PRIVACY) }.isFailure
-                        }
-                    }
+                    CrashAsk.Control.Yes -> SetupButton(s.setupCrashAskYes, modifier = focus.weight(1f)) { onAnswer(true) }
+                    CrashAsk.Control.No -> SetupButton(s.setupCrashAskNo, modifier = focus.weight(1f)) { onAnswer(false) }
+                    CrashAsk.Control.Privacy -> Unit
                 }
             }
         }
+        val privacyFocus = if (firstControl == CrashAsk.Control.Privacy) Modifier.focusRequester(first) else Modifier
+        SetupButton(s.setupCrashPrivacy, modifier = privacyFocus.fillMaxWidth(), onClick = openPrivacy)
         if (qr) PrivacyQr()
     }
 }

@@ -2973,7 +2973,7 @@
     "crash_body": "Jeśli TMPlayer ulegnie awarii, może wysłać raport do twórcy, aby problem został naprawiony. Nic nie jest wysyłane, dopóki tego nie włączysz.",
     "crash_holds": "Raport zawiera ślad stosu, wersję aplikacji, wersję systemu i model urządzenia, nic o tym, co oglądasz.",
     "crash_holds_desktop": "Raport zawiera ślad stosu, wersję aplikacji oraz system operacyjny i jego wersję, nic o tym, co oglądasz.",
-    "crash_privacy": "Przeczytaj politykę prywatności",
+    "crash_privacy": "Polityka prywatności",
     "crash_title": "Raporty o awariach",
     "data_body": "Każde z tych ustawień zmienisz później w ustawieniach.",
     "data_title": "Pamięć, dane i raporty",

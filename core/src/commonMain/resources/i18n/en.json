@@ -2973,7 +2973,7 @@
     "crash_body": "If TMPlayer crashes, it can send a report to the developer so the problem gets fixed. Nothing is sent unless you turn this on.",
     "crash_holds": "A report holds a stack trace, the app version, the system version and the device model, nothing about what you watch.",
     "crash_holds_desktop": "A report holds a stack trace, the app version and the operating system with its version, nothing about what you watch.",
-    "crash_privacy": "Read the privacy policy",
+    "crash_privacy": "Privacy policy",
     "crash_title": "Crash reports",
     "data_body": "Change any of these later in Settings.",
     "data_title": "Storage, data and reports",

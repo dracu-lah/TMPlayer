@@ -76,14 +76,15 @@ class CrashAskCardTvTest {
     }
 
     @Test
-    fun `the remote lands on Yes and walks to No and the privacy page`() {
+    fun `the remote lands on Yes and walks to No and down to the privacy page`() {
         show()
         rule.onNodeWithText("Help fix crashes?").assertExists()
         button("Yes, send reports").assertIsFocused()
         press(Key.DirectionRight)
         button("No").assertIsFocused()
-        press(Key.DirectionRight)
-        button("Read the privacy policy").assertIsFocused()
+        // The privacy page is the full-width button under Yes and No: Down reaches it.
+        press(Key.DirectionDown)
+        button("Privacy policy").assertIsFocused()
         // The arrows stay in the card: Up does not leave it for the page behind.
         press(Key.DirectionUp)
         rule.onNode(isFocused()).assertExists()

@@ -2973,7 +2973,7 @@
     "crash_body": "Se TMPlayer si arresta in modo anomalo, può inviare una segnalazione allo sviluppatore perché il problema venga risolto. Non viene inviato nulla finché non lo attivi.",
     "crash_holds": "Una segnalazione contiene uno stack trace, la versione dell'app, la versione del sistema e il modello del dispositivo, niente su ciò che guardi.",
     "crash_holds_desktop": "Una segnalazione contiene uno stack trace, la versione dell'app e il sistema operativo con la sua versione, niente su ciò che guardi.",
-    "crash_privacy": "Leggi l'informativa sulla privacy",
+    "crash_privacy": "Informativa sulla privacy",
     "crash_title": "Segnalazioni di arresto anomalo",
     "data_body": "Cambia tutto questo più tardi nelle Impostazioni.",
     "data_title": "Spazio, dati e segnalazioni",

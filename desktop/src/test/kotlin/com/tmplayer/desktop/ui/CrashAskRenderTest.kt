@@ -9,13 +9,17 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.width
 import com.tmplayer.data.SettingsStore
+import com.tmplayer.ui.onboarding.CrashAskCard
 import com.tmplayer.ui.onboarding.CrashAskHost
 import com.tmplayer.ui.onboarding.CrashReporting
 import com.tmplayer.ui.theme.TmMaterialTheme
@@ -62,7 +66,7 @@ class CrashAskRenderTest {
         // Not blocking: the keyboard stays where it was.
         onNode(isFocused()).assertDoesNotExist()
         onNode(hasText("No") and hasClickAction()).assertExists()
-        onNode(hasText("Read the privacy policy") and hasClickAction()).assertExists()
+        onNode(hasText("Privacy policy") and hasClickAction()).assertExists()
 
         onNode(hasText("Yes, send reports") and hasClickAction()).performClick()
         waitForIdle()
@@ -150,5 +154,27 @@ class CrashAskRenderTest {
 
     private companion object {
         const val WRITE_MS = 10_000L
+    }
+
+    @Test
+    fun threeButtonsAreVisibleCentredAndFullWidthOnAPhone() = runComposeUiTest {
+        setContent {
+            TmMaterialTheme(dark = true) {
+                Box(Modifier.size(360.dp, 640.dp)) { CrashAskCard(onAnswer = {}) }
+            }
+        }
+        val yes = onNode(hasText("Yes, send reports") and hasClickAction())
+        val no = onNode(hasText("No") and hasClickAction())
+        val privacy = onNode(hasText("Privacy policy") and hasClickAction())
+        yes.assertIsDisplayed(); no.assertIsDisplayed(); privacy.assertIsDisplayed()
+        val y = yes.getBoundsInRoot(); val n = no.getBoundsInRoot(); val p = privacy.getBoundsInRoot()
+        // Yes and No share one row at the same width and height; the privacy page sits under them.
+        assertEquals(y.width.value, n.width.value, 1f)
+        assertEquals(y.top.value, n.top.value, 1f)
+        assertTrue("privacy is below Yes and No", p.top.value >= y.bottom.value)
+        // It spans both of them, so the three read as one centred block.
+        assertTrue("privacy spans Yes and No", p.left.value <= y.left.value + 1f && p.right.value >= n.right.value - 1f)
+        // The block is centred in the card: the same space on both sides.
+        assertEquals(y.left.value - 0f, 360f - n.right.value, 24f)
     }
 }

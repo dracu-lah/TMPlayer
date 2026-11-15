@@ -2973,7 +2973,7 @@
     "crash_body": "Si TMPlayer plante, il peut envoyer un rapport au développeur pour que le problème soit corrigé. Rien n'est envoyé tant que vous ne l'activez pas.",
     "crash_holds": "Un rapport contient une trace de pile, la version de l'app, la version du système et le modèle de l'appareil, rien sur ce que vous regardez.",
     "crash_holds_desktop": "Un rapport contient une trace de pile, la version de l'app et le système d'exploitation avec sa version, rien sur ce que vous regardez.",
-    "crash_privacy": "Lire la politique de confidentialité",
+    "crash_privacy": "Politique de confidentialité",
     "crash_title": "Rapports de plantage",
     "data_body": "Modifiez tout cela plus tard dans les Paramètres.",
     "data_title": "Stockage, données et rapports",

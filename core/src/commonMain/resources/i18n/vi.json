@@ -2973,7 +2973,7 @@
     "crash_body": "Nếu TMPlayer gặp sự cố, ứng dụng có thể gửi báo cáo cho nhà phát triển để sửa lỗi. Không có gì được gửi trừ khi bạn bật tính năng này.",
     "crash_holds": "Báo cáo gồm dấu vết ngăn xếp, phiên bản ứng dụng, phiên bản hệ thống và mẫu thiết bị, không có gì về những gì bạn xem.",
     "crash_holds_desktop": "Báo cáo gồm dấu vết ngăn xếp, phiên bản ứng dụng, và hệ điều hành cùng phiên bản của nó, không có gì về những gì bạn xem.",
-    "crash_privacy": "Đọc chính sách quyền riêng tư",
+    "crash_privacy": "Chính sách quyền riêng tư",
     "crash_title": "Báo cáo sự cố",
     "data_body": "Bạn có thể đổi những mục này sau trong Cài đặt.",
     "data_title": "Bộ nhớ, dữ liệu và báo cáo",

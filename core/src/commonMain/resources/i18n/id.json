@@ -2973,7 +2973,7 @@
     "crash_body": "Jika TMPlayer crash, aplikasi dapat mengirim laporan ke pengembang agar masalahnya diperbaiki. Tidak ada yang dikirim kecuali Anda mengaktifkannya.",
     "crash_holds": "Laporan berisi stack trace, versi aplikasi, versi sistem, dan model perangkat, tanpa apa pun tentang yang Anda tonton.",
     "crash_holds_desktop": "Laporan berisi stack trace, versi aplikasi, serta sistem operasi dan versinya, tanpa apa pun tentang yang Anda tonton.",
-    "crash_privacy": "Baca kebijakan privasi",
+    "crash_privacy": "Kebijakan privasi",
     "crash_title": "Laporan crash",
     "data_body": "Ubah semua ini nanti di Pengaturan.",
     "data_title": "Penyimpanan, data, dan laporan",

@@ -2973,7 +2973,7 @@
     "crash_body": "Si TMPlayer falla, puede enviar un informe al desarrollador para que se corrija el problema. No se envía nada a menos que lo actives.",
     "crash_holds": "Un informe contiene un seguimiento de pila, la versión de la app, la versión del sistema y el modelo del dispositivo, nada sobre lo que ves.",
     "crash_holds_desktop": "Un informe contiene un seguimiento de pila, la versión de la app y el sistema operativo con su versión, nada sobre lo que ves.",
-    "crash_privacy": "Leer la política de privacidad",
+    "crash_privacy": "Política de privacidad",
     "crash_title": "Informes de fallos",
     "data_body": "Cambia cualquiera de estas opciones después en Ajustes.",
     "data_title": "Almacenamiento, datos y reportes",

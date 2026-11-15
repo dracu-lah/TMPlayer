@@ -2973,7 +2973,7 @@
     "crash_body": "Se o TMPlayer travar, ele pode enviar um relatório ao desenvolvedor para que o problema seja corrigido. Nada é enviado a menos que você ative isto.",
     "crash_holds": "Um relatório contém um rastreamento de pilha, a versão do app, a versão do sistema e o modelo do dispositivo, nada sobre o que você assiste.",
     "crash_holds_desktop": "Um relatório contém um rastreamento de pilha, a versão do app e o sistema operacional com a versão dele, nada sobre o que você assiste.",
-    "crash_privacy": "Ler a política de privacidade",
+    "crash_privacy": "Política de privacidade",
     "crash_title": "Relatórios de falhas",
     "data_body": "Mude qualquer uma destas opções depois em Configurações.",
     "data_title": "Armazenamento, dados e relatórios",

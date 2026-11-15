@@ -2973,7 +2973,7 @@
     "crash_body": "Pokud TMPlayer spadne, může vývojáři odeslat hlášení, aby se problém opravil. Nic se neodešle, pokud to nezapnete.",
     "crash_holds": "Hlášení obsahuje výpis zásobníku, verzi aplikace, verzi systému a model zařízení, nic o tom, co sledujete.",
     "crash_holds_desktop": "Hlášení obsahuje výpis zásobníku, verzi aplikace a operační systém s jeho verzí, nic o tom, co sledujete.",
-    "crash_privacy": "Přečíst zásady ochrany soukromí",
+    "crash_privacy": "Zásady ochrany osobních údajů",
     "crash_title": "Hlášení o pádech",
     "data_body": "Kterékoli z těchto voleb můžete později změnit v Nastavení.",
     "data_title": "Úložiště, data a hlášení",

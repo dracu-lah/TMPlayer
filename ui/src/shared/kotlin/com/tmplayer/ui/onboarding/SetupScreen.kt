@@ -592,6 +592,8 @@ internal fun SetupButton(
                 onClick = onClick,
             )
             .padding(horizontal = 18.dp, vertical = 10.dp),
+        // Centred: a button given the full width (the crash question's three) keeps its words in the middle.
+        horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         val color = when {

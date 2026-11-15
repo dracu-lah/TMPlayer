@@ -2973,7 +2973,7 @@
     "crash_body": "Wenn TMPlayer abstürzt, kann es einen Bericht an den Entwickler senden, damit das Problem behoben wird. Gesendet wird nur, wenn du das einschaltest.",
     "crash_holds": "Ein Bericht enthält einen Stacktrace, die App-Version, die Systemversion und das Gerätemodell, nichts darüber, was du ansiehst.",
     "crash_holds_desktop": "Ein Bericht enthält einen Stacktrace, die App-Version und das Betriebssystem mit seiner Version, nichts darüber, was du ansiehst.",
-    "crash_privacy": "Datenschutzerklärung lesen",
+    "crash_privacy": "Datenschutzerklärung",
     "crash_title": "Absturzberichte",
     "data_body": "Ändere all das später in den Einstellungen.",
     "data_title": "Speicher, Daten und Berichte",
