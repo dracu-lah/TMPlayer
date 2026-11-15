@@ -35,6 +35,46 @@ class DesktopHomeMixTest {
     }
 
     @Test
+    fun `resume first leads with the video being watched, then new, then another`() {
+        val new = (1..6).map { video("New Film ${'A' + it} ${2000 + it}.mkv", date = 100 - it) }
+        val going = (1..4).map { video("Going Film ${'A' + it} ${1990 + it}.mkv", date = 10 - it) }
+        val mixed = HomeFeatured.mix(fresh(*new.toTypedArray()), going, resumeFirst = true, complete = { true })
+        assertEquals(listOf(going[0], new[0], going[1], new[1], new[2]).map { it.id }, mixed.map { it.item.id })
+    }
+
+    @Test
+    fun `resume first without a complete resume page leads with a new one`() {
+        val new = (1..2).map { video("New Film ${'A' + it} ${2000 + it}.mkv", date = 100 - it) }
+        val going = video("Going Film Z 1999.mkv", date = 10)
+        val mixed = HomeFeatured.mix(fresh(*new.toTypedArray()), listOf(going), resumeFirst = true, complete = { it.item.id != going.id })
+        assertEquals(new.map { it.id }, mixed.map { it.item.id })
+        assertTrue(HomeFeatured.mix(fresh(*new.toTypedArray()), emptyList(), resumeFirst = true, complete = { true }).isNotEmpty())
+    }
+
+    private fun record(messageId: Long, positionMs: Long, durationMs: Long, updatedAt: Long) = ResumeRecord(
+        chatId = 1, messageId = messageId, fileId = 1, title = "t", chatTitle = "c", sizeBytes = 1, durationSec = (durationMs / 1000).toInt(),
+        positionMs = positionMs, durationMs = durationMs, updatedAt = updatedAt,
+    )
+
+    @Test
+    fun `only a started video from the last two weeks leads, newest first`() {
+        val now = 100L * 24 * 3_600_000
+        val day = 24 * 3_600_000L
+        val hour = 3_600_000L
+        val recent = record(1, 600_000, 2 * hour, now - 2 * day)
+        val newer = record(2, 600_000, 2 * hour, now - 1 * day)
+        val old = record(3, 600_000, 2 * hour, now - 20 * day)
+        val atTheEnd = record(4, 2 * hour - 60_000, 2 * hour, now - day)
+        val sampling = record(5, 10_000, 2 * hour, now - day)
+        val noLength = record(6, 600_000, 0, now + day)
+        assertEquals(
+            listOf(6L, 2L, 1L),
+            HomeFeatured.leading(listOf(recent, newer, old, atTheEnd, sampling, noLength), now).map { it.messageId },
+        )
+        assertTrue(HomeFeatured.leading(emptyList(), now).isEmpty())
+    }
+
+    @Test
     fun `either side fills the other's places`() {
         val going = (1..4).map { video("Going Film ${'A' + it} ${1990 + it}.mkv", date = 10 - it) }
         assertEquals(4, HomeFeatured.mix(emptyList(), going, complete = { true }).size)

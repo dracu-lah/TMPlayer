@@ -245,7 +245,8 @@ internal fun HomePane(
     // complete page, a moment after the row is in at most ([HomeFeatured.FILL_WAIT_MS]).
     val recent = rows.firstNotNullOfOrNull { it as? HomeRow.Recent }
     // Off in Settings, nothing is picked or turned over for it either.
-    val featured = rememberFeatured(recent.takeIf { carouselOn })
+    // It leads with the video being watched (PL-1): see [rememberFeatured].
+    val featured = rememberFeatured(recent.takeIf { carouselOn }, rows.firstNotNullOfOrNull { it as? HomeRow.Continue }.takeIf { carouselOn }, art)
     val carousel = carouselOn && recent != null && featured?.isEmpty() != true
     // With no carousel the rows are the whole first screen; with one, its first picture tells
     // HomeFirstPaint (through the carousel), so the loader lifts over a finished Home.
@@ -809,7 +810,12 @@ internal fun HomePane(
     // arriving above (Continue appearing after a first play) moves focus to the new top.
     // The banner arriving after the first row has taken the remote (the starred chats are read
     // last): the remote moves up onto its Play, but only while nothing has been pressed yet.
-    val bannerUp = !touch && carousel && !featured.isNullOrEmpty()
+    // Not when the banner leads with a new title and Continue watching is the first row: a
+    // habitual OK on the start focus must resume what the viewer is watching, not start something
+    // new (PL-1), so the remote stays on the first Continue card then.
+    val continueLeads = listed.firstOrNull().let { it is HomeRow.Continue && it.records.isNotEmpty() } &&
+        !leadsWithResume(featured, listed.firstOrNull() as? HomeRow.Continue)
+    val bannerUp = !touch && carousel && !featured.isNullOrEmpty() && !continueLeads
     LaunchedEffect(bannerUp) {
         if (!bannerUp || keyed[0] || HomeFocusMemory.away || restored[0] || !mayTakeFocus()) return@LaunchedEffect
         withFrameNanos { }
@@ -826,7 +832,7 @@ internal fun HomePane(
         if (!touch && firstReady && mayTakeFocus()) {
             // The banner first when there is one: the top of the page is where the remote starts,
             // and a ring on a card under a whole banner was a second thing that looked selected.
-            val onBanner = carousel && !featured.isNullOrEmpty() && tvPlayFocus != null
+            val onBanner = carousel && !featured.isNullOrEmpty() && tvPlayFocus != null && !continueLeads
             runCatching { if (onBanner) tvPlayFocus!!.requestFocus() else first.requestFocus() }
             // The focused row asks to be brought into view with room round it, which scrolled the
             // carousel above it half away; Home opens at its top, the carousel whole over the row.
@@ -1394,43 +1400,65 @@ private const val FEATURED_KEY = "featured"
 private val TV_DOWN_STEP = 200.dp
 
 /**
- * The carousel's pages from the Recently added row [recent]: null while that row is still being
- * asked for or the fill is still deciding (the carousel then holds its frame with a stand-in, at
- * most [HomeFeatured.FILL_WAIT_MS] once the row is in), empty for nothing to feature, which hides
- * the carousel. Only complete pages ([com.tmplayer.ui.online.completeFeatured]), decided once
- * per fill so no page comes or goes while it is looked at; a refresh keeps the pages up until
- * the new ones are decided. With online lookups off there are no complete pages, so none at once.
+ * The carousel's pages from the Recently added row [recent] mixed with the video being watched
+ * ([resume], PL-1 2026-11-15): the first page is the video last played within about two weeks
+ * and not near its end ([com.tmplayer.data.HomeFeatured.leading]), so Play on the lead page
+ * resumes; the rest alternate new and being watched, at most
+ * [com.tmplayer.data.HomeFeatured.RESUME_SHARE] of the latter. A record joins once its video is in
+ * [art]; one without a complete page (no online match) is passed over and the carousel leads with
+ * new titles, which [leadsWithResume] says. Null while that row is still being asked for or the
+ * fill is still deciding (the carousel then holds its frame with a stand-in, at most
+ * [HomeFeatured.FILL_WAIT_MS] once the row is in), empty for nothing to feature, which hides the
+ * carousel. Only complete pages ([com.tmplayer.ui.online.completeFeatured]), decided once per
+ * fill so no page comes or goes while it is looked at; a refresh keeps the pages up until the
+ * new ones are decided. With online lookups off there are no complete pages, so none at once.
  */
 @Composable
-private fun rememberFeatured(recent: HomeRow.Recent?): List<com.tmplayer.data.FeaturedPick>? {
+private fun rememberFeatured(
+    recent: HomeRow.Recent?,
+    resume: HomeRow.Continue?,
+    art: Map<String, MediaItem>,
+): List<com.tmplayer.data.FeaturedPick>? {
     val online = com.tmplayer.online.OnlineMetadata.current
     val enabled = online?.settings?.collectAsState()?.value?.enabled == true
     val candidates = remember(recent) {
-        recent?.takeIf { it.loaded }?.let { com.tmplayer.data.HomeFeatured.pick(it.entries, com.tmplayer.data.HomeFeatured.CANDIDATES) }
+        recent?.takeIf { it.loaded }?.let { com.tmplayer.data.HomeFeatured.pick(it.entries, com.tmplayer.data.HomeFeatured.CANDIDATES - com.tmplayer.data.HomeFeatured.LIMIT) }
     }
+    // The videos being watched, newest first. A record's picture arriving refills only when it adds
+    // a film or a show, not for every card.
+    val resumable = remember(resume, art) {
+        val now = System.currentTimeMillis()
+        com.tmplayer.data.HomeFeatured.leading(resume?.records.orEmpty(), now).asSequence()
+            .mapNotNull { art[SettingsStore.progressKey(it.chatId, it.messageId)] }
+            .map { com.tmplayer.data.FeaturedPick(com.tmplayer.data.ShelfEntry.File(it)) }
+            .filter(com.tmplayer.data.HomeFeatured::eligible)
+            .take(com.tmplayer.data.HomeFeatured.LIMIT).toList()
+    }
+    val resumeKeys = remember(resumable) { resumable.map { it.key } }
+    val latestResumable by androidx.compose.runtime.rememberUpdatedState(resumable)
     var decided by remember { mutableStateOf<List<com.tmplayer.data.FeaturedPick>?>(null) }
-    LaunchedEffect(candidates, online, enabled) {
+    LaunchedEffect(candidates, resumeKeys, online, enabled) {
         if (!enabled) {
             decided = emptyList()
             return@LaunchedEffect
         }
-        val picks = candidates ?: return@LaunchedEffect
-        if (picks.isEmpty()) {
-            decided = picks
-            return@LaunchedEffect
-        }
-        // The lookups still unanswered when the wait is up go on in this effect, so their answers
-        // are on the device for the next fill; they stop with it.
-        val keys = try {
-            com.tmplayer.ui.online.completeFeatured(picks, this)
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            emptySet()
-        }
-        decided = picks.filter { it.key in keys }.take(com.tmplayer.data.HomeFeatured.LIMIT)
+        // Recently added still on its way: the loaded row decides, not a carousel of resume pages alone.
+        if (recent != null && candidates == null) return@LaunchedEffect
+        decided = com.tmplayer.ui.online.mixedFeatured(candidates.orEmpty(), latestResumable, resumeFirst = true, scope = this)
     }
     return if (!enabled) emptyList() else decided
+}
+
+/**
+ * Whether the carousel's lead page is a video being watched (the first of [picks] against
+ * [resume]'s records), so the remote's start on its Play resumes. False for a carousel led by a
+ * new title: the television then starts on the first Continue watching card instead.
+ */
+private fun leadsWithResume(picks: List<com.tmplayer.data.FeaturedPick>?, resume: HomeRow.Continue?): Boolean {
+    val lead = picks?.firstOrNull() ?: return false
+    val records = resume?.records ?: return false
+    val keys = records.map { SettingsStore.progressKey(it.chatId, it.messageId) }.toHashSet()
+    return SettingsStore.progressKey(lead.item.chatId, lead.item.messageId) in keys
 }
 
 /** How long an empty Home waits for its rows before it takes itself for a first run. */

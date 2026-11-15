@@ -759,6 +759,34 @@ suspend fun completeFeatured(
     return keys
 }
 
+/**
+ * The carousel's pages for one fill: the Recently added picks [fresh] mixed with the videos being
+ * watched [resume] ([com.tmplayer.data.HomeFeatured.mix]), only the pages [completeFeatured] says
+ * are complete, empty when none is. [resumeFirst] puts a video being watched on the first page
+ * (phone and TV Home); the lookups then start from it, so its logo is the one fetched ahead. Off
+ * the main thread: the copies' online keys read the metadata cache. A lookup that fails leaves
+ * the pages without that candidate, never the carousel down.
+ */
+suspend fun mixedFeatured(
+    fresh: List<com.tmplayer.data.FeaturedPick>,
+    resume: List<com.tmplayer.data.FeaturedPick>,
+    resumeFirst: Boolean,
+    scope: kotlinx.coroutines.CoroutineScope,
+): List<com.tmplayer.data.FeaturedPick> {
+    val candidates = (if (resumeFirst) resume + fresh else fresh + resume).distinctBy { it.key }
+    if (candidates.isEmpty()) return emptyList()
+    val keys = try {
+        completeFeatured(candidates, scope, limit = candidates.size)
+    } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        emptySet()
+    }
+    return withContext(Dispatchers.IO) {
+        com.tmplayer.data.HomeFeatured.mix(fresh, resume.map { it.item }, resumeFirst = resumeFirst, complete = { it.key in keys })
+    }
+}
+
 /** A carousel candidate as its page will look it up: the question, the name that checks the answer, and a refused match. */
 private class FeaturedTarget(val item: MediaItem, val query: MetaQuery?, val name: com.tmplayer.data.ParsedName, val refused: Boolean)
 

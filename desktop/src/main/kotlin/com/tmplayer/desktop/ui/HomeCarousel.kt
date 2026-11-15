@@ -604,22 +604,11 @@ internal fun rememberFeatured(recent: HomeRow.Recent?, resume: HomeRow.Continue?
             decided = null
             return@LaunchedEffect
         }
-        val candidates = (fresh.orEmpty() + resumable).distinctBy { it.key }
-        if (candidates.isEmpty()) {
+        if ((fresh.orEmpty() + resumable).isEmpty()) {
             decided = emptyList()
             return@LaunchedEffect
         }
-        val keys = try {
-            com.tmplayer.ui.online.completeFeatured(candidates, this, limit = candidates.size)
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            emptySet()
-        }
-        // Off the main thread: the copies' online keys ([SameTitle]) read the metadata cache.
-        decided = withContext(Dispatchers.IO) {
-            HomeFeatured.mix(fresh.orEmpty(), resumable.map { it.item }, complete = { it.key in keys })
-        }
+        decided = com.tmplayer.ui.online.mixedFeatured(fresh.orEmpty(), resumable, resumeFirst = false, scope = this)
     }
     return if (!enabled) emptyList() else decided
 }

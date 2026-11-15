@@ -220,12 +220,17 @@ object HomeFeatured {
      * new, and either fills the other's places when it has too few. A video or show in both is
      * one page, the newer one's. Only films and shows of at least [MIN_BYTES], and only the pages
      * [complete] says are complete ([completeKeys]): never one drawn with a placeholder.
+     *
+     * With [resumeFirst] (phone and TV Home, PL-1 2026-11-15) the first page is the video being
+     * watched, then a new one, then another being watched, so a habitual OK or tap on the lead
+     * page resumes instead of starting something new. The desktop keeps a new page first.
      */
     fun mix(
         recent: List<FeaturedPick>,
         resume: List<MediaItem>,
         limit: Int = LIMIT,
         resumeShare: Int = RESUME_SHARE,
+        resumeFirst: Boolean = false,
         complete: (FeaturedPick) -> Boolean,
         matched: (MediaItem) -> String? = SameTitle::onlineKey,
     ): List<FeaturedPick> {
@@ -248,7 +253,7 @@ object HomeFeatured {
         }
         while (out.size < limit) {
             // New, part way through, new, part way through, new: until one side runs out.
-            val resumeTurn = out.size % 2 == 1 && resumed < resumeShare
+            val resumeTurn = out.size % 2 == (if (resumeFirst) 0 else 1) && resumed < resumeShare
             val fromResume = if (resumeTurn) next(going) else null
             val pick = fromResume ?: next(fresh) ?: next(going)?.also { resumed++ } ?: break
             if (fromResume != null) resumed++
@@ -270,8 +275,23 @@ object HomeFeatured {
         is ShelfEntry.Show -> hasArt(entry.series.cover) || entry.series.episodes.any { hasArt(it.item) }
     }
 
-    /** At most this many of the desktop carousel's pages are from Continue watching. */
+    /** At most this many of the carousel's pages are from Continue watching. */
     const val RESUME_SHARE = 2
+
+    /** A video last played longer ago than this no longer leads Home's carousel (about two weeks). */
+    const val RESUME_FRESH_MS = 14L * 24 * 60 * 60 * 1000
+
+    /**
+     * The records of Continue watching that may lead the carousel: played within [RESUME_FRESH_MS]
+     * of [now] and a resume point worth keeping ([ResumeRules.keeps]: not at the very end, where a finished
+     * video is not "being watched"), newest first. A record dated in the future counts as just
+     * played; one with no known length is kept on its position alone.
+     */
+    fun leading(records: List<ResumeRecord>, now: Long): List<ResumeRecord> =
+        records.asSequence()
+            .filter { now - it.updatedAt <= RESUME_FRESH_MS && ResumeRules.keeps(it.positionMs, it.durationMs) }
+            .sortedByDescending { it.updatedAt }
+            .toList()
 
     /**
      * Which film or show [pick] is, and whether it is a film or a show at all; null for an extra.
