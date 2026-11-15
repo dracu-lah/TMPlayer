@@ -368,6 +368,14 @@ class GarbageInputTest {
                 ResumeRecord.decode(text, text, -1, -1)
             }
             survive("DecodeMemory.decode", text) { DecodeMemory.decode(text) }
+            survive("RemedyMemory.decode", text) {
+                val memory = RemedyMemory.decode(text, 20_400)
+                val key = RemedyClassKey.of(DeviceFacts(hardware = text, sdk = text.length), DecodeJudge.Picture(text), text, text, text)
+                memory.planFor(key, text)
+                val written = memory.failed(text, com.tmplayer.player.Remedy.Reload, text, text, -1).crashed(key, 20_400)
+                RemedyMemory.decode(written.encode(), 20_400).planFor(text, text)
+                RemedyMemory.decode("$text=$text|$text|$text|$text|$text|20400|$text~$text~$text", 20_400).encode()
+            }
             survive("DownloadRequest.decodeAll", text) { DownloadRequest.decodeAll(text) }
             survive("RecentSearches.decode", text) { RecentSearches.decode(text) }
             survive("AddedChats.hiddenIds", text) {
