@@ -108,7 +108,8 @@ class QueuePlan private constructor(
             // A queue is one chat's files: the message number alone names a file in it. A second
             // chat's file with the same number (never queued together) is found by chat as well.
             val positions = HashMap<Long, Int>(order.size * 2)
-            order.forEachIndexed { index, item -> positions.putIfAbsent(item.messageId, index) }
+            // getOrPut, not putIfAbsent: the web app's Kotlin/JS HashMap has no putIfAbsent.
+            order.forEachIndexed { index, item -> positions.getOrPut(item.messageId) { index } }
             return QueuePlan(order, shuffle, repeatAll, seed, positions, repeatOne)
         }
     }
