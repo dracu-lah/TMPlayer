@@ -396,8 +396,18 @@ internal fun BrowseScreen(
     // Settings says to play at once; the page is then still a hold and Details away.
     val detailFirst by remember(panelContext) { SettingsStore(panelContext).detailFirst }.collectAsState(initial = true)
     val openMedia: (MediaItem, String) -> Unit = if (detailFirst) showDetail else onPlayMedia
-    val openResume: (ResumeRecord) -> Unit =
-        if (detailFirst) ({ record -> showDetail(record.toMediaItem(), record.chatTitle) }) else onResumeMedia
+    // A Continue watching tile with a resume point plays at once, whatever "Open a video's page
+    // first" says (PL-2, user 2026-11-15; Netflix, Prime and Plex do the same): a resume intent is
+    // one action, and the hold, the info key or a right click still lead to the page by Details.
+    // A record with no resume point (or one at the very end) opens the page as before. This
+    // reverses the 2026-10-23 rule that Continue and Watched answer the same press.
+    val openResume: (ResumeRecord) -> Unit = { record ->
+        if (detailFirst && !com.tmplayer.data.ResumeRules.canResume(record.positionMs, record.durationMs)) {
+            showDetail(record.toMediaItem(), record.chatTitle)
+        } else {
+            onResumeMedia(record)
+        }
+    }
     val openLaterVideo: (WatchLaterRecord) -> Unit =
         if (detailFirst) ({ record -> showDetail(record.toMediaItem(), record.chatTitle) }) else onOpenWatchLater
     // A show saved whole (HX20) opens its page, made whole from its chat; a line whose anchor no
@@ -406,9 +416,9 @@ internal fun BrowseScreen(
         val stub = record.stubSeries()
         if (stub != null) laterShow = stub to record.chatTitle else openLaterVideo(record)
     }
-    // The Watched list follows the same rule as Continue watching: OK on a row opened the
-    // player at once while a Continue row opened the page, so the two lists of History answered
-    // the same press differently (user, 2026-10-23). Play again stays in the hold menu.
+    // The Watched list opens the page (a watched video has no place to resume from); Continue
+    // watching plays at once since PL-2 (2026-11-15), reversing the 2026-10-23 rule that the two
+    // lists answer the same press. Play again stays in the hold menu.
     val openWatched: (WatchedRecord) -> Unit =
         if (detailFirst) ({ record -> showDetail(record.toMediaItem(), record.chatTitle) }) else onOpenWatched
 

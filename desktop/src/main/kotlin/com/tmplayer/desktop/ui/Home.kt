@@ -636,6 +636,11 @@ private fun ContinueCell(
         onDetails = { refocus ->
             state.openDetail(DetailRequest(item = item, chatTitle = chatTitle, outsideChat = true, onClosed = refocus))
         },
+        // A click or Enter on a card with a place to resume from plays at once (PL-2, 2026-11-15);
+        // the right click menu still leads to the page by Details. One at the very end opens the page.
+        onOpen = if (com.tmplayer.data.ResumeRules.canResume(record.positionMs, record.durationMs)) {
+            { state.openPlayer(item, startFromBeginning = false) }
+        } else null,
     )
 }
 

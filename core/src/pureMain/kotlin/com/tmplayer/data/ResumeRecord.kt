@@ -260,6 +260,17 @@ object ResumeRules {
         return positionMs < durationMs * (1 - END_FRACTION)
     }
 
+    /**
+     * Whether a record at [positionMs] of [durationMs] still has a place to resume from: started,
+     * and not in the last [END_FRACTION] (a place there is the credits; the page decides). Unlike
+     * [keeps] it takes a short position, since a record written under an older rule is still one.
+     */
+    fun canResume(positionMs: Long, durationMs: Long): Boolean {
+        if (positionMs <= 0) return false
+        if (durationMs <= 0) return true
+        return positionMs < durationMs * (1 - END_FRACTION)
+    }
+
     /** Whether playback at [positionMs] has seen enough of the video to call it watched. */
     fun watched(positionMs: Long, durationMs: Long): Boolean =
         durationMs > 0 && positionMs >= durationMs * WATCHED_FRACTION

@@ -29,6 +29,18 @@ class ResumeRulesTest {
     }
 
     @Test
+    fun `a record resumes from any started place short of the credits`() {
+        assertFalse(ResumeRules.canResume(0L, film))
+        // Under the three minute rule of today, but written under an older one: still a place.
+        assertTrue(ResumeRules.canResume(60_000L, film))
+        assertTrue(ResumeRules.canResume(60_000L, 0L))
+        val credits = (film * 0.92).toLong()
+        assertTrue(ResumeRules.canResume(credits - 1, film))
+        assertFalse(ResumeRules.canResume(credits, film))
+        assertFalse(ResumeRules.canResume(film, film))
+    }
+
+    @Test
     fun `nothing is kept in the last eight percent`() {
         val credits = (film * 0.92).toLong()
         assertTrue(ResumeRules.keeps(credits - 1, film))
