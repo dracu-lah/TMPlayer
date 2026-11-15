@@ -473,11 +473,12 @@ html[data-form=tv] .panel .set-block-title { font-size: calc(var(--dp) * 16); li
 .set-account .initial { width: 56px; height: 56px; font-size: 22px; flex: none; }
 .set-account .set-title { font-weight: 500; }
 .set-foot { padding: 4px 16px; }
+/* The most destructive action is the quietest control (Raju 10.3): an outlined row at the foot, the colour only in its words; it asks first. */
 .set .danger-button.set-signout {
-  align-self: stretch; display: flex; align-items: center; justify-content: center; gap: 8px; height: 48px; margin-top: 8px;
-  background: var(--error); color: var(--on-error); border: 0; font-size: 14px;
+  align-self: stretch; display: flex; align-items: center; justify-content: center; gap: 8px; height: 48px; margin-top: 24px;
+  background: none; color: var(--error); border: 1px solid var(--line); font-size: 14px;
 }
-.set .danger-button.set-signout:hover { background: color-mix(in srgb, var(--error) 88%, var(--fg)); }
+.set .danger-button.set-signout:hover { background: var(--surface-high); }
 /* The app's switch: a 52 by 32 track, a small grey thumb that grows and takes the accent when on. */
 .switch {
   position: relative; flex: none; width: 52px; height: 32px; border-radius: 16px; border: 2px solid var(--muted); background: var(--surface-high);

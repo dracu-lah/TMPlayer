@@ -837,7 +837,7 @@ function StorageBlock() {
     )
 }
 
-/** Sign out at the end of the list: full width, in the danger colour. It still asks first. */
+/** Sign out at the end of the list: a quiet outlined row with the danger colour in its words only, and a question first that names what goes with it. */
 function SignOut() {
     let dialog!: HTMLDialogElement
     const [leaving, setLeaving] = createSignal(false)
