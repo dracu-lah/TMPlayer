@@ -48,6 +48,35 @@ class AddChatsRenderTest {
      * until a chat is ticked, and Back (Esc) calls the leave action instead of closing or asking
      * to discard.
      */
+    /** Nothing recommended and nothing ticked in the required choice: a way out, not a dead end (ON-4). */
+    @Test
+    fun `required mode with nothing recommended offers Continue without choosing`() = runComposeUiTest {
+        val model = AddChatsViewModel(write = {})
+        val back = BackStack()
+        var went = 0
+        setContent {
+            CompositionLocalProvider(LocalBackStack provides back) {
+                TmMaterialTheme(dark = true) {
+                    Box(Modifier.size(1280.dp, 900.dp)) {
+                        AddChatsScreen(
+                            chats = CHATS,
+                            listComplete = true,
+                            starred = emptySet(),
+                            model = model,
+                            onClose = {},
+                            required = true,
+                            onContinue = { went++ },
+                        )
+                    }
+                }
+            }
+        }
+        waitForIdle()
+        onNode(hasText("Choose at least one chat")).assertExists()
+        onNode(hasText("Continue without choosing") and hasClickAction()).performClick()
+        assertEquals(1, went)
+    }
+
     @Test
     fun `required mode has no Back, needs a tick and does not close on Back`() = runComposeUiTest {
         val model = AddChatsViewModel(write = {})

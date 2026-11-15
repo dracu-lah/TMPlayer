@@ -286,6 +286,38 @@ class AddChatsTvKeysTest {
         ChatVideoCount.forget()
     }
 
+    @Test
+    fun `an account with nothing recommended gets Continue without choosing, reached by Right and OK`() {
+        val model = AddChatsViewModel(counts = NoVideos, write = {})
+        var went = 0
+        val activity = open(model, chats = CHATS.take(12), onContinue = { went++ })
+        assertTrue("nothing to recommend", model.state.value.recommended.isEmpty())
+        assertTrue(nodes(activity).any { words(it).contains("Continue without choosing") })
+        assertEquals(listOf("Saved Messages"), focusedTitle(activity))
+        // Done is off with nothing ticked, so Right lands on the way out instead of staying put.
+        press(activity, KeyEvent.KEYCODE_DPAD_RIGHT)
+        assertEquals(listOf("Continue without choosing"), focusedWords(activity))
+        press(activity, KeyEvent.KEYCODE_DPAD_LEFT)
+        assertEquals("Left goes back to the row", listOf("Saved Messages"), focusedTitle(activity))
+        press(activity, KeyEvent.KEYCODE_DPAD_RIGHT)
+        press(activity, KeyEvent.KEYCODE_DPAD_CENTER)
+        assertEquals(1, went)
+        model.stop()
+        idle()
+        ChatVideoCount.forget()
+    }
+
+    @Test
+    fun `with a Recommended band the way out is not offered, the gate stays required`() {
+        val model = AddChatsViewModel(counts = Counts, write = {}, countsRest = false)
+        val activity = open(model, chats = CHATS, onContinue = {})
+        assertEquals(12, model.state.value.recommended.size)
+        assertTrue(nodes(activity).none { words(it).contains("Continue without choosing") })
+        model.stop()
+        idle()
+        ChatVideoCount.forget()
+    }
+
     private fun open(
         model: AddChatsViewModel,
         chats: List<ChatSummary>,
@@ -293,6 +325,7 @@ class AddChatsTvKeysTest {
         required: Boolean = true,
         onLeave: () -> Unit = {},
         confirmLeave: Boolean = false,
+        onContinue: (() -> Unit)? = null,
     ): ComponentActivity {
         FormFactor.override(true)
         // A television is never in touch mode, and in touch mode Compose lets nothing pressable
@@ -311,6 +344,7 @@ class AddChatsTvKeysTest {
                     required = required,
                     onLeave = onLeave,
                     confirmLeave = confirmLeave,
+                    onContinue = onContinue,
                     // A stand-in for the television's search box: a press is its keyboard's Search.
                     searchField = if (!search) null else { _, _, _, modifier, onSubmit ->
                         Text("search probe", modifier.clickable { onSubmit() })
@@ -392,6 +426,11 @@ class AddChatsTvKeysTest {
         /** Saved Messages and 2,999 more: the size of the account the report came from. */
         val CHATS: List<ChatSummary> = listOf(chat(100, "Saved Messages", ChatKind.Saved)) +
             (1..2_999).map { chat(1_000L + it, "Chat number $it") }
+
+        /** Every chat is empty: nothing reaches the Recommended bar. */
+        val NoVideos = object : ChatCountCalls {
+            override suspend fun videoCount(chatId: Long, localOnly: Boolean): CountAnswer = CountAnswer.Counted(0)
+        }
 
         /** The first twelve hold 50 videos, every seventh after them 5, the rest none. */
         val Counts = object : ChatCountCalls {

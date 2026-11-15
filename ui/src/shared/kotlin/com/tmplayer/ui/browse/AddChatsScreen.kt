@@ -117,6 +117,7 @@ import com.tmplayer.data.ChatKind
 import com.tmplayer.data.ChatPicking
 import com.tmplayer.data.ChatSuggestions
 import com.tmplayer.data.ChatSummary
+import com.tmplayer.data.ChatsGate
 import com.tmplayer.data.CountAnswer
 import com.tmplayer.data.DeviceForm
 import com.tmplayer.data.KidsLock
@@ -183,6 +184,10 @@ import androidx.compose.ui.semantics.role
  * @param confirmLeave in [required] mode, Back with chats ticked asks "Leave TMPlayer?" before
  *   [onLeave], since the ticks live only here and a stray Back would lose them. Back with nothing
  *   ticked still leaves at once. Off where leaving does nothing (the desktop).
+ * @param onContinue in [required] mode, what Continue without choosing does (ON-4): offered only
+ *   when the list is whole, nothing was recommended and nothing is ticked, since then there is
+ *   nothing sensible to tick and Back would leave the app. The gate still stands whenever a
+ *   Recommended band exists. Null offers nothing.
  */
 @Composable
 fun AddChatsScreen(
@@ -201,6 +206,7 @@ fun AddChatsScreen(
     required: Boolean = false,
     onLeave: () -> Unit = onClose,
     confirmLeave: Boolean = false,
+    onContinue: (() -> Unit)? = null,
 ) {
     val s = LocalStrings.current
     val countWords = remember(s) { CountWords(s) }
@@ -308,6 +314,11 @@ fun AddChatsScreen(
     val nowShown by rememberUpdatedState(shown)
     val nowPlace by rememberUpdatedState(placeOf)
     val doneReady = !(required && state.ticked.isEmpty())
+    // The way out of a required choice with nothing to choose (ON-4): the head start has finished
+    // with no recommendation and the whole list is in.
+    val escapeFocus = remember { FocusRequester() }
+    val showEscape = required && onContinue != null && listComplete && !state.recommending &&
+        state.recommended.isEmpty() && state.ticked.isEmpty()
 
     fun focusRow(at: Int) {
         val list = nowShown
@@ -362,7 +373,11 @@ fun AddChatsScreen(
         focusRow(at)
     }
     // Done; with nothing ticked in the mandatory choice it is off and the remote stays put. No picker has a Select all for now (user, 2026-11-03).
-    fun toFoot(): Boolean = doneReady && runCatching { doneFocus.requestFocus() }.isSuccess
+    fun toFoot(): Boolean = when {
+        doneReady -> runCatching { doneFocus.requestFocus() }.isSuccess
+        showEscape -> runCatching { escapeFocus.requestFocus() }.isSuccess
+        else -> false
+    }
     fun rowKey(event: KeyEvent, id: Long): Boolean {
         val vertical = event.key == Key.DirectionDown || event.key == Key.DirectionUp
         if (event.type == KeyEventType.KeyUp) {
@@ -811,6 +826,12 @@ fun AddChatsScreen(
                 )
             }
         }
+        val escape: @Composable () -> Unit = {
+            val go = onContinue
+            if (showEscape && go != null) {
+                QuietButton(s.pickerContinueWithout, modifier = Modifier.focusRequester(escapeFocus), onClick = go)
+            }
+        }
         // The running total and Done on a card of their own, so the foot reads as the bar it is
         // rather than words left under the list.
         val footPane: @Composable ColumnScope.() -> Unit = {
@@ -839,6 +860,9 @@ fun AddChatsScreen(
                             modifier = Modifier.weight(1f),
                         )
                         doneButton()
+                    }
+                    if (showEscape) {
+                        Box(Modifier.fillMaxWidth().padding(bottom = if (form == DeviceForm.Phone) 8.dp else 0.dp), contentAlignment = Alignment.Center) { escape() }
                     }
                 }
             }
@@ -943,6 +967,7 @@ fun AddChatsScreen(
                             )
                             failure()
                             doneButton()
+                            escape()
                             if (required) {
                                 Text(s.pickerGateBody, style = MaterialTheme.typography.bodySmall, color = Tone.muted, maxLines = 6, overflow = TextOverflow.Ellipsis)
                             }
@@ -1485,6 +1510,8 @@ fun AddChatsFed(
         required = required,
         onLeave = onLeave,
         confirmLeave = confirmLeave,
+        // Nothing to tick in a required choice: go on for this visit, nothing written (ON-4).
+        onContinue = if (required) ChatsGate::waive else null,
     )
 }
 
