@@ -62,7 +62,9 @@ data class Cover(
  *
  * [compact] is for a tile under about 160 dp wide (the phone's grid), where the title takes a
  * smaller style and two lines. [showTitle] off leaves the colour and the number, for a slot
- * whose title is written beside it anyway, or one too small to hold any text.
+ * whose title is written beside it anyway, or one too small to hold any text. [playMark] off
+ * drops the faint play mark in the middle: a hero ([EdgeBackdrop]) has the name and Resume over
+ * it, where the mark only sat behind the words.
  */
 @Composable
 fun GeneratedCover(
@@ -70,6 +72,7 @@ fun GeneratedCover(
     modifier: Modifier = Modifier,
     compact: Boolean = false,
     showTitle: Boolean = true,
+    playMark: Boolean = true,
 ) {
     val (start, end) = CoverArt.Pairs[cover.pair]
     val inset = if (compact) 8.dp else 12.dp
@@ -89,12 +92,14 @@ fun GeneratedCover(
     ) {
         // A faint play mark in the middle, so the cover reads as a video waiting for its poster
         // rather than a blank tile (user, 2026-11-01).
-        Icon(
-            TmIcons.PlayCircle,
-            contentDescription = null,
-            tint = OnArt.copy(alpha = PLAY_MARK_ALPHA),
-            modifier = Modifier.align(Alignment.Center).size(if (compact) 40.dp else 56.dp),
-        )
+        if (playMark) {
+            Icon(
+                TmIcons.PlayCircle,
+                contentDescription = null,
+                tint = OnArt.copy(alpha = PLAY_MARK_ALPHA),
+                modifier = Modifier.align(Alignment.Center).size(if (compact) 40.dp else 56.dp),
+            )
+        }
         cover.number?.let { number ->
             Text(
                 number.toString(),

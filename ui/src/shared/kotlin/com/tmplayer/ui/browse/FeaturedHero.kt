@@ -55,14 +55,17 @@ import com.tmplayer.ui.theme.rememberReducedMotion
  * "Film  ·  2026  ·  Drama, Thriller  ·  2h 02m", or "Series  ·  2024  ·  Crime  ·  3 seasons":
  * the kind, the year (the provider's, else the name's), up to two genres and a film's length or a
  * show's seasons where the provider's [extras] know them. A film with no answer still has its
- * length from Telegram.
+ * length from Telegram. With [leftSec] (a film being watched, [SeriesWatch.leftSec]) the time left
+ * stands in place of the length: "Film  ·  2021  ·  1h 56m left".
  */
-fun featuredFactsLine(pick: FeaturedPick, meta: MetaInfo?, extras: MetaExtras?, s: Messages): String {
+fun featuredFactsLine(pick: FeaturedPick, meta: MetaInfo?, extras: MetaExtras?, s: Messages, leftSec: Long? = null): String {
     val series = pick.series
     val item = pick.item
     val year = meta?.year ?: SeriesShelf.episodeOf(item).year
     val genres = extras?.genres?.take(2)?.joinToString(", ")?.ifBlank { null }
-    val length = if (series != null) {
+    val length = if (leftSec != null && leftSec > 0 && series == null) {
+        s.browseTimeLeft(s.formatter.duration(leftSec))
+    } else if (series != null) {
         (extras?.seasons ?: series.seasons.count { it.number > 0 }.takeIf { it > 1 })?.let { s.metadataSeasons(it) }
     } else {
         (extras?.runtimeMin?.let { it * 60L } ?: item.durationSec.toLong().takeIf { it > 0 })?.let { s.formatter.duration(it) }
@@ -90,10 +93,12 @@ fun FeaturedInfo(
     textAlign: TextAlign = TextAlign.Start,
     scoreLogoHeight: androidx.compose.ui.unit.Dp = 16.dp,
     scoreLines: Int = 1,
+    /** The time left of a film being watched, in seconds ([SeriesWatch.leftSec]); null for none. */
+    leftSec: Long? = null,
 ) {
     val s = LocalStrings.current
     val extras = rememberMetaExtras(meta)
-    val facts = remember(pick, meta, extras, s) { featuredFactsLine(pick, meta, extras, s) }
+    val facts = remember(pick, meta, extras, s, leftSec) { featuredFactsLine(pick, meta, extras, s, leftSec) }
     val overview = meta?.overview?.trim().orEmpty()
     Column(
         modifier,

@@ -243,6 +243,7 @@ fun EdgeBackdropOf(
                         remember(cover) { cover.copy(number = null, chatInitial = null) },
                         place,
                         showTitle = false,
+                        playMark = false,
                     )
                 }
             }

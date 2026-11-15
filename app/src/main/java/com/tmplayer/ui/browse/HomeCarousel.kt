@@ -200,7 +200,7 @@ internal fun FeaturedCarousel(
             ) { page ->
                 val pick = latest.getOrNull(page) ?: return@HorizontalPager
                 FeaturedPage(
-                    pick, height, under, start, end, chatTitle,
+                    pick, height, under, start, end, chatTitle, watch,
                     footRoom = if (wide) WIDE_CONTROLS_ROOM else CONTROLS_ROOM,
                     wide = wide,
                     overviewLines = overviewLines,
@@ -272,12 +272,15 @@ private fun FeaturedPage(
     start: Dp,
     end: Dp,
     chatTitle: (Long) -> String,
+    watch: SeriesWatch,
     footRoom: Dp,
     wide: Boolean,
     overviewLines: Int,
 ) {
     val s = LocalStrings.current
     val item = pick.item
+    // A video being watched says how long is left; read here, so it is the point the page was drawn at.
+    val leftSec = remember(pick, watch) { watch.leftSec(pick) }
     val series = pick.series
     val chat = chatTitle(item.chatId)
     // A show's backdrop rather than one episode's still: the page stands for the whole show.
@@ -326,7 +329,7 @@ private fun FeaturedPage(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                FeaturedInfo(pick, meta, Modifier.fillMaxWidth(), overviewLines = overviewLines)
+                FeaturedInfo(pick, meta, Modifier.fillMaxWidth(), overviewLines = overviewLines, leftSec = leftSec)
             }
             return@Box
         }
@@ -354,7 +357,7 @@ private fun FeaturedPage(
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
-            FeaturedInfo(pick, meta, Modifier.fillMaxWidth(), overviewLines = 2, textAlign = TextAlign.Center)
+            FeaturedInfo(pick, meta, Modifier.fillMaxWidth(), overviewLines = 2, textAlign = TextAlign.Center, leftSec = leftSec)
         }
     }
 }

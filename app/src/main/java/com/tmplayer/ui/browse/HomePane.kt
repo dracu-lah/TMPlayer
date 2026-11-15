@@ -813,8 +813,7 @@ internal fun HomePane(
     // Not when the banner leads with a new title and Continue watching is the first row: a
     // habitual OK on the start focus must resume what the viewer is watching, not start something
     // new (PL-1), so the remote stays on the first Continue card then.
-    val continueLeads = listed.firstOrNull().let { it is HomeRow.Continue && it.records.isNotEmpty() } &&
-        !leadsWithResume(featured, listed.firstOrNull() as? HomeRow.Continue)
+    val continueLeads = continueStartsTheRemote(listed.firstOrNull(), featured)
     val bannerUp = !touch && carousel && !featured.isNullOrEmpty() && !continueLeads
     LaunchedEffect(bannerUp) {
         if (!bannerUp || keyed[0] || HomeFocusMemory.away || restored[0] || !mayTakeFocus()) return@LaunchedEffect
@@ -1405,8 +1404,10 @@ private val TV_DOWN_STEP = 200.dp
  * and not near its end ([com.tmplayer.data.HomeFeatured.leading]), so Play on the lead page
  * resumes; the rest alternate new and being watched, at most
  * [com.tmplayer.data.HomeFeatured.RESUME_SHARE] of the latter. A record joins once its video is in
- * [art]; one without a complete page (no online match) is passed over and the carousel leads with
- * new titles, which [leadsWithResume] says. Null while that row is still being asked for or the
+ * [art]. It needs no online match or picture of its own: a video with neither leads on its
+ * generated cover and Resume, a match that lands later swaps its picture in. Only a new page needs
+ * a complete match, so a carousel can still lead with a new title (no resume point, or the
+ * lookups off), which [leadsWithResume] says. Null while that row is still being asked for or the
  * fill is still deciding (the carousel then holds its frame with a stand-in, at most
  * [HomeFeatured.FILL_WAIT_MS] once the row is in), empty for nothing to feature, which hides the
  * carousel. Only complete pages ([com.tmplayer.ui.online.completeFeatured]), decided once per
@@ -1454,12 +1455,21 @@ private fun rememberFeatured(
  * [resume]'s records), so the remote's start on its Play resumes. False for a carousel led by a
  * new title: the television then starts on the first Continue watching card instead.
  */
-private fun leadsWithResume(picks: List<com.tmplayer.data.FeaturedPick>?, resume: HomeRow.Continue?): Boolean {
+internal fun leadsWithResume(picks: List<com.tmplayer.data.FeaturedPick>?, resume: HomeRow.Continue?): Boolean {
     val lead = picks?.firstOrNull() ?: return false
     val records = resume?.records ?: return false
     val keys = records.map { SettingsStore.progressKey(it.chatId, it.messageId) }.toHashSet()
     return SettingsStore.progressKey(lead.item.chatId, lead.item.messageId) in keys
 }
+
+/**
+ * Whether the television's start focus stays on the first Continue watching card instead of the
+ * carousel's Play: Continue is the first row with something in it and the carousel's lead page is
+ * not that video ([leadsWithResume]). A lead page of a video being watched, with or without a
+ * picture of its own (PL-1), takes the remote on its Resume.
+ */
+internal fun continueStartsTheRemote(first: HomeRow?, picks: List<com.tmplayer.data.FeaturedPick>?): Boolean =
+    first is HomeRow.Continue && first.records.isNotEmpty() && !leadsWithResume(picks, first)
 
 /** How long an empty Home waits for its rows before it takes itself for a first run. */
 private const val ROWS_WAIT_MS = 10_000L

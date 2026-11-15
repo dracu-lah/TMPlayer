@@ -111,6 +111,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.tmplayer.data.CourseProgress
 import com.tmplayer.data.EpisodeCopies
+import com.tmplayer.data.FeaturedPick
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.MediaMapper
 import com.tmplayer.data.NewEpisodes
@@ -182,6 +183,18 @@ class SeriesWatch(
 
     /** Watched when any copy of the episode is, or a file of several episodes that holds it. */
     fun finishedEpisode(episode: SeriesEpisode): Boolean = episode.watched(finished)
+
+    /**
+     * How many seconds are left of the film or episode [pick] stands for, from where the viewer
+     * stopped; null for a show's page (it says its seasons), a video not started or one whose length
+     * is not known. Shown on the Home carousel's page for a video being watched.
+     */
+    fun leftSec(pick: FeaturedPick): Long? {
+        if (pick.series != null) return null
+        val at = point(pick.item) ?: return null
+        if (at.positionMs <= 0 || at.durationMs <= 0) return null
+        return ((at.durationMs - at.positionMs) / 1000).takeIf { it > 0 }
+    }
 
     /** Where the viewer stopped in whichever copy of the episode got furthest. */
     fun pointOf(episode: SeriesEpisode): WatchPoint? =

@@ -199,7 +199,7 @@ internal fun TvFeaturedCarousel(
         Crossfade(targetState = pick, animationSpec = if (Motion.television) androidx.compose.animation.core.snap() else Motion.standard(), label = "tvFeatured", modifier = Modifier.matchParentSize()) { shown ->
             // The heading's words over any picture: a fade from the top, deeper than the heading,
             // under the page's own words.
-            TvFeaturedArt(shown, chatTitle, start = start, headerFade = headerFade)
+            TvFeaturedArt(shown, chatTitle, watch, start = start, headerFade = headerFade)
         }
 
         // What Play starts, worked out as the phone's page does.
@@ -349,9 +349,10 @@ private fun CarouselTurns(
 
 /** A page's picture, the fades that let its words read, and the name at its start. */
 @Composable
-private fun TvFeaturedArt(pick: FeaturedPick, chatTitle: (Long) -> String, start: Dp, headerFade: () -> Float) {
+private fun TvFeaturedArt(pick: FeaturedPick, chatTitle: (Long) -> String, watch: SeriesWatch, start: Dp, headerFade: () -> Float) {
     val s = LocalStrings.current
     val item = pick.item
+    val leftSec = remember(pick, watch) { watch.leftSec(pick) }
     val series = pick.series
     val chat = chatTitle(item.chatId)
     // A show's backdrop rather than one episode's still: the page stands for the whole show.
@@ -412,7 +413,7 @@ private fun TvFeaturedArt(pick: FeaturedPick, chatTitle: (Long) -> String, start
             }
             // Ten-foot sizes: the marks at 24 dp (16 dp is a phone's), two lines for them so none is
             // clipped, three of the overview so the description is not cut after two.
-            FeaturedInfo(pick, meta, overviewLines = 3, scoreLogoHeight = 24.dp, scoreLines = 2)
+            FeaturedInfo(pick, meta, overviewLines = 3, scoreLogoHeight = 24.dp, scoreLines = 2, leftSec = leftSec)
         }
     }
 }

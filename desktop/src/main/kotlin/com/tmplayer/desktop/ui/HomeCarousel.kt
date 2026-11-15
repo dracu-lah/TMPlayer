@@ -486,7 +486,7 @@ private fun FeaturedPage(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            FeaturedInfo(pick, meta, Modifier.widthIn(max = INFO_WIDTH), overviewLines = 3, scoreLogoHeight = 22.dp, scoreLines = 2)
+            FeaturedInfo(pick, meta, Modifier.widthIn(max = INFO_WIDTH), overviewLines = 3, scoreLogoHeight = 22.dp, scoreLines = 2, leftSec = remember(pick, watch) { watch.leftSec(pick) })
             Spacer(Modifier.height(6.dp))
             Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -567,7 +567,8 @@ private fun FeaturedSkeleton(side: Dp) {
  * The carousel's pages: what [HomeFeatured.pick] chooses from the Recently added row [recent],
  * mixed with Continue watching [resume] ([HomeFeatured.mix]): films and shows of at least
  * [HomeFeatured.MIN_BYTES] whose pages are complete ([com.tmplayer.ui.online.completeFeatured]).
- * A Continue watching record joins once its video is in [art]. Null while Recently added is still
+ * A Continue watching record joins once its video is in [art], with no match or picture needed
+ * (it is drawn on its generated cover). Null while Recently added is still
  * being asked for or the fill is deciding (the skeleton, at most [HomeFeatured.FILL_WAIT_MS] once
  * the row is in), empty for nothing to feature, which hides the carousel. Decided once per fill, so
  * no page comes or goes while it is looked at; with online lookups off, empty at once.
