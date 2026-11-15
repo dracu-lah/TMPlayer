@@ -69,6 +69,26 @@ export function writeAutoplay(on: boolean) {
     else kvWrite(AUTOPLAY_KEY, false)
 }
 
+/** After a video that is not an episode: play the next one in the chat's order (the apps' "play_chat_order"); off unless turned on. */
+export const CHAT_ORDER_KEY = 'player:chat-order'
+export async function readChatOrder(): Promise<boolean> {
+    return (await kvRead<boolean>(CHAT_ORDER_KEY)) === true
+}
+export function writeChatOrder(on: boolean) {
+    if (on) kvWrite(CHAT_ORDER_KEY, true)
+    else kvRemove(CHAT_ORDER_KEY)
+}
+
+/** Keep Repeat on for the next video (the apps' "keep_repeat"); off unless turned on. */
+export const KEEP_REPEAT_KEY = 'player:keep-repeat'
+export async function readKeepRepeat(): Promise<boolean> {
+    return (await kvRead<boolean>(KEEP_REPEAT_KEY)) === true
+}
+export function writeKeepRepeat(on: boolean) {
+    if (on) kvWrite(KEEP_REPEAT_KEY, true)
+    else kvRemove(KEEP_REPEAT_KEY)
+}
+
 /** How subtitles look (the app's SubtitleSize, SubtitleColour, SubtitleEdge, SubtitleBox, SubtitlePosition). */
 export interface SubtitleLook {
     size: 'small' | 'medium' | 'large' | 'extra_large'

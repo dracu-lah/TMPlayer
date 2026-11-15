@@ -9,6 +9,7 @@ import { chatGone, forgetGone } from '../goneVideos'
 import { watchPath } from './VideoList'
 import { warmFile } from '../stream/reader'
 import { looksSplit } from '../stream/joined'
+import { readChatOrder } from '../player/keep'
 import type { ChatView, VideoItem } from '../tg/types'
 
 /** The player's code (the engines and the controls), also fetched while idle once signed in (App.tsx). */
@@ -53,7 +54,10 @@ export function Watch() {
         if (video()) askKeepOnce().catch(() => {})
     })
     const [progress] = createResource(readProgress)
+    // "After a video that is not an episode": the chat's next video in the grid's order (EG-F30).
+    const [chatOrder] = createResource(() => readChatOrder().catch(() => false))
     const view = (): ChatView => ({
+        chatOrder: chatOrder() ?? false,
         sort: settings().sort,
         minBytes: settings().sizeMin,
         maxBytes: settings().sizeMax,
@@ -63,7 +67,7 @@ export function Watch() {
     })
     // The episodes and the next one wait for the chat's videos; the player does not wait for them.
     const [info] = createResource(
-        () => (progress.state === 'ready' ? { ...ids(), view: view() } : null),
+        () => (progress.state === 'ready' && chatOrder.state === 'ready' ? { ...ids(), view: view() } : null),
         ({ chatId, messageId, view }) => api.watch(chatId, messageId, view).catch((e) => (console.warn('[watch]', e), null)),
     )
     const close = () => back(navigate)

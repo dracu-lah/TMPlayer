@@ -946,6 +946,27 @@ export async function joinedFor(tg: TelegramClient, chatId: number, messageId: n
     }
 }
 
+/**
+ * The cards either side of a video in the chat's grid, in the order the grid is sorted in (the apps'
+ * ChatOrder, here the grid itself): size limits skip a card as they hide it, and when the video is the
+ * last card loaded and the chat has more pages, the next page is read (up to MORE_PAGES) before saying
+ * there is no next one. Null for a video that is no card of its own (another copy of one).
+ */
+async function chatOrderAround(tg: TelegramClient, s: ChatState, view: ChatView, id: string): Promise<{ previous: VideoItem | null; next: VideoItem | null } | null> {
+    for (let round = 0; ; round++) {
+        const tiles = arrange(s, { ...view, query: '', chatOrder: undefined }).tiles
+        const at = tiles.findIndex((tile) => videoId(tile.item) === id)
+        if (at < 0) return null
+        if (at < tiles.length - 1 || done(s) || round >= MORE_PAGES) return { previous: tiles[at - 1]?.item ?? null, next: tiles[at + 1]?.item ?? null }
+        try {
+            await load(s, () => loadPage(tg, s))
+        } catch {
+            // The chat could not be asked: what is loaded is the answer.
+            return { previous: tiles[at - 1]?.item ?? null, next: null }
+        }
+    }
+}
+
 const watchKept = new Map<string, { version: number; view: string; info: WatchInfo }>()
 
 /**
@@ -1009,12 +1030,14 @@ export async function watchInfo(tg: TelegramClient, chatId: number, messageId: n
                   .sort((a, b) => b.height - a.height || b.size - a.size)
                   .map(({ height: _h, size: _s, ...copy }) => copy)
             : []
+    // After a video that is not an episode (the apps' ChatOrder): the chat's own list goes on, in the grid's sort.
+    const around = view.chatOrder && !steps.next && !steps.previous && !seasons.length ? await chatOrderAround(tg, s, view, id) : null
     const info: WatchInfo = {
         title: steps.current?.show ?? r.tileTitle(current),
         episode: steps.current ? { code: steps.current.code, name: steps.current.name ?? null, show: steps.current.show } : null,
-        previous: item(steps.previous),
+        previous: item(steps.previous) ?? around?.previous ?? null,
         previousCode: steps.previousLabel?.code ?? null,
-        next: item(steps.next),
+        next: item(steps.next) ?? around?.next ?? null,
         nextCode: steps.nextLabel?.code ?? null,
         seasons,
         more,

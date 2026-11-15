@@ -60,9 +60,10 @@ import { BookmarksSheet, delayText, ShortcutsSheet, SIZES, TimingSheet } from '.
 import { MsoneSheet, type MsoneTarget } from './msone-sheet'
 import { episodeOf } from './msone'
 import { msoneOn } from '../msoneFlag'
-import { AUTOPLAY_LIMIT, fineRate, IDLE_LIMIT, noteInput, pressLoop, SeekUndo, SLEEP_CHOICES, sleepState, watching, wrapLoop, type Loop } from './extras'
+import { AUTOPLAY_LIMIT, fineRate, IDLE_LIMIT, noteInput, pressLoop, repeats, repeatState, SeekUndo, SLEEP_CHOICES, sleepState, watching, wrapLoop, type Loop } from './extras'
 import {
-    addBookmark, deleteBookmark, loadBookmarks, readAutoplay, renameBookmark, writeAutoplay, writeLook, type Bookmark, type SubtitleLook,
+    addBookmark, deleteBookmark, loadBookmarks, readAutoplay, readChatOrder, readKeepRepeat, renameBookmark, writeAutoplay, writeChatOrder, writeKeepRepeat, writeLook,
+    type Bookmark, type SubtitleLook,
 } from './keep'
 import type { SoundTrack } from './engines'
 import type { ChatSubtitle, VideoCopy, VideoItem, WatchInfo } from '../tg/types'
@@ -502,9 +503,32 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
     }
     onCleanup(() => clearTimeout(backTimer))
 
+    // ---- Repeat this video, and the chat's order after a video that is not an episode --------------
+    // The state outlives one player (extras.repeatState): off again when another video starts, unless "Keep repeat on".
+    const itemKey = `${c.item.chatId}:${c.item.messageId}`
+    const [keepRepeat, setKeepRepeat] = createSignal(false)
+    const [chatOrder, setChatOrder] = createSignal(false)
+    const [repeatOn, setRepeatOn] = createSignal(repeats(itemKey, false))
+    onMount(() => {
+        readKeepRepeat().then((keep) => (setKeepRepeat(keep), setRepeatOn(repeats(itemKey, keep))), () => {})
+        readChatOrder().then(setChatOrder, () => {})
+    })
+    const changeKeepRepeat = (on: boolean) => {
+        setKeepRepeat(on)
+        writeKeepRepeat(on)
+        setRepeatOn(repeats(itemKey, on))
+    }
+    // Takes effect from the next video: the watch page asks the chat for its next one when it opens.
+    const changeChatOrder = (on: boolean) => {
+        setChatOrder(on)
+        writeChatOrder(on)
+    }
+
     // ---- A-B repeat (AbLoop) -----------------------------------------------------------------
     const [loop, setLoop] = createSignal<Loop | null>(null)
     const pressRepeat = () => {
+        // The two repeats exclude each other: marking a stretch turns Repeat this video off.
+        if (repeatOn()) (repeatState.of = null, setRepeatOn(false))
         const was = loop()
         const next = pressLoop(was, v.currentTime)
         if (!was) flash(plain() ? t('player.loop_start_set', { start: clock(next!.start) }) : t('player.loop_from', { start: clock(next!.start) }))
@@ -719,7 +743,15 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
     // The video ended: a sleep timer set for its end stops here; otherwise autoplay counts down, or asks "Still watching?" after a run.
     const ended = () => {
         const next = c.info()?.next
+        // Repeat this video: from the start again, no card and no count towards "Still watching?";
+        // a sleep timer for this video's end wins, and Repeat is off for what comes next.
+        if (repeatOn() && !sleepEnd()) {
+            v.currentTime = 0
+            v.play().catch(() => {})
+            return
+        }
         if (sleepEnd()) {
+            if (repeatOn()) (repeatState.of = null, setRepeatOn(false))
             clearSleep()
             return askStill('sleep_end')
         }
@@ -728,6 +760,18 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         if (!autoplay() || nextHidden()) return
         if (watching.autoplayed >= AUTOPLAY_LIMIT) return askStill('autoplay')
         startCount(5)
+    }
+    const toggleRepeatVideo = () => {
+        const on = !repeatOn()
+        repeatState.of = on ? itemKey : null
+        setRepeatOn(on)
+        if (on) {
+            // Excludes the A-B repeat, and a card for the next video has nothing to announce.
+            setLoop(null)
+            stopCount()
+            setNextUp(false)
+        }
+        flash(on ? t('player.repeat_video_on') : t('player.repeat_off'))
     }
     // Anything the viewer does with the picture stops the countdown.
     listen('seeking', stopCount)
@@ -1254,7 +1298,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
     const [nextHidden, setNextHidden] = createSignal(false)
     listen('timeupdate', () => {
         const d = v.duration
-        setNextUp(!!info()?.next && isFinite(d) && d > 60 && d - v.currentTime <= 30)
+        setNextUp(!repeatOn() && !!info()?.next && isFinite(d) && d > 60 && d - v.currentTime <= 30)
     })
     listen('ended', ended)
     createEffect(on(() => info()?.next?.key, () => setNextHidden(false), { defer: true }))
@@ -1627,6 +1671,10 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                     <MorePage title={t('player.playback_options')} back="more">
                         <Entry icon={Moon02Icon} text={t('player.sleep_timer')} trailing={sleepSummary()} onClick={() => setSheet('sleep')} />
                         <Entry icon={RepeatIcon} text={repeatText()} trailing={plain() ? undefined : 'R'} onClick={() => (setSheet(null), pressRepeat())} />
+                        {/* Switches: the page stays up with the new value, as the volume lines do in the apps. */}
+                        <Entry icon={RepeatIcon} text={t('player.repeat_video')} trailing={repeatOn() ? t('common.on') : t('common.off')} onClick={toggleRepeatVideo} />
+                        <Entry text={t('settings.keep_repeat')} trailing={keepRepeat() ? t('common.on') : t('common.off')} onClick={() => changeKeepRepeat(!keepRepeat())} />
+                        <Entry text={t('settings.play_chat_order')} trailing={chatOrder() ? t('common.on') : t('common.off')} onClick={() => changeChatOrder(!chatOrder())} />
                         <Show when={chapters().length}>
                             <Entry text={t('player.chapter_next')} trailing={plain() ? undefined : `${t(/Mac/.test(navigator.platform) ? 'keys.cmd' : 'keys.ctrl')}+Right`} onClick={() => (setSheet(null), stepChapter(true))} />
                             <Entry text={t('player.chapter_previous')} trailing={plain() ? undefined : `${t(/Mac/.test(navigator.platform) ? 'keys.cmd' : 'keys.ctrl')}+Left`} onClick={() => (setSheet(null), stepChapter(false))} />

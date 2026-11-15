@@ -144,6 +144,11 @@ export interface ChatView {
     watched: string[]
     started: string[]
     query: string
+    /**
+     * After a video that is not an episode, the chat's own next one in this order (the app's
+     * ChatOrder): the watch page's Next and autoplay follow the grid's sort. Off or absent: it stops.
+     */
+    chatOrder?: boolean
 }
 
 /**

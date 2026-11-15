@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import { chapterAt, chapterMarks, chapterNext, chapterPrevious, readChapters, skipSegments } from './chapters.ts'
-import { fineRate, pressLoop, SeekUndo, wrapLoop } from './extras.ts'
+import { fineRate, pressLoop, repeats, repeatState, SeekUndo, wrapLoop } from './extras.ts'
 import { cardLeft, cardSize, frameSlot, parseStoryboardMap } from './seekpreview.ts'
 import type { TgFile } from '../stream/reader'
 
@@ -122,4 +122,16 @@ test('a storyboard map is read in either shape, garbage skipped', () => {
     assert.equal(parseStoryboardMap('frame_width=160\nframe_height=90\n'), null)
     assert.equal(parseStoryboardMap('\u0000￿ garbage'.repeat(1000)), null)
     assert.equal(parseStoryboardMap('frame_width=99999\nframe_height=90\n0,0,0'), null)
+})
+
+test('Repeat this video lasts for the video it was set on, unless Keep repeat on carries it', () => {
+    repeatState.of = null
+    assert.equal(repeats('7:10', false), false)
+    repeatState.of = '7:10'
+    assert.equal(repeats('7:10', false), true)
+    // Another video starts: the repeat has lapsed, with nothing to switch off.
+    assert.equal(repeats('7:20', false), false)
+    assert.equal(repeats('7:20', true), true)
+    repeatState.of = null
+    assert.equal(repeats('7:20', true), false)
 })

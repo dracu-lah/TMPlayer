@@ -113,6 +113,17 @@ export function noteInput() {
     watching.lastInput = Date.now()
 }
 
+/**
+ * Repeat this video (PlayQueue.repeatsVideo): the video it was switched on for, or null. Kept here
+ * because the next video is a new player; it repeats only that video unless "Keep repeat on" is set.
+ */
+export const repeatState: { of: string | null } = { of: null }
+
+/** Whether the video `key` plays again at its end. */
+export function repeats(key: string, keep: boolean): boolean {
+    return repeatState.of !== null && (keep || repeatState.of === key)
+}
+
 /** The sleep timer as it stands, kept here so it carries over to the next episode. */
 export const sleepState: { at: number | null; end: boolean } = { at: null, end: false }
 
