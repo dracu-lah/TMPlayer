@@ -316,13 +316,22 @@ object AuthStall {
      * The same count over anything that says whether the sign in is held up
      * ([ConnectAdvice.waiting]). Every emission starts it again, so a caller that wants a retry to
      * count as a fresh start emits once more, and one that does not filters repeats out first.
+     *
+     * [clearAfterMs] is the hysteresis for a banner that must not flash on a flapping line: once
+     * [stalled] is on, the line has to stay up that long before it goes off, and a line that drops
+     * again inside it leaves it on, without a new [timeoutMs] wait. Zero (the default) clears at once.
      */
-    suspend fun watchWaiting(waiting: Flow<Boolean>, stalled: MutableStateFlow<Boolean>, timeoutMs: Long) {
+    suspend fun watchWaiting(waiting: Flow<Boolean>, stalled: MutableStateFlow<Boolean>, timeoutMs: Long, clearAfterMs: Long = 0) {
         waiting.collectLatest { held ->
-            stalled.value = false
             if (held) {
+                // On already, and the line was only up for a blink: it stays on.
+                if (clearAfterMs > 0 && stalled.value) return@collectLatest
+                stalled.value = false
                 delay(timeoutMs)
                 stalled.value = true
+            } else {
+                if (clearAfterMs > 0 && stalled.value) delay(clearAfterMs)
+                stalled.value = false
             }
         }
     }

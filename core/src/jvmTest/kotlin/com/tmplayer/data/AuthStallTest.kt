@@ -8,6 +8,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -95,7 +96,109 @@ class AuthStallTest {
         watch.cancel()
     }
 
+    // ---- the "can't reach Telegram" banner (U2): shown after the wait, kept through a flapping line ----
+
+    private class Line { val held = MutableStateFlow(false) }
+
+    private fun Line.up(up: Boolean) { held.value = !up }
+
+    @Test
+    fun `a banner that is on stays through a blink of line and goes only when the line holds`() = runTest {
+        val h = Line()
+        val watch = launch { AuthStall.watchWaiting(h.held, stalled, TIMEOUT, CLEAR) }
+        h.held.value = true
+        runCurrent()
+        advanceTimeBy(TIMEOUT + 1)
+        runCurrent()
+        assertTrue(stalled.value)
+        // The line is up for a blink and drops again: still shown, and no second wait begins.
+        h.up(true)
+        runCurrent()
+        advanceTimeBy(CLEAR - 500)
+        runCurrent()
+        assertTrue(stalled.value)
+        h.up(false)
+        runCurrent()
+        advanceTimeBy(CLEAR * 3)
+        runCurrent()
+        assertTrue(stalled.value)
+        // Up for good: it goes once the line has held for CLEAR.
+        h.up(true)
+        runCurrent()
+        advanceTimeBy(CLEAR - 1)
+        runCurrent()
+        assertTrue(stalled.value)
+        advanceTimeBy(2)
+        runCurrent()
+        assertFalse(stalled.value)
+        watch.cancel()
+    }
+
+    @Test
+    fun `a line flapping every few seconds never makes the banner flash`() = runTest {
+        val h = Line()
+        val watch = launch { AuthStall.watchWaiting(h.held, stalled, TIMEOUT, CLEAR) }
+        h.held.value = true
+        runCurrent()
+        advanceTimeBy(TIMEOUT + 1)
+        runCurrent()
+        assertTrue(stalled.value)
+        var changes = 0
+        val seen = launch { stalled.collect { changes++ } }
+        runCurrent()
+        repeat(10) {
+            h.up(true)
+            runCurrent()
+            advanceTimeBy(CLEAR - 1_000)
+            h.up(false)
+            runCurrent()
+            advanceTimeBy(CLEAR)
+            runCurrent()
+        }
+        // Collected once on subscribing (the value it was), and never changed again.
+        assertEquals(1, changes)
+        assertTrue(stalled.value)
+        seen.cancel()
+        watch.cancel()
+    }
+
+    @Test
+    fun `before the banner shows, a blink of line restarts the wait`() = runTest {
+        val h = Line()
+        val watch = launch { AuthStall.watchWaiting(h.held, stalled, TIMEOUT, CLEAR) }
+        h.held.value = true
+        runCurrent()
+        advanceTimeBy(TIMEOUT - 1_000)
+        h.up(true)
+        runCurrent()
+        h.up(false)
+        runCurrent()
+        advanceTimeBy(TIMEOUT - 1)
+        runCurrent()
+        assertFalse(stalled.value)
+        advanceTimeBy(2)
+        runCurrent()
+        assertTrue(stalled.value)
+        watch.cancel()
+    }
+
+    @Test
+    fun `without hysteresis the old behaviour holds, a line clears at once`() = runTest {
+        val h = Line()
+        val watch = launch { AuthStall.watchWaiting(h.held, stalled, TIMEOUT) }
+        h.held.value = true
+        runCurrent()
+        advanceTimeBy(TIMEOUT + 1)
+        runCurrent()
+        assertTrue(stalled.value)
+        h.up(true)
+        runCurrent()
+        assertFalse(stalled.value)
+        watch.cancel()
+    }
+
     private companion object {
         const val TIMEOUT = 30_000L
+        const val CLEAR = 3_000L
     }
 }

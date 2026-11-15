@@ -70,6 +70,21 @@ enum class ConnectStep {
     Opening,
 }
 
+/** Where the line to Telegram stands, see [ConnectAdvice.reach]. */
+enum class Reach {
+    /** Requests are being answered. */
+    Connected,
+
+    /** The device has no network, or TDLib is waiting for one. */
+    DeviceOffline,
+
+    /** A proxy is in use and TDLib is still connecting through it. */
+    ThroughProxy,
+
+    /** The device is online and TDLib is connecting without an answer: blocked, a portal, a VPN, or a slow line. */
+    TelegramNotAnswering,
+}
+
 /** The likeliest reason, once the wait has gone on too long, in the order it is checked. */
 enum class ConnectHint {
     /** The device has no network, or TDLib says it is waiting for one. */
@@ -122,6 +137,28 @@ object ConnectAdvice {
         AuthState.Ready, is AuthState.Failed -> false
         else -> !link.isUp
     }
+
+    /**
+     * Where the line to Telegram stands as far as a viewer is concerned, told from TDLib's own
+     * state ([TelegramLink], which keeps Connecting, ConnectingToProxy and WaitingForNetwork
+     * apart) and what the platform says about the network. [DeviceOffline] has the offline pill
+     * already; the other two are "online, and Telegram does not answer".
+     */
+    fun reach(link: TelegramLink, network: NetworkFacts): Reach = when {
+        link.isUp -> Reach.Connected
+        link == TelegramLink.WaitingForNetwork || (network.known && network.status == NetworkStatus.Offline) -> Reach.DeviceOffline
+        link == TelegramLink.ConnectingToProxy -> Reach.ThroughProxy
+        else -> Reach.TelegramNotAnswering
+    }
+
+    /**
+     * Whether a signed in session is held up on Telegram while the device is online: the banner's
+     * condition, before its wait ([Td] counts [Td]'s 20 s over it and clears it with hysteresis,
+     * see [AuthStall.watchWaiting]). Only while the app is on view ([shown]); a device that is
+     * offline is the offline pill's, not this one's.
+     */
+    fun unreachable(auth: AuthState, link: TelegramLink, network: NetworkFacts, shown: Boolean): Boolean =
+        shown && auth is AuthState.Ready && reach(link, network).let { it == Reach.TelegramNotAnswering || it == Reach.ThroughProxy }
 
     /**
      * What the platform reports, in the words the help shows under the hint: the kind of network,

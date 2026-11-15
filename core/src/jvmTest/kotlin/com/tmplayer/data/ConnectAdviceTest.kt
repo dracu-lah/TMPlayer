@@ -31,6 +31,52 @@ class ConnectAdviceTest {
     }
 
     @Test
+    fun `the line is told apart as connected, device offline, through a proxy, or online and not answering`() {
+        assertEquals(Reach.Connected, ConnectAdvice.reach(TelegramLink.Ready, wifi))
+        assertEquals(Reach.Connected, ConnectAdvice.reach(TelegramLink.Updating, wifi))
+        assertEquals(Reach.DeviceOffline, ConnectAdvice.reach(TelegramLink.WaitingForNetwork, wifi))
+        assertEquals(Reach.DeviceOffline, ConnectAdvice.reach(TelegramLink.Connecting, wifi.copy(hasNetwork = false)))
+        assertEquals(Reach.DeviceOffline, ConnectAdvice.reach(TelegramLink.Connecting, wifi.copy(internet = false)))
+        assertEquals(Reach.ThroughProxy, ConnectAdvice.reach(TelegramLink.ConnectingToProxy, wifi))
+        assertEquals(Reach.TelegramNotAnswering, ConnectAdvice.reach(TelegramLink.Connecting, wifi))
+        assertEquals(Reach.TelegramNotAnswering, ConnectAdvice.reach(TelegramLink.Starting, wifi))
+        // A platform that reports nothing (the desktop) is never "offline": TDLib's own word decides.
+        assertEquals(Reach.TelegramNotAnswering, ConnectAdvice.reach(TelegramLink.Connecting, NetworkFacts()))
+        assertEquals(Reach.DeviceOffline, ConnectAdvice.reach(TelegramLink.WaitingForNetwork, NetworkFacts()))
+        for (link in TelegramLink.entries) ConnectAdvice.reach(link, wifi)
+    }
+
+    @Test
+    fun `a signed in session online with no line is unreachable, only while the app is on view`() {
+        for (link in listOf(TelegramLink.Connecting, TelegramLink.ConnectingToProxy, TelegramLink.Starting)) {
+            assertTrue(ConnectAdvice.unreachable(AuthState.Ready, link, wifi, shown = true))
+            assertFalse(ConnectAdvice.unreachable(AuthState.Ready, link, wifi, shown = false))
+        }
+        // A captive portal and a VPN are online as far as the platform says: they get the banner, with its one line.
+        assertTrue(ConnectAdvice.unreachable(AuthState.Ready, TelegramLink.Connecting, wifi.copy(captivePortal = true), shown = true))
+        assertTrue(ConnectAdvice.unreachable(AuthState.Ready, TelegramLink.Connecting, wifi.copy(vpn = true), shown = true))
+    }
+
+    @Test
+    fun `no banner for a line that is up, a device that is offline, or a session not signed in`() {
+        for (link in listOf(TelegramLink.Ready, TelegramLink.Updating)) {
+            assertFalse(ConnectAdvice.unreachable(AuthState.Ready, link, wifi, shown = true))
+        }
+        assertFalse(ConnectAdvice.unreachable(AuthState.Ready, TelegramLink.WaitingForNetwork, wifi, shown = true))
+        assertFalse(ConnectAdvice.unreachable(AuthState.Ready, TelegramLink.Connecting, wifi.copy(hasNetwork = false), shown = true))
+        assertFalse(ConnectAdvice.unreachable(AuthState.Connecting, TelegramLink.Connecting, wifi, shown = true))
+        assertFalse(ConnectAdvice.unreachable(AuthState.Failed("x"), TelegramLink.Connecting, wifi, shown = true))
+    }
+
+    @Test
+    fun `a captive portal and a VPN each get their one line, and a proxy is suggested for neither`() {
+        assertEquals(ConnectHint.CaptivePortal, ConnectAdvice.hint(TelegramLink.Connecting, wifi.copy(captivePortal = true), proxyOn = false))
+        assertEquals(ConnectHint.Vpn, ConnectAdvice.hint(TelegramLink.Connecting, wifi.copy(vpn = true), proxyOn = false))
+        assertFalse(ConnectAdvice.suggestsProxy(ConnectHint.CaptivePortal, proxyOn = false))
+        assertFalse(ConnectAdvice.suggestsProxy(ConnectHint.Vpn, proxyOn = false))
+    }
+
+    @Test
     fun `connecting is always waiting, a signed in session or a failure never`() {
         for (link in TelegramLink.entries) {
             assertTrue(ConnectAdvice.waiting(AuthState.Connecting, link))

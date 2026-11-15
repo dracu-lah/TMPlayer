@@ -156,7 +156,7 @@ object Td {
     /**
      * True once a signed in session has had no line to Telegram for [UNREACHABLE_MS] while the
      * network itself is up: Telegram is blocked or out of reach, and a banner offers Retry and a
-     * proxy. Cleared the moment the line is back, or by a Retry ([retryConnecting]).
+     * proxy. Cleared once the line has held for UNREACHABLE_CLEAR_MS (a blink does not clear it), or by a Retry ([retryConnecting]).
      */
     private val _unreachable = MutableStateFlow(false)
     val unreachable: StateFlow<Boolean> = _unreachable.asStateFlow()
@@ -328,10 +328,10 @@ object Td {
             // Only while the app is on view, and counted from its return: a phone that was in a
             // pocket comes back with its line down, and that is a reconnect, not a blocked network.
             val held = combine(_auth, _link, _network, connectAttempt, combine(foreground, foregroundEpoch, ::Pair)) { auth, link, network, attempt, (shown, epoch) ->
-                val up = network.status != NetworkStatus.Offline && link != TelegramLink.WaitingForNetwork
-                (shown && auth is AuthState.Ready && !link.isUp && up) to (attempt to epoch)
+                ConnectAdvice.unreachable(auth, link, network, shown) to (attempt to epoch)
             }.distinctUntilChanged().map { it.first }
-            AuthStall.watchWaiting(held, _unreachable, UNREACHABLE_MS)
+            // On a flapping line the banner stays once shown, until the line has held for UNREACHABLE_CLEAR_MS.
+            AuthStall.watchWaiting(held, _unreachable, UNREACHABLE_MS, UNREACHABLE_CLEAR_MS)
         }
         scope.launch {
             // A wait that went on too long is looked into rather than guessed at (HX23): TDLib is
@@ -1672,6 +1672,9 @@ object Td {
 
     /** How long a signed in session goes without a line before [unreachable] says so. */
     private const val UNREACHABLE_MS = 20_000L
+
+    /** How long the line must stay up before the "can't reach Telegram" banner goes: a blink does not clear it. */
+    private const val UNREACHABLE_CLEAR_MS = 3_000L
 
     /** How long a typed answer (a number, an email) waits for Telegram before the screen says so. */
     private const val SUBMIT_TIMEOUT_MS = 20_000L
