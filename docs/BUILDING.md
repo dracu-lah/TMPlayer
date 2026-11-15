@@ -149,15 +149,16 @@ toolchain was moved forward on 2026-10-18 (Gradle 9.8.1, AGP 9.4.1, Kotlin 2.4.2
   The manifest holds `CHANGE_WIFI_MULTICAST_STATE` for SSDP.
 - **The FFmpeg extension is built from source** for releases: `scripts/build-media3ext.sh`
   builds nextlib-media3ext at its pinned commit with `scripts/media3ext/tmplayer-decoders.patch`
-  (the extra FFmpeg decoders listed below, and the light video mode further down)
-  into `build/media3ext/nextlib-media3ext-<version>-tm3.aar`, which `:app` uses when it is there.
+  (the extra FFmpeg decoders listed below, the container reader and the light video mode further
+  down) into `build/media3ext/nextlib-media3ext-<version>-tm4.aar`, which `:app` uses when it is
+  there.
   It needs NDK 25.2.9519653, CMake 3.22.1, meson, ninja and nasm, and about 8 minutes for the four ABIs with
-  `JOBS=4` on a 12 thread machine (one ABI takes about 4; `TM_ABIS=armeabi-v7a` builds just that
+  `JOBS=4` on a 12 thread machine (one ABI takes about 2 once FFmpeg's sources are cached; `TM_ABIS=armeabi-v7a` builds just that
   one into a `-partial-` AAR that `:app` never uses; `GRADLE_WORKERS` sets Gradle's workers apart
   from `JOBS`). Without the AAR a debug build takes nextlib from Maven Central (only its own
   decoders, no light mode) and says so; the release job and F-Droid's recipe pass
   `-PtmRequireMedia3ext=true`, which fails instead. A nextlib bump means checking that the patch
-  still applies. Any change to the patch bumps `TM_REVISION` (`tm3` now), which renames the AAR
+  still applies. Any change to the patch bumps `TM_REVISION` (`tm4` now), which renames the AAR
   and the corresponding source archive the release notes link (see RELEASING.md).
 - **The decoders in the AAR** (tm3; the list is `ENABLED_DECODERS` in the patch's `ffmpeg/setup.sh`,
   the single source the host test reads too). Nextlib's own: Vorbis, Opus, FLAC, ALAC, PCM A-law and
@@ -171,16 +172,36 @@ toolchain was moved forward on 2026-10-18 (Gradle 9.8.1, AGP 9.4.1, Kotlin 2.4.2
   that are LGPL. Left out: the eight ADPCM decoders and AHX that FFmpeg builds only with
   `--enable-gpl` (circus, ima_escape, ima_hvqm2, ima_hvqm4, ima_magix, ima_pda, n64, psxc), and the
   `*_at` decoders (Apple's AudioToolbox). The AAR stays LGPL v3: no `--enable-gpl`, nothing
-  non-free. The build also has every FFmpeg demuxer and parser nextlib enables (367 demuxers, 68
-  parsers) and no encoder, muxer or filter. Media3's extractors name only some of these codecs, so
+  non-free. The build also has every FFmpeg parser nextlib enables (68), the demuxers of the
+  container reader below (tm4; nextlib enabled all 367 and twelve network protocols, which tm4
+  drops) and no encoder, muxer, protocol or filter. Media3's extractors name only some of these codecs, so
   `FfmpegLibrary` maps Media3's MIME types where they exist (MPEG-1 audio layers to mp1 and mp2,
   H.263, MS GSM) and takes every other decoder by the MIME type `video/x-ffmpeg-<decoder>` or
   `audio/x-ffmpeg-<decoder>` (the decoder's own name: `real_144`, `atrac3plus`, `g722`, `msmpeg4`
   differ from the configure names), with the container's extra data in the format's
   initialization data; the sample rate, channels, block size, bit rate, bits per coded sample,
-  FourCC and picture size reach FFmpeg through `ffcodecparams.h`. Until C2 lands a libavformat-backed
-  extractor, only the formats Media3's extractors already read reach the new audio and video
-  decoders by MIME (MPEG-1, H.263, MP2, MS GSM); the rest are ready for that extractor.
+  FourCC and picture size reach FFmpeg through `ffcodecparams.h`. The formats Media3's extractors
+  read reach the new decoders by Media3's MIME types (MPEG-1, H.263, MP2, MS GSM); the rest come
+  from the container reader below.
+- **The container reader** (tm4, C2): libavformat behind a Media3 extractor
+  (`app/.../player/demux/FfmpegExtractor`, added after every Media3 extractor by `FfmpegExtractors`,
+  so it only gets a file none of them sniffs). Its demuxers (`ENABLED_DEMUXERS` in the patch's
+  `ffmpeg/setup.sh`, `kDemuxers` in `ffdemux.h`): ASF/WMV/WMA, RealMedia and ivr, xWMA, DV, NUT,
+  MXF, NSV, WTV, Monkey's Audio, TTA, WavPack, AIFF, AU, CAF, VOC, Wave64, Ogg (Theora), MPEG
+  program streams (MPEG-1 system streams, which Media3's PsExtractor does not sniff; a VOB stays
+  Media3's), SMJPEG and Vivo. No protocol is compiled and nested opens are refused: the bytes come
+  from Media3's `ExtractorInput`, a read elsewhere being a reopen of `TdDataSource` at that byte.
+  Streams keep Media3's MIME type where a device decoder or a receiver may take them (MPEG-2, H.264
+  and HEVC in Annex B, AC-3, E-AC-3, DTS, TrueHD, MP1 to MP3) and are named by their FFmpeg
+  decoder otherwise. libavformat.so is about 0.56 MB raw per ABI. AVI, FLV and Matroska files whose
+  codec Media3 drops (WMV in AVI, RealVideo in Matroska) are still Media3's, without that track.
+- **Host tests of the container reader**: `run-demux-tests.sh <dir>` (after `build-host-ffmpeg.sh`)
+  makes a 6 s clip per container with the host's ffmpeg and runs the AAR's own `ffdemux.h` over it
+  (`demuxtest.cpp`): the probe, every packet in range, the first packets of each stream decoded,
+  a seek to the middle that reads a small part of the file and lands at or before the target, and
+  12 damaged copies (cut, flipped, zeroed, random) that must not crash or hang. ivr, xWMA, NSV,
+  Vivo, SMJPEG, APE and RealMedia with RealVideo 3/4 or Cook are untested (no host muxer or
+  encoder).
 - **Host tests of the decoders** run without a device: `scripts/media3ext/bench/build-host-ffmpeg.sh
   <dir>` builds the AAR's FFmpeg 9.0.1 for the host plus a reference `ffmpeg` of the same version,
   then `run-codec-tests.sh <dir>` makes a clip per decoder with the host's ffmpeg, decodes it the

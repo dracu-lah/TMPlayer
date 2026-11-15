@@ -81,11 +81,12 @@ fun releaseVersionCode(name: String): Int {
 
 // The FFmpeg extension. scripts/build-media3ext.sh builds nextlib-media3ext from its pinned
 // source with TMPlayer's extra decoders (MPEG-4 Part 2, DivX 3, VC-1, Motion JPEG, and in tm3 the old
-// and exotic video, extra audio, PCM and ADPCM ones listed in docs/BUILDING.md) and the light video
-// mode for weak devices (HX2c) into this AAR; without it the build takes the same nextlib from
-// Maven Central, which lacks all of them and says so. A release (and F-Droid's recipe)
+// and exotic video, extra audio, PCM and ADPCM ones listed in docs/BUILDING.md), the light video
+// mode for weak devices (HX2c) and, in tm4, the container reader of FfmpegExtractor into this
+// AAR; without it the build takes the same nextlib from Maven Central, which lacks all of them
+// and says so. A release (and F-Droid's recipe)
 // passes -PtmRequireMedia3ext=true, which fails the build instead of shipping without them.
-val media3extAar = rootProject.file("build/media3ext/nextlib-media3ext-${libs.versions.nextlib.get()}-tm3.aar")
+val media3extAar = rootProject.file("build/media3ext/nextlib-media3ext-${libs.versions.nextlib.get()}-tm4.aar")
 val requireMedia3ext: Boolean = (findProperty("tmRequireMedia3ext") as String?)?.trim()?.toBoolean() ?: false
 if (!media3extAar.isFile) {
     if (requireMedia3ext) {

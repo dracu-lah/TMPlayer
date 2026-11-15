@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Builds the Android FFmpeg extension from source: nextlib-media3ext 1.11.1-0.16.0 (by Anil
 # Beesetti, GPL-3.0) at its release commit, with TMPlayer's patch, into
-# build/media3ext/nextlib-media3ext-1.11.1-0.16.0-tm3.aar. app/build.gradle.kts uses that AAR when
+# build/media3ext/nextlib-media3ext-1.11.1-0.16.0-tm4.aar. app/build.gradle.kts uses that AAR when
 # it is there, and the Maven Central one (without the decoders and the light mode below) when it
-# is not. "tm3" is the patch's revision: tm1 had the decoders alone, tm2 added the light mode, tm3
-# adds the old, exotic and extra-audio decoders below, and the release notes link the corresponding
-# source of the same revision.
+# is not. "tm4" is the patch's revision: tm1 had the decoders alone, tm2 added the light mode, tm3
+# added the old, exotic and extra-audio decoders below, tm4 adds the container reader (libavformat)
+# below, and the release notes link the corresponding source of the same revision.
 #
 # What the patch (scripts/media3ext/tmplayer-decoders.patch) changes, and nothing else:
 #   - FFmpeg is configured with five more video decoders, all for formats Media3's extractors
@@ -33,6 +33,14 @@
 #     picture size of those streams to FFmpeg (ffcodecparams.h), and FfmpegLibrary maps Media3's
 #     MPEG-1 and MPEG-2 audio layers, H.263 and MS GSM, and names every other decoder through the
 #     MIME types video/x-ffmpeg-<decoder> and audio/x-ffmpeg-<decoder>.
+#   - tm4: libavformat is linked and packaged (nextlib built it but left it out), with only the
+#     demuxers of the containers Media3 has no extractor for (ASF/WMV/WMA, RealMedia and ivr, xWMA,
+#     DV, NUT, MXF, NSV, WTV, Monkey's Audio, TTA, WavPack, AIFF, AU, CAF, VOC, Wave64, Ogg, MPEG
+#     program streams, SMJPEG, Vivo) and no protocol at all, where nextlib enabled every demuxer and
+#     twelve network protocols. media3ext/src/main/cpp/ffdemux.h reads a container over two
+#     callbacks (read, seek) that the app answers from Media3's ExtractorInput, and ffdemux.cpp is
+#     its JNI side for the app's com.tmplayer.player.demux.FfmpegDemuxNative.
+#     scripts/media3ext/bench/run-demux-tests.sh tests it on the host.
 #   - setup.sh takes JOBS from the environment, so a small machine can build with JOBS=2.
 #   - A light video mode (HX2c) for pictures the device cannot decode in software in real time,
 #     chosen per format by the app through FfmpegLibrary.setLightVideoPolicy (TMPlayer passes
@@ -57,7 +65,7 @@
 set -euo pipefail
 
 VERSION="1.11.1-0.16.0"
-TM_REVISION="tm3"
+TM_REVISION="tm4"
 COMMIT="2dc77cd2d9352bc308aa26782f9c77a320df510b"
 SHA256="e80b3c90a3a72611f6ef62edc91255343da9eca0dbd7283049ebd751f88cc1b9"
 
@@ -127,6 +135,7 @@ fi
 grep -q 'wmapro wmalossless' "$tree/ffmpeg/setup.sh" || { echo "the patch did not apply" >&2; exit 1; }
 [ -f "$tree/media3ext/src/main/cpp/ffcodecparams.h" ] || { echo "the patch did not apply" >&2; exit 1; }
 [ -f "$tree/media3ext/src/main/cpp/fflight.h" ] || { echo "the patch did not apply" >&2; exit 1; }
+[ -f "$tree/media3ext/src/main/cpp/ffdemux.cpp" ] || { echo "the patch did not apply" >&2; exit 1; }
 printf 'sdk.dir=%s\n' "$ANDROID_HOME" > "$tree/local.properties"
 
 # nextlib's own Gradle build: ffmpegSetup runs ffmpeg/setup.sh, then CMake builds the JNI glue.

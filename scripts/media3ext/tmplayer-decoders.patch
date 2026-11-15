@@ -1,6 +1,6 @@
 --- a/ffmpeg/setup.sh
 +++ b/ffmpeg/setup.sh
-@@ -16,10 +16,32 @@
+@@ -16,10 +16,36 @@
  MBEDTLS_DIR=$SOURCES_DIR/mbedtls-$MBEDTLS_VERSION
  
  # Configuration
@@ -32,10 +32,27 @@
 +  pcm_s16be_planar pcm_s16le pcm_s16le_planar pcm_s24be pcm_s24daud pcm_s24le pcm_s24le_planar
 +  pcm_s32be pcm_s32le pcm_s32le_planar pcm_s64be pcm_s64le pcm_s8 pcm_s8_planar pcm_sga pcm_u16be
 +  pcm_u16le pcm_u24be pcm_u24le pcm_u32be pcm_u32le pcm_u8 pcm_vidc"
++# TMPlayer (tm4): the containers the app's FFmpeg extractor reads (libavformat, ffdemux.cpp), the
++# ones Media3 has no extractor for, and no protocol: the app hands libavformat the bytes itself,
++# so nothing here opens a file or a connection. Keep in step with kDemuxers in ffdemux.h.
++ENABLED_DEMUXERS="asf,rm,ivr,xwma,dv,nut,mxf,nsv,wtv,ape,tta,wv,aiff,au,caf,voc,w64,ogg,mpegps,smjpeg,vivo"
 +JOBS=${JOBS:-$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || sysctl -n hw.physicalcpu 2>/dev/null || echo 4)}
  
  # Gradle supplies these; standalone callers use the same pinned versions.
  CATALOG="$BASE_DIR/../gradle/libs.versions.toml"
+@@ -216,11 +242,10 @@
+       --disable-avfilter \
+       --disable-symver \
+       --enable-parsers \
+-      --enable-demuxers \
++      --enable-demuxer=${ENABLED_DEMUXERS} \
+       --enable-swresample \
+       --enable-avformat \
+       --enable-libdav1d \
+-      --enable-protocol=file,http,https,mmsh,mmst,pipe,rtmp,rtmps,rtmpt,rtmpts,rtp,tls \
+       --enable-version3 \
+       --enable-mbedtls \
+       --extra-ldexeflags=-pie \
 --- a/media3ext/build.gradle.kts
 +++ b/media3ext/build.gradle.kts
 @@ -22,7 +22,9 @@
@@ -63,6 +80,28 @@
 +-keep class io.github.anilbeesetti.nextlib.media3ext.ffdecoder.FfmpegLibrary {
 +    public static void setLightVideoPolicy(com.google.common.base.Predicate);
 +}
+--- a/media3ext/src/main/cpp/CMakeLists.txt
++++ b/media3ext/src/main/cpp/CMakeLists.txt
+@@ -18,7 +18,7 @@
+         # List variable name
+         ffmpeg_libs_names
+         # Values in the list
+-        avutil avcodec swresample swscale)
++        avutil avcodec avformat swresample swscale)
+ 
+ foreach (ffmpeg_lib_name ${ffmpeg_libs_names})
+     add_library(
+@@ -37,7 +37,9 @@
+         ffmain.cpp
+         ffcommon.cpp
+         ffaudio.cpp
+-        ffvideo.cpp)
++        ffvideo.cpp
++        # TMPlayer (tm4): libavformat for the app's FFmpeg extractor.
++        ffdemux.cpp)
+ 
+ set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,-z,max-page-size=16384")
+ 
 --- a/media3ext/src/main/cpp/ffaudio.cpp
 +++ b/media3ext/src/main/cpp/ffaudio.cpp
 @@ -5,6 +5,7 @@
@@ -154,7 +193,7 @@
      }
  
      avcodec_flush_buffers(context);
---- /dev/null
+--- a/media3ext/src/main/cpp/ffcodecparams.h
 +++ b/media3ext/src/main/cpp/ffcodecparams.h
 @@ -0,0 +1,99 @@
 +// TMPlayer (tm3): what a container tells a decoder before the first packet, for the decoders
@@ -256,7 +295,612 @@
 +}  // namespace ffparams
 +
 +#endif  // TMPLAYER_FFCODECPARAMS_H
---- /dev/null
+--- a/media3ext/src/main/cpp/ffdemux.cpp
++++ b/media3ext/src/main/cpp/ffdemux.cpp
+@@ -0,0 +1,266 @@
++// TMPlayer (tm4, C2): the JNI side of ffdemux.h, for the app's com.tmplayer.player.demux.FfmpegDemuxNative.
++// The app's class lives in the app (an app built against nextlib's Maven Central AAR, which lacks
++// these functions, still compiles and only sees UnsatisfiedLinkError, which it reads as "no
++// container reader"). Every call on one handle comes from one thread, the app's demux thread,
++// except nativeProbe, which needs no handle.
++#include <jni.h>
++#include <android/log.h>
++
++#include <cstdint>
++
++#include "ffdemux.h"
++
++#define DEMUX_FUNC(RETURN_TYPE, NAME, ...) \
++  extern "C" JNIEXPORT RETURN_TYPE JNICALL Java_com_tmplayer_player_demux_FfmpegDemuxNative_##NAME(JNIEnv *env, jclass, ##__VA_ARGS__)
++
++namespace {
++
++struct Handle {
++  tmdemux::Demuxer *demuxer = nullptr;
++  JNIEnv *env = nullptr;
++  jobject io = nullptr;
++  jbyteArray buffer = nullptr;
++  jint bufferLength = 0;
++  jmethodID read = nullptr;
++  jmethodID seek = nullptr;
++  tmdemux::Packet packet;
++  bool hasPacket = false;
++};
++
++int ioRead(void *opaque, uint8_t *out, int size) {
++  Handle *h = static_cast<Handle *>(opaque);
++  JNIEnv *env = h->env;
++  jint want = size < h->bufferLength ? size : h->bufferLength;
++  jint n = env->CallIntMethod(h->io, h->read, want);
++  if (env->ExceptionCheck()) {
++    env->ExceptionClear();
++    return AVERROR(EIO);
++  }
++  if (n == -1) return AVERROR_EOF;
++  if (n < -1) return AVERROR_EXIT;
++  if (n > want) return AVERROR(EIO);
++  if (n > 0) env->GetByteArrayRegion(h->buffer, 0, n, reinterpret_cast<jbyte *>(out));
++  return n;
++}
++
++int64_t ioSeek(void *opaque, int64_t position) {
++  Handle *h = static_cast<Handle *>(opaque);
++  JNIEnv *env = h->env;
++  jlong at = env->CallLongMethod(h->io, h->seek, (jlong) position);
++  if (env->ExceptionCheck()) {
++    env->ExceptionClear();
++    return AVERROR(EIO);
++  }
++  return at < 0 ? AVERROR_EXIT : at;
++}
++
++Handle *handleOf(JNIEnv *env, jlong value) {
++  Handle *h = reinterpret_cast<Handle *>(value);
++  if (h != nullptr) h->env = env;
++  return h;
++}
++
++bool validStream(const Handle *h, jint index) {
++  return h != nullptr && h->demuxer != nullptr && index >= 0 && (unsigned) index < h->demuxer->context->nb_streams;
++}
++
++// Outside text (a language tag) as Java can always take it: printable ASCII only, bounded.
++jstring asciiString(JNIEnv *env, const char *text, size_t limit) {
++  if (text == nullptr) return nullptr;
++  char clean[64];
++  if (limit >= sizeof clean) limit = sizeof clean - 1;
++  size_t n = 0;
++  for (; text[n] != '\0' && n < limit; n++) {
++    char c = text[n];
++    if (c < 0x20 || c > 0x7e) return nullptr;
++    clean[n] = c;
++  }
++  if (n == 0) return nullptr;
++  clean[n] = '\0';
++  return env->NewStringUTF(clean);
++}
++
++}  // namespace
++
++DEMUX_FUNC(jint, nativeApiVersion) { return tmdemux::kApiVersion; }
++
++DEMUX_FUNC(jstring, nativeProbe, jbyteArray data, jint length) {
++  if (data == nullptr || length <= 0) return nullptr;
++  jsize available = env->GetArrayLength(data);
++  if (length > available) length = available;
++  if (length > tmdemux::kProbeBytes) length = tmdemux::kProbeBytes;
++  jbyte *bytes = env->GetByteArrayElements(data, nullptr);
++  if (bytes == nullptr) return nullptr;
++  const char *name = tmdemux::probe(reinterpret_cast<const uint8_t *>(bytes), length);
++  env->ReleaseByteArrayElements(data, bytes, JNI_ABORT);
++  return name == nullptr ? nullptr : env->NewStringUTF(name);
++}
++
++DEMUX_FUNC(jlong, nativeOpen, jstring format, jobject io, jbyteArray buffer, jlong size, jintArray error) {
++  if (format == nullptr || io == nullptr || buffer == nullptr) return 0;
++  jclass ioClass = env->GetObjectClass(io);
++  jmethodID read = env->GetMethodID(ioClass, "read", "(I)I");
++  jmethodID seek = read == nullptr ? nullptr : env->GetMethodID(ioClass, "seek", "(J)J");
++  env->DeleteLocalRef(ioClass);
++  if (read == nullptr || seek == nullptr) {
++    env->ExceptionClear();
++    return 0;
++  }
++  Handle *h = new Handle();
++  h->env = env;
++  h->io = env->NewGlobalRef(io);
++  h->buffer = static_cast<jbyteArray>(env->NewGlobalRef(buffer));
++  h->bufferLength = env->GetArrayLength(buffer);
++  h->read = read;
++  h->seek = seek;
++  tmdemux::Io source;
++  source.opaque = h;
++  source.read = ioRead;
++  source.seek = ioSeek;
++  source.size = size > 0 ? size : -1;
++  const char *name = env->GetStringUTFChars(format, nullptr);
++  int code = 0;
++  h->demuxer = name == nullptr ? nullptr : tmdemux::open(name, source, &code);
++  if (name != nullptr) env->ReleaseStringUTFChars(format, name);
++  if (error != nullptr && env->GetArrayLength(error) > 0) env->SetIntArrayRegion(error, 0, 1, &code);
++  if (h->demuxer == nullptr) {
++    env->DeleteGlobalRef(h->io);
++    env->DeleteGlobalRef(h->buffer);
++    delete h;
++    return 0;
++  }
++  return reinterpret_cast<jlong>(h);
++}
++
++/** [duration in us or -1, stream count, main stream, byte where the packets start, seekable 0/1]. */
++DEMUX_FUNC(jlongArray, nativeInfo, jlong handle) {
++  Handle *h = handleOf(env, handle);
++  if (h == nullptr || h->demuxer == nullptr) return nullptr;
++  jlong values[5] = {
++      tmdemux::durationUs(h->demuxer),
++      (jlong) h->demuxer->context->nb_streams,
++      tmdemux::mainStream(h->demuxer),
++      h->demuxer->dataStart,
++      h->demuxer->avio->seekable ? 1 : 0,
++  };
++  jlongArray out = env->NewLongArray(5);
++  if (out != nullptr) env->SetLongArrayRegion(out, 0, 5, values);
++  return out;
++}
++
++/**
++ * [type (0 video, 1 audio, 2 other), width, height, sample rate, channels, bit rate, block align,
++ * bits per coded sample, codec tag, frame rate numerator, denominator, duration in us or -1,
++ * default 0/1, attached picture 0/1].
++ */
++DEMUX_FUNC(jlongArray, nativeStream, jlong handle, jint index) {
++  Handle *h = handleOf(env, handle);
++  if (!validStream(h, index)) return nullptr;
++  const AVStream *st = h->demuxer->context->streams[index];
++  const AVCodecParameters *p = st->codecpar;
++  AVRational fps = st->avg_frame_rate.num > 0 && st->avg_frame_rate.den > 0 ? st->avg_frame_rate : st->r_frame_rate;
++  int64_t duration = st->duration > 0 ? av_rescale_q(st->duration, st->time_base, AV_TIME_BASE_Q) : -1;
++  jlong values[14] = {
++      p->codec_type == AVMEDIA_TYPE_VIDEO ? 0 : p->codec_type == AVMEDIA_TYPE_AUDIO ? 1 : 2,
++      p->width, p->height, p->sample_rate, p->ch_layout.nb_channels, p->bit_rate, p->block_align,
++      p->bits_per_coded_sample, (jlong) p->codec_tag, fps.num, fps.den, duration,
++      (st->disposition & AV_DISPOSITION_DEFAULT) ? 1 : 0,
++      (st->disposition & AV_DISPOSITION_ATTACHED_PIC) ? 1 : 0,
++  };
++  jlongArray out = env->NewLongArray(14);
++  if (out != nullptr) env->SetLongArrayRegion(out, 0, 14, values);
++  return out;
++}
++
++/**
++ * 0: the name of this build's decoder for the stream (null when there is none), 1: the codec's
++ * name, 2: the language tag, 3: the demuxer's name, 4: the demuxer's long name.
++ */
++DEMUX_FUNC(jstring, nativeText, jlong handle, jint index, jint what) {
++  Handle *h = handleOf(env, handle);
++  if (h == nullptr || h->demuxer == nullptr) return nullptr;
++  const AVFormatContext *c = h->demuxer->context;
++  if (what == 3) return asciiString(env, c->iformat->name, 40);
++  if (what == 4) return asciiString(env, c->iformat->long_name, 60);
++  if (!validStream(h, index)) return nullptr;
++  const AVStream *st = c->streams[index];
++  switch (what) {
++    case 0: {
++      const AVCodec *codec = avcodec_find_decoder(st->codecpar->codec_id);
++      return codec == nullptr ? nullptr : asciiString(env, codec->name, 40);
++    }
++    case 1: return asciiString(env, avcodec_get_name(st->codecpar->codec_id), 40);
++    case 2: {
++      const AVDictionaryEntry *e = av_dict_get(st->metadata, "language", nullptr, 0);
++      return e == nullptr ? nullptr : asciiString(env, e->value, 16);
++    }
++    default: return nullptr;
++  }
++}
++
++DEMUX_FUNC(jbyteArray, nativeExtraData, jlong handle, jint index) {
++  Handle *h = handleOf(env, handle);
++  if (!validStream(h, index)) return nullptr;
++  const AVCodecParameters *p = h->demuxer->context->streams[index]->codecpar;
++  if (p->extradata == nullptr || p->extradata_size <= 0 || p->extradata_size > tmdemux::kMaxExtraData) return nullptr;
++  jbyteArray out = env->NewByteArray(p->extradata_size);
++  if (out != nullptr) env->SetByteArrayRegion(out, 0, p->extradata_size, reinterpret_cast<const jbyte *>(p->extradata));
++  return out;
++}
++
++/** The key frames the demuxer knows of in [stream]: time (us), byte, time, byte... */
++DEMUX_FUNC(jlongArray, nativeIndex, jlong handle, jint stream) {
++  Handle *h = handleOf(env, handle);
++  if (!validStream(h, stream)) return nullptr;
++  int count = avformat_index_get_entries_count(h->demuxer->context->streams[stream]);
++  if (count <= 0) return env->NewLongArray(0);
++  int capacity = count < tmdemux::kMaxIndexEntries ? count : tmdemux::kMaxIndexEntries;
++  int64_t *pairs = new int64_t[2 * (size_t) capacity];
++  int written = tmdemux::index(h->demuxer, stream, pairs, capacity);
++  jlongArray out = env->NewLongArray(2 * written);
++  if (out != nullptr && written > 0) env->SetLongArrayRegion(out, 0, 2 * written, reinterpret_cast<const jlong *>(pairs));
++  delete[] pairs;
++  return out;
++}
++
++/**
++ * Reads the next packet: its size, with [meta] = [stream, time in us or Long.MIN_VALUE, duration
++ * in us, key 0/1, byte position], or below 0 (-1 the end, another value an error). Its bytes are
++ * fetched with nativeCopy.
++ */
++DEMUX_FUNC(jint, nativeRead, jlong handle, jlongArray meta) {
++  Handle *h = handleOf(env, handle);
++  if (h == nullptr || h->demuxer == nullptr || meta == nullptr || env->GetArrayLength(meta) < 5) return -2;
++  h->hasPacket = false;
++  int ret = tmdemux::read(h->demuxer, &h->packet);
++  if (ret == AVERROR_EOF) return -1;
++  if (ret < 0) return ret == -1 ? -2 : ret;
++  h->hasPacket = true;
++  jlong values[5] = {h->packet.stream, h->packet.timeUs, h->packet.durationUs, h->packet.key ? 1 : 0, h->packet.position};
++  env->SetLongArrayRegion(meta, 0, 5, values);
++  return h->packet.size;
++}
++
++DEMUX_FUNC(jint, nativeCopy, jlong handle, jbyteArray out) {
++  Handle *h = handleOf(env, handle);
++  if (h == nullptr || !h->hasPacket || out == nullptr) return -1;
++  if (env->GetArrayLength(out) < h->packet.size) return -1;
++  if (h->packet.size > 0) env->SetByteArrayRegion(out, 0, h->packet.size, reinterpret_cast<const jbyte *>(h->packet.data));
++  return h->packet.size;
++}
++
++DEMUX_FUNC(jint, nativeSeek, jlong handle, jlong timeUs, jlong bytePosition) {
++  Handle *h = handleOf(env, handle);
++  if (h == nullptr || h->demuxer == nullptr) return -1;
++  h->hasPacket = false;
++  return tmdemux::seek(h->demuxer, timeUs, bytePosition);
++}
++
++DEMUX_FUNC(void, nativeClose, jlong handle) {
++  Handle *h = handleOf(env, handle);
++  if (h == nullptr) return;
++  tmdemux::close(h->demuxer);
++  env->DeleteGlobalRef(h->io);
++  env->DeleteGlobalRef(h->buffer);
++  delete h;
++}
+--- a/media3ext/src/main/cpp/ffdemux.h
++++ b/media3ext/src/main/cpp/ffdemux.h
+@@ -0,0 +1,333 @@
++// TMPlayer (tm4, C2): FFmpeg's libavformat as the last-resort container reader of the app's Media3
++// extractor (com.tmplayer.player.demux.FfmpegExtractor), for the containers Media3 has no extractor
++// for: ASF/WMV/WMA, RealMedia, MPEG-1 system streams, Ogg with Theora, NUT, MXF, DV and others (the
++// list below; ffmpeg/setup.sh compiles these demuxers and no other).
++//
++// Pure C++ over libavformat with no JNI, so scripts/media3ext/bench/demuxtest.cpp runs the same code
++// on the host. The bytes come from two callbacks, read and seek, that the app answers from Media3's
++// ExtractorInput (which a seek reopens at the new byte, moving TDLib's download there): libavformat
++// reads only what the demuxer asks for and never opens anything by itself (no protocol is compiled
++// and io_open refuses).
++//
++// Outside data: every size, count and index is bounded here, and a file the demuxer refuses is an
++// error, never a crash of this code.
++#ifndef TMPLAYER_FFDEMUX_H
++#define TMPLAYER_FFDEMUX_H
++
++#include <cstdint>
++#include <cstring>
++
++extern "C" {
++#include <libavcodec/avcodec.h>
++#include <libavformat/avformat.h>
++#include <libavutil/avutil.h>
++#include <libavutil/mathematics.h>
++}
++
++namespace tmdemux {
++
++/** The version of this interface, so the app can tell an AAR without it, or an older one. */
++constexpr int kApiVersion = 1;
++
++constexpr int kAvioBufferSize = 64 * 1024;
++/** What libavformat may read to find the streams: 1 MB and 2 s of picture, enough for every header. */
++constexpr int64_t kProbeSize = 1 << 20;
++constexpr int64_t kMaxAnalyzeDuration = 2 * AV_TIME_BASE;
++constexpr int kMaxStreams = 32;
++constexpr int kMaxExtraData = 1 << 20;
++constexpr int kMaxPacket = 32 << 20;
++constexpr int kMaxIndexEntries = 1 << 16;
++/** The bytes the sniff hands probe(). */
++constexpr int kProbeBytes = 32 * 1024;
++/** A probe score below this is a guess (libavformat's own retry threshold). */
++constexpr int kMinProbeScore = AVPROBE_SCORE_MAX / 4;
++
++/**
++ * The demuxers this reader uses, by libavformat's runtime name (MPEG-PS is "mpeg"). Every other
++ * container is Media3's, whose extractors run first.
++ */
++static const char *const kDemuxers[] = {
++    "asf", "rm", "ivr", "xwma", "dv", "nut", "mxf", "nsv", "wtv", "ape", "tta", "wv",
++    "aiff", "au", "caf", "voc", "w64", "ogg", "mpeg", "smjpeg", "vivo",
++};
++
++inline bool allowedDemuxer(const char *name) {
++  if (name == nullptr) return false;
++  for (const char *allowed : kDemuxers) {
++    if (strcmp(allowed, name) == 0) return true;
++  }
++  return false;
++}
++
++/**
++ * The name of the demuxer (one of kDemuxers) that recognises [data], or nullptr. [size] may be
++ * anything; only the first kProbeBytes are looked at.
++ */
++inline const char *probe(const uint8_t *data, int size) {
++  if (data == nullptr || size <= 0) return nullptr;
++  if (size > kProbeBytes) size = kProbeBytes;
++  // libavformat's probes read up to AVPROBE_PADDING_SIZE past the end, which must be zeros.
++  uint8_t *padded = static_cast<uint8_t *>(av_mallocz(size + AVPROBE_PADDING_SIZE));
++  if (padded == nullptr) return nullptr;
++  memcpy(padded, data, size);
++  AVProbeData pd = {};
++  pd.filename = "";
++  pd.buf = padded;
++  pd.buf_size = size;
++  int score = 0;
++  const AVInputFormat *format = av_probe_input_format3(&pd, 1, &score);
++  av_free(padded);
++  if (format == nullptr || score < kMinProbeScore || !allowedDemuxer(format->name)) return nullptr;
++  return format->name;
++}
++
++/** Where the bytes come from. read: bytes read, 0 or AVERROR_EOF at the end, below 0 an error. */
++struct Io {
++  void *opaque = nullptr;
++  int (*read)(void *opaque, uint8_t *buffer, int size) = nullptr;
++  /** Moves to [position] and returns it, or below 0. */
++  int64_t (*seek)(void *opaque, int64_t position) = nullptr;
++  /** The file's size, or -1 when unknown (no seeking then). */
++  int64_t size = -1;
++};
++
++struct Packet {
++  int stream = -1;
++  /** Presentation time (or decode time where there is none) in microseconds from the start, or INT64_MIN. */
++  int64_t timeUs = INT64_MIN;
++  int64_t durationUs = 0;
++  bool key = false;
++  int64_t position = -1;
++  const uint8_t *data = nullptr;
++  int size = 0;
++};
++
++struct Demuxer {
++  AVFormatContext *context = nullptr;
++  AVIOContext *avio = nullptr;
++  AVPacket *packet = nullptr;
++  Io io;
++  int64_t position = 0;
++  int64_t startUs = 0;
++  int64_t dataStart = 0;
++  bool aborted = false;
++};
++
++namespace detail {
++
++inline int readCallback(void *opaque, uint8_t *buffer, int size) {
++  Demuxer *d = static_cast<Demuxer *>(opaque);
++  if (d->aborted) return AVERROR_EXIT;
++  if (size <= 0) return 0;
++  int n = d->io.read(d->io.opaque, buffer, size);
++  if (n == 0 || n == AVERROR_EOF) return AVERROR_EOF;
++  if (n < 0) return n;
++  if (n > size) return AVERROR(EIO);
++  d->position += n;
++  return n;
++}
++
++inline int64_t seekCallback(void *opaque, int64_t offset, int whence) {
++  Demuxer *d = static_cast<Demuxer *>(opaque);
++  if (d->aborted) return AVERROR_EXIT;
++  whence &= ~AVSEEK_FORCE;
++  if (whence == AVSEEK_SIZE) return d->io.size >= 0 ? d->io.size : AVERROR(ENOSYS);
++  int64_t target;
++  switch (whence) {
++    case SEEK_SET: target = offset; break;
++    case SEEK_CUR: target = d->position + offset; break;
++    case SEEK_END:
++      if (d->io.size < 0) return AVERROR(ENOSYS);
++      target = d->io.size + offset;
++      break;
++    default: return AVERROR(EINVAL);
++  }
++  if (target < 0 || (d->io.size >= 0 && target > d->io.size)) return AVERROR(EINVAL);
++  int64_t at = d->io.seek(d->io.opaque, target);
++  if (at < 0) return at;
++  d->position = at;
++  return at;
++}
++
++/** No nested opens: a playlist, a reference or an image sequence never reaches the disk or the net. */
++inline int refuseOpen(AVFormatContext *, AVIOContext **, const char *, int, AVDictionary **) {
++  return AVERROR(EPERM);
++}
++
++}  // namespace detail
++
++inline void close(Demuxer *d) {
++  if (d == nullptr) return;
++  if (d->context != nullptr) avformat_close_input(&d->context);
++  if (d->avio != nullptr) {
++    av_freep(&d->avio->buffer);
++    avio_context_free(&d->avio);
++  }
++  if (d->packet != nullptr) av_packet_free(&d->packet);
++  delete d;
++}
++
++/** The stream seeks and the SeekMap go by: the first picture, else the first sound. */
++inline int mainStream(const Demuxer *d) {
++  int audio = -1;
++  for (unsigned i = 0; i < d->context->nb_streams; i++) {
++    const AVCodecParameters *p = d->context->streams[i]->codecpar;
++    if (p->codec_type == AVMEDIA_TYPE_VIDEO && !(d->context->streams[i]->disposition & AV_DISPOSITION_ATTACHED_PIC)) return (int) i;
++    if (p->codec_type == AVMEDIA_TYPE_AUDIO && audio < 0) audio = (int) i;
++  }
++  return audio;
++}
++
++/**
++ * Opens [format] (one of kDemuxers) over [io] and reads its streams. Returns nullptr on any
++ * failure, with [error] set to libavformat's code where there is one.
++ */
++inline Demuxer *open(const char *format, const Io &io, int *error) {
++  *error = 0;
++  if (!allowedDemuxer(format) || io.read == nullptr || io.seek == nullptr) {
++    *error = AVERROR(EINVAL);
++    return nullptr;
++  }
++  const AVInputFormat *input = av_find_input_format(format);
++  if (input == nullptr) {
++    *error = AVERROR_DEMUXER_NOT_FOUND;
++    return nullptr;
++  }
++  Demuxer *d = new Demuxer();
++  d->io = io;
++  d->packet = av_packet_alloc();
++  uint8_t *buffer = static_cast<uint8_t *>(av_malloc(kAvioBufferSize));
++  if (d->packet == nullptr || buffer == nullptr) {
++    av_free(buffer);
++    close(d);
++    *error = AVERROR(ENOMEM);
++    return nullptr;
++  }
++  d->avio = avio_alloc_context(buffer, kAvioBufferSize, 0, d, detail::readCallback, nullptr, detail::seekCallback);
++  if (d->avio == nullptr) {
++    av_free(buffer);
++    close(d);
++    *error = AVERROR(ENOMEM);
++    return nullptr;
++  }
++  d->avio->seekable = io.size > 0 ? AVIO_SEEKABLE_NORMAL : 0;
++  // A jump of up to 32 KB past the buffer is read through by libavformat itself; any other is
++  // the seek callback's, which the app answers by reading on (up to 256 KB) or by reopening there.
++  AVFormatContext *context = avformat_alloc_context();
++  if (context == nullptr) {
++    close(d);
++    *error = AVERROR(ENOMEM);
++    return nullptr;
++  }
++  context->pb = d->avio;
++  context->flags |= AVFMT_FLAG_CUSTOM_IO | AVFMT_FLAG_DISCARD_CORRUPT;
++  context->probesize = kProbeSize;
++  context->max_analyze_duration = kMaxAnalyzeDuration;
++  context->max_streams = kMaxStreams;
++  context->io_open = detail::refuseOpen;
++  int ret = avformat_open_input(&context, "", input, nullptr);
++  if (ret < 0) {
++    // avformat_open_input frees the context on failure, never the custom AVIO.
++    close(d);
++    *error = ret;
++    return nullptr;
++  }
++  d->context = context;
++  d->dataStart = avio_tell(d->avio);
++  // The streams a header leaves out (MPEG-PS has none), and the picture size and sample rate of
++  // the rest. A failure here keeps what the header gave.
++  avformat_find_stream_info(context, nullptr);
++  if (context->nb_streams == 0 || mainStream(d) < 0) {
++    close(d);
++    *error = AVERROR_INVALIDDATA;
++    return nullptr;
++  }
++  d->startUs = context->start_time != AV_NOPTS_VALUE && context->start_time > 0 ? context->start_time : 0;
++  // ASF keeps its index at the end, read only by its first seek: one tail read now (like an MP4
++  // with its index at the end), so the SeekMap has the index from the start. Seeking to the start
++  // also takes the reader back to the first packet, which the stream search went past.
++  if (strcmp(format, "asf") == 0 && d->avio->seekable) {
++    av_seek_frame(context, -1, context->start_time != AV_NOPTS_VALUE ? context->start_time : 0, AVSEEK_FLAG_BACKWARD);
++  }
++  return d;
++}
++
++/** Reads the next packet into [out]; 0, AVERROR_EOF at the end, or another error. */
++inline int read(Demuxer *d, Packet *out) {
++  av_packet_unref(d->packet);
++  for (int skipped = 0; skipped < 1024; skipped++) {
++    int ret = av_read_frame(d->context, d->packet);
++    if (ret < 0) return ret;
++    const AVPacket *p = d->packet;
++    if (p->stream_index < 0 || (unsigned) p->stream_index >= d->context->nb_streams ||
++        p->size < 0 || p->size > kMaxPacket || (p->size > 0 && p->data == nullptr)) {
++      av_packet_unref(d->packet);
++      continue;
++    }
++    const AVStream *st = d->context->streams[p->stream_index];
++    int64_t ts = p->pts != AV_NOPTS_VALUE ? p->pts : p->dts;
++    out->stream = p->stream_index;
++    out->timeUs = ts == AV_NOPTS_VALUE ? INT64_MIN : av_rescale_q(ts, st->time_base, AV_TIME_BASE_Q) - d->startUs;
++    out->durationUs = p->duration > 0 ? av_rescale_q(p->duration, st->time_base, AV_TIME_BASE_Q) : 0;
++    out->key = (p->flags & AV_PKT_FLAG_KEY) != 0;
++    out->position = p->pos;
++    out->data = p->data;
++    out->size = p->size;
++    return 0;
++  }
++  return AVERROR_INVALIDDATA;
++}
++
++/**
++ * Seeks to the last key frame at or before [timeUs] (from the start); [bytePosition], when not
++ * negative, is where to go on if the demuxer cannot seek by time. 0 or an error.
++ */
++inline int seek(Demuxer *d, int64_t timeUs, int64_t bytePosition) {
++  // A read the app cut short (a seek arrived while it waited) leaves the AVIO marked failed.
++  d->avio->error = 0;
++  d->avio->eof_reached = 0;
++  int64_t target = timeUs + d->startUs;
++  if (target < 0) target = 0;
++  int ret = av_seek_frame(d->context, -1, target, AVSEEK_FLAG_BACKWARD);
++  if (ret < 0) ret = avformat_seek_file(d->context, -1, INT64_MIN, target, target, 0);
++  if (ret < 0 && bytePosition >= 0) {
++    d->avio->error = 0;
++    d->avio->eof_reached = 0;
++    ret = av_seek_frame(d->context, -1, bytePosition, AVSEEK_FLAG_BYTE);
++  }
++  return ret;
++}
++
++/**
++ * The key frames the demuxer knows of in [stream], as time (microseconds from the start) and byte
++ * pairs into [out] (room for [capacity] pairs). Returns the number of pairs written.
++ */
++inline int index(const Demuxer *d, int stream, int64_t *out, int capacity) {
++  if (stream < 0 || (unsigned) stream >= d->context->nb_streams || capacity <= 0) return 0;
++  AVStream *st = d->context->streams[stream];
++  int count = avformat_index_get_entries_count(st);
++  if (count <= 0) return 0;
++  // Every entry, or an even spread over a huge index.
++  int step = count > capacity ? (count + capacity - 1) / capacity : 1;
++  int written = 0;
++  int64_t lastTime = INT64_MIN;
++  for (int i = 0; i < count && written < capacity; i += step) {
++    const AVIndexEntry *e = avformat_index_get_entry(st, i);
++    if (e == nullptr || !(e->flags & AVINDEX_KEYFRAME) || e->pos < 0 || e->timestamp == AV_NOPTS_VALUE) continue;
++    int64_t t = av_rescale_q(e->timestamp, st->time_base, AV_TIME_BASE_Q) - d->startUs;
++    if (t <= lastTime) continue;
++    lastTime = t;
++    out[2 * written] = t;
++    out[2 * written + 1] = e->pos;
++    written++;
++  }
++  return written;
++}
++
++inline int64_t durationUs(const Demuxer *d) {
++  return d->context->duration > 0 ? d->context->duration : -1;
++}
++
++}  // namespace tmdemux
++
++#endif  // TMPLAYER_FFDEMUX_H
+--- a/media3ext/src/main/cpp/fflight.h
 +++ b/media3ext/src/main/cpp/fflight.h
 @@ -0,0 +1,70 @@
 +// TMPlayer (HX2c): the frame step of the light video mode, kept apart so the host benchmark
