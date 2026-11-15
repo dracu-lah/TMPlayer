@@ -38,6 +38,7 @@ import com.tmplayer.online.TmdbApi
 import com.tmplayer.online.TvMazeApi
 import com.tmplayer.online.WikidataApi
 import com.tmplayer.platform.IOException
+import com.tmplayer.player.ChatSubtitles
 import com.tmplayer.player.MkvChapters
 import com.tmplayer.player.MkvClusters
 import com.tmplayer.player.Mp4Chapters
@@ -394,6 +395,20 @@ class GarbageInputTest {
                 }
                 SessionCheck.isAuthError(401, text)
             }
+            survive("ChatSubtitles.tagsOf and rank", text) {
+                ChatSubtitles.tagsOf(text)
+                ChatSubtitles.languageCode(text)
+                ChatSubtitles.rank(
+                    ChatSubtitles.Video(messageId = 1L shl 20, fileName = text, caption = text),
+                    listOf(ChatSubtitles.Doc(2L shl 20, 1, text + ".srt", 100), ChatSubtitles.Doc(Long.MAX_VALUE, 2, text, Long.MAX_VALUE), ChatSubtitles.Doc(-5, 3, text, -1)),
+                    listOf(text),
+                )
+            }
+            survive("ChatSubtitleText.read (text as a file)", text) {
+                runBlocking {
+                    for (name in listOf("a.srt", "a.ass", "a.vtt", "a.sub", "a.zip", text)) ChatSubtitleText.read(text.toByteArray(), name, 1, 2, text)
+                }
+            }
             survive("MsoneApi.parse", text) {
                 MsoneApi.parseHealth(text, 0)
                 MsoneApi.parseHits(text)
@@ -418,6 +433,9 @@ class GarbageInputTest {
             survive("Mp4Probe.parseMoov", shown) { Mp4Probe.parseMoov(data) }
             survive("JpegSize.read", shown) { JpegSize.read(data) }
             survive("SubtitleText.decode", shown) { SubtitleText.decode(data); SubtitleText.decode(data, "ar") }
+            survive("ChatSubtitleText.read (bytes as a file)", shown) {
+                runBlocking { for (name in listOf("a.srt", "a.ass", "a.sub", "a.zip", "a.vtt")) ChatSubtitleText.read(data, name, 1, 2, "ar") }
+            }
             survive("ZipArchive.inspect", shown) {
                 runBlocking {
                     val source = object : ZipSource {
