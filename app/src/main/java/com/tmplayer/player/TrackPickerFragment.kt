@@ -744,7 +744,7 @@ class TrackPickerFragment : Fragment() {
                 val chosen = colour == selected
                 Box(
                     Modifier
-                        .size(44.dp)
+                        .size(48.dp)
                         .clip(CircleShape)
                         .then(
                             if (chosen) {

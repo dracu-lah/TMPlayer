@@ -169,9 +169,6 @@ import com.tmplayer.data.guardedLifecycleScope as lifecycleScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** How long a first press of Back stays armed before it is forgotten. */
-private const val EXIT_WINDOW_MS = 2_000L
-
 /**
  * The mandatory chat choice's picker ([com.tmplayer.data.ChatsGate]) keeps its view model under
  * this run (counting down by one for each time the gate is answered), apart from every opening
@@ -1193,8 +1190,6 @@ private fun Root() {
     // must not be drawn: it would appear fully for a moment and then be replaced, which reads as
     // a glitch rather than as opening the chat the viewer asked to come back to.
     var autoOpenDecided by rememberSaveable { mutableStateOf(false) }
-    // Whether a first press of Back has already been made at the top level.
-    var exitArmed by remember { mutableStateOf(false) }
     // Hoisted out of BrowseScreen: opening a chat replaces that screen entirely, so a tab held
     // down there would be forgotten every time the viewer backed out of a chat.
     //
@@ -1880,23 +1875,9 @@ private fun Root() {
             MainActivity.requestedChat.value = null
         }
 
-        // At the top level Back would leave the app outright, and on a remote it sits right next
-        // to the D-pad and is very easy to hit by accident. Two presses, the way every other app
-        // on this television does it.
-        if (screen is Screen.Chats) {
-            val activity = LocalActivity.current
-            BackHandler {
-                if (exitArmed) activity?.finish() else { exitArmed = true; toast(L.mainBackAgain) }
-            }
-            // The second press has to follow the first, not arrive ten minutes later on a screen
-            // the viewer has long since forgotten pressing Back on.
-            LaunchedEffect(exitArmed) {
-                if (exitArmed) {
-                    delay(EXIT_WINDOW_MS)
-                    exitArmed = false
-                }
-            }
-        }
+        // The top level has no Back handler of its own: Back leaves, as in every other app, with no
+        // "press again" (rule 13 of the UX interaction plan), and the system's back-to-home
+        // animation plays because nothing here claims the press.
 
         // Home's rows, built here rather than inside Home so the TV home screen channels follow
         // them whichever screen is open. Recently added is the featured carousel at the top of

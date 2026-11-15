@@ -11,7 +11,12 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
@@ -48,7 +53,7 @@ fun TmAlertDialog(
         },
         // Drawn over the dialog's own surface, which is the same size and shape, so the hairline
         // sits exactly on its edge.
-        modifier = modifier.border(floatingBorder(), Floating.DialogShape),
+        modifier = modifier.border(floatingBorder(), Floating.DialogShape).escapeCloses(onDismissRequest),
         dismissButton = if (remote && dismissButton != null) {
             { DialogRemotePart(onDismissRequest, takeFocus = true, content = dismissButton) }
         } else {
@@ -64,6 +69,22 @@ fun TmAlertDialog(
         shape = Floating.DialogShape,
         containerColor = FloatingTone.dialog,
     )
+}
+
+/**
+ * Esc closes a dialog, whichever layer implementation draws it: the desktop's dialog layer and a
+ * tablet's hardware keyboard do not all send it to the dismiss request themselves. Only a bare Esc
+ * (a chord is somebody else's), and only while focus is inside the dialog; the press is spent
+ * here, so the page under it never hears the same key.
+ */
+internal fun Modifier.escapeCloses(onDismiss: () -> Unit): Modifier = onPreviewKeyEvent { event ->
+    val bare = !event.isCtrlPressed && !event.isAltPressed && !event.isMetaPressed && !event.isShiftPressed
+    if (event.key == Key.Escape && bare) {
+        if (event.type == KeyEventType.KeyDown) onDismiss()
+        true
+    } else {
+        false
+    }
 }
 
 /**

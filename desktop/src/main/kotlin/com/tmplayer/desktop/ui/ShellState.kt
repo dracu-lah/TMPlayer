@@ -723,6 +723,14 @@ class ShellState(
     }
 
     /**
+     * Whether something sits over the page that Esc should close before it does anything to the
+     * window: the profile menu, the search palette, a detail pane or a modal page (Settings).
+     * Dialogs are their own layer and take the key before it gets here.
+     */
+    val transientLayerOpen: Boolean
+        get() = profileOpen || paletteOpen || detail != null || modalOpen
+
+    /**
      * Keys nothing focused wanted: "/" to search (a text field keeps its own slash), and the back
      * keys, which unwind the [backStack] one rung at a time.
      */
@@ -732,7 +740,8 @@ class ShellState(
             // On a television full screen is the last rung rather than the first: Back unwinds
             // the pages, and only then leaves it.
             if (BigScreen.on) return backStack.handleBack() || lastBack()
-            if (fullscreen) {
+            // Esc is spent on the layer over the page (a menu, a pane, Settings) before the window.
+            if (fullscreen && !transientLayerOpen) {
                 fullscreen = false
                 return true
             }
