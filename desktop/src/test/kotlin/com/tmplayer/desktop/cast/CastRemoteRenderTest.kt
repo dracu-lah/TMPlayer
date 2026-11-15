@@ -66,6 +66,13 @@ class CastRemoteRenderTest {
     private val trouble = playing.copy(phase = CastPhase.Failed, error = "The TV couldn't play this video.", showsPause = false, note = null)
     private val buffering = playing.copy(phase = CastPhase.Buffering, note = "Your TV can't play this video's sound, so the phone converts it.", speed = 1.5f, subtitlesOn = false, volumeFixed = true)
 
+    // A transcode: the progress card under the note, and the slow word with it.
+    private val converting = playing.copy(
+        note = "Your TV can't play this format directly, so the phone converts it.",
+        converting = com.tmplayer.cast.TranscodeProgress(0, 802_000, 1_442_000, 1.6f),
+    )
+    private val convertingSlow = converting.copy(converting = com.tmplayer.cast.TranscodeProgress(600_000, 640_000, 0, 0.8f, slow = true))
+
     private class Form(val name: String, val widthDp: Int, val heightDp: Int, val density: Float)
 
     private val forms = listOf(
@@ -114,7 +121,7 @@ class CastRemoteRenderTest {
     @Test
     fun `the cast remote draws on every form in both themes`() {
         val out = File("build/cast-shots").apply { mkdirs() }
-        for (form in forms) for (dark in listOf(false, true)) for ((label, state) in listOf("playing" to playing, "buffering" to buffering, "failed" to trouble)) {
+        for (form in forms) for (dark in listOf(false, true)) for ((label, state) in listOf("playing" to playing, "buffering" to buffering, "failed" to trouble, "converting" to converting, "converting-slow" to convertingSlow)) {
             val w = (form.widthDp * form.density).toInt()
             val h = (form.heightDp * form.density).toInt()
             val png = ImageComposeScene(w, h, Density(form.density)) {

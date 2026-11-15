@@ -94,6 +94,8 @@ data class CastRemoteState(
     val speed: Float? = null,
     val hasPrevious: Boolean = false,
     val hasNext: Boolean = false,
+    /** A transcode for this TV, while it runs: the progress card with Stop converting. */
+    val converting: com.tmplayer.cast.TranscodeProgress? = null,
 )
 
 /** What the cast remote's controls do; the platform's sender behind them. */
@@ -114,6 +116,9 @@ interface CastRemoteActions {
     fun reconnect()
     fun playHere()
     fun retry()
+
+    /** Stop converting: the transcode and the TV's player stop, Try again and Play here offered. */
+    fun cancelConvert() {}
 }
 
 /** The skips the remote's arrows make, as the player's own. */
@@ -270,6 +275,10 @@ private fun StatusPanel(state: CastRemoteState, actions: CastRemoteActions, s: M
         if (note != null) {
             Spacer(Modifier.height(if (inline) 6.dp else 12.dp))
             Text(note, style = MaterialTheme.typography.bodySmall, color = Tone.muted, maxLines = if (inline) 2 else 4, overflow = TextOverflow.Ellipsis)
+        }
+        if (!trouble && state.converting != null) {
+            Spacer(Modifier.height(if (inline) 6.dp else 12.dp))
+            CastConvertingCard(state.converting, actions::cancelConvert)
         }
         if (trouble) {
             Spacer(Modifier.height(if (inline) 8.dp else 16.dp))
