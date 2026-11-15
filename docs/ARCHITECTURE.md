@@ -119,8 +119,8 @@ in a release yet: keep this table in step with the code when it ships.
 | | Phone | Android TV and Fire TV | Desktop | Web app | Tizen and webOS |
 | --- | --- | --- | --- | --- | --- |
 | Player | Media3 ExoPlayer, NextLib for audio the chip cannot decode | the same player, one overlay walked with the remote | libmpv through mediamp | the browser's own player | no app: the web app opens in the TV's browser (beta) |
-| Second engine (VLC) | planned, chosen per device, ExoPlayer stays the default | planned, as the phone | not applicable, mpv is already the second family | not applicable | not applicable |
-| Open in another app | player menu: a downloaded video, or a partial one as far as it has got; a streamed hand over is planned | hold OK on a video, same hand over | open a downloaded video in the computer's default player | not applicable | not applicable |
+| Second engine (VLC) | built with `-PtmVlc=true` only, off in released builds and in F-Droid (see `docs/distribution/libvlc-spike.md`), chosen per device, ExoPlayer stays the default; never run on a real device yet | the same as the phone | not applicable, mpv is already the second family | not applicable | not applicable |
+| Open in another app | player menu: a downloaded video, or a partial one as far as it has got; a video still downloading streams to the other app through a loopback server (Settings, Playback, Default player) | hold OK on a video, same hand over | open a downloaded video in the computer's default player | not applicable | not applicable |
 | Software video fallback | Settings, Playback, Prefer software video; Try the other decoder in the player menu | the same | not needed, mpv decides | not applicable | not applicable |
 | Stutter diagnostics | could-not-keep-up card with codec, decoder, dropped frames and whether the video streamed | the same card | none yet | none | none |
 | Logs and upload | Send logs shares a scrubbed file; crash reports go to Sentry only when the viewer agrees; nothing is uploaded on its own | saves the file to the Download folder (no share sheet on every TV) | saves the file | none | none |
