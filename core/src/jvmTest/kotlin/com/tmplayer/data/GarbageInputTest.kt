@@ -276,6 +276,21 @@ class GarbageInputTest {
     }
 
     @Test
+    fun formatLineNeverThrows() {
+        for (text in texts + "a".repeat(2_048)) {
+            survive("FormatLine.line", text) {
+                val facts = com.tmplayer.player.FormatLine.Facts(
+                    videoMime = text, videoCodecs = text, width = text.length, height = -text.length, frameRate = text.length.toFloat(),
+                    audioMime = text, audioCodecs = text, channels = text.length, containerMime = text,
+                )
+                com.tmplayer.player.FormatLine.copyBlock(com.tmplayer.player.FormatLine.line(facts, listOf(text)), listOf(com.tmplayer.player.FormatLine.Decoders(text, listOf(text))))
+            }
+            survive("FileDatacenter.of", text) { com.tmplayer.player.FileDatacenter.of(text) }
+        }
+        assertNoFailures()
+    }
+
+    @Test
     fun textParsersNeverThrow() {
         for (text in texts) {
             survive("UpdateFeed.parseFeed", text) { UpdateFeed.parseFeed(text) }
