@@ -44,6 +44,10 @@ const SOUND_PACKETS_PER_CALL = 64
 /** How far ahead of the clock sound is scheduled, seconds. */
 const SOUND_AHEAD = 3
 const TIME_EVENT_MS = 250
+/** A refresh later than this after the last one is a slow display (a TV, WebKit with no GPU under load): see [kick]. */
+const SLOW_REFRESH_MS = 34
+/** How often the timer looks at the screen while the display is slow, so a late refresh does not make the picture late. */
+const TIMER_STEP_MS = 10
 const SEEK_SETTLE_MS = 120
 
 /**
@@ -130,6 +134,8 @@ export class CanvasEngine implements Engine {
     private silent: boolean
     private raf = 0
     private loopTimer: ReturnType<typeof setTimeout> | undefined
+    private lastRefresh = 0
+    private slowDisplay = false
     private lastTimeEvent = 0
     private underruns: number[] = []
     private saidSlow = false
@@ -482,16 +488,43 @@ export class CanvasEngine implements Engine {
         clearTimeout(this.waitTimer)
     }
 
-    /** Asks for a look at the screen: one refresh while a frame may be due or have arrived. */
+    /**
+     * Asks for a look at the screen: the next refresh, and a timer beside it. The refresh is the
+     * right moment to draw while it comes on time; a display that is slow to refresh (WebKit with
+     * no GPU on a busy machine ran its refreshes 120 ms apart while its timers were on time, a TV
+     * is the same) would leave the picture a refresh behind the sound, so after a late refresh the
+     * timer looks every few milliseconds and draws what is due. Either one that comes first looks;
+     * the other one stays set for the next look.
+     */
     private kick() {
-        if (this.destroyed || this.raf || this.loopTimer) return
-        if (document.hidden) this.loopTimer = setTimeout(this.loop, 500)
-        else this.raf = requestAnimationFrame(this.loop)
+        if (this.destroyed) return
+        if (document.hidden) {
+            if (!this.loopTimer) this.loopTimer = setTimeout(this.onTimer, 500)
+            return
+        }
+        if (!this.raf) this.raf = requestAnimationFrame(this.onRefresh)
+        if (!this.loopTimer) this.loopTimer = setTimeout(this.onTimer, this.slowDisplay ? TIMER_STEP_MS : SLOW_REFRESH_MS)
     }
 
-    private readonly loop = () => {
+    private readonly onRefresh = () => {
         this.raf = 0
+        const now = performance.now()
+        this.slowDisplay = this.lastRefresh > 0 && now - this.lastRefresh > SLOW_REFRESH_MS
+        this.lastRefresh = now
+        // The refresh looks now; the timer is set again by [kick] when the clock still runs.
+        clearTimeout(this.loopTimer)
         this.loopTimer = undefined
+        this.look()
+    }
+
+    /** The timer came first: the refresh is late. */
+    private readonly onTimer = () => {
+        this.loopTimer = undefined
+        if (!document.hidden) this.slowDisplay = true
+        this.look()
+    }
+
+    private look() {
         if (this.destroyed) return
         this.step()
         // Stays on the refresh only while the clock runs; every other state is woken by a picture arriving.
