@@ -94,6 +94,7 @@ import com.tmplayer.ui.browse.SearchResultCard
 import com.tmplayer.ui.browse.SearchResultSkeleton
 import com.tmplayer.ui.browse.label
 import com.tmplayer.ui.browse.message
+import com.tmplayer.ui.browse.openResult
 import com.tmplayer.ui.browse.searchStatus
 import com.tmplayer.ui.components.TmDropdownMenu
 import com.tmplayer.ui.components.rememberToast
@@ -277,16 +278,14 @@ internal fun BoxScope.SearchPalette(
         }
         scope.launch {
             val lead = group.lead
-            if (!search.check(lead)) {
-                toast(s.searchNoLongerThere)
-                return@launch
-            }
-            close()
-            val item = group.asItem()
-            if (play || !state.detailFirst) {
-                state.openPlayer(lead, startFromBeginning = false)
-            } else {
-                state.openDetail(DetailRequest(item = item, chatTitle = state.chatTitleOf(lead.chatId), outsideChat = true))
+            search.openResult(lead, GlobalSearch.titleOf(group), onGone = { toast(s.searchNoLongerThere) }) {
+                close()
+                val item = group.asItem()
+                if (play || !state.detailFirst) {
+                    state.openPlayer(lead, startFromBeginning = false)
+                } else {
+                    state.openDetail(DetailRequest(item = item, chatTitle = state.chatTitleOf(lead.chatId), outsideChat = true))
+                }
             }
         }
     }

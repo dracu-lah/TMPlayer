@@ -170,21 +170,20 @@ internal fun PhoneBrowse(
     val titleOf: (Long) -> String = { id -> searchState.chats[id]?.title ?: chats.firstOrNull { it.id == id }?.title.orEmpty() }
     val openGroup: (ResultGroup) -> Unit = { group ->
         scope.launch {
-            // Deleted, or its chat left, since the search: say so, and the card goes.
-            if (!search.check(group.lead)) {
-                onMessage(s.searchNoLongerThere)
-                return@launch
-            }
-            search.remember()
-            val series = if (group.isShow) {
-                SeriesShelf.arrange(group.copies).firstNotNullOfOrNull { (it as? ShelfEntry.Show)?.series }
-            } else {
-                null
-            }
-            if (series != null) {
-                searchSeries = series to titleOf(group.lead.chatId)
-            } else {
-                onOpenMedia(group.asItem(), titleOf(group.lead.chatId))
+            // Deleted, or its chat left, since the search: say so, and the card goes. Answered at
+            // once with the Starting pill, and given up on after two seconds (the page opens).
+            search.openResult(group.lead, com.tmplayer.data.GlobalSearch.titleOf(group), onGone = { onMessage(s.searchNoLongerThere) }) {
+                search.remember()
+                val series = if (group.isShow) {
+                    SeriesShelf.arrange(group.copies).firstNotNullOfOrNull { (it as? ShelfEntry.Show)?.series }
+                } else {
+                    null
+                }
+                if (series != null) {
+                    searchSeries = series to titleOf(group.lead.chatId)
+                } else {
+                    onOpenMedia(group.asItem(), titleOf(group.lead.chatId))
+                }
             }
         }
     }

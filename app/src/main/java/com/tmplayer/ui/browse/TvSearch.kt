@@ -640,17 +640,15 @@ internal fun TvSearchPage(
         onOpenChat = { chat -> search.remember(); onOpenChat(chat) },
         onOpenGroup = { group ->
             scope.launch {
-                if (!search.check(group.lead)) {
-                    onMessage(s.searchNoLongerThere)
-                    return@launch
+                search.openResult(group.lead, GlobalSearch.titleOf(group), onGone = { onMessage(s.searchNoLongerThere) }) {
+                    search.remember()
+                    val series = if (group.isShow) {
+                        com.tmplayer.data.SeriesShelf.arrange(group.copies).firstNotNullOfOrNull { (it as? com.tmplayer.data.ShelfEntry.Show)?.series }
+                    } else {
+                        null
+                    }
+                    if (series != null) opened = series to titleOf(group.lead.chatId) else onOpenMedia(group.asItem(), titleOf(group.lead.chatId))
                 }
-                search.remember()
-                val series = if (group.isShow) {
-                    com.tmplayer.data.SeriesShelf.arrange(group.copies).firstNotNullOfOrNull { (it as? com.tmplayer.data.ShelfEntry.Show)?.series }
-                } else {
-                    null
-                }
-                if (series != null) opened = series to titleOf(group.lead.chatId) else onOpenMedia(group.asItem(), titleOf(group.lead.chatId))
             }
         },
         onFilters = search::setFilters,
