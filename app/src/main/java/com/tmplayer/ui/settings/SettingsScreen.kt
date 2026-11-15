@@ -1078,17 +1078,6 @@ fun SettingsScreen(
                             onToggle = { scope.launch { settings.setBackgroundAudio(!backgroundAudio) } },
                         )
                     }
-                    // The mini player (U8): on by default, read as the next video opens.
-                    item {
-                        val miniPlayer by settings.miniPlayer.collectAsStateWithLifecycle(initialValue = true)
-                        ToggleRow(
-                            title = s.settingsMiniPlayer,
-                            subtitle = if (miniPlayer) s.settingsMiniPlayerOn else s.settingsMiniPlayerOff,
-                            icon = ImageVector.vectorResource(R.drawable.ic_pip),
-                            checked = miniPlayer,
-                            onToggle = { scope.launch { settings.setMiniPlayer(!miniPlayer) } },
-                        )
-                    }
                 }
                 // Phone only (a television never enters by itself), and only where Android has the
                 // feature. Followed by the player, so it applies to the video open now (HX9).

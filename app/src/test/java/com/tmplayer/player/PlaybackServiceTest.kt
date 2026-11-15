@@ -167,11 +167,11 @@ class PlaybackServiceTest {
         }
     }
 
-    /** The component and the expand extra a notification's tap opens, after a handover with [ownTask]. */
-    private fun tapAfterHandOver(ownTask: Boolean): android.content.Intent {
-        val built = MediaSession.Builder(context, FakePlayer()).setId("tap-$ownTask-${System.nanoTime()}").build()
+    /** The intent a notification's tap opens, after a handover. */
+    private fun tapAfterHandOver(): android.content.Intent {
+        val built = MediaSession.Builder(context, FakePlayer()).setId("tap-${System.nanoTime()}").build()
         session = built
-        PlaybackService.start(context, built, playWhenReady = true, onStop = {}, onCannotContinue = {}, tapExpandsDock = ownTask)
+        PlaybackService.start(context, built, playWhenReady = true, onStop = {}, onCannotContinue = {})
         shadowOf(context as android.app.Application).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
         val manager = shadowOf(context.getSystemService(NotificationManager::class.java))
         PlaybackService.notifyStopped(context)
@@ -184,16 +184,8 @@ class PlaybackServiceTest {
     }
 
     @Test
-    fun `with the player in a task of its own, a tap goes through the browse shell and brings the docked player back`() {
-        val tap = tapAfterHandOver(ownTask = true)
-        assertEquals(com.tmplayer.MainActivity::class.java.name, tap.component?.className)
-        assertTrue(tap.getBooleanExtra(MiniDock.EXTRA_EXPAND, false))
-    }
-
-    @Test
-    fun `with the player in the app's task, a tap brings that task back as it was left`() {
-        val tap = tapAfterHandOver(ownTask = false)
-        assertFalse(tap.getBooleanExtra(MiniDock.EXTRA_EXPAND, false))
+    fun `a tap brings the app's task back as it was left`() {
+        val tap = tapAfterHandOver()
         assertEquals(android.content.Intent.ACTION_MAIN, tap.action)
     }
 }

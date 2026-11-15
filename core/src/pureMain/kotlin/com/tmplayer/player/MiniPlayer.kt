@@ -1,17 +1,16 @@
 package com.tmplayer.player
 
 /**
- * The mini player (U8): leaving the player with Back keeps the video playing in a bar docked above
- * the bottom navigation, instead of closing it. Tapping the bar expands the player at the same
- * place, and an X or a swipe down dismisses it.
+ * The desktop's in-app mini player (U8): leaving the player with Back keeps the video playing in a
+ * bar docked above the floating navigation, instead of closing it. Tapping the bar expands the
+ * player at the same place, and an X or a swipe down dismisses it.
  *
- * This is the pure state of that bar, shared by the phone and the desktop. It holds no player: the
- * shell keeps the one engine it already has and only changes what is drawn, so a docked video is
- * never a second decoder. A new video while one is docked replaces it in the same engine
- * ([MiniPlayerState.opened]).
+ * This is the pure state of that bar, used by the desktop shell only. The phone had it too and lost
+ * it (T12, 2026-11-16): there Back means stop and go back. It holds no player: the shell keeps the
+ * one engine it already has and only changes what is drawn, so a docked video is never a second
+ * decoder. A new video while one is docked replaces it in the same engine ([MiniPlayerState.opened]).
  *
- * The TV has no mini player ([MiniPlayerState.allowedOn]): its remote has nothing to point at a
- * bar with, and a 1 GB stick should not hold a decoder behind a screen nobody can steer.
+ * The TV never had one: the desktop passes [MiniContext.platformAllowed] false on a big screen.
  */
 enum class MiniPhase {
     /** Nothing is playing and nothing is docked. */
@@ -26,10 +25,8 @@ enum class MiniPhase {
 
 /** What is true of the player at the moment Back is pressed. */
 data class MiniContext(
-    /** The phone or the desktop, and not the TV ([MiniPlayerState.allowedOn]). */
+    /** The desktop window, and not a big screen (TV mode). */
     val platformAllowed: Boolean = true,
-    /** The viewer's own setting; on unless they turned it off. */
-    val enabled: Boolean = true,
     /** The video is open (a video still loading can be docked). */
     val opened: Boolean = true,
     val ended: Boolean = false,
@@ -90,11 +87,8 @@ data class MiniPlayerState(
     fun casting(on: Boolean): MiniPlayerState = if (casting == on) this else copy(casting = on)
 
     companion object {
-        /** Phone and desktop only. */
-        fun allowedOn(tv: Boolean): Boolean = !tv
-
         fun verdict(context: MiniContext): MiniVerdict = when {
-            !context.platformAllowed || !context.enabled -> MiniVerdict.Disabled
+            !context.platformAllowed -> MiniVerdict.Disabled
             context.inPictureInPicture -> MiniVerdict.PictureInPicture
             context.casting -> MiniVerdict.Casting
             context.locked -> MiniVerdict.Locked

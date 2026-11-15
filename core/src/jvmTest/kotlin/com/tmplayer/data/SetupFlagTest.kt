@@ -144,4 +144,18 @@ class SetupFlagTest {
         answered.armSetup()
         assertFalse(answered.lowStorageModeNow())
     }
+
+    @Test
+    fun `the retired mini player switch is removed on first read and never read again`() = runBlocking {
+        val settings = store()
+        // Nothing stored: nothing to do, no crash.
+        settings.dropRetiredMiniPlayer()
+        assertFalse(settings.hasMiniPlayerForTest())
+        settings.storeMiniPlayerForTest(false)
+        assertTrue(settings.hasMiniPlayerForTest())
+        settings.dropRetiredMiniPlayer()
+        assertFalse(settings.hasMiniPlayerForTest())
+        settings.dropRetiredMiniPlayer()
+        assertFalse(settings.hasMiniPlayerForTest())
+    }
 }

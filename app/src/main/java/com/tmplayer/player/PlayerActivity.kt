@@ -1693,18 +1693,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     /** True while the session is in [PlaybackService]'s hands: the player left, the sound playing on. */
     private var inBackgroundAudio = false
 
-    /** Settings, Playback: Back keeps the video going in a bar over browsing (U8, [MiniDock]). */
-    private var miniPlayerOn = true
-
-    /** Out of sight and on [MiniDock]: the browse shell's bar shows this video. */
-    private var docked = false
-
-    /**
-     * Docked by Back ([dockOnBack]) rather than by leaving the app: the viewer is still in the
-     * app, so the sound plays on whatever the background audio setting says.
-     */
-    private var dockedByBack = false
-
     /**
      * True while the video track is off because nobody can see it ([BackgroundPlayback.withoutVideo]),
      * so coming back turns on only what going away turned off.
@@ -2069,9 +2057,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             lifecycleScope.launch {
                 runCatching { settings.backgroundAudio.collect { backgroundAudioOn = it } }
             }
-            lifecycleScope.launch {
-                runCatching { settings.miniPlayer.collect { miniPlayerOn = it } }
-            }
             // Followed too: turning it off with a video open updates the system's request at once,
             // so Home from here no longer shrinks the video (Android 12 decided that in advance).
             lifecycleScope.launch {
@@ -2125,7 +2110,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         // arrives in [dispatchKeyEvent] as a key: it comes here, and without this a locked screen,
         // the next-up card or the row up all ended the film on the first press.
         onBackPressedDispatcher.addCallback(this) {
-            if (!peelOneOverlay() && !dockOnBack()) finish()
+            if (!peelOneOverlay()) leaveByBack()
         }
         subtitleView.setApplyEmbeddedStyles(true)
         applySubtitleStyle()
@@ -4808,8 +4793,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      */
     private fun keepsPlayingUnseen(): Boolean =
         // Sound alone plays on with the screen off whatever the setting: that is what it is for.
-        // Docked by Back the viewer is still in the app, browsing: it plays on as they asked.
-        (backgroundAudioOn || isAudio || dockedByBack) && !FormFactor.isTv(this) && !isFinishing && !inPictureInPicture &&
+        (backgroundAudioOn || isAudio) && !FormFactor.isTv(this) && !isFinishing && !inPictureInPicture &&
             mediaSession != null && playing?.playWhenReady == true &&
             // The sheet is up for a failure, a question or "Still watching?", none of which
             // plays on; the countdown to the next episode is the one sheet that does.
@@ -4838,8 +4822,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             playWhenReady = playing?.playWhenReady == true,
             onStop = { endBackgroundAudio(finish = true) },
             onCannotContinue = { stopUnseen() },
-            // In a task of its own the launcher's task is the shell's: the tap goes through it.
-            tapExpandsDock = ownTask(),
         )
         if (!started) {
             // Android would not start the service: the sound cannot go on unseen, and stopping
@@ -4903,159 +4885,18 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         exo.trackSelectionParameters = BackgroundPlayback.withVideo(exo.trackSelectionParameters)
     }
 
-    /*
-     * The mini player (U8, docs/mini-player-phone.md). The player opens in a task of its own while
-     * the setting is on ([PlayerLaunch]); leaving it then leaves it alive, out of sight, and
-     * [MiniDock] gives the browse shell a bar to see and steer it by. Nothing in the playback path
-     * changes: out of sight is background audio's handover, with the video track off.
-     */
-
-    /** The root of a task of its own, on a phone: leaving it does not finish it. */
-    private fun ownTask(): Boolean = isTaskRoot && !FormFactor.isTv(this)
-
-    private fun pictureInPictureJustEnded(): Boolean =
-        SystemClock.elapsedRealtime() - pictureInPictureEndedAt <= PIP_CLOSE_GRACE_MS
-
-    /** What [MiniPlayerState.verdict] needs to know of this player as Back is pressed. */
-    private fun miniContext(): MiniContext = MiniContext(
-        platformAllowed = MiniPlayerState.allowedOn(FormFactor.isTv(this)) && ownTask() && !handingOver && !isFinishing,
-        enabled = miniPlayerOn,
-        opened = playing != null,
-        ended = playing?.playbackState == Player.STATE_ENDED,
-        failed = failurePinned,
-        asking = statusOverlay.visibility == View.VISIBLE && !countingDownToNext,
-        casting = cast?.casting == true,
-        locked = locked,
-        inPictureInPicture = inPictureInPicture || pictureInPictureJustEnded(),
-        pausedForMs = pausedForMs(),
-    )
-
-    /** When the viewer's pause began ([SystemClock.elapsedRealtime]), 0 while the video plays. */
-    private var pausedSince = 0L
-
-    /** How long the video has been paused, for [MiniContext.pausedForMs]: 0 while it plays or is still opening. */
-    private fun pausedForMs(): Long {
-        val exo = playing ?: return 0L
-        if (exo.playWhenReady || pausedSince == 0L || exo.playbackState == Player.STATE_IDLE) return 0L
-        return SystemClock.elapsedRealtime() - pausedSince
-    }
-
     /**
-     * Back with nothing left to peel: docks the video into the browse shell's bar when
-     * [MiniPlayerState.verdict] says so, and says whether it did. [onStop] then hands the session
-     * to [PlaybackService] as background audio does, whatever that setting says: the viewer is
-     * still in the app.
+     * Back with nothing left to peel (T12): stop and go back to the page that opened the player.
+     * Paused first so the sound ends at once, not when the window is gone; the place is saved on
+     * the way out ([onStop] and [onDestroy]) and everything is released ([onDestroy]). The mini
+     * player that kept the video going behind browsing is gone on the phone. A second Back while
+     * the first is finishing does nothing more. Casting: the TV is stopped as well, as it always
+     * was ([PlayerCast.release]), and the place it reached is the one kept.
      */
-    private fun dockOnBack(): Boolean {
-        if (MiniPlayerState.verdict(miniContext()) != MiniVerdict.Dock) return false
-        docked = true
-        dockedByBack = true
-        // No corner window by itself on the way out ([pictureInPictureParams] reads [docked]),
-        // and NO_USER_ACTION so leaving for the shell is not taken as the viewer going Home.
-        updatePictureInPictureParams()
-        MiniDock.dock(dockHandle)
-        val shell = Intent(this, com.tmplayer.MainActivity::class.java)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_USER_ACTION)
-        val shown = runCatching { startActivity(shell) }
-            .onFailure { Log.w("TMPlayer", "Mini player: the browse shell would not open", it) }
-            .isSuccess
-        if (!shown) {
-            docked = false
-            dockedByBack = false
-            MiniDock.undock(dockHandle)
-            updatePictureInPictureParams()
-        }
-        return shown
-    }
-
-    /**
-     * Out of sight in a task of its own, however it was left: on the dock, so the shell has a bar
-     * to carry on from (the launcher, Recents, the notification's tap), and with the picture's
-     * decoder let go until the player is back. Home follows the background audio setting, decided
-     * in [onStop] before this; a sheet waiting for an answer stays, and the bar opens the player
-     * to it. Docked whatever the mini player setting says now: a player in its own task always
-     * has a way back.
-     */
-    private fun dockOnLeave() {
-        if (!docked) {
-            if (!ownTask() || handingOver || isFinishing || isChangingConfigurations || inPictureInPicture || pictureInPictureJustEnded()) return
-            docked = true
-            MiniDock.dock(dockHandle)
-        }
-        if (cast?.casting != true) playing?.let(::hideVideoUnseen)
-    }
-
-    /** Back in front ([onStart]): off the dock; the session and the picture come back as before. */
-    private fun undock() {
-        if (!docked) return
-        docked = false
-        dockedByBack = false
-        MiniDock.undock(dockHandle)
-        updatePictureInPictureParams()
-    }
-
-    /** The bar's X or swipe, or a docked video that ended: paused and finished, which frees it all. */
-    private fun dismissDocked() {
-        MiniDock.undock(dockHandle)
-        docked = false
-        dockedByBack = false
+    private fun leaveByBack() {
+        if (isFinishing) return
         playing?.pause()
-        endBackgroundAudio()
-        if (!isFinishing) finish()
-    }
-
-    /** A failure, a question, the end or a cast: only the player itself can show it. */
-    private fun needsTheViewer(): Boolean =
-        resumeWhenSeen || failurePinned || cast?.casting == true ||
-            (statusOverlay.visibility == View.VISIBLE && !countingDownToNext) ||
-            playing?.playbackState == Player.STATE_ENDED
-
-    /**
-     * The bar's play and pause. A pause is always a pause; a play that needs the viewer (see
-     * [needsTheViewer]) opens the player instead, and one that plays out of sight takes the
-     * foreground service first, which the app in front may start.
-     */
-    private fun dockedTogglePlay() {
-        val exo = playing
-        if (exo != null && exo.playWhenReady && exo.playbackState != Player.STATE_ENDED) {
-            exo.pause()
-            return
-        }
-        if (exo == null || needsTheViewer()) {
-            MiniDock.expand(this)
-            return
-        }
-        exo.play()
-        if (!inBackgroundAudio) startBackgroundAudio()
-        if (!inBackgroundAudio) {
-            // No session to hand over (or Android said no): the player shows it instead.
-            exo.pause()
-            MiniDock.expand(this)
-        }
-    }
-
-    /** This player as the browse shell's bar sees it ([MiniDock]). */
-    private val dockHandle: DockedPlayer = object : DockedPlayer {
-        override val chatId: Long get() = this@PlayerActivity.chatId
-        override val title: String get() = runCatching { displayName() }.getOrDefault("")
-        override val playing: Boolean
-            get() = this@PlayerActivity.playing?.let { it.playWhenReady && it.playbackState != Player.STATE_ENDED } == true
-        override val positionMs: Long get() = this@PlayerActivity.playing?.currentPosition ?: 0L
-        override val durationMs: Long
-            get() = this@PlayerActivity.playing?.duration?.takeIf { it > 0 } ?: (durationSec * 1000L)
-        override val casting: Boolean get() = cast?.casting == true
-
-        override fun togglePlay() = dockedTogglePlay()
-
-        override fun expand(context: Context): Boolean =
-            !isFinishing && !isDestroyed && MiniDock.moveTaskToFront(context, taskId)
-
-        override fun dismiss() = dismissDocked()
-
-        // Leaving the app from the shell is leaving it: off, the sound stops as it would from here.
-        override fun shellHidden() {
-            if (!(backgroundAudioOn || isAudio)) this@PlayerActivity.playing?.pause()
-        }
+        finish()
     }
 
     /**
@@ -5244,8 +5085,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             // Heard here before Media3's notification hears it: a pause lets the service out of
             // the foreground at once, so the paused notification can be swiped away.
             if (inBackgroundAudio) PlaybackService.setPlayWhenReady(playWhenReady)
-            // Back on a video paused for a few seconds closes it instead of docking it (PL-18).
-            pausedSince = if (playWhenReady) 0L else SystemClock.elapsedRealtime()
             onPauseChanged(playWhenReady, reason)
             reportWatching()
         }
@@ -6543,7 +6382,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             val next = _episodes.value.next
             val autoplay = runCatching { settings.autoplayNextNow() }.getOrDefault(true)
             hideNextUp()
-            val unseen = inBackgroundAudio || docked
+            val unseen = inBackgroundAudio
             val end = BackgroundPlayback.atTheEnd(
                 hasNext = next != null,
                 autoplay = autoplay,
@@ -6560,12 +6399,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                     return@launch
                 }
                 BackgroundPlayback.AtTheEnd.Finished -> {
-                    // Nothing comes next and nobody is looking: the bar goes, and the player with it.
-                    if (docked) {
-                        MiniDock.undock(dockHandle)
-                        dockHandle.dismiss()
-                        return@launch
-                    }
                     showFinished()
                     return@launch
                 }
@@ -6629,7 +6462,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         autoplayedInARow++
         // Out of sight no new activity may start, so the episode plays in this one; the count
         // carries on in it as it would across activities.
-        if (inBackgroundAudio || docked) {
+        if (inBackgroundAudio) {
             continueUnseen(next)
             return
         }
@@ -7506,7 +7339,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         if (!hasPictureInPicture()) return
         if (!PictureInPictureRules.entersOnLeaveHint(
                 sdk = android.os.Build.VERSION.SDK_INT,
-                settingOn = pipOnLeave && !docked,
+                settingOn = pipOnLeave,
                 tv = false,
                 playing = playing?.isPlaying == true,
                 casting = cast?.casting == true,
@@ -7541,7 +7374,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             // Never on a television: Home there means leaving the film (Decision E10), and the
             // corner window is only for a viewer who asked for it from the row or More.
             val autoEnter = PictureInPictureRules.autoEnter(
-                settingOn = pipOnLeave && !docked,
+                settingOn = pipOnLeave,
                 tv = FormFactor.isTv(this),
                 playing = playing?.isPlaying == true,
                 sheetUp = statusOverlay.visibility == View.VISIBLE,
@@ -10183,7 +10016,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      */
     override fun onStart() {
         super.onStart()
-        undock()
         if (openingFilm) watchOpening()
         // Back in front: the session comes home from the notification, the sound never stopped,
         // and the picture comes back on (turned off only while nobody could see it).
@@ -10223,21 +10055,15 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         // This place out to the other devices, once the saves have settled (ResumeSync).
         com.tmplayer.data.ResumeSync.pushSoon(settings)
         // On a TV the video carries on with the phone put away; nothing here to pause.
-        if (cast?.casting == true) {
-            dockOnLeave()
-            return
-        }
+        if (cast?.casting == true) return
         // In picture in picture the activity is stopped while the video is still on screen and
         // still the point of it; pausing here would stop the very thing the mode exists for.
         // With background audio on, the sound carries on from the notification instead.
         if (inPictureInPicture) return
         if (keepsPlayingUnseen()) startBackgroundAudio() else playing?.pause()
-        dockOnLeave()
     }
 
     override fun onDestroy() {
-        MiniDock.undock(dockHandle)
-        docked = false
         crashNote.ended()
         com.tmplayer.data.SelfInstaller.removeBeforeInstall(saveBeforeInstall)
         loopHandler.removeCallbacks(watchTick)
