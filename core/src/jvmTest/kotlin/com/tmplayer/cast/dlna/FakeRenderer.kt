@@ -87,9 +87,14 @@ class FakeRenderer(
 
     @Volatile private var closed = false
 
+    /** False once [powerOff] ran: a connection that still got through is dropped unanswered. */
+    @Volatile private var poweredOn = true
+
+    private val httpThread: Thread
+
     init {
         daemon("fake-ssdp") { ssdpLoop() }
-        daemon("fake-http") { httpLoop() }
+        httpThread = daemon("fake-http") { httpLoop() }
     }
 
     /** Playing time passes on the TV. At the end it stops, on the last position. */
@@ -117,9 +122,18 @@ class FakeRenderer(
         udp.send(DatagramPacket(bytes, bytes.size, InetSocketAddress(loopback, port)))
     }
 
-    /** The TV is switched off: nothing answers on HTTP any more. */
+    /**
+     * The TV is switched off: nothing answers on HTTP any more, from the moment this returns.
+     * Closing the listening socket alone is not that: while the accept thread is still blocked in
+     * accept(), the kernel keeps the socket listening until the thread wakes, so a call made right
+     * after could still be accepted and answered (20 in 3,000 locally, the CI flake of
+     * threeSilentPollsLoseTheRendererAndClosePort). So the switch is flipped first, and the accept
+     * thread is waited for, which leaves the port refusing.
+     */
     fun powerOff() {
+        poweredOn = false
         runCatching { http.close() }
+        httpThread.join(5_000)
     }
 
     override fun close() {
@@ -170,6 +184,7 @@ class FakeRenderer(
 
     private fun serve(socket: Socket) {
       socket.use { s ->
+        if (!poweredOn) return
         s.soTimeout = 5000
         val input = s.getInputStream()
         val requestLine = readLine(input) ?: return
