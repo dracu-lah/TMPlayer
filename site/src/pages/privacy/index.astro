@@ -120,6 +120,12 @@ Astro.locals.lang = ENGLISH;
       <p>The app log, the playback sessions and the marks are kept in the app's private storage on the device, bounded in size, and deleted when you sign out.</p>
     </PolicySection>
 
+    <PolicySection title="Wrong title? Only when you say so">
+      <p>In builds that include the log inbox, a video's menu has <em>Wrong title?</em>, and after you rename a video TMPlayer asks once, for that title, whether to send it. <strong>Nothing is sent by itself.</strong> The sheet shows the two lines that would leave, word for word: the video's file name and the title you chose, after phone numbers, e-mail addresses, t.me links and @usernames have been taken out on your device. A tick box, off, must be on before <em>Send</em> works, and <em>No thanks</em> ends it and is remembered for that title. The chat's name goes only if you tick a second box. No account, message, caption, size, chat id or other video goes with it.</p>
+      <p><strong>Where it goes:</strong> over HTTPS to the same Cloudflare Worker and private bucket as Send to developer, as one short line per title, with the same rules: no IP address, user agent or header is kept, and abuse is limited by a scrambled form of the address. The Worker cleans the text again and keeps a pair once, however many people send it. You get a short code such as <code>NAME-7K3Q</code>, which you can read out if you write about it. The titles are read only to teach TMPlayer to read names like yours, and are not shared.</p>
+      <p><strong>Offline:</strong> a title you agreed to send waits on your device, at most 20, and goes the next time the line works; signing out deletes them. <strong>Retention:</strong> 30 days. To have yours deleted sooner, email the code to <a href="mailto:hello@tmplayer.org?subject=TMPlayer%20title%20deletion">hello@tmplayer.org</a>. <strong>Legal basis:</strong> your consent, given by ticking the box and pressing <em>Send</em> each time.</p>
+    </PolicySection>
+
     <PolicySection title="Delete your data">
       <ul>
         <li><strong>Sign out</strong> (Settings) logs out of Telegram on this device and clears TDLib's database, the watch cache, your settings (the theme stays), favourites, Continue watching, the watched list, and the app log, playback sessions and marks kept for reports. Your downloads are kept unless you tick <em>Also delete my downloads</em>.</li>
@@ -144,7 +150,7 @@ Astro.locals.lang = ENGLISH;
     <PolicySection title="Changes">
       <p>Material changes update the effective date above and are listed here.</p>
       <ul>
-        <li><strong>15 November 2026:</strong> adds Send to developer, an upload of one report you have seen first, kept for 30 days; lists exactly what it holds and where it goes; the app now keeps a bounded log, playback sessions and marks on the device for reports, deleted when you sign out.</li>
+        <li><strong>15 November 2026:</strong> adds Send to developer, an upload of one report you have seen first, kept for 30 days; lists exactly what it holds and where it goes; the app now keeps a bounded log, playback sessions and marks on the device for reports, deleted when you sign out. Crash reports are asked about once, at first run, with no answer counted as No; a report also carries the chipset and, for a crash during or soon after a stutter, the player, decoder, codec, size class and stutter kind, never a title or file name. Adds Wrong title?, which sends a file name and the title you chose only after you have seen both and pressed Send.</li>
         <li><strong>29 October 2026:</strong> adds Resume on your other devices (opt in), which keeps Continue watching places in one message in your own Saved Messages; casting to a Chromecast or Google TV and what goes where; proxies; the web player at web.tmplayer.org and the Samsung and LG TV beta, which opens it; and the Google sign-in code prompt on Android.</li>
         <li><strong>28 October 2026:</strong> adds MSone's Malayalam subtitles, searched through TMPlayer's gateway at subs.tmplayer.org.</li>
         <li><strong>26 October 2026:</strong> with crash reporting on, the app also reports when a video could not play smoothly: its format and the device model, never what the video is.</li>
