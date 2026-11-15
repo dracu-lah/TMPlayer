@@ -210,7 +210,7 @@ internal fun ChatBar(
                         modifier = Modifier.padding(horizontal = 6.dp).size(16.dp),
                     )
                 }
-                if (query.isNotEmpty()) BarIcon(TmIcons.Close, s.browseClearSearch, null, { onQuery("") })
+                if (query.isNotEmpty()) BarTooltip(s.browseClearSearch, null, below = true) { com.tmplayer.ui.components.ClearButton(s.browseClearSearch, onClick = { onQuery("") }, target = 36.dp, disc = 24.dp) }
             }
         } else {
             BarPill {

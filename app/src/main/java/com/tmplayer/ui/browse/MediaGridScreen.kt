@@ -1328,8 +1328,18 @@ internal fun TouchMediaScaffold(
         onSubmit()
     }
 
-    // Back leaves the search first and the chat second, which is the order a phone user means it.
-    BackHandler(enabled = searching) { closeSearch() }
+    // Back empties the field first (the listing returns to the whole chat at once, the keyboard
+    // stays), then leaves the search, then the chat: the order a phone user means it.
+    BackHandler(enabled = searching) {
+        if (query.isNotEmpty()) {
+            onQuery("")
+            onSubmit()
+            runCatching { field.requestFocus() }
+            keyboard?.show()
+        } else {
+            closeSearch()
+        }
+    }
 
     val compact = rememberCompactChrome()
     val density = LocalDensity.current
@@ -1559,9 +1569,7 @@ private fun MediaSearchField(
             }
             if (query.isNotEmpty()) {
                 com.tmplayer.ui.components.IconTip(s.browseClearSearch) {
-                    IconButton(onClick = { onQueryChange("") }) {
-                        M3Icon(TmIcons.Close, contentDescription = s.browseClearSearch)
-                    }
+                    com.tmplayer.ui.components.ClearButton(s.browseClearSearch, onClick = { onQueryChange("") })
                 }
             } else if (onVoiceSearch != null) {
                 com.tmplayer.ui.components.IconTip(s.browseSearchByVoice) {

@@ -1117,9 +1117,6 @@ internal val ACTIONS_HEIGHT = 48.dp
 /** The key a page reports under when nothing names it, which is the page outside any host. */
 internal const val DEFAULT_PAGE = "page"
 
-/** Between the search field and its close button. */
-internal val SEARCH_GAP = 10.dp
-
 /**
  * From this window width the bar stands up as a rail down the start edge: Material's medium
  * window class, which a tablet, a phone on its side and a wide split screen all reach.

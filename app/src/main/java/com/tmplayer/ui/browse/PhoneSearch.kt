@@ -117,8 +117,8 @@ import com.tmplayer.ui.components.SlowAnswerNotice
 
 /**
  * The phone's search across every chat (CP73): a page of its own over the browser, its field
- * docked at the bottom above the keyboard where the bar's magnifier was, with the close button in
- * the magnifier's own place.
+ * docked at the bottom above the keyboard where the bar's magnifier was. It has no close button of
+ * its own: Back clears the words while there are any and closes the page on an empty field.
  *
  * Before anything is typed it offers the way back to things: recent chats (starred first), recent
  * searches (fill one in with the arrow, take one off with its cross or a hold, clear them all with
@@ -127,7 +127,8 @@ import com.tmplayer.ui.components.SlowAnswerNotice
  * typing settles ([GlobalSearchViewModel]). Each video is one card however many chats it was
  * posted in; a tap opens it as a video's tile does.
  *
- * Back closes the keyboard first (the system does that), then the filter sheet, then the search.
+ * Back closes the keyboard first (the system does that), then the filter sheet, then clears the
+ * words, then closes the search.
  * There is no swipe down to close: the page is a list, and a list is swiped.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -180,7 +181,17 @@ internal fun PhoneSearchScreen(
     var allChats by rememberSaveable(state.query.text) { mutableStateOf(false) }
     var allTopics by rememberSaveable(state.query.text) { mutableStateOf(false) }
 
-    BackHandler(enabled = !sheetOpen) { onClose() }
+    // Clearing the box empties the results, the filters and the sort at once, back to the recent
+    // searches, with the cursor in the field and the keyboard up. Back does the same while there
+    // is text, and closes the page only on an empty field (there is no separate close button).
+    val clear: () -> Unit = {
+        onText(TextFieldValue(""))
+        onFilters(SearchFilters())
+        onSort(SearchSort.BestMatch)
+        runCatching { focus.requestFocus() }
+        keyboard?.show()
+    }
+    BackHandler(enabled = !sheetOpen) { if (text.text.isNotEmpty()) clear() else onClose() }
 
     // The keyboard comes up once the field has finished growing out of the magnifier. Asked for at
     // once, it rose during the growth, and the field chased a spot the keyboard kept moving.
@@ -281,32 +292,15 @@ internal fun PhoneSearchScreen(
             Row(
                 Modifier.fillMaxWidth().navigationBarsPadding().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = BAR_MARGIN),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(SEARCH_GAP),
             ) {
                 SearchField(
                     text = text,
                     onText = onText,
                     onSubmit = { keyboard?.hide(); onSubmit() },
                     onVoice = onVoice,
+                    onClear = clear,
                     modifier = Modifier.weight(1f).then(fieldModifier).focusRequester(focus),
                 )
-                // Where the bar's magnifier was: the way back out.
-                val closePress = remember { MutableInteractionSource() }
-                com.tmplayer.ui.components.IconTip(s.searchClose) {
-                    Box(
-                        Modifier
-                            .size(BAR_HEIGHT)
-                            .pressScale(closePress)
-                            .shadow(BAR_SHADOW, CircleShape)
-                            .clip(CircleShape)
-                            .background(FloatingTone.menu)
-                            .border(floatingBorder(), CircleShape)
-                            .clickable(interactionSource = closePress, indication = ripple(), role = Role.Button, onClick = onClose),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(TmIcons.Close, contentDescription = s.searchClose, tint = Tone.text, modifier = Modifier.size(22.dp))
-                    }
-                }
             }
         }
         SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).imePadding().navigationBarsPadding().padding(bottom = BAR_HEIGHT + BAR_MARGIN + BAR_GAP))
@@ -332,6 +326,7 @@ private fun SearchField(
     onText: (TextFieldValue) -> Unit,
     onSubmit: () -> Unit,
     onVoice: (() -> Unit)?,
+    onClear: () -> Unit,
     modifier: Modifier,
 ) {
     val s = LocalStrings.current
@@ -400,9 +395,7 @@ private fun SearchField(
         ) { shown ->
             when (shown) {
                 FieldEnd.Clear -> com.tmplayer.ui.components.IconTip(s.browseClearSearch) {
-                    IconButton(onClick = { onText(TextFieldValue("")) }) {
-                        Icon(TmIcons.Close, contentDescription = s.browseClearSearch, tint = Tone.muted)
-                    }
+                    com.tmplayer.ui.components.ClearButton(s.browseClearSearch, onClick = onClear)
                 }
                 FieldEnd.Voice -> com.tmplayer.ui.components.IconTip(s.browseSearchByVoice) {
                     IconButton(onClick = { onVoice?.invoke() }) {
