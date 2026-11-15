@@ -149,16 +149,60 @@ again."); render tests per form factor; focus test; the setup's storage step and
 for this device" card use the same words; `Notice.LowStorage` (the free space alert) keeps its name.
 Edge: a download kept on purpose is never windowed, whatever the tab (say so in the detail line).
 
+### T5 Chat picker: recommended list misses video channels, no counts  (model: sonnet, depends: T2 merged)
+User, 2026-11-16: the recommended band in the chat picker (Add chats and the setup's chat step) leaves out
+channels that hold a lot of videos; the video counts may be inaccurate, so show none, neither in
+Recommended nor in the normal list. files: `ui/src/shared/.../ui/browse/AddChatsScreen.kt`,
+`ChatSuggestions` and `ChatPicking` (core), their tests, `en.json` count strings, desktop and web picker
+(`webapp/src/screens` SetupChats, AddChats). Done when: root cause of the misses found and written here
+(suspects: the scan budget per refresh, a chat read cut off at a page, channels not yet opened, a minimum
+count, folder or archive chats skipped, private-chat title rules), a `SyntheticAccount` test with a
+channel of 20,000 videos that is recommended, counts removed from rows and from the band header on phone,
+TV, desktop and web with dead strings deleted, ranking explained in one plain line to the user.
+Edge cases: a chat with a few videos stays out of Recommended but findable; scale 3,000 chats within budget.
+
+### T6 Mini player check  (model: haiku, depends: Raju phone pass)
+User asked 2026-11-16 whether the in-app mini player (video keeps playing while browsing) is missing. Docs
+say it exists on the phone (`docs/mini-player-phone.md`, `MiniDockBar`, `MiniPlayerBar`) and desktop
+(Ctrl+P), never on TV (by design, `MiniPlayerState.allowedOn`). Verify on the phone with the Raju pass; if it
+is not showing, find why.
+
+### T7 Player engines and the automatic remedy ladder  (model: opus high, depends: research doc)
+From `private/PLAYER-RELIABILITY-RESEARCH.md` (agent X1): detection signals and the one-switch-per-video
+ladder; PR1, PR2, PR2b, PR3 in `private/PLAYER-RELIABILITY-PLAN.md`. Also: Low storage mode does not start
+a film on phone and TV (HX79 evidence note): diagnose with logcat first, fix, add a test that a rolling
+window starts.
+
+### D1 Support cards: Buy Me a Coffee and UPI  (model: sonnet, running since 2026-11-16)
+Themed cards and dialogs with the official logos, regional order (IN: UPI first), icon popup through the
+existing `SupportReminder` nag. Design note `design/redesign/support-cards.md`.
+
 ## Not in this pass
 Store text, the site.
 
 ## Progress / handoff
 - 2026-11-16: plan written. Fresh-install default for the streaming mode is committed separately
   (`armSetup`). Workers T1, T2, T3 start from that commit.
+- 2026-11-16 T3 done (branch worktree-agent-a443a0c6839e96372, local, not pushed):
+  - `19715dc` Esc closes a `TmAlertDialog` on every platform (`escapeCloses`), and on the desktop the layer
+    over the page (Settings, detail pane, menu, palette) closes before full screen (`ShellState.transientLayerOpen`);
+    `ShortcutsAuditTest` (dialog Esc and focus back on the opener, Esc order, Ctrl+C/V/X/Z/A untouched, Tab).
+  - `055eb76` no exit confirmation at the top level in `MainActivity` (rule 13; the system back-to-home
+    animation now plays; dead string `main.back_again` removed from en.json); 48 dp for the episode panel
+    buttons (`EpisodesPanelTest` fails without it), the Free up space buttons and the subtitle swatches.
+  - `e4cb9e1` `docs/shortcuts.md` (a table per platform, Esc order, targets under 48 dp), `929b5c1` PlayerKeysTest.
+  - Checks: `:desktop:test` for ShortcutsAudit, BigScreen*, BrowseKeyboard, PlayerKeys, EpisodesPanel; `:app:compileDebugKotlin`.
+    No app unit test for the MainActivity change (the whole Root composes); no device or emulator.
+  - Left: `LoginScreen.kt` `ExitOnBack` still asks "press Back again" (T1's file); the player's back callback
+    always claims Back (no predictive back animation from the player); brightness has no button twin;
+    Series.kt phone rows are 40 dp (T2); desktop overlay buttons are 36 dp (mouse only).
+  - Gotcha: `private/` is git-ignored and lives only in the main tree; Compose Desktop dialogs did not close on
+    Esc in `runComposeUiTest` before `escapeCloses`; `press()` in desktop key tests needs a focused node (use `requestFocus` first).
 
 ## Decisions made by Claude
 - Three workers, not more: the files are split by surface and `MainActivity.kt` is shared, so only
   T3 touches it and only for back handling.
+- T3: Esc handling lives in the shared `TmAlertDialog` (one place, all platforms) instead of per dialog; full screen yields to a layer over the page on the desktop; the top level's exit confirmation is deleted rather than reworded. No design note: small, clear fixes.
 
 ## Sources
 - Search patterns: https://carbondesignsystem.com/patterns/search-pattern ,
