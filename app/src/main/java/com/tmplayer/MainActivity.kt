@@ -2336,6 +2336,7 @@ private fun Root() {
                             nav = touchNav,
                             current = null,
                             inProfile = screen is Screen.Downloads,
+                            downloadsShown = screen is Screen.Downloads,
                             searchOpen = false,
                             onHome = { stayOnBar(); touchNav.onHome() },
                             onChats = { stayOnBar(); touchNav.onChats() },

@@ -52,6 +52,8 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -149,6 +151,8 @@ internal fun TvTopBar(
     onChooseChats: (() -> Unit)? = null,
     /** On the Choose chats button, for Back from that screen to put the remote back on it. */
     chooseChatsFocus: FocusRequester? = null,
+    /** The Downloads page is the one shown, for the quick entry's mark. */
+    downloadsShown: Boolean = false,
 ) {
     val s = LocalStrings.current
     var profileOpen by remember { mutableStateOf(false) }
@@ -216,7 +220,18 @@ internal fun TvTopBar(
                 BarTab(s.commonSearch, TmIcons.Search, searchOpen, onSearch, Modifier.focusRequester(searchRequester).tvReturnPoint(searchRequester))
                 BarTab(s.browseTabHome, TmIcons.Home, current == TvBarTab.Home && !searchOpen, onHome, Modifier.focusRequester(focusOf(TvBarTab.Home, homeFocus)).tvReturnPoint(focusOf(TvBarTab.Home, homeFocus)))
                 BarTab(s.browseTabChats, TmIcons.Chats, current == TvBarTab.Chats && !searchOpen, onChats, Modifier.focusRequester(focusOf(TvBarTab.Chats, chatsFocus)).tvReturnPoint(focusOf(TvBarTab.Chats, chatsFocus)))
-                // Add or remove chats, a Right from Chats away: an action, not a page, so it is
+                // Quick entries for the two places a viewer returns to most, which were an account
+                // menu away (Up, Left, OK, Down, OK from Home; PL-16, 2026-11-15): icons that name
+                // themselves under the remote, after the tabs, so Right from Chats reaches them.
+                BarTab(
+                    s.navDownloads, TmIcons.Download, selected = inProfile && !searchOpen && downloadsShown, onClick = { beforeProfile(); nav.onDownloads() },
+                    compact = true,
+                )
+                BarTab(
+                    s.browseTabWatchLater, TmIcons.Clock, selected = false, onClick = { beforeProfile(); nav.onHistory(HistoryTab.WatchLater) },
+                    compact = true,
+                )
+                // Add or remove chats, after the quick entries: an action, not a page, so it is
                 // only an icon (named under the remote's focus) after the places.
                 if (onChooseChats != null) {
                     com.tmplayer.ui.components.ChooseChatsButton(
@@ -289,7 +304,15 @@ private val BRAND_NAME_TYPE = 22.sp
 
 /** One of the tabs: its icon and name in a pill, the icon filled while its page is shown. */
 @Composable
-private fun BarTab(label: String, icon: ImageVector, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun BarTab(
+    label: String,
+    icon: ImageVector,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    /** Only the icon until the remote is on it (or it is the page shown), which then names it. */
+    compact: Boolean = false,
+) {
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
     val pressed by interactions.collectIsPressedAsState()
@@ -326,12 +349,13 @@ private fun BarTab(label: String, icon: ImageVector, selected: Boolean, onClick:
                 .clip(pill)
                 .background(fill)
                 .clickable(interactionSource = interactions, indication = null, role = Role.Tab, onClick = onClick)
-                .padding(horizontal = 14.dp),
+                .padding(horizontal = if (compact && !focused && !selected) 10.dp else 14.dp)
+                .semantics { if (compact) contentDescription = label },
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             com.tmplayer.ui.components.SelectableIcon(icon, selected = selected, tint = ink, size = 20.dp)
-            Text(
+            if (!compact || focused || selected) Text(
                 label,
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = if (selected || focused) FontWeight.SemiBold else FontWeight.Medium,
