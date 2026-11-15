@@ -147,6 +147,7 @@ object SettingsMap {
         row("software_decoding", g, "settings.software_decoding", D, listOf("settings.software_decoding_detail"))
         row("detail_first", g, "settings.detail_first", PTD, onOff("settings.detail_first") + onOff("settings.detail_first_click"))
         row("background_audio", g, "settings.background_audio", P, onOff("settings.background_audio"))
+        row("mini_player", g, "settings.mini_player", P, onOff("settings.mini_player"))
         row("picture_in_picture", g, "settings.picture_in_picture_leave", P, onOff("settings.picture_in_picture_leave"), SettingsNeed.PictureInPicture)
         row("controls_timeout", g, "settings.controls_timeout", PTD, listOf("settings.controls_timeout_detail"), desktopTitle = "settings.hide_controls")
         row("resume_rewind", g, "settings.resume_rewind", PTD, listOf("settings.resume_rewind_detail"))
