@@ -1,6 +1,8 @@
 package com.tmplayer.data
 
 import com.tmplayer.cast.ByteRange
+import com.tmplayer.cast.Ffmpeg
+import com.tmplayer.cast.FfmpegProgress
 import com.tmplayer.cast.Mp4Probe
 import com.tmplayer.cast.WebVtt
 import com.tmplayer.cast.dlna.Didl
@@ -164,6 +166,25 @@ class GarbageInputTest {
                 StoredLocation.documentIsIn(text, text)
                 StoredLocation.documentIsIn(tree, text)
                 StoredLocation.documentIsIn(text, "$tree/document/x")
+            }
+        }
+        assertNoFailures()
+    }
+
+    /** What an ffmpeg the user has may print (C4): its encoder list and its -progress lines. */
+    @Test
+    fun ffmpegOutputNeverThrows() {
+        val extra = listOf(
+            "------\n V....D", "------\n VVVVVV " + "x".repeat(10_000), "------\n" + " A....D aac AAC\n".repeat(20_000),
+            "out_time_us=-1", "out_time_us=99999999999999999999", "out_time_ms=" + "9".repeat(5_000), "speed=-1x", "speed=NaNx",
+            "speed=Infinityx", "progress=", "=", "==", "progress=end\nprogress=end", "frame=\u0000",
+        )
+        for (text in texts + extra) {
+            survive("Ffmpeg.encoders", text) { Ffmpeg.ability(Ffmpeg.encoders(text)) }
+            survive("FfmpegProgress.feed", text) {
+                val p = FfmpegProgress()
+                text.lines().forEach { p.feed(it) }
+                p.lastError
             }
         }
         assertNoFailures()

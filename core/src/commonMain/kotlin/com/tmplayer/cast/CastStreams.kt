@@ -20,6 +20,8 @@ class CastStreams(
     private val converterFactory: (() -> AudioConverter)? = null,
     /** The DLNA headers a resource goes out with (see [com.tmplayer.cast.dlna.dlnaServing]); null for a Cast receiver. */
     private val serving: ((CastResource) -> DlnaServing?)? = null,
+    /** Where a [CastRoute.Transcode] runs, one at a time; null where this device cannot transcode. */
+    private val transcodes: TranscodeSlot? = null,
 ) {
 
     /** What the receiver is told to load, and how the sender reads its clock. */
@@ -101,7 +103,24 @@ class CastStreams(
                 server.publish(file, resource, serving?.invoke(resource))
                 Published(server.urlFor(file) + "?t=$startMs", "video/mp4", offset, false, route)
             }
-            is CastRoute.TranscodeVideo -> throw IOException("Converting the picture is not available here")
+            is CastRoute.Transcode -> {
+                val slot = transcodes ?: throw IOException("Converting the picture is not available here")
+                // Made as it is sent, from the asked time: a seek is a new stream from there,
+                // and the slot stops the one before it.
+                val resource = CastResource.Stream(route.target.mime) { query, out ->
+                    val from = query["t"]?.toLongOrNull()?.coerceAtLeast(0) ?: 0L
+                    try {
+                        slot.run(TranscodeJob(source, probe, route, from, name), out)
+                    } catch (e: IOException) {
+                        Logger.i(TAG, "Transcode ended: ${e.message}")
+                    }
+                }
+                val file = "stream$n.${route.target.container.extension}"
+                lastStream?.let(server::unpublish)
+                lastStream = file
+                server.publish(file, resource, serving?.invoke(resource))
+                Published(server.urlFor(file) + "?t=$startMs", route.target.mime, startMs.coerceAtLeast(0), false, route)
+            }
         }.also { Logger.i(TAG, "Published ${route::class.simpleName} for $name at ${it.url}") }
     }
 

@@ -19,7 +19,7 @@ class CastFormatsTest {
         preferred: Int? = null,
         convert: Boolean = false,
         transcode: Boolean = false,
-    ) = CastFormats.plan(MediaProbe(container, 0, v, a), caps, preferred, convert, transcode)
+    ) = CastFormats.plan(MediaProbe(container, 0, v, a), caps, preferred, convert, if (transcode) TranscodeAbility() else null)
 
     @Test
     fun `mp4 with h264 and aac plays directly`() {
@@ -105,14 +105,21 @@ class CastFormatsTest {
         assertFalse(refused.castable)
         assertEquals(CastRefusal.VideoCodec, refused.refusal)
         val converted = plan(Container.Mp4, video(Codecs.HEVC), listOf(audio(2, Codecs.AAC)), ReceiverCaps.LEGACY, transcode = true)
-        assertEquals(listOf(CastRoute.TranscodeVideo(2)), converted.routes)
+        val only = converted.routes.single() as CastRoute.Transcode
+        assertEquals(2, only.audioTrack)
+        assertEquals(TranscodeReason.VideoCodec, only.reason)
+        // AAC plays on the receiver: passed through, the picture made again.
+        assertEquals(TranscodeAudio.Copy, only.target.audio)
+        assertFalse(only.target.copyVideo)
         assertTrue(CastFormats.needsNote(converted.routes.first()))
     }
 
     @Test
     fun `hevc on an unnamed chromecast is tried and converted if it fails`() {
         val p = plan(Container.Mp4, video(Codecs.HEVC), listOf(audio(2, Codecs.AAC)), ReceiverCaps.UNKNOWN, transcode = true)
-        assertEquals(listOf(CastRoute.Direct("video/mp4"), CastRoute.TranscodeVideo(2)), p.routes)
+        assertEquals(CastRoute.Direct("video/mp4"), p.routes.first())
+        assertEquals(2, p.routes.size)
+        assertEquals(TranscodeReason.VideoCodec, (p.routes[1] as CastRoute.Transcode).reason)
     }
 
     @Test

@@ -304,7 +304,7 @@ class PlayerCast(
                 probe = p
                 val preferred = hooks.audioLanguage()?.let { lang -> p.audio.firstOrNull { sameLanguage(it.language, lang) }?.number }
                 val caps = capsFor(connectedState.model)
-                val pl = support.adapt(CastFormats.plan(p, caps, preferred, canConvertAudio = canConvert, canTranscodeVideo = false))
+                val pl = support.adapt(CastFormats.plan(p, caps, preferred, canConvertAudio = canConvert))
                 plan = pl
                 Log.i(TAG, "Plan for $file on ${connectedState.model}: $pl ($p)")
                 if (!pl.castable) {
@@ -508,7 +508,7 @@ class PlayerCast(
         val model = (support.session.value as? CastSessionState.Connected)?.model
         val audioCodec = p.audio.firstOrNull { it.number == audio }?.codec
         return when {
-            r is CastRoute.TranscodeVideo -> L.castConvertingPhone
+            r is CastRoute.Transcode -> L.castConvertingPhone
             r is CastRoute.ConvertAudio -> L.castSoundConvertedPhone
             r is CastRoute.Hls && r.audio.isEmpty() && p.audio.isNotEmpty() -> L.castSilent
             r is CastRoute.Hls && hlsAudio?.converted == true -> L.castSoundConvertedPhone

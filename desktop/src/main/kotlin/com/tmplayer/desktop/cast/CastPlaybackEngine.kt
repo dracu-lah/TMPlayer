@@ -127,7 +127,7 @@ class CastPlaybackEngine(
                 val p = MediaProbe.of(src, name)
                 probe = p
                 val preferred = prefs.audioLanguage?.let { lang -> p.audio.firstOrNull { sameLanguage(it.language, lang) }?.number }
-                val pl = receiver.adapt(CastFormats.plan(p, receiver.caps, preferred, canConvertAudio = false, canTranscodeVideo = false))
+                val pl = receiver.adapt(CastFormats.plan(p, receiver.caps, preferred, canConvertAudio = false))
                 plan = pl
                 Logger.i(TAG, "Plan for $name on ${receiver.model} (${receiver.kind}): $pl ($p)")
                 if (!pl.castable) {
@@ -246,7 +246,7 @@ class CastPlaybackEngine(
         val p = probe ?: return null
         val audioCodec = p.audio.firstOrNull { it.number == audio }?.codec
         return when {
-            r is CastRoute.TranscodeVideo -> L.castConvertingComputer
+            r is CastRoute.Transcode -> L.castConvertingComputer
             r is CastRoute.ConvertAudio -> L.castSoundConvertedComputer
             r is CastRoute.Hls -> if (r.audio.isEmpty() && p.audio.isNotEmpty()) L.castSilent else null
             audioCodec != null && CastFormats.audioSupport(audioCodec, receiver.caps) == com.tmplayer.cast.Support.No -> L.castSilent

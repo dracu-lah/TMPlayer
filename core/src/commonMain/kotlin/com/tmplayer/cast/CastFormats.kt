@@ -89,8 +89,12 @@ sealed interface CastRoute {
      */
     data class Hls(val audioTrack: Int?, val audio: List<HlsAudio>) : CastRoute
 
-    /** The picture itself re-encoded on this device: the last resort, said so on screen. */
-    data class TranscodeVideo(val audioTrack: Int?) : CastRoute
+    /**
+     * Made again on this device ([TranscodePlanner]): the picture as H.264 (or passed through where
+     * [TranscodeTarget.copyVideo] says only the sound or the wrapper is the trouble), the sound of
+     * [audioTrack] as the target says. The last resort, said so on screen, with its progress.
+     */
+    data class Transcode(val audioTrack: Int?, val reason: TranscodeReason, val target: TranscodeTarget) : CastRoute
 }
 
 /** Why a video cannot be cast at all. [Resolution]: a picture past 1080p on a 1080p receiver. */
@@ -169,14 +173,20 @@ object CastFormats {
      *
      * @param preferredAudio the track number the viewer has on, or null for the file's choice.
      * @param canConvertAudio this device can turn sound into AAC (Android, with the FFmpeg decoders).
-     * @param canTranscodeVideo this device can re-encode the picture.
+     * @param transcoder what this device can make again ([TranscodeAbility]), or null where it
+     *   cannot transcode (the TV build, no encoder, a computer without ffmpeg). A transcode is
+     *   planned only where nothing else makes the receiver play the file with its sound.
+     * @param linkKbps the measured link to the receiver, for the transcode's bitrate; null when not known.
+     * @param receiverContainers the wrappers a DLNA TV lists, for the transcode's; null for a Cast receiver.
      */
     fun plan(
         probe: MediaProbe,
         caps: ReceiverCaps,
         preferredAudio: Int? = null,
         canConvertAudio: Boolean = false,
-        canTranscodeVideo: Boolean = false,
+        transcoder: TranscodeAbility? = null,
+        linkKbps: Int? = null,
+        receiverContainers: Set<Container>? = null,
     ): CastPlan {
         val audio = chooseAudio(probe.audio, caps, preferredAudio, canConvertAudio)
         val audioTrack = audio?.track
@@ -184,16 +194,28 @@ object CastFormats {
         val videoOk = video?.let { videoSupport(it, caps) } ?: if (probe.container == Container.Other) Support.Maybe else Support.Yes
         val audioOk = audio?.support ?: Support.Yes
         val routes = ArrayList<CastRoute>()
-        val transcode = if (canTranscodeVideo) CastRoute.TranscodeVideo(audioTrack?.number) else null
+
+        fun transcode(reason: TranscodeReason, copyVideo: Boolean): CastRoute.Transcode? {
+            val ability = transcoder ?: return null
+            if (!copyVideo && video != null && !ability.decodesVideo(video.codec)) return null
+            val target = TranscodePlanner.target(probe, caps, ability, audioTrack, copyVideo, linkKbps, receiverContainers)
+            // Made again for its sound, it must come out with sound.
+            if (reason == TranscodeReason.AudioCodec && target.audio != TranscodeAudio.Aac && target.audio != TranscodeAudio.Ac3) return null
+            return CastRoute.Transcode(audioTrack?.number?.takeIf { target.audio != TranscodeAudio.None }, reason, target)
+        }
 
         // The picture cannot be shown as it is: conversion or nothing.
         if (videoOk == Support.No) {
-            val why = if (video != null && aboveFullHd(video) && caps.uhd == Support.No && videoSupport(video, caps.copy(uhd = Support.Yes)) != Support.No) {
-                CastRefusal.Resolution
-            } else {
-                CastRefusal.VideoCodec
+            val sizeOnly = video != null && aboveFullHd(video) && caps.uhd == Support.No && videoSupport(video, caps.copy(uhd = Support.Yes)) != Support.No
+            val bitsOnly = video != null && video.tenBit && caps.tenBit == Support.No && videoSupport(video, caps.copy(tenBit = Support.Yes)) != Support.No
+            val why = if (sizeOnly) CastRefusal.Resolution else CastRefusal.VideoCodec
+            val reason = when {
+                sizeOnly -> TranscodeReason.Resolution
+                bitsOnly -> TranscodeReason.TenBit
+                else -> TranscodeReason.VideoCodec
             }
-            return if (transcode != null) CastPlan(listOf(transcode), audioTrack?.number)
+            val t = transcode(reason, copyVideo = false)
+            return if (t != null) CastPlan(listOf(t), audioTrack?.number, silent = t.audioTrack == null && probe.audio.isNotEmpty())
             else CastPlan(emptyList(), audioTrack?.number, why)
         }
 
@@ -227,11 +249,26 @@ object CastFormats {
                 // A soundtrack nothing here can play or convert: the picture goes alone, said so.
                 if (remuxable && routes.all { it is CastRoute.Hls }) routes += CastRoute.Remux(null)
             }
-            Container.MpegTs, Container.Avi -> Unit
+            // No rewrap reads these: made again, the picture passed through where it plays as it is.
+            Container.MpegTs, Container.Avi -> transcode(TranscodeReason.Container, copyVideo = video?.codec == Codecs.H264 && videoOk == Support.Yes)?.let { routes += it }
             Container.Other -> routes += CastRoute.Direct("video/mp4")
         }
-        // A Maybe picture (HEVC on an unnamed Chromecast) falls back to conversion.
-        if (transcode != null && (routes.isEmpty() || videoOk == Support.Maybe)) routes += transcode
+        // Every way so far goes without the sound: made again with it, the picture passed through
+        // where it may play (a Maybe picture is still tried; the full conversion is behind it).
+        if (routes.firstOrNull()?.let { silentRoute(it, audioOk, probe) } == true && audioOk == Support.No) {
+            transcode(TranscodeReason.AudioCodec, copyVideo = true)?.let { routes.add(0, it) }
+        }
+        // A Maybe picture (HEVC on an unnamed Chromecast) or an unknown file falls back to conversion.
+        if (videoOk == Support.Maybe || routes.isEmpty() || probe.container == Container.Other) {
+            val reason = when {
+                probe.container == Container.Other && video == null -> TranscodeReason.Container
+                video != null && mayBeTooLarge(video, caps) && videoSupport(video, caps.copy(uhd = Support.Yes)) == Support.Yes -> TranscodeReason.Resolution
+                video != null && video.tenBit && caps.tenBit != Support.Yes -> TranscodeReason.TenBit
+                video == null -> TranscodeReason.Container
+                else -> TranscodeReason.VideoCodec
+            }
+            transcode(reason, copyVideo = false)?.let { routes += it }
+        }
         if (routes.isEmpty()) {
             val refusal = when {
                 probe.container == Container.MpegTs || probe.container == Container.Avi -> CastRefusal.Container
@@ -241,10 +278,26 @@ object CastFormats {
             return CastPlan(emptyList(), audioTrack?.number, refusal)
         }
         val first = routes.first()
-        val silent = (audioOk == Support.No && first is CastRoute.Direct) ||
-            (first is CastRoute.Remux && first.audioTrack == null && probe.audio.isNotEmpty()) ||
-            (first is CastRoute.Hls && first.audio.isEmpty() && probe.audio.isNotEmpty())
-        return CastPlan(routes.distinct(), audioTrack?.number, silent = silent)
+        return CastPlan(routes.distinct(), audioTrack?.number, silent = silentRoute(first, audioOk, probe))
+    }
+
+    /** [route] plays the picture without the sound the viewer chose. */
+    private fun silentRoute(route: CastRoute, audioOk: Support, probe: MediaProbe): Boolean = when (route) {
+        is CastRoute.Direct -> audioOk == Support.No
+        is CastRoute.Remux -> route.audioTrack == null && probe.audio.isNotEmpty()
+        is CastRoute.Hls -> route.audio.isEmpty() && probe.audio.isNotEmpty()
+        is CastRoute.Transcode -> route.audioTrack == null && probe.audio.isNotEmpty()
+        is CastRoute.ConvertAudio -> false
+    }
+
+    /**
+     * Rewrapping (or sending as it is) is enough for this receiver: the picture plays as it is, the
+     * wrapper has a rewrap here, and the sound plays or is converted. False means only a transcode
+     * would make it play with its sound.
+     */
+    fun remuxEnough(probe: MediaProbe, caps: ReceiverCaps, preferredAudio: Int? = null, canConvertAudio: Boolean = false): Boolean {
+        val p = plan(probe, caps, preferredAudio, canConvertAudio)
+        return p.castable && !p.silent
     }
 
     /**
@@ -295,5 +348,5 @@ object CastFormats {
     }
 
     /** The receiver will play the picture and the sound of [route] as given: no note needed. */
-    fun needsNote(route: CastRoute): Boolean = route is CastRoute.TranscodeVideo
+    fun needsNote(route: CastRoute): Boolean = route is CastRoute.Transcode
 }
