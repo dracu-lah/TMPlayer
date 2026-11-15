@@ -138,7 +138,7 @@ ladder runs), each with its `_detail`, stored as `notify_downloads`, `notify_epi
 | Storage card, Free up space | `downloads.*` | split | none | P T |
 | Download location | `storage.location` | location state | `download_root` | P T, more than one volume |
 | Remove after watching | `downloads.remove_after_watching` | `_body` | `remove_after_watching` | P T |
-| Low storage mode | `settings.low_storage` | `_on/_off` | `low_storage_mode` | P T |
+| While streaming: Keep video / Save space (two tabs) | `settings.stream_title` | `settings.stream_keep_detail` / `stream_save_detail` under the tabs | `low_storage_mode` (on is Save space) | P T D |
 | Low storage notification | `settings.low_storage_alert` | `settings.alert_low_storage_detail` | `notify_low_storage` | P |
 | Wi-Fi only downloads | `settings.wifi_only` | `_on/_off` | `wifi_only_downloads` | P |
 | Save mobile data | `settings.save_mobile_data` | `_on/_off` | `save_mobile_data` | P |
@@ -210,8 +210,8 @@ gestures, no Launcher, and Notifications kept. The differences from the phone, r
   phone's rows.
 - Home, Notifications: the phone's rows (desktop details for episodes, new videos and updates).
 - Storage: Free up space, Location (Change and Reset, `DesktopSettings.storageRoot`), Cache limit
-  (`DesktopSettings.cacheLimitBytes`), Remove after watching, Low storage mode, Low storage
-  notification, Pause downloads while playing, Scan the folder.
+  (`DesktopSettings.cacheLimitBytes`), Remove after watching, While streaming (Keep video or
+  Save space), Low storage notification, Pause downloads while playing, Scan the folder.
 - Account: the phone's rows.
 - About: Version group (no auto install, no detailed logs, no playback test, no send to the
   developer), Backup, Help with Proxy, Tour, What's new, Changelog, Report a problem, Save logs,
@@ -246,7 +246,7 @@ is moved by U20 (see "Not done").
    Subtitles and audio.
 2. **Sound rows on Playback** (Downmix, Even out volume) beside the picture rows, while the audio
    language sat elsewhere. Fix: with the audio language.
-3. **Where the video comes from** (Download the whole video first on Playback; Low storage mode,
+3. **Where the video comes from** (Download the whole video first on Playback; While streaming,
    Save mobile data, Wi-Fi only and Pause downloads while playing on Storage). Fix: Download the
    whole video first joins the others on Downloads and storage.
 4. **Crash reports** on About and help, the setup's crash step and the one-time "Help fix crashes?"
@@ -361,7 +361,7 @@ lock's state, an update waiting):
 | Playback | how a video starts and plays: autoplay, the default player, the engine and decoder, the controls, rewinding on resume, Advanced | P T D |
 | Player gestures / Mouse in the player | the player's touch gestures, or the mouse | P / D |
 | Subtitles and audio | subtitle look and languages, the audio language, remembered languages, Sound (downmix, even volume), Online subtitles | P T D |
-| Storage and downloads | the free space, where downloads go, Download the whole video first, Remove after watching, Low storage mode, Wi-Fi only, Save mobile data, Pause downloads while playing | P T D |
+| Storage and downloads | the free space, where downloads go, Download the whole video first, Remove after watching, While streaming, Wi-Fi only, Save mobile data, Pause downloads while playing | P T D |
 | Notifications | every notification, one switch each | P D |
 | Appearance and language | theme, colours, type, language, layout, size, motion | P T D |
 | Privacy and lock | App lock, Privacy (the privacy page, Send crash reports), Signed in (devices, Sign out) | P T D |

@@ -126,7 +126,11 @@ class SettingsGroupsTvTest {
     @Config(sdk = [35], qualifiers = "w960dp-h540dp-land-television-night-xhdpi")
     fun `Storage and downloads reaches Download the whole video first`() {
         show(SettingsPage.Storage)
-        walk("Storage location", "Download the whole video first", "Remove after watching", "Low storage mode")
+        walk("Storage location", "Download the whole video first", "Remove after watching")
+        // "While streaming" is one stop for both tabs, right under it.
+        row("Remove after watching").performKeyInput { pressKey(Key.DirectionDown) }
+        rule.waitForIdle()
+        rule.onNodeWithTag(STREAM_SWITCH_TAG).assertIsFocused()
     }
 
     @Test

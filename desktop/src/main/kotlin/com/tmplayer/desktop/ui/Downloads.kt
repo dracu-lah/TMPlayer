@@ -838,7 +838,6 @@ internal fun FreeUpReviewHost(
         onDismiss = onDismiss,
         lowStorage = if (short && (!lowStorageOn || lowStorageTurned)) {
             com.tmplayer.ui.components.LowStorageOffer(
-                mode = s.settingsLowStorage,
                 windowBytes = com.tmplayer.player.LowStorageWindow.WINDOW_BYTES,
                 on = lowStorageTurned,
             ) {

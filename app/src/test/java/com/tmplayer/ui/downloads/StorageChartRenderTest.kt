@@ -165,7 +165,7 @@ class StorageChartRenderTest {
                 sections = sections,
                 onFree = {},
                 onDismiss = {},
-                lowStorage = LowStorageOffer("Low storage mode", 64 * mb, on = false) {},
+                lowStorage = LowStorageOffer(64 * mb, on = false) {},
             )
         }
         idle(1500)

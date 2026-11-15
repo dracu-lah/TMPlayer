@@ -379,7 +379,7 @@ data class ChoiceCopy(val title: String, val detail: String)
 
 fun Strings.setupCopy(step: SetupStep): SetupCopy = when (step) {
     SetupStep.Posters -> SetupCopy(setupPostersTitle, setupPostersBody)
-    SetupStep.Storage -> SetupCopy(setupStorageTitle, setupStorageBody)
+    SetupStep.Storage -> SetupCopy(setupStorageTitle, setupStreamBody)
     SetupStep.Performance -> SetupCopy(setupPerformanceTitle, setupPerformanceBody)
     SetupStep.MobileData -> SetupCopy(setupMobileTitle, setupMobileBody)
     // The screen says which: memory, storage or both (fitHeadline).
@@ -390,8 +390,8 @@ fun Strings.setupCopy(step: SetupStep): SetupCopy = when (step) {
 fun Strings.choiceCopy(choice: SetupChoice): ChoiceCopy = when (choice) {
     SetupChoice.PostersOn -> ChoiceCopy(setupPostersOn, setupPostersOnDetail)
     SetupChoice.PostersOff -> ChoiceCopy(setupPostersOff, setupPostersOffDetail)
-    SetupChoice.KeepWhilePlaying -> ChoiceCopy(setupStorageNormal, setupStorageNormalDetail)
-    SetupChoice.LowStorage -> ChoiceCopy(setupStorageLow, setupStorageLowDetail)
+    SetupChoice.KeepWhilePlaying -> ChoiceCopy(settingsStreamKeep, settingsStreamKeepDetail)
+    SetupChoice.LowStorage -> ChoiceCopy(settingsStreamSave, settingsStreamSaveDetail)
     SetupChoice.FullQuality -> ChoiceCopy(setupPerformanceFull, setupPerformanceFullDetail)
     SetupChoice.Lighter -> ChoiceCopy(setupPerformanceLighter, setupPerformanceLighterDetail)
     SetupChoice.SaveData -> ChoiceCopy(setupMobileSave, setupMobileSaveDetail)

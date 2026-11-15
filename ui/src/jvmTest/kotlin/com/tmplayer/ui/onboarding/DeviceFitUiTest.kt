@@ -35,7 +35,7 @@ class DeviceFitUiTest {
     @Test
     fun `the rows the changes name are the Settings rows`() {
         val s = Translator.english()
-        assertEquals(s.settingsLowStorage, s.recommendationCopy(Recommendation.LowStorageMode).title)
+        assertEquals(s.settingsStreamRecommended, s.recommendationCopy(Recommendation.LowStorageMode).title)
         assertEquals(s.settingsTrickplay, s.recommendationCopy(Recommendation.NoSeekThumbnails).title)
         assertEquals(s.settingsLighterPictures, s.recommendationCopy(Recommendation.LighterPictures).title)
         assertEquals(s.settingsReduceMotion, s.recommendationCopy(Recommendation.ReduceMotion).title)
