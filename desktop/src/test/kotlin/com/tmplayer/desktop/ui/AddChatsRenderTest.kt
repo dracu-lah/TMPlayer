@@ -8,6 +8,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.performClick
@@ -37,7 +38,7 @@ import java.io.File
 
 /**
  * The Add chats picker (HX27) over a long account, in both themes: each frame has something on it
- * besides the ground, and only the rows on screen were counted. With TMPLAYER_SHOTS=<dir> the
+ * besides the ground, and no row shows a video count. With TMPLAYER_SHOTS=<dir> the
  * frames are written there.
  */
 @OptIn(ExperimentalTestApi::class)
@@ -163,7 +164,7 @@ class AddChatsRenderTest {
     }
 
     @Test
-    fun `the picker draws the bands and counts only what is on screen`() {
+    fun `the picker draws the bands and counts the head of the list`() {
         for (dark in listOf(true, false)) {
             val model = AddChatsViewModel(counts = Counts)
             shot("add-chats-${theme(dark)}", 1366, 900, dark, model) {
@@ -171,9 +172,29 @@ class AddChatsRenderTest {
             }
             val counted = model.state.value.counted
             assertTrue("the first row was counted", counted.containsKey(CHATS.first().id))
-            assertFalse("a row far below the window was not counted", counted.containsKey(CHATS.last().id))
             model.stop()
         }
+    }
+
+    /** T5: no row says how many videos a chat holds, and a Recommended row says why it is there in words. */
+    @Test
+    fun `rows show no video count and a recommended row says why`() = runComposeUiTest {
+        val model = AddChatsViewModel(counts = Counts, countsRest = false)
+        setContent {
+            TmMaterialTheme(dark = true) {
+                Box(Modifier.size(1280.dp, 900.dp)) {
+                    AddChatsScreen(chats = CHATS, listComplete = true, starred = emptySet(), model = model, onClose = {})
+                }
+            }
+        }
+        waitUntil(timeoutMillis = 10_000) { model.state.value.recommended.isNotEmpty() }
+        waitForIdle()
+        assertTrue(model.state.value.counted.isNotEmpty())
+        onAllNodes(hasText("Has many videos")).assertCountEquals(model.state.value.recommended.size)
+        onAllNodes(hasText("About ", substring = true)).assertCountEquals(0)
+        onAllNodes(hasText("1,000+", substring = true)).assertCountEquals(0)
+        onAllNodes(hasText("Could not count", substring = true)).assertCountEquals(0)
+        model.stop()
     }
 
     @Test

@@ -57,12 +57,10 @@ class AddChatsRenderTest {
     fun phone() {
         val model = AddChatsViewModel(counts = Counts)
         save("add-chats-phone.png", render(tv = false, model, CHATS))
-        // Only the rows on screen are counted (and the head of the list, which the recommendation
-        // is made from): a chat deep in the list was never asked about.
+        // The head of the list is counted first, which the recommendation is made from, and the
+        // rest of the account behind it, in the background: no row shows a figure (T5).
         val counted = model.state.value.counted
         assertTrue("the first row was counted", counted.containsKey(CHATS.first().id))
-        assertFalse("a row far below the screen was not counted", counted.containsKey(CHATS.last().id))
-        assertEquals(ChatCount.Unknown, counted[UNCOUNTABLE])
         model.stop()
     }
 

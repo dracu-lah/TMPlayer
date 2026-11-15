@@ -39,17 +39,6 @@ object ChatPicking {
         val starred: Boolean = false,
     )
 
-    /** What the foot says: how many chats are ticked, and how many videos they hold between them. */
-    data class Total(
-        val chats: Int,
-        /** Summed over the chats whose count is known; [counted] says how many that was. */
-        val videos: Int,
-        val counted: Int,
-    ) {
-        /** Whether every ticked chat has been counted, so the figure is not still filling in. */
-        val whole: Boolean get() = counted == chats
-    }
-
     /** Whether [chat] belongs in [scope]. Saved Messages counts as a person, as it does elsewhere. */
     fun inScope(chat: ChatSummary, scope: Scope): Boolean = when (scope) {
         Scope.All -> true
@@ -182,19 +171,6 @@ object ChatPicking {
     fun foldedIn(rows: List<Row>, counts: Map<Long, ChatCount>, ticked: Set<Long>, band: Band): List<Row> =
         rows.filter { it.band == band && folds(it, counts, ticked) }
 
-    /**
-     * The chats of [rows] still to count in the background, past the head start: uncounted, not
-     * Gone, in list order, at most [limit] so one pass is bounded.
-     */
-    fun toCount(rows: List<Row>, counts: Map<Long, ChatCount>, limit: Int = Int.MAX_VALUE): List<Long> {
-        val out = ArrayList<Long>()
-        for (row in rows) {
-            if (out.size >= limit) break
-            if (row.band != Band.Gone && !counts.containsKey(row.id)) out += row.id
-        }
-        return out
-    }
-
     /** The ids of [rows], which is what Select all and Clear act on: what is on the screen now. */
     fun visible(rows: List<Row>): Set<Long> = rows.asSequence().filter { it.band != Band.Gone }.mapTo(LinkedHashSet()) { it.id }
 
@@ -222,23 +198,27 @@ object ChatPicking {
     /** Whether ticking [adding] more chats at once is worth a word first. */
     fun needsConfirm(adding: Int): Boolean = adding > CONFIRM_OVER
 
-    /** The foot's figures. A chat with no count yet simply adds nothing to the number. */
-    fun total(ticked: Set<Long>, counts: Map<Long, ChatCount>): Total {
-        var videos = 0
-        var counted = 0
-        for (id in ticked) {
-            val known = counts[id] as? ChatCount.Known ?: continue
-            videos += known.videos
-            counted++
+    /**
+     * The order the account is counted in: Saved Messages, then channels (a video library is nearly
+     * always one), then groups, then people, Telegram's own recency inside each. A stable order, so
+     * two runs over the same account agree.
+     */
+    fun scanOrder(chats: List<ChatSummary>): List<ChatSummary> {
+        fun rank(chat: ChatSummary) = when (chat.kind) {
+            ChatKind.Saved -> 0
+            ChatKind.Channel -> 1
+            ChatKind.Group -> 2
+            ChatKind.Direct -> 3
         }
-        return Total(ticked.size, videos, counted)
+        return chats.sortedBy(::rank)
     }
 
     /**
-     * The chats worth counting before any row is drawn, so the Recommended band can appear within
-     * the first seconds: the head of the list, in Telegram's own order of recency, and Saved
-     * Messages. Everything past this is counted as its row comes on screen, and nothing is
-     * counted at all once the picker closes.
+     * The chats counted before any row is drawn, so the Recommended band can appear within the
+     * first seconds: Saved Messages and the head of the list in Telegram's own order of recency,
+     * which is where the chats the viewer watches from are. The rest of the account is counted
+     * behind it in [scanOrder], in the background, and nothing is counted at all once the picker
+     * closes.
      */
     fun headStart(chats: List<ChatSummary>, ahead: Int = COUNT_AHEAD): List<Long> {
         val out = LinkedHashSet<Long>()
@@ -251,9 +231,9 @@ object ChatPicking {
     }
 
     /**
-     * How far ahead the counts run before the viewer scrolls. Sixty chats at three at a time is
-     * twenty rounds, which an account of three thousand finishes in seconds and a television does
-     * not feel; the recommendation is made from these.
+     * How far ahead the counts run first. Sixty chats at three at a time is twenty rounds, which
+     * the first band is made from within seconds; the rest of the account follows in the
+     * background and the band is ranked again as it arrives ([ChatSuggestions.refine]).
      */
     const val COUNT_AHEAD = 60
 

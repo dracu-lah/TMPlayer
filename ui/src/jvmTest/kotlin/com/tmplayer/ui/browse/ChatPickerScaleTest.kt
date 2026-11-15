@@ -27,7 +27,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -371,16 +370,15 @@ class ChatPickerScaleTest {
      * had counted the whole account: the video chats, fullest first, the first thirty ticked.
      */
     @Test
-    fun `recommending over every real count picks the chats with twenty videos, thirty ticked, fullest first`() {
+    fun `recommending over every real count picks thirty of the chats with twenty videos, fullest first`() {
         val account = SyntheticAccount(CoroutineScope(Job()), { 0L })
         val chats = account.mainList()
         val counts = chats.associate { it.id to (ChatCount.Known(account.videoCount(it.id)) as ChatCount) }
         val suggestion = ChatSuggestions.recommend(ChatPicking.counted(chats, counts))
         val want = expected(chats, account) { true }
-        report("recommend over all ${chats.size} real counts: ${suggestion.ids.size} chats, ${suggestion.ticked.size} ticked, first ${suggestion.ids.take(5)}")
-        assertEquals(want, suggestion.ids)
-        assertEquals(want.take(ChatSuggestions.MAX_PRETICKED).toSet(), suggestion.ticked)
-        assertEquals(ChatSuggestions.MAX_PRETICKED, suggestion.ticked.size)
+        report("recommend over all ${chats.size} real counts: ${suggestion.ids.size} chats, first ${suggestion.ids.take(5)}")
+        assertEquals(want.take(ChatSuggestions.MAX_BAND), suggestion.ids)
+        assertEquals(ChatSuggestions.MAX_BAND, suggestion.ids.size)
         // The three 20,000-video chats lead, and the rest follow in the list's order.
         assertEquals(listOf(1L, 2L, 3L), suggestion.ids.take(3))
         assertTrue(suggestion.ids.all { account.videoCount(it) >= ChatSuggestions.MIN_VIDEOS })
@@ -389,7 +387,7 @@ class ChatPickerScaleTest {
 
     /** What the picker really recommends is made from the head start's answers alone, and from the ones that answered. */
     @Test
-    fun `the picker recommends the head start's chats with twenty videos, fullest first, and ticks thirty`() = runTest(dispatcher, timeout = 5.minutes) {
+    fun `the picker recommends thirty of the head start's chats with twenty videos, fullest first, and ticks none`() = runTest(dispatcher, timeout = 5.minutes) {
         val account = SyntheticAccount(backgroundScope, { testScheduler.currentTime })
         picker(account) { model ->
             val chats = account.mainList()
@@ -397,13 +395,13 @@ class ChatPickerScaleTest {
             val took = until(10 * 60_000) { model.state.value.recommended.isNotEmpty() }
             val head = ChatPicking.headStart(chats).toSet()
             val answered = { id: Long -> id in head && knownFigure(model, id) != null }
-            val want = expected(chats, account, answered)
+            val want = expected(chats, account, answered).take(ChatSuggestions.MAX_BAND)
             val state = model.state.value
             val unknown = state.counted.filterValues { it == ChatCount.Unknown }.keys
             report("recommended ${state.recommended.size} of ${head.size} counted (${unknown.size} could not be counted: ${unknown.sorted()}) at ${took / 1000.0} s; ticked ${state.ticked.size}; first ${state.recommended.take(5)}")
             assertEquals(want, state.recommended)
             assertTrue("nothing is ticked for the viewer", state.ticked.isEmpty())
-            assertTrue("more than the ticked cap qualify, or the cap is not tested: ${want.size}", want.size > ChatSuggestions.MAX_PRETICKED)
+            assertEquals("the band is capped", ChatSuggestions.MAX_BAND, want.size)
             // A chat that could not be counted is left out, not written off as empty.
             assertTrue(unknown.none { it in state.recommended })
             for (id in state.recommended) assertTrue("chat $id", account.videoCount(id) >= ChatSuggestions.MIN_VIDEOS)
@@ -414,38 +412,75 @@ class ChatPickerScaleTest {
     }
 
     /**
-     * A list that rearranges itself under a finger ticks the wrong chat, so the recommendation is
-     * taken once. The counts that arrive after it, and the head start asked for again, leave the
-     * band's order exactly as it was, although a recommendation made now would be longer.
+     * A list that rearranges itself under a finger ticks the wrong chat, so once the viewer has
+     * touched the list the band's rows stay where they are, and what the later counts find is added
+     * at the end.
      */
     @Test
-    fun `the recommendation does not change when later counts arrive`() = runTest(dispatcher, timeout = 5.minutes) {
-        val account = SyntheticAccount(backgroundScope, { testScheduler.currentTime })
+    fun `after the viewer ticks, a late 20000 video channel takes the slot of an outranked row and moves nothing`() = runTest(dispatcher, timeout = 5.minutes) {
+        val account = SyntheticAccount(backgroundScope, { testScheduler.currentTime }, bigChats = mapOf(1_500L to 20_000))
         picker(account) { model ->
             val chats = account.mainList()
             model.start(chats)
             until(10 * 60_000) { model.state.value.recommended.isNotEmpty() }
-            val taken = model.state.value
-            val bandBefore = ChatPicking.rows(chats, added = emptySet(), recommended = taken.recommended).filter { it.band == ChatPicking.Band.Recommended }.map { it.id }
-            (61L..account.videoChats).forEach(model::count)
-            until(10 * 60_000) { model.answered((1L..account.videoChats).toList()) }
+            val taken = model.state.value.recommended
+            assertTrue(1_500L !in taken)
+            model.toggle(taken.last())
+            model.countRest(chats)
+            until(15 * 60_000) { 1_500L in model.state.value.recommended }
+            val after = model.state.value.recommended
+            report("band ${taken.size} before the viewer's tick, ${after.size} after the scan; chat 1500 at ${after.indexOf(1_500L)}")
+            // Only the slot of an outranked chat changed hands: no row moved, the ticked one stayed.
+            val changed = taken.indices.filter { taken[it] != after[it] }
+            assertEquals("same length: the band was full", taken.size, after.size)
+            assertTrue("rows changed: $changed", changed.size == 1 && after[changed.single()] == 1_500L)
+            assertTrue("the ticked row stayed", taken.last() in after)
+            assertTrue(1_500L in after)
+        }
+    }
+
+    /**
+     * T5: a channel of 20,000 videos far down a 3,000 chat account (past the head start, past the
+     * first thousand) is recommended, first, while nothing has been touched. Before the scan fed
+     * the band it was taken once from the 60 newest chats and never looked at it again.
+     */
+    @Test
+    fun `a channel with 20000 videos far down the account is recommended, and the scan stays in budget`() = runTest(dispatcher, timeout = 10.minutes) {
+        val big = 1_500L
+        val account = SyntheticAccount(backgroundScope, { testScheduler.currentTime }, bigChats = mapOf(big to 20_000))
+        picker(account) { model ->
+            val chats = account.mainList()
+            assertEquals(ChatKind.Channel, chats.first { it.id == big }.kind)
             model.start(chats)
+            model.countRest(chats)
+            val first = until(10 * 60_000) { model.state.value.recommended.isNotEmpty() }
+            assertTrue("first band at $first ms", first <= 3_100)
+            assertTrue("not in the head start", big !in ChatPicking.headStart(chats))
+            val found = until(15 * 60_000) { big in model.state.value.recommended }
+            val band = model.state.value.recommended
+            report("20,000 video channel at chat $big: first band at ${first / 1000.0} s, found at ${found / 1000.0} s, band ${band.size}, at ${band.indexOf(big)}; most in flight ${account.maxCountsInFlight}; requests ${account.countRequests}; calls ${account.calls}")
+            assertTrue("recommended", big in band)
+            assertTrue("a channel with 20,000 videos leads the band (with the other two): ${band.take(5)}", big in band.take(4))
+            assertTrue("found at $found ms", found < 10 * 60_000)
+            assertTrue("${account.maxCountsInFlight} counts in flight", account.maxCountsInFlight <= ChatVideoCount.AT_ONCE)
+            // Every chat of the account was asked about once or twice (the server again for a flood or a failure), not more.
+            val wholePass = until(20 * 60_000) { model.state.value.counted.size >= chats.size }
+            assertTrue("whole account counted in ${wholePass / 1000.0} s", model.state.value.counted.size >= chats.size)
+            assertTrue("requests ${account.countRequests} for ${chats.size} chats", account.countRequests <= chats.size * 3)
+            // Closed: nothing more is asked.
+            model.stop()
+            runCurrent()
+            advanceTimeBy(3 * 60_000)
+            val settled = account.countRequests
             advanceTimeBy(60_000)
-            val after = model.state.value
-            val bandAfter = ChatPicking.rows(chats, added = emptySet(), recommended = after.recommended).filter { it.band == ChatPicking.Band.Recommended }.map { it.id }
-            val fresh = ChatSuggestions.recommend(ChatPicking.counted(chats, after.counted))
-            report("band before ${bandBefore.size} chats, after ${after.counted.size} counts ${bandAfter.size} chats; a fresh recommendation would hold ${fresh.ids.size}")
-            assertEquals(taken.recommended, after.recommended)
-            assertEquals(bandBefore, bandAfter)
-            assertEquals(taken.ticked, after.ticked)
-            assertNotEquals("the later counts would have changed it, or this proves nothing", taken.recommended, fresh.ids)
+            assertEquals("the counter asked after stop", settled, account.countRequests)
         }
     }
 
     /**
      * The counter keeps one answer per chat and nothing for a chat that failed; the picker's own
      * map holds the chats asked for and no more. Asking again for a chat that is counted costs no
-     * call and adds no entry, and a chat that could not be counted is asked again in place.
+     * call and adds no entry.
      */
     @Test
     fun `memory stays bounded to the chats that were counted`() = runTest(dispatcher, timeout = 5.minutes) {
@@ -473,18 +508,11 @@ class ChatPickerScaleTest {
             val calls = account.total()
             val requests = account.countRequests
             repeat(5) { (1L..account.videoChats).forEach(model::count) }
-            val known = counted.filterValues { it is ChatCount.Known }.keys
-            known.take(100).forEach(model::countAgain)
             until(10_000) { false }
             assertEquals(asked, model.state.value.counted.size)
             assertEquals("a chat already counted was asked again", requests, account.countRequests)
             assertEquals(calls, account.total())
 
-            // A chat that failed is asked again in place, as many times as the viewer asks, and is still one entry.
-            repeat(3) { unknown.forEach(model::countAgain) }
-            until(30_000) { model.answered(unknown) }
-            assertEquals(asked, model.state.value.counted.size)
-            assertTrue("asking for the failed again asked nothing", account.countRequests > requests)
         }
     }
 }
