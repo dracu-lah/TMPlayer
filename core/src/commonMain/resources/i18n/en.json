@@ -3505,6 +3505,14 @@
     "subtitle": "The highlights of this version",
     "title": "What's new in {version}"
   },
+  "widget": {
+    "locked": "TMPlayer is locked",
+    "locked_hint": "Tap to unlock",
+    "nothing": "Nothing to continue",
+    "open_hint": "Tap to open TMPlayer",
+    "play_description": "Continue {title}, {percent}% watched",
+    "sign_in": "Sign in to TMPlayer"
+  },
   "window": {
     "close": "Close",
     "maximize": "Maximize",
