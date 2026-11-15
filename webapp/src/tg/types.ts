@@ -61,6 +61,8 @@ export interface PieceSet {
 }
 
 export interface VideoItem extends FileRef {
+    /** The Telegram datacenter (1 to 5) the file is kept in, for Playback details; absent in items kept before this existed. */
+    dc?: number
     chatId: number
     messageId: number
     duration: number

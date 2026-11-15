@@ -148,6 +148,7 @@
 .player[data-variant="tv"] .pc-status-inner { max-width: calc(var(--u) * 560); }
 .player[data-variant="tv"] .pc-status h2 { font-size: calc(var(--u) * 24); line-height: calc(var(--u) * 30); }
 .player[data-variant="tv"] .pc-status-name, .player[data-variant="tv"] .pc-status-body { font-size: calc(var(--u) * 16); line-height: calc(var(--u) * 22); }
+.player[data-variant="tv"] .pc-status-format { font-size: calc(var(--u) * 14); line-height: calc(var(--u) * 20); }
 .player[data-variant="tv"] .pc-sheet-button { min-height: calc(var(--u) * 48); padding: 0 calc(var(--u) * 28); font-size: calc(var(--u) * 16); }
 .player[data-variant="tv"] .pc-sheet-button:focus { background: #fff; color: var(--on-focus); border-color: #fff; outline: none; }
 

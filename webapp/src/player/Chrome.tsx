@@ -1816,6 +1816,9 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                         <p>{c.details()}</p>
                         <p>{c.readout()}</p>
                         <p>{t('player.details_speed', { speed: speedLabel(rate()) })}</p>
+                        <Show when={c.item.dc}>
+                            <p>{t('player.details_datacenter', { number: c.item.dc! })}</p>
+                        </Show>
                     </div>
                 </Match>
             </Switch>

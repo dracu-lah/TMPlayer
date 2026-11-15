@@ -24,6 +24,7 @@ import { hevcAccepted, pictureNames, tvDecodesHevc, withHevc } from './hevcnames
 import { tvServiceUp } from '../stream/tvservice'
 import { TV_BROWSER, tvNativeOff, tvPlaysNatively } from './tvnative'
 import { mpegAudioLayer, soundDecoderFor } from './libavframes'
+import type { FormatFacts } from './formatline'
 
 export interface Probe {
     input: Input
@@ -52,6 +53,8 @@ export interface Probe {
     tryNames: string[]
     /** No name was taken, but this is a TV that decodes HEVC, AV1 and VP9: the Source Buffer is tried without asking. */
     hevcTrusted: boolean
+    /** What the file's header says of its picture and sound, for the error card's one plain line (formatline.ts). */
+    facts: FormatFacts
 }
 
 /** Why a file cannot play here: the page says "needs the app" with the reason. */
@@ -198,7 +201,21 @@ export async function probe(file: MediaFile, durationHint: number): Promise<Prob
     if (!remuxable && !native && vcodec && /^(hev1|hvc1)/.test(vcodec) && (await (await import('./hevc')).canTranscodeHevc())) {
         transcode = remuxable = true
     }
-    return { input, container: format.name, video, audios, duration, base, mime: asMp4, native, remuxable, videoCodec: codecName(video), transcode, hevcAs: transcode ? null : hevcAs, tryNames: transcode ? [] : tryNames, hevcTrusted: !transcode && (hevcTrusted || pictureTrusted) }
+    // The error card's line, from the header alone: no read of the stream is added to the opening
+    // (the colour transfer, which could cost one, is left out).
+    const sound = audios[0] ?? null
+    const facts: FormatFacts = {
+        videoCodec: video ? (video.codec ?? codecName(video)) : null,
+        videoParams: vcodec,
+        width: video?.displayWidth ?? 0,
+        height: video?.displayHeight ?? 0,
+        transfer: null,
+        audioCodec: sound ? (sound.codec ?? codecName(sound)) : null,
+        audioParams: sound ? ((await sound.getCodecParameterString().catch(() => null)) ?? null) : null,
+        channels: sound?.numberOfChannels ?? 0,
+        container: format.name,
+    }
+    return { input, container: format.name, video, audios, duration, base, mime: asMp4, native, remuxable, videoCodec: codecName(video), transcode, hevcAs: transcode ? null : hevcAs, tryNames: transcode ? [] : tryNames, hevcTrusted: !transcode && (hevcTrusted || pictureTrusted), facts }
 }
 
 /**

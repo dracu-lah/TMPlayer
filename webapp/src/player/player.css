@@ -422,6 +422,8 @@
 .pc-status-warning { color: #ff5449; display: grid; margin: 8px 0 4px; }
 .pc-status h2 { margin: 8px 0 0; font-size: 20px; line-height: 26px; font-weight: 700; }
 .pc-status-body { margin: 0; font-size: 15px; line-height: 20px; color: rgba(255,255,255,.62); }
+/* The failed format in one plain line, under the sentence (formatline.ts). */
+.pc-status-format { margin: 6px 0 0; font-size: 13px; line-height: 18px; color: rgba(255,255,255,.46); overflow-wrap: anywhere; }
 .pc-status-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 24px; }
 .pc-sheet-button {
   min-height: 48px; padding: 0 28px; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; cursor: pointer;

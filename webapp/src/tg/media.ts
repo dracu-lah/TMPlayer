@@ -112,6 +112,7 @@ export function itemOf(
     return {
         key,
         size,
+        dc: m.dcId && m.dcId >= 1 && m.dcId <= 5 ? m.dcId : undefined,
         chatId: msg.chat.id,
         messageId: msg.id,
         duration: m.type === 'video' ? m.duration : 0,

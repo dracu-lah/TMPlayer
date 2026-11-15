@@ -13,6 +13,7 @@ import { storyboardFrames, type Frames } from './storyboard'
 import { appleTouch, FrameGrabber, PICTURES_SHOWN } from './seekpreview'
 import { Chrome, variant } from './Chrome'
 import { OpeningLoader } from './loader'
+import { copyDetails, formatLine, type FormatFacts } from './formatline'
 import { readChapters, type Chapter } from './chapters'
 import { applyDelay, look, placeCues, lookVars, setLook, setSubDelay } from './cues'
 import { readLook } from './keep'
@@ -113,6 +114,11 @@ export function Player(props: {
     const [source, setSource] = createSignal<Source>(original())
     const [error, setError] = createSignal<string | null>(null)
     const [needsApp, setNeedsApp] = createSignal<Why | null>(null)
+    /** What the file's header says of its picture and sound, for the error card's one plain line (formatline.ts). */
+    const [facts, setFacts] = createSignal<FormatFacts | null>(null)
+    /** The failure on the card is a codec or container one, the kind that line is about. */
+    const [mediaFailed, setMediaFailed] = createSignal(false)
+    const [detailsCopied, setDetailsCopied] = createSignal(false)
     /** The picture is converted here (HEVC with no decoder), which makes the opening slow: the loader says so. */
     const [converting, setConverting] = createSignal(false)
     /** A line over the picture: the sound, a subtitle file, a quality switch. */
@@ -161,6 +167,7 @@ export function Player(props: {
 
     const fail = (e: unknown) => {
         console.error('[player]', e)
+        setMediaFailed(e instanceof Unplayable || e instanceof DOMException || /could not take this part|MediaSource|SourceBuffer|decod|codec|hevc/i.test(String((e as Error)?.message ?? e)))
         if (e instanceof Unplayable) setNeedsApp(e.why)
         // Offline: wait for the connection and carry on at the same second (onOnline).
         else if (!navigator.onLine) {
@@ -255,6 +262,9 @@ export function Player(props: {
         unload()
         video.defaultPlaybackRate = rate
         setError(null)
+        setMediaFailed(false)
+        setFacts(null)
+        setDetailsCopied(false)
         setStall(null)
         setSource(src)
         let f: MediaFile
@@ -281,6 +291,7 @@ export function Player(props: {
             if (typeof p === 'string') return await fallback(new Unplayable({ kind: 'format', format: p }), f, at, play, gen, rate)
             if (gen !== generation) return p.input.dispose()
             probed = p
+            setFacts(p.facts)
             setConverting(p.transcode)
             setAudios(p.audios)
             setAudio(p.audios[0] ?? null)
@@ -519,6 +530,33 @@ export function Player(props: {
 
     /** The same source again at the same second: Retry after a stall, a lost connection or a quality pick. */
     const reload = (src = source()) => load(src, engine ? video.currentTime || 0 : openingAt, !video.paused || stall() !== null)
+
+    /** The failed format in one plain line, for the card of a codec or container failure that knew its format; empty otherwise. */
+    const failedLine = () => (needsApp() || (error() && mediaFailed()) ? formatLine(facts()) : '')
+
+    /** Copy details: the line, what this browser says of the codecs, the datacenter and the browser; no title, chat or file name. */
+    const copyFailure = async () => {
+        const f = facts()
+        const source = globalThis.MediaSource ?? (globalThis as { ManagedMediaSource?: typeof MediaSource }).ManagedMediaSource
+        const ask = (kind: string, codec: string | null) => {
+            if (!codec) return null
+            const type = `${kind}/mp4; codecs="${codec}"`
+            let yes = false
+            try {
+                yes = !!source?.isTypeSupported(type)
+            } catch {
+                // a browser that throws on a string it does not know says no
+            }
+            return `${type} ${yes ? 'yes' : 'no'}`
+        }
+        const support = [ask('video', f?.videoParams ?? null), ask('audio', f?.audioParams ?? null)].filter((s): s is string => !!s)
+        try {
+            await navigator.clipboard.writeText(copyDetails(failedLine(), support, item.dc, navigator.userAgent))
+            setDetailsCopied(true)
+        } catch {
+            setDetailsCopied(false)
+        }
+    }
 
     const whyText = (why: Why) =>
         why.kind === 'format'
@@ -916,6 +954,7 @@ export function Player(props: {
                         body={needsApp() ? whyText(needsApp()!) : (error() ?? (stall() === 'start' ? t('player.stalled_slow') : t('player.stalled_mid_slow')))}
                         note={needsApp() ? t('web.app_body') : undefined}
                         warning={!!error() || !!needsApp()}
+                        format={failedLine()}
                     >
                         <Show
                             when={needsApp()}
@@ -940,6 +979,11 @@ export function Player(props: {
                                 }}
                             >
                                 {t('player.lighter', { quality: `${lighter().height}p` })}
+                            </button>
+                        </Show>
+                        <Show when={failedLine()}>
+                            <button type="button" class="pc-sheet-button" onClick={copyFailure}>
+                                {detailsCopied() ? t('player.details_copied') : t('player.copy_details')}
                             </button>
                         </Show>
                         <button type="button" class="pc-sheet-button" onClick={close}>{t('player.go_back')}</button>
@@ -967,7 +1011,7 @@ export function Player(props: {
  * what happened in a heading and a line, and the ways on as pills in a row that wraps. Stacked on
  * a phone held upright, the picture beside the words where the height is short.
  */
-function StatusSheet(props: { item: VideoItem; title: string; heading: string; body: string; note?: string; warning: boolean; children: JSX.Element }) {
+function StatusSheet(props: { item: VideoItem; title: string; heading: string; body: string; note?: string; warning: boolean; format?: string; children: JSX.Element }) {
     const [art, setArt] = createSignal<string | null>(null)
     onMount(() => {
         if (props.item.thumb && !props.warning) loadThumb(props.item.thumb).then(setArt, () => {})
@@ -987,6 +1031,9 @@ function StatusSheet(props: { item: VideoItem; title: string; heading: string; b
                     </Show>
                     <h2>{props.heading}</h2>
                     <p class="pc-status-body">{props.body}</p>
+                    <Show when={props.format}>
+                        <p class="pc-status-format">{props.format}</p>
+                    </Show>
                     <Show when={props.note}>
                         <p class="pc-status-body">{props.note}</p>
                     </Show>
