@@ -362,6 +362,32 @@ Android options, PixelCopy on TV overlay planes.
 Themed cards and dialogs with the official logos, regional order (IN: UPI first), icon popup through the
 existing `SupportReminder` nag. Design note `design/redesign/support-cards.md`.
 
+## RUN QUEUE (user, 2026-11-16: "do all"; hands-free, 3 workers at once, own worktree each)
+
+"do all" approves: redesigns R1 to R4 (R3 without counts, merged with T5's picker), Raju groups A to I, T7 (RL1 to RL15
+except the user's device pass RL15), T8, T10, T11, TS1 to TS8, FQ1 to FQ15 incl. the TV pause clock, store listing and phone
+page copy in the repo (files only, nothing is published), live streams last. Hard stops that stay the user's: store
+submissions, tags and releases, deploys, device passes (RL15, leftovers list), keys and secrets (Trakt and Simkl keys,
+anime-skip client id: build everything behind a missing key, leave the key as a TODO for the user), NPCI logo.
+Nothing is pushed until the user says (commits stay local); each merge into main runs CatalogTest and the compile of
+app and desktop. A read-only Sonnet reviewer reads each big task's diff (R1 to R4, RL5 and RL6, FQ8, FQ12); the worker
+fixes the findings once. A check failing twice marks the task blocked and the queue goes on.
+Order (files that overlap run in different waves; "after" = depends):
+1. Running: T4 (storage tabs), T9 (series all seasons, ranges), T12 (remove mini player).
+2. Next: RL1+RL2+RL3 (core pure, new files); T10 skip times (after T9); FQ1+FQ2+FQ7 (not starting reason, unreachable
+   banner, sign in stall; after T12).
+3. Then: Raju A+D+H (chats and search phone, settings search synonyms, web); Raju B+R4 (banner, bottom bar, offline
+   mode); Raju E+F (words only, connect help); RL5+RL6+RL8 (player wiring, after T12).
+4. Then: R1 (every video by default); R3+T5 picker and one question setup; R2 (Downloads tab and storage page, after T4);
+   T11 (anime episode data, after T9, T10); Raju C+G (detail and downloads, player controls and labels).
+5. Then: T8 format badges; TS rest (season packs, why no poster, preferred copy, caption link, subtitle language,
+   backup before sign out and sync); RL9, RL10, RL11, RL12, RL13, RL14 (docs); FQ10 night mode, FQ11 black theme,
+   FQ9 lighter copy, FQ8 cast, FQ14 audio playlist, FQ15 troubleshooting guides, TV clock, store text, phone page, FQ13
+   (blocked on keys), live streams.
+6. Last: the inventory review waves (R1 to R9 on `private/ux-inventory/`, dimensions D1 to D8: animation, look, speed with
+   the compose-performance skill) and Raju's second pass on the final build.
+Progress of each item is logged below in "Progress / handoff" with its commit.
+
 ## Not in this pass
 Store text, the site.
 
