@@ -47,6 +47,9 @@ class AddChatsRenderTest {
     @After
     fun tearDown() {
         FormFactor.override(false)
+        // A test's cancelled counts hand their permits back on the looper; left unrun they would
+        // hold the app wide counter's three for the next test, whose counts would never land.
+        idle()
     }
 
     @Test
@@ -80,6 +83,9 @@ class AddChatsRenderTest {
         assertTrue(model.state.value.recommended.isEmpty())
         assertTrue(model.state.value.ticked.isEmpty())
         model.stop()
+        // The cancelled counts hand their permits back on the looper; left unrun they would hold
+        // all three for the next test, whose counts would then never land.
+        idle()
     }
 
     /**
@@ -126,6 +132,91 @@ class AddChatsRenderTest {
         // No frame is drawn here: drawing the window while the tick box still animates left the
         // native canvas in a state that stopped the next test's counts from landing.
         model.stop()
+    }
+
+    /**
+     * The Recommended band's one button (ON-3) ticks the whole band on a press and takes it out on
+     * the next, and Back in the required choice with chats ticked asks before it leaves (ON-5):
+     * No leaves the ticks alone, Leave goes. Back with nothing ticked is the test above.
+     */
+    @Test
+    @Config(sdk = [35], qualifiers = "w411dp-h891dp-port-night-xhdpi")
+    fun `the band's button adds the band and Back with ticks asks before leaving`() {
+        com.tmplayer.data.ChatVideoCount.forget()
+        FormFactor.override(false)
+        val model = AddChatsViewModel(counts = Counts, write = {}, countsRest = false)
+        var left = 0
+        val activity = Robolectric.buildActivity(ComponentActivity::class.java).setup().get()
+        activity.setContent {
+            TmMaterialTheme(dark = true) {
+                AddChatsScreen(
+                    chats = CHATS, listComplete = true, starred = emptySet(), model = model, onClose = {},
+                    required = true, onLeave = { left++ }, confirmLeave = true,
+                )
+            }
+        }
+        idle()
+        assertTrue("three chats reach the bar: ${model.state.value}", model.state.value.recommended.size == 3)
+        assertTrue("nothing is ticked for the viewer", model.state.value.ticked.isEmpty())
+        click(activity, "Add these 3 chats")
+        idle()
+        assertEquals(model.state.value.recommended.toSet(), model.state.value.ticked)
+        assertTrue("the button now takes them out", node(activity, "Remove these 3 chats", clickable = true) != null)
+        click(activity, "Remove these 3 chats")
+        idle()
+        assertTrue(model.state.value.ticked.isEmpty())
+        click(activity, "Add these 3 chats")
+        idle()
+
+        activity.onBackPressedDispatcher.onBackPressed()
+        idle()
+        assertEquals("Back with ticks asks first", 0, left)
+        assertTrue(node(activity, "Leave TMPlayer?") != null)
+        activity.onBackPressedDispatcher.onBackPressed()
+        idle()
+        assertTrue("Back from the question keeps the choice", node(activity, "Leave TMPlayer?") == null)
+        assertEquals(3, model.state.value.ticked.size)
+        assertEquals(0, left)
+        activity.onBackPressedDispatcher.onBackPressed()
+        idle()
+        click(activity, "Leave")
+        idle()
+        assertEquals(1, left)
+        model.stop()
+    }
+
+    /**
+     * The picker reopened over a choice already made (ON-12): the added chats lead in their own
+     * band, are not listed again under Recommended, and the band is not held behind skeletons.
+     */
+    @Test
+    @Config(sdk = [35], qualifiers = "w411dp-h891dp-port-night-xhdpi")
+    fun `reopened over a choice the added chats lead and appear once`() {
+        com.tmplayer.data.ChatVideoCount.forget()
+        FormFactor.override(false)
+        val file = File.createTempFile("added", ".preferences_pb").apply { delete() }
+        val store = com.tmplayer.data.SettingsStore(com.tmplayer.data.SettingsStore.openDataStore(file))
+        kotlinx.coroutines.runBlocking { store.setAddedChats(listOf(com.tmplayer.data.AddedChat(101, "Harbour Notes"))) }
+        val model = AddChatsViewModel(store, Counts, write = {}, countsRest = false).also { it.open() }
+        val activity = Robolectric.buildActivity(ComponentActivity::class.java).setup().get()
+        activity.setContent {
+            TmMaterialTheme(dark = true) {
+                AddChatsScreen(chats = CHATS, listComplete = true, starred = emptySet(), model = model, onClose = {})
+            }
+        }
+        val until = System.nanoTime() + 5_000_000_000L
+        while (model.state.value.added.isEmpty() && System.nanoTime() < until) {
+            Thread.sleep(20)
+            idle()
+        }
+        idle()
+        assertEquals(setOf(101L), model.state.value.added)
+        assertTrue("an Added band heads the added chats: ${nodes(activity).map { n -> n.config.getOrNull(SemanticsProperties.Text).orEmpty().joinToString("|") { it.text } }.filter { it.isNotBlank() }}", node(activity, "1 CHAT ADDED") != null)
+        assertEquals("the chat is listed once", 1, nodes(activity).count { n -> n.config.getOrNull(SemanticsProperties.Text).orEmpty().any { it.text == "Harbour Notes" } })
+        assertTrue(model.state.value.recommended.isNotEmpty() && 101L !in model.state.value.recommended)
+        assertFalse(model.state.value.recommending)
+        model.stop()
+        file.delete()
     }
 
     /** A save that fails says so with Try again, rather than sitting on the press for ever. */

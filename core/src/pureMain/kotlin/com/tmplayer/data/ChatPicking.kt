@@ -19,11 +19,13 @@ object ChatPicking {
     /**
      * A band of the list, in the order they are drawn.
      *
-     * [Recommended] and [Starred] only stand while the whole list is shown: a search or a filter
-     * is a question about every chat, and answering it with three headings in the way hides what
-     * was asked for.
+     * [Added], [Recommended] and [Starred] only stand while the whole list is shown: a search or a
+     * filter is a question about every chat, and answering it with headings in the way hides what
+     * was asked for. [Added] holds the chats the viewer had added when the picker opened, first
+     * under Saved Messages, so reopening the picker to add one more shows what is already in and
+     * never lists those chats a second time under Recommended.
      */
-    enum class Band { Saved, Recommended, Starred, Chats, Archived, Gone }
+    enum class Band { Saved, Added, Recommended, Starred, Chats, Archived, Gone }
 
     /**
      * One row. [chat] is null for a [Band.Gone] row, which is drawn from the name the chat had
@@ -65,6 +67,8 @@ object ChatPicking {
      * @param added the ids added now, for the rows that have no chat left.
      * @param addedNames what those chats were called when they were added.
      * @param recommended [ChatSuggestions.recommend]'s answer, in its order.
+     * @param alreadyAdded the chats added when the picker opened, fixed for the opening so a row
+     *   never moves between bands as it is ticked or unticked.
      * @param listComplete whether the chat list is whole. A chat still on its way is simply not
      *   here yet, and must not be called gone: HX32's partial load would otherwise mark half an
      *   account as left.
@@ -78,6 +82,7 @@ object ChatPicking {
         query: String = "",
         scope: Scope = Scope.All,
         listComplete: Boolean = false,
+        alreadyAdded: Set<Long> = emptySet(),
     ): List<Row> {
         val searching = query.isNotBlank()
         val whole = !searching && scope == Scope.All
@@ -98,6 +103,8 @@ object ChatPicking {
         for (chat in saved) out += Row(chat.id, chat.title, Band.Saved, chat, chat.id in starred)
         if (whole) {
             val byId = rest.associateBy { it.id }
+            // What is in already, in the chat list's order, before anything is offered.
+            if (alreadyAdded.isNotEmpty()) for (chat in rest) if (chat.id in alreadyAdded) add(chat, Band.Added)
             // In the recommendation's order, which is fullest first.
             for (id in recommended) byId[id]?.let { add(it, Band.Recommended) }
             // Starred next: the viewer said these matter, so they are not hunted for down the list.

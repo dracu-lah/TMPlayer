@@ -50,11 +50,14 @@ class AddChatsViewModel(
     /**
      * @param ticked the chats that will be added when Done is pressed.
      * @param counted each chat's videos as they arrive; a chat absent from here is still counting.
+     * @param added the chats the viewer had added when the picker opened (the stored choice when
+     *   it is a pick), fixed for the opening: the Added band, and what Recommended leaves out.
      * @param recommended the Recommended band, taken once and then left alone, so no row moves
      *   under a finger as the counts come in.
      * @param recommending true from the first open until the Recommended band is taken (at most
      *   [RECOMMEND_BY_MS]), while the screen holds the band's place with a skeleton so no row
-     *   moves under a finger or a click when it lands.
+     *   moves under a finger or a click when it lands. Not held when the viewer already has chats
+     *   added: opening the picker to add one more needs no wait.
      * @param saving true while the choice is being written, so Done cannot run twice.
      * @param saved true once it is written and the screen may close.
      * @param error what went wrong when the last write failed, shown with Try again, or null.
@@ -64,6 +67,7 @@ class AddChatsViewModel(
         val scope: ChatPicking.Scope = ChatPicking.Scope.All,
         val ticked: Set<Long> = emptySet(),
         val counted: Map<Long, ChatCount> = emptyMap(),
+        val added: Set<Long> = emptySet(),
         val recommended: List<Long> = emptyList(),
         val belowBar: Boolean = false,
         val recommending: Boolean = false,
@@ -95,10 +99,11 @@ class AddChatsViewModel(
         private set
 
     /**
-     * Reads the stored choice and ticks what it holds. A viewer who has never answered opens on
-     * the recommendation alone, which is what the Recommended band ticks as it arrives; one who
-     * has answered opens on their own chats, so opening the picker and pressing Done changes
-     * nothing.
+     * Reads the stored choice and ticks what it holds. A viewer who has never answered opens with
+     * nothing ticked and the Recommended band to choose from; one who has answered opens on their
+     * own chats (the Added band), so opening the picker and pressing Done changes nothing.
+     *
+     * A tick made before the read lands is kept: the stored ids are added to it, never replace it.
      */
     fun open() {
         val store = settings ?: return
@@ -108,7 +113,14 @@ class AddChatsViewModel(
             if (choice.mode == AddedMode.Picked) {
                 val ids = choice.chats.mapTo(LinkedHashSet()) { it.id }
                 opened = ids
-                _state.update { it.copy(ticked = ids) }
+                _state.update {
+                    it.copy(
+                        ticked = it.ticked + ids,
+                        added = ids,
+                        // Adding one more chat to a choice already made needs no wait for the band.
+                        recommending = it.recommending && ids.isEmpty(),
+                    )
+                }
             } else {
                 // Nothing picked yet: nothing is ticked until the counts recommend something, and
                 // Back from an untouched picker leaves the account as it was.
@@ -123,7 +135,7 @@ class AddChatsViewModel(
      */
     fun start(chats: List<ChatSummary>) {
         if (headStart != null || chats.isEmpty() || counts == null) return
-        if (_state.value.recommended.isEmpty()) _state.update { it.copy(recommending = true) }
+        if (_state.value.recommended.isEmpty() && _state.value.added.isEmpty()) _state.update { it.copy(recommending = true) }
         headStart = viewModelScope.launch {
             val jobs = ChatPicking.headStart(chats).mapNotNull { id ->
                 count(id)
@@ -239,7 +251,9 @@ class AddChatsViewModel(
      */
     private fun recommend(chats: List<ChatSummary>) {
         if (_state.value.recommended.isNotEmpty()) return
-        val answer = ChatSuggestions.recommend(ChatPicking.counted(chats, _state.value.counted))
+        // What is added already is not recommended again: it has its own band.
+        val added = _state.value.added
+        val answer = ChatSuggestions.recommend(ChatPicking.counted(chats, _state.value.counted).filter { it.id !in added })
         if (answer.ids.isEmpty()) return
         _state.update { now ->
             // Shown only: nothing is ticked for the viewer (user, 2026-11-04).
@@ -254,7 +268,12 @@ class AddChatsViewModel(
 
     fun scope(scope: ChatPicking.Scope) = _state.update { it.copy(scope = scope) }
 
-    fun toggle(chatId: Long) = _state.update { it.copy(ticked = ChatPicking.toggle(it.ticked, chatId)) }
+    /** Whether the choice is being written or is written: the selection is then fixed, so what is saved is what the foot showed. */
+    private val locked: Boolean get() = _state.value.saving || _state.value.saved
+
+    fun toggle(chatId: Long) {
+        if (!locked) _state.update { it.copy(ticked = ChatPicking.toggle(it.ticked, chatId)) }
+    }
 
     /**
      * Stars or unstars a chat from the picker itself (HX30), the same store the Favourites tab
@@ -267,9 +286,13 @@ class AddChatsViewModel(
     }
 
     /** Select all, or Clear, over the rows on screen. [visible] is [ChatPicking.visible]. */
-    fun selectAll(visible: Set<Long>) = _state.update { it.copy(ticked = ChatPicking.selectAll(it.ticked, visible)) }
+    fun selectAll(visible: Set<Long>) {
+        if (!locked) _state.update { it.copy(ticked = ChatPicking.selectAll(it.ticked, visible)) }
+    }
 
-    fun clear(visible: Set<Long>) = _state.update { it.copy(ticked = ChatPicking.clear(it.ticked, visible)) }
+    fun clear(visible: Set<Long>) {
+        if (!locked) _state.update { it.copy(ticked = ChatPicking.clear(it.ticked, visible)) }
+    }
 
     /** How many chats Select all would add, for the word before a very large one. */
     fun adding(visible: Set<Long>): Int = visible.count { it !in _state.value.ticked }
@@ -288,10 +311,12 @@ class AddChatsViewModel(
      */
     fun done(chats: List<ChatSummary>) {
         val save = write ?: return
-        if (_state.value.saving || _state.value.saved) return
+        if (locked) return
+        // Taken now, with the press: a tick that lands while the write runs is not part of it, and
+        // the screen cannot make one (the selection is fixed until the write ends in an error).
+        val ticked = _state.value.ticked
         _state.update { it.copy(saving = true, error = null) }
         viewModelScope.launch {
-            val ticked = _state.value.ticked
             val byId = chats.associateBy { it.id }
             val known = addedNames.associate { it.id to it.title }
             val chosen = ticked.map { id -> AddedChat(id, byId[id]?.title ?: known[id].orEmpty()) }

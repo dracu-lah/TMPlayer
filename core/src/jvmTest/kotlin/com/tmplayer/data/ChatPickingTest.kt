@@ -165,4 +165,58 @@ class ChatPickingTest {
         assertEquals(null, counted.first { it.id == 4L }.videos)
         assertTrue(counted.first { it.id == 1L }.savedMessages)
     }
+
+    @Test
+    fun `the chats already added form their own band first, and are not listed a second time`() {
+        val rows = ChatPicking.rows(
+            chats = account,
+            added = setOf(2L, 4L),
+            starred = setOf(2L),
+            recommended = listOf(2L, 3L),
+            alreadyAdded = setOf(2L, 4L),
+        )
+        assertEquals(
+            listOf(
+                ChatPicking.Band.Saved to 1L,
+                ChatPicking.Band.Added to 2L,
+                ChatPicking.Band.Added to 4L,
+                ChatPicking.Band.Recommended to 3L,
+                ChatPicking.Band.Chats to 5L,
+            ),
+            bands(rows),
+        )
+        assertEquals("each chat is on one row", rows.size, rows.map { it.id }.toSet().size)
+    }
+
+    @Test
+    fun `a search or a filter has no Added band, the chat sits where it is found`() {
+        val searching = ChatPicking.rows(chats = account, added = setOf(2L), query = "harbour", alreadyAdded = setOf(2L))
+        assertEquals(listOf(ChatPicking.Band.Chats to 2L), bands(searching))
+        val filtered = ChatPicking.rows(chats = account, added = setOf(2L), scope = ChatPicking.Scope.Channels, alreadyAdded = setOf(2L))
+        assertTrue(filtered.none { it.band == ChatPicking.Band.Added })
+    }
+
+    @Test
+    fun `an added chat that is gone keeps its Gone row and one that is not added is untouched`() {
+        val rows = ChatPicking.rows(
+            chats = account,
+            added = setOf(2L, 99L),
+            addedNames = listOf(AddedChat(99L, "Left channel")),
+            alreadyAdded = setOf(2L, 99L),
+            listComplete = true,
+        )
+        assertEquals(ChatPicking.Band.Gone to 99L, bands(rows).last())
+        assertEquals(ChatPicking.Band.Added to 2L, bands(rows)[1])
+    }
+
+    @Test
+    fun `three thousand chats with a thousand added still list each chat once`() {
+        val many = listOf(saved) + (10L..3_009L).map { chat(it) }
+        val already = (10L..1_009L).toSet()
+        val rows = ChatPicking.rows(chats = many, added = already, recommended = (500L..1_500L).toList(), alreadyAdded = already)
+        assertEquals(many.size, rows.size)
+        assertEquals(many.size, rows.map { it.id }.toSet().size)
+        assertEquals(1_000, rows.count { it.band == ChatPicking.Band.Added })
+        assertEquals(491, rows.count { it.band == ChatPicking.Band.Recommended })
+    }
 }

@@ -180,6 +180,9 @@ import androidx.compose.ui.semantics.role
  *   [onLeave] instead of asking to discard, since there is nothing behind it to go back to.
  * @param onLeave what Back does in [required] mode: leaves the app on the phone and the
  *   television, nothing on the desktop.
+ * @param confirmLeave in [required] mode, Back with chats ticked asks "Leave TMPlayer?" before
+ *   [onLeave], since the ticks live only here and a stray Back would lose them. Back with nothing
+ *   ticked still leaves at once. Off where leaving does nothing (the desktop).
  */
 @Composable
 fun AddChatsScreen(
@@ -197,6 +200,7 @@ fun AddChatsScreen(
     searchField: (@Composable (value: String, onValueChange: (String) -> Unit, placeholder: String, modifier: Modifier, onSubmit: () -> Unit) -> Unit)? = null,
     required: Boolean = false,
     onLeave: () -> Unit = onClose,
+    confirmLeave: Boolean = false,
 ) {
     val s = LocalStrings.current
     val countWords = remember(s) { CountWords(s) }
@@ -215,7 +219,7 @@ fun AddChatsScreen(
     // chat that is there does not rebuild the rows.
     val everyId = remember(chats) { chats.mapTo(HashSet()) { it.id } }
     val strays by remember(everyId) { derivedStateOf { state.ticked.filterTo(LinkedHashSet()) { it !in everyId } } }
-    val rows = remember(chats, state.query, state.scope, state.recommended, starred, listComplete, strays, choice.chats) {
+    val rows = remember(chats, state.query, state.scope, state.recommended, state.added, starred, listComplete, strays, choice.chats) {
         ChatPicking.rows(
             chats = chats,
             added = strays,
@@ -225,6 +229,7 @@ fun AddChatsScreen(
             query = state.query,
             scope = state.scope,
             listComplete = listComplete,
+            alreadyAdded = state.added,
         )
     }
     // The row the remote stands on, kept here because the short list reads it (a focused row never folds away).
@@ -287,6 +292,8 @@ fun AddChatsScreen(
     val rowFocus = remember { HashMap<Long, FocusRequester>() }
     val lazyIndex = remember { HashMap<Long, Int>() }
     var inFoot by remember { mutableStateOf(false) }
+    // The remote is on the Recommended band's button, which is not a row: Back from it climbs too.
+    var onBandButton by remember { mutableStateOf(false) }
     // Once a key is pressed the remote is the viewer's, and the first focus stops following the list.
     var keyed by remember { mutableStateOf(false) }
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
@@ -425,9 +432,10 @@ fun AddChatsScreen(
     // The remote starts on the first row, where OK ticks, not in the search box (HX76). Until a row
     // is there it stands on the filters, and moves down to the first row when one lands, unless a
     // key has been pressed since.
-    // It starts on Done instead when the Recommended band ticked something, so most viewers press
-    // OK once; a band that lands late (up to 3 s) never moves a remote that has already moved. No
-    // chats at all: it starts on the rail.
+    // It starts on Done instead when something is already ticked and recommended (a picker
+    // reopened over a choice already made: nothing is ticked for a first run); a band that lands
+    // late (up to 3 s) never moves a remote that has already moved. No chats at all: it starts
+    // on the rail.
     val firstId = shown.firstOrNull()?.id
     val startOnDone = tv && !state.recommending && state.recommended.isNotEmpty() && state.ticked.isNotEmpty() && doneReady
     LaunchedEffect(firstId, startOnDone) {
@@ -470,9 +478,10 @@ fun AddChatsScreen(
             asking != null -> asking = null
             // On the television Back from the list or the foot goes up to the filters first, so
             // the top of a long list is one press away; Back there leaves.
-            tv && (onRow != null || inFoot || inSearch) -> toTop()
+            tv && (onRow != null || inFoot || inSearch || onBandButton) -> toTop()
             // Nothing behind the mandatory choice to go back to: Back leaves the app (or, on the
-            // desktop, does nothing), and the ticks are not lost to a discard question.
+            // desktop, does nothing). With ticks made it asks first, once: they live only here.
+            required && confirmLeave && state.ticked.isNotEmpty() && !state.saving -> asking = Ask.Leave
             required -> onLeave()
             model.changed -> asking = Ask.Discard
             else -> onClose()
@@ -636,7 +645,7 @@ fun AddChatsScreen(
                     val divider = 16.dp + (if (tv) 52.dp else 44.dp) + 12.dp
                     for ((band, inBand) in bands) {
                         if (holding && band != ChatPicking.Band.Saved) continue
-                        val label = if (bands.size > 1 || holding) bandLabel(band, s) else null
+                        val label = if (bands.size > 1 || holding) bandLabel(band, inBand.size, s) else null
                         if (label != null) {
                             item(key = "band-$band") { BandLabel(label) }
                         }
@@ -647,6 +656,37 @@ fun AddChatsScreen(
                                     style = MaterialTheme.typography.bodySmall,
                                     color = Tone.muted,
                                     modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+                                )
+                            }
+                        }
+                        // One explicit press takes the whole band (the pickers tick nothing for the
+                        // viewer): 20 chats are one press, not 20 ticks or 40 presses of a remote.
+                        // Not for the fallback band, which says nothing reached the bar.
+                        if (band == ChatPicking.Band.Recommended && !state.belowBar && inBand.size >= 2) {
+                            item(key = "band-recommended-all") {
+                                val ids = inBand.mapNotNullTo(LinkedHashSet()) { (it as? ChatPicking.Item.Chat)?.row?.id }
+                                val every = ids.all { it in state.ticked }
+                                val words = if (every) s.pickerRemoveThese(ids.size) else s.pickerAddThese(ids.size)
+                                SetupButton(
+                                    words,
+                                    modifier = Modifier
+                                        .padding(start = ROW_INSET, end = ROW_INSET, bottom = 10.dp)
+                                        .onFocusChanged { onBandButton = it.hasFocus }
+                                        // The remote's Right goes to Done and Left to the filters, as from a row.
+                                        .onPreviewKeyEvent { event ->
+                                            val end = if (rtl) Key.DirectionLeft else Key.DirectionRight
+                                            val start = if (rtl) Key.DirectionRight else Key.DirectionLeft
+                                            when {
+                                                event.type != KeyEventType.KeyDown -> false
+                                                event.key == end -> toFoot()
+                                                event.key == start && tv -> { toTop(); true }
+                                                else -> false
+                                            }
+                                        },
+                                    onClick = {
+                                        tick(!every)
+                                        if (every) model.clear(ids) else model.selectAll(ids)
+                                    },
                                 )
                             }
                         }
@@ -724,6 +764,16 @@ fun AddChatsScreen(
                         onYes = {
                             asking = null
                             onClose()
+                        },
+                        onNo = { asking = null },
+                    )
+                    Ask.Leave -> Confirm(
+                        title = s.pickerLeaveTitle,
+                        body = s.pickerLeaveBody,
+                        action = s.pickerLeaveYes,
+                        onYes = {
+                            asking = null
+                            onLeave()
                         },
                         onNo = { asking = null },
                     )
@@ -1040,6 +1090,7 @@ private val ARROWS = setOf(FocusDirection.Up, FocusDirection.Down, FocusDirectio
 /** A question the foot is asking in place of the total. */
 private sealed interface Ask {
     data object Discard : Ask
+    data object Leave : Ask
 }
 
 /**
@@ -1371,8 +1422,9 @@ private fun PickSkeleton(rows: Int, tv: Boolean, divider: Dp) {
 private val NAME_WIDTHS = floatArrayOf(0.55f, 0.4f, 0.65f, 0.35f, 0.5f)
 
 /** What a band's heading says; Saved Messages is one row and needs none. */
-private fun bandLabel(band: ChatPicking.Band, s: com.tmplayer.i18n.Messages): String? = when (band) {
+private fun bandLabel(band: ChatPicking.Band, count: Int, s: com.tmplayer.i18n.Messages): String? = when (band) {
     ChatPicking.Band.Saved -> null
+    ChatPicking.Band.Added -> s.pickerAddedCount(count)
     ChatPicking.Band.Recommended -> s.pickerBandRecommended
     ChatPicking.Band.Starred -> s.pickerBandStarred
     ChatPicking.Band.Chats -> s.browseFilterAllChats
@@ -1407,6 +1459,7 @@ fun AddChatsFed(
     searchField: (@Composable (value: String, onValueChange: (String) -> Unit, placeholder: String, modifier: Modifier, onSubmit: () -> Unit) -> Unit)? = null,
     required: Boolean = false,
     onLeave: () -> Unit = onClose,
+    confirmLeave: Boolean = false,
 ) {
     val everything by chatsViewModel.everything.collectAsState()
     val paging by chatsViewModel.paging.collectAsState()
@@ -1431,6 +1484,7 @@ fun AddChatsFed(
         searchField = searchField,
         required = required,
         onLeave = onLeave,
+        confirmLeave = confirmLeave,
     )
 }
 

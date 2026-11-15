@@ -6,7 +6,7 @@
 //
 // Opened with `setup=1` it is the chats gate (App.tsx): no Back, no bar, and Done waits for at
 // least one chat. Either way a viewer who has not chosen before opens on the Recommended band
-// ticked for them, made from the head of the list counted first (core's ChatSuggestions).
+// (nothing ticked for them), made from the head of the list counted first (core's ChatSuggestions).
 import { createEffect, createMemo, createResource, createSignal, For, onCleanup, onMount, Show, untrack } from 'solid-js'
 import { useBeforeLeave, useNavigate, useSearchParams } from '@solidjs/router'
 import { Search01Icon, StarIcon } from '@hugeicons/core-free-icons'

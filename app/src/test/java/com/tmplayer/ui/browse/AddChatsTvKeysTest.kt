@@ -216,12 +216,83 @@ class AddChatsTvKeysTest {
         model.stop()
     }
 
+    /**
+     * The Recommended band's button (ON-3) is one stop the remote reaches with Down from the first
+     * row, OK adds the whole band and OK again takes it out, Down goes on to the band's first
+     * row, and Back from it climbs to the rail like Back from a row (ON-5).
+     */
+    @Test
+    fun `the remote reaches the Recommended band's button with Down and OK takes the band`() {
+        val model = AddChatsViewModel(counts = Counts, write = {}, countsRest = false)
+        val activity = open(model, chats = CHATS)
+        assertEquals(listOf("Saved Messages"), focusedTitle(activity))
+        assertEquals(12, model.state.value.recommended.size)
+        press(activity, KeyEvent.KEYCODE_DPAD_DOWN)
+        assertEquals(listOf("Add these 12 chats"), focusedWords(activity))
+        press(activity, KeyEvent.KEYCODE_DPAD_CENTER)
+        assertEquals(model.state.value.recommended.toSet(), model.state.value.ticked)
+        assertEquals("the remote stays on the button", listOf("Remove these 12 chats"), focusedWords(activity))
+        press(activity, KeyEvent.KEYCODE_DPAD_CENTER)
+        assertTrue(model.state.value.ticked.isEmpty())
+        assertEquals(listOf("Add these 12 chats"), focusedWords(activity))
+        press(activity, KeyEvent.KEYCODE_DPAD_DOWN)
+        assertEquals("Down goes on to the band's first chat", listOf("Chat number 1"), focusedTitle(activity))
+        press(activity, KeyEvent.KEYCODE_DPAD_UP)
+        assertEquals(listOf("Add these 12 chats"), focusedWords(activity))
+        // Nothing ticked in the required choice: Done is off, so Right stays on the button.
+        press(activity, KeyEvent.KEYCODE_DPAD_RIGHT)
+        assertEquals(listOf("Add these 12 chats"), focusedWords(activity))
+        press(activity, KeyEvent.KEYCODE_DPAD_CENTER)
+        press(activity, KeyEvent.KEYCODE_DPAD_RIGHT)
+        assertEquals("Right goes to Done once something is ticked", listOf("Done"), focusedWords(activity))
+        press(activity, KeyEvent.KEYCODE_DPAD_LEFT)
+        assertEquals("Left goes back to the last row the remote stood on", listOf("Chat number 1"), focusedTitle(activity))
+        model.stop()
+        idle()
+        ChatVideoCount.forget()
+    }
+
+    @Test
+    fun `Back from the band's button climbs to the rail, then with ticks asks before leaving`() {
+        val model = AddChatsViewModel(counts = Counts, write = {}, countsRest = false)
+        var left = 0
+        val activity = open(model, chats = CHATS, onLeave = { left++ }, confirmLeave = true)
+        press(activity, KeyEvent.KEYCODE_DPAD_DOWN)
+        press(activity, KeyEvent.KEYCODE_DPAD_CENTER)
+        assertEquals(12, model.state.value.ticked.size)
+        activity.onBackPressedDispatcher.onBackPressed()
+        idle()
+        assertTrue("Back from the button goes to the rail: ${focusedWords(activity)}", focusedWords(activity).contains("All"))
+        assertEquals(0, left)
+        activity.onBackPressedDispatcher.onBackPressed()
+        idle()
+        assertEquals("with ticks the second Back asks", 0, left)
+        assertTrue(nodes(activity).any { words(it).contains("Leave TMPlayer?") })
+        // No is the way back: the question goes and the ticks stay.
+        activity.onBackPressedDispatcher.onBackPressed()
+        idle()
+        assertTrue(nodes(activity).none { words(it).contains("Leave TMPlayer?") })
+        assertEquals(12, model.state.value.ticked.size)
+        // The remote went back to Done, so Back climbs to the rail first and the next one asks again.
+        activity.onBackPressedDispatcher.onBackPressed()
+        idle()
+        activity.onBackPressedDispatcher.onBackPressed()
+        idle()
+        click(activity, "Leave")
+        idle()
+        assertEquals(1, left)
+        model.stop()
+        idle()
+        ChatVideoCount.forget()
+    }
+
     private fun open(
         model: AddChatsViewModel,
         chats: List<ChatSummary>,
         search: Boolean = false,
         required: Boolean = true,
         onLeave: () -> Unit = {},
+        confirmLeave: Boolean = false,
     ): ComponentActivity {
         FormFactor.override(true)
         // A television is never in touch mode, and in touch mode Compose lets nothing pressable
@@ -239,6 +310,7 @@ class AddChatsTvKeysTest {
                     onClose = {},
                     required = required,
                     onLeave = onLeave,
+                    confirmLeave = confirmLeave,
                     // A stand-in for the television's search box: a press is its keyboard's Search.
                     searchField = if (!search) null else { _, _, _, modifier, onSubmit ->
                         Text("search probe", modifier.clickable { onSubmit() })

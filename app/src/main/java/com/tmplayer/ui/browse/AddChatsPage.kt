@@ -69,5 +69,7 @@ internal fun AddChatsPage(
         },
         required = required,
         onLeave = onLeave,
+        // The ticks live only in the picker, and Back here leaves the app: it asks first.
+        confirmLeave = required,
     )
 }

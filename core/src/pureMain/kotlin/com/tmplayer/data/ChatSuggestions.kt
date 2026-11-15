@@ -8,12 +8,12 @@ package com.tmplayer.data
 data class CountedChat(val id: Long, val order: Int, val videos: Int?, val savedMessages: Boolean = false)
 
 /**
- * Which chats the picker recommends and ticks for the viewer (HX27).
+ * Which chats the picker recommends (HX27). It lists them; nothing is ticked for the viewer.
  *
  * The numbers are here, in one place, rather than spread through the screen, so they can be moved
  * after seeing real accounts: [MIN_VIDEOS] is the line between a chat that is a video library and
- * a chat where a few clips were shared, and [MAX_PRETICKED] keeps a first run from ticking two
- * hundred chats that then all have to be scanned.
+ * a chat where a few clips were shared, and [MAX_PRETICKED] caps [Suggestion.ticked] (the old pre-tick, kept so
+ * the cap stays measured).
  *
  * An account where nothing reaches the line (a new sign in, a viewer whose chats are all chatter)
  * must not meet an empty section, so the [FALLBACK] fullest chats are offered instead, unticked:
@@ -24,7 +24,11 @@ object ChatSuggestions {
     /** Videos a chat needs before it is recommended. */
     const val MIN_VIDEOS = 20
 
-    /** At most this many are ticked for the viewer, fullest first. */
+    /**
+     * At most this many of [Suggestion.ids] are in [Suggestion.ticked], fullest first. The picker
+     * does not tick them for the viewer (user, 2026-11-04): it lists them under Recommended and
+     * offers one button that adds the band, which is an act of the viewer's own.
+     */
     const val MAX_PRETICKED = 30
 
     /** Offered when nothing reaches [MIN_VIDEOS], and never ticked. */
@@ -32,7 +36,7 @@ object ChatSuggestions {
 
     /**
      * @param ids the recommended chats, in the order the section lists them.
-     * @param ticked the ones ticked for the viewer, always a subset of [ids].
+     * @param ticked the fullest of [ids], always a subset of [ids]. Not applied by the pickers: nothing is ticked for the viewer.
      * @param belowBar true when nothing reached [MIN_VIDEOS] and these are the fullest chats
      *   instead, which is what the section's foot says out loud.
      */
