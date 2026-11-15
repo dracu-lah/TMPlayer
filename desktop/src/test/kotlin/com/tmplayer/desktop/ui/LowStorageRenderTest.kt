@@ -10,8 +10,14 @@ import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.test.ExperimentalTestApi
-import androidx.compose.ui.test.SemanticsMatcher
-import androidx.compose.ui.test.isToggleable
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.test.requestFocus
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -46,8 +52,8 @@ import java.io.File
 import java.nio.file.Files
 
 /**
- * Low storage mode on the desktop (CP66): the question [LowStorageQuestionHost] asks when a video
- * or a download does not fit, answered both ways, and the switch in Settings with its two lines.
+ * "While streaming: Save space" on the desktop (CP66): the question [LowStorageQuestionHost] asks when a video
+ * or a download does not fit, answered both ways, and the two tabs in Settings with the line under them.
  * With TMPLAYER_SHOTS=<dir> the frames (dark, light, Arabic) are written there as PNGs.
  */
 @OptIn(ExperimentalTestApi::class, kotlinx.coroutines.DelicateCoroutinesApi::class)
@@ -79,8 +85,8 @@ class LowStorageRenderTest {
         mimeType = "video/x-matroska", thumbnailFileId = 0, miniThumbnail = null, date = 1, fileName = "Harbour.Notes.2021.mkv",
     )
 
-    private val playQuestion = L.mainLowStorageAskPlay(mode = L.settingsLowStorage)
-    private val keepQuestion = L.mainLowStorageAskKeep(mode = L.settingsLowStorage)
+    private val playQuestion = L.mainStreamAskPlay
+    private val keepQuestion = L.mainStreamAskKeep
 
     @Test
     fun `a video that does not fit is asked about, and Not now leaves the mode off`() = runComposeUiTest {
@@ -88,9 +94,9 @@ class LowStorageRenderTest {
         val answer = GlobalScope.async { LowStorageQuestion.ask(film) }
         waitUntil { LowStorageQuestion.pending.value != null }
         waitForIdle()
-        onNodeWithText(L.settingsLowStorage).assertExists()
+        onNodeWithText(L.settingsStreamSwitchTitle).assertExists()
         onNodeWithText(playQuestion).assertExists()
-        onNodeWithText(L.settingsLowStorageDetail).assertExists()
+        onNodeWithText(L.settingsStreamSaveDetail).assertExists()
         // Focus starts on the answer that does what the viewer pressed.
         onNodeWithText(L.mainLowStorageSwitchPlay).assertIsFocused()
         onNodeWithText(L.mainLowStorageNotNow).performClick()
@@ -128,22 +134,53 @@ class LowStorageRenderTest {
     }
 
     @Test
-    fun `the Settings switch says what each state costs`() = runComposeUiTest {
+    fun `While streaming is two tabs and the line under them says what the chosen one costs`() = runComposeUiTest {
         setContent { TmMaterialTheme(dark = true) { Box(Modifier.size(1280.dp, 3200.dp)) { SettingsPage(shell, "2.0.0", initialCategory = SettingsCategory.Storage) } } }
         waitForIdle()
-        onNodeWithText(L.settingsLowStorage).performScrollTo().assertExists()
-        onNodeWithText(L.settingsLowStorageOff).assertExists()
-        // The switch on the same line as the row's title: the toggle whose row holds the title, not
-        // the nearest one, since the rows are only about 48 dp apart.
-        val title = onNodeWithText(L.settingsLowStorage).fetchSemanticsNode().boundsInRoot
-        val switch = onAllNodes(isToggleable()).fetchSemanticsNodes()
-            .minBy { kotlin.math.abs(it.boundsInRoot.center.y - title.center.y) }
-        onNode(SemanticsMatcher("the Low storage switch") { it.id == switch.id }).performClick()
+        onNodeWithText(L.settingsStreamTitle).performScrollTo().assertExists()
+        // Off is Keep video: fresh settings in this test store start off, as an upgraded install does.
+        onNodeWithText(L.settingsStreamKeepDetail).assertExists()
+        onNodeWithText(L.settingsStreamSaveDetail).assertDoesNotExist()
+        // A kept download is never windowed, and the line says so under either tab.
+        assertTrue(L.settingsStreamKeepDetail.contains("never trimmed"))
+        assertTrue(L.settingsStreamSaveDetail.contains("never trimmed"))
+        onNode(hasText(L.settingsStreamKeep) and hasClickAction()).assertIsSelected()
+        onNode(hasText(L.settingsStreamSave) and hasClickAction()).assertIsNotSelected()
+        onNode(hasText(L.settingsStreamSave) and hasClickAction()).performClick()
         waitUntil(timeoutMillis = 5_000) { runBlocking { settings.lowStorageModeNow() } }
         waitForIdle()
-        onNodeWithText(L.settingsLowStorageOn).assertExists()
-        onNodeWithText(L.settingsLowStorageOff).assertDoesNotExist()
+        onNodeWithText(L.settingsStreamSaveDetail).assertExists()
+        onNodeWithText(L.settingsStreamKeepDetail).assertDoesNotExist()
+        onNode(hasText(L.settingsStreamSave) and hasClickAction()).assertIsSelected()
+        // Back to Keep video with a click, the stored boolean off again.
+        onNode(hasText(L.settingsStreamKeep) and hasClickAction()).performClick()
+        waitUntil(timeoutMillis = 5_000) { !runBlocking { settings.lowStorageModeNow() } }
         runBlocking { settings.setLowStorageMode(false) }
+    }
+
+    @Test
+    fun `from the keyboard Left and Right move between the tabs and Space picks one`() = runComposeUiTest {
+        runBlocking { settings.setLowStorageMode(false) }
+        setContent { TmMaterialTheme(dark = true) { Box(Modifier.size(1280.dp, 3200.dp)) { SettingsPage(shell, "2.0.0", initialCategory = SettingsCategory.Storage) } } }
+        waitForIdle()
+        val keep = onNode(hasText(L.settingsStreamKeep) and hasClickAction())
+        val save = onNode(hasText(L.settingsStreamSave) and hasClickAction())
+        keep.performScrollTo().requestFocus()
+        keep.assertIsFocused()
+        // Right walks to Save space and the focus ring goes with it; Space (the segment's click) picks it.
+        keep.performKeyInput { pressKey(Key.DirectionRight) }
+        waitForIdle()
+        save.assertIsFocused()
+        save.performKeyInput { pressKey(Key.Spacebar) }
+        waitUntil(timeoutMillis = 5_000) { runBlocking { settings.lowStorageModeNow() } }
+        waitForIdle()
+        save.assertIsSelected()
+        save.performKeyInput { pressKey(Key.DirectionLeft) }
+        waitForIdle()
+        keep.assertIsFocused()
+        keep.performKeyInput { pressKey(Key.Spacebar) }
+        waitUntil(timeoutMillis = 5_000) { !runBlocking { settings.lowStorageModeNow() } }
+        keep.assertIsSelected()
     }
 
     @Test
@@ -161,9 +198,9 @@ class LowStorageRenderTest {
                 }
             }
         }
-        save("low-storage-settings.png", render(dark = true, height = 3200) { SettingsPage(shell, "2.0.0", initialCategory = SettingsCategory.Playback) })
+        save("low-storage-settings.png", render(dark = true, height = 3200) { SettingsPage(shell, "2.0.0", initialCategory = SettingsCategory.Storage) })
         runBlocking { settings.setLowStorageMode(true) }
-        save("low-storage-settings-on.png", render(dark = true, height = 3200) { SettingsPage(shell, "2.0.0", initialCategory = SettingsCategory.Playback) })
+        save("low-storage-settings-on.png", render(dark = true, height = 3200) { SettingsPage(shell, "2.0.0", initialCategory = SettingsCategory.Storage) })
         runBlocking { settings.setLowStorageMode(false) }
     }
 

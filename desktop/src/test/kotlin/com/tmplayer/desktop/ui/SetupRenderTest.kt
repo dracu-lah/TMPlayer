@@ -221,7 +221,7 @@ class SetupRenderTest {
 
     /**
      * CP68: a disk short of room. The Device step in Storage's place (light, dark, Arabic), the
-     * Settings card, and from the keyboard: focus on Apply, Enter turns Low storage mode on.
+     * Settings card, and from the keyboard: focus on Apply, Enter turns Save space on.
      */
     @Test
     fun deviceStepAndCard() {
@@ -321,7 +321,7 @@ class SetupRenderTest {
 
     /**
      * The switch steps on one page (Setup.pages): a row each under one heading, starting on what
-     * is set (Low storage mode off, Save mobile data on as suggested, crash reports off). Pressing
+     * is set (Save space off, Save mobile data on as suggested, crash reports off). Pressing
      * a row only marks it; Done writes every one that changed.
      */
     @Test
@@ -336,7 +336,7 @@ class SetupRenderTest {
                 }
             }
         }
-        val low = hasText("Low storage mode") and hasClickAction()
+        val low = hasText("Save space") and hasClickAction()
         val save = hasText("Save mobile data") and hasClickAction()
         val crash = hasText("Send crash reports") and hasClickAction()
         onNode(hasText("Storage, data and reports")).assertExists()
@@ -482,7 +482,7 @@ class SetupRenderTest {
         }
         onNode(hasText("Next") and hasClickAction()).performClick()
         waitForIdle()
-        onNode(hasText("Low storage mode") and hasClickAction()).assertExists()
+        onNode(hasText("Save space") and hasClickAction()).assertExists()
         onNode(hasText("Send crash reports") and hasClickAction()).assertIsNotSelected()
         onNode(hasText("Done") and hasClickAction()).assertExists()
 
@@ -490,7 +490,7 @@ class SetupRenderTest {
         waitForIdle()
         onNode(hasText("Next") and hasClickAction()).performClick()
         waitForIdle()
-        onNode(hasText("Keep whole videos") and hasClickAction()).assertExists()
+        onNode(hasText("Keep video") and hasClickAction()).assertExists()
         onNode(hasText("Send crash reports")).assertDoesNotExist()
     }
 
@@ -556,7 +556,7 @@ class SetupRenderTest {
         onNode(hasText("Theme and size")).assertExists()
         onNode(hasText("Next") and hasClickAction()).performClick()
         waitForIdle()
-        onNode(hasText("Keep whole videos") and hasClickAction()).assertExists()
+        onNode(hasText("Keep video") and hasClickAction()).assertExists()
         onNode(hasText("Back") and hasClickAction()).performClick()
         waitForIdle()
         onNode(hasText("Theme and size")).assertExists()
