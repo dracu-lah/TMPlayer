@@ -180,6 +180,9 @@ object EpisodeGuide {
         }
     }
 
+    /** The numbers of [season]'s episodes held inside another episode's file ("S01E09E10" holds 10). */
+    fun covered(season: SeriesSeason): Set<Int> = coveredByLongerFiles(season.episodes)
+
     /** The numbers of episodes held inside another episode's file ("S01E09E10" holds 10). */
     private fun coveredByLongerFiles(rows: Collection<SeriesEpisode>): Set<Int> {
         var out: HashSet<Int>? = null

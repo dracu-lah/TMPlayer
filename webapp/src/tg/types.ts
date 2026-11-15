@@ -383,7 +383,7 @@ export interface WatchInfo {
     next: VideoItem | null
     nextCode: string | null
     /** The show's seasons, when it is an episode; empty otherwise. */
-    seasons: { number: number; episodes: EpisodeRef[] }[]
+    seasons: { number: number; episodes: EpisodeRef[]; covered: number[] }[]
     /** Other cards of the chat, newest first, when it is not an episode. */
     more: Tile[]
     fileName: string

@@ -776,6 +776,18 @@ a.detail-round { text-decoration: none; }
 .season-chip small { font-size: 11px; line-height: 14px; color: var(--muted); }
 .season-chip.on { background: var(--accent-container); border-color: var(--accent); color: var(--on-accent-container); }
 .season-chip.on small { color: var(--on-accent-container); }
+/* T9: a season the chats hold none of is quiet; the dot marks the ones they hold. */
+.season-chip.quiet:not(.on) { opacity: 0.62; }
+.season-name { display: inline-flex; align-items: center; gap: 6px; }
+.season-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex: none; }
+.season-chip.on .season-dot { background: var(--on-accent-container); }
+.season-chip small:empty { display: none; }
+.gap-note { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; background: var(--surface); border: 1px solid var(--outline); border-radius: var(--r-m); padding: 8px 14px; margin: 8px 0; }
+.gap-note p { margin: 4px 0; }
+.episode.gap { border: 1px solid var(--outline); opacity: 0.62; cursor: pointer; font: inherit; min-height: 56px; }
+.episode.gap:hover, .episode.gap:focus-visible { opacity: 1; }
+.episode.gap .episode-code { color: var(--muted); }
+.episode.gap .episode-name { color: var(--muted); }
 .episode-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .episode { position: relative; width: 100%; display: flex; align-items: center; gap: 12px; text-align: start; background: var(--surface); border: 0; border-radius: var(--r-m); padding: 12px 14px; min-height: 48px; overflow: hidden; color: inherit; text-decoration: none; }
 .episode:hover { background: var(--surface-high); }

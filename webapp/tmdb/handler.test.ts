@@ -250,6 +250,8 @@ test('the extras: genres, length, rating, age rating, directors, cast in order, 
         cast: [{ name: 'First', role: 'Big Buck', photo: null }, { name: 'Second', role: 'Frank', photo: '/second0123.jpg' }],
         trailer: 'trailer1',
         ended: false,
+        seasonList: [],
+        next: null,
         imdb: 'tt1254207',
         logo: null,
     })
