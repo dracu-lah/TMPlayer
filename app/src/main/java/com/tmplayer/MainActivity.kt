@@ -1470,6 +1470,18 @@ private fun Root() {
             play(stored, chatTitle = chatTitle)
             return
         }
+        // Complete in the watch cache, or no way to reach Telegram: the lookup could only be a wait
+        // (up to LOOKUP_TIMEOUT_MS, offline all of it) behind the Starting pill, and the stored row
+        // already plays. The fresh id is fetched in the background for the next press, and
+        // [play] says "connect to play" itself when a stream cannot start offline.
+        val offline = networkStatus == NetworkStatus.Offline && !telegramConnected
+        val cached = !offline && com.tmplayer.data.runCatchingCancellable { Td.localFileAvailability(stored.fileId) }
+            .getOrDefault(LocalFileAvailability.Missing) == LocalFileAvailability.Complete
+        if (offline || cached) {
+            if (cached) App.backgroundScope.launch { runCatching { Td.lookupMedia(stored.chatId, stored.messageId) } }
+            play(stored, chatTitle = chatTitle)
+            return
+        }
         // The stored row carries a file id from whichever TDLib instance wrote it, which is
         // not a number this one can necessarily use. Asking Telegram for the message again
         // returns a current id and tells TDLib where the file came from, without which it
