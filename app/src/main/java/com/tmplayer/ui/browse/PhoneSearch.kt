@@ -162,6 +162,8 @@ internal fun PhoneSearchScreen(
     /** The Try again row after a page failed to load. */
     onRetryMore: () -> Unit = {},
     onRetry: () -> Unit,
+    /** "Search my other chats" (HX62): the same words over the chats that were not added, once. */
+    onSearchOthers: () -> Unit = {},
     onRemoveRecent: (String) -> Unit,
     /** Clears them all and hands back what was there, for the Undo. */
     onClearRecent: () -> List<String>,
@@ -189,16 +191,16 @@ internal fun PhoneSearchScreen(
     }
 
     val query = text.text
-    val byUsername = rememberUsernameChat(query)
     // Every chat's name matched off the main thread, the last answer kept up meanwhile, so the
     // field never waits for it between letters.
     var localChats by remember { mutableStateOf(emptyList<ChatSummary>()) }
     LaunchedEffect(chats, query, favourites) {
         localChats = if (query.isBlank()) emptyList() else withContext(Dispatchers.Default) { GlobalSearch.localChats(chats, query, favourites) }
     }
-    val chatMatches = remember(localChats, byUsername) { withUsernameChat(localChats, byUsername) }
-    // A pasted post or invite link, or a public chat to join (CP79).
-    val offer = rememberLinkOffer(query, byUsername)
+    // The viewer's own chats only (HX62): no username is looked up on Telegram.
+    val chatMatches = localChats
+    // A pasted post or invite link (CP79).
+    val offer = rememberLinkOffer(query)
     val recentChats = remember(chats, favourites) { GlobalSearch.recentChats(chats, favourites) }
     val briefs = remember(state.chats, chats) { state.chats + chats.associate { it.id to ChatBrief.of(it) } }
     val titleOf: (Long) -> String = { id -> briefs[id]?.title.orEmpty() }
@@ -261,6 +263,8 @@ internal fun PhoneSearchScreen(
                         onRetry = onRetry,
                         onRetryMore = onRetryMore,
                         onClearFilters = { onFilters(SearchFilters()) },
+                        onSearchOthers = onSearchOthers,
+                        onAddChats = { keyboard?.hide(); onClose(); com.tmplayer.ui.browse.AddChatsRequest.ask() },
                         onSearchWord = { word -> onText(TextFieldValue(word, TextRange(word.length))); onSubmit() },
                     )
                 }
@@ -533,6 +537,8 @@ private fun androidx.compose.foundation.lazy.LazyListScope.results(
     onRetry: () -> Unit,
     onRetryMore: () -> Unit,
     onClearFilters: () -> Unit,
+    onSearchOthers: () -> Unit,
+    onAddChats: () -> Unit,
     onSearchWord: (String) -> Unit,
 ) {
     if (chatMatches.isNotEmpty()) {
@@ -567,7 +573,30 @@ private fun androidx.compose.foundation.lazy.LazyListScope.results(
             }
         }
     }
+    // What the search covered: said once, with the way to choose chats (HX62) and, over the
+    // added chats, the one-off button for the others.
+    if (state.everyChatNote) {
+        item(key = "every-chat") {
+            Note(LocalStrings.current.searchEveryChatNote) {
+                TmSecondaryButton(onClick = onAddChats) { Text(LocalStrings.current.pickerAddMore) }
+            }
+        }
+    }
     val shown = state.shown
+    searchCountLine(state)?.let { count ->
+        item(key = "count") {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(count, style = MaterialTheme.typography.bodyMedium, color = Tone.muted, modifier = Modifier.weight(1f))
+                if (state.canSearchOthers) {
+                    TextButton(onClick = onSearchOthers) { Text(LocalStrings.current.searchOtherChats) }
+                }
+            }
+        }
+    }
     when {
         // While the typing settles too, rather than a heading over nothing until Telegram is asked.
         shown.isEmpty() && (state.searching || state.settling) -> {
@@ -599,6 +628,15 @@ private fun androidx.compose.foundation.lazy.LazyListScope.results(
                 } else {
                     Text(s.searchNone(state.query.text), style = MaterialTheme.typography.titleMedium, color = Tone.text, textAlign = TextAlign.Center)
                     Text(s.searchNoneDetail, style = MaterialTheme.typography.bodyMedium, color = Tone.muted, textAlign = TextAlign.Center)
+                    // Nothing in the chats the viewer chose: the way to choose more (HX62), and the
+                    // one-off look at the others, rather than a dead end.
+                    if (state.addedOnly) {
+                        Text(s.searchNoneAdded, style = MaterialTheme.typography.bodyMedium, color = Tone.muted, textAlign = TextAlign.Center)
+                    }
+                    if (state.canSearchOthers) {
+                        TmSecondaryButton(onClick = onSearchOthers) { Text(s.searchOtherChats) }
+                    }
+                    TmSecondaryButton(onClick = onAddChats) { Text(s.pickerAddMore) }
                     AllChatsSearch.fallbackQuery(state.query.server)?.let { word ->
                         TmSecondaryButton(onClick = { onSearchWord(word) }) { Text(s.searchSearchFor(word)) }
                     }

@@ -424,6 +424,10 @@ internal fun BrowseScreen(
 
     // The chips over Chats and History, remembered across launches like the card layout.
     val browseSettings = remember(panelContext) { SettingsStore(panelContext) }
+    // Copies named for the viewer's preferred audio language lead a search result (EG-F5).
+    LaunchedEffect(browseSettings, search) {
+        browseSettings.trackPreferences.collect { search.audioLanguage = com.tmplayer.player.TrackLanguages.normalise(it.audioLanguage) }
+    }
     val chatFilter by remember(browseSettings) { browseSettings.chatFilter.map(ChatFilter::decode) }
         .collectAsState(initial = ChatFilter.All)
     val chatSort by remember(browseSettings) { browseSettings.chatSort.map(ChatSort::decode) }

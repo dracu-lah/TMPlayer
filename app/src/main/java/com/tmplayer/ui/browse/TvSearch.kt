@@ -58,6 +58,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -121,6 +122,10 @@ internal fun TvSearchScreen(
     /** The Try again pill after a page failed to load. */
     onRetryMore: () -> Unit = {},
     onRetry: () -> Unit,
+    /** "Search my other chats" (HX62): the same words over the chats that were not added, once. */
+    onSearchOthers: () -> Unit = {},
+    /** The picker, for "Add more chats" when nothing was found in the added ones. */
+    onAddChats: () -> Unit = { com.tmplayer.ui.browse.AddChatsRequest.ask() },
     /** The poster a result's page was opened from, which the remote goes back to when the page closes. */
     tileReturn: TileReturn = rememberTileReturn(),
     /** A result's page is up over the list (the shell's page, or a show's episodes). */
@@ -148,13 +153,13 @@ internal fun TvSearchScreen(
         runCatching { if (voice != null) micFocus.requestFocus() else fieldFocus.requestFocus() }
     }
 
-    val byUsername = rememberUsernameChat(text)
-    val chatMatches = remember(chats, text, favourites, byUsername) {
+    // The viewer's own chats only (HX62): no username is looked up on Telegram.
+    val chatMatches = remember(chats, text, favourites) {
         if (text.isBlank()) GlobalSearch.recentChats(chats, favourites, limit = 10)
-        else withUsernameChat(GlobalSearch.localChats(chats, text, favourites), byUsername).take(10)
+        else GlobalSearch.localChats(chats, text, favourites).take(10)
     }
-    // A typed post or invite link, or a public chat to join (CP79), as a pill beside the field.
-    val offer = rememberLinkOffer(text, byUsername)
+    // A typed post or invite link (CP79), as a pill beside the field.
+    val offer = rememberLinkOffer(text)
     val briefs = remember(state.chats, chats) { state.chats + chats.associate { it.id to ChatBrief.of(it) } }
     var focusedGroup by remember { mutableStateOf<ResultGroup?>(null) }
     val grid = com.tmplayer.ui.components.rememberAheadGridState()
@@ -327,6 +332,31 @@ internal fun TvSearchScreen(
                     }
                 }
 
+                // The count line, the way to the chats that were not added, and what was covered
+                // when nothing was added (HX62): one row the remote walks to like the pills.
+                if (text.isNotBlank()) {
+                    val count = searchCountLine(state)
+                    if (count != null || state.everyChatNote) {
+                        item(span = full, key = "count") {
+                            Row(
+                                Modifier.testTag("search-count-row"),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            ) {
+                                // The pill leads the row, over the first poster, so Up from the posters lands on it.
+                                if (state.canSearchOthers) {
+                                    TvPill(s.searchOtherChats, TmIcons.Search, modifier = Modifier.testTag("search-other-chats"), onClick = onSearchOthers)
+                                }
+                                if (state.everyChatNote) {
+                                    TvPill(s.pickerAddMore, TmIcons.PersonAdd, onClick = onAddChats)
+                                    Text(s.searchEveryChatNote, style = MaterialTheme.typography.bodyLarge, color = Tone.muted, modifier = Modifier.weight(1f, fill = false))
+                                }
+                                if (count != null) Text(count, style = MaterialTheme.typography.bodyLarge, color = Tone.muted, modifier = Modifier.testTag("search-count"))
+                            }
+                        }
+                    }
+                }
+
                 when {
                     text.isBlank() -> Unit
                     shown.isEmpty() && state.searching -> {
@@ -350,6 +380,12 @@ internal fun TvSearchScreen(
                             } else {
                                 Text(s.searchNone(state.query.text), style = MaterialTheme.typography.titleMedium, color = Tone.text)
                                 Text(s.searchNoneDetail, style = MaterialTheme.typography.bodyLarge, color = Tone.muted)
+                                // Nothing in the chats the viewer chose: the way to choose more (HX62).
+                                if (state.addedOnly) Text(s.searchNoneAdded, style = MaterialTheme.typography.bodyLarge, color = Tone.muted)
+                                if (state.canSearchOthers) {
+                                    TvPill(s.searchOtherChats, TmIcons.Search, modifier = Modifier.testTag("search-other-chats"), onClick = onSearchOthers)
+                                }
+                                TvPill(s.pickerAddMore, TmIcons.PersonAdd, onClick = onAddChats)
                                 AllChatsSearch.fallbackQuery(state.query.server)?.let { word ->
                                     TvPill(s.searchSearchFor(word), TmIcons.Search) { onText(word); onSubmit(word) }
                                 }
@@ -490,7 +526,7 @@ private fun MicOrb(onClick: () -> Unit, modifier: Modifier = Modifier) {
  * the remote is on it, as the phone draws them.
  */
 @Composable
-private fun TvPill(label: String, icon: ImageVector?, chosen: Boolean = false, plain: Boolean = false, onClick: () -> Unit) {
+private fun TvPill(label: String, icon: ImageVector?, chosen: Boolean = false, plain: Boolean = false, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
     val fill by animateColorAsState(
@@ -508,7 +544,7 @@ private fun TvPill(label: String, icon: ImageVector?, chosen: Boolean = false, p
     val lessMotion = rememberReducedMotion() || Motion.reduced
     val scale by animateFloatAsState(if (focused && !lessMotion) 1.06f else 1f, Motion.standard(Motion.Fast), label = "tvPillScale")
     Row(
-        Modifier
+        modifier
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
@@ -709,6 +745,7 @@ internal fun TvSearchPage(
         onLoadMore = search::loadMore,
         onRetryMore = search::retryMore,
         onRetry = search::retry,
+        onSearchOthers = search::searchOtherChats,
         tileReturn = tileReturn,
         pageOpen = pageOpen || opened != null,
         account = account,

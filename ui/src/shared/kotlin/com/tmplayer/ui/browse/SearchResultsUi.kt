@@ -305,3 +305,13 @@ fun searchStatus(state: GlobalSearchState): String? = when {
     state.stillSearching -> L.searchStillSearching
     else -> null
 }
+
+/**
+ * The count line over the videos, "23 videos in 6 chats" (EG-F8), or null while nothing is listed
+ * or the typing has not settled. The same on the phone, the television, the desktop and the web.
+ */
+fun searchCountLine(state: GlobalSearchState): String? {
+    if (state.settling) return null
+    val tally = state.tally ?: return null
+    return L.searchCount(tally.videos, tally.chats)
+}

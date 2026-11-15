@@ -96,6 +96,7 @@ import com.tmplayer.ui.browse.label
 import com.tmplayer.ui.browse.message
 import com.tmplayer.ui.browse.openResult
 import com.tmplayer.ui.browse.searchStatus
+import com.tmplayer.ui.browse.searchCountLine
 import com.tmplayer.ui.components.TmDropdownMenu
 import com.tmplayer.ui.components.rememberToast
 import com.tmplayer.ui.i18n.LocalStrings
@@ -290,8 +291,8 @@ internal fun BoxScope.SearchPalette(
         }
     }
 
-    val byUsername = com.tmplayer.ui.browse.rememberUsernameChat(query.text)
-    val offer = com.tmplayer.ui.browse.rememberLinkOffer(query.text, byUsername)
+    // The viewer's own chats only (HX62): no username is looked up on Telegram.
+    val offer = com.tmplayer.ui.browse.rememberLinkOffer(query.text)
     // A first page that will not come says so, with Retry, after the app's usual wait.
     var slow by remember(query) { mutableStateOf(false) }
     LaunchedEffect(query, ui.searching) {
@@ -301,11 +302,11 @@ internal fun BoxScope.SearchPalette(
             slow = true
         }
     }
-    val rows = remember(ui, chats, favourites, recents, allowed, allChats, allTopics, query.text, byUsername, slow, offer) {
-        listOfNotNull(offer?.let { PaletteRow.Link(it) }) + buildRows(ui, chats, favourites, if (allowed != null) emptyList() else recents, allChats, search, byUsername, onSearchWord = { word ->
+    val rows = remember(ui, chats, favourites, recents, allowed, allChats, allTopics, query.text, slow, offer) {
+        listOfNotNull(offer?.let { PaletteRow.Link(it) }) + buildRows(ui, chats, favourites, if (allowed != null) emptyList() else recents, allChats, search, onSearchWord = { word ->
             state.paletteQuery = TextFieldValue(word, TextRange(word.length))
             search.submit(word)
-        }, slow = slow, allTopics = allTopics)
+        }, onAddChats = { close(); com.tmplayer.ui.browse.AddChatsRequest.ask() }, slow = slow, allTopics = allTopics)
     }
 
     fun pick(row: PaletteRow, play: Boolean = false) {
@@ -486,8 +487,9 @@ private fun buildRows(
     recents: List<String>,
     allChats: Boolean,
     search: GlobalSearchViewModel,
-    byUsername: ChatSummary?,
     onSearchWord: (String) -> Unit,
+    /** Closes the palette and opens the picker, for "Add more chats" (HX62). */
+    onAddChats: () -> Unit = {},
     /** The first page has been on its way past [com.tmplayer.ui.components.SlowAnswer.AFTER_MS]. */
     slow: Boolean = false,
     /** Every topic found is listed, not only the first few. */
@@ -509,7 +511,7 @@ private fun buildRows(
         Place.entries.forEach { add(PaletteRow.GoTo(it)) }
         return@buildList
     }
-    val matching = com.tmplayer.ui.browse.withUsernameChat(GlobalSearch.localChats(chats, query.text, favourites), byUsername)
+    val matching = GlobalSearch.localChats(chats, query.text, favourites)
     if (matching.isNotEmpty()) {
         add(PaletteRow.Heading(s.searchChatsHeading))
         val shown = if (allChats) matching else matching.take(GlobalSearch.CHAT_PREVIEW)
@@ -529,6 +531,14 @@ private fun buildRows(
     if (videos.isNotEmpty() || ui.searching) add(PaletteRow.Heading(s.searchVideosHeading))
     // Offline too: the search runs again once back, and Retry asks sooner.
     searchStatus(ui)?.let { add(PaletteRow.Note(it, retry = ui.error != null || ui.offline)) }
+    // What was covered (HX62): the count, the one-off look at the chats not added, and, when none
+    // was added yet, that every chat was searched, with the way to choose.
+    searchCountLine(ui)?.let { add(PaletteRow.Note(it)) }
+    if (ui.canSearchOthers && videos.isNotEmpty()) add(PaletteRow.Action(s.searchOtherChats) { search.searchOtherChats() })
+    if (ui.everyChatNote) {
+        add(PaletteRow.Note(s.searchEveryChatNote))
+        add(PaletteRow.Action(s.pickerAddMore) { onAddChats() })
+    }
     if (slow && ui.searching && videos.isEmpty()) add(PaletteRow.Note(com.tmplayer.ui.components.SlowAnswer.MESSAGE, retry = true))
     when {
         videos.isNotEmpty() -> videos.forEach { add(PaletteRow.Video(it)) }
@@ -538,10 +548,13 @@ private fun buildRows(
             if (hidden.isEmpty()) {
                 add(PaletteRow.Note(s.searchNone(query.text)))
                 add(PaletteRow.Note(s.searchNoneDetail))
+                if (ui.addedOnly) add(PaletteRow.Note(s.searchNoneAdded))
             } else {
                 hidden.forEach { add(PaletteRow.Note(it.message(ui))) }
             }
             if (!ui.filters.isDefault) add(PaletteRow.Action(s.searchClearFilters) { search.clearFilters() })
+            if (ui.canSearchOthers) add(PaletteRow.Action(s.searchOtherChats) { search.searchOtherChats() })
+            add(PaletteRow.Action(s.pickerAddMore) { onAddChats() })
             AllChatsSearch.fallbackQuery(query.server)?.let { word ->
                 add(PaletteRow.Action(s.searchSearchFor(word)) { onSearchWord(word) })
             }

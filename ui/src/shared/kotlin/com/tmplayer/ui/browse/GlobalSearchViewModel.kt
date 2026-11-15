@@ -53,6 +53,14 @@ fun interface VideoSearchSource {
     suspend fun page(query: String, cursor: AllChatsCursor, filters: SearchFilters): AllChatsPage
 
     /**
+     * [page] over every chat of the account rather than the added chats alone: the one-off
+     * "Search my other chats" (HX62). The kids lock still applies. A source with no such
+     * difference (the promo fixture) answers as [page] does.
+     */
+    suspend fun everyChatPage(query: String, cursor: AllChatsCursor, filters: SearchFilters): AllChatsPage =
+        page(query, cursor, filters)
+
+    /**
      * What Telegram says of [item]'s message now: found, gone for good (deleted, its chat left
      * since the search) or [MessageLookup.Unreachable] (a flood wait, a server error, a post held
      * back). Null when it cannot be asked (offline, the fixture).
@@ -95,6 +103,11 @@ fun interface VideoSearchSource {
                 } else {
                     repo.searchAddedChats(query, added, cursor, filters = filters)
                 }
+            }
+
+            override suspend fun everyChatPage(query: String, cursor: AllChatsCursor, filters: SearchFilters): AllChatsPage {
+                val session = Td.awaitConnectedSessionOrNull() ?: throw Offline()
+                return ChatRepository(session.client).searchAllChats(query, cursor, filters = filters, everyChat = true)
             }
 
             /**
@@ -151,7 +164,26 @@ data class GlobalSearchState(
     val topicsError: String? = null,
     /** More groups could have topics than one search asks ([TopicSearch.CHATS_PER_SEARCH]): the heading says so. */
     val topicsPartial: Boolean = false,
+    /**
+     * The search reads the chats the viewer added (HX62), which is what makes "Search my other
+     * chats" worth offering. False when nothing was added yet: every chat is searched, and the
+     * screen says so ([GlobalSearchState.everyChatNote]).
+     */
+    val addedOnly: Boolean = false,
+    /** The one-off "Search my other chats" is on for these words: the whole account, not the added chats. */
+    val everyChat: Boolean = false,
 ) {
+    /** How many videos in how many chats the list holds, for the count line; null for an empty list. */
+    val tally: GlobalSearch.Tally? by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        if (shown.isEmpty()) null else GlobalSearch.tally(shown)
+    }
+
+    /** "Search my other chats" is on offer: the search is of the added chats and has not yet gone further. */
+    val canSearchOthers: Boolean get() = addedOnly && !everyChat && !query.isEmpty && !offline
+
+    /** The search covered every chat because none was added yet: said above the results, with the way to choose. */
+    val everyChatNote: Boolean get() = !addedOnly && !everyChat && !query.isEmpty && groups.isNotEmpty()
+
     /** What the list shows: [groups] through the filters, the kids lock already applied. */
     val shown: List<ResultGroup> by lazy(LazyThreadSafetyMode.PUBLICATION) { GlobalSearch.filter(groups, filters, query) }
 
@@ -193,6 +225,10 @@ class GlobalSearchViewModel(
     private val topicSource: TopicSource? = if (source === VideoSearchSource.Telegram) TopicSource.Telegram else null,
     /** The chats search may list: the kids lock and the added chats ([ChatGate.browsing]); a test's own. */
     private val gate: StateFlow<Set<Long>?> = ChatGate.browsing,
+    /** The kids lock alone, for the one-off search of the viewer's other chats ([searchOtherChats]). */
+    private val wholeGate: StateFlow<Set<Long>?> = ChatGate.allowed,
+    /** The viewer's answer to the picker: whether search reads the added chats alone. */
+    private val choice: StateFlow<com.tmplayer.data.AddedChoice> = com.tmplayer.data.AddedChats.choice,
     /**
      * Where Telegram's pages are kept by query ([PageQueries]), so searching the same words again
      * lists them at once and asks again only once they are [PageQueries.SEARCH_STALE_MS] old.
@@ -210,7 +246,7 @@ class GlobalSearchViewModel(
     private data class Answer(val serverQuery: String, val pages: List<AllChatsPage>, val cursor: AllChatsCursor)
 
     private fun keyOf(query: SearchQuery, filters: SearchFilters) =
-        QueryKey.Search(query.server, "${filters.serverSide.first}:${filters.serverSide.second}")
+        QueryKey.Search(query.server, "${filters.serverSide.first}:${filters.serverSide.second}${if (everyChat) ":every" else ""}")
 
     /** A first page, kept as the start of a fresh answer for [query]. */
     private fun keepFirst(query: SearchQuery, filters: SearchFilters, page: AllChatsPage) {
@@ -248,6 +284,27 @@ class GlobalSearchViewModel(
     /** Whether each chat has topics, as [TopicSource.isForum] said this run, so a chat is looked at once. */
     private val forums = java.util.concurrent.ConcurrentHashMap<Long, Boolean>()
 
+    /**
+     * The viewer's preferred audio language as a two letter code, which leads the copies of a
+     * video whose names carry it (EG-F5). Set by the screen from the track preferences.
+     */
+    @Volatile
+    var audioLanguage: String? = null
+
+    /** The cards' copy order: [identity], led by [audioLanguage] where there is one. */
+    private val identityNow: SearchIdentity get() = SearchIdentity.preferring(identity, audioLanguage)
+
+    /** "Search my other chats" is on, for the words in [everyChatWords] only (HX62: never the default). */
+    @Volatile
+    private var everyChat = false
+    private var everyChatWords = ""
+
+    /** The chats the cards may come from: the added chats under the kids lock, the lock alone for the one-off. */
+    private fun activeGate(): Set<Long>? = if (everyChat) wholeGate.value else gate.value
+
+    private suspend fun fetch(query: String, cursor: AllChatsCursor, filters: SearchFilters): AllChatsPage =
+        if (everyChat) source.everyChatPage(query, cursor, filters) else source.page(query, cursor, filters)
+
     private var job: Job? = null
     private var localJob: Job? = null
     private var rememberJob: Job? = null
@@ -270,7 +327,8 @@ class GlobalSearchViewModel(
         // The kids lock coming on, or a chat removed in the picker, while results are listed
         // takes its chats out of them at once.
         viewModelScope.launch {
-            gate.collect { allowed ->
+            gate.collect { browsing ->
+                val allowed = if (everyChat) wholeGate.value else browsing
                 if (allowed != null) _state.update { s ->
                     s.copy(
                         groups = s.groups.filter { g -> g.copies.all { KidsLock.allows(allowed, it.chatId) } },
@@ -314,6 +372,20 @@ class GlobalSearchViewModel(
         _state.update { it.copy(sort = sort, groups = GlobalSearch.order(it.groups, it.query, sort)) }
     }
 
+    /**
+     * "Search my other chats" (HX62): the same words once more over every chat of the account,
+     * not only the added ones, listed with what was found already. A one-off: the next words go
+     * back to the added chats. Nothing to do when nothing was added (every chat is searched
+     * already) or the search has no words.
+     */
+    fun searchOtherChats() {
+        val now = _state.value
+        if (!now.canSearchOthers) return
+        everyChat = true
+        everyChatWords = now.query.server
+        startVideos(now.query.text, settle = 0, force = true)
+    }
+
     /** Clears every filter, from the empty state's one tap. */
     fun clearFilters() = setFilters(SearchFilters())
 
@@ -326,7 +398,7 @@ class GlobalSearchViewModel(
         if (now.groups.size >= GlobalSearch.MAX_GROUPS) return
         _state.update { it.copy(loadingMore = true) }
         job = viewModelScope.launch {
-            runCatching { source.page(serverQuery, cursor, now.filters) }
+            runCatching { fetch(serverQuery, cursor, now.filters) }
                 .onSuccess { page ->
                     cursor = page.cursor
                     keepNext(now.query, now.filters, page)
@@ -401,8 +473,10 @@ class GlobalSearchViewModel(
         val query = GlobalSearch.parse(text)
         val now = _state.value
         if (!force && query == now.query) return
+        // The one-off search of every chat lasts for its own words only.
+        if (everyChat && (query.isEmpty || query.server != everyChatWords)) everyChat = false
         // The kids lock and the added chats (HX27): search lists videos from the added chats alone.
-        val allowed = gate.value
+        val allowed = activeGate()
         // Only the words around Telegram's part changed (a quality marker, a space): the answer
         // asked for, or about to be, stands, and the new words only screen and rank it.
         if (!force && !query.isEmpty && query.server == now.query.server && (asked == query.server || now.settling) &&
@@ -413,7 +487,7 @@ class GlobalSearchViewModel(
             localJob = viewModelScope.launch {
                 val local = withContext(work) { GlobalSearch.localVideos(known() + alsoKnown, query, allowed, ::onlineNames) }
                 localNow = local
-                regroup { s -> GlobalSearch.merge(GlobalSearch.order(s.groups, query, s.sort), local, query, s.sort, identity) }
+                regroup { s -> GlobalSearch.merge(GlobalSearch.order(s.groups, query, s.sort), local, query, s.sort, identityNow) }
             }
             return
         }
@@ -429,6 +503,7 @@ class GlobalSearchViewModel(
             _state.value = GlobalSearchState(
                 query = query, filters = now.filters, sort = now.sort,
                 topics = now.topics, topicsSearching = now.topicsSearching, topicsError = now.topicsError, topicsPartial = now.topicsPartial,
+                addedOnly = addedOnlyNow(),
             )
             return
         }
@@ -447,6 +522,8 @@ class GlobalSearchViewModel(
             topicsSearching = now.topicsSearching,
             topicsError = now.topicsError,
             topicsPartial = now.topicsPartial,
+            addedOnly = addedOnlyNow(),
+            everyChat = everyChat,
         )
         val kept = cache?.peek<Answer>(keyOf(query, now.filters), PageQueries.SEARCH_STALE_MS)
         if (kept != null) {
@@ -454,6 +531,8 @@ class GlobalSearchViewModel(
             cursor = kept.data.cursor
             asked = query.server
         }
+        // "Search my other chats" asks the same words again: what the added chats gave stays listed.
+        val widening = everyChat && now.groups.isNotEmpty() && !now.query.isEmpty && now.query.server == query.server
         job = viewModelScope.launch {
             // The local half, off the main thread: no connection needed and no wait. What was
             // listed and still answers the new words stays up until Telegram's answer takes its
@@ -462,11 +541,11 @@ class GlobalSearchViewModel(
             localNow = local
             regroup { s ->
                 val carried = GlobalSearch.order(
-                    s.groups.filter { g -> g.copies.any { GlobalSearch.matchesLocally(it, query, onlineNames(it)) } },
+                    if (widening) s.groups else s.groups.filter { g -> g.copies.any { GlobalSearch.matchesLocally(it, query, onlineNames(it)) } },
                     query,
                     s.sort,
                 )
-                GlobalSearch.merge(carried, local, query, s.sort, identity)
+                GlobalSearch.merge(carried, local, query, s.sort, identityNow)
             }
             // The same words searched before: Telegram's pages from then, listed at once through
             // the kids lock and the added chats as they are now, and asked again only once stale.
@@ -482,7 +561,7 @@ class GlobalSearchViewModel(
                 // Asked only now, so only now does the screen say it is searching.
                 _state.update { it.copy(settling = false, searching = kept == null) }
             }
-            firstAnswer(query, fresh = kept == null)
+            firstAnswer(query, fresh = kept == null && !widening)
         }
     }
 
@@ -586,14 +665,14 @@ class GlobalSearchViewModel(
         try {
             var pages = 0
             serverQuery = query.server
-            var page = source.page(serverQuery, AllChatsCursor(), filters)
+            var page = fetch(serverQuery, AllChatsCursor(), filters)
             pages++
             if (page.items.isEmpty()) {
                 // Telegram matches whole words, and to it "Harbour_Notes" is one: try the query
                 // spelled as release names spell it, then its longest word alone.
                 val tries = GlobalSearch.variants(query.server) + listOfNotNull(com.tmplayer.data.AllChatsSearch.fallbackQuery(query.server))
                 for (spelling in tries) {
-                    val retry = source.page(spelling, AllChatsCursor(), filters)
+                    val retry = fetch(spelling, AllChatsCursor(), filters)
                     pages++
                     if (retry.items.isNotEmpty()) {
                         serverQuery = spelling
@@ -608,7 +687,7 @@ class GlobalSearchViewModel(
             _state.update { it.copy(searching = false, endReached = page.cursor.done) }
             while (GlobalSearch.wantsMore(_state.value.shown.size, pages, cursor.done)) {
                 _state.update { it.copy(stillSearching = true) }
-                val next = source.page(serverQuery, cursor, filters)
+                val next = fetch(serverQuery, cursor, filters)
                 pages++
                 cursor = next.cursor
                 keepNext(query, filters, next)
@@ -657,8 +736,8 @@ class GlobalSearchViewModel(
         val kept = if (!fallback) page.items else withContext(work) { page.items.filter { GlobalSearch.matchesLocally(it, keepTo, onlineNames(it)) } }
         val local = localNow
         regroup(chats = page.chats.associateBy { it.id }) { s ->
-            val base = if (fresh) GlobalSearch.merge(emptyList(), local, s.query, s.sort, identity) else s.groups
-            GlobalSearch.merge(base, kept, s.query, s.sort, identity)
+            val base = if (fresh) GlobalSearch.merge(emptyList(), local, s.query, s.sort, identityNow) else s.groups
+            GlobalSearch.merge(base, kept, s.query, s.sort, identityNow)
         }
     }
 
@@ -674,6 +753,9 @@ class GlobalSearchViewModel(
             if (_state.compareAndSet(s, s.copy(groups = groups, chats = if (chats.isEmpty()) s.chats else s.chats + chats))) return
         }
     }
+
+    /** Whether search reads the added chats alone: the viewer picked chats (HX27), however few. */
+    private fun addedOnlyNow(): Boolean = choice.value.mode == com.tmplayer.data.AddedMode.Picked
 
     /** The online title of [item], when the providers have already been asked about it. */
     private fun onlineNames(item: MediaItem): List<String> {

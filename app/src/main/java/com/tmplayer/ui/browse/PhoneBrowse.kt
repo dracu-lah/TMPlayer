@@ -276,6 +276,7 @@ internal fun PhoneBrowse(
                 onLoadMore = search::loadMore,
                 onRetryMore = search::retryMore,
                 onRetry = search::retry,
+                onSearchOthers = search::searchOtherChats,
                 onRemoveRecent = { entry -> scope.launch { settings.removeRecentSearch(entry) } },
                 onClearRecent = {
                     val before = recent

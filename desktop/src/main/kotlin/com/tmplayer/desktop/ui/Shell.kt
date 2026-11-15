@@ -462,6 +462,10 @@ private fun Browse(state: ShellState, player: PlayerContent) {
         val searchModel = rememberViewModel(Unit) {
             com.tmplayer.ui.browse.GlobalSearchViewModel(onSearched = { state.settings.addRecentSearch(it) })
         }
+        // Copies named for the viewer's preferred audio language lead a search result (EG-F5).
+        LaunchedEffect(state.settings, searchModel) {
+            state.settings.trackPreferences.collect { searchModel.audioLanguage = com.tmplayer.player.TrackLanguages.normalise(it.audioLanguage) }
+        }
         // What the device already holds is searched as well as what Telegram answers.
         // Followed in an effect rather than read here: a video playing saves its place every ten
         // seconds, and reading the list in the shell recomposed the whole window each time.
