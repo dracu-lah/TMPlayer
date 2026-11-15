@@ -3,7 +3,6 @@ package com.tmplayer.ui.settings
 import android.content.Context
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -45,6 +44,7 @@ import com.tmplayer.i18n.Strings
 import com.tmplayer.platform.Logger
 import com.tmplayer.ui.components.FloatingWindow
 import com.tmplayer.ui.components.PhonePad
+import com.tmplayer.ui.components.PanelActions
 import com.tmplayer.ui.components.TmButton
 import com.tmplayer.ui.components.TmSecondaryButton
 import com.tmplayer.ui.i18n.LocalStrings
@@ -111,7 +111,7 @@ fun SendToDeveloperButton(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun SendPanel(
+internal fun SendPanel(
     state: State,
     onSend: () -> Unit,
     onCancelSend: () -> Unit,
@@ -132,7 +132,7 @@ private fun SendPanel(
                 State.Preparing -> {
                     Title(s.logsSendDevTitle)
                     Body(s.logsSendDevPreparing)
-                    TmSecondaryButton(onClick = onClose, modifier = Modifier.focusRequester(primary)) { Text(s.commonCancel) }
+                    PanelActions { TmSecondaryButton(onClick = onClose, modifier = Modifier.focusRequester(primary)) { Text(s.commonCancel) } }
                 }
                 is State.Confirm -> {
                     Title(s.logsSendDevTitle)
@@ -141,17 +141,18 @@ private fun SendPanel(
                     for (part in state.report.parts) Body("• " + partLabel(s, part))
                     if (state.report.trimmed) Body(s.logsSendDevTrimmed)
                     Text(s.logsSendDevSize(s.formatter.bytes(state.report.bytes.toLong())), style = MaterialTheme.typography.bodyLarge, color = Tone.text)
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        TmButton(onClick = onSend, modifier = Modifier.focusRequester(primary)) { Text(s.logsSendDevConfirm) }
-                        TmSecondaryButton(onClick = onClose) { Text(s.commonCancel) }
+                    // Cancel is focused, not Send: an OK meant for something else never sends the report.
+                    PanelActions {
+                        TmSecondaryButton(onClick = onClose, modifier = Modifier.focusRequester(primary)) { Text(s.commonCancel) }
+                        TmButton(onClick = onSend) { Text(s.logsSendDevConfirm) }
                     }
                 }
                 is State.Sending -> {
                     Title(s.logsSendDevTitle)
                     Body(s.logsSendDevSending)
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        TmButton(onClick = {}, enabled = false, loading = true, busyLabel = s.logsSendDevSending) { Text(s.logsSendDevConfirm) }
+                    PanelActions {
                         TmSecondaryButton(onClick = onCancelSend, modifier = Modifier.focusRequester(primary)) { Text(s.commonCancel) }
+                        TmButton(onClick = {}, enabled = false, loading = true, busyLabel = s.logsSendDevSending) { Text(s.logsSendDevConfirm) }
                     }
                 }
                 is State.Sent -> {
@@ -170,22 +171,22 @@ private fun SendPanel(
                         color = Tone.accent,
                     )
                     Body(s.logsSendDevSentBody(state.keepDays))
-                    TmButton(onClick = onClose, modifier = Modifier.focusRequester(primary)) { Text(s.commonClose) }
+                    PanelActions { TmButton(onClick = onClose, modifier = Modifier.focusRequester(primary)) { Text(s.commonClose) } }
                 }
                 is State.Kept -> {
                     Title(s.logsSendDevKeptTitle)
                     Body(keptMessage(s, state))
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        TmButton(onClick = onClose, modifier = Modifier.focusRequester(primary)) { Text(s.commonClose) }
+                    PanelActions {
                         if (state.why != Why.SLOW_DOWN) TmSecondaryButton(onClick = onAgain) { Text(s.commonTryAgain) }
+                        TmButton(onClick = onClose, modifier = Modifier.focusRequester(primary)) { Text(s.commonClose) }
                     }
                 }
                 is State.Failed -> {
                     Title(s.logsSendDevTitle)
                     Body(s.logsSendDevFailed)
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        TmButton(onClick = onAgain, modifier = Modifier.focusRequester(primary)) { Text(s.commonTryAgain) }
+                    PanelActions {
                         TmSecondaryButton(onClick = onClose) { Text(s.commonClose) }
+                        TmButton(onClick = onAgain, modifier = Modifier.focusRequester(primary)) { Text(s.commonTryAgain) }
                     }
                 }
             }

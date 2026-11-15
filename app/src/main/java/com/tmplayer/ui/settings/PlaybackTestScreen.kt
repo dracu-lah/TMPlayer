@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -40,6 +39,7 @@ import com.tmplayer.player.PlaybackTestSession
 import com.tmplayer.player.PlaybackTestSession.State
 import com.tmplayer.ui.components.FloatingWindow
 import com.tmplayer.ui.components.PhonePad
+import com.tmplayer.ui.components.PanelActions
 import com.tmplayer.ui.components.TmButton
 import com.tmplayer.ui.components.TmSecondaryButton
 import com.tmplayer.ui.i18n.LocalStrings
@@ -115,15 +115,15 @@ private fun TestPanel(
                 State.Idle -> Unit
                 State.Looking -> {
                     Body(s.playbacktestLooking)
-                    TmSecondaryButton(onClick = onClose, modifier = Modifier.focusRequester(primary)) { Text(s.commonCancel) }
+                    PanelActions { TmSecondaryButton(onClick = onClose, modifier = Modifier.focusRequester(primary)) { Text(s.commonCancel) } }
                 }
                 State.Refused -> {
                     Body(s.playbacktestRefused)
-                    TmButton(onClick = onClose, modifier = Modifier.focusRequester(primary)) { Text(s.commonClose) }
+                    PanelActions { TmButton(onClick = onClose, modifier = Modifier.focusRequester(primary)) { Text(s.commonClose) } }
                 }
                 State.NoVideo -> {
                     Body(s.playbacktestNoVideo)
-                    TmButton(onClick = onClose, modifier = Modifier.focusRequester(primary)) { Text(s.commonClose) }
+                    PanelActions { TmButton(onClick = onClose, modifier = Modifier.focusRequester(primary)) { Text(s.commonClose) } }
                 }
                 is State.Ready -> {
                     Body(s.playbacktestVideo(state.video.title))
@@ -135,26 +135,26 @@ private fun TestPanel(
                             s.playbacktestFetchOffer(s.formatter.bytes(fetch.bytes), s.formatter.bytes(fetch.freeBytes))
                         },
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    PanelActions {
+                        TmSecondaryButton(onClick = onClose) { Text(s.commonCancel) }
                         TmButton(onClick = onStart, modifier = Modifier.focusRequester(primary)) {
                             Text(if (fetch == null) s.playbacktestStart else s.playbacktestFetchStart)
                         }
-                        TmSecondaryButton(onClick = onClose) { Text(s.commonCancel) }
                     }
                 }
                 is State.NoSpace -> {
                     Body(s.playbacktestVideo(state.video.title))
                     Body(s.playbacktestNoSpace(s.formatter.bytes(state.needed), s.formatter.bytes(state.free)))
-                    TmButton(onClick = onClose, modifier = Modifier.focusRequester(primary)) { Text(s.commonClose) }
+                    PanelActions { TmButton(onClick = onClose, modifier = Modifier.focusRequester(primary)) { Text(s.commonClose) } }
                 }
                 is State.Fetching -> {
                     Body(s.playbacktestFetching(s.formatter.bytes(state.bytes), s.formatter.bytes(state.total)))
-                    TmSecondaryButton(onClick = onCancel, modifier = Modifier.focusRequester(primary)) { Text(s.commonCancel) }
+                    PanelActions { TmSecondaryButton(onClick = onCancel, modifier = Modifier.focusRequester(primary)) { Text(s.commonCancel) } }
                 }
                 is State.Testing -> {
                     Preview(runner)
                     Body(s.playbacktestTesting((state.playedMs / 1000).toInt(), (PlaybackTest.WINDOW_MS / 1000).toInt()))
-                    TmSecondaryButton(onClick = onCancel, modifier = Modifier.focusRequester(primary)) { Text(s.commonCancel) }
+                    PanelActions { TmSecondaryButton(onClick = onCancel, modifier = Modifier.focusRequester(primary)) { Text(s.commonCancel) } }
                 }
                 is State.Done -> {
                     val r = state.result
@@ -167,10 +167,10 @@ private fun TestPanel(
                     }
                     if (state.added) Body(s.playbacktestAdded)
                     if (state.addFailed) Body(s.playbacktestAddFailed)
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    PanelActions {
                         if (!state.added) {
-                            TmButton(onClick = onAdd, modifier = Modifier.focusRequester(primary)) { Text(s.playbacktestAdd) }
                             TmSecondaryButton(onClick = onClose) { Text(s.commonClose) }
+                            TmButton(onClick = onAdd, modifier = Modifier.focusRequester(primary)) { Text(s.playbacktestAdd) }
                         } else {
                             TmButton(onClick = onClose, modifier = Modifier.focusRequester(primary)) { Text(s.commonClose) }
                         }
@@ -178,15 +178,16 @@ private fun TestPanel(
                 }
                 is State.Failed -> {
                     Body(if (state.fetching) s.playbacktestFailedFetch else s.playbacktestFailed)
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        TmButton(onClick = onAgain, modifier = Modifier.focusRequester(primary)) { Text(s.commonTryAgain) }
+                    PanelActions {
                         TmSecondaryButton(onClick = onClose) { Text(s.commonClose) }
+                        TmButton(onClick = onAgain, modifier = Modifier.focusRequester(primary)) { Text(s.commonTryAgain) }
                     }
                 }
             }
         }
     }
-    // Each step focuses its first button, so the remote always has somewhere to land.
+    // Each step focuses its own step (Start, Add, Try again) or its only button, so the remote always
+    // has somewhere to land; a Back press is the way out.
     LaunchedEffect(state::class) { runCatching { primary.requestFocus() } }
 }
 
