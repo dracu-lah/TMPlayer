@@ -41,6 +41,10 @@
 #     callbacks (read, seek) that the app answers from Media3's ExtractorInput, and ffdemux.cpp is
 #     its JNI side for the app's com.tmplayer.player.demux.FfmpegDemuxNative.
 #     scripts/media3ext/bench/run-demux-tests.sh tests it on the host.
+#     Also in tm4 (nothing was released as tm4 yet): the decoders g723_1 and siren (both LGPL;
+#     Vivo's sound), and open() copies the sequence header of an MPEG-1 or MPEG-2 video stream that
+#     has no extra data out of its first packet into the extra data, so a decoder started after a
+#     seek has it.
 #   - setup.sh takes JOBS from the environment, so a small machine can build with JOBS=2.
 #   - A light video mode (HX2c) for pictures the device cannot decode in software in real time,
 #     chosen per format by the app through FfmpegLibrary.setLightVideoPolicy (TMPlayer passes

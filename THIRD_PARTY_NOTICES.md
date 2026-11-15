@@ -22,8 +22,8 @@ The app's AAR is built from that source by `scripts/build-media3ext.sh`, with TM
 `scripts/media3ext/tmplayer-decoders.patch` applied: it adds more of FFmpeg's LGPL decoders to NextLib's `ffmpeg/setup.sh`: video (MPEG-4 Part 2,
 Microsoft MPEG-4, VC-1, Motion JPEG, MPEG-1, WMV1 to WMV3, H.263, Flash video, Theora, DV, Sorenson
 SVQ1 and SVQ3, VP6, RealVideo 1 to 4, Cinepak, ProRes, FFV1, HuffYUV, Ut Video), audio (WMA
-family, MPEG audio layers 1 and 2, Cook, RealAudio, QCELP, GSM, SIPR, ATRAC3, Speex, WavPack, TTA,
-Monkey's Audio, Nellymoser, and the PCM and ADPCM families) and maps Media3's formats to them.
+family, MPEG audio layers 1 and 2, Cook, RealAudio, QCELP, GSM, SIPR, G.723.1, Siren, ATRAC3, Speex,
+WavPack, TTA, Monkey's Audio, Nellymoser, and the PCM and ADPCM families) and maps Media3's formats to them.
 FFmpeg stays LGPL v3 with no GPL and nothing non-free: 8 ADPCM decoders and AHX were skipped
 because FFmpeg builds them only with `--enable-gpl`. The patch also adds a light video mode
 to NextLib's JNI and Java glue (dav1d's frame threads, film grain left out and YV12 frames to the

@@ -169,7 +169,7 @@ toolchain was moved forward on 2026-10-18 (Gradle 9.8.1, AGP 9.4.1, Kotlin 2.4.2
   FFVHuff, Ut Video, MJPEG-B; audio, WMA 1 and 2, WMA Pro, WMA Lossless, MP1, MP2, Cook,
   RealAudio 1.0 and 2.0 (`real_144`, `real_288`), QCELP, GSM and MS GSM, SIPR, ATRAC3 and
   ATRAC3+, Speex, WavPack, TTA, Monkey's Audio, Nellymoser, all 35 PCM kinds and 54 ADPCM kinds
-  that are LGPL. Left out: the eight ADPCM decoders and AHX that FFmpeg builds only with
+  that are LGPL; and, folded into tm4 before its first release, G.723.1 and Siren (Vivo's sound). Left out: the eight ADPCM decoders and AHX that FFmpeg builds only with
   `--enable-gpl` (circus, ima_escape, ima_hvqm2, ima_hvqm4, ima_magix, ima_pda, n64, psxc), and the
   `*_at` decoders (Apple's AudioToolbox). The AAR stays LGPL v3: no `--enable-gpl`, nothing
   non-free. The build also has every FFmpeg parser nextlib enables (68), the demuxers of the
