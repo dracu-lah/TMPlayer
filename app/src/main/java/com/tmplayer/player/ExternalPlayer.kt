@@ -161,6 +161,11 @@ object ExternalPlayer {
             // MX Player: `subs` is a Uri array and `subs.enable` the ones shown at once. UNVERIFIED on a real install.
             intent.putExtra("subs", arrayOf(subtitle)).putExtra("subs.enable", arrayOf(subtitle))
         }
+        // The grant on the intent covers its data only: the subtitle in an extra gets its own, or the
+        // other app is refused the file it was named.
+        if (subtitle != null && subtitle.scheme == "content") {
+            runCatching { context.grantUriPermission(app.packageName, subtitle, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+        }
         if (uri.scheme == "content") {
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             // The explicit grant too, for an app that reads on another thread after its activity is gone.

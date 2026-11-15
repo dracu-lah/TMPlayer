@@ -53,6 +53,9 @@ class SubtitleFiles(
      */
     var onCastFile: ((file: File, mimeType: String, label: String) -> Boolean)? = null
 
+    /** Told of each file put over the video (loaded from the phone or fetched online), for its handover to another player. */
+    var onAttached: ((File) -> Unit)? = null
+
     /** The id of the file just loaded, until its track shows up and is selected. */
     private var pending: Pair<String, String>? = null
 
@@ -140,9 +143,11 @@ class SubtitleFiles(
             .build()
         if (onCastFile?.invoke(copy.file, copy.mimeType, name) == true) {
             // Kept in [loaded] for when the video comes back here; the cast shows it now.
+            runCatching { onAttached?.invoke(copy.file) }
             say(L.tracksFileLoaded(name))
             return
         }
+        runCatching { onAttached?.invoke(copy.file) }
         pending = id to name
         exo.setMediaItem(item(video), exo.currentPosition)
         if (exo.playbackState == Player.STATE_IDLE) exo.prepare()
@@ -169,6 +174,10 @@ class SubtitleFiles(
             out.toByteArray()
         } ?: return Copy.Refused(L.tracksFileUnopenable)
         val folder = File(activity.cacheDir, "subtitles").apply { mkdirs() }
+        // A name of its own, because the file is remembered for the video's handover to another player:
+        // the next video's "1.srt" must not become this one's. The folder keeps the newest few.
+        val stamp = System.currentTimeMillis()
+        trimFolder(folder)
         // Written back as UTF-8 whatever it arrived in: Media3 reads these formats as UTF-8, and
         // an older .srt saved in a Windows code page would otherwise lose every accented letter.
         // A file that is not Unicode is read in the code page of the language its name gives
@@ -179,16 +188,28 @@ class SubtitleFiles(
         val text = SubtitleText.decode(bytes, named ?: Locale.getDefault().language)
         val mime = ExternalSubtitle.mimeTypeOf(extension)
         if (mime != null) {
-            val file = File(folder, "${loaded.size + 1}.$extension")
+            val file = File(folder, "${stamp}-${loaded.size + 1}.$extension")
             file.writeText(text)
             return Copy.Done(file, mime)
         }
         if (!ExternalSubtitle.isMicroDvd(text)) {
             return Copy.Refused(L.tracksFileVobsub)
         }
-        val file = File(folder, "${loaded.size + 1}.srt")
+        val file = File(folder, "${stamp}-${loaded.size + 1}.srt")
         file.writeText(ExternalSubtitle.microDvdToSrt(text, fps))
         return Copy.Done(file, ExternalSubtitle.MIME_SUBRIP)
+    }
+
+    /** Keeps the copies of loaded files bounded: the oldest go once there are more than [KEEP_COPIES]. */
+    private fun trimFolder(folder: File) {
+        runCatching {
+            val files = folder.listFiles { f -> f.isFile }?.sortedBy { it.lastModified() } ?: return
+            files.take((files.size - KEEP_COPIES + 1).coerceAtLeast(0)).forEach { it.delete() }
+        }
+    }
+
+    private companion object {
+        const val KEEP_COPIES = 40
     }
 
     private fun displayName(uri: Uri): String? = runCatching {

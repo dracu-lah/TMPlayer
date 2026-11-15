@@ -28,6 +28,16 @@
     <cache-path
         name="logs"
         path="logs/" />
+    <!--
+      A subtitle the viewer loaded or had fetched, for the video's handover to VLC or MX Player: the
+      copies of loaded files and the fetched ones, both cache, both small text.
+    -->
+    <cache-path
+        name="subtitles"
+        path="subtitles/" />
+    <cache-path
+        name="online_subtitles"
+        path="online-subtitles/files/" />
     <!-- A downloaded video, in TMPlayer's own Downloads folder. -->
     <files-path
         name="downloads"

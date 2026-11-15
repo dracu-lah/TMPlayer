@@ -290,7 +290,13 @@ object ExternalPlayRouter {
             }
             uri = Uri.parse(address)
         }
-        return Prepared(ExternalPlayer.viewIntent(context, app, uri, mime, item.title, positionMs))
+        // The subtitle the viewer loaded or had fetched for this video, or one beside the downloaded file
+        // (a file that is gone is skipped, and so is one the app cannot hand out).
+        val language = runCatching { settings.trackPreferencesNow().subtitleKey }.getOrNull()
+        val subtitle = runCatching {
+            ExternalSubtitleFile.forVideo(context, SubtitleMemory.keyOf(item.chatId, item.messageId), readiness.file, language)
+        }.getOrNull()
+        return Prepared(ExternalPlayer.viewIntent(context, app, uri, mime, item.title, positionMs, subtitle))
     }
 
     // ---- coming back ----------------------------------------------------------------------------

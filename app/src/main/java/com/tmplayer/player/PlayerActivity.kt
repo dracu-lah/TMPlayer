@@ -1841,6 +1841,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             setOnClickListener { cast?.openPicker() }
         }
         subtitleFiles.onCastFile = { file, mime, label -> cast?.addSubtitle(file, mime, label) == true }
+        // Remembered per video, so a handover to VLC or MX Player later carries it (ExternalSubtitleFile).
+        subtitleFiles.onAttached = { file ->
+            if (hasMessage()) SubtitleMemory.at(this).remember(SubtitleMemory.keyOf(chatId, messageId), file.absolutePath)
+        }
     }
 
     private val castHooks = object : PlayerCast.Hooks {
