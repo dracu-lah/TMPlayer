@@ -143,7 +143,8 @@ fun HomePage(state: ShellState, chats: ChatListViewModel) {
     // Recently added's search is asked for as soon as the setting is read (rememberHomeRows), not
     // once the chat list has loaded and the row is drawn: the loader waits on the carousel, and
     // the carousel on this row. Only while the row or the carousel is on.
-    val rows = rememberHomeRows(model, list, favourites, history, later, watched.values, recentMinStarred = 1, layout = layout)
+    val named by remember { state.watched.lists.visible }.collectAsState(initial = emptyList())
+    val rows = rememberHomeRows(model, list, favourites, history, later, watched.values, recentMinStarred = 1, layout = layout, lists = named)
     // With nothing of its own to show yet, Home waits on the chat list, or says why it failed,
     // rather than greet somebody with starred chats as a first run. With starred chats it waits a
     // moment for them, so the carousel does not land over Continue watching, but never for the
@@ -173,7 +174,7 @@ fun HomePage(state: ShellState, chats: ChatListViewModel) {
             when (row) {
                 is HomeRow.Chat -> model.request(row.chatId)
                 is HomeRow.Recent -> model.requestRecent()
-                is HomeRow.Continue, is HomeRow.WatchLater, is HomeRow.NewEpisodes -> Unit
+                is HomeRow.Continue, is HomeRow.WatchLater, is HomeRow.Listed, is HomeRow.NewEpisodes -> Unit
             }
         },
         onArtWanted = model::requestArt,
@@ -229,6 +230,11 @@ internal fun HomeRowsView(
     val shown = openSeries
     if (shown != null) {
         SeriesPage(state, shown, rememberSeriesWatch(state), onClose = { openSeries = null })
+        return
+    }
+    // The named lists' page (HX43), from a list's row or History: under a show opened from it.
+    if (state.openList != null) {
+        ListsPage(state, art, onLaterArtWanted, onOpenSeries = { openSeries = it }, onBack = { state.openList = null })
         return
     }
     val paged = openRow?.let { key -> rows.firstOrNull { it.key == key } }
@@ -394,7 +400,11 @@ internal fun HomeRowsView(
                                 count = row.countLabel(s),
                                 side = side,
                                 // Every loaded row opens as a page of its own.
-                                onSeeAll = if (loaded && !(row is HomeRow.Recent && row.noneChosen)) ({ openRow = row.key }) else null,
+                                onSeeAll = when {
+                                    row is HomeRow.Listed -> ({ state.openList = row.listId })
+                                    loaded && !(row is HomeRow.Recent && row.noneChosen) -> ({ openRow = row.key })
+                                    else -> null
+                                },
                             )
                             if (!loaded) {
                                 PlaceholderStrip(side, sizes.card)
@@ -409,7 +419,12 @@ internal fun HomeRowsView(
                                 // The card a chat's grid draws, so the pane offers Remove from Watch later.
                                 is HomeRow.WatchLater -> Strip(side) {
                                     items(row.records, key = { "l-${it.id}" }) { record ->
-                                        Box(Modifier.width(sizes.card)) { LaterCell(state, record, art, onLaterArtWanted) { openSeries = it } }
+                                        Box(Modifier.width(sizes.card)) { LaterCell(state, record, art, onLaterArtWanted, onOpenShow = { series -> openSeries = series }) }
+                                    }
+                                }
+                                is HomeRow.Listed -> Strip(side) {
+                                    items(row.records, key = { "l-${it.id}" }) { record ->
+                                        Box(Modifier.width(sizes.card)) { LaterCell(state, record, art, onLaterArtWanted, onOpenShow = { series -> openSeries = series }, laterLine = false) }
                                     }
                                 }
                                 is HomeRow.NewEpisodes -> Strip(side) {
@@ -497,6 +512,11 @@ private fun RowPage(
                     is HomeRow.WatchLater -> listOf(
                         sizes.card to (row.records + row.more).map { record ->
                             "l-${record.id}" to @Composable { LaterCell(state, record, art, onLaterArtWanted, onOpenSeries) }
+                        },
+                    )
+                    is HomeRow.Listed -> listOf(
+                        sizes.card to row.records.map { record ->
+                            "l-${record.id}" to @Composable { LaterCell(state, record, art, onLaterArtWanted, onOpenSeries, laterLine = false) }
                         },
                     )
                     is HomeRow.NewEpisodes -> listOf(
@@ -646,20 +666,30 @@ private fun ContinueCell(
 
 /** A Watch later card: the one a chat's grid draws, so the pane offers Remove from Watch later. */
 @Composable
-private fun LaterCell(
+internal fun LaterCell(
     state: ShellState,
     record: WatchLaterRecord,
     art: Map<String, MediaItem>,
     onLaterArtWanted: (WatchLaterRecord) -> Unit,
     /** A show saved whole (HX20): its page. */
     onOpenShow: (Series) -> Unit = {},
+    /**
+     * On a named list's page (HX43): Remove from list in the right click menu, in place of Watch
+     * later's Remove. Null keeps Watch later's.
+     */
+    onRemove: (() -> Unit)? = null,
+    /** False for a card that is not Watch later's (a named list's row on Home): no Remove at all. */
+    laterLine: Boolean = true,
 ) {
     LaunchedEffect(record.key) { onLaterArtWanted(record) }
     LaunchedEffect(record.key) { state.noteChatTitle(record.chatId, record.chatTitle) }
     val item = art[record.key] ?: remember(record) { record.toMediaItem() }
     val show = remember(record) { record.stubSeries() }
     if (show == null) {
-        OnHome { MediaTile(state, item, record.chatTitle, outsideChat = true) }
+        val removeLine: (@Composable (close: () -> Unit) -> Unit)? = onRemove?.let { remove ->
+            { close -> androidx.compose.material3.DropdownMenuItem(text = { Text(LocalStrings.current.listsRemove) }, onClick = { close(); remove() }) }
+        }
+        OnHome { MediaTile(state, item, record.chatTitle, outsideChat = true, extraMenu = removeLine) }
         return
     }
     // A show saved whole: named as the show, its episode's picture on it, opening the show's page.
@@ -678,10 +708,14 @@ private fun LaterCell(
         onOpen = { onOpenShow(show) },
         extraMenu = { close ->
             androidx.compose.material3.DropdownMenuItem(text = { Text(LocalStrings.current.detailOpenDetails) }, onClick = { close(); onOpenShow(show) })
-            androidx.compose.material3.DropdownMenuItem(text = { Text(LocalStrings.current.detailWatchLaterRemove) }, onClick = {
-                close()
-                com.tmplayer.platform.Background.scope.launch { runCatching { state.watched.watchLater.remove(record) } }
-            })
+            if (onRemove != null) {
+                androidx.compose.material3.DropdownMenuItem(text = { Text(LocalStrings.current.listsRemove) }, onClick = { close(); onRemove() })
+            } else if (laterLine) {
+                androidx.compose.material3.DropdownMenuItem(text = { Text(LocalStrings.current.detailWatchLaterRemove) }, onClick = {
+                    close()
+                    com.tmplayer.platform.Background.scope.launch { runCatching { state.watched.watchLater.remove(record) } }
+                })
+            }
         },
     )
 }
@@ -742,7 +776,7 @@ private fun HomeRow.title(s: com.tmplayer.i18n.Messages, titles: Map<Long, Strin
 /** How many videos a row holds, as its "See all" says it; null when it cannot tell. */
 private fun HomeRow.countLabel(s: com.tmplayer.i18n.Messages): String? {
     val count = when (this) {
-        is HomeRow.Continue, is HomeRow.WatchLater, is HomeRow.Chat -> total
+        is HomeRow.Continue, is HomeRow.WatchLater, is HomeRow.Listed, is HomeRow.Chat -> total
         is HomeRow.NewEpisodes -> episodes.size
         is HomeRow.Recent -> entries.size
     }

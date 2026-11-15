@@ -128,6 +128,8 @@ fun WatchedPage(state: ShellState, tabs: @Composable () -> Unit = {}) {
             BrowseTab.History.heading,
             HistoryTab.Watched.blurb,
             actions = {
+                // The named lists (HX43), beside History's own lists.
+                OutlinedButton(onClick = { state.openLists() }) { Text(s.listsOpen) }
                 if (!records.isNullOrEmpty()) {
                     if (!selection.active) OutlinedButton(onClick = { selection.start() }) { Text(s.browseSelect) }
                     OutlinedButton(onClick = clearAll) { Text(s.browseClearHistory) }
@@ -271,6 +273,8 @@ fun WatchLaterPage(state: ShellState, tabs: @Composable () -> Unit = {}) {
             BrowseTab.History.heading,
             HistoryTab.WatchLater.blurb,
             actions = {
+                // The named lists (HX43), beside History's own lists.
+                OutlinedButton(onClick = { state.openLists() }) { Text(s.listsOpen) }
                 if (!records.isNullOrEmpty()) {
                     if (!selection.active) OutlinedButton(onClick = { selection.start() }) { Text(s.browseSelect) }
                     OutlinedButton(onClick = clearAll) { Text(s.browseClearWatchLater) }

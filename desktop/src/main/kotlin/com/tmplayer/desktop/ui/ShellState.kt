@@ -413,6 +413,15 @@ class ShellState(
 
     fun chatOf(chatId: Long): ChatSummary? = knownChats[chatId]
 
+    /** The named lists' page (HX43), shown over Home, by the list it opens on ("" for the first); null while closed. */
+    var openList by mutableStateOf<String?>(null)
+
+    /** Home, at the lists' page on list [id]. */
+    fun openLists(id: String = "") {
+        go(Destination.Home)
+        openList = id
+    }
+
     fun go(to: Destination) {
         openChat = null
         chatToRefocus = null

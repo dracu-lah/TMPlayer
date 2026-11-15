@@ -213,6 +213,8 @@ private fun DetailPane(state: ShellState, request: DetailRequest) {
     val matched = shownMatch != null
     // The comments under a channel post (CP81).
     val comments = com.tmplayer.ui.browse.rememberCommentCount(item)
+    // The named lists' picker (HX43), held by the window so it outlives the pane.
+    val pickList = com.tmplayer.ui.browse.LocalListPicker.current
 
     val actions = DetailActions.of(
         DetailContext(
@@ -220,6 +222,7 @@ private fun DetailPane(state: ShellState, request: DetailRequest) {
             resumeMs = point?.positionMs ?: 0L,
             finished = finished,
             watchLater = key in laterKeys,
+            lists = pickList != null,
             inDownloads = record != null,
             copyInDownloads = copyKept,
             cached = item.onDevice,
@@ -356,6 +359,8 @@ private fun DetailPane(state: ShellState, request: DetailRequest) {
             DetailAction.Resume, DetailAction.Play, DetailAction.PlayInTmPlayer, DetailAction.StartOver -> Unit
             DetailAction.MarkWatched, DetailAction.MarkUnwatched -> Unit
             DetailAction.AddWatchLater, DetailAction.RemoveWatchLater, DetailAction.RemoveFromHistory -> Unit
+            // The pane closes and the picker opens over the page, held by the window ([ListPickerHost]).
+            DetailAction.AddToList -> pickList?.invoke(com.tmplayer.data.WatchLaterRecord.of(item, title, System.currentTimeMillis()))
             DetailAction.Download, DetailAction.SaveToDownloads, DetailAction.CancelDownload -> Unit
             DetailAction.InDownloads -> state.go(Destination.Downloads)
             DetailAction.RemoveDownload -> Unit

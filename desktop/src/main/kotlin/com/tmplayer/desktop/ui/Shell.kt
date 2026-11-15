@@ -133,6 +133,8 @@ fun DesktopShell(
         // The big-screen mode's dialogs take the remote as they open and walk with the arrows.
         com.tmplayer.ui.components.LocalRemoteArrows provides BigScreen.on,
     ) {
+        // "Add to a list" (HX43) from any menu or pane: the picker opens over the window.
+        com.tmplayer.ui.browse.ListPickerHost(state.watched.lists, onMessage = { state.notices.tryEmit(it) }, onOpenList = { state.openLists(it) }) {
         Surface(
             Modifier
                 .fillMaxSize()
@@ -245,6 +247,7 @@ fun DesktopShell(
                 // own buttons, which a message there covered.
                 TopMessageHost(toasts, Modifier.align(Alignment.BottomCenter).padding(bottom = maxOf(NavBarClearance, ChatBarClearance), start = 24.dp, end = 24.dp))
             }
+        }
         }
     }
 }

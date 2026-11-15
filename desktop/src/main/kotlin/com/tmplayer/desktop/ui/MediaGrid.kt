@@ -912,6 +912,8 @@ internal fun MediaTile(
     badge: (@Composable () -> Unit)? = null,
     /** A film's 2:3 poster card ([SeriesShelf.isFilm]); the caller says, as only it knows the grid. */
     poster: Boolean = false,
+    /** The caller's own lines at the right click menu's foot: a named list's Remove from list (HX43). */
+    extraMenu: (@Composable (close: () -> Unit) -> Unit)? = null,
 ) {
     val s = LocalStrings.current
     // The grid's selection, when there is one, so the pane can start one with this poster.
@@ -933,6 +935,7 @@ internal fun MediaTile(
         finished = finished,
         badge = badge,
         poster = poster,
+        extraMenu = extraMenu,
         onDetails = { refocus ->
             state.openDetail(
                 DetailRequest(
@@ -1337,6 +1340,13 @@ internal fun TileMenu(
                 toast(if (later) s.detailWatchLaterRemoved(item.title) else s.detailWatchLaterAdded(item.title))
             }
         })
+        // One of the viewer's named lists (HX43): a name, never a copy, so a restricted chat keeps it too.
+        com.tmplayer.ui.browse.LocalListPicker.current?.let { pick ->
+            DropdownMenuItem(text = { Text(s.listsAddTo) }, onClick = {
+                onDismiss()
+                pick(com.tmplayer.data.WatchLaterRecord.of(item, title, System.currentTimeMillis()))
+            })
+        }
         when {
             record != null -> {
                 DropdownMenuItem(text = { Text(s.downloadsInDownloads) }, onClick = { onDismiss(); state.go(Destination.Downloads) })
