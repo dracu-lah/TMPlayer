@@ -49,8 +49,8 @@ class ContinueWidgetProvider : AppWidgetProvider() {
     }
 
     override fun onReceive(context: Context, intent: Intent?) {
-        // Not on a television: the receiver is switched off there (bools.xml), and a box that is
-        // not caught by that resource still gets nothing from here.
+        // Not on a television: the receiver is switched off there ([WidgetAvailability]), and a box
+        // that is not caught by that still gets nothing from here.
         if (FormFactor.isTv(context)) return
         super.onReceive(context, intent)
         // The language changed on the device: the text on the tiles is built in it.

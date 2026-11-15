@@ -71,6 +71,8 @@ class App : Application() {
         }
         // Why this device got the TV or the phone layout, for a generic box's report (HX78).
         Logger.i("tm-form", com.tmplayer.data.FormFactor.describe(this))
+        // The Continue watching widget's receiver is off on a television, on elsewhere (one cheap read, no write when it is right).
+        if (!safe) backgroundScope.launch { com.tmplayer.widget.WidgetAvailability.sync(this@App) }
         // A background job or a view model's job that throws is logged and reported (with the
         // switch on), never the end of the process (HX10).
         com.tmplayer.platform.JobFailures.report = CrashReports::handled

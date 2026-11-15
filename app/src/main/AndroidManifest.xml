@@ -310,11 +310,12 @@
           because a widget provider has to be: the launcher is another app and sends the update
           broadcast. It also listens for the language change, which Android still delivers to a
           manifest receiver. It reads nothing from the intent, only redraws from the app's own
-          settings. Switched off on a television (bools.xml), which has no widget host.
+          settings. Switched off at run time on a television, which has no widget host
+          (WidgetAvailability, from App.onCreate): a resource named here cannot vary by configuration.
         -->
         <receiver
             android:name=".widget.ContinueWidgetProvider"
-            android:enabled="@bool/widget_enabled"
+            android:enabled="true"
             android:exported="true"
             android:label="@string/app_name">
             <intent-filter>
