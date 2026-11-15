@@ -106,6 +106,18 @@ data class MediaItem(
     val startSec: Int = 0,
     /** Telegram's seek thumbnails for the video, a sprite and its map, or null. See [StoryboardMaps]. */
     val storyboard: StoryboardFiles? = null,
+    /**
+     * The file id of the photo of the album this video was sent in, when that photo is the picture
+     * [thumbnailFileId] shows (the video had no cover of its own): see [AlbumPosts.fold]. 0 for a
+     * video that is not in an album, whose album has no photo, or one not read yet. An older cache
+     * without it reads 0 and the card keeps the picture it had.
+     */
+    val albumPhotoFileId: Int = 0,
+    /**
+     * True when the uploader chose a cover for this video (`MessageVideo.cover`), which an album's
+     * photo never replaces. False for a video with only the frame Telegram took.
+     */
+    val hasCover: Boolean = false,
 ) {
     /**
      * Which byte piece of a cut video this file is, read off its name ([SplitPieces.pieceOf]), or
@@ -397,6 +409,7 @@ data class MediaItem(
             topicId == other.topicId &&
             extra == other.extra &&
             albumId == other.albumId &&
+            albumPhotoFileId == other.albumPhotoFileId &&
             playingQuality == other.playingQuality &&
             startSec == other.startSec &&
             qualities == other.qualities &&

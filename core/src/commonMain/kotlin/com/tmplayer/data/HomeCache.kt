@@ -188,6 +188,9 @@ object HomeCache {
         .put("album", albumId)
         .put("start", startSec)
         .apply {
+            // Only for an album's video: most items never carry these keys, so a big cache stays as small as it was.
+            if (albumPhotoFileId != 0) put("aph", albumPhotoFileId)
+            if (hasCover) put("cov", true)
             if (versions.isNotEmpty()) put("versions", versions.toJson())
             if (parts.isNotEmpty()) put("parts", parts.toJson())
             if (pieces.isNotEmpty()) put("pieces", pieces.toJson())
@@ -222,6 +225,9 @@ object HomeCache {
             albumId = json.optLong("album"),
             pieces = items(json.optJSONArray("pieces")),
             startSec = json.optInt("start"),
+            // A cache written before albums read as one post has neither key: both read as none.
+            albumPhotoFileId = json.optInt("aph"),
+            hasCover = json.optBoolean("cov"),
         )
     }.getOrNull()
 

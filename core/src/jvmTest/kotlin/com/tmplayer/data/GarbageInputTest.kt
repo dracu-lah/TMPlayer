@@ -228,6 +228,35 @@ class GarbageInputTest {
     }
 
     @Test
+    fun albumPostsNeverThrow() {
+        fun video(message: Long, album: Long, name: String, caption: String = "") = MediaItem(
+            chatId = 1, messageId = message, fileId = 1, title = name, sizeBytes = 1, durationSec = 1, mimeType = "video/mp4",
+            thumbnailFileId = 5, miniThumbnail = null, date = 1, fileName = name, caption = caption, albumId = album,
+        )
+        val long = "x".repeat(4_096)
+        val captions = corpus + texts + long + MediaText.captionOf(long) + listOf("\n".repeat(5_000), "😀".repeat(3_000))
+        for (text in captions) {
+            // An album of ten photos and no video, photos with no picture size (file id 0), and a huge caption.
+            val ten = (1L..10L).map { AlbumPhoto(1, 7, it, if (it % 2 == 0L) 0 else it.toInt(), null, if (it == 1L) text else "") }
+            survive("AlbumPosts.fold ten photos no video", text) {
+                AlbumPosts.fold(listOf(video(50, 9, "other.mkv")), AlbumPosts.pick(ten))
+            }
+            survive("AlbumPosts.fold caption", text) {
+                val out = AlbumPosts.fold(listOf(video(11, 7, "video.mp4"), video(12, 7, text, text)), AlbumPosts.pick(ten))
+                out.forEach { it.searchText; it.parsedName }
+            }
+            survive("AlbumPosts.pick albumless and negative", text) {
+                AlbumPosts.pick(listOf(AlbumPhoto(0, 0, -1, -5, byteArrayOf(), text), AlbumPhoto(1, -3, Long.MAX_VALUE, Int.MIN_VALUE, null, text)))
+            }
+            survive("HomeCache.decode album keys", text) {
+                HomeCache.decode(text)
+                HomeCache.itemOf(org.json.JSONObject("{\"c\":1,\"m\":2,\"f\":3,\"aph\":" + (text.hashCode()) + ",\"cov\":\"x\"}"))
+            }
+        }
+        assertNoFailures()
+    }
+
+    @Test
     fun textParsersNeverThrow() {
         for (text in texts) {
             survive("UpdateFeed.parseFeed", text) { UpdateFeed.parseFeed(text) }
