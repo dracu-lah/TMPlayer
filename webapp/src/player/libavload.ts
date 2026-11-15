@@ -14,7 +14,8 @@ import type * as LibAVTypes from '../../libav/libav.types'
 export type LibAV = LibAVTypes.LibAV
 export type Variant = 'tmplayer' | 'tmplayer-sound'
 
-const BASE = '/libav'
+/** Beside the page's own files: the TV build lives under /tv/ and ships its own copy (dist-tv/libav). */
+const BASE = `${import.meta.env.BASE_URL}libav`
 const VERSION = '6.10.9.0'
 
 /** A module with one `memory.fill`: compiles only where bulk memory (Chromium 75) is there. */
