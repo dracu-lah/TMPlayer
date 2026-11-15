@@ -2235,6 +2235,14 @@ fun PlayerScreen(
                 )
             }
 
+            // The Telegram datacenter the file is kept in (EG-F61): read from its remote id when the
+            // details are opened, a local call; nothing for a local file or an id that does not say.
+            var datacenter by remember(item.fileId) { mutableStateOf<Int?>(null) }
+            LaunchedEffect(showDetails, item.fileId) {
+                if (showDetails && item.fileId > 0 && item.chatId != 0L && datacenter == null) {
+                    datacenter = runCatching { com.tmplayer.data.Td.remoteDatacenter(item.fileId) }.getOrNull()
+                }
+            }
             if (showDetails) {
                 DetailsPanel(
                     rows = {
@@ -2242,6 +2250,7 @@ fun PlayerScreen(
                             addAll(engine.details())
                             add(s.playerSpeed to SeekMath.speedLabel(engine.state.value.speed))
                             if (item.sizeBytes > 0) add(s.playerDetailsLabelFile to com.tmplayer.player.StreamStats.formatBytes(item.sizeBytes))
+                            datacenter?.let { add(s.playerDetailsLabelDatacenter to "DC $it") }
                             downloaded?.let {
                                 val label = if (current.isDownload) s.playerDetailsLabelDownloaded else s.playerDetailsLabelCached
                                 add(label to s.messages.formatter.percent(it.toDouble()))

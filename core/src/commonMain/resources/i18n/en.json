@@ -1920,6 +1920,7 @@
     "details_hwdec": "Hardware decoding",
     "details_hz": "{rate} Hz",
     "details_label_cached": "Loaded",
+    "details_label_datacenter": "Datacenter",
     "details_label_downloaded": "Downloaded",
     "details_label_file": "File",
     "details_label_picture": "Picture",
