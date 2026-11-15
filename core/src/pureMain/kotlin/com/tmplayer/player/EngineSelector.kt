@@ -44,6 +44,9 @@ enum class EngineReason {
 
     /** ExoPlayer failed to decode this video and the one automatic switch went to VLC. */
     SwitchedAfterFailure,
+
+    /** VLC crashed in native code on this device before ([EngineCrashes]): Automatic leaves it alone. */
+    VlcCrashed,
 }
 
 /** What went wrong in an engine, as far as choosing one goes: only [Decoder] is the engine's fault. */
@@ -112,6 +115,8 @@ data class EngineInput(
     val vlcAvailable: Boolean = false,
     /** The known device list: [KnownDevices.effective] of the feed's, or the shipped one. */
     val known: List<KnownDevice> = KnownDevices.builtIn,
+    /** Native crashes while VLC played on this device ([EngineCrashes], [VlcCrashes.count]). */
+    val vlcCrashes: Int = 0,
 )
 
 /**
@@ -141,6 +146,9 @@ data class EngineDecision(
  *     across videos at most one change to VLC and one back, never a loop.
  *  5. Otherwise ExoPlayer.
  * Whatever would be VLC without the library is ExoPlayer with [EngineReason.VlcUnavailable].
+ * Whatever Automatic would make VLC (rules 3, 4 and the switch after a failure) is ExoPlayer with
+ * [EngineReason.VlcCrashed] once VLC crashed natively here [EngineCrashes.AUTOMATIC_LIMIT] times
+ * (PR6); the viewer's own VLC (rule 2) stays.
  *
  * During one video ([afterFailure]): at most one automatic switch, only from ExoPlayer to VLC,
  * only on a decoding failure and only under Automatic. A video that fails in VLC is never sent
@@ -164,14 +172,14 @@ object EngineSelector {
         val entry = KnownDevices.find(input.known, input.device, input.video.mime)
         if (entry != null) {
             val decision = when (entry.engine) {
-                PlayerEngine.Vlc -> vlcOr(input, EngineReason.KnownDevice, entry.decoder)
+                PlayerEngine.Vlc -> automaticVlcOr(input, EngineReason.KnownDevice, entry.decoder)
                 PlayerEngine.ExoPlayer, null -> EngineDecision(PlayerEngine.ExoPlayer, EngineReason.KnownDevice, entry.decoder)
             }
             return decision.copy(entryId = entry.id.ifEmpty { null })
         }
         val history = input.history
         if (history.exoPlayerFailures >= HISTORY_FAILURES && history.vlcFailures == 0) {
-            return vlcOr(input, EngineReason.DeviceHistory)
+            return automaticVlcOr(input, EngineReason.DeviceHistory)
         }
         return EngineDecision(PlayerEngine.ExoPlayer, EngineReason.Default)
     }
@@ -186,14 +194,23 @@ object EngineSelector {
         if (switches >= SWITCHES_PER_VIDEO) return null
         if (running.engine != PlayerEngine.ExoPlayer) return null
         if (input.stereo3d || !input.vlcAvailable) return null
+        if (vlcCrashedHere(input)) return null
         return EngineDecision(PlayerEngine.Vlc, EngineReason.SwitchedAfterFailure)
     }
+
+    /** VLC crashed natively on this device often enough that Automatic no longer picks it (PR6). */
+    fun vlcCrashedHere(input: EngineInput): Boolean = input.vlcCrashes >= EngineCrashes.AUTOMATIC_LIMIT
 
     /** The other engine for the status sheet to offer after [running] failed, or null when there is none. */
     fun toOffer(input: EngineInput, running: PlayerEngine): PlayerEngine? = when (running) {
         PlayerEngine.ExoPlayer -> if (input.vlcAvailable && !input.stereo3d) PlayerEngine.Vlc else null
         PlayerEngine.Vlc -> PlayerEngine.ExoPlayer
     }
+
+    /** VLC as Automatic wants it: [vlcOr], unless VLC crashed natively here. */
+    private fun automaticVlcOr(input: EngineInput, reason: EngineReason, decoder: DecoderHint? = null): EngineDecision =
+        if (input.vlcAvailable && vlcCrashedHere(input)) EngineDecision(PlayerEngine.ExoPlayer, EngineReason.VlcCrashed, decoder)
+        else vlcOr(input, reason, decoder)
 
     private fun vlcOr(input: EngineInput, reason: EngineReason, decoder: DecoderHint? = null): EngineDecision =
         if (input.vlcAvailable) EngineDecision(PlayerEngine.Vlc, reason)

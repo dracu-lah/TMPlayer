@@ -16,8 +16,9 @@ import java.io.File
  * so the next start is an ordinary one. It is not a setting, and nothing of the viewer's is
  * changed or deleted by it.
  *
- * Only a crash the uncaught exception handler sees is counted. A native crash or the system
- * killing a hung app leaves no mark here.
+ * Counted: a crash the uncaught exception handler sees, and a native crash or a hang while the
+ * VLC engine played ([com.tmplayer.player.EngineCrashWatch], PR6). Any other native crash or the
+ * system killing a hung app leaves no mark here.
  */
 object SafeMode {
     /** Whether this run is in safe mode. Decided once, in [watch], before anything is built. */
@@ -37,6 +38,11 @@ object SafeMode {
         runCatching {
             val loop = CrashLoop(File(context.filesDir, "crash/early.txt"))
             this.loop = loop
+            // A crash while the VLC engine played (PR6) is native, so the handler below never saw
+            // it: the engine's mark says so, and an early one counts towards the loop as well.
+            com.tmplayer.player.EngineCrashWatch.atStart(context)?.let { mark ->
+                if (com.tmplayer.player.EngineCrashes.earlyForLoop(mark, CrashLoop.EARLY_MS)) loop.note(mark.sinceStartMs)
+            }
             active = loop.looping()
             val startedAt = SystemClock.elapsedRealtime()
             val previous = Thread.getDefaultUncaughtExceptionHandler()

@@ -1540,11 +1540,11 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             setOnClickListener { tryOtherDecoder() }
         }
         statusEngine = findViewById<android.widget.Button>(R.id.status_engine).apply {
-            setOnClickListener { switchEngine() }
+            setOnClickListener { if (crashOfferUp) answerCrashOffer(exo = true) else switchEngine() }
         }
         statusEngineAlways = findViewById<android.widget.Button>(R.id.status_engine_always).apply {
             text = L.playerEngineAlwaysVlc
-            setOnClickListener { alwaysUseVlc() }
+            setOnClickListener { if (crashOfferUp) answerCrashOffer(exo = false) else alwaysUseVlc() }
         }
         // The layout carries English for the preview; the words on screen come from the catalog.
         statusRetry?.text = L.commonTryAgain
@@ -2148,6 +2148,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         engineDecision = decision
         if (decision != null) Log.i(START_TAG, "Engine ${decision.engine.key} (${decision.reason}) for file $fileId")
         if (decision?.engine == com.tmplayer.data.PlayerEngine.Vlc && vlcCanTake()) {
+            if (offerExoAfterCrashes(client)) return
             startVlcPlayback(client, carry = null)
             return
         }
@@ -2168,7 +2169,48 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             history = runCatching { store.engineHistoryNow() }.getOrDefault(EngineHistory.None),
             video = VideoFacts(mime = mediaMime.ifBlank { null }),
             vlcAvailable = true,
+            vlcCrashes = EngineCrashWatch.crashes(this).count,
         )
+    }
+
+    /**
+     * The viewer picked VLC and it has crashed on this device since the card last asked (PR6,
+     * [EngineCrashes.offerExoPlayer]): the sheet offers ExoPlayer for this video, or VLC as chosen.
+     * The choice in Settings is the viewer's and is not changed.
+     */
+    private var crashOfferUp = false
+
+    private fun offerExoAfterCrashes(client: TdlClient): Boolean {
+        val input = engineInput ?: return false
+        val crashes = EngineCrashWatch.crashes(this)
+        if (!EngineCrashes.offerExoPlayer(input.choice, crashes)) return false
+        EngineCrashWatch.offered(this)
+        castClient = client
+        crashOfferUp = true
+        // Play in ExoPlayer as the sheet's answer, focused, with Keep VLC under it ([showEngineOffer]).
+        engineOffer = com.tmplayer.data.PlayerEngine.ExoPlayer
+        showError(L.playerEngineCrashOffer(crashes.count), retryable = false)
+        statusTitle.text = L.playerEngineCrashTitle
+        statusEngineAlways?.apply {
+            text = L.playerEngineKeepVlc
+            visibility = View.VISIBLE
+        }
+        return true
+    }
+
+    /** The crash card's answer: this video in ExoPlayer ([exo]) or in VLC as the viewer chose. */
+    private fun answerCrashOffer(exo: Boolean) {
+        crashOfferUp = false
+        val client = castClient ?: return
+        hideFailureActions()
+        failurePinned = false
+        showStatus(if (exo) L.playerEngineTryingExoplayer else L.playerEngineTryingVlc)
+        if (exo) {
+            engineDecision = EngineDecision(com.tmplayer.data.PlayerEngine.ExoPlayer, EngineReason.VlcCrashed)
+            startExoPlayback(client)
+        } else {
+            startVlcPlayback(client, carry = null)
+        }
     }
 
     /** Settings, Playback's "Switch engine on decoder error", read with [readEngineInput]. */
@@ -2281,9 +2323,12 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             backend.release()
             throw e
         }
+        val app = applicationContext
         val engine = VlcEngine(
             backend,
             onRelease = { runCatching { stream?.close() } },
+            // PR6: a mark while VLC plays, so a native crash is known at the next start.
+            onActive = { on -> EngineCrashWatch.active(app, on) },
         )
         return engine to source
     }

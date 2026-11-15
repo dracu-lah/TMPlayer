@@ -209,6 +209,8 @@ class GarbageInputTest {
             survive("TunneledMode.from", text) { com.tmplayer.player.TunneledMode.from(text) }
             survive("ExternalExtras.forApp", text) { com.tmplayer.player.ExternalExtras.forApp(text, text, text.length.toLong() - 5, text) }
             survive("EngineHistory.decode", text) { com.tmplayer.player.EngineHistory.decode(text) }
+            survive("EngineMark.decode", text) { com.tmplayer.player.EngineMark.decode(text) }
+            survive("VlcCrashes.decode", text) { com.tmplayer.player.VlcCrashes.decode(text) }
             survive("UpdateFeed.parseGitHub", text) { UpdateFeed.parseGitHub(text) }
             survive("UpdateFeed.parseGitHubList", text) { UpdateFeed.parseGitHubList(text) }
             survive("UpdateFeed.keyFor", text) { UpdateFeed.keyFor(text) }
