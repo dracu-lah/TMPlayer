@@ -130,7 +130,11 @@ class LogScrubber(known: Collection<String> = emptyList()) {
         .map { Regex(Regex.escape(it), RegexOption.IGNORE_CASE) }
 
     fun scrub(line: String): String {
-        var out = line
+        // The file name and e-mail patterns below are not linear on a long unbroken run (they can
+        // start at every character), so one 100,000 character line held a test for minutes and
+        // could stall Send logs. A log line is never worth more than this; the rest is dropped,
+        // which also keeps whatever it held out of the report.
+        var out = if (line.length > MAX_LINE) line.substring(0, MAX_LINE) + CUT else line
         for (name in names) out = name.replace(out, NAME)
         out = EMAIL.replace(out, "[email]")
         out = PATH_FILE.replace(out) { "${it.groupValues[1]}[file]" }
@@ -144,6 +148,11 @@ class LogScrubber(known: Collection<String> = emptyList()) {
     companion object {
         /** A known name shorter than this is not taken out; see [LogExport.knownNames]. */
         const val MIN_KNOWN = 4
+
+        /** The longest a log line is kept before it is scrubbed; see [scrub]. */
+        const val MAX_LINE = 2_000
+
+        private const val CUT = " [cut]"
 
         private const val NAME = "[name]"
 
