@@ -3323,6 +3323,7 @@
     "no_file_picker": "There's no file picker on this device",
     "no_other_audio": "This video has no other audio",
     "no_subtitles": "This video has no subtitles",
+    "not_supported": "Not supported on this device",
     "playing_now": "Playing now",
     "reset_timing": "Reset timing",
     "section_look": "Look",

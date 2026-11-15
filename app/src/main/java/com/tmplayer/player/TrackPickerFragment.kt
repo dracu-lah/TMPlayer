@@ -204,6 +204,9 @@ class TrackPickerFragment : Fragment() {
     private fun trackLines(onOnline: () -> Unit, onMsone: () -> Unit, onInPlace: () -> Unit, lookIcon: ImageVector): List<Line> {
         val host = host ?: return emptyList()
         val player = host.trackPlayer ?: return emptyList()
+        // Tracks the player cannot decode on this device: listed dimmed below, so a file with only
+        // those is not told it has none (and sent to search online for what it already carries).
+        val unsupported = mutableListOf<Option>()
         val options = buildList {
             // Subtitles need an explicit "off"; audio always has at least one track playing.
             if (trackType == C.TRACK_TYPE_TEXT) add(Option(null, -1, L.commonOff))
@@ -211,15 +214,30 @@ class TrackPickerFragment : Fragment() {
             for (group in player.currentTracks.groups) {
                 if (group.type != trackType) continue
                 for (index in 0 until group.length) {
-                    if (!group.isTrackSupported(index)) continue
-                    number++
                     val format = group.getTrackFormat(index)
-                    add(Option(group, index, describe(group, index, number - 1), tags(format).ifEmpty { null }?.joinToString("  ·  ")))
+                    val detail = tags(format).ifEmpty { null }?.joinToString("  ·  ")
+                    if (!group.isTrackSupported(index)) {
+                        unsupported += Option(group, index, describe(group, index, number + unsupported.size), detail)
+                        continue
+                    }
+                    number++
+                    add(Option(group, index, describe(group, index, number - 1), detail))
                 }
             }
         }.let(::numberNamesakes)
         return buildList {
             val none = options.isEmpty() || (trackType == C.TRACK_TYPE_TEXT && options.size == 1)
+            if (none && unsupported.isNotEmpty()) {
+                // Only tracks this device cannot play: they are named, not hidden, and online
+                // search is still offered since nothing here will show.
+                unsupportedLines(unsupported).forEach(::add)
+                if (trackType == C.TRACK_TYPE_TEXT) {
+                    onlineLine(onOnline)?.let(::add)
+                    msoneLine(onMsone)?.let(::add)
+                }
+                if (trackType == C.TRACK_TYPE_AUDIO && options.isNotEmpty()) addAll(timingLines(host, onInPlace))
+                return@buildList
+            }
             if (none) {
                 add(Line("none", if (trackType == C.TRACK_TYPE_AUDIO) L.tracksNoOtherAudio else L.tracksNoSubtitles) { close() })
                 // Sound can still be out of step with only the one track to choose from.
@@ -243,6 +261,7 @@ class TrackPickerFragment : Fragment() {
                     ) { choose(option) },
                 )
             }
+            unsupportedLines(unsupported).forEach(::add)
             if (trackType == C.TRACK_TYPE_TEXT) {
                 onlineLine(onOnline)?.let(::add)
                 msoneLine(onMsone)?.let(::add)
@@ -251,6 +270,18 @@ class TrackPickerFragment : Fragment() {
             if (trackType == C.TRACK_TYPE_TEXT) addAll(styleLines(host, onInPlace, lookIcon))
         }
     }
+
+    /** The tracks the player cannot decode here: dimmed, still focusable, saying why and doing nothing. */
+    private fun unsupportedLines(tracks: List<Option>): List<Line> =
+        numberNamesakes(tracks).mapIndexed { index, option ->
+            Line(
+                key = "unsupported$index",
+                title = option.label,
+                detail = listOfNotNull(L.tracksNotSupported, option.detail).joinToString("  ·  "),
+                selected = false,
+                enabled = false,
+            ) {}
+        }
 
     /** "Search online", in a build that carries the OpenSubtitles key. */
     private fun onlineLine(onOnline: () -> Unit): Line? {
