@@ -4,12 +4,18 @@
 // sample and picture size handed over by ffcodecparams.h, error concealment off, one packet per
 // call), decodes the whole stream and prints what came out.
 //
-// codectest <clip> <decoder> [threads]
-//   prints one line: "OK <decoder> <video|audio> units=<frames or samples> md5=<hex>" where the md5
+// codectest <clip> <decoder> [threads] [garbage <seed>]
+//   With "garbage" the extra data and every packet are damaged first (bytes flipped, a range zeroed,
+//   the packet cut short, emptied or filled with random bytes, by a generator seeded with <seed>)
+//   and decode errors are ignored: the line is "GARBAGE-OK <decoder> ..." when the decoder
+//   survived, and a crash or a hang is the test failing. Outside data must never take the app
+//   down (AGENTS.md, Error handling).
+//   Otherwise prints one line: "OK <decoder> <video|audio> units=<frames or samples> md5=<hex>" where the md5
 //   is of the raw decoder output (video: every frame's planes in the decoder's own pixel format,
 //   packed with no padding; audio: signed 16-bit interleaved, converted by libswresample as the
 //   AAR does), or "FAIL <decoder> <why>". run-codec-tests.sh compares the md5 with the one the
 //   host's own ffmpeg gets from the same clip and decoder.
+#include <algorithm>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -27,6 +33,44 @@ extern "C" {
 #include <libavutil/md5.h>
 #include <libavutil/opt.h>
 #include <libswresample/swresample.h>
+}
+
+// xorshift64: the same damage for the same seed on every machine.
+struct Rng {
+    explicit Rng(uint64_t seed) : state(seed * 0x9E3779B97F4A7C15ull + 0x1234567ull) {}
+    uint64_t Next() {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        return state;
+    }
+    uint32_t Below(uint32_t n) { return n ? static_cast<uint32_t>(Next() % n) : 0; }
+    uint64_t state;
+};
+
+// Damages a buffer of `size` bytes in place; returns the size to use (it may be cut short).
+static int Damage(Rng &rng, uint8_t *data, int size) {
+    switch (rng.Below(6)) {
+        case 0:
+            for (int i = 0, n = 1 + rng.Below(8); i < n && size > 0; i++) data[rng.Below(size)] ^= 1u << rng.Below(8);
+            return size;
+        case 1:
+            return size > 0 ? static_cast<int>(rng.Below(size)) : 0;
+        case 2: {
+            if (size <= 0) return size;
+            int from = rng.Below(size);
+            int to = from + rng.Below(size - from + 1);
+            memset(data + from, 0, to - from);
+            return size;
+        }
+        case 3:
+            for (int i = 0; i < size; i++) data[i] = static_cast<uint8_t>(rng.Next());
+            return size;
+        case 4:
+            return 0;
+        default:
+            return size;
+    }
 }
 
 static int Fail(const char *decoder, const char *why) {
@@ -56,6 +100,8 @@ int main(int argc, char **argv) {
     const char *path = argv[1];
     const char *name = argv[2];
     const int threads = argc > 3 ? atoi(argv[3]) : 2;
+    const bool garbage = argc > 4 && !strcmp(argv[4], "garbage");
+    Rng rng(argc > 5 ? static_cast<uint64_t>(atoll(argv[5])) : 1);
     av_log_set_level(AV_LOG_ERROR);
 
     const AVCodec *codec = avcodec_find_decoder_by_name(name);
@@ -82,6 +128,8 @@ int main(int argc, char **argv) {
         context->extradata = static_cast<uint8_t *>(av_mallocz(static_cast<size_t>(par->extradata_size) + AV_INPUT_BUFFER_PADDING_SIZE));
         memcpy(context->extradata, par->extradata, par->extradata_size);
         context->extradata_size = par->extradata_size;
+        // A damaged or cut container header: the decoder may refuse it, never crash on it.
+        if (garbage && rng.Below(2)) context->extradata_size = Damage(rng, context->extradata, par->extradata_size);
     }
     if (video) {
         ffparams::ApplyVideo(context, par->width, par->height, par->bits_per_coded_sample, par->codec_tag);
@@ -93,7 +141,13 @@ int main(int argc, char **argv) {
     }
     context->thread_count = threads;
     context->err_recognition = AV_EF_IGNORE_ERR;
-    if (avcodec_open2(context, codec, nullptr) < 0) return Fail(name, "avcodec_open2 failed");
+    if (avcodec_open2(context, codec, nullptr) < 0) {
+        if (garbage) {
+            printf("GARBAGE-OK %s refused the damaged header\n", name);
+            return 0;
+        }
+        return Fail(name, "avcodec_open2 failed");
+    }
 
     Hasher hasher;
     long long units = 0;
@@ -144,7 +198,22 @@ int main(int argc, char **argv) {
     };
 
     while (av_read_frame(format, packet) >= 0) {
-        if (packet->stream_index == stream) {
+        if (packet->stream_index == stream && garbage) {
+            // The damaged copy sits in a zero-padded buffer of its own, as Media3's input buffers are.
+            AVPacket *bad = av_packet_alloc();
+            if (packet->size > 0 && av_new_packet(bad, packet->size) >= 0) {
+                memcpy(bad->data, packet->data, packet->size);
+                // At least one byte: an empty packet means end of stream to FFmpeg, and Media3
+                // never hands the decoder one.
+                bad->size = std::max(1, Damage(rng, bad->data, packet->size));
+                bad->pts = packet->pts;
+                bad->dts = packet->dts;
+                bad->duration = packet->duration;
+                bad->flags = packet->flags;
+                if (avcodec_send_packet(context, bad) >= 0) drain();
+            }
+            av_packet_free(&bad);
+        } else if (packet->stream_index == stream) {
             int result = avcodec_send_packet(context, packet);
             // A bad packet is skipped, as the AAR does (AVERROR_INVALIDDATA is not fatal).
             if (result < 0 && result != AVERROR_INVALIDDATA) {
@@ -157,6 +226,11 @@ int main(int argc, char **argv) {
         av_packet_unref(packet);
     }
     avcodec_send_packet(context, nullptr);
+    if (garbage) {
+        drain();
+        printf("GARBAGE-OK %s units=%lld\n", name, units);
+        return 0;
+    }
     if (drain() < 0) return Fail(name, "receive_frame failed at the end");
     if (units == 0) return Fail(name, "decoded nothing");
 

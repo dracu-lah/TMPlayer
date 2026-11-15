@@ -77,6 +77,18 @@ check() {
     failed=$((failed + 1))
   fi
   tests_ran="$tests_ran $decoder"
+  # Damaged input must never take the app down: the same clip with its extra data and every packet
+  # damaged, eight seeds, under a time limit (a hang is a failure too).
+  local seed code
+  for seed in 1 2 3 4 5 6 7 8; do
+    timeout 120 "$bin" "$clip" "$decoder" 2 garbage "$seed" >/dev/null 2>&1
+    code=$?
+    if [ "$code" -ne 0 ]; then
+      echo "CRASH $decoder: damaged input, seed $seed, exit code $code"
+      failed=$((failed + 1))
+      break
+    fi
+  done
 }
 
 # video <decoder> <host encoder> <extension> <size> [encoder options...]

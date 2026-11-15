@@ -185,7 +185,9 @@ toolchain was moved forward on 2026-10-18 (Gradle 9.8.1, AGP 9.4.1, Kotlin 2.4.2
   <dir>` builds the AAR's FFmpeg 9.0.1 for the host plus a reference `ffmpeg` of the same version,
   then `run-codec-tests.sh <dir>` makes a clip per decoder with the host's ffmpeg, decodes it the
   way the JNI glue sets a decoder up (`codectest.cpp` with the patch's own `ffcodecparams.h`) and
-  compares the md5 with the reference's. It lists the decoders no clip could be made for (no host
+  compares the md5 with the reference's, then decodes the same clip eight times with its extra
+  data and packets damaged (flipped, zeroed, cut, random) to show no decoder crashes or hangs on a
+  bad file. It lists the decoders no clip could be made for (no host
   encoder: WMV 3, VP6, RealVideo 3 and 4, SVQ3, MJPEG-B, MP1, WMA Pro and Lossless, Cook, RealAudio
   2.0, QCELP, SIPR, ATRAC3, Monkey's Audio and most rare ADPCM and PCM kinds) as untested.
 - **The light video mode** (HX2c) is for pictures the device decodes in software and cannot keep
