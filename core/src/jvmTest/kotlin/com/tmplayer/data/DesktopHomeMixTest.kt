@@ -89,7 +89,7 @@ class DesktopHomeMixTest {
     }
 
     @Test
-    fun `a record shows once its video is known to have a picture`() {
+    fun `a record keeps its card without a picture and goes only when gone`() {
         fun record(item: MediaItem) = ResumeRecord(
             chatId = item.chatId, messageId = item.messageId, fileId = 1, title = item.title, chatTitle = "",
             sizeBytes = item.sizeBytes, durationSec = item.durationSec, positionMs = 60_000, durationMs = 6_000_000, updatedAt = 1,
@@ -97,9 +97,14 @@ class DesktopHomeMixTest {
         val pictured = video("Pictured 2001.mkv", date = 2)
         val bare = video("Bare 2002.mkv", date = 1, art = false)
         val row = HomeRow.Continue(listOf(record(pictured), record(bare)))
-        assertNull(HomeRows.withArt(row, emptyMap()))
+        // Kept without a picture known yet: the generated cover stands in until it arrives.
+        assertEquals(listOf(pictured.messageId, bare.messageId), (HomeRows.withArt(row, emptyMap()) as HomeRow.Continue).records.map { it.messageId })
         val art = listOf(pictured, bare).associateBy { SettingsStore.progressKey(it.chatId, it.messageId) }
-        assertEquals(listOf(pictured.messageId), (HomeRows.withArt(row, art) as HomeRow.Continue).records.map { it.messageId })
+        assertEquals(listOf(pictured.messageId, bare.messageId), (HomeRows.withArt(row, art) as HomeRow.Continue).records.map { it.messageId })
+        // Dropped only when the video is gone.
+        val goneBare = HomeRows.withArt(row, art) { _, message -> message == bare.messageId } as HomeRow.Continue
+        assertEquals(listOf(pictured.messageId), goneBare.records.map { it.messageId })
+        assertNull(HomeRows.withArt(HomeRow.WatchLater(listOf(WatchLaterRecord(chatId = bare.chatId, messageId = bare.messageId, fileId = 9, title = "Bare", fileName = "bare.mkv", chatTitle = "Films", sizeBytes = 1, durationSec = 1, mimeType = "video/mp4", addedAt = 1))), art) { _, _ -> true })
     }
 
     @Test

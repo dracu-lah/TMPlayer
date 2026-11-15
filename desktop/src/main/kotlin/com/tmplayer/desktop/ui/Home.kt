@@ -265,12 +265,13 @@ internal fun HomeRowsView(
     // Settings can turn the carousel off: then nothing is picked or turned over for it either.
     val carouselOn = layout.carousel
     val featured = rememberFeatured(recentRow.takeIf { carouselOn }, continueRow.takeIf { carouselOn }, art)
-    // Every tile on Home has a picture of its own; "See all" still lists the whole row. Recently
+    // Every discovered tile on Home has a picture of its own (Continue watching and Watch later keep
+    // every card, with the generated cover); "See all" still lists the whole row. Recently
     // added is a row too, under Continue watching, as well as the carousel (user, 2026-10-23).
     // Recently added turned off as a row is still there for the carousel, and is not drawn; its
     // "no chosen chats" line is, so the carousel's empty place is explained.
     val shownRows = remember(rows, art) {
-        rows.filter { it !is HomeRow.Recent || it.asRow || it.noneChosen }.mapNotNull { HomeRows.withArt(it, art) }
+        rows.filter { it !is HomeRow.Recent || it.asRow || it.noneChosen }.mapNotNull { HomeRows.withArt(it, art) { chat, message -> com.tmplayer.data.GoneVideos.reasonFor(chat, message) != null } }
     }
     val watch = rememberSeriesWatch(state)
     // In line with the page header's title, whatever the window's width.

@@ -517,16 +517,18 @@ object HomeRows {
 
     /**
      * [row] with only the tiles that have a picture of their own ([HomeFeatured.hasArt]), as the
-     * desktop's Home draws it: never a tile of nothing but a generated cover. A record of Continue
-     * watching or Watch later keeps no picture, so it shows once its video has been asked for and
-     * is in [art] (keyed as [SettingsStore.progressKey]) with one. Null for a loaded row left with
-     * nothing to show; a row still loading is returned as it is.
+     * desktop's Home draws it: never a tile of nothing but a generated cover, for what Home
+     * discovers (Recently added, a chat's row, new episodes). What the viewer chose themselves,
+     * Continue watching and Watch later, keeps every card, with the generated cover until its
+     * video's own picture arrives: an in-progress video missing from Home was reachable only
+     * through History. A record is dropped only when its video is [gone], which the lists forget
+     * on their own ([GoneVideos]) a moment later. Null for a loaded row left with nothing to
+     * show; a row still loading is returned as it is.
      */
-    fun withArt(row: HomeRow, art: Map<String, MediaItem>): HomeRow? {
-        fun pictured(chatId: Long, messageId: Long) = art[keyOf(chatId, messageId)]?.let(HomeFeatured::hasArt) == true
+    fun withArt(row: HomeRow, art: Map<String, MediaItem>, gone: (chatId: Long, messageId: Long) -> Boolean = { _, _ -> false }): HomeRow? {
         val kept = when (row) {
-            is HomeRow.Continue -> row.copy(records = row.records.filter { pictured(it.chatId, it.messageId) })
-            is HomeRow.WatchLater -> row.copy(records = row.records.filter { pictured(it.chatId, it.messageId) })
+            is HomeRow.Continue -> row.copy(records = row.records.filterNot { gone(it.chatId, it.messageId) })
+            is HomeRow.WatchLater -> row.copy(records = row.records.filterNot { gone(it.chatId, it.messageId) })
             is HomeRow.NewEpisodes -> row.copy(episodes = row.episodes.filter { HomeFeatured.hasArt(it.item) })
             is HomeRow.Chat -> if (!row.loaded) return row else row.copy(entries = row.entries.filter(HomeFeatured::hasArt))
             // The line saying no chosen chat is there stands as it is.
