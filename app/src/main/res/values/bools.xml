@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Whether the Continue watching widget's receiver exists at all: a phone feature, so a television turns it off (values-television). -->
+    <bool name="widget_enabled">true</bool>
+</resources>

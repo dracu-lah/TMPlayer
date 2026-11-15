@@ -135,7 +135,11 @@ class ContinueWidgetTest {
         val table = listOf(
             Triple(110, 40, Size.Compact),
             Triple(110, 110, Size.Compact),
+            Triple(160, 160, Size.Compact),
             Triple(250, 56, Size.Compact),
+            Triple(250, 99, Size.Compact),
+            Triple(250, 100, Size.Regular),
+            Triple(170, 110, Size.Regular),
             Triple(250, 110, Size.Regular),
             Triple(320, 250, Size.Regular),
             Triple(0, 0, Size.Regular),

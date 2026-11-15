@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The widget's card. The radius is the usual widget corner; Android 12 and later launchers round it themselves anyway. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/widget_card" />
+    <corners android:radius="16dp" />
+</shape>

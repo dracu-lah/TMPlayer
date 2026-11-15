@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Where a poster would be on a tile with none (no picture yet, a protected chat, nothing to
+  continue). The size gives it the 2:3 shape of a poster, so the widget's image view draws it the
+  way it draws a real one, centred, whatever height the widget has.
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <size
+                android:width="64dp"
+                android:height="96dp" />
+            <solid android:color="@color/widget_plate" />
+            <corners android:radius="10dp" />
+        </shape>
+    </item>
+    <item
+        android:width="28dp"
+        android:height="28dp"
+        android:drawable="@drawable/widget_play"
+        android:gravity="center" />
+</layer-list>

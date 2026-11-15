@@ -58,8 +58,8 @@ object ContinueWidget {
     /** Below this height (dp) the widget is the strip: a 2x1 cell is about 110 x 40 dp to 110 x 110 dp. */
     private const val COMPACT_BELOW_DP = 100
 
-    /** Below this width (dp) the picture is left out whatever the height: it would crowd the title. */
-    private const val NARROW_BELOW_DP = 150
+    /** Below this width (dp) the picture is left out whatever the height: the title would have under 80 dp. */
+    private const val NARROW_BELOW_DP = 170
 
     /** [Account] from where the sign in is: only Telegram asking for a login counts as signed out. */
     fun accountOf(auth: AuthState): Account = when (auth) {

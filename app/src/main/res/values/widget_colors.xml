@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      The Continue watching home screen widget (com.tmplayer.widget). A launcher draws it with the
+      system's night mode, not the app's own theme choice, so light and dark are the two value
+      folders. Text on the card holds 4.5:1 or more in both, the unfilled bar 3:1 against the card.
+    -->
+    <color name="widget_card">#F6FAFD</color>
+    <color name="widget_text">#10151A</color>
+    <color name="widget_text_dim">#4A5560</color>
+    <color name="widget_track">#C5CED6</color>
+    <color name="widget_accent">#1B7FB8</color>
+    <color name="widget_plate">#DCE6EE</color>
+</resources>

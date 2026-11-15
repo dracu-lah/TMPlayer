@@ -61,6 +61,20 @@ internal object TvArt {
     }
 
     /**
+     * The film's or show's portrait poster as the online cache holds it, for the phone's home screen
+     * widget (`WidgetArt`): the file itself, not a copy for a launcher, so the caller copies it where
+     * it wants it. Null when the online lookups are off or do not know the title, or the run's
+     * [budget] could not pay for the lookup or the download.
+     */
+    suspend fun posterFile(art: TvChannels.Art, budget: OnlineBudget): File? {
+        if (!onlinePictures) return null
+        val info = found(art, budget) ?: return null
+        val url = info.posterUrl ?: return null
+        if (!budget.take()) return null
+        return runCatching { OnlineMetadata.current?.image(url) }.getOrNull()
+    }
+
+    /**
      * Telegram's own thumbnail of the video, downloaded if it is not on the device, copied in under
      * [prefix] and named after [key] (the video, not the file id, which a new session may renumber).
      */

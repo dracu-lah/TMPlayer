@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The picker's preview before Android 12: a card with a poster, two lines and a bar, no text. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="250dp"
+    android:height="110dp"
+    android:viewportWidth="250"
+    android:viewportHeight="110">
+    <path
+        android:fillColor="@color/widget_card"
+        android:pathData="M16,0h218a16,16 0 0 1 16,16v78a16,16 0 0 1 -16,16h-218a16,16 0 0 1 -16,-16v-78a16,16 0 0 1 16,-16z" />
+    <path
+        android:fillColor="@color/widget_plate"
+        android:pathData="M20,10h54a8,8 0 0 1 8,8v74a8,8 0 0 1 -8,8h-54a8,8 0 0 1 -8,-8v-74a8,8 0 0 1 8,-8z" />
+    <path
+        android:fillColor="@color/widget_accent"
+        android:pathData="M39,43v22l19,-11z" />
+    <path
+        android:fillColor="@color/widget_text"
+        android:pathData="M94,28h120v10h-120z" />
+    <path
+        android:fillColor="@color/widget_text_dim"
+        android:pathData="M94,46h80v8h-80z" />
+    <path
+        android:fillColor="@color/widget_track"
+        android:pathData="M94,76h140v4h-140z" />
+    <path
+        android:fillColor="@color/widget_accent"
+        android:pathData="M94,76h62v4h-62z" />
+</vector>

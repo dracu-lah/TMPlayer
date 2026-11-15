@@ -297,6 +297,27 @@
             android:exported="false" />
 
         <!--
+          The Continue watching home screen widget (phone only, see ContinueWidgetProvider). Exported
+          because a widget provider has to be: the launcher is another app and sends the update
+          broadcast. It also listens for the language change, which Android still delivers to a
+          manifest receiver. It reads nothing from the intent, only redraws from the app's own
+          settings. Switched off on a television (bools.xml), which has no widget host.
+        -->
+        <receiver
+            android:name=".widget.ContinueWidgetProvider"
+            android:enabled="@bool/widget_enabled"
+            android:exported="true"
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.LOCALE_CHANGED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_continue_info" />
+        </receiver>
+
+        <!--
           After TMPlayer has updated itself (HX5): deletes the downloaded APK and, after an install
           that closed the app, posts "Updated, tap to open". Android sends MY_PACKAGE_REPLACED to
           the app's own package only, so nothing else reaches it.
