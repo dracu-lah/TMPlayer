@@ -1,5 +1,5 @@
 import { createEffect, createResource, createSignal, on, onCleanup, Show } from 'solid-js'
-import { useSearchParams } from '@solidjs/router'
+import { A, useSearchParams } from '@solidjs/router'
 import { api, errorText } from '../tg/rpc'
 import { onBackOnline } from '../net'
 import { Search01Icon } from '@hugeicons/core-free-icons'
@@ -12,13 +12,16 @@ import { HiddenBySize, tileCard, VideoList } from './VideoList'
 export function Search() {
     const [params, setParams] = useSearchParams<{ q?: string }>()
     const [text, setText] = createSignal(params.q ?? '')
+    // "Search my other chats" (HX62): the same words over every chat, once. The next words go back to the added chats.
+    const [everyChatFor, setEveryChatFor] = createSignal('')
+    const everyChat = () => !!params.q && everyChatFor() === params.q.trim()
     const [results, { refetch }] = createResource(
         () => {
             const q = params.q?.trim()
             // The added chats travel with every ask, even one the gate itself did not change (a watched tick): `addedView()` is cheap.
-            return q ? ([q, settings().sizeMin, settings().sizeMax, addedMode(), [...(addedIds() ?? [])].join()] as const) : false
+            return q ? ([q, settings().sizeMin, settings().sizeMax, addedMode(), [...(addedIds() ?? [])].join(), everyChat()] as const) : false
         },
-        async ([q, minBytes, maxBytes]) => api.search(q, { minBytes, maxBytes, added: addedView(), ...(await progress()) }),
+        async ([q, minBytes, maxBytes, , , wide]) => api.search(q, { minBytes, maxBytes, added: addedView(), ...(await progress()) }, wide),
     )
     onBackOnline(() => results.error && refetch())
     let debounce = 0
@@ -54,8 +57,22 @@ export function Search() {
                 <p class="muted">{t('browse.finding_videos')}</p>
             </Show>
             <HiddenBySize count={found()?.hiddenBySize ?? 0} />
+            <Show when={found() && !results.loading && found()!.tiles.length}>
+                <p class="muted search-count">{t('search.count', { videos: found()!.videos, chats: found()!.chats })}</p>
+            </Show>
+            <Show when={found() && !results.loading && found()!.addedOnly && !everyChat()}>
+                <button class="link" type="button" onClick={() => setEveryChatFor(params.q!.trim())}>{t('search.other_chats')}</button>
+            </Show>
+            <Show when={found() && !results.loading && !found()!.addedOnly && found()!.tiles.length}>
+                <p class="muted">{t('search.every_chat_note')}</p>
+                <A class="link" href="/added-chats">{t('picker.add_more')}</A>
+            </Show>
             <Show when={found() && !results.loading && !found()!.tiles.length}>
                 <p class="muted">{t('search.none', { query: params.q!.trim() })}</p>
+                <Show when={found()!.addedOnly}>
+                    <p class="muted">{t('search.none_added')}</p>
+                </Show>
+                <A class="link" href="/added-chats">{t('picker.add_more')}</A>
             </Show>
             <VideoList cards={found()?.tiles.map((tile) => tileCard(tile, true)) ?? []} label={t('common.search')} />
         </>

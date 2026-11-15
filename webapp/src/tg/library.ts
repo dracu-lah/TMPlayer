@@ -6,6 +6,7 @@ import type { Message, Peer, TelegramClient } from '@mtcute/web'
 import { rules, type Shelf, type ShelfTile, type Video } from '../rules'
 import { chatProtects, itemOf, photosAmong, rawOf, thumbnails, videoId } from './media'
 import { forgetSponsored, loadSponsored } from './sponsored'
+import { tally } from '../ui/searchTally'
 import type { ChatItem, CopyRef, ChatPage, ChatView, Found, ListView, RecentPage, SponsoredItem, Tile, VideoItem, WatchInfo } from './types'
 
 const PAGE = 100
@@ -626,21 +627,64 @@ export async function rankChats(query: string): Promise<number[]> {
 /** Kept for two minutes, so a change of size limits arranges again without asking Telegram. */
 const searches = new Map<string, { time: number; messages: Promise<Message[]> }>()
 
+/** Added chats searched side by side (two calls each, a video and a document search), as the apps' CHATS_AT_ONCE. */
+const ADDED_AT_ONCE = 6
+/** The most added chats one search reads: one answer is all the page has, so a longer list is cut here. */
+const ADDED_MAX = 60
+
+/**
+ * The videos and files of the viewer's added chats (HX62) that answer `query`: each chat searched on
+ * its own, a few at a time, because Telegram's search across the account cannot be told "these chats
+ * only" and, post-filtered, would show almost nothing for twelve chats of three thousand. A chat that
+ * refuses (left, flooded past what mtcute waits out) is skipped and the rest are listed.
+ */
+async function inAddedChats(tg: TelegramClient, query: string, added: Set<number>): Promise<Message[]> {
+    const limit = query ? 40 : 60
+    const chats = [...added].slice(0, ADDED_MAX)
+    const out: Message[] = []
+    for (let i = 0; i < chats.length; i += ADDED_AT_ONCE) {
+        const batch = chats.slice(i, i + ADDED_AT_ONCE)
+        const answers = await Promise.all(
+            batch.map(async (chatId) => {
+                try {
+                    const [videos, docs] = await Promise.all([
+                        tg.searchMessages({ chatId, query, filter: VIDEO_FILTER, limit }),
+                        tg.searchMessages({ chatId, query, filter: DOC_FILTER, limit }),
+                    ])
+                    return [...videos, ...docs] as Message[]
+                } catch {
+                    return []
+                }
+            }),
+        )
+        for (const found of answers) out.push(...found)
+    }
+    return out
+}
+
 /**
  * The newest videos across every chat for [query] (all of them for a blank one), through the
  * rules, with their items. `added` leaves out chats not in the viewer's choice (HX27), null for
  * every chat.
  */
-export async function across(tg: TelegramClient, query: string, added: Set<number> | null = null): Promise<{ videos: Video[]; items: Map<string, VideoItem> }> {
+export async function across(
+    tg: TelegramClient,
+    query: string,
+    added: Set<number> | null = null,
+    everyChat = false,
+): Promise<{ videos: Video[]; items: Map<string, VideoItem> }> {
     const r = await rules()
-    let hit = searches.get(query)
+    // The viewer's added chats are read one by one; every chat (nothing added, or the one-off "Search my other chats") in one search across the account.
+    const own = added && !everyChat ? added : null
+    const key = `${own ? [...own].join() : '*'}\n${query}`
+    let hit = searches.get(key)
     if (!hit || Date.now() - hit.time > 120_000) {
         const limit = query ? 60 : 100
         hit = {
             time: Date.now(),
             messages: Promise.all([
-                tg.searchGlobal({ query, filter: VIDEO_FILTER, limit }),
-                tg.searchGlobal({ query, filter: DOC_FILTER, limit }),
+                own ? inAddedChats(tg, query, own) : tg.searchGlobal({ query, filter: VIDEO_FILTER, limit }),
+                own ? Promise.resolve([]) : tg.searchGlobal({ query, filter: DOC_FILTER, limit }),
                 // A photo whose caption names the title leads to its album's videos; beside a query
                 // only, and a failure of this search leaves the others' answer standing.
                 query ? tg.searchGlobal({ query, filter: PHOTO_FILTER, limit: ALBUM_READS * 2 }).catch(() => []) : Promise.resolve([]),
@@ -656,14 +700,14 @@ export async function across(tg: TelegramClient, query: string, added: Set<numbe
                 return [...found, ...photoHits, ...kept]
             }),
         }
-        hit.messages.catch(() => searches.delete(query))
-        searches.set(query, hit)
+        hit.messages.catch(() => searches.delete(key))
+        searches.set(key, hit)
         for (const [k, v] of searches) if (Date.now() - v.time > 120_000) searches.delete(k)
     }
     const messages = await hit.messages
     const byId = new Map<string, Message>()
     const raws = []
-    const inChats = messages.filter((msg) => !added || added.has(msg.chat?.id))
+    const inChats = messages.filter((msg) => !own || own.has(msg.chat?.id))
     const { photos, byAlbum } = photosAmong(inChats)
     for (const msg of inChats) {
         const raw = rawOf(msg, chatProtects(msg))
@@ -683,11 +727,13 @@ export async function across(tg: TelegramClient, query: string, added: Set<numbe
 }
 
 /** Videos across every chat within the size limits, grouped into shows, copies and pieces as a chat's are, newest first. */
-export async function searchAll(tg: TelegramClient, query: string, view: ListView): Promise<Found> {
+export async function searchAll(tg: TelegramClient, query: string, view: ListView, everyChat = false): Promise<Found> {
     const r = await rules()
-    const { videos, items } = await across(tg, query, addedSetOf(view))
+    const added = addedSetOf(view)
+    const { videos, items } = await across(tg, query, added, everyChat)
     const shelf = r.shelf(videos, 'Newest', view.minBytes, view.maxBytes, view.watched, view.started)
-    return { tiles: tilesOf(shelf, items, view), hiddenBySize: shelf.hiddenBySize }
+    const tiles = tilesOf(shelf, items, view)
+    return { tiles, hiddenBySize: shelf.hiddenBySize, ...tally(tiles), addedOnly: !!added }
 }
 
 // The chats the viewer added (HX27): a rough video count, without reading or screening any of

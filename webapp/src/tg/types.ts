@@ -232,6 +232,11 @@ export interface ListView {
 export interface Found {
     tiles: Tile[]
     hiddenBySize: number
+    /** Videos the cards stand for (a show by its episodes) and the chats they are in, for the count line. */
+    videos: number
+    chats: number
+    /** The search read the viewer's added chats (HX62); false when it read every chat because none was added. */
+    addedOnly: boolean
 }
 
 /**

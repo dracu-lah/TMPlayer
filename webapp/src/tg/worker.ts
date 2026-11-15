@@ -270,8 +270,8 @@ export const api = {
     },
 
     /** Videos across every chat within the size limits, grouped as a chat's are, newest first. */
-    async search(_: Ctx, query: string, view: ListView): Promise<Found> {
-        return searchAll(tg, query, view)
+    async search(_: Ctx, query: string, view: ListView, everyChat = false): Promise<Found> {
+        return searchAll(tg, query, view, everyChat)
     },
 
     /** Recently added's See all, read on a page at a time (see library.ts recentPage for the modes). */
