@@ -199,6 +199,20 @@ Store text, the site.
   - Gotcha: `private/` is git-ignored and lives only in the main tree; Compose Desktop dialogs did not close on
     Esc in `runComposeUiTest` before `escapeCloses`; `press()` in desktop key tests needs a focused node (use `requestFocus` first).
 
+- 2026-11-16 T2 (worktree agent-a8fbeec1c7c3f1840, local commits 57b52aa, f52246b, 6ca92f2):
+  done: desktop chat grid Ctrl+A / Ctrl+Space / Enter+Space pick while selecting (ListSelectionKeysTest);
+  desktop Downloads now on the shared GridSelection (Ctrl+A from nothing, Ctrl+click, Shift+click
+  range, Ctrl+Space, Esc) and a deleted row hands keyboard focus to a neighbour (RowFocusHandoff,
+  DownloadsSelectionKeysTest); rowAfterRemoving moved to ui/shared RowHandoff.kt (TV Downloads uses
+  it); note design/redesign/list-selection.md. Audit: Android History/Downloads/TV focus restore,
+  filter notes with Clear, empty states already existed and were left alone.
+  left: focus handoff after removal in desktop History grid and chat list (RowFocusHandoff is ready
+  to wear); Android phone/TV chat grid selection with a hardware keyboard (Ctrl+A); web grid
+  selection; a Filters "Clear all" chip row when 2+ filters (FilterNote has one Clear today);
+  scale test for 100,000 downloads selection.
+  gotchas: Compose test mouse has no modifier keys: use performKeyInput keyDown, click, keyUp;
+  a removed row loses focus BEFORE and the data change lands near it, hence the 1 s window match.
+
 ## Decisions made by Claude
 - Three workers, not more: the files are split by surface and `MainActivity.kt` is shared, so only
   T3 touches it and only for back handling.
