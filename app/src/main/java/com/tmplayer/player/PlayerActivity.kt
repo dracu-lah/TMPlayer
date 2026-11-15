@@ -8321,6 +8321,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             val here = Translator.messages.formatter.percent(downloadedFraction.toDouble())
             add(if (isRealDownload()) L.playerDetailsDownloaded(here) else L.playerDetailsCached(here))
             add(L.playerDetailsSpeed(PlaybackSpeed.label(playbackSpeed)))
+            if (!downloadComplete && speed.bytesPerSec >= StreamStats.MIN_MEANINGFUL_SPEED) {
+                add(L.playerDetailsLineSpeed(Translator.messages.formatter.speed(speed.bytesPerSec)))
+            }
         }
         return mediaTitle.ifBlank { L.playerPlaybackDetails } to lines
     }
@@ -8938,7 +8941,12 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     private fun updateDownloadChip() {
         val exo = player
         val aheadMs = if (exo != null && exo.duration != C.TIME_UNSET) (exo.bufferedPosition - exo.currentPosition).coerceAtLeast(0) else -1L
-        cacheChipWanted = LoadingChip.shows(cacheChipWanted, aheadMs, isRealDownload())
+        // Not ready (opening, or stalled) is the "Loading" state; ready and playing on a buffer
+        // that ran short is "Getting the next part". A buffer the load control has stopped
+        // filling (its byte cap) has nothing more coming, so it never keeps the chip up.
+        val starting = exo == null || exo.playbackState != Player.STATE_READY
+        val bufferFull = exo != null && !starting && !exo.isLoading
+        cacheChipWanted = LoadingChip.shows(cacheChipWanted, aheadMs, isRealDownload(), starting, bufferFull)
         val show = controlsUp &&
             statusOverlay.visibility != View.VISIBLE &&
             rebufferChip.visibility != View.VISIBLE &&
@@ -8954,7 +8962,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         downloadChip.text = when {
             isRealDownload() && moving -> L.playerDownloadedPercentSpeed(percent, rate)
             isRealDownload() -> L.playerDownloadedPercent(percent)
-            moving -> L.playerCachingPercentSpeed(percent, rate)
+            // Playing on a short buffer: no figures, the line speed is in Playback details.
+            !starting -> L.playerGettingNextPart
             else -> L.playerCachingPercent(percent)
         }
     }
