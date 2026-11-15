@@ -158,7 +158,7 @@ class ThemeAuditRenderTest {
             shot("support") {
                 Box(Modifier.fillMaxSize()) {
                     SettingsPage(shell, "2.0.0")
-                    SupportPopup(from = "settings", onClose = {})
+                    SupportPopup(onClose = {})
                 }
             }
             shot("card") {

@@ -227,7 +227,7 @@ fun AboutScreen(onBack: () -> Unit) {
         }
     }
 
-    if (supporting) SupportDialog(from = "about", onClose = { supporting = false })
+    if (supporting) SupportDialog(onClose = { supporting = false })
     if (coffee) CoffeeDialog(supporter, asking = false, onLater = { coffee = false }, onNever = { coffee = false })
 
     qr?.let { link ->

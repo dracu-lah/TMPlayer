@@ -52,6 +52,7 @@ import com.tmplayer.ui.onboarding.SetupStep
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.rememberUiScale
 import kotlinx.coroutines.Dispatchers
+import com.tmplayer.platform.Background
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -817,7 +818,7 @@ internal fun AboutRows(state: ShellState, version: String, onShowAbout: () -> Un
         modifier = Modifier.padding(start = SETTING_INSET, end = SETTING_INSET, top = 12.dp),
     )
 
-    if (supporting) SupportPopup(from = "settings", onClose = { supporting = false })
+    if (supporting) SupportPopup(onClose = { supporting = false }, onStarred = { Background.scope.launch { runCatching { settings.markSupportStarred() } } })
     if (whatsNew) WhatsNewPopup(onClose = { whatsNew = false })
     if (reporting) FeedbackPopup(onClose = { reporting = false })
 }

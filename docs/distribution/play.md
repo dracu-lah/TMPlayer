@@ -124,6 +124,9 @@ play, and the user generated content rules. A removal can also come without a st
   skip in the Play build.
 - **Don't keep the updater, `REQUEST_INSTALL_PACKAGES`, donation or sponsor links** in the Play
   flavor. Play policy bans self updates and outside payment prompts.
+  Build it with `-PtmPlay=true`: `BuildConfig.SUPPORT_LINKS` goes false, which removes the support
+  window (Buy Me a Coffee and UPI cards), the Settings and About rows and the reminder (D1,
+  `design/redesign/support-cards.md`). Amazon and F-Droid keep them: voluntary, unlock nothing.
 - **Don't submit without reviewer access.** The demo mode is found from the first screen and the
   steps are in "App access". Test it on a fresh install.
 - **Don't skip Report and Block.** Chats and their videos get a Report action and a hide option

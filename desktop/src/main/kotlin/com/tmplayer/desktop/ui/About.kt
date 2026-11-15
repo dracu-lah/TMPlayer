@@ -98,7 +98,7 @@ internal fun AboutPage(version: String, supporter: Boolean = false, onBack: () -
 private fun Links(version: String, supporter: Boolean, onRead: () -> Unit) {
     val s = LocalStrings.current
     var supporting by remember { mutableStateOf(false) }
-    if (supporting) SupportPopup(from = "about", onClose = { supporting = false })
+    if (supporting) SupportPopup(onClose = { supporting = false })
 
     // The mark and the name, then the version and the licence under them, in line with the rows.
     Column(

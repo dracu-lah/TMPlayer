@@ -76,8 +76,8 @@ class SupportRenderTest {
     @Test
     fun settingsRowAndCodes() {
         save("support-settings.png", render(dark = true, height = 3200) { SettingsPage(shell, "2.0.0") })
-        save("support-codes.png", render(dark = true) { SupportPopup(from = "settings", onClose = {}) })
-        save("support-codes-light.png", render(dark = false) { SupportPopup(from = "settings", onClose = {}) })
+        save("support-codes.png", render(dark = true) { SupportPopup(onClose = {}) })
+        save("support-codes-light.png", render(dark = false) { SupportPopup(onClose = {}) })
     }
 
     @Test
