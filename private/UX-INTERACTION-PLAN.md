@@ -289,6 +289,27 @@ Tests: fixtures for Naruto Shippuden (500 episodes, 21 TMDB seasons, AniList one
 shapes) plus one cour-split show and one with a wrong match, scale (500 rows, no request per row), offline,
 garbage. Privacy: only the show id and episode numbers are sent, none of the file or chat names.
 
+### T12 Remove the phone's in-app mini player  (model: sonnet medium, depends: T1 merged (SettingsScreen.kt), a worker slot)
+User, 2026-11-16: the in-app mini player confuses people: Back from the player leaves the video playing in a bar
+while they are on the details page; people who press Back just want to leave. Decision: remove it (Raju 6.4
+agrees). Back from the player now means "stop and go back": pause, save the position (resume point), release the
+player, return to the page that opened it (detail, chat, Home). Keep: system Picture in Picture when the user
+leaves with Home or the PiP button (their choice, not Back), background audio notification if it exists, the
+desktop's always on top mini window (Ctrl+P, a different feature the user did not mention), and TV (never had it).
+- Delete, not hide: `MiniDock.kt`, `MiniDockBar.kt`, `MiniPlayerBar.kt` (check the desktop does not use it: if it
+  does, keep only what desktop needs), `MiniPlayerState.verdict` dock paths, the launch flags and `TouchNavHost`
+  hooks, the Settings row or switch that controls it (`SettingsScreen.kt` mentions MiniPlayer), the strings in
+  en.json, `docs/mini-player-phone.md` (replace with one paragraph in docs/FEATURES.md), render tests of the dock;
+  `design/ux-audit/mini-player-phone.webp` stays as history only if referenced, else delete.
+- Stored settings: an old "dock on Back" value is ignored and removed on first read, no crash.
+- Edge cases: Back while buffering or on the failure sheet; Back right after a seek (position saved at the seek);
+  a playing video when the app is killed (resume point already saved); casting (Back must not drop the cast
+  session silently: it asks or stops it, say which in the plan); a download running for that video continues;
+  the next-up card and episode panel closing first; predictive back animation; two quick Backs.
+- Tests: Back stops playback and saves the position, the opener page is shown (Compose or Robolectric), PiP still
+  works from Home, no leftover references (grep test or a compile), render tests per form factor.
+Supersedes Raju group B's "mini bar X 48 dp" and 6.4.
+
 ### D1 Support cards: Buy Me a Coffee and UPI  (model: sonnet, running since 2026-11-16)
 Themed cards and dialogs with the official logos, regional order (IN: UPI first), icon popup through the
 existing `SupportReminder` nag. Design note `design/redesign/support-cards.md`.
