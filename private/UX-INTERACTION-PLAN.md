@@ -173,6 +173,28 @@ ladder; PR1, PR2, PR2b, PR3 in `private/PLAYER-RELIABILITY-PLAN.md`. Also: Low s
 a film on phone and TV (HX79 evidence note): diagnose with logcat first, fix, add a test that a rolling
 window starts.
 
+### T8 Format badges: resolution, HDR, Dolby, audio  (model: sonnet high, depends: D1 or T5 done, a worker slot)
+User, 2026-11-16: "HD, 4K, 1080p icons / logo images might be missing, add them if possible, also Dolby Atmos
+and other stuff." Today only the details sheet shows a quality label (`VideoCopies.qualityLabel`,
+`MediaDetailSheet.kt:526`); tiles, lists, the player and Downloads show none.
+- Shared part first: one `FormatBadge` (ui/shared, design tokens, motion, TV focus is not needed, it is not
+  a control) and a pure `FormatFacts` classifier in core with a table test: from width and height (cheap,
+  Telegram gives them): SD, HD (720p), Full HD (1080p), 2K (1440p), 4K (2160p), 8K; from a probe: HDR10, HDR10+,
+  HLG, Dolby Vision (profile in `FormatRoute.dolbyVisionProfile`), 10-bit, codec (HEVC, AV1), frame rate
+  high (50 and up), audio: Atmos (E-AC-3 JOC or TrueHD Atmos), 7.1, 5.1, stereo, DTS, DTS-HD, DTS:X, AAC.
+- Logos: Dolby, Dolby Vision, Dolby Atmos, DTS, HDR10+ and "4K Ultra HD" are licensed marks; their logo
+  files may not be shown without a licence. So: our own badges in plain text pills ("4K", "1080p", "HDR",
+  "Dolby Vision", "Atmos", "5.1"), a generic icon (a speaker, a sun) and no brand logo images. The
+  user may supply a licence and logos later (no work until then).
+- Where: poster tile (one resolution pill, top corner, only 720p and up, only when known), details page
+  (full row: resolution, HDR kind, codec, audio, size), player info sheet and track picker (per track),
+  Downloads rows. Phone, TV, desktop, web. No probing per tile: resolution from the message, the rest only
+  from a file already on disk or after the first play, cached per video (bounded cache), never a TDLib
+  call per visible tile (scale rule).
+- Honest: a badge says what the file declares; "Atmos" only when the track is Atmos, never guessed from the
+  name; unknown shows nothing (no empty pill). Raju check: the badge must not crowd the poster at 200% font.
+- Tests: classifier table, garbage input (zero or negative size, absurd values), render per form factor.
+
 ### D1 Support cards: Buy Me a Coffee and UPI  (model: sonnet, running since 2026-11-16)
 Themed cards and dialogs with the official logos, regional order (IN: UPI first), icon popup through the
 existing `SupportReminder` nag. Design note `design/redesign/support-cards.md`.
