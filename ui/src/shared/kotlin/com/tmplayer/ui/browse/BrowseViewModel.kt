@@ -822,6 +822,13 @@ data class MediaListState(
     val archives: List<com.tmplayer.data.ArchiveFile> = emptyList(),
     /** The last page asked for failed: the foot says so with Try again ([MediaListViewModel.retryMore]). */
     val moreFailed: Boolean = false,
+    /**
+     * A search's word at the foot of what it found: only the newest part of the chat was read, or
+     * only what is on this device. Null for a listing, and for a search Telegram answered.
+     */
+    val searchNote: String? = null,
+    /** The search read the chat back only so far: Keep looking ([MediaListViewModel.searchDeeper]) goes on. */
+    val canSearchDeeper: Boolean = false,
 )
 
 /**
@@ -844,6 +851,13 @@ class MediaListViewModel(
      * viewer was in rather than back on all of them. Null where nothing is remembered.
      */
     private val topicMemory: TopicMemory? = null,
+    /**
+     * What a search of this chat asks, for the chat and the topic shown: TDLib's
+     * `searchChatMessages` and `getChatHistory` unless a test passes its own.
+     */
+    private val searchSource: ((chatId: Long, topicId: Int) -> com.tmplayer.data.ChatSearchSource)? = null,
+    /** The videos the app has seen anywhere (Home, Continue watching), for a search's first answer. */
+    private val knownVideos: () -> List<MediaItem> = { com.tmplayer.online.KnownMedia.all() },
 ) : ViewModel(com.tmplayer.platform.JobFailures.viewModelScope("MediaList")) {
 
     /** Where [MediaListViewModel] keeps the topic picked in each group. */
@@ -1218,6 +1232,10 @@ class MediaListViewModel(
      * starting again at the newest message and reading the same empty pages a second time.
      */
     private fun keepLooking() {
+        if (searchRun != null) {
+            searchDeeper()
+            return
+        }
         if (_state.value !is UiState.Empty || pageJob?.isActive == true) return
         _state.value = UiState.Loading(if (query.isNotBlank()) L.browseSearching else L.browseFindingVideos)
         pageJob = viewModelScope.launch {
@@ -1251,6 +1269,14 @@ class MediaListViewModel(
      */
     private fun load(preserveContent: Boolean, force: Boolean = false, keepOnFailure: Boolean = true) {
         _topics.value?.let { bar -> if (bar.selected != topicId) _topics.value = bar.copy(selected = topicId) }
+        // A search has its own way through the chat ([ChatSearchRun]); the listing's kept pages are
+        // what it answers from first.
+        if (query.isNotBlank()) {
+            startSearch()
+            return
+        }
+        searchRun = null
+        searchGen++
         val key = gridKey()
         val kept = if (force) null else cache.peek<ChatGrid>(key, PageQueries.GRID_STALE_MS)
         if (kept != null) {
@@ -1413,25 +1439,117 @@ class MediaListViewModel(
      * becomes the paging query from then on, so scrolling keeps working with the cursors it has,
      * and every page is ranked locally against what the viewer actually typed.
      */
-    private suspend fun firstPage(repository: ChatRepository): MediaPage {
-        val whole = repository.mediaPage(chatId, MediaCursors(), query, topicId = topicId)
-        if (whole.items.isNotEmpty() || query.isBlank()) return whole
+    private suspend fun firstPage(repository: ChatRepository): MediaPage =
+        repository.mediaPage(chatId, MediaCursors(), query, topicId = topicId)
 
-        val words = Fuzzy.tokens(query)
-            .filter { it.length >= MIN_FALLBACK_WORD }
-            .sortedByDescending { it.length }
-            .take(MAX_FALLBACK_WORDS)
-        if (words.size < 2 && Fuzzy.tokens(query).size < 2) return whole
+    /** The search under way, for the words in [query]; null while the chat is listed. */
+    private var searchRun: com.tmplayer.data.ChatSearchRun? = null
 
-        for (word in words) {
-            if (word == query) continue
-            val page = repository.mediaPage(chatId, MediaCursors(), word, topicId = topicId)
-            if (page.items.isNotEmpty()) {
-                serverQuery = word
-                return page
+    /**
+     * Which search is current. Every answer carries the number it was asked under and is dropped
+     * when the words have changed since, so a slow answer never lands over a newer one.
+     */
+    private var searchGen = 0
+
+    private fun searchSourceFor(): com.tmplayer.data.ChatSearchSource =
+        searchSource?.invoke(chatId, topicId) ?: TdChatSearch(chatId, topicId)
+
+    /**
+     * What the app already holds of this chat, for a search's first answer: every page of the
+     * listing loaded so far (kept in [cache]), the listing on screen, and the videos seen anywhere
+     * else. Bounded by those: the kept pages and [com.tmplayer.online.KnownMedia]'s 1,500.
+     */
+    private fun loadedForSearch(): List<MediaItem> {
+        val listed = cache.data<ChatGrid>(QueryKey.ChatMedia(chatId, topicId, ""))?.items.orEmpty()
+        val shown = (_state.value as? UiState.Content)?.value?.items.orEmpty()
+        val known = runCatching { knownVideos() }.getOrDefault(emptyList())
+        return listed + shown + known
+    }
+
+    /**
+     * Searches the chat for [query]: what is loaded answers at once, then Telegram's answer is
+     * added under it (never reordering what is listed), or, when Telegram finds nothing or cannot
+     * be asked, the newest part of the chat is read back and matched here.
+     */
+    private fun startSearch() {
+        val gen = ++searchGen
+        pageJob?.cancel()
+        holdsJob?.cancel()
+        hiddenBySize = 0
+        _selfDestructing.value = 0
+        archives = emptyList()
+        cursors = MediaCursors()
+        loadSponsored()
+        val run = com.tmplayer.data.ChatSearchRun(searchSourceFor(), query, loadedForSearch(), chatId, topicId)
+        searchRun = run
+        val local = run.local()
+        when {
+            local.items.isNotEmpty() -> show(local, still = true)
+            // The listing from before stays up under the spinner rather than flashing a skeleton.
+            _state.value !is UiState.Content -> _state.value = UiState.Loading(L.browseSearching)
+        }
+        _searching.value = true
+        pageJob = viewModelScope.launch {
+            try {
+                val answer = run.first()
+                if (gen != searchGen) return@launch
+                show(answer.copy(items = marked(answer.items)), still = false)
+                if (answer.items.isNotEmpty()) recordSearch(query)
+            } finally {
+                if (gen == searchGen) _searching.value = false
             }
         }
-        return whole
+    }
+
+    /** The next part of a search: Telegram's next page ([deeper] false) or another round of the history. */
+    private fun continueSearch(deeper: Boolean) {
+        val run = searchRun ?: return
+        if (pageJob?.isActive == true) return
+        val gen = searchGen
+        val current = (_state.value as? UiState.Content)?.value
+        if (current != null) _state.value = UiState.Content(current.copy(loadingMore = true, moreFailed = false))
+        else _state.value = UiState.Loading(L.browseSearching)
+        pageJob = viewModelScope.launch {
+            val answer = if (deeper) run.deeper() else run.more()
+            if (gen != searchGen) return@launch
+            show(answer.copy(items = marked(answer.items)), still = false)
+        }
+    }
+
+    /** Keep looking under a search that read only the newest part of the chat. */
+    fun searchDeeper() = continueSearch(deeper = true)
+
+    /** A search's answer as the listing, its empty state or its failure. [still] while Telegram has not answered. */
+    private fun show(answer: com.tmplayer.data.ChatSearchAnswer, still: Boolean) {
+        val note = when {
+            still -> null
+            answer.how == com.tmplayer.data.ChatSearchHow.Offline -> L.browseSearchOffline
+            answer.how == com.tmplayer.data.ChatSearchHow.Scanned && answer.canGoDeeper -> L.browseSearchScanned(answer.scanned)
+            else -> null
+        }
+        val failed = answer.failed
+        _state.value = when {
+            answer.items.isEmpty() && failed != null -> UiState.Error(Failures.humanise(failed))
+            answer.items.isEmpty() && !still -> {
+                val topic = _topics.value?.nameOf(topicId)
+                val said = if (topic != null) L.gridTopicNoMatch(topic, query) else L.browseNoMatch(query)
+                if (note != null && answer.canGoDeeper) UiState.Empty("$said\n\n$note", StateAction.KeepLooking, icon = TmIcons.SearchRemove)
+                else if (note != null) UiState.Empty("$said\n\n$note", StateAction.SearchAllChats, icon = TmIcons.SearchRemove)
+                else UiState.Empty(said, StateAction.SearchAllChats, icon = TmIcons.SearchRemove)
+            }
+            answer.items.isEmpty() -> UiState.Loading(L.browseSearching)
+            else -> UiState.Content(
+                MediaListState(
+                    items = answer.items,
+                    sponsored = sponsored,
+                    // Not the end while Telegram is still to answer: the foot stays open.
+                    endReached = !still && answer.endReached,
+                    moreFailed = failed != null,
+                    searchNote = note,
+                    canSearchDeeper = !still && answer.canGoDeeper,
+                ),
+            )
+        }
     }
 
     /**
@@ -1642,6 +1760,11 @@ class MediaListViewModel(
         val current = _state.value as? UiState.Content ?: return
         if (current.value.loadingMore || current.value.endReached) return
         if (pageJob?.isActive == true) return
+        // A search pages through Telegram's answer; the history it read goes on only by Keep looking.
+        if (searchRun != null) {
+            if (!current.value.moreFailed) continueSearch(deeper = false)
+            return
+        }
 
         _state.value = UiState.Content(current.value.copy(loadingMore = true, moreFailed = false))
         pageJob = viewModelScope.launch {
@@ -1657,6 +1780,12 @@ class MediaListViewModel(
      */
     fun retryMore() {
         val current = _state.value as? UiState.Content ?: return
+        val run = searchRun
+        if (run != null) {
+            pageJob?.cancel()
+            continueSearch(deeper = run.readingHistory)
+            return
+        }
         if (current.value.endReached) return
         pageJob?.cancel()
         _state.value = UiState.Content(current.value.copy(loadingMore = false, moreFailed = false))
@@ -1745,11 +1874,28 @@ class MediaListViewModel(
         /** Live posts are gathered this long, so a burst of episodes lands as one redraw. */
         const val LIVE_WINDOW_MS = 2_000L
 
-        /** Shorter than this and a word is "the" or "s02": it narrows nothing. */
-        const val MIN_FALLBACK_WORD = 3
+    }
+}
 
-        /** Three retries is already three round trips; past that the wait is the worse answer. */
-        const val MAX_FALLBACK_WORDS = 3
+/**
+ * A chat search through TDLib: `searchChatMessages` (through [ChatRepository.mediaPage]) and
+ * `getChatHistory`, on the signed in session. Online means a connection within
+ * [ONLINE_CHECK_MS]: TDLib holds a request until it can reach Telegram, and offline that would
+ * leave the search spinning with no end.
+ */
+private class TdChatSearch(private val chatId: Long, private val topicId: Int) : com.tmplayer.data.ChatSearchSource {
+    private suspend fun repository() = ChatRepository(Td.awaitAuthorizedSession().client)
+
+    override suspend fun search(query: String, cursors: MediaCursors, limit: Int): MediaPage =
+        repository().mediaPage(chatId, cursors, query, pageSize = limit, topicId = topicId)
+
+    override suspend fun history(fromMessageId: Long, limit: Int, onlyLocal: Boolean): com.tmplayer.data.ChatHistoryPage =
+        repository().historyPage(chatId, fromMessageId, limit, onlyLocal)
+
+    override suspend fun online(): Boolean = Td.awaitConnectedSessionOrNull(ONLINE_CHECK_MS) != null
+
+    private companion object {
+        const val ONLINE_CHECK_MS = 3_000L
     }
 }
 

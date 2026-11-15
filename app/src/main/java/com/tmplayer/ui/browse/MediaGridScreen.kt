@@ -582,6 +582,8 @@ fun MediaGridScreen(
     // answer, and nothing the listing does then may take the field's focus: that closed the
     // keyboard after a letter or two (user, 2026-10-23).
     var typing by remember { mutableStateOf(false) }
+    // The remote's Search key asks the grid to take the focus once the answer has a first tile.
+    var focusResults by remember { mutableStateOf(false) }
     val typingNow = typing && !selecting
 
     val listing: @Composable () -> Unit = {
@@ -903,6 +905,10 @@ fun MediaGridScreen(
                             com.tmplayer.ui.components.MediaGridSkeletonRow(wideColumns, gap, dense)
                         }
                     }
+                    // A search that read only the newest part of the chat says so, with Keep looking.
+                    if (!list.loadingMore && feed.isNotEmpty()) {
+                        searchNoteItem(list.searchNote, if (list.canSearchDeeper) viewModel::searchDeeper else null)
+                    }
                     // The chat's compressed files named like videos, greyed, each with why (U10).
                     archiveItems(
                         list.archives,
@@ -1059,6 +1065,14 @@ fun MediaGridScreen(
             LaunchedEffect(list.items.firstOrNull()?.id, touch) {
                 if (!touch && !typingNow) runCatching { firstItem.requestFocus() }
             }
+            // After the keyboard's Search the results take the remote, as soon as there is one:
+            // the text field would otherwise keep it, and Down from there is a guess.
+            LaunchedEffect(focusResults, list.items.firstOrNull()?.id) {
+                if (focusResults && !touch && list.items.isNotEmpty()) {
+                    runCatching { firstItem.requestFocus() }
+                    focusResults = false
+                }
+            }
             // Back from a video's page the remote lands on the tile it was opened from: a page
             // of messages arriving meanwhile asked for the first tile above (Mi TV, 2026-10-23).
             ReturnToTile(tileReturn, pageOpen = details.top != null || heldMenuOf != null || openSeries.series != null) { key ->
@@ -1180,7 +1194,10 @@ fun MediaGridScreen(
                     isFavorite = isFavorite,
                     query = query,
                     onQuery = { query = it },
-                    onSubmit = submit,
+                    onSubmit = {
+                        if (query.isNotBlank()) focusResults = true
+                        submit()
+                    },
                     onToggleFavorite = onToggleFavorite,
                     edge = edge,
                     onRefresh = refresh,
@@ -1589,6 +1606,11 @@ internal fun Header(
     modifier: Modifier = Modifier,
 ) {
     val s = LocalStrings.current
+    // Back clears the search first, and leaves the chat only from a listing of all of it.
+    BackHandler(enabled = query.isNotBlank()) {
+        onQuery("")
+        onSubmit()
+    }
     // On Fire TV the voice button opens the keyboard, which the remote's mic dictates into.
     var keyboardRequests by remember { mutableStateOf(0) }
     val startVoice = rememberVoiceSearch(s.gridVoicePromptVideo, onKeyboard = { keyboardRequests++ }) {

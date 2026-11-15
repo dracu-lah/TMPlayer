@@ -498,7 +498,7 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
                 footerSlow = { SlowAnswerLine(content.items.size, onRetry = model::retryMore) },
                 scrollLabel = { key -> entryByKey[key]?.let { com.tmplayer.ui.browse.ScrollLabels.video(it, shownSort, s) } },
                 // Compressed files named like videos follow the videos, greyed with why (U10).
-                footer = if (!content.moreFailed && content.archives.isEmpty()) null else {
+                footer = if (!content.moreFailed && content.archives.isEmpty() && content.searchNote == null) null else {
                     {
                         Column(Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             // The last page failed: said, with Try again, not a listing that stops short.
@@ -507,6 +507,17 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
                                     Text(s.gridMoreFailed, color = Tone.muted)
                                     Spacer(Modifier.width(12.dp))
                                     OutlinedButton(onClick = model::retryMore) { Text(s.commonTryAgain) }
+                                }
+                            }
+                            // A search that read only the newest part of the chat says so, with Keep looking.
+                            val note = content.searchNote
+                            if (note != null && !content.loadingMore) {
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                                    Text(note, color = Tone.muted)
+                                    if (content.canSearchDeeper) {
+                                        Spacer(Modifier.width(12.dp))
+                                        OutlinedButton(onClick = model::searchDeeper) { Text(s.commonKeepLooking) }
+                                    }
                                 }
                             }
                             ArchiveList(content.archives, noVideos = content.items.isEmpty(), onExplain = { toast(it) })
