@@ -1,6 +1,14 @@
 package com.tmplayer.ui.settings
 
+import com.tmplayer.data.DeviceForm
+import com.tmplayer.data.SettingsGroup
+import com.tmplayer.data.SettingsNeed
+import com.tmplayer.data.SettingsRow
+import com.tmplayer.data.SettingsSearch
+import com.tmplayer.ui.settings.LocalSettingsSeek
+import com.tmplayer.ui.settings.SettingsSeek
 import com.tmplayer.ui.components.FastScroller
+import com.tmplayer.ui.settings.seekable
 import com.tmplayer.ui.components.keepTopInSight
 import android.content.Intent
 import android.net.Uri
@@ -197,10 +205,23 @@ import kotlinx.coroutines.withContext
  * gathers the setup's answers (SetupChoicesList), each with a way to the page it also lives on.
  */
 /**
- * Settings' pages, in the order the category list shows them (2026-11-01: App lock, Connected
- * devices and Sign out are one page, [Account], and Setup choices is last, as Redo setup choices).
+ * Settings' pages, in the order the category list shows them: grouped by what the viewer is
+ * trying to do (U20, 2026-11-15), the same names and order as the shared [SettingsGroup], less the
+ * desktop's Mouse. [Subtitles] is Subtitles and audio, [Storage] Storage and downloads, [Account]
+ * Privacy and lock (the app lock, crash reports and the privacy page, the devices and Sign out),
+ * [About] About and help; Setup choices is last, as Redo setup choices.
  */
-enum class SettingsPage { Appearance, Playback, Subtitles, Gestures, Library, Home, TvHome, Notifications, Storage, Account, About, SetupChoices }
+enum class SettingsPage {
+    Playback, Gestures, Subtitles, Storage, Notifications, Appearance, Account, Library, Home, TvHome, About, SetupChoices;
+
+    /** The shared group this page is. */
+    val group: SettingsGroup get() = SettingsGroup.valueOf(name)
+
+    companion object {
+        /** The page for [group]; null for the desktop's Mouse page. */
+        fun of(group: SettingsGroup): SettingsPage? = entries.firstOrNull { it.name == group.name }
+    }
+}
 
 /**
  * Focus for a row in a lazy list, which exists only once the list has been measured: a frame
@@ -346,6 +367,9 @@ fun SettingsScreen(
     val learntLanguages by settings.learntLanguages.collectAsStateWithLifecycle(initialValue = emptyList())
     val history by settings.continueWatching.collectAsStateWithLifecycle(initialValue = emptyList())
     val videoDecoder by settings.videoDecoder.collectAsStateWithLifecycle(initialValue = com.tmplayer.data.VideoDecoder.Automatic)
+    // The engine rows only where there is a second engine, or VLC is the stored choice (U20).
+    val engineStored by settings.engineChoice.collectAsStateWithLifecycle(initialValue = com.tmplayer.player.EngineChoice.Automatic)
+    val vlcShown = com.tmplayer.player.EngineAvailability.vlcOffered || engineStored == com.tmplayer.player.EngineChoice.Vlc
     val watchedStore = remember { WatchedStore(context) }
     val watchedList by watchedStore.history.collectAsStateWithLifecycle(initialValue = emptyList())
     val historyRemoval = com.tmplayer.ui.browse.rememberHistoryRemoval()
@@ -496,14 +520,14 @@ fun SettingsScreen(
         SettingsPage.SetupChoices -> s.settingsRedoSetupChoices
         SettingsPage.Appearance -> s.settingsPageAppearance
         SettingsPage.Playback -> s.settingsPlayback
-        SettingsPage.Subtitles -> s.settingsSubtitles
+        SettingsPage.Subtitles -> s.settingsPageSubtitlesAudio
         SettingsPage.Gestures -> s.settingsPageGestures
         SettingsPage.Library -> s.settingsLibrary
         SettingsPage.Home -> s.settingsPageHome
         SettingsPage.TvHome -> s.settingsPageTvHome
         SettingsPage.Notifications -> s.settingsPageNotifications
         SettingsPage.Storage -> s.settingsPageStorage
-        SettingsPage.Account -> s.settingsPageAccount
+        SettingsPage.Account -> s.settingsPagePrivacyLock
         SettingsPage.About -> s.settingsPageAbout
     }
 
@@ -534,6 +558,29 @@ fun SettingsScreen(
     // These rows describe the machine they are running on, and half of them name it.
     val device = if (touch) "phone" else "tv"
 
+    // The search box over the category list (U20): a phone's only, past 25 rows. The query is
+    // kept while a page found by it is open, so Back comes back to the results.
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    val seek = remember { SettingsSeek() }
+    val needs = SettingsNeeds(
+        vlc = vlcShown,
+        pictureInPicture = pipAvailable,
+        logInbox = sendToDeveloper != null,
+        playNext = watchNextSupported,
+        channels = tvChannelsSupported,
+    )
+    val form = if (touch) DeviceForm.Phone else DeviceForm.Tv
+    val searchRows = remember(touch, vlcShown, pipAvailable) { needs.rows(form) }
+    val searchOffered = SettingsSearch.offered(form, searchRows.size)
+    val openHit: (SettingsRow) -> Unit = { row ->
+        SettingsPage.of(row.group)?.let { target ->
+            if (row.need == SettingsNeed.Advanced) playbackAdvancedOpen = true
+            seek.aim(row, form, s)
+            cameFromStep = null
+            showPage(target)
+        }
+    }
+
     // The size beside the cached video has to follow the video: watching something else replaces
     // the record, and a figure left over from the last video is worse than no figure at all.
     LaunchedEffect(cached.map { it.fileId }) { refresh() }
@@ -558,7 +605,7 @@ fun SettingsScreen(
                 returnTo = null
                 // Back from a page lands on the row that opened it, with the list scrolled where
                 // it was. A first arrival starts on the first row, at the top.
-                val row = categoryFocus.getValue(back ?: SettingsPage.Appearance)
+                val row = categoryFocus.getValue(back ?: SettingsPage.entries.first())
                 // A list drawn afresh (Settings left for Downloads and come back to) starts at
                 // its top, where a row near the foot such as Storage is not laid out yet and
                 // cannot take focus: the list goes to its foot for it, and focus brings it into view.
@@ -575,6 +622,19 @@ fun SettingsScreen(
                 }
             }
         }
+    }
+
+    // Search: once the page is open, the row found is brought into view and lit, then forgotten so
+    // the next visit to the page is a plain one.
+    LaunchedEffect(page, seek.titles) {
+        if (page == null) {
+            seek.clear()
+            return@LaunchedEffect
+        }
+        if (seek.titles.isEmpty()) return@LaunchedEffect
+        seek.target.arrive(pageState, focus = !touch)
+        kotlinx.coroutines.delay(SEEK_GLOW_MS)
+        seek.clear()
     }
 
     // Setup choices' "Also in": once the page is open, its row is brought into view and lit, and on
@@ -611,7 +671,7 @@ fun SettingsScreen(
     // scrolls under the bars rather than stopping short of them.
     val insets = WindowInsets.safeDrawing.asPaddingValues()
 
-    val list: @Composable () -> Unit = {
+    val list: @Composable () -> Unit = { androidx.compose.runtime.CompositionLocalProvider(LocalSettingsSeek provides seek) {
     // The category list keeps one state for as long as Settings is open, so coming back from
     // a page finds it scrolled where it was left. Each page starts at its own top.
     val shownState = if (page == null) listState else pageState
@@ -677,7 +737,7 @@ fun SettingsScreen(
 
         // "Recommended for this device" (CP68), above the categories while anything recommended
         // for a device short of memory or storage is still off. It draws nothing otherwise.
-        if (page == null) {
+        if (page == null && searchQuery.isBlank()) {
             item {
                 com.tmplayer.ui.onboarding.DeviceFitSettingsCard(
                     settings,
@@ -697,16 +757,10 @@ fun SettingsScreen(
                     SetupChoicesList(
                         settings = settings,
                         place = { step ->
-                            val target = when (step) {
-                                SetupStep.Posters -> SettingsPage.Library
-                                SetupStep.Storage -> SettingsPage.Storage
-                                SetupStep.Performance -> SettingsPage.Appearance
-                                SetupStep.MobileData -> SettingsPage.Storage
-                                // Its settings are on three pages; each row above has its own.
-                                SetupStep.Device -> null
-                                // Never listed here: its switch is on the privacy rows already.
-                                SetupStep.CrashReports -> null
-                            }
+                            // The shared links (SettingsLink), which SettingsMapTest holds to rows
+                            // that exist on this form.
+                            val target = com.tmplayer.ui.settings.settingsLinkFor(step, if (touch) DeviceForm.Phone else DeviceForm.Tv)
+                                ?.let { SettingsPage.of(it.group) }
                             target?.let {
                                 SetupPlace(titleOf(it)) {
                                     cameFromStep = step
@@ -926,19 +980,27 @@ fun SettingsScreen(
                         onToggle = { scope.launch { settings.setAutoplayNext(!autoplayNext) } },
                     )
                 }
-                // Hardware first, or the app's own software decoder for a device whose decoder
-                // draws broken frames. The player's error sheet offers the other one too.
-                item {
-                    ActionRow(
-                        title = s.settingsDecoder,
-                        subtitle = videoDecoder.label,
-                        icon = TmIcons.Play,
-                        onClick = { pickingDecoder = true },
-                    )
-                }
                 // The default player (which absorbs "Open videos in another app"), the engine and
                 // its two switches, and the collapsed Advanced group (PR4, PR5).
-                playerRows(settings, touch, playbackAdvancedOpen) { playbackAdvancedOpen = !playbackAdvancedOpen }
+                playerRows(
+                    settings = settings,
+                    touch = touch,
+                    advancedOpen = playbackAdvancedOpen,
+                    vlcShown = vlcShown,
+                    onToggleAdvanced = { playbackAdvancedOpen = !playbackAdvancedOpen },
+                    decoderRow = {
+                        // Hardware first, or the app's own software decoder for a device whose decoder
+                        // draws broken frames. The player's error sheet offers the other one too.
+                        item {
+                            ActionRow(
+                                title = s.settingsDecoder,
+                                subtitle = videoDecoder.label,
+                                icon = TmIcons.Play,
+                                onClick = { pickingDecoder = true },
+                            )
+                        }
+                    },
+                )
                 item {
                     ToggleRow(
                         title = s.settingsDetailFirst,
@@ -948,51 +1010,9 @@ fun SettingsScreen(
                         onToggle = { scope.launch { settings.setDetailFirst(!detailFirst) } },
                     )
                 }
-                item {
-                    ToggleRow(
-                        title = s.settingsDownloadFirst,
-                        subtitle = if (downloadFirst) {
-                            s.settingsDownloadFirstOn
-                        } else {
-                            s.settingsDownloadFirstOff
-                        },
-                        icon = TmIcons.Download,
-                        checked = downloadFirst,
-                        onToggle = {
-                            scope.launch { settings.setDownloadBeforePlaying(!downloadFirst) }
-                        },
-                    )
-                }
-                // Low storage mode is on the Storage page, with the rest of what decides the room
-                // TMPlayer takes (user, 2026-10-22).
-                // On both devices, defaulting the way each always has: a phone folds surround to stereo
-                // for its speaker and headphones, a television passes it to whatever is wired up. The
-                // switch is for the exceptions, a soundbar that cannot take the film's track or a phone
-                // plugged into a receiver. Read when a video opens, so it applies from the next one.
-                item {
-                    val downmix = AudioDownmix.wanted(downmixChoice, television = !touch)
-                    ToggleRow(
-                        title = s.settingsDownmix,
-                        subtitle = if (downmix) {
-                            s.settingsDownmixOn
-                        } else {
-                            s.settingsDownmixOff
-                        },
-                        icon = ImageVector.vectorResource(R.drawable.ic_audio_language),
-                        checked = downmix,
-                        onToggle = { scope.launch { settings.setDownmix(!downmix) } },
-                    )
-                }
-                // On by default; the player's menu has the same line for the video playing now.
-                item {
-                    ToggleRow(
-                        title = s.playerEvenVolume,
-                        subtitle = if (evenVolume) s.settingsEvenVolumeOn else s.settingsEvenVolumeOff,
-                        icon = ImageVector.vectorResource(R.drawable.ic_volume),
-                        checked = evenVolume,
-                        onToggle = { scope.launch { settings.setEvenVolume(!evenVolume) } },
-                    )
-                }
+                // Low storage mode and Download the whole video first are on Storage and downloads,
+                // with the rest of what decides the room TMPlayer takes (user, 2026-10-22; U20). The
+                // sound and the audio language are on Subtitles and audio.
                 // The phone only: a television has no screen to turn off and nothing else to switch to.
                 // Off by default, so leaving the player pauses it as it always has; read as the
                 // player is left, so it applies to the video playing now.
@@ -1019,15 +1039,6 @@ fun SettingsScreen(
                             onToggle = { scope.launch { settings.setPictureInPictureOnLeave(!pipOnLeave) } },
                         )
                     }
-                }
-                // The soundtrack a video opens in when neither the file nor its series has one saved.
-                item {
-                    ActionRow(
-                        title = s.settingsAudioLanguage,
-                        subtitle = trackPrefs.audioSummary,
-                        icon = ImageVector.vectorResource(R.drawable.ic_audio_language),
-                        onClick = { trackPicker = TrackLanguagePicker.Audio },
-                    )
                 }
                 // Thumbnails over the scrub bar, from what is already downloaded. Shown even where the
                 // memory rules them out, switched off and saying why, so a 1 GB stick's owner who read
@@ -1119,6 +1130,15 @@ fun SettingsScreen(
                         onClick = { trackPicker = TrackLanguagePicker.Subtitle },
                     )
                 }
+                // The soundtrack a video opens in when neither the file nor its series has one saved.
+                item {
+                    ActionRow(
+                        title = s.settingsAudioLanguage,
+                        subtitle = trackPrefs.audioSummary,
+                        icon = ImageVector.vectorResource(R.drawable.ic_audio_language),
+                        onClick = { trackPicker = TrackLanguagePicker.Audio },
+                    )
+                }
                 // What each series learnt from the player, and Forget: the per series memory
                 // above the languages chosen here, made visible.
                 item {
@@ -1131,6 +1151,36 @@ fun SettingsScreen(
                         },
                         icon = TmIcons.History,
                         onClick = { showingLearnt = true },
+                    )
+                }
+                // The sound (moved from Playback by U20), under the soundtrack's language.
+                sectionTitle { s.settingsSound }
+                // On both devices, defaulting the way each always has: a phone folds surround to stereo
+                // for its speaker and headphones, a television passes it to whatever is wired up. The
+                // switch is for the exceptions, a soundbar that cannot take the film's track or a phone
+                // plugged into a receiver. Read when a video opens, so it applies from the next one.
+                item {
+                    val downmix = AudioDownmix.wanted(downmixChoice, television = !touch)
+                    ToggleRow(
+                        title = s.settingsDownmix,
+                        subtitle = if (downmix) {
+                            s.settingsDownmixOn
+                        } else {
+                            s.settingsDownmixOff
+                        },
+                        icon = ImageVector.vectorResource(R.drawable.ic_audio_language),
+                        checked = downmix,
+                        onToggle = { scope.launch { settings.setDownmix(!downmix) } },
+                    )
+                }
+                // On by default; the player's menu has the same line for the video playing now.
+                item {
+                    ToggleRow(
+                        title = s.playerEvenVolume,
+                        subtitle = if (evenVolume) s.settingsEvenVolumeOn else s.settingsEvenVolumeOff,
+                        icon = ImageVector.vectorResource(R.drawable.ic_volume),
+                        checked = evenVolume,
+                        onToggle = { scope.launch { settings.setEvenVolume(!evenVolume) } },
                     )
                 }
 
@@ -1534,6 +1584,23 @@ fun SettingsScreen(
                 // television's remote can reach too. Left out entirely when there is nothing but
                 // internal storage to choose between.
                 item { DownloadLocationRow(onMoved = { scope.launch { refresh() } }) }
+                // Download the whole video first (moved from Playback by U20): with the other rows that
+                // decide whether a video streams or comes down first.
+                item {
+                    ToggleRow(
+                        title = s.settingsDownloadFirst,
+                        subtitle = if (downloadFirst) {
+                            s.settingsDownloadFirstOn
+                        } else {
+                            s.settingsDownloadFirstOff
+                        },
+                        icon = TmIcons.Download,
+                        checked = downloadFirst,
+                        onToggle = {
+                            scope.launch { settings.setDownloadBeforePlaying(!downloadFirst) }
+                        },
+                    )
+                }
                 // Here rather than among the downloads it acts on: it is a setting, and the
                 // Downloads page is the list. Turning it on is asked first; off deletes nothing.
                 item {
@@ -1717,6 +1784,40 @@ fun SettingsScreen(
                             end = if (touch) 16.dp else 0.dp,
                         ),
                     )
+                }
+
+                // What leaves this device and what the privacy page says about it (moved from About
+                // and help by U20): the one switch that sends anything, beside the page explaining it.
+                sectionTitle { s.settingsPrivacy }
+                item {
+                    ActionRow(
+                        title = s.aboutPrivacy,
+                        subtitle = s.settingsPrivacyDetail(device),
+                        icon = TmIcons.Lock,
+                        onClick = { openPage(About.PRIVACY, s.settingsQrPrivacyPage) },
+                    )
+                }
+                // The one setting that sends anything anywhere except Telegram and GitHub, and it is off
+                // until it is asked for. A build with no DSN compiled in has nowhere to send a report, so
+                // rather than offer a switch that does nothing, it is not drawn at all.
+                if (CrashReports.available) {
+                    item {
+                        ToggleRow(
+                            title = s.settingsCrashReports,
+                            subtitle = if (crashReports) {
+                                s.settingsCrashReportsOn
+                            } else {
+                                s.settingsCrashReportsOff
+                            },
+                            icon = TmIcons.Warning,
+                            checked = crashReports,
+                            onToggle = {
+                                val next = !crashReports
+                                scope.launch { settings.setCrashReports(next) }
+                                if (next) CrashReports.start(context, true) else CrashReports.stop()
+                            },
+                        )
+                    }
                 }
 
                 sectionTitle { s.settingsAccountSignedIn }
@@ -1952,36 +2053,6 @@ fun SettingsScreen(
                 }
                 item {
                     ActionRow(
-                        title = s.aboutPrivacy,
-                        subtitle = s.settingsPrivacyDetail(device),
-                        icon = TmIcons.Lock,
-                        onClick = { openPage(About.PRIVACY, s.settingsQrPrivacyPage) },
-                    )
-                }
-                // The one setting that sends anything anywhere except Telegram and GitHub, and it is off
-                // until it is asked for. A build with no DSN compiled in has nowhere to send a report, so
-                // rather than offer a switch that does nothing, it is not drawn at all.
-                if (CrashReports.available) {
-                    item {
-                        ToggleRow(
-                            title = s.settingsCrashReports,
-                            subtitle = if (crashReports) {
-                                s.settingsCrashReportsOn
-                            } else {
-                                s.settingsCrashReportsOff
-                            },
-                            icon = TmIcons.Warning,
-                            checked = crashReports,
-                            onToggle = {
-                                val next = !crashReports
-                                scope.launch { settings.setCrashReports(next) }
-                                if (next) CrashReports.start(context, true) else CrashReports.stop()
-                            },
-                        )
-                    }
-                }
-                item {
-                    ActionRow(
                         title = s.aboutLawfulUse,
                         subtitle = s.aboutLawfulUseDetail,
                         icon = TmIcons.Gavel,
@@ -2037,159 +2108,185 @@ fun SettingsScreen(
                 if (account != null) {
                     settingsNote { AccountHeader(account) }
                 }
-                item {
-                    ActionRow(
-                        title = titleOf(SettingsPage.Appearance),
-                        // Plain facts, "Dark · English": "System default, English right now" read
-                        // oddly beside the theme (UX review, 2026-10-27).
-                        subtitle = s.settingsPageAppearanceSummary(
-                            theme = themeChoice.label,
-                            language = com.tmplayer.ui.i18n.languageShortName(language),
-                        ),
-                        icon = TmIcons.Palette,
-                        modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Appearance)),
-                        onClick = { showPage(SettingsPage.Appearance) },
-                    )
+                if (searchOffered) {
+                    settingsNote(key = "settings-search") { SettingsSearchBox(searchQuery, onQuery = { searchQuery = it }) }
                 }
-                item {
-                    ActionRow(
-                        title = titleOf(SettingsPage.Playback),
-                        subtitle = s.settingsPagePlaybackSummary,
-                        icon = TmIcons.Play,
-                        modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Playback)),
-                        onClick = { showPage(SettingsPage.Playback) },
-                    )
+                val hits = if (searchOffered && searchQuery.isNotBlank()) {
+                    SettingsSearch.match(searchQuery, searchRows, form) { key -> s.searchText(key, touch) }
+                } else {
+                    null
                 }
-                item {
-                    val style = subtitleStyle.summary()
-                    ActionRow(
-                        title = titleOf(SettingsPage.Subtitles),
-                        // The online half is only worth a mention in a build that has it.
-                        subtitle = if (OnlineSubtitles.available) {
-                            s.settingsPageSubtitlesSummaryOnline(style)
-                        } else {
-                            style
-                        },
-                        icon = ImageVector.vectorResource(R.drawable.ic_subtitles),
-                        modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Subtitles)),
-                        onClick = { showPage(SettingsPage.Subtitles) },
-                    )
-                }
-                // Touch only, like the rows inside it: a remote has a button for each of them.
-                if (touch) {
+                if (hits != null) {
+                    // What the words found, each row with the page it lives on; a press opens the
+                    // page on the row.
+                    if (hits.isEmpty()) {
+                        settingsNote { SettingsNoteText(s.settingsSearchNone(searchQuery.trim())) }
+                    }
+                    hits.forEach { hit ->
+                        item(key = "hit-${hit.row.id}") {
+                            ActionRow(
+                                title = hit.title,
+                                subtitle = hit.page,
+                                icon = TmIcons.Search,
+                                onClick = { openHit(hit.row) },
+                            )
+                        }
+                    }
+                } else {
                     item {
                         ActionRow(
-                            title = titleOf(SettingsPage.Gestures),
-                            subtitle = s.settingsPageGesturesSummary,
-                            icon = ImageVector.vectorResource(R.drawable.ic_player_forward),
-                            modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Gestures)),
-                            onClick = { showPage(SettingsPage.Gestures) },
+                            title = titleOf(SettingsPage.Playback),
+                            subtitle = s.settingsGroupPlaybackSummary,
+                            icon = TmIcons.Play,
+                            modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Playback)),
+                            onClick = { showPage(SettingsPage.Playback) },
                         )
                     }
-                }
-                item {
-                    ActionRow(
-                        title = titleOf(SettingsPage.Library),
-                        subtitle = s.settingsPageLibrarySummary,
-                        icon = TmIcons.Grid,
-                        modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Library)),
-                        onClick = { showPage(SettingsPage.Library) },
-                    )
-                }
-                item {
-                    ActionRow(
-                        title = titleOf(SettingsPage.Home),
-                        subtitle = s.settingsPageHomeRowsSummary,
-                        icon = TmIcons.Home,
-                        modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Home)),
-                        onClick = { showPage(SettingsPage.Home) },
-                    )
-                }
-                // Android TV and Google TV only: a phone, a Fire TV and a Fire tablet have neither a
-                // Play next row nor channels, and a page of switches that do nothing there is noise.
-                if (watchNextSupported || tvChannelsSupported) {
+                    // Touch only, like the rows inside it: a remote has a button for each of them.
+                    if (touch) {
+                        item {
+                            ActionRow(
+                                title = titleOf(SettingsPage.Gestures),
+                                subtitle = s.settingsPageGesturesSummary,
+                                icon = ImageVector.vectorResource(R.drawable.ic_player_forward),
+                                modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Gestures)),
+                                onClick = { showPage(SettingsPage.Gestures) },
+                            )
+                        }
+                    }
+                    item {
+                        val style = subtitleStyle.summary()
+                        ActionRow(
+                            title = titleOf(SettingsPage.Subtitles),
+                            // The online half is only worth a mention in a build that has it.
+                            subtitle = if (OnlineSubtitles.available) {
+                                s.settingsGroupSubtitlesAudioSummaryOnline(style)
+                            } else {
+                                s.settingsGroupSubtitlesAudioSummary(style)
+                            },
+                            icon = ImageVector.vectorResource(R.drawable.ic_subtitles),
+                            modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Subtitles)),
+                            onClick = { showPage(SettingsPage.Subtitles) },
+                        )
+                    }
                     item {
                         ActionRow(
-                            title = titleOf(SettingsPage.TvHome),
-                            subtitle = s.settingsPageTvHomeSummary,
+                            title = titleOf(SettingsPage.Storage),
+                            // The free space once it has been measured, which is the number somebody
+                            // opening this page is usually after.
+                            subtitle = if (disk.totalBytes > 0) {
+                                s.settingsStorageFree(s.formatter.bytes(disk.freeBytes), s.formatter.bytes(disk.totalBytes))
+                            } else {
+                                s.settingsGroupStorageSummary
+                            },
+                            icon = TmIcons.Download,
+                            modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Storage)),
+                            onClick = { showPage(SettingsPage.Storage) },
+                        )
+                    }
+                    // A phone's only: a TV posts no notifications (CP76).
+                    if (touch) {
+                        item {
+                            ActionRow(
+                                title = titleOf(SettingsPage.Notifications),
+                                subtitle = s.settingsPageNotificationsSummaryShort,
+                                icon = TmIcons.Bell,
+                                modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Notifications)),
+                                onClick = { showPage(SettingsPage.Notifications) },
+                            )
+                        }
+                    }
+                    item {
+                        ActionRow(
+                            title = titleOf(SettingsPage.Appearance),
+                            // Plain facts, "Dark · English": "System default, English right now" read
+                            // oddly beside the theme (UX review, 2026-10-27).
+                            subtitle = s.settingsPageAppearanceSummary(
+                                theme = themeChoice.label,
+                                language = com.tmplayer.ui.i18n.languageShortName(language),
+                            ),
+                            icon = TmIcons.Palette,
+                            modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Appearance)),
+                            onClick = { showPage(SettingsPage.Appearance) },
+                        )
+                    }
+                    item {
+                        ActionRow(
+                            title = titleOf(SettingsPage.Account),
+                            // The lock's state when it is set, which is the thing worth knowing at a glance.
+                            subtitle = if (appLock.pinSet) AppLockWords.summary(appLock) else s.settingsGroupPrivacyLockSummary,
+                            icon = TmIcons.Lock,
+                            modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Account)),
+                            onClick = { showPage(SettingsPage.Account) },
+                        )
+                    }
+                    item {
+                        ActionRow(
+                            title = titleOf(SettingsPage.Library),
+                            subtitle = s.settingsPageLibrarySummary,
+                            icon = TmIcons.Grid,
+                            modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Library)),
+                            onClick = { showPage(SettingsPage.Library) },
+                        )
+                    }
+                    item {
+                        ActionRow(
+                            title = titleOf(SettingsPage.Home),
+                            subtitle = s.settingsPageHomeRowsSummary,
                             icon = TmIcons.Home,
-                            modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.TvHome)),
-                            onClick = { showPage(SettingsPage.TvHome) },
+                            modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Home)),
+                            onClick = { showPage(SettingsPage.Home) },
                         )
                     }
-                }
-                // A phone's only: a TV posts no notifications (CP76).
-                if (touch) {
+                    // Android TV and Google TV only: a phone, a Fire TV and a Fire tablet have neither a
+                    // Play next row nor channels, and a page of switches that do nothing there is noise.
+                    if (watchNextSupported || tvChannelsSupported) {
+                        item {
+                            ActionRow(
+                                title = titleOf(SettingsPage.TvHome),
+                                subtitle = s.settingsPageTvHomeSummary,
+                                icon = TmIcons.Home,
+                                modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.TvHome)),
+                                onClick = { showPage(SettingsPage.TvHome) },
+                            )
+                        }
+                    }
+                    item {
+                        // An update waiting is said here as well as inside, in the same colour, so it
+                        // is not hidden one level down.
+                        val offered = updateState.release
+                        ActionRow(
+                            title = titleOf(SettingsPage.About),
+                            subtitle = if (offered != null) {
+                                UpdateWords.settingsRow(offered)
+                            } else {
+                                s.settingsGroupAboutSummary(Updates.installedVersion)
+                            },
+                            icon = TmIcons.Info,
+                            tint = if (offered != null) Tone.caution else Color.Unspecified,
+                            modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.About)),
+                            onClick = { showPage(SettingsPage.About) },
+                        )
+                    }
+                    // The setup's answers again, last: each also lives on its own page, so this is a
+                    // way back through them rather than a page to open first (UX review, 2026-10-27).
                     item {
                         ActionRow(
-                            title = titleOf(SettingsPage.Notifications),
-                            subtitle = s.settingsPageNotificationsSummaryShort,
-                            icon = TmIcons.Bell,
-                            modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Notifications)),
-                            onClick = { showPage(SettingsPage.Notifications) },
+                            title = titleOf(SettingsPage.SetupChoices),
+                            subtitle = s.setupChoicesSummary,
+                            icon = TmIcons.Checklist,
+                            modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.SetupChoices)),
+                            onClick = {
+                                cameFromStep = null
+                                showPage(SettingsPage.SetupChoices)
+                            },
                         )
                     }
-                }
-                item {
-                    ActionRow(
-                        title = titleOf(SettingsPage.Storage),
-                        // The free space once it has been measured, which is the number somebody
-                        // opening this page is usually after.
-                        subtitle = if (disk.totalBytes > 0) {
-                            s.settingsStorageFree(s.formatter.bytes(disk.freeBytes), s.formatter.bytes(disk.totalBytes))
-                        } else {
-                            s.settingsPageStorageSummary
-                        },
-                        icon = TmIcons.Download,
-                        modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Storage)),
-                        onClick = { showPage(SettingsPage.Storage) },
-                    )
-                }
-                item {
-                    ActionRow(
-                        title = titleOf(SettingsPage.Account),
-                        // The lock's state when it is set, which is the thing worth knowing at a glance.
-                        subtitle = if (appLock.pinSet) AppLockWords.summary(appLock) else s.settingsPageAccountSummary,
-                        icon = TmIcons.Lock,
-                        modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Account)),
-                        onClick = { showPage(SettingsPage.Account) },
-                    )
-                }
-                item {
-                    // An update waiting is said here as well as inside, in the same colour, so it
-                    // is not hidden one level down.
-                    val offered = updateState.release
-                    ActionRow(
-                        title = titleOf(SettingsPage.About),
-                        subtitle = if (offered != null) {
-                            UpdateWords.settingsRow(offered)
-                        } else {
-                            s.settingsPageAboutBackupSummary(Updates.installedVersion)
-                        },
-                        icon = TmIcons.Info,
-                        tint = if (offered != null) Tone.caution else Color.Unspecified,
-                        modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.About)),
-                        onClick = { showPage(SettingsPage.About) },
-                    )
-                }
-                // The setup's answers again, last: each also lives on its own page, so this is a
-                // way back through them rather than a page to open first (UX review, 2026-10-27).
-                item {
-                    ActionRow(
-                        title = titleOf(SettingsPage.SetupChoices),
-                        subtitle = s.setupChoicesSummary,
-                        icon = TmIcons.Checklist,
-                        modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.SetupChoices)),
-                        onClick = {
-                            cameFromStep = null
-                            showPage(SettingsPage.SetupChoices)
-                        },
-                    )
                 }
             }
         } }
     }
-    }
+    } }
 
     val flow = pinFlow
     if (flow != null) {
@@ -2968,7 +3065,8 @@ internal fun SectionTitle(text: String) {
 @Composable
 private fun ThemePicker(current: ThemeChoice, onPick: (ThemeChoice) -> Unit) {
     val options = ThemeChoice.entries
-    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
+    // No title on a phone (the segments say it), but the search still finds it as Theme.
+    Column(Modifier.seekable(LocalStrings.current.settingsTheme).fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
             options.forEachIndexed { index, choice ->
                 SegmentedButton(
@@ -3010,6 +3108,7 @@ private fun AccentRow(
     val touch = isTouch()
     Column(
         Modifier
+            .seekable(s.settingsAccent)
             .fillMaxWidth()
             .then(
                 if (touch) {
@@ -3066,7 +3165,8 @@ private fun StorageCard(
     val s = LocalStrings.current
     val touch = isTouch()
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        // Found by the search as Free up space, its button.
+        modifier = Modifier.seekable(s.downloadsFreeUpSpace).fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Tone.surface),
         shape = if (touch) M3Theme.shapes.large else RoundedCornerShape(Corner.Large),
     ) {
@@ -3169,7 +3269,7 @@ internal fun StepperRow(
                 }
             },
             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-            modifier = modifier.fillMaxWidth().heightIn(min = 56.dp),
+            modifier = modifier.seekable(title).fillMaxWidth().heightIn(min = 56.dp),
         )
         return
     }
@@ -3187,7 +3287,7 @@ internal fun StepperRow(
     val dim = if (focused) Tone.onFocusFill.copy(alpha = 0.8f) else Tone.muted
 
     Row(
-        modifier
+        modifier.seekable(title)
             .fillMaxWidth()
             .heightIn(min = 64.dp)
             .clip(RoundedCornerShape(Corner.Large))
@@ -3346,7 +3446,7 @@ private fun SignOutButton(label: String, onClick: () -> Unit) {
     val tv = !isTouch()
     val interactions = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
-    Box(Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 12.dp)) {
+    Box(Modifier.seekable(label).fillMaxWidth().padding(top = 12.dp, bottom = 12.dp)) {
         androidx.compose.material3.Button(
             onClick = onClick,
             interactionSource = interactions,
@@ -3378,7 +3478,7 @@ internal fun ActionRow(
 ) {
     val iconTint = if (tint == Color.Unspecified) Tone.accent else tint
     FocusRow(
-        modifier = modifier,
+        modifier = modifier.seekable(title),
         onClick = onClick,
         headline = {
             M3Text(title, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -3422,7 +3522,7 @@ internal fun ToggleRow(
     val tick = com.tmplayer.ui.components.rememberToggleTick()
     val toggle = { tick(!checked); onToggle() }
     FocusRow(
-        modifier = modifier,
+        modifier = modifier.seekable(title),
         onClick = toggle,
         headline = { M3Text(title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
         supporting = { M3Text(subtitle, maxLines = SUPPORTING_LINES, overflow = TextOverflow.Ellipsis) },
@@ -3748,6 +3848,9 @@ private fun NoticeToggleRow(
         },
     )
 }
+
+/** How long the row a search found stays lit once its page has opened on it. */
+private const val SEEK_GLOW_MS = 1_600L
 
 /** How long Undo stands in for Back to the defaults. */
 private const val APPEARANCE_UNDO_MS = 10_000L

@@ -1,5 +1,6 @@
 package com.tmplayer.desktop.ui
 
+import com.tmplayer.ui.settings.seekable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -183,6 +184,7 @@ internal fun Setting(
         Modifier
             .layoutId(SettingsPart.Row)
             .then(modifier)
+            .seekable(title)
             .fillMaxWidth()
             .padding(ROW_GAP)
             .clip(shape)

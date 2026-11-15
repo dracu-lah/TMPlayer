@@ -63,8 +63,8 @@ internal fun LazyListScope.sectionTitle(text: @Composable () -> String) {
 }
 
 /** Small print under a group, outside its card. */
-internal fun LazyListScope.settingsNote(content: @Composable LazyItemScope.() -> Unit) {
-    item(contentType = GroupBreak, content = content)
+internal fun LazyListScope.settingsNote(key: Any? = null, content: @Composable LazyItemScope.() -> Unit) {
+    item(key = key, contentType = GroupBreak, content = content)
 }
 
 /**

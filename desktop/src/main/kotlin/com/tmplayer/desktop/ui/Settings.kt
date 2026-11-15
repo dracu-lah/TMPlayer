@@ -68,6 +68,15 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.tmplayer.data.AppLockSettings
+import com.tmplayer.data.DeviceForm
+import com.tmplayer.data.SettingsGroup
+import com.tmplayer.data.SettingsMap
+import com.tmplayer.data.SettingsNeed
+import com.tmplayer.data.SettingsRow
+import com.tmplayer.data.SettingsSearch
+import com.tmplayer.ui.settings.LocalSettingsSeek
+import com.tmplayer.ui.settings.SettingsSeek
+import com.tmplayer.ui.settings.seekable
 import com.tmplayer.data.DiskInfo
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.StorageRelocationPlan
@@ -103,12 +112,16 @@ import kotlinx.coroutines.withContext
  * player, which is what the phone's gestures are for a finger.
  */
 /**
- * Settings' pages, in the list's order (2026-11-01: App lock, Connected devices and Sign out are
- * one page, [Account], and Setup choices is last, as Redo setup choices, so the wide layout opens
- * on Appearance).
+ * Settings' pages, in the list's order: grouped by what the viewer is trying to do (U20,
+ * 2026-11-15), the same names and order as the shared [SettingsGroup], less the phone's Gestures
+ * and the television's launcher. [Subtitles] is Subtitles and audio, [Account] Privacy and lock;
+ * Setup choices is last, as Redo setup choices, so the wide layout opens on Playback.
  */
 enum class SettingsCategory {
-    Appearance, Playback, Subtitles, Mouse, Library, Home, Notifications, Storage, Account, About, SetupChoices;
+    Playback, Mouse, Subtitles, Storage, Notifications, Appearance, Account, Library, Home, About, SetupChoices;
+
+    /** The shared group this page is. */
+    val group: SettingsGroup get() = SettingsGroup.valueOf(name)
 
     internal val icon: androidx.compose.ui.graphics.vector.ImageVector
         get() = when (this) {
@@ -126,12 +139,15 @@ enum class SettingsCategory {
         }
 
     internal companion object {
-        /** The page a setup step's settings also live on, for Setup choices' "Also in". */
-        fun holding(step: SetupStep): SettingsCategory? = when (step) {
-            SetupStep.Posters -> Library
-            SetupStep.Storage -> Storage
-            SetupStep.Performance, SetupStep.MobileData, SetupStep.Device, SetupStep.CrashReports -> null
-        }
+        /**
+         * The page a setup step's settings also live on, for Setup choices' "Also in": the shared
+         * links (SettingsLink), which SettingsMapTest holds to rows the desktop has.
+         */
+        fun holding(step: SetupStep): SettingsCategory? =
+            com.tmplayer.ui.settings.settingsLinkFor(step, DeviceForm.Desktop)?.let { of(it.group) }
+
+        /** The page for [group]; null for the phone's and the television's own pages. */
+        fun of(group: SettingsGroup): SettingsCategory? = entries.firstOrNull { it.name == group.name }
     }
 }
 
@@ -155,13 +171,13 @@ internal fun titleOf(category: SettingsCategory): String {
         SettingsCategory.SetupChoices -> s.settingsRedoSetupChoices
         SettingsCategory.Appearance -> s.settingsPageAppearance
         SettingsCategory.Playback -> s.settingsPlayback
-        SettingsCategory.Subtitles -> s.settingsSubtitles
+        SettingsCategory.Subtitles -> s.settingsPageSubtitlesAudio
         SettingsCategory.Mouse -> s.settingsPageMouse
         SettingsCategory.Library -> s.settingsLibrary
         SettingsCategory.Home -> s.settingsPageHome
         SettingsCategory.Notifications -> s.settingsPageNotifications
         SettingsCategory.Storage -> s.settingsPageStorage
-        SettingsCategory.Account -> s.settingsPageAccount
+        SettingsCategory.Account -> s.settingsPagePrivacyLock
         SettingsCategory.About -> s.settingsPageAbout
     }
 }
@@ -224,6 +240,22 @@ fun SettingsPage(
         onInitialTaken()
     }
     val open = openName?.let { name -> SettingsCategory.entries.firstOrNull { it.name == name } }
+    // The search box over the list (U20): its words, kept while a page found by it is open, and
+    // the row it is taking the viewer to.
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    val seek = remember { SettingsSeek() }
+    val searchFocus = remember { FocusRequester() }
+    val strings = LocalStrings.current
+    LaunchedEffect(open, seek.titles) {
+        if (open == null) {
+            seek.clear()
+            return@LaunchedEffect
+        }
+        if (seek.titles.isEmpty()) return@LaunchedEffect
+        seek.target.arrive()
+        kotlinx.coroutines.delay(SEEK_GLOW_MS)
+        seek.clear()
+    }
     // Setup choices' "Also in": the row to bring the viewer to once its page is open, and the step
     // to come back to, since Back from that page returns to Setup choices.
     var jumpTo by remember { mutableStateOf<SetupStep?>(null) }
@@ -268,6 +300,10 @@ fun SettingsPage(
             .fillMaxSize()
             .tracksKeyboardFocus(keyboard)
             .onKeyEvent { event ->
+                // Ctrl+F (Cmd+F) goes to the search box, as it does in a browser's settings.
+                if (event.type == KeyEventType.KeyDown && (event.isCtrlPressed || event.isMetaPressed) && event.key == Key.F) {
+                    return@onKeyEvent runCatching { searchFocus.requestFocus() }.isSuccess
+                }
                 if (event.type != KeyEventType.KeyDown || event.isCtrlPressed || event.isMetaPressed || event.isAltPressed) return@onKeyEvent false
                 when (event.key) {
                     Key.Escape -> escape.value?.let { back ->
@@ -317,7 +353,7 @@ fun SettingsPage(
                 returnTo?.let { runCatching { categoryFocus.getValue(it).requestFocus() } }
             }
         }
-        CompositionLocalProvider(LocalKeyboardFocus provides keyboard) {
+        CompositionLocalProvider(LocalKeyboardFocus provides keyboard, LocalSettingsSeek provides seek) {
             val list: @Composable () -> Unit = {
                 CategoryList(
                     state = state,
@@ -331,6 +367,18 @@ fun SettingsPage(
                         cameFromStep = null
                         jumpTo = null
                         openName = category.name
+                    },
+                    query = searchQuery,
+                    onQuery = { searchQuery = it },
+                    searchFocus = searchFocus,
+                    onHit = { row ->
+                        SettingsCategory.of(row.group)?.let { category ->
+                            aboutView = null
+                            cameFromStep = null
+                            jumpTo = null
+                            seek.aim(row, DeviceForm.Desktop, strings)
+                            openName = category.name
+                        }
                     },
                 )
             }
@@ -459,6 +507,10 @@ private fun CategoryList(
     selected: SettingsCategory?,
     focus: Map<SettingsCategory, FocusRequester>,
     onOpen: (SettingsCategory) -> Unit,
+    query: String = "",
+    onQuery: (String) -> Unit = {},
+    searchFocus: FocusRequester = remember { FocusRequester() },
+    onHit: (SettingsRow) -> Unit = {},
 ) {
     val s = LocalStrings.current
     val settings = state.settings
@@ -476,6 +528,40 @@ private fun CategoryList(
     val offered = if (state.extras.updates != null) updateState.release else null
 
     if (account != null) AccountHeader(account)
+    val searchRows = desktopSearchRows(state)
+    val searching = SettingsSearch.offered(DeviceForm.Desktop, searchRows.size) && query.isNotBlank()
+    if (SettingsSearch.offered(DeviceForm.Desktop, searchRows.size)) {
+        SearchField(
+            query = query,
+            onQuery = { onQuery(it.take(MAX_QUERY)) },
+            placeholder = s.settingsSearch,
+            focus = searchFocus,
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp),
+        )
+    }
+    if (searching) {
+        val hits = SettingsSearch.match(query, searchRows, DeviceForm.Desktop) { key ->
+            s.messages.format(key, mapOf("device" to "desktop", "form" to "desktop"))
+        }
+        if (hits.isEmpty()) {
+            Text(
+                s.settingsSearchNone(query.trim()),
+                style = MaterialTheme.typography.bodyMedium,
+                color = Tone.muted,
+                modifier = Modifier.padding(16.dp),
+            )
+        } else {
+            // What the words found, each row with the page it lives on; a click opens the page on it.
+            SettingsColumn(Modifier.padding(top = 4.dp), dividerStart = SettingsDividerStart) {
+                hits.forEach { hit ->
+                    Setting(hit.title, hit.page, icon = TmIcons.Search, onClick = { onHit(hit.row) }) {
+                        RowTail(null, RowEnd.Chevron)
+                    }
+                }
+            }
+        }
+        return
+    }
     com.tmplayer.ui.onboarding.DeviceFitSettingsCard(
         settings,
         onApplied = { toast(s.deviceApplied) },
@@ -487,14 +573,14 @@ private fun CategoryList(
                 SettingsCategory.SetupChoices -> s.setupChoicesSummary
                 // Plain facts, "Dark · English" (UX review, 2026-10-27).
                 SettingsCategory.Appearance -> s.settingsPageAppearanceSummary(theme = theme.label, language = com.tmplayer.ui.i18n.languageShortName(language))
-                SettingsCategory.Playback -> s.settingsPagePlaybackSummaryDesktop
+                SettingsCategory.Playback -> s.settingsGroupPlaybackSummaryDesktop
                 SettingsCategory.Subtitles -> {
                     val style = listOf(
                         subtitleStyle.size.label,
                         if (subtitleStyle.box) s.settingsSubtitleStyleBox else s.settingsSubtitleStyleNoBox,
                         subtitleStyle.position.label,
                     ).joinToString("  ·  ")
-                    if (OnlineSubtitles.available) s.settingsPageSubtitlesSummaryOnline(style) else style
+                    if (OnlineSubtitles.available) s.settingsGroupSubtitlesAudioSummaryOnline(style) else s.settingsGroupSubtitlesAudioSummary(style)
                 }
                 SettingsCategory.Mouse -> s.settingsPageMouseSummary
                 SettingsCategory.Library -> s.settingsPageLibrarySummary
@@ -502,11 +588,11 @@ private fun CategoryList(
                 SettingsCategory.Notifications -> settingsSummaryOverride(category) ?: s.settingsPageNotificationsSummaryShort
                 SettingsCategory.Storage -> disk?.takeIf { it.totalBytes > 0 }?.let {
                     s.settingsStorageFree(StorageRelocationPlan.size(it.freeBytes), StorageRelocationPlan.size(it.totalBytes))
-                } ?: s.settingsPageStorageSummary
-                SettingsCategory.Account -> if (appLock.pinSet) AppLockWords.summary(appLock) else s.settingsPageAccountSummary
+                } ?: s.settingsGroupStorageSummaryDesktop
+                SettingsCategory.Account -> if (appLock.pinSet) AppLockWords.summary(appLock) else s.settingsGroupPrivacyLockSummary
                 // An update waiting is said here as well as inside, in the same colour, so it is
                 // not hidden one level down.
-                SettingsCategory.About -> offered?.let { UpdateWords.settingsRow(it) } ?: s.settingsPageAboutBackupSummary(version)
+                SettingsCategory.About -> offered?.let { UpdateWords.settingsRow(it) } ?: s.settingsGroupAboutSummary(version)
             }
             val caution = category == SettingsCategory.About && offered != null
             Setting(
@@ -564,6 +650,34 @@ internal class SettingsPages(
         }
     }
 }
+
+/**
+ * The rows the desktop's search looks through: the desktop's own, less those this build or this
+ * account does not draw (U20).
+ */
+@Composable
+private fun desktopSearchRows(state: ShellState): List<SettingsRow> {
+    val updates = state.extras.updates != null
+    return remember(updates) {
+        SettingsMap.on(DeviceForm.Desktop).filter { row ->
+            when (row.need) {
+                null, SettingsNeed.Advanced -> true
+                SettingsNeed.Updates -> updates
+                SettingsNeed.CrashReports -> com.tmplayer.desktop.DesktopCrashReports.available
+                SettingsNeed.OnlineSubtitles -> OnlineSubtitles.current?.inBuild == true
+                SettingsNeed.OnlineMetadata -> com.tmplayer.online.OnlineMetadata.current != null
+                // The phone's and the television's, and what the viewer has.
+                else -> false
+            }
+        }
+    }
+}
+
+/** A query longer than any title is somebody's paste, not a search. */
+private const val MAX_QUERY = 80
+
+/** How long the row a search found stays lit once its page has opened on it. */
+private const val SEEK_GLOW_MS = 1_600L
 
 /** The narrowest window that still has room for the list and a page side by side. */
 private val TWO_PANE_FROM = 960.dp
@@ -747,7 +861,7 @@ internal fun SignOutButton(label: String, onClick: () -> Unit) {
     androidx.compose.material3.Button(
         onClick = onClick,
         interactionSource = interactions,
-        modifier = Modifier.fillMaxWidth().padding(top = 20.dp).height(48.dp).keyboardRing(interactions, CircleShape),
+        modifier = Modifier.seekable(label).fillMaxWidth().padding(top = 20.dp).height(48.dp).keyboardRing(interactions, CircleShape),
         colors = androidx.compose.material3.ButtonDefaults.buttonColors(
             containerColor = Tone.danger,
             contentColor = MaterialTheme.colorScheme.onError,

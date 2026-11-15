@@ -1,5 +1,6 @@
 package com.tmplayer.desktop.ui
 
+import com.tmplayer.ui.settings.seekable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -106,6 +107,7 @@ internal fun StorageGroup(state: ShellState, jumps: Map<com.tmplayer.ui.onboardi
     val moving by DesktopStorage.relocationProgress.collectAsState()
     val removeAfterWatching by settings.removeAfterWatching.collectAsState(initial = false)
     val lowStorage by settings.lowStorageMode.collectAsState(initial = false)
+    val downloadFirst by settings.downloadBeforePlaying.collectAsState(initial = false)
     var refresh by remember { mutableIntStateOf(0) }
     var figures by remember { mutableStateOf<StorageFigures?>(null) }
     var dialog by remember { mutableStateOf<StorageDialog?>(null) }
@@ -182,6 +184,11 @@ internal fun StorageGroup(state: ShellState, jumps: Map<com.tmplayer.ui.onboardi
                 onMore = { setLimit(state, DesktopSettings.stepCacheLimit(desktop.cacheLimitBytes, 1)) },
             )
         }
+    }
+    // Download the whole video first (moved from Playback by U20): with the other rows that decide
+    // whether a video streams or comes down first.
+    Toggle(s.settingsDownloadFirst, if (downloadFirst) s.settingsDownloadFirstOn else s.settingsDownloadFirstOff, downloadFirst, icon = TmIcons.Download) {
+        scope.launch { settings.setDownloadBeforePlaying(it) }
     }
     // Here rather than among the downloads it acts on: on is asked first, since from then on files
     // go without a press; off deletes nothing.
@@ -281,7 +288,9 @@ internal fun StorageCard(
     result: String? = null,
     onFreeUp: () -> Unit,
 ) {
-    Surface(shape = RoundedCornerShape(Corner.Large), color = Tone.surface, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+    // Found by the search as Free up space, its button.
+    val freeUp = LocalStrings.current.downloadsFreeUpSpace
+    Surface(shape = RoundedCornerShape(Corner.Large), color = Tone.surface, modifier = Modifier.seekable(freeUp).fillMaxWidth().padding(vertical = 4.dp)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             com.tmplayer.ui.components.StorageOverview(
                 figures = figures?.chart() ?: com.tmplayer.data.StorageChart.Figures(0, 0, 0, 0, 0, 0, 0),

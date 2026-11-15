@@ -38,42 +38,43 @@ import kotlinx.coroutines.launch
  *
  * "Open videos in another app" is not a row of its own: it lives in [DefaultPlayerRow] (one home
  * per job), whose sheet lists TMPlayer, Ask every time and the installed players, and resets to
- * Ask. The player engine offers VLC only where [EngineAvailability] says so. The two switches
- * beside it are stored and travel in a backup. Advanced is collapsed ([advancedOpen]) and holds the
+ * Ask. The player engine offers VLC only where [EngineAvailability] says so, and with the switch
+ * beside it is drawn only there ([vlcShown]); the decoder sits between them. Advanced is collapsed ([advancedOpen]) and holds the
  * switches most people never need; each is left out where the device cannot use it, not greyed.
  */
 internal fun LazyListScope.playerRows(
     settings: SettingsStore,
     touch: Boolean,
     advancedOpen: Boolean,
+    /**
+     * Whether the engine rows are drawn: VLC is offered here, or is the stored choice (so the row
+     * can say it is unavailable and be put back). Without VLC, Automatic and ExoPlayer are the one
+     * engine and there is nothing to switch to, so both rows would do nothing (U20).
+     */
+    vlcShown: Boolean,
     onToggleAdvanced: () -> Unit,
+    /** The decoder, beside the engine it is part of. */
+    decoderRow: LazyListScope.() -> Unit,
 ) {
     item { DefaultPlayerRow(settings) }
-    item { EngineRow(settings) }
-    item {
-        val s = LocalStrings.current
-        val scope = rememberCoroutineScope()
-        val on by settings.switchEngineOnError.collectAsStateWithLifecycle(initialValue = true)
-        ToggleRow(
-            title = s.settingsEngineSwitch,
-            subtitle = if (on) s.settingsEngineSwitchOn else s.settingsEngineSwitchOff,
-            icon = TmIcons.Refresh,
-            checked = on,
-            onToggle = { scope.launch { settings.setSwitchEngineOnError(!on) } },
-        )
+    if (vlcShown) item { EngineRow(settings) }
+    decoderRow()
+    if (vlcShown) {
+        item {
+            val s = LocalStrings.current
+            val scope = rememberCoroutineScope()
+            val on by settings.switchEngineOnError.collectAsStateWithLifecycle(initialValue = true)
+            ToggleRow(
+                title = s.settingsEngineSwitch,
+                subtitle = if (on) s.settingsEngineSwitchOn else s.settingsEngineSwitchOff,
+                icon = TmIcons.Refresh,
+                checked = on,
+                onToggle = { scope.launch { settings.setSwitchEngineOnError(!on) } },
+            )
+        }
     }
-    item {
-        val s = LocalStrings.current
-        val scope = rememberCoroutineScope()
-        val on by settings.suggestVlc.collectAsStateWithLifecycle(initialValue = true)
-        ToggleRow(
-            title = s.settingsEngineSuggestVlc,
-            subtitle = if (on) s.settingsEngineSuggestVlcOn else s.settingsEngineSuggestVlcOff,
-            icon = TmIcons.Info,
-            checked = on,
-            onToggle = { scope.launch { settings.setSuggestVlc(!on) } },
-        )
-    }
+    // "Suggest VLC when playback cannot keep up" was here: stored, but read by nothing, so a
+    // switch that changed nothing (U20). Its key is still read for old backups.
     item {
         val s = LocalStrings.current
         ActionRow(

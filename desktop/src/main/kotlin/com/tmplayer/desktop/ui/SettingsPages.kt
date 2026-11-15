@@ -196,8 +196,6 @@ internal fun PlaybackRows(state: ShellState, jumps: Map<SetupStep, JumpTarget>) 
     val scope = rememberCoroutineScope()
     val autoplay by settings.autoplayNext.collectAsState(initial = true)
     val detailFirst by settings.detailFirst.collectAsState(initial = true)
-    val downloadFirst by settings.downloadBeforePlaying.collectAsState(initial = false)
-    val trackPrefs by settings.trackPreferences.collectAsState(initial = TrackPreferences())
     val touchPrefs by settings.touchPrefs.collectAsState(initial = TouchPrefs())
     val resumeRewindMs by settings.resumeRewindMs.collectAsState(initial = ResumeRewind.DEFAULT_MS)
     val desktop by state.extras.prefs.state.collectAsState()
@@ -211,19 +209,9 @@ internal fun PlaybackRows(state: ShellState, jumps: Map<SetupStep, JumpTarget>) 
         detailFirst,
         icon = TmIcons.Info,
     ) { on -> scope.launch { settings.setDetailFirst(on) } }
-    Toggle(s.settingsDownloadFirst, if (downloadFirst) s.settingsDownloadFirstOn else s.settingsDownloadFirstOff, downloadFirst, icon = TmIcons.Download) {
-        scope.launch { settings.setDownloadBeforePlaying(it) }
-    }
-    // Low storage mode is on the Storage page, with the rest of what decides the room TMPlayer
-    // takes (user, 2026-10-22).
-    Toggle(s.settingsDownmix, if (desktop.downmix) s.settingsDownmixOn else s.settingsDownmixOff, desktop.downmix, icon = TmIcons.VolumeUp) { on ->
-        state.extras.prefs.update { it.copy(downmix = on) }
-    }
-    val evenVolume by settings.evenVolume.collectAsState(initial = true)
-    Toggle(s.playerEvenVolume, if (evenVolume) s.settingsEvenVolumeOn else s.settingsEvenVolumeOff, evenVolume, icon = TmIcons.VolumeUp) { on ->
-        scope.launch { settings.setEvenVolume(on) }
-    }
-    AudioLanguageSetting(settings, trackPrefs, scope)
+    // Low storage mode and Download the whole video first are on Storage and downloads, with the
+    // rest of what decides the room TMPlayer takes (user, 2026-10-22; U20); the sound and the
+    // audio language are on Subtitles and audio.
     Toggle(
         s.settingsSoftwareDecoding,
         if (DesktopSettings.defaultSoftwareDecoding()) s.settingsSoftwareDecodingLinux else s.settingsSoftwareDecodingDetail,
@@ -253,7 +241,11 @@ internal fun PlaybackRows(state: ShellState, jumps: Map<SetupStep, JumpTarget>) 
     }
 }
 
-/** Subtitles: how they look, when they come on and in which language, then Online subtitles. */
+/**
+ * Subtitles and audio: how subtitles look, when they come on and in which language, the
+ * soundtrack's language beside them (one set of track languages, U20), the sound, then Online
+ * subtitles.
+ */
 @Composable
 internal fun SubtitlesRows(state: ShellState) {
     val s = LocalStrings.current
@@ -271,7 +263,18 @@ internal fun SubtitlesRows(state: ShellState) {
         TmIcons.Subtitles,
     ) { styling = true }
     SubtitleLanguageSettings(settings, trackPrefs, scope)
+    AudioLanguageSetting(settings, trackPrefs, scope)
     LearntLanguagesSetting(settings, scope)
+    // The sound (moved from Playback by U20), under the soundtrack's language.
+    Group(s.settingsSound)
+    val desktop by state.extras.prefs.state.collectAsState()
+    Toggle(s.settingsDownmix, if (desktop.downmix) s.settingsDownmixOn else s.settingsDownmixOff, desktop.downmix, icon = TmIcons.VolumeUp) { on ->
+        state.extras.prefs.update { it.copy(downmix = on) }
+    }
+    val evenVolume by settings.evenVolume.collectAsState(initial = true)
+    Toggle(s.playerEvenVolume, if (evenVolume) s.settingsEvenVolumeOn else s.settingsEvenVolumeOff, evenVolume, icon = TmIcons.VolumeUp) { on ->
+        scope.launch { settings.setEvenVolume(on) }
+    }
     OnlineSubtitlesGroup()
 
     if (styling) SubtitleStyleDialog(settings, subtitleStyle, onClose = { styling = false })
@@ -567,6 +570,30 @@ internal fun AccountRows(state: ShellState, onPin: (DesktopPinFlow) -> Unit, onK
         color = Tone.muted,
         modifier = Modifier.padding(horizontal = SETTING_INSET),
     )
+    // What leaves this computer and what the privacy page says about it (moved from About and help
+    // by U20): the one switch that sends anything, beside the page explaining it.
+    Group(s.settingsPrivacy)
+    Action(s.settingsPrivacy, s.settingsPrivacyComputer, TmIcons.Lock, end = RowEnd.External) {
+        OpenExternal.browse(About.PRIVACY)
+    }
+    // The one setting that sends anything anywhere but Telegram and GitHub, off until it is asked
+    // for (CP102g). A build with no DSN has nowhere to send a report, so the row is not drawn.
+    if (com.tmplayer.desktop.DesktopCrashReports.available) {
+        val crashReports by settings.crashReports.collectAsState(initial = false)
+        Toggle(
+            s.settingsCrashReports,
+            if (crashReports) s.settingsCrashReportsOn else s.settingsCrashReportsOff,
+            crashReports,
+            icon = TmIcons.Warning,
+        ) { on ->
+            scope.launch {
+                runCatching { settings.setCrashReports(on) }
+                withContext(Dispatchers.IO) {
+                    if (on) com.tmplayer.desktop.DesktopCrashReports.start(true) else com.tmplayer.desktop.DesktopCrashReports.stop()
+                }
+            }
+        }
+    }
     Group(s.settingsAccountSignedIn)
     // Where the account is signed in, and ending a session (CP83): behind this page's PIN.
     Action(s.settingsDevices, s.settingsDevicesDetail, TmIcons.Phone) { com.tmplayer.ui.settings.DevicesScreenState.open = true }
@@ -759,27 +786,6 @@ internal fun AboutRows(state: ShellState, version: String, onShowAbout: () -> Un
                 val file = withContext(Dispatchers.IO) { runCatching { saveNameCheck() } }
                 file.onSuccess { toast(if (it == null) s.logsNameReportEmpty else s.logsNameReportSaved(it.absolutePath)) }
                     .onFailure { toast(s.logsFailed) }
-            }
-        }
-    }
-    Action(s.settingsPrivacy, s.settingsPrivacyComputer, TmIcons.Lock, end = RowEnd.External) {
-        OpenExternal.browse(About.PRIVACY)
-    }
-    // The one setting that sends anything anywhere but Telegram and GitHub, off until it is asked
-    // for (CP102g). A build with no DSN has nowhere to send a report, so the row is not drawn.
-    if (com.tmplayer.desktop.DesktopCrashReports.available) {
-        val crashReports by settings.crashReports.collectAsState(initial = false)
-        Toggle(
-            s.settingsCrashReports,
-            if (crashReports) s.settingsCrashReportsOn else s.settingsCrashReportsOff,
-            crashReports,
-            icon = TmIcons.Warning,
-        ) { on ->
-            scope.launch {
-                runCatching { settings.setCrashReports(on) }
-                withContext(Dispatchers.IO) {
-                    if (on) com.tmplayer.desktop.DesktopCrashReports.start(true) else com.tmplayer.desktop.DesktopCrashReports.stop()
-                }
             }
         }
     }

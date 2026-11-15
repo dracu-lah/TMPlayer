@@ -349,3 +349,87 @@ in all 21 other catalogs, so it stays in `en.json` until the user removes it fro
 Outside Settings the same search finds about 200 more (`browse`, `downloads`, `grid`, `groups`,
 and so on), all in every catalog; `player.zip_too_large` is in no catalog and no code (left for the
 player work in flight).
+
+## After: the groups (U20, step 2)
+
+One order on the phone, the television and the desktop (`SettingsGroup`, core), each page with a
+one-line summary in the list (`settings.group_*_summary`, or a live value: the free space, the
+lock's state, an update waiting):
+
+| Page | What it is for | Forms |
+| --- | --- | --- |
+| Playback | how a video starts and plays: autoplay, the default player, the engine and decoder, the controls, rewinding on resume, Advanced | P T D |
+| Player gestures / Mouse in the player | the player's touch gestures, or the mouse | P / D |
+| Subtitles and audio | subtitle look and languages, the audio language, remembered languages, Sound (downmix, even volume), Online subtitles | P T D |
+| Storage and downloads | the free space, where downloads go, Download the whole video first, Remove after watching, Low storage mode, Wi-Fi only, Save mobile data, Pause downloads while playing | P T D |
+| Notifications | every notification, one switch each | P D |
+| Appearance and language | theme, colours, type, language, layout, size, motion | P T D |
+| Privacy and lock | App lock, Privacy (the privacy page, Send crash reports), Signed in (devices, Sign out) | P T D |
+| Library | which videos show, the last chat, Lists, Posters and details | P T D |
+| Home, Launcher | Home's rows; the TV launcher's rows | P T D, T |
+| About and help | version and updates, backup, help and logs, support, About | P T D |
+| Redo setup choices | the setup's answers, each with "Also in" its page | P T D |
+
+`SettingsMap` (core) lists every row by page with its title and detail keys, the forms it is on
+and what it needs to be drawn (a build feature, a device feature, or the viewer's own state). It
+is the search box's index and the deep link test's list, and the screen tests hold it to the
+pages both ways: `SettingsMapScreenTest` (phone and TV, every page), `SettingsMapDesktopTest`.
+
+Search: a box over the list on the phone and the desktop (Ctrl+F there), shown past 25 rows
+(`SettingsSearch`, table tested). It matches word starts in titles, the lines under them and the
+page names, accents folded, and opens the page on the row, lit for a moment. A television has no
+box: its pages are a few D-pad presses apart and typing with a remote costs more than walking.
+
+## Old row to new place
+
+| Row | Before | After |
+| --- | --- | --- |
+| Preferred audio language | Playback | Subtitles and audio, under the subtitle language |
+| Downmix to stereo, Even out volume | Playback | Subtitles and audio, Sound |
+| Download the whole video first | Playback | Storage and downloads, under the location |
+| Privacy (the privacy page) | About and help, Help | Privacy and lock, Privacy |
+| Send crash reports | About and help, Help | Privacy and lock, Privacy |
+| Decoder | Playback, first | Playback, beside the player engine |
+| Player engine, Switch engine on decoder error | Playback | Playback, only where VLC is offered or chosen |
+| Suggest VLC when playback cannot keep up | Playback | removed (read by nothing) |
+| Page list | Appearance first | Playback first, the groups' order on every form |
+| Subtitles | "Subtitles" | "Subtitles and audio" |
+| Account and security | "Account and security" | "Privacy and lock" |
+| Setup choices, Mobile data on a TV | "Also in" Storage, which has no such row there | no link on a TV |
+
+Every other row stays where it was. No stored key changed: each row reads and writes the same
+DataStore name as before, so a backup from before U20 restores into the same rows
+(`BackupCoverageTest` unchanged).
+
+## Links into Settings (U20, step 3)
+
+`SettingsLink` (core) lists every way in from outside: Home's "Open settings" card, Setup choices'
+"Also in" (Posters, Storage, Performance, Mobile data), and the help lines that name a place
+("Change it any time in Settings, Playback", "Sign in under Settings, Online subtitles", "Choose
+them in Settings, App lock", "Turn them back on in Settings, Posters and details", the size note,
+not enough space, Wi-Fi only, Save name check, the crash question). `SettingsMapTest` checks each
+lands on a row that exists on each of its forms; `SettingsLinksSourceTest` reads the sources so a
+new one cannot slip past (a page opened by name outside Settings, a web `/settings/<page>#anchor`,
+a line of help text naming "Settings, <place>").
+
+## Candidates to remove (for the user to decide)
+
+| What | Why it might go | Why it is still here |
+| --- | --- | --- |
+| Tell me when a new version is out (`update_notify`) | Reads as the same job as the Update ready notification (`notify_update`) | It is the in-app check, the other is the system notification; merging changes behaviour |
+| Clear posters and details, Clear online subtitles | Storage's Free up space already reviews the posters | Different stores (the details' answers, the subtitle files); Free up space does not clear them |
+| Thumbnails while seeking | Never drawn while `Trickplay.PICTURES_SHOWN` is false | The player still reads it; turning the pictures back on brings the row back |
+| Player engine, Switch engine on decoder error | Hidden in every released build (no libVLC) | A `-PtmVlc=true` build uses them |
+| Playback stats overlay | Most viewers never need it | It is the one way to see the decoder and dropped frames; already folded under Advanced |
+| Desktop Preview card titled "Preview" | The phone's and the TV's have no title | Harmless; kept so the desktop's page reads the same |
+| The unused settings strings above (about 130 before U20) | No code reads them | In all 21 other catalogs: remove from all 22 at once |
+
+## Not done in U20, and why
+
+- The web app's Settings keeps its six pages and their order (appearance, home, playback,
+  library, storage, about): it has none of the moved rows, its pages need a signed in session to
+  screenshot, and its own TV layout is one long page. Its Playback line in the list is its only
+  row's title, a near repeat; left.
+- The tour's Settings picture (`tour-*-settings*`) still shows the old list order and names:
+  retaking it needs the promo build and `scripts/annotate-shot.py` then `scripts/tour-badges.py`.
+  The tour's four lines are rewritten for the new pages and keep their badges' order.

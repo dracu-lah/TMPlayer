@@ -45,7 +45,8 @@ import org.robolectric.annotation.GraphicsMode
  * Settings, Playback, the default player and engine rows (PR4, PR5): what is on the page on a
  * phone and on a television, that Advanced stays folded until asked, that VLC is not offered while
  * its library is not in the build, and that every switch writes the store. The page has no
- * duplicate of "Open videos in another app": it is the Default player.
+ * duplicate of "Open videos in another app": it is the Default player. Without a second engine
+ * the engine rows are not drawn, and Suggest VLC, which nothing read, is gone (U20).
  */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -62,12 +63,21 @@ class PlaybackSettingsTest {
         FormFactor.override(false)
     }
 
-    private fun show(touch: Boolean) {
+    private fun show(touch: Boolean, vlcShown: Boolean = true) {
         FormFactor.override(!touch)
         rule.setContent {
             TmMaterialTheme(dark = true) {
                 var open by remember { mutableStateOf(false) }
-                LazyColumn { playerRows(settings, touch, open) { open = !open } }
+                LazyColumn {
+                    playerRows(
+                        settings = settings,
+                        touch = touch,
+                        advancedOpen = open,
+                        vlcShown = vlcShown,
+                        onToggleAdvanced = { open = !open },
+                        decoderRow = { item { ActionRow(title = "Decoder", subtitle = "Hardware first", icon = com.tmplayer.ui.icons.TmIcons.Play, onClick = {}) } },
+                    )
+                }
             }
         }
         rule.waitForIdle()
@@ -80,7 +90,8 @@ class PlaybackSettingsTest {
         rule.onNodeWithText("Default player").assertIsDisplayed()
         rule.onNodeWithText("Player engine").assertIsDisplayed()
         rule.onNodeWithText("Switch engine on decoder error").assertIsDisplayed()
-        rule.onNodeWithText("Suggest VLC when playback cannot keep up").assertIsDisplayed()
+        // Stored but read by nothing (U20): no switch for it.
+        rule.onNodeWithText("Suggest VLC when playback cannot keep up").assertDoesNotExist()
         rule.onNodeWithText("Advanced").assertIsDisplayed()
         // One home per job: no second row for opening in another app.
         rule.onNodeWithText("Open videos in another app").assertDoesNotExist()
@@ -116,7 +127,7 @@ class PlaybackSettingsTest {
         )
         rule.waitForIdle()
 
-        val rows = listOf("Default player", "Player engine", "Switch engine on decoder error", "Suggest VLC when playback cannot keep up", "Advanced")
+        val rows = listOf("Default player", "Player engine", "Decoder", "Switch engine on decoder error", "Advanced")
         rule.onNode(hasText(rows.first()) and hasClickAction()).requestFocus()
         for ((index, title) in rows.withIndex()) {
             rule.onNode(hasText(title) and hasClickAction()).assertIsFocused()
@@ -163,6 +174,17 @@ class PlaybackSettingsTest {
         rule.onNodeWithText("Switch engine on decoder error").performClick()
         rule.waitForIdle()
         assertFalse(runBlocking { settings.switchEngineOnErrorNow() })
+    }
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w411dp-h891dp-port-night-xhdpi")
+    fun `without a second engine the engine rows are hidden, not greyed`() {
+        show(touch = true, vlcShown = false)
+        rule.onNodeWithText("Default player").assertIsDisplayed()
+        rule.onNodeWithText("Decoder").assertIsDisplayed()
+        rule.onNodeWithText("Player engine").assertDoesNotExist()
+        rule.onNodeWithText("Switch engine on decoder error").assertDoesNotExist()
+        rule.onNodeWithText("Advanced").assertIsDisplayed()
     }
 
     @Test
