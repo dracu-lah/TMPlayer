@@ -75,4 +75,28 @@ class ChatsGateTest {
         assertTrue(ChatsGate.up(ChatsGate.Move.Wait))
         assertTrue(ChatsGate.up(ChatsGate.Move.Show))
     }
+
+    @Test
+    fun `a gate that was answered gives the next sign in a new picker run`() {
+        var run = ChatsGate.Run(-1, shown = false)
+        run = ChatsGate.advance(run, ChatsGate.Move.None)
+        assertEquals("nothing shown yet, nothing moves", ChatsGate.Run(-1, false), run)
+        run = ChatsGate.advance(run, ChatsGate.Move.Wait)
+        run = ChatsGate.advance(run, ChatsGate.Move.Show)
+        assertEquals("shown keeps the run, so a rotation keeps the ticks", ChatsGate.Run(-1, true), run)
+        run = ChatsGate.advance(run, ChatsGate.Move.Show)
+        assertEquals(ChatsGate.Run(-1, true), run)
+        run = ChatsGate.advance(run, ChatsGate.Move.None)
+        assertEquals("answered: the next gate is another model", ChatsGate.Run(-2, false), run)
+        run = ChatsGate.advance(run, ChatsGate.Move.None)
+        assertEquals(ChatsGate.Run(-2, false), run)
+        run = ChatsGate.advance(ChatsGate.advance(run, ChatsGate.Move.Show), ChatsGate.Move.None)
+        assertEquals("a second sign in and answer moves on again", ChatsGate.Run(-3, false), run)
+    }
+
+    @Test
+    fun `a short wait while the gate is up keeps its run`() {
+        val shown = ChatsGate.Run(-1, shown = true)
+        assertEquals(shown, ChatsGate.advance(shown, ChatsGate.Move.Wait))
+    }
 }

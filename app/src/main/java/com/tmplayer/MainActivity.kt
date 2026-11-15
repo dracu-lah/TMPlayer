@@ -174,7 +174,8 @@ private const val EXIT_WINDOW_MS = 2_000L
 
 /**
  * The mandatory chat choice's picker ([com.tmplayer.data.ChatsGate]) keeps its view model under
- * this fixed run, apart from every opening from Settings, so a rotation mid-choice keeps the ticks.
+ * this run (counting down by one for each time the gate is answered), apart from every opening
+ * from Settings, so a rotation mid-choice keeps the ticks and a later sign in starts clean.
  */
 private const val GATE_RUN = -1
 
@@ -799,6 +800,17 @@ private fun Root() {
     // tour offer or support prompt over or before it.
     val chatsGate = com.tmplayer.ui.browse.rememberChatsGate(chatsViewModel, setupPending)
     val gateUp = com.tmplayer.data.ChatsGate.up(chatsGate)
+    // The gate's picker model lives in the activity under its run. Once the gate has been answered
+    // the next one gets a new run, so a second sign in in this process (Sign out does not recreate
+    // the activity) meets a fresh picker, not the saved one of the old account, whose Done
+    // returned at once and did nothing.
+    var gateRun by rememberSaveable { mutableStateOf(GATE_RUN) }
+    var gateShown by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(chatsGate) {
+        val next = com.tmplayer.data.ChatsGate.advance(com.tmplayer.data.ChatsGate.Run(gateRun, gateShown), chatsGate)
+        gateRun = next.run
+        gateShown = next.shown
+    }
     val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
     val inShell = auth is AuthState.Ready && !setupPending && !gateUp && lifecycleState.isAtLeast(Lifecycle.State.RESUMED)
     // The popup follows the item, once per version, two seconds after it appears. Not over the
@@ -1785,7 +1797,7 @@ private fun Root() {
         // The mandatory chat choice (ChatsGate), after the app lock so a locked app is unlocked
         // before any chat name is shown. In place of the app, not over it, so a remote cannot walk
         // out of it; it goes by itself once Done writes the choice. Back leaves the app. The view
-        // model is kept under a fixed key, so a rotation keeps the ticks.
+        // model is kept under the gate run, so a rotation keeps the ticks and a later gate starts clean.
         if (chatsGate == com.tmplayer.data.ChatsGate.Move.Wait) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { androidx.compose.material3.CircularProgressIndicator(color = Tone.accent) }
             return@Box
@@ -1795,7 +1807,7 @@ private fun Root() {
             com.tmplayer.ui.browse.AddChatsPage(
                 settings = settings,
                 chatsViewModel = chatsViewModel,
-                run = GATE_RUN,
+                run = gateRun,
                 onClose = {},
                 required = true,
                 onLeave = { activity?.finish() },

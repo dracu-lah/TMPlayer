@@ -72,6 +72,21 @@ object ChatsGate {
         else -> Move.None
     }
 
+    /**
+     * Which picker model the gate uses. The host keeps the model under [run] in the activity, and
+     * Sign out does not recreate the activity, so a second sign in in the same process would meet
+     * the first one's saved model (Done returned at once and did nothing). Each time the gate has
+     * been shown and then goes, [run] moves on and the next gate starts clean.
+     */
+    data class Run(val run: Int, val shown: Boolean)
+
+    /** The run after the gate's [move] is seen; [Move.Wait] changes nothing, so a short wait keeps the ticks. */
+    fun advance(now: Run, move: Move): Run = when {
+        move == Move.Show -> now.copy(shown = true)
+        now.shown && move == Move.None -> Run(now.run - 1, shown = false)
+        else -> now
+    }
+
     /** Whether [move] takes the app's place: the shell's notices and offers wait while it does. */
     fun up(move: Move): Boolean = move != Move.None
 }
