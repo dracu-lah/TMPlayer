@@ -60,7 +60,6 @@ import com.tmplayer.i18n.Strings
 import com.tmplayer.ui.components.deviceForm
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.icons.TmIcons
-import com.tmplayer.ui.nav.BackHandler
 import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.focusRing
@@ -89,6 +88,11 @@ fun AppearanceStep(
     groups: List<Int> = listOf(1),
     /** Whether something follows, so the button says Next rather than Done. */
     moreAfter: Boolean = true,
+    /**
+     * Takes the recommended settings and ends the setup: a button beside Next in Skip all's place
+     * (ON-8), one press from the start focus on a remote (ON-20). Null keeps the quiet Skip all.
+     */
+    onUseRecommended: (() -> Unit)? = null,
 ) {
     val s = LocalStrings.current
     val scope = rememberCoroutineScope()
@@ -101,7 +105,9 @@ fun AppearanceStep(
     val primaryFocus = remember { FocusRequester() }
     var focused by remember { mutableStateOf(false) }
 
-    BackHandler(onBack = onSkipAll)
+    // Back on the first page is not Skip all (ON-9): a back gesture or a remote's Back meant as
+    // "go back" must not end the whole setup unseen. It is left to the system (the phone leaves
+    // the app, and opens on this page again), and the shortcut is the button beside Next.
 
     val last = before + 1 == groups.sum() && !moreAfter
     StepFrame(
@@ -114,6 +120,7 @@ fun AppearanceStep(
         modifier = modifier,
         primaryFocus = primaryFocus,
         onPrimaryFocused = { focused = true },
+        onUseRecommended = if (last) null else onUseRecommended,
     ) { wide ->
         val controls: @Composable () -> Unit = {
             Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {

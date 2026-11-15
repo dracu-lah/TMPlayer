@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import com.tmplayer.data.AuthState
+import com.tmplayer.data.DeviceFit
 import com.tmplayer.data.DeviceForm
 import com.tmplayer.data.Recommendation
 import com.tmplayer.data.SettingsStore
@@ -195,6 +196,25 @@ object Setup {
      */
     fun withCrashReports(steps: List<SetupStep>, available: Boolean): List<SetupStep> =
         if (available && SetupStep.CrashReports !in steps) steps + SetupStep.CrashReports else steps
+
+    /**
+     * [steps] as the first run asks them (ON-8): Performance only on a device [fit] says is short
+     * of memory, where the lighter pictures are worth a page. Everywhere else the default is the
+     * recommended one that nearly everyone keeps, and the row stays in Settings (its Setup
+     * choices, which use [stepsFor] and keep the step).
+     */
+    fun firstRun(steps: List<SetupStep>, fit: DeviceFit): List<SetupStep> =
+        if (fit.shortOfMemory) steps else steps.filter { it != SetupStep.Performance }
+
+    /**
+     * The setup is drawn in the language in use ([active]), so that language has already been
+     * seen: remembered as announced (ON-10), so the first Home does not say "Now in Español" after
+     * a whole setup in it. Only a later change of language announces. A blank [active] is left.
+     */
+    suspend fun markLanguageSeen(settings: SettingsStore, active: String) {
+        if (active.isBlank()) return
+        runCatching { settings.setLanguageAnnounced(active) }
+    }
 
     /** What the shell does about the setup right now. */
     enum class Decision {

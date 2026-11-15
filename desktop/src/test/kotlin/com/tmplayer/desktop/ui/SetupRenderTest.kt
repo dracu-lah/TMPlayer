@@ -554,8 +554,10 @@ class SetupRenderTest {
                 }
             }
         }
-        onNode(hasText("Skip all") and hasClickAction()).performClick()
-        waitForIdle()
+        // Skip all on the first page is Use recommended settings now (ON-8), beside Next.
+        onNode(hasText("Skip all")).assertDoesNotExist()
+        onNode(hasText("Use recommended settings") and hasClickAction()).performClick()
+        waitUntil(timeoutMillis = WRITE_MS) { done }
         assertTrue(done)
     }
 

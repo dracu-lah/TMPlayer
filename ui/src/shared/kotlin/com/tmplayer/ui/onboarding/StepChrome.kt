@@ -74,7 +74,9 @@ data class FlowPosition(val index: Int, val groups: List<Int>) {
  * start and the primary button (Next, or Done on the very last step) at the end.
  *
  * [onBack] null hides Back (the first step of all) but keeps its place, so Next never moves.
- * [onSkipAll] null hides Skip all, which the last step's Done already says. [content] gets
+ * [onSkipAll] null hides Skip all, which the last step's Done already says. [onUseRecommended],
+ * on the first step, takes Skip all's place with a button beside Next: one Left press from where a
+ * remote starts takes the recommended settings and ends the setup. [content] gets
  * whether the screen is wide (a television, a desktop window, a phone on its side), where the
  * words go beside the answers or the picture rather than above them.
  */
@@ -89,6 +91,7 @@ internal fun StepFrame(
     modifier: Modifier = Modifier,
     primaryFocus: FocusRequester? = null,
     onPrimaryFocused: () -> Unit = {},
+    onUseRecommended: (() -> Unit)? = null,
     content: @Composable (wide: Boolean) -> Unit,
 ) {
     val s = LocalStrings.current
@@ -136,7 +139,7 @@ internal fun StepFrame(
                         maxLines = 1,
                     )
                 }
-                if (onSkipAll != null) {
+                if (onSkipAll != null && onUseRecommended == null) {
                     QuietButton(s.setupSkipAll, modifier = Modifier.arrowsMoveFocus(), onClick = onSkipAll)
                 } else {
                     // As tall as Skip all, so the bar under it does not move on the last step.
@@ -151,6 +154,15 @@ internal fun StepFrame(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (onBack != null) QuietButton(s.setupBack, icon = true, modifier = Modifier.arrowsMoveFocus(), onClick = onBack)
                 Spacer(Modifier.weight(1f))
+                if (onUseRecommended != null) {
+                    // Beside Next, not over it: the step's one main action stays Next.
+                    SetupButton(
+                        s.setupUseRecommended,
+                        modifier = Modifier.arrowsMoveFocus(),
+                        onClick = onUseRecommended,
+                    )
+                    Spacer(Modifier.width(12.dp))
+                }
                 SetupButton(
                     primary,
                     primary = true,

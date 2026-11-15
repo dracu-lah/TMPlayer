@@ -203,7 +203,8 @@ fun SetupScreen(
     }
 
     val back: (() -> Unit)? = if (!state.isFirst) ({ state.back() }) else onBackFromFirst
-    BackHandler { back?.invoke() ?: onSkipAll() }
+    // Back on a first page with nowhere to go back to is left to the system, never Skip all (ON-9).
+    BackHandler(enabled = back != null) { back?.invoke() }
 
     val copy = when {
         switches -> SetupCopy(s.setupDataTitle, s.setupDataBody)

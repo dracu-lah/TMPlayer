@@ -345,6 +345,38 @@ class SetupTest {
         assertEquals("Español (Latinoamérica)", choices.first { it.tag == "es-419" }.name)
     }
 
+    @Test
+    fun `the first run asks Performance on a device short of memory only`() {
+        val steps = Setup.steps(posters = true, phone = true)
+        assertTrue(SetupStep.Performance in steps)
+        assertEquals(
+            listOf(SetupStep.Posters, SetupStep.Storage, SetupStep.MobileData),
+            Setup.firstRun(steps, com.tmplayer.data.DeviceFit.Fine),
+        )
+        // Short of storage alone is the Device step's business, not a page of lighter pictures.
+        assertFalse(
+            SetupStep.Performance in Setup.firstRun(steps, com.tmplayer.data.DeviceFit(shortOfMemory = false, shortOfStorage = true)),
+        )
+        assertEquals(steps, Setup.firstRun(steps, com.tmplayer.data.DeviceFit(shortOfMemory = true, shortOfStorage = false)))
+        // Settings' Setup choices keep the step: it is the place to change the answer.
+        assertTrue(SetupStep.Performance in Setup.stepsFor(com.tmplayer.data.DeviceForm.Phone, posters = true, recommendations = emptyList()))
+        // Nothing left to ask is an empty list, which the setup takes as Appearance alone.
+        assertTrue(Setup.firstRun(listOf(SetupStep.Performance), com.tmplayer.data.DeviceFit.Fine).isEmpty())
+    }
+
+    @Test
+    fun `the setup's own language is marked announced, so only a later change announces`() = runBlocking {
+        val settings = store()
+        assertEquals("", settings.languageAnnounced.first())
+        Setup.markLanguageSeen(settings, "es")
+        assertEquals("es", settings.languageAnnounced.first())
+        assertFalse(com.tmplayer.i18n.LanguageNotice.shouldShow("", "es", settings.languageAnnounced.first(), hasCatalog = true))
+        assertTrue(com.tmplayer.i18n.LanguageNotice.shouldShow("", "de", settings.languageAnnounced.first(), hasCatalog = true))
+        // A blank language leaves what was remembered.
+        Setup.markLanguageSeen(settings, "")
+        assertEquals("es", settings.languageAnnounced.first())
+    }
+
     private fun store(): SettingsStore {
         val file = Files.createTempDirectory("tm-setup").resolve(SettingsStore.FILE_NAME).toFile()
         return SettingsStore(SettingsStore.openDataStore(file))

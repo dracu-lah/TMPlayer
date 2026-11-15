@@ -2989,7 +2989,8 @@
     "storage_low_detail": "Keeps only the part around where you are. Going back downloads it again.",
     "storage_normal": "Keep whole videos",
     "storage_normal_detail": "Videos you play stay whole in Recently played, so going back is instant",
-    "storage_title": "Storage"
+    "storage_title": "Storage",
+    "use_recommended": "Use recommended settings"
   },
   "share": {
     "chooser_title": "{count, plural, one {Share this video} other {Share # videos}}",
