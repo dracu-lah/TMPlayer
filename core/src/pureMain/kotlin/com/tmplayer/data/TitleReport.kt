@@ -61,10 +61,14 @@ class TitleReport private constructor(
          * off. [chatName] goes in only when [includeChat] (the viewer ticked it) and is not blank.
          */
         fun of(fileName: String, title: String, chatName: String? = null, includeChat: Boolean = false): TitleReport? {
-            val name = capped(scrub(fileName), MAX_NAME)
-            val chosen = capped(scrub(title), MAX_TITLE)
+            // The patterns below are not linear on a very long run (an e-mail address starts anywhere),
+            // so only a generous head of each text is ever scrubbed: a 100,000 character name took
+            // 89 s. The head is four times the cap, so what the scrub removes cannot push the cap's
+            // worth of text out of reach.
+            val name = capped(scrub(headOf(fileName, MAX_NAME * HEAD_FACTOR)), MAX_NAME)
+            val chosen = capped(scrub(headOf(title, MAX_TITLE * HEAD_FACTOR)), MAX_TITLE)
             if (name.isEmpty() || chosen.isEmpty()) return null
-            val chat = if (includeChat) chatName?.let { capped(scrub(it), MAX_CHAT) }?.ifEmpty { null } else null
+            val chat = if (includeChat) chatName?.let { capped(scrub(headOf(it, MAX_CHAT * HEAD_FACTOR)), MAX_CHAT) }?.ifEmpty { null } else null
             return TitleReport(name, chosen, chat)
         }
 
@@ -118,6 +122,14 @@ class TitleReport private constructor(
 
         private fun normalised(text: String): String =
             text.trim().lowercase().replace(SPACES, " ")
+
+        private const val HEAD_FACTOR = 4
+
+        /** The first [max] characters of [text], never ending on half a surrogate pair. */
+        private fun headOf(text: String, max: Int): String {
+            if (text.length <= max) return text
+            return text.substring(0, if (text[max - 1].isHighSurrogate()) max - 1 else max)
+        }
 
         /** [text] cut to [max] characters, not through a surrogate pair, and trimmed. */
         private fun capped(text: String, max: Int): String {
