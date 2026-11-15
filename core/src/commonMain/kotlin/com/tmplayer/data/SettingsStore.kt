@@ -797,6 +797,8 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
      * "Low storage mode": a streamed video keeps only a rolling window of itself on the disk, so a
      * film larger than the free space can still be watched. Off by default, because seeking back
      * past the window fetches those bytes again. Never applies to a video the viewer downloaded.
+     * Off until chosen, except that a fresh install's first sign in screen turns it on ([armSetup]):
+     * an install updated from before keeps off, so an update changes nothing for it.
      */
     val lowStorageMode: Flow<Boolean> = read { it[LOW_STORAGE_MODE] ?: false }
 
@@ -2451,9 +2453,18 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
         prefs.edit { it.remove(SIGNED_IN) }
     }
 
-    /** A sign in screen is up: the setup comes once the account is in. */
+    /**
+     * A sign in screen is up: the setup comes once the account is in. The first sign in screen of
+     * a fresh install (nothing about setup, signing in or Low storage mode stored yet) also turns
+     * [lowStorageMode] on, so a new install starts with it on; an install that is updated never
+     * reaches this, and a stored answer either way is left alone.
+     */
     suspend fun armSetup() {
-        prefs.edit { if (it[SETUP] != SETUP_PENDING) it[SETUP] = SETUP_PENDING }
+        prefs.edit {
+            val fresh = it[SETUP] == null && it[SIGNED_IN] != true && it[LOW_STORAGE_MODE] == null
+            if (fresh) it[LOW_STORAGE_MODE] = true
+            if (it[SETUP] != SETUP_PENDING) it[SETUP] = SETUP_PENDING
+        }
     }
 
     /**

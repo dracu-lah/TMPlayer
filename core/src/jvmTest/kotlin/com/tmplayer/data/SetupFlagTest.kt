@@ -122,4 +122,26 @@ class SetupFlagTest {
         assertTrue(settings.takeOnlyFolders())
         assertFalse(settings.takeOnlyFolders())
     }
+
+    @Test
+    fun `a fresh install starts with Low storage mode on, an updated or answered one does not change`() = runBlocking {
+        val fresh = store()
+        assertFalse("off until a sign in screen", fresh.lowStorageModeNow())
+        fresh.armSetup()
+        assertTrue(fresh.lowStorageModeNow())
+        // Turned off by the viewer: arming again (every sign in step arms) does not turn it back on.
+        fresh.setLowStorageMode(false)
+        fresh.armSetup()
+        assertFalse(fresh.lowStorageModeNow())
+
+        val signedIn = store()
+        signedIn.markSignedIn()
+        signedIn.armSetup()
+        assertFalse("an install that was signed in before keeps off", signedIn.lowStorageModeNow())
+
+        val answered = store()
+        answered.setLowStorageMode(false)
+        answered.armSetup()
+        assertFalse(answered.lowStorageModeNow())
+    }
 }
