@@ -17,7 +17,7 @@ left and Next at the bottom right, Done on the last). Appearance: the theme (Sys
 and the interface size, applied as they are picked so the screen itself is the preview, plus the
 wallpaper's colours on Android 12 and later. Preferences, each with a picture of both answers and
 the current one already chosen: which chats the sidebar lists (only for an account with
-folders), posters and details from TMDB, TVmaze and AniList, Low storage mode, full quality or
+folders), posters and details from TMDB, TVmaze and AniList, While streaming (Keep video or Save space), full quality or
 lighter pictures and motion, and on a phone whether to save mobile data. Then the quick tour: a
 few marked screenshots of where videos come from, Home, the player, the controls, downloads, the
 TV home screen row (on a TV) and Settings. Settings can run the setup again or the tour on its
