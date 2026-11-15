@@ -56,7 +56,8 @@ object ChatSearch {
         // Telegram's search ignores case, so two spellings that differ only by it are one question.
         val out = LinkedHashMap<String, String>()
         fun ask(spelling: String) {
-            if (spelling.isNotBlank()) out.putIfAbsent(spelling.lowercase(), spelling)
+            val key = spelling.lowercase()
+            if (spelling.isNotBlank() && key !in out) out[key] = spelling
         }
         ask(typed)
         ask(words.joinToString(" "))
