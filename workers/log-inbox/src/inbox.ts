@@ -140,8 +140,11 @@ export async function handle(request: Request, env: Env, deps: Deps = realDeps):
   if (Number.isFinite(declared) && declared > max) return json(413, { error: 'too_large', maxBytes: max })
 
   const mine = await env.LIMITER.limit({ key: await addressKey(request) })
+  // The shared budget is spent only by a caller its own address let through, so one noisy address
+  // cannot use up the minute for everyone else.
+  if (!mine.success) return json(429, { error: 'slow_down' }, { 'Retry-After': '60' })
   const all = await env.GLOBAL.limit({ key: 'all' })
-  if (!mine.success || !all.success) return json(429, { error: 'slow_down' }, { 'Retry-After': '60' })
+  if (!all.success) return json(429, { error: 'slow_down' }, { 'Retry-After': '60' })
 
   const bytes = await readLimited(request.body, max)
   if (bytes === null) return json(413, { error: 'too_large', maxBytes: max })

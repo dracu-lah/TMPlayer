@@ -169,6 +169,16 @@ test('a limit hit, per address or for everyone, is a 429 and stores nothing', as
   assert.equal(mine.bucket.objects.size + all.bucket.objects.size, 0)
 })
 
+test('an address its own limiter refused does not spend the shared budget', async () => {
+  let spent = 0
+  const e = env({
+    LIMITER: { limit: async () => ({ success: false }) },
+    GLOBAL: { limit: async () => (spent++, { success: true }) },
+  })
+  for (let i = 0; i < 5; i++) assert.equal((await handle(post(report), e, deps)).status, 429)
+  assert.equal(spent, 0)
+})
+
 test('the limiter gets a hash, never the address', async () => {
   const keys: string[] = []
   const e = env({ LIMITER: { limit: async ({ key }) => (keys.push(key), { success: true }) } })
