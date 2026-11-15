@@ -39,6 +39,24 @@ someone who has never used a media app: plain words (no jargon, no internal name
 "cache window"), one obvious next step per screen, defaults that work without opening Settings, big
 targets, nothing destructive without a clear sentence, and the same look and motion everywhere.
 
+## Redesign over workaround (user, 2026-11-16)
+
+"Even if it is a completely new design and aspects for better usability, do that instead of
+workarounding in the same stuff." So when a flaw is structural (wrong layout, too many steps, a
+setting that should not exist, a screen that does the wrong job), do not patch it: redesign it.
+
+- Order: shared parts first (tokens, shared components), then the screens, so nothing is built twice.
+- Before building a redesign, write `design/redesign/<name>.md`: the problem Raju hits, the new flow,
+  phone, TV (remote and focus), desktop (keyboard) and web in one table, edge cases (empty, huge,
+  failing, interrupted), and a before shot. Then build, then an after shot. Small, clear fixes skip
+  the note.
+- Keep TMPlayer's identity (colour, type, shapes in the design system); take ideas from other apps,
+  never copy their look. Every redesign ships on all platforms that have the feature (parity).
+- Delete what the redesign replaces (old rows, dead strings, unused composables): no parallel old
+  and new versions. A removed setting keeps a safe default; a stored value stays readable.
+- Big ones (a new Home, a new player overlay, merged screens) stop at the design note for the
+  user's OK; everything else goes ahead and is logged under "Decisions made by Claude".
+
 ## Review dimensions for every control (the exhaustive pass)
 
 Inventory: `node scripts/ux-inventory.mjs` writes `private/ux-inventory/<chunk>.md`, one checkbox per
