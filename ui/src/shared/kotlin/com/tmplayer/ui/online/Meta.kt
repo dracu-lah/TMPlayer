@@ -761,8 +761,9 @@ suspend fun completeFeatured(
 
 /**
  * The carousel's pages for one fill: the Recently added picks [fresh] mixed with the videos being
- * watched [resume] ([com.tmplayer.data.HomeFeatured.mix]), only the pages [completeFeatured] says
- * are complete, empty when none is. [resumeFirst] puts a video being watched on the first page
+ * watched [resume] ([com.tmplayer.data.HomeFeatured.mix]), the new pages only where
+ * [completeFeatured] says they are complete, a video being watched even with no match or picture
+ * (its page is drawn on its generated cover), empty when none is. [resumeFirst] puts a video being watched on the first page
  * (phone and TV Home); the lookups then start from it, so its logo is the one fetched ahead. Off
  * the main thread: the copies' online keys read the metadata cache. A lookup that fails leaves
  * the pages without that candidate, never the carousel down.
@@ -783,7 +784,7 @@ suspend fun mixedFeatured(
         emptySet()
     }
     return withContext(Dispatchers.IO) {
-        com.tmplayer.data.HomeFeatured.mix(fresh, resume.map { it.item }, resumeFirst = resumeFirst, complete = { it.key in keys })
+        com.tmplayer.data.HomeFeatured.mix(fresh, resume.map { it.item }, resumeFirst = resumeFirst, complete = { it.key in keys }, resumeComplete = { true })
     }
 }
 

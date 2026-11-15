@@ -233,29 +233,30 @@ object HomeFeatured {
         resumeFirst: Boolean = false,
         complete: (FeaturedPick) -> Boolean,
         matched: (MediaItem) -> String? = SameTitle::onlineKey,
+        resumeComplete: (FeaturedPick) -> Boolean = complete,
     ): List<FeaturedPick> {
         if (limit <= 0) return emptyList()
         val seen = HashSet<String>()
-        fun usable(pick: FeaturedPick): Boolean {
-            if (!complete(pick)) return false
+        fun usable(pick: FeaturedPick, needs: (FeaturedPick) -> Boolean): Boolean {
+            if (!needs(pick)) return false
             return fresh(pick, seen, matched)
         }
         val fresh = ArrayDeque(recent)
         val going = ArrayDeque(resume.map { FeaturedPick(ShelfEntry.File(it)) })
         val out = ArrayList<FeaturedPick>()
         var resumed = 0
-        fun next(queue: ArrayDeque<FeaturedPick>): FeaturedPick? {
+        fun next(queue: ArrayDeque<FeaturedPick>, needs: (FeaturedPick) -> Boolean): FeaturedPick? {
             while (queue.isNotEmpty()) {
                 val pick = queue.removeFirst()
-                if (usable(pick)) return pick
+                if (usable(pick, needs)) return pick
             }
             return null
         }
         while (out.size < limit) {
             // New, part way through, new, part way through, new: until one side runs out.
             val resumeTurn = out.size % 2 == (if (resumeFirst) 0 else 1) && resumed < resumeShare
-            val fromResume = if (resumeTurn) next(going) else null
-            val pick = fromResume ?: next(fresh) ?: next(going)?.also { resumed++ } ?: break
+            val fromResume = if (resumeTurn) next(going, resumeComplete) else null
+            val pick = fromResume ?: next(fresh, complete) ?: next(going, resumeComplete)?.also { resumed++ } ?: break
             if (fromResume != null) resumed++
             out += pick
         }

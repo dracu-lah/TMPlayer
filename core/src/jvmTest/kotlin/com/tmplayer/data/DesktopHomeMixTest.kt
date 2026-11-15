@@ -51,6 +51,58 @@ class DesktopHomeMixTest {
         assertTrue(HomeFeatured.mix(fresh(*new.toTypedArray()), emptyList(), resumeFirst = true, complete = { true }).isNotEmpty())
     }
 
+    @Test
+    fun `a video being watched with no match or art still leads when resume pages need none`() {
+        val new = (1..2).map { video("New Film ${'A' + it} ${2000 + it}.mkv", date = 100 - it) }
+        // No Telegram thumbnail and no online match: nothing but the generated cover to draw.
+        val going = video("Kuruthi.2021.1080p.mkv", date = 10, art = false)
+        assertTrue(!HomeFeatured.hasArt(going))
+        val mixed = HomeFeatured.mix(
+            fresh(*new.toTypedArray()), listOf(going), resumeFirst = true,
+            complete = { it.item.id != going.id }, resumeComplete = { true },
+        )
+        assertEquals(listOf(going, new[0], new[1]).map { it.id }, mixed.map { it.item.id })
+    }
+
+    @Test
+    fun `a new page still needs its match even when resume pages need none`() {
+        val new = video("New Film B 2002.mkv", date = 100)
+        val going = video("Going Film Z 1999.mkv", date = 10, art = false)
+        val mixed = HomeFeatured.mix(
+            fresh(new), listOf(going), resumeFirst = true,
+            complete = { it.item.id != new.id }, resumeComplete = { true },
+        )
+        assertEquals(listOf(going.id), mixed.map { it.item.id })
+    }
+
+    @Test
+    fun `a resume page with no art is still only a film or show of a real size`() {
+        val small = video("Going Film Small 1999.mkv", date = 10, art = false).copy(sizeBytes = 50_000_000)
+        val extra = video("Going Film Z 1999 Trailer.mkv", date = 10, art = false)
+        val clip = video("VID_20241013_1200.mp4", date = 10, art = false)
+        val mixed = HomeFeatured.mix(emptyList(), listOf(small, extra, clip), resumeFirst = true, complete = { true }, resumeComplete = { true })
+        assertTrue(mixed.isEmpty())
+    }
+
+    @Test
+    fun `the same video in new and being watched is one page, led by the resume one`() {
+        val going = video("Going Film Z 1999.mkv", date = 10, art = false)
+        val mixed = HomeFeatured.mix(
+            fresh(going), listOf(going), resumeFirst = true,
+            complete = { false }, resumeComplete = { true },
+        )
+        assertEquals(listOf(going.id), mixed.map { it.item.id })
+    }
+
+    @Test
+    fun `a finished or stale record is never offered, art or not`() {
+        val now = 100L * 24 * 3600 * 1000
+        val finished = record(1, 5_900_000, 6_000_000, now)
+        val stale = record(2, 600_000, 6_000_000, now - HomeFeatured.RESUME_FRESH_MS - 1)
+        val live = record(3, 600_000, 6_000_000, now - 1000)
+        assertEquals(listOf(3L), HomeFeatured.leading(listOf(finished, stale, live), now).map { it.messageId })
+    }
+
     private fun record(messageId: Long, positionMs: Long, durationMs: Long, updatedAt: Long) = ResumeRecord(
         chatId = 1, messageId = messageId, fileId = 1, title = "t", chatTitle = "c", sizeBytes = 1, durationSec = (durationMs / 1000).toInt(),
         positionMs = positionMs, durationMs = durationMs, updatedAt = updatedAt,
