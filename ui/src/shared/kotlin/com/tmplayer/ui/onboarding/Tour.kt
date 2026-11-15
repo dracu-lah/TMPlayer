@@ -112,10 +112,13 @@ fun Strings.tourCopy(page: TourPage, form: DeviceForm): TourCopy {
         TourPage.TvHome -> TourCopy(tourTvHomeTitle, listOf(tourTvHomeRow, tourTvHomeAdd))
         TourPage.Settings -> TourCopy(
             tourSettingsTitle,
+            // The pages as U20 grouped them, one line each, in the order the picture's badges mark:
+            // Playback (which says where the languages went), Storage and downloads, Privacy and
+            // lock, Appearance.
             listOf(
-                tourSettingsPlayback,
-                if (tv) tourSettingsStorageTv else tourSettingsStorage,
-                tourSettingsLock,
+                tourSettingsPlaybackPage,
+                if (tv) tourSettingsStoragePageTv else tourSettingsStoragePage,
+                tourSettingsPrivacyPage,
                 tourSettingsAppearance,
             ) +
                 // Where Settings is, last and without a badge: the picture is the page itself, and

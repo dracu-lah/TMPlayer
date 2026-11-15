@@ -49,6 +49,19 @@ class TourTest {
     }
 
     @Test
+    fun `the Settings page's lines name Settings' pages as they are now`() {
+        // U20 grouped Settings by job: each line starts with a page's name as the list says it
+        // (Appearance shortened), and the last says where Settings is.
+        val pages = com.tmplayer.data.SettingsGroup.entries.map { Translator.messages.text(it.title) } + "Appearance"
+        for (form in DeviceForm.entries) {
+            for (line in Translator.messages.tourCopy(TourPage.Settings, form).lines.dropLast(1)) {
+                val named = line.substringBefore(':')
+                assertTrue("$form: \"$named\" is a page of Settings ($pages)", named in pages)
+            }
+        }
+    }
+
+    @Test
     fun `a picture's badges never outnumber its page's lines`() {
         for (form in DeviceForm.entries) {
             for (page in Tour.pages(form)) {
