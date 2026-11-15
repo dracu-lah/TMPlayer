@@ -52,6 +52,10 @@ import org.robolectric.annotation.GraphicsMode
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class PlaybackSettingsTest {
+    private companion object {
+        /** How long a store write may take on a slow runner before the test gives up. */
+        const val WRITE_MS = 10_000L
+    }
 
     @get:Rule
     val rule = createAndroidComposeRule<ComponentActivity>()
@@ -169,10 +173,14 @@ class PlaybackSettingsTest {
         rule.onNodeWithText("VLC").assertDoesNotExist()
         rule.onNodeWithText("ExoPlayer").performClick()
         rule.waitForIdle()
+        // The store writes on its own thread, which waitForIdle does not wait for (a slow CI runner
+        // read the old value), so the test waits for the write itself.
+        rule.waitUntil(WRITE_MS) { runBlocking { settings.engineChoiceNow() } == EngineChoice.ExoPlayer }
         assertEquals(EngineChoice.ExoPlayer, runBlocking { settings.engineChoiceNow() })
 
         rule.onNodeWithText("Switch engine on decoder error").performClick()
         rule.waitForIdle()
+        rule.waitUntil(WRITE_MS) { !runBlocking { settings.switchEngineOnErrorNow() } }
         assertFalse(runBlocking { settings.switchEngineOnErrorNow() })
     }
 
@@ -208,6 +216,7 @@ class PlaybackSettingsTest {
         rule.onNodeWithText("Ask every time").assertIsDisplayed()
         rule.onNodeWithText("Reset to Ask every time").performClick()
         rule.waitForIdle()
+        rule.waitUntil(WRITE_MS) { runBlocking { settings.defaultPlayerNow() } == PlayerChoice.Ask }
         assertEquals(PlayerChoice.Ask, runBlocking { settings.defaultPlayerNow() })
     }
 

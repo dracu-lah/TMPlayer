@@ -47,6 +47,10 @@ import org.robolectric.annotation.GraphicsMode
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class ResumeSyncRowsTest {
+    private companion object {
+        /** How long a store write may take on a slow runner before the test gives up. */
+        const val WRITE_MS = 10_000L
+    }
 
     @get:Rule
     val rule = createAndroidComposeRule<ComponentActivity>()
@@ -108,6 +112,8 @@ class ResumeSyncRowsTest {
         // Off from the switch: no question, the rows go, the file is left for the delete row.
         rule.onNode(hasText("Resume on your other devices") and hasClickAction()).performScrollTo().performClick()
         rule.waitForIdle()
+        // The store writes on its own thread, which waitForIdle does not wait for.
+        rule.waitUntil(WRITE_MS) { !runBlocking { settings.resumeSync.first() } }
         assertFalse(runBlocking { settings.resumeSync.first() })
         rule.onAllNodesWithText("Sync now").assertCountEquals(0)
     }
