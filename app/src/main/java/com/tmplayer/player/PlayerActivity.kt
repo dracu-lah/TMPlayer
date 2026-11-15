@@ -576,6 +576,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
     private val watch = PlaybackWatch()
 
+    /** What is playing, for a crash report (S2): engine, decoder, codec family and size class only. */
+    private val crashNote = CrashPlayingNote()
+
     /**
      * The playback trace (reliability plan L1): dropped frames, underruns, buffer, decoder and the
      * data source's waits for TDLib, every few seconds while the video plays. Ticks on [loopHandler]
@@ -2271,6 +2274,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             for (file in subtitleFiles.files) vlc.addSubtitleFile(file.uri.toString())
             vlc.speed = carry?.speed ?: playbackSpeed
             vlc.setDelays(syncDelays.audioMs, syncDelays.subtitleMs)
+            crashNote.began("libvlc")
             // The tracks are not listed yet: the engine puts them back as they are ([VlcEngine.restore]).
             carry?.let(vlc::restore)
             if (inBackgroundAudio) hideVideoUnseen(vlc.player)
@@ -2509,6 +2513,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             }
         }
         player = exo
+        crashNote.began("media3")
         traceRecorder.attach(exo)
         wakeEndWatch()
         castClient = client
@@ -4138,6 +4143,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                         initializationDurationMs: Long,
                     ) {
                         watchDecoder = decoderName
+                        crashNote.decoder(decoderName)
                     }
 
                     override fun onVideoInputFormatChanged(
@@ -4147,6 +4153,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                     ) {
                         // A decoder made again or a track changed: the stretch in hand is not playback.
                         watch.interrupted()
+                        crashNote.format(format.sampleMimeType, format.width, format.height)
                         watchFrameRate(format)
                     }
 
@@ -4569,6 +4576,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             if (videoHiddenUnseen && (size.width <= 0 || size.height <= 0)) return
             videoWidth = size.width
             videoHeight = size.height
+            // The size libVLC reports is the one it has; ExoPlayer's input format said it already.
+            if (vlcEngine != null) crashNote.format("", size.width, size.height)
             followVideoOrientation()
             // After PlayerView's own listener has set the frame to the video's aspect: a fixed
             // shape goes back on, the subtitles find the picture, and a decoder switched to
@@ -5001,6 +5010,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * picture and background audio keep the player playing and go nowhere near it.
      */
     private fun letGoOfPlayer() {
+        // A crash after this is not about the video that was playing (S2).
+        crashNote.ended()
         // The VLC engine when it plays (PR2): its native player, surface and stream, all of it.
         releaseVlc()
         val exo = player ?: return
@@ -9345,6 +9356,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     }
 
     override fun onDestroy() {
+        crashNote.ended()
         com.tmplayer.data.SelfInstaller.removeBeforeInstall(saveBeforeInstall)
         loopHandler.removeCallbacks(watchTick)
         // Every runnable on this handler, the undo chip's expiry among them: a delayed one holds
