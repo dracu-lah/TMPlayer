@@ -195,6 +195,8 @@ internal fun PlaybackRows(state: ShellState, jumps: Map<SetupStep, JumpTarget>) 
     val settings = state.settings
     val scope = rememberCoroutineScope()
     val autoplay by settings.autoplayNext.collectAsState(initial = true)
+    val playChatOrder by settings.playChatOrder.collectAsState(initial = false)
+    val keepRepeat by settings.keepRepeat.collectAsState(initial = false)
     val detailFirst by settings.detailFirst.collectAsState(initial = true)
     val touchPrefs by settings.touchPrefs.collectAsState(initial = TouchPrefs())
     val resumeRewindMs by settings.resumeRewindMs.collectAsState(initial = ResumeRewind.DEFAULT_MS)
@@ -202,6 +204,13 @@ internal fun PlaybackRows(state: ShellState, jumps: Map<SetupStep, JumpTarget>) 
 
     Toggle(s.settingsAutoplay, if (autoplay) s.settingsAutoplayOn else s.settingsAutoplayOff, autoplay, icon = TmIcons.Play) {
         scope.launch { settings.setAutoplayNext(it) }
+    }
+    // After a video that is not an episode, and whether Repeat this video outlasts it (EG-F30, EG-F52).
+    Toggle(s.settingsPlayChatOrder, if (playChatOrder) s.settingsPlayChatOrderOn else s.settingsPlayChatOrderOff, playChatOrder, icon = TmIcons.Play) {
+        scope.launch { settings.setPlayChatOrder(it) }
+    }
+    Toggle(s.settingsKeepRepeat, if (keepRepeat) s.settingsKeepRepeatOn else s.settingsKeepRepeatOff, keepRepeat, icon = TmIcons.Repeat) {
+        scope.launch { settings.setKeepRepeat(it) }
     }
     Toggle(
         s.settingsDetailFirst,

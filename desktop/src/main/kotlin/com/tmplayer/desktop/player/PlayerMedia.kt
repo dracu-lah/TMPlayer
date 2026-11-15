@@ -39,6 +39,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 import org.openani.mediamp.source.MediaData
@@ -546,16 +547,43 @@ class TelegramPlayerMedia(
         // Started from a chat's audio: the list is the order, the next file plays when one ends.
         com.tmplayer.data.PlayQueue.stepsFor(item)?.let { return it }
         val tag = EpisodeNeighbours.tagOf(item)
-        val show = EpisodeNeighbours.showOf(item) ?: return Episodes()
+        val show = EpisodeNeighbours.showOf(item) ?: return chatOrder()
         if (item.chatId == 0L) return Episodes(current = tag)
         val session = Td.awaitAuthorizedSession()
         val repository = ChatRepository(session.client)
         // In a group with topics, the neighbours are looked for in this video's own topic.
         val topic = item.topicId.takeIf { it != 0 }
             ?: runCatching { repository.topicOf(item.chatId, item.messageId) }.getOrDefault(0)
-        return EpisodeNeighbours.lookUp(item, show) { query, cursors ->
+        val steps = EpisodeNeighbours.lookUp(item, show) { query, cursors ->
             runCatching { repository.mediaPage(item.chatId, cursors, query = query, topicId = topic) }
                 .onFailure { Logger.w(TAG, "Episode lookup failed", it) }.getOrNull()
+        }
+        // A name that reads as a show but has no other episode in the chat is a video that is not
+        // an episode: the chat's order takes over, where the setting asks.
+        return if (steps.previous == null && steps.next == null) chatOrder().takeIf { it.next != null || it.previous != null } ?: steps else steps
+    }
+
+    /**
+     * After a video that is not an episode (EG-F30): with the setting on, the chat's next video in
+     * the order its grid is sorted in ([com.tmplayer.data.ChatOrder]), which autoplay, the next-up
+     * card and "Still watching?" then treat as the next episode. Nothing is asked of Telegram with
+     * the setting off, for sound alone or a video with no chat; a chat that cannot be asked leaves
+     * it as a film is: the video ends on its last frame.
+     */
+    private suspend fun chatOrder(): Episodes {
+        if (item.chatId == 0L || com.tmplayer.data.ChatAudio.isAudio(item)) return Episodes()
+        val settings = DesktopServices.settings
+        if (!runCatching { settings.playChatOrderNow() }.getOrDefault(false)) return Episodes()
+        val session = Td.awaitAuthorizedSession()
+        val repository = ChatRepository(session.client)
+        val sort = runCatching { settings.videoSort(item.chatId).first() }.getOrDefault(com.tmplayer.data.VideoSort.DEFAULT)
+        val min = runCatching { settings.minSizeBytes.first() }.getOrDefault(com.tmplayer.data.SizeFilter.DEFAULT_MIN)
+        val max = runCatching { settings.maxSizeBytes.first() }.getOrDefault(com.tmplayer.data.SizeFilter.DEFAULT_MAX)
+        val topic = item.topicId.takeIf { it != 0 }
+            ?: runCatching { repository.topicOf(item.chatId, item.messageId) }.getOrDefault(0)
+        return com.tmplayer.data.ChatOrder.steps(item, sort, fits = { com.tmplayer.data.SizeFilter.matches(it.sizeBytes, min, max) }) { anchor, newer ->
+            runCatching { repository.videoWindow(item.chatId, anchor, newer, topic) }
+                .onFailure { Logger.w(TAG, "Chat order lookup failed", it) }.getOrNull()
         }
     }
 

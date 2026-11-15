@@ -173,6 +173,9 @@ internal sealed interface MenuAction {
     data object ToggleVolumeBoost : MenuAction
     data object ToggleNightMode : MenuAction
 
+    /** Repeat this video on or off (EG-F52); the menu stays open. */
+    data object ToggleRepeatVideo : MenuAction
+
     /** A new 3D video choice, applied with the page left open for the next. */
     data class Stereo(val stereo: Stereo3d) : MenuAction
 
@@ -421,6 +424,8 @@ internal fun BoxScope.PlayerOverlay(
     sleepTimer: String? = null,
     /** The A-B repeat as marked so far, drawn on the timebar and named above it; null for none. */
     loop: AbLoop? = null,
+    /** Whether Repeat this video is on, or null where the menu has no such line (sound alone). */
+    repeatVideo: Boolean? = null,
     /** This video's bookmarks for the menu and the timebar; null where the video can have none. */
     bookmarks: List<Bookmark>? = null,
     onHoverControls: (Boolean) -> Unit,
@@ -541,14 +546,14 @@ internal fun BoxScope.PlayerOverlay(
                             Box {
                                 OverlayButton(TmIcons.Subtitles, s.playerSubtitlesHint, onClick = { onOpenMenu(MenuAt(MenuPage.Subtitles, MenuAt.Anchor.Subtitles)) })
                                 if (menu?.anchor == MenuAt.Anchor.Subtitles) {
-                                    PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, sleepTimer, bookmarks, loop, onOpenMenu, onCloseMenu, onMenuAction)
+                                    PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, sleepTimer, bookmarks, loop, onOpenMenu, onCloseMenu, onMenuAction, repeatVideo = repeatVideo)
                                 }
                             }
                         }
                         Box {
                             OverlayButton(TmIcons.Audio, s.playerAudioHint, onClick = { onOpenMenu(MenuAt(MenuPage.Audio, MenuAt.Anchor.Audio)) })
                             if (menu?.anchor == MenuAt.Anchor.Audio) {
-                                PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, sleepTimer, bookmarks, loop, onOpenMenu, onCloseMenu, onMenuAction)
+                                PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, sleepTimer, bookmarks, loop, onOpenMenu, onCloseMenu, onMenuAction, repeatVideo = repeatVideo)
                             }
                         }
                         Box {
@@ -560,7 +565,7 @@ internal fun BoxScope.PlayerOverlay(
                                 ) { Text(SeekMath.speedLabel(status.speed), color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium) }
                             }
                             if (menu?.anchor == MenuAt.Anchor.Speed) {
-                                PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, sleepTimer, bookmarks, loop, onOpenMenu, onCloseMenu, onMenuAction)
+                                PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, sleepTimer, bookmarks, loop, onOpenMenu, onCloseMenu, onMenuAction, repeatVideo = repeatVideo)
                             }
                         }
                         // A click steps the shape through all eight, as W does; the panel has its page of them.
@@ -590,7 +595,7 @@ internal fun BoxScope.PlayerOverlay(
         PlayerMenu(
             open, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable,
             watchedLabel, sleepTimer, bookmarks, loop, onOpenMenu, onCloseMenu, onMenuAction,
-            panel = true, subtitles = subtitlesButton, firstFocus = firstFocus,
+            panel = true, subtitles = subtitlesButton, firstFocus = firstFocus, repeatVideo = repeatVideo,
         )
     }
 }
@@ -981,6 +986,8 @@ internal fun PlayerMenu(
     subtitles: Boolean = true,
     /** Given to the page's first line, where the panel puts the keyboard as a page opens. */
     firstFocus: FocusRequester? = null,
+    /** Whether Repeat this video is on, or null where the menu has no such line (sound alone). */
+    repeatVideo: Boolean? = null,
 ) {
     val s = LocalStrings.current
     val copies = LocalPlayerCopies.current
@@ -1102,6 +1109,8 @@ internal fun PlayerMenu(
                     else -> s.playerLoopClear
                 }
                 Entry(repeat, trailing = "R") { pick(MenuAction.Do(PlayerAction.AbRepeat)) }
+                // A switch: the menu stays up with the new value, as the volume lines do.
+                if (repeatVideo != null) Entry(s.playerRepeatVideo, checked = repeatVideo) { onAction(MenuAction.ToggleRepeatVideo) }
                 Entry(s.playerGoToTime, trailing = s.playerKeyCommandG(commandKey(s))) { pick(MenuAction.Do(PlayerAction.GoToTime)) }
                 // A chaptered file only; the menu stays open for the next step, as the frame steps do.
                 if (status.chapters.isNotEmpty()) {
