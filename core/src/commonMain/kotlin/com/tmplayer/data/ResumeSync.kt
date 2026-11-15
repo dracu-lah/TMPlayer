@@ -127,7 +127,8 @@ object ResumeSync {
         val now = System.currentTimeMillis()
         if (now - lastPullAt < MIN_PULL_INTERVAL_MS) return
         lastPullAt = now
-        withTimeoutOrNull(PULL_TIMEOUT_MS) { runCatching { sync(settings, push = false) } }
+        // runCatching goes outside the timeout: inside it would swallow the timeout's own cancellation.
+        runCatching { withTimeoutOrNull(PULL_TIMEOUT_MS) { sync(settings, push = false) } }
     }
 
     /**
@@ -389,9 +390,13 @@ object ResumeSync {
                 return WriteResult.Written
             }
             // Gone since it was read (deleted by the viewer): sent anew below. Anything else is tried next time.
-            if (td.getMessage(chatId, target.id).valueOrNull != null) {
-                return WriteResult.Failed(Failures.humanise(edited.errorMessage ?: "edit"))
+            // Only Telegram's own "no such message" counts as gone: an outage or a flood wait on this
+            // lookup too would otherwise send a second sync file.
+            val gone = when (val answer = td.getMessage(chatId, target.id)) {
+                is TdlResult.Success -> false
+                is TdlResult.Failure -> StaleEntries.classify(answer.code, answer.message) is MessageLookup.Gone
             }
+            if (!gone) return WriteResult.Failed(Failures.humanise(edited.errorMessage ?: "edit"))
         }
         val sentAt = maxOf(lastSendAt, settings.resumeSyncSentAtNow())
         if (now - sentAt in 0 until RESEND_GUARD_MS) return WriteResult.WaitingForFile

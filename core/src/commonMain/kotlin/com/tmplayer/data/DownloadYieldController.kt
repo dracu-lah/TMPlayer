@@ -2,6 +2,7 @@ package com.tmplayer.data
 
 import com.tmplayer.platform.Logger
 import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -80,7 +81,14 @@ class DownloadYieldController(
         val plays = entries.map { (id, entry) ->
             DownloadYield.Play(
                 fileIds = setOf(id),
-                streaming = on && runCatching { isStreaming(id) }.getOrDefault(false),
+                streaming = on && try {
+                    isStreaming(id)
+                } catch (e: CancellationException) {
+                    // A newer input cancelled this pass: end it, do not decide on a guess.
+                    throw e
+                } catch (_: Exception) {
+                    false
+                },
                 pausedForMs = entry.pausedSinceMs?.let { (now - it).coerceAtLeast(0) } ?: 0L,
             )
         }
