@@ -25,7 +25,7 @@ import {
     VideoReplayIcon,
     FavouriteIcon,
 } from '@hugeicons/core-free-icons'
-import { addedIds, addedMode, homeChatRows, settings, setSetting, SIZE_DEFAULTS, starredIds, storageWorks, type Theme } from '../store'
+import { addedIds, addedMode, homeChatRows, namedLists, settings, setSetting, SIZE_DEFAULTS, starredIds, storageWorks, type Theme } from '../store'
 import { editorRows, encodeOrder, moveKey, parseOrder, type OrderEntry } from '../ui/homeOrder'
 import { back, me, signOut } from '../session'
 import { api } from '../tg/rpc'
@@ -394,14 +394,16 @@ function HomePage() {
 /** The rows Settings > Home's order lists: Continue watching, Recently added and each starred chat Home drew, in the stored order. */
 function homeOrderRows(): OrderEntry[] {
     const chats = homeChatRows().filter((c) => starredIds().has(c.chatId))
-    return editorRows(chats, parseOrder(settings().homeOrder))
+    const lists = namedLists().filter((l) => l.info.home && l.lines.length).map((l) => ({ id: l.info.id, name: l.info.name }))
+    return editorRows(chats, parseOrder(settings().homeOrder), lists)
 }
 
 function homeOrderTitle(row: OrderEntry): string {
-    return row.key === 'continue' ? t('settings.home_continue') : row.key === 'recent' ? t('settings.home_recent') : (row.chatTitle ?? row.key)
+    return row.key === 'continue' ? t('settings.home_continue') : row.key === 'recent' ? t('settings.home_recent') : (row.listName ?? row.chatTitle ?? row.key)
 }
 
 function homeOrderOff(row: OrderEntry): boolean {
+    if (row.listName !== undefined) return false
     return row.key === 'continue' ? !settings().homeContinue : row.key === 'recent' ? !settings().homeRecent : !settings().homeStarred
 }
 

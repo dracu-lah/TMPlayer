@@ -6,10 +6,10 @@ import { rules } from '../rules'
 import { cryptoProvider } from './crypto'
 import { findChatSubtitles, forgetChatSubtitles } from './chatsubs'
 import { homePage } from './home'
-import { archivedList, chatList, chatPage, forgetAll, joinedFor, rankChats, recentPage, searchAll, videoCounts, watchInfo } from './library'
+import { archivedList, chatList, chatPage, forgetAll, joinedFor, listTiles, rankChats, recentPage, searchAll, videoCounts, watchInfo } from './library'
 import { clickSponsored, reportSponsored, viewSponsored } from './sponsored'
 import { chatProtects, files, itemOf, rawOf, thumbnails, toItem } from './media'
-import type { ChatInfo, ChatItem, ChatPage, ChatSubtitle, ChatsEvent, ChatView, Country, Found, HomePage, HomeView, ListView, Me, RecentPage, QrEvent, RpcError, SentCode, SponsoredReport, VideoItem, WatchInfo } from './types'
+import type { ChatInfo, ChatItem, ChatPage, ChatSubtitle, ChatsEvent, ChatView, Country, Found, HomePage, HomeView, ListView, Me, RecentPage, QrEvent, RpcError, SentCode, SponsoredReport, Tile, VideoItem, WatchInfo } from './types'
 
 // `VITE_TG_TEST=1 pnpm dev` signs in on Telegram's test servers (numbers 99966XYYYY, the code
 // is X five times), with its own storage, to try the sign in steps without a real account.
@@ -356,6 +356,11 @@ export const api = {
         }
         if (info.username) info.link = `https://t.me/${info.username}`
         return info
+    },
+
+    /** A named list's cards (HX43), grouped as a chat's grid, from the videos the page keeps. */
+    async listTiles(_: Ctx, lines: { item: VideoItem; show?: string }[]): Promise<Tile[]> {
+        return listTiles(lines)
     },
 
     /** One message's video, for a watch page opened by its address. Null when it is gone or not a video. */

@@ -8,6 +8,7 @@ import type { Sort, VideoItem } from './tg/types'
 import { clearIndex, POSTERS as POSTER_CACHE, THUMBS, touch } from './cacheBounds'
 import { cleanHome } from './ui/homeSettings'
 import { decodePick, encodePick, type Pick } from './pick'
+import * as Lists from './ui/lists'
 
 export type Theme = 'system' | 'dark' | 'light' | 'black'
 
@@ -219,6 +220,7 @@ export async function loadSettings() {
     setAddedModeSignal(readMode(mode))
     setStarredIds(new Set(stars))
     setLaterIds(new Set(later.map(laterId)))
+    await loadLists()
     await loadPicks()
     applyTheme(settings().theme)
 }
@@ -686,6 +688,74 @@ export async function cachedThumb(key: string, fetch: () => Promise<ArrayBuffer>
     return blob
 }
 
+// The viewer's named lists (HX43): one document under `lists`, the apps' rules (ui/lists.ts).
+
+const LISTS = 'lists'
+const [listsDoc, setListsDoc] = createSignal<Lists.ListsDoc>(Lists.emptyLists())
+/** The lists as the page draws them: in the order made, each line in the order added. */
+export const namedLists = () => Lists.visible(listsDoc())
+
+export async function loadLists() {
+    setListsDoc(Lists.readLists(await read<unknown>(LISTS), Date.now()))
+}
+
+/**
+ * One edit, made over what is stored now and merged with it, so another tab's edit made meanwhile
+ * is kept (the newest write wins per list and per line, as the apps merge them).
+ */
+function editLists(change: (doc: Lists.ListsDoc, now: number) => Lists.ListsDoc) {
+    const now = Date.now()
+    const next = change(listsDoc(), now)
+    if (next === listsDoc()) return
+    setListsDoc(next)
+    write(LISTS, next)
+    if (!db) return
+    void raw((st) => get<unknown>(LISTS, st)).then((there) => {
+        const merged = Lists.merge(Lists.readLists(there, now), listsDoc(), now)
+        if (JSON.stringify(merged) === JSON.stringify(listsDoc())) return
+        setListsDoc(merged)
+        write(LISTS, merged)
+    }, () => {})
+}
+
+/** A new list; null for an empty name or once the most lists are made. */
+export function createList(name: string): Lists.ListInfo | null {
+    let made: Lists.ListInfo | null = null
+    editLists((doc, now) => {
+        const r = Lists.create(doc, name, now)
+        if (!r) return doc
+        made = r[1]
+        return r[0]
+    })
+    return made
+}
+
+export const renameList = (id: string, name: string) => editLists((doc, now) => Lists.rename(doc, id, name, now))
+export const setListHome = (id: string, home: boolean) => editLists((doc, now) => Lists.setHome(doc, id, home, now))
+export const deleteList = (id: string) => editLists((doc, now) => Lists.deleteList(doc, id, now))
+
+/** Puts a video (or, with `show`, the whole show it is an episode of) in list `id`. */
+export function addToList(id: string, item: VideoItem, show?: string): Lists.AddResult {
+    let result: Lists.AddResult = 'no-list'
+    const line = show ? { item: { ...item, title: show, name: show }, show: show.trim().toLowerCase() } : { item }
+    editLists((doc, now) => {
+        const [next, r] = Lists.add(doc, id, line, now)
+        result = r
+        return next
+    })
+    return result
+}
+
+export const removeFromList = (id: string, keys: readonly string[]) => editLists((doc, now) => Lists.removeLines(doc, id, new Set(keys), now))
+
+/** Videos gone from their chats (HX21) out of every list: the ones of `keys` that were in one. */
+export function forgetListVideos(keys: readonly string[]): string[] {
+    const wanted = new Set(keys)
+    const listed = new Set(listsDoc().lines.filter((l) => !l.show && wanted.has(Lists.lineKey(l))).map(Lists.lineKey))
+    if (listed.size) editLists((doc, now) => Lists.forgetVideos(doc, listed, now)[0])
+    return [...listed]
+}
+
 /** Sign out: settings, positions, watched, stars, thumbnails and posters go; the theme falls back to the system's. */
 export async function clearAll() {
     memory.clear()
@@ -701,6 +771,7 @@ export async function clearAll() {
     setSettings({ ...DEFAULTS })
     setStarredIds(new Set<number>())
     setLaterIds(new Set<string>())
+    setListsDoc(Lists.emptyLists())
     setPicks(new Map())
     // The added chats are the account's, not the device's, so signing out leaves none of them
     // behind and the next account is asked for itself (as the apps' clearEverything does).

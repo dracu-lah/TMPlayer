@@ -4,12 +4,13 @@
 // right click menu is turned off page wide (blockBrowserMenu) so a right click feels like the app's.
 import { createEffect, createSignal, Show } from 'solid-js'
 import { useNavigate } from '@solidjs/router'
-import { Clock01Icon, Delete02Icon, InformationCircleIcon, PlayIcon, Search01Icon, Tick02Icon } from '@hugeicons/core-free-icons'
+import { Clock01Icon, Delete02Icon, InformationCircleIcon, LeftToRightListBulletIcon, PlayIcon, Search01Icon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { t } from '../i18n'
 import { historyId, removeWithUndo } from '../historyEdits'
 import { laterIds, setLater, setWatched, watchedIds, watchedTick } from '../store'
 import { Icon } from './Icon'
 import { openPosterPicker } from './PosterPicker'
+import { openListPicker } from '../screens/Lists'
 import type { VideoItem } from '../tg/types'
 
 interface Target {
@@ -112,6 +113,11 @@ export function CardMenu() {
         close()
         if (now) setLater(now.item, !laterIds().has(historyId(now.item)))
     }
+    const pickList = () => {
+        const now = target()
+        close()
+        if (now) openListPicker(now.item)
+    }
     const choosePoster = () => {
         const now = target()
         close()
@@ -143,6 +149,13 @@ export function CardMenu() {
                         <button class="menu-row" type="button" onClick={toggleLater}>
                             <Icon icon={Clock01Icon} size={22} />
                             <span>{laterIds().has(historyId(now().item)) ? t('detail.watch_later_remove') : t('detail.watch_later_add')}</span>
+                        </button>
+                        <button class="menu-row" type="button" onClick={pickList}>
+                            <Icon icon={LeftToRightListBulletIcon} size={22} />
+                            <span>
+                                {t('lists.add_to')}
+                                <small>{t('lists.add_to_detail')}</small>
+                            </span>
                         </button>
                         <button class="menu-row" type="button" onClick={choosePoster}>
                             <Icon icon={Search01Icon} size={22} />

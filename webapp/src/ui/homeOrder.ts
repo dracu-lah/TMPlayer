@@ -77,14 +77,18 @@ export function moveKey(order: readonly string[], key: string, by: number): stri
 export interface OrderEntry {
     key: string
     chatTitle: string | null
+    /** A named list's row (HX43): the list's name. */
+    listName?: string
 }
 
 /** What Settings lists: Continue watching, Recently added, a row for each starred chat, in the stored order. */
-export function editorRows(chats: readonly { chatId: number; title: string }[], stored: readonly string[]): OrderEntry[] {
+export function editorRows(chats: readonly { chatId: number; title: string }[], stored: readonly string[], lists: readonly { id: string; name: string }[] = []): OrderEntry[] {
     const defaults: OrderEntry[] = [
         { key: CONTINUE, chatTitle: null },
         { key: RECENT, chatTitle: null },
         ...chats.map((c) => ({ key: chatKey(c.chatId), chatTitle: c.title })),
+        // The named lists on Home (HX43), after the chats, as Home builds them.
+        ...lists.map((l) => ({ key: `list-${l.id}`, chatTitle: null, listName: l.name })),
     ]
     const byKey = new Map(defaults.map((e) => [e.key, e]))
     return arrangeOrder(defaults.map((e) => e.key), stored).flatMap((k) => byKey.get(k) ?? [])

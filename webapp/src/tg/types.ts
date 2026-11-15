@@ -282,7 +282,10 @@ export interface HomeView extends ListView {
 /** One row of Home, as the app builds it (WebRules' home). A row not `loaded` is still waiting for Telegram. */
 export interface HomeRow {
     key: string
-    kind: 'continue' | 'recent' | 'chat'
+    /** 'list': one of the viewer's named lists (HX43), built in the page from the lists it keeps. */
+    kind: 'continue' | 'recent' | 'chat' | 'list'
+    /** A named list's row: the list's id. */
+    listId?: string
     /** A starred chat's row: the chat, and its name. */
     chatId: number | null
     title: string | null

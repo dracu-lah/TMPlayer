@@ -15,9 +15,17 @@ export function chatGone(e: unknown): boolean {
     return CHAT_GONE.test(text)
 }
 
-/** Which catalog line says what left the lists, or null when nothing did. */
-export function goneKey(history: number, later: number, videos: number): 'continue.gone_left_lists' | 'continue.gone_left_watch_later' | 'continue.gone_left_history' | null {
+/** Which catalog line says what left the lists, or null when nothing did; `named` counts the named lists' lines (HX43). */
+export function goneKey(
+    history: number,
+    later: number,
+    videos: number,
+    named = 0,
+): 'continue.gone_left_lists' | 'continue.gone_left_watch_later' | 'continue.gone_left_history' | 'continue.gone_left_your_lists' | 'continue.gone_left_history_and_your_lists' | null {
     if (!(videos > 0)) return null
+    // Watch later is one of the viewer's lists too, so "your lists" covers both.
+    if (named > 0 && history > 0) return 'continue.gone_left_history_and_your_lists'
+    if (named > 0) return 'continue.gone_left_your_lists'
     if (history > 0 && later > 0) return 'continue.gone_left_lists'
     if (later > 0) return 'continue.gone_left_watch_later'
     return 'continue.gone_left_history'

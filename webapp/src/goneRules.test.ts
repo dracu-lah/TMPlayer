@@ -29,3 +29,10 @@ test('the line names the lists that changed', () => {
     assert.equal(goneKey(1, 1, 1), 'continue.gone_left_lists')
     assert.equal(goneKey(-1, -1, NaN), null)
 })
+
+test('a video that left a named list says your lists, with the history when it left that too', () => {
+    assert.equal(goneKey(0, 0, 1, 1), 'continue.gone_left_your_lists')
+    assert.equal(goneKey(0, 1, 2, 1), 'continue.gone_left_your_lists')
+    assert.equal(goneKey(1, 0, 1, 1), 'continue.gone_left_history_and_your_lists')
+    assert.equal(goneKey(1, 1, 1), 'continue.gone_left_lists')
+})

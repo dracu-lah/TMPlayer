@@ -1,10 +1,11 @@
-import { createEffect, createSignal, For, Index, lazy, Match, on, onCleanup, Show, Switch } from 'solid-js'
+import { createEffect, createMemo, createResource, createSignal, For, Index, lazy, Match, on, onCleanup, Show, Switch } from 'solid-js'
 import { A } from '@solidjs/router'
 import { ArrowLeft01Icon, ArrowRight01Icon, UserAdd01Icon } from '@hugeicons/core-free-icons'
 import { call, errorText } from '../tg/rpc'
 import { onBackOnline } from '../net'
 import { t } from '../i18n'
-import { addedIds, addedMode, addedView, progress, rememberHomeChats, resumes, settings, starredIds, watchedTick } from '../store'
+import { addedIds, addedMode, addedView, namedLists, progress, rememberHomeChats, resumes, settings, starredIds, watchedTick } from '../store'
+import { arrangeOrder, parseOrder } from '../ui/homeOrder'
 import { forgetGone } from '../goneVideos'
 import { Icon } from '../ui/Icon'
 import { useObservedCovers } from './promo'
@@ -64,7 +65,14 @@ export function Home() {
         const l = homeLayout()
         return !l.carousel && !l.continueWatching && !l.recentlyAdded && !l.starredRows
     }
-    const firstRun = () => !allOff() && page()?.settled && !page()!.rows.length
+    const listRows = useListRows()
+    // Home's rows and the named lists' rows (HX43) in the viewer's order (Settings > Home): a list's row moves like any other.
+    const rows = createMemo(() => {
+        const all = [...(page()?.rows ?? []), ...listRows()]
+        const byKey = new Map(all.map((r) => [r.key, r]))
+        return arrangeOrder(all.map((r) => r.key), parseOrder(settings().homeOrder)).flatMap((k) => byKey.get(k) ?? [])
+    })
+    const firstRun = () => !allOff() && page()?.settled && !page()!.rows.length && !listRows().length
     return (
         <>
             {/* The app's Home opens on its mark and name, not on a heading (the page is still called Home). */}
@@ -107,7 +115,7 @@ export function Home() {
                     <A class="primary-link" href="/settings/home">{t('home.open_settings')}</A>
                 </div>
             </Show>
-            <For each={page()?.rows ?? []}>
+            <For each={rows()}>
                 {(row) => (
                     <Switch>
                         {/* Recently added kept for the carousel alone: its row is off. */}
@@ -142,14 +150,37 @@ function homeLayout(): HomeView['layout'] {
     return { carousel: s.carousel, continueWatching: s.homeContinue, recentlyAdded: s.homeRecent, starredRows: s.homeStarred, order: s.homeOrder }
 }
 
+/** Lines read for a list's row: its first cards are among them however its shows fold. */
+const LIST_ROW_LINES = 200
+const ROW_CARDS = 10
+
+/** A row for each named list put on Home, its first cards grouped by the app's rules in the worker. */
+function useListRows() {
+    const wanted = () => namedLists().filter((l) => l.info.home && l.lines.length)
+    const [rows] = createResource(
+        () => wanted().map((l) => ({ id: l.info.id, name: l.info.name, count: l.lines.length, lines: l.lines.slice(0, LIST_ROW_LINES) })),
+        (lists) =>
+            Promise.all(
+                lists.map(async (l): Promise<HomeRow> => {
+                    const tiles = await call('listTiles', [l.lines.map((x) => ({ item: x.item, show: x.show }))]).catch(() => [])
+                    return { key: `list-${l.id}`, kind: 'list', listId: l.id, chatId: null, title: l.name, loaded: true, starredOnly: false, tiles: tiles.slice(0, ROW_CARDS), hasMore: true, asRow: true, noneChosen: false }
+                }),
+            ),
+    )
+    return () => (rows.latest ?? []).filter((r) => r.tiles.length)
+}
+
 function rowTitle(row: HomeRow, selfId: number | null): string {
     if (row.kind === 'continue') return t('home.row_continue')
+    if (row.kind === 'list') return row.title ?? ''
     if (row.kind === 'recent') return row.starredOnly ? t('home.row_recent') : t('home.row_recent_all')
     return row.chatId === selfId ? t('chats.saved_messages') : (row.title ?? '')
 }
 
 /** Where a row's See all goes: a starred chat's own page, or Recently added's; null for a row without one. */
 function seeAllOf(row: HomeRow): string | null {
+    // Always for a list: its page is where it is renamed, taken off Home or deleted.
+    if (row.kind === 'list' && row.listId) return `/lists/${row.listId}`
     if (!row.hasMore) return null
     if (row.kind === 'chat' && row.chatId != null) return `/chat/${row.chatId}`
     if (row.kind === 'recent') return '/recent'
@@ -158,7 +189,7 @@ function seeAllOf(row: HomeRow): string | null {
 
 function cardsOf(row: HomeRow): CardData[] {
     if (row.kind === 'continue') return row.tiles.map((tile) => videoCard(tile.item))
-    return row.tiles.map((tile) => tileCard(tile, row.kind === 'recent'))
+    return row.tiles.map((tile) => tileCard(tile, row.kind === 'recent' || row.kind === 'list'))
 }
 
 /** One row: its heading (a starred chat's opens the chat), and its cards in a strip that scrolls sideways. */

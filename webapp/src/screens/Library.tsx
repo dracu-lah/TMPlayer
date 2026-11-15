@@ -2,7 +2,7 @@
 // the app's tabs (Recent, Continue, Watch later, Watched), each day under its own heading.
 import { createEffect, createMemo, createResource, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, type JSX } from 'solid-js'
 import { A, useParams } from '@solidjs/router'
-import { CheckmarkCircle02Icon, Clock01Icon, History, PlayIcon, StarIcon, Tick02Icon } from '@hugeicons/core-free-icons'
+import { CheckmarkCircle02Icon, Clock01Icon, History, LeftToRightListBulletIcon, PlayIcon, StarIcon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { api, call } from '../tg/rpc'
 import { t } from '../i18n'
 import { laterIds, laterKey, laterList, resumes, starredIds, watchedList, watchedTick } from '../store'
@@ -208,6 +208,11 @@ export function HistoryPage() {
                         </A>
                     )}
                 </For>
+                {/* The named lists (HX43), beside History's own lists. */}
+                <A class="history-tab" href="/lists">
+                    <Icon icon={LeftToRightListBulletIcon} size={16} />
+                    {t('lists.open')}
+                </A>
             </nav>
             <Switch>
                 <Match when={entries.loading && !entries.latest}>

@@ -726,6 +726,41 @@ export async function across(
     return { videos, items }
 }
 
+/**
+ * A named list's cards (HX43), from the videos the page keeps (nothing is asked of Telegram):
+ * grouped into shows, copies and pieces as a chat's grid is, a show saved whole as one card, each
+ * card where its first line stands, in the order the lines were added.
+ */
+export async function listTiles(lines: { item: VideoItem; show?: string }[]): Promise<Tile[]> {
+    const r = await rules()
+    const videos: Video[] = []
+    const items = new Map<string, VideoItem>()
+    const order = new Map<string, number>()
+    const out: { at: number; tile: Tile }[] = []
+    lines.slice(0, 20_000).forEach((line, at) => {
+        const item = line.item
+        if (!item || typeof item.chatId !== 'number' || typeof item.messageId !== 'number') return
+        if (line.show) {
+            out.push({ at, tile: { key: `show-${item.chatId}-${line.show}`, kind: 'show', title: item.title, item, seasons: 0, episodes: 0, copies: 0, parts: 0, pieces: 0, extra: null } })
+            return
+        }
+        const v = r.video({
+            chatId: item.chatId, messageId: item.messageId, kind: 'video', fileName: item.fileName ?? item.title, mimeType: null, caption: null,
+            size: item.size ?? 0, duration: item.duration ?? 0, width: 0, height: 0, date: Math.floor((item.date ?? 0) / 1000), topicId: 0, albumId: null,
+            canBeSaved: item.canBeSaved !== false, selfDestructs: false, withheld: false,
+        })
+        if (!v || items.has(v.id)) return
+        items.set(v.id, item)
+        order.set(v.id, at)
+        videos.push(v)
+    })
+    const shelf = r.shelf(videos, 'Newest', 0, r.sizeLimits().ceiling, [], [])
+    for (const tile of tilesOf(shelf, items, { watched: [], started: [] })) {
+        out.push({ at: order.get(`${tile.item.chatId}:${tile.item.messageId}`) ?? Number.MAX_SAFE_INTEGER, tile })
+    }
+    return out.sort((a, b) => a.at - b.at).map((o) => o.tile)
+}
+
 /** Videos across every chat within the size limits, grouped into shows, copies and pieces as a chat's are, newest first. */
 export async function searchAll(tg: TelegramClient, query: string, view: ListView, everyChat = false): Promise<Found> {
     const r = await rules()

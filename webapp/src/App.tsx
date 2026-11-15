@@ -9,6 +9,7 @@ import { Home } from './screens/Home'
 import { Nav } from './ui/Nav'
 import { Toaster } from './ui/Toast'
 import { CardMenu } from './ui/CardMenu'
+import { ListPicker, ListsPage } from './screens/Lists'
 import { PosterPicker } from './ui/PosterPicker'
 import { applyUpdate, updateReady } from './install'
 import { scheduleTrim } from './cacheBounds'
@@ -163,6 +164,7 @@ function Shell(props: ParentProps) {
             </Show>
             <Toaster />
             <CardMenu />
+            <ListPicker />
             <PosterPicker />
             <Show when={sessionHere() === 'elsewhere'}>
                 <OtherTab />
@@ -191,6 +193,7 @@ export function App() {
             <Route path="/settings/:page?" component={Settings} />
             <Route path="/favourites" component={Favourites} />
             <Route path="/history/:tab?" component={HistoryPage} />
+            <Route path="/lists/:id?" component={ListsPage} />
             <Route path="*" component={NotFound} />
         </Router>
     )

@@ -3,15 +3,15 @@
 // Continue watching, Watched and Watch later, and the page says so once for the lot. Only a plain
 // answer counts: a lookup that failed (offline, a flood wait, anything unknown) keeps the entry.
 import { t } from './i18n'
-import { dropLater, removeFromHistory } from './store'
+import { dropLater, forgetListVideos, removeFromHistory } from './store'
 import { showToast } from './ui/Toast'
 import { chatGone, goneKey } from './goneRules'
 
 export { chatGone }
 
 /** The line for what left the lists, or null when nothing did. */
-export function goneLine(history: number, later: number, videos: number): string | null {
-    const key = goneKey(history, later, videos)
+export function goneLine(history: number, later: number, videos: number, named = 0): string | null {
+    const key = goneKey(history, later, videos, named)
     return key && t(key, { count: videos })
 }
 
@@ -34,7 +34,10 @@ export async function forgetGone(gone: { chatId: number; messageId: number }[], 
     const inHistory = new Set(removed ? [...removed.snapshot.resumes, ...removed.snapshot.watched].map(([k]) => k.slice(k.indexOf(':') + 1)) : [])
     let later = 0
     for (const g of fresh) if (dropLater(g.chatId, g.messageId)) (later++, inHistory.add(`${g.chatId}:${g.messageId}`))
-    const line = goneLine(removed?.count ?? 0, later, inHistory.size)
+    // And out of the named lists (HX43), every list a video was in.
+    const named = forgetListVideos(ids)
+    named.forEach((k) => inHistory.add(k))
+    const line = goneLine(removed?.count ?? 0, later, inHistory.size, named.length)
     if (say && line) showToast({ text: line })
     return inHistory.size
 }

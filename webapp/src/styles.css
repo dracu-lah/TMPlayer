@@ -1258,3 +1258,12 @@ button.primary.danger:disabled { opacity: .4; }
     transform: translate(-50%, -50%);
   }
 }
+
+/* The named lists (HX43): the page's buttons, a card with Remove under it, the name field. */
+.list-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 0 0 20px; }
+.list-actions .switch-row { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; }
+.list-card { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.list-card > .link { align-self: flex-start; }
+.list-name { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 4px; font-size: 13px; color: var(--muted); }
+.list-name input { height: 40px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--fg); font: inherit; font-size: 15px; }
+.list-name input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }

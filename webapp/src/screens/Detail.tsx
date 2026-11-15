@@ -1,10 +1,11 @@
 import { createEffect, createMemo, createResource, createSignal, For, Match, onCleanup, onMount, Show, Switch, type JSX } from 'solid-js'
 import { A, useLocation, useNavigate, useParams } from '@solidjs/router'
-import { ArrowLeft02Icon, Cancel01Icon, ClapperboardIcon, Clock01Icon, ListVideoIcon, PlayIcon, RepeatIcon, Search01Icon, Tick02Icon } from '@hugeicons/core-free-icons'
+import { ArrowLeft02Icon, Cancel01Icon, ClapperboardIcon, Clock01Icon, LeftToRightListBulletIcon, ListVideoIcon, PlayIcon, RepeatIcon, Search01Icon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { api, errorText } from '../tg/rpc'
 import { back } from '../session'
 import { t } from '../i18n'
-import { dropResume, getResume, laterIds, progress as readProgress, setLater, setShowLater, setWatched, setWatchedMany, settings, showLaterId, watchedList, watchedTick } from '../store'
+import { dropResume, getResume, laterIds, namedLists, progress as readProgress, setLater, setShowLater, setWatched, setWatchedMany, settings, showLaterId, watchedList, watchedTick } from '../store'
+import { openListPicker } from './Lists'
 import { chatGone, forgetGone } from '../goneVideos'
 import { showChoices, type MarkChoice } from './showMarks'
 import { Icon, type IconData } from '../ui/Icon'
@@ -103,6 +104,7 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
     const [left] = createResource(() => getResume(item.chatId, item.messageId))
     const [watched] = createResource(watchedTick, async () => (await watchedList()).some((w) => w.chatId === item.chatId && w.messageId === item.messageId))
     const later = () => laterIds().has(`${item.chatId}:${item.messageId}`)
+    const inAList = () => namedLists().some((l) => l.lines.some((x) => !x.show && x.item.chatId === item.chatId && x.item.messageId === item.messageId))
     const [more, setMore] = createSignal(false)
     // "More" is offered only for an overview that is cut short (the app's SynopsisSlot).
     let synopsis: HTMLParagraphElement | undefined
@@ -335,6 +337,8 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
                         </Show>
                         <Round icon={Tick02Icon} label={t('detail.round_watched')} on={!!watched()} onClick={() => setWatched(item.chatId, item.messageId, !watched())} />
                         <Round icon={Clock01Icon} label={t('detail.round_watch_later')} on={later()} onClick={() => setLater(item, !later())} />
+                        {/* One of the viewer's named lists (HX43): kept by name, so a restricted chat's video goes in one too. */}
+                        <Round icon={LeftToRightListBulletIcon} label={t('detail.round_list')} on={inAList()} onClick={() => openListPicker(item)} />
                         {/* Beside the other repairs a wrong poster is fixed by: TMDB's titles for this name, one chosen. */}
                         <Show when={settings().posters}>
                             <Round icon={Search01Icon} label={t('poster.round')} onClick={() => openPosterPicker(item, props.info?.seasons.flatMap((s) => s.episodes.map((e) => e.item)) ?? [])} />
@@ -545,6 +549,8 @@ function Episodes(props: { info: WatchInfo; current: VideoItem }) {
                         setSaid(on ? t('detail.watch_later_added', { title: props.info.title }) : t('detail.watch_later_removed', { title: props.info.title }))
                     }}
                 />
+                {/* The whole show in one of the viewer's named lists (HX43). */}
+                <Round icon={LeftToRightListBulletIcon} label={t('lists.add_to')} onClick={() => openListPicker(props.current, props.info.title)} />
             </div>
             <p class="muted small" role="status" aria-live="polite">{said()}</p>
             <dialog class="confirm card-menu" ref={marks} aria-labelledby="marks-title" onClick={(e) => e.target === marks && marks.close()}>

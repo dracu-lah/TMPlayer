@@ -33,3 +33,12 @@ test('garbage: only keys survive, whatever the stored value is', () => {
     assert.equal(parseOrder(Array.from({ length: 10_000 }, (_, i) => `chat-${i}`).join(',')).length, 2000)
     assert.deepEqual(parseOrder(encodeOrder(['continue', 'chat-9'])), ['continue', 'chat-9'])
 })
+
+test('a named list on Home is a row of its own after the chats, moved like any other', () => {
+    const lists = [{ id: 'abcd1234', name: 'Weekend' }]
+    const listed = editorRows([{ chatId: 1, title: 'One' }], [], lists)
+    assert.deepEqual(listed.map((e) => e.key), ['continue', 'recent', 'chat-1', 'list-abcd1234'])
+    assert.equal(listed[3].listName, 'Weekend')
+    assert.deepEqual(editorRows([{ chatId: 1, title: 'One' }], ['list-abcd1234', 'continue'], lists).map((e) => e.key), ['list-abcd1234', 'continue', 'recent', 'chat-1'])
+    assert.deepEqual(parseOrder('list-abcd1234,chat-1'), ['list-abcd1234', 'chat-1'])
+})
