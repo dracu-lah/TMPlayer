@@ -156,7 +156,7 @@
      avcodec_flush_buffers(context);
 --- /dev/null
 +++ b/media3ext/src/main/cpp/ffcodecparams.h
-@@ -0,0 +1,96 @@
+@@ -0,0 +1,99 @@
 +// TMPlayer (tm3): what a container tells a decoder before the first packet, for the decoders
 +// TMPlayer's patch adds. Kept apart, and free of JNI, so the host test (TMPlayer's
 +// scripts/media3ext/bench, "codec" mode) runs the very code the app runs.
@@ -236,10 +236,13 @@
 +    return true;
 +}
 +
-+// The picture's size and bits per coded sample, each used only when it is positive and sane (a
-+// container's field is outside data, so the size is capped at 16384 on each side).
-+inline bool ApplyVideo(AVCodecContext *context, int width, int height, int bitsPerCodedSample) {
++// The picture's size, bits per coded sample and FourCC (the codec tag: Ut Video reads its pixel
++// format from it), each used only when it is positive and sane (a container's field is outside
++// data, so the size is capped at 16384 on each side).
++inline bool ApplyVideo(AVCodecContext *context, int width, int height, int bitsPerCodedSample,
++                       uint32_t codecTag) {
 +    if (LegacyVideo(context->codec_id)) return false;
++    if (codecTag != 0) context->codec_tag = codecTag;
 +    if (width > 0 && height > 0 && width <= 16384 && height <= 16384) {
 +        context->width = context->coded_width = width;
 +        context->height = context->coded_height = height;
@@ -447,7 +450,7 @@
      }
  
      bool MaybeAcquireNativeWindow(JNIEnv *env, jobject new_surface) {
-@@ -277,19 +372,33 @@
+@@ -277,19 +372,34 @@
      // Decoding and rendering run on different threads.
      ScaleContext renderContext;
      ScaleContext yuvContext;
@@ -475,20 +478,22 @@
 +                               jint flags,
 +                               jint width,
 +                               jint height,
-+                               jint bitsPerCodedSample) {
++                               jint bitsPerCodedSample,
++                               jint codecTag) {
      auto jniContext = std::make_unique<JniContext>();
 +    jniContext->light = (flags & kFlagLight) != 0;
 +    jniContext->yv12 = jniContext->light && (flags & kFlagYv12) != 0;
  
      AVCodecContext *codecContext = avcodec_alloc_context3(codec);
      if (!codecContext) {
-@@ -310,12 +419,32 @@
+@@ -310,12 +420,33 @@
          env->GetByteArrayRegion(extraData, 0, size, (jbyte *) codecContext->extradata);
      }
  
 +    // TMPlayer (tm3): the picture's size and depth from the container, for the old and exotic
 +    // decoders that cannot read them from the stream (ffcodecparams.h).
-+    ffparams::ApplyVideo(codecContext, width, height, bitsPerCodedSample);
++    ffparams::ApplyVideo(codecContext, width, height, bitsPerCodedSample,
++                         static_cast<uint32_t>(codecTag));
 +
      codecContext->thread_count = threads;
 -    if (codec->id == AV_CODEC_ID_AV1) {
@@ -516,7 +521,7 @@
      codecContext->err_recognition = AV_EF_IGNORE_ERR;
      int result = avcodec_open2(codecContext, codec, nullptr);
      if (result < 0) {
-@@ -336,20 +465,119 @@
+@@ -336,20 +467,120 @@
  }
  
  
@@ -625,7 +630,8 @@
 +                                                                                 jint flags,
 +                                                                                 jint width,
 +                                                                                 jint height,
-+                                                                                 jint bits_per_coded_sample) {
++                                                                                 jint bits_per_coded_sample,
++                                                                                 jint codec_tag) {
      AVCodec *codec = getCodecByName(env, codec_name);
      if (!codec) {
          LOGE("Codec not found.");
@@ -634,11 +640,11 @@
  
 -    return (jlong) createVideoContext(env, codec, extra_data, threads);
 +    return (jlong) createVideoContext(env, codec, extra_data, threads, flags, width, height,
-+                                      bits_per_coded_sample);
++                                      bits_per_coded_sample, codec_tag);
  }
  
  extern "C"
-@@ -400,47 +628,15 @@
+@@ -400,47 +631,15 @@
      auto *const jniContext = reinterpret_cast<JniContext *>(jContext);
      auto *frame = reinterpret_cast<AVFrame *>(
              env->GetLongField(output_buffer, jniContext->decoder_private_field));
@@ -694,7 +700,7 @@
  }
  
  extern "C"
-@@ -538,7 +734,10 @@
+@@ -538,7 +737,10 @@
      const size_t uvLength = static_cast<size_t>(uvStride) * ((height + 1) / 2);
      uint8_t *dest[] = {data, data + yLength, data + yLength + uvLength, nullptr};
      int strides[] = {yStride, uvStride, uvStride, 0};
@@ -825,7 +831,7 @@
        case MimeTypes.AUDIO_AC3 -> "ac3";
        case MimeTypes.AUDIO_E_AC3, MimeTypes.AUDIO_E_AC3_JOC -> "eac3";
        case MimeTypes.AUDIO_TRUEHD -> "truehd";
-@@ -123,12 +155,95 @@
+@@ -123,12 +155,100 @@
        case MimeTypes.VIDEO_AV1 -> "libdav1d";
        case MimeTypes.VIDEO_MPEG -> "mpegvideo";
        case MimeTypes.VIDEO_MPEG2 -> "mpeg2video";
@@ -852,12 +858,17 @@
 +
 +  /**
 +   * TMPlayer (tm3): the MIME type that names FFmpeg's decoder {@code decoder} ("wmv2", "rv40",
-+   * "wmav2", "adpcm_ms"), for a {@link Format} whose codec Media3 has no MIME type for.
++   * "wmav2", "adpcm_ms"), for a {@link Format} whose codec Media3 has no MIME type for. The name is
++   * the decoder's own, the one FFmpeg's {@code avcodec_find_decoder_by_name} takes, which for a
++   * few differs from the name it is configured under: real_144, real_288, atrac3plus, g722, g726,
++   * g726le and msmpeg4 (the decoders {@code ra_144}, {@code ra_288}, {@code atrac3p},
++   * {@code adpcm_g722}, {@code adpcm_g726}, {@code adpcm_g726le} and {@code msmpeg4v3} of the build).
 +   *
 +   * <p>Such a format's {@code initializationData} is: [0] the codec's extra data as FFmpeg expects
 +   * it (the container's, as it is; empty or absent when the codec has none); audio only, [1] eight
 +   * bytes: the block size and the bits per coded sample, each a big-endian int32 (0 when unknown);
-+   * video only, [1] four bytes: the bits per coded sample as a big-endian int32. The sample rate,
++   * video only, [1] eight bytes: the bits per coded sample and the codec tag (the container's
++   * FourCC, which Ut Video reads its pixel format from), each a big-endian int32. The sample rate,
 +   * channel count, bit rate (average bitrate) and picture size come from the {@link Format}.
 +   * {@link #audioInitializationData} and {@link #videoInitializationData} build the lists.
 +   */
@@ -874,8 +885,8 @@
 +
 +  /** TMPlayer (tm3): see {@link #ffmpegMimeType}. */
 +  public static java.util.List<byte[]> videoInitializationData(
-+      @Nullable byte[] extraData, int bitsPerCodedSample) {
-+    byte[] params = java.nio.ByteBuffer.allocate(4).putInt(bitsPerCodedSample).array();
++      @Nullable byte[] extraData, int bitsPerCodedSample, int codecTag) {
++    byte[] params = java.nio.ByteBuffer.allocate(8).putInt(bitsPerCodedSample).putInt(codecTag).array();
 +    return java.util.Arrays.asList(extraData == null ? new byte[0] : extraData, params);
 +  }
 +
@@ -942,7 +953,7 @@
      private final String codecName;
      private long nativeContext;
      // Initialized by createOutputBuffer() during the SimpleDecoder constructor.
-@@ -64,13 +69,28 @@
+@@ -64,13 +69,29 @@
          // Format uses clockwise degrees. Ignore unsupported non-right-angle rotations.
          int rotation = format.rotationDegrees % 360;
          rotationDegrees = rotation % 90 == 0 ? (rotation + 360) % 360 : 0;
@@ -954,10 +965,11 @@
 +        }
 +        // TMPlayer (tm3): the picture's size and the bits per coded sample, for the old and exotic
 +        // decoders that cannot read them from the stream (see FfmpegLibrary.ffmpegMimeType).
-+        int bitsPerCodedSample = FfmpegLibrary.decoderNameOfFfmpegMimeType(format.sampleMimeType) != null
-+                ? FfmpegLibrary.ffmpegParam(format.initializationData, 0) : 0;
++        boolean ffmpegMime = FfmpegLibrary.decoderNameOfFfmpegMimeType(format.sampleMimeType) != null;
++        int bitsPerCodedSample = ffmpegMime ? FfmpegLibrary.ffmpegParam(format.initializationData, 0) : 0;
++        int codecTag = ffmpegMime ? FfmpegLibrary.ffmpegParam(format.initializationData, 1) : 0;
 +        nativeContext = ffmpegInitialize(codecName, extraData, threads, flags,
-+                Math.max(format.width, 0), Math.max(format.height, 0), bitsPerCodedSample);
++                Math.max(format.width, 0), Math.max(format.height, 0), bitsPerCodedSample, codecTag);
          if (nativeContext == 0) {
              throw new FfmpegDecoderException("Failed to initialize decoder.");
          }
@@ -972,7 +984,7 @@
      /**
       * Returns FFmpeg-compatible codec-specific initialization data ("extra data"), or {@code null} if
       * not required.
-@@ -87,11 +107,17 @@
+@@ -87,11 +108,17 @@
                  System.arraycopy(pps, 0, extraData, sps.length, pps.length);
                  return extraData;
              }
@@ -992,13 +1004,13 @@
                  return null;
              }
          }
-@@ -223,7 +249,8 @@
+@@ -223,7 +250,8 @@
          }
      }
  
 -    private native long ffmpegInitialize(String codecName, @Nullable byte[] extraData, int threads);
 +    private native long ffmpegInitialize(String codecName, @Nullable byte[] extraData, int threads, int flags,
-+                                         int width, int height, int bitsPerCodedSample);
++                                         int width, int height, int bitsPerCodedSample, int codecTag);
  
      private native long ffmpegReset(long context);
  
