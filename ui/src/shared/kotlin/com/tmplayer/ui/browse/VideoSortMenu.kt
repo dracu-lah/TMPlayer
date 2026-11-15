@@ -25,16 +25,19 @@ fun videoSortLabel(sort: VideoSort, s: Messages): String = when (sort) {
     VideoSort.Unwatched -> s.gridSortUnwatched
 }
 
-/** The glyph beside [sort] in the menu. */
+/**
+ * The glyph beside [sort] in the menu: one of its own in the group (Oldest and Last played once
+ * shared one), and Unwatched first wears the Unwatched filter's glyph, as the same idea.
+ */
 fun videoSortIcon(sort: VideoSort): ImageVector = when (sort) {
     VideoSort.Newest -> TmIcons.Clock
-    VideoSort.Oldest -> TmIcons.History
+    VideoSort.Oldest -> TmIcons.Rewind
     VideoSort.Name -> TmIcons.TextSize
     VideoSort.Year -> TmIcons.Trailer
     VideoSort.Size -> TmIcons.Download
     VideoSort.Longest -> TmIcons.Frames
     VideoSort.LastPlayed -> TmIcons.History
-    VideoSort.Unwatched -> TmIcons.Play
+    VideoSort.Unwatched -> TmIcons.PlayCircle
 }
 
 /** What [filter] is called in the Show group, and in the "Showing ..." line over the grid. */
@@ -49,7 +52,7 @@ fun videoFilterLabel(filter: VideoFilter, s: Messages): String = when (filter) {
     VideoFilter.HighDefinition -> s.gridFilterHd
 }
 
-/** The glyph beside [filter] in the menu. */
+/** The glyph beside [filter] in the menu, an outline like every other line's. */
 fun videoFilterIcon(filter: VideoFilter): ImageVector = when (filter) {
     VideoFilter.All -> TmIcons.Grid
     VideoFilter.Unwatched -> TmIcons.PlayCircle
@@ -57,7 +60,7 @@ fun videoFilterIcon(filter: VideoFilter): ImageVector = when (filter) {
     VideoFilter.Watched -> TmIcons.CheckCircle
     VideoFilter.OnDevice -> TmIcons.Folder
     VideoFilter.Shows -> TmIcons.Episodes
-    VideoFilter.Singles -> TmIcons.PlaySolid
+    VideoFilter.Singles -> TmIcons.Play
     VideoFilter.HighDefinition -> TmIcons.AspectRatio
 }
 
@@ -165,8 +168,8 @@ fun videoMenuGroups(state: VideoMenuState, s: Messages): List<ChoiceGroup> = bui
 
 /**
  * A chat's Sort and filter menu on a phone and a computer: one card grown out of the Sort button
- * ([GroupedChoicePopover]) with the order and the Show group. A pick applies and
- * closes the card, so the grid is seen to change under it.
+ * ([GroupedChoicePopover]) with every group of [videoMenuGroups]. A pick applies and closes the
+ * card, so the grid is seen to change under it.
  */
 @Composable
 fun VideoMenuPopover(open: Boolean, anchor: PopoverAnchor, state: VideoMenuState, onDismiss: () -> Unit) {
