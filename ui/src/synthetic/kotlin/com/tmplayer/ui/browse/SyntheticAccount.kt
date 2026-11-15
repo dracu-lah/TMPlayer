@@ -62,6 +62,8 @@ class SyntheticAccount(
     val warm: Boolean = false,
     /** False answers every count from the database, with none of [CountShape]'s awkward chats: the picker on a good day. */
     val mixedCounts: Boolean = true,
+    /** Chats that hold this many videos wherever they sit in the list, past [videoChats] too: a channel of 20,000 far down an account. */
+    val bigChats: Map<Long, Int> = emptyMap(),
 ) {
     /** Where TDLib's requests run: one that fails does not take the others, or the test, with it. */
     private val scope = CoroutineScope(parent.coroutineContext + SupervisorJob(parent.coroutineContext[Job]))
@@ -174,6 +176,7 @@ class SyntheticAccount(
 
     /** Videos in [chatId]: a few huge chats, the rest a hundred or so, none past [videoChats]. */
     fun videoCount(chatId: Long): Int = when {
+        chatId in bigChats -> bigChats.getValue(chatId)
         chatId > videoChats || chatId >= 100_000L -> 0
         chatId <= 3 -> 20_000
         else -> 40_000 / (videoChats - 3)
