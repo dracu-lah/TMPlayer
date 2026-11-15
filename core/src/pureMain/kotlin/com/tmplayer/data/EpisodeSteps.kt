@@ -104,6 +104,18 @@ object EpisodeNeighbours {
         )
     }
 
+    /**
+     * The steps around [current] among the videos kept on this device ([kept]: the Downloads), for
+     * when the chat cannot be asked (no connection, or a search that failed). Only the kept
+     * videos of the same show count, and the answer is null when none of them is next to [current],
+     * so the caller keeps what it had.
+     */
+    fun amongKept(current: MediaItem, show: String, kept: List<MediaItem>): EpisodeSteps? {
+        val same = kept.filter { it.id != current.id && showOf(it)?.equals(show, ignoreCase = true) == true }
+        if (same.isEmpty()) return null
+        return around(current, same).takeIf { it.previous != null || it.next != null }
+    }
+
     /** Pages of a chat read at most for one lookup: forty messages of each kind a page. */
     const val MAX_PAGES = 8
 

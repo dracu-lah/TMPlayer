@@ -204,4 +204,34 @@ class EpisodeStepsTest {
         assertNull(EpisodeNeighbours.showOf(film))
         assertEquals("Harbour Notes", EpisodeNeighbours.showOf(video("Harbour.Notes.S01E02.mkv")))
     }
+
+    @Test
+    fun `with no chat to ask the kept episodes of the same show are the neighbours`() {
+        val e04 = video("Harbour.Notes.S01E04.mkv")
+        val e05 = video("Harbour.Notes.S01E05.mkv")
+        val e06 = video("Harbour.Notes.S01E06.mkv")
+        val other = video("Other.Show.S01E06.mkv")
+        val steps = EpisodeNeighbours.amongKept(e05, "Harbour Notes", listOf(e04, e06, other))
+        assertEquals(e04.id, steps?.previous?.id)
+        assertEquals(e06.id, steps?.next?.id)
+    }
+
+    @Test
+    fun `kept videos of another show or none at all leave the steps unchanged`() {
+        val e05 = video("Harbour.Notes.S01E05.mkv")
+        val other = video("Other.Show.S01E06.mkv")
+        assertNull(EpisodeNeighbours.amongKept(e05, "Harbour Notes", listOf(other)))
+        assertNull(EpisodeNeighbours.amongKept(e05, "Harbour Notes", emptyList()))
+        // Only itself kept: nothing to step to.
+        assertNull(EpisodeNeighbours.amongKept(e05, "Harbour Notes", listOf(e05)))
+    }
+
+    @Test
+    fun `a single kept episode after the current one is a next and has no previous`() {
+        val e05 = video("Harbour.Notes.S01E05.mkv")
+        val e06 = video("Harbour.Notes.S01E06.mkv")
+        val steps = EpisodeNeighbours.amongKept(e05, "Harbour Notes", listOf(e06))
+        assertNull(steps?.previous)
+        assertEquals(e06.id, steps?.next?.id)
+    }
 }

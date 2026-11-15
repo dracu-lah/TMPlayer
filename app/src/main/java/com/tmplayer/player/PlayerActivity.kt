@@ -5772,15 +5772,31 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             val steps = EpisodeNeighbours.lookUp(here, show) { query, cursors ->
                 com.tmplayer.data.runCatchingCancellable { repository.mediaPage(chatId, cursors, query = query, topicId = topic) }.getOrNull()
             }
-            _episodes.value = steps
+            // Nothing next to this one in the chat, or the chat could not be asked (offline, a
+            // failed search): the other episodes of the show kept in Downloads stand in, so Next
+            // and autoplay work for a downloaded season without a connection.
+            val found = if (steps.previous == null && steps.next == null) keptSteps(here, show) ?: steps else steps
+            _episodes.value = found
             refreshSessionMetadata()
             // The providers' episode names, where lookups are on: a label first, then a better one.
-            val named = withContext(Dispatchers.IO) { EpisodeNames.named(steps, here, OnlineMetadata.current) }
-            if (named != steps) {
+            val named = withContext(Dispatchers.IO) { EpisodeNames.named(found, here, OnlineMetadata.current) }
+            if (named != found) {
                 _episodes.value = named
                 refreshSessionMetadata()
             }
         }
+    }
+
+    /**
+     * The episodes next to [here] among the show's videos kept in Downloads whose files are on the
+     * disk, or null when none is. Local reads only: it works with no connection.
+     */
+    private suspend fun keptSteps(here: MediaItem, show: String): EpisodeSteps? = withContext(Dispatchers.IO) {
+        val kept = com.tmplayer.data.runCatchingCancellable { settings.downloadsNow() }.getOrNull().orEmpty()
+            .filter { com.tmplayer.data.EpisodeNeighbours.showOf(it.toMediaItem())?.equals(show, ignoreCase = true) == true }
+            .filter { LocalDownloads.presentVideo(it) != null }
+            .map { it.toMediaItem() }
+        com.tmplayer.data.EpisodeNeighbours.amongKept(here, show, kept)
     }
 
     /**
