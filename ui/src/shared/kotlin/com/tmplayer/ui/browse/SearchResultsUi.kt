@@ -179,6 +179,8 @@ fun SearchResultCard(
     modifier: Modifier = Modifier,
     highlighted: Boolean = false,
     posterWidth: Dp = 64.dp,
+    /** At the card's end: the phone's Resume button on a result with progress. */
+    trailing: (@Composable () -> Unit)? = null,
 ) {
     val s = LocalStrings.current
     val item = remember(group) { group.asItem() }
@@ -213,6 +215,7 @@ fun SearchResultCard(
                 }
             }
         }
+        trailing?.invoke()
     }
 }
 

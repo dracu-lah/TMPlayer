@@ -153,6 +153,8 @@ internal fun PhoneSearchScreen(
     /** The topics' own Try again ([GlobalSearchViewModel.retryTopics]). */
     onRetryTopics: () -> Unit = {},
     onOpenGroup: (ResultGroup) -> Unit,
+    /** Plays (resumes) one copy of a result that has progress, without opening its page. */
+    onPlayCopy: (ResultGroup, MediaItem) -> Unit = { _, _ -> },
     onResume: (ResumeRecord) -> Unit,
     onFilters: (SearchFilters) -> Unit,
     onSort: (SearchSort) -> Unit,
@@ -255,6 +257,7 @@ internal fun PhoneSearchScreen(
                         progress = progress,
                         onOpenChat = onOpenChat,
                         onOpenGroup = { keyboard?.hide(); onOpenGroup(it) },
+                        onPlayCopy = { group, copy -> keyboard?.hide(); onPlayCopy(group, copy) },
                         onRetry = onRetry,
                         onRetryMore = onRetryMore,
                         onClearFilters = { onFilters(SearchFilters()) },
@@ -526,6 +529,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.results(
     progress: (MediaItem) -> Float?,
     onOpenChat: (ChatSummary) -> Unit,
     onOpenGroup: (ResultGroup) -> Unit,
+    onPlayCopy: (ResultGroup, MediaItem) -> Unit,
     onRetry: () -> Unit,
     onRetryMore: () -> Unit,
     onClearFilters: () -> Unit,
@@ -613,6 +617,20 @@ private fun androidx.compose.foundation.lazy.LazyListScope.results(
                     .padding(horizontal = 8.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .clickable { onOpenGroup(group) },
+                // A film with progress resumes from its card; a show's page picks its episode.
+                trailing = if (group.isShow) null else {
+                    val copy = group.copies.firstOrNull { (progress(it) ?: 0f) > 0f }
+                    if (copy == null) null else {
+                        {
+                            val s = LocalStrings.current
+                            TextButton(onClick = { onPlayCopy(group, copy) }) {
+                                Icon(TmIcons.Play, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text(s.commonResume)
+                            }
+                        }
+                    }
+                },
             )
         }
     }

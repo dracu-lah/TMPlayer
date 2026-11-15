@@ -187,6 +187,16 @@ internal fun PhoneBrowse(
             }
         }
     }
+    // Resume on a result with progress: the same still-there check and Starting pill as a tap,
+    // then the shell's own play (which carries on from the saved point).
+    val playCopy: (ResultGroup, MediaItem) -> Unit = { group, copy ->
+        scope.launch {
+            search.openResult(copy, com.tmplayer.data.GlobalSearch.titleOf(group), onGone = { onMessage(s.searchNoLongerThere) }) {
+                search.remember()
+                onPlayMedia(copy, titleOf(copy.chatId))
+            }
+        }
+    }
     val voice = rememberVoiceSearch(s.browseVoicePromptChat) { heard ->
         searchText = TextFieldValue(heard, TextRange(heard.length))
         search.submit(heard)
@@ -259,6 +269,7 @@ internal fun PhoneBrowse(
                 },
                 onRetryTopics = search::retryTopics,
                 onOpenGroup = openGroup,
+                onPlayCopy = playCopy,
                 onResume = onResume,
                 onFilters = search::setFilters,
                 onSort = search::setSort,

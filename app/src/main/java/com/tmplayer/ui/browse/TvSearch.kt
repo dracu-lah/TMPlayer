@@ -72,6 +72,7 @@ import com.tmplayer.data.SearchFilters
 import com.tmplayer.data.SearchQuality
 import com.tmplayer.data.SearchSort
 import com.tmplayer.ui.components.TvSearchField
+import com.tmplayer.ui.components.holdable
 import com.tmplayer.ui.components.rememberVoiceSearch
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.icons.TmIcons
@@ -110,6 +111,8 @@ internal fun TvSearchScreen(
     progress: (MediaItem) -> Float?,
     onOpenChat: (ChatSummary) -> Unit,
     onOpenGroup: (ResultGroup) -> Unit,
+    /** Long OK on a film: plays it, from its saved point when it has one. */
+    onPlayGroup: (ResultGroup) -> Unit = {},
     onFilters: (SearchFilters) -> Unit,
     onSort: (SearchSort) -> Unit,
     onLoadMore: () -> Unit,
@@ -348,6 +351,7 @@ internal fun TvSearchScreen(
                                     if (shown.indexOf(group) >= shown.size - COLUMNS * 2) onLoadMore()
                                 },
                                 onClick = { onOpenGroup(group) },
+                                onHold = { if (!group.isShow) onPlayGroup(group) },
                             )
                         }
                         if (state.loadingMore) {
@@ -543,6 +547,7 @@ private fun PosterCard(
     reduced: Boolean,
     onFocused: () -> Unit,
     onClick: () -> Unit,
+    onHold: () -> Unit,
 ) {
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
@@ -554,7 +559,7 @@ private fun PosterCard(
             .clip(RoundedCornerShape(12.dp))
             .border(if (focused) 3.dp else 0.dp, if (focused) Tone.accent else Color.Transparent, RoundedCornerShape(12.dp))
             .onFocusChanged { if (it.isFocused) onFocused() }
-            .clickable(interactionSource = interactions, indication = null, onClick = onClick),
+            .holdable(interactionSource = interactions, onClick = onClick, onHold = onHold),
     ) {
         ResultPoster(item, Modifier.fillMaxWidth(), fraction)
         // Files, as the page counts its versions: the same file in two chats is one.
@@ -659,6 +664,15 @@ internal fun TvSearchPage(
                         null
                     }
                     if (series != null) opened = series to titleOf(group.lead.chatId) else onOpenMedia(group.asItem(), titleOf(group.lead.chatId))
+                }
+            }
+        },
+        onPlayGroup = { group ->
+            scope.launch {
+                val copy = group.copies.firstOrNull { (watch.point(it)?.fraction ?: 0f) > 0f } ?: group.lead
+                search.openResult(copy, GlobalSearch.titleOf(group), onGone = { onMessage(s.searchNoLongerThere) }) {
+                    search.remember()
+                    onPlayMedia(copy, titleOf(copy.chatId))
                 }
             }
         },
