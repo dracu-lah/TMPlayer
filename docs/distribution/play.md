@@ -19,6 +19,16 @@ before acting on them.
   `FOREGROUND_SERVICE_MEDIA_PLAYBACK` (background audio) each need a declaration in the console
   with a short video of the feature.
 - **An AAB.** Play takes an Android App Bundle, so the release job builds one beside the APKs.
+- **libVLC, if a Play build carries it** (PR2, `-PtmVlc=true`; see
+  [libvlc-spike.md](libvlc-spike.md)). 16 KB pages: met, every 64-bit `.so` in libvlc-all 3.7.7
+  has 16 KB LOAD alignment (Play requires it for apps targeting Android 15 and later since
+  2025-11-01, <https://developer.android.com/guide/practices/page-sizes>). Downloaded code: the
+  library and its Lua scripts ship inside the bundle and nothing is fetched at run time, which
+  the Device and Network Abuse policy allows
+  (<https://support.google.com/googleplay/android-developer/answer/9888379>). Data safety: no
+  change, libVLC sends nothing for a local file or a 127.0.0.1 stream. Size: the AAB gives each
+  device one ABI, 20 to 24 MB more. Licence: the GPL source offer goes in the listing's
+  description link and the release notes, as for NextLib.
 
 ## The account
 

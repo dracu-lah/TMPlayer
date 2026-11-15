@@ -19,6 +19,14 @@ presentations of it.
 Audio the device cannot decode in hardware (DTS, TrueHD, E-AC3 on a cheap stick) falls back to
 software decoders from NextLib, while video stays on the hardware decoder.
 
+A build made with `-PtmVlc=true` (never F-Droid's) adds libVLC as a second engine (PR2): the
+`Engine` interface (`ExoEngine`, `VlcEngine`) behind the same overlay, with `VlcEngine` also a
+Media3 `Player` (`VlcPlayer`) so the controls, the track picker and the media session drive it
+unchanged. `EngineSelector` (core) picks the engine; VLC reads a stream from `LoopbackStream` on
+127.0.0.1 and a download by path. libVLC is loaded by the first video that plays in it, never at
+start, and `EngineCrashWatch` marks the time it plays so a native crash is known at the next start
+(PR6). See `docs/distribution/libvlc-spike.md`.
+
 ## Modules
 
 `settings.gradle.kts` includes four modules:

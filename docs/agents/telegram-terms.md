@@ -10,6 +10,14 @@ change touches sign in, what is shown from a chat, the manifest, the updater or 
   user's behalf without them knowing, and read state is never faked or hidden.
 - **Telegram's own restrictions stay on.** Never set TDLib's `ignore_platform_restrictions`, and
   keep `MediaMapper` skipping messages with a restriction reason.
+- **The loopback hand-off stays on the device.** The external player hand-off and the VLC engine
+  (PR2) read a video from `LoopbackStream`: 127.0.0.1 only, a token per session, loopback clients
+  only, closed when playback ends. The bytes are the same TDLib download the built-in player
+  reads, for the signed in user, of a message they can open; nothing is relayed off the device,
+  and a chat known to restrict saving is never served (it gets no hand-off, and its videos stream
+  in ExoPlayer, never VLC), and no Telegram limit is bypassed. Checked 2026-11-15 against the API terms
+  (<https://core.telegram.org/api/terms>): no item is touched. Re-check if the server ever listens
+  beyond 127.0.0.1.
 - **A store build has no updater.** Google Play and Amazon get a file without the in-app updater
   and without `REQUEST_INSTALL_PACKAGES`, as the F-Droid build already is; only the GitHub APK
   updates itself.

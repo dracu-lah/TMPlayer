@@ -62,6 +62,27 @@ Because the OpenSSL License is not compatible with the GPL, TMPlayer's own code 
 additional permission to be combined with it; see
 [LICENSE-OPENSSL-EXCEPTION.md](LICENSE-OPENSSL-EXCEPTION.md).
 
+### libVLC for Android 3.7.7 (only in a build made with `-PtmVlc=true`)
+
+The second playback engine (PR2). It is not in the default build, the F-Droid build or any store
+build; an APK that carries it says so in its release notes.
+
+- Author: VideoLAN and the VLC authors
+- Artifact: `org.videolan.android:libvlc-all:3.7.7` from Maven Central, unmodified
+  (libVLC 3.0.25, `libvlc.so`, `libvlcjni.so`, `libc++_shared.so` and the Java binding)
+- Licence: the binding and libVLC are LGPL-2.1-or-later. The prebuilt `libvlc.so` links in
+  modules and libraries under GPL-2.0-or-later (among them x264, libdvdnav and libdvdread) and
+  others under LGPL, BSD and MIT terms, so the library as shipped is distributed under
+  GPL-2.0-or-later, which TMPlayer's GPL-3.0-or-later is compatible with.
+- Source: <https://code.videolan.org/videolan/libvlcjni/-/tree/3.7.7> and the VLC 3.0.25 tree it
+  builds, <https://code.videolan.org/videolan/vlc/-/tree/3.0.25>; the contribs' versions are in that
+  tree's `contrib/src/*/rules.mak`.
+
+Relinking: TMPlayer loads libVLC as separate shared libraries by name and calls it only through
+its public Java binding, so a modified libVLC built from the source above can replace the three
+`.so` files in the APK (re-signed with your own key) without any change to TMPlayer. A release
+that carries libVLC links its corresponding source archive from its notes, as for NextLib.
+
 ### Android libraries
 
 - AndroidX Core, Activity, Compose, TV Material, Lifecycle, Media3 1.11.1, Leanback, Fragment and

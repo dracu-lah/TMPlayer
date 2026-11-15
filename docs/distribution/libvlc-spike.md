@@ -51,7 +51,8 @@ libraries compressed, `useLegacyPackaging = true`):
 | x86_64 (debug only) | 54.4 MB | 9.0 MB | 0.1 MB | about 25.9 MB | about 63 MB |
 
 Plus 0.3 MB of Java classes and 0.3 MB of assets (Lua scripts, an HRTF file). The universal APK
-would grow by about 45 MB; the per-ABI APKs by 20 to 24 MB.
+would grow by about 45 MB; the per-ABI APKs by 20 to 24 MB. Measured on the debug APK, which keeps
+all four ABIs: 90.9 MB without libVLC, 190.0 MB with `-PtmVlc=true` (2026-11-15).
 
 ## 16 KB page size (measured)
 
@@ -137,3 +138,15 @@ NDK toolchain per build; not done. Sources: <https://f-droid.org/docs/Inclusion_
 - Whether the GitHub APK carries libVLC (`-PtmVlc=true` in the release workflow), and whether
   only as per-ABI files or in the universal one too. Default until answered: not carried.
 - F-Droid: left out (default), or built from source in the recipe.
+
+## Each channel (PR7, 2026-11-15)
+
+| Channel | libVLC in it | Action |
+| --- | --- | --- |
+| GitHub APK (universal and per-ABI) | No, until the user decides | Build with `-PtmVlc=true` once the device checks pass; link the libVLC source in the release notes; per-ABI files only would keep the universal download as it is |
+| F-Droid | No | Leave out (the default). Building libVLC from source in the recipe is the only way in |
+| Google Play (set aside, Phase G) | Possible | Met: 16 KB, no downloaded code, Data safety unchanged ([play.md](play.md)); the AAB gives one ABI per device |
+| Amazon Appstore | Possible | Same build as Play's store file; most Fire TV sticks run 32-bit `armeabi-v7a`, which libVLC ships (unverified on a stick) |
+| Obtainium, Uptodown, XDA | Follows the GitHub APK | Nothing of their own: they take the GitHub release |
+| winget, AUR, desktop | Not applicable | The desktop plays with mpv (mediamp), no libVLC |
+| Telegram's terms | Checked | The loopback hand-off stays on 127.0.0.1 with a token, nothing leaves the device, a chat that restricts saving is never served ([telegram-terms.md](../agents/telegram-terms.md)) |
