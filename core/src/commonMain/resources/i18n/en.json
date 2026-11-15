@@ -1486,7 +1486,6 @@
   },
   "main": {
     "archived": "{title} archived",
-    "back_again": "Press Back again to leave",
     "back_online": "Back online. Library updated.",
     "connect_to_play": "Connect to the internet to play this video.",
     "crash_always": "Always send crash reports",

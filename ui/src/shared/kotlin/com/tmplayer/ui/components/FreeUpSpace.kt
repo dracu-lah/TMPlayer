@@ -602,7 +602,7 @@ internal fun ReviewButton(
     }
     Row(
         modifier
-            .heightIn(min = if (large) 48.dp else 44.dp)
+            .heightIn(min = 48.dp)
             .clip(CircleShape)
             .focusRing(focused && kind != ButtonKind.Danger, CircleShape)
             .background(background)
