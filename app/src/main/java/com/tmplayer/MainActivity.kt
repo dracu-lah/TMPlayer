@@ -1799,7 +1799,7 @@ private fun Root() {
         // out of it; it goes by itself once Done writes the choice. Back leaves the app. The view
         // model is kept under the gate run, so a rotation keeps the ticks and a later gate starts clean.
         if (chatsGate == com.tmplayer.data.ChatsGate.Move.Wait) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { androidx.compose.material3.CircularProgressIndicator(color = Tone.accent) }
+            com.tmplayer.ui.browse.ChatsGateWaiting()
             return@Box
         }
         if (chatsGate == com.tmplayer.data.ChatsGate.Move.Show) {

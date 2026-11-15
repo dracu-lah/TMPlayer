@@ -612,7 +612,7 @@ private fun ChatsGateOverlay(state: ShellState, chats: com.tmplayer.ui.browse.Ch
     CoverWindowControls()
     Surface(Modifier.fillMaxSize().windowDrag(), color = Tone.background) {
         if (waiting) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Tone.accent) }
+            com.tmplayer.ui.browse.ChatsGateWaiting()
             return@Surface
         }
         val model = rememberViewModel(Unit) { com.tmplayer.ui.browse.newAddChatsViewModel(state.settings) }

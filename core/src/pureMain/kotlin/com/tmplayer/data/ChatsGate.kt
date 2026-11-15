@@ -1,5 +1,8 @@
 package com.tmplayer.data
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+
 /**
  * Whether the app must ask which chats to show before anything else (the mandatory chat choice).
  *
@@ -24,6 +27,31 @@ object ChatsGate {
      */
     const val MIN_CHATS = 4
 
+    /**
+     * How long the gate's wait shows its spinner alone; after this it also offers a way out
+     * (Continue without choosing), so a slow or blocked list never holds the app for the whole wait.
+     */
+    const val WAY_OUT_MS = 4_000L
+
+    private val waivedNow = MutableStateFlow(false)
+
+    /**
+     * True once the viewer chose to go on without choosing, for this visit only: nothing is
+     * written, so the gate asks again at the next start. The web's `setChatsGateWaived` is the
+     * same. Cleared when the account signs out.
+     */
+    val waived: StateFlow<Boolean> get() = waivedNow
+
+    /** Goes on without the choice until the app is closed (or the account signs out). */
+    fun waive() {
+        waivedNow.value = true
+    }
+
+    /** Asks again: a new account must not meet the last one's waiver. */
+    fun clearWaiver() {
+        waivedNow.value = false
+    }
+
     /** What the shell does about the chat choice right now. */
     enum class Move {
         /** Nothing: already answered, waiting on something else, or too few chats to ask about. */
@@ -45,9 +73,10 @@ object ChatsGate {
      * 1. Any answer ([AddedMode.All], or [AddedMode.Picked], an empty pick included) means [Move.None].
      * 2. [setupPending]: the setup after sign in runs first, so the two never stack.
      * 3. [kidsLocked]: a child's profile is not asked; the gate comes back once the lock is off.
-     * 4. The chat list not loaded yet and not [waitedOut]: [Move.Wait].
-     * 5. At least [MIN_CHATS] chats ([total], after the kids lock): [Move.Show].
-     * 6. Anything else (too few chats, waited out, offline) is [Move.None], so Home with its
+     * 4. [waived]: the viewer chose to go on without choosing, for this visit.
+     * 5. The chat list not loaded yet and not [waitedOut]: [Move.Wait].
+     * 6. At least [MIN_CHATS] chats ([total], after the kids lock): [Move.Show].
+     * 7. Anything else (too few chats, waited out, offline) is [Move.None], so Home with its
      *    downloads and Continue watching stays usable, and the gate shows once the list comes.
      *
      * [listComplete] is not needed for either answer: enough chats already in is enough to ask,
@@ -63,10 +92,12 @@ object ChatsGate {
         listComplete: Boolean,
         total: Int,
         waitedOut: Boolean,
+        waived: Boolean = false,
     ): Move = when {
         mode != AddedMode.Unanswered -> Move.None
         setupPending -> Move.None
         kidsLocked -> Move.None
+        waived -> Move.None
         !chatsLoaded && !waitedOut -> Move.Wait
         total >= MIN_CHATS -> Move.Show
         else -> Move.None

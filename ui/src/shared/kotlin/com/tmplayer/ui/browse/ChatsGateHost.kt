@@ -1,6 +1,21 @@
 package com.tmplayer.ui.browse
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -13,7 +28,10 @@ import com.tmplayer.data.ChatsGate
 import com.tmplayer.data.KidsLock
 import com.tmplayer.data.Td
 import com.tmplayer.ui.components.UiState
+import com.tmplayer.ui.i18n.LocalStrings
+import com.tmplayer.ui.onboarding.QuietButton
 import com.tmplayer.ui.onboarding.Setup
+import com.tmplayer.ui.theme.Tone
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -48,6 +66,9 @@ fun rememberChatsGate(chatsViewModel: ChatListViewModel, setupPending: Boolean, 
     val paging by chatsViewModel.paging.collectAsState()
     val refreshing by chatsViewModel.refreshing.collectAsState()
     val connected by Td.connected.collectAsState()
+    val waived by ChatsGate.waived.collectAsState()
+    // A new account never meets the last one's waiver.
+    LaunchedEffect(signedIn) { if (!signedIn) ChatsGate.clearWaiver() }
     val armed by rememberUpdatedState(signedIn && !setupPending)
     val waitedOut by remember {
         waitedOutFlow(snapshotFlow { armed }, Setup.WAIT_FOR_CHATS_MS)
@@ -62,6 +83,7 @@ fun rememberChatsGate(chatsViewModel: ChatListViewModel, setupPending: Boolean, 
         listComplete = listComplete(everything, connected, refreshing, paging),
         total = total,
         waitedOut = waitedOut,
+        waived = waived,
     )
 }
 
@@ -75,5 +97,34 @@ internal fun waitedOutFlow(armed: Flow<Boolean>, ms: Long): Flow<Boolean> = arme
     if (on) {
         delay(ms)
         emit(true)
+    }
+}
+
+/**
+ * What the gate shows during [ChatsGate.Move.Wait], the same on the phone, the television and the
+ * desktop: the spinner with "Loading your chats" under it (ON-7), and after
+ * [ChatsGate.WAY_OUT_MS] a quiet Continue without choosing, which waives the gate for this visit
+ * (nothing is written, it asks again next start). The remote lands on the button as it appears.
+ */
+@Composable
+fun ChatsGateWaiting(modifier: Modifier = Modifier) {
+    val s = LocalStrings.current
+    var wayOut by remember { mutableStateOf(false) }
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        delay(ChatsGate.WAY_OUT_MS)
+        wayOut = true
+    }
+    LaunchedEffect(wayOut) {
+        if (wayOut) runCatching { focus.requestFocus() }
+    }
+    Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            CircularProgressIndicator(color = Tone.accent)
+            Text(s.pickerLoading, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
+            if (wayOut) {
+                QuietButton(s.pickerContinueWithout, modifier = Modifier.focusRequester(focus), onClick = ChatsGate::waive)
+            }
+        }
     }
 }

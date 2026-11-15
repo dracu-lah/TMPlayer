@@ -1745,6 +1745,7 @@
     "clear_scope": "Clear {scope} ({count})",
     "confirm_body": "Reading many chats takes longer. You can remove chats again at any time.",
     "confirm_title": "{count, plural, one {Select # chat?} other {Select # chats?}}",
+    "continue_without": "Continue without choosing",
     "count_about": "{count, plural, =0 {No videos counted} one {About # video} other {About # videos}}",
     "count_again": "Count again",
     "count_many": "1,000+ videos",

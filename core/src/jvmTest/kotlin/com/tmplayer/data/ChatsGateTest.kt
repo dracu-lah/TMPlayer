@@ -16,7 +16,8 @@ class ChatsGateTest {
         listComplete: Boolean = true,
         total: Int = 40,
         waitedOut: Boolean = false,
-    ) = ChatsGate.decide(mode, setupPending, kidsLocked, chatsLoaded, listComplete, total, waitedOut)
+        waived: Boolean = false,
+    ) = ChatsGate.decide(mode, setupPending, kidsLocked, chatsLoaded, listComplete, total, waitedOut, waived)
 
     @Test
     fun `an unanswered account with enough chats is asked`() {
@@ -53,6 +54,17 @@ class ChatsGateTest {
         assertEquals(ChatsGate.Move.None, decide(chatsLoaded = false, total = 0, waitedOut = true))
         // Once the list arrives after the wait, it is asked then: nothing has to retry.
         assertEquals(ChatsGate.Move.Show, decide(chatsLoaded = true, waitedOut = true))
+    }
+
+    @Test
+    fun `going on without choosing lets the app through, waiting or not`() {
+        assertEquals(ChatsGate.Move.None, decide(waived = true))
+        assertEquals(ChatsGate.Move.None, decide(waived = true, chatsLoaded = false))
+        // The waiver is in memory only and a sign out clears it.
+        ChatsGate.waive()
+        assertTrue(ChatsGate.waived.value)
+        ChatsGate.clearWaiver()
+        assertFalse(ChatsGate.waived.value)
     }
 
     @Test
