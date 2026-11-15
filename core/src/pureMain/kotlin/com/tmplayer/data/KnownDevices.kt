@@ -70,6 +70,12 @@ data class KnownDevice(
     val engine: PlayerEngine? = null,
     val decoder: DecoderHint? = null,
     val note: String = "",
+    /**
+     * Whether tunneled playback is known to work (true) or to break (false) on this device, which
+     * Settings' Tunneled playback Auto follows ([KnownDevices.tunnelingFor]); null says nothing.
+     * An entry may carry only this, with no engine or decoder preference.
+     */
+    val tunneling: Boolean? = null,
 ) {
 
     /** Whether this entry covers [device] playing a video of [mime] (null when not known yet). */
@@ -170,14 +176,22 @@ object KnownDevices {
         return shipped.filter { it.id !in fed } + feed
     }
 
-    /** The first entry covering [device] for a video of [mime], or null. */
+    /** The first entry covering [device] for a video of [mime] that prefers an engine or a decoder, or null. */
     fun find(list: List<KnownDevice>, device: DeviceFacts, mime: String?): KnownDevice? =
-        list.firstOrNull { it.matches(device, mime) }
+        list.firstOrNull { (it.engine != null || it.decoder != null) && it.matches(device, mime) }
+
+    /**
+     * What the list says about tunneled playback on [device] for a video of [mime]: true or false
+     * from the first matching entry that states it, null when none does (Auto then leaves it off).
+     */
+    fun tunnelingFor(list: List<KnownDevice>, device: DeviceFacts, mime: String?): Boolean? =
+        list.firstOrNull { it.tunneling != null && it.matches(device, mime) }?.tunneling
 
     private fun entryOf(entry: JSONObject): KnownDevice? {
         val engine = PlayerEngine.ofKey(entry.opt("engine") as? String)
         val decoder = DecoderHint.ofKey(entry.opt("decoder") as? String)
-        if (engine == null && decoder == null) return null
+        val tunneling = entry.opt("tunneling") as? Boolean
+        if (engine == null && decoder == null && tunneling == null) return null
         val chipsets = tokens(entry.opt("chipsets")).filter { it.length >= MIN_CHIPSET }
         val models = tokens(entry.opt("models"))
         if (chipsets.isEmpty() && models.isEmpty()) return null
@@ -194,6 +208,7 @@ object KnownDevices {
             engine = engine,
             decoder = decoder,
             note = (entry.opt("note") as? String)?.take(MAX_NOTE).orEmpty(),
+            tunneling = tunneling,
         )
     }
 

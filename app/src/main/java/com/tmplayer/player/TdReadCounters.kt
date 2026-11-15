@@ -26,12 +26,22 @@ object TdReadCounters {
     const val MAX_ONE_WAIT_MS = 3_600_000L
 
     private val waited = AtomicLong()
+
+    /** Every wait since the process began (or [reset]): the stats overlay reads this, so it never steals the recorder's [take]. */
+    private val waitedTotal = AtomicLong()
     private val opened = AtomicInteger()
 
     /** A read or an open that blocked for [ms] waiting on TDLib. A negative or absurd value is held to range. */
     fun waited(ms: Long) {
-        if (ms > 0) waited.addAndGet(ms.coerceAtMost(MAX_ONE_WAIT_MS))
+        if (ms > 0) {
+            val held = ms.coerceAtMost(MAX_ONE_WAIT_MS)
+            waited.addAndGet(held)
+            waitedTotal.addAndGet(held)
+        }
     }
+
+    /** The milliseconds waited so far in total, for a reader that takes differences ([PlaybackStatsText]). */
+    fun totalWaitedMs(): Long = waitedTotal.get()
 
     /** The source was opened: the first time, a reopen after a close, or a seek. */
     fun opened() {

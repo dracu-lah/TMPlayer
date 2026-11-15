@@ -579,6 +579,128 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     /** What is playing, for a crash report (S2): engine, decoder, codec family and size class only. */
     private val crashNote = CrashPlayingNote()
 
+    // ---- the playback stats overlay (PR5): built and ticking only while the Advanced switch is on --
+
+    private var statsOn = false
+
+    // ---- tunneled playback (PR5), on a television only ----------------------------------------------
+
+    /** Settings, Playback, Advanced, Tunneled playback; read as the video opens. */
+    private var tunneledMode = com.tmplayer.player.TunneledMode.Auto
+
+    /** Whether the player in hand was built with tunneling on, so an error under it can retry without. */
+    private var tunnelingActive = false
+
+    /** A playback error under tunneling happened in this screen: it is not tried again here. */
+    private var tunnelingFailed = false
+
+    /** Whether the track selector is told to tunnel for the video being opened, and why (logged). */
+    private fun tunnelingDecision(): TunnelingPolicy.Decision {
+        val tv = FormFactor.isTv(this)
+        if (!tv) return TunnelingPolicy.Decision(false, TunnelingPolicy.Reason.NotTelevision)
+        val mime = mediaMime.ifBlank { null }
+        return TunnelingPolicy.decide(
+            TunnelingPolicy.Input(
+                mode = tunneledMode,
+                television = true,
+                knownDevice = com.tmplayer.data.KnownDevices.tunnelingFor(com.tmplayer.data.KnownDevices.builtIn, EngineDevice.facts(), mime),
+                // A tunneled decoder never hands frames to the app: 3D, a forced shape and the app's own
+                // software decoder all work on frames, so nothing is drawn onto a picture the app cannot reach.
+                drawsOnPicture = stereo.on || videoScale != VideoScale.Fit || videoDecoder == com.tmplayer.data.VideoDecoder.Software,
+                codecCanTunnel = TunnelingSupport.canTunnel(mime),
+                failedBefore = tunnelingFailed,
+            ),
+        )
+    }
+
+    /**
+     * An error while the player tunnels (a decoder that cannot, an audio track that will not start in
+     * tunnel mode): once, the same place again with tunneling off. True when it took the error.
+     */
+    private fun retryWithoutTunneling(error: PlaybackException): Boolean {
+        val exo = player ?: return false
+        if (!TunnelingPolicy.retriesWithout(tunnelingActive, tunnelingFailed, EngineFailures.of(error.errorCode) == EngineFailure.Source)) return false
+        tunnelingFailed = true
+        tunnelingActive = false
+        Log.w("TMPlayer", "Playback error ${error.errorCodeName} while tunneling: trying again without it")
+        (exo.trackSelector as? DefaultTrackSelector)?.let { it.parameters = it.buildUponParameters().setTunnelingEnabled(false).build() }
+        exo.prepare()
+        exo.playWhenReady = true
+        return true
+    }
+    private var statsOverlay: PlaybackStatsOverlay? = null
+    private var statsScheduled = false
+    private var statsWaitBase = 0L
+    private val statsGate = PlaybackStatsText.Throttle()
+
+    private val statsTick = object : Runnable {
+        override fun run() {
+            statsScheduled = false
+            if (!statsOn || isFinishing || isDestroyed) return
+            val engine = currentEngine() ?: return
+            updateStats(engine)
+            // Only while a video plays and is in front: paused or in the background it holds its last reading.
+            if (engine.player.isPlaying && lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)) scheduleStats()
+        }
+    }
+
+    private fun scheduleStats() {
+        if (statsScheduled) return
+        statsScheduled = true
+        loopHandler.postDelayed(statsTick, PlaybackStatsText.ONE_SECOND_MS)
+    }
+
+    /** Builds the readout and starts its tick, when the switch is on; nothing at all when it is off. */
+    private fun startStats() {
+        if (!statsOn) return
+        if (statsOverlay == null) {
+            statsOverlay = PlaybackStatsOverlay(
+                root = findViewById(R.id.player_root),
+                below = findViewById(R.id.overlay_container),
+                tv = FormFactor.isTv(this),
+            )
+            statsWaitBase = TdReadCounters.totalWaitedMs()
+        }
+        currentEngine()?.let { updateStats(it) }
+        scheduleStats()
+    }
+
+    private fun stopStats() {
+        loopHandler.removeCallbacks(statsTick)
+        statsScheduled = false
+        statsGate.reset()
+        statsOverlay?.release()
+        statsOverlay = null
+    }
+
+    private fun updateStats(engine: Engine) {
+        val overlay = statsOverlay ?: return
+        if (!statsGate.allow(SystemClock.elapsedRealtime())) return
+        val stats = runCatching { engine.stats() }.getOrNull() ?: return
+        val vlc = stats.engine == com.tmplayer.data.PlayerEngine.Vlc
+        val total = TdReadCounters.totalWaitedMs()
+        val waited = (total - statsWaitBase).coerceAtLeast(0L)
+        statsWaitBase = total
+        val hardware = when {
+            vlc -> null
+            watchDecoder.isEmpty() -> null
+            else -> !DecoderNames.isSoftware(watchDecoder) && !watchSoftware
+        }
+        overlay.show(
+            PlaybackStatsText.lines(
+                PlaybackStatsText.Readout(
+                    engine = if (vlc) "libVLC" else "ExoPlayer",
+                    decoder = if (vlc) "" else watchDecoder,
+                    hardware = hardware,
+                    droppedFrames = if (vlc) stats.droppedFrames else watch.figures().dropped,
+                    bufferAheadMs = if (vlc) stats.bufferedMs else (player?.let { it.bufferedPosition - it.currentPosition } ?: 0L),
+                    readWaitMs = waited,
+                    speed = engine.speed,
+                ),
+            ),
+        )
+    }
+
     /**
      * The playback trace (reliability plan L1): dropped frames, underruns, buffer, decoder and the
      * data source's waits for TDLib, every few seconds while the video plays. Ticks on [loopHandler]
@@ -1984,6 +2106,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             val evenRead = async { runCatching { settings.evenVolumeNow() }.getOrDefault(true) }
             val silenceRead = async { runCatching { settings.skipSilenceNow() }.getOrDefault(false) }
             val decoderRead = async { runCatching { settings.videoDecoderNow() }.getOrDefault(com.tmplayer.data.VideoDecoder.Automatic) }
+            val tunnelRead = async { runCatching { settings.tunneledModeNow() }.getOrDefault(com.tmplayer.player.TunneledMode.Auto) }
+            val statsRead = async { runCatching { settings.playbackStatsNow() }.getOrDefault(false) }
             val styleRead = async { runCatching { settings.subtitleStyleNow() }.getOrDefault(SubtitleStyle()) }
             // Only a video from a message has somewhere to keep an offset; a file opened from
             // elsewhere starts in sync and forgets any change on the way out.
@@ -2072,6 +2196,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             evenVolumeOn = evenRead.await()
             skipSilence = silenceRead.await()
             videoDecoder = decoderRead.await()
+            tunneledMode = tunnelRead.await()
+            statsOn = statsRead.await()
             subtitleStyle = styleRead.await()
             applySubtitleStyle()
             delaysRead.await()?.let { syncDelays = it }
@@ -2275,6 +2401,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             vlc.speed = carry?.speed ?: playbackSpeed
             vlc.setDelays(syncDelays.audioMs, syncDelays.subtitleMs)
             crashNote.began("libvlc")
+            startStats()
             // The tracks are not listed yet: the engine puts them back as they are ([VlcEngine.restore]).
             carry?.let(vlc::restore)
             if (inBackgroundAudio) hideVideoUnseen(vlc.player)
@@ -2514,6 +2641,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         }
         player = exo
         crashNote.began("media3")
+        startStats()
         traceRecorder.attach(exo)
         wakeEndWatch()
         castClient = client
@@ -4009,6 +4137,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
         val plan = trackPlan
         val subtitles = plan.subtitles
+        val tunneling = tunnelingDecision()
         val trackSelector = DefaultTrackSelector(this).apply {
             parameters = buildUponParameters()
                 // Off stays off, so a series watched without captions does not get them back on an
@@ -4030,8 +4159,11 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 .setPreferredTextLanguage((subtitles as? SubtitlePlan.On)?.language)
                 .setSelectUndeterminedTextLanguage(false)
                 .setPreferredAudioLanguage(plan.audioLanguage)
+                .setTunnelingEnabled(tunneling.tunneled)
                 .build()
         }
+        tunnelingActive = tunneling.tunneled
+        Log.i("TMPlayer", "Tunneled playback ${if (tunneling.tunneled) "on" else "off"}: ${tunneling.reason} (mode ${tunneledMode.key})")
 
         // Constant-bitrate seeking rescues formats that ship without a seek index. Not "always":
         // on a file that has an index the estimate is worse than the index, and the seek lands
@@ -4602,6 +4734,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             // A pause and play inside one sample interval would read as a slow clock (HX37).
             if (!isPlaying) watch.interrupted()
             if (isPlaying) startWatch()
+            if (isPlaying) startStats()
             loopHandler.removeCallbacks(loopWatch)
             if (isPlaying && abLoop?.complete == true) loopHandler.post(loopWatch)
             // Started again from outside the card (a headset, the notification): the question
@@ -4728,6 +4861,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 leaveForSignIn()
                 return
             }
+            if (retryWithoutTunneling(error)) return
             if (switchDecoderByItself(error)) return
             // With a second engine here (PR2): VLC by itself, or its button on the sheet below.
             if (handleEngineError(error)) return
@@ -5012,6 +5146,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     private fun letGoOfPlayer() {
         // A crash after this is not about the video that was playing (S2).
         crashNote.ended()
+        stopStats()
         // The VLC engine when it plays (PR2): its native player, surface and stream, all of it.
         releaseVlc()
         val exo = player ?: return
