@@ -1,5 +1,6 @@
 package com.tmplayer.ui.player
 
+import com.tmplayer.ui.theme.focusRingOnTv
 import com.tmplayer.ui.theme.collectIsFocusVisibleAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -382,6 +383,7 @@ private fun PanelButton(
             .heightIn(min = if (tv) 48.dp else 44.dp)
             .clip(shape)
             .background(if (focused) Tone.focusFill else Tone.surfaceHigh)
+            .focusRingOnTv(focused, shape)
             .then(if (!focused) Modifier.border(1.dp, Tone.outline, shape) else Modifier)
             .clickable(
                 interactionSource = interactions,
@@ -422,6 +424,7 @@ private fun SwitchLine(label: String, on: Boolean, onToggle: () -> Unit) {
             .heightIn(min = if (tv) 52.dp else 48.dp)
             .clip(shape)
             .background(if (focused) Tone.focusFill else Tone.surfaceHigh)
+            .focusRingOnTv(focused, shape)
             .semantics {
                 role = Role.Switch
                 stateDescription = if (on) s.commonOn else s.commonOff

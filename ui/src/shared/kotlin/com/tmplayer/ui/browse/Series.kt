@@ -1,5 +1,6 @@
 package com.tmplayer.ui.browse
 
+import com.tmplayer.ui.theme.focusEdge
 import com.tmplayer.ui.components.EdgeStep
 import com.tmplayer.ui.components.FastScroller
 import com.tmplayer.ui.components.keepTopInSight
@@ -506,7 +507,7 @@ private fun EpisodeLine(
             .fillMaxWidth()
             .clip(shape)
             .background(if (focused) Tone.surfaceHigh else Color.Transparent)
-            .border(if (focused) Focus.Edge else 0.dp, if (focused) Tone.accent else Color.Transparent, shape)
+            .focusEdge(focused, shape)
             .then(
                 if (onLongClick != null && tv && holdOk) {
                     Modifier.okHold(interactions, onClick, onLongClick)

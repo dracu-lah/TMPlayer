@@ -1,5 +1,6 @@
 package com.tmplayer.ui.components
 
+import com.tmplayer.ui.theme.focusScale
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
@@ -65,7 +66,7 @@ fun ChooseChatsButton(
     val focused by interactions.collectIsFocusVisibleAsState()
     val still = rememberLessMotion()
     val scale by animateFloatAsState(
-        targetValue = if (still || !focused) 1f else Motion.FocusScale,
+        targetValue = if (still || !focused) 1f else focusScale,
         animationSpec = Motion.standard(Motion.Fast),
         label = "chooseChatsScale",
     )

@@ -1,7 +1,6 @@
 package com.tmplayer.ui.theme
 
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.foundation.border
 import com.tmplayer.data.Accent
 import androidx.compose.runtime.getValue
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -16,22 +15,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import com.tmplayer.ui.i18n.ProvideStrings
 import androidx.compose.runtime.staticCompositionLocalOf
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.Outline
-import androidx.compose.ui.graphics.drawOutline
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.isSpecified
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.runtime.ReadOnlyComposable
-import androidx.compose.runtime.State
-import kotlin.math.ceil
-import kotlin.math.min
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -127,70 +113,6 @@ val LocalDarkTheme = staticCompositionLocalOf { true }
  * the few things that paint the ground themselves rather than read the scheme, such as the loader.
  */
 val LocalPureBlack = staticCompositionLocalOf { false }
-
-/**
- * A ring around whatever the remote is on, for when the fill alone is not enough.
- *
- * In daylight [Tone.focusFill] is a pale blue, a 1.24:1 step on near-white and well under the 3:1
- * a control is meant to stand out by, so an outline in the accent carries the signal the fill
- * cannot.
- *
- * In the dark theme [Tone.focusFill] is already a bright block against a near-black screen, but
- * that block alone cannot tell "focused" apart from a control that is merely chosen or otherwise
- * lit the same way (HX42: a Home banner pill with no fill change at all had no focus mark once
- * Reduce motion turned its scale off). The ring there is [Tone.onFocusFill], Material's own
- * contrast-guaranteed ink for that fill, rather than the accent again: a ring in the same hue as
- * the block it sits on would still read as invisible.
- */
-@Composable
-fun Modifier.focusRing(focused: Boolean, shape: Shape): Modifier =
-    if (focused && FocusVisibility.visible) {
-        border(width = Focus.Ring, color = focusRingColor(), shape = shape)
-    } else {
-        this
-    }
-
-/** The colour [focusRing] draws in: see there for why it is not the accent in the dark theme. */
-@Composable
-@ReadOnlyComposable
-fun focusRingColor(): Color = if (LocalDarkTheme.current) Tone.onFocusFill else Tone.accent
-
-/**
- * A focus [fill] behind the content and a [Focus.Ring] in [ring] over it, painted from [focused]
- * in the draw phase alone, so a focus move draws the element again and composes nothing (HX76:
- * on a 1 GB TV stick each row or tile composed again cost a share of a frame). The stroke is the
- * one [border] draws for a rounded shape (whole pixels wide, inset by half of that, the corners
- * shrunk to match), and the fill is [androidx.compose.foundation.background]'s, so it looks as a
- * `background(...).focusRing(...)` pair did. [focused] decides alone: pass a State that already
- * holds [FocusVisibility] where a mouse click should leave no mark ([collectIsFocusVisibleAsState]).
- */
-fun Modifier.focusDrawn(focused: State<Boolean>, ring: Color, shape: Shape, fill: Color = Color.Unspecified): Modifier =
-    drawWithCache {
-        val stroke = min(ceil(Focus.Ring.toPx()), ceil(size.minDimension / 2))
-        val half = stroke / 2
-        val outline = shape.createOutline(size, layoutDirection, this)
-        val corner = (outline as? Outline.Rounded)?.roundRect?.topLeftCornerRadius?.let {
-            CornerRadius((it.x - half).coerceAtLeast(0f), (it.y - half).coerceAtLeast(0f))
-        }
-        val style = Stroke(stroke)
-        onDrawWithContent {
-            val on = focused.value
-            if (on && fill.isSpecified) drawOutline(outline, fill)
-            drawContent()
-            if (!on) return@onDrawWithContent
-            if (corner != null) {
-                drawRoundRect(
-                    ring,
-                    topLeft = Offset(half, half),
-                    size = Size(size.width - stroke, size.height - stroke),
-                    cornerRadius = corner,
-                    style = style,
-                )
-            } else {
-                drawOutline(outline, ring, style = style)
-            }
-        }
-    }
 
 /** The app's palette as complete Material 3 schemes, one per mode. */
 object TmSchemes {

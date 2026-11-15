@@ -1,5 +1,6 @@
 package com.tmplayer.ui.browse
 
+import com.tmplayer.ui.theme.focusRingOnTv
 import com.tmplayer.ui.theme.collectIsFocusVisibleAsState
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
@@ -88,6 +89,7 @@ fun HeroPill(
             .then(if (focus != null) Modifier.focusRequester(focus) else Modifier)
             .clip(CircleShape)
             .background(fill)
+            .focusRingOnTv(focused, CircleShape)
             .clickable(interactionSource = interactions, indication = if (isTouch()) androidx.compose.foundation.LocalIndication.current else null, role = Role.Button, onClick = onClick)
             .padding(horizontal = 28.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.Center,

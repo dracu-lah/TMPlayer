@@ -1,5 +1,6 @@
 package com.tmplayer.ui.online
 
+import com.tmplayer.ui.theme.focusEdge
 import com.tmplayer.ui.theme.collectIsFocusVisibleAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -503,7 +504,7 @@ private fun PersonCard(person: MetaPerson, loadPhoto: Boolean) {
                 .size(face)
                 .clip(CircleShape)
                 .background(Tone.surfaceHigh)
-                .border(if (focused) Focus.Edge else 0.dp, if (focused) Tone.accent else Color.Transparent, CircleShape),
+                .focusEdge(focused, CircleShape),
             contentAlignment = Alignment.Center,
         ) {
             Text(initials(person.name), style = MaterialTheme.typography.titleMedium, color = Tone.muted)
@@ -692,7 +693,7 @@ private fun KnownPoster(known: KnownTitle, onClick: () -> Unit, modifier: Modifi
                 .aspectRatio(2f / 3f)
                 .clip(shape)
                 .background(Tone.surfaceHigh)
-                .border(if (focused) Focus.Edge else 0.dp, if (focused) Tone.accent else Color.Transparent, shape)
+                .focusEdge(focused, shape)
                 .clickable(interactionSource = interactions, indication = if (tv) null else androidx.compose.foundation.LocalIndication.current, onClick = onClick),
         ) {
             MediaArt(known.item.miniThumbnail, known.item.thumbnailFileId, Modifier.fillMaxSize()) {}
