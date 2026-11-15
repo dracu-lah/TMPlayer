@@ -311,6 +311,9 @@ class ShellState(
 
     var paletteQuery by mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(""))
 
+    /** When the palette last closed, for [com.tmplayer.ui.browse.SearchLifetime]: null before its first opening. */
+    var paletteClosedAtMs: Long? = null
+
     /**
      * Set with the palette's text when something other than typing opened it ([searchEverywhere]),
      * so the palette runs the search at once rather than waiting for a key.

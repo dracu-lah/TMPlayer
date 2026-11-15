@@ -28,6 +28,7 @@ export const PAGE_STRINGS = [
     'about.read',
     'browse.clear_history',
     'browse.clear_history_detail',
+    'browse.clear_search',
     'browse.clear_watch_later',
     'browse.empty_continue',
     'browse.empty_favourites_touch',

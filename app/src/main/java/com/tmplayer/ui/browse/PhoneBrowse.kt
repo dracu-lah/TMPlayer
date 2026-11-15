@@ -133,6 +133,16 @@ internal fun PhoneBrowse(
     // The Chats page comes back on the chip it was left on, a folder or one of Telegram's filters.
     var lastChats by rememberSaveable { mutableStateOf("") }
     LaunchedEffect(tab) { if (tab.onChatsPage) lastChats = BrowseSection.encode(tab) }
+    // The search starts fresh after the app was away for more than two minutes, and when this state
+    // was restored into a new process ([SearchLifetime]); a rotation or a quick switch keeps it.
+    SearchFreshness {
+        searchOpen = false
+        searchText = TextFieldValue()
+        savedFilters = ""
+        search.setFilters(SearchFilters())
+        search.setSort(SearchSort.BestMatch)
+        search.type("")
+    }
 
     // Back after the process was stopped: the model is new, the saved filters are not.
     LaunchedEffect(Unit) {

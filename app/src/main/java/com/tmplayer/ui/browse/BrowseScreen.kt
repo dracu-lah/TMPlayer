@@ -1026,6 +1026,13 @@ internal fun BrowseScreen(
     } else if (tvNav != null) {
         // The search across every chat: the bar's Search, and the remote's search key.
         var tvSearchOpen by rememberSaveable { mutableStateOf(false) }
+        // Away for more than two minutes, or restored into a new process: the search page is shut.
+        SearchFreshness {
+            tvSearchOpen = false
+            search.setFilters(com.tmplayer.data.SearchFilters())
+            search.setSort(com.tmplayer.data.SearchSort.BestMatch)
+            search.type("")
+        }
         val barFocus = remember { FocusRequester() }
         val pageFocus = remember { FocusRequester() }
         // The account's picture, which Back from Settings returns the remote to.

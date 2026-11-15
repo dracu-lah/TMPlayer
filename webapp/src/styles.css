@@ -338,6 +338,13 @@ input:not([type=range]):not([type=radio]):not([type=checkbox]):focus { border-co
   max-width: 720px;
 }
 .search-field:focus-within { border-color: var(--accent); }
+.search-field input[type=search]::-webkit-search-cancel-button { display: none; -webkit-appearance: none; }
+/* The clear button: a cross in a soft round disc (ClearButton in ui), 28px in a 44px target, ringed on focus for a remote. */
+.search-clear { display: grid; place-items: center; width: 44px; height: 44px; margin-right: -12px; padding: 0; border: 0; background: none; color: var(--muted); border-radius: 999px; cursor: pointer; flex: none; }
+.search-clear-disc { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 999px; background: color-mix(in srgb, var(--fg) 12%, transparent); }
+.search-clear:focus-visible { outline: none; }
+.search-clear:focus-visible .search-clear-disc { outline: 2px solid var(--accent); outline-offset: 2px; }
+.search-clear:active .search-clear-disc { transform: scale(0.92); }
 .search-field input:not([type=range]):not([type=radio]) { border: 0; background: none; padding: 0; height: 100%; }
 
 /*

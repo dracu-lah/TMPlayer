@@ -35,6 +35,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
@@ -90,6 +91,7 @@ import com.tmplayer.ui.browse.topicMemory
 import androidx.compose.ui.draw.alpha
 import com.tmplayer.ui.browse.GlobalSearchState
 import com.tmplayer.ui.browse.GlobalSearchViewModel
+import com.tmplayer.ui.browse.SearchLifetime
 import com.tmplayer.ui.browse.SearchResultCard
 import com.tmplayer.ui.browse.SearchResultSkeleton
 import com.tmplayer.ui.browse.label
@@ -210,8 +212,10 @@ private enum class Place(val icon: ImageVector) {
 
 /**
  * The search across every chat, as a palette over the window (CP73): Ctrl+K (Cmd+K on a Mac)
- * opens it from any page, Esc closes it with the query kept, and opening it again brings the query
- * back selected, so typing replaces it and Enter runs it again.
+ * opens it from any page. Esc empties the field first (with its filters) and closes on an empty one;
+ * Ctrl+K again, or a click outside, closes it with the query kept, and opening it again within two
+ * minutes brings the query back selected, so typing replaces it and Enter runs it again. After more
+ * than two minutes, and in a new window, it opens empty ([SearchLifetime]).
  *
  * A field, the filter chips once there is something to filter, and one list the arrow keys walk:
  * the chats whose names match (three, then "Show all"), the videos ([SearchResultCard], one card
@@ -248,7 +252,27 @@ internal fun BoxScope.SearchPalette(
     val text = state.paletteQuery
     val query = ui.query
 
-    BackHandler(enabled = true) { state.paletteOpen = false }
+    // Esc (and Back) empties the field first, with its filters and sort, and closes on an empty one.
+    fun clearAll() {
+        state.paletteQuery = TextFieldValue("")
+        search.type("")
+        search.setFilters(com.tmplayer.data.SearchFilters())
+        search.setSort(SearchSort.BestMatch)
+        selected = -1
+        runCatching { field.requestFocus() }
+    }
+    BackHandler(enabled = true) { if (state.paletteQuery.text.isNotEmpty()) clearAll() else state.paletteOpen = false }
+    // Closed for more than two minutes (or never opened in this process): the old words are gone.
+    // Esc and Ctrl+K again within that bring the last query back, selected, as before.
+    remember {
+        if (!SearchLifetime.keeps(SearchLifetime.processId, state.paletteClosedAtMs, System.currentTimeMillis()) && !state.paletteSubmit) {
+            state.paletteQuery = TextFieldValue("")
+            search.setFilters(com.tmplayer.data.SearchFilters())
+            search.setSort(SearchSort.BestMatch)
+            search.type("")
+        }
+    }
+    DisposableEffect(Unit) { onDispose { state.paletteClosedAtMs = System.currentTimeMillis() } }
     LaunchedEffect(Unit) {
         // Back with the last query selected whole, so typing starts a new one.
         if (state.paletteSubmit) {
@@ -411,7 +435,7 @@ internal fun BoxScope.SearchPalette(
                                     Key.DirectionUp -> { move(-1); true }
                                     Key.PageDown -> { move(PAGE); true }
                                     Key.PageUp -> { move(-PAGE); true }
-                                    Key.Escape -> { close(); true }
+                                    Key.Escape -> { if (text.text.isNotEmpty()) clearAll() else close(); true }
                                     Key.Enter, Key.NumPadEnter -> {
                                         val row = rows.getOrNull(selected)
                                         if (row != null) pick(row, play = command) else search.submit(text.text)
@@ -431,13 +455,7 @@ internal fun BoxScope.SearchPalette(
                     )
                     if (text.text.isNotEmpty()) {
                         BarTooltip(s.browseClearSearch, null, below = true) {
-                            IconButton(onClick = {
-                                state.paletteQuery = TextFieldValue("")
-                                search.type("")
-                                runCatching { field.requestFocus() }
-                            }) {
-                                Icon(TmIcons.Close, contentDescription = s.browseClearSearch)
-                            }
+                            com.tmplayer.ui.components.ClearButton(s.browseClearSearch, onClick = ::clearAll)
                         }
                     }
                 }

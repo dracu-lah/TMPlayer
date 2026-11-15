@@ -148,6 +148,15 @@ internal fun TvSearchScreen(
     )
     val micFocus = remember { FocusRequester() }
     val fieldFocus = remember { FocusRequester() }
+    // Clear: the words, the filters and the sort go at once, and the remote returns to the field.
+    val clear: () -> Unit = {
+        onText("")
+        onFilters(SearchFilters())
+        onSort(SearchSort.BestMatch)
+        runCatching { fieldFocus.requestFocus() }
+    }
+    // Back with words in the field clears them first; the next Back leaves as it always did.
+    com.tmplayer.ui.nav.BackHandler(enabled = text.isNotEmpty(), onBack = clear)
     // A frame first: the field is an item of the results' list now, composed as the list is laid out.
     LaunchedEffect(Unit) {
         withFrameNanos { }
@@ -218,9 +227,8 @@ internal fun TvSearchScreen(
                             editRequests = keyboardRequests,
                         )
                         if (text.isNotEmpty()) {
-                            TvPill(s.commonClear, TmIcons.Close) {
-                                runCatching { fieldFocus.requestFocus() }
-                                onText("")
+                            com.tmplayer.ui.components.IconTip(s.browseClearSearch) {
+                                com.tmplayer.ui.components.ClearButton(s.browseClearSearch, target = 56.dp, disc = 40.dp, onClick = clear)
                             }
                         }
                         offer?.let { found -> TvPill(found.label, TmIcons.Send) { LinkRequests.ask(found.link) } }
@@ -686,6 +694,12 @@ internal fun TvSearchPage(
     val settings = remember(context) { com.tmplayer.data.SettingsStore(context) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     var text by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(state.query.text) }
+    // Words, filters and sort start fresh after two minutes away or a restore into a new process.
+    SearchFreshness {
+        text = ""
+        search.setFilters(com.tmplayer.data.SearchFilters())
+        search.setSort(com.tmplayer.data.SearchSort.BestMatch)
+    }
     LaunchedEffect(text) { search.type(text) }
     val recent by remember(settings) { settings.recentSearches }.collectAsState(initial = emptyList())
     val keeps by remember(settings) { settings.rememberSearches }.collectAsState(initial = true)

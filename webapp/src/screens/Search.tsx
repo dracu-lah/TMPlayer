@@ -1,17 +1,26 @@
-import { createEffect, createResource, createSignal, on, onCleanup, Show } from 'solid-js'
-import { A, useSearchParams } from '@solidjs/router'
+import { createEffect, createResource, createSignal, on, onCleanup, onMount, Show } from 'solid-js'
+import { A, useNavigate, useSearchParams } from '@solidjs/router'
 import { api, errorText } from '../tg/rpc'
 import { onBackOnline } from '../net'
-import { Search01Icon } from '@hugeicons/core-free-icons'
+import { Cancel01Icon, Search01Icon } from '@hugeicons/core-free-icons'
 import { t } from '../i18n'
 import { addedIds, addedMode, addedView, progress, settings } from '../store'
 import { Icon } from '../ui/Icon'
+import { keepsSearch } from '../ui/searchLifetime'
 import { HiddenBySize, tileCard, VideoList } from './VideoList'
+
+/** Whether this page load has already shown the search: a reload or a new tab starts with an empty box, though the address may still carry `?q=`. */
+let shownThisLoad = false
 
 /** Videos across every chat, grouped into shows, copies and pieces as a chat's are. The words are in the address (`?q=`), so Back returns to the same results. */
 export function Search() {
     const [params, setParams] = useSearchParams<{ q?: string }>()
-    const [text, setText] = createSignal(params.q ?? '')
+    const navigate = useNavigate()
+    // A fresh page load (reload, a pasted address, a restored tab) never brings an old search back.
+    const stale = !shownThisLoad && !!params.q
+    shownThisLoad = true
+    const [text, setText] = createSignal(stale ? '' : (params.q ?? ''))
+    let input: HTMLInputElement | undefined
     // "Search my other chats" (HX62): the same words over every chat, once. The next words go back to the added chats.
     const [everyChatFor, setEveryChatFor] = createSignal('')
     const everyChat = () => !!params.q && everyChatFor() === params.q.trim()
@@ -27,6 +36,38 @@ export function Search() {
     let debounce = 0
     let typing = false
     onCleanup(() => clearTimeout(debounce))
+    // Clearing empties the box, the address's words and so the results, the note under them and the other-chats ask at once, and puts the cursor back in the box.
+    const clear = () => {
+        clearTimeout(debounce)
+        typing = false
+        setText('')
+        setEveryChatFor('')
+        setParams({ q: undefined }, { replace: true })
+        input?.focus()
+    }
+    onMount(() => {
+        if (stale) setParams({ q: undefined }, { replace: true })
+        // Back in front after more than two minutes: a fresh box. A tab that was only glanced away from keeps it.
+        let hiddenAt: number | null = null
+        const onVisible = () => {
+            if (document.visibilityState === 'hidden') {
+                hiddenAt = Date.now()
+                return
+            }
+            const was = hiddenAt
+            hiddenAt = null
+            if (!keepsSearch(was, Date.now())) clear()
+        }
+        document.addEventListener('visibilitychange', onVisible)
+        onCleanup(() => document.removeEventListener('visibilitychange', onVisible))
+    })
+    // Escape empties the box first and leaves the page on an empty one (there is no close button: the browser's Back leaves too).
+    const onKey = (e: KeyboardEvent) => {
+        if (e.key !== 'Escape') return
+        e.preventDefault()
+        if (text()) clear()
+        else if (window.history.length > 1) navigate(-1)
+    }
     const onType = (v: string) => {
         setText(v)
         typing = true
@@ -45,7 +86,12 @@ export function Search() {
             <h1 class="page-title">{t('common.search')}</h1>
             <label class="search-field">
                 <Icon icon={Search01Icon} size={20} />
-                <input type="search" placeholder={t('search.field_hint')} aria-label={t('search.field_hint')} value={text()} onInput={(e) => onType(e.currentTarget.value)} autofocus />
+                <input ref={input} type="search" placeholder={t('search.field_hint')} aria-label={t('search.field_hint')} value={text()} onInput={(e) => onType(e.currentTarget.value)} onKeyDown={onKey} autofocus />
+                <Show when={text()}>
+                    <button class="search-clear" type="button" aria-label={t('browse.clear_search')} title={t('browse.clear_search')} onClick={clear}>
+                        <span class="search-clear-disc"><Icon icon={Cancel01Icon} size={14} /></span>
+                    </button>
+                </Show>
             </label>
             <Show when={results.error}>
                 <div class="notice error-notice">
