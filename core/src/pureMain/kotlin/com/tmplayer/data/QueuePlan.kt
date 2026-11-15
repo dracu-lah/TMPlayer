@@ -44,7 +44,8 @@ class QueuePlan private constructor(
     /**
      * The same files shuffled when [on], with [current] (the file playing, or null before any
      * does) first so nothing the viewer is hearing is played again; or in the order posted when
-     * not, from [current] on.
+     * not, the whole list oldest first. The listener is not moved either way: the neighbours of the
+     * file playing come from [stepsFor] and [positionOf], never from the list starting at it.
      */
     fun withShuffle(on: Boolean, current: MediaItem? = null): QueuePlan {
         if (on == shuffle) return this
@@ -92,7 +93,7 @@ class QueuePlan private constructor(
 
         /** A plan for [files] in the order posted, or shuffled; [seed] makes a shuffle repeatable. */
         fun of(files: List<MediaItem>, shuffle: Boolean = false, repeatAll: Boolean = false, seed: Long = Random.nextLong(), current: MediaItem? = null, repeatOne: Boolean = false): QueuePlan {
-            val ordered = if (shuffle) shuffled(files.distinctBy { it.chatId to it.messageId }, current, seed) else files.sortedWith(POSTED)
+            val ordered = if (shuffle) shuffled(files.distinctBy { it.chatId to it.messageId }, current, seed) else files.distinctBy { it.chatId to it.messageId }.sortedWith(POSTED)
             return build(ordered, shuffle, repeatAll, seed, repeatOne && !repeatAll)
         }
 

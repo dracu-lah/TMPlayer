@@ -66,6 +66,14 @@ class QueuePlanTest {
     }
 
     @Test
+    fun `a file given twice plays once in the posted order too`() {
+        val plan = QueuePlan.of(listOf(audio(1), audio(2), audio(2), audio(3)))
+        assertEquals(listOf(1L, 2L, 3L), ids(plan))
+        assertEquals(3L, plan.stepsFor(audio(2))!!.next!!.messageId)
+        assertEquals(1L, plan.stepsFor(audio(2))!!.previous!!.messageId)
+    }
+
+    @Test
     fun `turning shuffle on keeps the file heard and off goes back to the posted order`() {
         val plan = QueuePlan.of((1L..50L).map { audio(it) })
         val mixed = plan.withShuffle(true, current = audio(20))

@@ -101,7 +101,7 @@ class RecoveringCastSource(
 
         override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
             while (true) {
-                if (closed) throw IOException("Closed")
+                if (closed) throw ReadArbiter.ReaderClosedException()
                 try {
                     val r = reader ?: inner.open(at).also { reader = it }
                     val n = r.read(buffer, offset, length)

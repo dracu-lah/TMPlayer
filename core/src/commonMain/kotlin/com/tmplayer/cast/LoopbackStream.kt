@@ -248,7 +248,7 @@ internal class LoopbackSource(
             reader.read(buffer, offset, length)
         } catch (e: IOException) {
             // A reader closed under it is the request ending (a hang up, a seek), not a failure.
-            if (e !is ReadArbiter.ReaderClosedException && e.message != "Closed") runCatching { onFailure(e) }
+            if (e !is ReadArbiter.ReaderClosedException) runCatching { onFailure(e) }
             throw e
         }
 
