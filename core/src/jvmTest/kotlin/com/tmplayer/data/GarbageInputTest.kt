@@ -18,6 +18,7 @@ import com.tmplayer.cast.dlna.SinkCaps
 import com.tmplayer.cast.dlna.plan
 import com.tmplayer.cast.dlna.Soap
 import com.tmplayer.cast.dlna.ManualAddress
+import com.tmplayer.cast.dlna.ManualTvStore
 import com.tmplayer.cast.dlna.Ssdp
 import com.tmplayer.cast.dlna.TransportActions
 import com.tmplayer.cast.dlna.UpnpTime
@@ -213,6 +214,7 @@ class GarbageInputTest {
             survive("Ssdp.parse NT", text) {
                 Ssdp.parse("NOTIFY * HTTP/1.1\r\nNTS: ssdp:alive\r\nNT: $text\r\nUSN: uuid:x::$text\r\nLOCATION: http://192.168.1.2/d.xml\r\nCACHE-CONTROL: $text\r\n\r\n".toByteArray())?.mayBeRenderer
             }
+            survive("ManualTvStore.parse", text) { ManualTvStore.parse(text); ManualTvStore.parse(text.lines().joinToString("\n") { "http://192.168.1.2/d.xml\t$it\t$it" }) }
             survive("ManualAddress.parse", text) {
                 for (loopback in listOf(false, true)) {
                     (ManualAddress.parse(text, loopback) as? ManualAddress.Parsed.Target)?.let { ManualAddress.candidates(it) }
