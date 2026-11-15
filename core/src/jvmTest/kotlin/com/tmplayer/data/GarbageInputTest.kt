@@ -82,6 +82,10 @@ class GarbageInputTest {
         assertTrue(failures.isEmpty(), "Parsers threw on garbage:\n" + failures.distinct().take(40).joinToString("\n"))
 
     private val corpus: List<String> = listOf(
+        // Episode and season ranges in names (T9 take): cut off, doubled, absurd and endless.
+        "E01-", "E~~", "S01-S", "S99-S1", "E999999999-E1", "to to to", "S01E01 to", "Ep 1~", "Ep 1, 2, 3, ", "S01E01,,,02",
+        "S01E01\u2013", "S01-S03-S05", "Seasons 99-100", "Seasons -", "S00-S00", "E1~2~3~4~5~6~7~8~9~10~11~12~13~14~15~16",
+        "1-1-1-".repeat(300), "E01,".repeat(300), "S01E01 to E02 ".repeat(100), "\u0661\u0662-\u0663\u0664",
         "", " ", "\u0000", "﻿", "\uD800", "\uDFFF\uD800", "😀".repeat(50),
         "{", "}", "[", "]", "{}", "[]", "null", "true", "0", "-1", "1e999", "-1e999", "NaN", "\"\"", "\"",
         "{\"a\":", "{\"a\":}", "{\"a\" 1}", "[1,,2]", "{\"a\":1,}", "[null]", "[{}]", "[[]]",

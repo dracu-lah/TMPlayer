@@ -125,6 +125,11 @@ internal fun SeriesOpened(
     chatTitle: String? = null,
     /** The show's chat, from a page opened outside it (Home, search, Watch later); null leaves Go to out. */
     onOpenChat: (() -> Unit)? = null,
+    /**
+     * "Find in other chats" on a missing episode: runs after the page has closed, to take the viewer
+     * to the search. A chat's grid goes back to the chat list first, where the search opens.
+     */
+    onSearchOpened: () -> Unit = {},
 ) {
     // Every episode its chat holds, not only those the screen behind had read.
     val whole = com.tmplayer.ui.browse.rememberWholeSeries(series)
@@ -157,7 +162,18 @@ internal fun SeriesOpened(
         onMessage = { com.tmplayer.ui.components.showMessage(context, it) },
         onOpenChat = onOpenChat,
     )
-    SeriesPage(whole, watch, onPlay, startOver, onDismiss, onLongClick.takeIf { isTouch() }, onDownload, chatTitle, downloadedIds, showActions)
+    val onlyMine by remember(settings) { settings.seriesOnlyMine }.collectAsStateWithLifecycle(initialValue = false)
+    SeriesPage(
+        whole, watch, onPlay, startOver, onDismiss, onLongClick.takeIf { isTouch() }, onDownload, chatTitle, downloadedIds, showActions,
+        onlyMine = onlyMine,
+        onOnlyMine = { on -> scope.launch { settings.setSeriesOnlyMine(on) } },
+        // The search page opens on the show and the episode's code, once this page has gone.
+        onFindElsewhere = { words ->
+            SearchRequest.ask(words)
+            onDismiss()
+            onSearchOpened()
+        },
+    )
 }
 
 /**
@@ -178,6 +194,9 @@ private fun SeriesPage(
     chatTitle: String?,
     downloadedIds: Set<String>,
     showActions: ShowActions,
+    onlyMine: Boolean,
+    onOnlyMine: (Boolean) -> Unit,
+    onFindElsewhere: (String) -> Unit,
 ) {
     val touch = isTouch()
     // On a phone the page grows out of the show's tile, and folds back towards it.
@@ -201,6 +220,9 @@ private fun SeriesPage(
                 downloadedIds = downloadedIds,
                 chatTitle = chatTitle,
                 showActions = showActions,
+                onlyMine = onlyMine,
+                onOnlyMine = onOnlyMine,
+                onFindElsewhere = onFindElsewhere,
                 contentPadding = if (touch) {
                     PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp)
                 } else {

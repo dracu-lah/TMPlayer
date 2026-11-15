@@ -26,6 +26,7 @@ import com.tmplayer.data.MediaText
 import com.tmplayer.data.ResumeRecord
 import com.tmplayer.data.ResumeRewind
 import com.tmplayer.data.Series
+import com.tmplayer.data.EpisodeGuide
 import com.tmplayer.data.SeriesShelf
 import com.tmplayer.data.copyQuality
 import com.tmplayer.data.ShelfEntry
@@ -148,6 +149,8 @@ interface ShelfTile {
 interface WebSeason {
     val number: Int
     val episodes: Array<WebEpisode>
+    /** Episode numbers a longer file holds ("S01E09E10" holds 10), so the show's page does not list them as missing. */
+    val covered: Array<Int>
 }
 
 interface WebEpisode {
@@ -827,6 +830,7 @@ private fun show(key: String, series: Series): ShelfTile = plain(
                     "copies" to ids(episode.copies),
                 )
             }.toTypedArray(),
+            "covered" to EpisodeGuide.covered(season).toTypedArray(),
         )
     }.toTypedArray(),
 )

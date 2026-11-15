@@ -121,6 +121,9 @@ export interface Extras {
     imdb?: string | null
     /** The title logo's file; null for none. Answers kept before it was added lack the field. */
     logo?: string | null
+    /** A show's seasons and the next episode to air (T9); answers kept before it was added lack both. */
+    seasonList?: { number: number; episodes: number; airDate: string | null }[]
+    next?: { season: number; episode: number; airDate: string } | null
     episode?: { name: string; overview: string; still: string | null }
 }
 

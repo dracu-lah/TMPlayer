@@ -38,6 +38,7 @@ private val OPEN_LAST_CHAT = booleanPreferencesKey("open_last_chat")
 private val DOWNLOAD_FIRST = booleanPreferencesKey("download_before_playing")
 private val AUTOPLAY_NEXT = booleanPreferencesKey("autoplay_next")
 private val DETAIL_FIRST = booleanPreferencesKey("detail_first")
+private val SERIES_ONLY_MINE = booleanPreferencesKey("series_only_mine")
 private val COMPACT_NAV = booleanPreferencesKey("compact_nav")
 private val DOWNMIX_STEREO = booleanPreferencesKey("downmix_stereo")
 private val VOLUME_BOOST = booleanPreferencesKey("volume_boost")
@@ -662,6 +663,16 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
 
     suspend fun setDetailFirst(value: Boolean) {
         prefs.edit { it[DETAIL_FIRST] = value }
+    }
+
+    /**
+     * "Only show what I have" on a show's page (T9): on lists just the seasons and episodes the
+     * chats hold; off (the default) lists every one the metadata knows, the missing ones quiet.
+     */
+    val seriesOnlyMine: Flow<Boolean> = read { it[SERIES_ONLY_MINE] ?: false }
+
+    suspend fun setSeriesOnlyMine(value: Boolean) {
+        prefs.edit { it[SERIES_ONLY_MINE] = value }
     }
 
     /**

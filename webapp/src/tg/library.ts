@@ -1069,6 +1069,7 @@ export async function watchInfo(tg: TelegramClient, chatId: number, messageId: n
     const item = (v: Video | null | undefined) => (v ? (s.items.get(v.id) ?? null) : null)
     const seasons = (steps.series?.seasons ?? []).map((season) => ({
         number: season.number,
+        covered: Array.from(season.covered ?? []),
         episodes: season.episodes.flatMap((e) => {
             const it = s.items.get(e.video.id)
             return it ? [{ code: e.code, name: e.video.id === id ? (steps.current?.name ?? null) : null, item: it }] : []
