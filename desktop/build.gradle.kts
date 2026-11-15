@@ -84,6 +84,10 @@ val generateBuildInfo = tasks.register("generateBuildInfo") {
         .firstOrNull { !it.isNullOrBlank() }
         .orEmpty()
     inputs.property("sentryDsn", sentryDsn)
+    // Optional: the log inbox's address (workers/log-inbox), as on Android. Empty hides "Wrong title?"
+    // and the question after a rename; an address that is not https counts as none.
+    val logUploadUrl = (localProps.getProperty("LOG_UPLOAD_URL") ?: System.getenv("LOG_UPLOAD_URL") ?: "").trim()
+    inputs.property("logUploadUrl", logUploadUrl)
     inputs.property("version", desktopVersion)
     inputs.property("installerVersion", installerVersion)
     outputs.dir(out)
@@ -103,6 +107,7 @@ val generateBuildInfo = tasks.register("generateBuildInfo") {
             |    const val TMDB_API_KEY = "$tmdbKey"
             |    const val OMDB_API_KEY = "$omdbKey"
             |    const val SENTRY_DSN = "$sentryDsn"
+            |    const val LOG_UPLOAD_URL = "$logUploadUrl"
             |}
             |""".trimMargin(),
         )

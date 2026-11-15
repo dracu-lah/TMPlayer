@@ -163,6 +163,7 @@ fun detailRow(
         DetailAction.UseMatch -> DetailRow(action, s.gridMatchAgain, TmIcons.Image, onSelect = onSelect)
         DetailAction.ChoosePoster -> DetailRow(action, s.posterChoose, TmIcons.Search, s.posterChooseDetail, onSelect = onSelect)
         DetailAction.Rename -> DetailRow(action, s.gridRename, TmIcons.Edit, s.gridRenameDetail, onSelect = onSelect)
+        DetailAction.WrongTitle -> DetailRow(action, s.titlesMenu, TmIcons.Help, s.titlesMenuDetail, onSelect = onSelect)
         DetailAction.CommentVideos -> DetailRow(action, s.detailCommentsVideos, TmIcons.Chats, onSelect = onSelect)
         DetailAction.ExportCopy -> DetailRow(action, s.keepExportGallery, TmIcons.Image, s.keepExportGalleryDetail, onSelect = onSelect)
     }

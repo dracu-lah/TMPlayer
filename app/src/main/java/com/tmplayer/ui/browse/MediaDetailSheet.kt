@@ -247,12 +247,21 @@ internal fun MediaDetailOpened(
         )
     }
     var renaming by remember { mutableStateOf(false) }
+    // "Wrong title?" for a video not renamed yet: the rename comes first, and its save opens the review.
+    var renamingToReport by remember { mutableStateOf(false) }
     if (renaming) {
         com.tmplayer.player.BookmarkNoteSheet(
             title = s.gridRenameTitle,
             initial = correction?.title ?: com.tmplayer.data.SeriesShelf.filmTitle(item),
             saveLabel = s.gridRenameSave,
             onSave = { text ->
+                // After the save, once per title (or at once when "Wrong title?" asked for the rename),
+                // the sheet that shows what would be sent. It outlives this page.
+                com.tmplayer.data.TitleReports.askAfterRename(
+                    item, shownBefore = correction?.title ?: com.tmplayer.data.SeriesShelf.filmTitle(item), newTitle = text,
+                    chatName = chatTitle.ifBlank { null }, force = renamingToReport,
+                )
+                renamingToReport = false
                 // Every copy of the tile, so the title holds whichever one it shows. Empty goes
                 // back to the file name.
                 App.backgroundScope.launch {
@@ -261,9 +270,9 @@ internal fun MediaDetailOpened(
                 leave()
             },
             // Backing out of the name leaves the page as it was, rather than closing it too.
-            onDismiss = { if (asMenu) onDismiss() else renaming = false },
-            onClose = { if (asMenu) onDismiss() else renaming = false },
-            hint = s.gridRenameHint,
+            onDismiss = { renamingToReport = false; if (asMenu) onDismiss() else renaming = false },
+            onClose = { renamingToReport = false; if (asMenu) onDismiss() else renaming = false },
+            hint = if (renamingToReport) s.titlesTitleRenameHint else s.gridRenameHint,
             maxLength = com.tmplayer.data.VideoCorrections.TITLE_MAX,
         )
         return
@@ -306,6 +315,7 @@ internal fun MediaDetailOpened(
             hasClipboard = touch,
             outsideChat = onOpenChat != null,
             canCorrect = true,
+            canReportTitle = com.tmplayer.data.TitleReports.canReport(item),
             grouped = item.versions.size > 1,
             separated = correction?.separate == true,
             matched = matched,
@@ -412,6 +422,16 @@ internal fun MediaDetailOpened(
             } }
             DetailAction.ChoosePoster -> { { choosingPoster = true } }
             DetailAction.Rename -> { { renaming = true } }
+            DetailAction.WrongTitle -> { {
+                val chosen = correction?.title?.takeIf { it.isNotBlank() }
+                if (chosen != null) {
+                    com.tmplayer.data.TitleReports.open(item, chosen, chatTitle.ifBlank { null })
+                    if (asMenu) onDismiss()
+                } else {
+                    renamingToReport = true
+                    renaming = true
+                }
+            } }
             DetailAction.CommentVideos -> { { commentsOpen = true } }
             DetailAction.ExportCopy -> { {
                 // A second press while this video is copying is the same press again.

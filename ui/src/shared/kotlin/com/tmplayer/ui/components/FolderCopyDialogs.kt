@@ -195,7 +195,7 @@ fun FolderCopyPreparingDialog(gallery: Boolean = false) {
  * dialog's own.
  */
 @Composable
-private fun dialogBodyMax(cap: Dp): Dp {
+internal fun dialogBodyMax(cap: Dp): Dp {
     val height = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.height.toDp() }
     if (height <= 0.dp) return cap
     return (height - DIALOG_CHROME).coerceIn(DIALOG_BODY_MIN, cap)

@@ -293,6 +293,11 @@ class GarbageInputTest {
             survive("MediaName.spellingKey", text) { MediaName.spellingKey(text) }
             survive("TitleShape.of", text) { TitleShape.of(text) }
             survive("TitleReport.parse", text) { TitleReport.parse(text) }
+            survive("TitleLedger.decode", text) { TitleLedger.decode(text).let { TitleLedger.decode(it.encode()) } }
+            survive("TitleUpload.outcome", text) {
+                for (status in listOf(-1, 0, 200, 201, 429, 500)) TitleUpload.outcome(status, text, text)
+                LogUpload.titlesUrl(text)
+            }
             survive("TitleReport.of", text) {
                 TitleReport.of(text, text, text, includeChat = true)?.let { TitleReport.parse(it.toJson()) }
                 TitleReport.scrub(text)

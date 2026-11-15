@@ -145,6 +145,9 @@ fun main(args: Array<String>) {
         com.tmplayer.data.AddedChats.follow(settings)
         // The viewer's corrections to names and groups, for every screen that arranges a chat.
         com.tmplayer.data.VideoCorrections.follow(settings)
+        // "Wrong title?" (N1): the process's sender, none without an inbox address in the build.
+        com.tmplayer.data.TitleReports.install(settings.titleLedger, BuildInfo.LOG_UPLOAD_URL)
+        com.tmplayer.data.TitleReports.flushSoon()
         OnlineMetadata.current = desktopOnlineMetadata()
         // Home as it was last built, read now so its first frame finds it in memory (HomeCache).
         com.tmplayer.data.HomeCache.file = java.io.File(DesktopPaths.dataDir, "home-cache.json")
@@ -443,6 +446,8 @@ fun main(args: Array<String>) {
                                     )
                                 }
                             }
+                            // "Wrong title?" and the question after a rename (N1): over the page, so it outlives the pane whose rename asked it.
+                            com.tmplayer.ui.components.TitleReportHost()
                             // Nothing on screen with a page header (sign in, the PIN pad): the
                             // buttons on their own, top right. The player has its own in its bar.
                             if (shell.nowPlaying == null || recovery.failure != null) WindowControlsFallback(Modifier.align(Alignment.TopEnd))

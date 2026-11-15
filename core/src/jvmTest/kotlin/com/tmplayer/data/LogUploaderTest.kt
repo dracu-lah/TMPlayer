@@ -26,9 +26,9 @@ class LogUploaderTest {
         runCatching { raw?.close() }
     }
 
-    private fun serve(status: Int, body: String, headers: Map<String, String> = emptyMap(), seen: (String, String?) -> Unit = { _, _ -> }): String {
+    private fun serve(status: Int, body: String, headers: Map<String, String> = emptyMap(), path: String = "/v1/report", seen: (String, String?) -> Unit = { _, _ -> }): String {
         val s = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
-        s.createContext("/v1/report") { ex ->
+        s.createContext(path) { ex ->
             val received = ex.requestBody.readBytes().toString(Charsets.UTF_8)
             seen(received, ex.requestHeaders.getFirst("Content-Type"))
             val out = body.toByteArray()
@@ -38,14 +38,14 @@ class LogUploaderTest {
         }
         s.start()
         server = s
-        return "http://127.0.0.1:${s.address.port}/v1/report"
+        return "http://127.0.0.1:${s.address.port}$path"
     }
 
     @Test
     fun `a stored report gives its code and sends the text as plain text`() = runBlocking {
         var got = ""
         var type: String? = null
-        val url = serve(201, """{"code":"TMP-7K3Q","keepDays":30}""") { b, t -> got = b; type = t }
+        val url = serve(201, """{"code":"TMP-7K3Q","keepDays":30}""", seen = { b, t -> got = b; type = t })
         val outcome = LogUploader.send(url, "TMPlayer logs\nhello é")
         assertEquals(LogUpload.Outcome.Sent("TMP-7K3Q"), outcome)
         assertEquals("TMPlayer logs\nhello é", got)
@@ -120,5 +120,33 @@ class LogUploaderTest {
             }
         }
         assertTrue("took ${(System.nanoTime() - began) / 1_000_000} ms", (System.nanoTime() - began) / 1_000_000 < 5_000)
+    }
+
+    @Test
+    fun `a title report is posted as plain text and its code comes back`() = runBlocking {
+        var got = ""
+        var type: String? = null
+        val url = serve(201, """{"code":"NAME-2PGE","duplicate":false,"keepDays":30}""", path = "/v1/titles", seen = { b, t -> got = b; type = t })
+        val text = TitleReport.of("Night.Train.2024.mkv", "Night Train")!!.toJson()
+        assertEquals(TitleUpload.Outcome.Sent("NAME-2PGE"), LogUploader.sendTitle(url, text))
+        assertEquals(text, got)
+        assertEquals("text/plain; charset=utf-8", type)
+    }
+
+    @Test
+    fun `a title report meets the limit, an error, a redirect and nobody listening`() = runBlocking {
+        assertEquals(TitleUpload.Outcome.SlowDown(7), LogUploader.sendTitle(serve(429, "{}", mapOf("Retry-After" to "7"), "/v1/titles"), "{}"))
+        stop()
+        assertEquals(TitleUpload.Outcome.Failed(503), LogUploader.sendTitle(serve(503, "{}", path = "/v1/titles"), "{}"))
+        stop()
+        assertEquals(TitleUpload.Outcome.Failed(302), LogUploader.sendTitle(serve(302, "", mapOf("Location" to "http://127.0.0.1:1/"), "/v1/titles"), "{}"))
+        val free = ServerSocket(0).use { it.localPort }
+        assertEquals(TitleUpload.Outcome.NoConnection, LogUploader.sendTitle("http://127.0.0.1:$free/v1/titles", "{}"))
+    }
+
+    @Test
+    fun `a title text over the cap never leaves`() = runBlocking {
+        val url = serve(201, """{"code":"NAME-2PGE"}""", path = "/v1/titles")
+        assertEquals(TitleUpload.Outcome.Failed(413), LogUploader.sendTitle(url, "x".repeat(TitleUpload.MAX_BYTES + 1)))
     }
 }

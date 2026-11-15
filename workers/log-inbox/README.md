@@ -76,7 +76,10 @@ the bucket and no request appears in the worker's logs.
 
 `LOG_UPLOAD_URL` is a build value (`app/build.gradle.kts`): a line in
 `local.properties`, or the `LOG_UPLOAD_URL` environment variable.
-Empty (the default, and what forks and CI build with) hides "Send to developer".
+Empty (the default, and what forks and CI build with) hides "Send to developer". The desktop reads the
+same two names for its own build (`desktop/build.gradle.kts`). The title reports go to the same host:
+`LogUpload.titlesUrl` turns `https://host/v1/report` into `https://host/v1/titles`, and an empty
+address hides "Wrong title?" and the question after a rename too.
 
 ## Tests
 

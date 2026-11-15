@@ -16,7 +16,9 @@ import kotlinx.coroutines.launch
  * Names are all the app has to go on, and a guess is sometimes wrong: two different films with one
  * title folded into one tile, a poster for somebody else's film, a title nobody would recognise. So
  * each of those can be put right by hand, from the video's menu, and the answer is kept on this
- * device (and in a backup), never sent anywhere.
+ * device (and in a backup). Only a renamed title can leave, and only when the viewer chooses
+ * "Wrong title?" or answers the question after a rename, after seeing exactly what goes
+ * ([TitleReport]); nothing else here is ever sent.
  */
 data class VideoCorrection(
     /** "Not the same video": never folded together with any other file. */

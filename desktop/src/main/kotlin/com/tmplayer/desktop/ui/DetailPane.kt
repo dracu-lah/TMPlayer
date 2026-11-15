@@ -230,6 +230,7 @@ private fun DetailPane(state: ShellState, request: DetailRequest) {
             hasClipboard = true,
             outsideChat = request.outsideChat && chat != null,
             canCorrect = true,
+            canReportTitle = com.tmplayer.data.TitleReports.canReport(item),
             grouped = item.versions.size > 1,
             separated = correction?.separate == true,
             matched = matched,
@@ -249,6 +250,8 @@ private fun DetailPane(state: ShellState, request: DetailRequest) {
     var confirmingRemove by remember(item.id) { mutableStateOf(false) }
     // "Rename" is asked over the pane too, which closes once the title is saved.
     var renaming by remember(item.id) { mutableStateOf(false) }
+    // "Wrong title?" for a video not renamed yet: the rename comes first, and its save opens the review.
+    var renamingToReport by remember(item.id) { mutableStateOf(false) }
     // "Choose the right poster" is asked over the pane too; the pane stays open under it.
     var choosingPoster by remember(item.id) { mutableStateOf(false) }
     // The comments' videos open over the pane, which stays until they close.
@@ -261,6 +264,17 @@ private fun DetailPane(state: ShellState, request: DetailRequest) {
         }
         if (action == DetailAction.Rename) {
             renaming = true
+            return
+        }
+        if (action == DetailAction.WrongTitle) {
+            val chosen = correction?.title?.takeIf { it.isNotBlank() }
+            if (chosen != null) {
+                com.tmplayer.data.TitleReports.open(item, chosen, title.ifBlank { null })
+                close()
+            } else {
+                renamingToReport = true
+                renaming = true
+            }
             return
         }
         if (action == DetailAction.ChoosePoster) {
@@ -366,7 +380,7 @@ private fun DetailPane(state: ShellState, request: DetailRequest) {
                     runCatching { state.settings.correct(com.tmplayer.data.VideoCorrections.filesOf(item)) { it.withWrongMatch(wrong) } }
                 }
             }
-            DetailAction.Rename, DetailAction.CommentVideos, DetailAction.ChoosePoster -> Unit
+            DetailAction.Rename, DetailAction.WrongTitle, DetailAction.CommentVideos, DetailAction.ChoosePoster -> Unit
             DetailAction.ExportCopy -> outlives.launch {
                 val file = record?.localPath?.let(::File)?.takeIf { it.isFile }
                 if (file == null) {
@@ -506,15 +520,22 @@ private fun DetailPane(state: ShellState, request: DetailRequest) {
     if (renaming) {
         RenameDialog(
             initial = correction?.title ?: com.tmplayer.data.SeriesShelf.filmTitle(item),
-            onSave = { title ->
+            onSave = { newTitle ->
                 renaming = false
                 // Every copy of the tile, so the title holds whichever one it shows.
                 outlives.launch {
-                    runCatching { state.settings.correct(com.tmplayer.data.VideoCorrections.filesOf(item)) { it.copy(title = title) } }
+                    runCatching { state.settings.correct(com.tmplayer.data.VideoCorrections.filesOf(item)) { it.copy(title = newTitle) } }
                 }
+                // Once per title (or at once when "Wrong title?" asked for the rename): the dialog that
+                // shows what would be sent. It lives in the window, not in this pane, which closes now.
+                com.tmplayer.data.TitleReports.askAfterRename(
+                    item, shownBefore = correction?.title ?: com.tmplayer.data.SeriesShelf.filmTitle(item), newTitle = newTitle,
+                    chatName = title.ifBlank { null }, force = renamingToReport,
+                )
+                renamingToReport = false
                 close()
             },
-            onDismiss = { renaming = false },
+            onDismiss = { renaming = false; renamingToReport = false },
         )
     }
 

@@ -103,6 +103,9 @@ private val QUALITY_HABIT = stringPreferencesKey("quality_habit")
 /** What this device remembers of pictures it decoded in software: see [DecodeMemory]. */
 private val DECODE_MEMORY = stringPreferencesKey("decode_memory")
 
+/** Title reports sent, asked about and waiting for a connection (N1): see [TitleLedger]. Device only, not backed up. */
+private val TITLE_LEDGER = stringPreferencesKey("title_ledger")
+
 /** The kinds of picture ([DecodeMemory.keyOf]) whose "may stutter" question the viewer turned off. */
 private val HEAVY_ASK_SKIP = stringPreferencesKey("heavy_ask_skip")
 
@@ -2571,6 +2574,16 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
 
     /** What this device remembers of the pictures it played in software ([DecodeMemory]). */
     suspend fun decodeMemoryNow(): Map<String, Boolean> = DecodeMemory.decode(prefs.data.first()[DECODE_MEMORY])
+
+    /** The title reports this device sent, asked about and holds for later (N1), kept on this device only. */
+    val titleLedger: TitleLedgerStore = object : TitleLedgerStore {
+        override suspend fun read(): TitleLedger = TitleLedger.decode(prefs.data.first()[TITLE_LEDGER])
+
+        // Read and written inside one edit, so a send finishing while a queue is added to loses neither.
+        override suspend fun update(change: (TitleLedger) -> TitleLedger) {
+            prefs.edit { it[TITLE_LEDGER] = change(TitleLedger.decode(it[TITLE_LEDGER])).encode() }
+        }
+    }
 
     /** The kinds of picture the "may stutter" question is no longer asked for. */
     suspend fun heavyAskSkipsNow(): Set<String> =

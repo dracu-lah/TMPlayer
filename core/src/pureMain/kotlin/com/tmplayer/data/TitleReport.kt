@@ -26,6 +26,13 @@ class TitleReport private constructor(
     /** The same for the same [fileName] and [title], whatever their case or spacing; the chat is not in it. */
     val hash: String get() = hashOf(fileName, title)
 
+    /**
+     * A short code for the pair, NAME-7K3Q, that the inbox works out from the same hash and
+     * answers with: a viewer on a television, who cannot type, reads it out instead. It is a
+     * label for saying aloud, never a way to find the report (two pairs may share one).
+     */
+    val code: String get() = codeOf(hash)
+
     /** One JSON object, the whole of what is sent. */
     fun toJson(): String {
         val json = JSONObject()
@@ -118,6 +125,21 @@ class TitleReport private constructor(
             val title = json.opt("title") as? String ?: return null
             val chat = json.opt("chat") as? String
             return of(name, title, chat, includeChat = chat != null)
+        }
+
+        /** No 0, 1, I, L or O, as the log inbox's codes: a code read aloud or off a television is not mistaken. */
+        const val CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"
+
+        /** NAME-XXXX for a [hash] of 16 hex digits: the number read in base 31, last four digits. A hash that is not hex gives "NAME-2222". */
+        internal fun codeOf(hash: String): String {
+            var value = hash.toULongOrNull(16) ?: 0uL
+            val base = CODE_ALPHABET.length.toULong()
+            val out = CharArray(4)
+            for (i in 3 downTo 0) {
+                out[i] = CODE_ALPHABET[(value % base).toInt()]
+                value /= base
+            }
+            return "NAME-" + out.concatToString()
         }
 
         private fun normalised(text: String): String =

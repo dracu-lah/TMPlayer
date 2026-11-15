@@ -191,6 +191,10 @@ class App : Application() {
         // The viewer's corrections to names and groups, read once here for every screen that
         // arranges a chat.
         com.tmplayer.data.VideoCorrections.follow(SettingsStore(this))
+        // "Wrong title?" (N1): the one sender a process has, none without an inbox address in the
+        // build. The pairs that waited for a connection are tried once, a minute after a normal start.
+        com.tmplayer.data.TitleReports.install(SettingsStore(this).titleLedger, BuildConfig.LOG_UPLOAD_URL)
+        if (!safe) com.tmplayer.data.TitleReports.flushSoon()
         // "Ask when the app opens": the app is opened again once its last activity has left the
         // screen. Counted across activities, so the player starting in front of the browse screen
         // (and the browse screen stopping behind it) does not count as leaving.

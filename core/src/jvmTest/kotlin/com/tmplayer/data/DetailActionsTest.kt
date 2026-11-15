@@ -147,6 +147,18 @@ class DetailActionsTest {
     }
 
     @Test
+    fun `Wrong title is offered right after Rename where there is an inbox, and nowhere else`() {
+        val base = DetailContext(canBeSaved = true, canCorrect = true)
+        assertFalse(DetailActions.of(base).contains(DetailAction.WrongTitle))
+        assertEquals(listOf(ChoosePoster, Rename, DetailAction.WrongTitle), DetailActions.of(base.copy(canReportTitle = true)).takeLast(3))
+        // Where nothing can be corrected (a screen that would not redraw), there is no report either.
+        assertFalse(DetailActions.of(DetailContext(canBeSaved = true, canReportTitle = true)).contains(DetailAction.WrongTitle))
+        // It sends names, never a copy of the video: a chat that restricts saving still gets it.
+        assertTrue(DetailActions.of(base.copy(canBeSaved = false, canReportTitle = true)).contains(DetailAction.WrongTitle))
+        assertFalse(DetailActions.keepsACopy(DetailAction.WrongTitle))
+    }
+
+    @Test
     fun `another copy kept says so and offers no second download`() {
         val actions = DetailActions.of(phoneGrid.copy(grouped = true, copyInDownloads = true))
         assertTrue(InDownloads in actions)

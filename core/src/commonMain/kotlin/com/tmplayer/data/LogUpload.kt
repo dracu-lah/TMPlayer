@@ -28,6 +28,18 @@ object LogUpload {
         return u.startsWith("https://") && u.length > "https://".length && u.none { it.isWhitespace() }
     }
 
+    /**
+     * The inbox's address for title reports (N1), made from the build's one address
+     * (`https://host/v1/report` gives `https://host/v1/titles`), or null where there is no inbox.
+     * Same host, same rules: a build with no address offers no title reports either.
+     */
+    fun titlesUrl(url: String?): String? {
+        if (!available(url)) return null
+        val u = url!!.trim().substringBefore('?').substringBefore('#').trimEnd('/')
+        val base = if (u.endsWith("/v1/report")) u.removeSuffix("/v1/report") else u
+        return "$base/v1/titles"
+    }
+
     /** The code in the inbox's answer, or null when there is not exactly a well formed one. */
     fun parseCode(body: String?): String? {
         if (body == null) return null

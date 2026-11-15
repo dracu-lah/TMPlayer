@@ -76,6 +76,13 @@ enum class DetailAction {
     /** The title the viewer wants to see, which grouping reads too. */
     Rename,
 
+    /**
+     * "Wrong title?" (N1): tell the developer how this file name should have been read, after a
+     * sheet shows exactly what would be sent. Offered beside [Rename] where the build has an inbox
+     * ([DetailContext.canReportTitle]). For a video not renamed yet it opens the rename first.
+     */
+    WrongTitle,
+
     /** "Videos in the comments": the videos posted under a channel post (CP81). */
     CommentVideos,
 
@@ -132,6 +139,8 @@ data class DetailContext(
     val externalDefault: Boolean = false,
     /** Another app can be fed a video that is not all here, as a stream (the phone), so Open in another app need not wait for the whole file. */
     val canStreamElsewhere: Boolean = false,
+    /** The build has a title inbox and the file has a name worth sending ([TitleReports.canReport]): "Wrong title?" is offered. */
+    val canReportTitle: Boolean = false,
 )
 
 object DetailActions {
@@ -193,6 +202,7 @@ object DetailActions {
             // lookups found nothing: the picker says plainly when they are off.
             add(DetailAction.ChoosePoster)
             add(DetailAction.Rename)
+            if (context.canReportTitle) add(DetailAction.WrongTitle)
         }
     }
 

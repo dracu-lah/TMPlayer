@@ -395,6 +395,9 @@ class MainActivity : ComponentActivity() {
                         // The layout nudge (HX78), over every screen: a box shown the touch layout
                         // meets it on the sign in screen already.
                         LayoutNudgeHost()
+                        // "Wrong title?" and the question after a rename (N1): one place, over every
+                        // screen, so it outlives the page whose rename asked it.
+                        com.tmplayer.ui.components.TitleReportHost(tvPanel = { st, actions -> com.tmplayer.ui.components.TitleReportTvPanel(st, actions) })
                     }
                 }
             }

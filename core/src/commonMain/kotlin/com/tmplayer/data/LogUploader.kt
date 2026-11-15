@@ -9,16 +9,24 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 
 /**
- * Posts one report to the log inbox (`workers/log-inbox`) after the viewer said yes ([LogUpload]
- * says how the answer reads). One request, nothing kept: no cookies, no redirects followed (a
- * captive portal's answer is a failure, not a code), no retry on its own, and the connection is
- * closed the moment the viewer cancels.
+ * Posts one text to the log inbox (`workers/log-inbox`) after the viewer said yes: a report
+ * ([send], [LogUpload] says how the answer reads) or a title report ([sendTitle], [TitleUpload]).
+ * One request, nothing kept: no cookies, no redirects followed (a captive portal's answer is a
+ * failure, not a code), no retry on its own, and the connection is closed the moment the viewer
+ * cancels. The phone and the desktop share it.
  */
 object LogUploader {
 
     private const val CONNECT_MS = 15_000
     private const val READ_MS = 30_000
     private const val MAX_REPLY_BYTES = 4_096
+
+    /** What came back from one request, before it is read as a report's or a title's answer. */
+    private sealed interface Exchange {
+        data class Answer(val status: Int, val body: String?, val retryAfter: String?) : Exchange
+        data object NoConnection : Exchange
+        data class Failed(val status: Int) : Exchange
+    }
 
     /**
      * Never throws except for cancellation. Any trouble reaching the inbox, including a connection
@@ -27,11 +35,29 @@ object LogUploader {
      */
     suspend fun send(url: String, text: String): LogUpload.Outcome {
         if (!LogUpload.fits(text)) return LogUpload.Outcome.Failed(413)
+        return when (val got = exchange(url, text)) {
+            is Exchange.Answer -> LogUpload.outcome(got.status, got.body, got.retryAfter)
+            Exchange.NoConnection -> LogUpload.Outcome.NoConnection
+            is Exchange.Failed -> LogUpload.Outcome.Failed(got.status)
+        }
+    }
+
+    /** One title report (the JSON of a [TitleReport]) to [url] (see [LogUpload.titlesUrl]). Never throws except for cancellation. */
+    suspend fun sendTitle(url: String, text: String): TitleUpload.Outcome {
+        if (text.encodeToByteArray().size > TitleUpload.MAX_BYTES) return TitleUpload.Outcome.Failed(413)
+        return when (val got = exchange(url, text)) {
+            is Exchange.Answer -> TitleUpload.outcome(got.status, got.body, got.retryAfter)
+            Exchange.NoConnection -> TitleUpload.Outcome.NoConnection
+            is Exchange.Failed -> TitleUpload.Outcome.Failed(got.status)
+        }
+    }
+
+    private suspend fun exchange(url: String, text: String): Exchange {
         val bytes = text.toByteArray(Charsets.UTF_8)
         val connection = try {
             URL(url).openConnection() as HttpURLConnection
         } catch (e: Exception) {
-            return LogUpload.Outcome.Failed(0)
+            return Exchange.Failed(0)
         }
         return coroutineScope {
             val job = async(Dispatchers.IO) { post(connection, bytes) }
@@ -45,7 +71,7 @@ object LogUploader {
         }
     }
 
-    private fun post(connection: HttpURLConnection, bytes: ByteArray): LogUpload.Outcome = try {
+    private fun post(connection: HttpURLConnection, bytes: ByteArray): Exchange = try {
         connection.requestMethod = "POST"
         connection.connectTimeout = CONNECT_MS
         connection.readTimeout = READ_MS
@@ -59,11 +85,11 @@ object LogUploader {
         val status = connection.responseCode
         val stream = if (status >= 400) connection.errorStream else connection.inputStream
         val reply = stream?.use { readSmall(it) }
-        LogUpload.outcome(status, reply, connection.getHeaderField("Retry-After"))
+        Exchange.Answer(status, reply, connection.getHeaderField("Retry-After"))
     } catch (e: IOException) {
-        LogUpload.Outcome.NoConnection
+        Exchange.NoConnection
     } catch (e: Exception) {
-        LogUpload.Outcome.Failed(0)
+        Exchange.Failed(0)
     } finally {
         runCatching { connection.disconnect() }
     }
