@@ -357,12 +357,14 @@ fun PlayerScreen(
     }
     // The message as Telegram has it now (CP80): its lighter copies, start time and storyboard.
     // The grid's item already carries them; one rebuilt from a record is read again.
-    var post by remember(current.item.chatId, current.item.messageId) { mutableStateOf<MediaItem?>(null) }
+    // Kept per message through rememberForMessage, so the chat and message ids (longs) stay out of
+    // this function's own local slots: see rememberForMessage.
+    var post by rememberForMessage(current.item) { mutableStateOf<MediaItem?>(null) }
     // The subtitle files posted in this video's chat (EG-F48), looked for once when the Subtitles menu
     // first opens: one search, kept for the video, and nothing when offline or the kids lock leaves
     // the chat out. The menu shows "In this chat" only when there are some.
-    var chatHits by remember(current.item.chatId, current.item.messageId) { mutableStateOf(emptyList<com.tmplayer.player.ChatSubtitles.Hit>()) }
-    var chatAsked by remember(current.item.chatId, current.item.messageId) { mutableStateOf(false) }
+    var chatHits by rememberForMessage(current.item) { mutableStateOf(emptyList<com.tmplayer.player.ChatSubtitles.Hit>()) }
+    var chatAsked by rememberForMessage(current.item) { mutableStateOf(false) }
     // The media handed on to a Telegram copy before it ever opened, whose leaving saves nothing.
     val neverOpened = remember { arrayOfNulls<PlayerMedia>(1) }
     LaunchedEffect(current.item.chatId, current.item.messageId) {
@@ -2484,6 +2486,18 @@ private const val FULLSCREEN_SETTLE_MS = 300L
 
 /** Whether [item] came from a message, which is what the Watched list is keyed by. */
 internal fun hasMessage(item: MediaItem): Boolean = item.chatId != 0L && item.messageId != 0L
+
+/**
+ * remember(item.chatId, item.messageId) in a frame of its own. PlayerScreen has well over a hundred
+ * local slots, and ProGuard, which computes the release build's stack map frames again, tracks
+ * liveness for the first 64 only: three such remembers in a row put their longs in slots 71 to 75,
+ * the compiler reused 72 for the next pair, and ProGuard still wrote 71 as a long, so the release
+ * PlayerScreenKt failed the verifier and the player could not open (verifyReleaseClasses, as HX1
+ * was for SeriesKt). Not inline on purpose.
+ */
+@Composable
+private fun <T> rememberForMessage(item: MediaItem, calculation: () -> T): T =
+    remember(item.chatId, item.messageId) { calculation() }
 
 /**
  * The tracks and speed as they stand, counted the way a [ResumeState] counts them: each track's
