@@ -1,6 +1,7 @@
 package com.tmplayer.ui.settings
 
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,7 +15,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.junit4.StateRestorationTester
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -53,6 +57,7 @@ class SettingsSearchLeaveTest {
 
     private var shown by mutableStateOf("settings")
     private var page by mutableStateOf<SettingsPage?>(null)
+    private var left = 0
 
     private fun host(restoration: StateRestorationTester? = null) {
         FormFactor.override(false)
@@ -60,6 +65,8 @@ class SettingsSearchLeaveTest {
         set {
             TMPlayerTheme {
                 Box(Modifier.fillMaxSize().background(Tone.background)) {
+                    // The app's own handler, composed first as MainActivity's leaveSettings is.
+                    BackHandler { left++ }
                     val holder = rememberSaveableStateHolder()
                     holder.SaveableStateProvider(shown) {
                         if (shown == "settings") {
@@ -144,5 +151,33 @@ class SettingsSearchLeaveTest {
         restoration.emulateSavedInstanceStateRestore()
         settle()
         assertEquals("audio lang", typed())
+    }
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w411dp-h891dp-port-night-xhdpi")
+    fun `Back clears the words first and only then leaves`() {
+        host()
+        rule.onNodeWithTag(SEARCH_TAG).performTextInput("audio lang")
+        rule.waitForIdle()
+        rule.activity.onBackPressedDispatcher.onBackPressed()
+        settle()
+        assertEquals("", typed())
+        assertEquals(0, left)
+        rule.activity.onBackPressedDispatcher.onBackPressed()
+        settle()
+        assertEquals(1, left)
+    }
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w411dp-h891dp-port-night-xhdpi")
+    fun `the clear control empties the box and the focus stays in it`() {
+        host()
+        rule.onNodeWithTag(SEARCH_TAG).performTextInput("audio lang")
+        rule.onNodeWithTag(SEARCH_TAG).requestFocus()
+        rule.waitForIdle()
+        rule.onNodeWithContentDescription("Clear the search").performClick()
+        settle()
+        assertEquals("", typed())
+        rule.onNodeWithTag(SEARCH_TAG).assertIsFocused()
     }
 }

@@ -566,6 +566,9 @@ fun SettingsScreen(
     // Per visit: gone once Settings is left, unless a page found by it is open (About or the cached
     // videos from a result come back to that page, and Back returns to the results).
     var searchQuery by com.tmplayer.ui.components.rememberVisitQuery(keep = page != null)
+    // Back empties the box before it leaves Settings (UX rule 2). Composed after the caller's own
+    // handler, so it is asked first.
+    BackHandler(enabled = page == null && searchQuery.isNotEmpty()) { searchQuery = "" }
     val seek = remember { SettingsSeek() }
     val needs = SettingsNeeds(
         vlc = vlcShown,
