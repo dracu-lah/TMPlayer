@@ -504,6 +504,23 @@
                         android:tint="@color/player_control_icon"
                         android:visibility="gone" />
 
+                    <!-- Television only: the next episode, one press from the row. The remote of a
+                         Google TV or a Mi TV has no media-next key, and the list was seven presses
+                         away. Shown only while the chat has a next episode to play. -->
+                    <ImageButton
+                        android:id="@+id/control_tv_next_episode"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_marginStart="4dp"
+                        android:background="@drawable/bg_control_button"
+                        android:contentDescription="Next episode"
+                        android:nextFocusUp="@id/controls_timebar"
+                        android:padding="12dp"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/ic_player_next"
+                        android:tint="@color/player_control_icon"
+                        android:visibility="gone" />
+
                     <!-- Television only: the row's overflow, last so it is the end of the walk.
                          The phone's is in its top bar. -->
                     <ImageButton

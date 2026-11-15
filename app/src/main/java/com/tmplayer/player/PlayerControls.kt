@@ -119,6 +119,21 @@ class PlayerControls(
     private val episodesButton: TextView = root.findViewById(R.id.control_episodes)
     private val copyButton: TextView = root.findViewById(R.id.control_copy)
 
+    /** The television's Next episode button; shown only while there is a next episode. */
+    private val nextEpisodeButton: View = root.findViewById(R.id.control_tv_next_episode)
+
+    /** The next episode the row's button plays, or null. */
+    private var nextEpisodeToPlay: MediaItem? = null
+
+    /**
+     * The row button the remote was last on, so a sheet or picker that closes puts it back on that
+     * button and not on the first one ([focusRow]). Null on a fresh appearance of the row.
+     */
+    private var lastRowButton: View? = null
+
+    private fun isRowButton(view: View): Boolean =
+        view.parent === buttons || view === episodesButton || view === copyButton
+
     /** The phone's times line shows what is left rather than the total. */
     var showRemaining = false
         set(value) {
@@ -268,7 +283,13 @@ class PlayerControls(
         wire(lockButton) { onLock() }
         wire(episodesButton) { onEpisodes() }
         wire(copyButton) { onCopies() }
+        wire(nextEpisodeButton) { nextEpisodeToPlay?.let(onPlayEpisode) }
         episodesButton.text = L.episodesTitle
+        if (isTv) {
+            container.viewTreeObserver.addOnGlobalFocusChangeListener { _, now ->
+                if (now != null && isRowButton(now)) lastRowButton = now
+            }
+        }
         rotate.visibility = if (isTv) View.GONE else View.VISIBLE
         // The scrims on five stops, which their XML stand-ins cannot hold without a seam.
         root.findViewById<View>(R.id.controls_scrim_top).background = ControlsScrim.top()
@@ -680,6 +701,7 @@ class PlayerControls(
             root.findViewById(R.id.control_audio),
             root.findViewById(R.id.control_speed),
             shapeButton,
+            nextEpisodeButton,
             more,
             centerPlay,
         )
@@ -718,6 +740,7 @@ class PlayerControls(
             R.id.control_rotate to L.playerScreenOrientation,
             R.id.control_lock to L.playerLockScreen,
             R.id.control_tv_more to L.commonMore,
+            R.id.control_tv_next_episode to L.playerNextEpisode,
             R.id.control_episodes to L.episodesTitle,
             R.id.control_copy to L.playerCopies,
         )
@@ -793,7 +816,10 @@ class PlayerControls(
         previousCaption: String = "",
         nextCaption: String = "",
     ) {
-        if (isTv) return
+        if (isTv) {
+            setNextEpisodeButton(nextEpisode, nextLabel)
+            return
+        }
         // Invisible rather than gone keeps the play disc dead centre whether or not there are
         // neighbours.
         centerPrevious.visibility = if (previousEpisode != null) View.VISIBLE else View.INVISIBLE
@@ -804,6 +830,21 @@ class PlayerControls(
         describe(centerNext, nextLabel)
         centerNext.setOnClickListener { nextEpisode?.let(onPlayEpisode) }
         caption(centerNextCaption, nextCaption.takeIf { nextEpisode != null })
+    }
+
+    /**
+     * The television's Next episode button: there while the chat has a next episode, gone for a
+     * film, a last episode or a lookup that found nothing. A remote standing on it when it goes
+     * is put back on the row rather than dropped.
+     */
+    private fun setNextEpisodeButton(next: MediaItem?, label: String) {
+        nextEpisodeToPlay = next
+        describe(nextEpisodeButton, label)
+        val wanted = if (next != null) View.VISIBLE else View.GONE
+        if (nextEpisodeButton.visibility == wanted) return
+        val hadFocus = nextEpisodeButton.hasFocus()
+        nextEpisodeButton.visibility = wanted
+        if (hadFocus) focusRow()
     }
 
     /**
@@ -888,10 +929,11 @@ class PlayerControls(
         describe(rotate, label)
     }
 
-    fun show() {
+    fun show(focusButtons: Boolean = false) {
         container.removeCallbacks(hide)
         if (!shown) {
             shown = true
+            lastRowButton = null
             // Cancels a fade out still running, and the GONE at its end with it.
             container.animate().cancel()
             container.visibility = View.VISIBLE
@@ -904,7 +946,12 @@ class PlayerControls(
             // A remote has no pointer, so something must hold focus the moment the row appears,
             // and the bar is what earns it: the arrows then seek at once, which is what an arrow
             // over a video means everywhere else, and the buttons are one press Down away.
-            if (isTv) timeBar.requestFocus()
+            // Down from the bare picture is the one way in that wants the buttons: the arrows
+            // already seek without the row, so the bar earns nothing there.
+            if (isTv) {
+                val first = container.findViewById<View>(R.id.control_subtitles)
+                if (!focusButtons || first.visibility != View.VISIBLE || !first.requestFocus()) timeBar.requestFocus()
+            }
         }
         poke()
     }
@@ -930,7 +977,9 @@ class PlayerControls(
      */
     fun focusRow() {
         if (!isTv || !visible) return
-        container.findViewById<View>(R.id.control_subtitles).requestFocus()
+        // The button the remote was on before the sheet opened, else the first one.
+        val back = lastRowButton?.takeIf { it.isShown && it.isFocusable }
+        (back ?: container.findViewById<View>(R.id.control_subtitles)).requestFocus()
         poke()
     }
 

@@ -6792,6 +6792,16 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 }
                 return true
             }
+            // The CC and the audio-language keys many remotes carry: the same pickers the row's
+            // buttons open, a press away from the bare picture (the desktop's SubtitleNext and
+            // AudioNext keys). Nothing while a status sheet owns the screen or nothing is loaded.
+            KeyEvent.KEYCODE_CAPTIONS, KeyEvent.KEYCODE_MEDIA_AUDIO_TRACK -> {
+                val type = TrackKeys.pickerFor(event.keyCode)
+                if (type != null && event.repeatCount == 0 && player != null && statusOverlay.visibility != View.VISIBLE) {
+                    showTrackPicker(type)
+                }
+                return true
+            }
             // Every key that changes playback shows that it did: the jumps their side figure, play
             // and pause the centre disc or glyph. With no buttons for them on a television's row,
             // the cue is the only sign the press landed.
@@ -6879,8 +6889,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 }
                 // Any other press over the bare picture asks for the row rather than doing
                 // anything irreversible; the second press does the thing it lands on.
+                // Down lands on the first button, the one thing the arrows cannot do without the row;
+                // Up keeps the bar.
                 if (FormFactor.isTv(this) && !controlsUp && statusOverlay.visibility != View.VISIBLE) {
-                    controls?.show()
+                    controls?.show(focusButtons = event.keyCode == KeyEvent.KEYCODE_DPAD_DOWN)
                     return true
                 }
             }
