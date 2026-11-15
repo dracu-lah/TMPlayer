@@ -18,6 +18,7 @@ export type Rules = {
         : never
 }
 export type RawVideo = Plain<core.RawVideo>
+export type RawPhoto = Plain<core.RawPhoto>
 export type Video = Plain<core.Video>
 export type Shelf = Plain<core.Shelf>
 export type ShelfTile = Plain<core.ShelfTile>

@@ -395,4 +395,61 @@ class WebRulesTest {
         // Nothing picked at all: Home picks its own chats.
         assertTrue(homePlan(chats, arrayOf(2.0), null, layout(), null, true).autoPick)
     }
+
+    private fun photo(id: Int, album: String?, caption: String?, hasPicture: Boolean = true): RawPhoto {
+        val o: dynamic = js("({})")
+        o.chatId = -1001234567890.0
+        o.messageId = id.toDouble()
+        o.albumId = album
+        o.caption = caption
+        o.hasPicture = hasPicture
+        return o.unsafeCast<RawPhoto>()
+    }
+
+    @Test
+    fun `an album's photo gives its videos a caption and a picture`() {
+        val page = screenAlbums(
+            arrayOf(
+                raw(11, "video.mp4", albumId = "7", kind = "video", mime = "video/mp4"),
+                raw(12, "Harbour.Notes.S01E02.mkv", albumId = "7", caption = "Own words"),
+                raw(20, "Alone.2020.mkv"),
+            ),
+            arrayOf(photo(10, "7", "Harbour Notes, season one")),
+        )
+        val first = page.videos.first { it.messageId == 11.0 }
+        assertEquals("Harbour Notes, season one", first.caption)
+        assertEquals("Harbour Notes, season one", first.title)
+        assertTrue(first.albumPhoto)
+        val second = page.videos.first { it.messageId == 12.0 }
+        assertEquals("Own words", second.caption)
+        assertTrue(second.albumPhoto)
+        assertFalse(page.videos.first { it.messageId == 20.0 }.albumPhoto)
+        isPlain(first)
+    }
+
+    @Test
+    fun `a photo with no picture, no album or an album of two shows changes no picture`() {
+        val noPicture = screenAlbums(arrayOf(raw(11, "video.mp4", albumId = "7")), arrayOf(photo(10, "7", "Words", hasPicture = false)))
+        assertFalse(noPicture.videos[0].albumPhoto)
+        assertEquals("Words", noPicture.videos[0].caption)
+        val alone = screenAlbums(arrayOf(raw(11, "video.mp4")), arrayOf(photo(10, null, "Words"), photo(9, "0", "Words")))
+        assertEquals("", alone.videos[0].caption)
+        val mixed = screenAlbums(
+            arrayOf(raw(11, "Harbour.Notes.S01E01.mkv", albumId = "7"), raw(12, "Night.Lantern.2022.1080p.mkv", albumId = "7")),
+            arrayOf(photo(10, "7", "Harbour Notes")),
+        )
+        assertTrue(mixed.videos.none { it.albumPhoto || it.caption.isNotEmpty() })
+        // No photos given: exactly screen().
+        assertEquals(screen(arrayOf(raw(11, "video.mp4"))).videos[0].caption, screenAlbums(arrayOf(raw(11, "video.mp4")), emptyArray()).videos[0].caption)
+    }
+
+    @Test
+    fun `garbage photos never throw`() {
+        val big = "x".repeat(4096)
+        val photos = arrayOf(photo(1, "", big), photo(2, "not a number", null), photo(3, "-5", "\u0000"), photo(4, "9223372036854775807", big, hasPicture = false))
+        val page = screenAlbums(arrayOf(raw(11, "video.mp4", albumId = "9223372036854775807"), raw(12, "v.mp4", albumId = "-5")), photos)
+        assertEquals(2, page.videos.size)
+        val ten = Array(10) { photo(it + 1, "7", if (it == 0) big else null, hasPicture = it % 2 == 0) }
+        assertEquals(0, screenAlbums(emptyArray(), ten).videos.size)
+    }
 }

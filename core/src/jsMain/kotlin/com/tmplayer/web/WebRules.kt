@@ -3,6 +3,8 @@
 
 package com.tmplayer.web
 
+import com.tmplayer.data.AlbumPhoto
+import com.tmplayer.data.AlbumPosts
 import com.tmplayer.data.ArchiveFile
 import com.tmplayer.data.ArchiveKind
 import com.tmplayer.data.Archives
@@ -72,6 +74,21 @@ interface RawVideo {
     val withheld: Boolean
 }
 
+/**
+ * A photo of an album as the worker read it (a photo among a page's messages, or a search hit on
+ * one): the album's caption and picture for [AlbumPosts].
+ */
+interface RawPhoto {
+    val chatId: Double
+    val messageId: Double
+    /** The album (grouped_id) as a decimal string, or null for a photo on its own. */
+    val albumId: String?
+    /** The photo's caption as Telegram sent it, untrimmed. */
+    val caption: String?
+    /** Whether the worker can draw the photo (it has a thumbnail to ask for). */
+    val hasPicture: Boolean
+}
+
 /** A video after the app's rules: what the lists, the player and the rest of this module take. */
 interface Video {
     /** "chatId:messageId", the app's own key for a video. */
@@ -89,6 +106,8 @@ interface Video {
     val date: Double
     val topicId: Double
     val albumId: String?
+    /** True when the album's photo is this video's picture (the worker draws it from the photo's message). */
+    val albumPhoto: Boolean
     /** False: stream only, nothing kept (ContentProtection.StreamOnly). */
     val canBeSaved: Boolean
     val round: Boolean
@@ -286,9 +305,17 @@ fun video(raw: RawVideo): Video? = if (raw.selfDestructs) null else mapped(raw)?
  * A page of messages: the videos to list, an album's caption shared with its captionless
  * videos as the apps do, and the self-destructing ones counted.
  */
-fun screen(raws: Array<RawVideo>): Screened {
+fun screen(raws: Array<RawVideo>): Screened = screenAlbums(raws, emptyArray())
+
+/**
+ * [screen] with the photos of the page's albums ([RawPhoto], found among its messages or by a
+ * search): an album's photo gives its videos a caption where they have none and, where the
+ * worker can draw it, their picture (`albumPhoto`). Same rules as the apps' [AlbumPosts].
+ */
+fun screenAlbums(raws: Array<RawVideo>, photos: Array<RawPhoto>): Screened {
     val screened = ContentProtection.screen(raws.toList(), { it.selfDestructs }, ::mapped)
-    val items = MediaText.shareAlbumCaptions(screened.items)
+    val picked = AlbumPosts.pick(photos.mapNotNull(::albumPhotoOf))
+    val items = MediaText.shareAlbumCaptions(AlbumPosts.fold(screened.items, picked))
     return plain("videos" to items.map(::toWeb).toTypedArray(), "selfDestructing" to screened.selfDestructing)
 }
 
@@ -693,6 +720,20 @@ private fun mapped(raw: RawVideo): MediaItem? {
     }
 }
 
+/** The apps' [AlbumPhoto] for a photo the worker read: its file is only known to the worker, so any picture is file 1. */
+private fun albumPhotoOf(raw: RawPhoto): AlbumPhoto? {
+    val album = raw.albumId?.toLongOrNull() ?: return null
+    if (album == 0L) return null
+    return AlbumPhoto(
+        chatId = raw.chatId.toLong(),
+        albumId = album,
+        messageId = raw.messageId.toLong(),
+        fileId = if (raw.hasPicture) 1 else 0,
+        mini = null,
+        caption = MediaText.captionOf(raw.caption),
+    )
+}
+
 private fun toItem(video: Video): MediaItem = MediaItem(
     chatId = video.chatId.toLong(),
     messageId = video.messageId.toLong(),
@@ -711,6 +752,7 @@ private fun toItem(video: Video): MediaItem = MediaItem(
     height = video.height.toInt(),
     topicId = video.topicId.toInt(),
     albumId = video.albumId?.toLongOrNull() ?: 0L,
+    albumPhotoFileId = if (video.albumPhoto) 1 else 0,
 )
 
 private fun toWeb(item: MediaItem): Video = plain(
@@ -728,6 +770,7 @@ private fun toWeb(item: MediaItem): Video = plain(
     "date" to item.date.toDouble(),
     "topicId" to item.topicId.toDouble(),
     "albumId" to item.albumId.takeIf { it != 0L }?.toString(),
+    "albumPhoto" to (item.albumPhotoFileId != 0),
     "canBeSaved" to item.canBeSaved,
     "round" to MediaText.isRound(item),
 )

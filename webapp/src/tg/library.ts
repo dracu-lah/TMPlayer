@@ -4,7 +4,7 @@
 // gets the kept answer.
 import type { Message, Peer, TelegramClient } from '@mtcute/web'
 import { rules, type Shelf, type ShelfTile, type Video } from '../rules'
-import { chatProtects, itemOf, rawOf, thumbnails, videoId } from './media'
+import { chatProtects, itemOf, photosAmong, rawOf, thumbnails, videoId } from './media'
 import { forgetSponsored, loadSponsored } from './sponsored'
 import type { ChatItem, CopyRef, ChatPage, ChatView, Found, ListView, RecentPage, SponsoredItem, Tile, VideoItem, WatchInfo } from './types'
 
@@ -13,6 +13,13 @@ const PAGE = 100
 const SEARCH_PAGE = 50
 const VIDEO_FILTER = { _: 'inputMessagesFilterVideo' } as const
 const DOC_FILTER = { _: 'inputMessagesFilterDocument' } as const
+const PHOTO_FILTER = { _: 'inputMessagesFilterPhotos' } as const
+/** An album read back for a search hit (AlbumPosts in core): six albums a page, three at once, one history window each. */
+const ALBUM_READS = 6
+const ALBUM_AT_ONCE = 3
+const ALBUM_MEMBERS = 10
+/** The longest FLOOD_WAIT one album read sits out, once. */
+const ALBUM_FLOOD_MAX_S = 30
 /** Chats kept arranged at once; the oldest opened goes first. */
 const KEEP_CHATS = 6
 
@@ -57,6 +64,8 @@ interface ChatState {
     /** Telegram's search of the chat, per query (lower case): the spelling that answered and its pages. */
     searches: Map<string, ChatSearch>
     archives: Map<number, string>
+    /** The first photo message of each album met so far (by album id), drawn as its videos' picture; bounded. */
+    albumPhotos: Map<string, Message>
     selfDestructing: number
     /** Bumped each time videos come in, so a kept arrangement knows it is stale. */
     version: number
@@ -105,6 +114,7 @@ async function openState(tg: TelegramClient, chatId: number): Promise<ChatState>
         hits: new Map(),
         searches: new Map(),
         archives: new Map(),
+        albumPhotos: new Map(),
         selfDestructing: 0,
         version: 0,
         loading: null,
@@ -133,10 +143,19 @@ async function loadPage(tg: TelegramClient, s: ChatState): Promise<void> {
     s.version++
 }
 
-/** Messages Telegram sent for the chat, through the rules, into `into` (and their items into the chat's). Returns the videos added. */
+/**
+ * Messages Telegram sent for the chat, through the rules, into `into` (and their items into the chat's). Returns the videos added.
+ * Photos among them (an album's, from a search hit or a window read) give the album's videos a caption and a picture.
+ */
 function absorb(r: Awaited<ReturnType<typeof rules>>, s: ChatState, messages: Message[], into: Map<string, Video>): Video[] {
     const byId = new Map<number, Message>()
     for (const msg of messages) byId.set(msg.id, msg)
+    const { photos, byAlbum } = photosAmong(messages)
+    for (const [album, msg] of byAlbum) {
+        s.albumPhotos.delete(album)
+        s.albumPhotos.set(album, msg)
+    }
+    while (s.albumPhotos.size > KEEP_ALBUM_PHOTOS) s.albumPhotos.delete(s.albumPhotos.keys().next().value!)
     const raws = []
     for (const msg of byId.values()) {
         const raw = rawOf(msg, s.protected)
@@ -151,18 +170,70 @@ function absorb(r: Awaited<ReturnType<typeof rules>>, s: ChatState, messages: Me
         }
         raws.push(raw)
     }
-    const screened = r.screen(raws)
+    const screened = r.screenAlbums(raws, photos)
     if (into === s.videos) s.selfDestructing += screened.selfDestructing
     const added: Video[] = []
     for (const v of screened.videos) {
         const msg = byId.get(v.messageId)
-        const item = msg && itemOf(msg, v.title, r.posterAsk(v), r.continueTitle(v))
+        const item = msg && itemOf(msg, v.title, r.posterAsk(v), r.continueTitle(v), v.albumPhoto && v.albumId ? s.albumPhotos.get(v.albumId) : null)
         if (!item) continue
         into.set(v.id, v)
         s.items.set(v.id, item)
         added.push(v)
     }
     return added
+}
+
+/** Albums' photos kept per chat. */
+const KEEP_ALBUM_PHOTOS = 300
+
+/**
+ * The messages around the albums that `hits` belong to: one history window per album (a photo hit
+ * first, then an album's video hit), at most six a page and three at once, never one per item. A read
+ * that fails leaves its album as the hit showed it, and a flood wait is waited out by that read alone.
+ */
+export async function albumNeighbours(tg: TelegramClient, photoHits: Message[], hits: Message[]): Promise<Message[]> {
+    const anchors = new Map<string, Message>()
+    for (const m of [...photoHits, ...hits]) {
+        if (!m.groupedId || !m.chat) continue
+        const key = `${m.chat.id}:${m.groupedId.toString()}`
+        if (!anchors.has(key)) anchors.set(key, m)
+    }
+    const reads = [...anchors.values()].slice(0, ALBUM_READS)
+    const out: Message[] = []
+    for (let i = 0; i < reads.length; i += ALBUM_AT_ONCE) {
+        const chunk = await Promise.all(reads.slice(i, i + ALBUM_AT_ONCE).map((m) => albumWindow(tg, m)))
+        out.push(...chunk.flat())
+    }
+    return out
+}
+
+/** One album's members around `anchor`: the ten before and after it, kept to its own album. */
+async function albumWindow(tg: TelegramClient, anchor: Message): Promise<Message[]> {
+    for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+            const around = await tg.getHistory(anchor.chat.id, {
+                offset: { id: anchor.id, date: Math.floor(anchor.date.getTime() / 1000) },
+                addOffset: -ALBUM_MEMBERS,
+                limit: ALBUM_MEMBERS * 2 + 1,
+            })
+            const album = anchor.groupedId!.toString()
+            return around.filter((m) => m.groupedId?.toString() === album).slice(0, ALBUM_MEMBERS)
+        } catch (e) {
+            const seconds = floodSeconds(e)
+            if (seconds === null || seconds > ALBUM_FLOOD_MAX_S || attempt > 0) return []
+            await new Promise((resolve) => setTimeout(resolve, seconds * 1000 + 250))
+        }
+    }
+    return []
+}
+
+/** The seconds a FLOOD_WAIT asks for, or null for any other failure. */
+function floodSeconds(e: unknown): number | null {
+    const seconds = (e as { seconds?: unknown })?.seconds
+    if (typeof seconds === 'number' && Number.isFinite(seconds)) return seconds
+    const m = /FLOOD_WAIT_(\d+)/.exec(String((e as { message?: unknown })?.message ?? e))
+    return m ? Number(m[1]) : null
 }
 
 /**
@@ -196,13 +267,22 @@ async function searchChat(tg: TelegramClient, s: ChatState, query: string): Prom
                         return res as Message[]
                     }),
             )
-            return absorb(r, s, pages.flat(), s.hits)
+            const hits = pages.flat()
+            // A photo whose caption names the title leads to its album's videos: asked beside the
+            // others (its first page only, a failure leaves the rest standing), then one read of
+            // each hit's album.
+            const photoHits = await tg
+                .searchMessages({ chatId: s.id, query: spelling, filter: PHOTO_FILTER, limit: ALBUM_READS * 2 })
+                .then((res) => res as Message[])
+                .catch(() => [] as Message[])
+            const neighbours = await albumNeighbours(tg, photoHits, hits)
+            return absorb(r, s, [...hits, ...photoHits, ...neighbours], s.hits)
         }
         if (st.spelling === null) {
             for (const spelling of r.chatSearchSpellings(query)) {
                 const feeds: Feed[] = [VIDEO_FILTER, DOC_FILTER].map((filter) => ({ filter, next: undefined, done: false }))
                 const added = await pageOf(spelling, feeds)
-                if (!r.rank(added.map((v) => `${v.title} ${v.fileName}`), query).length) continue
+                if (!r.rank(added.map((v) => `${v.title} ${v.fileName} ${v.caption}`), query).length) continue
                 st.spelling = spelling
                 st.feeds = feeds
                 st.done = feeds.every((f) => f.done)
@@ -302,7 +382,11 @@ function arrange(s: ChatState, view: ChatView): ChatPage {
     const shelf = r.shelf(videos, view.sort, view.minBytes, view.maxBytes, view.watched, view.started)
     let tiles = tilesOf(shelf, s.items, view)
     if (query) {
-        const texts = tiles.map((t) => (t.kind === 'show' ? t.title : `${t.title} ${s.videos.get(videoId(t.item))?.fileName ?? ''}`))
+        const texts = tiles.map((t) => {
+            if (t.kind === 'show') return t.title
+            const v = s.videos.get(videoId(t.item)) ?? s.hits.get(videoId(t.item))
+            return `${t.title} ${v?.fileName ?? ''} ${v?.caption ?? ''}`
+        })
         const order = r.rank(texts, query)
         tiles = order.map((i) => tiles[i])
     }
@@ -557,7 +641,20 @@ export async function across(tg: TelegramClient, query: string, added: Set<numbe
             messages: Promise.all([
                 tg.searchGlobal({ query, filter: VIDEO_FILTER, limit }),
                 tg.searchGlobal({ query, filter: DOC_FILTER, limit }),
-            ]).then(([a, b]) => [...a, ...b] as Message[]),
+                // A photo whose caption names the title leads to its album's videos; beside a query
+                // only, and a failure of this search leaves the others' answer standing.
+                query ? tg.searchGlobal({ query, filter: PHOTO_FILTER, limit: ALBUM_READS * 2 }).catch(() => []) : Promise.resolve([]),
+            ]).then(async ([a, b, c]) => {
+                const found = [...a, ...b] as Message[]
+                const photoHits = [...c] as Message[]
+                // One read of each hit's album, six a page: the search is kept two minutes, so it is read once.
+                const neighbours = query ? await albumNeighbours(tg, photoHits, found) : []
+                // Of a video hit's album only the photo is wanted (its caption and picture); the other
+                // videos are listed when a photo hit named the album, as the answer to the words.
+                const named = new Set(photoHits.filter((m) => m.groupedId).map((m) => `${m.chat?.id}:${m.groupedId!.toString()}`))
+                const kept = neighbours.filter((m) => m.media?.type === 'photo' || named.has(`${m.chat?.id}:${m.groupedId?.toString()}`))
+                return [...found, ...photoHits, ...kept]
+            }),
         }
         hit.messages.catch(() => searches.delete(query))
         searches.set(query, hit)
@@ -566,8 +663,9 @@ export async function across(tg: TelegramClient, query: string, added: Set<numbe
     const messages = await hit.messages
     const byId = new Map<string, Message>()
     const raws = []
-    for (const msg of messages) {
-        if (added && !added.has(msg.chat?.id)) continue
+    const inChats = messages.filter((msg) => !added || added.has(msg.chat?.id))
+    const { photos, byAlbum } = photosAmong(inChats)
+    for (const msg of inChats) {
         const raw = rawOf(msg, chatProtects(msg))
         if (!raw) continue
         byId.set(videoId(raw), msg)
@@ -575,8 +673,8 @@ export async function across(tg: TelegramClient, query: string, added: Set<numbe
     }
     const videos: Video[] = []
     const items = new Map<string, VideoItem>()
-    for (const v of r.screen(raws).videos) {
-        const item = itemOf(byId.get(v.id)!, v.title, r.posterAsk(v), r.continueTitle(v))
+    for (const v of r.screenAlbums(raws, photos).videos) {
+        const item = itemOf(byId.get(v.id)!, v.title, r.posterAsk(v), r.continueTitle(v), v.albumPhoto && v.albumId ? byAlbum.get(v.albumId) : null)
         if (!item || items.has(v.id)) continue
         items.set(v.id, item)
         videos.push(v)

@@ -1,7 +1,7 @@
 // Worker only: turns Telegram messages into the page's plain items and remembers where each file's
 // bytes are, so the page can ask for them by key.
 import type { FileLocation, Message, tl } from '@mtcute/web'
-import type { PosterAsk, RawVideo, Video } from '../rules'
+import type { PosterAsk, RawPhoto, RawVideo, Video } from '../rules'
 import type { FileRef, Storyboard, VideoCopy, VideoItem } from './types'
 
 /** Where a Telegram document's bytes are. */
@@ -85,7 +85,14 @@ export function coverKey(m: { getThumbnail(type: string): { raw: unknown } | nul
 }
 
 /** The page's item for a message already known to hold a video, under [title], its file noted. */
-export function itemOf(msg: Message, title: string, poster: PosterAsk | null | undefined, name?: string): VideoItem | null {
+export function itemOf(
+    msg: Message,
+    title: string,
+    poster: PosterAsk | null | undefined,
+    name?: string,
+    /** The album's photo message, when the rules say it is this video's picture (an uploader's own cover is not read here, so a photo beats Telegram's frame). */
+    albumPhoto?: Message | null,
+): VideoItem | null {
     const m = msg.media
     if (!m || (m.type !== 'video' && m.type !== 'document')) return null
     const key = m.uniqueFileId
@@ -97,7 +104,9 @@ export function itemOf(msg: Message, title: string, poster: PosterAsk | null | u
         chatId: msg.chat.id,
         messageId: msg.id,
     })
-    const thumb = m.getThumbnail('m') ?? m.thumbnails[0] ?? null
+    const own = m.getThumbnail('m') ?? m.thumbnails[0] ?? null
+    const photo = albumPhoto ? photoThumb(albumPhoto) : null
+    const thumb = photo ?? own
     if (thumb) thumbnails.set(thumb.uniqueFileId, thumb)
     const raw = msg.raw._ === 'message' ? msg.raw : null
     return {
@@ -148,6 +157,45 @@ export function rawOf(msg: Message, chatProtected: boolean): RawVideo | null {
         selfDestructs: !!media?.ttlSeconds,
         withheld: !!raw?.restrictionReason?.length || !!raw?.fromScheduled,
     }
+}
+
+/** The picture a photo message offers a card: its medium size, else its first. Null for a message that is not a photo. */
+function photoThumb(msg: Message) {
+    const m = msg.media
+    if (!m || m.type !== 'photo') return null
+    return m.getThumbnail('m') ?? m.thumbnails[0] ?? null
+}
+
+/**
+ * A photo of an album as the rules read one (WebRules' RawPhoto), or null for anything else: not a
+ * photo, not in an album, or withheld. Nothing is saved: the photo is drawn as a card's picture only.
+ */
+export function rawPhotoOf(msg: Message): RawPhoto | null {
+    const m = msg.media
+    if (!m || m.type !== 'photo' || !msg.groupedId) return null
+    const raw = msg.raw._ === 'message' ? msg.raw : null
+    if (raw?.restrictionReason?.length || raw?.fromScheduled) return null
+    return {
+        chatId: msg.chat.id,
+        messageId: msg.id,
+        albumId: msg.groupedId.toString(),
+        caption: msg.text || null,
+        hasPicture: !!photoThumb(msg),
+    }
+}
+
+/** The photos among `messages` for the rules, and the first photo message of each album (by album id) to draw as its videos' picture. */
+export function photosAmong(messages: Message[]): { photos: RawPhoto[]; byAlbum: Map<string, Message> } {
+    const photos: RawPhoto[] = []
+    const byAlbum = new Map<string, Message>()
+    for (const msg of messages) {
+        const raw = rawPhotoOf(msg)
+        if (!raw) continue
+        photos.push(raw)
+        const have = byAlbum.get(raw.albumId!)
+        if (raw.hasPicture && (!have || msg.id < have.id)) byAlbum.set(raw.albumId!, msg)
+    }
+    return { photos, byAlbum }
 }
 
 /** The message's chat has "restrict saving content" on. */
