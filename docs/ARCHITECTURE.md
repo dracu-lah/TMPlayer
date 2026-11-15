@@ -138,6 +138,14 @@ TMPlayer is the control point and serves only the chosen video and its subtitle,
   `CastRecovery`, `LanAddress`, `WebVtt`. `cast/dlna/` holds the DLNA client: SSDP discovery,
   device description, SOAP, DIDL, `SinkCaps` (what the TV says it plays), `DlnaRenderer` with
   polling, and `DlnaCast` for one session.
+- **Finding TVs.** `DlnaDiscovery` asks for `MediaRenderer:1` and `ssdp:all` three times at the
+  start and goes on while the picker is open (`live`): NOTIFY alive and byebye on port 1900, a
+  slow search every 30 s, rows that expire by their max-age (an old LG that answers only
+  `ssdp:all` is found). "Add a TV by its address" (`ManualAddress`: an IPv4 or a description link,
+  private or link local only, no names, no IPv6, no redirects; a unicast M-SEARCH, then guessed
+  description paths) is kept by `ManualTvStore` (a file in the app's own folder, not in a backup)
+  and listed by every run. The picker shows Cast and DLNA counts apart; the dialog is
+  `AddTvDialog` in `ui/shared`. Android 17's local network permission: `docs/BUILDING.md`.
 - **LAN guard.** The session token in the URL plus the renderer's own IP; no PIN, as a TV cannot
   type one. DLNA streams carry DLNA headers and close after 30 minutes idle (paused).
 - **Phone (`app/.../cast/`).** `CastSupport` is the interface `PlayerCast`, `CastRemoteScreen` and

@@ -143,10 +143,26 @@ toolchain was moved forward on 2026-10-18 (Gradle 9.8.1, AGP 9.4.1, Kotlin 2.4.2
   their tests are `jvmTest`.
 - **`compileSdk` is 37** because `tdl-coroutines` 14+ declares that minimum in its AAR metadata.
   `targetSdk` deliberately stays at 35.
-- **Local network permission (DLNA casting).** Android 17 asks for a local network permission
-  once an app targets it; at `targetSdk` 35 it does not apply. Before raising `targetSdk` to 37,
-  request it before SSDP discovery and the cast server, or DLNA and Cast discovery find nothing.
-  The manifest holds `CHANGE_WIFI_MULTICAST_STATE` for SSDP.
+- **Local network permission (DLNA casting).** Verified 2026-11-15 against the Android developer
+  docs, not assumed. From Android 17 (API 37) an app that **targets 37 or higher** needs the runtime
+  permission `ACCESS_LOCAL_NETWORK` (group `NEARBY_DEVICES`, so a user who allowed Bluetooth nearby
+  devices is not asked again) for any TCP connection and any UDP unicast, multicast or broadcast to
+  or from the LAN: SSDP discovery, the description fetch, SOAP and the cast server all count, and a
+  failure is a timeout (TCP) or `EPERM` (UDP). An app that targets **36 or lower** is granted it
+  implicitly with `INTERNET`, and the docs say not to declare or request it there, so at `targetSdk`
+  35 nothing is needed and nothing is asked. `NEARBY_WIFI_DEVICES` was only the Android 16 opt-in
+  test switch (`RESTRICT_LOCAL_NETWORK`) and is deprecated; it is not what to request. Google's own
+  way round it is the Cast output switcher or an `NsdManager` picker (mDNS only), neither of which
+  covers DLNA's SSDP. Test with `adb shell am compat disable RESTRICT_LOCAL_NETWORK <package>`
+  (Android 16 opt-in) or by targeting 37 on an Android 17 device.
+  Before raising `targetSdk` to 37 (CP15/U30): add `<uses-permission
+  android:name="android.permission.ACCESS_LOCAL_NETWORK" />` to the manifest. The request flow is
+  already in the code behind the target check (`LocalNetworkPermission` in `app/.../cast/`: asked
+  when the Cast picker opens, a denied answer says so in the picker and starts no search), so
+  that line is the only change. The manifest holds `CHANGE_WIFI_MULTICAST_STATE` for SSDP.
+  Sources: <https://developer.android.com/privacy-and-security/local-network-permission> and the
+  `ACCESS_LOCAL_NETWORK` entry of
+  <https://developer.android.com/reference/android/Manifest.permission#ACCESS_LOCAL_NETWORK>.
 - **The FFmpeg extension is built from source** for releases: `scripts/build-media3ext.sh`
   builds nextlib-media3ext at its pinned commit with `scripts/media3ext/tmplayer-decoders.patch`
   (the extra FFmpeg decoders listed below, the container reader and the light video mode further
