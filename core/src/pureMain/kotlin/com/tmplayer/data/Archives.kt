@@ -104,6 +104,19 @@ object Archives {
             MediaName.parse(stem).let { it.episode != null || it.season != null }
     }
 
+    /**
+     * Why a file handed to the player (a link, Continue watching, another app) is an archive it
+     * cannot play, in the same sentence the listing carries ([reason]), or null when there is
+     * nothing to say: not an archive, or a ZIP the player opens and inspects itself
+     * ([ZipArchive.inspect]). A RAR, a 7z, a tarball and a ZIP volume (`.z01`) are told apart
+     * from a video by name, so the player says what the file is rather than failing to decode it.
+     */
+    fun blockedOnOpen(fileName: String, mimeType: String = "", sizeBytes: Long = 0, caption: String? = null): String? {
+        val kind = kindOf(fileName, mimeType) ?: return null
+        if (kind == ArchiveKind.Zip && SplitPieces.baseOf(fileName.trim()).endsWith(".zip", ignoreCase = true)) return null
+        return reason(ArchiveFile(0, 0, 0, fileName, sizeBytes, 0, kind, volume = isVolume(fileName), locked = looksLocked(fileName, caption)))
+    }
+
     /** Whether a name or a caption says a password is needed. */
     fun looksLocked(vararg texts: String?): Boolean = texts.any { it != null && PASSWORD.containsMatchIn(it) }
 

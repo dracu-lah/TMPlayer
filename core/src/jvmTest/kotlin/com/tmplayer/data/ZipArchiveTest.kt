@@ -166,6 +166,19 @@ class ZipArchiveTest {
     }
 
     @Test
+    fun `every verdict has the sentence the player shows, and only an unreadable one is worth a retry`() {
+        val l = com.tmplayer.i18n.L
+        assertNull(ZipVerdict(ZipVerdict.Kind.Playable).reason)
+        assertEquals(l.playerZipCompressed, ZipVerdict(ZipVerdict.Kind.Compressed).reason)
+        assertEquals(l.playerZipEncrypted, ZipVerdict(ZipVerdict.Kind.Encrypted).reason)
+        assertEquals(l.playerZipTooLarge, ZipVerdict(ZipVerdict.Kind.TooLarge).reason)
+        assertEquals(l.playerZipNoVideo, ZipVerdict(ZipVerdict.Kind.NoVideo).reason)
+        assertEquals(l.playerZipUnreadable, ZipVerdict(ZipVerdict.Kind.Unreadable).reason)
+        for (kind in ZipVerdict.Kind.entries) assertEquals(kind == ZipVerdict.Kind.Unreadable, ZipVerdict(kind).retryable)
+        assertEquals(ZipVerdict.Kind.entries.size - 1, ZipVerdict.Kind.entries.mapNotNull { ZipVerdict(it).reason }.toSet().size)
+    }
+
+    @Test
     fun `inspect says playable for a stored video`() = runBlocking {
         val archive = zip { stored("Movie.mkv", payload(50_000), it) }
         val verdict = ZipArchive.inspect(Bytes(archive))

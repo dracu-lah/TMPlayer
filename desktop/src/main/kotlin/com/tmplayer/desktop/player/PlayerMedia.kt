@@ -213,6 +213,9 @@ class TelegramPlayerMedia(
         // A download plays from the Downloads folder (B3.5), before TDLib is asked anything: it is
         // not in TDLib's cache at all any more, and it plays with no connection.
         // A video cut into byte pieces plays joined, whatever is kept of any one piece.
+        // A RAR, a 7z or a ZIP volume handed over (a link, Continue watching): what it is and why
+        // it cannot play, rather than a decoder failure on bytes that are not a video.
+        com.tmplayer.data.Archives.blockedOnOpen(item.fileName, item.mimeType, item.sizeBytes, item.caption)?.let { throw IOException(it) }
         joinedPieces()?.let { return openJoined(it) }
         indexed(item.chatId, item.messageId)?.let { file ->
             downloadFile = file
@@ -400,14 +403,9 @@ class TelegramPlayerMedia(
             override val size: Long = bytes.size
             override suspend fun read(offset: Long, length: Int): ByteArray? = bytes.readRange(offset, length)
         }
-        val entries = com.tmplayer.data.ZipArchive.entries(archive) ?: throw IOException(L.playerZipUnreadable)
-        val video = com.tmplayer.data.ZipArchive.bestVideo(entries) ?: throw IOException(
-            when (com.tmplayer.data.ZipArchive.blockedVideo(entries)?.blocker) {
-                com.tmplayer.data.ZipBlocker.Compressed -> L.playerZipCompressed
-                com.tmplayer.data.ZipBlocker.Encrypted -> L.playerZipEncrypted
-                null -> L.playerZipNoVideo
-            },
-        )
+        val verdict = com.tmplayer.data.ZipArchive.inspect(archive)
+        val video = verdict.entry?.takeIf { verdict.kind == com.tmplayer.data.ZipVerdict.Kind.Playable }
+            ?: throw IOException(verdict.reason.orEmpty())
         val start = com.tmplayer.data.ZipArchive.dataOffset(archive, video) ?: throw IOException(L.playerZipUnreadable)
         return WindowedBytes(bytes, start, video.uncompressedSize) to video.name.substringAfterLast('/')
     }

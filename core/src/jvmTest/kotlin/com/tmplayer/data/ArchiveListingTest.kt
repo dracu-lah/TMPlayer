@@ -3,6 +3,7 @@ package com.tmplayer.data
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** Which archives a chat lists under its videos (greyed), and the reason each one carries (U10). */
@@ -67,6 +68,28 @@ class ArchiveListingTest {
         assertTrue(Archives.looksLocked("Show.rar", "PWD=x"))
         assertFalse(Archives.looksLocked("Bypass.2019.1080p.rar", "Season finale"))
         assertFalse(Archives.looksLocked("Show.rar", null, ""))
+    }
+
+    @Test
+    fun `a handed over archive says why it cannot play, except a zip the player inspects itself`() {
+        val l = com.tmplayer.i18n.L
+        assertEquals(l.gridArchiveReason("RAR"), Archives.blockedOnOpen("Season 1.rar"))
+        assertEquals(l.gridArchiveReason("7z"), Archives.blockedOnOpen("Course.7z"))
+        assertEquals(l.gridArchiveReason("archive"), Archives.blockedOnOpen("backup.tar.gz"))
+        assertEquals(l.gridArchiveVolumeReason("RAR"), Archives.blockedOnOpen("Lectures.part2.rar"))
+        assertEquals(l.gridArchiveVolumeReason("ZIP"), Archives.blockedOnOpen("Season.z01"))
+        assertEquals(l.gridArchivePasswordReason("RAR"), Archives.blockedOnOpen("Show.rar", caption = "password: 1234"))
+        assertEquals(l.gridArchiveHugeReason("7z"), Archives.blockedOnOpen("Box.7z", sizeBytes = 3 * gb))
+        assertEquals(l.gridArchiveReason("RAR"), Archives.blockedOnOpen("download", "application/vnd.rar"))
+        // A ZIP, or the pieces of a split one, is the player's to open and inspect.
+        assertNull(Archives.blockedOnOpen("Season 1.zip"))
+        assertNull(Archives.blockedOnOpen("Season 1.zip.002"))
+        // Videos, audio and nothing at all are left alone, and absurd names do not throw.
+        assertNull(Archives.blockedOnOpen("Holiday.mkv", "video/x-matroska"))
+        assertNull(Archives.blockedOnOpen("Lecture 3.mp3", "audio/mpeg"))
+        assertNull(Archives.blockedOnOpen(""))
+        assertNull(Archives.blockedOnOpen("a".repeat(100_000)))
+        assertEquals(l.gridArchiveReason("RAR"), Archives.blockedOnOpen("é".repeat(5_000) + ".RAR"))
     }
 
     @Test

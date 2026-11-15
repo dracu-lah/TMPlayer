@@ -62,6 +62,20 @@ data class ZipVerdict(val kind: Kind, val entry: ZipEntry? = null) {
         /** Not a ZIP, cut short, a piece missing or the bytes unreachable. */
         Unreadable,
     }
+
+    /** The sentence the player shows for this verdict, or null for [Kind.Playable]. */
+    val reason: String?
+        get() = when (kind) {
+            Kind.Playable -> null
+            Kind.Compressed -> com.tmplayer.i18n.L.playerZipCompressed
+            Kind.Encrypted -> com.tmplayer.i18n.L.playerZipEncrypted
+            Kind.TooLarge -> com.tmplayer.i18n.L.playerZipTooLarge
+            Kind.NoVideo -> com.tmplayer.i18n.L.playerZipNoVideo
+            Kind.Unreadable -> com.tmplayer.i18n.L.playerZipUnreadable
+        }
+
+    /** Whether trying again could change the answer: only a directory that could not be read. */
+    val retryable: Boolean get() = kind == Kind.Unreadable
 }
 
 /**

@@ -2326,6 +2326,12 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             val delaysRead = async { if (hasMessage()) runCatching { settings.syncDelays(chatId, messageId) }.getOrDefault(SyncDelays()) else null }
             // A video cut into byte pieces plays as the one file it was, joined: none of its
             // pieces is a video on its own, whatever the download index or the cache holds of one.
+            // A RAR, a 7z or a ZIP volume handed over (a link, Continue watching): what it is and
+            // why it cannot play, rather than a decoder failure on bytes that are not a video.
+            com.tmplayer.data.Archives.blockedOnOpen(mediaFileName, mediaMime, fileSizeBytes, mediaCaption)?.let { why ->
+                showError(why, retryable = false)
+                return@launch
+            }
             val joined = mayBeJoined() && findPieces(session.client)
             if (joined && !prepareJoined(session.client)) return@launch
             // The download index first. Every way into this screen passes here, the next episode
@@ -5954,19 +5960,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 }
             }
         }
-        val entries = com.tmplayer.data.ZipArchive.entries(archive)
-        if (entries == null) {
-            showError(L.playerZipUnreadable, retryable = true)
-            return null
-        }
-        val video = com.tmplayer.data.ZipArchive.bestVideo(entries)
+        val verdict = com.tmplayer.data.ZipArchive.inspect(archive)
+        val video = verdict.entry?.takeIf { verdict.kind == com.tmplayer.data.ZipVerdict.Kind.Playable }
         if (video == null) {
-            val message = when (com.tmplayer.data.ZipArchive.blockedVideo(entries)?.blocker) {
-                com.tmplayer.data.ZipBlocker.Compressed -> L.playerZipCompressed
-                com.tmplayer.data.ZipBlocker.Encrypted -> L.playerZipEncrypted
-                null -> L.playerZipNoVideo
-            }
-            showError(message, retryable = false)
+            showError(verdict.reason.orEmpty(), retryable = verdict.retryable)
             return null
         }
         val start = com.tmplayer.data.ZipArchive.dataOffset(archive, video)
