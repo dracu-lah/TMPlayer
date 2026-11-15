@@ -217,6 +217,22 @@
                 android:textColor="#9A9AA5"
                 android:textSize="15sp" />
 
+            <!--
+              The failed format in one plain line (FormatLine), under the sentence that says the
+              device cannot play it: "HEVC Main 10 L5.0, 3840 x 2160, E-AC-3 5.1". Up only on a
+              codec or container failure that knew its format; smaller and dimmer than the sentence.
+            -->
+            <TextView
+                android:id="@+id/status_format"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:maxWidth="720dp"
+                android:textColor="#80808C"
+                android:textSize="13sp"
+                android:textIsSelectable="false"
+                android:visibility="gone" />
+
             <ProgressBar
                 android:id="@+id/status_progress"
                 style="?android:attr/progressBarStyleHorizontal"
@@ -363,6 +379,20 @@
                   is no key: the gesture exists, but a viewer looking at a failure should not have to
                   know it. One button, doing what the sentence described.
                 -->
+                <!--
+                  What went wrong, in words a report or a forum post can carry: the format line, the
+                  device's decoders and the error underneath, on the clipboard. Not the title, the chat
+                  or the file name. On every failure, quietest, above Go back.
+                -->
+                <Button
+                    android:id="@+id/status_copy"
+                    style="@style/PlayerSheetButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:text="Copy details"
+                    android:visibility="gone" />
+
                 <Button
                     android:id="@+id/status_back"
                     style="@style/PlayerSheetButton"

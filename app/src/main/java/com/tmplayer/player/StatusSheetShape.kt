@@ -76,6 +76,7 @@ object StatusSheetShape {
         val name = overlay.findViewById<TextView>(R.id.status_name)
         val text = overlay.findViewById<TextView>(R.id.status_text)
         val detail = overlay.findViewById<TextView>(R.id.status_detail)
+        val format = overlay.findViewById<TextView>(R.id.status_format)
 
         // The picture side takes a narrow, fixed slice: it is there to be recognised, not read, so
         // every point it does not use goes to the message and the buttons.
@@ -144,7 +145,7 @@ object StatusSheetShape {
         sheet.gravity = if (shape == Shape.Tv) Gravity.CENTER else flow
         column.gravity = flow
         side.gravity = flow
-        listOfNotNull<TextView>(name, overlay.findViewById(R.id.status_title), overlay.findViewById(R.id.status_meta), text, detail).forEach {
+        listOfNotNull<TextView>(name, overlay.findViewById(R.id.status_title), overlay.findViewById(R.id.status_meta), text, detail, format).forEach {
             it.gravity = if (sideBySide) Gravity.START else Gravity.CENTER
         }
         // On a handset the buttons go in a row, each as wide as its words, so all of them are on
@@ -163,6 +164,13 @@ object StatusSheetShape {
         // The message and its hint read as one paragraph beside the poster, not two blocks.
         text?.updateLayoutParams<LinearLayout.LayoutParams> {
             bottomMargin = if (shape == Shape.SideBySide) px(ROW_TEXT_GAP_DP) else px(STACK_TEXT_GAP_DP)
+        }
+        // The failed format hangs under the sentence it belongs to: the gap below the sentence is
+        // taken back for it, and the gap to the buttons moves under it.
+        format?.updateLayoutParams<LinearLayout.LayoutParams> {
+            val gap = if (shape == Shape.SideBySide) px(ROW_TEXT_GAP_DP) else px(STACK_TEXT_GAP_DP)
+            topMargin = px(FORMAT_GAP_DP) - gap
+            bottomMargin = gap
         }
         detail?.updateLayoutParams<LinearLayout.LayoutParams> {
             topMargin = if (shape == Shape.SideBySide) px(ROW_TEXT_GAP_DP) else px(STACK_DETAIL_GAP_DP)
@@ -208,6 +216,9 @@ object StatusSheetShape {
     private const val STACK_TEXT_GAP_DP = 20f
     private const val STACK_DETAIL_GAP_DP = 14f
     private const val ROW_TEXT_GAP_DP = 8f
+
+    /** The failed format's line sits this far under the sentence. */
+    private const val FORMAT_GAP_DP = 6f
 }
 
 /**

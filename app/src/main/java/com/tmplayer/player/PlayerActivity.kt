@@ -265,6 +265,12 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     private lateinit var statusTitle: TextView
     private lateinit var statusText: TextView
     private lateinit var statusDetail: TextView
+
+    /** The failed format in one plain line ([FailedFormat]), under the failure sentence. */
+    private var statusFormat: TextView? = null
+
+    /** "Copy details" on the failure sheet: the format line, the device's decoders, the error. */
+    private var statusCopy: android.widget.Button? = null
     private lateinit var statusProgress: ProgressBar
     private lateinit var rebufferChip: View
     private lateinit var rebufferText: TextView
@@ -1438,17 +1444,66 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     /** The last error Media3 reported, for "Copy details" on the failure sheet. */
     private var lastPlaybackError: PlaybackException? = null
 
+    /** The error the next [showError] is about, handed over once so a later sheet of another kind shows no format. */
+    private var formatErrorPending: PlaybackException? = null
+
+    /** What the failure sheet was about, kept for "Copy details" after the player is gone. */
+    private var failedFormat: FailedFormat.Of? = null
+
     /**
-     * What "Copy details" puts on the clipboard: what the sheet says, the file, the device and the
-     * error underneath, plain text a report or a forum post can carry. Nothing about the account.
+     * Puts the failed format's line under the sentence, for a codec or container failure that knew
+     * its format ([FailedFormat.relevant]); nothing for an error before any format was known, a
+     * lost line or a full disk. The format is kept either way for "Copy details".
+     */
+    private fun showFailedFormat() {
+        val error = formatErrorPending
+        formatErrorPending = null
+        val view = statusFormat ?: return
+        view.visibility = View.GONE
+        failedFormat = null
+        if (error == null) return
+        val renderer = (error as? androidx.media3.exoplayer.ExoPlaybackException)
+            ?.takeIf { it.type == androidx.media3.exoplayer.ExoPlaybackException.TYPE_RENDERER }
+        val software = runCatching {
+            val index = renderer?.rendererIndex
+            val exo = player
+            if (index != null && exo != null && index in 0 until exo.rendererCount) {
+                DecoderSwitch.isFfmpeg(exo.getRenderer(index))
+            } else {
+                watchSoftware
+            }
+        }.getOrDefault(watchSoftware)
+        val of = FailedFormat.of(player, renderer?.rendererFormat, software)
+        failedFormat = of
+        if (!FailedFormat.relevant(error)) return
+        val line = FailedFormat.line(of)
+        if (line.isEmpty()) return
+        view.text = line
+        view.visibility = View.VISIBLE
+    }
+
+    /**
+     * What "Copy details" puts on the clipboard: the app and device, what the sheet says, the
+     * failed format and the device's decoders for it, the file's size and length, and the error
+     * underneath. Plain text a report or a forum post can carry. Nothing about the account, and no
+     * title, chat or file name (AGENTS.md privacy).
      */
     private fun errorDetails(): String = buildString {
         appendLine("TMPlayer ${com.tmplayer.BuildConfig.VERSION_NAME} (${com.tmplayer.BuildConfig.VERSION_CODE})")
         appendLine("${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}, Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})${if (FormFactor.isTv(this@PlayerActivity)) ", TV" else ""}")
         appendLine("${statusTitle.text}: ${statusText.text}")
-        appendLine("File: ${mediaFileName.ifBlank { "?" }}, ${mediaMime.ifBlank { "?" }}, ${fileSizeBytes} bytes, ${durationSec} s, ${if (downloadedVideo != null) "downloaded" else "streamed"}")
-        player?.videoFormat?.let { appendLine("Video: ${it.sampleMimeType} ${it.codecs.orEmpty()} ${it.width}x${it.height}") }
-        player?.audioFormat?.let { appendLine("Audio: ${it.sampleMimeType} ${it.codecs.orEmpty()} ${it.channelCount} ch ${it.sampleRate} Hz") }
+        failedFormat?.let { of ->
+            // The notes in English, so a report reads the same whatever language the viewer had.
+            val block = com.tmplayer.player.FormatLine.copyBlock(
+                FailedFormat.line(of, "read by FFmpeg", "software decoder"),
+                FailedFormat.decoders(of),
+            )
+            if (block.isNotEmpty()) appendLine(block)
+        }
+        appendLine("File: ${mediaMime.ifBlank { "?" }}, ${fileSizeBytes} bytes, ${durationSec} s, ${if (downloadedVideo != null) "downloaded" else "streamed"}")
+        failedFormat?.video?.let { appendLine("Video: ${it.sampleMimeType} ${it.codecs.orEmpty()} ${it.width}x${it.height}") }
+        failedFormat?.audio?.let { appendLine("Audio: ${it.sampleMimeType} ${it.codecs.orEmpty()} ${it.channelCount} ch ${it.sampleRate} Hz") }
+        fileDatacenter?.let { appendLine("Datacenter: DC $it") }
         lastPlaybackError?.let { e ->
             appendLine("Error: ${e.errorCodeName} (${e.errorCode})")
             var cause: Throwable? = e
@@ -1458,6 +1513,27 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 cause = cause.cause
                 depth++
             }
+        }
+    }
+
+    /** Copy details: the text of [errorDetails] on the clipboard, with a message that says it worked or did not. */
+    private fun copyErrorDetails() {
+        val clipboard = getSystemService(android.content.ClipboardManager::class.java)
+        val copied = runCatching {
+            clipboard?.setPrimaryClip(android.content.ClipData.newPlainText(L.playerCopyDetails, errorDetails()))
+        }.isSuccess && clipboard != null
+        com.tmplayer.ui.components.showMessage(this, if (copied) L.playerDetailsCopied else L.stateFailed)
+    }
+
+    /** The Telegram datacenter the video's file is kept in, or null when its remote id does not say (see [FileDatacenter]). */
+    private var fileDatacenter: Int? = null
+
+    /** Reads [fileDatacenter] once, off the critical path, for Playback details and Copy details. */
+    private fun findDatacenter() {
+        if (fileId <= 0) return
+        itemScope.launch {
+            afterOpening()
+            fileDatacenter = runCatching { Td.remoteDatacenter(fileId) }.getOrNull()
         }
     }
 
@@ -1857,6 +1933,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         statusTitle = findViewById(R.id.status_title)
         statusText = findViewById(R.id.status_text)
         statusDetail = findViewById(R.id.status_detail)
+        statusFormat = findViewById(R.id.status_format)
         statusProgress = findViewById(R.id.status_progress)
         statusSpinner = findViewById(R.id.status_spinner)
         statusArt = findViewById(R.id.status_art)
@@ -1903,7 +1980,11 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         statusReload?.text = L.commonReload
         statusOpenWith?.text = L.playerOpenInAnotherApp
         statusBack?.text = L.playerGoBack
-        statusLogs = PlayerErrorSheet.addSendLogs(statusOpenWith, ::errorDetails)
+        statusLogs = PlayerErrorSheet.addSendLogs(statusOpenWith)
+        statusCopy = findViewById<android.widget.Button>(R.id.status_copy).apply {
+            text = L.playerCopyDetails
+            setOnClickListener { copyErrorDetails() }
+        }
         statusName = findViewById(R.id.status_name)
         loaderHost = PlayerLoaderHost(
             root = findViewById(R.id.player_root),
@@ -2251,6 +2332,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         findEpisodes()
         findCopies()
         findSkipTimes()
+        findDatacenter()
         // Telegram's lighter copies and storyboard (CP80), for the quality list and the scrub bar.
         if (hasMessage()) itemScope.launch { afterOpening(); Td.awaitAuthorizedSession(); readPost() }
 
@@ -5296,6 +5378,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             // only when the other decoder can take this format.
             decoderPlan = DecoderSwitch.planFor(player, error)
             lastPlaybackError = error
+            formatErrorPending = error
             // Refused as signed out: no retry or new id helps, and the sign in comes next (HX23).
             if (sessionLost(error)) {
                 leaveForSignIn()
@@ -8471,6 +8554,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 )
             }
             if (fileSizeBytes > 0) add(L.playerDetailsFile(Translator.messages.formatter.bytes(fileSizeBytes)))
+            fileDatacenter?.let { add(L.playerDetailsDatacenter(it.toString())) }
             val here = Translator.messages.formatter.percent(downloadedFraction.toDouble())
             add(if (isRealDownload()) L.playerDetailsDownloaded(here) else L.playerDetailsCached(here))
             add(L.playerDetailsSpeed(PlaybackSpeed.label(playbackSpeed)))
@@ -9557,6 +9641,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         }
         statusTitle.text = L.playerCantPlay
         statusText.text = message
+        showFailedFormat()
 
         // One attempt button, not two: the app works out whether it means a plain retry or a
         // delete and a fresh fetch. See [reloadFromScratch].
@@ -9569,6 +9654,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     private fun hideFailureActions() {
         slowStartUp = false
         statusLogs?.visibility = View.GONE
+        statusCopy?.visibility = View.GONE
+        statusFormat?.visibility = View.GONE
+        formatErrorPending = null
         statusReload?.visibility = View.GONE
         statusOpenWith?.visibility = View.GONE
         statusBack?.visibility = View.GONE
@@ -9658,8 +9746,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     private fun showFailureActions(retryable: Boolean, offerOtherApp: Boolean = true) {
         statusReload?.visibility = View.GONE
         statusOpenWith?.visibility = View.GONE
-        // Last and quietest: the logs to send with a report of it. See [rememberSendLogs].
+        // Last and quietest: the logs to send with a report of it, and the details to copy.
         statusLogs?.visibility = View.VISIBLE
+        statusCopy?.visibility = View.VISIBLE
         statusBack?.apply {
             visibility = View.VISIBLE
             if (!retryable) {

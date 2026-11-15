@@ -1428,6 +1428,17 @@ object Td {
     }
 
     /**
+     * The Telegram datacenter [fileId] is kept in (1 to 5), for the playback details (EG-F61), or
+     * null when TDLib has no remote id for it or the id does not say. TDLib exposes no datacenter
+     * field; it is read from the remote id ([com.tmplayer.player.FileDatacenter]). A local call,
+     * no network.
+     */
+    suspend fun remoteDatacenter(fileId: Int): Int? {
+        val td = current ?: return null
+        return com.tmplayer.player.FileDatacenter.of(td.getFile(fileId).valueOrNull?.remote?.id)
+    }
+
+    /**
      * Deletes one downloaded file and leaves the rest of the cache alone.
      *
      * This is what the Downloads screen removes a row with. `deleteFile` only touches the copy on

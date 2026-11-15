@@ -142,7 +142,7 @@ class PlayerExtrasRenderTest {
 
     // ---- the failure sheet --------------------------------------------------------------------
 
-    private fun errorSheet(tv: Boolean, name: String) {
+    private fun errorSheet(tv: Boolean, name: String, format: String? = null, sideways: Boolean = false): FragmentActivity {
         FormFactor.override(tv)
         val activity = Robolectric.buildActivity(FragmentActivity::class.java).setup().get()
         // The player's own theme, as the manifest gives PlayerActivity, so the buttons are its buttons.
@@ -174,15 +174,29 @@ class PlayerExtrasRenderTest {
             text = L.playerGoBack
             visibility = View.VISIBLE
         }
-        if (tv) {
+        if (tv || format != null) {
             // A television's worst case: every way out at once, which the old stack ran off the
             // bottom of the screen.
             activity.findViewById<Button>(R.id.status_decoder).apply {
                 text = L.playerDecoderOther
                 visibility = View.VISIBLE
             }
+        }
+        if (tv) {
             openWith.apply {
                 text = L.playerOpenWith
+                visibility = View.VISIBLE
+            }
+        }
+        // What showFailureActions leaves up on every failure, and showFailedFormat for a codec one.
+        activity.findViewById<Button>(R.id.status_copy).apply {
+            text = L.playerCopyDetails
+            visibility = View.VISIBLE
+        }
+        if (format != null) {
+            activity.findViewById<TextView>(R.id.status_text).text = L.playerErrorFormat
+            activity.findViewById<TextView>(R.id.status_format).apply {
+                text = format
                 visibility = View.VISIBLE
             }
         }
@@ -194,19 +208,109 @@ class PlayerExtrasRenderTest {
         val at = IntArray(2).also(back::getLocationInWindow)
         assertTrue("Go back is on the screen", at[1] + back.height <= screen.height)
         val sheet = activity.findViewById<StatusSheet>(R.id.status_sheet)
-        val expected = if (tv) StatusSheetShape.Shape.Tv else StatusSheetShape.Shape.Stacked
+        val expected = if (tv) StatusSheetShape.Shape.Tv else if (sideways) StatusSheetShape.Shape.SideBySide else StatusSheetShape.Shape.Stacked
         assertEquals("the sheet's shape", expected, sheet.shape)
-        assertWordsWhole(activity.findViewById(R.id.status_title), listOfNotNull<TextView>(activity.findViewById(R.id.status_reload), logs as? TextView, activity.findViewById(R.id.status_back)))
+        assertWordsWhole(activity.findViewById(R.id.status_title), listOfNotNull<TextView>(activity.findViewById(R.id.status_reload), logs as? TextView, activity.findViewById(R.id.status_copy), activity.findViewById(R.id.status_back)))
+        val copy = activity.findViewById<View>(R.id.status_copy)
+        val copyAt = IntArray(2).also(copy::getLocationInWindow)
+        assertTrue("Copy details is on the screen", copyAt[1] + copy.height <= screen.height)
+        if (format != null) {
+            val line = activity.findViewById<TextView>(R.id.status_format)
+            assertTrue("the format line is shown", line.isShown)
+            // One short line of words, not cut: it is what the viewer reads and a report quotes.
+            for (i in 0 until line.layout.lineCount) assertEquals("the format line is not cut short", 0, line.layout.getEllipsisCount(i))
+            val text = activity.findViewById<TextView>(R.id.status_text)
+            val textAt = IntArray(2).also(text::getLocationInWindow)
+            val lineAt = IntArray(2).also(line::getLocationInWindow)
+            assertTrue("the line sits under the sentence", lineAt[1] >= textAt[1] + text.height - 2)
+        }
         shot(activity, name, dialog = false)
+        return activity
     }
 
     @Test
     @Config(sdk = [35], qualifiers = "w411dp-h891dp-port-night-xhdpi")
-    fun errorSheetPhone() = errorSheet(tv = false, name = "extras-error-phone.png")
+    fun errorSheetPhone() {
+        errorSheet(tv = false, name = "extras-error-phone.png")
+    }
 
     @Test
     @Config(sdk = [35], qualifiers = "w960dp-h540dp-land-night-xhdpi")
-    fun errorSheetTelevision() = errorSheet(tv = true, name = "extras-error-tv.png")
+    fun errorSheetTelevision() {
+        errorSheet(tv = true, name = "extras-error-tv.png")
+    }
+
+    // The sheet for a format the device cannot play (EG-F37): the sentence, the format line, Try the
+    // other decoder, Copy details. One shot per form factor.
+    private val formatLine = "HEVC Main 10 L5.0, 3840 x 2160, 23.976 fps, HDR10, E-AC-3 5.1, Matroska, read by FFmpeg"
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w411dp-h891dp-port-night-xhdpi")
+    fun formatSheetPhone() {
+        errorSheet(tv = false, name = "extras-format-phone.png", format = formatLine)
+    }
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w891dp-h411dp-land-night-xhdpi")
+    fun formatSheetPhoneSideways() {
+        errorSheet(tv = false, name = "extras-format-phone-land.png", format = formatLine, sideways = true)
+    }
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w960dp-h540dp-land-night-xhdpi")
+    fun formatSheetTelevision() {
+        errorSheet(tv = true, name = "extras-format-tv.png", format = formatLine)
+    }
+
+    /**
+     * The remote on the sheet: Try the other decoder is where focus lands, Down walks the buttons
+     * and reaches Copy details, then Go back, and Up walks back; OK on Copy details answers.
+     */
+    @Test
+    @Config(sdk = [35], qualifiers = "w960dp-h540dp-land-night-xhdpi")
+    fun formatSheetFocusOnTelevision() {
+        val activity = errorSheet(tv = true, name = "extras-format-tv-focus.png", format = formatLine)
+        val decoder = activity.findViewById<Button>(R.id.status_decoder)
+        val copy = activity.findViewById<Button>(R.id.status_copy)
+        val back = activity.findViewById<Button>(R.id.status_back)
+        // The framework's own D-pad step: ViewRootImpl asks the focused view for its neighbour in the
+        // direction and gives it focus; OK is a click on the focused button. (Robolectric has no
+        // ViewRootImpl key handling, so the step is made here, with the same focusSearch.)
+        fun key(code: Int) {
+            val focused = activity.findViewById<View>(R.id.status_overlay).findFocus()
+            when (code) {
+                android.view.KeyEvent.KEYCODE_DPAD_DOWN -> focused?.focusSearch(View.FOCUS_DOWN)?.requestFocus()
+                android.view.KeyEvent.KEYCODE_DPAD_UP -> focused?.focusSearch(View.FOCUS_UP)?.requestFocus()
+                else -> focused?.performClick()
+            }
+            idle(100)
+        }
+        // The sheet's own start focus, as the player gives it on a remote (no touch mode).
+        val actions = activity.findViewById<android.view.ViewGroup>(R.id.status_actions)
+        for (i in 0 until actions.childCount) actions.getChildAt(i).isFocusableInTouchMode = true
+        decoder.requestFocus()
+        idle(100)
+        assertTrue("Try the other decoder starts focused", decoder.isFocused)
+        var presses = 0
+        while (!copy.isFocused && presses < 8) {
+            key(android.view.KeyEvent.KEYCODE_DPAD_DOWN)
+            presses++
+        }
+        assertTrue("Down reaches Copy details from Try the other decoder; focus is on ${activity.findViewById<View>(R.id.status_overlay).findFocus()}, decoder at ${decoder.top}, copy at ${copy.top}, shown ${copy.isShown}, focusable ${copy.isFocusable}", copy.isFocused)
+        key(android.view.KeyEvent.KEYCODE_DPAD_DOWN)
+        assertTrue("Down from Copy details is Go back", back.isFocused)
+        key(android.view.KeyEvent.KEYCODE_DPAD_UP)
+        assertTrue("Up is back on Copy details", copy.isFocused)
+        var clicked = 0
+        copy.setOnClickListener { clicked++ }
+        key(android.view.KeyEvent.KEYCODE_DPAD_CENTER)
+        assertEquals("OK on Copy details presses it", 1, clicked)
+        while (!decoder.isFocused && presses < 20) {
+            key(android.view.KeyEvent.KEYCODE_DPAD_UP)
+            presses++
+        }
+        assertTrue("Up walks back to Try the other decoder", decoder.isFocused)
+    }
 
     /** The title is not cut short, and no button label wraps inside its pill. */
     private fun assertWordsWhole(title: TextView, buttons: List<TextView>) {
