@@ -227,6 +227,32 @@ Today only `number_of_seasons` is read (`MetaApis.kt:250`) and the series page l
 - Edge: the chats' episodes numbered differently from the data (absolute vs per-season) keep today's matching
   and never show a present episode as missing twice; a mismatch shows nothing as missing for that season.
 
+### T10 Skip times: more sources and a local fallback  (model: sonnet high, depends: a worker slot; files: core/.../online/MetaApis.kt, OnlineMetadata.kt, SkipTimes.kt, player skip pill, desktop and web skip code)
+User, 2026-11-16: "intro-db, anime-skip.com and similar API features need to be added, check what is missing."
+Found: TheIntroDB, IntroDB.app (by IMDb id) and AniSkip (by MAL id from AniList) are built (`MetaApis.kt:759` on,
+`OnlineMetadata.skipTimes`, `SkipPill.kt`, cached in `MetaStores.skipTimes`). Missing, in value order:
+1. Chapters inside the file (MKV and MP4 chapters titled Intro, Opening, Recap, Credits, Ending, Preview) as
+   `SkipSegment`s: free, exact, offline, no API. Read through the engine's chapter list (Media3, libVLC, mpv);
+   they win over any API when present. Pure title-to-kind mapper with a table test (many languages, garbage).
+2. anime-skip.com (GraphQL, needs a client id header: register one for TMPlayer, read their terms first;
+   timestamps types Intro, Recap, Credits, Preview, Title Card, Mixed Intro, Canon, Filler...) as the second
+   source for anime after AniSkip; map its types to `SkipKind`; rate limit and a 404 and empty answers cached.
+3. A second chance for anime ids: when AniList gives no `idMal`, map via a public id-mapping API or Jikan, so
+   AniSkip can still be asked; a show recognised only by TMDB gets TheTVDB or IMDb ids for the two community DBs.
+4. "Mark this as the intro" in the player (two taps: start, end) saved locally and applied to the other episodes
+   of the same season and chat as a guess (with a pill "Skip intro (from your mark)"), phone, TV remote (one
+   button path), desktop (key), no upload. Optional later: a contribute button that sends to a database
+   (needs their key and terms, not now).
+5. Per kind switch in Settings: Ask (pill, default) or Skip by itself (after a 3 s countdown with Cancel) or
+   Off, per Recap, Intro, Credits, Preview; check what exists and extend one control, no parallel one.
+6. Parity: the pill and the segments on phone, TV, desktop and web (desktop has 4 files and web 3 that touch
+   segments today; `ui/shared` has none: move the model and the pill's logic to shared first).
+7. Later, not now: local detection by comparing two episodes (audio fingerprint), expensive on weak devices.
+Tests: provider answer fixtures for each API with garbage and huge answers (`GarbageInputTest`), a merge test
+(chapters, then API, then user mark; overlapping and out of range segments dropped), a D-pad test that the
+pill is focusable on TV and Back dismisses it. Privacy: lookups send only ids and episode numbers (no file
+names, no chat names), Settings explains it in one plain line, and the switch off sends nothing.
+
 ### D1 Support cards: Buy Me a Coffee and UPI  (model: sonnet, running since 2026-11-16)
 Themed cards and dialogs with the official logos, regional order (IN: UPI first), icon popup through the
 existing `SupportReminder` nag. Design note `design/redesign/support-cards.md`.
