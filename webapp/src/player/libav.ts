@@ -25,11 +25,11 @@ type Packet = LibAVTypes.Packet
 /** The containers (as `sniff` names them) mediabunny cannot open and this engine does. */
 export const LIBAV_FORMATS = new Set(['AVI', 'FLV', 'WMV', 'RealMedia', 'MPEG-PS (VOB)'])
 
-const debug = location.hostname === 'localhost'
-const phone = matchMedia('(pointer: coarse)').matches
+export const debug = location.hostname === 'localhost'
+export const phone = matchMedia('(pointer: coarse)').matches
 
 /** FFmpeg's picture codec names in plain words, for "needs the app" and the readout. */
-const VIDEO_NAMES: Record<string, string> = {
+export const VIDEO_NAMES: Record<string, string> = {
     mpeg4: 'MPEG-4 Part 2 (DivX, Xvid)',
     msmpeg4v1: 'MS MPEG-4 v1',
     msmpeg4v2: 'MS MPEG-4 v2',
@@ -109,7 +109,7 @@ const SOUND_NAMES: Record<string, string> = {
     ralf: 'RealAudio Lossless',
 }
 
-const AV_PKT_FLAG_KEY = 1
+export const AV_PKT_FLAG_KEY = 1
 
 /** A sound track libav.js reads, in the shape the player's menu shows. */
 export interface LibavSound extends SoundTrack {
@@ -117,7 +117,7 @@ export interface LibavSound extends SoundTrack {
     readonly decodable: boolean
 }
 
-interface Picture {
+export interface Picture {
     index: number
     codecId: number
     codecpar: number
@@ -131,7 +131,7 @@ interface Picture {
     avcc: Uint8Array | null
 }
 
-const toSeconds = (lo: number, hi: number, tb: [number, number], L: LibAV): number | null => {
+export const toSeconds = (lo: number, hi: number, tb: [number, number], L: LibAV): number | null => {
     if (hi === L.AV_NOPTS_VALUE_HI && lo === L.AV_NOPTS_VALUE_LO) return null
     return (L.i64tof64(lo, hi) * tb[0]) / tb[1]
 }
@@ -155,6 +155,88 @@ async function pictureEncoder(width: number, height: number): Promise<'avc' | 'v
     if (MS.isTypeSupported('video/mp4; codecs="avc1.4d401f"') && (await canEncodeVideo('avc', { width, height, bitrate: QUALITY_HIGH }))) return 'avc'
     if (MS.isTypeSupported('video/mp4; codecs="vp09.00.31.08"') && (await canEncodeVideo('vp9', { width, height, bitrate: QUALITY_HIGH }))) return 'vp9'
     return null
+}
+
+/** What FFmpeg's demuxer says about a file: its picture, its sound tracks and where it starts. */
+export interface Header {
+    fmt: number
+    pic: Picture
+    /** FFmpeg's name of the picture codec. */
+    vname: string
+    /** The picture codec in plain words. */
+    codecWords: string
+    sounds: LibavSound[]
+    /** Each sound stream's decoder inputs, by stream index. */
+    inputs: Map<number, { codecId: number; codecpar: number; tb: [number, number] }>
+    duration: number
+    /** Where the file's clock starts (seconds), which the player counts as 0. */
+    base: number
+}
+
+/**
+ * Opens `file` in `L` (libav.js reads it through the file's own reader) and reads the header.
+ * A failed read is kept in `failure.error`, so a lost connection is not taken for a damaged file.
+ * Throws Unplayable `no-picture` for a file without a picture; the caller checks the rest.
+ */
+export async function readHeader(L: LibAV, file: MediaFile, container: string, durationHint: number, failure: { error: unknown }): Promise<Header> {
+    const name = `in-${file.key.replace(/[^\w.-]/g, '_')}`
+    L.onblockread = async (n: string, pos: number, len: number) => {
+        const end = Math.min(file.size, pos + len)
+        let data: Uint8Array = new Uint8Array(0)
+        if (pos < file.size) {
+            try {
+                data = await file.read(pos, end)
+            } catch (e) {
+                // Passed through libav's read, so the run fails with it (the player waits for the connection).
+                failure.error = e
+                throw e
+            }
+        }
+        await L.ff_block_reader_dev_send(n, pos, data)
+    }
+    await L.mkblockreaderdev(name, file.size)
+    const [fmt, streams] = await L.ff_init_demuxer_file(name)
+    const v = streams.find((s) => s.codec_type === L.AVMEDIA_TYPE_VIDEO)
+    if (!v) throw new Unplayable({ kind: 'no-picture' })
+    const vname = await L.avcodec_get_name(v.codec_id)
+    const vpar = await L.ff_copyout_codecpar(v.codecpar)
+    const pic: Picture = {
+        index: v.index,
+        codecId: v.codec_id,
+        codecpar: v.codecpar,
+        name: vname,
+        tb: [v.time_base_num, v.time_base_den],
+        width: vpar.width ?? 0,
+        height: vpar.height ?? 0,
+        copy: vname === 'h264',
+        avcc: vname === 'h264' && vpar.extradata && vpar.extradata[0] === 1 && vpar.extradata.length > 6 ? vpar.extradata.slice() : null,
+    }
+    const codecWords = VIDEO_NAMES[vname] ?? vname
+    const sounds: LibavSound[] = []
+    const inputs = new Map<number, { codecId: number; codecpar: number; tb: [number, number] }>()
+    for (const s of streams) {
+        if (s.codec_type !== L.AVMEDIA_TYPE_AUDIO) continue
+        const n = await L.avcodec_get_name(s.codec_id)
+        const par = await L.ff_copyout_codecpar(s.codecpar)
+        sounds.push({
+            index: s.index,
+            codec: SOUND_CODECS[n] ?? null,
+            internalCodecId: SOUND_NAMES[n] ?? n,
+            languageCode: 'und',
+            name: null,
+            numberOfChannels: par.channels ?? 0,
+            decodable: !!(await L.avcodec_find_decoder(s.codec_id)),
+        })
+        inputs.set(s.index, { codecId: s.codec_id, codecpar: s.codecpar, tb: [s.time_base_num, s.time_base_den] })
+    }
+    const lengths = streams.map((s) => s.duration).filter((d) => d > 0 && isFinite(d) && d < 1e7)
+    const duration = lengths.length ? Math.max(...lengths) : durationHint
+    // Where the file's clock starts, which the player counts as 0: an MPEG-TS file starts
+    // where the broadcast clock stood (1.4 s, or hours in).
+    const startLo = await L.AVFormatContext_start_time(fmt)
+    const startHi = await L.AVFormatContext_start_timehi(fmt)
+    const start0 = startLo === L.AV_NOPTS_VALUE_LO && startHi === L.AV_NOPTS_VALUE_HI ? 0 : L.i64tof64(startLo, startHi) / 1e6
+    return { fmt, pic, vname, codecWords, sounds, inputs, duration, base: isFinite(start0) && start0 > 0 && start0 < 1e6 ? start0 : 0 }
 }
 
 /**
@@ -205,80 +287,24 @@ export class LibavEngine extends FeedEngine {
         const t0 = performance.now()
         const L = await startLibav()
         /** A read that failed (a lost connection), so the failure is not taken for a damaged file. */
-        let readError: unknown = null
+        const failure: { error: unknown } = { error: null }
         try {
-            const name = `in-${file.key.replace(/[^\w.-]/g, '_')}`
-            L.onblockread = async (n: string, pos: number, len: number) => {
-                const end = Math.min(file.size, pos + len)
-                let data: Uint8Array = new Uint8Array(0)
-                if (pos < file.size) {
-                    try {
-                        data = await file.read(pos, end)
-                    } catch (e) {
-                        // Passed through libav's read, so the run fails with it (the player waits for the connection).
-                        readError = e
-                        throw e
-                    }
-                }
-                await L.ff_block_reader_dev_send(n, pos, data)
-            }
-            await L.mkblockreaderdev(name, file.size)
-            const [fmt, streams] = await L.ff_init_demuxer_file(name)
-            const v = streams.find((s) => s.codec_type === L.AVMEDIA_TYPE_VIDEO)
-            if (!v) throw new Unplayable({ kind: 'no-picture' })
-            const vname = await L.avcodec_get_name(v.codec_id)
-            const vpar = await L.ff_copyout_codecpar(v.codecpar)
-            const pic: Picture = {
-                index: v.index,
-                codecId: v.codec_id,
-                codecpar: v.codecpar,
-                name: vname,
-                tb: [v.time_base_num, v.time_base_den],
-                width: vpar.width ?? 0,
-                height: vpar.height ?? 0,
-                copy: vname === 'h264',
-                avcc: vname === 'h264' && vpar.extradata && vpar.extradata[0] === 1 && vpar.extradata.length > 6 ? vpar.extradata.slice() : null,
-            }
-            const codecWords = VIDEO_NAMES[vname] ?? vname
+            const h = await readHeader(L, file, container, durationHint, failure)
+            const { pic, sounds, vname, codecWords } = h
             if (pic.copy) {
                 const MS = window.ManagedMediaSource ?? window.MediaSource
                 if (!MS?.isTypeSupported('video/mp4; codecs="avc1.4d401f"')) throw new Unplayable({ kind: 'picture', codec: codecWords })
-            } else if (!(await L.avcodec_find_decoder(v.codec_id))) throw new Unplayable({ kind: 'picture', codec: codecWords })
+            } else if (!(await L.avcodec_find_decoder(pic.codecId))) throw new Unplayable({ kind: 'picture', codec: codecWords })
             else if (pic.width * pic.height > softwarePixels(navigator.hardwareConcurrency || 2, (navigator as { deviceMemory?: number }).deviceMemory, phone)) {
                 // Decoded and encoded again here, a picture this large would stutter: the app plays it.
                 throw new Unplayable({ kind: 'too-heavy', codec: `${codecWords}, ${pic.width} x ${pic.height}` })
             }
-
-            const sounds: LibavSound[] = []
-            const inputs = new Map<number, { codecId: number; codecpar: number; tb: [number, number] }>()
-            for (const s of streams) {
-                if (s.codec_type !== L.AVMEDIA_TYPE_AUDIO) continue
-                const n = await L.avcodec_get_name(s.codec_id)
-                const par = await L.ff_copyout_codecpar(s.codecpar)
-                sounds.push({
-                    index: s.index,
-                    codec: SOUND_CODECS[n] ?? null,
-                    internalCodecId: SOUND_NAMES[n] ?? n,
-                    languageCode: 'und',
-                    name: null,
-                    numberOfChannels: par.channels ?? 0,
-                    decodable: !!(await L.avcodec_find_decoder(s.codec_id)),
-                })
-                inputs.set(s.index, { codecId: s.codec_id, codecpar: s.codecpar, tb: [s.time_base_num, s.time_base_den] })
-            }
-            const lengths = streams.map((s) => s.duration).filter((d) => d > 0 && isFinite(d) && d < 1e7)
-            const duration = lengths.length ? Math.max(...lengths) : durationHint
-            // Where the file's clock starts, which the player counts as 0: an MPEG-TS file starts
-            // where the broadcast clock stood (1.4 s, or hours in).
-            const startLo = await L.AVFormatContext_start_time(fmt)
-            const startHi = await L.AVFormatContext_start_timehi(fmt)
-            const start0 = startLo === L.AV_NOPTS_VALUE_LO && startHi === L.AV_NOPTS_VALUE_HI ? 0 : L.i64tof64(startLo, startHi) / 1e6
-            const engine = new LibavEngine(video, L, fmt, pic, sounds, null, duration, container, ev)
-            engine.streams = inputs
+            const engine = new LibavEngine(video, L, h.fmt, pic, sounds, null, h.duration, container, ev)
+            engine.streams = h.inputs
             engine.size = file.size
             // AVI keeps no showing times, so they are rebuilt from the picture's own counts.
             engine.ordered = container === 'AVI'
-            engine.base = isFinite(start0) && start0 > 0 && start0 < 1e6 ? start0 : 0
+            engine.base = h.base
             engine.sound = sounds.find((t) => t.decodable) ?? null
             if (!pic.copy) {
                 engine.encoder = await pictureEncoder(pic.width || 640, pic.height || 360)
@@ -290,7 +316,7 @@ export class LibavEngine extends FeedEngine {
             return engine
         } catch (e) {
             L.terminate()
-            if (readError || e instanceof Unplayable) throw readError ?? e
+            if (failure.error || e instanceof Unplayable) throw failure.error ?? e
             // FFmpeg could not make sense of it: a damaged or unusual file.
             if (debug) console.debug('[libav] could not open', e)
             throw new Unplayable({ kind: 'format', format: container })
