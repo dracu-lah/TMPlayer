@@ -37,6 +37,27 @@ arithmetically (`scripts/release-version.py`, below), so the code can only ever 
 Android refuses to install an APK whose `versionCode` is lower than the one already on the
 device, and a hand-rolled number is easy to get wrong.
 
+## Before you tag
+
+- **The 16 KB page-size gate.** Google Play needs apps that target Android 15 or later to run on
+  devices with 16 KB memory pages, and a native library whose ELF segments are aligned to less than
+  `0x4000` does not load there. After any change that touches a native library (a new FFmpeg or
+  TDLib build, libVLC, libmpv, the media3 extension, an NDK or AGP bump), build the release and run:
+
+  ```sh
+  ./gradlew :app:assembleRelease
+  scripts/check-16kb.sh app/build/outputs/apk/release/app-universal-release.apk
+  ```
+
+  It runs `zipalign -c -P 16 -v 4` on the APK and reads the `p_align` of every LOAD segment of every
+  `.so` in it. A 64-bit library below `0x4000` or a zip that is not 16 KB aligned fails (exit 1,
+  with the file named); a 32-bit one only warns, since 16 KB devices run 64-bit apps (the 32-bit
+  TDLib is `0x1000` today). The release workflow runs the same script on the universal APK right
+  after the build and before the APK is handed on, so a failure stops the release before it is
+  published, and it publishes nothing itself. Run it by hand first on a build that adds or bumps a
+  native package; `scripts/check-16kb.sh --self-test` proves the script itself still catches a 4 KB
+  library. It also takes an `.aab`, a `.jar`, a single `.so` or a desktop bundle folder.
+
 ## Version numbers
 
 Every build has a stage: test version N (`-beta.N`, N from 1 to 98) is stage N, the release is 99,
