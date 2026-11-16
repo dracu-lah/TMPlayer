@@ -227,12 +227,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     private var mediaFileName = ""
     private var mediaCaption = ""
 
-    /** The file's type, for telling sound alone (a chat's audio, [ChatAudio]) from a video. */
+    /** The file's type, as the chat gave it. */
     private var mediaMime = ""
-    private val isAudio: Boolean get() = mediaMime.startsWith("audio/", ignoreCase = true)
-
-    /** What stands in for the picture while sound alone plays: its name and where it is from. */
-    private var audioCard: View? = null
 
     /** The forum topic the post is in, or 0, for the speed remembered per topic. */
     private var mediaTopicId = 0
@@ -1101,7 +1097,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * while one is playable, is not this case; nor is a picture that is only cover art.
      */
     private fun pictureUnplayable(tracks: Tracks): Boolean {
-        if (pictureChecked || isAudio) return false
+        if (pictureChecked) return false
         val video = tracks.groups.filter { group ->
             group.type == C.TRACK_TYPE_VIDEO &&
                 (0 until group.length).none { group.getTrackFormat(it).sampleMimeType?.startsWith("image/") == true }
@@ -1137,7 +1133,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * the one there is), or while casting, where the TV decodes the picture.
      */
     private fun checkSoftwareDecode(tracks: Tracks): Boolean {
-        if (softwareChecked || isAudio) return false
+        if (softwareChecked) return false
         val group = tracks.groups.firstOrNull { it.type == C.TRACK_TYPE_VIDEO && it.isSelected } ?: return false
         val format = (0 until group.length).firstOrNull { group.isTrackSelected(it) }?.let { group.getTrackFormat(it) } ?: return false
         if (format.sampleMimeType?.startsWith("image/") == true) return false
@@ -1370,7 +1366,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
     /** Samples the watch once a second while the video plays ([PlaybackWatch]). */
     private fun startWatch() {
-        if (watch.done || isAudio || !firstFrameReady) return
+        if (watch.done || !firstFrameReady) return
         loopHandler.removeCallbacks(watchTick)
         loopHandler.postDelayed(watchTick, WATCH_TICK_MS)
     }
@@ -2295,7 +2291,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         piecesIncomplete = false
         piecesNoticeShown = false
         // The remedy ladder starts afresh for this video, with what the device list says here (RL6).
-        remedies.newVideo(com.tmplayer.data.KnownDevices.remediesFor(com.tmplayer.data.KnownDevices.builtIn, EngineDevice.facts(), mediaMime.ifBlank { null }), active = !isAudio)
+        remedies.newVideo(com.tmplayer.data.KnownDevices.remediesFor(com.tmplayer.data.KnownDevices.builtIn, EngineDevice.facts(), mediaMime.ifBlank { null }), active = true)
     }
 
     /**
@@ -2674,12 +2670,12 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
     /**
      * Whether VLC can play this video here: one file (not a video in pieces, which only ExoPlayer
-     * joins), a picture (sound alone stays on ExoPlayer, which has the audio effects), no cast
+     * joins), no cast
      * (the TV plays it), and, when it streams, a size known (the loopback server needs one) and a
      * chat not known to restrict saving: its bytes are never put on a socket, even 127.0.0.1's.
      */
     private fun vlcCanTake(): Boolean =
-        joinedSource == null && !isAudio && !castUp() && fileId > 0 &&
+        joinedSource == null && !castUp() && fileId > 0 &&
             (downloadedVideo != null || (fileSizeBytes > 0 && savable != false))
 
     /** The engine on screen, as an [Engine]: VLC's, or ExoPlayer's wrapped for the switch. */
@@ -3008,7 +3004,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         findViewById<FrameLayout>(R.id.playback_container).addView(view)
         touchSurface = view
         controls?.setShape(videoScale)
-        controls?.setShapeOffered(!isAudio)
         // On a television only while 3D is drawn for a headset, which needs a copy per eye.
         view.findViewById<View>(androidx.media3.ui.R.id.exo_content_frame)
             ?.addOnLayoutChangeListener { frame, _, _, _, _, _, _, _, _ ->
@@ -3634,14 +3629,14 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     private fun contentFrame(): View? = touchSurface?.findViewById(androidx.media3.ui.R.id.exo_content_frame)
 
     /**
-     * Whether a pinch zooms freely now. Not on a television (no gestures there at all), not for
-     * sound alone, not while locked, in the corner window or casting, not in 3D (a headset's two
+     * Whether a pinch zooms freely now. Not on a television (no gestures there at all), not
+     * while locked, in the corner window or casting, not in 3D (a headset's two
      * halves and the anaglyph are drawn for the whole frame), and not where the video surface
      * cannot follow a view's scale (Android 6's SurfaceView, [videoFollowsTransforms]); there the
      * pinch steps the shape as it always did.
      */
     private fun zoomAllowed(): Boolean =
-        !FormFactor.isTv(this) && !isAudio && !locked && !inPictureInPicture && !stereo.on &&
+        !FormFactor.isTv(this) && !locked && !inPictureInPicture && !stereo.on &&
             cast?.casting != true && videoFollowsTransforms(touchSurface?.videoSurfaceView)
 
     /**
@@ -4815,8 +4810,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * first: while it is up the activity is never stopped, and closing its window means stop.
      */
     private fun keepsPlayingUnseen(): Boolean =
-        // Sound alone plays on with the screen off whatever the setting: that is what it is for.
-        (backgroundAudioOn || isAudio) && !FormFactor.isTv(this) && !isFinishing && !inPictureInPicture &&
+        backgroundAudioOn && !FormFactor.isTv(this) && !isFinishing && !inPictureInPicture &&
             mediaSession != null && playing?.playWhenReady == true &&
             // The sheet is up for a failure, a question or "Still watching?", none of which
             // plays on; the countdown to the next episode is the one sheet that does.
@@ -5171,7 +5165,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                     // Playing: a failure sheet's offer of the other engine is spent.
                     engineOffer = null
                     markStart("ready to play", STAGE_READY)
-                    // Sound alone has no first frame: ready is its picture.
                     openedGate.complete(Unit)
                     firstFrameReady = true
                     noteSeekIndex()
@@ -5179,7 +5172,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                     offerStartOver()
                     controls?.setBuffering(false)
                     if (!failurePinned) hideStatus()
-                    showAudioCard()
                     // Once, as the picture first lands: the viewer sees the name of what they
                     // opened and where the controls live, and the row folds away on its own.
                     if (!controlsShownOnStart) {
@@ -5745,11 +5737,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      */
     private fun findEpisodes() {
         val here = currentItem()
-        // Started from a chat's audio: the list is the order, the next file plays when one ends.
-        com.tmplayer.data.PlayQueue.stepsFor(here)?.let { steps ->
-            _episodes.value = steps
-            return
-        }
         val show = EpisodeNeighbours.showOf(here)
         if (show == null) {
             // A video that is not an episode: the chat's own next one, where the setting asks.
@@ -5799,13 +5786,13 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * After a video that is not an episode (EG-F30): with the setting on, the chat's next video
      * in the order its grid is sorted in is what autoplay goes on to ([com.tmplayer.data.ChatOrder]),
      * through the same next-up card, countdown and "Still watching?" as an episode. Off the critical
-     * path like [findEpisodes]; nothing is asked of Telegram with the setting off, for sound alone,
+     * path like [findEpisodes]; nothing is asked of Telegram with the setting off, for
      * a local file or a video with no chat, and a chat that cannot be asked (offline) leaves it as
      * it was: the video ends and stays on its last frame. The size limits the grid applies skip a
      * video above them, and another copy of the same file is not played again.
      */
     private fun findChatOrder(here: MediaItem) {
-        if (chatId == 0L || com.tmplayer.data.ChatAudio.isAudio(here)) return
+        if (chatId == 0L) return
         itemScope.launch {
             if (!playsChatOrder()) return@launch
             afterOpening()
@@ -6393,8 +6380,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * no next episode the last frame stays up with a way to watch it again.
      */
     private fun onVideoEnded() {
-        // Repeat one on a chat's audio: from the start again in this same player, not marked
-        // watched and no countdown to a next file; unseen too, so the sound carries on.
+        // Repeat this video: from the start again in this same player, not marked watched and no
+        // countdown to a next video; unseen too, so the sound carries on.
         if (repeatsAtTheEnd()) {
             player?.let {
                 it.seekTo(0)
@@ -6404,8 +6391,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         }
         // Repeat this video gives way to a sleep timer set for this video's end: the video ends,
         // and Repeat is off for whatever is played next.
-        if (sleepAtTheEnd && com.tmplayer.data.PlayQueue.repeatsVideo(currentItem(), keepRepeat)) {
-            com.tmplayer.data.PlayQueue.setRepeatVideo(false)
+        if (sleepAtTheEnd && com.tmplayer.data.RepeatVideo.repeats(currentItem(), keepRepeat)) {
+            com.tmplayer.data.RepeatVideo.set(false)
         }
         if (piecesIncomplete) {
             // Only up to a missing piece: said again, and nothing marked or played next.
@@ -6486,13 +6473,13 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     ) is BackgroundPlayback.AtTheEnd.Next
 
     /**
-     * Whether the end now reached plays this video again: Repeat one on a chat's audio, or Repeat
-     * this video ([com.tmplayer.data.PlayQueue.repeatsVideo]). A replay is nobody's autoplay, so it
+     * Whether the end now reached plays this video again: Repeat this video
+     * ([com.tmplayer.data.RepeatVideo.repeats]). A replay is nobody's autoplay, so it
      * neither counts towards "Still watching?" nor shows the next-up card; the idle question still
      * comes after two hours with nothing pressed. A sleep timer for the end of the video wins.
      */
     private fun repeatsAtTheEnd(): Boolean =
-        com.tmplayer.data.PlayQueue.atEnd(currentItem(), keepRepeat, sleepAtTheEnd) == com.tmplayer.data.QueuePlan.AtEnd.Replay
+        com.tmplayer.data.RepeatVideo.replaysAtEnd(currentItem(), keepRepeat, sleepAtTheEnd)
 
     /** [playEpisode] for an episode nobody asked for, counted towards "Still watching?". */
     private fun autoplay(next: MediaItem) {
@@ -6854,9 +6841,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
         when (event.keyCode) {
             // A remote's own Aspect (zoom) key steps the picture shape, as the row's button does,
-            // with nothing to reach first (HX16). Not for sound alone.
+            // with nothing to reach first (HX16).
             KeyEvent.KEYCODE_TV_ZOOM_MODE -> {
-                if (event.repeatCount == 0 && !isAudio) applyScale(videoScale.next())
+                if (event.repeatCount == 0) applyScale(videoScale.next())
                 return true
             }
             // A remote's 3D key steps 3D: off, one eye, both eyes for a headset or a 3D TV, red and
@@ -7521,14 +7508,14 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             chapters = chapters.isNotEmpty(),
             // Only once the chat is known to allow saving: a protected chat's frames stay in it.
             saveFrame = savable == true,
-            // A picture to shape, as for 3D: not sound alone, not while a cast plays it.
+            // A picture to shape, as for 3D: not while a cast plays it.
             pictureShape = stereoOffered(),
             stereo = stereoOffered(),
             zoomed = zoom.zoomed,
             reportStutter = stutterReportable(),
             copyLinkAtTime = linkAtTimeOffered(),
             otherEngine = otherEngineOffered(),
-            repeatVideo = repeatVideoOffered(),
+            repeatVideo = true,
             markIntro = skipCtl.canMark,
             removeIntroMark = skipCtl.canMark && skipCtl.hasOwnMark,
         )
@@ -7547,7 +7534,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             reportStutter = stutterReportable(),
             copyLinkAtTime = linkAtTimeOffered(),
             otherEngine = otherEngineOffered(),
-            repeatVideo = repeatVideoOffered(),
+            repeatVideo = true,
             markIntro = skipCtl.canMark,
             removeIntroMark = skipCtl.canMark && skipCtl.hasOwnMark,
         )
@@ -7563,7 +7550,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         override fun sleepDetail() = sleepTimerDetail()
         override fun sleepChoice() = this@PlayerActivity.sleepChoice()
         override fun loop() = abLoop
-        override fun repeatVideo() = com.tmplayer.data.PlayQueue.repeatsVideo(currentItem(), keepRepeat)
+        override fun repeatVideo() = com.tmplayer.data.RepeatVideo.repeats(currentItem(), keepRepeat)
         override fun introMarking() = skipCtl.introMarking
         override fun chapter(): String? =
             if (chapters.isEmpty()) null
@@ -7733,8 +7720,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         val exo = player ?: return
         val clock = Translator.messages.formatter::clock
         // The two repeats exclude each other: marking a stretch turns Repeat this video off.
-        if (com.tmplayer.data.PlayQueue.repeatsVideo(currentItem(), keepRepeat)) {
-            com.tmplayer.data.PlayQueue.setRepeatVideo(false)
+        if (com.tmplayer.data.RepeatVideo.repeats(currentItem(), keepRepeat)) {
+            com.tmplayer.data.RepeatVideo.set(false)
         }
         val before = abLoop
         val after = AbLoop.press(before, exo.currentPosition)
@@ -7755,19 +7742,15 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         }
     }
 
-    /** Repeat this video is offered for a video; a chat's audio has its own repeat in the list. */
-    private fun repeatVideoOffered(): Boolean = !com.tmplayer.data.ChatAudio.isAudio(currentItem())
-
     /**
      * Repeat this video (EG-F52): the end seeks to the start and plays on, with no next-up card and
      * no count towards "Still watching?". Turning it on clears the A-B repeat, and it lapses by
-     * itself when another video starts unless "Keep repeat on" is set ([com.tmplayer.data.PlayQueue]).
+     * itself when another video starts unless "Keep repeat on" is set ([com.tmplayer.data.RepeatVideo]).
      * Nothing polls: the end of the video is what asks.
      */
     private fun toggleRepeatVideo() {
-        if (!repeatVideoOffered()) return
-        val on = !com.tmplayer.data.PlayQueue.repeatsVideo(currentItem(), keepRepeat)
-        com.tmplayer.data.PlayQueue.setRepeatVideo(on, currentItem())
+        val on = !com.tmplayer.data.RepeatVideo.repeats(currentItem(), keepRepeat)
+        com.tmplayer.data.RepeatVideo.set(on, currentItem())
         if (on) {
             if (abLoop != null) {
                 abLoop = null
@@ -8022,8 +8005,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         lifecycleScope.launch { runCatching { settings.setNightMode(on) } }
     }
 
-    /** 3D video is for a picture: not sound alone, and not while a cast plays the video. */
-    private fun stereoOffered(): Boolean = !isAudio && cast?.connected != true && cast?.casting != true
+    /** 3D video is not offered while a cast plays the video. */
+    private fun stereoOffered(): Boolean = cast?.connected != true && cast?.casting != true
 
     /**
      * Before the player is first prepared: what the file's name says about 3D, and the effects
@@ -8031,9 +8014,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * that follows in a new player), so turning it on there needs no second start.
      */
     private fun prepareStereo(exo: ExoPlayer) {
-        stereoTagged = if (isAudio) null else Stereo3d.detect(listOf(mediaFileName, mediaCaption, mediaTitle).joinToString(" "))
+        stereoTagged = Stereo3d.detect(listOf(mediaFileName, mediaCaption, mediaTitle).joinToString(" "))
         stereoHinted = false
-        if (stereoPipeline || isAudio) return
+        if (stereoPipeline) return
         if (stereo.on || stereoTagged != null) {
             stereoPipeline = true
             // Before the player is attached, so read here rather than through [player].
@@ -9445,49 +9428,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             // The offline notice already says it.
             StartVerdict.State.Offline -> null
         }
-    }
-
-    /**
-     * Sound alone has no picture, so the black where it would be carries the file's name and its
-     * chat instead, centred, under the controls. Built once and kept; gone for a video.
-     */
-    private fun showAudioCard() {
-        if (!isAudio) {
-            audioCard?.visibility = View.GONE
-            return
-        }
-        val root = findViewById<FrameLayout>(R.id.player_root)
-        val card = audioCard ?: android.widget.LinearLayout(this).apply {
-            orientation = android.widget.LinearLayout.VERTICAL
-            gravity = android.view.Gravity.CENTER
-            val density = resources.displayMetrics.density
-            setPadding((32 * density).toInt(), 0, (32 * density).toInt(), 0)
-            addView(android.widget.ImageView(context).apply {
-                setImageResource(R.drawable.ic_audio_language)
-                setColorFilter(android.graphics.Color.WHITE)
-                alpha = 0.7f
-                layoutParams = android.widget.LinearLayout.LayoutParams((72 * density).toInt(), (72 * density).toInt())
-            })
-            addView(android.widget.TextView(context).apply {
-                tag = "title"
-                setTextColor(android.graphics.Color.WHITE)
-                textSize = 22f
-                gravity = android.view.Gravity.CENTER
-                setPadding(0, (16 * density).toInt(), 0, 0)
-            })
-            addView(android.widget.TextView(context).apply {
-                tag = "detail"
-                setTextColor(android.graphics.Color.argb(184, 255, 255, 255))
-                textSize = 15f
-                gravity = android.view.Gravity.CENTER
-                setPadding(0, (6 * density).toInt(), 0, 0)
-            })
-            root.addView(this, 1, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-            audioCard = this
-        }
-        card.findViewWithTag<android.widget.TextView>("title")?.text = mediaTitle
-        card.findViewWithTag<android.widget.TextView>("detail")?.text = chatTitle
-        card.visibility = View.VISIBLE
     }
 
     /** A stall after playback has begun: a small chip, so the video stays on screen. */
