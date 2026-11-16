@@ -39,6 +39,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -573,7 +574,7 @@ internal fun DetailFacts(
  * way the television's menus are; under a finger or a pointer it is a list line with a ripple.
  */
 @Composable
-private fun DetailActionRow(row: DetailRow, modifier: Modifier = Modifier) {
+fun DetailActionRow(row: DetailRow, modifier: Modifier = Modifier) {
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusVisibleAsState()
     val touch = isTouch()
@@ -595,14 +596,15 @@ private fun DetailActionRow(row: DetailRow, modifier: Modifier = Modifier) {
             .clip(shape)
             .background(background)
             .focusRing(focused, shape)
-            .clickable(interactionSource = interactions, indication = if (touch) androidx.compose.foundation.LocalIndication.current else null, onClick = row.onSelect)
+            .clickable(interactionSource = interactions, indication = if (touch) androidx.compose.foundation.LocalIndication.current else null, role = Role.Button, onClick = row.onSelect)
             .padding(horizontal = if (touch) 12.dp else 16.dp, vertical = if (touch) 12.dp else 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(row.icon, contentDescription = null, tint = if (focused) foreground else if (row.destructive) Tone.danger else Tone.muted, modifier = Modifier.size(22.dp))
         Spacer(Modifier.width(16.dp))
         Column(Modifier.weight(1f)) {
-            Text(row.label, style = MaterialTheme.typography.titleMedium, color = foreground, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // Two lines under a finger: at a large font a long label ("Mark as watched") is read whole.
+            Text(row.label, style = MaterialTheme.typography.titleMedium, color = foreground, maxLines = if (touch) 2 else 1, overflow = TextOverflow.Ellipsis)
             if (row.detail != null) {
                 Text(
                     row.detail,

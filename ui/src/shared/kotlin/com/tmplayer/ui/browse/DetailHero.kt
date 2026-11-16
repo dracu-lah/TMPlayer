@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
@@ -171,7 +172,7 @@ internal fun FactLine(facts: List<Fact>, modifier: Modifier = Modifier, style: T
  * scale and a ring on top of an already-swapped fill read as repetitive).
  */
 @Composable
-internal fun HeroPill(
+fun HeroPill(
     label: String,
     icon: ImageVector,
     onClick: () -> Unit,
@@ -195,7 +196,7 @@ internal fun HeroPill(
             .then(if (tv) Modifier else Modifier.pressScale(interactions, Micro.PillPressScale))
             .clip(CircleShape)
             .background(if (focused) Tone.focusFill else Tone.hero)
-            .clickable(interactionSource = interactions, indication = if (tv) null else LocalIndication.current, onClick = onClick)
+            .clickable(interactionSource = interactions, indication = if (tv) null else LocalIndication.current, role = Role.Button, onClick = onClick)
             .padding(start = if (large) 24.dp else 20.dp, end = if (large) 30.dp else 24.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
@@ -224,7 +225,7 @@ internal fun HeroPill(
  * for it.
  */
 @Composable
-internal fun RoundAction(
+fun RoundAction(
     label: String,
     icon: ImageVector,
     onClick: () -> Unit,
@@ -300,7 +301,7 @@ internal fun RoundAction(
                         else -> Tone.surfaceHigh
                     },
                 )
-                .clickable(interactionSource = interactions, indication = null, enabled = !ghost, onClick = press)
+                .clickable(interactionSource = interactions, indication = null, enabled = !ghost, role = Role.Button, onClick = press)
                 .then(off)
                 .padding(start = 16.dp, end = 20.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -331,7 +332,7 @@ internal fun RoundAction(
             .then(requester)
             .width(RoundActionWidth)
             .clip(RoundedCornerShape(Corner.Medium))
-            .clickable(interactionSource = interactions, indication = if (enabled) LocalIndication.current else null, enabled = !ghost) {
+            .clickable(interactionSource = interactions, indication = if (enabled) LocalIndication.current else null, enabled = !ghost, role = Role.Button) {
                 if (enabled) {
                     toggles?.let(tick)
                     onClick()
@@ -413,7 +414,7 @@ internal fun Modifier.downloadRing(progress: Float?): Modifier {
  * overview arriving in place of a caption (or a short one) moves nothing under it ([SynopsisSlot]).
  */
 @Composable
-internal fun Synopsis(
+fun Synopsis(
     text: String,
     modifier: Modifier = Modifier,
     style: TextStyle = MaterialTheme.typography.bodyMedium,
@@ -438,7 +439,7 @@ internal fun Synopsis(
             .focusRing(focused, shape)
             .then(
                 if (pressable) {
-                    Modifier.clickable(interactionSource = interactions, indication = if (tv) null else LocalIndication.current) { open = !open }
+                    Modifier.clickable(interactionSource = interactions, indication = if (tv) null else LocalIndication.current, role = Role.Button) { open = !open }
                 } else {
                     Modifier
                 },

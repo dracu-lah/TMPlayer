@@ -68,6 +68,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
@@ -450,7 +451,7 @@ fun EpisodeRow(
  * television control does.
  */
 @Composable
-internal fun CopyChip(label: String, chosen: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, description: String = label) {
+fun CopyChip(label: String, chosen: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, description: String = label) {
     val tv = !isTouch()
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusVisibleAsState()
@@ -466,6 +467,14 @@ internal fun CopyChip(label: String, chosen: Boolean, onClick: () -> Unit, modif
         },
         maxLines = 1,
         modifier = modifier
+            .semantics {
+                contentDescription = description
+                selected = chosen
+            }
+            .clickable(interactionSource = interactions, indication = if (tv) null else androidx.compose.foundation.LocalIndication.current, role = Role.Button, onClick = onClick)
+            // A finger's 48 dp, round a pill that stays as slim as it was: the press lands on the
+            // taller box, the fill and ring are drawn on the pill inside it.
+            .then(if (tv) Modifier else Modifier.minimumInteractiveComponentSize())
             .clip(shape)
             .background(
                 when {
@@ -476,11 +485,6 @@ internal fun CopyChip(label: String, chosen: Boolean, onClick: () -> Unit, modif
             )
             .focusRing(focused, shape)
             .border(1.dp, if (chosen && !focused) Tone.accent.copy(alpha = 0.6f) else Color.Transparent, shape)
-            .semantics {
-                contentDescription = description
-                selected = chosen
-            }
-            .clickable(interactionSource = interactions, indication = if (tv) null else androidx.compose.foundation.LocalIndication.current, onClick = onClick)
             .padding(horizontal = 14.dp, vertical = if (tv) 8.dp else 6.dp),
     )
 }
@@ -560,9 +564,9 @@ private fun EpisodeLine(
                 if (onLongClick != null && tv && holdOk) {
                     Modifier.okHold(interactions, onClick, onLongClick)
                 } else if (onLongClick != null && !tv) {
-                    Modifier.combinedClickable(interactionSource = interactions, indication = androidx.compose.foundation.LocalIndication.current, onClick = onClick, onLongClick = onLongClick)
+                    Modifier.combinedClickable(interactionSource = interactions, indication = androidx.compose.foundation.LocalIndication.current, role = Role.Button, onClick = onClick, onLongClick = onLongClick)
                 } else {
-                    Modifier.clickable(interactionSource = interactions, indication = if (tv) null else androidx.compose.foundation.LocalIndication.current, onClick = onClick)
+                    Modifier.clickable(interactionSource = interactions, indication = if (tv) null else androidx.compose.foundation.LocalIndication.current, role = Role.Button, onClick = onClick)
                 },
             )
             .padding(if (tv || large) 12.dp else 8.dp),
@@ -1700,6 +1704,12 @@ private fun EpisodeRanges(
                 },
                 maxLines = 1,
                 modifier = Modifier
+                    .semantics {
+                        role = Role.Tab
+                        this.selected = chosen
+                    }
+                    .clickable(interactionSource = interactions, indication = null) { onSelect(index) }
+                    .then(if (tv) Modifier else Modifier.minimumInteractiveComponentSize())
                     .clip(shape)
                     .background(
                         when {
@@ -1710,11 +1720,6 @@ private fun EpisodeRanges(
                     )
                     .border(if (chosen && !focused) 1.5.dp else 0.dp, if (chosen && !focused) Tone.accent else Color.Transparent, shape)
                     .focusRing(focused, shape)
-                    .semantics {
-                        role = Role.Tab
-                        this.selected = chosen
-                    }
-                    .clickable(interactionSource = interactions, indication = null) { onSelect(index) }
                     .padding(horizontal = if (tv) 18.dp else 14.dp, vertical = if (tv) 10.dp else 8.dp),
             )
         }
@@ -1745,24 +1750,25 @@ fun ProgressLine(fraction: Float, modifier: Modifier = Modifier) {
 }
 
 @Composable
-internal fun PlayButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun PlayButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusVisibleAsState()
     val tv = !isTouch()
     Row(
         modifier
-            .height(if (tv) 48.dp else 40.dp)
+            // A floor, not a fixed height: at a large font the label's own line is taller than 40 dp.
+            .heightIn(min = 48.dp)
             .clip(CircleShape)
             .background(Tone.accent)
             .border(if (focused) 2.dp else 0.dp, if (focused) Tone.text else Color.Transparent, CircleShape)
-            .clickable(interactionSource = interactions, indication = if (tv) null else androidx.compose.foundation.LocalIndication.current, onClick = onClick)
+            .clickable(interactionSource = interactions, indication = if (tv) null else androidx.compose.foundation.LocalIndication.current, role = Role.Button, onClick = onClick)
             .padding(start = 14.dp, end = 20.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         val ink = Tone.onAccent
         Icon(TmIcons.Play, contentDescription = null, tint = ink, modifier = Modifier.size(22.dp))
-        Text(label, style = MaterialTheme.typography.labelLarge, color = ink, maxLines = 1)
+        Text(label, style = MaterialTheme.typography.labelLarge, color = ink, maxLines = 2)
     }
 }
 

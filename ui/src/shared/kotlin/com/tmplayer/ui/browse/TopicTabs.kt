@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -252,16 +253,18 @@ private fun TopicTab(
     }.joinToString(", ")
     Row(
         modifier
-            .heightIn(min = if (tv) TV_HEIGHT else TOUCH_HEIGHT)
-            .clip(shape)
-            .background(fill)
-            .focusRing(focused, shape)
             .semantics(mergeDescendants = true) {
                 role = Role.Tab
                 selected = chosen
                 contentDescription = described
             }
             .clickable(interactionSource = interactions, indication = null, onClick = onClick)
+            // A finger's 48 dp round a pill that stays 36 dp: the press lands on the taller box.
+            .then(if (tv) Modifier else Modifier.minimumInteractiveComponentSize())
+            .heightIn(min = if (tv) TV_HEIGHT else TOUCH_HEIGHT)
+            .clip(shape)
+            .background(fill)
+            .focusRing(focused, shape)
             .padding(horizontal = if (tv) 18.dp else 14.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),

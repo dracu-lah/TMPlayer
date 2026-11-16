@@ -38,6 +38,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -231,6 +232,8 @@ private fun SeasonChip(season: EpisodeGuide.Season, chosen: Boolean, tv: Boolean
             .semantics {
                 role = Role.Tab
                 this.selected = chosen
+                // A season the chat holds nothing of: said as unavailable, not just drawn faint.
+                if (!usable) disabled()
             }
             .then(if (usable) Modifier.clickable(interactionSource = interactions, indication = null, onClick = onSelect) else Modifier)
             .padding(horizontal = if (tv) 20.dp else 16.dp, vertical = if (tv) 10.dp else 8.dp),
@@ -300,6 +303,7 @@ private fun GuideRow(
                     Modifier.clickable(
                         interactionSource = interactions,
                         indication = if (tv) null else androidx.compose.foundation.LocalIndication.current,
+                        role = Role.Button,
                         onClick = onOpen,
                     )
                 } else {
