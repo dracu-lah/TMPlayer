@@ -56,7 +56,7 @@ class ConnectHelpRenderTest {
         for (dark in listOf(true, false)) {
             shot("connect-banner-${theme(dark)}", 960, 200, dark) {
                 Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.TopCenter) {
-                    ConnectBannerView(connectHintLabel(ConnectHint.MaybeBlocked, s), proxyOn = false, onRetry = {}, onOpenProxies = {})
+                    ConnectBannerView(connectHintLabel(ConnectHint.MaybeBlocked, s), onRetry = {}, onOpenProxies = {})
                 }
             }
             shot("proxy-${theme(dark)}", 1366, 900, dark) { ProxyScreen(onClose = {}) }

@@ -1055,7 +1055,7 @@ private fun PasswordPane(
 
     val reveal = if (shown) s.loginHidePassword else s.loginShowPassword
     LoginForm(
-        title = s.loginPasswordTitle,
+        title = s.loginTelegramPasswordTitle,
         blurb = s.loginPasswordBlurb,
         note = state.hint.takeIf { it.isNotBlank() }?.let { s.loginPasswordHint(it) },
         value = password,

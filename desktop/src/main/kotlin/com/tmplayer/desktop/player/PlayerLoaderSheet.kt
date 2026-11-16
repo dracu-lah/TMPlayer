@@ -166,18 +166,36 @@ internal fun BoxScope.LoaderSheet(
             // The line as measured while bytes move, for choosing a lighter copy next time (CP80).
             // TDLib's bytes only: the player's reads include the start already on the disk.
             if (fraction != null && fraction != 1f && now == lastAt) com.tmplayer.player.LineSpeed.note(meter.bytesPerSec)
-            note = if (!speedNotes) {
-                null
-            } else if (now - started > SLOW_MS && rate >= StreamStats.MIN_MEANINGFUL_SPEED && (fraction ?: 0f) < 1f) {
+            // One decision for every screen (FQ1, StartVerdict).
+            val verdict = com.tmplayer.data.StartVerdict.of(
+                com.tmplayer.data.StartVerdict.Facts(
+                    waitedMs = now - started,
+                    quietMs = now - lastAt,
+                    local = (fraction ?: 0f) >= 1f,
+                    deviceOffline = false,
+                    bytesPerSec = rate,
+                    speedLimited = com.tmplayer.data.Td.speedLimitedNow(),
+                ),
+                slowAfterMs = SLOW_MS,
+            )
+            val speedLine = if (rate >= StreamStats.MIN_MEANINGFUL_SPEED) {
                 val figure = s.formatter.speed(rate)
-                val said = if (real) s.playerDownloadingRate(figure) else s.playerCachingRate(figure)
-                // Telegram's own cap on an account without Premium (CP83): said, nothing offered.
-                if (com.tmplayer.data.Td.speedLimitedNow()) said + "\n" + s.playerSpeedLimited else said
-            } else if (now - started > SLOW_MS && (fraction ?: 0f) < 1f && rate < StreamStats.MIN_MEANINGFUL_SPEED) {
-                // Nothing measurable arriving yet: said quietly, long before the stall sheet.
-                s.connectSlowTitle
+                if (real) s.playerDownloadingRate(figure) else s.playerCachingRate(figure)
             } else {
                 null
+            }
+            note = if (!speedNotes) {
+                null
+            } else {
+                when (verdict) {
+                    // Telegram's own cap on an account without Premium (CP83): said, nothing offered.
+                    com.tmplayer.data.StartVerdict.State.Quota -> listOfNotNull(speedLine, s.playerSpeedLimited).joinToString("\n")
+                    // Nothing measurable arriving yet: said quietly, long before the stall sheet.
+                    com.tmplayer.data.StartVerdict.State.Slow, com.tmplayer.data.StartVerdict.State.Stalled -> s.connectSlowTitle
+                    com.tmplayer.data.StartVerdict.State.Waiting ->
+                        speedLine.takeIf { now - started > SLOW_MS && (fraction ?: 0f) < 1f }
+                    com.tmplayer.data.StartVerdict.State.Offline -> null
+                }
             }
             delay(TICK_MS)
         }
@@ -291,7 +309,7 @@ private fun BoxScope.StalledPanel(
             Text(if (midPlay) s.playerStalledMidTitle else s.playerStalledTitle, style = MaterialTheme.typography.headlineSmall, color = Color.White, textAlign = TextAlign.Center)
             Text(
                 when (OpeningStall.reason(link)) {
-                    OpeningStall.Reason.NoLine -> s.playerStalledNoLine
+                    OpeningStall.Reason.NoLine -> s.playerStalledNoLinePlain
                     OpeningStall.Reason.Slow -> if (midPlay) s.playerStalledMidSlow else s.playerStalledSlow
                 },
                 color = Color.White.copy(alpha = 0.8f),
