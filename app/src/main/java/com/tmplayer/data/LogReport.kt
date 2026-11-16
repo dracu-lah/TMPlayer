@@ -10,6 +10,7 @@ import com.tmplayer.player.DecoderLister
 import com.tmplayer.player.LastVideoCodec
 import com.tmplayer.player.PlaybackMarks
 import com.tmplayer.player.StutterVerdict
+import com.tmplayer.player.TraceFacts
 import com.tmplayer.player.TraceFile
 import com.tmplayer.player.TraceText
 import com.tmplayer.ui.settings.feedbackFacts
@@ -49,6 +50,7 @@ object LogReport {
     fun sessionBlocks(file: File): List<List<String>> = TraceFile(file).read().map { session ->
         val verdict = StutterVerdict.classify(session.samples).name.lowercase()
         listOf("Session started ${FileLogSink.stamp(session.startedAtMs)}, ${session.samples.size} reading(s), verdict $verdict") +
+            TraceFacts.lines(session.facts, session.hops) +
             TraceText.lines(session.samples)
     }
 

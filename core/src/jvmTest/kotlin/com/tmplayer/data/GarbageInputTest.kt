@@ -382,6 +382,14 @@ class GarbageInputTest {
                 for (session in PlaybackTrace.read(text)) StutterVerdict.analyse(session.samples)
                 PlaybackTrace.read(text + "\n" + PlaybackTrace.sampleLine(com.tmplayer.player.TraceSample(atMs = 1)))
                 PlaybackTraceRing.from(text).sessions()
+                // Version 2's lines (facts, hops) with the text in every place a value goes.
+                val k = com.tmplayer.json.JSONObject().put("dec.name", text).put("class", text).put("rung", 5)
+                val v2 = PlaybackTrace.sessionLine(1) + "\n" +
+                    com.tmplayer.json.JSONObject().put("t", "f").put("at", 2).put("k", k) + "\n" +
+                    com.tmplayer.json.JSONObject().put("t", "f").put("at", 2).put("k", text) + "\n" +
+                    com.tmplayer.json.JSONObject().put("t", "h").put("at", 3).put("ev", text).put("to", text) + "\n" + text
+                for (session in PlaybackTrace.read(v2)) com.tmplayer.player.TraceFacts.lines(session.facts, session.hops)
+                PlaybackTraceRing.from(v2).sessions().let { PlaybackTrace.encode(it) }
             }
             survive("LogUpload.outcome", text) {
                 LogUpload.parseCode(text)
