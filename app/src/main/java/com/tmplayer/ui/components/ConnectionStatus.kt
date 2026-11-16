@@ -4,11 +4,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
@@ -28,11 +23,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.tmplayer.ui.i18n.LocalStrings
-import com.tmplayer.ui.icons.TmIcons
 import com.tmplayer.ui.theme.Tone
 
 enum class ConnectionNotice {
@@ -45,16 +38,16 @@ enum class ConnectionNotice {
 }
 
 /**
- * A status that never takes focus or blocks saved content and playback. Offline on a touch screen
- * can also lead on: [onOpenDownloads] makes the pill a button to Downloads, the one place a
- * video plays without a line (PL-13). A remote cannot reach it, so a television's pill stays
- * passive, and its tiles carry the Downloaded mark instead.
+ * A status that never takes focus or blocks saved content and playback: "Reconnecting" and
+ * "Connecting", a spinner and a few words. Offline is not drawn here: it is the Connect banner's
+ * card ([com.tmplayer.ui.connect.OfflineBanner]) with Try again, placed by the host clear of the
+ * tab bar (R4), so there is one thing that says offline and never a passive pill that duplicates it.
  */
 @Composable
-fun ConnectionStatus(notice: ConnectionNotice, modifier: Modifier = Modifier, onOpenDownloads: (() -> Unit)? = null) {
+fun ConnectionStatus(notice: ConnectionNotice, modifier: Modifier = Modifier) {
     val s = LocalStrings.current
     AnimatedVisibility(
-        visible = notice != ConnectionNotice.Hidden,
+        visible = notice == ConnectionNotice.Reconnecting || notice == ConnectionNotice.Connecting,
         modifier = modifier,
         enter = fadeIn(),
         exit = fadeOut(),
@@ -65,11 +58,8 @@ fun ConnectionStatus(notice: ConnectionNotice, modifier: Modifier = Modifier, on
         // legible when the scheme underneath is a light one, or the wallpaper's.
         val container = if (touch) SnackbarDefaults.color else Tone.surfaceHigh.copy(alpha = 0.96f)
         val onContainer = if (touch) SnackbarDefaults.contentColor else Tone.text
-        val leads = touch && notice == ConnectionNotice.Offline && onOpenDownloads != null
         Row(
             Modifier
-                .clip(if (touch) M3.shapes.extraSmall else CircleShape)
-                .then(if (leads) Modifier.clickable(role = Role.Button, onClickLabel = s.downloadsTitle, onClick = { onOpenDownloads?.invoke() }) else Modifier)
                 .background(container, if (touch) M3.shapes.extraSmall else CircleShape)
                 .padding(
                     horizontal = if (touch) 12.dp else 16.dp,
@@ -78,28 +68,14 @@ fun ConnectionStatus(notice: ConnectionNotice, modifier: Modifier = Modifier, on
             horizontalArrangement = Arrangement.spacedBy(if (touch) 8.dp else 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            when (notice) {
-                ConnectionNotice.Offline -> Icon(
-                    TmIcons.WifiOff,
-                    contentDescription = null,
-                    tint = onContainer,
-                    modifier = Modifier.size(20.dp),
-                )
-                ConnectionNotice.Reconnecting, ConnectionNotice.Connecting -> Spinner(
-                    size = 20.dp,
-                    // The television's spinner keeps its accent colour.
-                    color = if (touch) onContainer else Color.Unspecified,
-                    strokeWidth = 2.dp,
-                )
-                ConnectionNotice.Hidden -> Unit
-            }
+            Spinner(
+                size = 20.dp,
+                // The television's spinner keeps its accent colour.
+                color = if (touch) onContainer else Color.Unspecified,
+                strokeWidth = 2.dp,
+            )
             Text(
-                text = when (notice) {
-                    ConnectionNotice.Offline -> s.stateOffline
-                    ConnectionNotice.Reconnecting -> s.stateReconnecting
-                    ConnectionNotice.Connecting -> s.stateConnectingShort
-                    ConnectionNotice.Hidden -> ""
-                },
+                text = if (notice == ConnectionNotice.Reconnecting) s.stateReconnecting else s.stateConnectingShort,
                 // A phone screen is narrower than this sentence at TV size, and the pill would run
                 // off both edges rather than sit in a corner of the screen.
                 style = if (touch) {
@@ -109,13 +85,6 @@ fun ConnectionStatus(notice: ConnectionNotice, modifier: Modifier = Modifier, on
                 },
                 color = onContainer,
             )
-            if (leads) {
-                Text(
-                    text = s.downloadsTitle,
-                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold, textDecoration = TextDecoration.Underline),
-                    color = SnackbarDefaults.actionColor,
-                )
-            }
         }
     }
 }

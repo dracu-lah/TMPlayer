@@ -2195,6 +2195,8 @@ internal fun MediaCard(
     title: String? = null,
     /** The line of facts in place of the file's own (Home's New episodes row: the chat, quality and size). */
     meta: (@Composable (ink: androidx.compose.ui.graphics.ColorProducer) -> Unit)? = null,
+    /** Offline Home (R4): the card cannot play with no line, so it is dimmed and says "Needs internet". */
+    needsInternet: Boolean = false,
 ) {
     // This video's correction alone, from the screen's one collector ([LocalTileShared]).
     val renamed = com.tmplayer.ui.components.rememberCorrection(item.id)?.title
@@ -2207,6 +2209,7 @@ internal fun MediaCard(
         dense = dense,
         poster = poster,
         selected = selected,
+        needsInternet = needsInternet,
         // Every video card, in a chat's grid, Home and search: its stream warmed on focus or press.
         modifier = modifier.then(Modifier.warmUpOnIntent(item)),
         meta = meta ?: { ink -> MetaLine(item, watched, ink, finished = finished, poster = poster) },
@@ -2255,6 +2258,8 @@ internal fun VideoTile(
     meta: (@Composable (ink: androidx.compose.ui.graphics.ColorProducer) -> Unit)? = null,
     /** False for a card that writes its name on the art (Home's Continue watching), keeping only [meta] under it. */
     showTitle: Boolean = true,
+    /** Offline Home (R4): dimmed with "Needs internet" over the art; still focusable and pressable. */
+    needsInternet: Boolean = false,
     art: @Composable BoxScope.() -> Unit,
 ) {
     val touch = isTouch()
@@ -2306,9 +2311,11 @@ internal fun VideoTile(
         // on every tile in view.
         ring = Modifier.focusDrawn(focusedState, accent, shape)
     }
+    val needsInternetLabel = LocalStrings.current.homeNeedsInternet
     Column(
         modifier
             .fillMaxWidth()
+            .needsInternetSemantics(needsInternet, needsInternetLabel)
             .then(
                 if (touch) {
                     // The ripple is drawn on the art below rather than across the whole column.
@@ -2340,7 +2347,10 @@ internal fun VideoTile(
                 .then(if (touch) Modifier.indication(interactions, LocalIndication.current) else Modifier)
                 .then(ring)
                 .selectionEdge(selected, shape),
-            content = art,
+            content = {
+                art()
+                if (needsInternet) NeedsInternetCover()
+            },
         )
         Spacer(Modifier.height(if (touch) 8.dp else 10.dp))
         // Two lines, and always two where a row of tiles sits under this one, so the pictures
