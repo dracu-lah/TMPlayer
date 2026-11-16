@@ -181,7 +181,7 @@ class VideoCopiesTest {
     // ---- which copy plays --------------------------------------------------------------------
 
     @Test
-    fun `the pick order is chosen, on device, started, usual quality, newest`() {
+    fun `the pick order is chosen, on device, started, usual quality, then the best picture for this device`() {
         val newest = video(1, 20, "Night.Train.2019.2160p.mkv", date = 900)
         val small = video(1, 21, "Night.Train.2019.720p.mkv", date = 500)
         val full = video(1, 22, "Night.Train.2019.1080p.mkv", date = 400)
@@ -194,7 +194,8 @@ class VideoCopiesTest {
         val remote = all - kept
         assertEquals(small, VideoCopies.pick(remote, started = { it == small }, habit = habit))
         assertEquals(full, VideoCopies.pick(remote, habit = habit))
-        assertEquals(newest, VideoCopies.pick(remote))
+        // Nothing else to go on: the tallest picture a phone shows in full, not the newest post (a television takes the 4K one).
+        assertEquals(full, VideoCopies.pick(remote))
         // A pick that no longer exists (the message was deleted) is passed over.
         assertEquals(full, VideoCopies.pick(remote, chosen = "1:999", habit = habit))
     }

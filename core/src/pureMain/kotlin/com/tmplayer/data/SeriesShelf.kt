@@ -833,7 +833,8 @@ object SeriesShelf {
 
     /**
      * Which copy of [episode] to play: the one partway through, else the one most like [like]
-     * (the copy the viewer watched last), else the newest.
+     * (the copy the viewer watched last), else the best one this device suits (the newest where
+     * no copy states its picture).
      */
     fun pick(
         episode: SeriesEpisode,
@@ -843,7 +844,8 @@ object SeriesShelf {
     ): MediaItem {
         if (episode.copies.size <= 1) return episode.item
         episode.copies.firstOrNull { !finished(it) && position(it) > 0f }?.let { return it }
-        return like?.let { EpisodeCopies.closest(it, episode.copies) } ?: episode.item
+        // Nothing watched yet in the show: the best picture this device suits ([VideoCopies.bestForDevice]).
+        return like?.let { EpisodeCopies.closest(it, episode.copies) } ?: VideoCopies.bestForDevice(episode.copies) ?: episode.item
     }
 
     private val NOT_WORD = Regex("""[^\p{L}\p{M}\p{N}]+""")
