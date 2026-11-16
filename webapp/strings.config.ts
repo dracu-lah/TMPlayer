@@ -534,6 +534,7 @@ export const PAGE_STRINGS = [
     'settings.resume_sync_started',
     'settings.resume_sync_syncing',
     'settings.resume_sync_too_new',
+    'settings.resume_sync_two_copies',
     'settings.resume_sync_unreadable',
     'settings.saves_as_you_go',
     'settings.sign_out',

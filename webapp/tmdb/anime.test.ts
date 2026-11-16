@@ -105,6 +105,19 @@ test('AniList down and nothing from TMDB: unavailable and never kept, not "nothi
     assert.equal(m.cache.size, 0)
 })
 
+test('a server error pauses AniList for a while: no second ask into an outage, TMDB still answers, and it is asked again after', async () => {
+    const w = world((s) => (s.url.hostname === 'graphql.anilist.co' ? j({}, 503) : j({ results: [tmdbShow] })))
+    const handle = createHandler(w.deps)
+    const first = await (await get(handle, '/tmdb/poster?k=show&t=Naruto&s=1&a=1')).json()
+    assert.equal(first.poster, '/tmdbposter01.jpg')
+    assert.equal(w.calls.filter((c) => c.url.hostname === 'graphql.anilist.co').length, 1, 'not retried at once')
+    await get(handle, '/tmdb/poster?k=show&t=Other+Show&s=1&a=1')
+    assert.equal(w.calls.filter((c) => c.url.hostname === 'graphql.anilist.co').length, 1, 'not asked while paused')
+    w.clock.t += 31_000
+    await get(handle, '/tmdb/poster?k=show&t=Third+Show&s=1&a=1')
+    assert.equal(w.calls.filter((c) => c.url.hostname === 'graphql.anilist.co').length, 2)
+})
+
 test('garbage from AniList is no match, never a crash', async () => {
     for (const body of ['not json', '{"data":', 'null', '[]', '{"data":{"Page":{"media":"x"}}}', '{"data":{"Page":{"media":[null,1,{"id":"a"}]}}}']) {
         const w = world((s) => (s.url.hostname === 'graphql.anilist.co' ? new Response(body) : j({ results: [] })))

@@ -32,6 +32,7 @@ export type Outcome =
     | { kind: 'tooNew'; version: number }
     | { kind: 'unreadable' }
     | { kind: 'waitingForFile' }
+    | { kind: 'twoCopies' }
     | { kind: 'done'; received: number; wrote: boolean; dropped: number }
     | { kind: 'failed'; reason: string }
 
@@ -116,6 +117,13 @@ export async function runSync(d: Deps, o: { push?: boolean; replace?: boolean } 
         const changed = found.length === 0 || unreadable || !sameLists(remote, encoded.doc)
         const caption = `${FILE_TAG}\n${d.caption}`
         let wrote = false
+        // The switch may have been turned off (or the file deleted) since this sync began: nothing is written then.
+        if (changed && !(await d.state.get()).on) return { kind: 'off' }
+        if (found.length > 1 && !o.replace) {
+            // Taken in, but not written: the apps merge what the web does not read before one copy is left.
+            await d.state.set({ base: nextBase(local, change, applied.resumed, now), account: d.account })
+            return { kind: 'twoCopies' }
+        }
         if (changed && found.length <= 1) {
             const target = found[0]?.id ?? null
             let id: number | null = null
@@ -125,7 +133,9 @@ export async function runSync(d: Deps, o: { push?: boolean; replace?: boolean } 
             }
             // No file yet, or deleted since it was read: sent once, and not again until Telegram has shown it.
             if (id === null) {
-                if (now - state.sentAt >= 0 && now - state.sentAt < RESEND_GUARD_MS) return { kind: 'waitingForFile' }
+                const fresh = await d.state.get()
+                if (!fresh.on) return { kind: 'off' }
+                if (now - fresh.sentAt >= 0 && now - state.sentAt < RESEND_GUARD_MS) return { kind: 'waitingForFile' }
                 await d.state.set({ sentAt: now, file: 0 })
                 const sent = await d.transport.write(null, encoded.bytes, caption)
                 if ('id' in sent) id = sent.id
@@ -149,4 +159,18 @@ export async function runSync(d: Deps, o: { push?: boolean; replace?: boolean } 
     }
 }
 
-
+/** A state as kept: the switch is on only when it says `true`, anything missing or of another type reads as the default. */
+export function parseState(saved: unknown): State | null {
+    if (!saved || typeof saved !== 'object') return null
+    const s = saved as Partial<State>
+    const fresh = freshState()
+    const nums = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is number => typeof x === 'number') : [])
+    const keys = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [])
+    return {
+        on: s.on === true,
+        account: typeof s.account === 'number' ? s.account : fresh.account,
+        file: typeof s.file === 'number' ? s.file : fresh.file,
+        sentAt: typeof s.sentAt === 'number' ? s.sentAt : fresh.sentAt,
+        base: { resumeKeys: keys(s.base?.resumeKeys), favourites: nums(s.base?.favourites), at: typeof s.base?.at === 'number' ? s.base.at : 0 },
+    }
+}
