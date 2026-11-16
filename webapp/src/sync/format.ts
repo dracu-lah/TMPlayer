@@ -435,9 +435,9 @@ export function mergeCounting(left: SyncDoc, right: SyncDoc, now: number): { doc
         .sort((x, y) => y.at - x.at || LISTS.indexOf(x.list) - LISTS.indexOf(y.list) || (x.key < y.key ? -1 : 1))
     const removed = removalsAll.slice(0, MAX_REMOVALS)
 
-    // Named lists are the apps' to merge (NamedListRules): the newer file's are kept as they are.
+    // Named lists are the apps' to merge (NamedListRules); here the two copies' are only joined, by id, the newest winning for each.
     const newerFile = a.updatedAt > b.updatedAt || (a.updatedAt === b.updatedAt && a.appVersion >= b.appVersion) ? a : b
-    const lists = a.lists !== undefined && b.lists !== undefined ? newerFile.lists : (a.lists ?? b.lists)
+    const lists = a.lists !== undefined && b.lists !== undefined ? unionLists(a.lists, b.lists) : (a.lists ?? b.lists)
     const doc: SyncDoc = {
         account: Math.max(a.account, b.account),
         updatedAt: newerFile.updatedAt,
@@ -465,6 +465,32 @@ export function mergeCounting(left: SyncDoc, right: SyncDoc, now: number): { doc
 }
 
 export const merge = (a: SyncDoc, b: SyncDoc, now: number): SyncDoc => mergeCounting(a, b, now).doc
+
+/**
+ * Two copies of the named lists (kept raw) joined: a list by its id, a line by its list and its own
+ * name, a removal by its list and entry, each the newest by its time. Nothing is dropped for being
+ * absent from one copy; the apps apply the removals when they merge (NamedListRules).
+ */
+export function unionLists(a: unknown, b: unknown): unknown {
+    const pick = (x: unknown, name: string): Json[] => objs(obj(x)?.[name], 20_000)
+    const join = (name: string, key: (o: Json) => string, at: (o: Json) => number) => {
+        const out = new Map<string, Json>()
+        for (const o of [...pick(a, name), ...pick(b, name)]) {
+            const k = key(o)
+            const prev = out.get(k)
+            if (!prev || at(o) > at(prev) || (at(o) === at(prev) && tie(o) > tie(prev))) out.set(k, o)
+        }
+        return [...out.entries()].sort((x, y) => (x[0] < y[0] ? -1 : 1)).map(([, o]) => o)
+    }
+    const s = (v: unknown) => String(v ?? '')
+    const n = (v: unknown) => num(v) ?? 0
+    const entryName = (o: Json) => (s(o.series) ? `${s(o.chat)}_s:${s(o.series)}` : `${s(o.chat)}_${s(o.message)}`)
+    return {
+        lists: join('lists', (o) => s(o.id), (o) => n(o.at)),
+        entries: join('entries', (o) => `${s(o.list)}|${entryName(o)}`, (o) => n(o.addedAt)),
+        removed: join('removed', (o) => `${s(o.list)}|${s(o.entry)}`, (o) => n(o.at)),
+    }
+}
 
 // ---- what a device changes to match a merge ---------------------------------------------------
 

@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import { decode, emptyDoc, encode, keyOf, tdlibMessageId, type SyncDoc } from './format.ts'
 import type { Lists, Writer } from './local.ts'
-import { RESEND_GUARD_MS, freshState, runSync, type Deps, type State, type SyncFile } from './run.ts'
+import { RESEND_GUARD_MS, freshState, parseState, runSync, type Deps, type State, type SyncFile } from './run.ts'
 
 const CHAT = -1001234567890
 const T0 = 1_800_000_000_000
@@ -241,7 +241,8 @@ test('two copies are both read and merged in, and left for the apps to put right
     c.messages.push({ id: 1, date: 1, bytes: (await encode(one)).bytes }, { id: 2, date: 2, bytes: (await encode(two)).bytes })
     const a = device(c, { t: T0 })
     const out = await runSync(a.deps())
-    assert.deepEqual(out, { kind: 'done', received: 2, wrote: false, dropped: 0 })
+    // Said so ("two copies"), not "done": the viewer is told nothing was written here.
+    assert.deepEqual(out, { kind: 'twoCopies' })
     assert.deepEqual(a.lists.resumes.map((r) => r.messageId).sort(), [5, 8])
     assert.deepEqual(c.calls, { files: 1, write: 0, remove: 0 })
 })
@@ -275,4 +276,37 @@ test('a connection that fails is a failure in words, not a thrown error, and not
     down.offline = () => true
     assert.deepEqual(await runSync(down), { kind: 'noConnection' })
     assert.equal(c.messages.length, 0)
+})
+
+test('a switch turned off while a sync runs (another tab, or Turn off and delete) stops it before any write', async () => {
+    const c = cloud()
+    const clock = { t: T0 }
+    const a = device(c, clock)
+    a.lists.resumes.push(place(5, 300, T0 - 10))
+    const deps = a.deps()
+    const files = deps.transport.files
+    deps.transport = { ...deps.transport, files: async (k) => { const r = await files(k); a.state = { ...a.state, on: false }; return r } }
+    assert.deepEqual(await runSync(deps), { kind: 'off' })
+    assert.equal(c.calls.write, 0)
+    assert.equal(c.messages.length, 0)
+})
+
+test('a file deleted under a sync that was turned off is not sent anew', async () => {
+    const c = cloud()
+    const clock = { t: T0 }
+    const a = device(c, clock)
+    a.lists.resumes.push(place(5, 300, T0 - 10))
+    await runSync(a.deps())
+    a.lists.resumes.push(place(9, 60, T0 - 5))
+    clock.t += RESEND_GUARD_MS + 1
+    const deps = a.deps()
+    deps.transport = { ...deps.transport, write: async () => { a.state = { ...a.state, on: false }; c.messages.length = 0; return { gone: true as const } } }
+    assert.deepEqual(await runSync(deps), { kind: 'off' })
+    assert.equal(c.messages.length, 0)
+})
+
+test('the state kept is read strictly: the switch is on only when it is true', () => {
+    for (const bad of [null, 'x', 7, [], { on: 'true' }, { on: 1 }, { on: {} }, {}]) assert.equal(parseState(bad)?.on ?? false, false)
+    assert.equal(parseState({ on: true, file: 'x', account: null })?.on, true)
+    assert.deepEqual(parseState({ on: true, base: { resumeKeys: [1, 'a'], favourites: ['x', 2] } })?.base, { resumeKeys: ['a'], favourites: [2], at: 0 })
 })

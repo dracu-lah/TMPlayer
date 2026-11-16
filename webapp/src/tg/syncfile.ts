@@ -48,6 +48,9 @@ export async function findFiles(tg: TelegramClient, known: number): Promise<Mess
     return [...found.values()].sort((a, b) => b.date.getTime() - a.date.getTime() || b.id - a.id)
 }
 
+/** Whether a file of this stated size may be downloaded: a known size within the limit; an unknown, zero or negative one may not. */
+export const isReadableSize = (size: number | null | undefined): boolean => typeof size === 'number' && Number.isFinite(size) && size > 0 && size <= MAX_READ_BYTES
+
 /** The files found, each downloaded (a large one is named, not read). */
 export async function readFiles(tg: TelegramClient, known: number): Promise<FoundFile[]> {
     const out: FoundFile[] = []
@@ -55,7 +58,8 @@ export async function readFiles(tg: TelegramClient, known: number): Promise<Foun
         const file: FoundFile = { id: m.id, date: Math.floor(m.date.getTime() / 1000), bytes: null }
         const media = m.media
         if (media?.type !== 'document') continue
-        if ((media.fileSize ?? 0) > MAX_READ_BYTES) file.failed = 'large'
+        // A size Telegram does not state is not trusted: the download cannot be bounded, so it is not made.
+        if (!isReadableSize(media.fileSize)) file.failed = 'large'
         else {
             try {
                 const bytes = await tg.downloadAsBuffer(media)

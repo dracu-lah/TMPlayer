@@ -10,7 +10,7 @@ import { api, errorText } from '../tg/rpc'
 import { me } from '../session'
 import { t } from '../i18n'
 import { REMOVAL_DAYS } from './format'
-import { freshState, runSync, type Deps, type Outcome, type State } from './run'
+import { freshState, parseState, runSync, type Deps, type Outcome, type State } from './run'
 import type { Lists, Writer } from './local'
 import type { VideoItem } from '../tg/types'
 import {
@@ -48,7 +48,7 @@ export const LEAVE_GAP_MS = 30 * 1000
 
 /** What the last run came to, for the Settings row (SyncStatus). */
 export interface Status {
-    kind: 'done' | 'noConnection' | 'waitingForFile' | 'failed' | 'unreadable' | 'tooNew' | 'otherAccount'
+    kind: 'done' | 'noConnection' | 'waitingForFile' | 'twoCopies' | 'failed' | 'unreadable' | 'tooNew' | 'otherAccount'
     at: number
     received: number
     dropped: number
@@ -70,18 +70,42 @@ export const syncHasFile = () => state().file !== 0 || state().account !== 0
 
 /** Reads what was kept: the switch, the last status, whether Home asked already. Called once at start. */
 export async function loadSync(): Promise<void> {
-    const saved = await kvRead<State>(STATE_KEY)
-    if (saved && typeof saved === 'object') setState({ ...freshState(), ...saved, base: { ...freshState().base, ...saved.base } })
+    const saved = readShared() ?? parseState(await kvRead<State>(STATE_KEY))
+    if (saved) setState(saved)
     const last = await kvRead<Status>(STATUS_KEY)
     if (last && typeof last === 'object' && typeof last.at === 'number') setStatus(last)
     setCardSeen((await kvRead<boolean>(CARD_KEY)) === true)
     setLoaded(true)
 }
 
+/**
+ * The state is also kept in localStorage, which every tab of this site shares: the switch and the
+ * file a tab last used are read from there before each run, and a change in another tab arrives as
+ * a `storage` event, so a tab that was open when the switch was turned off does not sync on.
+ */
+const SHARED_KEY = 'tmplayer-sync-state'
+function readShared(): State | null {
+    try {
+        return parseState(JSON.parse(localStorage.getItem(SHARED_KEY) ?? 'null'))
+    } catch {
+        return null
+    }
+}
+
 async function patch(p: Partial<State>) {
-    const next = { ...state(), ...p }
+    const next = { ...(readShared() ?? state()), ...p }
     setState(next)
     kvWrite(STATE_KEY, next)
+    try {
+        localStorage.setItem(SHARED_KEY, JSON.stringify(next))
+    } catch {}
+}
+
+/** The state as it is now, across tabs. */
+function currentState(): State {
+    const shared = readShared()
+    if (shared) setState(shared)
+    return state()
 }
 
 function note(s: Status | null) {
@@ -123,7 +147,7 @@ function deps(): Deps {
         account: me()?.id ?? 0,
         appVersion: 'web',
         caption: t('settings.resume_sync_caption'),
-        state: { get: async () => state(), set: patch },
+        state: { get: async () => currentState(), set: patch },
         transport: {
             files: (known) => api.syncFiles(known),
             write: (target, bytes, caption) => api.syncWrite(target, bytes, caption),
@@ -149,6 +173,7 @@ const statusOf = (o: Outcome, at: number): Status | null => {
         case 'otherAccount':
         case 'noConnection':
         case 'waitingForFile':
+        case 'twoCopies':
             return { kind: o.kind, at, received: 0, dropped: 0, detail: '' }
     }
 }
@@ -216,6 +241,13 @@ export function startSync() {
             else if (Date.now() - lastRunAt > MIN_GAP_MS) ask('start')
         })
         window.addEventListener('online', () => ask('start'))
+        // The switch or the file changed in another tab.
+        window.addEventListener('storage', (e) => {
+            if (e.key !== SHARED_KEY) return
+            const now = readShared()
+            if (now) setState(now)
+            if (!now?.on) (clearTimeout(timer), (timer = 0), (due = 0))
+        })
     }
     syncSoon()
 }
@@ -241,8 +273,10 @@ export async function setSyncOn(on: boolean): Promise<void> {
 
 /** "Turn off and delete the sync file": off here, and the file (and an older TMPlayer's message) out of Saved Messages. True when it is gone. */
 export async function turnOffAndDelete(): Promise<boolean> {
-    const known = state().file
+    // Off first, so a sync under way writes nothing more, then it is waited for: no edit of the file meets its deletion.
     await setSyncOn(false)
+    if (busy) await busy.catch(() => {})
+    const known = currentState().file
     try {
         const gone = await api.syncDeleteAll(known)
         if (gone) await patch({ file: 0, sentAt: 0 })
@@ -258,6 +292,9 @@ export function stopSync() {
     timer = 0
     due = 0
     lastRunAt = 0
+    try {
+        localStorage.removeItem(SHARED_KEY)
+    } catch {}
     setState(freshState())
     setStatus(null)
     setCardSeen(true)
@@ -297,6 +334,8 @@ export function statusLine(): string {
             return t('settings.resume_sync_offline')
         case 'waitingForFile':
             return t('settings.resume_sync_pending')
+        case 'twoCopies':
+            return t('settings.resume_sync_two_copies')
         case 'failed':
             return t('settings.resume_sync_failed', { reason: s.detail || '?' })
         case 'unreadable':

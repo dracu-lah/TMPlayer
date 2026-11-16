@@ -19,6 +19,7 @@ import {
     sameLists,
     tdlibMessageId,
     toJson,
+    unionLists,
     webMessageId,
     type SyncApply,
     type SyncDoc,
@@ -240,6 +241,19 @@ test('huge lists are cut to twice their cap on reading, a huge title to its boun
     const r = await read(await gzip(text(sync({ resume: many }))))
     assert.ok(r.resume.length <= 400)
     assert.ok(r.resume.every((x) => x.title.length <= 60))
+})
+
+test('two copies\' named lists are joined by id, the newest winning for each, nothing dropped for being absent', () => {
+    const a = { lists: [{ id: 'aaa', name: 'Old', at: 1 }, { id: 'bbb', name: 'Only A', at: 5 }], entries: [{ list: 'aaa', chat: 1, message: 2, addedAt: 3, title: 'A' }], removed: [{ list: 'aaa', at: 9 }] }
+    const b = { lists: [{ id: 'aaa', name: 'New', at: 7 }], entries: [{ list: 'aaa', chat: 1, message: 2, addedAt: 4, title: 'B' }, { list: 'aaa', chat: 1, message: 3, addedAt: 1, title: 'C' }], removed: [{ list: 'aaa', entry: '1_2', at: 2 }] }
+    const u = unionLists(a, b) as { lists: { id: string; name: string }[]; entries: { title: string }[]; removed: unknown[] }
+    assert.deepEqual(u.lists.map((l) => `${l.id}:${l.name}`), ['aaa:New', 'bbb:Only A'])
+    assert.deepEqual(u.entries.map((e) => e.title).sort(), ['B', 'C'])
+    assert.equal(u.removed.length, 2)
+    assert.deepEqual(unionLists(b, a), unionLists(a, b), 'the order the copies are read in does not matter')
+    for (const junk of [null, 'x', 7, [], { lists: 'no', entries: [null, 3] }]) assert.doesNotThrow(() => unionLists(junk, a))
+    const merged = merge({ ...emptyDoc(1), lists: a, updatedAt: 1 }, { ...emptyDoc(1), lists: b, updatedAt: 2 }, 10)
+    assert.equal((merged.lists as { lists: unknown[] }).lists.length, 2)
 })
 
 test('random shapes never throw in reading, merging or applying', async () => {

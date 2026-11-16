@@ -64,6 +64,8 @@ export const MISS_TTL = 7 * DAY
 const REFUSED_RETRY = DAY * 1000
 const DEFAULT_WAIT = 10_000
 const RETRY = 1_000
+/** How long AniList is left alone after a server error (a 429 names its own time, up to 600 s). */
+const ANILIST_BACKOFF = 30_000
 const SIZES = new Set(['w185', 'w300', 'w342', 'w500', 'w780'])
 const FILE = /^\/[A-Za-z0-9_-]{8,64}\.(jpg|png|webp)$/
 
@@ -138,7 +140,11 @@ export function createHandler(deps: Deps) {
             return { kind: 'throttled', waitMs }
         }
         if (response.status === 404) return { kind: 'missing' }
-        if (!response.ok) return { kind: 'failed' }
+        if (!response.ok) {
+            // An outage is not asked again at once: AniList is left alone for a short while (the retry below does not double it).
+            aniPausedUntil = now() + ANILIST_BACKOFF
+            return { kind: 'failed' }
+        }
         try {
             return { kind: 'ok', json: await response.json() }
         } catch {
@@ -149,7 +155,8 @@ export function createHandler(deps: Deps) {
     /** One more try after a second for a dropped connection or a server error, then give up. */
     async function aniRetrying(query: string, variables: Record<string, unknown>): Promise<Reply> {
         const first = await aniCall(query, variables)
-        if (first.kind !== 'failed') return first
+        // A server error paused AniList (aniCall): no second ask into an outage. A dropped connection is tried once more.
+        if (first.kind !== 'failed' || now() < aniPausedUntil) return first
         await sleep(RETRY)
         return aniCall(query, variables)
     }

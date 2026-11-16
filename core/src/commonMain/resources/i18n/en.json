@@ -3018,6 +3018,7 @@
     "resume_sync_started": "Resume on your other devices is on",
     "resume_sync_syncing": "Syncing with your Saved Messages",
     "resume_sync_too_new": "The sync file comes from a newer TMPlayer. Update TMPlayer here to keep syncing; nothing was written.",
+    "resume_sync_two_copies": "Two sync files were found in your Saved Messages. Their places were taken in, but nothing was written here: open TMPlayer on your phone or computer to join them into one.",
     "resume_sync_unreadable": "The sync file in your Saved Messages could not be read. Your lists here are kept and nothing was written.",
     "save_mobile_data": "Save mobile data",
     "save_mobile_data_off": "Off: a video is fetched to the end as fast as the connection allows",
