@@ -66,6 +66,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.tmplayer.R
+import com.tmplayer.data.FormatFacts
 import com.tmplayer.i18n.L
 import com.tmplayer.i18n.Translator
 import com.tmplayer.online.DownloadResult
@@ -117,7 +118,14 @@ class TrackPickerFragment : Fragment() {
     private val host: TrackPickerHost? get() = activity as? TrackPickerHost
 
     /** A track to choose, its name and, under it, what tells it apart from a namesake. */
-    private class Option(val group: Tracks.Group?, val trackIndex: Int, val label: String, val detail: String? = null)
+    private class Option(
+        val group: Tracks.Group?,
+        val trackIndex: Int,
+        val label: String,
+        val detail: String? = null,
+        /** What a sound track declares (Atmos, DTS, 5.1 and so on), drawn as pills under the name; empty for the rest. */
+        val tags: List<FormatFacts.Tag> = emptyList(),
+    )
 
     private enum class Page { Tracks, Online, Msone, Chat }
 
@@ -138,6 +146,7 @@ class TrackPickerFragment : Fragment() {
         val icon: ImageVector? = null,
         val enabled: Boolean = true,
         val group: Group = Group.Tracks,
+        val tags: List<FormatFacts.Tag> = emptyList(),
         val onClick: () -> Unit,
     )
 
@@ -233,12 +242,13 @@ class TrackPickerFragment : Fragment() {
                 for (index in 0 until group.length) {
                     val format = group.getTrackFormat(index)
                     val detail = tags(format).ifEmpty { null }?.joinToString("  ·  ")
+                    val badges = soundTags(format)
                     if (!group.isTrackSupported(index)) {
-                        unsupported += Option(group, index, describe(group, index, number + unsupported.size), detail)
+                        unsupported += Option(group, index, describe(group, index, number + unsupported.size), detail, badges)
                         continue
                     }
                     number++
-                    add(Option(group, index, describe(group, index, number - 1), detail))
+                    add(Option(group, index, describe(group, index, number - 1), detail, badges))
                 }
             }
         }.let(::numberNamesakes)
@@ -277,6 +287,7 @@ class TrackPickerFragment : Fragment() {
                         detail = listOfNotNull(if (selected) L.tracksPlayingNow else null, option.detail)
                             .ifEmpty { null }?.joinToString("  ·  "),
                         selected = selected,
+                        tags = option.tags,
                     ) { choose(option) },
                 )
             }
@@ -300,6 +311,7 @@ class TrackPickerFragment : Fragment() {
                 detail = listOfNotNull(L.tracksNotSupported, option.detail).joinToString("  ·  "),
                 selected = false,
                 enabled = false,
+                tags = option.tags,
             ) {}
         }
 
@@ -810,6 +822,7 @@ class TrackPickerFragment : Fragment() {
                 selected = line.selected,
                 icon = line.icon,
                 enabled = line.enabled,
+                tags = line.tags,
                 modifier = if (line.key == focusKey) Modifier.focusRequester(firstFocus) else Modifier,
                 onClick = line.onClick,
             )
@@ -841,9 +854,12 @@ class TrackPickerFragment : Fragment() {
             else -> L.tracksTrackNumber((position + 1).toString())
         }
 
+        // A kind or a layout that has a pill under the name is not said twice: what is left in
+        // words is a plain Dolby track and a channel count with no common name (mono, three, seven).
+        val pills = soundTags(format)
         val details = buildList {
-            soundFormat(format)?.let { add(it) }
-            if (format.channelCount > 0) add(channels(format.channelCount))
+            if (pills.none { it.kind == FormatFacts.Kind.Audio }) soundFormat(format)?.let { add(it) }
+            if (format.channelCount > 0 && pills.none { it.kind == FormatFacts.Kind.Channels }) add(channels(format.channelCount))
         }
 
         return if (details.isEmpty()) name else "$name  ·  ${details.joinToString(" ")}"
@@ -881,14 +897,14 @@ class TrackPickerFragment : Fragment() {
      * among the tracks of their kind, as a last resort.
      */
     private fun numberNamesakes(options: List<Option>): List<Option> {
-        val seen = options.groupingBy { it.label to it.detail }.eachCount()
+        val seen = options.groupingBy { Triple(it.label, it.detail, it.tags) }.eachCount()
         var number = 0
         return options.map { option ->
             if (option.group == null) return@map option
             number++
-            if ((seen[option.label to option.detail] ?: 0) < 2) return@map option
+            if ((seen[Triple(option.label, option.detail, option.tags)] ?: 0) < 2) return@map option
             val tag = L.tracksTrackNumber(number.toString())
-            Option(option.group, option.trackIndex, option.label, listOfNotNull(option.detail, tag).joinToString("  ·  "))
+            Option(option.group, option.trackIndex, option.label, listOfNotNull(option.detail, tag).joinToString("  ·  "), option.tags)
         }
     }
 
@@ -904,6 +920,10 @@ class TrackPickerFragment : Fragment() {
             else -> null
         }
     }
+
+    /** The pills a sound track wears in the picker (FormatFacts); none for subtitles. */
+    private fun soundTags(format: Format): List<FormatFacts.Tag> =
+        if (trackType == C.TRACK_TYPE_AUDIO) FormatFacts.audioTags(Media3Probe.audioOf(format)) else emptyList()
 
     private fun channels(count: Int) = when (count) {
         1 -> L.tracksMono

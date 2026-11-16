@@ -1992,6 +1992,12 @@ private fun DownloadCard(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+                // The picture and the sound the file declares, where known (the one slot for format badges).
+                val formats = com.tmplayer.ui.components.rememberFormatTags(item)
+                if (formats.isNotEmpty()) {
+                    Spacer(Modifier.height(6.dp))
+                    com.tmplayer.ui.components.FormatBadgeRow(formats)
+                }
             }
             // A whole download on a phone: More, with Share, Save to folder and Delete behind it.
             if (tapToPlay && !row.cached) {

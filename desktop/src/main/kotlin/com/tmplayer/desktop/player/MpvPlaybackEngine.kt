@@ -1,5 +1,7 @@
 package com.tmplayer.desktop.player
 
+import com.tmplayer.data.FormatFacts
+import com.tmplayer.data.FormatProbes
 import com.tmplayer.data.ResumeState
 import com.tmplayer.desktop.DesktopPaths
 import com.tmplayer.i18n.L
@@ -256,6 +258,7 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
         if (tracksDirty || tick % TRACK_POLL_EVERY == 0) {
             tracksDirty = false
             _tracks.value = readTracks(h)
+            recordProbe(h, _tracks.value)
             val chapters = readChapters(h)
             if (chapters != _state.value.chapters) _state.update { it.copy(chapters = chapters) }
         }
@@ -281,6 +284,66 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
         }
     }
 
+    /** The video the engine is playing, set by [probeFor], so what mpv lists is stored under it (FormatProbes). */
+    @Volatile private var probeId: String? = null
+    private var probedTracks: List<MediaTrack>? = null
+
+    override fun probeFor(id: String) {
+        probeId = id
+        probedTracks = null
+    }
+
+    /**
+     * Stores what the file declares ([FormatFacts.Probe]) once mpv lists its tracks, and again only
+     * when the list changes. Reads mpv's own words: the codec, the profile text, the colour transfer,
+     * the pixel format's bit depth and, where this mpv says so, the Dolby Vision profile. Never throws.
+     */
+    private fun recordProbe(h: MPVHandle, tracks: List<MediaTrack>) {
+        val id = probeId ?: return
+        if (tracks.isEmpty() || tracks == probedTracks) return
+        probedTracks = tracks
+        runCatching {
+            val count = (h.int("track-list/count") ?: 0).coerceIn(0, MAX_PROBED_TRACKS)
+            var video: Int? = null
+            val sound = ArrayList<FormatFacts.AudioTrack>()
+            for (i in 0 until count) {
+                val selected = h.bool("track-list/$i/selected") == true
+                when (h.string("track-list/$i/type")) {
+                    "video" -> if (h.bool("track-list/$i/albumart") != true && (video == null || selected)) video = i
+                    "audio" -> {
+                        val track = FormatFacts.AudioTrack(
+                            mime = h.string("track-list/$i/codec")?.let { "audio/$it" },
+                            profile = h.string("track-list/$i/codec-profile"),
+                            channels = h.int("track-list/$i/demux-channel-count") ?: 0,
+                        )
+                        if (selected) sound.add(0, track) else sound.add(track)
+                    }
+                }
+            }
+            val v = video
+            val dolby = v?.let { h.int("track-list/$it/dolby-vision-profile") }?.takeIf { it > 0 }
+            val depth = h.string("video-params/pixelformat")?.let { BIT_DEPTH.find(it)?.groupValues?.get(1)?.toIntOrNull() } ?: 0
+            FormatProbes.record(
+                id,
+                FormatFacts.Probe(
+                    videoMime = v?.let { h.string("track-list/$it/codec") }?.let { "video/$it" },
+                    videoCodecs = dolby?.let { "dvhe.%02d.06".format(it) },
+                    width = v?.let { h.int("track-list/$it/demux-w") } ?: 0,
+                    height = v?.let { h.int("track-list/$it/demux-h") } ?: 0,
+                    frameRate = (v?.let { h.double("track-list/$it/demux-fps") } ?: 0.0).toFloat(),
+                    transfer = when (h.string("video-params/gamma")) {
+                        "pq" -> FormatFacts.Transfer.Pq
+                        "hlg" -> FormatFacts.Transfer.Hlg
+                        null -> FormatFacts.Transfer.Unknown
+                        else -> FormatFacts.Transfer.Sdr
+                    },
+                    bitDepth = depth,
+                    audio = sound.take(MAX_PROBED_AUDIO),
+                ),
+            )
+        }
+    }
+
     private fun readTracks(h: MPVHandle): List<MediaTrack> {
         val count = h.int("track-list/count") ?: return emptyList()
         return (0 until count).mapNotNull { i ->
@@ -301,6 +364,7 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
                 isDefault = h.bool("track-list/$i/default") == true,
                 external = h.bool("track-list/$i/external") == true,
                 forced = h.bool("track-list/$i/forced") == true,
+                profile = if (type == TrackType.Audio) h.string("track-list/$i/codec-profile") else null,
             )
         }
     }
@@ -946,6 +1010,11 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
         const val TAG = "MpvPlaybackEngine"
         const val POLL_MS = 250L
         const val TRACK_POLL_EVERY = 8
+        private const val MAX_PROBED_TRACKS = 64
+        private const val MAX_PROBED_AUDIO = 16
+
+        /** "yuv420p10le" is ten bits, "yuv420p" is eight (no digits). */
+        private val BIT_DEPTH = Regex("p(\\d{2})(?:le|be)?$")
         const val SEEK_SETTLE_MS = 600L
 
         /** How often, how long, and after how long an idle mpv counts, for a keyframe seek. */

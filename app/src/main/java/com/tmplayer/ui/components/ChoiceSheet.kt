@@ -315,6 +315,8 @@ fun TvChoiceRow(
     selected: Boolean? = null,
     icon: ImageVector? = null,
     enabled: Boolean = true,
+    /** Format pills under the words (a sound track's Atmos, 5.1): text only, not a stop of their own. */
+    tags: List<com.tmplayer.data.FormatFacts.Tag> = emptyList(),
     onClick: () -> Unit,
 ) {
     val interactions = remember { MutableInteractionSource() }
@@ -354,6 +356,9 @@ fun TvChoiceRow(
             Text(title, style = MaterialTheme.typography.titleMedium, color = ink)
             if (detail != null) {
                 Text(detail, style = MaterialTheme.typography.bodyMedium, color = if (focused) ink else Tone.muted)
+            }
+            if (tags.isNotEmpty()) {
+                FormatBadgeRow(tags, Modifier.padding(top = 4.dp), ink = if (focused) ink else null)
             }
         }
         if (trailing != null) {
@@ -435,12 +440,13 @@ fun ChoiceLine(
     selected: Boolean? = null,
     icon: ImageVector? = null,
     enabled: Boolean = true,
+    tags: List<com.tmplayer.data.FormatFacts.Tag> = emptyList(),
     onClick: () -> Unit,
 ) {
     if (isTouch()) {
-        ChoiceRow(title, modifier.fillMaxWidth(), detail, selected, icon, enabled, onClick)
+        ChoiceRow(title, modifier.fillMaxWidth(), detail, selected, icon, enabled, tags, onClick)
     } else {
-        TvChoiceRow(title, modifier, detail, selected = selected, icon = icon, enabled = enabled, onClick = onClick)
+        TvChoiceRow(title, modifier, detail, selected = selected, icon = icon, enabled = enabled, tags = tags, onClick = onClick)
     }
 }
 

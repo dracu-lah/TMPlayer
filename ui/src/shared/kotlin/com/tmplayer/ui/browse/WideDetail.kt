@@ -235,14 +235,14 @@ fun WideDetailPanel(
                     listOfNotNull(
                         (parsed.year ?: matchYear.takeIf { yearInFacts })?.let { Fact(it.toString()) },
                         item.durationSec.takeIf { it > 0 }?.let { Fact(s.formatter.duration(it.toLong())) },
-                        // As the copy under Play names it ([VideoCopies.qualityLabel]).
-                        (com.tmplayer.data.VideoCopies.qualityLabel(item) ?: facts.resolution)?.let { Fact(it, chip = true) },
                         item.sizeBytes.takeIf { it > 0 }?.let { Fact(com.tmplayer.data.SplitPieces.sizeFact(item, s.formatter.size(it))) },
                         chatTitle.takeIf { it.isNotBlank() }?.let { Fact(it) },
                         Fact(s.detailWatchedLine, accent = true).takeIf { finished },
                     ),
                     style = MaterialTheme.typography.titleSmall,
                 )
+                // The picture and the sound the file declares (resolution first, then what a player saw): FormatFacts.
+                com.tmplayer.ui.components.FormatBadgeRow(com.tmplayer.ui.components.rememberFormatTags(item))
                 DetailMetaLines(
                     extrasState,
                     year = matchYear.takeIf { !yearInFacts },

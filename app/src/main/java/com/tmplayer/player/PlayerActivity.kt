@@ -5051,6 +5051,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
          */
         override fun onTracksChanged(tracks: Tracks) {
             if (!tracks.isEmpty) markStart("tracks known", STAGE_TRACKS)
+            // What the file declares, for the badges on its details page (T8). Cheap, once per listing.
+            // Not for Telegram's lighter copy, whose picture is not the upload the page is about.
+            if (!tracks.isEmpty && playingQuality == 0) runCatching { com.tmplayer.data.FormatProbes.record("$chatId:$messageId", Media3Probe.of(tracks)) }
             // After a switch of engine: the languages, the speed and the volume of the one before.
             pendingCarry?.let { carry -> if (currentEngine()?.restore(carry) == true) pendingCarry = null }
             logSubtitleTracks(tracks)

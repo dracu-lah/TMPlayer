@@ -1233,12 +1233,12 @@ internal fun Poster(
             if (selection?.history == true && (showing || selection.active)) {
                 TickBox(selected, Modifier.align(Alignment.TopStart).padding(TileBadgeInset)) { selection.toggle(index) }
             }
-            // The top end corner: the caller's mark, else on a poster the quality its name states.
-            val quality = item.qualityTags.firstOrNull()
+            // The top end corner: the caller's mark, else on a poster the resolution (720p and up, FormatFacts.tileTag).
+            val quality = remember(item.width, item.height, item.fileName, item.title) { com.tmplayer.data.FormatFacts.tileTag(item) }
             if (!showing) when {
                 badge != null -> Box(Modifier.align(Alignment.TopEnd).padding(TileBadgeInset)) { badge() }
                 // Only on its own: two chips across a narrow poster would meet in the middle.
-                poster && quality != null && !selected && record == null && download == null && !item.onDevice && !finished -> TileBadge(quality, Modifier.align(Alignment.TopEnd).padding(TileBadgeInset))
+                poster && quality != null && !selected && record == null && download == null && !item.onDevice && !finished -> com.tmplayer.ui.components.FormatBadge(quality, Modifier.align(Alignment.TopEnd).padding(TileBadgeInset), onArt = true)
             }
             if (showing) {
                 Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.25f)))
