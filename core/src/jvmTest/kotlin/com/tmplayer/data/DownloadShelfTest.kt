@@ -56,6 +56,16 @@ class DownloadShelfTest {
     }
 
     @Test
+    fun `rows downloaded in the same moment are ordered by key, whatever order they come in`() {
+        val rows = arrayOf(Row(3, "Gamma (2021).mkv", 50), Row(1, "Alpha (2019).mkv", 50), Row(2, "Beta (2020).mkv", 50))
+        val expected = listOf("1", "2", "3")
+        assertEquals(expected, arranged(DownloadShelf.Sort.Newest, *rows))
+        assertEquals(expected, arranged(DownloadShelf.Sort.Newest, *rows.reversedArray()))
+        // A later row still goes first; the tie only decides among equals.
+        assertEquals(listOf("4") + expected, arranged(DownloadShelf.Sort.Newest, *rows, Row(4, "Delta (2022).mkv", 60)))
+    }
+
+    @Test
     fun `a stored order reads back, an unknown one is newest`() {
         for (sort in DownloadShelf.Sort.entries) assertEquals(sort, DownloadShelf.Sort.decode(sort.name))
         assertEquals(DownloadShelf.Sort.Newest, DownloadShelf.Sort.decode("Sideways"))
