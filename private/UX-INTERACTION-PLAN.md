@@ -801,3 +801,9 @@ Next session: run `:app:testDebugUnitTest` and `:desktop:test` in full (per modu
 - Next: Settings.kt L819 could use CheckRow (R3's file); show-password toggle on the Opensubtitles sign in dialog needs a design call.
 - Gotchas: 39e08c1 alone does not compile (uses FocusWhenShown, added in a70f4e0). Material controls get keyboard marks from ProvideFocusVisibility only (state layer).
 - Decisions: used R1's scrimDismiss and added swallowClicks beside it; palette rows made non-focusable (field keeps the keyboard); left settings files to R3.
+
+### Worker handoff: R6 review, flows (branch worktree-agent-a511392e0af4b1e44, local, not pushed)
+- Done: a22fb99 (sign in errors and PIN lines are live regions, `liveMessage` helper, PaneError), 8f5c8ee (proxy screen: failed Use/Remove/Stop shown, Add busy reset), 631c1e5 (phone update dialog: Close and Back while downloading), b8b4497 (Downloads selection bar: Share + 48 dp named icons), bf52e00 (QuietButton 48 dp min, StepHeading is a heading), 9f59331 (FlowsReviewTest, 5 tests). Notes in private/ux-review/flows.md.
+- Next: manual proxy kind selected state (SetupButton `selected`), TV "Help translate" QR fallback (Settings, R3), TalkBack pass on a device.
+- Gotchas: the inventory predates the one question setup (SetupScreen, CrashAskCard, CrashReportsQuestion gone). A worktree needs a copy of local.properties for gradle. `TouchUpdateDialog` and `Offer` are now internal for the test.
+- Decisions: outside taps stay ignored during a download but Back and Close hide the dialog (download runs on Background.scope); selection bar secondaries became icon-only (as the cards do); used `errorsNoAnswer` as the generic proxy failure text (no new en.json key).
