@@ -787,6 +787,9 @@ fun PlayerScreen(
         }
         // Every file opens whole; the engine puts mpv's own zoom back as it opens.
         zoom = PictureZoom.NONE
+        // What the file declares goes to the badges on its details page once mpv lists its tracks.
+        // Not for Telegram's lighter copy, whose picture is not the upload the page is about.
+        if (item.playingQuality == 0) engine.probeFor(item.id)
         engine.open(data, start, prefs)
         val error = engine.state.value.error
         // On a TV the casting panel says what went wrong, with Play here beside it.

@@ -1,5 +1,6 @@
 package com.tmplayer.desktop.player
 
+import com.tmplayer.data.FormatFacts
 import com.tmplayer.i18n.L
 import com.tmplayer.player.Stereo3d
 import com.tmplayer.player.SubtitlePlan
@@ -18,6 +19,13 @@ import org.openani.mediamp.source.MediaData
 interface PlaybackEngine {
     val state: StateFlow<PlaybackStatus>
     val tracks: StateFlow<List<MediaTrack>>
+
+    /**
+     * Names the video the next [open] plays ([com.tmplayer.data.MediaItem.id]), so an engine that
+     * can read its tracks stores what the file declares for the badges ([com.tmplayer.data.FormatProbes]).
+     * Nothing for an engine that cannot.
+     */
+    fun probeFor(id: String) {}
 
     /** Opens [data] and returns once the file is loaded, or with [PlaybackStatus.error] set. */
     suspend fun open(data: MediaData, startAtMs: Long, prefs: OpenPrefs = OpenPrefs())
@@ -197,17 +205,22 @@ data class MediaTrack(
     val external: Boolean,
     /** Flagged forced: the few lines a film subtitles on purpose, signs and foreign dialogue. */
     val forced: Boolean = false,
+    /** The codec's profile in words where the engine gives one ("Dolby TrueHD + Dolby Atmos"), for the badges. */
+    val profile: String? = null,
 ) {
-    /** "English (ac3 5.1)", "Signs", "Track 3". */
+    /** "English (ac3 5.1)", "English (Atmos 5.1)", "Signs", "Track 3". */
     val label: String
         get() {
             val name = listOfNotNull(
                 title?.takeIf { it.isNotBlank() },
                 language?.takeIf { it.isNotBlank() && it != "und" }?.let(::languageName),
             ).distinct().joinToString(" · ").ifBlank { L.playerTrackNumber(id.toString()) }
+            // A sound track says its kind and layout as the badges do (Atmos, DTS-HD, 5.1); a codec
+            // or count with no such name keeps its plain word.
+            val tags = if (type == TrackType.Audio) FormatFacts.audioTags(FormatFacts.AudioTrack("audio/${codec.orEmpty()}", null, profile, channels ?: 0)) else emptyList()
             val extra = listOfNotNull(
-                codec?.takeIf { it.isNotBlank() },
-                channels?.takeIf { it > 0 }?.let(::channelLabel),
+                tags.firstOrNull { it.kind == FormatFacts.Kind.Audio }?.text ?: codec?.takeIf { it.isNotBlank() },
+                tags.firstOrNull { it.kind == FormatFacts.Kind.Channels && it.text != FormatFacts.STEREO }?.text ?: channels?.takeIf { it > 0 }?.let(::channelLabel),
             ).joinToString(" ")
             return if (extra.isBlank()) name else "$name ($extra)"
         }
