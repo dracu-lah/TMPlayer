@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -29,6 +30,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
@@ -109,15 +111,22 @@ private fun JoinChatButton(info: ChatInfo?) {
     val context = LocalContext.current
     val link = info.link ?: return
     com.tmplayer.ui.components.TmButton(
-        onClick = {
-            context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(link)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        },
+        onClick = { openLink(context, link) },
     ) {
         Icon(TmIcons.OpenExternal, contentDescription = null, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(8.dp))
         Text(s.linkOpenInTelegram)
     }
 }
+
+/**
+ * Opens [link] in whatever handles it (Telegram, or a browser). A phone with neither, or one that
+ * refuses, says so instead of crashing the app on the press. True when something opened.
+ */
+internal fun openLink(context: Context, link: String): Boolean =
+    runCatching {
+        context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(link)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }.onFailure { showMessage(context, L.gridNoAppOpens) }.isSuccess
 
 /** The rest could not be loaded: said, with Try again, so a failure does not pass for a wait. */
 @Composable
@@ -129,7 +138,7 @@ private fun ChatInfoFailed(load: ChatInfoLoad) {
 }
 
 @Composable
-private fun ChatInfoBody(info: ChatInfo?, title: String, photoFileId: Int, miniThumbnail: ByteArray?, touch: Boolean) {
+internal fun ChatInfoBody(info: ChatInfo?, title: String, photoFileId: Int, miniThumbnail: ByteArray?, touch: Boolean) {
     val s = LocalStrings.current
     val context = LocalContext.current
     val name = info?.summary?.title ?: title
@@ -150,7 +159,8 @@ private fun ChatInfoBody(info: ChatInfo?, title: String, photoFileId: Int, miniT
         Row(
             Modifier
                 .clip(RoundedCornerShape(12.dp))
-                .then(if (touch) Modifier.clickable(onClickLabel = s.chatsInfoCopyUsername) { copy(context, "@$username", L.chatsInfoUsernameCopied) } else Modifier)
+                // A thumb's 48 dp, though the words are shorter than that.
+                .then(if (touch) Modifier.heightIn(min = 48.dp).clickable(role = Role.Button, onClickLabel = s.chatsInfoCopyUsername) { copy(context, "@$username", L.chatsInfoUsernameCopied) } else Modifier)
                 .padding(horizontal = 10.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -166,7 +176,12 @@ private fun ChatInfoBody(info: ChatInfo?, title: String, photoFileId: Int, miniT
     val link = info?.link
     if (link != null) {
         if (touch) {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            // Wraps under the first at a large font, rather than running off the sheet.
+            @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+            androidx.compose.foundation.layout.FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 TmSecondaryButton(onClick = { share(context, link) }) {
                     Icon(TmIcons.Share, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
