@@ -186,7 +186,7 @@ in a release yet: keep this table in step with the code when it ships.
 | Software decoders in the app | FFmpeg extension: H.264, HEVC, AV1, VP8, VP9, MPEG-1, 2 and 4, DivX 3, VC-1, Motion JPEG, WMV 1 to 3, H.263, Sorenson, Theora, DV, SVQ1, SVQ3, VP6, RealVideo 1 to 4, Cinepak, ProRes, FFV1, Huffyuv, Ut Video, MJPEG-B; audio from DTS and TrueHD to WMA, RealAudio, GSM, G.723.1, Siren, ATRAC3, Speex, WavPack, TTA, Monkey's Audio and every PCM and ADPCM kind (a container Media3 cannot read is C2) | the same | mpv's own | not applicable | not applicable |
 | Stutter diagnostics | could-not-keep-up card with codec, decoder, dropped frames and whether the video streamed | the same card | none yet | none | none |
 | Logs and upload | Send logs shares a scrubbed file; crash reports go to Sentry only when the viewer agrees; nothing is uploaded on its own | saves the file to the Download folder (no share sheet on every TV) | saves the file | none | none |
-| Filters | Night mode for sound, Volume boost, audio delay | the same | the same, through mpv's filters | none | none |
+| Filters | Quiet loud scenes (night mode), Volume boost, audio delay | the same | the same, through mpv's filters | none | none |
 | Archives and pieces | stored ZIPs and pieces play; other archives are listed greyed with the reason | the same | the same | the same, read in the browser | none |
 | Audio files | a chat's Audio list: queue, shuffle, repeat, background audio | the same, screen off while it plays | the same | none | none |
 
