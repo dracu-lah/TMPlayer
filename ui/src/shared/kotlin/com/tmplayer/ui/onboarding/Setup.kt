@@ -1,32 +1,27 @@
 package com.tmplayer.ui.onboarding
 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.setValue
 import com.tmplayer.data.AuthState
-import com.tmplayer.data.DeviceFit
 import com.tmplayer.data.DeviceForm
 import com.tmplayer.data.Recommendation
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.i18n.Strings
 
 /**
- * The short setup after signing in (CP67, CP69), on the phone, the television and the desktop
- * alike. It replaced the two page tour before sign in and the one card after it (CP42): the sign
- * in screen comes first, and once the account is in, the setup runs as one flow in two groups
- * ([SetupAndTour]): Appearance, then these preference steps (one thing each, a picture of each
- * answer, the current answer marked and Next to keep or apply it), with the switch-like ones
- * together on one page ([Setup.pages]). The quick tour ([Tour]) is offered on its own afterwards,
- * and which chats to show is the mandatory chat choice ([com.tmplayer.data.ChatsGate]), not a step.
+ * The setup after signing in is one question ([com.tmplayer.data.SetupFlow]): which chats have your
+ * videos. These are the answers to everything it no longer asks, kept as the rows of Settings'
+ * "Redo setup choices" (one thing each, a picture of each answer, the current answer marked), on
+ * the phone, the television and the desktop alike. The device decides Lighter or Full on its own
+ * ([SetupFlowEffects]) and the quick tour is a Tips card ([TipsCard]).
  *
- * Who sees it: a sign in screen arms it (`SettingsStore.armSetup`), so an install that was signed
- * in before this existed never does, and a fresh sign in always does. Settings can run it again.
+ * Who sees the question: a sign in screen arms it (`SettingsStore.armSetup`), so an install that
+ * was signed in before this existed never does, and a fresh sign in always does. Settings can run
+ * it again.
  */
 enum class SetupStep {
     /** Posters and overviews looked up online by the cleaned title, or plain tiles. */
     Posters,
 
-    /** Low storage mode: stream big videos without keeping them whole. */
+    /** While streaming: keep a big video whole, or save space by keeping only a window of it. */
     Storage,
 
     /** Full pictures and motion, or Lighter pictures, Reduce motion and no thumbnails while seeking. */
@@ -34,13 +29,6 @@ enum class SetupStep {
 
     /** On a phone only: Save mobile data and downloads that wait for Wi-Fi, or no limits. */
     MobileData,
-
-    /**
-     * Send crash reports (CP102f), the one consent question: off until it is turned on, with no
-     * answer suggested. Only in a build that can report ([CrashReporting.available]), always the
-     * last of the preferences, and drawn as one switch rather than two pictured answers.
-     */
-    CrashReports,
 
     /**
      * A device short of memory or storage (CP68): apply the recommended settings, or not now. It
@@ -65,19 +53,15 @@ enum class SetupChoice(val step: SetupStep) {
     NoLimits(SetupStep.MobileData),
     ApplyRecommended(SetupStep.Device),
     NotNow(SetupStep.Device),
-    // Off first: it is what Next keeps when the switch was never touched.
-    CrashReportsOff(SetupStep.CrashReports),
-    CrashReportsOn(SetupStep.CrashReports),
     ;
 
     /**
-     * True for the answer the setup suggests. That is every setting's default, except on Mobile
+     * True for the answer Settings suggests. That is every setting's default, except on Mobile
      * data, where saving it is suggested although the settings start off: an install updated from
-     * a version without the step keeps behaving as it did. Crash reports suggest neither: sending
-     * them is consent, so nothing there is marked as the better answer.
+     * a version without the step keeps behaving as it did.
      */
     val recommended: Boolean
-        get() = step != SetupStep.CrashReports && step.choices.first() == this
+        get() = step.choices.first() == this
 
     /**
      * Whether this answer is pictured with a screenshot. The storage and mobile data steps draw
@@ -87,18 +71,17 @@ enum class SetupChoice(val step: SetupStep) {
         get() = step == SetupStep.Posters || step == SetupStep.Performance
 }
 
-/** The settings the setup reads and writes, as they are now. */
+/** The settings Settings' Setup choices reads and writes, as they are now. */
 data class SetupValues(
     val posters: Boolean,
     val lowStorage: Boolean,
     val lighter: Boolean = false,
     val saveData: Boolean = false,
-    val crashReports: Boolean = false,
 ) {
     /**
      * The answer on [step] that matches what is set, as Settings' Setup choices names it. Unlike
      * [current], Mobile data says what is set rather than what is suggested; null for the Device
-     * step, whose answer is an action rather than a plain setting (so Next always writes it
+     * step, whose answer is an action rather than a plain setting (so a press always writes it
      * rather than only on a change).
      */
     fun chosen(step: SetupStep): SetupChoice? = when (step) {
@@ -116,23 +99,21 @@ data class SetupValues(
         SetupStep.MobileData -> SetupChoice.SaveData
         // Apply is what the step is for; Not now is the press that changes nothing.
         SetupStep.Device -> SetupChoice.ApplyRecommended
-        // What is set, which on a fresh install is off: the switch is never turned on for anyone.
-        SetupStep.CrashReports -> if (crashReports) SetupChoice.CrashReportsOn else SetupChoice.CrashReportsOff
     }
 }
 
 object Setup {
 
     /**
-     * The steps this build and this device get. Posters only where the build looks them up at
-     * all; Storage wherever Low storage mode exists; Performance on every
-     * device; Mobile data only on a phone, the one device that is ever on a metered connection
-     * for long.
+     * The steps Settings' Setup choices lists for this build and this device. Posters only where
+     * the build looks them up at all; Storage wherever the streaming mode exists; Performance on
+     * every device; Mobile data only on a phone, the one device that is ever on a metered
+     * connection for long.
      *
      * A device short of memory or storage, with settings still to recommend, gets the Device step
      * in Storage's place, since Low storage mode is among them when storage is short. When those
      * settings include the lighter ones ([devicePerformance]), it takes Performance's place too,
-     * so nothing is asked twice.
+     * so nothing is listed twice.
      */
     fun steps(
         posters: Boolean,
@@ -149,10 +130,9 @@ object Setup {
         }
 
     /**
-     * The steps for a device of [form], worked out the same way by the setup after sign in and by
-     * Settings' Setup choices, so the two never list different steps. [recommendations] are what
-     * this device is recommended and still has off (CP68): any at all bring the Device step. The
-     * desktop is only ever offered Low storage mode there, so its Performance step stays.
+     * The steps for a device of [form]. [recommendations] are what this device is recommended and
+     * still has off (CP68): any at all bring the Device step. The desktop is only ever offered
+     * Low storage mode there, so its Performance step stays.
      */
     fun stepsFor(
         form: DeviceForm,
@@ -165,46 +145,8 @@ object Setup {
         phone = form == DeviceForm.Phone,
     )
 
-    /**
-     * The steps that are one switch each (Low storage mode, Save mobile data, Send crash reports)
-     * rather than two pictured answers, and so can share a page.
-     */
-    val SWITCHES: Set<SetupStep> = setOf(SetupStep.Storage, SetupStep.MobileData, SetupStep.CrashReports)
-
-    /**
-     * [steps] as the pages the setup shows, in order. Posters, Device and Performance keep a page
-     * each (their answers are pictured, and the annotated shots of them stay valid). Two or more
-     * of the [SWITCHES] share one page at the end, a row each, so a phone's three switch steps
-     * take one page rather than three; a lone one keeps its own page where it was.
-     */
-    fun pages(steps: List<SetupStep>): List<List<SetupStep>> {
-        val switches = steps.filter { it in SWITCHES }
-        if (switches.size < 2) return steps.map { listOf(it) }
-        return steps.filter { it !in SWITCHES }.map { listOf(it) } + listOf(switches)
-    }
-
-    /**
-     * Whether the storage step is offered. Low storage mode is core's (`TdByteWindow`), so the
-     * phone, the television and the desktop all have it.
-     */
+    /** Whether the storage step is offered: the streaming mode is core's (`TdByteWindow`), on every platform. */
     const val STORAGE_STEP = true
-
-    /**
-     * [steps] with the crash report question at the end, where the build can send a report
-     * ([CrashReporting.available]). Settings' Setup choices leave it out: Settings has the same
-     * switch in its own place, and the per-crash prompt stays as it is.
-     */
-    fun withCrashReports(steps: List<SetupStep>, available: Boolean): List<SetupStep> =
-        if (available && SetupStep.CrashReports !in steps) steps + SetupStep.CrashReports else steps
-
-    /**
-     * [steps] as the first run asks them (ON-8): Performance only on a device [fit] says is short
-     * of memory, where the lighter pictures are worth a page. Everywhere else the default is the
-     * recommended one that nearly everyone keeps, and the row stays in Settings (its Setup
-     * choices, which use [stepsFor] and keep the step).
-     */
-    fun firstRun(steps: List<SetupStep>, fit: DeviceFit): List<SetupStep> =
-        if (fit.shortOfMemory) steps else steps.filter { it != SetupStep.Performance }
 
     /**
      * The setup is drawn in the language in use ([active]), so that language has already been
@@ -216,31 +158,7 @@ object Setup {
         runCatching { settings.setLanguageAnnounced(active) }
     }
 
-    /** What the shell does about the setup right now. */
-    enum class Decision {
-        /** Nothing to do: not armed, or already done. */
-        None,
-
-        /** Armed, but what it waits on is not in yet. */
-        Wait,
-
-        /** Show it. */
-        Show,
-    }
-
-    /**
-     * The setup's next move. [pending] is the armed flag; [chatsLoaded] whether what it waits on
-     * has come. [waitedOut] gives up waiting on something slow to come, and it goes ahead. The
-     * shells no longer hold the setup for the chat list (only the mandatory chat choice waits on
-     * that, with [WAIT_FOR_CHATS_MS]), so they call this with `chatsLoaded = true`.
-     */
-    fun decide(pending: Boolean, chatsLoaded: Boolean, waitedOut: Boolean = false): Decision = when {
-        !pending -> Decision.None
-        !chatsLoaded && !waitedOut -> Decision.Wait
-        else -> Decision.Show
-    }
-
-    /** How long the mandatory chat choice waits for the chat list before letting the app through. */
+    /** How long the chat list may take before the chat question offers a way out (Continue without choosing). */
     const val WAIT_FOR_CHATS_MS = 8_000L
 
     /** Whether [auth] is a screen of the sign in itself, which is what arms the setup. */
@@ -252,17 +170,15 @@ object Setup {
 }
 
 /**
- * Writes what [choice] stands for. The one place an answer is applied, by the setup's steps and by
- * Settings' Setup choices alike, so changing a choice there does exactly what the setup did.
- * [posters] switches online posters and details (`OnlineMetadata.setEnabled`), null in a build
- * without them, [recommendations] what Apply turns on, and [crashReports] the platform's own
- * start or stop of crash reporting once the setting is written ([CrashReporting.onChange]).
+ * Writes what [choice] stands for. The one place an answer is applied, by Settings' Setup choices
+ * (and nothing else now), so changing a choice there does what the setup used to do. [posters]
+ * switches online posters and details (`OnlineMetadata.setEnabled`), null in a build without them,
+ * and [recommendations] is what Apply turns on.
  */
 suspend fun SetupChoice.applyTo(
     settings: SettingsStore,
     posters: ((Boolean) -> Unit)?,
     recommendations: List<Recommendation> = emptyList(),
-    crashReports: ((Boolean) -> Unit)? = null,
 ) {
     when (this) {
         SetupChoice.PostersOn -> posters?.invoke(true)
@@ -290,84 +206,6 @@ suspend fun SetupChoice.applyTo(
         }
         SetupChoice.ApplyRecommended -> settings.applyRecommendations(recommendations)
         SetupChoice.NotNow -> Unit
-        // The setting Settings' "Send crash reports" switch writes, then the SDK brought up or down.
-        SetupChoice.CrashReportsOn -> {
-            settings.setCrashReports(true)
-            crashReports?.invoke(true)
-        }
-        SetupChoice.CrashReportsOff -> {
-            settings.setCrashReports(false)
-            crashReports?.invoke(false)
-        }
-    }
-}
-
-/**
- * What a platform tells the first run about crash reports (CP102f). [available] is whether this
- * build can send a report at all (on Android `CrashReports.available`: a build with no DSN has
- * nowhere to send one, so the question is not asked, as Settings leaves out its switch).
- * [onChange] runs after the setting is written, to start the reporting SDK or stop it.
- *
- * The desktop passes [Unavailable] until it reports crashes (CP102g). CP100's Preferences screen
- * takes the same value for its "Send crash reports" row ([CrashReportsQuestion]).
- */
-class CrashReporting(val available: Boolean, val onChange: (Boolean) -> Unit = {}) {
-    companion object {
-        /** A build that cannot send a report: the question is never shown. */
-        val Unavailable = CrashReporting(available = false)
-    }
-}
-
-/**
- * Where the setup is, a page at a time. Picking an answer or Skip moves on and finishes after the
- * last page; Back goes to the page before, and from the first leaves the setup as Skip all does.
- * Snapshot state, so a screen that reads [index] recomposes when it moves.
- *
- * Built from steps, each step is a page of its own (Settings' shots, the promo captures and most
- * tests walk them that way); [paged] takes the setup's real pages ([Setup.pages]), where the
- * switch steps can share one.
- */
-class SetupState private constructor(val pages: List<List<SetupStep>>, start: Int, @Suppress("UNUSED_PARAMETER") paged: Unit) {
-    constructor(steps: List<SetupStep>, start: Int = 0) : this(steps.map { listOf(it) }, start, Unit)
-
-    init {
-        require(pages.isNotEmpty() && pages.none { it.isEmpty() }) { "a setup with no steps is not shown" }
-    }
-
-    /** Every step, page after page. */
-    val steps: List<SetupStep> = pages.flatten()
-
-    var index by mutableIntStateOf(start.coerceIn(0, pages.lastIndex))
-        private set
-
-    /** The steps on the page shown: one, or the switch steps together. */
-    val page: List<SetupStep> get() = pages[index]
-
-    /** The page's first step, which is the page's whole question unless it holds several. */
-    val step: SetupStep get() = page.first()
-    val isFirst: Boolean get() = index == 0
-    val isLast: Boolean get() = index == pages.lastIndex
-
-    /** Skip all is offered while more than this step is left; on the last, Skip says the same. */
-    val canSkipAll: Boolean get() = !isLast
-
-    /** Moves on a step; false when this was the last, which means the setup is done. */
-    fun next(): Boolean {
-        if (isLast) return false
-        index++
-        return true
-    }
-
-    /** Moves back a step; false on the first, which means leaving the setup. */
-    fun back(): Boolean {
-        if (isFirst) return false
-        index--
-        return true
-    }
-
-    companion object {
-        /** A setup over [pages] as [Setup.pages] makes them. */
-        fun paged(pages: List<List<SetupStep>>, start: Int = 0): SetupState = SetupState(pages, start, Unit)
     }
 }
 
@@ -384,7 +222,6 @@ fun Strings.setupCopy(step: SetupStep): SetupCopy = when (step) {
     SetupStep.MobileData -> SetupCopy(setupMobileTitle, setupMobileBody)
     // The screen says which: memory, storage or both (fitHeadline).
     SetupStep.Device -> SetupCopy(deviceShortMemory, deviceQuestion)
-    SetupStep.CrashReports -> SetupCopy(setupCrashTitle, setupCrashBody)
 }
 
 fun Strings.choiceCopy(choice: SetupChoice): ChoiceCopy = when (choice) {
@@ -398,6 +235,4 @@ fun Strings.choiceCopy(choice: SetupChoice): ChoiceCopy = when (choice) {
     SetupChoice.NoLimits -> ChoiceCopy(setupMobileNoLimits, setupMobileNoLimitsDetail)
     SetupChoice.ApplyRecommended -> ChoiceCopy(deviceApply, deviceQuestion)
     SetupChoice.NotNow -> ChoiceCopy(deviceNotNow, settingsSavesAsYouGo)
-    SetupChoice.CrashReportsOn -> ChoiceCopy(settingsCrashReports, setupCrashHolds)
-    SetupChoice.CrashReportsOff -> ChoiceCopy(settingsCrashReports, settingsCrashReportsOff)
 }

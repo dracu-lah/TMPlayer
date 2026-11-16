@@ -273,37 +273,16 @@ fun ShellNotices(state: ShellState, modifier: Modifier = Modifier) {
     }
     if (picking) LanguagePopup(state.settings, onClose = { picking = false })
     if (whatsNew.showing && !playing && !state.updatePopup) WhatsNewPopup(onClose = { whatsNew.showing = false })
-    // The quick tour, offered once to an install signed in before it existed (CP69), behind the
-    // other notices. Taking it opens the tour over the window (Shell.kt).
-    val s = LocalStrings.current
+    // The quick tour as a Tips card (R3), once, behind the other notices: not a dialog. Show me
+    // opens the tour over the window (Shell.kt); Not now turns the card off for good.
     val tour by state.settings.tourState.collectAsState(initial = SettingsStore.TourState.Done)
-    if (tour == SettingsStore.TourState.Never && language == null && !whatsNew.showing && !playing && !state.updatePopup) {
+    if (SettingsStore.tipsDue(tour) && language == null && !whatsNew.showing && !playing && !state.updatePopup) {
         val scope = rememberCoroutineScope()
-        ConfirmDialog(
-            title = s.tourOfferTitle,
-            message = s.tourOfferBody,
-            confirmLabel = s.tourOfferTake,
-            cancelLabel = s.deviceNotNow,
-            destructive = false,
-            focusConfirm = true,
-            onConfirm = { scope.launch { runCatching { state.settings.openTour() } } },
+        com.tmplayer.ui.onboarding.TipsCard(
+            onShow = { scope.launch { runCatching { state.settings.openTour() } } },
             onDismiss = { scope.launch { runCatching { state.settings.markTourDone() } } },
+            modifier = modifier.widthIn(max = 640.dp),
         )
     }
-    // S1: "Help fix crashes?", once, for an install never asked, behind every other notice.
-    val crashAsking by com.tmplayer.desktop.DesktopCrashReports.pending.collectAsState()
-    val reporting = remember {
-        com.tmplayer.ui.onboarding.CrashReporting(com.tmplayer.desktop.DesktopCrashReports.available) { on ->
-            if (on) com.tmplayer.desktop.DesktopCrashReports.start(true) else com.tmplayer.desktop.DesktopCrashReports.stop()
-        }
-    }
-    com.tmplayer.ui.onboarding.CrashAskHost(
-        settings = state.settings,
-        reporting = reporting,
-        inShell = true,
-        otherUp = language != null || picking || whatsNew.showing || playing || state.updatePopup || crashAsking ||
-            tour == SettingsStore.TourState.Never,
-        modifier = modifier,
-    )
 }
 

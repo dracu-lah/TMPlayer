@@ -68,6 +68,4 @@ fun settingsLinkFor(step: SetupStep, form: DeviceForm): SettingsLink? = when (st
     SetupStep.MobileData -> SettingsLink.SetupMobileData
     // Its settings are on three pages; each row above has its own.
     SetupStep.Device -> null
-    // Never listed there: its switch is on Privacy and lock already.
-    SetupStep.CrashReports -> null
 }?.takeIf { form in it.forms }

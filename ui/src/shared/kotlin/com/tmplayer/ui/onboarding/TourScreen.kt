@@ -199,3 +199,11 @@ private val BADGE = 28.dp
 
 /** How much of a badge sits outside its mark's corner: most of it, so it touches the circle's edge. */
 private const val OUTSIDE = 0.85f
+
+/** The quick tour on its own: taken from the Tips card on Home, or opened from Settings. */
+@Composable
+fun TourOnly(onDone: () -> Unit, modifier: Modifier = Modifier) {
+    val form = deviceForm()
+    val tour = remember(form) { TourProgress(Tour.pages(form)) }
+    TourScreen(tour, onDone = onDone, modifier = modifier)
+}

@@ -11,17 +11,13 @@ the streaming works, see [ARCHITECTURE.md](ARCHITECTURE.md).
 Settings, Devices, Link Desktop Device, point it at the screen. No typing an email address with a
 D-pad. On a phone the number comes first, with the country picker and the code boxes Telegram
 itself uses, and the QR route is there for an account that lives on another handset. Two-step
-verification works either way. Once signed in, a short setup walks through three groups, every
-step in the same frame (the group and "Step n of m" at the top with Skip all, Back at the bottom
-left and Next at the bottom right, Done on the last). Appearance: the theme (System, Light, Dark)
-and the interface size, applied as they are picked so the screen itself is the preview, plus the
-wallpaper's colours on Android 12 and later. Preferences, each with a picture of both answers and
-the current one already chosen: which chats the sidebar lists (only for an account with
-folders), posters and details from TMDB, TVmaze and AniList, While streaming (Keep video or Save space), full quality or
-lighter pictures and motion, and on a phone whether to save mobile data. Then the quick tour: a
-few marked screenshots of where videos come from, Home, the player, the controls, downloads, the
-TV home screen row (on a TV) and Settings. Settings can run the setup again or the tour on its
-own, and an install updated from an older version is offered the tour once.
+verification works either way. Once signed in, the setup is one question: "Which chats have your videos?", then Home. It is the chat
+picker (a search box, nothing ticked, Done off until a chat is ticked, Back asks "Leave without choosing?"; with
+no chat holding videos it says to forward a video to Saved Messages). Everything else is decided for you or lives
+in Settings: lighter or full pictures are picked from the device's memory, crash reports are off until you turn
+them on in Settings, and the quick tour is a dismissible Tips card on Home. Settings, Redo setup choices lists
+posters and details, While streaming (Keep video or Save space), full quality or lighter pictures and motion, and
+on a phone whether to save mobile data; it can also ask the one question again.
 
 **Shows media, not messages.** Browse the chats and channels you already have, then see only their
 playable videos. Text messages never appear. Video documents are included too, so an `.mkv` sent

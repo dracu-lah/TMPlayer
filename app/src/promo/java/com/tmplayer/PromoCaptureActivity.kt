@@ -75,9 +75,6 @@ import com.tmplayer.ui.browse.STILL_MORE_TO_SEARCH
 import com.tmplayer.ui.browse.FIRST_LOAD_TIP
 import com.tmplayer.data.SizeFilter
 import androidx.compose.foundation.layout.padding
-import com.tmplayer.ui.onboarding.SetupScreen
-import com.tmplayer.ui.onboarding.SetupState
-import com.tmplayer.ui.onboarding.SetupStep
 import com.tmplayer.ui.settings.AboutScreen
 import com.tmplayer.ui.settings.SettingsPage
 import com.tmplayer.ui.settings.SettingsScreen
@@ -334,40 +331,6 @@ class PromoCaptureActivity : ComponentActivity() {
                             onSubmitPassword = {},
                             submitError = null,
                         )
-                        // The setup after sign in (CP67), which the fixture reaches without a sign in:
-                        // every step, as an account with folders gets them, opening on `--es step
-                        // library|posters|storage`. Finishing or Skip all goes to the chat list.
-                        // With `--ez lowend true` the Device step (CP68) takes Storage's place, as on a
-                        // low-end device: `--es step device` opens on it.
-                        "setup" -> {
-                            val store = remember { SettingsStore(applicationContext) }
-                            val fit = com.tmplayer.ui.onboarding.rememberDeviceFit()
-                            val recommendations = com.tmplayer.ui.onboarding.rememberRecommendations(store, fit)
-                            val lowEnd = com.tmplayer.data.DeviceFitOverride.forced != null
-                            val steps = remember(lowEnd) {
-                                SetupStep.entries.filter { if (lowEnd) it != SetupStep.Storage else it != SetupStep.Device }
-                            }
-                            val setup = remember(steps) {
-                                SetupState(
-                                    steps,
-                                    start = steps.indexOfFirst { it.name.equals(intent.getStringExtra("step"), ignoreCase = true) }.coerceAtLeast(0),
-                                )
-                            }
-                            // Held once shown, as the app holds them, so applying does not empty the list.
-                            val shown = remember(recommendations.isNotEmpty()) { recommendations }
-                            SetupScreen(store, setup, onDone = { screen = "chats" }, fit = fit, recommendations = shown)
-                        }
-                        // A fresh sign in's whole walk (CP69): Appearance, then the setup's choices on one count.
-                        "setuptour" -> {
-                            val store = remember { SettingsStore(applicationContext) }
-                            val phone = com.tmplayer.ui.components.deviceForm() == com.tmplayer.data.DeviceForm.Phone
-                            val steps = remember(phone) {
-                                SetupStep.entries.filter {
-                                    it != SetupStep.Device && (phone || it != SetupStep.MobileData)
-                                }
-                            }
-                            com.tmplayer.ui.onboarding.SetupAndTour(store, steps, onDone = { screen = "chats" })
-                        }
                         // The quick tour (CP69), from `--es page videos|home|player|controls|downloads|
                         // tvhome|settings`. Finishing or Skip all goes to the chat list.
                         "tour" -> {

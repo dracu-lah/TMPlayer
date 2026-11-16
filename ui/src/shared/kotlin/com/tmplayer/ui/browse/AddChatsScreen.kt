@@ -104,6 +104,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -179,9 +180,9 @@ import androidx.compose.ui.semantics.role
  *   [onLeave] instead of asking to discard, since there is nothing behind it to go back to.
  * @param onLeave what Back does in [required] mode: leaves the app on the phone and the
  *   television, nothing on the desktop.
- * @param confirmLeave in [required] mode, Back with chats ticked asks "Leave TMPlayer?" before
- *   [onLeave], since the ticks live only here and a stray Back would lose them. Back with nothing
- *   ticked still leaves at once. Off where leaving does nothing (the desktop).
+ * @param confirmLeave in [required] mode, Back asks "Leave without choosing?" before [onLeave],
+ *   with or without ticks, since a stray Back would close the app on the one question it asks.
+ *   Off where leaving does nothing (the desktop).
  * @param onContinue in [required] mode, what Continue without choosing does (ON-4): offered only
  *   when the list is whole, nothing was recommended and nothing is ticked, since then there is
  *   nothing sensible to tick and Back would leave the app. The gate still stands whenever a
@@ -315,8 +316,9 @@ fun AddChatsScreen(
     // The way out of a required choice with nothing to choose (ON-4): the head start has finished
     // with no recommendation and the whole list is in.
     val escapeFocus = remember { FocusRequester() }
-    val showEscape = required && onContinue != null && listComplete && !state.recommending &&
+    val showHint = required && listComplete && !state.recommending &&
         state.recommended.isEmpty() && state.ticked.isEmpty()
+    val showEscape = showHint && onContinue != null
 
     fun focusRow(at: Int) {
         val list = nowShown
@@ -501,8 +503,8 @@ fun AddChatsScreen(
             // the top of a long list is one press away; Back there leaves.
             tv && (onRow != null || inFoot || inSearch || onBandButton) -> toTop()
             // Nothing behind the mandatory choice to go back to: Back leaves the app (or, on the
-            // desktop, does nothing). With ticks made it asks first, once: they live only here.
-            required && confirmLeave && state.ticked.isNotEmpty() && !state.saving -> asking = Ask.Leave
+            // desktop, does nothing). It always asks "Leave without choosing?" first.
+            required && confirmLeave && !state.saving -> asking = Ask.Leave
             required -> onLeave()
             model.changed -> asking = Ask.Discard
             else -> onClose()
@@ -585,8 +587,8 @@ fun AddChatsScreen(
                     if (!tv) {
                     // A phone stacks Back, the title and the words; a wide screen has the room to put Back
                     // beside the title, which leaves more of it for the rows.
-                    val headingText = if (required) s.pickerGateTitle else s.pickerChooseChats
-                    val blurbText = if (required) s.pickerGateBody else s.pickerBlurbOnly
+                    val headingText = if (required) s.setupWhichTitle else s.pickerChooseChats
+                    val blurbText = if (required) s.setupWhichBody else s.pickerBlurbOnly
                     if (compact) {
                         item(key = "title") {
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -797,8 +799,8 @@ fun AddChatsScreen(
                         onNo = { asking = null },
                     )
                     Ask.Leave -> Confirm(
-                        title = s.pickerLeaveTitle,
-                        body = s.pickerLeaveBody,
+                        title = s.pickerLeaveChoosingTitle,
+                        body = s.pickerLeaveChoosingBody,
                         action = s.pickerLeaveYes,
                         onYes = {
                             asking = null
@@ -842,8 +844,21 @@ fun AddChatsScreen(
         }
         val escape: @Composable () -> Unit = {
             val go = onContinue
-            if (showEscape && go != null) {
-                QuietButton(s.pickerContinueWithout, modifier = Modifier.focusRequester(escapeFocus), onClick = go)
+            // No chat holds videos yet (Saved Messages may be the only row): say what to do, and
+            // leave the way on for this visit.
+            if (showHint) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        s.pickerForwardHint,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Tone.muted,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                    )
+                    if (go != null) {
+                        QuietButton(s.pickerContinueWithout, modifier = Modifier.focusRequester(escapeFocus), onClick = go)
+                    }
+                }
             }
         }
         // The running total and Done on a card of their own, so the foot reads as the bar it is
@@ -875,7 +890,7 @@ fun AddChatsScreen(
                         )
                         doneButton()
                     }
-                    if (showEscape) {
+                    if (showHint) {
                         Box(Modifier.fillMaxWidth().padding(bottom = if (form == DeviceForm.Phone) 8.dp else 0.dp), contentAlignment = Alignment.Center) { escape() }
                     }
                 }
@@ -890,7 +905,7 @@ fun AddChatsScreen(
             val scopeCounts = remember(chats) {
                 ChatPicking.Scope.entries.associateWith { sc -> chats.count { ChatPicking.inScope(it, sc) } }
             }
-            val title = if (required) s.pickerGateTitle else s.pickerChooseChats
+            val title = if (required) s.setupWhichTitle else s.pickerChooseChats
             Column(Modifier.fillMaxSize()) {
                 Text(
                     title,
@@ -983,7 +998,7 @@ fun AddChatsScreen(
                             doneButton()
                             escape()
                             if (required) {
-                                Text(s.pickerGateBody, style = MaterialTheme.typography.bodySmall, color = Tone.muted, maxLines = 6, overflow = TextOverflow.Ellipsis)
+                                Text(s.setupWhichBody, style = MaterialTheme.typography.bodySmall, color = Tone.muted, maxLines = 6, overflow = TextOverflow.Ellipsis)
                             }
                             if (shown.isNotEmpty()) {
                                 Text(s.pickerTvKeys, style = MaterialTheme.typography.bodySmall, color = Tone.muted, maxLines = 3, overflow = TextOverflow.Ellipsis)

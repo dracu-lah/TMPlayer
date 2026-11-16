@@ -124,10 +124,10 @@ class AddChatsTvKeysTest {
     }
 
     @Test
-    fun `Back goes from a row to the rail and a second Back leaves the required choice`() {
+    fun `Back goes from a row to the rail and a second Back asks, then Leave leaves the required choice`() {
         val model = AddChatsViewModel(counts = null, write = {})
         var left = 0
-        val activity = open(model, chats = CHATS, onLeave = { left++ })
+        val activity = open(model, chats = CHATS, onLeave = { left++ }, confirmLeave = true)
         press(activity, KeyEvent.KEYCODE_DPAD_DOWN)
         activity.onBackPressedDispatcher.onBackPressed()
         idle()
@@ -135,8 +135,41 @@ class AddChatsTvKeysTest {
         assertEquals(0, left)
         activity.onBackPressedDispatcher.onBackPressed()
         idle()
-        assertEquals("a second Back leaves", 1, left)
+        assertEquals("a second Back asks first, even with nothing ticked", 0, left)
+        assertTrue(nodes(activity).any { words(it).contains("Leave without choosing?") })
+        click(activity, "Leave")
+        idle()
+        assertEquals(1, left)
         model.stop()
+    }
+
+    /**
+     * The setup's one question on a television (R3): the remote starts on the first chat, OK ticks
+     * it, Right goes to Done, and Back climbs to the rail and then asks "Leave without choosing?".
+     * Nothing is ticked for the viewer and Done is off until a chat is.
+     */
+    @Test
+    fun `the setup question on a television, first chat, OK ticks, Right goes to Done, Back asks`() {
+        val model = AddChatsViewModel(counts = null, write = {})
+        var left = 0
+        val activity = open(model, chats = CHATS, onLeave = { left++ }, confirmLeave = true)
+        assertTrue("nothing is ticked for the viewer", model.state.value.ticked.isEmpty())
+        assertTrue("the question is the heading", nodes(activity).any { words(it).contains("Which chats have your videos?") })
+        assertEquals("focus starts on the first chat", listOf("Saved Messages"), focusedTitle(activity))
+        press(activity, KeyEvent.KEYCODE_DPAD_CENTER)
+        assertEquals("OK ticks the chat", 1, model.state.value.ticked.size)
+        press(activity, KeyEvent.KEYCODE_DPAD_RIGHT)
+        assertEquals("Right moves to Done", listOf("Done"), focusedWords(activity))
+        activity.onBackPressedDispatcher.onBackPressed()
+        idle()
+        assertEquals("the first Back climbs, it does not leave", 0, left)
+        activity.onBackPressedDispatcher.onBackPressed()
+        idle()
+        assertTrue("the next Back asks", nodes(activity).any { words(it).contains("Leave without choosing?") })
+        assertEquals(0, left)
+        model.stop()
+        idle()
+        ChatVideoCount.forget()
     }
 
     @Test
@@ -267,11 +300,11 @@ class AddChatsTvKeysTest {
         activity.onBackPressedDispatcher.onBackPressed()
         idle()
         assertEquals("with ticks the second Back asks", 0, left)
-        assertTrue(nodes(activity).any { words(it).contains("Leave TMPlayer?") })
+        assertTrue(nodes(activity).any { words(it).contains("Leave without choosing?") })
         // No is the way back: the question goes and the ticks stay.
         activity.onBackPressedDispatcher.onBackPressed()
         idle()
-        assertTrue(nodes(activity).none { words(it).contains("Leave TMPlayer?") })
+        assertTrue(nodes(activity).none { words(it).contains("Leave without choosing?") })
         assertEquals(12, model.state.value.ticked.size)
         // The remote went back to Done, so Back climbs to the rail first and the next one asks again.
         activity.onBackPressedDispatcher.onBackPressed()

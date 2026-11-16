@@ -141,7 +141,6 @@ import com.tmplayer.ui.components.ConnectionNotice
 import com.tmplayer.ui.components.ConnectionStatus
 import com.tmplayer.ui.components.rememberToast
 import com.tmplayer.ui.onboarding.Setup
-import com.tmplayer.ui.onboarding.SetupAndTour
 import com.tmplayer.ui.onboarding.TourOnly
 import com.tmplayer.ui.update.UpdateDialog
 import com.tmplayer.ui.update.LinkQrDialog
@@ -152,7 +151,7 @@ import com.tmplayer.ui.settings.SettingsScreen
 import com.tmplayer.ui.settings.CoffeeDialog
 import com.tmplayer.ui.settings.LanguageDialog
 import com.tmplayer.ui.settings.LanguageNoticeCard
-import com.tmplayer.ui.settings.TourOfferCard
+import com.tmplayer.ui.onboarding.TipsCard
 import com.tmplayer.ui.settings.LayoutNudgeHost
 import com.tmplayer.ui.settings.WhatsNewDialog
 import com.tmplayer.ui.i18n.rememberLanguageNotice
@@ -686,8 +685,8 @@ private fun Root() {
     val setupPending by settings.setupPending.collectAsStateWithLifecycle(initialValue = false)
     // The quick tour (CP69). Done until the store answers, so the offer never flashes up.
     val tourState by settings.tourState.collectAsStateWithLifecycle(initialValue = SettingsStore.TourState.Done)
-    // Null until read, so the offer cannot flash up before Not now's week is known (ON-11).
-    val tourOfferAfter by settings.tourOfferAfter.collectAsStateWithLifecycle(initialValue = Long.MAX_VALUE)
+    // Settings' "Run the setup again": the one question asked again as the ordinary picker.
+    val setupReplay by settings.setupReplay.collectAsStateWithLifecycle(initialValue = false)
     // The favourites the kids lock lets through, as the Favourites tab lists them, so every count
     // of them (the badge, Clear all) says the same number.
     val storedFavorites by settings.favorites.collectAsStateWithLifecycle(initialValue = emptySet())
@@ -767,7 +766,11 @@ private fun Root() {
     // asked before the app, once the setup is done. While it is up (or briefly waits for the chat
     // list), nothing of the shell's own is offered: no update popup, What's new, language card,
     // tour offer or support prompt over or before it.
-    val chatsGate = com.tmplayer.ui.browse.rememberChatsGate(chatsViewModel, setupPending, signedIn = auth is AuthState.Ready)
+    val gateMove = com.tmplayer.ui.browse.rememberChatsGate(chatsViewModel, setupPending, signedIn = auth is AuthState.Ready)
+    // While the setup is armed it is the one question (SetupFlow), shown through the same gate
+    // bookkeeping: the question is a shown gate, every wait a wait.
+    val setupFlow = com.tmplayer.ui.browse.rememberSetupFlow(chatsViewModel, setupPending, setupReplay, signedIn = auth is AuthState.Ready)
+    val chatsGate = if (setupPending) com.tmplayer.data.SetupFlow.toMove(setupFlow) else gateMove
     val gateUp = com.tmplayer.data.ChatsGate.up(chatsGate)
     // The gate's picker model lives in the activity under its run. Once the gate has been answered
     // the next one gets a new run, so a second sign in in this process (Sign out does not recreate
@@ -1704,50 +1707,8 @@ private fun Root() {
             return@Box
         }
 
-        // The setup after sign in (CP67), in place of the shell until it is done or skipped. It no
-        // longer waits for the chat list: only the mandatory chat choice after it needs that.
-        if (setupPending) {
-            // What this device is short of, and which settings would help (CP68): the Device step.
-            val fit = com.tmplayer.ui.onboarding.rememberDeviceFit()
-            val light by settings.lightSettings.collectAsStateWithLifecycle(initialValue = null)
-            val seekThumbnails = com.tmplayer.ui.onboarding.rememberSeekThumbnailsShown()
-            val lightNow = light
-            if (lightNow == null) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { androidx.compose.material3.CircularProgressIndicator(color = Tone.accent) }
-                return@Box
-            }
-            val finish: () -> Unit = { scope.launch { runCatching { settings.markSetupDone() } } }
-            // Read once, as the setup opens: applying them must not take the step away under the viewer.
-            val recommendations = remember {
-                com.tmplayer.data.DeviceFitRules.recommendations(fit, lightNow, seekThumbnails)
-            }
-            // The same steps Settings' Setup choices lists (Setup.stepsFor), read once as the setup opens.
-            val steps = remember {
-                Setup.stepsFor(
-                    FormFactor.form(context),
-                    posters = com.tmplayer.online.OnlineMetadata.current != null,
-                    recommendations = recommendations,
-                )
-            }
-            // Appearance, then the choices; the quick tour is offered on its own once the shell is up.
-            SetupAndTour(
-                settings,
-                steps,
-                onDone = finish,
-                fit = fit,
-                recommendations = recommendations,
-                // CP102f: the crash report question, only in a build with somewhere to send one.
-                crashReporting = remember {
-                    com.tmplayer.ui.onboarding.CrashReporting(CrashReports.available) { on ->
-                        if (on) CrashReports.start(context, true) else CrashReports.stop()
-                    }
-                },
-            )
-            return@Box
-        }
-
-        // The quick tour on its own (CP69): taken from the offer below, or opened from Settings.
-        if (tourState == SettingsStore.TourState.Pending) {
+        // The quick tour on its own (CP69): taken from the Tips card on Home, or opened from Settings.
+        if (!setupPending && tourState == SettingsStore.TourState.Pending) {
             TourOnly(onDone = { scope.launch { runCatching { settings.markTourDone() } } })
             return@Box
         }
@@ -1775,6 +1736,31 @@ private fun Root() {
         // before any chat name is shown. In place of the app, not over it, so a remote cannot walk
         // out of it; it goes by itself once Done writes the choice. Back leaves the app. The view
         // model is kept under the gate run, so a rotation keeps the ticks and a later gate starts clean.
+        // The setup after sign in is this same picker (R3): "Which chats have your videos?", then
+        // Home. Its waits are the spinner with "Loading your chats" under it, or the offline card.
+        if (setupPending) {
+            com.tmplayer.ui.onboarding.SetupFlowEffects(settings, setupFlow, replay = setupReplay)
+            when (setupFlow) {
+                com.tmplayer.data.SetupFlow.Next.Choose -> {
+                    val activity = LocalActivity.current
+                    com.tmplayer.ui.browse.AddChatsPage(
+                        settings = settings,
+                        chatsViewModel = chatsViewModel,
+                        run = gateRun,
+                        // Only a replay has a Back and a Done that closes it; the first question ends by itself.
+                        onClose = { scope.launch { runCatching { settings.markSetupDone() } } },
+                        required = com.tmplayer.data.SetupFlow.required(setupReplay),
+                        onLeave = { activity?.finish() },
+                    )
+                }
+                com.tmplayer.data.SetupFlow.Next.Offline -> com.tmplayer.ui.browse.SetupOffline()
+                com.tmplayer.data.SetupFlow.Next.Wait -> com.tmplayer.ui.browse.ChatsGateWaiting()
+                else -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    androidx.compose.material3.CircularProgressIndicator(color = Tone.accent)
+                }
+            }
+            return@Box
+        }
         if (chatsGate == com.tmplayer.data.ChatsGate.Move.Wait) {
             com.tmplayer.ui.browse.ChatsGateWaiting()
             return@Box
@@ -2256,17 +2242,17 @@ private fun Root() {
         val crashPending = crashQuestion != null
         val noticeLanguage = languageNotice.language
         var tvHintUp by remember { mutableStateOf(FormFactor.isTv(context)) }
-        val tourOffer = SettingsStore.tourOfferDue(tourState, tourOfferAfter, System.currentTimeMillis()) && inShell &&
+        val tourOffer = SettingsStore.tipsDue(tourState) && inShell &&
             screen is Screen.Chats && !showUpdate && noticeLanguage == null && !pickingLanguage &&
             !whatsNew.showing && supportRung == 0 && !crashPending
         com.tmplayer.ui.settings.TourOfferFrame(
             offer = tourOffer,
             hintUp = tvHintUp && FormFactor.isTv(context) && inShell && screen is Screen.Chats,
             card = { cardModifier ->
-                TourOfferCard(
-                    again = tourOfferAfter != 0L,
-                    onTake = { scope.launch { runCatching { settings.openTour() } } },
-                    onDecline = { scope.launch { runCatching { settings.putOffTourOffer(System.currentTimeMillis()) } } },
+                TipsCard(
+                    onShow = { scope.launch { runCatching { settings.openTour() } } },
+                    // One tap, one answer: the card does not come back (the tour stays in Settings).
+                    onDismiss = { scope.launch { runCatching { settings.markTourDone() } } },
                     modifier = cardModifier,
                 )
             },
@@ -2527,27 +2513,6 @@ private fun Root() {
             )
         }
         supporting?.let { SupportDialog(onClose = { supporting = null }) }
-
-        // S1: "Help fix crashes?", once, for an install never asked (the setup's step was skipped,
-        // or it was signed in before the step existed). On the chat list, behind every other card.
-        val crashAskReporting = remember {
-            com.tmplayer.ui.onboarding.CrashReporting(CrashReports.available) { on ->
-                if (on) CrashReports.start(context, true) else CrashReports.stop()
-            }
-        }
-        val struggleHintUp by com.tmplayer.data.DeviceFitHint.raised.collectAsStateWithLifecycle()
-        com.tmplayer.ui.onboarding.CrashAskHost(
-            settings = settings,
-            reporting = crashAskReporting,
-            inShell = inShell && screen is Screen.Chats,
-            otherUp = showUpdate || noticeLanguage != null || whatsNew.showing || supportRung != 0 || supporting != null ||
-                crashPending || newVideoOffer || struggleHintUp || tourState == SettingsStore.TourState.Never || changelogQr,
-            safeMode = com.tmplayer.data.SafeMode.active,
-            modifier = Modifier
-                .align(if (FormFactor.isTv(context)) Alignment.BottomEnd else Alignment.BottomCenter)
-                .windowInsetsPadding(WindowInsets.safeDrawing)
-                .padding(if (FormFactor.isTv(context)) 40.dp else 16.dp),
-        )
 
         ConnectionStatus(
             notice = connectionNotice,
