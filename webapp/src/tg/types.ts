@@ -383,7 +383,9 @@ export interface WatchInfo {
     next: VideoItem | null
     nextCode: string | null
     /** The show's seasons, when it is an episode; empty otherwise. */
-    seasons: { number: number; episodes: EpisodeRef[] }[]
+    seasons: { number: number; episodes: EpisodeRef[]; covered: number[] }[]
+    /** Whole-season files of the show ("Season 2 Complete"), listed under their season; `seasonEnd` is set for a span of seasons. */
+    packs: { season: number; seasonEnd: number | null; item: VideoItem }[]
     /** Other cards of the chat, newest first, when it is not an episode. */
     more: Tile[]
     fileName: string

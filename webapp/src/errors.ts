@@ -3,15 +3,15 @@
 import { t, waitPhrase } from './i18n'
 
 const KNOWN: [RegExp, Parameters<typeof t>[0]][] = [
-    [/PHONE_NUMBER_INVALID|PHONE_NUMBER_FLOOD/, 'errors.phone_invalid'],
+    [/PHONE_NUMBER_INVALID|PHONE_NUMBER_FLOOD/, 'errors.phone_check'],
     [/PHONE_NUMBER_BANNED/, 'errors.phone_banned'],
     [/PHONE_NUMBER_UNOCCUPIED/, 'errors.no_account'],
-    [/PHONE_CODE_INVALID|PHONE_CODE_EMPTY|EMAIL_CODE_INVALID|CODE_INVALID/, 'errors.wrong_code'],
+    [/PHONE_CODE_INVALID|PHONE_CODE_EMPTY|EMAIL_CODE_INVALID|CODE_INVALID/, 'errors.code_check'],
     [/PHONE_CODE_EXPIRED|EMAIL_VERIFY_EXPIRED|AUTH_RESTART/, 'errors.code_expired'],
     [/PASSWORD_HASH_INVALID/, 'errors.wrong_password'],
     [/EMAIL_INVALID|EMAIL_NOT_ALLOWED/, 'errors.email_invalid'],
     [/SEND_CODE_UNAVAILABLE/, 'errors.code_unavailable'],
-    [/PAYMENT_REQUIRED|Payment is required/i, 'errors.premium_sign_in'],
+    [/PAYMENT_REQUIRED|Payment is required/i, 'errors.premium_qr'],
     [/CHANNEL_PRIVATE|CHAT_FORBIDDEN|USER_BANNED_IN_CHANNEL/, 'errors.channel_private'],
     [/PEER_ID_INVALID|CHANNEL_INVALID|CHAT_ID_INVALID|USERNAME_NOT_OCCUPIED/, 'errors.chat_gone'],
     [/AUTH_KEY_UNREGISTERED|SESSION_REVOKED|USER_DEACTIVATED/, 'errors.signed_out'],

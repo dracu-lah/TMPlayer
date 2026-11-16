@@ -245,15 +245,17 @@ class SettingsBook(private val kv: KeyValueStore) : AllowedChatsSource, Correcti
         if (sort == VideoSort.DEFAULT) e.remove(videoSortKey(chatId)) else e[videoSortKey(chatId)] = sort.name
     }
 
-    val minSizeBytes: Flow<Long> = read { it.long(MIN_SIZE) ?: SizeFilter.DEFAULT_MIN }
-    val maxSizeBytes: Flow<Long> = read { it.long(MAX_SIZE) ?: SizeFilter.DEFAULT_MAX }
+    val minSizeBytes: Flow<Long> = read { SizeFilter.effectiveMin(it.long(MIN_SIZE)) }
+    val maxSizeBytes: Flow<Long> = read { SizeFilter.effectiveMax(it.long(MAX_SIZE)) }
 
-    suspend fun setMinSizeBytes(value: Long) = kv.edit { e ->
-        e[MIN_SIZE] = SizeFilter.clampMin(value, e.long(MAX_SIZE) ?: SizeFilter.DEFAULT_MAX)
+    suspend fun setHideSmallClips(on: Boolean) = kv.edit { e ->
+        val floor = SizeFilter.clipSwitchFloor(e.long(MIN_SIZE), on)
+        if (floor != null) e[MIN_SIZE] = floor else e.remove(MIN_SIZE)
     }
 
-    suspend fun setMaxSizeBytes(value: Long) = kv.edit { e ->
-        e[MAX_SIZE] = SizeFilter.clampMax(value, e.long(MIN_SIZE) ?: SizeFilter.DEFAULT_MIN)
+    suspend fun resetSizeLimits() = kv.edit { e ->
+        e.remove(MIN_SIZE)
+        e.remove(MAX_SIZE)
     }
 
     val autoplayNext: Flow<Boolean> = read { it.flag(AUTOPLAY_NEXT) ?: true }

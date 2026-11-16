@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -92,5 +93,29 @@ class EpisodesPanelTest {
 
         onNodeWithText("Autoplay next episode").performClick()
         assertEquals(false, autoplay)
+    }
+
+    @Test
+    fun `the Previous and Next buttons are at least 48 dp tall`() = runComposeUiTest {
+        val playing = items[2]
+        setContent {
+            val steps = EpisodeNeighbours.around(playing, items)
+            PlayerTheme {
+                Box(Modifier.size(1280.dp, 720.dp)) {
+                    EpisodesSheet(
+                        state = EpisodesState(
+                            series = steps.series!!, playing = playing, previous = steps.previous, previousLabel = "Previous",
+                            next = steps.next, nextLabel = "Next", autoplay = true,
+                        ),
+                        watch = SeriesWatch.None,
+                        actions = EpisodesActions(onPlay = {}, onToggleWatched = {}, onAutoplay = {}),
+                        onClose = {},
+                    )
+                }
+            }
+        }
+        waitForIdle()
+        onNodeWithText("Previous").assertHeightIsAtLeast(48.dp)
+        onNodeWithText("Next").assertHeightIsAtLeast(48.dp)
     }
 }

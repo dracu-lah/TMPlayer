@@ -1,0 +1,382 @@
+diff --git a/app/build.gradle.kts b/app/build.gradle.kts
+index 0393a45..cda120a 100644
+--- a/app/build.gradle.kts
++++ b/app/build.gradle.kts
+@@ -229,6 +229,7 @@ android {
+     }
+ 
+     buildTypes {
++        debug { applicationIdSuffix = ".hx76" } // AB-TEMP
+         release {
+             // The architectures the published APK carries, and the whole of why it is the size
+             // it is: TDLib alone is 20 MB per architecture, FFmpeg another 4.
+diff --git a/ui/src/androidMain/kotlin/com/tmplayer/ui/components/FramePosterAndroid.kt b/ui/src/androidMain/kotlin/com/tmplayer/ui/components/FramePosterAndroid.kt
+new file mode 100644
+index 0000000..8ece9a0
+--- /dev/null
++++ b/ui/src/androidMain/kotlin/com/tmplayer/ui/components/FramePosterAndroid.kt
+@@ -0,0 +1,65 @@
++package com.tmplayer.ui.components
++
++import android.view.Choreographer
++import android.view.View
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.remember
++import androidx.compose.ui.platform.LocalView
++
++/**
++ * The view's own queue: a post waits behind the traversal a frame has asked for, so it runs once
++ * that frame is drawn (the platform's prefetch scheduler posts the same way); the next frame is
++ * waited for with the choreographer.
++ */
++@Composable
++internal fun rememberFramePoster(): FramePoster? {
++    val view = LocalView.current
++    return remember(view) { ViewFramePoster(view) }
++}
++
++@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class) // AB-TEMP
++private class ViewFramePoster(private val view: View) : FramePoster {
++    private val choreographer = Choreographer.getInstance()
++    private val waiting = HashMap<Runnable, Choreographer.FrameCallback>()
++
++    override fun afterThisFrame(task: Runnable) {
++        view.post(task)
++    }
++
++    override fun afterNextFrame(task: Runnable) {
++        val callback = waiting.getOrPut(task) {
++            Choreographer.FrameCallback {
++                waiting.remove(task)
++                view.post(task)
++            }
++        }
++        choreographer.removeFrameCallback(callback)
++        choreographer.postFrameCallback(callback)
++    }
++
++    override fun cancel(task: Runnable) {
++        view.removeCallbacks(task)
++        waiting.remove(task)?.let(choreographer::removeFrameCallback)
++    }
++
++    override val showing: Boolean
++        get() = view.isAttachedToWindow && view.windowVisibility == View.VISIBLE
++
++    // AB-TEMP
++    @Suppress("DEPRECATION")
++    private val platform: androidx.compose.foundation.lazy.layout.PrefetchScheduler? by lazy {
++        runCatching {
++            Class.forName("androidx.compose.foundation.lazy.layout.AndroidPrefetchScheduler")
++                .getDeclaredConstructor(View::class.java).apply { isAccessible = true }
++                .newInstance(view) as androidx.compose.foundation.lazy.layout.PrefetchScheduler
++        }.onFailure { android.util.Log.e("AB", "no platform scheduler", it) }.getOrNull()
++    }
++
++    @Suppress("DEPRECATION")
++    override fun platformScheduler() = platform
++
++    override fun batchOn(): Boolean = runCatching {
++        Class.forName("android.os.SystemProperties").getMethod("get", String::class.java, String::class.java)
++            .invoke(null, "debug.tm.batch", "1") as String != "0"
++    }.getOrDefault(true)
++}
+diff --git a/ui/src/jvmMain/kotlin/com/tmplayer/ui/components/FramePosterDesktop.kt b/ui/src/jvmMain/kotlin/com/tmplayer/ui/components/FramePosterDesktop.kt
+new file mode 100644
+index 0000000..6bcd9fd
+--- /dev/null
++++ b/ui/src/jvmMain/kotlin/com/tmplayer/ui/components/FramePosterDesktop.kt
+@@ -0,0 +1,7 @@
++package com.tmplayer.ui.components
++
++import androidx.compose.runtime.Composable
++
++/** The desktop composes ahead with the platform's own scheduler: no poster. */
++@Composable
++internal fun rememberFramePoster(): FramePoster? = null
+diff --git a/ui/src/jvmTest/kotlin/com/tmplayer/ui/components/IdleBatchTest.kt b/ui/src/jvmTest/kotlin/com/tmplayer/ui/components/IdleBatchTest.kt
+new file mode 100644
+index 0000000..d071bb5
+--- /dev/null
++++ b/ui/src/jvmTest/kotlin/com/tmplayer/ui/components/IdleBatchTest.kt
+@@ -0,0 +1,86 @@
++package com.tmplayer.ui.components
++
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++/**
++ * The TV's prefetch batches (HX76): rows composed ahead run in one go after a frame, up to a cap,
++ * so a batch costs one frame instead of a frame per step. A fake clock: each task "takes" the time
++ * it is given here. Whether it saves frames on the Mi TV is measured there.
++ */
++class IdleBatchTest {
++    private var clock = 0L
++    private val batch = IdleBatch<String>(capNanos = 40, now = { clock })
++
++    /** Runs a batch where each task takes [cost] and finishes if the time it was given covers it. */
++    private fun runBatch(cost: Map<String, Long>, ran: MutableList<String> = ArrayList()): Boolean =
++        batch.run { task, available ->
++            val needs = cost.getValue(task)
++            if (available() < needs) {
++                true
++            } else {
++                clock += needs
++                ran += task
++                false
++            }
++        }
++
++    @Test
++    fun `one batch is posted however many tasks come before it runs`() {
++        assertTrue(batch.add("a"))
++        assertFalse(batch.add("b"))
++        assertFalse(batch.add("c"))
++        val ran = ArrayList<String>()
++        assertFalse(runBatch(mapOf("a" to 5L, "b" to 5L, "c" to 5L), ran))
++        assertEquals(listOf("a", "b", "c"), ran)
++        assertFalse(batch.posted)
++        assertTrue("an empty queue posts again", batch.add("d"))
++    }
++
++    @Test
++    fun `the cap stops a batch and the rest wait for the next one in order`() {
++        val cost = mapOf("a" to 15L, "b" to 15L, "c" to 15L, "d" to 15L)
++        for (task in cost.keys) batch.add(task)
++        val ran = ArrayList<String>()
++        assertTrue(runBatch(cost, ran))
++        assertEquals("c needs 15 with 10 left", listOf("a", "b"), ran)
++        assertTrue(batch.posted)
++        ran.clear()
++        assertFalse(runBatch(cost, ran))
++        assertEquals(listOf("c", "d"), ran)
++    }
++
++    @Test
++    fun `the first task of a batch always runs whole, even past the cap`() {
++        val cost = mapOf("slow" to 100L, "next" to 1L)
++        batch.add("slow")
++        batch.add("next")
++        val ran = ArrayList<String>()
++        assertTrue(runBatch(cost, ran))
++        assertEquals("nothing after a task that spent the cap", listOf("slow"), ran)
++        ran.clear()
++        assertFalse(runBatch(cost, ran))
++        assertEquals(listOf("next"), ran)
++    }
++
++    @Test
++    fun `a hidden window parks the queue and the next task posts again`() {
++        batch.add("a")
++        batch.park()
++        assertTrue(batch.add("b"))
++        val ran = ArrayList<String>()
++        assertFalse(runBatch(mapOf("a" to 1L, "b" to 1L), ran))
++        assertEquals(listOf("a", "b"), ran)
++    }
++
++    @Test
++    fun `clear drops what waits`() {
++        batch.add("a")
++        batch.clear()
++        val ran = ArrayList<String>()
++        assertFalse(runBatch(emptyMap(), ran))
++        assertTrue(ran.isEmpty())
++    }
++}
+diff --git a/ui/src/shared/kotlin/com/tmplayer/ui/components/AheadState.kt b/ui/src/shared/kotlin/com/tmplayer/ui/components/AheadState.kt
+index 3061cef..d3e6ef6 100644
+--- a/ui/src/shared/kotlin/com/tmplayer/ui/components/AheadState.kt
++++ b/ui/src/shared/kotlin/com/tmplayer/ui/components/AheadState.kt
+@@ -7,11 +7,15 @@ import androidx.compose.foundation.lazy.LazyListPrefetchStrategy
+ import androidx.compose.foundation.lazy.LazyListState
+ import androidx.compose.foundation.lazy.layout.LazyLayoutPrefetchState
+ import androidx.compose.foundation.lazy.layout.NestedPrefetchScope
++import androidx.compose.foundation.lazy.layout.PrefetchRequest
++import androidx.compose.foundation.lazy.layout.PrefetchRequestScope
++import androidx.compose.foundation.lazy.layout.PrefetchScheduler
+ import androidx.compose.foundation.lazy.grid.LazyGridState
+ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+ import androidx.compose.foundation.lazy.layout.LazyLayoutCacheWindow
+ import androidx.compose.foundation.lazy.rememberLazyListState
+ import androidx.compose.runtime.Composable
++import androidx.compose.runtime.DisposableEffect
+ import androidx.compose.runtime.remember
+ import com.tmplayer.data.Thumbnails
+ 
+@@ -73,23 +77,40 @@ fun rememberAheadGridState(initialFirstVisibleItemIndex: Int = 0, initialFirstVi
+  */
+ @OptIn(ExperimentalFoundationApi::class)
+ @Composable
+-fun rememberJumpAheadListState(enabled: Boolean, behind: Int = 2): LazyListState {
+-    val strategy = remember(enabled, behind) { if (enabled) JumpAheadPrefetch(behind) else LazyListPrefetchStrategy() }
++fun rememberJumpAheadListState(enabled: Boolean, batched: Boolean = true, behind: Int = 2): LazyListState {
++    // A desktop has no poster (null): the platform's scheduler runs the rows there.
++    val poster = rememberFramePoster()
++    val strategy = remember(enabled, batched, behind, poster) {
++        if (!enabled) LazyListPrefetchStrategy()
++        else JumpAheadPrefetch(behind, if (batched && poster != null) IdleBatchScheduler(poster, IDLE_BATCH_CAP_NANOS) else null)
++    }
++    DisposableEffect(strategy) { onDispose { (strategy as? JumpAheadPrefetch)?.stop() } }
+     return rememberLazyListState(prefetchStrategy = strategy)
+ }
+ 
++/** How long one idle batch of rows composed ahead may hold the main thread before a key is read. */
++private const val IDLE_BATCH_CAP_NANOS = 40_000_000L
++
+ /**
+  * Composes ahead by the visible items, not by distance, so it follows a jump of any size. Bounded:
+  * at most a screenful plus [behind] items are held, each scheduled once, and nothing is asked for
+  * while the visible items and the count stay the same, so a list at rest does no work. The rows
+  * held run their effects like rows on screen, so work a row starts for the viewer (a Telegram
+- * count) must wait until it is in the visible items.
++ * count) must wait until it is in the visible items. [scheduler] null is the platform's.
+  */
++@Suppress("DEPRECATION") // prefetchScheduler: still read by LazyLayout in 1.12; null falls back to the platform's
+ @OptIn(ExperimentalFoundationApi::class)
+-internal class JumpAheadPrefetch(behind: Int) : LazyListPrefetchStrategy {
++internal class JumpAheadPrefetch(behind: Int, private val scheduler: IdleBatchScheduler? = null) : LazyListPrefetchStrategy {
+     private val window = JumpAheadWindow(behind)
+     private val held = HashMap<Int, LazyLayoutPrefetchState.PrefetchHandle>()
+ 
++    override val prefetchScheduler: PrefetchScheduler? get() = scheduler
++
++    /** The list left the screen: nothing more runs for it. */
++    fun stop() {
++        scheduler?.stop()
++    }
++
+     override fun LazyListPrefetchScope.onScroll(delta: Float, layoutInfo: LazyListLayoutInfo) {
+         // A negative delta moves the content up: the list is going towards its end.
+         if (delta != 0f) window.forward = delta < 0f
+@@ -158,6 +179,128 @@ internal class JumpAheadWindow(private val behind: Int) {
+     }
+ }
+ 
++/**
++ * Posts work to the main thread between frames: [afterThisFrame] once the frame being built is
++ * drawn (a view's post), [afterNextFrame] once one more frame has gone by. A platform without one
++ * (the desktop) answers null from [rememberFramePoster].
++ */
++@OptIn(ExperimentalFoundationApi::class) // AB-TEMP
++internal interface FramePoster {
++    fun afterThisFrame(task: Runnable)
++    fun afterNextFrame(task: Runnable)
++    fun cancel(task: Runnable)
++
++    /** False while the window is hidden or gone: nothing is composed for a screen nobody sees. */
++    val showing: Boolean
++
++    // AB-TEMP
++    fun platformScheduler(): PrefetchScheduler? = null
++    fun batchOn(): Boolean = true
++}
++
++/**
++ * Runs a list's prefetch in batches in the idle time after a frame (HX76), instead of the
++ * platform's way of fitting one step of one row into what is left of each frame. Each step of a
++ * row (its composition, its measure) asks for a redraw of the whole list, because the row is not
++ * placed and the request climbs to the list's layer; on the Mi TV each of those frames re-recorded
++ * the list (about 11 ms in debug), and since a frame was drawn the platform's scheduler then gave
++ * the next step only a frame's leftover, so a row composed ahead cost one or two frames of its own.
++ * Here every step that fits in [capNanos] runs in one go, so a batch costs one frame. A key pressed
++ * during a batch waits up to the cap (the first row of a batch always runs whole, so one row more).
++ */
++@Suppress("DEPRECATION") // PrefetchScheduler: still read by LazyLayout in 1.12
++@OptIn(ExperimentalFoundationApi::class)
++internal class IdleBatchScheduler(private val poster: FramePoster, capNanos: Long) : PrefetchScheduler {
++    private val batch = IdleBatch<PrefetchRequest>(capNanos, System::nanoTime)
++    private val scope = Scope()
++
++    private val run = object : Runnable {
++        override fun run() {
++            if (!poster.showing) {
++                batch.park()
++                return
++            }
++            val more = batch.run { request, available ->
++                scope.available = available
++                with(request) { scope.execute() }
++            }
++            if (more) poster.afterNextFrame(this)
++        }
++    }
++
++    override fun schedulePrefetch(prefetchRequest: PrefetchRequest) {
++        // AB-TEMP
++        val platform = poster.platformScheduler()
++        if (platform != null && !poster.batchOn()) {
++            platform.schedulePrefetch(prefetchRequest)
++            return
++        }
++        if (batch.add(prefetchRequest)) poster.afterThisFrame(run)
++    }
++
++    fun stop() {
++        poster.cancel(run)
++        batch.clear()
++    }
++
++    private class Scope : PrefetchRequestScope {
++        var available: () -> Long = { 0L }
++        override fun availableTimeNanos(): Long = available()
++    }
++}
++
++/**
++ * The queue [IdleBatchScheduler] runs, kept apart from Compose's sealed requests so it can be
++ * tested. Bounded by its caller: [JumpAheadPrefetch] asks for a screenful at most per move.
++ */
++internal class IdleBatch<T : Any>(private val capNanos: Long, private val now: () -> Long) {
++    private val queue = ArrayDeque<T>()
++
++    /** A batch is posted and has not run yet. */
++    var posted = false
++        private set
++
++    /** Queues [task]; true when the caller must post a batch (none is waiting). */
++    fun add(task: T): Boolean {
++        queue.addLast(task)
++        if (posted) return false
++        posted = true
++        return true
++    }
++
++    /**
++     * One batch: the first task runs whole (given all the time it asks for, so a batch always gets
++     * somewhere), the rest while the cap lasts; a task that ran out of time stays first for the
++     * next batch. True when tasks remain, so the caller posts the next batch a frame later.
++     */
++    fun run(execute: (task: T, available: () -> Long) -> Boolean): Boolean {
++        val deadline = now() + capNanos
++        val unbounded: () -> Long = { Long.MAX_VALUE }
++        val bounded: () -> Long = { maxOf(0L, deadline - now()) }
++        var first = true
++        while (true) {
++            val task = queue.firstOrNull() ?: break
++            if (!first && bounded() <= 0L) break
++            val more = execute(task, if (first) unbounded else bounded)
++            first = false
++            if (more) break
++            queue.removeFirst()
++        }
++        posted = queue.isNotEmpty()
++        return posted
++    }
++
++    /** The window is hidden: the tasks wait, and the next one added posts a batch again. */
++    fun park() {
++        posted = false
++    }
++
++    fun clear() {
++        queue.clear()
++        posted = false
++    }
++}
++
+ /**
+  * Keeps a row that rests at its start there when cards arrive in front of the first one (a newer
+  * video, or the row filled in from the cache and then from the chats). A lazy list holds on to the

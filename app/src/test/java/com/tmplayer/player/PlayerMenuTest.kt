@@ -124,6 +124,8 @@ class PlayerMenuTest {
             copyLinkAtTime = true,
             otherEngine = true,
             repeatVideo = true,
+            markIntro = true,
+            removeIntroMark = true,
         )
         assertFalse(PlayerMenuEntry.PictureInPicture in entries)
         assertEquals(PlayerMenuEntry.entries.size - 1, entries.size)
@@ -146,6 +148,8 @@ class PlayerMenuTest {
                 copyLinkAtTime = true,
                 otherEngine = true,
                 repeatVideo = true,
+                markIntro = true,
+                removeIntroMark = true,
             ).toSet(),
         )
     }
@@ -187,6 +191,7 @@ class PlayerMenuTest {
                 PhoneMenuEntry.SaveToDownloads,
                 PhoneMenuEntry.MarkWatched,
                 PhoneMenuEntry.ReportStutter,
+                PhoneMenuEntry.ReportWrongPicture,
                 PhoneMenuEntry.PlaybackDetails,
             ),
             PlayerMenu.phoneEntries(
@@ -202,7 +207,7 @@ class PlayerMenuTest {
                 copyLinkAtTime = true,
             ),
         )
-        assertEquals(PhoneMenuEntry.entries.toSet(), PlayerMenu.phoneEntries(true, true, true, true, paused = true, bookmarks = true, chapters = true, saveFrame = true, pictureShape = true, stereo = true, zoomed = true, reportStutter = true, copyLinkAtTime = true, otherEngine = true, repeatVideo = true).toSet())
+        assertEquals(PhoneMenuEntry.entries.toSet(), PlayerMenu.phoneEntries(true, true, true, true, paused = true, bookmarks = true, chapters = true, saveFrame = true, pictureShape = true, stereo = true, zoomed = true, reportStutter = true, copyLinkAtTime = true, otherEngine = true, repeatVideo = true, markIntro = true, removeIntroMark = true).toSet())
     }
 
     @Test
@@ -282,21 +287,29 @@ class PlayerMenuTest {
     }
 
     @Test
-    fun `report stutter is offered when asked, last before the details on the phone and before the keys on the television`() {
+    fun `the viewer's two reports go together, last before the details on the phone and before the keys on the television, and never on a cast`() {
         val phone = PlayerMenu.phoneEntries(true, true, true, true, reportStutter = true)
-        assertEquals(PhoneMenuEntry.ReportStutter, phone[phone.size - 2])
+        assertEquals(PhoneMenuEntry.ReportStutter, phone[phone.size - 3])
+        assertEquals(PhoneMenuEntry.ReportWrongPicture, phone[phone.size - 2])
         assertEquals(PhoneMenuEntry.PlaybackDetails, phone.last())
-        assertFalse(PhoneMenuEntry.ReportStutter in PlayerMenu.phoneEntries(true, true, true, true))
+        val noCast = PlayerMenu.phoneEntries(true, true, true, true)
+        assertFalse(PhoneMenuEntry.ReportStutter in noCast)
+        assertFalse(PhoneMenuEntry.ReportWrongPicture in noCast)
 
         val tv = PlayerMenu.tvEntries(pictureInPicture = true, reportStutter = true)
-        assertEquals(PlayerMenuEntry.ReportStutter, tv[tv.size - 2])
+        assertEquals(PlayerMenuEntry.ReportStutter, tv[tv.size - 3])
+        assertEquals(PlayerMenuEntry.ReportWrongPicture, tv[tv.size - 2])
         assertEquals(PlayerMenuEntry.RemoteKeys, tv.last())
-        assertFalse(PlayerMenuEntry.ReportStutter in PlayerMenu.tvEntries(pictureInPicture = true))
+        val tvNoCast = PlayerMenu.tvEntries(pictureInPicture = true)
+        assertFalse(PlayerMenuEntry.ReportStutter in tvNoCast)
+        assertFalse(PlayerMenuEntry.ReportWrongPicture in tvNoCast)
     }
 
     @Test
     fun `the phone entry has its words`() {
         assertEquals(com.tmplayer.i18n.L.playerReportStutter, PhoneMenuEntry.ReportStutter.label())
+        assertEquals(com.tmplayer.i18n.L.playerReportWrongPicture, PhoneMenuEntry.ReportWrongPicture.label())
+        assertEquals("Picture looks wrong", com.tmplayer.i18n.L.playerReportWrongPicture)
     }
 
     @Test
@@ -332,5 +345,14 @@ class PlayerMenuTest {
         assertEquals(tv.indexOf(PlayerMenuEntry.AbLoop) + 1, tv.indexOf(PlayerMenuEntry.RepeatVideo))
         assertFalse(PlayerMenuEntry.RepeatVideo in PlayerMenu.tvEntries(pictureInPicture = true))
         assertEquals(com.tmplayer.i18n.L.playerRepeatVideo, PhoneMenuEntry.RepeatVideo.label())
+    }
+
+    @Test
+    fun `the sound switch is called Quiet loud scenes, not Night mode, wherever the menu draws it`() {
+        assertEquals("Quiet loud scenes", PhoneMenuEntry.NightMode.label())
+        assertEquals("Quiet loud scenes", com.tmplayer.i18n.L.playerQuietLoudScenes)
+        assertEquals("Quiet loud scenes off", com.tmplayer.i18n.L.playerQuietLoudScenesOff)
+        assertTrue(com.tmplayer.i18n.L.playerQuietLoudScenesOn.startsWith("Quiet loud scenes on"))
+        assertFalse(com.tmplayer.i18n.L.playerDetailsQuietLoudScenes.contains("Night", ignoreCase = true))
     }
 }

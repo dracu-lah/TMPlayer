@@ -10,6 +10,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.use
 import com.tmplayer.i18n.L
 import com.tmplayer.online.SkipKind
+import com.tmplayer.online.SkipSegment
 import org.jetbrains.skia.EncodedImageFormat
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -29,7 +30,7 @@ class SkipPillRenderTest {
             val png = ImageComposeScene(1280, 720, Density(1f)) {
                 PlayerTheme {
                     Box(Modifier.fillMaxSize().background(Color(0xFF3A3F47))) {
-                        SkipPill(SkipKind.Intro, lifted = lifted, onSkip = {})
+                        SkipPill(SkipSegment(SkipKind.Intro, 0, 90_000), lifted = lifted, onSkip = {})
                     }
                 }
             }.use { scene ->
@@ -39,6 +40,25 @@ class SkipPillRenderTest {
             assertTrue(png.size > 2_000)
             File("build/skip-shots").apply { mkdirs() }.resolve("skip-pill${if (lifted) "-lifted" else ""}.png").writeBytes(png)
         }
+    }
+
+    @Test
+    fun countdownDrawsWithItsCancelAndAMarkedIntroSaysSo() {
+        val png = ImageComposeScene(1280, 720, Density(1f)) {
+            PlayerTheme {
+                Box(Modifier.fillMaxSize().background(Color(0xFF3A3F47))) {
+                    SkipPill(SkipSegment(SkipKind.Opening, 0, 90_000), lifted = false, onSkip = {}, secondsLeft = 2, onCancel = {})
+                }
+            }
+        }.use { scene ->
+            scene.render(0)
+            scene.render(1_000_000_000).encodeToData(EncodedImageFormat.PNG)!!.bytes
+        }
+        assertTrue(png.size > 2_000)
+        File("build/skip-shots").apply { mkdirs() }.resolve("skip-pill-counting.png").writeBytes(png)
+        assertEquals(L.playerSkipIntroMark, skipLabel(SkipSegment(SkipKind.Intro, 0, 90_000, com.tmplayer.online.SkipSource.Mark), L))
+        assertEquals(L.playerSkipIntroMark, skipLabel(SkipSegment(SkipKind.Intro, 0, 90_000, com.tmplayer.online.SkipSource.Guess), L))
+        assertEquals(L.playerSkipOpening, skipLabel(SkipSegment(SkipKind.Opening, 0, 90_000, com.tmplayer.online.SkipSource.Chapter), L))
     }
 
     @Test

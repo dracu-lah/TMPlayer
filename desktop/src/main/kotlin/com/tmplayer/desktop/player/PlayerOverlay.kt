@@ -117,6 +117,8 @@ import androidx.compose.ui.unit.sp
 import com.tmplayer.data.Bookmark
 import com.tmplayer.data.MediaItem
 import com.tmplayer.online.SkipKind
+import com.tmplayer.online.SkipSegment
+import com.tmplayer.online.SkipSource
 import com.tmplayer.data.EpisodeNeighbours
 import com.tmplayer.player.PlaybackSpeed
 import com.tmplayer.player.Stereo3d
@@ -424,8 +426,10 @@ internal fun BoxScope.PlayerOverlay(
     sleepTimer: String? = null,
     /** The A-B repeat as marked so far, drawn on the timebar and named above it; null for none. */
     loop: AbLoop? = null,
-    /** Whether Repeat this video is on, or null where the menu has no such line (sound alone). */
+    /** Whether Repeat this video is on, or null where the menu has no such line. */
     repeatVideo: Boolean? = null,
+    /** The label of "Mark this as the intro" (an episode only), or null for no such line. */
+    markIntro: String? = null,
     /** This video's bookmarks for the menu and the timebar; null where the video can have none. */
     bookmarks: List<Bookmark>? = null,
     onHoverControls: (Boolean) -> Unit,
@@ -546,14 +550,14 @@ internal fun BoxScope.PlayerOverlay(
                             Box {
                                 OverlayButton(TmIcons.Subtitles, s.playerSubtitlesHint, onClick = { onOpenMenu(MenuAt(MenuPage.Subtitles, MenuAt.Anchor.Subtitles)) })
                                 if (menu?.anchor == MenuAt.Anchor.Subtitles) {
-                                    PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, sleepTimer, bookmarks, loop, onOpenMenu, onCloseMenu, onMenuAction, repeatVideo = repeatVideo)
+                                    PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, sleepTimer, bookmarks, loop, onOpenMenu, onCloseMenu, onMenuAction, repeatVideo = repeatVideo, markIntro = markIntro)
                                 }
                             }
                         }
                         Box {
                             OverlayButton(TmIcons.Audio, s.playerAudioHint, onClick = { onOpenMenu(MenuAt(MenuPage.Audio, MenuAt.Anchor.Audio)) })
                             if (menu?.anchor == MenuAt.Anchor.Audio) {
-                                PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, sleepTimer, bookmarks, loop, onOpenMenu, onCloseMenu, onMenuAction, repeatVideo = repeatVideo)
+                                PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, sleepTimer, bookmarks, loop, onOpenMenu, onCloseMenu, onMenuAction, repeatVideo = repeatVideo, markIntro = markIntro)
                             }
                         }
                         Box {
@@ -565,7 +569,7 @@ internal fun BoxScope.PlayerOverlay(
                                 ) { Text(SeekMath.speedLabel(status.speed), color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium) }
                             }
                             if (menu?.anchor == MenuAt.Anchor.Speed) {
-                                PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, sleepTimer, bookmarks, loop, onOpenMenu, onCloseMenu, onMenuAction, repeatVideo = repeatVideo)
+                                PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, sleepTimer, bookmarks, loop, onOpenMenu, onCloseMenu, onMenuAction, repeatVideo = repeatVideo, markIntro = markIntro)
                             }
                         }
                         // A click steps the shape through all eight, as W does; the panel has its page of them.
@@ -595,7 +599,7 @@ internal fun BoxScope.PlayerOverlay(
         PlayerMenu(
             open, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable,
             watchedLabel, sleepTimer, bookmarks, loop, onOpenMenu, onCloseMenu, onMenuAction,
-            panel = true, subtitles = subtitlesButton, firstFocus = firstFocus, repeatVideo = repeatVideo,
+            panel = true, subtitles = subtitlesButton, firstFocus = firstFocus, repeatVideo = repeatVideo, markIntro = markIntro,
         )
     }
 }
@@ -986,8 +990,9 @@ internal fun PlayerMenu(
     subtitles: Boolean = true,
     /** Given to the page's first line, where the panel puts the keyboard as a page opens. */
     firstFocus: FocusRequester? = null,
-    /** Whether Repeat this video is on, or null where the menu has no such line (sound alone). */
+    /** Whether Repeat this video is on, or null where the menu has no such line. */
     repeatVideo: Boolean? = null,
+    markIntro: String? = null,
 ) {
     val s = LocalStrings.current
     val copies = LocalPlayerCopies.current
@@ -1101,7 +1106,7 @@ internal fun PlayerMenu(
             MenuPage.Options -> {
                 Entry(s.playerDownmix, checked = status.downmix) { pick(MenuAction.ToggleDownmix) }
                 Entry(s.playerVolumeBoost, checked = status.volumeBoost) { pick(MenuAction.ToggleVolumeBoost) }
-                Entry(s.playerNightMode, checked = status.nightMode) { pick(MenuAction.ToggleNightMode) }
+                Entry(s.playerQuietLoudScenes, checked = status.nightMode) { pick(MenuAction.ToggleNightMode) }
                 Entry(s.playerSleepTimer, trailing = sleepTimer ?: s.commonOff) { page(MenuPage.Sleep) }
                 val repeat = when {
                     loop == null -> s.playerLoopSetStart
@@ -1112,6 +1117,8 @@ internal fun PlayerMenu(
                 // A switch: the menu stays up with the new value, as the volume lines do.
                 if (repeatVideo != null) Entry(s.playerRepeatVideo, checked = repeatVideo) { onAction(MenuAction.ToggleRepeatVideo) }
                 Entry(s.playerGoToTime, trailing = s.playerKeyCommandG(commandKey(s))) { pick(MenuAction.Do(PlayerAction.GoToTime)) }
+                // An episode only: two presses, the start and the end; the menu closes so the picture shows.
+                if (markIntro != null) Entry(markIntro, trailing = "O") { pick(MenuAction.Do(PlayerAction.MarkIntro)) }
                 // A chaptered file only; the menu stays open for the next step, as the frame steps do.
                 if (status.chapters.isNotEmpty()) {
                     Entry(s.playerChapterNext) { onAction(MenuAction.Do(PlayerAction.ChapterStep(forward = true))) }
@@ -1487,6 +1494,10 @@ internal fun BoxScope.NextUpCard(label: String, secondsLeft: Int, lifted: Boolea
 /** The next-up card's surface, which the skip pill shares so the two read as one family. */
 private val NextUpSurface = Color(0xE61C1C1E)
 
+/** The pill's words for [segment]: an intro the viewer marked says so, the rest by kind. */
+internal fun skipLabel(segment: SkipSegment, s: com.tmplayer.i18n.Strings): String =
+    if (segment.source == SkipSource.Mark || segment.source == SkipSource.Guess) s.playerSkipIntroMark else skipLabel(segment.kind, s)
+
 /** The words on the pill for each kind of segment: "Skip intro", "Skip credits" and the rest. */
 internal fun skipLabel(kind: SkipKind, s: com.tmplayer.i18n.Strings): String = when (kind) {
     SkipKind.Intro -> s.playerSkipIntro
@@ -1504,9 +1515,16 @@ internal fun skipLabel(kind: SkipKind, s: com.tmplayer.i18n.Strings): String = w
  * since the "?" sheet is a long way from the moment it is wanted.
  */
 @Composable
-internal fun BoxScope.SkipPill(kind: SkipKind, lifted: Boolean, onSkip: () -> Unit) {
+internal fun BoxScope.SkipPill(
+    segment: SkipSegment,
+    lifted: Boolean,
+    onSkip: () -> Unit,
+    /** Seconds left on a countdown for a stretch set to skip by itself, with a Cancel beside the words. */
+    secondsLeft: Int? = null,
+    onCancel: () -> Unit = {},
+) {
     val s = LocalStrings.current
-    val label = skipLabel(kind, s)
+    val label = if (secondsLeft == null) skipLabel(segment, s) else s.playerSkipIn(secondsLeft)
     val hover = remember { MutableInteractionSource() }
     val hovered by hover.collectIsHoveredAsState()
     AnimatedVisibility(
@@ -1528,7 +1546,20 @@ internal fun BoxScope.SkipPill(kind: SkipKind, lifted: Boolean, onSkip: () -> Un
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(label, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                Icon(TmIcons.SkipNext, null, tint = Color.White, modifier = Modifier.size(20.dp))
+                if (secondsLeft == null) {
+                    Icon(TmIcons.SkipNext, null, tint = Color.White, modifier = Modifier.size(20.dp))
+                } else {
+                    // Its own target: a click on Cancel does not also skip.
+                    Text(
+                        L.commonCancel,
+                        color = Tone.accent,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        modifier = Modifier.testTag("skip-cancel").clip(RoundedCornerShape(12.dp)).clickable(onClick = onCancel)
+                            .padding(horizontal = 6.dp, vertical = 4.dp),
+                    )
+                }
             }
         }
     }

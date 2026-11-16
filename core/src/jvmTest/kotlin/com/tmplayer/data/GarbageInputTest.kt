@@ -25,6 +25,12 @@ import com.tmplayer.cast.dlna.UpnpTime
 import com.tmplayer.i18n.Decimal
 import com.tmplayer.json.JSONObject
 import com.tmplayer.online.AniListApi
+import com.tmplayer.online.AnimeSkipApi
+import com.tmplayer.online.ChapterSkips
+import com.tmplayer.online.IdMapApi
+import com.tmplayer.online.SkipModes
+import com.tmplayer.online.SkipSession
+import com.tmplayer.online.UserSkipMarks
 import com.tmplayer.online.HttpResponse
 import com.tmplayer.online.HttpTransport
 import com.tmplayer.online.MetaExtras
@@ -82,6 +88,10 @@ class GarbageInputTest {
         assertTrue(failures.isEmpty(), "Parsers threw on garbage:\n" + failures.distinct().take(40).joinToString("\n"))
 
     private val corpus: List<String> = listOf(
+        // Episode and season ranges in names (T9 take): cut off, doubled, absurd and endless.
+        "E01-", "E~~", "S01-S", "S99-S1", "E999999999-E1", "to to to", "S01E01 to", "Ep 1~", "Ep 1, 2, 3, ", "S01E01,,,02",
+        "S01E01\u2013", "S01-S03-S05", "Seasons 99-100", "Seasons -", "S00-S00", "E1~2~3~4~5~6~7~8~9~10~11~12~13~14~15~16",
+        "1-1-1-".repeat(300), "E01,".repeat(300), "S01E01 to E02 ".repeat(100), "\u0661\u0662-\u0663\u0664",
         "", " ", "\u0000", "﻿", "\uD800", "\uDFFF\uD800", "😀".repeat(50),
         "{", "}", "[", "]", "{}", "[]", "null", "true", "0", "-1", "1e999", "-1e999", "NaN", "\"\"", "\"",
         "{\"a\":", "{\"a\":}", "{\"a\" 1}", "[1,,2]", "{\"a\":1,}", "[null]", "[{}]", "[[]]",
@@ -115,7 +125,8 @@ class GarbageInputTest {
         "[Events]\nFormat: Layer, Start, End, Text\nDialogue: 0,0:00:01.00,0:00:00.00\nDialogue: ,,,,,,,,,,",
         "https://t.me/", "tg://", "tg://resolve?domain=", "t.me/c/", "t.me/c/-1/-1", "t.me/c/1/99999999999999999999",
         "https://t.me/proxy?server=&port=x&secret=", "tg://socks?server=a&port=70000", "%%%", "%E0%A4%A",
-        "S01E", "S99999E99999", "1080p", "Show.S01E01-E", "Ep.0", "Part 0 of 0", "(", ")", "[[[", "((((((((((",
+        "S01E", "S99999E99999", "S01-S", "S99-S1", "E01-", "E~~", "to to to", "E999999999-E1", "tt", "tt0111161", "imdb.com/title/", "themoviedb.org/tv/",
+        "Spanish (", "Hindi (Latin America", ".srt", "S01-S03 ".repeat(5_000), "1080p", "Show.S01E01-E", "Ep.0", "Part 0 of 0", "(", ")", "[[[", "((((((((((",
         "-", "--", "+-1", "1:", ":1", "::", "60:60:60", "-0", "1e3", "١٢٣",
         "\n".repeat(2_000), "a".repeat(100_000), "{\"a\":\"" + "x".repeat(50_000) + "\"}",
         "[".repeat(500) + "]".repeat(500), "{\"a\":".repeat(300) + "1" + "}".repeat(300),
@@ -277,6 +288,26 @@ class GarbageInputTest {
     }
 
     @Test
+    fun formatFactsNeverThrow() {
+        for (text in texts + "a".repeat(2_048)) {
+            survive("FormatFacts.tags", text) {
+                val track = FormatFacts.AudioTrack(mime = text, codecs = text, profile = text, channels = text.length - 3)
+                val probe = FormatFacts.Probe(
+                    videoMime = text, videoCodecs = text, width = text.length * 977, height = -text.length, frameRate = text.length * 31f,
+                    bitDepth = text.length, audio = listOf(track, track), hdr10Plus = text.isNotEmpty(),
+                )
+                FormatFacts.tags(probe, FormatFacts.resolutionOf(text.length, text.length, text))
+                FormatFacts.resolutionOf(0, 0, text)
+                FormatFacts.dolbyVisionProfile(text)
+                FormatProbes.record(text, probe)
+                FormatProbes[text]
+            }
+        }
+        FormatProbes.clear()
+        assertNoFailures()
+    }
+
+    @Test
     fun formatLineNeverThrows() {
         for (text in texts + "a".repeat(2_048)) {
             survive("FormatLine.line", text) {
@@ -302,7 +333,15 @@ class GarbageInputTest {
             }
             survive("KnownDevices.parse", text) {
                 val list = KnownDevices.parse(text)
-                KnownDevices.find(KnownDevices.effective(list), DeviceFacts(hardware = text, model = text, sdk = text.length), text)
+                val device = DeviceFacts(hardware = text, model = text, sdk = text.length)
+                KnownDevices.find(KnownDevices.effective(list), device, text)
+                KnownDevices.plan(com.tmplayer.player.RemedyPlan(), KnownDevices.remediesFor(KnownDevices.effective(list), device, text))
+                KnownDevices.startOf(text)
+            }
+            // The feed's remedy fields, each given text of every shape: bad ones are skipped.
+            survive("KnownDevices.parse remedy fields", text) {
+                val entry = com.tmplayer.json.JSONObject(mapOf("id" to text, "chipsets" to listOf(text, "abc"), "async" to text, "excludeDecoders" to listOf(text), "startRung" to text, "note" to text))
+                KnownDevices.parse("[$entry]")
             }
             survive("EngineChoice.from", text) { com.tmplayer.player.EngineChoice.from(text) }
             survive("PlayerChoice.parse", text) { com.tmplayer.player.PlayerChoice.parse(text) }
@@ -343,6 +382,14 @@ class GarbageInputTest {
                 for (session in PlaybackTrace.read(text)) StutterVerdict.analyse(session.samples)
                 PlaybackTrace.read(text + "\n" + PlaybackTrace.sampleLine(com.tmplayer.player.TraceSample(atMs = 1)))
                 PlaybackTraceRing.from(text).sessions()
+                // Version 2's lines (facts, hops) with the text in every place a value goes.
+                val k = com.tmplayer.json.JSONObject().put("dec.name", text).put("class", text).put("rung", 5)
+                val v2 = PlaybackTrace.sessionLine(1) + "\n" +
+                    com.tmplayer.json.JSONObject().put("t", "f").put("at", 2).put("k", k) + "\n" +
+                    com.tmplayer.json.JSONObject().put("t", "f").put("at", 2).put("k", text) + "\n" +
+                    com.tmplayer.json.JSONObject().put("t", "h").put("at", 3).put("ev", text).put("to", text) + "\n" + text
+                for (session in PlaybackTrace.read(v2)) com.tmplayer.player.TraceFacts.lines(session.facts, session.hops)
+                PlaybackTraceRing.from(v2).sessions().let { PlaybackTrace.encode(it) }
             }
             survive("LogUpload.outcome", text) {
                 LogUpload.parseCode(text)
@@ -368,6 +415,14 @@ class GarbageInputTest {
                 ResumeRecord.decode(text, text, -1, -1)
             }
             survive("DecodeMemory.decode", text) { DecodeMemory.decode(text) }
+            survive("RemedyMemory.decode", text) {
+                val memory = RemedyMemory.decode(text, 20_400)
+                val key = RemedyClassKey.of(DeviceFacts(hardware = text, sdk = text.length), DecodeJudge.Picture(text), text, text, text)
+                memory.planFor(key, text)
+                val written = memory.failed(text, com.tmplayer.player.Remedy.Reload, text, text, -1).crashed(key, 20_400)
+                RemedyMemory.decode(written.encode(), 20_400).planFor(text, text)
+                RemedyMemory.decode("$text=$text|$text|$text|$text|$text|20400|$text~$text~$text", 20_400).encode()
+            }
             survive("DownloadRequest.decodeAll", text) { DownloadRequest.decodeAll(text) }
             survive("RecentSearches.decode", text) { RecentSearches.decode(text) }
             survive("AddedChats.hiddenIds", text) {
@@ -415,6 +470,13 @@ class GarbageInputTest {
             survive("Decimal.parse", text) { Decimal.parse(text) }
             survive("MediaName.parse", text) { MediaName.parse(text); MediaName.parse(text, text) }
             survive("MediaName.spellingKey", text) { MediaName.spellingKey(text) }
+            survive("MediaName.pack", text) { MediaName.parse(text).let { it.pack; it.packSeason } }
+            survive("MetaLinks.read", text) { com.tmplayer.online.MetaLinks.read(text, text, null) }
+            survive("MetaQuery.of link", text) {
+                com.tmplayer.online.MetaQuery.of(text, "imdb.com/title/tt0111161 $text")
+                com.tmplayer.online.MetaQuery.of("x.mkv", "tt$text themoviedb.org/tv/$text")
+            }
+            survive("ChatSubtitles.tagsOf", text) { com.tmplayer.player.ChatSubtitles.tagsOf(text); com.tmplayer.player.ChatSubtitles.tagsOf("$text.Hindi ($text).srt") }
             survive("TitleShape.of", text) { TitleShape.of(text) }
             survive("TitleReport.parse", text) { TitleReport.parse(text) }
             survive("TitleLedger.decode", text) { TitleLedger.decode(text).let { TitleLedger.decode(it.encode()) } }
@@ -600,6 +662,73 @@ class GarbageInputTest {
         assertNoFailures()
     }
 
+    /**
+     * Keep my place on all my devices, version 3: the bookmarks and corrections in the sync file
+     * (truncated, wrong types, huge, random) and the raw entries their stores keep their times and
+     * removals under. Whatever comes in reads as nothing, or as a bounded list the merge and the
+     * writer take without throwing.
+     */
+    @Test
+    fun syncedBookmarksAndCorrectionsNeverThrow() {
+        fun sync(fields: String) = "{\"format\":\"tmplayer-sync\",\"version\":3,$fields}"
+        val mark = "{\"chat\":-100,\"msg\":5,\"id\":1700000000000,\"pos\":9000,\"note\":\"the twist\",\"at\":1700000000001}"
+        val fix = "{\"chat\":-100,\"msg\":5,\"fix\":\"title=Night Train\",\"at\":1700000000001}"
+        val shapes = texts.take(200).flatMap { t ->
+            listOf("\"bookmarks\":$t", "\"corrections\":$t", "\"bookmarks\":[$t],\"corrections\":[$t]", "\"bookmarks\":[{\"note\":$t,\"chat\":1,\"msg\":1,\"id\":1,\"pos\":1}]")
+        } + listOf(
+            "\"bookmarks\":{}", "\"bookmarks\":\"x\"", "\"bookmarks\":7,\"corrections\":null",
+            "\"bookmarks\":[{\"chat\":\"a\",\"msg\":[],\"id\":null,\"pos\":{},\"note\":5,\"at\":\"now\"}]",
+            "\"bookmarks\":[{\"chat\":1e999,\"msg\":-1e999,\"id\":1e999,\"pos\":1e999,\"at\":1e999}]",
+            "\"bookmarks\":[{\"chat\":1,\"msg\":1,\"id\":-5,\"pos\":-1,\"note\":\"x\"},{\"chat\":1,\"msg\":1,\"id\":0,\"pos\":0}]",
+            "\"bookmarks\":[{\"chat\":1,\"msg\":1,\"id\":5,\"pos\":1,\"note\":\"" + "n".repeat(1_000_000) + "\"}]",
+            "\"bookmarks\":[{\"chat\":1,\"msg\":1,\"id\":5,\"pos\":1,\"note\":\"\u001e\u001f\u0000\\n\"}]",
+            "\"bookmarks\":[" + List(30_000) { mark }.joinToString(",") + "]",
+            "\"corrections\":[{\"chat\":1,\"msg\":1,\"fix\":5,\"at\":1},{\"chat\":1,\"msg\":1,\"at\":1},{\"fix\":\"separate\"}]",
+            "\"corrections\":[{\"chat\":1,\"msg\":1,\"fix\":\"title=" + "t".repeat(2_000_000) + "\",\"at\":1}]",
+            "\"corrections\":[{\"chat\":1,\"msg\":1,\"fix\":\"tmdb=film:99999999999999999999\\ntmdb=show:-5\\nwrong\\nseparate\",\"at\":-1}]",
+            "\"corrections\":[" + List(20_000) { fix }.joinToString(",") + "]",
+            "\"removed\":[{\"list\":\"bookmark\",\"key\":\"1_2\",\"at\":1},{\"list\":\"bookmark\",\"key\":\"a_b_c\",\"at\":1},{\"list\":\"correction\",\"key\":5,\"at\":1},{\"list\":\"correction\",\"key\":\"1_2_3\",\"at\":1}]",
+            "\"bookmarks\":[$mark],\"corrections\":[$fix],\"removed\":[{\"list\":\"bookmark\",\"key\":\"-100_5_1700000000000\",\"at\":1700000000002}]",
+        )
+        for (shape in shapes) {
+            survive("SyncDocuments.decode bookmarks", shape) {
+                val read = SyncDocuments.decode(sync(shape).encodeToByteArray(), 0)
+                if (read is SyncRead.Ok) {
+                    val doc = read.doc
+                    assertTrue(doc.bookmarks.size <= SyncDocuments.MAX_BOOKMARKS * 2 && doc.corrections.size <= SyncDocuments.MAX_CORRECTIONS * 2)
+                    assertTrue(doc.bookmarks.all { it.bookmark.note.length <= BookmarkCodec.MAX_NOTE && it.bookmark.id > 0 && it.bookmark.positionMs >= 0 })
+                    assertTrue(doc.corrections.all { VideoCorrection.decode(it.text).title?.length ?: 0 <= SyncDocuments.TITLE_MAX })
+                    val merged = SyncDocuments.merge(doc, SyncDocument(), 1_800_000_000_000L)
+                    assertTrue(merged.bookmarks.size <= SyncDocuments.MAX_BOOKMARKS && merged.corrections.size <= SyncDocuments.MAX_CORRECTIONS)
+                    SyncDocuments.apply(SyncDocument(), merged)
+                    SyncDocuments.decode(SyncDocuments.encode(merged).bytes, 0)
+                }
+            }
+        }
+        for (text in texts) {
+            survive("SyncDocuments.bookmarksOf", text) {
+                SyncDocuments.bookmarksOf(
+                    mapOf(
+                        "b_$text" to text, "b_-100_5" to text, "b_-100_5" to "\u001f\u001f", "bt_$text" to text, "bt_-100_5_1" to text,
+                        "xb_$text" to 5L, "xb_-100_5_1" to text, "xb_-100_5_1" to -1L, "b_1_1_1" to text, "b_-100_6" to "1\u001f2\u001f$text",
+                    ),
+                )
+            }
+            survive("SyncDocuments.correctionsOf", text) {
+                SyncDocuments.correctionsOf(
+                    mapOf("fix_$text" to text, "fix_-100_5" to text, "fixat_-100_5" to text, "fixat_$text" to 5L, "fix_1_1" to "title=$text\ntmdb=film:$text"),
+                )
+            }
+            survive("SyncDocuments.extraRemovals", text) {
+                SyncDocuments.extraRemovals(
+                    mapOf("xfix_$text" to 5L, "xfix_-100_5" to text, "xfix_1_2_3" to 5L),
+                    mapOf("xb_$text" to 5L, "xb_-100_5_1" to text, "xb_1_2" to 5L),
+                )
+            }
+        }
+        assertNoFailures()
+    }
+
     @Test
     fun savedRecordsNeverThrow() {
         val dir = kotlin.io.path.createTempDirectory("garbage").toFile()
@@ -628,6 +757,30 @@ class GarbageInputTest {
             survive("SkipSegment.fromJson", json) { SkipSegment.fromJson(json) }
             survive("SubtitleHit.fromJson", json) { SubtitleHit.fromJson(org.json.JSONObject(json.toString())) }
         }
+        assertNoFailures()
+    }
+
+    /** Chapter titles are free text, the modes line and the marks file are read from the disk: none may throw. */
+    @Test
+    fun skipTitlesModesAndMarksNeverThrow() {
+        for (text in texts) {
+            survive("ChapterSkips.kindOf", text) { ChapterSkips.kindOf(text) }
+            survive("SkipModes.decode", text) { SkipModes.decode(text) }
+            survive("UserSkipMarks.open", text) {
+                UserSkipMarks.open(object : UserSkipMarks.Persistence {
+                    override fun read() = text
+                    override fun write(text: String) = Unit
+                })
+                UserSkipMarks.segmentsFor("1:1", "k", 1_400_000)
+            }
+            survive("SkipSession.chapters", text) {
+                SkipSession().apply {
+                    chapters(listOf(com.tmplayer.player.Chapter(Random(text.hashCode()).nextLong(-5, 2_000_000), text)))
+                    offer(1_000, 1_400_000, true, 0)
+                }
+            }
+        }
+        UserSkipMarks.reset()
         assertNoFailures()
     }
 
@@ -668,7 +821,17 @@ class GarbageInputTest {
             survive("OmdbApi", shown) { runBlocking { OmdbApi(http, limiter, "t").scores("k", "tt1") } }
             survive("WikidataApi", shown) { runBlocking { WikidataApi(http, limiter, "t").scores("tt1") } }
             val ani = AniListApi(http, limiter, "t")
-            survive("AniListApi", shown) { runBlocking { ani.search("q"); ani.extras("1") } }
+            survive("AniListApi", shown) { runBlocking { ani.search("q"); ani.extras("1"); ani.episodes("1") } }
+            // T11: the anime episode sources, each asked for its episodes with nonsense coming back.
+            survive("TmdbApi anime", shown) {
+                runBlocking {
+                    tmdb.showGuide("k", "1", "en")
+                    tmdb.episodeGroup("k", "g", "en")
+                    tmdb.seasons("k", "1", listOf(1, 2, 3), "en")
+                }
+            }
+            survive("KitsuApi", shown) { runBlocking { val kitsu = com.tmplayer.online.KitsuApi(http, limiter, "t"); kitsu.idFor("1"); kitsu.episodes("1", 0) } }
+            survive("JikanApi", shown) { runBlocking { com.tmplayer.online.JikanApi(http, limiter, "t").episodes("1", 1) } }
             val msone = MsoneApi(http, limiter, "t")
             survive("MsoneApi", shown) {
                 runBlocking {
@@ -688,6 +851,11 @@ class GarbageInputTest {
                     skips.introDbApp("tt1", 1, 1)
                 }
             }
+            // A fake client id, so the asking code runs; the real one is the user's to register.
+            survive("AnimeSkipApi", shown) {
+                runBlocking { AnimeSkipApi(http, limiter, "t", "fake-client", { 0L }).segments("1", 1, 1_400) }
+            }
+            survive("IdMapApi", shown) { runBlocking { IdMapApi(http, limiter, "t").forAniList("1") } }
         }
         assertNoFailures()
     }

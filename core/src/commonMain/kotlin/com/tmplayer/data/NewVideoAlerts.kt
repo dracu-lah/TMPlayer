@@ -127,7 +127,8 @@ object NewVideoAlerts {
                 latest[chatId] = repository.mediaPage(chatId, pageSize = PAGE).items
             }.onFailure { Logger.w(TAG, "chat not checked: ${it.message}") }
         }
-        val min = settings.minSizeBytes.first()
+        // A clip does not ping: the alerts keep a floor of their own (SizeFilter.NOTIFY_MIN).
+        val min = SizeFilter.notifyMin(settings.minSizeBytes.first())
         val max = settings.maxSizeBytes.first()
         val diff = diff(starred, seen, latest, titles) { SizeFilter.matches(it.sizeBytes, min, max) }
         settings.setNewVideoSeen(diff.seen)

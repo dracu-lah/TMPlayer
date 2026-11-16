@@ -1,5 +1,5 @@
 ---
-// /troubleshooting/: the three guides for the reports people send. English only.
+// /troubleshooting/: the guides for the reports people send. English only.
 import Base from '../../layouts/Base.astro';
 import BgArt from '../../components/BgArt.astro';
 import Header from '../../components/Header.astro';
@@ -27,7 +27,7 @@ const itemList = {
   })),
 };
 ---
-<Base path="/troubleshooting/" title="Troubleshooting TMPlayer: video, network and storage" description="Fixes for the problems people report: a Telegram video that will not start or keeps buffering, Telegram blocked on the network, and a phone or TV stick with no space left." getBar>
+<Base path="/troubleshooting/" title="Troubleshooting TMPlayer: video, sign in, storage" description="Fixes in plain words for what people report: a video that stutters, has no picture or will not start, an empty Home, sign in problems and full storage." getBar>
   <Fragment slot="head">
     <JsonLd data={breadcrumb(['Troubleshooting', '/troubleshooting/'])} />
     <JsonLd data={itemList} />
@@ -38,7 +38,7 @@ const itemList = {
 
 <main id="main">
 
-  <PageHead lede="The three problems people report most, with the quickest fix first." updated="/troubleshooting/">
+  <PageHead lede="The problems people report most: what you see, three steps at most, and what TMPlayer already does by itself." updated="/troubleshooting/">
     <Fragment slot="crumbs"><a href="/">{text(ENGLISH, 'common.home')}</a><span aria-hidden="true">/</span>Troubleshooting</Fragment>
     <Fragment slot="title">When something{' '}<em>does not work</em></Fragment>
     <Fragment slot="actions">

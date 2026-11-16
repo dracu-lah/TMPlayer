@@ -18,10 +18,14 @@ ShortDescription: Watch the videos in your Telegram chats while they download. U
 Description: |-
   TMPlayer plays the videos in your own Telegram chats and channels. It starts within seconds while
   the file is still downloading, and seeking re-aims the download instead of waiting for it. Sign in
-  with a QR code or your phone number, browse each chat's videos as a poster grid, resume where you
-  stopped and go on to the next episode. Embedded subtitles and audio tracks play through the bundled
-  mpv. TMPlayer is an unofficial client built on TDLib: it is not made by or affiliated with
-  Telegram, and it needs your own Telegram account.
+  with a QR code or your phone number, answer one question about which chats hold your videos, and
+  browse them as a poster grid. Series pages put every season in order, anime gets its own episode
+  titles, and skip intro, recap and credits buttons use the file's chapters and community timing
+  databases. A Downloads tab shows what is saved, Save space streams with only a small part kept,
+  and badges show 4K, HDR, Dolby Vision or Atmos where the file says so. Optional: keep your place,
+  bookmarks and favourites on all your devices through one small file in your own Saved Messages.
+  Embedded subtitles and audio tracks play through the bundled mpv. TMPlayer is an unofficial client
+  built on TDLib: it is not made by or affiliated with Telegram, and it needs your own Telegram account.
 Moniker: tmplayer
 Tags:
 - media-player

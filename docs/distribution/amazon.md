@@ -42,11 +42,15 @@ Fire TV):
 >
 > What it plays: MKV, MP4, AVI and TS, with embedded subtitles (including PGS and VobSub) and switchable audio tracks. DTS, TrueHD and E-AC3 are decoded in software when the device cannot.
 >
-> Series: episode names such as S02E04 are recognised, so the next episode is one press away and can play on its own. TMPlayer remembers where you stopped and keeps a Continue watching row.
+> Series: every season and episode in order, with season packs and episode ranges understood, so the next episode is one press away and can play on its own. Anime gets its own episode titles and pictures. Skip intro, recap and credits buttons use the chapters inside the file first, then community timing databases. TMPlayer remembers where you stopped and keeps a Continue watching row.
 >
-> Built for the remote: the whole app works with the D-pad, the Menu button opens the player menu, and rewind and fast forward work as you expect. Thumbnails while you scrub come from the part of the video already downloaded, and are switched off on devices with 1 GB of memory to keep playback smooth.
+> Easy to start: after you sign in, one question asks which chats hold your videos. Everything else is chosen for the device. While streaming you can choose Save space (keeps only the part you are watching, good for a stick with little room) or Keep video. The Downloads tab shows what is running, paused or saved, and Free up space gives room back without touching Telegram. Offline, Home puts what is on the device first.
 >
-> Private by design: TMPlayer talks directly to Telegram from your device. There is no TMPlayer account and no server in between. No ads of its own and no analytics. Crash reports are sent only if you agree.
+> Built for the remote: the whole app works with the D-pad, the Menu button opens the player menu, and rewind and fast forward work as you expect. Small badges show 4K, 1080p, HDR, Dolby Vision, Atmos or 5.1 where the file says so. If the picture stops while the sound goes on, TMPlayer tries another decoder or player by itself. Thumbnails while you scrub come from the part of the video already downloaded, and are switched off on devices with 1 GB of memory to keep playback smooth.
+>
+> Keep my place on all my devices: optional, off until you say yes. Where you stopped, what you watched, Watch later, favourites and bookmarks are kept in one small file in your own Saved Messages, so a TV, phone and computer agree.
+>
+> Private by design: TMPlayer talks directly to Telegram from your device. There is no TMPlayer account and no server in between. No ads of its own and no analytics. Crash reports are sent only if you agree. Optional lookups for posters, subtitles and skip times send only a title or an id, never your videos or anything from Telegram.
 >
 > Free and open source under the GPL-3.0 licence: https://github.com/dracu-lah/TMPlayer
 >
@@ -56,9 +60,9 @@ Fire TV):
 
 - Starts playing within seconds while the video is still downloading
 - Sign in by scanning a QR code with Telegram on your phone
-- Shows only the videos in a chat, as a poster grid, with Continue watching
 - MKV, MP4, AVI and TS with embedded subtitles and multiple audio tracks
-- Recognises episodes and plays the next one; remembers where you stopped
+- Recognises episodes, plays the next one and offers skip intro; remembers where you stopped
+- Save space or Keep video, a Downloads tab, and a Home that works offline
 
 **Keywords** (comma separated):
 

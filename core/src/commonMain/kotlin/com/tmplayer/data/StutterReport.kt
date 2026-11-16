@@ -76,6 +76,14 @@ object StutterReport {
          * reported as `unknown` ([verdictOf]).
          */
         val verdict: String = UNKNOWN_VERDICT,
+        /**
+         * The remedy codes the ladder had taken when the report was made (`ex,sw`, see
+         * [com.tmplayer.player.Remedy.code]), or empty for the defaults: whether the picture that
+         * stuttered was already on a changed path.
+         */
+        val remedies: String = "",
+        /** Ladder hops taken in this video so far. */
+        val hops: Int = 0,
     ) {
         /** What the daily limit counts: codec, bit depth and size bucket. */
         val kind: String get() = "${clean(codec)}:${if (bitDepth > 8) 10 else 8}:$sizeBucket"
@@ -86,7 +94,7 @@ object StutterReport {
         "codec", "profile", "bit_depth", "width", "height", "fps", "bitrate_kbps", "container",
         "decoder", "decoder_type", "prediction", "speed_percent", "dropped_frames", "frames", "underruns",
         "manufacturer", "model", "android", "cores", "abi", "app_version", "symptom", "fps_source",
-        "source", "buffered_ahead_ms", "verdict",
+        "source", "buffered_ahead_ms", "verdict", "remedies", "hops",
     )
 
     /** The words a verdict may be reported as: the causes of [StutterCause], lower case. */
@@ -136,6 +144,8 @@ object StutterReport {
         "source" to clean(facts.source),
         "buffered_ahead_ms" to facts.bufferedAheadMs.coerceIn(-1, 3_600_000).toString(),
         "verdict" to verdictOf(facts.verdict),
+        "remedies" to clean(facts.remedies),
+        "hops" to facts.hops.coerceIn(0, 10).toString(),
     )
 
     /**

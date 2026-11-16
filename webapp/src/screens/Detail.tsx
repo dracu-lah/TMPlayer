@@ -1,13 +1,14 @@
 import { createEffect, createMemo, createResource, createSignal, For, Match, onCleanup, onMount, Show, Switch, type JSX } from 'solid-js'
 import { A, useLocation, useNavigate, useParams } from '@solidjs/router'
-import { ArrowLeft02Icon, Cancel01Icon, ClapperboardIcon, Clock01Icon, LeftToRightListBulletIcon, ListVideoIcon, PlayIcon, RepeatIcon, Search01Icon, Tick02Icon } from '@hugeicons/core-free-icons'
+import { ArrowLeft02Icon, Cancel01Icon, ClapperboardIcon, Clock01Icon, FilterHorizontalIcon, LeftToRightListBulletIcon, ListVideoIcon, PlayIcon, RepeatIcon, Search01Icon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { api, errorText } from '../tg/rpc'
 import { back } from '../session'
 import { t } from '../i18n'
-import { dropResume, getResume, laterIds, namedLists, progress as readProgress, setLater, setShowLater, setWatched, setWatchedMany, settings, showLaterId, watchedList, watchedTick } from '../store'
+import { dropResume, getResume, laterIds, namedLists, progress as readProgress, setLater, setShowLater, setSetting, setWatched, setWatchedMany, settings, showLaterId, watchedList, watchedTick } from '../store'
 import { openListPicker } from './Lists'
 import { chatGone, forgetGone } from '../goneVideos'
 import { showChoices, type MarkChoice } from './showMarks'
+import { agrees, hasGaps, rows as guideRows, seasons as guideSeasons, type HeldSeason, type Row as GuideRow, type SeasonStop } from './seriesGuide'
 import { Icon, type IconData } from '../ui/Icon'
 import { TmdbMark } from '../ui/TmdbMark'
 import { TitleLogo } from '../ui/TitleLogo'
@@ -137,6 +138,8 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
     // queue: until it is in, the page shows the video's own frame, never a poster that a film's wide
     // picture then replaces. The wide picture comes light first (w300), then whole (w780).
     const [kind, setKind] = createSignal<'film' | 'show' | null | undefined>(undefined)
+    // The answer could not be had (no key, offline): not "nothing found", so no line says so.
+    const [failed, setFailed] = createSignal(false)
     const film = () => kind() === 'film'
     // An effect, not a mount: choosing another title ('Choose the right poster') asks again at once.
     let asked = false
@@ -148,6 +151,7 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
             live = false
             stop()
         })
+        setFailed(false)
         if (asked) {
             setKind(undefined)
             setPoster(null)
@@ -163,9 +167,15 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
                 if (k === 'film' && f.backdrop) stop = loadBackdropLightFirst(ask, (u) => live && setBackdrop(u))
                 else if (f.poster) loadPoster(ask, 'w342', { priority: true }).then((u) => live && u && setPoster(u), () => {})
             },
-            () => live && setKind(null),
+            () => live && (setFailed(true), setKind(null)),
         )
     })
+    // Why there is no poster, in one line with the one action that fixes it ("Why no poster?"): never for a match, while the answer is coming, or when it could not be had.
+    const why = (): 'off' | 'unread' | 'nothing' | null => {
+        if (!settings().posters) return 'off'
+        if (kind() === undefined || kind() !== null || failed()) return null
+        return askOf(item) ? 'nothing' : 'unread'
+    }
     const title = () => found()?.title || props.info?.title || item.title
     const ep = () => props.info?.episode ?? null
     const episodeName = () => extras()?.episode?.name || ep()?.name || ''
@@ -348,6 +358,19 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
                             <Round icon={ClapperboardIcon} label={t('detail.round_trailer')} href={`https://www.youtube.com/watch?v=${extras()!.trailer}`} />
                         </Show>
                     </div>
+                    <Show when={why()}>
+                        {(w) => (
+                            <p class="poster-why muted small">
+                                <span>{t(w() === 'off' ? 'poster.why_off' : w() === 'unread' ? 'poster.why_name_none' : 'poster.why_nothing')}</span>
+                                <Show
+                                    when={w() === 'off'}
+                                    fallback={<button type="button" class="link" onClick={() => openPosterPicker(item, props.info?.seasons.flatMap((s) => s.episodes.map((e) => e.item)) ?? [])}>{t('poster.why_fix')}</button>}
+                                >
+                                    <button type="button" class="link" onClick={() => setSetting('posters', true)}>{t('poster.why_off_action')}</button>
+                                </Show>
+                            </p>
+                        )}
+                    </Show>
                 </div>
                 <Show when={(props.info?.copies.length ?? 0) > 1}>
                     <Versions item={item} info={props.info!} />
@@ -373,7 +396,7 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
                 <div class="detail-side">{aboutSection()}</div>
                 </div>
                 <Show when={props.info?.seasons.length}>
-                    <Episodes info={props.info!} current={item} />
+                    <Episodes info={props.info!} current={item} extras={extras()} />
                 </Show>
                 <Show when={!props.info?.seasons.length && props.info?.more.length}>
                     <More info={props.info!} />
@@ -497,17 +520,77 @@ function Person(props: { person: { name: string; role: string; photo: string | n
     )
 }
 
+/** The episode number in a code like "S01E04" or "S01E04a"; 0 when it has none. */
+function numberOf(code: string): number {
+    return Number(/E(\d+)/i.exec(code)?.[1] ?? 0)
+}
+
+const ONLY_MINE = 'tm.series.only_mine'
+
+/** "Only show what I have" (T9), kept per browser; off (the full list) without it or where storage is blocked. */
+function readOnlyMine(): boolean {
+    try {
+        return localStorage.getItem(ONLY_MINE) === '1'
+    } catch {
+        return false
+    }
+}
+
+function saveOnlyMine(on: boolean): void {
+    try {
+        localStorage.setItem(ONLY_MINE, on ? '1' : '0')
+    } catch {
+        // Storage blocked: the choice lasts until the page is left.
+    }
+}
+
 /**
  * The show's episodes, a season at a time, the one this page is about marked, the watched ones
  * ticked. Over them the show's own actions, as the apps' show page has them (HX20): Watch later for
  * the whole show, and Mark episodes, whose card lists the season's and the show's lines with how
  * many episodes each changes, so picking one is the confirmation.
  */
-function Episodes(props: { info: WatchInfo; current: VideoItem }) {
+function Episodes(props: { info: WatchInfo; current: VideoItem; extras: Extras | null }) {
     const progress = useProgress()
+    const navigate = useNavigate()
     const seasonOf = () => props.info.seasons.find((s) => s.episodes.some((e) => e.item.messageId === props.current.messageId))?.number ?? props.info.seasons[0]?.number
     const [picked, setPicked] = createSignal<number | null>(null)
-    const season = createMemo(() => props.info.seasons.find((s) => s.number === (picked() ?? seasonOf())) ?? props.info.seasons[0])
+    // Every season and episode TMDB knows, laid over the chat's (T9): the chat's own list alone while
+    // there is no season list, for a wrong match, or with "Only show what I have" on.
+    const today = new Date().toISOString().slice(0, 10)
+    const [onlyMine, setOnlyMine] = createSignal(readOnlyMine())
+    const heldSeasons = createMemo((): HeldSeason[] =>
+        props.info.seasons.map((s) => ({ number: s.number, numbers: s.episodes.map((e) => numberOf(e.code)), covered: s.covered ?? [], packed: props.info.packs.some((p) => p.season === s.number) })),
+    )
+    const listed = () => props.extras?.seasonList ?? []
+    const next = () => props.extras?.next ?? null
+    const full = createMemo((): SeasonStop[] | null => {
+        if (!listed().length && !next()) return null
+        return agrees(heldSeasons(), listed()) ? guideSeasons(heldSeasons(), listed(), next(), today) : null
+    })
+    const guide = () => (onlyMine() ? null : full())
+    const stops = createMemo((): SeasonStop[] =>
+        guide() ?? heldSeasons().map((s) => ({ number: s.number, have: new Set(s.numbers).size, total: null, state: 'have' as const, airDate: null, special: s.number === 0 })),
+    )
+    const shown = createMemo(() => {
+        const want = picked() ?? seasonOf()
+        return stops().some((s) => s.number === want) ? want : (props.info.seasons[0]?.number ?? 0)
+    })
+    const season = createMemo(() => props.info.seasons.find((s) => s.number === shown()))
+    // The whole-season files of the season shown, after its episodes (a pack of several seasons sits under its first).
+    const packsHere = () => props.info.packs.filter((p) => p.season === shown())
+    const packName = (p: { season: number; seasonEnd: number | null }) => (p.seasonEnd ? t('series.pack_span', { first: p.season, last: p.seasonEnd }) : t('series.pack_whole'))
+    const lines = createMemo((): GuideRow[] => {
+        const n = shown()
+        if (!guide()) return (season()?.episodes ?? []).map((e) => ({ kind: 'have' as const, number: numberOf(e.code) }))
+        return guideRows(n, heldSeasons(), listed().find((s) => s.number === n), next(), today)
+    })
+    const [gap, setGap] = createSignal<{ number: number; state: 'missing' | 'upcoming'; airDate: string | null } | null>(null)
+    let gapCard!: HTMLDialogElement
+    const code = (n: number) => `S${String(shown()).padStart(2, '0')}E${String(n).padStart(2, '0')}`
+    const find = (words: string) => navigate(`/search?q=${encodeURIComponent(words)}`)
+    const day = (iso: string) => new Date(iso).toLocaleDateString('en', { day: 'numeric', month: 'short', year: 'numeric' })
+    const seasonName = (n: number) => (n === 0 ? t('series.specials') : t('series.season', { number: n }))
     const [seen] = createResource(watchedTick, async () => new Set((await watchedList()).map((w) => `${w.chatId}:${w.messageId}`)))
     const watchedSet = () => seen.latest ?? new Set<string>()
     const seasons = () => props.info.seasons.map((s) => ({ number: s.number, episodes: s.episodes.map((e) => e.item) }))
@@ -551,6 +634,20 @@ function Episodes(props: { info: WatchInfo; current: VideoItem }) {
                 />
                 {/* The whole show in one of the viewer's named lists (HX43). */}
                 <Round icon={LeftToRightListBulletIcon} label={t('lists.add_to')} onClick={() => openListPicker(props.current, props.info.title)} />
+                {/* The honest full list is the default; this is the way back to only the viewer's own (T9). */}
+                <Show when={onlyMine() ? hasGaps(guideSeasons(heldSeasons(), listed(), next(), today)) && agrees(heldSeasons(), listed()) : hasGaps(stops())}>
+                    <Round
+                        icon={FilterHorizontalIcon}
+                        label={onlyMine() ? t('series.show_all_short') : t('series.only_mine_short')}
+                        on={onlyMine()}
+                        onClick={() => {
+                            const on = !onlyMine()
+                            setOnlyMine(on)
+                            saveOnlyMine(on)
+                            setSaid(on ? t('series.only_mine') : t('series.show_all'))
+                        }}
+                    />
+                </Show>
             </div>
             <p class="muted small" role="status" aria-live="polite">{said()}</p>
             <dialog class="confirm card-menu" ref={marks} aria-labelledby="marks-title" onClick={(e) => e.target === marks && marks.close()}>
@@ -574,36 +671,112 @@ function Episodes(props: { info: WatchInfo; current: VideoItem }) {
                 </div>
             </dialog>
             <div class="season-tabs" role="tablist">
-                <For each={props.info.seasons}>
+                <For each={stops()}>
                     {(s) => (
-                        <button role="tab" class="season-chip" classList={{ on: s.number === season()?.number }} aria-selected={s.number === season()?.number} onClick={() => setPicked(s.number)}>
-                            <span>{t('series.season', { number: s.number })}</span>
-                            <small>{t('series.episodes_count', { count: s.episodes.length })}</small>
+                        <button role="tab" class="season-chip" classList={{ on: s.number === shown(), quiet: s.state !== 'have' }} aria-selected={s.number === shown()} onClick={() => setPicked(s.number)}>
+                            <span class="season-name">
+                                {/* "In your chats" by presence, not by a count that may be wrong. */}
+                                <Show when={guide() && s.state === 'have'}>
+                                    <span class="season-dot" role="img" aria-label={t('series.in_your_chats')} />
+                                </Show>
+                                {seasonName(s.number)}
+                            </span>
+                            <small>
+                                {!guide()
+                                    ? t('series.episodes_count', { count: s.have })
+                                    : s.state === 'missing'
+                                      ? t('series.not_in_chats')
+                                      : s.state === 'upcoming'
+                                        ? s.airDate
+                                            ? t('detail.airs_on', { date: day(s.airDate) })
+                                            : t('detail.upcoming')
+                                        : s.total
+                                          ? t('series.episodes_count', { count: s.total })
+                                          : ''}
+                            </small>
                         </button>
                     )}
                 </For>
             </div>
+            <Show when={guide() && !season()?.episodes.length && !packsHere().length}>
+                <div class="gap-note">
+                    <p class="muted">{stops().find((s) => s.number === shown())?.state === 'upcoming' ? t('detail.airs_on', { date: day(stops().find((s) => s.number === shown())?.airDate ?? '') }) : t('series.season_gap_note', { season: seasonName(shown()) })}</p>
+                    <Show when={stops().find((s) => s.number === shown())?.state === 'missing'}>
+                        <button type="button" class="link" onClick={() => find(`${props.info.title} S${String(shown()).padStart(2, '0')}`)}>{t('series.find_elsewhere')}</button>
+                    </Show>
+                </div>
+            </Show>
+            <dialog class="confirm card-menu" ref={gapCard} aria-labelledby="gap-title" onClick={(e) => e.target === gapCard && gapCard.close()}>
+                <h2 id="gap-title">{gap() ? code(gap()!.number) : ''}</h2>
+                <p class="muted">{props.info.title}</p>
+                <p>{gap()?.state === 'upcoming' ? (gap()!.airDate ? t('detail.airs_on', { date: day(gap()!.airDate!) }) : t('detail.upcoming')) : gap() ? t('series.gap_missing', { code: code(gap()!.number) }) : ''}</p>
+                <Show when={gap()?.state === 'missing'}>
+                    <button class="menu-row" type="button" onClick={() => { const g = gap(); gapCard.close(); if (g) find(`${props.info.title} ${code(g.number)}`) }}>
+                        <Icon icon={Search01Icon} size={22} />
+                        <span>{t('series.find_elsewhere')}</span>
+                    </button>
+                </Show>
+                <div class="confirm-buttons">
+                    <button class="link" type="button" onClick={() => gapCard.close()}>{t('common.close')}</button>
+                </div>
+            </dialog>
             <ol class="episode-list">
-                <For each={season()?.episodes ?? []}>
-                    {(e) => {
-                        const here = () => e.item.messageId === props.current.messageId && e.item.chatId === props.current.chatId
-                        return (
-                            <li>
-                                <A class="episode" classList={{ playing: here() }} href={watchPath(e.item)} state={{ video: e.item }} aria-current={here() ? 'true' : undefined}>
-                                    <span class="episode-code">{e.code}</span>
-                                    <span class="episode-name">{e.name ?? shortLength(e.item.duration)}</span>
-                                    <Show when={watchedSet().has(`${e.item.chatId}:${e.item.messageId}`)}>
-                                        <span class="episode-watched" role="img" aria-label={t('detail.watched_line')}>
-                                            <Icon icon={Tick02Icon} size={16} />
+                <For each={lines()}>
+                    {(line) => (
+                        <Show
+                            when={line.kind === 'have'}
+                            fallback={
+                                <li>
+                                    <button
+                                        type="button"
+                                        class="episode gap"
+                                        onClick={() => {
+                                            if (line.kind !== 'gap') return
+                                            setGap({ number: line.number, state: line.state, airDate: line.airDate })
+                                            gapCard.showModal()
+                                        }}
+                                    >
+                                        <span class="episode-code">{code(line.number)}</span>
+                                        <span class="episode-name">
+                                            {line.kind === 'gap' && line.state === 'upcoming' ? (line.airDate ? t('detail.airs_on', { date: day(line.airDate) }) : t('detail.upcoming')) : t('series.not_in_chats')}
                                         </span>
-                                    </Show>
-                                    <Show when={progress(e.item)}>
-                                        {(p) => <span class="episode-progress"><span style={{ width: `${Math.min(100, p() * 100)}%` }} /></span>}
-                                    </Show>
-                                </A>
-                            </li>
-                        )
-                    }}
+                                    </button>
+                                </li>
+                            }
+                        >
+                            <For each={(season()?.episodes ?? []).filter((e) => numberOf(e.code) === line.number)}>
+                                {(e) => {
+                                    const here = () => e.item.messageId === props.current.messageId && e.item.chatId === props.current.chatId
+                                    return (
+                                        <li>
+                                            <A class="episode" classList={{ playing: here() }} href={watchPath(e.item)} state={{ video: e.item }} aria-current={here() ? 'true' : undefined}>
+                                                <span class="episode-code">{e.code}</span>
+                                                <span class="episode-name">{e.name ?? shortLength(e.item.duration)}</span>
+                                                <Show when={watchedSet().has(`${e.item.chatId}:${e.item.messageId}`)}>
+                                                    <span class="episode-watched" role="img" aria-label={t('detail.watched_line')}>
+                                                        <Icon icon={Tick02Icon} size={16} />
+                                                    </span>
+                                                </Show>
+                                                <Show when={progress(e.item)}>
+                                                    {(p) => <span class="episode-progress"><span style={{ width: `${Math.min(100, p() * 100)}%` }} /></span>}
+                                                </Show>
+                                            </A>
+                                        </li>
+                                    )
+                                }}
+                            </For>
+                        </Show>
+                    )}
+                </For>
+                <For each={packsHere()}>
+                    {(p) => (
+                        <li>
+                            <A class="episode pack" href={watchPath(p.item)} state={{ video: p.item }}>
+                                <span class="episode-code">{packName(p)}</span>
+                                <span class="episode-name">{t('series.pack_note')}</span>
+                            </A>
+                        </li>
+                    )}
                 </For>
             </ol>
         </section>

@@ -11,6 +11,7 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.FocusRequester
+import com.tmplayer.ui.components.rowAfterRemoving
 import androidx.compose.ui.draw.alpha
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.foundation.clickable
@@ -30,6 +31,7 @@ import com.tmplayer.ui.browse.TouchChipStrip
 import com.tmplayer.ui.browse.TouchFilterChip
 import com.tmplayer.ui.browse.TouchPage
 import com.tmplayer.ui.browse.TouchPageSpec
+import com.tmplayer.ui.browse.toTop
 import com.tmplayer.ui.browse.VideoPosterThumb
 import com.tmplayer.ui.components.FloatingBackButton
 import com.tmplayer.ui.components.FloatingBarIcon
@@ -144,6 +146,7 @@ import com.tmplayer.ui.components.ScrollToTop
 import com.tmplayer.ui.components.FastScroller
 import com.tmplayer.ui.components.TvConfirm
 import com.tmplayer.ui.components.isTouch
+import com.tmplayer.ui.components.rememberActionToast
 import com.tmplayer.ui.components.rememberToast
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.icons.TmIcons
@@ -175,7 +178,7 @@ import kotlinx.coroutines.withContext
  * against the index; [fileId] is the TDLib id resolved against this session, for the rows TDLib
  * still holds.
  */
-private data class DownloadRow(
+internal data class DownloadRow(
     val key: String,
     val title: String,
     val bytes: Long,
@@ -220,8 +223,6 @@ private data class DownloadRow(
 fun DownloadsScreen(
     onPlay: (ResumeRecord) -> Unit,
     onBack: () -> Unit,
-    /** Opens on the cached videos rather than the downloads, for Settings' Cached videos row. */
-    openOnCached: Boolean = false,
     /**
      * Opens with Free up space's review already up: for "Not enough space", and for Settings'
      * Storage, whose Free up space is this page's.
@@ -252,7 +253,11 @@ fun DownloadsScreen(
     // about until the file has landed. In the order the videos were asked for, which is the order
     // they will arrive in, so the list does not reshuffle itself as the figures move.
     val activeMap by OfflineDownloads.active.collectAsStateWithLifecycle()
-    val active = remember(activeMap) { activeMap.values.sortedBy { it.order } }
+    // Cards cancelled inside their Undo window ([cancelRow]) are already gone from the page.
+    val cancelling = CancelWindow.shared
+    val active = remember(activeMap, cancelling.pending) {
+        activeMap.values.filter { it.fileId !in cancelling.pending }.sortedBy { it.order }
+    }
 
     // Each waiting video's place in the queue, worked out once for the list rather than once for
     // every row in it. See where it is read, below.
@@ -269,6 +274,9 @@ fun DownloadsScreen(
 
     var rows by remember { mutableStateOf<List<DownloadRow>>(emptyList()) }
     var cachedRows by remember { mutableStateOf<List<DownloadRow>>(emptyList()) }
+    // One list for what the viewer downloaded and what playing left behind (R2): the second wears an
+    // "Auto-saved" tag and a Keep action, and is otherwise a row like any other.
+    val everything = remember(rows, cachedRows) { rows + cachedRows }
     // Empty until the first measurement lands, never read during composition: reading the disk is
     // a blocking statvfs().
     var disk by remember { mutableStateOf(DiskInfo.EMPTY) }
@@ -286,8 +294,8 @@ fun DownloadsScreen(
     var picking by remember { mutableStateOf(false) }
     // Which tab is up. Opens on whichever has something in it: somebody who just queued three
     // videos wants the queue, and somebody opening this on a quiet phone wants what they have.
-    var tab by rememberSaveable { mutableStateOf(if (openOnCached) CACHED else COMPLETED) }
-    var landedOnATab by rememberSaveable { mutableStateOf(openOnCached) }
+    var tab by rememberSaveable { mutableStateOf(COMPLETED) }
+    var landedOnATab by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(active.isNotEmpty()) {
         if (landedOnATab) return@LaunchedEffect
         if (active.isNotEmpty()) tab = ONGOING
@@ -295,13 +303,11 @@ fun DownloadsScreen(
     }
     var confirmingDeleteMany by remember { mutableStateOf(false) }
 
-    // A phone and a tablet draw one page: what is downloading (only while something is), what is
-    // downloaded, grouped by show, and Recently played folded away at the foot. The television
-    // keeps its three tabs (see [TvDownloads]): a remote steps through one short list at a time
-    // better than down one long page, and its tabs are the first thing it lands on.
+    // A phone and a tablet draw one page: what is downloading (only while something is), then one
+    // list of what is on this phone, grouped by show. The television keeps its two tabs (see
+    // [TvDownloads]): a remote steps through one short list at a time better than down one long
+    // page, and its tabs are the first thing it lands on.
     val onePage = isTouch()
-    // Settings' Recently played row opens the page with that section unfolded and in view.
-    var cachedOpen by rememberSaveable { mutableStateOf(openOnCached) }
     var freeingUp by remember { mutableStateOf(false) }
     // A Free up space run under way, and the line it left: what it freed, and what it had to leave.
     var freeUpBusy by remember { mutableStateOf(false) }
@@ -317,6 +323,15 @@ fun DownloadsScreen(
     var rowFocusAsked by remember { mutableStateOf(0) }
     val rowFocus = remember { FocusRequester() }
     val remote = !isTouch()
+    // The row the player was opened from: when the player closes the remote is on it again, not on
+    // whatever the window picked (R2, "Back from the player returns focus to the opener").
+    val opener = remember { OpenerMemory() }
+    RestoreOpenerOnResume(opener) { key ->
+        if (remote) {
+            rowFocusKey = key
+            rowFocusAsked++
+        }
+    }
     // A row of the list, wearing the requester when it is the one the remote goes to next.
     val focusTarget: @Composable (String, @Composable () -> Unit) -> Unit = { key, card ->
         Box(if (remote && key == rowFocusKey) Modifier.focusRequester(rowFocus) else Modifier) { card() }
@@ -364,9 +379,6 @@ fun DownloadsScreen(
     // The list's own height, which an empty section's message takes a share of as its least.
     val viewportPx by remember(listState) { derivedStateOf { listState.layoutInfo.viewportSize.height } }
     val viewport = with(androidx.compose.ui.platform.LocalDensity.current) { viewportPx.toDp() }
-    // Where the Recently played heading sits in the list, written as the list is laid out, so
-    // the page can scroll to it when it opens on that section.
-    val cachedHeadingAt = remember { intArrayOf(-1) }
 
     fun leavePicking() {
         picking = false
@@ -409,7 +421,7 @@ fun DownloadsScreen(
 
     // Only the rows that are still on the list. A selection that outlived its videos would offer
     // to delete or share things that are no longer there.
-    val chosen = remember(picked, rows) { rows.filter { it.key in picked } }
+    val chosen = remember(picked, everything) { everything.filter { it.key in picked } }
     // The selection's running total, and a warning when it is more than the room left in the
     // folder saved to last (read off the main thread: it is a statfs()).
     val chosenBytes = remember(chosen) { chosen.sumOf { it.bytes } }
@@ -422,8 +434,8 @@ fun DownloadsScreen(
         L.downloadsSaveToFolderOverLast(free = Translator.messages.formatter.bytes(free), folder = name)
     }
 
-    // Every row, because every row is a download.
-    val shown = rows
+    // Every row of the one list: a selection never reaches further than what the page shows.
+    val shown = everything
 
     // A selection belongs to the tab it was made on. Carried across, its bar would sit under a
     // list of downloads it says nothing about.
@@ -862,7 +874,7 @@ fun DownloadsScreen(
         pickedTree = null
         val keys = FolderExport.pendingKeys.orEmpty().toSet()
         FolderExport.pendingKeys = null
-        val chosenNow = rows.filter { it.key in keys }
+        val chosenNow = everything.filter { it.key in keys }
         if (chosenNow.isEmpty()) return@LaunchedEffect
         val candidates = chosenNow.map { row ->
             FolderExport.Candidate(row.key, row.record, row.fileId, row.title, whole = !row.cached && !row.missing && row.complete)
@@ -901,8 +913,8 @@ fun DownloadsScreen(
     // The episodes of one show sit together under its name, in watching order, and every other
     // video stands on its own, newest first. The rows
     // and every action on them are the tabs' own; only the order and the headings are new.
-    val shelf = remember(rows, downloadsSort) {
-        com.tmplayer.data.DownloadShelf.arrange(rows, { it.record.toMediaItem() }, { it.key }, { it.record.updatedAt }, sort = downloadsSort)
+    val shelf = remember(everything, downloadsSort) {
+        com.tmplayer.data.DownloadShelf.arrange(everything,{ it.record.toMediaItem() }, { it.key }, { it.record.updatedAt }, sort = downloadsSort)
     }
     // The downloads' rows in the order the list shows them, for where the remote goes after one.
     val keptOrder = remember(shelf) {
@@ -914,19 +926,40 @@ fun DownloadsScreen(
         }
     }
     // Read once the removal has run, when the list composed earlier is out of date.
-    fun keptNow(): Set<String> = rows.mapTo(HashSet()) { it.key }
+    fun keptNow(): Set<String> = everything.mapTo(HashSet()) { it.key }
     fun activeNow(): Set<String> = OfflineDownloads.active.value.values.mapTo(HashSet()) { "active_${it.fileId}" }
     val activeOrder = remember(active) { active.map { "active_${it.fileId}" } }
-    // Cancel takes the row the remote is on out of the queue: the next one down takes it.
+    // Cancel on a touch screen is undoable (7.2): the card leaves at once and the download waits,
+    // paused, with its part file, for [CANCEL_UNDO_MS]; Undo brings the card back and resumes it, and
+    // only after the window is the part file deleted. Each cancel has a token, so an Undo and a
+    // second Cancel never finish one another's window. The window outlives the page: rotating or
+    // leaving inside it still ends with the part file deleted, as the card promised.
+    val undoToast = rememberActionToast()
+    // A remote cannot reach a toast, so there Cancel stays what it was: the row goes with the
+    // remote on it, on to the next one down.
     val cancelRow: (OfflineDownloads.Progress) -> Unit = { progress ->
-        val before = activeOrder
-        scope.launch {
-            dropUnfinished(progress.fileId)
-            // The download service takes it off the queue a moment after it is asked to.
-            kotlinx.coroutines.withTimeoutOrNull(ROW_GONE_WAIT_MS) {
-                OfflineDownloads.active.first { queue -> queue.values.none { it.fileId == progress.fileId } }
+        // A failed card's word is Dismiss: nothing is running, so there is nothing to bring back.
+        if (touch && progress.stage != OfflineDownloads.Stage.Failed) {
+            val id = progress.fileId
+            val wasPaused = progress.stage == OfflineDownloads.Stage.Paused
+            OfflineDownloads.pause(context, id)
+            val token = cancelling.begin(id)
+            undoToast(L.downloadsCancelled, L.browseUndo) {
+                if (cancelling.undo(id, token) && !wasPaused) OfflineDownloads.resume(context, id)
             }
-            landAfterRemoving(before, "active_${progress.fileId}", activeNow())
+            // Not the page's scope: that dies with the page or a rotation, and the window must end
+            // either way with the part file gone.
+            cancelling.schedule(com.tmplayer.platform.Background.scope, CANCEL_UNDO_MS, id, token, ::dropUnfinished)
+        } else {
+            val before = activeOrder
+            scope.launch {
+                dropUnfinished(progress.fileId)
+                // The download service takes it off the queue a moment after it is asked to.
+                kotlinx.coroutines.withTimeoutOrNull(ROW_GONE_WAIT_MS) {
+                    OfflineDownloads.active.first { queue -> queue.values.none { it.fileId == progress.fileId } }
+                }
+                landAfterRemoving(before, "active_${progress.fileId}", activeNow())
+            }
         }
     }
     // Newest, Name and Largest over the downloads, once there are two to put in order.
@@ -934,7 +967,7 @@ fun DownloadsScreen(
     // just played (PlayRandom). Nothing for a list with no finished video.
     val watchedStore = remember(context) { com.tmplayer.data.WatchedStore(context) }
     val watchedNow by remember(watchedStore) { watchedStore.watched }.collectAsStateWithLifecycle(initialValue = emptyMap())
-    val playRandom: (() -> Unit)? = rows.filter { it.complete && !it.missing && it.bytes > 0 }.takeIf { it.isNotEmpty() }?.let { playable ->
+    val playRandom: (() -> Unit)? = everything.filter { it.complete && !it.missing && it.bytes > 0 }.takeIf { it.isNotEmpty() }?.let { playable ->
         {
             com.tmplayer.data.PlayRandom.next(
                 scope = com.tmplayer.data.PlayRandom.DOWNLOADS_SCOPE,
@@ -952,7 +985,16 @@ fun DownloadsScreen(
             row = row,
             picking = picking,
             checked = row.key in picked,
-            onPlay = { if (row.partial) saveToDownloads(row) else onPlay(row.record) },
+            // An auto-saved video plays as it is, part loaded or not: Keep is its own button.
+            onPlay = {
+                if (row.partial && !row.cached) {
+                    saveToDownloads(row)
+                } else {
+                    opener.opened(row.key)
+                    onPlay(row.record)
+                }
+            },
+            onKeep = if (row.cached) ({ saveToDownloads(row) }) else null,
             onShare = { share(listOf(row)) },
             // A phone's card has room for it as a square beside Delete; a television's card stays
             // Watch, Share and Delete, and its heading's Save to folder says why it cannot.
@@ -974,6 +1016,15 @@ fun DownloadsScreen(
             },
         )
     } }
+    // What "Auto-saved" means, once, over the list that has such a video in it.
+    val autoSavedNote: @Composable () -> Unit = {
+        Text(
+            L.downloadsAutoSavedNote,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = TEXT_EDGE, end = TEXT_EDGE, top = 4.dp, bottom = 4.dp),
+        )
+    }
     // The top of the page: what TMPlayer uses and what is free, and the one Free up space. Every
     // way to clear a part of it (the chart's legend, the cards' Delete on Recently played and the
     // unmatched files, Delete all) is in the review this opens.
@@ -1048,45 +1099,10 @@ fun DownloadsScreen(
             return@body
         }
 
-        if (tab == CACHED) {
-            item {
-                Text(
-                    L.downloadsCachedTabNote,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = TEXT_EDGE, end = TEXT_EDGE, top = 16.dp, bottom = 4.dp),
-                )
-            }
-            // Watch and Save to Downloads, the two things only this list does. Clearing them, and
-            // the unmatched files beside them, is Free up space's review on the Downloaded tab.
-            items(cachedRows, key = { it.key }) { row ->
-                DownloadCard(
-                    row = row,
-                    picking = false,
-                    checked = false,
-                    onPlay = { onPlay(row.record) },
-                    onShare = { saveToDownloads(row) },
-                    onDelete = null,
-                    onToggle = {},
-                    onHold = null,
-                )
-            }
-            if (counted && cachedRows.isEmpty()) {
-                item {
-                    EmptyState(0.6f, viewport) {
-                        BigEmpty(
-                            L.downloadsEmptyCached,
-                            icon = TmIcons.Download,
-                        )
-                    }
-                }
-            }
-            return@body
-        }
-
         // Free up space first, then the list: the remote steps down from the tabs onto the button.
         item(key = "storage") { storageCard() }
-        if (rows.size > 1) item(key = "sort") { sortChips() }
+        if (everything.size > 1) item(key = "sort") { sortChips() }
+        if (cachedRows.isNotEmpty()) item(key = "auto-note") { autoSavedNote() }
         // Grouped by show as the phone's page is, so the two read as one list. The headings take
         // no focus: the remote steps from card to card and each heading scrolls in with its first.
         shelf.forEach { entry ->
@@ -1122,9 +1138,7 @@ fun DownloadsScreen(
         }
     }
     val pageBody: LazyListScope.() -> Unit = {
-        var at = 0
         item(key = "storage") { storageCard() }
-        at++
         // Only while something is on its way: a Downloading heading over nothing is a section to
         // read past on every visit.
         if (active.isNotEmpty()) {
@@ -1152,21 +1166,18 @@ fun DownloadsScreen(
                     onFreeUp = { freeingUp = true },
                 )
             }
-            at += 1 + active.size
         }
         item(key = "h-done") {
-            SectionHeading(if (rows.isEmpty()) L.downloadsDownloaded else L.downloadsTabDownloadedCount(count = rows.size))
+            SectionHeading(if (everything.isEmpty()) L.downloadsOnThisPhone else L.downloadsOnThisPhoneCount(count = everything.size))
         }
-        at += 1
-        if (rows.size > 1) {
+        if (everything.size > 1) {
             item(key = "sort") { sortChips() }
-            at++
         }
+        if (cachedRows.isNotEmpty()) item(key = "auto-note") { autoSavedNote() }
         shelf.forEach { entry ->
             when (entry) {
                 is com.tmplayer.data.DownloadShelf.Entry.Single -> {
                     item(key = entry.key) { keptCard(entry.row) }
-                    at++
                 }
                 is com.tmplayer.data.DownloadShelf.Entry.Show -> {
                     item(key = entry.key) {
@@ -1179,11 +1190,10 @@ fun DownloadsScreen(
                         )
                     }
                     items(entry.episodes, key = { it.key }) { keptCard(it) }
-                    at += 1 + entry.episodes.size
                 }
             }
         }
-        if (counted && rows.isEmpty()) {
+        if (counted && everything.isEmpty()) {
             item(key = "e-done") {
                 EmptyState(0.4f, viewport) {
                     BigEmpty(
@@ -1196,53 +1206,13 @@ fun DownloadsScreen(
                     )
                 }
             }
-            at++
-        }
-        cachedHeadingAt[0] = at
-        item(key = "h-cached") {
-            CollapsibleHeading(
-                title = if (cachedRows.isEmpty()) L.downloadsCached else L.downloadsTabCachedCount(count = cachedRows.size),
-                detail = cachedRows.sumOf { it.bytes }.takeIf { it > 0 }?.let { Translator.messages.formatter.bytes(it) },
-                open = cachedOpen,
-                onToggle = { cachedOpen = !cachedOpen },
-            )
-        }
-        if (cachedOpen) {
-            item(key = "n-cached") {
-                Text(
-                    if (counted && cachedRows.isEmpty()) L.downloadsEmptyCached else L.downloadsCachedTabNote,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = TEXT_EDGE, end = TEXT_EDGE, bottom = 4.dp),
-                )
-            }
-            // Watch and Save to Downloads; clearing them is Free up space's review at the top.
-            items(cachedRows, key = { it.key }) { row ->
-                DownloadCard(
-                    row = row,
-                    picking = false,
-                    checked = false,
-                    onPlay = { onPlay(row.record) },
-                    onShare = { saveToDownloads(row) },
-                    onDelete = null,
-                    onToggle = {},
-                    onHold = null,
-                )
-            }
         }
     }
     val body = if (onePage) pageBody else tabBody
-    // Opened from Settings' Recently played row: that section, unfolded, in view.
-    LaunchedEffect(counted) {
-        if (!counted || !openOnCached || !onePage) return@LaunchedEffect
-        withFrameNanos { }
-        if (cachedHeadingAt[0] > 0) runCatching { listState.scrollToItem(cachedHeadingAt[0]) }
-    }
     val tabLabel = { which: Int ->
         when (which) {
             ONGOING -> if (active.isEmpty()) L.downloadsTabDownloading else L.downloadsTabDownloadingCount(count = active.size)
-            COMPLETED -> if (rows.isEmpty()) L.downloadsTabDownloaded else L.downloadsTabDownloadedCount(count = rows.size)
-            else -> if (cachedRows.isEmpty()) L.downloadsTabCached else L.downloadsTabCachedCount(count = cachedRows.size)
+            else -> if (everything.isEmpty()) L.downloadsOnThisDevice else L.downloadsOnThisDeviceCount(count = everything.size)
         }
     }
 
@@ -1254,7 +1224,7 @@ fun DownloadsScreen(
             onTab = { tab = it },
             picking = picking,
             chosenCount = chosen.size,
-            canSelect = rows.isNotEmpty(),
+            canSelect = everything.isNotEmpty(),
             allChosen = chosen.size >= shown.size,
             onBack = onBack,
             onSelect = { picking = true },
@@ -1276,7 +1246,7 @@ fun DownloadsScreen(
             onTab = { tab = it },
             picking = picking,
             chosenCount = chosen.size,
-            canSelect = rows.isNotEmpty() && tab == COMPLETED,
+            canSelect = everything.isNotEmpty() && tab == COMPLETED,
             allChosen = chosen.size >= shown.size,
             onBack = onBack,
             onSelect = { picking = true },
@@ -1337,7 +1307,7 @@ fun DownloadsScreen(
                         }
                         // Select, for Share, Save to folder and Delete on several at once. Delete all
                         // went: Select all and Delete, or Free up space's review, say the same.
-                        if (rows.isNotEmpty()) {
+                        if (everything.isNotEmpty()) {
                             TextAction(L.downloadsSelect) { picking = true }
                         }
                     },
@@ -1479,7 +1449,6 @@ fun DownloadsScreen(
             onDismiss = { freeingUp = false },
             lowStorage = if (short && (!lowStorageOn || lowStorageTurned)) {
                 com.tmplayer.ui.components.LowStorageOffer(
-                    mode = L.settingsLowStorage,
                     windowBytes = com.tmplayer.player.LowStorageWindow.WINDOW_BYTES,
                     on = lowStorageTurned,
                 ) {
@@ -1692,40 +1661,6 @@ private fun ShowHeading(title: String, detail: String) {
 }
 
 /**
- * Recently played's heading at the foot of the page, which opens and closes the section: those
- * videos are not downloads, so they stay out of the way until somebody asks for them.
- */
-@Composable
-private fun CollapsibleHeading(title: String, detail: String?, open: Boolean, onToggle: () -> Unit) {
-    val s = LocalStrings.current
-    val interactions = remember { MutableInteractionSource() }
-    val shape = RoundedCornerShape(Corner.Medium)
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = CARD_EDGE, vertical = 8.dp)
-            .clip(shape)
-            .tvFocusRing(interactions, shape)
-            .clickable(interactionSource = interactions, indication = LocalIndication.current, role = Role.Button, onClick = onToggle)
-            .padding(horizontal = CARD_PAD, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
-            if (detail != null) {
-                Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-        Icon(
-            if (open) TmIcons.ChevronUp else TmIcons.ChevronDown,
-            contentDescription = if (open) s.commonHide else s.commonShow,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}
-
-
-/**
  * The shell every row on this screen is drawn in: a filled card with an edge and its own space.
  *
  * Both kinds of row use it, so a video arriving and a video that has arrived are plainly the same
@@ -1892,7 +1827,7 @@ private fun IconOnlyAction(
  * phone's list of anything behaves and keeps small buttons out of a tick target.
  */
 @Composable
-private fun DownloadCard(
+internal fun DownloadCard(
     row: DownloadRow,
     picking: Boolean,
     checked: Boolean,
@@ -1908,6 +1843,8 @@ private fun DownloadCard(
     onSaveToGallery: (() -> Unit)? = null,
     /** A download whose file went: fetched from Telegram again (HX21); null where not offered. */
     onDownloadAgain: (() -> Unit)? = null,
+    /** Keep, for an auto-saved video: turns it into a download. Null for a download. */
+    onKeep: (() -> Unit)? = null,
 ) {
     val touch = isTouch()
     // The phone's card plays on a tap and keeps the rest behind More: a whole download only.
@@ -1915,6 +1852,9 @@ private fun DownloadCard(
     var menuOpen by remember { mutableStateOf(false) }
     val s = LocalStrings.current
     val details = listOfNotNull(
+        // A video playing left behind says so, in the one word the page's note explains (R2), first so a
+        // large font that cuts the line short cuts the chat's name and not the tag.
+        if (row.cached) s.downloadsAutoSaved else null,
         // A part-loaded video says both figures: "710 MB" alone reads as the size of the video,
         // while "710 MB of 1.4 GB" says what is on the disk and what would finish it.
         if (row.partial && row.totalBytes > row.bytes) {
@@ -1926,7 +1866,6 @@ private fun DownloadCard(
         row.chatTitle.ifBlank { null },
         // A part-loaded file still occupies its bytes, and that is the row a viewer looking for
         // space is most likely to want gone.
-        // A cached video was never asked for as a download, so it is cached, not downloaded.
         // A download that stopped part way says so, and what it holds here (user, 2026-10-18).
         if (row.partial) (if (row.cached) s.downloadsPartCached else s.downloadsUnfinishedOnDevice(size = s.formatter.bytes(row.bytes))) else null,
         if (row.missing) s.downloadsFileMissing else null,
@@ -1944,6 +1883,7 @@ private fun DownloadCard(
         onClick = when {
             picking -> ({ pickTick(!checked); onToggle() })
             tapToPlay -> onPlay
+            // A television's auto-saved or part loaded card has its buttons; a tap does nothing here.
             else -> null
         },
         onHold = onHold,
@@ -1992,14 +1932,31 @@ private fun DownloadCard(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+                // The picture and the sound the file declares, where known (the one slot for format badges).
+                val formats = com.tmplayer.ui.components.rememberFormatTags(item)
+                if (formats.isNotEmpty()) {
+                    Spacer(Modifier.height(6.dp))
+                    com.tmplayer.ui.components.FormatBadgeRow(formats)
+                }
             }
-            // A whole download on a phone: More, with Share, Save to folder and Delete behind it.
-            if (tapToPlay && !row.cached) {
+            // A whole download on a phone: More, with Share, Save to folder and Delete behind it
+            // (and Keep first, on an auto-saved video).
+            if (tapToPlay) {
                 Box {
                     IconButton(onClick = { menuOpen = true }) {
                         Icon(TmIcons.MoreVert, contentDescription = s.commonMoreOptions, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     com.tmplayer.ui.components.TmDropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        if (onKeep != null) {
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text(s.downloadsKeep) },
+                                leadingIcon = { Icon(TmIcons.Download, contentDescription = null) },
+                                onClick = {
+                                    menuOpen = false
+                                    onKeep()
+                                },
+                            )
+                        }
                         androidx.compose.material3.DropdownMenuItem(
                             text = { Text(s.commonShare) },
                             leadingIcon = { Icon(TmIcons.Share, contentDescription = null) },
@@ -2044,7 +2001,7 @@ private fun DownloadCard(
         }
         // Hidden while picking: a Delete button inside something the viewer is tapping to select
         // is a mistake waiting to be made. A phone's whole download has its More instead.
-        if (!picking && !(tapToPlay && !row.cached)) {
+        if (!picking && !tapToPlay) {
             CardActions {
                 when {
                     // Something took the file. The record is all that is left to deal with.
@@ -2054,10 +2011,10 @@ private fun DownloadCard(
                     }
                     row.cached -> {
                         // A phone's card plays on a tap; a television's needs the button.
-                        if (!tapToPlay) PrimaryAction(s.navWatch, TmIcons.Play, onPlay)
-                        // What a recently played video wants is keeping. Clearing it is Free up
-                        // space's review, with the rest of what playing left behind.
-                        SecondaryAction(s.downloadsSaveToDownloads, TmIcons.Download, onShare)
+                        PrimaryAction(s.navWatch, TmIcons.Play, onPlay)
+                        // What an auto-saved video wants is keeping (R2); deleting it is the icon.
+                        if (onKeep != null) SecondaryAction(s.downloadsKeep, TmIcons.Download, onKeep)
+                        if (onDelete != null) IconOnlyAction(s.commonDelete, TmIcons.Delete, onDelete, danger = true)
                     }
                     row.partial -> {
                         PrimaryAction(s.commonResume, TmIcons.Refresh, onPlay)
@@ -2089,7 +2046,7 @@ private fun DownloadCard(
  * service only writes on completion.
  */
 @Composable
-private fun ActiveDownloadCard(
+internal fun ActiveDownloadCard(
     progress: OfflineDownloads.Progress,
     place: Int,
     onPause: () -> Unit,
@@ -2307,7 +2264,9 @@ private fun PhoneDownloads(
     } else {
         null
     }
-    TouchPage(TouchPageSpec(current = null, inProfile = true, hidden = picking, actions = actions))
+    TouchPage(TouchPageSpec(current = com.tmplayer.ui.browse.TouchDestination.Downloads, hidden = picking, actions = actions))
+    // The Downloads button pressed again on its own page takes the list back to its top, as a tab bar does.
+    com.tmplayer.ui.browse.ScrollToTopOnReselect(com.tmplayer.ui.browse.TouchDestination.Downloads) { animate -> listState.toTop(animate) }
 
     val compact = rememberCompactChrome()
     val navigationBar = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -2354,6 +2313,8 @@ private fun PhoneDownloads(
             }
         }
 
+        // Your lists and Settings, the gear that left the bar with the picture (R2); not while a selection is up.
+        if (!picking) com.tmplayer.ui.browse.YouGearButton(Modifier.align(Alignment.TopEnd))
         FloatingBackButton(
             icon = if (picking) TmIcons.Close else TmIcons.ArrowBack,
             // While picking, the button leaves the selection rather than the screen: that is what
@@ -2435,7 +2396,7 @@ private fun TvDownloads(
     body: LazyListScope.() -> Unit,
 ) {
     val s = LocalStrings.current
-    val tabFocus = remember { List(3) { FocusRequester() } }
+    val tabFocus = remember { List(2) { FocusRequester() } }
     LaunchedEffect(refocus) {
         if (refocus == 0) return@LaunchedEffect
         withFrameNanos { }
@@ -2508,7 +2469,6 @@ private fun TvDownloads(
         ) {
             TvPill(tabLabel(ONGOING), TmIcons.Download, selected = tab == ONGOING, modifier = Modifier.focusRequester(tabFocus[ONGOING])) { onTab(ONGOING) }
             TvPill(tabLabel(COMPLETED), TmIcons.CheckCircle, selected = tab == COMPLETED, modifier = Modifier.focusRequester(tabFocus[COMPLETED])) { onTab(COMPLETED) }
-            TvPill(tabLabel(CACHED), TmIcons.Clock, selected = tab == CACHED, modifier = Modifier.focusRequester(tabFocus[CACHED])) { onTab(CACHED) }
         }
         Spacer(Modifier.height(8.dp))
         Box(Modifier.fillMaxSize()) {
@@ -2523,21 +2483,11 @@ private fun TvDownloads(
     }
 }
 
-/**
- * Where the remote goes once [gone] has been taken out of a list that showed [before], in that
- * order, and now holds [now]: the first row after it that is still there, else the nearest one
- * above it, else null (the tab). [gone] itself when it is still there, its file not deleted.
- */
-internal fun rowAfterRemoving(before: List<String>, gone: String, now: Set<String>): String? {
-    if (gone in now) return gone
-    val at = before.indexOf(gone)
-    if (at < 0) return null
-    return before.subList(at + 1, before.size).firstOrNull { it in now }
-        ?: before.subList(0, at).lastOrNull { it in now }
-}
-
 /** Frames the row the remote goes to after a removal is asked for the focus over. */
 private const val ROW_FOCUS_TRIES = 10
+
+/** How long Undo stays on a cancelled download before its part file goes (a touch screen). */
+internal const val CANCEL_UNDO_MS = 5_000L
 
 /** How long a cancelled download is waited for to leave the queue before the remote moves on. */
 private const val ROW_GONE_WAIT_MS = 3_000L
@@ -2610,10 +2560,9 @@ private fun TvPill(
     }
 }
 
-/** The three tabs, as indices, because that is what [TabRow] counts in. */
+/** The two tabs, as indices: what is coming down, and what is on this device (downloaded and auto-saved together). */
 private const val ONGOING = 0
 private const val COMPLETED = 1
-private const val CACHED = 2
 
 /** The separator these rows join their figures with, spaced as the rest of the app spaces it. */
 private const val DOT = "  ·  "

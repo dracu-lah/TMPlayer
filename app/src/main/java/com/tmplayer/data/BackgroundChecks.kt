@@ -252,8 +252,21 @@ class BackgroundChecks : JobService() {
                 .setContentIntent(AppNotices.open(context, NOTIFY_SPONSOR) { it.putExtra(MainActivity.EXTRA_OPEN, OPEN_SUPPORT) })
                 .setAutoCancel(true)
             if (!star) {
+                // By region (SupportRegion): in India the first button is Pay by UPI and opens the
+                // support window, which is where UPI is paid from; elsewhere Buy me a coffee opens
+                // its page. Nothing is paid until the viewer presses something in the window.
+                val upiFirst = DeviceCountry.supportOrder(context).first == SupportRegion.Method.Upi
                 builder.addAction(
-                    AppNotices.action(context, R.drawable.ic_stat_support, L.supportBuyCoffee, NoticeActions.link(context, NoticeActions.LINK_COFFEE, NOTIFY_SPONSOR)),
+                    if (upiFirst) {
+                        AppNotices.action(
+                            context,
+                            R.drawable.ic_stat_support,
+                            L.supportPayUpi,
+                            AppNotices.open(context, NOTIFY_SPONSOR) { it.putExtra(MainActivity.EXTRA_OPEN, OPEN_SUPPORT) },
+                        )
+                    } else {
+                        AppNotices.action(context, R.drawable.ic_stat_support, L.supportBuyCoffee, NoticeActions.link(context, NoticeActions.LINK_COFFEE, NOTIFY_SPONSOR))
+                    },
                 )
             }
             if (SupportReminder.offersStar(counters, rung)) {

@@ -239,7 +239,8 @@ fun rememberSeasonEpisodes(meta: MetaInfo?, season: Int): List<MetaEpisode>? {
     val online = OnlineMetadata.current ?: return null
     if (meta == null || meta.kind != MetaKind.Show) return null
     val listed by produceState(online.peekSeason(meta, season), meta, season) {
-        if (value == null) value = withContext(Dispatchers.IO) { online.season(meta, season) }
+        // Asked again for each season: the value held from the last one is another season's list.
+        value = online.peekSeason(meta, season) ?: withContext(Dispatchers.IO) { online.season(meta, season) }
     }
     return listed
 }

@@ -154,6 +154,30 @@ class ChooseChatsBarTest {
     }
 
     @Test
+    @Config(sdk = [35], qualifiers = "w320dp-h640dp-port-night-xhdpi")
+    fun `at a normal font the Chats bar writes the word beside the glyph, clear of the title and still 48 dp tall`() {
+        val activity = chatsBar(fontScale = 1f)
+        val node = button(activity)!!
+        assertTrue("the pill says Choose chats", label in words(node))
+        assertInside(activity, node.boundsInRoot)
+        val title = nodes(activity).first { "Chats" in words(it) && label !in words(it) }
+        assertApart(node.boundsInRoot, title.boundsInRoot)
+        val px = activity.resources.displayMetrics.density * 48f
+        assertEquals("a thumb's target tall", px, node.boundsInRoot.height, 1f)
+        assertTrue("wider than the glyph alone", node.boundsInRoot.width > px + 1f)
+        draw(activity, "choose-chats-phone-chats-320-word.png")
+    }
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w320dp-h640dp-port-night-xhdpi")
+    fun `at a large font the word is left out so the bar keeps its room`() {
+        val activity = chatsBar(fontScale = 2f)
+        val node = button(activity)!!
+        assertFalse("no written word at 2x", label in words(node))
+        assertEquals(activity.resources.displayMetrics.density * 48f, node.boundsInRoot.width, 1f)
+    }
+
+    @Test
     @Config(sdk = [35], qualifiers = "w640dp-h320dp-land-night-xhdpi")
     fun `the Chats bar on its side keeps the button on the screen`() {
         val activity = chatsBar(fontScale = 1f)

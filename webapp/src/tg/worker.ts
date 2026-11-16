@@ -299,15 +299,11 @@ export const api = {
         return reportSponsored(tg, id, option)
     },
 
-    /** The size slider's stops (no minimum, the quick minimums, then every 100 MB to no limit), where each sits and its label. */
-    async sizeScale(_: Ctx): Promise<{ min: number; max: number; stops: { bytes: number; at: number; label: string }[]; quick: number[] }> {
+    /** The size switch's numbers and words: "Hide small clips" hides under clipMin, Home leaves out under homeMin. */
+    async sizeLimits(_: Ctx): Promise<{ clipMin: number; homeMin: number; ceiling: number; clipLabel: string; homeLabel: string }> {
         const r = await rules()
         const l = r.sizeLimits()
-        const sizes = new Set([l.floor, l.defaultMin, ...l.quick])
-        for (let b = l.step; b <= l.ceiling; b += l.step) sizes.add(b)
-        sizes.add(l.ceiling)
-        const stops = [...sizes].sort((a, b) => a - b).map((bytes) => ({ bytes, at: r.sizeFraction(bytes), label: r.sizeLabel(bytes) }))
-        return { min: l.defaultMin, max: l.defaultMax, stops, quick: l.quick }
+        return { clipMin: l.clipMin, homeMin: l.homeMin, ceiling: l.ceiling, clipLabel: r.sizeLabel(l.clipMin), homeLabel: r.sizeLabel(l.homeMin) }
     },
 
     /** "You'll see videos from 50 MB upwards." */

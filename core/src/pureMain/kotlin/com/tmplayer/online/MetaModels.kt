@@ -37,6 +37,17 @@ data class MetaQuery(
      * with it); a name that lists none keeps its old key, so answers already kept for it stand.
      */
     val languages: List<String> = emptyList(),
+    /**
+     * An IMDb id (`tt0111161`) the post's own words give for this video ([MetaLinks]): resolved
+     * through TMDB once, and only where [tmdbId] is not already set. Part of [cacheKey] when set.
+     */
+    val imdbId: String? = null,
+    /**
+     * True when [tmdbId] or [imdbId] came from a link in the post's words rather than from a
+     * `{tmdb-123}` or the viewer's pick: the answer is then marked [MetaInfo.linked] and rests on
+     * the link, unless the file's own year or episode contradicts it ([OnlineMetadata]).
+     */
+    val fromLink: Boolean = false,
 ) {
     /** True when an episode's own name and words are wanted, not only the show's. */
     val wantsEpisode: Boolean get() = kind == MetaKind.Show && episode != null
@@ -60,6 +71,8 @@ data class MetaQuery(
         tmdbId?.toString().orEmpty(),
         if (language.startsWith("en")) language else "$language+en",
         languages.takeIf { it.isNotEmpty() }?.sorted()?.joinToString("-"),
+        imdbId?.let { "imdb:$it" },
+        if (fromLink) "link" else null,
     ).joinToString("|")
 
     companion object {
@@ -86,9 +99,13 @@ data class MetaQuery(
             val forced = FORCED.find(fileName)?.groupValues?.get(1)?.toIntOrNull()
                 ?: caption?.let { FORCED.find(it) }?.groupValues?.get(1)?.toIntOrNull()
             val name = fileName.replace(FORCED, " ")
+            // The words' own link, only where nothing stronger (a `{tmdb-123}`, the viewer's pick) was said.
             val parsed = MediaName.parse(name, caption?.replace(FORCED, " "))
+            val read = if (forced == null) MetaLinks.read(fileName, caption) else MetaLinks.Found()
+            // A film's link on a file that names an episode is somebody else's title: not taken.
+            val link = if (read.tmdbId != null && !read.show && parsed.isSeries) MetaLinks.Found() else read
             val title = parsed.title.trim()
-            if (forced == null && !meaningful(title, parsed.year)) return null
+            if (forced == null && !link.any && !meaningful(title, parsed.year)) return null
             val anime = parsed.season == null && parsed.episode != null &&
                 (FANSUB_GROUP.containsMatchIn(name) || DASH_EPISODE.containsMatchIn(name)) && !SXXEXX.containsMatchIn(name)
             return MetaQuery(
@@ -97,10 +114,13 @@ data class MetaQuery(
                 season = parsed.season ?: if (parsed.episode != null) 1 else null,
                 episode = parsed.episode,
                 anime = anime,
-                tmdbId = forced,
+                tmdbId = forced ?: link.tmdbId,
                 // A daily show named by its air date is a show, though it names no episode number.
-                kind = if (parsed.isSeries) MetaKind.Show else MetaKind.Film,
+                // A TMDB link says which kind the title is.
+                kind = if (link.tmdbId != null) (if (link.show) MetaKind.Show else MetaKind.Film) else if (parsed.isSeries) MetaKind.Show else MetaKind.Film,
                 languages = (MediaName.languages(name) + (caption?.let { MediaName.languages(it.replace(FORCED, " ")) } ?: emptyList())).distinct(),
+                imdbId = link.imdbId.takeIf { forced == null && link.tmdbId == null },
+                fromLink = forced == null && link.any,
             )
         }
     }
@@ -116,6 +136,11 @@ data class MetaEpisode(
     /** When it first aired (or will), as the provider writes it: `2026-10-14`. */
     val airDate: String? = null,
     val runtimeMin: Int? = null,
+    /**
+     * Which site gave the title, empty where the list is one provider's own (TMDB, TVmaze): an
+     * anime's episodes are merged from several ([AnimeEpisodes]), and each says whose words it carries.
+     */
+    val source: String = "",
 )
 
 /**
@@ -135,6 +160,18 @@ data class MetaInfo(
     /** The language [overview] is in, as the provider was asked for it. */
     val language: String = "en",
     val episode: MetaEpisode? = null,
+    /**
+     * The other names the provider gave the title (AniList's English, romaji and synonyms), kept so
+     * the same show can be found on another provider by a name it spells the same way. Empty for the
+     * others, and for an answer kept before it was added.
+     */
+    val aliases: List<String> = emptyList(),
+    /**
+     * Found by an IMDb or TMDB link in the post's own words ([MetaLinks]), so the link is what
+     * backs it ([MetaConfidence]): a file named "clip_720p" with a link in its caption has no
+     * year to agree with.
+     */
+    val linked: Boolean = false,
 ) {
     /** The best picture for a 16:9 tile: the episode's own still, the show's backdrop, its poster. */
     val wideUrl: String? get() = episode?.stillUrl ?: backdropUrl
@@ -149,12 +186,14 @@ data class MetaInfo(
         .put("poster", posterUrl.orEmpty())
         .put("backdrop", backdropUrl.orEmpty())
         .put("language", language)
+        .apply { if (aliases.isNotEmpty()) put("aliases", com.tmplayer.json.JSONArray(aliases)) }
+        .apply { if (linked) put("linked", true) }
         .apply {
             episode?.let {
                 put(
                     "episode",
                     JSONObject().put("season", it.season).put("number", it.number).put("name", it.name)
-                        .put("overview", it.overview).put("still", it.stillUrl.orEmpty()),
+                        .put("overview", it.overview).put("still", it.stillUrl.orEmpty()).put("source", it.source),
                 )
             }
         }
@@ -171,6 +210,8 @@ data class MetaInfo(
                 posterUrl = json.optString("poster").ifBlank { null },
                 backdropUrl = json.optString("backdrop").ifBlank { null },
                 language = json.optString("language", "en"),
+                linked = json.optBoolean("linked", false),
+                aliases = json.optJSONArray("aliases")?.let { list -> (0 until minOf(list.length(), 16)).map { list.optString(it) }.filter { it.isNotBlank() } }.orEmpty(),
                 episode = json.optJSONObject("episode")?.let {
                     MetaEpisode(
                         season = it.optInt("season"),
@@ -178,6 +219,7 @@ data class MetaInfo(
                         name = it.optString("name"),
                         overview = it.optString("overview"),
                         stillUrl = it.optString("still").ifBlank { null },
+                        source = it.optString("source"),
                     )
                 },
             )

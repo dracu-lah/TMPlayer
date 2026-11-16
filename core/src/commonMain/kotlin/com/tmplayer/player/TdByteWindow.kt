@@ -205,6 +205,7 @@ class TdByteWindow(private val td: TdlClient) {
         playhead = takePlayhead(fileId)
         lowStorage = LowStorageStreams.isRolling(fileId)
         saveData = !lowStorage && SaveDataStreams.isActive(fileId)
+        indexLooked = false
         stopWatching()
         val watcher = CoroutineScope(SupervisorJob() + Dispatchers.IO + com.tmplayer.platform.JobFailures.handler("TdByteWindow"))
         scope = watcher
@@ -390,6 +391,7 @@ class TdByteWindow(private val td: TdlClient) {
         val file = td.getFile(fileId).valueOrNull ?: throw IOException("File $fileId disappeared")
         var available = available(file, target)
         if (available > 0) return available
+        learnIndex(target)
         onDiskAt(target).takeIf { it > 0 }?.let { run ->
             followSide(target, run)
             return run
@@ -613,6 +615,7 @@ class TdByteWindow(private val td: TdlClient) {
         ) {
             return
         }
+        learnIndex(offset)
         val run = onDiskAt(offset)
         if (run >= ON_DISK_ENOUGH || (run > 0 && offset + run >= size)) {
             Logger.i(TAG, "Low storage: file $fileId opened at $offset, on the disk already")
@@ -661,7 +664,7 @@ class TdByteWindow(private val td: TdlClient) {
      */
     private fun isFar(target: Long): Boolean {
         if (saveData || completed) return false
-        if (lowStorage && !LowStorageWindow.nearTheEnd(target, size)) return false
+        if (lowStorage && !LowStorageStreams.nearTheEnd(fileId, target, size)) return false
         val ph = playhead ?: return false
         val at = ph.mainAt
         // Before the first read there is no stream to keep: wherever it starts is the stream.
@@ -671,6 +674,36 @@ class TdByteWindow(private val td: TdlClient) {
         if (inProbe(ph, target)) return false
         return kotlin.math.abs(target - at) > DownloadWindow.FORWARD_SLACK_BYTES
     }
+
+    /**
+     * In Low storage mode, a read near the far end of a file whose index the warm-up did not find
+     * (HX79): the head on the disk is read once for where the index starts ([StreamIndex.locate]),
+     * so a moov or Cues longer than [LowStorageWindow.INDEX_TAIL_BYTES] is read as the index, not
+     * as a seek that deletes the head. Once per stream, a megabyte from the disk at most.
+     */
+    private suspend fun learnIndex(target: Long) {
+        if (!lowStorage || indexLooked || size <= 0 || target < StreamWarmup.HEAD_BYTES) return
+        if (size - target > LowStorageWindow.MAX_INDEX_BYTES || LowStorageStreams.knowsIndex(fileId)) return
+        indexLooked = true
+        val path = localPath ?: return
+        val prefix = td.getFileDownloadedPrefixSize(fileId, 0).valueOrNull?.size ?: return
+        val length = minOf(prefix, StreamWarmup.HEAD_BYTES)
+        if (length < HEAD_MIN_BYTES) return
+        val head = runCatching {
+            java.io.RandomAccessFile(path, "r").use { file ->
+                val n = minOf(length, file.length()).toInt()
+                if (n < HEAD_MIN_BYTES) null else ByteArray(n).also { file.readFully(it) }
+            }
+        }.getOrNull() ?: return
+        val index = StreamIndex.locate(head, size) ?: return
+        if (index.start > target) return
+        LowStorageStreams.knowIndex(fileId, index.start, size)
+        Logger.i(TAG, "Low storage: file $fileId has its index at ${index.start}, ${(size - index.start) / 1024} KB to the end")
+    }
+
+    /** Whether [learnIndex] already looked at this stream's head. */
+    @Volatile
+    private var indexLooked = false
 
     private fun inProbe(ph: Playhead, target: Long): Boolean {
         val p = ph.probe
@@ -926,6 +959,9 @@ class TdByteWindow(private val td: TdlClient) {
     companion object {
         /** What [requestUnlessOnDisk] wants on the disk at an offset before it leaves the download be. */
         private const val ON_DISK_ENOUGH = 256L * 1024
+
+        /** The least of a file's head worth reading for where its index is ([learnIndex]). */
+        private const val HEAD_MIN_BYTES = 4L * 1024
 
         /** A probe's fetch: one of the parts Telegram hands files out in, on its boundary. */
         private const val PROBE_BYTES = 1024L * 1024

@@ -19,6 +19,10 @@ import com.tmplayer.data.ChatKind
 import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.CountAnswer
 import com.tmplayer.data.FormFactor
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
+import com.tmplayer.ui.browse.SetupOffline
 import com.tmplayer.ui.theme.TmMaterialTheme
 import kotlinx.coroutines.awaitCancellation
 import org.junit.After
@@ -57,12 +61,10 @@ class AddChatsRenderTest {
     fun phone() {
         val model = AddChatsViewModel(counts = Counts)
         save("add-chats-phone.png", render(tv = false, model, CHATS))
-        // Only the rows on screen are counted (and the head of the list, which the recommendation
-        // is made from): a chat deep in the list was never asked about.
+        // The head of the list is counted first, which the recommendation is made from, and the
+        // rest of the account behind it, in the background: no row shows a figure (T5).
         val counted = model.state.value.counted
         assertTrue("the first row was counted", counted.containsKey(CHATS.first().id))
-        assertFalse("a row far below the screen was not counted", counted.containsKey(CHATS.last().id))
-        assertEquals(ChatCount.Unknown, counted[UNCOUNTABLE])
         model.stop()
     }
 
@@ -115,7 +117,7 @@ class AddChatsRenderTest {
             }
         }
         idle()
-        assertTrue(node(activity, "Choose chats to watch") != null)
+        assertTrue(node(activity, "Which chats have your videos?") != null)
         assertTrue("no Back button", node(activity, "Back", clickable = true) == null)
         assertTrue(node(activity, "Choose at least one chat") != null)
         assertTrue("Done waits for a tick", node(activity, "Choose at least one chat", clickable = true) == null)
@@ -171,10 +173,10 @@ class AddChatsRenderTest {
         activity.onBackPressedDispatcher.onBackPressed()
         idle()
         assertEquals("Back with ticks asks first", 0, left)
-        assertTrue(node(activity, "Leave TMPlayer?") != null)
+        assertTrue(node(activity, "Leave without choosing?") != null)
         activity.onBackPressedDispatcher.onBackPressed()
         idle()
-        assertTrue("Back from the question keeps the choice", node(activity, "Leave TMPlayer?") == null)
+        assertTrue("Back from the question keeps the choice", node(activity, "Leave without choosing?") == null)
         assertEquals(3, model.state.value.ticked.size)
         assertEquals(0, left)
         activity.onBackPressedDispatcher.onBackPressed()
@@ -251,6 +253,116 @@ class AddChatsRenderTest {
         idle()
         assertEquals(2, tries)
         model.stop()
+    }
+
+    /**
+     * No chat holds videos (R3): the question still shows what there is, Saved Messages first, and
+     * says to forward a video there. The way on for this visit stays under it, and Done stays off.
+     */
+    @Test
+    @Config(sdk = [35], qualifiers = "w411dp-h891dp-port-night-xhdpi")
+    fun `an account with only Saved Messages is told to forward a video there`() {
+        FormFactor.override(false)
+        val model = AddChatsViewModel(counts = EmptyCounts, write = {})
+        var went = 0
+        val activity = Robolectric.buildActivity(ComponentActivity::class.java).setup().get()
+        activity.setContent {
+            TmMaterialTheme(dark = true) {
+                AddChatsScreen(
+                    chats = listOf(CHATS.first { it.kind == ChatKind.Saved }),
+                    listComplete = true,
+                    starred = emptySet(),
+                    model = model,
+                    onClose = {},
+                    required = true,
+                    onContinue = { went++ },
+                )
+            }
+        }
+        idle()
+        assertTrue(node(activity, "Which chats have your videos?") != null)
+        assertTrue("Saved Messages is the row", node(activity, "Saved Messages", clickable = true) != null)
+        assertTrue(
+            "the hint says what to do",
+            node(activity, "Forward a video to Saved Messages in Telegram, then tick Saved Messages here.") != null,
+        )
+        assertTrue("Done waits for a tick", node(activity, "Done", clickable = true) == null)
+        save("setup-question-saved-only-phone.png", draw(activity))
+        click(activity, "Continue without choosing")
+        assertEquals(1, went)
+        model.stop()
+        idle()
+    }
+
+    /** The offline card (R3): the same words and two buttons on a phone and on a television. */
+    @Test
+    @Config(sdk = [35], qualifiers = "w411dp-h891dp-port-night-xhdpi")
+    fun `the setup's offline card on a phone`() {
+        offlineCard(tv = false, shot = "setup-offline-phone.png")
+    }
+
+    @Test
+    @Config(sdk = [28], qualifiers = "w960dp-h540dp-land-television-night-xhdpi")
+    fun `the setup's offline card on a television`() {
+        offlineCard(tv = true, shot = "setup-offline-tv.png")
+    }
+
+    private fun offlineCard(tv: Boolean, shot: String) {
+        FormFactor.override(tv)
+        if (tv) androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().setInTouchMode(false)
+        com.tmplayer.data.ChatsGate.clearWaiver()
+        val activity = Robolectric.buildActivity(ComponentActivity::class.java).setup().get()
+        activity.setContent { TmMaterialTheme(dark = true) { SetupOffline() } }
+        idle()
+        assertTrue(node(activity, "You are offline") != null)
+        assertTrue(node(activity, "TMPlayer needs the internet once to list your chats. It carries on by itself when you are back online.") != null)
+        assertTrue(node(activity, "Try again", clickable = true) != null)
+        assertTrue(node(activity, "Continue without choosing", clickable = true) != null)
+        save(shot, draw(activity))
+        click(activity, "Continue without choosing")
+        assertTrue("the way on waives the question for this visit", com.tmplayer.data.ChatsGate.waived.value)
+        com.tmplayer.data.ChatsGate.clearWaiver()
+    }
+
+    /** The Tips card (R3) in place of the modal tour offer: Show me opens the tour, Not now turns it off. */
+    @Test
+    @Config(sdk = [35], qualifiers = "w411dp-h891dp-port-night-xhdpi")
+    fun `the Tips card on a phone`() {
+        tipsCard(tv = false, shot = "tips-card-phone.png")
+    }
+
+    @Test
+    @Config(sdk = [28], qualifiers = "w960dp-h540dp-land-television-night-xhdpi")
+    fun `the Tips card on a television`() {
+        tipsCard(tv = true, shot = "tips-card-tv.png")
+    }
+
+    private fun tipsCard(tv: Boolean, shot: String) {
+        FormFactor.override(tv)
+        if (tv) androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().setInTouchMode(false)
+        var shown = 0
+        var dismissed = 0
+        val activity = Robolectric.buildActivity(ComponentActivity::class.java).setup().get()
+        activity.window.decorView.dispatchWindowFocusChanged(true)
+        activity.setContent {
+            TmMaterialTheme(dark = true) {
+                androidx.compose.foundation.layout.Box(
+                    androidx.compose.ui.Modifier.fillMaxSize().padding(16.dp),
+                    contentAlignment = androidx.compose.ui.Alignment.BottomCenter,
+                ) {
+                    com.tmplayer.ui.onboarding.TipsCard(onShow = { shown++ }, onDismiss = { dismissed++ })
+                }
+            }
+        }
+        idle()
+        assertTrue(node(activity, "Tips") != null)
+        assertTrue(node(activity, "A short tour of where your videos come from, the player, downloads and Settings.") != null)
+        assertTrue("no dialog: the card is plain content, not a window", node(activity, "Take a quick tour?") == null)
+        save(shot, draw(activity))
+        click(activity, "Show me")
+        assertEquals(1, shown)
+        click(activity, "Not now")
+        assertEquals(1, dismissed)
     }
 
     private fun idle() = repeat(10) { shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(100)) }
@@ -345,6 +457,11 @@ class AddChatsRenderTest {
                 STARRED -> CountAnswer.Counted(57)
                 else -> CountAnswer.Counted((chatId % 9).toInt())
             }
+        }
+
+        /** Every chat counts as holding no video: nothing is recommended. */
+        val EmptyCounts = object : ChatCountCalls {
+            override suspend fun videoCount(chatId: Long, localOnly: Boolean): CountAnswer = CountAnswer.Counted(0)
         }
 
         val Silent = object : ChatCountCalls {

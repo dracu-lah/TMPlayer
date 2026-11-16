@@ -98,6 +98,7 @@ import com.tmplayer.ui.components.isTouch
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.icons.TmIcons
 import com.tmplayer.ui.online.LocalOnlineArt
+import com.tmplayer.data.OfflineHomeRows
 import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.Tv
@@ -149,6 +150,10 @@ internal fun HomePane(
      * Not needed when [rows] is empty: the empty state already says the same.
      */
     noFavourites: Boolean = false,
+    /** The phone's "Choose favourites": the chat list, its rows answering a tap with a star. Null leaves the card without a button. */
+    onChooseFavourites: (() -> Unit)? = null,
+    /** The one question about keeping the viewer's place on all their devices, asked once at the end of Home. */
+    keepPlace: KeepPlaceCardState? = null,
     /** False when Settings turned the carousel off: Home opens on its rows, Recently added among them. */
     carouselOn: Boolean = true,
     /** Every row of Home off in Settings ([com.tmplayer.data.HomeLayout.allOff]): a card says so, with the way back. */
@@ -194,6 +199,13 @@ internal fun HomePane(
 ) {
     val s = LocalStrings.current
     val touch = isTouch()
+    // Offline (R4): a press on a card that cannot play with no line opens its page, which says so,
+    // instead of starting something that fails after the press.
+    val offlineHome = LocalOfflineHome.current
+    val onPlay = remember(offlineHome, onPlay, onDetails) { offlineHome.gate(onPlay, onDetails) }
+    val onPlayNow = remember(offlineHome, onPlayNow, onDetails) { offlineHome.gate(onPlayNow, onDetails) }
+    val onResume = remember(offlineHome, onResume, onDetails) { offlineHome.gateResume(onResume, onDetails) }
+    val onOpenWatchLater = remember(offlineHome, onOpenWatchLater, onDetails) { offlineHome.gateLater(onOpenWatchLater, onDetails) }
     // On a phone the page runs up under the status bar (see LocalUnderStatusBar).
     val under = if (touch) LocalUnderStatusBar.current else 0.dp
     if (rows.isEmpty() && allOff) {
@@ -222,11 +234,13 @@ internal fun HomePane(
         // A list of the chats' videos that never comes back gives way to the card after a while,
         // so a first run without a connection still says what to do.
         var waitedOut by remember { mutableStateOf(false) }
-        if (!rowsReady) LaunchedEffect(Unit) {
+        // Offline, the rows are also held till the download index and watch cache have been read.
+        val held = !rowsReady || !LocalOfflineHome.current.settled
+        if (held) LaunchedEffect(Unit) {
             kotlinx.coroutines.delay(ROWS_WAIT_MS)
             waitedOut = true
         }
-        if (!rowsReady && !waitedOut) {
+        if (held && !waitedOut) {
             Column(Modifier.fillMaxSize().padding(top = under)) {
                 tvHeader?.invoke(false)
                 if (touch) PhoneHomeBrand(Modifier.padding(start = start, top = BRAND_TOP), onArt = false)
@@ -248,8 +262,17 @@ internal fun HomePane(
     val recent = rows.firstNotNullOfOrNull { it as? HomeRow.Recent }
     // Off in Settings, nothing is picked or turned over for it either.
     // It leads with the video being watched (PL-1): see [rememberFeatured].
-    val featured = rememberFeatured(recent.takeIf { carouselOn }, rows.firstNotNullOfOrNull { it as? HomeRow.Continue }.takeIf { carouselOn }, art)
-    val carousel = carouselOn && recent != null && featured?.isEmpty() != true
+    val onlineFeatured = rememberFeatured(recent.takeIf { carouselOn }, rows.firstNotNullOfOrNull { it as? HomeRow.Continue }.takeIf { carouselOn }, art)
+    // Offline the hero is the first video on this phone, and with none there is no hero (R4).
+    val offlineHero = remember(rows, offlineHome.offline) {
+        if (!offlineHome.offline) {
+            null
+        } else {
+            OfflineHomeRows.hero(rows)?.let { listOf(com.tmplayer.data.FeaturedPick(com.tmplayer.data.ShelfEntry.File(it.toMediaItem()))) }.orEmpty()
+        }
+    }
+    val featured = offlineHero ?: onlineFeatured
+    val carousel = carouselOn && (recent != null || offlineHero != null) && featured?.isEmpty() != true
     // With no carousel the rows are the whole first screen; with one, its first picture tells
     // HomeFirstPaint (through the carousel), so the loader lifts over a finished Home.
     // Not at once: the starred chats' row can arrive a moment after the rest, bringing the carousel
@@ -690,6 +713,7 @@ internal fun HomePane(
                                             heldContinue = key to row.records.indexOf(record)
                                             onHoldMedia(item, chat)
                                         },
+                                        needsInternet = offlineHome.offline && !offlineHome.plays(record.chatId, record.messageId),
                                         modifier = Modifier.width(continueWidth(touch))
                                             .then(if (isFirst && record === row.records.first()) Modifier.focusRequester(first) else Modifier)
                                             .then(if (record === continueStandIn) Modifier.focusRequester(continueRefocus) else Modifier),
@@ -707,7 +731,7 @@ internal fun HomePane(
                                     LaunchedEffect(record.key) { onLaterArtWanted(record) }
                                     val known = art[record.key] ?: remember(record) { record.toMediaItem() }
                                     // Offline: a video in Downloads says so, as every grid tile does (PL-13).
-                                    val downloaded = record.key in LocalOfflineDownloads.current
+                                    val downloaded = offlineHome.offline && record.key in offlineHome.downloadedKeys
                                     val item = remember(known, downloaded) { if (downloaded) known.withLocality(MediaItem.Locality.Downloaded) else known }
                                     val holdShow = LocalSeriesHold.current
                                     val stub = remember(record) { record.stubSeries() }
@@ -724,6 +748,7 @@ internal fun HomePane(
                                             { onHoldMedia(item, record.chatTitle.ifEmpty { chatTitle(record.chatId) }) }
                                         },
                                         dense = touch,
+                                        needsInternet = !record.isShow && offlineHome.offline && !offlineHome.plays(item),
                                         modifier = Modifier.width(wideWidth(touch))
                                             .then(if (isFirst && record === laterRecords.first()) Modifier.focusRequester(first) else Modifier),
                                     )
@@ -745,6 +770,7 @@ internal fun HomePane(
                                         dense = touch,
                                         title = if (episode.show.isBlank()) episode.code else "${episode.show}  ·  ${episode.code}",
                                         badge = { NewBadge(compact = touch) },
+                                        needsInternet = offlineHome.needsInternet(item),
                                         meta = { ink -> CaptionLine(telegramFacts(chat, item), ink) },
                                         modifier = Modifier.width(wideWidth(touch))
                                             .then(if (isFirst && episode === row.episodes.first()) Modifier.focusRequester(first) else Modifier),
@@ -781,7 +807,27 @@ internal fun HomePane(
                 // the chat list, which the hint names.
                 if (noFavourites) {
                     item(key = "favourites-hint", contentType = "favourites-hint") {
-                        FavouritesHintCard(s.homeFavouritesHint(if (touch) "phone" else "tv"), start = start, end = end)
+                        if (touch && onChooseFavourites != null) {
+                            // A phone's card has a button: "press and hold" in a card was an
+                            // instruction to find a gesture (Raju 4.4).
+                            FavouritesHintCard(
+                                s.homeFavouritesStar,
+                                start = start,
+                                end = end,
+                                buttonLabel = s.homeFavouritesChoose,
+                                onChoose = onChooseFavourites,
+                            )
+                        } else {
+                            FavouritesHintCard(s.homeFavouritesHint(if (touch) "phone" else "tv"), start = start, end = end)
+                        }
+                    }
+                }
+                // Asked once, last: "Keep my place on all my devices?" (FQ12). Counted as shown when
+                // its item comes into the list, so it is one showing and never again.
+                if (keepPlace?.visible == true) {
+                    item(key = "keep-place", contentType = "keep-place") {
+                        LaunchedEffect(Unit) { keepPlace.shown() }
+                        KeepPlaceCard(onYes = keepPlace::yes, onNotNow = keepPlace::notNow, start = start, end = end, modifier = Modifier.padding(top = 16.dp))
                     }
                 }
             }
@@ -1052,6 +1098,13 @@ private fun RowSeeAll(
                 )
             }
         }
+        // Home keeps clips and trailers out of its rows (R1): said here, with where to find them.
+        M3Text(
+            s.homeSmallLeftOut(com.tmplayer.data.SizeFilter.label(com.tmplayer.data.SizeFilter.HOME_MIN)),
+            style = M3MaterialTheme.typography.bodySmall,
+            color = Tone.muted,
+            modifier = Modifier.padding(start = if (touch) 16.dp else start, end = end, bottom = 4.dp),
+        )
         androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
             columns = androidx.compose.foundation.lazy.grid.GridCells.Adaptive(if (poster) posterWidth(touch) else wideWidth(touch)),
             state = grid,
@@ -1118,6 +1171,7 @@ private fun ShelfTile(
             onLongClick = { onHold(entry.item, chatTitle(entry.item.chatId)) },
             dense = touch,
             poster = poster,
+            needsInternet = LocalOfflineHome.current.needsInternet(entry.item),
             // Its first bytes asked for while the card is in focus or under the finger.
             modifier = modifier,
         )

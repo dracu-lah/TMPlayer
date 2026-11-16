@@ -20,4 +20,11 @@ object Skip {
     const val FORWARD_MS = 10_000L
     const val BACK_MS = 5_000L
     const val BAR_MS = 30_000L
+
+    /**
+     * The back and forward buttons beside play: ten seconds each way, the figure on the button. A
+     * button names its number, and the one back from a missed line is pressed again rather than
+     * overshooting, so it is not the arrows' five.
+     */
+    const val BUTTON_MS = 10_000L
 }

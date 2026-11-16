@@ -165,9 +165,11 @@ object LowStorageWindow {
      * The request for a download from [offset] of a file of [size] bytes, given what is already on
      * disk. It asks for [window] bytes, or the rest of the file when that is closer, and deletes
      * first when keeping what is there would take the disk past the window and its slack, or when
-     * it is a [roll].
+     * it is a [roll]. The file's index, when [indexStart] says where it is ([indexOf]), is held on
+     * top of that budget: a film's moov or Cues has to be read whatever its size, and counting it
+     * against the window is what made reading a 12 MB one delete the head (HX79).
      */
-    fun plan(ranges: List<Range>, offset: Long, size: Long, window: Long, roll: Boolean = false): Request {
+    fun plan(ranges: List<Range>, offset: Long, size: Long, window: Long, roll: Boolean = false, indexStart: Long = NO_INDEX): Request {
         val end = if (size > 0) minOf(size, offset + window) else offset + window
         val limit = (end - offset).coerceAtLeast(1)
         val wanted = Range(offset, end)
@@ -175,7 +177,7 @@ object LowStorageWindow {
         val budget = window + SLACK_BYTES
         // A roll always starts afresh: keeping the window it moves on from is what it is there to stop.
         if (roll) return Request(limit, deleteFirst = true, ranges = listOf(wanted))
-        if (bytes(kept) <= budget) return Request(limit, deleteFirst = false, ranges = kept)
+        if (counted(kept, indexStart, size) <= budget) return Request(limit, deleteFirst = false, ranges = kept)
 
         // A request from inside what is already on disk, such as the jump back from a Matroska or
         // MP4 index at the far end: deleting would throw away the very bytes about to be read. It
@@ -184,7 +186,7 @@ object LowStorageWindow {
         val held = merge(ranges)
         val here = held.firstOrNull { offset >= it.start && offset < it.end }
         if (here != null) {
-            val spare = (budget - bytes(held)).coerceAtLeast(0)
+            val spare = (budget - counted(held, indexStart, size)).coerceAtLeast(0)
             val shortEnd = if (size > 0) minOf(size, here.end + spare) else here.end + spare
             if (shortEnd - offset > ROLL_MARGIN_BYTES) {
                 return Request(shortEnd - offset, deleteFirst = false, ranges = merge(held + Range(offset, shortEnd)))
@@ -223,13 +225,15 @@ object LowStorageWindow {
      * ([nearTheEnd]) is recorded as reaching the end of it ([indexRange]), so reading it never
      * rolls the window.
      */
-    fun onDisk(ranges: List<Range>, offset: Long, run: Long, size: Long, window: Long): OnDisk {
+    fun onDisk(ranges: List<Range>, offset: Long, run: Long, size: Long, window: Long, indexStart: Long = NO_INDEX): OnDisk {
         if (run <= 0) return OnDisk(OnDisk.Use.Fetch, ranges)
         val end = if (size > 0) minOf(size, offset + run) else offset + run
-        if (nearTheEnd(offset, size)) return OnDisk(OnDisk.Use.Read, merge(ranges + indexRange(offset, end, size)))
+        if (nearTheEnd(offset, size, indexStart)) {
+            return OnDisk(OnDisk.Use.Read, merge(ranges + indexRange(offset, end, size, indexStart)))
+        }
         val held = merge(ranges + Range(offset, end))
         if (size > 0 && end >= size) return OnDisk(OnDisk.Use.Read, held)
-        if (!plan(held, end, size, window).deleteFirst) return OnDisk(OnDisk.Use.ReadAndFollow, held)
+        if (!plan(held, end, size, window, indexStart = indexStart).deleteFirst) return OnDisk(OnDisk.Use.ReadAndFollow, held)
         if (end - offset > ROLL_MARGIN_BYTES + ALIGN_BYTES) return OnDisk(OnDisk.Use.ReadThenRoll, held)
         return OnDisk(OnDisk.Use.Fetch, ranges)
     }
@@ -253,10 +257,10 @@ object LowStorageWindow {
 
     /**
      * Whether a probe of `[start, end)` (a small fetch of its own, see `TdByteWindow`) still keeps
-     * what [ranges] hold within the window and its slack.
+     * what [ranges] hold within the window and its slack, the known index aside ([counted]).
      */
-    fun probeFits(ranges: List<Range>, start: Long, end: Long, size: Long, window: Long): Boolean =
-        bytes(ranges + indexRange(start, end, size)) <= window + SLACK_BYTES
+    fun probeFits(ranges: List<Range>, start: Long, end: Long, size: Long, window: Long, indexStart: Long = NO_INDEX): Boolean =
+        counted(ranges + indexRange(start, end, size, indexStart), indexStart, size) <= window + SLACK_BYTES
 
     /**
      * The range held for `[start, end)` read as an index: up to the end of the file when it lies
@@ -264,16 +268,49 @@ object LowStorageWindow {
      * most, which the slack covers, and keeps [shouldRoll] from rolling the window on at an
      * index read, which would delete the film's start for its last megabyte.
      */
-    fun indexRange(start: Long, end: Long, size: Long): Range =
-        Range(start, if (nearTheEnd(start, size)) size else end)
+    fun indexRange(start: Long, end: Long, size: Long, indexStart: Long = NO_INDEX): Range =
+        Range(start, if (nearTheEnd(start, size, indexStart)) size else end)
 
     /**
      * Whether a read at [position] is close enough to the end of a file of [size] bytes to be its
      * index (an MKV's Cues and Tags, an MP4's moov) rather than a seek: such a read is fetched as
      * a probe and the download goes back to where the picture is, instead of moving there.
+     *
+     * The last [INDEX_TAIL_BYTES] always count; a known index ([indexStart], [indexOf]) counts
+     * from where it starts, however much longer it is, up to [MAX_INDEX_BYTES].
      */
-    fun nearTheEnd(position: Long, size: Long): Boolean =
-        size > 0 && position < size && size - position <= INDEX_TAIL_BYTES
+    fun nearTheEnd(position: Long, size: Long, indexStart: Long = NO_INDEX): Boolean {
+        if (size <= 0 || position >= size) return false
+        val index = indexOf(indexStart, size)
+        if (index != null && position >= index.start) return true
+        return size - position <= INDEX_TAIL_BYTES
+    }
+
+    /**
+     * The index of a file of [size] bytes starting at [indexStart] (from the file's head:
+     * `StreamIndex.locate`), taken to run to the end of the file as a trailing moov or Cues does;
+     * null when it is not known, outside the file, or longer than [MAX_INDEX_BYTES], which no
+     * index is and anything else (a bad hint) must not be read as.
+     */
+    fun indexOf(indexStart: Long, size: Long): Range? {
+        if (size <= 0 || indexStart < 0 || indexStart >= size) return null
+        if (size - indexStart > MAX_INDEX_BYTES) return null
+        return Range(indexStart, size)
+    }
+
+    /** What [ranges] take on the disk against the window's budget: every byte, less the known index's. */
+    fun counted(ranges: List<Range>, indexStart: Long, size: Long): Long {
+        val all = merge(ranges)
+        val index = indexOf(indexStart, size) ?: return bytes(all)
+        val inIndex = all.sumOf { (minOf(it.end, index.end) - maxOf(it.start, index.start)).coerceAtLeast(0) }
+        return bytes(all) - inIndex
+    }
+
+    /** No index known for the file. */
+    const val NO_INDEX = -1L
+
+    /** The largest index held beside the window: a long film's moov is tens of megabytes at most. */
+    const val MAX_INDEX_BYTES = 32L * 1024 * 1024
 
     /** How much of the end of a file [nearTheEnd] counts as its index; within [SLACK_BYTES]. */
     const val INDEX_TAIL_BYTES = 8L * 1024 * 1024

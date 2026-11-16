@@ -7,7 +7,7 @@ import { t } from '../i18n'
 import { addedIds, addedMode, addedView, progress, settings } from '../store'
 import { Icon } from '../ui/Icon'
 import { keepsSearch } from '../ui/searchLifetime'
-import { HiddenBySize, tileCard, VideoList } from './VideoList'
+import { tileCard, VideoList } from './VideoList'
 
 /** Whether this page load has already shown the search: a reload or a new tab starts with an empty box, though the address may still carry `?q=`. */
 let shownThisLoad = false
@@ -28,9 +28,10 @@ export function Search() {
         () => {
             const q = params.q?.trim()
             // The added chats travel with every ask, even one the gate itself did not change (a watched tick): `addedView()` is cheap.
-            return q ? ([q, settings().sizeMin, settings().sizeMax, addedMode(), [...(addedIds() ?? [])].join(), everyChat()] as const) : false
+            return q ? ([q, addedMode(), [...(addedIds() ?? [])].join(), everyChat()] as const) : false
         },
-        async ([q, minBytes, maxBytes, , , wide]) => api.search(q, { minBytes, maxBytes, added: addedView(), ...(await progress()) }, wide),
+        // A search names the video the viewer is after, so the size floor stands aside for it (as the apps' chat search).
+        async ([q, , , wide]) => api.search(q, { minBytes: 0, maxBytes: Number.MAX_SAFE_INTEGER, added: addedView(), ...(await progress()) }, wide),
     )
     onBackOnline(() => results.error && refetch())
     let debounce = 0
@@ -102,7 +103,6 @@ export function Search() {
             <Show when={results.loading && !found()}>
                 <p class="muted">{t('browse.finding_videos')}</p>
             </Show>
-            <HiddenBySize count={found()?.hiddenBySize ?? 0} />
             <Show when={found() && !results.loading && found()!.tiles.length}>
                 <p class="muted search-count">{t('search.count', { videos: found()!.videos, chats: found()!.chats })}</p>
             </Show>

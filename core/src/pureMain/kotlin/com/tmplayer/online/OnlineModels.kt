@@ -53,6 +53,8 @@ data class MetaSettings(
     val omdbRefusedKey: String = "",
     /** Skip intro, recap and credits buttons in the player, from TheIntroDB and AniSkip. */
     val skipTimes: Boolean = true,
+    /** What each kind of skip does when the playhead reaches it: Ask (the default), Skip by itself, or Off. Local, not in a backup. */
+    val skipModes: SkipModes = SkipModes(),
     /**
      * Whether [enabled] was turned off by this version or a later one (Settings, the first-run
      * switch, the grid's note, a restore). False with [enabled] off means the off came from an

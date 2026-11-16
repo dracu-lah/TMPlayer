@@ -134,27 +134,26 @@ class ChatPickingTest {
     }
 
     @Test
-    fun `the foot counts the chats ticked and the videos known of them`() {
-        val counts = mapOf<Long, ChatCount>(
-            2L to ChatCount.Known(40),
-            3L to ChatCount.Known(2),
-            4L to ChatCount.Unknown,
-        )
-        val total = ChatPicking.total(setOf(2L, 3L, 4L, 5L), counts)
-        assertEquals(4, total.chats)
-        assertEquals(42, total.videos)
-        assertEquals(2, total.counted)
-        assertFalse("still filling in", total.whole)
-        assertTrue(ChatPicking.total(setOf(2L), counts).whole)
-    }
-
-    @Test
     fun `the head start counts Saved Messages and the head of the list, and no more`() {
         val many = listOf(saved) + (10L..200L).map { chat(it) }
         val ahead = ChatPicking.headStart(many, ahead = 5)
         assertEquals(5, ahead.size)
         assertEquals(1L, ahead.first())
         assertEquals(listOf(1L, 10L, 11L, 12L, 13L), ahead)
+    }
+
+    @Test
+    fun `the scan reads channels before groups before people, recency inside each, and every chat once`() {
+        val mixed = listOf(
+            chat(1, kind = ChatKind.Direct),
+            chat(2, kind = ChatKind.Group),
+            chat(3, kind = ChatKind.Channel),
+            chat(4, kind = ChatKind.Saved),
+            chat(5, kind = ChatKind.Channel),
+            chat(6, kind = ChatKind.Group),
+        )
+        assertEquals(listOf(4L, 3L, 5L, 2L, 6L, 1L), ChatPicking.scanOrder(mixed).map { it.id })
+        assertEquals(listOf(4L, 1L, 2L), ChatPicking.headStart(mixed, ahead = 3))
     }
 
     @Test

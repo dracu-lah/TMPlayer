@@ -38,6 +38,7 @@ private val OPEN_LAST_CHAT = booleanPreferencesKey("open_last_chat")
 private val DOWNLOAD_FIRST = booleanPreferencesKey("download_before_playing")
 private val AUTOPLAY_NEXT = booleanPreferencesKey("autoplay_next")
 private val DETAIL_FIRST = booleanPreferencesKey("detail_first")
+private val SERIES_ONLY_MINE = booleanPreferencesKey("series_only_mine")
 private val COMPACT_NAV = booleanPreferencesKey("compact_nav")
 private val DOWNMIX_STEREO = booleanPreferencesKey("downmix_stereo")
 private val VOLUME_BOOST = booleanPreferencesKey("volume_boost")
@@ -64,16 +65,26 @@ private val RESUME_SYNC_AT = longPreferencesKey("resume_sync_at")
 private val RESUME_SYNC_ACCOUNT = longPreferencesKey("resume_sync_account")
 private val RESUME_SYNC_SENT_AT = longPreferencesKey("resume_sync_sent_at")
 private val RESUME_SYNC_STATUS = stringPreferencesKey("resume_sync_status")
+// "Keep my place on all my devices": the Home card that asks once (answered or left), and when this
+// device last wrote the file, so a restart does not start the few minutes' pause over.
+private val KEEP_PLACE_CARD_SEEN = booleanPreferencesKey("keep_place_card_seen")
+private val KEEP_PLACE_WROTE_AT = longPreferencesKey("keep_place_wrote_at")
 private val SKIP_SILENCE = booleanPreferencesKey("skip_silence")
 private val BACKGROUND_AUDIO = booleanPreferencesKey("background_audio")
 private val PIP_ON_LEAVE = booleanPreferencesKey("pip_on_leave")
+/** The phone's in-app mini player switch, retired (T12): never read, removed by [SettingsStore.dropRetiredMiniPlayer]. */
 private val MINI_PLAYER = booleanPreferencesKey("mini_player")
 // Not "resume_...": that prefix is a resume point's, and the sweeps over resume points (the
 // broken-history prune at launch, Clear history) would take this setting with them.
 private val RESUME_REWIND = longPreferencesKey("rewind_on_resume_ms")
 private val WIFI_ONLY = booleanPreferencesKey("wifi_only_downloads")
+// No longer read (always on, R2): the name stays so a backup that carries it still restores and the coverage test knows it.
+@Suppress("unused")
 private val PAUSE_DOWNLOADS_WHILE_PLAYING = booleanPreferencesKey("pause_downloads_while_playing")
 private val SAVE_MOBILE_DATA = booleanPreferencesKey("save_mobile_data")
+// "On mobile data: Ask first, Never, Allow" (R2): one word that replaced the two switches above for
+// anyone who has chosen; before that [MobileData.resolve] reads the two booleans.
+private val MOBILE_DATA = stringPreferencesKey("mobile_data")
 private val REMOVE_AFTER_WATCHING = booleanPreferencesKey("remove_after_watching")
 private val LOW_STORAGE_MODE = booleanPreferencesKey("low_storage_mode")
 // Android's chosen place for downloads (HX26): an absolute path to a volume's app-specific
@@ -141,7 +152,6 @@ private val KIDS_CHATS = stringSetPreferencesKey("kids_chats")
 
 private val SETUP = stringPreferencesKey("setup")
 private val TOUR = stringPreferencesKey("tour")
-private val TOUR_OFFER_AFTER = longPreferencesKey("tour_offer_after")
 private val HISTORY_TAB = stringPreferencesKey("history_tab")
 private val HISTORY_SORT = stringPreferencesKey("history_sort")
 private val DOWNLOADS_SORT = stringPreferencesKey("downloads_sort")
@@ -303,11 +313,13 @@ private val SUGGEST_VLC = booleanPreferencesKey("suggest_vlc")
 // How each engine has done on this device (PR2, [com.tmplayer.player.EngineHistory]): this device's
 // decoders, so it stays behind in a backup.
 private val ENGINE_HISTORY = stringPreferencesKey("engine_history")
+// What the remedy ladder learned per class of video on this device (RL6, [RemedyMemory]): its decoders, so it stays behind.
+private val REMEDY_MEMORY = stringPreferencesKey("remedy_memory")
 private val FRAME_RATE_MATCHING = booleanPreferencesKey("frame_rate_matching")
 private val TUNNELED_PLAYBACK = stringPreferencesKey("tunneled_playback")
 private val PLAYBACK_STATS = booleanPreferencesKey("playback_stats")
 
-// Play the chat in order, and Repeat this video (EG-F30, EG-F52): see [ChatOrder] and [PlayQueue].
+// Play the chat in order, and Repeat this video (EG-F30, EG-F52): see [ChatOrder] and [RepeatVideo].
 private val PLAY_CHAT_ORDER = booleanPreferencesKey("play_chat_order")
 private val KEEP_REPEAT = booleanPreferencesKey("keep_repeat")
 
@@ -397,6 +409,7 @@ private fun downloadKey(chatId: Long, messageId: Long) =
 private const val CACHED_PREFIX = "wc_"
 private const val SETUP_PENDING = "pending"
 private const val SETUP_DONE = "done"
+private const val SETUP_REPLAY = "replay"
 private const val TOUR_PENDING = "pending"
 private const val TOUR_DONE = "done"
 
@@ -544,6 +557,7 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
             // is how sparingly it may use the mobile data it pays for.
             val device = listOf(LIGHTER_PICTURES, REDUCE_MOTION, DEVICE_CARD_DISMISSED, DEVICE_HINT_SHOWN, SAVE_MOBILE_DATA)
                 .mapNotNull { key -> prefs[key]?.let { Pair(key, it) } }
+            val keptMobileData = prefs[MOBILE_DATA]
             val customAccent = prefs[ACCENT_CUSTOM]
             val typeface = prefs[APP_TYPEFACE]
             val highContrast = prefs[HIGH_CONTRAST]
@@ -573,6 +587,7 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
             typeface?.let { prefs[APP_TYPEFACE] = it }
             highContrast?.let { prefs[HIGH_CONTRAST] = it }
             for ((key, value) in device) prefs[key] = value
+            keptMobileData?.let { prefs[MOBILE_DATA] = it }
             for ((key, value) in support) prefs[key] = value
             supportNever?.let { prefs[SUPPORT_NEVER] = it }
             supporter?.let { prefs[SUPPORT_SUPPORTER] = it }
@@ -661,6 +676,16 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
 
     suspend fun setDetailFirst(value: Boolean) {
         prefs.edit { it[DETAIL_FIRST] = value }
+    }
+
+    /**
+     * "Only show what I have" on a show's page (T9): on lists just the seasons and episodes the
+     * chats hold; off (the default) lists every one the metadata knows, the missing ones quiet.
+     */
+    val seriesOnlyMine: Flow<Boolean> = read { it[SERIES_ONLY_MINE] ?: false }
+
+    suspend fun setSeriesOnlyMine(value: Boolean) {
+        prefs.edit { it[SERIES_ONLY_MINE] = value }
     }
 
     /**
@@ -753,13 +778,62 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
     suspend fun correct(items: List<MediaItem>, change: (VideoCorrection) -> VideoCorrection) {
         val now = VideoCorrections.current
         val updated = items.distinctBy { it.id }.map { it to change(now[it.id] ?: VideoCorrection()) }
+        val at = System.currentTimeMillis()
         prefs.edit { prefs ->
             for ((item, correction) in updated) {
                 val key = stringPreferencesKey(VideoCorrections.keyName(item.chatId, item.messageId))
-                if (correction.isEmpty) prefs.remove(key) else prefs[key] = correction.encode()
+                val name = ProgressKeys.of(item.chatId, item.messageId)
+                val stamp = longPreferencesKey(SyncDocuments.CORRECTION_AT_PREFIX + name)
+                val gone = longPreferencesKey(SyncDocuments.CORRECTION_REMOVAL_PREFIX + name)
+                // When it changed, and when it was cleared, so another device with sync on follows.
+                if (correction.isEmpty) {
+                    val existed = prefs[key] != null
+                    prefs.remove(key)
+                    prefs.remove(stamp)
+                    if (existed) prefs[gone] = at
+                } else {
+                    prefs.remove(gone)
+                    prefs[key] = correction.encode()
+                    prefs[stamp] = at
+                }
             }
         }
         updated.forEach { (item, correction) -> VideoCorrections.put(item.id, correction) }
+    }
+
+    /**
+     * Corrections made on another device ([ResumeSync]), in one edit, each checked again against
+     * what is here now: a correction changed here after it was made there stays, and a clear
+     * only clears a correction that was not changed here since. Returns how many changed.
+     */
+    suspend fun applySyncedCorrections(add: List<SyncCorrection>, remove: Map<String, Long>): Int {
+        if (add.isEmpty() && remove.isEmpty()) return 0
+        var changed = 0
+        prefs.edit { prefs ->
+            for (incoming in add) {
+                val name = incoming.key
+                val key = stringPreferencesKey(VideoCorrections.PREFIX + name)
+                val stamp = longPreferencesKey(SyncDocuments.CORRECTION_AT_PREFIX + name)
+                val gone = longPreferencesKey(SyncDocuments.CORRECTION_REMOVAL_PREFIX + name)
+                val mineAt = if (prefs[key] != null) (prefs[stamp] ?: 1L) else 0L
+                if ((prefs[gone] ?: 0L) > incoming.at || mineAt >= incoming.at) continue
+                prefs[key] = incoming.text
+                prefs[stamp] = incoming.at
+                prefs.remove(gone)
+                changed++
+            }
+            for ((name, at) in remove) {
+                val key = stringPreferencesKey(VideoCorrections.PREFIX + name)
+                val stamp = longPreferencesKey(SyncDocuments.CORRECTION_AT_PREFIX + name)
+                val gone = longPreferencesKey(SyncDocuments.CORRECTION_REMOVAL_PREFIX + name)
+                if (prefs[key] == null || (prefs[stamp] ?: 1L) >= at) continue
+                prefs.remove(key)
+                prefs.remove(stamp)
+                prefs[gone] = at
+                changed++
+            }
+        }
+        return changed
     }
 
     /**
@@ -797,6 +871,8 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
      * "Low storage mode": a streamed video keeps only a rolling window of itself on the disk, so a
      * film larger than the free space can still be watched. Off by default, because seeking back
      * past the window fetches those bytes again. Never applies to a video the viewer downloaded.
+     * Off until chosen, except that a fresh install's first sign in screen turns it on ([armSetup]):
+     * an install updated from before keeps off, so an update changes nothing for it.
      */
     val lowStorageMode: Flow<Boolean> = read { it[LOW_STORAGE_MODE] ?: false }
 
@@ -980,11 +1056,30 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
                 it.remove(RESUME_SYNC_AT)
                 it.remove(RESUME_SYNC_ACCOUNT)
                 it.remove(RESUME_SYNC_STATUS)
+                it.remove(KEEP_PLACE_WROTE_AT)
             }
         }
     }
 
     suspend fun resumeSyncNow(): Boolean = prefs.data.first()[RESUME_SYNC] ?: false
+
+    /**
+     * Whether the one question about keeping the viewer's place on all their devices still waits
+     * to be asked on Home: not once it was shown, answered or sync was turned on in Settings.
+     */
+    val keepPlaceCardPending: Flow<Boolean> = read { !(it[KEEP_PLACE_CARD_SEEN] ?: false) && !(it[RESUME_SYNC] ?: false) }
+
+    /** The card was shown (or answered): it is not shown again, whatever came of it. */
+    suspend fun setKeepPlaceCardSeen() {
+        prefs.edit { it[KEEP_PLACE_CARD_SEEN] = true }
+    }
+
+    /** When this device last wrote the sync file; 0 before. */
+    suspend fun resumeSyncWroteAtNow(): Long = prefs.data.first()[KEEP_PLACE_WROTE_AT] ?: 0L
+
+    suspend fun setResumeSyncWroteAt(at: Long) {
+        prefs.edit { it[KEEP_PLACE_WROTE_AT] = at }
+    }
 
     /** The Saved Messages message the places are kept in, once found or sent; 0 before. */
     suspend fun resumeSyncMessageNow(): Long = prefs.data.first()[RESUME_SYNC_MESSAGE] ?: 0L
@@ -1175,15 +1270,20 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
     suspend fun backgroundAudioNow(): Boolean = prefs.data.first()[BACKGROUND_AUDIO] ?: false
 
     /**
-     * Whether Back from a playing video keeps it going in a bar over browsing (U8, the mini
-     * player) rather than closing it. On unless turned off. Phone only on Android: the player opens
-     * in a task of its own while it is on, which is what lets it be left without being finished.
+     * The retired "Keep playing in a mini player" switch (T12): Back from the player now always
+     * stops and goes back. An old stored value is never read; this removes it, once, and is safe to
+     * call on every start.
      */
-    val miniPlayer: Flow<Boolean> = read { it[MINI_PLAYER] ?: true }
-
-    suspend fun setMiniPlayer(value: Boolean) {
-        prefs.edit { it[MINI_PLAYER] = value }
+    suspend fun dropRetiredMiniPlayer() {
+        if (prefs.data.first().contains(MINI_PLAYER)) prefs.edit { it.remove(MINI_PLAYER) }
     }
+
+    /** The retired switch as an older version stored it, for the removal's test. */
+    internal suspend fun storeMiniPlayerForTest(on: Boolean) {
+        prefs.edit { it[MINI_PLAYER] = on }
+    }
+
+    internal suspend fun hasMiniPlayerForTest(): Boolean = prefs.data.first().contains(MINI_PLAYER)
 
     /**
      * Whether going Home or to another app while a video plays shrinks it into a picture in
@@ -1303,32 +1403,61 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
     suspend fun isKeptDownload(chatId: Long, messageId: Long): Boolean =
         prefs.data.first()[downloadKey(chatId, messageId)] != null
 
+    private fun mobileDataOf(prefs: Preferences): MobileData =
+        MobileData.resolve(prefs[MOBILE_DATA], prefs[WIFI_ONLY] ?: false, prefs[SAVE_MOBILE_DATA] ?: false)
+
     /**
-     * Refuse to fetch video over a connection the viewer pays for by the byte.
-     *
-     * Off by default, because many people watch on mobile data by choice. On, it is absolute: a
-     * video that is not already downloaded will not open until there is Wi-Fi.
+     * "On mobile data": Ask first (the default), Never or Allow (R2). Read from the one stored word
+     * when the viewer has chosen, else from the two switches it replaced ([MobileData.resolve]).
      */
-    val wifiOnlyDownloads: Flow<Boolean> = read { it[WIFI_ONLY] ?: false }
+    val mobileData: Flow<MobileData> = read { mobileDataOf(it) }
+
+    /** Read at the start of playback and of a download, where the flow's first emission has not arrived yet. */
+    suspend fun mobileDataNow(): MobileData = mobileDataOf(prefs.data.first())
+
+    /**
+     * Picks the answer and keeps the old Wi-Fi only switch in step with it (Never is on, the others
+     * off), so a backup restored on a build before R2 holds back exactly what this one does.
+     *
+     * Also ends the old "Save mobile data" streaming bound: its row is gone, so a stored true could
+     * never be turned off again, and Allow would still have limited every stream. A pick is the
+     * viewer's one answer about mobile data, so the old key is removed (it maps once, here).
+     */
+    suspend fun setMobileData(value: MobileData) {
+        prefs.edit {
+            it[MOBILE_DATA] = value.stored
+            it[WIFI_ONLY] = value == MobileData.Never
+            it.remove(SAVE_MOBILE_DATA)
+        }
+    }
+
+    /**
+     * Refuse to fetch video over a connection the viewer pays for by the byte: "On mobile data:
+     * Never". Derived from [mobileData], so the readers of this switch (the download service, the
+     * player, the update download) follow the one control without a change.
+     */
+    val wifiOnlyDownloads: Flow<Boolean> = read { mobileDataOf(it).blocks }
 
     suspend fun setWifiOnlyDownloads(value: Boolean) {
-        prefs.edit { it[WIFI_ONLY] = value }
+        prefs.edit {
+            it[WIFI_ONLY] = value
+            // An answer already chosen moves with the switch: Never on, and off leaves Never.
+            val chosen = MobileData.parse(it[MOBILE_DATA])
+            if (value) it[MOBILE_DATA] = MobileData.Never.stored
+            else if (chosen == MobileData.Never) it[MOBILE_DATA] = MobileData.Ask.stored
+        }
     }
 
     /**
-     * "Pause downloads while playing": the other downloads wait while a video plays from the
-     * network, so they do not share its line, and carry on when it ends or has been paused for
-     * long ([DownloadYield]). On by default: a stream that stutters beside a download looks like a
-     * slow video, and nobody has to remember to turn this on to be spared it.
+     * Always on since R2 (the switch is gone): the other downloads wait while a video plays from
+     * the network, so they do not share its line, and carry on when it ends or has been paused for
+     * long ([DownloadYield]). A stream that stutters beside a download looks like a slow video, and
+     * nobody has to find a switch to be spared it. The stored value stays in old backups and is not read.
      */
-    val pauseDownloadsWhilePlaying: Flow<Boolean> = read { it[PAUSE_DOWNLOADS_WHILE_PLAYING] ?: true }
-
-    suspend fun setPauseDownloadsWhilePlaying(value: Boolean) {
-        prefs.edit { it[PAUSE_DOWNLOADS_WHILE_PLAYING] = value }
-    }
+    val pauseDownloadsWhilePlaying: Flow<Boolean> = read { true }
 
     /** Read at the start of playback, where the flow's first emission has not arrived yet. */
-    suspend fun wifiOnlyDownloadsNow(): Boolean = prefs.data.first()[WIFI_ONLY] ?: false
+    suspend fun wifiOnlyDownloadsNow(): Boolean = mobileDataOf(prefs.data.first()).blocks
 
     /**
      * "Save mobile data": on a metered connection a streamed video is fetched only a bounded
@@ -1590,9 +1719,17 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
     }
 
     /** Whether [notice] may be posted: its own switch, at [Notice.defaultOn] until it is touched. */
-    fun noticeOn(notice: Notice): Flow<Boolean> = read { it[noticeKey(notice)] ?: notice.defaultOn }
+    fun noticeOn(notice: Notice): Flow<Boolean> = read { noticeValue(it, notice) }
 
-    suspend fun noticeOnNow(notice: Notice): Boolean = prefs.data.first()[noticeKey(notice)] ?: notice.defaultOn
+    suspend fun noticeOnNow(notice: Notice): Boolean = noticeValue(prefs.data.first(), notice)
+
+    /**
+     * [Notice.LowStorage] is always on since R2 (its switch left Settings: a phone about to run out
+     * of room says so, and the system's own notification settings can still silence the channel);
+     * the stored value stays in old backups and is not read.
+     */
+    private fun noticeValue(prefs: Preferences, notice: Notice): Boolean =
+        if (notice == Notice.LowStorage) true else prefs[noticeKey(notice)] ?: notice.defaultOn
 
     /**
      * Turns [notice] on or off. Turning one on that watches the chats starts from what they hold
@@ -1969,6 +2106,13 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
         prefs.edit { it[ENGINE_HISTORY] = com.tmplayer.player.EngineHistory.decode(it[ENGINE_HISTORY]).failed(engine).encode() }
     }
 
+    /** The remedy ladder's memory per class ([RemedyMemory.decode]: anything unreadable is empty, stale entries dropped). */
+    suspend fun remedyMemoryNow(today: Int): RemedyMemory = RemedyMemory.decode(prefs.data.first()[REMEDY_MEMORY], today)
+
+    suspend fun setRemedyMemory(memory: RemedyMemory) {
+        prefs.edit { it[REMEDY_MEMORY] = memory.encode() }
+    }
+
     /** Switch to the other engine by itself when a decoder gives up (on), or only suggest it (off). */
     val switchEngineOnError: Flow<Boolean> = read { it[ENGINE_SWITCH_ON_ERROR] ?: true }
 
@@ -2137,23 +2281,30 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
 
     // ---- size filter ------------------------------------------------------------------------
 
+    /**
+     * The smallest video a chat lists ([SizeFilter.effectiveMin]): 0 unless the viewer turned on
+     * "Hide small clips" (50 MB) or chose a floor before the sliders went. A stored 400 MB, the old
+     * default, reads as 0.
+     */
     val minSizeBytes: Flow<Long> =
-        read { it[MIN_SIZE] ?: SizeFilter.DEFAULT_MIN }
+        read { SizeFilter.effectiveMin(it[MIN_SIZE]) }
 
     val maxSizeBytes: Flow<Long> =
-        read { it[MAX_SIZE] ?: SizeFilter.DEFAULT_MAX }
+        read { SizeFilter.effectiveMax(it[MAX_SIZE]) }
 
-    suspend fun setMinSizeBytes(value: Long) {
+    /** The Sort sheet's "Hide small clips" switch: on stores [SizeFilter.CLIP_MIN] (a custom floor is kept), off stores nothing. */
+    suspend fun setHideSmallClips(on: Boolean) {
         prefs.edit { prefs ->
-            val max = prefs[MAX_SIZE] ?: SizeFilter.DEFAULT_MAX
-            prefs[MIN_SIZE] = SizeFilter.clampMin(value, max)
+            val floor = SizeFilter.clipSwitchFloor(prefs[MIN_SIZE], on)
+            if (floor != null) prefs[MIN_SIZE] = floor else prefs.remove(MIN_SIZE)
         }
     }
 
-    suspend fun setMaxSizeBytes(value: Long) {
+    /** Reset on the Sort sheet's custom limits line: both stored bounds go, every video is listed. */
+    suspend fun resetSizeLimits() {
         prefs.edit { prefs ->
-            val min = prefs[MIN_SIZE] ?: SizeFilter.DEFAULT_MIN
-            prefs[MAX_SIZE] = SizeFilter.clampMax(value, min)
+            prefs.remove(MIN_SIZE)
+            prefs.remove(MAX_SIZE)
         }
     }
 
@@ -2432,7 +2583,14 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
      * arrived, and had gone through the old tour, is never walked through it; a fresh sign in,
      * including one after signing out, is. True while it waits to be shown or is on screen.
      */
-    val setupPending: Flow<Boolean> = read { it[SETUP] == SETUP_PENDING }
+    val setupPending: Flow<Boolean> = read { it[SETUP] == SETUP_PENDING || it[SETUP] == SETUP_REPLAY }
+
+    /**
+     * The setup is on screen because Settings ran it again ([replaySetup]) rather than because of
+     * a sign in: the one question is asked again as the ordinary picker, with the chosen chats
+     * ticked and a Back, and ends when it is closed.
+     */
+    val setupReplay: Flow<Boolean> = read { it[SETUP] == SETUP_REPLAY }
 
     /**
      * An account is signed in on this device. Kept until Sign out clears the preferences, so a
@@ -2451,9 +2609,18 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
         prefs.edit { it.remove(SIGNED_IN) }
     }
 
-    /** A sign in screen is up: the setup comes once the account is in. */
+    /**
+     * A sign in screen is up: the setup comes once the account is in. The first sign in screen of
+     * a fresh install (nothing about setup, signing in or Low storage mode stored yet) also turns
+     * [lowStorageMode] on, so a new install starts with it on; an install that is updated never
+     * reaches this, and a stored answer either way is left alone.
+     */
     suspend fun armSetup() {
-        prefs.edit { if (it[SETUP] != SETUP_PENDING) it[SETUP] = SETUP_PENDING }
+        prefs.edit {
+            val fresh = it[SETUP] == null && it[SIGNED_IN] != true && it[LOW_STORAGE_MODE] == null
+            if (fresh) it[LOW_STORAGE_MODE] = true
+            if (it[SETUP] != SETUP_PENDING) it[SETUP] = SETUP_PENDING
+        }
     }
 
     /**
@@ -2469,9 +2636,9 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
         }
     }
 
-    /** Settings' "Run the setup again". */
+    /** Settings' "Run the setup again": the one question, asked again as the ordinary picker. */
     suspend fun replaySetup() {
-        prefs.edit { it[SETUP] = SETUP_PENDING }
+        prefs.edit { it[SETUP] = SETUP_REPLAY }
     }
 
     /**
@@ -2496,31 +2663,6 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
     /** Finished, skipped, or the offer turned down: not shown again unless Settings opens it. */
     suspend fun markTourDone() {
         prefs.edit { it[TOUR] = TOUR_DONE }
-    }
-
-    /**
-     * When the tour offer may come back after "Not now" (epoch ms), or 0 while it was never put
-     * off. "Not now" must not mean "never": the first one brings the offer back once, after
-     * [Companion.TOUR_OFFER_PAUSE_MS]; asked again, [putOffTourOffer] turns it down for good.
-     */
-    val tourOfferAfter: Flow<Long> = read { it[TOUR_OFFER_AFTER] ?: 0L }
-
-    /**
-     * "Not now" on the tour offer: the first time it comes back once, after [Companion.TOUR_OFFER_PAUSE_MS]
-     * from [now]; the second time (the offer had already come back) it is marked done, as "No
-     * thanks". Returns true when the offer will come again.
-     */
-    suspend fun putOffTourOffer(now: Long): Boolean {
-        var again = false
-        prefs.edit {
-            if ((it[TOUR_OFFER_AFTER] ?: 0L) == 0L) {
-                it[TOUR_OFFER_AFTER] = now + Companion.TOUR_OFFER_PAUSE_MS
-                again = true
-            } else {
-                it[TOUR] = TOUR_DONE
-            }
-        }
-        return again
     }
 
     enum class TourState { Never, Pending, Done }
@@ -3188,7 +3330,20 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
     suspend fun restoreEntries(writes: (Map<String, Any>) -> Map<String, Any>) {
         prefs.edit { prefs ->
             val now = prefs.asMap().mapKeys { it.key.name }
-            for ((name, value) in writes(now)) prefs.putRaw(name, value)
+            val written = writes(now)
+            for ((name, value) in written) prefs.putRaw(name, value)
+            // A correction brought back by a restore is the viewer's choice: a removal noted for it
+            // (here or in a synced file) must not undo it, so it is stamped as changed now.
+            val at = System.currentTimeMillis()
+            for (name in written.keys) {
+                if (VideoCorrections.idOf(name) == null) continue
+                val id = name.removePrefix(VideoCorrections.PREFIX)
+                val gone = longPreferencesKey(SyncDocuments.CORRECTION_REMOVAL_PREFIX + id)
+                if (prefs[gone] != null) {
+                    prefs.remove(gone)
+                    prefs[longPreferencesKey(SyncDocuments.CORRECTION_AT_PREFIX + id)] = at
+                }
+            }
             evictOldestHistory(prefs)
         }
     }
@@ -3278,12 +3433,8 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
          */
         const val FILE_NAME = "tmplayer.preferences_pb"
 
-        /** How long "Not now" on the tour offer waits before the offer comes back, once: seven days. */
-        const val TOUR_OFFER_PAUSE_MS = 7L * 24 * 60 * 60 * 1000
-
-        /** Whether the tour offer may show at [now]: not taken or turned down, and not put off for later. */
-        fun tourOfferDue(state: TourState, after: Long, now: Long): Boolean =
-            state == TourState.Never && now >= after
+        /** Whether the Tips card may show on Home: the tour was never taken or turned down. */
+        fun tipsDue(state: TourState): Boolean = state == TourState.Never
 
         /** Opens the store at [file]. Call once per process and share the result. */
         fun openDataStore(file: File): DataStore<Preferences> = openSafeDataStore(file)

@@ -87,31 +87,49 @@ class SetupFlagTest {
     }
 
     @Test
-    fun `Not now on the tour offer brings it back once after a week, then it is turned down`() = runBlocking {
+    fun `the Tips card is due until the tour is taken or dismissed, then never again`() = runBlocking {
         val settings = store()
-        val day = 24L * 60 * 60 * 1000
         settings.armSetup()
         settings.markSetupDone()
-        assertEquals(0L, settings.tourOfferAfter.first())
-        assertTrue(SettingsStore.tourOfferDue(settings.tourState.first(), settings.tourOfferAfter.first(), now = 1_000L))
-
-        // The first Not now: still not done, and held back for seven days.
-        assertTrue(settings.putOffTourOffer(now = 1_000L))
-        assertEquals(SettingsStore.TourState.Never, settings.tourState.first())
-        val after = settings.tourOfferAfter.first()
-        assertEquals(1_000L + SettingsStore.TOUR_OFFER_PAUSE_MS, after)
-        assertFalse(SettingsStore.tourOfferDue(SettingsStore.TourState.Never, after, now = 1_000L + 6 * day))
-        assertTrue(SettingsStore.tourOfferDue(SettingsStore.TourState.Never, after, now = 1_000L + 7 * day))
-
-        // Offered again and turned down: now it stays done, and the setup rerun does not bring it back.
-        assertFalse(settings.putOffTourOffer(now = 1_000L + 8 * day))
-        assertEquals(SettingsStore.TourState.Done, settings.tourState.first())
+        assertTrue(SettingsStore.tipsDue(settings.tourState.first()))
+        // Dismissed for good: one tap, and a rerun of the setup does not bring it back.
+        settings.markTourDone()
+        assertFalse(SettingsStore.tipsDue(settings.tourState.first()))
         settings.replaySetup()
         settings.markSetupDone()
-        assertEquals(SettingsStore.TourState.Done, settings.tourState.first())
-        // Taking it, or having done it, is never due.
-        assertFalse(SettingsStore.tourOfferDue(SettingsStore.TourState.Pending, 0L, now = 1L))
-        assertFalse(SettingsStore.tourOfferDue(SettingsStore.TourState.Done, 0L, now = 1L))
+        assertFalse(SettingsStore.tipsDue(settings.tourState.first()))
+        // Taking it is not due either.
+        assertFalse(SettingsStore.tipsDue(SettingsStore.TourState.Pending))
+    }
+
+    @Test
+    fun `running it again from Settings is a replay, a sign in is not`() = runBlocking {
+        val settings = store()
+        settings.armSetup()
+        assertTrue(settings.setupPending.first())
+        assertFalse(settings.setupReplay.first())
+        settings.markSetupDone()
+        settings.replaySetup()
+        assertTrue(settings.setupPending.first())
+        assertTrue(settings.setupReplay.first())
+        // A sign in screen over a replay is a sign in again: the strict question.
+        settings.armSetup()
+        assertFalse(settings.setupReplay.first())
+        settings.markSetupDone()
+        assertFalse(settings.setupPending.first())
+        assertFalse(settings.setupReplay.first())
+    }
+
+    @Test
+    fun `a fresh install ends with streaming mode on and crash reports off`() = runBlocking {
+        val settings = store()
+        settings.armSetup()
+        settings.markSetupDone()
+        assertTrue("streaming mode (Save space) is on for a fresh install", settings.lowStorageModeNow())
+        assertFalse("crash reports are off until Settings turns them on", settings.crashReportsNow())
+        assertFalse(settings.crashReports.first())
+        // Nothing in the setup writes the answer: it stays unanswered, so Settings asks once.
+        assertFalse("the crash switch was never written", settings.crashReportsAsked.first())
     }
 
     @Test
@@ -121,5 +139,41 @@ class SetupFlagTest {
         settings.storeOnlyFoldersForTest(true)
         assertTrue(settings.takeOnlyFolders())
         assertFalse(settings.takeOnlyFolders())
+    }
+
+    @Test
+    fun `a fresh install starts with Low storage mode on, an updated or answered one does not change`() = runBlocking {
+        val fresh = store()
+        assertFalse("off until a sign in screen", fresh.lowStorageModeNow())
+        fresh.armSetup()
+        assertTrue(fresh.lowStorageModeNow())
+        // Turned off by the viewer: arming again (every sign in step arms) does not turn it back on.
+        fresh.setLowStorageMode(false)
+        fresh.armSetup()
+        assertFalse(fresh.lowStorageModeNow())
+
+        val signedIn = store()
+        signedIn.markSignedIn()
+        signedIn.armSetup()
+        assertFalse("an install that was signed in before keeps off", signedIn.lowStorageModeNow())
+
+        val answered = store()
+        answered.setLowStorageMode(false)
+        answered.armSetup()
+        assertFalse(answered.lowStorageModeNow())
+    }
+
+    @Test
+    fun `the retired mini player switch is removed on first read and never read again`() = runBlocking {
+        val settings = store()
+        // Nothing stored: nothing to do, no crash.
+        settings.dropRetiredMiniPlayer()
+        assertFalse(settings.hasMiniPlayerForTest())
+        settings.storeMiniPlayerForTest(false)
+        assertTrue(settings.hasMiniPlayerForTest())
+        settings.dropRetiredMiniPlayer()
+        assertFalse(settings.hasMiniPlayerForTest())
+        settings.dropRetiredMiniPlayer()
+        assertFalse(settings.hasMiniPlayerForTest())
     }
 }

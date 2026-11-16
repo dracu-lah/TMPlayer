@@ -489,7 +489,7 @@ internal fun PhonePageFrame(
                 // Choose chats at its end: add or remove chats in one tap from the list they fill.
                 TopAppBar(
                     title = { Text(s.browseTabChats, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                    actions = { com.tmplayer.ui.components.ChooseChatsButton() },
+                    actions = { com.tmplayer.ui.components.ChooseChatsButton(labelled = true) },
                 )
             } else {
                 TopAppBar(

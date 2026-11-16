@@ -46,6 +46,7 @@ function query(a: PickedAsk): string {
     if (a.picked && a.tmdbId) q.set('p', '1')
     if (a.year) q.set('y', String(a.year))
     if (a.tmdbId) q.set('id', String(a.tmdbId))
+    else if (a.imdbId) q.set('i', a.imdbId)
     if (a.series) q.set('s', '1')
     if (a.languages.length) q.set('l', a.languages.join(','))
     return q.toString()
@@ -121,6 +122,9 @@ export interface Extras {
     imdb?: string | null
     /** The title logo's file; null for none. Answers kept before it was added lack the field. */
     logo?: string | null
+    /** A show's seasons and the next episode to air (T9); answers kept before it was added lack both. */
+    seasonList?: { number: number; episodes: number; airDate: string | null }[]
+    next?: { season: number; episode: number; airDate: string } | null
     episode?: { name: string; overview: string; still: string | null }
 }
 

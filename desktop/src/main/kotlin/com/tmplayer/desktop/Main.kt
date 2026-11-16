@@ -149,6 +149,8 @@ fun main(args: Array<String>) {
         com.tmplayer.data.TitleReports.install(settings.titleLedger, BuildInfo.LOG_UPLOAD_URL)
         com.tmplayer.data.TitleReports.flushSoon()
         OnlineMetadata.current = desktopOnlineMetadata()
+        // The intros the viewer marked in the player, kept here and sent nowhere.
+        com.tmplayer.online.UserSkipMarks.open(com.tmplayer.online.FileSkipMarks(java.io.File(DesktopPaths.dataDir, "skip-marks.json")))
         // Home as it was last built, read now so its first frame finds it in memory (HomeCache).
         com.tmplayer.data.HomeCache.file = java.io.File(DesktopPaths.dataDir, "home-cache.json")
         Background.scope.launch { runCatching { com.tmplayer.data.HomeCache.preload() } }
@@ -443,7 +445,6 @@ fun main(args: Array<String>) {
                                             if (!com.tmplayer.desktop.ui.BigScreen.on) shell.fullscreen = false
                                             shell.freeUpSpace()
                                         },
-                                        mini = remember(shell) { com.tmplayer.desktop.ui.MiniLink(shell) },
                                     )
                                 }
                             }

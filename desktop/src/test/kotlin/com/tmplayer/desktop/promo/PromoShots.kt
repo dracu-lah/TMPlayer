@@ -75,9 +75,6 @@ import com.tmplayer.i18n.Languages
 import com.tmplayer.i18n.Translator
 import com.tmplayer.ui.icons.TmIcons
 import com.tmplayer.ui.onboarding.SetupChoice
-import com.tmplayer.ui.onboarding.SetupScreen
-import com.tmplayer.ui.onboarding.SetupState
-import com.tmplayer.ui.onboarding.SetupStep
 import com.tmplayer.ui.onboarding.setupImageName
 import com.tmplayer.ui.theme.TmMaterialTheme
 import com.tmplayer.ui.theme.Tone
@@ -432,31 +429,6 @@ class PromoShots {
             }
         } finally {
             com.tmplayer.online.OnlineMetadata.current = null
-        }
-    }
-
-    /** The setup after sign in (CP67) as the desktop shows it, step by step; only checked, not shipped. */
-    @Test
-    fun setup() {
-        for (step in SetupStep.entries) {
-            both("setup-${step.name.lowercase()}") {
-                SetupScreen(settings, remember { SetupState(SetupStep.entries.toList(), start = step.ordinal) }, onDone = {})
-            }
-        }
-    }
-
-    /** The same in the en-XA pseudo-locale: longer, accented text, to see what a translation will do to it. */
-    @Test
-    fun setupPseudo() {
-        Translator.use(Languages.PSEUDO)
-        try {
-            for (step in SetupStep.entries) {
-                both("setup-xa-${step.name.lowercase()}", darkOnly = true) {
-                    SetupScreen(settings, remember { SetupState(SetupStep.entries.toList(), start = step.ordinal) }, onDone = {})
-                }
-            }
-        } finally {
-            Translator.use(Languages.ENGLISH)
         }
     }
 

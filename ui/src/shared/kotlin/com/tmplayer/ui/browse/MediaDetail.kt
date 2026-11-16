@@ -107,7 +107,45 @@ data class DetailRow(
      * elsewhere when the Download button it was on turns into this.
      */
     val enabled: Boolean = true,
-)
+    /**
+     * The icon the round button wears while this line is a switch that is ON (Watched, Watch later):
+     * the button then draws filled, so it reads as a button that is pressed in and not as a status
+     * (Raju 5.1). Null for a step, and for a switch that is off.
+     */
+    val stateIcon: ImageVector? = null,
+    /** A live line about this row under the buttons ("Downloading, 5 percent, 140 MB of 2.6 GB"); null for none. */
+    val status: String? = null,
+) {
+    /** The icon the round button draws: [stateIcon] while the switch is on. */
+    val roundIcon: ImageVector get() = stateIcon ?: icon
+
+    /** Whether the round button draws as a switch that is on. */
+    val on: Boolean get() = stateIcon != null
+}
+
+/**
+ * The line under the round buttons while this video is coming down (Raju 5.2): where it stands, how far, and how much.
+ * "Downloading, 5 percent, 140.2 MB of 2.59 GB"; a download that waits or stopped says that instead of "Downloading".
+ * Pure so a test can hold the words to the figures.
+ */
+fun downloadStatusLine(progress: com.tmplayer.data.OfflineDownloads.Progress, s: Messages): String {
+    val stage = when (progress.stage) {
+        com.tmplayer.data.OfflineDownloads.Stage.Running, com.tmplayer.data.OfflineDownloads.Stage.Moving -> s.gridStageDownloading
+        com.tmplayer.data.OfflineDownloads.Stage.Paused -> s.gridStagePausedLong
+        com.tmplayer.data.OfflineDownloads.Stage.Queued -> s.gridStageQueued
+        com.tmplayer.data.OfflineDownloads.Stage.Offline, com.tmplayer.data.OfflineDownloads.Stage.Yielding -> s.gridStageWaiting
+        com.tmplayer.data.OfflineDownloads.Stage.NoWifi -> s.gridStageNoWifi
+        com.tmplayer.data.OfflineDownloads.Stage.Failed -> s.gridStageFailed
+    }
+    val percent = progress.fraction?.let { s.formatter.percent(it.toDouble()) }
+    val size = when {
+        progress.totalBytes > 0 && progress.downloadedBytes > 0 ->
+            s.commonOfTotal(done = s.formatter.bytes(progress.downloadedBytes), total = s.formatter.bytes(progress.totalBytes))
+        progress.totalBytes > 0 -> s.formatter.bytes(progress.totalBytes)
+        else -> null
+    }
+    return listOfNotNull(stage, percent.takeIf { progress.downloadedBytes > 0 }, size).joinToString(", ")
+}
 
 /**
  * The usual wording and icon for [action]. A platform overrides a line where it knows more, such
@@ -135,9 +173,9 @@ fun detailRow(
         DetailAction.PlayInTmPlayer -> DetailRow(action, s.externalPlayInTmplayer, TmIcons.Play, s.externalPlayInTmplayerDetail, onSelect = onSelect)
         DetailAction.StartOver -> DetailRow(action, s.detailStartOver, TmIcons.Refresh, s.detailStartOverDetail, onSelect = onSelect)
         DetailAction.MarkWatched -> DetailRow(action, s.gridMarkWatched, TmIcons.Check, s.gridMarkWatchedDetail, onSelect = onSelect)
-        DetailAction.MarkUnwatched -> DetailRow(action, s.gridMarkUnwatched, TmIcons.Close, s.gridMarkUnwatchedDetail, onSelect = onSelect)
+        DetailAction.MarkUnwatched -> DetailRow(action, s.gridMarkUnwatched, TmIcons.Close, s.gridMarkUnwatchedDetail, onSelect = onSelect, stateIcon = TmIcons.Check)
         DetailAction.AddWatchLater -> DetailRow(action, s.detailWatchLaterAdd, TmIcons.Clock, s.detailWatchLaterAddDetail, onSelect = onSelect)
-        DetailAction.RemoveWatchLater -> DetailRow(action, s.detailWatchLaterRemove, TmIcons.Close, onSelect = onSelect)
+        DetailAction.RemoveWatchLater -> DetailRow(action, s.detailWatchLaterRemove, TmIcons.Close, onSelect = onSelect, stateIcon = TmIcons.Clock)
         DetailAction.AddToList -> DetailRow(action, s.listsAddTo, TmIcons.List, s.listsAddToDetail, onSelect = onSelect)
         DetailAction.RemoveFromHistory ->
             DetailRow(action, s.browseRemoveFromHistory, TmIcons.History, s.browseRemoveFromHistoryDetail, destructive = true, onSelect = onSelect)
@@ -216,7 +254,8 @@ fun MediaDetailPanel(
     // The screen's one collector when it has one, rather than a second of its own.
     val corrections by com.tmplayer.ui.components.rememberCorrections()
     val parsed = remember(item, corrections) { com.tmplayer.data.SeriesShelf.episodeOf(item, corrections) }
-    val matched = com.tmplayer.ui.online.rememberMatched(item)
+    val matchedState = com.tmplayer.ui.online.rememberMatchedState(item)
+    val matched = matchedState.value
     val meta = matched?.info
     // "small-shelf-part-1" reads as a title once its joiners are spaces; a name with spaces in it
     // already chose its own punctuation and keeps it. A match's own title wins, in the UI language.
@@ -247,6 +286,8 @@ fun MediaDetailPanel(
     // the poster or the overview came and went.
     val metaEnabled = online?.let { com.tmplayer.ui.components.rememberMetaSettings(it) }?.value?.enabled
     val metadataOff = online != null && poster == null && overview == null && metaEnabled != true
+    // Why there is no poster, in one line with the action that fixes it (TS): never where the platform brought its own picture.
+    val posterWhy = rememberPosterWhy(item, matched = meta != null || poster != null || overview != null, settled = matchedState.settled)
 
     Column(
         modifier
@@ -326,13 +367,13 @@ fun MediaDetailPanel(
                 listOfNotNull(
                     (parsed.year ?: meta?.year)?.let { Fact(it.toString()) },
                     item.durationSec.takeIf { it > 0 }?.let { Fact(s.formatter.duration(it.toLong())) },
-                    // As the copy under Play names it ([VideoCopies.qualityLabel]).
-                    (com.tmplayer.data.VideoCopies.qualityLabel(item) ?: facts.resolution)?.let { Fact(it, chip = true) },
                     item.sizeBytes.takeIf { it > 0 }?.let { Fact(com.tmplayer.data.SplitPieces.sizeFact(item, s.formatter.size(it))) },
                     chatTitle.takeIf { it.isNotBlank() }?.let { Fact(it) },
                     Fact(s.detailWatchedLine, accent = true).takeIf { finished },
                 ),
             )
+            // The picture and the sound the file declares (resolution first, then what a player saw): FormatFacts.
+            com.tmplayer.ui.components.FormatBadgeRow(com.tmplayer.ui.components.rememberFormatTags(item))
             // The file's own length is on the facts line already.
             MetaFactsLines(extras, runtime = item.durationSec <= 0)
             ResumeLine(watched, finished, item.durationSec)
@@ -358,10 +399,6 @@ fun MediaDetailPanel(
         val others = buildList {
             addAll(rows.drop(1).filter { !actionsAtFoot || it.action in HEADLINE_ACTIONS })
             extras?.trailer?.let { trailer -> add(DetailRow(DetailAction.Play, s.metadataTrailer, TrailerIcon, onSelect = { trailers.open(trailer) })) }
-            // Posters and overviews are off: one button to turn them on from here, as Settings can.
-            if (metadataOff && !actionsAtFoot) {
-                add(DetailRow(DetailAction.Play, s.metadataTurnOn, TmIcons.Info, s.metadataTurnOnDetail, onSelect = { online?.setEnabled(true) }))
-            }
         }
         if (others.isNotEmpty()) {
             // Centred under Play on a phone, as on a video's page and a show's.
@@ -371,10 +408,14 @@ fun MediaDetailPanel(
                 horizontalArrangement = Arrangement.spacedBy(4.dp, if (centred) Alignment.CenterHorizontally else Alignment.Start),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                others.forEach { RoundAction(it.label, it.icon, it.onSelect, destructive = it.destructive, detail = it.detail, short = roundLabel(it, s), progress = it.progress, enabled = it.enabled) }
+                others.forEach { RoundAction(it.label, it.roundIcon, it.onSelect, destructive = it.destructive, detail = it.detail, short = roundLabel(it, s), progress = it.progress, enabled = it.enabled, on = it.on) }
             }
         }
         extras?.trailer?.let { trailer -> trailers.unopened?.takeIf { it == trailer }?.let { TrailerQr(it, Modifier.padding(vertical = 8.dp)) } }
+        // No poster: why, and the one thing that fixes it (this is also where "turn on posters" lives now).
+        if (poster == null && overview == null) {
+            posterWhy?.let { PosterWhyLine(it, onTurnOn = { online?.setEnabled(true) }, onFix = fixMatchOf(rows), modifier = Modifier.fillMaxWidth()) }
+        }
 
         // A film the chat posted several times over: every copy by quality and size, one click away.
         Versions(item, onPickCopy, chatTitle, copyStarted)
@@ -395,9 +436,6 @@ fun MediaDetailPanel(
             // Things done now and then, out of the way of Play.
             val rest = buildList {
                 addAll(rows.drop(1).filter { it.action !in HEADLINE_ACTIONS })
-                if (metadataOff) {
-                    add(DetailRow(DetailAction.Play, s.metadataTurnOn, TmIcons.Info, s.metadataTurnOnDetail, onSelect = { online?.setEnabled(true) }))
-                }
             }
             if (rest.isNotEmpty()) {
                 FlowRow(
@@ -405,7 +443,7 @@ fun MediaDetailPanel(
                     horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    rest.forEach { RoundAction(it.label, it.icon, it.onSelect, destructive = it.destructive, detail = it.detail, short = roundLabel(it, s), progress = it.progress, enabled = it.enabled) }
+                    rest.forEach { RoundAction(it.label, it.roundIcon, it.onSelect, destructive = it.destructive, detail = it.detail, short = roundLabel(it, s), progress = it.progress, enabled = it.enabled, on = it.on) }
                 }
             }
         }

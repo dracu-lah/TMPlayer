@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.tmplayer.data.FormatFacts
 import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.LocalDarkTheme
 import com.tmplayer.ui.theme.Tone
@@ -60,6 +61,8 @@ fun ChoiceRow(
     selected: Boolean? = null,
     icon: ImageVector? = null,
     enabled: Boolean = true,
+    /** Format pills under the words (a sound track's Atmos, 5.1): text only, not a stop of their own. */
+    tags: List<FormatFacts.Tag> = emptyList(),
     onClick: () -> Unit,
 ) {
     val shape = RoundedCornerShape(Corner.Medium)
@@ -72,7 +75,7 @@ fun ChoiceRow(
     }
     Row(
         modifier
-            .heightIn(min = if (detail == null) 56.dp else 72.dp)
+            .heightIn(min = if (detail == null && tags.isEmpty()) 56.dp else 72.dp)
             .clip(shape)
             .then(target)
             .padding(horizontal = LocalChoiceInset.current, vertical = 2.dp)
@@ -90,6 +93,7 @@ fun ChoiceRow(
         Column {
             Text(title, style = MaterialTheme.typography.bodyLarge, color = Tone.text)
             if (detail != null) Text(detail, style = MaterialTheme.typography.bodySmall, color = Tone.muted)
+            if (tags.isNotEmpty()) FormatBadgeRow(tags, Modifier.padding(top = 4.dp, bottom = 4.dp))
         }
     }
 }

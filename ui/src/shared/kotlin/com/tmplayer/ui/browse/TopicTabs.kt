@@ -215,11 +215,11 @@ private fun TopicFindField(value: String, onValue: (String) -> Unit, tv: Boolean
             }
         }
         if (value.isNotEmpty()) {
-            Icon(
-                TmIcons.Close,
-                contentDescription = s.commonClear,
-                tint = Tone.muted,
-                modifier = Modifier.size(if (tv) 18.dp else 16.dp).clickable(onClickLabel = s.commonClear) { onValue("") },
+            com.tmplayer.ui.components.ClearButton(
+                s.commonClear,
+                onClick = { onValue("") },
+                target = if (tv) 40.dp else 36.dp,
+                disc = if (tv) 22.dp else 20.dp,
             )
         }
     }

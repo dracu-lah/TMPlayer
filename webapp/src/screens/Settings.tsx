@@ -25,12 +25,11 @@ import {
     VideoReplayIcon,
     FavouriteIcon,
 } from '@hugeicons/core-free-icons'
-import { addedIds, addedMode, homeChatRows, namedLists, settings, setSetting, SIZE_DEFAULTS, starredIds, storageWorks, type Theme } from '../store'
+import { addedIds, addedMode, homeChatRows, namedLists, settings, setSetting, starredIds, storageWorks, type Theme } from '../store'
 import { editorRows, encodeOrder, moveKey, parseOrder, type OrderEntry } from '../ui/homeOrder'
 import { back, me, signOut } from '../session'
 import { api } from '../tg/rpc'
 import { t } from '../i18n'
-import { sizeScale } from './sizes'
 import { clearHistoryWithUndo } from '../clearHistory'
 import { size } from './VideoList'
 import { form, layout, layoutFixed, setLayout, type Layout } from '../form'
@@ -513,9 +512,6 @@ function Library() {
                     <p class="muted small">{t('metadata.about_notice')}</p>
                 </div>
             </div>
-            <div class="set-card set-blocks" id="size">
-                <SizeLimits />
-            </div>
             <div class="set-card">
                 {/* One row for Continue watching and Watched together; Watch later is kept. Done at once, with Undo. */}
                 <button type="button" class="set-row" onClick={() => void clearHistoryWithUndo()}>
@@ -644,96 +640,6 @@ function Choices<T extends string | number>(props: { label: string; name: string
     )
 }
 
-/**
- * The app's two thumb size slider: No minimum, 50 MB, then every 100 MB up to No limit, on its
- * uneven scale (the first gigabyte takes almost half the track). The arrow keys move one stop,
- * Page Up and Down ten; the thumbs never cross.
- */
-function SizeLimits() {
-    const stops = () => sizeScale()?.stops ?? []
-    const indexOf = (bytes: number) => {
-        const s = stops()
-        let best = 0
-        for (let i = 1; i < s.length; i++) if (Math.abs(s[i].bytes - bytes) < Math.abs(s[best].bytes - bytes)) best = i
-        return best
-    }
-    const minI = () => indexOf(settings().sizeMin)
-    const maxI = () => indexOf(settings().sizeMax)
-    const nearest = (at: number) => {
-        const s = stops()
-        let best = 0
-        for (let i = 1; i < s.length; i++) if (Math.abs(s[i].at - at) < Math.abs(s[best].at - at)) best = i
-        return best
-    }
-    const pick = (which: 'min' | 'max', i: number) => {
-        const last = stops().length - 1
-        if (which === 'min') setSetting('sizeMin', stops()[Math.max(0, Math.min(i, maxI() - 1))].bytes)
-        else setSetting('sizeMax', stops()[Math.min(last, Math.max(i, minI() + 1))].bytes)
-    }
-    const keys = (which: 'min' | 'max', e: KeyboardEvent) => {
-        const at = which === 'min' ? minI() : maxI()
-        const step = { ArrowLeft: -1, ArrowDown: -1, ArrowRight: 1, ArrowUp: 1, PageDown: -10, PageUp: 10, Home: -1e4, End: 1e4 }[e.key]
-        if (step === undefined) return
-        e.preventDefault()
-        pick(which, at + step)
-    }
-    const [range] = createResource(
-        () => [settings().sizeMin, settings().sizeMax] as const,
-        ([min, max]) => api.sizeRange(min, max),
-    )
-    const isDefault = () => settings().sizeMin === SIZE_DEFAULTS.sizeMin && settings().sizeMax >= SIZE_DEFAULTS.sizeMax
-    const at = (i: number) => (stops()[i]?.at ?? 0) * 100
-    return (
-        <div class="set-block">
-            <h3 class="set-block-title" id="size-label">{t('settings.size_limits')}</h3>
-            <Show when={stops().length}>
-                <div class="size-readout" aria-hidden="true">
-                    <span>{stops()[minI()].label}</span>
-                    <span>{stops()[maxI()].label}</span>
-                </div>
-                <div class="dual-range" style={{ '--from': `${at(minI())}%`, '--to': `${at(maxI())}%` }}>
-                    <div class="dual-track" />
-                    <input
-                        type="range"
-                        min="0"
-                        max="1000"
-                        // Above the top thumb once past half way, so two thumbs side by side can both be taken.
-                        classList={{ above: at(minI()) > 50 }}
-                        value={Math.round(at(minI()) * 10)}
-                        aria-label={t('size.smallest')}
-                        aria-valuetext={stops()[minI()].label}
-                        onInput={(e) => pick('min', nearest(Number(e.currentTarget.value) / 1000))}
-                        onKeyDown={(e) => keys('min', e)}
-                    />
-                    <input
-                        type="range"
-                        min="0"
-                        max="1000"
-                        value={Math.round(at(maxI()) * 10)}
-                        aria-label={t('size.largest')}
-                        aria-valuetext={stops()[maxI()].label}
-                        onInput={(e) => pick('max', nearest(Number(e.currentTarget.value) / 1000))}
-                        onKeyDown={(e) => keys('max', e)}
-                    />
-                </div>
-            </Show>
-            <p class="muted" aria-live="polite">{range.latest ? t('settings.size_limits_note', { range: range.latest }) : ''}</p>
-            <Show when={!isDefault()}>
-                <button
-                    class="link"
-                    type="button"
-                    onClick={() => {
-                        setSetting('sizeMin', SIZE_DEFAULTS.sizeMin)
-                        setSetting('sizeMax', SIZE_DEFAULTS.sizeMax)
-                    }}
-                >
-                    {t('common.reset')}
-                </button>
-            </Show>
-        </div>
-    )
-}
-
 /** Rewind when resuming: the app's choices, Off first. */
 function Rewind() {
     const [choices] = createResource(() => api.rewindChoices())
@@ -837,7 +743,7 @@ function StorageBlock() {
     )
 }
 
-/** Sign out at the end of the list: full width, in the danger colour. It still asks first. */
+/** Sign out at the end of the list: a quiet outlined row with the danger colour in its words only, and a question first that names what goes with it. */
 function SignOut() {
     let dialog!: HTMLDialogElement
     const [leaving, setLeaving] = createSignal(false)
@@ -902,9 +808,6 @@ function TvSettings() {
             <TvSwitch id="home-starred" title={t('settings.home_starred_rows')} on={settings().homeStarred} onText={t('settings.home_starred_rows_on')} offText={t('settings.home_starred_rows_off')} onPick={(on) => setSetting('homeStarred', on)} />
             <p class="muted small">{t('settings.home_follows_added')}</p>
             <HomeOrder />
-            <TvPanel title="" id="size-label" anchor="size">
-                <SizeLimits />
-            </TvPanel>
             <TvPanel title={t('browse.clear_history')} id="history-label">
                 <p class="muted small">{t('browse.clear_history_detail')}</p>
                 <button class="outline-button" style={{ 'align-self': 'start' }} type="button" aria-labelledby="history-label" onClick={() => void clearHistoryWithUndo()}>

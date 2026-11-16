@@ -229,12 +229,42 @@
         </LinearLayout>
 
         <FrameLayout
+            android:id="@+id/center_seek_back_frame"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginStart="8dp"
+            android:visibility="gone">
+
+            <ImageButton
+                android:id="@+id/center_seek_back"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@drawable/bg_center_button"
+                android:contentDescription="Back 10 seconds"
+                android:padding="10dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_seek_back"
+                android:tint="@color/player_control_icon" />
+
+            <TextView
+                android:id="@+id/center_seek_back_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:fontFamily="sans-serif-medium"
+                android:importantForAccessibility="no"
+                android:text="10"
+                android:textColor="@color/player_control_icon"
+                android:textSize="11sp" />
+        </FrameLayout>
+
+        <FrameLayout
             android:id="@+id/center_play_pause"
             android:accessibilityLiveRegion="polite"
             android:layout_width="72dp"
             android:layout_height="72dp"
-            android:layout_marginStart="16dp"
-            android:layout_marginEnd="16dp"
+            android:layout_marginStart="8dp"
+            android:layout_marginEnd="8dp"
             android:background="@drawable/bg_center_button"
             android:clickable="true"
             android:contentDescription="Pause"
@@ -254,6 +284,36 @@
                 android:layout_gravity="center"
                 android:indeterminateTint="#FFFFFFFF"
                 android:visibility="gone" />
+        </FrameLayout>
+
+        <FrameLayout
+            android:id="@+id/center_seek_forward_frame"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginEnd="8dp"
+            android:visibility="gone">
+
+            <ImageButton
+                android:id="@+id/center_seek_forward"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@drawable/bg_center_button"
+                android:contentDescription="Forward 10 seconds"
+                android:padding="10dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_seek_forward"
+                android:tint="@color/player_control_icon" />
+
+            <TextView
+                android:id="@+id/center_seek_forward_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:fontFamily="sans-serif-medium"
+                android:importantForAccessibility="no"
+                android:text="10"
+                android:textColor="@color/player_control_icon"
+                android:textSize="11sp" />
         </FrameLayout>
 
         <LinearLayout
@@ -412,97 +472,248 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:background="@drawable/bg_controls_pill"
+                    android:gravity="center_vertical"
                     android:orientation="horizontal"
                     android:paddingStart="0dp"
                     android:paddingTop="4dp"
                     android:paddingEnd="4dp"
                     android:paddingBottom="4dp">
 
-                    <ImageButton
-                        android:id="@+id/control_subtitles"
-                        android:layout_width="48dp"
-                        android:layout_height="48dp"
+                    <!-- One slot per labelled button: the round button, and under it its word, shown for the first
+                         sessions only (PlayerControls.setLabelsShown). The slot is what the row shows and hides. -->
+                    <LinearLayout
+                        android:id="@+id/slot_subtitles"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
                         android:layout_marginStart="4dp"
-                        android:background="@drawable/bg_control_button"
-                        android:contentDescription="Subtitles"
-                        android:nextFocusUp="@id/controls_timebar"
-                        android:padding="12dp"
-                        android:scaleType="fitCenter"
-                        android:src="@drawable/ic_subtitles"
-                        android:tint="@color/player_control_icon" />
+                        android:gravity="center_horizontal"
+                        android:minWidth="48dp"
+                        android:orientation="vertical">
 
-                    <ImageButton
-                        android:id="@+id/control_audio"
-                        android:layout_width="48dp"
-                        android:layout_height="48dp"
-                        android:layout_marginStart="4dp"
-                        android:background="@drawable/bg_control_button"
-                        android:contentDescription="Audio"
-                        android:nextFocusUp="@id/controls_timebar"
-                        android:padding="12dp"
-                        android:scaleType="fitCenter"
-                        android:src="@drawable/ic_audio_language"
-                        android:tint="@color/player_control_icon" />
+                        <ImageButton
+                            android:id="@+id/control_subtitles"
+                            android:layout_width="48dp"
+                            android:layout_height="48dp"
+                            android:background="@drawable/bg_control_button"
+                            android:contentDescription="Subtitles"
+                            android:nextFocusUp="@id/controls_timebar"
+                            android:padding="12dp"
+                            android:scaleType="fitCenter"
+                            android:src="@drawable/ic_subtitles"
+                            android:tint="@color/player_control_icon" />
 
-                    <ImageButton
-                        android:id="@+id/control_speed"
-                        android:layout_width="48dp"
-                        android:layout_height="48dp"
+                        <TextView
+                            android:id="@+id/label_subtitles"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:ellipsize="end"
+                            android:fontFamily="sans-serif-medium"
+                            android:importantForAccessibility="no"
+                            android:maxLines="1"
+                            android:paddingBottom="2dp"
+                            android:text="Subtitles"
+                            android:textColor="#E6FFFFFF"
+                            android:textSize="11sp"
+                            android:visibility="gone" />
+                    </LinearLayout>
+
+                    <!-- One slot per labelled button: the round button, and under it its word, shown for the first
+                         sessions only (PlayerControls.setLabelsShown). The slot is what the row shows and hides. -->
+                    <LinearLayout
+                        android:id="@+id/slot_audio"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
                         android:layout_marginStart="4dp"
-                        android:background="@drawable/bg_control_button"
-                        android:contentDescription="Playback speed"
-                        android:nextFocusUp="@id/controls_timebar"
-                        android:padding="12dp"
-                        android:scaleType="fitCenter"
-                        android:src="@drawable/ic_speed"
-                        android:tint="@color/player_control_icon" />
+                        android:gravity="center_horizontal"
+                        android:minWidth="48dp"
+                        android:orientation="vertical">
+
+                        <ImageButton
+                            android:id="@+id/control_audio"
+                            android:layout_width="48dp"
+                            android:layout_height="48dp"
+                            android:background="@drawable/bg_control_button"
+                            android:contentDescription="Audio"
+                            android:nextFocusUp="@id/controls_timebar"
+                            android:padding="12dp"
+                            android:scaleType="fitCenter"
+                            android:src="@drawable/ic_audio_language"
+                            android:tint="@color/player_control_icon" />
+
+                        <TextView
+                            android:id="@+id/label_audio"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:ellipsize="end"
+                            android:fontFamily="sans-serif-medium"
+                            android:importantForAccessibility="no"
+                            android:maxLines="1"
+                            android:paddingBottom="2dp"
+                            android:text="Sound"
+                            android:textColor="#E6FFFFFF"
+                            android:textSize="11sp"
+                            android:visibility="gone" />
+                    </LinearLayout>
+
+                    <!-- One slot per labelled button: the round button, and under it its word, shown for the first
+                         sessions only (PlayerControls.setLabelsShown). The slot is what the row shows and hides. -->
+                    <LinearLayout
+                        android:id="@+id/slot_speed"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="4dp"
+                        android:gravity="center_horizontal"
+                        android:minWidth="48dp"
+                        android:orientation="vertical">
+
+                        <ImageButton
+                            android:id="@+id/control_speed"
+                            android:layout_width="48dp"
+                            android:layout_height="48dp"
+                            android:background="@drawable/bg_control_button"
+                            android:contentDescription="Playback speed"
+                            android:nextFocusUp="@id/controls_timebar"
+                            android:padding="12dp"
+                            android:scaleType="fitCenter"
+                            android:src="@drawable/ic_speed"
+                            android:tint="@color/player_control_icon" />
+
+                        <TextView
+                            android:id="@+id/label_speed"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:ellipsize="end"
+                            android:fontFamily="sans-serif-medium"
+                            android:importantForAccessibility="no"
+                            android:maxLines="1"
+                            android:paddingBottom="2dp"
+                            android:text="Speed"
+                            android:textColor="#E6FFFFFF"
+                            android:textSize="11sp"
+                            android:visibility="gone" />
+                    </LinearLayout>
 
                     <!-- Picture shape: Fit, Crop, Stretch, a press each, the glyph showing the
                          one in force. On both devices: on a television it was a page inside More,
                          three presses and a list for the one control a sofa reaches for when a
                          wide video leaves bars. A phone shows it only while the row has room. -->
-                    <ImageButton
-                        android:id="@+id/control_shape"
-                        android:layout_width="48dp"
-                        android:layout_height="48dp"
+                    <!-- One slot per labelled button: the round button, and under it its word, shown for the first
+                         sessions only (PlayerControls.setLabelsShown). The slot is what the row shows and hides. -->
+                    <LinearLayout
+                        android:id="@+id/slot_shape"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
                         android:layout_marginStart="4dp"
-                        android:background="@drawable/bg_control_button"
-                        android:contentDescription="Picture shape"
-                        android:nextFocusUp="@id/controls_timebar"
-                        android:padding="12dp"
-                        android:scaleType="fitCenter"
-                        android:src="@drawable/ic_shape_fit"
-                        android:tint="@color/player_control_icon"
-                        android:visibility="gone" />
+                        android:gravity="center_horizontal"
+                        android:minWidth="48dp"
+                        android:orientation="vertical"
+                        android:visibility="gone">
 
-                    <ImageButton
-                        android:id="@+id/control_rotate"
-                        android:layout_width="48dp"
-                        android:layout_height="48dp"
+                        <ImageButton
+                            android:id="@+id/control_shape"
+                            android:layout_width="48dp"
+                            android:layout_height="48dp"
+                            android:background="@drawable/bg_control_button"
+                            android:contentDescription="Picture shape"
+                            android:nextFocusUp="@id/controls_timebar"
+                            android:padding="12dp"
+                            android:scaleType="fitCenter"
+                            android:src="@drawable/ic_shape_fit"
+                            android:tint="@color/player_control_icon" />
+
+                        <TextView
+                            android:id="@+id/label_shape"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:ellipsize="end"
+                            android:fontFamily="sans-serif-medium"
+                            android:importantForAccessibility="no"
+                            android:maxLines="1"
+                            android:paddingBottom="2dp"
+                            android:text="Fit"
+                            android:textColor="#E6FFFFFF"
+                            android:textSize="11sp"
+                            android:visibility="gone" />
+                    </LinearLayout>
+
+                    <!-- One slot per labelled button: the round button, and under it its word, shown for the first
+                         sessions only (PlayerControls.setLabelsShown). The slot is what the row shows and hides. -->
+                    <LinearLayout
+                        android:id="@+id/slot_rotate"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
                         android:layout_marginStart="4dp"
-                        android:background="@drawable/bg_control_button"
-                        android:contentDescription="Screen orientation"
-                        android:nextFocusUp="@id/controls_timebar"
-                        android:padding="12dp"
-                        android:scaleType="fitCenter"
-                        android:src="@drawable/ic_rotate_landscape"
-                        android:tint="@color/player_control_icon"
-                        android:visibility="gone" />
+                        android:gravity="center_horizontal"
+                        android:minWidth="48dp"
+                        android:orientation="vertical"
+                        android:visibility="gone">
+
+                        <ImageButton
+                            android:id="@+id/control_rotate"
+                            android:layout_width="48dp"
+                            android:layout_height="48dp"
+                            android:background="@drawable/bg_control_button"
+                            android:contentDescription="Screen orientation"
+                            android:nextFocusUp="@id/controls_timebar"
+                            android:padding="12dp"
+                            android:scaleType="fitCenter"
+                            android:src="@drawable/ic_rotate_landscape"
+                            android:tint="@color/player_control_icon" />
+
+                        <TextView
+                            android:id="@+id/label_rotate"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:ellipsize="end"
+                            android:fontFamily="sans-serif-medium"
+                            android:importantForAccessibility="no"
+                            android:maxLines="1"
+                            android:paddingBottom="2dp"
+                            android:text="Rotate"
+                            android:textColor="#E6FFFFFF"
+                            android:textSize="11sp"
+                            android:visibility="gone" />
+                    </LinearLayout>
 
                     <!-- Phone only, and only while the row has room: the lock, a press away
                          rather than first in the overflow. A phone held upright keeps it there. -->
-                    <ImageButton
-                        android:id="@+id/control_lock"
-                        android:layout_width="48dp"
-                        android:layout_height="48dp"
+                    <!-- One slot per labelled button: the round button, and under it its word, shown for the first
+                         sessions only (PlayerControls.setLabelsShown). The slot is what the row shows and hides. -->
+                    <LinearLayout
+                        android:id="@+id/slot_lock"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
                         android:layout_marginStart="4dp"
-                        android:background="@drawable/bg_control_button"
-                        android:contentDescription="Lock the screen"
-                        android:padding="12dp"
-                        android:scaleType="fitCenter"
-                        android:src="@drawable/ic_lock"
-                        android:tint="@color/player_control_icon"
-                        android:visibility="gone" />
+                        android:gravity="center_horizontal"
+                        android:minWidth="48dp"
+                        android:orientation="vertical"
+                        android:visibility="gone">
+
+                        <ImageButton
+                            android:id="@+id/control_lock"
+                            android:layout_width="48dp"
+                            android:layout_height="48dp"
+                            android:background="@drawable/bg_control_button"
+                            android:contentDescription="Lock the screen"
+                            android:padding="12dp"
+                            android:scaleType="fitCenter"
+                            android:src="@drawable/ic_lock"
+                            android:tint="@color/player_control_icon" />
+
+                        <TextView
+                            android:id="@+id/label_lock"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:ellipsize="end"
+                            android:fontFamily="sans-serif-medium"
+                            android:importantForAccessibility="no"
+                            android:maxLines="1"
+                            android:paddingBottom="2dp"
+                            android:text="Lock"
+                            android:textColor="#E6FFFFFF"
+                            android:textSize="11sp"
+                            android:visibility="gone" />
+                    </LinearLayout>
 
                     <!-- Television only: the next episode, one press from the row. The remote of a
                          Google TV or a Mi TV has no media-next key, and the list was seven presses

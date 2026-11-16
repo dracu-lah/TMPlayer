@@ -18,7 +18,7 @@ enum class SettingsGroup(val title: String, val summary: String) {
     Gestures("settings.page_gestures", "settings.page_gestures_summary"),
     Mouse("settings.page_mouse", "settings.page_mouse_summary"),
     Subtitles("settings.page_subtitles_audio", "settings.group_subtitles_audio_summary"),
-    Storage("settings.page_storage", "settings.group_storage_summary"),
+    Storage("settings.page_downloads_data", "settings.group_storage_summary"),
     Notifications("settings.page_notifications", "settings.page_notifications_summary_short"),
     Appearance("settings.page_appearance", "settings.page_appearance_summary"),
     Account("settings.page_privacy_lock", "settings.group_privacy_lock_summary"),
@@ -96,6 +96,12 @@ class SettingsRow(
     val need: SettingsNeed? = null,
     val desktopTitle: String? = null,
     val drawnAs: List<String> = emptyList(),
+    /**
+     * A catalog key whose text is the other words a person types for this row ("bigger", "font",
+     * "log out"): the search matches meanings, not only titles (Raju 11.2). In the viewer's
+     * language, so each locale lists its own; a locale without the key falls back to English.
+     */
+    val keywords: String? = null,
 ) {
     fun titleOn(form: DeviceForm): String = if (form == Desktop) desktopTitle ?: title else title
 
@@ -131,8 +137,9 @@ object SettingsMap {
         need: SettingsNeed? = null,
         desktopTitle: String? = null,
         drawnAs: List<String> = emptyList(),
+        keywords: Boolean = false,
     ) {
-        add(SettingsRow(id, group, title, forms, details, need, desktopTitle, drawnAs))
+        add(SettingsRow(id, group, title, forms, details, need, desktopTitle, drawnAs, if (keywords) "settings.keywords_$id" else null))
     }
 
     private fun onOff(key: String) = listOf("${key}_on", "${key}_off")
@@ -149,7 +156,6 @@ object SettingsMap {
         row("software_decoding", g, "settings.software_decoding", D, listOf("settings.software_decoding_detail"))
         row("detail_first", g, "settings.detail_first", PTD, onOff("settings.detail_first") + onOff("settings.detail_first_click"))
         row("background_audio", g, "settings.background_audio", P, onOff("settings.background_audio"))
-        row("mini_player", g, "settings.mini_player", P, onOff("settings.mini_player"))
         row("picture_in_picture", g, "settings.picture_in_picture_leave", P, onOff("settings.picture_in_picture_leave"), SettingsNeed.PictureInPicture)
         row("controls_timeout", g, "settings.controls_timeout", PTD, listOf("settings.controls_timeout_detail"), desktopTitle = "settings.hide_controls")
         row("resume_rewind", g, "settings.resume_rewind", PTD, listOf("settings.resume_rewind_detail"))
@@ -187,16 +193,15 @@ object SettingsMap {
         row("online_cache", sub, "online.clear_cache", PTD, need = SettingsNeed.OnlineSubtitles)
 
         val st = SettingsGroup.Storage
-        row("free_up_space", st, "downloads.free_up_space", PTD)
+        row("free_up_space", st, "downloads.free_up_space", PTD, keywords = true)
         row("download_location", st, "storage.location", PTD)
         row("cache_limit", st, "storage.cache_limit", D)
         row("download_first", st, "settings.download_first", PTD, onOff("settings.download_first"))
-        row("remove_after_watching", st, "downloads.remove_after_watching", PTD, listOf("downloads.remove_after_watching_body"))
-        row("low_storage", st, "settings.low_storage", PTD, onOff("settings.low_storage"))
-        row("low_storage_alert", st, "settings.low_storage_alert", PD, listOf("settings.alert_low_storage_detail"))
-        row("wifi_only", st, "settings.wifi_only", P, onOff("settings.wifi_only"))
-        row("save_mobile_data", st, "settings.save_mobile_data", P, onOff("settings.save_mobile_data"))
-        row("pause_downloads", st, "settings.pause_downloads_while_playing", PTD, onOff("settings.pause_downloads_while_playing"))
+        row("remove_after_watching", st, "downloads.remove_after_watching", PTD, listOf("downloads.remove_after_watching_body"), keywords = true)
+        row("low_storage", st, "settings.stream_title", PTD, listOf("settings.stream_keep_detail", "settings.stream_save_detail"), keywords = true)
+        // The twin switches Wi-Fi only and Save mobile data became one question (R2); the low space alert and
+        // pausing downloads while playing are always on, so neither has a row.
+        row("mobile_data", st, "settings.mobile_data_title", P, listOf("settings.mobile_data_ask_detail", "settings.mobile_data_never_detail", "settings.mobile_data_allow_detail"), keywords = true)
         row("scan_folder", st, "storage.scan", D)
 
         val n = SettingsGroup.Notifications
@@ -213,11 +218,11 @@ object SettingsMap {
         row("theme", a, "settings.theme", PTD)
         row("pure_black", a, "settings.pure_black", PTD, listOf("theme.black_detail"))
         row("accent", a, "settings.accent", PTD, listOf("settings.accent_detail"))
-        row("typeface", a, "settings.typeface", PTD, listOf("settings.typeface_detail"))
+        row("typeface", a, "settings.typeface", PTD, listOf("settings.typeface_detail"), keywords = true)
         row("high_contrast", a, "settings.high_contrast", PTD, listOf("settings.high_contrast_detail"))
         row("language", a, "settings.language", PTD)
         row("layout", a, "interface.layout", PTD, desktopTitle = "settings.layout")
-        row("interface_size", a, "interface.size", PTD, listOf("interface.size_detail"))
+        row("interface_size", a, "interface.size", PTD, listOf("interface.size_detail"), keywords = true)
         row("lighter_pictures", a, "settings.lighter_pictures", PT, onOff("settings.lighter_pictures"))
         row("reduce_motion", a, "settings.reduce_motion", PT, onOff("settings.reduce_motion"))
         row("high_contrast_focus", a, "settings.high_contrast_focus", T, listOf("settings.high_contrast_focus_detail"))
@@ -236,20 +241,24 @@ object SettingsMap {
         row("privacy_page", lock, "about.privacy", PTD, listOf("settings.privacy_detail"), desktopTitle = "settings.privacy")
         row("crash_reports", lock, "settings.crash_reports", PTD, onOff("settings.crash_reports"), SettingsNeed.CrashReports)
         row("devices", lock, "settings.devices", PTD, listOf("settings.devices_detail"))
-        row("sign_out", lock, "settings.sign_out", PTD)
+        row("resume_sync", lock, "syncplace.switch", PTD, onOff("syncplace.switch"))
+        row("sign_out", lock, "settings.sign_out", PTD, keywords = true)
 
         val lib = SettingsGroup.Library
-        row("size_limits", lib, "settings.size_limits", PTD, desktopTitle = "settings.smallest", drawnAs = listOf("settings.largest"))
         row("open_last_chat", lib, "settings.open_last_chat", PTD)
         row("forget_last_chat", lib, "settings.forget_last_chat", PTD, need = SettingsNeed.State)
         row("remember_searches", lib, "settings.remember_searches", PTD, onOff("settings.remember_searches"))
-        row("resume_sync", lib, "settings.resume_sync", PTD, onOff("settings.resume_sync"))
         row("resume_sync_delete", lib, "settings.resume_sync_delete", PTD, need = SettingsNeed.State)
         row("chosen_chats", lib, "picker.row_title", PTD)
         row("clear_favourites", lib, "settings.clear_favourites", PTD, need = SettingsNeed.State)
         row("clear_history", lib, "browse.clear_history", PTD, listOf("browse.clear_history_detail"), SettingsNeed.State)
         row("posters", lib, "metadata.toggle", PTD, onOff("metadata.toggle"), SettingsNeed.OnlineMetadata)
-        row("skip_times", lib, "metadata.skip_times", PTD, listOf("metadata.skip_times_detail"), SettingsNeed.OnlineMetadata)
+        row("skip_times", lib, "metadata.skip_times", PTD, listOf("metadata.skip_times_privacy"), SettingsNeed.OnlineMetadata)
+        // One line per kind of skip, drawn only while the switch above is on (T10).
+        row("skip_mode_recap", lib, "settings.skip_recap", PTD, listOf("settings.skip_mode_note"), SettingsNeed.State)
+        row("skip_mode_intro", lib, "settings.skip_intro", PTD, listOf("settings.skip_mode_note"), SettingsNeed.State)
+        row("skip_mode_credits", lib, "settings.skip_credits", PTD, listOf("settings.skip_mode_note"), SettingsNeed.State)
+        row("skip_mode_preview", lib, "settings.skip_preview", PTD, listOf("settings.skip_mode_note"), SettingsNeed.State)
         row("tmdb_key", lib, "metadata.key", PTD, need = SettingsNeed.OnlineMetadata)
         row("omdb_key", lib, "metadata.omdb_key", PTD, need = SettingsNeed.OnlineMetadata)
         row("details_cache", lib, "metadata.clear_cache", PTD, need = SettingsNeed.OnlineMetadata)

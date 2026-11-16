@@ -6,10 +6,17 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -20,6 +27,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -59,9 +67,16 @@ fun ChooseChatsButton(
     onArt: Boolean = false,
     shortcut: String? = null,
     side: TipSide = TipSide.Below,
+    /**
+     * Writes the name beside the glyph, as a pill, where the font is at its normal size: a bare
+     * person-plus was the only way to add chats and nobody tapped it (Raju 4.3). At a large font
+     * the pill would push its neighbours, so the glyph stands alone again, as everywhere else.
+     */
+    labelled: Boolean = false,
     onClick: () -> Unit = { AddChatsRequest.ask() },
 ) {
     val label = LocalStrings.current.pickerChooseChats
+    val written = labelled && LocalDensity.current.fontScale <= LABEL_MAX_FONT_SCALE
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusVisibleAsState()
     val still = rememberLessMotion()
@@ -87,10 +102,10 @@ fun ChooseChatsButton(
     // A box of its own for the caller's place: a tooltip box does not pass an `align` on to its parent.
     Box(modifier) {
         IconTip(label, shortcut = shortcut, side = side) {
-            Box(
+            Row(
                 Modifier
                     .then(if (focus != null) Modifier.focusRequester(focus) else Modifier)
-                    .size(size)
+                    .then(if (written) Modifier.height(size).widthIn(min = size) else Modifier.size(size))
                     .pressScale(interactions)
                     .graphicsLayer {
                         scaleX = scale
@@ -100,10 +115,21 @@ fun ChooseChatsButton(
                     .background(fill)
                     .focusRing(focused, CircleShape)
                     .clickable(interactionSource = interactions, indication = androidx.compose.foundation.LocalIndication.current, role = Role.Button, onClick = onClick)
-                    .semantics { contentDescription = label },
-                contentAlignment = Alignment.Center,
+                    .semantics { contentDescription = label }
+                    .then(if (written) Modifier.padding(start = 12.dp, end = 16.dp) else Modifier),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(TmIcons.PersonAdd, contentDescription = null, tint = ink, modifier = Modifier.size(size * ICON_SHARE))
+                if (written) {
+                    Text(
+                        label,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = ink,
+                        maxLines = 1,
+                        modifier = Modifier.padding(start = 8.dp),
+                    )
+                }
             }
         }
     }
@@ -113,3 +139,6 @@ fun ChooseChatsButton(
 val ChooseChatsButtonSize: Dp = 48.dp
 
 private const val ICON_SHARE = 0.5f
+
+/** The largest font scale at which the pill's word still fits beside the title (Raju 4.3 asks for 1.0). */
+private const val LABEL_MAX_FONT_SCALE = 1.15f

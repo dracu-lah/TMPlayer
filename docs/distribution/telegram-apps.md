@@ -56,8 +56,11 @@ Status: draft. Submit at <https://alternativeto.net> (log in, "Add new applicati
   > instead of waiting. Sign in on a TV by scanning a QR code with your phone. Pick a chat and
   > only its playable videos appear, as a poster grid with what you were watching first. It plays
   > MKV, MP4, AVI and TS with embedded subtitles and multiple audio tracks, recognises episode
-  > names and moves on to the next episode, and remembers where you stopped. No ads of its own,
-  > no account except your Telegram one, no server in between.
+  > names and moves on to the next episode, and remembers where you stopped. Series and anime get
+  > their own pages, with skip intro and credits buttons and badges for 4K, HDR and Atmos. Save
+  > space or Keep video, a Downloads tab and an offline Home suit phones that are always full, and
+  > an optional file in your own Saved Messages keeps your place on all your devices. No ads of
+  > its own, no account except your Telegram one, no server in between.
   >
   > TMPlayer is an unofficial app, not made by or affiliated with Telegram. It uses the Telegram
   > API through TDLib and needs your own Telegram account.
@@ -66,7 +69,7 @@ Status: draft. Submit at <https://alternativeto.net> (log in, "Add new applicati
 - **Source:** https://github.com/dracu-lah/TMPlayer
 - **License:** Open source (GPL-3.0), Free
 - **Platforms:** Android, Android TV, Windows, macOS, Linux, Fire TV (if offered), AppImage
-- **Category:** Video and Movies (or Audio and Music, Media Player)
+- **Category:** Video and Movies (or Media Player; TMPlayer plays videos only)
 - **Tags / features:** video-player, media-player, telegram, streaming, android-tv,
   subtitle-support, ad-free, open-source, lightweight, remote-control. Do not pick
   "no registration required": it needs a Telegram account.

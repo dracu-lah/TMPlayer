@@ -193,6 +193,9 @@ input:not([type=range]):not([type=radio]):not([type=checkbox]):focus { border-co
 }
 .nav-picture.ringed { border-color: var(--accent); }
 .nav-picture-blank { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+/* Five places (Downloads came in with R2): the cells narrow so the bar keeps its side gutters on a phone. */
+@media (max-width: 420px) { .nav-cells { --cell-w: 60px; } }
+@media (max-width: 359px) { .nav-cells { --cell-w: 54px; } }
 /* A phone held sideways, where height is short: round icon buttons, the names in the tooltips. */
 @media (max-height: 500px) and (orientation: landscape) {
   .nav { bottom: calc(10px + env(safe-area-inset-bottom)); }
@@ -473,11 +476,12 @@ html[data-form=tv] .panel .set-block-title { font-size: calc(var(--dp) * 16); li
 .set-account .initial { width: 56px; height: 56px; font-size: 22px; flex: none; }
 .set-account .set-title { font-weight: 500; }
 .set-foot { padding: 4px 16px; }
+/* The most destructive action is the quietest control (Raju 10.3): an outlined row at the foot, the colour only in its words; it asks first. */
 .set .danger-button.set-signout {
-  align-self: stretch; display: flex; align-items: center; justify-content: center; gap: 8px; height: 48px; margin-top: 8px;
-  background: var(--error); color: var(--on-error); border: 0; font-size: 14px;
+  align-self: stretch; display: flex; align-items: center; justify-content: center; gap: 8px; height: 48px; margin-top: 24px;
+  background: none; color: var(--error); border: 1px solid var(--line); font-size: 14px;
 }
-.set .danger-button.set-signout:hover { background: color-mix(in srgb, var(--error) 88%, var(--fg)); }
+.set .danger-button.set-signout:hover { background: var(--surface-high); }
 /* The app's switch: a 52 by 32 track, a small grey thumb that grows and takes the accent when on. */
 .switch {
   position: relative; flex: none; width: 52px; height: 32px; border-radius: 16px; border: 2px solid var(--muted); background: var(--surface-high);
@@ -776,6 +780,20 @@ a.detail-round { text-decoration: none; }
 .season-chip small { font-size: 11px; line-height: 14px; color: var(--muted); }
 .season-chip.on { background: var(--accent-container); border-color: var(--accent); color: var(--on-accent-container); }
 .season-chip.on small { color: var(--on-accent-container); }
+/* T9: a season the chats hold none of is quiet; the dot marks the ones they hold. */
+.season-chip.quiet:not(.on) { opacity: 0.62; }
+.season-name { display: inline-flex; align-items: center; gap: 6px; }
+.season-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex: none; }
+.season-chip.on .season-dot { background: var(--on-accent-container); }
+.season-chip small:empty { display: none; }
+.gap-note { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; background: var(--surface); border: 1px solid var(--outline); border-radius: var(--r-m); padding: 8px 14px; margin: 8px 0; }
+.gap-note p { margin: 4px 0; }
+.poster-why { display: flex; flex-wrap: wrap; align-items: center; gap: 0 12px; margin: 8px 0; }
+.poster-why .link { min-height: 44px; padding: 0 4px; }
+.episode.gap { border: 1px solid var(--outline); opacity: 0.62; cursor: pointer; font: inherit; min-height: 56px; }
+.episode.gap:hover, .episode.gap:focus-visible { opacity: 1; }
+.episode.gap .episode-code { color: var(--muted); }
+.episode.gap .episode-name { color: var(--muted); }
 .episode-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .episode { position: relative; width: 100%; display: flex; align-items: center; gap: 12px; text-align: start; background: var(--surface); border: 0; border-radius: var(--r-m); padding: 12px 14px; min-height: 48px; overflow: hidden; color: inherit; text-decoration: none; }
 .episode:hover { background: var(--surface-high); }
@@ -878,41 +896,9 @@ input.chat-tick[type=checkbox] { flex: none; width: 22px; height: 22px; margin: 
 .archives summary { cursor: pointer; font-weight: 500; }
 .archives ul { margin: 8px 0 0; padding-left: 20px; color: var(--muted); overflow-wrap: anywhere; }
 
-/* The size limits: two thumbs on one track, the span between them in the accent. */
-.size-readout { display: flex; justify-content: space-between; font-weight: 500; font-variant-numeric: tabular-nums; }
-.dual-range { position: relative; height: 32px; }
-.dual-track {
-  position: absolute; left: 10px; right: 10px; top: 50%; height: 4px; margin-top: -2px; border-radius: 2px;
-  background: linear-gradient(to right, var(--surface-high) var(--from), var(--accent) var(--from), var(--accent) var(--to), var(--surface-high) var(--to));
-}
-.dual-range input { position: absolute; inset: 0; width: 100%; margin: 0; background: none; -webkit-appearance: none; appearance: none; pointer-events: none; }
-.dual-range input::-webkit-slider-runnable-track { background: transparent; height: 32px; }
-.dual-range input::-moz-range-track { background: transparent; }
-.dual-range input::-webkit-slider-thumb {
-  -webkit-appearance: none; pointer-events: auto; width: 20px; height: 20px; margin-top: 6px; border-radius: 50%;
-  background: var(--accent); border: 2px solid var(--surface); cursor: grab; transition: transform var(--fast);
-}
-.dual-range input::-moz-range-thumb { pointer-events: auto; width: 20px; height: 20px; border-radius: 50%; background: var(--accent); border: 2px solid var(--surface); cursor: grab; }
-.dual-range input:active::-webkit-slider-thumb { transform: scale(1.15); }
-.dual-range input.above { z-index: 1; }
-.dual-range input:focus-visible { outline: none; }
-.dual-range input:focus-visible::-webkit-slider-thumb { outline: 2px solid var(--accent); outline-offset: 2px; }
-.dual-range input:focus-visible::-moz-range-thumb { outline: 2px solid var(--accent); outline-offset: 2px; }
-
-/* A chat's "n hidden" chip and its smallest-size picker. */
-.size-chip {
-  min-height: 32px; padding: 0 12px; border-radius: 16px; border: 1px solid var(--line); background: transparent;
-  color: var(--accent); font-size: 13px; font-weight: 500; white-space: nowrap; cursor: pointer;
-}
-.size-chip:hover, .size-chip:focus-visible { background: var(--surface-high); }
-.size-options { display: flex; flex-direction: column; margin: 0 -8px; }
-.size-options button {
-  display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 8px; border-radius: var(--r-md, 12px);
-  background: transparent; border: 0; color: var(--fg); font-size: 16px; text-align: left; cursor: pointer;
-}
-.size-options button span:first-child { flex: 1; }
-.size-options button:hover, .size-options button:focus-visible { background: var(--surface-high); }
-.size-options button.on { color: var(--accent); font-weight: 500; }
+/* A chat's end row: "3 small videos hidden" and Show them. */
+.small-hidden { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 16px 0 8px; }
+.small-hidden p { margin: 0; }
 
 /* A question before something that cannot be undone. */
 .confirm {
@@ -1044,6 +1030,7 @@ button.nav-cell { border: 0; background: none; padding: 0; font: inherit; cursor
 .favourites-list { list-style: none; padding: 0; }
 .empty-state { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 64px 16px; text-align: center; color: var(--muted); }
 .empty-state p { max-width: 420px; font-size: 14px; line-height: 20px; }
+.downloads-card-title { font-size: 20px; line-height: 28px; font-weight: 500; color: var(--fg); }
 .empty-disc { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-high); color: var(--accent); }
 /* A link or a button alike: as a <button> it would keep the browser's grey fill and system font. */
 .outline-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 36px; padding: 0 16px; border: 1px solid var(--line); border-radius: 999px; background: none; color: var(--fg); text-decoration: none; font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; }

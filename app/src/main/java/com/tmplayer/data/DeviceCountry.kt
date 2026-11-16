@@ -21,4 +21,13 @@ object DeviceCountry {
         if (network.isNotBlank()) return network.uppercase(Locale.ROOT)
         return Locale.getDefault().country.uppercase(Locale.ROOT)
     }
+
+    /**
+     * Which way to support TMPlayer comes first here (see [SupportRegion]): India by the language's
+     * region or the SIM's country, else Buy Me a Coffee. No permission, nothing sent anywhere.
+     */
+    fun supportOrder(context: Context): SupportRegion.Order {
+        val telephony = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
+        return SupportRegion.order(Locale.getDefault().country, runCatching { telephony?.simCountryIso }.getOrNull())
+    }
 }

@@ -380,7 +380,7 @@ private fun PanelButton(
     val ink = if (focused) Tone.onFocusFill else Tone.text
     Row(
         modifier
-            .heightIn(min = if (tv) 48.dp else 44.dp)
+            .heightIn(min = 48.dp)
             .clip(shape)
             .background(if (focused) Tone.focusFill else Tone.surfaceHigh)
             .focusRingOnTv(focused, shape)

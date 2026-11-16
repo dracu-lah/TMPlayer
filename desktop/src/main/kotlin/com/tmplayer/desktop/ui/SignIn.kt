@@ -404,6 +404,8 @@ private fun PhonePane(wrong: Boolean, initial: String?, onBack: (() -> Unit)?) {
                 maxLines = 1,
             )
         }
+        // The chip's second half: "India +91".
+        if (country != null) SignInWords.dialChip(entry.dial)?.let { Text(it, color = Tone.muted, maxLines = 1, modifier = Modifier.padding(end = 8.dp)) }
         Icon(TmIcons.ChevronRight, contentDescription = null, tint = Tone.muted, modifier = Modifier.size(20.dp))
     }
     // A number reads left to right in every language, Arabic and Persian included.
@@ -530,6 +532,11 @@ private fun CodePane(state: AuthState.Code, onChangeNumber: () -> Unit) {
                 enabled = remaining <= 0 && !resend.busy,
             ) {
                 Text(if (remaining > 0) s.loginResendIn(SignInWords.clock(remaining)) else SignInWords.resendLabel(state.next))
+            }
+        } else {
+            // Never just gone: with no other route the row says what is left to do.
+            SignInWords.resendNone(state)?.let {
+                Text(it, style = MaterialTheme.typography.bodyMedium, color = Tone.muted, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
         TextButton(onClick = onChangeNumber) { Text(s.loginWrongNumber) }

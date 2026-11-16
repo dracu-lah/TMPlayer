@@ -80,6 +80,69 @@ test('small controls answer 48 px under a finger', async ({ page, isMobile }) =>
     }
 })
 
+// Raju 4.10: two floating bars on top of each other hid the last row's caption and looked broken. A
+// chat has its own bar at the foot in place of the main one, the last row clears it, and nothing
+// else floats over it.
+test('a chat has one bar at the foot, no floating bars overlap, and the last row clears it', async ({ page, isMobile }) => {
+    test.skip(!isMobile, 'the floating bar is a phone and tablet layout')
+    await noSizeFloor(page)
+    await page.goto('/chat/-1001')
+    await expect(page.locator('.card').first()).toBeVisible()
+    await expect(page.locator('nav.chat-bar')).toBeVisible()
+    await page.waitForTimeout(500)
+    const bars = await page.evaluate(() =>
+        [...document.querySelectorAll<HTMLElement>('nav, [role=toolbar], .floating')]
+            .filter((el) => getComputedStyle(el).position === 'fixed' && el.getBoundingClientRect().width > 0)
+            .map((el) => {
+                const r = el.getBoundingClientRect()
+                return { name: `${el.tagName.toLowerCase()}.${el.className}`, left: r.left, right: r.right, top: r.top, bottom: r.bottom }
+            }),
+    )
+    expect(bars.length, 'the chat bar is there').toBeGreaterThan(0)
+    expect(bars.filter((b) => b.name.includes('nav') && !b.name.includes('chat-bar')).map((b) => b.name), 'the main bar is not drawn under the chat bar').toEqual([])
+    for (let i = 0; i < bars.length; i++) {
+        for (let j = i + 1; j < bars.length; j++) {
+            const a = bars[i]
+            const b = bars[j]
+            const apart = a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top
+            expect(apart, `${a.name} and ${b.name} overlap`).toBe(true)
+        }
+    }
+    // Scrolled to the end, the last row's caption is not under the bar.
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
+    await page.waitForTimeout(300)
+    const covered = await page.evaluate(() => {
+        const bar = document.querySelector('nav.chat-bar .nav-cells')!.getBoundingClientRect()
+        const cards = [...document.querySelectorAll<HTMLElement>('.card')].filter((c) => c.getBoundingClientRect().height > 0)
+        const last = cards[cards.length - 1].getBoundingClientRect()
+        const sideways = last.left < bar.right && last.right > bar.left
+        return sideways ? last.bottom - bar.top : 0
+    })
+    expect(covered, 'px of the last card under the chat bar').toBeLessThanOrEqual(0)
+})
+
+// Raju 10.3: Sign out was the widest, filled red button on the page. It is a quiet outlined row now,
+// and it asks first with a sentence that names what goes with it; Cancel leaves everything as it was.
+test('Sign out is a quiet row that asks first', async ({ page }) => {
+    await page.goto('/settings')
+    const button = page.getByRole('button', { name: 'Sign out of Telegram' })
+    await expect(button).toBeVisible()
+    const look = await button.evaluate((el) => {
+        const s = getComputedStyle(el)
+        return { background: s.backgroundColor, border: s.borderTopWidth }
+    })
+    expect(look.background, 'no filled background').toMatch(/^rgba\(0, 0, 0, 0\)$|^transparent$/)
+    expect(look.border, 'an outline instead').not.toBe('0px')
+    await button.click()
+    const ask = page.getByRole('dialog')
+    await expect(ask.getByRole('heading', { name: 'Sign out of Telegram?' })).toBeVisible()
+    await expect(ask).toContainText('favourites')
+    await ask.getByRole('button', { name: 'Cancel' }).click()
+    await expect(ask).toBeHidden()
+    await expect(button).toBeVisible()
+    await expect(page).toHaveURL(/\/settings/)
+})
+
 test('sign in', async ({ page, context }) => {
     await fakeCase(context, 'signedout')
     await page.goto('/')

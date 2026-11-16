@@ -11,17 +11,13 @@ the streaming works, see [ARCHITECTURE.md](ARCHITECTURE.md).
 Settings, Devices, Link Desktop Device, point it at the screen. No typing an email address with a
 D-pad. On a phone the number comes first, with the country picker and the code boxes Telegram
 itself uses, and the QR route is there for an account that lives on another handset. Two-step
-verification works either way. Once signed in, a short setup walks through three groups, every
-step in the same frame (the group and "Step n of m" at the top with Skip all, Back at the bottom
-left and Next at the bottom right, Done on the last). Appearance: the theme (System, Light, Dark)
-and the interface size, applied as they are picked so the screen itself is the preview, plus the
-wallpaper's colours on Android 12 and later. Preferences, each with a picture of both answers and
-the current one already chosen: which chats the sidebar lists (only for an account with
-folders), posters and details from TMDB, TVmaze and AniList, Low storage mode, full quality or
-lighter pictures and motion, and on a phone whether to save mobile data. Then the quick tour: a
-few marked screenshots of where videos come from, Home, the player, the controls, downloads, the
-TV home screen row (on a TV) and Settings. Settings can run the setup again or the tour on its
-own, and an install updated from an older version is offered the tour once.
+verification works either way. Once signed in, the setup is one question: "Which chats have your videos?", then Home. It is the chat
+picker (a search box, nothing ticked, Done off until a chat is ticked, Back asks "Leave without choosing?"; with
+no chat holding videos it says to forward a video to Saved Messages). Everything else is decided for you or lives
+in Settings: lighter or full pictures are picked from the device's memory, crash reports are off until you turn
+them on in Settings, and the quick tour is a dismissible Tips card on Home. Settings, Redo setup choices lists
+posters and details, While streaming (Keep video or Save space), full quality or lighter pictures and motion, and
+on a phone whether to save mobile data; it can also ask the one question again.
 
 **Shows media, not messages.** Browse the chats and channels you already have, then see only their
 playable videos. Text messages never appear. Video documents are included too, so an `.mkv` sent
@@ -30,6 +26,13 @@ as a file is not missed.
 **Starts fast and seeks properly.** Playback begins while the file is still arriving, and seeking
 re-aims the download rather than waiting for it. This is the whole reason the app exists. Bring the
 controls up and the corner says how much of the video has arrived, and how quickly.
+
+**Back means stop.** On a phone, Back from the player pauses the video, saves where you were,
+releases the player and returns to the page that opened it (there is no in-app mini player bar
+there). Home or the Picture in picture button shrinks the video to a system window, and background
+audio, when it is on, keeps the sound in the notification; Back while casting also stops the TV. The
+desktop keeps its own mini player (Back docks a playing video into a bar, Ctrl+P makes the small
+always on top window).
 
 **Or waits, if your connection would rather.** Settings has a *Download the whole video first*
 switch, off by default. On, the video is fetched in full before it starts, which beats being
@@ -61,6 +64,15 @@ screen, move into TMPlayer's own Downloads folder and stay until you delete them
 touches them. Coming back to a video you stopped half way through keeps the half already on disk
 instead of starting the download again, and backing out of one stops the download rather than
 leaving it running in the background.
+
+**Downloads is a place of its own.** A tab on the phone's bar (Home, Chats, Search, Downloads, with
+the number running on it), a tab on the television's top bar, a button on the desktop's bar (Ctrl+J)
+and, on the web, a page that says downloads are in the app. The page is the running cards (Pause,
+Cancel with Undo on a touch screen) over one list, "On this phone", where what you downloaded and
+what playing left behind ("Auto-saved", with Keep) stand together; Free up space shows only when
+there is something to free. Settings, Downloads and data holds Where to save, On mobile data
+(Ask first, Never, Allow), While streaming, Download the whole video first and Remove after
+watching. Your lists and Settings are behind the gear at the top of Home and of Downloads.
 
 **Is a phone app on a phone.** The same library, drawn the way Android draws things in the hand:
 a Material 3 type scale, full-bleed chat rows, search that expands into the app bar, actions as
@@ -96,7 +108,7 @@ do it.
 **Keeps itself current.** Shortly after every launch, and every six hours while it runs, it looks
 for a newer release, puts an amber *Update* on the rail and in the drawer when there is one, and
 offers it once in a popup (Update now, Remind me later, Skip this version). It downloads and
-installs it for you, and waits for Wi-Fi when Wi-Fi only is on. Signing out clears everything it
+installs it for you, and waits for Wi-Fi when On mobile data is Never. Signing out clears everything it
 ever kept: the Telegram session, your history, favourites, settings, and downloaded media.
 
 <p align="center">
@@ -144,8 +156,20 @@ Windows), remembers its window size and
 place, and opening it a second time brings the first window forward. Downloads stay on the
 computer until you remove them, on their own page.
 
-**Mini player and shortcuts.** Ctrl+P shrinks the window to a small always on top picture in a
-corner of the screen and brings it back; `?` lists every key.
+**Back leaves the video.** Back (Esc, Backspace, Alt+Left, the mouse's back button) stops the video, keeps
+your place and returns to the page that opened it, as on the phone. There is no bar that keeps a video
+playing over a page. Ctrl+P is a different thing: it shrinks the window to a small always on top picture in
+a corner of the screen and brings it back. `?` lists every key.
+
+**Quiet loud scenes.** One switch in the player menu, off until you turn it on, remembered. On Android and
+Android TV it squeezes the loudest scenes down and lifts quiet speech. On the computer the bundled FFmpeg
+has no compressor (only `aformat`, `anull` and `aresample`, checked 2026-11-16), so it uses the track's own
+Dolby range control and a clearer speech channel on a surround fold; its detail line in Playback details
+says so. The web app has no audio chain and does not offer it.
+
+**Pure black and a clock.** Appearance has a Pure black switch under the theme (System and Dark, phone, TV,
+computer, web) for OLED screens. The television's controls show the time of day in the top corner for as
+long as a video is paused; the end time of a video is not shown (removed on purpose in 1.16.0).
 
 **Updates itself.** Shortly after every launch, and every six hours while it runs, it looks for a
 newer release; when there is one, an amber *Update* item joins the side bar and a popup offers it

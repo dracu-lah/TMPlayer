@@ -55,7 +55,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import com.tmplayer.ui.components.pressScale
@@ -568,9 +570,7 @@ private fun Actions(
     // item it was composed twice while the first paint's list handed over to the live one, and
     // two players opened one over the other (sound over a black screen, 2026-10-22).
     TrailerHost(trailers)
-    // Posters and overviews are off: one button to turn them on from here, as Settings can.
     val online = OnlineMetadata.current
-    val metadataOff = online != null && !online.settings.collectAsState().value.enabled
     val trailer = page.extras?.trailer
     val primary = page.rows.firstOrNull()
     val others = buildList {
@@ -585,9 +585,6 @@ private fun Actions(
         if (trailer != null || holds.trailer) {
             add(DetailRow(DetailAction.Play, s.metadataTrailer, TrailerIcon, onSelect = { trailer?.let(trailers::open) }, placeholder = trailer == null))
         }
-        if (!headlineOnly && online != null && page.meta == null && metadataOff) {
-            add(DetailRow(DetailAction.Play, s.metadataTurnOn, TmIcons.Info, s.metadataTurnOnDetail, onSelect = { online.setEnabled(true) }))
-        }
     }
     // The time left is on the line over the buttons (see ResumeLine), so the pill says only Resume.
     val hero: @Composable (Modifier) -> Unit = { modifier ->
@@ -597,7 +594,7 @@ private fun Actions(
         if (tv) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 hero(Modifier)
-                others.forEach { androidx.compose.runtime.key(slotOf(it)) { RoundAction(it.label, it.icon, it.onSelect, destructive = it.destructive, detail = it.detail, short = roundLabel(it, s), toggles = togglesOn(it.action), progress = it.progress, enabled = it.enabled, ghost = it.placeholder, waiting = it.placeholder && !page.extrasState.settled) } }
+                others.forEach { androidx.compose.runtime.key(slotOf(it)) { RoundAction(it.label, it.roundIcon, it.onSelect, destructive = it.destructive, detail = it.detail, short = roundLabel(it, s), toggles = togglesOn(it.action), on = it.on, progress = it.progress, enabled = it.enabled, ghost = it.placeholder, waiting = it.placeholder && !page.extrasState.settled) } }
             }
         } else if (!primaryFullWidth) {
             // A phone on its side: the round buttons in Play's row, after it, wrapping only when
@@ -605,7 +602,7 @@ private fun Actions(
             // first at the start, so a trailer arriving later never moves it.
             FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 hero(Modifier)
-                others.forEach { androidx.compose.runtime.key(slotOf(it)) { RoundAction(it.label, it.icon, it.onSelect, destructive = it.destructive, detail = it.detail, short = roundLabel(it, s), toggles = togglesOn(it.action), progress = it.progress, enabled = it.enabled, ghost = it.placeholder, waiting = it.placeholder && !page.extrasState.settled) } }
+                others.forEach { androidx.compose.runtime.key(slotOf(it)) { RoundAction(it.label, it.roundIcon, it.onSelect, destructive = it.destructive, detail = it.detail, short = roundLabel(it, s), toggles = togglesOn(it.action), on = it.on, progress = it.progress, enabled = it.enabled, ghost = it.placeholder, waiting = it.placeholder && !page.extrasState.settled) } }
             }
         } else {
             hero(Modifier.fillMaxWidth())
@@ -614,10 +611,25 @@ private fun Actions(
                 horizontalArrangement = Arrangement.spacedBy(4.dp, if (headlineOnly) Alignment.CenterHorizontally else Alignment.Start),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                others.forEach { androidx.compose.runtime.key(slotOf(it)) { RoundAction(it.label, it.icon, it.onSelect, destructive = it.destructive, detail = it.detail, short = roundLabel(it, s), toggles = togglesOn(it.action), progress = it.progress, enabled = it.enabled, ghost = it.placeholder, waiting = it.placeholder && !page.extrasState.settled) } }
+                others.forEach { androidx.compose.runtime.key(slotOf(it)) { RoundAction(it.label, it.roundIcon, it.onSelect, destructive = it.destructive, detail = it.detail, short = roundLabel(it, s), toggles = togglesOn(it.action), on = it.on, progress = it.progress, enabled = it.enabled, ghost = it.placeholder, waiting = it.placeholder && !page.extrasState.settled) } }
             }
         }
+        // The live line of a download under way, under the buttons (Raju 5.2): a number, not only a ring.
+        page.rows.firstNotNullOfOrNull { it.status }?.let { line ->
+            Text(
+                line,
+                style = MaterialTheme.typography.bodyMedium,
+                color = Tone.muted,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+            )
+        }
         trailers.unopened?.let { TrailerQr(it, Modifier.padding(vertical = 8.dp)) }
+        // No poster: why, and the one thing that fixes it (one Down from the buttons for a remote). It also
+        // replaces the old "turn on posters" button.
+        val why = rememberPosterWhy(page.item, matched = page.meta != null, settled = page.metaState.settled)
+        if (why != null && page.meta == null) {
+            PosterWhyLine(why, onTurnOn = { online?.setEnabled(true) }, onFix = fixMatchOf(page.rows))
+        }
     }
 }
 
@@ -665,14 +677,7 @@ internal val HEADLINE_ACTIONS = setOf(
 @Composable
 private fun MoreActions(page: DetailPage) {
     val s = LocalStrings.current
-    val online = OnlineMetadata.current
-    val metadataOff = online != null && !online.settings.collectAsState().value.enabled
-    val rest = buildList {
-        addAll(page.rows.drop(1).filter { it.action !in HEADLINE_ACTIONS })
-        if (online != null && page.meta == null && metadataOff) {
-            add(DetailRow(DetailAction.Play, s.metadataTurnOn, TmIcons.Info, s.metadataTurnOnDetail, onSelect = { online.setEnabled(true) }))
-        }
-    }
+    val rest = page.rows.drop(1).filter { it.action !in HEADLINE_ACTIONS }
     if (rest.isEmpty()) return
     val tv = !isTouch()
     FlowRow(
@@ -682,7 +687,7 @@ private fun MoreActions(page: DetailPage) {
         horizontalArrangement = Arrangement.spacedBy(if (tv) 12.dp else 4.dp, if (tv) Alignment.Start else Alignment.CenterHorizontally),
         verticalArrangement = Arrangement.spacedBy(if (tv) 12.dp else 8.dp),
     ) {
-        rest.forEach { androidx.compose.runtime.key(slotOf(it)) { RoundAction(it.label, it.icon, it.onSelect, destructive = it.destructive, detail = it.detail, short = roundLabel(it, s), toggles = togglesOn(it.action), progress = it.progress, enabled = it.enabled) } }
+        rest.forEach { androidx.compose.runtime.key(slotOf(it)) { RoundAction(it.label, it.roundIcon, it.onSelect, destructive = it.destructive, detail = it.detail, short = roundLabel(it, s), toggles = togglesOn(it.action), on = it.on, progress = it.progress, enabled = it.enabled) } }
     }
 }
 

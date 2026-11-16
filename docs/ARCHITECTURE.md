@@ -51,6 +51,60 @@ container reader below) names the decoder in the MIME type, `video/x-ffmpeg-<dec
 `audio/x-ffmpeg-<decoder>`, with the container's extra data in the format's initialization data
 (`FfmpegLibrary.ffmpegMimeType` documents the layout).
 
+### Remedy ladder
+
+When a video plays wrong, the player changes one thing at a time, by itself, and remembers what
+worked. The pieces are pure and tested in `core` (`RemedyLadderTest`, `RemedyMemory` tests, the
+two watches' tests); `RemedyRunner` and `DecoderPolicy` in `:app` are the glue.
+
+- **Evidence** (`RemedyEvidence`). Hard evidence lets the ladder hop by itself: a decoder error
+  (`DecoderError`), no decoder for the format (`NoDecoder`), sound without a picture
+  (`FirstFrameWatch`: 4 s on a hardware decoder, 10 s on software, 3 s more after a seek), a picture
+  that stopped while the sound goes on (`FrozenOutputWatch`, 3 s), a failed audio output
+  (`AudioFailed`), and the two presses "Report stutter" and "Picture looks wrong" (`UserStutter`,
+  `UserReport`). Soft evidence only offers a one-tap chip once per video: a stutter verdict
+  (`Stutter`) or software that cannot keep up (`SoftwareTooSlow`, which offers a lighter copy).
+  A source that stalls (`Source`) changes nothing, since another decoder would wait just the same.
+- **Rungs and remedies** (`Rung`, `Remedy`). One remedy changes one thing, so a result can be
+  blamed on it. R1 keeps the chip: reload at the same place, leave the failing decoder's name out
+  of the codec list, turn MediaCodec async queueing on, turn tunneled playback off. R2 is the app's
+  FFmpeg video decoder. R3 is the other engine, and only as `EngineSelector.afterFailure` allows it.
+  A1 is the app's FFmpeg audio decoder (PCM out), A2 passthrough off. R4 asks the person: the status
+  sheet, or a lighter Telegram copy, which is only ever offered. Each failure kind has its own
+  order (`RemedyLadder.ladderFor`); a decoder error goes to the next decoder, then software, then
+  the other engine.
+- **Never loops.** At most two automatic hops per video (`MAX_HOPS`), one per level (decoder,
+  sound, engine). A hop to a path already played on is refused, the next hop waits 1.5 s
+  (`PROBATION_MS`), and after the status sheet only the sheet is left. The viewer's choices win:
+  a picked engine, a picked decoder, a set tunneling mode, and Settings "Never switch by itself"
+  (then hard evidence offers instead, except a press, which is its own consent). A video with no
+  picture after a hop ends in the sheet, never in sound over black. The older one-time switches
+  (`switchDecoderByItself`, the engine sheet) ask `RemedyRunner.allowsDecoderSwitch` and
+  `allowsEngineSwitch` first, so they share that budget.
+- **The path.** `RemedyPath` is where a video plays (engine, software, excluded names, async,
+  tunneling, reloaded, audio software, passthrough off); a hop only moves away from the default,
+  so it cannot return to a path it left. `DecoderPolicy` turns it into Media3's settings once per
+  build of the player (the codec list, the queueing mode, the renderer order, tunneling), and the
+  hop re-opens the video at the same position, tracks, speed and subtitles.
+- **Class memory** (`RemedyMemory`, `RemedyClassKey`). The class of a video is the chipset, the
+  Android version, the picture's kind (codec, bit depth, size and rate bucket), the codec profile,
+  the container family and the audio codec, as `sun50iw6p1/28/hevc:10:1080:30/2/mkv/eac3`: never
+  a title or a file id. A remedy that played 60 s clean (`WORKED_MS`) becomes the class's start, so
+  the next video of that class starts on it with no wait and no stutter. A remedy that failed on
+  two different videos is skipped, and tried once more after an app update. One native crash in a
+  class starts its next video on software, two on the other engine. It is stored as one text line, bounded: 200 classes, counts capped, entries unseen for 180 days dropped, bad lines
+  skipped. `KnownDevices` (the device feed) can name a start remedy for a device while the memory knows
+  none, so a device fixed once can be fixed for others.
+- **Cost.** `RemedyRunner` owns one sampler tick a second, only while a picture someone can see is
+  playing; it stops once the first frame came and the path played 60 s clean, and runs again for 15
+  s after a seek. A paused player, background audio or a released player post nothing, which keeps
+  a 1 GB TV stick idle.
+- **What it records.** Each hop and each press goes into the playback trace and the Send logs
+  bundle (`PlaybackTrace`, `StutterReport`, `DecoderFacts`: the decoder names with their hardware
+  flags and the output format), by class and short video tag, so a bad device can be told from a bad
+  file. The presses are not offered while a cast session runs.
+  A real device is the only proof that a remedy fixes a given chip: `private/PLAYBACK-TEST-MATRIX.md`.
+
 ### Container reader
 
 A file none of Media3's extractors sniffs (ASF/WMV/WMA, RealMedia, an MPEG-1 system stream, an Ogg
@@ -190,9 +244,9 @@ in a release yet: keep this table in step with the code when it ships.
 | Software decoders in the app | FFmpeg extension: H.264, HEVC, AV1, VP8, VP9, MPEG-1, 2 and 4, DivX 3, VC-1, Motion JPEG, WMV 1 to 3, H.263, Sorenson, Theora, DV, SVQ1, SVQ3, VP6, RealVideo 1 to 4, Cinepak, ProRes, FFV1, Huffyuv, Ut Video, MJPEG-B; audio from DTS and TrueHD to WMA, RealAudio, GSM, G.723.1, Siren, ATRAC3, Speex, WavPack, TTA, Monkey's Audio and every PCM and ADPCM kind (a container Media3 cannot read is C2) | the same | mpv's own | not applicable | not applicable |
 | Stutter diagnostics | could-not-keep-up card with codec, decoder, dropped frames and whether the video streamed | the same card | none yet | none | none |
 | Logs and upload | Send logs shares a scrubbed file; crash reports go to Sentry only when the viewer agrees; nothing is uploaded on its own | saves the file to the Download folder (no share sheet on every TV) | saves the file | none | none |
-| Filters | Night mode for sound, Volume boost, audio delay | the same | the same, through mpv's filters | none | none |
+| Filters | Quiet loud scenes (night mode), Volume boost, audio delay | the same | the same, through mpv's filters | none | none |
 | Archives and pieces | stored ZIPs and pieces play; other archives are listed greyed with the reason | the same | the same | the same, read in the browser | none |
-| Audio files | a chat's Audio list: queue, shuffle, repeat, background audio | the same, screen off while it plays | the same | none | none |
+| Audio files | none: videos only, music, audio files and voice messages are never listed (`VideosOnlyTest`); a video's sound plays on with the screen off when that setting is on | none | none | none | none |
 
 ## Constraints the design answers to
 

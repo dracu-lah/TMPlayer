@@ -57,13 +57,13 @@ fun LowStorageQuestionHost(state: ShellState) {
     val s = LocalStrings.current
     val scope = rememberCoroutineScope()
     ConfirmDialog(
-        title = s.settingsLowStorage,
+        title = s.settingsStreamSwitchTitle,
         message = if (shown.keep) {
-            s.mainLowStorageAskKeep(mode = s.settingsLowStorage)
+            s.mainStreamAskKeep
         } else {
-            s.mainLowStorageAskPlay(mode = s.settingsLowStorage)
+            s.mainStreamAskPlay
         },
-        detail = s.settingsLowStorageDetail,
+        detail = s.settingsStreamSaveDetail,
         confirmLabel = s.mainLowStorageSwitchPlay,
         cancelLabel = s.mainLowStorageNotNow,
         destructive = false,

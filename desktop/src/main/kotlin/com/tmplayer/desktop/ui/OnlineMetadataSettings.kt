@@ -64,10 +64,24 @@ internal fun OnlineMetadataGroup(toggleModifier: Modifier = Modifier) {
         toggleModifier,
         icon = TmIcons.Image,
     ) { online.setEnabled(it) }
-    // The player's skip intro button rides on lookups, so it is offered only while they are on.
-    if (settings.enabled) {
-        Toggle(s.metadataSkipTimes, s.metadataSkipTimesDetail, settings.skipTimes, icon = TmIcons.Episodes) {
-            online.setSkipTimes(it)
+    // The player's skip buttons: the online lists ride on lookups, but a file's chapters and the
+    // viewer's own marks do not, so the switch is there with lookups off too. One line under it
+    // says what is sent; one row per kind of skip under that, while the switch is on.
+    Toggle(s.metadataSkipTimes, s.metadataSkipTimesPrivacy, settings.skipTimes, icon = TmIcons.Episodes) {
+        online.setSkipTimes(it)
+    }
+    if (settings.skipTimes) {
+        for (group in com.tmplayer.online.SkipGroup.entries) {
+            val current = settings.skipModes.of(group)
+            ChoiceSetting(
+                s.skipGroupName(group),
+                s.settingsSkipModeNote,
+                TmIcons.Episodes,
+                s.skipModeName(current),
+                com.tmplayer.online.SkipMode.entries.map { mode ->
+                    MenuChoice(s.skipModeName(mode), s.skipModeDetail(mode), mode == current) { online.setSkipMode(group, mode) }
+                },
+            )
         }
     }
     Action(
@@ -159,4 +173,23 @@ internal fun OmdbKeyDialog(onClose: () -> Unit) {
         },
         dismissButton = { TextButton(onClick = onClose) { Text(s.commonCancel) } },
     )
+}
+
+internal fun com.tmplayer.i18n.Strings.skipGroupName(group: com.tmplayer.online.SkipGroup): String = when (group) {
+    com.tmplayer.online.SkipGroup.Recap -> settingsSkipRecap
+    com.tmplayer.online.SkipGroup.Intro -> settingsSkipIntro
+    com.tmplayer.online.SkipGroup.Credits -> settingsSkipCredits
+    com.tmplayer.online.SkipGroup.Preview -> settingsSkipPreview
+}
+
+internal fun com.tmplayer.i18n.Strings.skipModeName(mode: com.tmplayer.online.SkipMode): String = when (mode) {
+    com.tmplayer.online.SkipMode.Ask -> settingsSkipModeAsk
+    com.tmplayer.online.SkipMode.Auto -> settingsSkipModeAuto
+    com.tmplayer.online.SkipMode.Off -> commonOff
+}
+
+internal fun com.tmplayer.i18n.Strings.skipModeDetail(mode: com.tmplayer.online.SkipMode): String = when (mode) {
+    com.tmplayer.online.SkipMode.Ask -> settingsSkipModeAskDetail
+    com.tmplayer.online.SkipMode.Auto -> settingsSkipModeAutoDetail
+    com.tmplayer.online.SkipMode.Off -> settingsSkipModeOffDetail
 }

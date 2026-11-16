@@ -141,7 +141,6 @@ import com.tmplayer.ui.components.ConnectionNotice
 import com.tmplayer.ui.components.ConnectionStatus
 import com.tmplayer.ui.components.rememberToast
 import com.tmplayer.ui.onboarding.Setup
-import com.tmplayer.ui.onboarding.SetupAndTour
 import com.tmplayer.ui.onboarding.TourOnly
 import com.tmplayer.ui.update.UpdateDialog
 import com.tmplayer.ui.update.LinkQrDialog
@@ -152,7 +151,7 @@ import com.tmplayer.ui.settings.SettingsScreen
 import com.tmplayer.ui.settings.CoffeeDialog
 import com.tmplayer.ui.settings.LanguageDialog
 import com.tmplayer.ui.settings.LanguageNoticeCard
-import com.tmplayer.ui.settings.TourOfferCard
+import com.tmplayer.ui.onboarding.TipsCard
 import com.tmplayer.ui.settings.LayoutNudgeHost
 import com.tmplayer.ui.settings.WhatsNewDialog
 import com.tmplayer.ui.i18n.rememberLanguageNotice
@@ -168,9 +167,6 @@ import kotlinx.coroutines.flow.first
 import com.tmplayer.data.guardedLifecycleScope as lifecycleScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-
-/** How long a first press of Back stays armed before it is forgotten. */
-private const val EXIT_WINDOW_MS = 2_000L
 
 /**
  * The mandatory chat choice's picker ([com.tmplayer.data.ChatsGate]) keeps its view model under
@@ -311,7 +307,7 @@ private data class RoomPrompt(
     val reclaimBytes: Long,
     val shortfallBytes: Long,
     val chatTitle: String,
-    /** Low storage mode is off and the video would stream, so the message names the mode. */
+    /** While streaming is on Keep video and the video would stream, so the message names Save space. */
     val lowStorageOff: Boolean = false,
 )
 
@@ -375,7 +371,8 @@ class MainActivity : ComponentActivity() {
             }
         }
         noteRequestedScreen(intent)
-        followMiniPlayer()
+        // The retired mini player switch (T12): an old stored value is dropped, never read.
+        lifecycleScope.launch { runCatching { SettingsStore(this@MainActivity).dropRetiredMiniPlayer() } }
         setContent {
             TMPlayerTheme {
                 // Shared screens (a video's copies) open their sheets as the phone's own sheet.
@@ -447,7 +444,7 @@ class MainActivity : ComponentActivity() {
                     return@launch
                 }
             }
-            startActivity(com.tmplayer.player.PlayerLaunch.fromBrowse(this@MainActivity, PlayerActivity.intent(this@MainActivity, video.toMediaItem(), video.chatTitle)))
+            startActivity(PlayerActivity.intent(this@MainActivity, video.toMediaItem(), video.chatTitle))
         }
     }
 
@@ -459,39 +456,6 @@ class MainActivity : ComponentActivity() {
     override fun onStop() {
         super.onStop()
         com.tmplayer.ui.components.PlayPress.end()
-        // Leaving the app from here leaves a docked video too; a rotation is not leaving.
-        if (!isChangingConfigurations) com.tmplayer.player.MiniDock.shellHidden()
-    }
-
-    /**
-     * The mini player (U8): the setting for the launch flags ([com.tmplayer.player.PlayerLaunch]),
-     * the notification's tap through here ([com.tmplayer.player.MiniDock.EXTRA_EXPAND]), and Back
-     * on the first page while a video is docked. Registered before the screens' own Back
-     * handlers, so it only hears a Back none of them took: it goes to the launcher as Home would,
-     * because Android left alone may bring the player's task forward instead.
-     */
-    private fun followMiniPlayer() {
-        expandDockedPlayer(intent)
-        lifecycleScope.launch {
-            runCatching { SettingsStore(this@MainActivity).miniPlayer.collect { com.tmplayer.player.MiniDock.enabled = it } }
-        }
-        val leave = object : androidx.activity.OnBackPressedCallback(false) {
-            override fun handleOnBackPressed() {
-                val home = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                if (runCatching { startActivity(home) }.isFailure) moveTaskToBack(true)
-            }
-        }
-        onBackPressedDispatcher.addCallback(this, leave)
-        lifecycleScope.launch {
-            com.tmplayer.player.MiniDock.docked.collect { leave.isEnabled = it != null }
-        }
-    }
-
-    /** A tap on the media notification with the player in a task of its own: the player comes back. */
-    private fun expandDockedPlayer(intent: Intent?) {
-        if (intent?.getBooleanExtra(com.tmplayer.player.MiniDock.EXTRA_EXPAND, false) != true) return
-        intent.removeExtra(com.tmplayer.player.MiniDock.EXTRA_EXPAND)
-        com.tmplayer.player.MiniDock.expand(this)
     }
 
     override fun onUserInteraction() {
@@ -566,7 +530,6 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        expandDockedPlayer(intent)
         noteRequestedScreen(intent)
         playFromHomeScreen(intent)
     }
@@ -722,8 +685,8 @@ private fun Root() {
     val setupPending by settings.setupPending.collectAsStateWithLifecycle(initialValue = false)
     // The quick tour (CP69). Done until the store answers, so the offer never flashes up.
     val tourState by settings.tourState.collectAsStateWithLifecycle(initialValue = SettingsStore.TourState.Done)
-    // Null until read, so the offer cannot flash up before Not now's week is known (ON-11).
-    val tourOfferAfter by settings.tourOfferAfter.collectAsStateWithLifecycle(initialValue = Long.MAX_VALUE)
+    // Settings' "Run the setup again": the one question asked again as the ordinary picker.
+    val setupReplay by settings.setupReplay.collectAsStateWithLifecycle(initialValue = false)
     // The favourites the kids lock lets through, as the Favourites tab lists them, so every count
     // of them (the badge, Clear all) says the same number.
     val storedFavorites by settings.favorites.collectAsStateWithLifecycle(initialValue = emptySet())
@@ -803,7 +766,11 @@ private fun Root() {
     // asked before the app, once the setup is done. While it is up (or briefly waits for the chat
     // list), nothing of the shell's own is offered: no update popup, What's new, language card,
     // tour offer or support prompt over or before it.
-    val chatsGate = com.tmplayer.ui.browse.rememberChatsGate(chatsViewModel, setupPending, signedIn = auth is AuthState.Ready)
+    val gateMove = com.tmplayer.ui.browse.rememberChatsGate(chatsViewModel, setupPending, signedIn = auth is AuthState.Ready)
+    // While the setup is armed it is the one question (SetupFlow), shown through the same gate
+    // bookkeeping: the question is a shown gate, every wait a wait.
+    val setupFlow = com.tmplayer.ui.browse.rememberSetupFlow(chatsViewModel, setupPending, setupReplay, signedIn = auth is AuthState.Ready)
+    val chatsGate = if (setupPending) com.tmplayer.data.SetupFlow.toMove(setupFlow) else gateMove
     val gateUp = com.tmplayer.data.ChatsGate.up(chatsGate)
     // The gate's picker model lives in the activity under its run. Once the gate has been answered
     // the next one gets a new run, so a second sign in in this process (Sign out does not recreate
@@ -1039,11 +1006,12 @@ private fun Root() {
     var connectionNotice by remember { mutableStateOf(ConnectionNotice.Hidden) }
     var wasOffline by remember { mutableStateOf(false) }
     var wasDisconnected by remember { mutableStateOf(false) }
-    LaunchedEffect(networkStatus, telegramConnected, auth) {
-        val effectivelyOffline = networkStatus == NetworkStatus.Offline && !telegramConnected
+    // Offline as the screens believe it: held for 2 s each way by the host (OfflineSettle), so the
+    // banner and Home's cards never flash on a flaky link (R4).
+    val settledOffline = com.tmplayer.ui.browse.LocalOfflineHome.current.offline
+    LaunchedEffect(settledOffline, networkStatus, telegramConnected, auth) {
         when {
-            effectivelyOffline -> {
-                delay(OFFLINE_SETTLE_MS)
+            settledOffline -> {
                 wasOffline = true
                 connectionNotice = ConnectionNotice.Offline
             }
@@ -1090,7 +1058,7 @@ private fun Root() {
     // One slot for whatever the current login pane got wrong: only one of them is ever on screen.
     var signInError by rememberSaveable { mutableStateOf<String?>(null) }
     var roomPrompt by remember { mutableStateOf<RoomPrompt?>(null) }
-    // "Switch to Low storage mode?", for a video that only fits that way, and the refusal "Not now"
+    // "Switch to Save space?", for a video that only fits that way, and the refusal "Not now"
     // falls back to. A refused download leaves its question in [LowStorageOffers].
     var lowStorageAsk by remember { mutableStateOf<Pair<LowStorageOffers.Ask, RoomPrompt?>?>(null) }
     val offeredLowStorage by LowStorageOffers.pending.collectAsStateWithLifecycle()
@@ -1109,7 +1077,6 @@ private fun Root() {
     var railReturn by remember { mutableStateOf<com.tmplayer.ui.browse.RailReturn?>(null) }
     // Whether the Downloads screen opens on its cached videos, which is how Settings' Cached
     // videos row reaches the list of them.
-    var downloadsOnCached by remember { mutableStateOf(false) }
     // How many times the Downloads screen has been asked to open with Free up space up (0: not),
     // which is where "Not enough space" sends the viewer: straight to what can go, not to a tab
     // to work it out from. A count, so a second refusal while the page is up opens it again.
@@ -1134,7 +1101,6 @@ private fun Root() {
         // Back from the Downloads screen goes wherever the viewer already was, not to the chat
         // list: they were reading a chat, pressed a notification, and Back should return them to it.
         if (screen !is Screen.Downloads) downloadsCameFrom = screen
-        downloadsOnCached = false
         // The player's "Not enough space" asks for Free up space itself.
         downloadsFreeUp = if (requestedScreen == MainActivity.OPEN_FREE_UP_SPACE) downloadsFreeUp + 1 else 0
         downloadsAskedForRoom = true
@@ -1193,8 +1159,6 @@ private fun Root() {
     // must not be drawn: it would appear fully for a moment and then be replaced, which reads as
     // a glitch rather than as opening the chat the viewer asked to come back to.
     var autoOpenDecided by rememberSaveable { mutableStateOf(false) }
-    // Whether a first press of Back has already been made at the top level.
-    var exitArmed by remember { mutableStateOf(false) }
     // Hoisted out of BrowseScreen: opening a chat replaces that screen entirely, so a tab held
     // down there would be forgotten every time the viewer backed out of a chat.
     //
@@ -1234,7 +1198,7 @@ private fun Root() {
     // Only the count: the map itself changes with every download's progress, several times a
     // second, and reading it here recomposed the whole shell for each one.
     val activeDownloadsState = OfflineDownloads.active.collectAsStateWithLifecycle()
-    val activeDownloadCount by remember(activeDownloadsState) { derivedStateOf { activeDownloadsState.value.size } }
+    val activeDownloadCount by remember(activeDownloadsState) { derivedStateOf { OfflineDownloads.runningCount(activeDownloadsState.value) } }
 
     /**
      * The preparation itself, split out only so [play] can wrap the whole of it in one pending
@@ -1289,7 +1253,7 @@ private fun Root() {
             if (LocalDownloads.videoFor(settings, item.chatId, item.messageId) != null) {
                 withContext(Dispatchers.Main) {
                     com.tmplayer.ui.components.PlayPress.open()
-                    context.startActivity(com.tmplayer.player.PlayerLaunch.fromBrowse(context, PlayerActivity.intent(context, item, chatTitle)))
+                    context.startActivity(PlayerActivity.intent(context, item, chatTitle))
                 }
                 return@withContext
             }
@@ -1347,11 +1311,8 @@ private fun Root() {
                 com.tmplayer.ui.components.PlayPress.open()
                 // The room was decided just above, so the player need not measure it again.
                 context.startActivity(
-                    com.tmplayer.player.PlayerLaunch.fromBrowse(
-                        context,
-                        PlayerActivity.intent(context, item, chatTitle)
-                            .putExtra(PlayerActivity.EXTRA_ROOM_DECIDED, item.fileId),
-                    ),
+                    PlayerActivity.intent(context, item, chatTitle)
+                        .putExtra(PlayerActivity.EXTRA_ROOM_DECIDED, item.fileId),
                 )
             }
 
@@ -1745,50 +1706,8 @@ private fun Root() {
             return@Box
         }
 
-        // The setup after sign in (CP67), in place of the shell until it is done or skipped. It no
-        // longer waits for the chat list: only the mandatory chat choice after it needs that.
-        if (setupPending) {
-            // What this device is short of, and which settings would help (CP68): the Device step.
-            val fit = com.tmplayer.ui.onboarding.rememberDeviceFit()
-            val light by settings.lightSettings.collectAsStateWithLifecycle(initialValue = null)
-            val seekThumbnails = com.tmplayer.ui.onboarding.rememberSeekThumbnailsShown()
-            val lightNow = light
-            if (lightNow == null) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { androidx.compose.material3.CircularProgressIndicator(color = Tone.accent) }
-                return@Box
-            }
-            val finish: () -> Unit = { scope.launch { runCatching { settings.markSetupDone() } } }
-            // Read once, as the setup opens: applying them must not take the step away under the viewer.
-            val recommendations = remember {
-                com.tmplayer.data.DeviceFitRules.recommendations(fit, lightNow, seekThumbnails)
-            }
-            // The same steps Settings' Setup choices lists (Setup.stepsFor), read once as the setup opens.
-            val steps = remember {
-                Setup.stepsFor(
-                    FormFactor.form(context),
-                    posters = com.tmplayer.online.OnlineMetadata.current != null,
-                    recommendations = recommendations,
-                )
-            }
-            // Appearance, then the choices; the quick tour is offered on its own once the shell is up.
-            SetupAndTour(
-                settings,
-                steps,
-                onDone = finish,
-                fit = fit,
-                recommendations = recommendations,
-                // CP102f: the crash report question, only in a build with somewhere to send one.
-                crashReporting = remember {
-                    com.tmplayer.ui.onboarding.CrashReporting(CrashReports.available) { on ->
-                        if (on) CrashReports.start(context, true) else CrashReports.stop()
-                    }
-                },
-            )
-            return@Box
-        }
-
-        // The quick tour on its own (CP69): taken from the offer below, or opened from Settings.
-        if (tourState == SettingsStore.TourState.Pending) {
+        // The quick tour on its own (CP69): taken from the Tips card on Home, or opened from Settings.
+        if (!setupPending && tourState == SettingsStore.TourState.Pending) {
             TourOnly(onDone = { scope.launch { runCatching { settings.markTourDone() } } })
             return@Box
         }
@@ -1816,6 +1735,31 @@ private fun Root() {
         // before any chat name is shown. In place of the app, not over it, so a remote cannot walk
         // out of it; it goes by itself once Done writes the choice. Back leaves the app. The view
         // model is kept under the gate run, so a rotation keeps the ticks and a later gate starts clean.
+        // The setup after sign in is this same picker (R3): "Which chats have your videos?", then
+        // Home. Its waits are the spinner with "Loading your chats" under it, or the offline card.
+        if (setupPending) {
+            com.tmplayer.ui.onboarding.SetupFlowEffects(settings, setupFlow, replay = setupReplay)
+            when (setupFlow) {
+                com.tmplayer.data.SetupFlow.Next.Choose -> {
+                    val activity = LocalActivity.current
+                    com.tmplayer.ui.browse.AddChatsPage(
+                        settings = settings,
+                        chatsViewModel = chatsViewModel,
+                        run = gateRun,
+                        // Only a replay has a Back and a Done that closes it; the first question ends by itself.
+                        onClose = { scope.launch { runCatching { settings.markSetupDone() } } },
+                        required = com.tmplayer.data.SetupFlow.required(setupReplay),
+                        onLeave = { activity?.finish() },
+                    )
+                }
+                com.tmplayer.data.SetupFlow.Next.Offline -> com.tmplayer.ui.browse.SetupOffline()
+                com.tmplayer.data.SetupFlow.Next.Wait -> com.tmplayer.ui.browse.ChatsGateWaiting()
+                else -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    androidx.compose.material3.CircularProgressIndicator(color = Tone.accent)
+                }
+            }
+            return@Box
+        }
         if (chatsGate == com.tmplayer.data.ChatsGate.Move.Wait) {
             com.tmplayer.ui.browse.ChatsGateWaiting()
             return@Box
@@ -1880,23 +1824,9 @@ private fun Root() {
             MainActivity.requestedChat.value = null
         }
 
-        // At the top level Back would leave the app outright, and on a remote it sits right next
-        // to the D-pad and is very easy to hit by accident. Two presses, the way every other app
-        // on this television does it.
-        if (screen is Screen.Chats) {
-            val activity = LocalActivity.current
-            BackHandler {
-                if (exitArmed) activity?.finish() else { exitArmed = true; toast(L.mainBackAgain) }
-            }
-            // The second press has to follow the first, not arrive ten minutes later on a screen
-            // the viewer has long since forgotten pressing Back on.
-            LaunchedEffect(exitArmed) {
-                if (exitArmed) {
-                    delay(EXIT_WINDOW_MS)
-                    exitArmed = false
-                }
-            }
-        }
+        // The top level has no Back handler of its own: Back leaves, as in every other app, with no
+        // "press again" (rule 13 of the UX interaction plan), and the system's back-to-home
+        // animation plays because nothing here claims the press.
 
         // Home's rows, built here rather than inside Home so the TV home screen channels follow
         // them whichever screen is open. Recently added is the featured carousel at the top of
@@ -1962,7 +1892,6 @@ private fun Root() {
                     home = Screen.Chats,
                 )
             }
-            downloadsOnCached = false
             downloadsFreeUp = 0
             screen = Screen.Downloads
         }
@@ -2188,13 +2117,13 @@ private fun Root() {
                     if (downloadsCameFrom is Screen.Chats) railReturn = com.tmplayer.ui.browse.RailReturn.Downloads
                     screen = downloadsCameFrom
                 }
-                // On a television one Back leaves too, the remote landing on the account's picture
-                // whose menu opened Downloads, as Back from Settings does: going by way of the bar
-                // took two presses (2026-10-21).
+                // On a television one Back leaves too, the remote landing on the bar, on the page it
+                // comes back to: Downloads is a place on the bar now (R2), not behind the picture, so
+                // there is no account item to go back to.
                 BackHandler(
                     onBack = {
                         if (tvBarShown) {
-                            if (downloadsCameFrom is Screen.Chats) railReturn = com.tmplayer.ui.browse.RailReturn.Profile
+                            if (downloadsCameFrom is Screen.Chats) railReturn = com.tmplayer.ui.browse.RailReturn.Downloads
                             screen = downloadsCameFrom
                         } else {
                             leaveDownloads()
@@ -2207,7 +2136,6 @@ private fun Root() {
                     DownloadsScreen(
                         onPlay = { record -> resumeMedia(record) },
                         onBack = leaveDownloads,
-                        openOnCached = downloadsOnCached,
                         openFreeUp = downloadsFreeUp > 0,
                         askedForRoom = downloadsFreeUp > 0 && downloadsAskedForRoom,
                         // An empty Downloads page: to the chats, where Download is.
@@ -2266,7 +2194,6 @@ private fun Root() {
                     // Storage's Free up space: the Downloads page with the review up, Back to Settings.
                     onFreeUpSpace = {
                         downloadsCameFrom = Screen.Settings
-                        downloadsOnCached = false
                         downloadsFreeUp += 1
                         downloadsAskedForRoom = false
                         screen = Screen.Downloads
@@ -2311,17 +2238,17 @@ private fun Root() {
         val crashPending = crashQuestion != null
         val noticeLanguage = languageNotice.language
         var tvHintUp by remember { mutableStateOf(FormFactor.isTv(context)) }
-        val tourOffer = SettingsStore.tourOfferDue(tourState, tourOfferAfter, System.currentTimeMillis()) && inShell &&
+        val tourOffer = SettingsStore.tipsDue(tourState) && inShell &&
             screen is Screen.Chats && !showUpdate && noticeLanguage == null && !pickingLanguage &&
             !whatsNew.showing && supportRung == 0 && !crashPending
         com.tmplayer.ui.settings.TourOfferFrame(
             offer = tourOffer,
             hintUp = tvHintUp && FormFactor.isTv(context) && inShell && screen is Screen.Chats,
             card = { cardModifier ->
-                TourOfferCard(
-                    again = tourOfferAfter != 0L,
-                    onTake = { scope.launch { runCatching { settings.openTour() } } },
-                    onDecline = { scope.launch { runCatching { settings.putOffTourOffer(System.currentTimeMillis()) } } },
+                TipsCard(
+                    onShow = { scope.launch { runCatching { settings.openTour() } } },
+                    // One tap, one answer: the card does not come back (the tour stays in Settings).
+                    onDismiss = { scope.launch { runCatching { settings.markTourDone() } } },
                     modifier = cardModifier,
                 )
             },
@@ -2364,7 +2291,23 @@ private fun Root() {
                 val holder = rememberSaveableStateHolder()
                 // The end a pushed screen comes in from: the right, or the left in a right to left language.
                 val endSign = if (androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl) -1 else 1
-                TouchNavHost(nav = touchNav, chrome = touchChrome, pageKey = TouchScreens.key(screen)) {
+                TouchNavHost(
+                    nav = touchNav,
+                    chrome = touchChrome,
+                    pageKey = TouchScreens.key(screen),
+                    // The connection notice stands above the bar, never over it, and the pages make
+                    // room for it (R4, 9.1): Offline is a card with Try again and Downloads.
+                    bannerShown = connectionNotice != ConnectionNotice.Hidden && auth is AuthState.Ready,
+                    banner = {
+                        if (connectionNotice == ConnectionNotice.Offline) {
+                            com.tmplayer.ui.connect.OfflineBanner(
+                                onOpenDownloads = openDownloads.takeIf { screen !is Screen.Downloads },
+                            )
+                        } else {
+                            ConnectionStatus(notice = connectionNotice)
+                        }
+                    },
+                ) {
                     AnimatedContent(
                         targetState = screen,
                         contentKey = { TouchScreens.key(it) },
@@ -2435,13 +2378,13 @@ private fun Root() {
         lowStorageAsk?.let { (ask, refusal) ->
             // An invitation, so focus starts on "Switch and play": it does what the viewer pressed.
             TvConfirm(
-                title = L.settingsLowStorage,
+                title = L.settingsStreamSwitchTitle,
                 message = if (ask.keep) {
-                    L.mainLowStorageAskKeep(mode = L.settingsLowStorage)
+                    L.mainStreamAskKeep
                 } else {
-                    L.mainLowStorageAskPlay(mode = L.settingsLowStorage)
+                    L.mainStreamAskPlay
                 },
-                detail = L.settingsLowStorageDetail,
+                detail = L.settingsStreamSaveDetail,
                 confirmLabel = L.mainLowStorageSwitchPlay,
                 cancelLabel = L.mainLowStorageNotNow,
                 destructive = false,
@@ -2482,7 +2425,7 @@ private fun Root() {
                         }
                         ) +
                     // A stream, with the mode off: the one answer that deletes nothing is named.
-                    if (pending.lowStorageOff) " " + L.mainNoRoomLowStorage(mode = L.settingsLowStorage, device = device) else "",
+                    if (pending.lowStorageOff) " " + L.mainStreamNoRoom(device = device) else "",
                 detail = L.mainNoRoomDetail,
                 // Straight to what can go, with the sheet that says what each line frees already up
                 // (user, 2026-10-18), rather than to a tab to work it out from.
@@ -2492,7 +2435,6 @@ private fun Root() {
                 onConfirm = {
                     roomPrompt = null
                     if (screen !is Screen.Downloads) downloadsCameFrom = screen
-                    downloadsOnCached = false
                     downloadsFreeUp += 1
                     downloadsAskedForRoom = true
                     screen = Screen.Downloads
@@ -2581,37 +2523,37 @@ private fun Root() {
                 },
             )
         }
-        supporting?.let { from -> SupportDialog(from = from, onClose = { supporting = null }) }
+        supporting?.let { SupportDialog(onClose = { supporting = null }) }
 
-        // S1: "Help fix crashes?", once, for an install never asked (the setup's step was skipped,
-        // or it was signed in before the step existed). On the chat list, behind every other card.
-        val crashAskReporting = remember {
-            com.tmplayer.ui.onboarding.CrashReporting(CrashReports.available) { on ->
-                if (on) CrashReports.start(context, true) else CrashReports.stop()
-            }
+        // The phone's notice stands in the floating bar's host, above the bar (TouchNavHost's banner).
+        // Elsewhere the pills keep the foot of the screen and Offline is the card at the top (R4).
+        if (FormFactor.isTv(context)) {
+            ConnectionStatus(
+                notice = connectionNotice,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 20.dp),
+            )
         }
-        val struggleHintUp by com.tmplayer.data.DeviceFitHint.raised.collectAsStateWithLifecycle()
-        com.tmplayer.ui.onboarding.CrashAskHost(
-            settings = settings,
-            reporting = crashAskReporting,
-            inShell = inShell && screen is Screen.Chats,
-            otherUp = showUpdate || noticeLanguage != null || whatsNew.showing || supportRung != 0 || supporting != null ||
-                crashPending || newVideoOffer || struggleHintUp || tourState == SettingsStore.TourState.Never || changelogQr,
-            safeMode = com.tmplayer.data.SafeMode.active,
-            modifier = Modifier
-                .align(if (FormFactor.isTv(context)) Alignment.BottomEnd else Alignment.BottomCenter)
-                .windowInsetsPadding(WindowInsets.safeDrawing)
-                .padding(if (FormFactor.isTv(context)) 40.dp else 16.dp),
-        )
-
-        ConnectionStatus(
-            notice = connectionNotice,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 20.dp),
-            // Offline, the way to a video that plays: Downloads (not from Downloads itself).
-            onOpenDownloads = openDownloads.takeIf { screen !is Screen.Downloads && auth is AuthState.Ready },
-        )
+        if (connectionNotice == ConnectionNotice.Offline && auth is AuthState.Ready && FormFactor.isTv(context)) {
+            com.tmplayer.ui.connect.OfflineBanner(
+                modifier = if (FormFactor.isTv(context)) {
+                    // On a TV, in the Connect banner's place: Up from the bar goes into it (HX22).
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .zIndex(2f)
+                        .padding(top = com.tmplayer.ui.theme.Tv.SafeV, end = com.tmplayer.ui.theme.Tv.SafeH)
+                        .widthIn(max = TV_BANNER_MAX)
+                } else {
+                    Modifier
+                        .align(Alignment.TopCenter)
+                        .zIndex(2f)
+                        .windowInsetsPadding(WindowInsets.statusBars)
+                        .padding(top = 8.dp, start = 16.dp, end = 16.dp)
+                },
+                onOpenDownloads = openDownloads.takeIf { !FormFactor.isTv(context) && screen !is Screen.Downloads },
+            )
+        }
         // Over the connection notice's place, a little higher when both are up.
         com.tmplayer.ui.components.StartingStatus(
             Modifier
@@ -2644,8 +2586,6 @@ private fun Root() {
         com.tmplayer.ui.connect.ProxyScreenHost()
     }
 }
-
-private const val OFFLINE_SETTLE_MS = 750L
 
 /** The connection banner's width on a TV, clear of the bar's tabs at the start. */
 private val TV_BANNER_MAX = 440.dp

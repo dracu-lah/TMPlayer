@@ -37,8 +37,9 @@ object SettingsSearch {
                 val detail = row.details.asSequence().map { read(text, it) }.firstOrNull { it.isNotBlank() }.orEmpty()
                 val page = read(text, row.group.title)
                 val titleWords = words(title)
+                val also = words(row.keywords?.let { read(text, it) }.orEmpty())
                 val rest = words(row.details.joinToString(" ") { read(text, it) } + " " + page + " " + row.drawnAs.joinToString(" ") { read(text, it) })
-                if (!words.all { word -> titleWords.any { it.startsWith(word) } || rest.any { it.startsWith(word) } }) {
+                if (!words.all { word -> titleWords.any { it.startsWith(word) } || also.any { it.startsWith(word) } || rest.any { it.startsWith(word) } }) {
                     return@mapIndexedNotNull null
                 }
                 val titleText = titleWords.joinToString(" ")
@@ -46,7 +47,9 @@ object SettingsSearch {
                     titleText.startsWith(phrase) -> 0
                     words.all { word -> titleWords.any { it.startsWith(word) } } -> 1
                     titleText.contains(phrase) -> 2
-                    else -> 3
+                    // The words a person types for the row beat a line that happens to hold one.
+                    words.all { word -> titleWords.any { it.startsWith(word) } || also.any { it.startsWith(word) } } -> 3
+                    else -> 4
                 }
                 Triple(rank, index, Hit(row, title, detail, page))
             }
@@ -121,7 +124,7 @@ enum class SettingsLink(val from: String, val group: SettingsGroup, val row: Str
     SetupPerformance("setup.choices_body", SettingsGroup.Appearance, "lighter_pictures", setOf(DeviceForm.Phone, DeviceForm.Tv)),
 
     /** Setup choices, Mobile data: Also in Downloads and storage (a phone's row). */
-    SetupMobileData("setup.choices_body", SettingsGroup.Storage, "save_mobile_data", setOf(DeviceForm.Phone)),
+    SetupMobileData("setup.choices_body", SettingsGroup.Storage, "mobile_data", setOf(DeviceForm.Phone)),
 
     /** The chooser's "Change it any time in Settings, Playback". */
     ChooserNote("external.chooser_note", SettingsGroup.Playback, "default_player", setOf(DeviceForm.Phone, DeviceForm.Tv)),
@@ -141,20 +144,14 @@ enum class SettingsLink(val from: String, val group: SettingsGroup, val row: Str
     /** "Posters are off. Turn them back on in Settings, Posters and details." */
     PostersOff("grid.meta_notice_turned_off", SettingsGroup.Library, "posters", setOf(DeviceForm.Phone, DeviceForm.Tv, DeviceForm.Desktop)),
 
-    /** A chat's "Change the minimum and maximum size in Settings." */
-    SizeLimits("browse.size_limits_in_settings", SettingsGroup.Library, "size_limits", setOf(DeviceForm.Phone, DeviceForm.Tv, DeviceForm.Desktop)),
-
     /** Not enough room to play: "choose another storage location in Settings". */
     NoSpace("player.no_space", SettingsGroup.Storage, "download_location", setOf(DeviceForm.Phone, DeviceForm.Tv, DeviceForm.Desktop)),
 
     /** "Wi-Fi only is on ... turn Wi-Fi only off in Settings" (a phone's row). */
-    WifiOnly("player.wifi_only", SettingsGroup.Storage, "wifi_only", setOf(DeviceForm.Phone)),
+    WifiOnly("player.mobile_data_never", SettingsGroup.Storage, "mobile_data", setOf(DeviceForm.Phone)),
 
     /** "Developer options are on. Save name check is in Settings, under Save logs." */
     DeveloperOn("logs.developer_on", SettingsGroup.About, "name_report", setOf(DeviceForm.Phone, DeviceForm.Tv, DeviceForm.Desktop)),
-
-    /** The "Help fix crashes?" card: "You can change this anytime in Settings." */
-    CrashAsk("setup.crash_ask_body", SettingsGroup.Account, "crash_reports", setOf(DeviceForm.Phone, DeviceForm.Tv, DeviceForm.Desktop)),
     ;
 
     /** Where Setup choices' "Also in" goes is in the ui module (SetupStep lives there). */
