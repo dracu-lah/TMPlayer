@@ -97,7 +97,7 @@ class SkipPill(
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 Gravity.END or Gravity.BOTTOM,
             ).apply {
-                rightMargin = NextUpCard.marginPx(root)
+                SideInsets.atEnd(this, NextUpCard.marginPx(root))
                 bottomMargin = NextUpCard.bottomPx(root)
             },
         )

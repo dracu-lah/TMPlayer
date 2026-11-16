@@ -29,6 +29,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.doOnPreDraw
 import androidx.core.view.updateLayoutParams
 import androidx.core.view.updatePadding
+import androidx.core.view.updatePaddingRelative
 import androidx.fragment.app.FragmentActivity
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -3109,24 +3110,25 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 bottom = baseBottom + safe.bottom,
             )
             topBar.updatePadding(left = barLeft + safe.left, right = barRight + safe.right, top = safe.top)
-            corner?.updatePadding(right = safe.right, top = safe.top + underTheBar)
+            // The chips stand at the start or the end of the screen, which right to left are the
+            // other way round: each keeps clear of the inset on its own side (R8, 2026-11-16).
+            val side = SideInsets.of(safe.left, safe.right, root.layoutDirection == View.LAYOUT_DIRECTION_RTL)
+            corner?.updatePaddingRelative(end = side.end, top = safe.top + underTheBar)
             nextUpCard?.view?.updateLayoutParams<FrameLayout.LayoutParams> {
-                rightMargin = safe.right + NextUpCard.marginPx(root)
+                SideInsets.atEnd(this, side.end + NextUpCard.marginPx(root))
                 bottomMargin = safe.bottom + NextUpCard.bottomPx(root)
             }
             skipPill?.view?.updateLayoutParams<FrameLayout.LayoutParams> {
-                rightMargin = safe.right + NextUpCard.marginPx(root)
+                SideInsets.atEnd(this, side.end + NextUpCard.marginPx(root))
                 bottomMargin = safe.bottom + NextUpCard.bottomPx(root)
             }
             // "Back to" on the start side keeps clear of a cutout or the bar in landscape too.
             undoChip?.view?.updateLayoutParams<FrameLayout.LayoutParams> {
-                leftMargin = safe.left + NextUpCard.marginPx(root)
-                marginStart = safe.left + NextUpCard.marginPx(root)
+                SideInsets.atStart(this, side.start + NextUpCard.marginPx(root))
                 bottomMargin = safe.bottom + NextUpCard.bottomPx(root)
             }
             suggestChip?.view?.updateLayoutParams<FrameLayout.LayoutParams> {
-                leftMargin = safe.left + NextUpCard.marginPx(root)
-                marginStart = safe.left + NextUpCard.marginPx(root)
+                SideInsets.atStart(this, side.start + NextUpCard.marginPx(root))
                 bottomMargin = safe.bottom + SubtitleOfferChip.bottomOver(root)
             }
             insets

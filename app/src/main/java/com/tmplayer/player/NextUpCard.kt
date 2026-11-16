@@ -79,7 +79,7 @@ class NextUpCard(
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 Gravity.END or Gravity.BOTTOM,
             ).apply {
-                rightMargin = marginPx(root)
+                SideInsets.atEnd(this, marginPx(root))
                 bottomMargin = bottomPx(root)
             },
         )
@@ -144,5 +144,30 @@ class NextUpCard(
         fun marginPx(view: android.view.View): Int = (MARGIN_DP * view.resources.displayMetrics.density).toInt()
 
         fun bottomPx(view: android.view.View): Int = (BOTTOM_DP * view.resources.displayMetrics.density).toInt()
+    }
+}
+
+/**
+ * The screen's side insets as start and end, and the margins of a chip that stands at one of them.
+ *
+ * A chip laid out at [android.view.Gravity.END] sits on the left right to left, so a bare
+ * `rightMargin` put it flush against the left edge (and under a cutout there) in Arabic, Hebrew
+ * and Persian. The relative margin is what a [FrameLayout] reads once it is set; the absolute one
+ * is kept for the side it means left to right.
+ */
+internal data class SideInsets(val start: Int, val end: Int) {
+    companion object {
+        fun of(left: Int, right: Int, rtl: Boolean): SideInsets =
+            if (rtl) SideInsets(start = right, end = left) else SideInsets(start = left, end = right)
+
+        fun atEnd(params: FrameLayout.LayoutParams, px: Int) {
+            params.marginEnd = px
+            params.rightMargin = px
+        }
+
+        fun atStart(params: FrameLayout.LayoutParams, px: Int) {
+            params.marginStart = px
+            params.leftMargin = px
+        }
     }
 }
