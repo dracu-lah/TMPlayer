@@ -272,6 +272,7 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
                 onSearchDown = { gridNav?.focus(0) },
                 recent = recent,
                 onClearRecent = { scope.launch { state.settings.clearRecentSearches() } },
+                onRemoveRecent = { entry -> scope.launch { state.settings.removeRecentSearch(entry) } },
                 favourite = favourite,
                 // The star says it, filled or not; a message about it would only repeat that.
                 onToggleFavourite = { scope.launch { state.settings.toggleFavorite(chat.id) } },
