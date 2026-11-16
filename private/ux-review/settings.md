@@ -1,7 +1,7 @@
 # Review: settings (203 controls, 16 files), worker R3, 2026-11-16
 
 Verdict key: ok / fixed in <commit> / left: <why>. D1 behaviour, D2 input modes, D3 motion, D4 look, D5 words, D6 speed, D7 access, D8 common person.
-Commits (branch worktree-agent-ac7f613f240e2428a): 0ba39c5 DownloadShelf tie-break, 3f189a8 search box, 3769865 support/learnt/TV switch, then the cards commit (see the end).
+Commits (branch worktree-agent-ac7f613f240e2428a): 0ba39c5 DownloadShelf tie-break, 3f189a8 search box, 3769865 support/learnt/TV switch, 26eb8a9 cards.
 
 ## Settings list and search (SettingsScreen.kt, SettingsSearchBox.kt)
 | Control | D1 | D2 | D3 | D4 | D5 | D6 | D7 | D8 |
@@ -28,8 +28,8 @@ Commits (branch worktree-agent-ac7f613f240e2428a): 0ba39c5 DownloadShelf tie-bre
 | --- | --- |
 | Support window: Sponsor and Star links | fixed 3769865 (a Row squeezed the second link to a column of letters at 200 percent font; now a FlowRow). Test SettingsLargeFontTest, failed before the fix |
 | Support window: Don't show / Maybe later | ok (weighted pair, wraps its words) |
-| Language notice: Change / Keep | fixed (FlowRow, whole buttons wrap at 200 percent font) test SettingsLargeFontTest |
-| Tour offer: No thanks / Take the tour | fixed (same) test SettingsLargeFontTest |
+| Language notice: Change / Keep | fixed 26eb8a9 (FlowRow, whole buttons wrap at 200 percent font) test SettingsLargeFontTest |
+| Tour offer: No thanks / Take the tour | fixed 26eb8a9 (same) test SettingsLargeFontTest |
 | Layout nudge, What's new | ok (already FlowRow) |
 | Feedback panel | ok (full width buttons, Close on its own line) |
 | Coffee button | ok (brand colours kept on purpose) |
