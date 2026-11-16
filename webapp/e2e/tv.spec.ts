@@ -63,8 +63,9 @@ for (const size of [
             await tv(page)
         })
 
-        // The fake account's files are under 400 MB, so Home has no carousel and opens on its first card.
-        test('Home: no carousel to show opens on the first card, rows, OK opens the page on Play, Back returns to Play and then the card, Back goes to the bar', async ({ page }) => {
+        // 'mid' (the tests that open Home): the fake account's files say 100 MB, over Home's 50 MB floor and under the carousel's 400 MB, so Home has rows, no carousel and opens on its first card. The player's tests keep the real sizes, which its stream needs.
+        test('Home: no carousel to show opens on the first card, rows, OK opens the page on Play, Back returns to Play and then the card, Back goes to the bar', async ({ page, context }) => {
+            await fakeCase(context, 'mid')
             await page.goto('/')
             await expect(page.locator('html')).toHaveAttribute('data-form', 'tv')
             await expect.poll(() => focused(page)).toContain('card|/video/')
@@ -99,7 +100,8 @@ for (const size of [
             expect(await focused(page)).toBe('tv-tab|/')
         })
 
-        test('Chats and a chat: the bar keeps the remote, a chat opens on its first card, the sort menu and Back', async ({ page }) => {
+        test('Chats and a chat: the bar keeps the remote, a chat opens on its first card, the sort menu and Back', async ({ page, context }) => {
+            await fakeCase(context, 'mid')
             await page.goto('/')
             await expect.poll(() => focused(page)).toContain('card|/video/')
             await press(page, 'ArrowUp')
@@ -130,7 +132,8 @@ for (const size of [
             await expect.poll(() => focused(page)).toBe(row)
         })
 
-        test('Choose chats: the bar holds a button on Chats only, OK opens the picker on its page, Back returns the remote to the button', async ({ page }) => {
+        test('Choose chats: the bar holds a button on Chats only, OK opens the picker on its page, Back returns the remote to the button', async ({ page, context }) => {
+            await fakeCase(context, 'mid')
             await page.goto('/')
             await expect.poll(() => focused(page)).toContain('card|/video/')
             await press(page, 'ArrowUp')
@@ -156,7 +159,8 @@ for (const size of [
             await expect(page.locator('.tv-bar .choose-chats')).toHaveCount(0)
         })
 
-        test('Settings: a choice is made with OK, not by moving; Sign out asks, Back closes the question onto it', async ({ page }) => {
+        test('Settings: a choice is made with OK, not by moving; Sign out asks, Back closes the question onto it', async ({ page, context }) => {
+            await fakeCase(context, 'mid')
             await page.goto('/')
             await expect.poll(() => focused(page)).toContain('card|/video/')
             await press(page, 'ArrowUp')
@@ -445,7 +449,8 @@ for (const size of [
             expect(await focused(page)).toBe('tv-tab|/search')
         })
 
-        test('A notice with buttons never takes the remote, but Up from the bar and Down from the foot reach it, and Back, Down or closing it gives the remote back (HX22)', async ({ page }) => {
+        test('A notice with buttons never takes the remote, but Up from the bar and Down from the foot reach it, and Back, Down or closing it gives the remote back (HX22)', async ({ page, context }) => {
+            await fakeCase(context, 'mid')
             await page.goto('/')
             await expect.poll(() => focused(page)).toContain('card|/video/')
             await press(page, 'ArrowUp')
@@ -495,6 +500,7 @@ for (const size of [
         })
 
         test('A toast\'s Undo is reached from the bar, stays up while the remote is on it, and OK undoes (HX22)', async ({ page }) => {
+            test.setTimeout(45_000)
             await page.evaluate(
                 () =>
                     new Promise<void>((resolve, reject) => {
@@ -510,7 +516,10 @@ for (const size of [
             await page.goto('/settings')
             await expect.poll(() => focused(page)).not.toBe('')
             const on = () => page.evaluate(() => document.activeElement?.getAttribute('aria-labelledby') ?? '')
-            for (let i = 0; i < 40 && (await on()) !== 'history-label'; i++) await press(page, 'ArrowDown')
+            // Down walks the page's panels; Clear history sits left of the Rewind choices under the sync switch, so Down
+            // from that switch lands on Rewind (nearest in line) and Up from there reaches the button.
+            for (let i = 0; i < 80 && (await on()) !== 'history-label' && (await page.evaluate(() => (document.activeElement as HTMLInputElement | null)?.name)) !== 'rewind'; i++) await press(page, 'ArrowDown')
+            for (let i = 0; i < 4 && (await on()) !== 'history-label'; i++) await press(page, 'ArrowUp')
             expect(await on()).toBe('history-label')
             await press(page, 'Enter')
             await expect(page.locator('.toast button')).toBeVisible()
@@ -655,7 +664,7 @@ for (const size of [
 
         test('Recently added: Right past the last card lands on See all, a card of the row\'s size, and OK opens the page, which reads on', async ({ page, context }) => {
             test.setTimeout(60_000)
-            await fakeCase(context, 'manyrecent')
+            await fakeCase(context, 'manyrecent', 'mid')
             await tv(page)
             await page.goto('/')
             await expect.poll(() => focused(page)).toContain('card|/video/')
