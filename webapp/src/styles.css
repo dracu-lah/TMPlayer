@@ -193,6 +193,9 @@ input:not([type=range]):not([type=radio]):not([type=checkbox]):focus { border-co
 }
 .nav-picture.ringed { border-color: var(--accent); }
 .nav-picture-blank { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+/* Five places (Downloads came in with R2): the cells narrow so the bar keeps its side gutters on a phone. */
+@media (max-width: 420px) { .nav-cells { --cell-w: 60px; } }
+@media (max-width: 359px) { .nav-cells { --cell-w: 54px; } }
 /* A phone held sideways, where height is short: round icon buttons, the names in the tooltips. */
 @media (max-height: 500px) and (orientation: landscape) {
   .nav { bottom: calc(10px + env(safe-area-inset-bottom)); }
@@ -1025,6 +1028,7 @@ button.nav-cell { border: 0; background: none; padding: 0; font: inherit; cursor
 .favourites-list { list-style: none; padding: 0; }
 .empty-state { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 64px 16px; text-align: center; color: var(--muted); }
 .empty-state p { max-width: 420px; font-size: 14px; line-height: 20px; }
+.downloads-card-title { font-size: 20px; line-height: 28px; font-weight: 500; color: var(--fg); }
 .empty-disc { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-high); color: var(--accent); }
 /* A link or a button alike: as a <button> it would keep the browser's grey fill and system font. */
 .outline-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 36px; padding: 0 16px; border: 1px solid var(--line); border-radius: 999px; background: none; color: var(--fg); text-decoration: none; font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; }

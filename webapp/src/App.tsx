@@ -39,6 +39,7 @@ const Recent = lazy(loadRecent)
 const Settings = lazy(loadSettingsPage)
 const Detail = lazy(loadDetail)
 const AddChats = lazy(loadAddChats)
+const Downloads = lazy(() => import('./screens/Downloads').then((m) => ({ default: m.Downloads })))
 const Favourites = lazy(() => loadLibrary().then((m) => ({ default: m.Favourites })))
 const HistoryPage = lazy(() => loadLibrary().then((m) => ({ default: m.HistoryPage })))
 const later = [loadChats, loadChat, loadChatInfo, loadSearch, loadRecent, loadSettingsPage, loadDetail, loadWatch, loadAddChats]
@@ -191,6 +192,7 @@ export function App() {
             <Route path="/video/:chatId/:messageId" component={Detail} />
             <Route path="/watch/:chatId/:messageId" component={Watch} />
             <Route path="/settings/:page?" component={Settings} />
+            <Route path="/downloads" component={Downloads} />
             <Route path="/favourites" component={Favourites} />
             <Route path="/history/:tab?" component={HistoryPage} />
             <Route path="/lists/:id?" component={ListsPage} />

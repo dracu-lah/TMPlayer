@@ -30,14 +30,16 @@ rides in the same files. T12 removed the mini player, T4 made the streaming row 
 2. **One list "On this phone"** (the TV and desktop say "On this device", "On this computer"): downloaded and auto-saved
    videos together, in the page's order chips (Newest, Name, Largest), grouped by show as before. An auto-saved video
    (what playing left behind, the old "Recently played") wears a small **Auto-saved** tag in its detail line and has a
-   **Keep** action (turns it into a download, `saveToDownloads`) beside Watch. Delete on an auto-saved video stays in Free up
-   space's review, as before (nothing new to delete by hand without a name).
+   **Keep** action (turns it into a download, `saveToDownloads`) beside Watch (first in the phone's More menu). It is
+   otherwise a row like any other: it plays on a tap, Share, Save to folder and Delete work on it (named, confirmed), and a
+   note once over the list says what Auto-saved means. On the desktop an auto-saved row has Watch and Keep; Delete stays in
+   Free up space's review there.
 3. **Free up space**: only when the review has something to free; then a quiet text button under the storage line.
    Nothing to free: the line "Nothing to free up" and no button.
-4. **Cancel gets Undo** on a touch screen (7.2): the card leaves, the download is paused, "Cancelled. Undo" for 5 s; Undo
-   resumes it with the part file kept; after 5 s (or when the page is left) the part file is deleted. A remote cannot
-   reach a toast, so the TV and the desktop keep cancel as it is (the bar says Cancel on the button; a half-finished
-   download there stays in the list as Paused until Cancel, which deletes it).
+4. **Cancel gets Undo** on a touch screen (7.2): the card leaves, the download is paused, "Download cancelled. Undo" for 5 s;
+   Undo resumes it with the part file kept; after 5 s the part file is deleted (`CancelWindow`, tokens per cancel). If the page
+   is left inside the window the download is simply still there, paused: nothing is deleted behind the viewer's back. A
+   remote cannot reach a toast, so the TV and the desktop keep Cancel as it is. A failed card ("Dismiss") has nothing to bring back.
 5. The empty state's buttons ("Go to Chats", "Download a season") sit above the bar (bottom padding), not under it (7.3).
 
 ## Settings, Downloads and data
@@ -60,9 +62,11 @@ Mobile data, the stored values (`MobileDataPolicy`):
 Picking writes `mobile_data` and keeps the old keys in step (`wifi_only_downloads` = Never; the others clear it), so a
 restore on an older build still behaves. "Save mobile data" (a streaming bound) keeps its stored value and its effect for
 the people who set it; it is no longer shown.
-- **Ask first**: a download or a stream over 300 MB on mobile data asks once per session (today's default).
-- **Never**: nothing starts on mobile data; the card says "Waiting for Wi-Fi" and starts by itself on Wi-Fi.
-- **Allow**: never asks.
+- **Ask first**: a video that has to be streamed over 300 MB on mobile data asks once per session (today's default, in the
+  player). A download is the viewer's own press and is not asked about.
+- **Never**: nothing that is not already on the phone starts on mobile data: a stream says so with the way out, a download
+  card says "Waiting for Wi-Fi" and starts by itself on Wi-Fi.
+- **Allow**: never asks (`MeteredPolicy.decide(asks = false)`).
 A TV is never on mobile data: the row is not offered there (`MeteredPolicy`), as the two switches were not.
 
 ## Edge cases
@@ -72,8 +76,9 @@ A TV is never on mobile data: the row is not offered there (`MeteredPolicy`), as
   99+ is shown as 99+. It updates once a second with the ticker, not per byte.
 - **A download finishes while the viewer is on another tab**: the badge falls by one; no toast (the old behaviour stays:
   the notification says it); the video is in the list when the tab is opened. Nothing scrolls under the thumb.
-- **Mobile data warning**: Ask first warns before a large video starts; the warning's words name the video size and the
-  choice "Use mobile data" / "Wait for Wi-Fi". Never says why a card waits. A change of the control applies to the next start.
+- **Mobile data warning**: Ask first warns before a large streamed video starts (the player's existing sheet, with its size).
+  Never says why a card waits. A change of the control applies to the next start. The old "Wi-Fi only" line in the player
+  became "On mobile data is set to Never ..." and links to the new row.
 - **Empty**: the empty state with Go to Chats and Download a season above the bar.
 - **Offline**: the page works (it is the place offline videos live); nothing here needs the network.
 - **Rotation, process death**: the sort, the page and the list scroll are saved as before; the cancel window ends the
