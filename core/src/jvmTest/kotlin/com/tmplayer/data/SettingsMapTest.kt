@@ -71,7 +71,7 @@ class SettingsMapTest {
             "default_player" to SettingsGroup.Playback,
             "player_engine" to SettingsGroup.Playback,
             "mobile_data" to SettingsGroup.Storage,
-            "resume_sync" to SettingsGroup.Library,
+            "resume_sync" to SettingsGroup.Account,
             "find_subtitles" to SettingsGroup.Subtitles,
             "detailed_logs" to SettingsGroup.About,
             "playback_test" to SettingsGroup.About,
