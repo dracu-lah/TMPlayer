@@ -151,10 +151,14 @@ TMPlayer is the control point and serves only the chosen video and its subtitle,
 - **Phone (`app/.../cast/`).** `CastSupport` is the interface `PlayerCast`, `CastRemoteScreen` and
   `CastPickerSheet` drive. `MergedCastSupport(google, dlna)` joins the lists (ids `gc:` and
   `dlna:`; Cast wins one row per address). `DlnaCastSupport` discovers only while a picker is
-  open and holds a multicast lock only then. `DlnaCastService` keeps a DLNA cast alive with the
+  open or a screen's 15 s `CastPresenceScan` runs, and holds a multicast lock only then. `DlnaCastService` keeps a DLNA cast alive with the
   screen off (foreground, media session, Wi-Fi and wake locks). The F-Droid build has DLNA alone.
-- **Desktop.** `DesktopCast` holds a `Receiver` (Cast or DLNA), `CastFinder` lists both,
-  `CastPlaybackEngine` plays on it.
+- **Desktop.** `DesktopCast` holds a `Receiver` (Cast or DLNA), `CastFinder` lists both (its
+  search counted, like the phone's), `CastPlaybackEngine` plays on it.
+- **The button (FQ8).** Core `CastPresence` decides when the Cast button is drawn: only once a TV
+  has been found (either kind) or a cast is under way, a TV seen in the last 10 minutes shown at
+  once while a search confirms it. The phone's player and detail page and the desktop's player
+  bar each search 15 s when they come into sight and then stop, so nothing searches at idle.
 - **Transcode, the last resort.** `CastPlan` gets a `Transcode` route only where no Direct, HLS,
   Remux or ConvertAudio way plays the file with its sound: a picture codec, 10 bit or a size
   past 1080p the receiver refuses, MPEG-TS or AVI, or sound nothing else converts (an MP4 with
