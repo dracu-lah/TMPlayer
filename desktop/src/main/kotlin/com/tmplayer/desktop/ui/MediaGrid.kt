@@ -1205,7 +1205,7 @@ internal fun Poster(
                     when (download.stage) {
                         OfflineDownloads.Stage.Running -> download.fraction?.let { s.formatter.percent(it.toDouble()) } ?: s.gridStageDownloading
                         OfflineDownloads.Stage.Queued -> s.gridStageQueued
-                        OfflineDownloads.Stage.Paused -> s.gridStagePaused
+                        OfflineDownloads.Stage.Paused -> s.gridStagePausedLong
                         OfflineDownloads.Stage.Offline, OfflineDownloads.Stage.Yielding -> s.gridStageWaiting
                         OfflineDownloads.Stage.NoWifi -> s.gridStageNoWifi
                         OfflineDownloads.Stage.Moving -> s.gridStageMoving

@@ -21,6 +21,7 @@ import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.Td
 import com.tmplayer.data.start
 import com.tmplayer.i18n.L
+import com.tmplayer.i18n.Translator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -231,7 +232,8 @@ private suspend fun planDownloads(
             }
         }
         if (batch.outOfSpace) offerLowStorage(context, settings, chosen, candidates, batch, chatTitle)
-        batch.fits.map { chosen[it] } to batchMessage(batch, chosen.size)
+        val taken = batch.fits.map { chosen[it] }
+        taken to batchMessage(batch, chosen.size, big = taken.singleOrNull()?.takeIf { it.sizeBytes >= BIG_DOWNLOAD_BYTES }, freeBytes = DiskSpace.read(context).freeBytes)
     }
 }
 
@@ -266,6 +268,9 @@ private suspend fun offerLowStorage(
     LowStorageOffers.ask(LowStorageOffers.Ask(item, chatTitle(item), keep = true))
 }
 
+/** From this size one download says what it is and how much room is left, as it starts. */
+private const val BIG_DOWNLOAD_BYTES = 1L shl 30
+
 /**
  * What to say about a selection the device could not take whole.
  *
@@ -274,7 +279,7 @@ private suspend fun offerLowStorage(
  * including whatever was on the device already: those are subtracted here, so the sentence counts
  * the videos that actually needed fetching.
  */
-private fun batchMessage(batch: CacheShelf.Batch, wanted: Int): String {
+private fun batchMessage(batch: CacheShelf.Batch, wanted: Int, big: MediaItem? = null, freeBytes: Long = 0L): String {
     val taken = batch.fits.size
     val needed = wanted - batch.alreadyHere.size
     // Room is the only thing that can refuse a tick, and by this point the watch cache has already
@@ -285,6 +290,11 @@ private fun batchMessage(batch: CacheShelf.Batch, wanted: Int): String {
         needed == 0 -> L.gridAlreadyDownloadedMany
         taken == 0 -> L.gridNoneFit(room = noRoom)
         taken < needed -> L.gridSomeFit(taken = taken, needed = needed, room = noRoom)
+        // One video over a gigabyte says its size and the room left (Raju 5.2): the press that costs the most says so.
+        taken == 1 && big != null && freeBytes > 0 -> L.gridDownloadingOneBig(
+            size = Translator.messages.formatter.bytes(big.sizeBytes),
+            free = Translator.messages.formatter.bytes(freeBytes),
+        )
         taken == 1 -> L.gridDownloadingOne
         // They are fetched one at a time, so what the viewer is told is what they will see on the
         // Downloads screen: one coming down and the rest waiting their turn.

@@ -4173,7 +4173,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             MeteredDecision.Allow -> true
             MeteredDecision.Block -> {
                 showError(
-                    L.playerWifiOnly,
+                    L.playerMobileDataNever,
                     retryable = false,
                 )
                 false

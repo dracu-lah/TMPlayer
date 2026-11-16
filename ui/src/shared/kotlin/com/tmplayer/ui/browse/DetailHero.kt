@@ -43,6 +43,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -241,6 +242,11 @@ internal fun RoundAction(
     /** A download under way, 0 to 1: a ring round the button fills as it goes. */
     progress: Float? = null,
     /**
+     * A switch that is ON (Watched, Watch later): the round button is drawn filled in the accent
+     * with its check or clock, and read out as pressed, so it looks like a button that is held in.
+     */
+    on: Boolean = false,
+    /**
      * Its place held for a button that may still come (the trailer, while the title's extras are on
      * their way): laid out, not drawn, not reachable. It fades in where it stood once it is real.
      */
@@ -311,6 +317,15 @@ internal fun RoundAction(
         else -> Tone.text
     }
     val tick = rememberToggleTick()
+    val fill by androidx.compose.animation.animateColorAsState(
+        when {
+            focused -> Tone.focusFill
+            on -> Tone.accent
+            else -> Tone.surfaceHigh
+        },
+        Motion.standard(Motion.Fast),
+        label = "roundActionFill",
+    )
     Column(
         modifier
             .then(requester)
@@ -322,7 +337,16 @@ internal fun RoundAction(
                     onClick()
                 }
             }
-            .then(if (ghost) Modifier else Modifier.semantics { contentDescription = listOfNotNull(label, detail).joinToString(". ") })
+            .then(
+                if (ghost) {
+                    Modifier
+                } else {
+                    Modifier.semantics {
+                        contentDescription = listOfNotNull(label, detail).joinToString(". ")
+                        if (on) selected = true
+                    }
+                },
+            )
             .then(off)
             .padding(vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -334,13 +358,13 @@ internal fun RoundAction(
                 .pressScale(interactions)
                 .downloadRing(progress)
                 .clip(CircleShape)
-                .background(if (focused) Tone.focusFill else Tone.surfaceHigh)
-                .border(1.dp, if (focused) Color.Transparent else Tone.outline, CircleShape),
+                .background(fill)
+                .border(1.dp, if (focused || on) Color.Transparent else Tone.outline, CircleShape),
             contentAlignment = Alignment.Center,
         ) {
-            // A switch's icon turns into its other one (the check into the cross, the clock into
-            // the cross) rather than blinking, so the press visibly did something.
-            SwapIcon(icon, if (focused) Tone.onFocusFill else ink, size = 22.dp)
+            // A switch's icon turns into its other one rather than blinking, so the press visibly
+            // did something; on, it is filled in the accent, with the icon in its ink.
+            SwapIcon(icon, if (focused) Tone.onFocusFill else if (on) Tone.onAccent else ink, size = 22.dp)
         }
         // Up to three lines, in type small enough for the longest word to fit the button's width:
         // in Malayalam "Mark as watched" ran past two lines, and German and French broke
@@ -553,15 +577,17 @@ internal val HeroPillMax = 420.dp
 internal fun roundLabel(row: DetailRow, s: Messages): String = when (row.action) {
     DetailAction.StartOver -> s.detailRoundRestart
     DetailAction.MarkWatched -> s.detailRoundWatched
-    DetailAction.MarkUnwatched -> s.detailRoundUnwatched
+    // One word whichever way it stands: the filled button says it is on (Raju 5.1).
+    DetailAction.MarkUnwatched -> s.detailRoundWatched
     DetailAction.AddWatchLater -> s.detailRoundWatchLater
-    DetailAction.RemoveWatchLater -> s.detailRoundRemove
+    DetailAction.RemoveWatchLater -> s.detailRoundWatchLater
     DetailAction.AddToList -> s.detailRoundList
     DetailAction.Download -> s.detailRoundDownload
     DetailAction.SaveToDownloads -> s.detailRoundSave
     DetailAction.InDownloads -> s.detailRoundDownloaded
     DetailAction.RemoveDownload -> s.detailRoundDelete
-    DetailAction.CancelDownload -> s.detailRoundStop
+    // "Cancel" here and on the Downloads page: one word for one action (Raju 5.2).
+    DetailAction.CancelDownload -> s.commonCancel
     DetailAction.SelectVideos -> s.detailRoundSelect
     DetailAction.OpenElsewhere -> s.detailRoundOpenWith
     DetailAction.CopyLink -> s.detailRoundLink
