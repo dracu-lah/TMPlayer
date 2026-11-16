@@ -1229,7 +1229,11 @@ private fun KeptRow(
             name,
             detail,
             detailColor = if (missing) Tone.danger else Tone.muted,
-        ) { fileName?.let { FileNameLine(it) } }
+        ) {
+            fileName?.let { FileNameLine(it) }
+            // The picture and the sound the file declares, where known (the one slot for format badges).
+            com.tmplayer.ui.components.FormatBadgeRow(com.tmplayer.ui.components.rememberFormatTags(item), Modifier.padding(top = 4.dp))
+        }
         when {
             missing -> {
                 TextButton(onClick = onDownloadAgain) { Text(s.downloadsDownloadAgain) }

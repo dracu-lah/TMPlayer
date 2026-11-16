@@ -2663,13 +2663,14 @@ private fun MediaArt(
             )
             finished -> WatchedBadge(corner)
         }
-        // The top end corner: the caller's own mark, else on a poster the quality the name
-        // states, which a film's card shows where a video's carries it in its line of facts.
-        val quality = item.qualityTags.firstOrNull()
+        // The top end corner: the caller's own mark, else on a poster the resolution (720p and up,
+        // from the stated size, else the name: FormatFacts.tileTag), which a film's card shows
+        // where a video's carries it in its line of facts.
+        val quality = remember(item.width, item.height, item.fileName, item.title) { com.tmplayer.data.FormatFacts.tileTag(item) }
         when {
             badge != null -> Box(Modifier.align(Alignment.TopEnd).padding(inset)) { badge() }
             // Only on its own: two chips across a narrow poster would meet in the middle.
-            poster && !thumb && quality != null && waiting == null && !item.onDevice && !finished -> TileBadge(quality, Modifier.align(Alignment.TopEnd).padding(inset))
+            poster && !thumb && quality != null && waiting == null && !item.onDevice && !finished -> com.tmplayer.ui.components.FormatBadge(quality, Modifier.align(Alignment.TopEnd).padding(inset), onArt = true)
         }
 
         // Where playback stopped, as a line laid on the foot of the picture. Only with a saved
