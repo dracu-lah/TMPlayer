@@ -72,6 +72,25 @@ test('a watch page opened by its address plays', async ({ page }) => {
     await playsPast(page, 1)
 })
 
+// R9: Tab into controls that have gone shows them, and they stay while the keyboard is on one.
+test('Tab brings the hidden controls back and they stay while a control has the keyboard', async ({ page, isMobile }) => {
+    test.skip(isMobile, 'a keyboard is a desktop input')
+    await openCard(page, 'Native Clip')
+    await playsPast(page, 0.5)
+    await page.mouse.move(640, 300)
+    // The clip is short: it may have ended and paused, which keeps the controls up.
+    await page.evaluate(() => { const v = document.querySelector('video')!; v.currentTime = 0; v.loop = true; return v.play() })
+    await page.mouse.move(640, 320)
+    await expect(page.locator('.pc.shown')).toHaveCount(0, { timeout: 8000 })
+    await page.keyboard.press('Tab')
+    await expect(page.locator('.pc.shown')).toHaveCount(1)
+    const on = await page.evaluate(() => document.activeElement?.matches(':focus-visible') && !!document.activeElement.closest('.pc-layer'))
+    expect(on, 'the keyboard is on a control of the row').toBe(true)
+    // Past the 3.5 s hide time the row is still there.
+    await page.waitForTimeout(5000)
+    await expect(page.locator('.pc.shown')).toHaveCount(1)
+})
+
 test.describe('without a service worker', () => {
     test.use({ serviceWorkers: 'block' })
     test('an MP4 is repacked instead', async ({ page }) => {

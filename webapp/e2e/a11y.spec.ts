@@ -25,13 +25,15 @@ test.describe('axe on the main screens', () => {
         ['Home', '/', 'main'],
         ['Chats', '/chats', 'a[href^="/chat/"]'],
         ['a chat', '/chat/-1001', '.card'],
-        ['Search', '/search?q=Clip', '.card'],
+        ['Search', '/search', '.card'],
         ['History', '/history', 'main'],
         ['Settings', '/settings/appearance', 'main'],
         ['a video page', '/video/-1001/1', '.detail-title'],
     ] as const)
         test(name, async ({ page }) => {
             await page.goto(path)
+            // A search opened by its address starts empty on purpose (a reload never brings an old one back): type the words.
+            if (name === 'Search') await page.getByRole('searchbox').fill('Clip')
             await expect(page.locator(ready).first()).toBeVisible()
             await page.waitForTimeout(500)
             await audit(page, name)
@@ -51,12 +53,12 @@ test.describe('axe on the main screens', () => {
 test('small controls answer 48 px under a finger', async ({ page, isMobile }) => {
     test.skip(!isMobile, 'a touch screen only')
     await noSizeFloor(page)
-    for (const path of ['/chats', '/chat/-1001']) {
+    for (const path of ['/chats', '/chat/-1001', '/history', '/lists']) {
         await page.goto(path)
-        await expect(page.locator('.round-button').first()).toBeVisible()
+        await expect(page.locator('main').first()).toBeVisible()
         await page.waitForTimeout(500)
         const misses = await page.evaluate(() =>
-            [...document.querySelectorAll<HTMLElement>('.round-button, .icon-button, .see-all, button.tonal')]
+            [...document.querySelectorAll<HTMLElement>('.round-button, .icon-button, .see-all, button.tonal, .history-tab, .outline-button, button.link, a.link')]
                 .filter((el) => el.getBoundingClientRect().width > 0)
                 .flatMap((el) => {
                     const r = el.getBoundingClientRect()
