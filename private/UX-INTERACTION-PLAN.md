@@ -711,3 +711,16 @@ full checks, write the device checklist. Everything below is LATER, in this orde
 6. Inventory review waves R1 to R9 over private/ux-inventory (dimensions D1 to D8, compose-performance skill), then Raju's second pass.
 7. Blocked on the user: Trakt and Simkl sync (keys), anime-skip client id, add more chats to the devices ("later").
 DROPPED: live streams, FQ9 lighter copy, FQ14 audio playlists.
+
+## RESUME CHECKPOINTS (written 2026-11-16 before the user went out; read this first after a compaction)
+State: main at the commit "Plans: wrap up now, the rest is later" or later; nothing pushed. No new workers. Only the three below.
+- [ ] CP1 Sync fixes worker af29fab81473144b7 (branch worktree-agent-af29fab81473144b7): 7 reviewer findings (list above). Done when it replies; then merge.
+- [ ] CP2 Test stabiliser a06f2029e76f5d0dc (branch worktree-agent-a06f2029e76f5d0dc): flaky and failing tests, full per-module runs. Merge.
+- [ ] CP3 Player labels + RL10 to RL12 a98d5b6ea6412adb9 (branch worktree-agent-a98d5b6ea6412adb9): controls with words, Report stutter, trace fields, decoder facts. Merge LAST (touches the most files; expect conflicts with the sync work in PlayerActivity, HomePane, SettingsScreen).
+For each merge, in this order:
+  1. `cd /home/dracu/projects/personal/TMPlayer && git add -f private && git commit -m "Plans: notes"` (merge is blocked by uncommitted private/ files otherwise).
+  2. `git merge --no-edit <branch>`; resolve conflicts keeping BOTH sides (check the SettingsScreen sign out flow signOutNow/backupFirst and HomePane keepPlace + onChooseFavourites).
+  3. Checks (JDK 21: `export JAVA_HOME=$HOME/.jdks/jdk-21.0.12+8 PATH=$JAVA_HOME/bin:$PATH`): `./gradlew :core:jvmTest --tests '*CatalogTest' :app:compileDebugKotlin :app:compileDebugUnitTestKotlin :desktop:compileKotlin :desktop:compileTestKotlin --max-workers=3 -q`.
+  4. A check failing twice: mark the task blocked here and leave that branch unmerged.
+- [ ] CP4 After all three: dash grep (AGENTS.md "Writing"), `git status`, `git log --oneline | head`.
+- [ ] CP5 Write the final summary for the user: what is merged, the device checklist (phone, TV, Tanix, Mi TV: Mongoose film in Save space and Keep video, Report stutter, sign out backup, TV Home card focus, offline Home), the needs-the-user list (anime-skip client id, langsync + dead keys, translations, push, beta release with the cadence guard), the LATER list (see "WRAP UP NOW"). Then STOP.
