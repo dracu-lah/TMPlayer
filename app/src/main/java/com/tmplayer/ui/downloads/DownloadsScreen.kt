@@ -254,7 +254,7 @@ fun DownloadsScreen(
     // they will arrive in, so the list does not reshuffle itself as the figures move.
     val activeMap by OfflineDownloads.active.collectAsStateWithLifecycle()
     // Cards cancelled inside their Undo window ([cancelRow]) are already gone from the page.
-    val cancelling = remember { CancelWindow() }
+    val cancelling = CancelWindow.shared
     val active = remember(activeMap, cancelling.pending) {
         activeMap.values.filter { it.fileId !in cancelling.pending }.sortedBy { it.order }
     }
@@ -932,8 +932,8 @@ fun DownloadsScreen(
     // Cancel on a touch screen is undoable (7.2): the card leaves at once and the download waits,
     // paused, with its part file, for [CANCEL_UNDO_MS]; Undo brings the card back and resumes it, and
     // only after the window is the part file deleted. Each cancel has a token, so an Undo and a
-    // second Cancel never finish one another's window. If the page is left inside the window the
-    // download is simply still there, paused: nothing is deleted behind the viewer's back.
+    // second Cancel never finish one another's window. The window outlives the page: rotating or
+    // leaving inside it still ends with the part file deleted, as the card promised.
     val undoToast = rememberActionToast()
     // A remote cannot reach a toast, so there Cancel stays what it was: the row goes with the
     // remote on it, on to the next one down.
@@ -947,14 +947,9 @@ fun DownloadsScreen(
             undoToast(L.downloadsCancelled, L.browseUndo) {
                 if (cancelling.undo(id, token) && !wasPaused) OfflineDownloads.resume(context, id)
             }
-            scope.launch {
-                kotlinx.coroutines.delay(CANCEL_UNDO_MS)
-                // Deleted first, the card let go after: it never flashes back between the two.
-                if (cancelling.isCurrent(id, token)) {
-                    dropUnfinished(id)
-                    cancelling.expire(id, token)
-                }
-            }
+            // Not the page's scope: that dies with the page or a rotation, and the window must end
+            // either way with the part file gone.
+            cancelling.schedule(com.tmplayer.platform.Background.scope, CANCEL_UNDO_MS, id, token, ::dropUnfinished)
         } else {
             val before = activeOrder
             scope.launch {
