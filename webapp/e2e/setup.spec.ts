@@ -15,7 +15,7 @@ test('signing in opens the chats gate, with no Back and no way past it without a
     await fakeCase(context, 'signedout', 'password', 'unanswered')
     await signIn(page)
     await expect(page).toHaveURL(/\/added-chats\?setup=1&next=%2F$/)
-    await expect(page.getByRole('heading', { name: 'Choose chats to watch' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Which chats have your videos?' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Back' })).toHaveCount(0)
     await expect(page.getByRole('checkbox', { name: 'Test Clips' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Choose at least one chat' })).toBeDisabled()

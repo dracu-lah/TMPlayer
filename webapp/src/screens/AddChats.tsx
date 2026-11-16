@@ -321,8 +321,8 @@ export function AddChats() {
                 }
             >
                 {/* The gate has no Back: choosing is the way on. */}
-                <h1 class="page-title">{t('picker.gate_title')}</h1>
-                <p class="muted picker-blurb">{t('picker.gate_body')}</p>
+                <h1 class="page-title">{t('setup.which_title')}</h1>
+                <p class="muted picker-blurb">{t('setup.which_body')}</p>
             </Show>
             <label class="search-field">
                 <Icon icon={Search01Icon} size={20} />
@@ -351,6 +351,10 @@ export function AddChats() {
             </Show>
             <Show when={!loaded() && !failed() && !list().length}>
                 <p class="muted">{t('picker.loading')}</p>
+            </Show>
+            {/* No chat holds videos yet (Saved Messages may be the only row): say what to do. */}
+            <Show when={gate() && loaded() && !failed() && list().length <= 1}>
+                <p class="muted picker-note">{t('picker.forward_hint')}</p>
             </Show>
             <Show when={(loaded() || failed()) && !rows().length}>
                 <p class="muted">{text().trim() ? t('chats.no_match', { query: text().trim() }) : t('picker.empty')}</p>
