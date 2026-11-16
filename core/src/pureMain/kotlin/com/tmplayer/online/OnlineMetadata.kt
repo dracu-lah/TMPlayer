@@ -585,7 +585,8 @@ class OnlineMetadata(
         val settings = store.now
         if (!settings.enabled || !settings.skipTimes) return emptyList()
         val query = item.metaQuery ?: return emptyList()
-        val info = (lookup(query) as? MetaResult.Found)?.info ?: return emptyList()
+        // The show alone: the skip lookup needs its ids, not this episode's name, so it does not wake the episode guide.
+        val info = (lookup(query.showOnly()) as? MetaResult.Found)?.info ?: return emptyList()
         val show = info.kind == MetaKind.Show
         if (show && query.episode == null) return emptyList()
         val season = if (show) query.season ?: 1 else null

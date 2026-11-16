@@ -105,6 +105,7 @@ class SkipLookupTest {
         val before = http.requests.size
         assertEquals(got, online.skipTimes(item))
         assertEquals("kept: the second ask goes nowhere", before, http.requests.size)
+        assertEquals("a skip lookup does not wake the episode guide (TMDB, Kitsu, Jikan)", 0, http.count("themoviedb") + http.count("kitsu") + http.count("jikan"))
     }
 
     @Test
