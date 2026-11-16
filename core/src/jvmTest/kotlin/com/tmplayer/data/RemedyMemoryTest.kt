@@ -135,6 +135,21 @@ class RemedyMemoryTest {
     }
 
     @Test
+    fun aRefusedBitstreamTeachesTheSoundAtOnce() {
+        val crashed = RemedyMemory.Empty.crashed(key, day).worked(key, listOf(Remedy.ExcludeDecoder), day).crashed(key, day)
+            .failed(key, Remedy.AudioSoftware, "a", v1, day)
+        val memory = crashed.learned(key, Remedy.AudioSoftware, day)
+        val record = memory.records.getValue(key)
+        assertEquals(setOf(Remedy.ExcludeDecoder, Remedy.AudioSoftware), record.working, "the picture's start stays")
+        assertTrue(Remedy.AudioSoftware !in record.fails, "its failure is forgotten")
+        assertEquals(1, record.crashes, "crash counts are not a sound's to clear")
+        // One per level: passthrough off replaces it, a lighter copy is never learned.
+        assertEquals(setOf(Remedy.ExcludeDecoder, Remedy.PassthroughOff), memory.learned(key, Remedy.PassthroughOff, day).records.getValue(key).working)
+        assertEquals(record.working, memory.learned(key, Remedy.LighterCopy, day).records.getValue(key).working)
+        assertEquals(memory.records, RemedyMemory.decode(memory.encode(), day).records)
+    }
+
+    @Test
     fun theClassKeyIsShortAndPlain() {
         val tanix = DeviceFacts(hardware = "sun50iw6p1", board = "exdroid", sdk = 28)
         val picture = DecodeJudge.Picture(DecodeJudge.MIME_HEVC, bitDepth = 10, width = 1920, height = 1080, fps = 23.976f)

@@ -304,6 +304,8 @@ private val SUGGEST_VLC = booleanPreferencesKey("suggest_vlc")
 // How each engine has done on this device (PR2, [com.tmplayer.player.EngineHistory]): this device's
 // decoders, so it stays behind in a backup.
 private val ENGINE_HISTORY = stringPreferencesKey("engine_history")
+// What the remedy ladder learned per class of video on this device (RL6, [RemedyMemory]): its decoders, so it stays behind.
+private val REMEDY_MEMORY = stringPreferencesKey("remedy_memory")
 private val FRAME_RATE_MATCHING = booleanPreferencesKey("frame_rate_matching")
 private val TUNNELED_PLAYBACK = stringPreferencesKey("tunneled_playback")
 private val PLAYBACK_STATS = booleanPreferencesKey("playback_stats")
@@ -1975,6 +1977,13 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
     /** Counts one decoding failure of [engine] on this device. */
     suspend fun noteEngineFailure(engine: PlayerEngine) {
         prefs.edit { it[ENGINE_HISTORY] = com.tmplayer.player.EngineHistory.decode(it[ENGINE_HISTORY]).failed(engine).encode() }
+    }
+
+    /** The remedy ladder's memory per class ([RemedyMemory.decode]: anything unreadable is empty, stale entries dropped). */
+    suspend fun remedyMemoryNow(today: Int): RemedyMemory = RemedyMemory.decode(prefs.data.first()[REMEDY_MEMORY], today)
+
+    suspend fun setRemedyMemory(memory: RemedyMemory) {
+        prefs.edit { it[REMEDY_MEMORY] = memory.encode() }
     }
 
     /** Switch to the other engine by itself when a decoder gives up (on), or only suggest it (off). */
