@@ -6,6 +6,7 @@ import { onBackOnline } from '../net'
 import { t } from '../i18n'
 import { progress as readProgress, settings, setSetting, setStarred, starredIds } from '../store'
 import { form } from '../form'
+import { arrowKeys } from '../ui/arrows'
 import { Icon } from '../ui/Icon'
 import { PageBar } from '../ui/PageBar'
 import { notePool } from '../ui/PosterPicker'
@@ -373,11 +374,18 @@ function SortMenu(props: {
 }) {
     const [open, setOpen] = createSignal(false)
     let box!: HTMLDivElement
+    let trigger!: HTMLButtonElement
+    // Escape or a pick puts the keyboard back on the button that opened the menu, not on a line that is gone.
+    const shut = () => (setOpen(false), trigger.focus({ preventScroll: true }))
     const close = (e: Event) => {
-        if (e instanceof KeyboardEvent ? e.key === 'Escape' : !box.contains(e.target as Node)) setOpen(false)
+        if (e instanceof KeyboardEvent) {
+            if (e.key === 'Escape') shut()
+        } else if (!box.contains(e.target as Node)) setOpen(false)
     }
     createEffect(() => {
         if (!open()) return
+        // The keyboard starts on the first line (a ring shows only where it came by keys).
+        queueMicrotask(() => box.querySelector<HTMLElement>('[role^=menuitem]')?.focus({ preventScroll: true }))
         document.addEventListener('pointerdown', close)
         document.addEventListener('keydown', close)
         onCleanup(() => {
@@ -388,9 +396,10 @@ function SortMenu(props: {
     return (
         <div class="menu-box" ref={box}>
             <button
+                ref={trigger}
                 class={props.cell ? 'nav-cell' : 'round-button'}
                 type="button"
-                aria-haspopup="true"
+                aria-haspopup="menu"
                 aria-expanded={open()}
                 aria-label={t('grid.sort_label')}
                 title={t('grid.sort_label')}
@@ -402,7 +411,15 @@ function SortMenu(props: {
                 </Show>
             </button>
             <Show when={open()}>
-                <div class="pop-menu" role="menu" aria-label={t('grid.sort_label')}>
+                <div
+                    class="pop-menu"
+                    role="menu"
+                    aria-label={t('grid.sort_label')}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Tab') shut()
+                        else if (form() !== 'tv') arrowKeys(e, e.currentTarget, '[role^=menuitem]', { vertical: true })
+                    }}
+                >
                     <p class="pop-title">{t('grid.sort_label')}</p>
                     <For each={SORTS}>
                         {(s) => (
@@ -413,7 +430,7 @@ function SortMenu(props: {
                                 classList={{ on: settings().sort === s.value }}
                                 onClick={() => {
                                     setSetting('sort', s.value)
-                                    setOpen(false)
+                                    shut()
                                 }}
                             >
                                 <span>{t(s.key)}</span>
@@ -439,7 +456,7 @@ function SortMenu(props: {
                             </Show>
                         </button>
                         <Show when={props.customRange}>
-                            <button type="button" role="menuitem" class="on" onClick={() => { props.onReset(); setOpen(false) }}>
+                            <button type="button" role="menuitem" class="on" onClick={() => { props.onReset(); shut() }}>
                                 <span>{t('grid.size_limit_on', { range: props.customRange! })}</span>
                             </button>
                         </Show>

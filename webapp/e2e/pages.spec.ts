@@ -279,6 +279,14 @@ test.describe('a video page', () => {
         // Best first: 4K, then 1080p, then 720p.
         await expect(options.nth(0)).toContainText('4K')
         await expect(options.nth(1)).toHaveAttribute('aria-selected', 'true')
+        // R9: the list is a list box, so the arrows walk it (a TV has its remote's own walk).
+        if (!(await page.evaluate(() => document.documentElement.dataset.form === 'tv'))) {
+            await options.nth(0).focus()
+            await page.keyboard.press('ArrowDown')
+            await expect(options.nth(1)).toBeFocused()
+            await page.keyboard.press('End')
+            await expect(options.nth(2)).toBeFocused()
+        }
         await options.nth(2).click()
         await expect(page).toHaveURL(/\/video\/-1005\/27$/)
         await expect(page.locator('.detail-copy-summary')).toContainText('720p')

@@ -49,6 +49,30 @@ test.describe('axe on the main screens', () => {
     })
 })
 
+// R9: the sort menu is keyboard whole: Enter opens it on its first line, the arrows walk, Escape or a pick gives the keyboard back to its button.
+test('the sort menu opens on its first line, walks on arrows and hands the keyboard back', async ({ page }) => {
+    await noSizeFloor(page)
+    await page.goto('/chat/-1001')
+    await expect(page.locator('.card').first()).toBeVisible()
+    const trigger = page.getByRole('button', { name: 'Sort videos by' }).first()
+    await trigger.focus()
+    await page.keyboard.press('Enter')
+    const items = page.getByRole('menuitemradio')
+    await expect(items.first()).toBeFocused()
+    await page.keyboard.press('ArrowDown')
+    await expect(items.nth(1)).toBeFocused()
+    await page.keyboard.press('End')
+    await expect(page.locator('[role^=menuitem]').last()).toBeFocused()
+    await page.keyboard.press('Escape')
+    await expect(items.first()).toHaveCount(0)
+    await expect(trigger).toBeFocused()
+    await page.keyboard.press('Enter')
+    await page.keyboard.press('ArrowDown')
+    await page.keyboard.press('Enter')
+    await expect(items.first()).toHaveCount(0)
+    await expect(trigger).toBeFocused()
+})
+
 // U19: under a finger the small round buttons answer a 48 px square, though they look 40 or 44.
 test('small controls answer 48 px under a finger', async ({ page, isMobile }) => {
     test.skip(!isMobile, 'a touch screen only')
