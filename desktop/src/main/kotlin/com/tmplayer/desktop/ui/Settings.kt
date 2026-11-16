@@ -176,7 +176,7 @@ internal fun titleOf(category: SettingsCategory): String {
         SettingsCategory.Library -> s.settingsLibrary
         SettingsCategory.Home -> s.settingsPageHome
         SettingsCategory.Notifications -> s.settingsPageNotifications
-        SettingsCategory.Storage -> s.settingsPageStorage
+        SettingsCategory.Storage -> s.settingsPageDownloadsData
         SettingsCategory.Account -> s.settingsPagePrivacyLock
         SettingsCategory.About -> s.settingsPageAbout
     }

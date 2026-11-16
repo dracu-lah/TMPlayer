@@ -344,9 +344,7 @@ fun SettingsScreen(
     val resumeSyncStatus by settings.resumeSyncStatus.collectAsStateWithLifecycle(initialValue = null)
     val resumeSyncAt by settings.resumeSyncAt.collectAsStateWithLifecycle(initialValue = 0L)
     val resumeSyncRunning by com.tmplayer.data.ResumeSync.running.collectAsStateWithLifecycle()
-    val wifiOnly by settings.wifiOnlyDownloads.collectAsStateWithLifecycle(initialValue = false)
-    val pauseWhilePlaying by settings.pauseDownloadsWhilePlaying.collectAsStateWithLifecycle(initialValue = true)
-    val saveMobileData by settings.saveMobileData.collectAsStateWithLifecycle(initialValue = false)
+    val mobileData by settings.mobileData.collectAsStateWithLifecycle(initialValue = com.tmplayer.data.MobileData.Ask)
     val trickplayOn by settings.trickplay.collectAsStateWithLifecycle(initialValue = true)
     val watchNextOn by settings.watchNext.collectAsStateWithLifecycle(initialValue = false)
     val trickplayMemory = remember { DeviceQuirks.trickplayMemory(context) }
@@ -513,7 +511,7 @@ fun SettingsScreen(
         SettingsPage.Home -> s.settingsPageHome
         SettingsPage.TvHome -> s.settingsPageTvHome
         SettingsPage.Notifications -> s.settingsPageNotifications
-        SettingsPage.Storage -> s.settingsPageStorage
+        SettingsPage.Storage -> s.settingsPageDownloadsData
         SettingsPage.Account -> s.settingsPagePrivacyLock
         SettingsPage.About -> s.settingsPageAbout
     }
@@ -1626,6 +1624,28 @@ fun SettingsScreen(
                 // television's remote can reach too. Left out entirely when there is nothing but
                 // internal storage to choose between.
                 item { DownloadLocationRow(onMoved = { scope.launch { refresh() } }) }
+                // "On mobile data": Ask first, Never or Allow, in place of the twin switches Wi-Fi only and
+                // Save mobile data (R2). A phone's row only: a television is on the wall and a stick is
+                // behind it, plugged into a network that is Wi-Fi or a cable and never a data allowance.
+                if (MeteredPolicy.wifiOnlyOffered(television = !touch)) {
+                    item {
+                        MobileDataRow(
+                            choice = mobileData,
+                            onPick = { scope.launch { settings.setMobileData(it) } },
+                            modifier = Modifier.jumpTarget(jumps.getValue(SetupStep.MobileData)),
+                        )
+                    }
+                }
+                // "While streaming": Keep video, or Save space, which streams through a rolling window
+                // of the video for a device with less room than the film. The line under the tabs says
+                // the cost of the chosen one; a download kept on purpose is never windowed.
+                item {
+                    StreamStorageRow(
+                        saveSpace = lowStorage,
+                        onPick = { scope.launch { settings.setLowStorageMode(it) } },
+                        modifier = Modifier.jumpTarget(jumps.getValue(SetupStep.Storage)),
+                    )
+                }
                 // Download the whole video first (moved from Playback by U20): with the other rows that
                 // decide whether a video streams or comes down first.
                 item {
@@ -1659,79 +1679,6 @@ fun SettingsScreen(
                                 prompt = Prompt.RemoveAfterWatching
                             }
                         },
-                    )
-                }
-                // "While streaming": Keep video, or Save space, which streams through a rolling window
-                // of the video for a device with less room than the film. The line under the tabs says
-                // the cost of the chosen one; a download kept on purpose is never windowed.
-                item {
-                    StreamStorageRow(
-                        saveSpace = lowStorage,
-                        onPick = { scope.launch { settings.setLowStorageMode(it) } },
-                        modifier = Modifier.jumpTarget(jumps.getValue(SetupStep.Storage)),
-                    )
-                }
-                // Its notification, beside the mode it is about rather than on the Notifications
-                // page (2026-11-01). A phone's only, as that page is: a TV posts none (CP76).
-                if (touch) {
-                    item(key = "notice-${Notice.LowStorage.name}") {
-                        NoticeToggleRow(
-                            notice = Notice.LowStorage,
-                            title = s.settingsLowStorageAlert,
-                            subtitle = s.settingsAlertLowStorageDetail,
-                            onBlocked = { toast(s.notifyBlocked) },
-                        )
-                    }
-                }
-                // A phone's row only. A television is on the wall and a stick is behind it, both plugged
-                // into a network that is Wi-Fi or a cable and never a data allowance somebody pays for by
-                // the gigabyte, so on a TV this asks the viewer to rule out something that cannot happen.
-                if (MeteredPolicy.wifiOnlyOffered(television = !touch)) {
-                    item {
-                        ToggleRow(
-                            title = s.settingsWifiOnly,
-                            subtitle = if (wifiOnly) {
-                                s.settingsWifiOnlyOn
-                            } else {
-                                s.settingsWifiOnlyOff
-                            },
-                            icon = TmIcons.Wifi,
-                            checked = wifiOnly,
-                            onToggle = { scope.launch { settings.setWifiOnlyDownloads(!wifiOnly) } },
-                        )
-                    }
-                }
-                // Beside it, a phone's row only for the same reason: a stream on mobile data fetched
-                // only a few minutes ahead, so a film stopped early has not cost most of its size.
-                if (MeteredPolicy.saveMobileDataOffered(television = !touch)) {
-                    item {
-                        ToggleRow(
-                            title = s.settingsSaveMobileData,
-                            modifier = Modifier.jumpTarget(jumps.getValue(SetupStep.MobileData)),
-                            subtitle = if (saveMobileData) {
-                                s.settingsSaveMobileDataOn
-                            } else {
-                                s.settingsSaveMobileDataOff
-                            },
-                            icon = TmIcons.Phone,
-                            checked = saveMobileData,
-                            onToggle = { scope.launch { settings.setSaveMobileData(!saveMobileData) } },
-                        )
-                    }
-                }
-                // On a TV as well as a phone: the line is shared whatever the screen. A stream first,
-                // then the downloads, and the Downloads screen says why they wait.
-                item {
-                    ToggleRow(
-                        title = s.settingsPauseDownloadsWhilePlaying,
-                        subtitle = if (pauseWhilePlaying) {
-                            s.settingsPauseDownloadsWhilePlayingOn
-                        } else {
-                            s.settingsPauseDownloadsWhilePlayingOff
-                        },
-                        icon = TmIcons.Pause,
-                        checked = pauseWhilePlaying,
-                        onToggle = { scope.launch { settings.setPauseDownloadsWhilePlaying(!pauseWhilePlaying) } },
                     )
                 }
             }
