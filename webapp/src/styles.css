@@ -946,6 +946,23 @@ button.primary.danger { background: var(--error); color: var(--bg); }
 /* The first run: nothing anywhere yet. */
 .first-run { padding: 24px; border: 1px solid var(--line); border-radius: var(--r-l); background: var(--surface); display: flex; flex-direction: column; gap: 8px; align-items: start; max-width: 560px; }
 .first-run h2 { font-size: 22px; line-height: 28px; font-weight: 400; }
+/* Home's one question about keeping the place on every device (the apps' KeepPlaceCard): once, at the end of Home. */
+.keep-place {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px 16px; align-items: start; max-width: 720px;
+  margin-top: 24px; padding: 20px; border: 1px solid var(--line); border-radius: var(--r-l); background: var(--surface);
+  scroll-margin-bottom: calc(96px + env(safe-area-inset-bottom));
+}
+.keep-place-icon { color: var(--accent); margin-top: 2px; }
+.keep-place-text { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.keep-place-text h2 { font-size: 20px; line-height: 26px; font-weight: 500; overflow-wrap: anywhere; }
+.keep-place-text p { font-size: 14px; line-height: 20px; overflow-wrap: anywhere; }
+.keep-place-buttons { grid-column: 1 / -1; display: flex; justify-content: flex-end; align-items: center; gap: 12px; flex-wrap: wrap; }
+.keep-place-buttons button { min-height: 44px; min-width: 44px; padding-inline: 20px; font-size: 16px; }
+@media (max-width: 479px) {
+  .keep-place { grid-template-columns: minmax(0, 1fr); padding: 16px; }
+  .keep-place-icon { display: none; }
+  .keep-place-buttons { flex-direction: column-reverse; align-items: stretch; }
+}
 a.primary-link {
   margin-top: 8px; background: var(--accent); color: var(--on-accent); border-radius: 999px; min-height: 44px; padding: 12px 24px;
   font-size: 14px; line-height: 20px; font-weight: 500; text-decoration: none;

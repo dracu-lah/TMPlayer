@@ -156,10 +156,18 @@ function tombOf(key: string): string | null {
     return m ? `${m[1] === 'watched' ? 'xw' : m[1] === 'later' ? 'xl' : 'xfix'}:${m[2]}_${tdlibMessageId(Number(m[3]))}` : null
 }
 
+/** Called when a list the sync file holds changed (a place, a mark, Watch later, a star, a pick); sync/index.ts pushes soon after. */
+let listsChanged: (() => void) | null = null
+export function onListsChanged(fn: () => void) {
+    listsChanged = fn
+}
+const SYNCED = /^(resume|watched|later|star|fix):/
+
 function write(key: string, value: unknown) {
     // A line put (back) is newer than any removal of it: an Undo must not be taken off again by a sync.
     const tomb = tombOf(key)
     if (tomb) removeRaw(tomb)
+    if (listsChanged && SYNCED.test(key)) queueMicrotask(listsChanged)
     memory.set(key, value)
     const done = db ? note(key, { v: value }) : () => {}
     if (db)
@@ -172,6 +180,7 @@ function write(key: string, value: unknown) {
 function remove(key: string, quiet = false) {
     const tomb = quiet ? null : tombOf(key)
     if (tomb) write(tomb, Date.now())
+    if (!quiet && listsChanged && SYNCED.test(key)) queueMicrotask(listsChanged)
     removeRaw(key)
 }
 
@@ -816,6 +825,11 @@ export async function syncPicks(): Promise<{ chatId: number; messageId: number; 
 /** The starred chats with when each was starred. */
 export async function syncStars(): Promise<{ chatId: number; time: number }[]> {
     return (await all<{ chatId: number; time: number }>('star:')).filter((s) => Number.isSafeInteger(s?.chatId))
+}
+
+/** Once a sync has written into the lists: what shows them (Home's rows, History) reads them again. */
+export function syncWrote() {
+    setWatchedTick(watchedTick() + 1)
 }
 
 /** A place that came in from the file, with the time the file gave it. */

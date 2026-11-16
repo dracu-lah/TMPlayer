@@ -18,6 +18,7 @@
     "test:player": "node --test \"src/player/*.test.ts\"",
     "test:stream": "node --test \"src/stream/*.test.ts\"",
     "test:ui": "node --test \"src/ui/*.test.ts\"",
+    "test:sync": "node --test \"src/sync/*.test.ts\"",
     "test:tg": "node --test \"src/tg/*.test.ts\"",
     "test:tv": "node --test \"tv/test/*.test.cjs\" \"tv/test/*.test.ts\"",
     "e2e": "playwright test"

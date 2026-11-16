@@ -6,6 +6,8 @@ import {
     ArrowLeft02Icon,
     ArrowRight01Icon,
     ArrowUp01Icon,
+    CloudSyncIcon,
+    LockKeyholeIcon,
     Delete02Icon,
     Download04Icon,
     GridViewIcon,
@@ -40,6 +42,8 @@ import { checkKept, install, installed, installPrompt, iosBrowser, keepData, kep
 import { cacheSizes, clearCaches } from '../cacheBounds'
 import { msoneOn, stateLine } from '../msoneFlag'
 import { health, knownHealth, type Health } from '../player/msone'
+import { setSyncOn, statusLine, syncHasFile, syncNow, syncOn, syncRunning, syncStatus, turnOffAndDelete } from '../sync'
+import { showToast } from '../ui/Toast'
 
 const THEMES: Theme[] = ['system', 'dark', 'light', 'black']
 const LAYOUTS: Layout[] = ['desktop', 'tv']
@@ -49,7 +53,7 @@ const LICENCES = `${import.meta.env.BASE_URL}licenses.txt`
 const UPI_ID = 'nevilnicks4321@okaxis'
 const UPI_LINK = `upi://pay?pa=${UPI_ID}&pn=TMPlayer&cu=INR&tn=${encodeURIComponent('TMPlayer support')}`
 
-type PageId = 'appearance' | 'home' | 'playback' | 'library' | 'storage' | 'about'
+type PageId = 'appearance' | 'home' | 'playback' | 'library' | 'privacy' | 'storage' | 'about'
 
 /** The app's pages (SettingsPage) that the web has something to put in, in its order. */
 const PAGES: { id: PageId; icon: IconData; title: () => string; summary: () => string }[] = [
@@ -62,6 +66,7 @@ const PAGES: { id: PageId; icon: IconData; title: () => string; summary: () => s
     { id: 'home', icon: Home03Icon, title: () => t('settings.page_home'), summary: () => t('settings.page_home_rows_summary') },
     { id: 'playback', icon: PlayIcon, title: () => t('settings.playback'), summary: () => t('settings.resume_rewind') },
     { id: 'library', icon: GridViewIcon, title: () => t('settings.library'), summary: () => t('settings.page_library_summary') },
+    { id: 'privacy', icon: LockKeyholeIcon, title: () => t('settings.page_privacy_lock'), summary: () => (syncOn() ? t('syncplace.switch_on') : t('syncplace.switch_off')) },
     { id: 'storage', icon: HardDriveIcon, title: () => t('web.settings_storage'), summary: () => t('web.settings_storage_summary') },
     { id: 'about', icon: InformationCircleIcon, title: () => t('settings.page_about'), summary: () => t('about.licence_line') },
 ]
@@ -211,6 +216,9 @@ function PageBody(props: { id: PageId }) {
             </Match>
             <Match when={props.id === 'library'}>
                 <Library />
+            </Match>
+            <Match when={props.id === 'privacy'}>
+                <Privacy />
             </Match>
             <Match when={props.id === 'storage'}>
                 <StoragePage />
@@ -522,6 +530,95 @@ function Library() {
     )
 }
 
+/**
+ * Privacy and lock: resume on your other devices (the apps' row of the same name). Off until the
+ * viewer turns it on, and turning it on asks first what goes where. While on: the line of the last
+ * sync, "Sync now" (or "Replace the sync file" when the file could not be read), and "Turn off and
+ * delete the sync file", which takes TMPlayer's file out of Saved Messages.
+ */
+function Privacy() {
+    let enable!: HTMLDialogElement
+    let erase!: HTMLDialogElement
+    let replace!: HTMLDialogElement
+    const [deleting, setDeleting] = createSignal(false)
+    const say = (text: string) => showToast({ text })
+    const change = (on: boolean) => (on ? enable.showModal() : void setSyncOn(false))
+    const turnOn = () => {
+        enable.close()
+        void setSyncOn(true)
+        say(t('settings.resume_sync_started'))
+    }
+    const erased = async () => {
+        setDeleting(true)
+        const gone = await turnOffAndDelete()
+        setDeleting(false)
+        erase.close()
+        say(gone ? t('settings.resume_sync_deleted') : t('settings.resume_sync_delete_failed'))
+    }
+    const unreadable = () => syncStatus()?.kind === 'unreadable'
+    return (
+        <>
+            <div class="set-card">
+                <ToggleRow icon={CloudSyncIcon} title={t('settings.resume_sync')} subtitle={syncOn() ? t('settings.resume_sync_on') : t('settings.resume_sync_off')} on={syncOn()} onChange={change} />
+                <Show when={syncOn()}>
+                    <div class="set-block sync-status">
+                        <p class="small" role="status" aria-live="polite" aria-busy={syncRunning()}>{statusLine()}</p>
+                        <div class="sync-buttons">
+                            <Show
+                                when={unreadable()}
+                                fallback={<button type="button" class="outline-button" disabled={syncRunning()} onClick={() => void syncNow()}>{t('settings.resume_sync_now')}</button>}
+                            >
+                                <button type="button" class="outline-button" disabled={syncRunning()} onClick={() => replace.showModal()}>{t('settings.resume_sync_replace')}</button>
+                            </Show>
+                        </div>
+                    </div>
+                </Show>
+                <Show when={syncOn() || syncHasFile()}>
+                    <button type="button" class="set-row" onClick={() => erase.showModal()}>
+                        <RowBody icon={Delete02Icon} title={t('settings.resume_sync_delete')} subtitle={t('settings.resume_sync_delete_detail')} />
+                    </button>
+                </Show>
+                <div class="set-block">
+                    <p class="muted small">{t('syncplace.privacy')}</p>
+                </div>
+            </div>
+            <dialog class="confirm" ref={enable} aria-labelledby="sync-enable-title">
+                <h2 id="sync-enable-title">{t('settings.resume_sync_enable_title')}</h2>
+                <p class="muted">{t('settings.resume_sync_enable_message')}</p>
+                <div class="confirm-buttons">
+                    <button class="link" type="button" onClick={() => enable.close()}>{t('common.cancel')}</button>
+                    <button class="primary" type="button" onClick={turnOn}>{t('syncplace.card_yes')}</button>
+                </div>
+            </dialog>
+            <dialog class="confirm" ref={erase} aria-labelledby="sync-delete-title">
+                <h2 id="sync-delete-title">{t('settings.resume_sync_delete_title')}</h2>
+                <p class="muted">{t('settings.resume_sync_delete_message')}</p>
+                <div class="confirm-buttons">
+                    <button class="link" type="button" disabled={deleting()} onClick={() => erase.close()}>{t('common.cancel')}</button>
+                    <button class="primary danger" type="button" disabled={deleting()} onClick={() => void erased()}>{t('settings.resume_sync_delete')}</button>
+                </div>
+            </dialog>
+            <dialog class="confirm" ref={replace} aria-labelledby="sync-replace-title">
+                <h2 id="sync-replace-title">{t('settings.resume_sync_replace_title')}</h2>
+                <p class="muted">{t('settings.resume_sync_replace_message')}</p>
+                <div class="confirm-buttons">
+                    <button class="link" type="button" onClick={() => replace.close()}>{t('common.cancel')}</button>
+                    <button
+                        class="primary danger"
+                        type="button"
+                        onClick={() => {
+                            replace.close()
+                            void syncNow({ replace: true })
+                        }}
+                    >
+                        {t('settings.resume_sync_replace')}
+                    </button>
+                </div>
+            </dialog>
+        </>
+    )
+}
+
 function StoragePage() {
     return (
         <>
@@ -808,6 +905,12 @@ function TvSettings() {
             <TvSwitch id="home-starred" title={t('settings.home_starred_rows')} on={settings().homeStarred} onText={t('settings.home_starred_rows_on')} offText={t('settings.home_starred_rows_off')} onPick={(on) => setSetting('homeStarred', on)} />
             <p class="muted small">{t('settings.home_follows_added')}</p>
             <HomeOrder />
+            <TvSwitch id="sync" title={t('settings.resume_sync')} on={syncOn()} onText={t('settings.resume_sync_on')} offText={t('settings.resume_sync_off')} onPick={(on) => void setSyncOn(on)} />
+            <p class="muted small">{t('syncplace.privacy')}</p>
+            <Show when={syncOn()}>
+                <p class="muted small" role="status">{statusLine()}</p>
+                <button class="outline-button" style={{ 'align-self': 'start' }} type="button" disabled={syncRunning()} onClick={() => void syncNow()}>{t('settings.resume_sync_now')}</button>
+            </Show>
             <TvPanel title={t('browse.clear_history')} id="history-label">
                 <p class="muted small">{t('browse.clear_history_detail')}</p>
                 <button class="outline-button" style={{ 'align-self': 'start' }} type="button" aria-labelledby="history-label" onClick={() => void clearHistoryWithUndo()}>
