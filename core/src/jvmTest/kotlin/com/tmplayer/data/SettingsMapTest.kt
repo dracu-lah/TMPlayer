@@ -70,7 +70,7 @@ class SettingsMapTest {
         val homes = mapOf(
             "default_player" to SettingsGroup.Playback,
             "player_engine" to SettingsGroup.Playback,
-            "pause_downloads" to SettingsGroup.Storage,
+            "mobile_data" to SettingsGroup.Storage,
             "resume_sync" to SettingsGroup.Library,
             "find_subtitles" to SettingsGroup.Subtitles,
             "detailed_logs" to SettingsGroup.About,
@@ -154,9 +154,10 @@ class SettingsMapTest {
             "log out" to "sign_out",
             "logout" to "sign_out",
             "sign off" to "sign_out",
-            "mobile data" to "save_mobile_data",
-            "data" to "save_mobile_data",
-            "internet" to "save_mobile_data",
+            "mobile data" to "mobile_data",
+            "data" to "mobile_data",
+            "wifi" to "mobile_data",
+            "internet" to "mobile_data",
             // The While streaming row, whatever its title says now: the old name and the new words.
             "low storage" to "low_storage",
             "save space" to "low_storage",

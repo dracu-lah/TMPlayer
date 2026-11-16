@@ -124,7 +124,7 @@ enum class SettingsLink(val from: String, val group: SettingsGroup, val row: Str
     SetupPerformance("setup.choices_body", SettingsGroup.Appearance, "lighter_pictures", setOf(DeviceForm.Phone, DeviceForm.Tv)),
 
     /** Setup choices, Mobile data: Also in Downloads and storage (a phone's row). */
-    SetupMobileData("setup.choices_body", SettingsGroup.Storage, "save_mobile_data", setOf(DeviceForm.Phone)),
+    SetupMobileData("setup.choices_body", SettingsGroup.Storage, "mobile_data", setOf(DeviceForm.Phone)),
 
     /** The chooser's "Change it any time in Settings, Playback". */
     ChooserNote("external.chooser_note", SettingsGroup.Playback, "default_player", setOf(DeviceForm.Phone, DeviceForm.Tv)),
@@ -148,7 +148,7 @@ enum class SettingsLink(val from: String, val group: SettingsGroup, val row: Str
     NoSpace("player.no_space", SettingsGroup.Storage, "download_location", setOf(DeviceForm.Phone, DeviceForm.Tv, DeviceForm.Desktop)),
 
     /** "Wi-Fi only is on ... turn Wi-Fi only off in Settings" (a phone's row). */
-    WifiOnly("player.wifi_only", SettingsGroup.Storage, "wifi_only", setOf(DeviceForm.Phone)),
+    WifiOnly("player.wifi_only", SettingsGroup.Storage, "mobile_data", setOf(DeviceForm.Phone)),
 
     /** "Developer options are on. Save name check is in Settings, under Save logs." */
     DeveloperOn("logs.developer_on", SettingsGroup.About, "name_report", setOf(DeviceForm.Phone, DeviceForm.Tv, DeviceForm.Desktop)),

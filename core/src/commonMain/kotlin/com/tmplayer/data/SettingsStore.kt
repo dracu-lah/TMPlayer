@@ -74,8 +74,13 @@ private val MINI_PLAYER = booleanPreferencesKey("mini_player")
 // broken-history prune at launch, Clear history) would take this setting with them.
 private val RESUME_REWIND = longPreferencesKey("rewind_on_resume_ms")
 private val WIFI_ONLY = booleanPreferencesKey("wifi_only_downloads")
+// No longer read (always on, R2): the name stays so a backup that carries it still restores and the coverage test knows it.
+@Suppress("unused")
 private val PAUSE_DOWNLOADS_WHILE_PLAYING = booleanPreferencesKey("pause_downloads_while_playing")
 private val SAVE_MOBILE_DATA = booleanPreferencesKey("save_mobile_data")
+// "On mobile data: Ask first, Never, Allow" (R2): one word that replaced the two switches above for
+// anyone who has chosen; before that [MobileData.resolve] reads the two booleans.
+private val MOBILE_DATA = stringPreferencesKey("mobile_data")
 private val REMOVE_AFTER_WATCHING = booleanPreferencesKey("remove_after_watching")
 private val LOW_STORAGE_MODE = booleanPreferencesKey("low_storage_mode")
 // Android's chosen place for downloads (HX26): an absolute path to a volume's app-specific
@@ -548,6 +553,7 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
             // is how sparingly it may use the mobile data it pays for.
             val device = listOf(LIGHTER_PICTURES, REDUCE_MOTION, DEVICE_CARD_DISMISSED, DEVICE_HINT_SHOWN, SAVE_MOBILE_DATA)
                 .mapNotNull { key -> prefs[key]?.let { Pair(key, it) } }
+            val keptMobileData = prefs[MOBILE_DATA]
             val customAccent = prefs[ACCENT_CUSTOM]
             val typeface = prefs[APP_TYPEFACE]
             val highContrast = prefs[HIGH_CONTRAST]
@@ -577,6 +583,7 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
             typeface?.let { prefs[APP_TYPEFACE] = it }
             highContrast?.let { prefs[HIGH_CONTRAST] = it }
             for ((key, value) in device) prefs[key] = value
+            keptMobileData?.let { prefs[MOBILE_DATA] = it }
             for ((key, value) in support) prefs[key] = value
             supportNever?.let { prefs[SUPPORT_NEVER] = it }
             supporter?.let { prefs[SUPPORT_SUPPORTER] = it }
@@ -1324,32 +1331,56 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
     suspend fun isKeptDownload(chatId: Long, messageId: Long): Boolean =
         prefs.data.first()[downloadKey(chatId, messageId)] != null
 
+    private fun mobileDataOf(prefs: Preferences): MobileData =
+        MobileData.resolve(prefs[MOBILE_DATA], prefs[WIFI_ONLY] ?: false, prefs[SAVE_MOBILE_DATA] ?: false)
+
     /**
-     * Refuse to fetch video over a connection the viewer pays for by the byte.
-     *
-     * Off by default, because many people watch on mobile data by choice. On, it is absolute: a
-     * video that is not already downloaded will not open until there is Wi-Fi.
+     * "On mobile data": Ask first (the default), Never or Allow (R2). Read from the one stored word
+     * when the viewer has chosen, else from the two switches it replaced ([MobileData.resolve]).
      */
-    val wifiOnlyDownloads: Flow<Boolean> = read { it[WIFI_ONLY] ?: false }
+    val mobileData: Flow<MobileData> = read { mobileDataOf(it) }
+
+    /** Read at the start of playback and of a download, where the flow's first emission has not arrived yet. */
+    suspend fun mobileDataNow(): MobileData = mobileDataOf(prefs.data.first())
+
+    /**
+     * Picks the answer and keeps the old Wi-Fi only switch in step with it (Never is on, the others
+     * off), so a backup restored on a build before R2 holds back exactly what this one does.
+     */
+    suspend fun setMobileData(value: MobileData) {
+        prefs.edit {
+            it[MOBILE_DATA] = value.stored
+            it[WIFI_ONLY] = value == MobileData.Never
+        }
+    }
+
+    /**
+     * Refuse to fetch video over a connection the viewer pays for by the byte: "On mobile data:
+     * Never". Derived from [mobileData], so the readers of this switch (the download service, the
+     * player, the update download) follow the one control without a change.
+     */
+    val wifiOnlyDownloads: Flow<Boolean> = read { mobileDataOf(it).blocks }
 
     suspend fun setWifiOnlyDownloads(value: Boolean) {
-        prefs.edit { it[WIFI_ONLY] = value }
+        prefs.edit {
+            it[WIFI_ONLY] = value
+            // An answer already chosen moves with the switch: Never on, and off leaves Never.
+            val chosen = MobileData.parse(it[MOBILE_DATA])
+            if (value) it[MOBILE_DATA] = MobileData.Never.stored
+            else if (chosen == MobileData.Never) it[MOBILE_DATA] = MobileData.Ask.stored
+        }
     }
 
     /**
-     * "Pause downloads while playing": the other downloads wait while a video plays from the
-     * network, so they do not share its line, and carry on when it ends or has been paused for
-     * long ([DownloadYield]). On by default: a stream that stutters beside a download looks like a
-     * slow video, and nobody has to remember to turn this on to be spared it.
+     * Always on since R2 (the switch is gone): the other downloads wait while a video plays from
+     * the network, so they do not share its line, and carry on when it ends or has been paused for
+     * long ([DownloadYield]). A stream that stutters beside a download looks like a slow video, and
+     * nobody has to find a switch to be spared it. The stored value stays in old backups and is not read.
      */
-    val pauseDownloadsWhilePlaying: Flow<Boolean> = read { it[PAUSE_DOWNLOADS_WHILE_PLAYING] ?: true }
-
-    suspend fun setPauseDownloadsWhilePlaying(value: Boolean) {
-        prefs.edit { it[PAUSE_DOWNLOADS_WHILE_PLAYING] = value }
-    }
+    val pauseDownloadsWhilePlaying: Flow<Boolean> = read { true }
 
     /** Read at the start of playback, where the flow's first emission has not arrived yet. */
-    suspend fun wifiOnlyDownloadsNow(): Boolean = prefs.data.first()[WIFI_ONLY] ?: false
+    suspend fun wifiOnlyDownloadsNow(): Boolean = mobileDataOf(prefs.data.first()).blocks
 
     /**
      * "Save mobile data": on a metered connection a streamed video is fetched only a bounded
@@ -1611,9 +1642,17 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
     }
 
     /** Whether [notice] may be posted: its own switch, at [Notice.defaultOn] until it is touched. */
-    fun noticeOn(notice: Notice): Flow<Boolean> = read { it[noticeKey(notice)] ?: notice.defaultOn }
+    fun noticeOn(notice: Notice): Flow<Boolean> = read { noticeValue(it, notice) }
 
-    suspend fun noticeOnNow(notice: Notice): Boolean = prefs.data.first()[noticeKey(notice)] ?: notice.defaultOn
+    suspend fun noticeOnNow(notice: Notice): Boolean = noticeValue(prefs.data.first(), notice)
+
+    /**
+     * [Notice.LowStorage] is always on since R2 (its switch left Settings: a phone about to run out
+     * of room says so, and the system's own notification settings can still silence the channel);
+     * the stored value stays in old backups and is not read.
+     */
+    private fun noticeValue(prefs: Preferences, notice: Notice): Boolean =
+        if (notice == Notice.LowStorage) true else prefs[noticeKey(notice)] ?: notice.defaultOn
 
     /**
      * Turns [notice] on or off. Turning one on that watches the chats starts from what they hold
