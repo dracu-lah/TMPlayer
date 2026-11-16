@@ -237,8 +237,15 @@ internal fun MoreVideosSheet(
                     Spacer(Modifier.width(12.dp))
                     Text(s.commonLoading, color = Tone.muted)
                 }
-                state.failure != null && !state.done -> Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(state.failure.orEmpty(), color = Tone.muted, modifier = Modifier.weight(1f))
+                // A flow: Try again wraps under the words at a large font rather than squeezing them.
+                state.failure != null && !state.done -> @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+                androidx.compose.foundation.layout.FlowRow(
+                    Modifier.padding(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    itemVerticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(state.failure.orEmpty(), color = Tone.muted)
                     com.tmplayer.ui.components.TmButton(onClick = list::loadMore) { Text(s.commonTryAgain) }
                 }
                 state.failure != null -> Text(state.failure.orEmpty(), color = Tone.muted, modifier = Modifier.padding(16.dp))

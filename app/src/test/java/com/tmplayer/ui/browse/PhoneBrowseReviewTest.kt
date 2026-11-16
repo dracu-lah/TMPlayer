@@ -267,6 +267,21 @@ class PhoneBrowseReviewTest {
         assertInside(activity, retry!!)
     }
 
+    @Test
+    @Config(sdk = [35], qualifiers = "w320dp-h640dp-port-night-xhdpi")
+    fun `a note and its button wrap at a 2x font instead of squeezing the words into a column`() {
+        val note = "Only the newest 500 messages of this chat were searched."
+        val activity = open(fontScale = 2f) { SearchNoteRow(note, onDeeper = {}) }
+        val words = byWords(activity, note)
+        val button = byWords(activity, L.commonKeepLooking)
+        assertNotNull(words)
+        assertNotNull(button)
+        assertInside(activity, button!!)
+        val room = activity.resources.displayMetrics.density * 200f
+        assertTrue("the words keep a readable width (${words!!.boundsInRoot.width}px)", words.boundsInRoot.width >= room)
+        assertTrue("the button sits under the words", button.boundsInRoot.top >= words.boundsInRoot.bottom - 1f)
+    }
+
     // The pills --------------------------------------------------------------------------
 
     @Test

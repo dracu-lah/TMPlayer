@@ -81,12 +81,15 @@ internal fun PosterPickerSheet(
                     Spacer(Modifier.width(12.dp))
                     Text(s.commonLoading, color = Tone.muted)
                 }
-                is PickerLoad.Message -> Row(
+                // A flow: Try again wraps under the words at a large font rather than squeezing them.
+                is PickerLoad.Message -> @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+                androidx.compose.foundation.layout.FlowRow(
                     Modifier.padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    itemVerticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(load.text, color = Tone.muted, modifier = Modifier.weight(1f))
+                    Text(load.text, color = Tone.muted)
                     if (load.canRetry) {
                         TmButton(onClick = { attempt++ }, modifier = Modifier.focusRequester(first)) { Text(s.commonTryAgain) }
                     }
