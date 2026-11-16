@@ -161,12 +161,14 @@ fun HomePage(state: ShellState, chats: ChatListViewModel) {
         return
     }
     val stalled by model.stalled.collectAsState()
+    // Offline (R4): the rows as an offline Home draws them, and the cards' greying.
+    com.tmplayer.ui.browse.OfflineHomeScope(rows) { offlineRows ->
     HomeRowsView(
         rowsReady = model.rowsSettled,
         layout = layout ?: HomeLayout(),
         onOpenHomeSettings = { state.openSettings(SettingsCategory.Home) },
         state = state,
-        rows = rows,
+        rows = offlineRows,
         chats = list.ifEmpty { ownChats },
         stalled = stalled,
         art = art,
@@ -182,6 +184,7 @@ fun HomePage(state: ShellState, chats: ChatListViewModel) {
         onRefresh = model::refreshInPlace,
         seeAll = model::seeAll,
     )
+    }
 }
 
 /**
@@ -270,7 +273,17 @@ internal fun HomeRowsView(
     LaunchedEffect(continueRow?.records) { continueRow?.records?.forEach(onArtWanted) }
     // Settings can turn the carousel off: then nothing is picked or turned over for it either.
     val carouselOn = layout.carousel
-    val featured = rememberFeatured(recentRow.takeIf { carouselOn }, continueRow.takeIf { carouselOn }, art)
+    val onlineFeatured = rememberFeatured(recentRow.takeIf { carouselOn }, continueRow.takeIf { carouselOn }, art)
+    // Offline the hero is the first video on this phone, and with none there is no hero (R4).
+    val offlineHome = com.tmplayer.ui.browse.LocalOfflineHome.current
+    val offlineHero = remember(rows, offlineHome.offline) {
+        if (!offlineHome.offline) {
+            null
+        } else {
+            com.tmplayer.data.OfflineHomeRows.hero(rows)?.let { listOf(com.tmplayer.data.FeaturedPick(ShelfEntry.File(it.toMediaItem()))) }.orEmpty()
+        }
+    }
+    val featured = offlineHero ?: onlineFeatured
     // Every discovered tile on Home has a picture of its own (Continue watching and Watch later keep
     // every card, with the generated cover); "See all" still lists the whole row. Recently
     // added is a row too, under Continue watching, as well as the carousel (user, 2026-10-23).
@@ -640,12 +653,14 @@ private fun ContinueCell(
     val item = art[key] ?: remember(record) { record.toMediaItem() }
     val chatTitle = record.chatTitle.ifEmpty { titles[record.chatId].orEmpty() }
     val s = LocalStrings.current
+    val offlineHome = com.tmplayer.ui.browse.LocalOfflineHome.current
     Poster(
         state = state,
         nav = null,
         index = 0,
         item = item,
         chatTitle = chatTitle,
+        needsInternet = offlineHome.offline && !offlineHome.plays(record.chatId, record.messageId),
         // The card draws its own pill of progress, under the name.
         progress = null,
         art = { OnHome { ContinueCardArt(record, item, Modifier.fillMaxSize()) } },
@@ -689,7 +704,8 @@ internal fun LaterCell(
         val removeLine: (@Composable (close: () -> Unit) -> Unit)? = onRemove?.let { remove ->
             { close -> androidx.compose.material3.DropdownMenuItem(text = { Text(LocalStrings.current.listsRemove) }, onClick = { close(); remove() }) }
         }
-        OnHome { MediaTile(state, item, record.chatTitle, outsideChat = true, extraMenu = removeLine) }
+        val offlineHome = com.tmplayer.ui.browse.LocalOfflineHome.current
+        OnHome { MediaTile(state, item, record.chatTitle, outsideChat = true, extraMenu = removeLine, needsInternet = offlineHome.needsInternet(item)) }
         return
     }
     // A show saved whole: named as the show, its episode's picture on it, opening the show's page.
@@ -731,6 +747,7 @@ private fun NewEpisodeCell(state: ShellState, episode: NewEpisode, titles: Map<L
         index = 0,
         item = item,
         chatTitle = chatTitle,
+        needsInternet = com.tmplayer.ui.browse.LocalOfflineHome.current.needsInternet(item),
         progress = null,
         badge = { NewBadge(compact = false) },
         art = { OnHome { OnlineArt(item, Modifier.fillMaxSize()) { RecordArt(item) } } },
@@ -753,7 +770,12 @@ private fun ShelfCell(
     onOpenSeries: (Series) -> Unit,
 ) {
     when (entry) {
-        is ShelfEntry.File -> OnHome { MediaTile(state, entry.item, chatTitle(entry.item.chatId), outsideChat = true, poster = poster) }
+        is ShelfEntry.File -> OnHome {
+            MediaTile(
+                state, entry.item, chatTitle(entry.item.chatId), outsideChat = true, poster = poster,
+                needsInternet = com.tmplayer.ui.browse.LocalOfflineHome.current.needsInternet(entry.item),
+            )
+        }
         is ShelfEntry.Show -> SeriesPoster(entry.series, rememberSeriesWatch(state), onOpen = { onOpenSeries(entry.series) }, poster = poster, state = state)
     }
 }

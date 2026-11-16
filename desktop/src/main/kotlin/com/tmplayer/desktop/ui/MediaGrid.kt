@@ -1,5 +1,6 @@
 package com.tmplayer.desktop.ui
 
+import com.tmplayer.ui.browse.NeedsInternetCover
 import com.tmplayer.ui.browse.continueCardTitle
 import com.tmplayer.ui.browse.HistoryTab
 import com.tmplayer.ui.browse.BrowseTab
@@ -914,6 +915,8 @@ internal fun MediaTile(
     poster: Boolean = false,
     /** The caller's own lines at the right click menu's foot: a named list's Remove from list (HX43). */
     extraMenu: (@Composable (close: () -> Unit) -> Unit)? = null,
+    /** Offline Home (R4): see [Poster]. */
+    needsInternet: Boolean = false,
 ) {
     val s = LocalStrings.current
     // The grid's selection, when there is one, so the pane can start one with this poster.
@@ -936,6 +939,7 @@ internal fun MediaTile(
         badge = badge,
         poster = poster,
         extraMenu = extraMenu,
+        needsInternet = needsInternet,
         onDetails = { refocus ->
             state.openDetail(
                 DetailRequest(
@@ -1025,6 +1029,8 @@ internal fun Poster(
     onDetails: ((refocus: () -> Unit) -> Unit)? = null,
     /** What a click, Enter and Play do in place of playing or the pane: a saved show's page (HX20). */
     onOpen: (() -> Unit)? = null,
+    /** Offline Home (R4): cannot play with no line, so it is dimmed and a press opens its page, which says so. */
+    needsInternet: Boolean = false,
 ) {
     val s = LocalStrings.current
     val interaction = remember { MutableInteractionSource() }
@@ -1065,6 +1071,8 @@ internal fun Poster(
             picking = false
         } else if (ticksOnClick) {
             selection?.toggle(index)
+        } else if (needsInternet) {
+            state.openDetail(DetailRequest(item = item, chatTitle = chatTitle, outsideChat = true, onClosed = { runCatching { requester.requestFocus() } }))
         } else {
             if (onOpen != null) onOpen() else state.openPlayer(item, startFromBeginning = false)
         }
@@ -1084,7 +1092,7 @@ internal fun Poster(
     }
     val detailFirst = state.detailFirst
     val click: () -> Unit = {
-        if (onOpen != null && !(picking && selection != null) && !ticksOnClick) onOpen() else if (detailFirst && !(picking && selection != null) && !ticksOnClick) page() else play()
+        if (needsInternet && !(picking && selection != null) && !ticksOnClick) play() else if (onOpen != null && !(picking && selection != null) && !ticksOnClick) onOpen() else if (detailFirst && !(picking && selection != null) && !ticksOnClick) page() else play()
     }
     val openMenu: () -> Unit = {
         if (details != null) {
@@ -1160,6 +1168,7 @@ internal fun Poster(
                 .then(if (focused || selected) Modifier.border(Focus.Ring, Tone.accent, MaterialTheme.shapes.medium) else Modifier),
         ) {
             art()
+            if (needsInternet) NeedsInternetCover()
             if (progress != null && progress > 0f) {
                 ProgressLine(progress, Modifier.align(Alignment.BottomCenter))
             }

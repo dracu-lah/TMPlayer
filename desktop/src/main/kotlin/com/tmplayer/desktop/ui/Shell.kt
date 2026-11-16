@@ -36,6 +36,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import com.tmplayer.data.NetworkStatus
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -125,7 +126,25 @@ fun DesktopShell(
     // The arrows nothing on the page took move focus from here in the big-screen mode (ShellState.onKey).
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     androidx.compose.runtime.SideEffect { state.focusManager = focusManager }
+    // Offline (R4): the line down, held 2 s each way so a flaky link never flashes, and while it is,
+    // the downloads whose file is really there, which are what plays then.
+    LaunchedEffect(Unit) { DesktopConnectivity.start() }
+    val network by DesktopConnectivity.status.collectAsState()
+    val telegramConnected by Td.connected.collectAsState()
+    val offline = com.tmplayer.ui.browse.rememberSettledOffline(network == NetworkStatus.Offline && !telegramConnected)
+    var offlineDownloads by remember { mutableStateOf<List<com.tmplayer.data.ResumeRecord>>(emptyList()) }
+    LaunchedEffect(offline) {
+        offlineDownloads = if (offline) {
+            com.tmplayer.data.runCatchingCancellable {
+                state.settings.downloadsNow().filter { com.tmplayer.desktop.DownloadIndex.state(it) == com.tmplayer.desktop.DownloadIndex.FileState.Present }
+            }.getOrDefault(emptyList())
+        } else {
+            emptyList()
+        }
+    }
+    val offlineHome = remember(offline, offlineDownloads) { com.tmplayer.data.OfflineHome(offline, offlineDownloads) }
     CompositionLocalProvider(
+        com.tmplayer.ui.browse.LocalOfflineHome provides offlineHome,
         LocalBackStack provides state.backStack,
         LocalToastHost provides toasts,
         // A video's copies open as a centred card over the window, the phone's sheet on a desktop.
@@ -365,13 +384,12 @@ private fun Browse(state: ShellState, player: PlayerContent) {
     }
     LaunchedEffect(Unit) { state.notices.collect { toast(it) } }
 
-    // The offline pill, and the refresh once both the network and Telegram are back.
+    // The offline card, and the refresh once both the network and Telegram are back.
     val browseScope = rememberCoroutineScope()
-    LaunchedEffect(Unit) { DesktopConnectivity.start() }
-    val network by DesktopConnectivity.status.collectAsState()
     val telegramConnected by Td.connected.collectAsState()
-    // Back online is not said: the offline pill going is the news, and the lists refresh in place.
-    val connection = rememberConnectionNotice(network, telegramConnected) {
+    val offline = com.tmplayer.ui.browse.LocalOfflineHome.current.offline
+    // Back online is not said: the card going is the news, and the lists refresh in place.
+    val connection = rememberConnectionNotice(offline, telegramConnected) {
         chats.load()
         browseScope.launch { runCatching { state.extras.updates?.checkIfDue() } }
     }
@@ -530,7 +548,7 @@ private fun Browse(state: ShellState, player: PlayerContent) {
             SupportAskHost(state)
         }
 
-        ConnectionBanner(connection, Modifier.align(Alignment.TopCenter).padding(top = 12.dp))
+        ConnectionBanner(connection, Modifier.align(Alignment.TopCenter).padding(top = 12.dp), onOpenDownloads = { state.go(Destination.Downloads) })
 
         // Over the page rather than instead of it, so the page keeps its scroll position and its
         // search, and closing the player is simply taking this away.
