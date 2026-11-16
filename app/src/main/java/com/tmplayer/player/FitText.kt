@@ -26,7 +26,10 @@ internal fun FitText(
 ) {
     val words = text.trim().split(' ').count { it.isNotEmpty() }.coerceAtLeast(1)
     // The floor in dp, not sp: at twice the font an sp floor is twice as large and fits nothing.
-    val floor = with(LocalDensity.current) { FIT_MIN.toSp() }
+    // Never above the style's own size: at a font scale under 0.83 the floor would pass the maximum, which autoSize rejects.
+    val floor = with(LocalDensity.current) { FIT_MIN.toSp() }.let { f ->
+        if (style.fontSize.isSp && f.isSp && f.value > style.fontSize.value) style.fontSize else f
+    }
     Text(
         text,
         style = style,
