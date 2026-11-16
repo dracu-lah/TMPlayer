@@ -247,7 +247,7 @@ fun UpdateDialog(onDismiss: () -> Unit) {
 }
 
 /** A release on offer, with what this device makes of it. */
-private class Offer(
+internal class Offer(
     val release: Release,
     val skipped: Boolean,
     val sizeBytes: Long,
@@ -272,10 +272,10 @@ private val PANEL_MAX = 620.dp
 /**
  * The phone's version: the same card in a dialog of its own, with the buttons stacked for a thumb,
  * Update now across the full width and the two ways out under it. Tapping outside closes it, except
- * while the download runs, when the dialog is what holds the download's progress on screen.
+ * while the download runs, when Close or Back hides it and the download carries on.
  */
 @Composable
-private fun TouchUpdateDialog(
+internal fun TouchUpdateDialog(
     state: UpdateState,
     offer: Offer?,
     onPrimary: () -> Unit,
@@ -289,8 +289,11 @@ private fun TouchUpdateDialog(
     // A phone on its side has too little height to stack the list over the buttons.
     val short = LocalConfiguration.current.screenHeightDp < SHORT_SCREEN
     Dialog(
-        onDismissRequest = { if (!downloading) onDismiss() },
-        properties = DialogProperties(usePlatformDefaultWidth = false),
+        // Back and Close always work: the download carries on without the dialog (it runs on the
+        // process's scope, as on a television), so a viewer is never held in front of a bar that
+        // has no way out. Only a stray tap outside is ignored while it runs.
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnClickOutside = !downloading),
     ) {
         UpdateCard(
             title = title(state, offer),
@@ -306,7 +309,10 @@ private fun TouchUpdateDialog(
                 .widthIn(max = if (short) 860.dp else 560.dp)
                 .floatingSurface(),
         ) {
-            if (downloading) return@UpdateCard
+            if (downloading) {
+                TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { M3Text(s.commonClose) }
+                return@UpdateCard
+            }
             // A dialog's button is too narrow for a spinner beside the words, so the label names
             // the check while it runs, and the button is disabled against a second press.
             val checking = state is UpdateState.Checking
