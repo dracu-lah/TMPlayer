@@ -388,6 +388,14 @@ Order (files that overlap run in different waves; "after" = depends):
    the compose-performance skill) and Raju's second pass on the final build.
 Progress of each item is logged below in "Progress / handoff" with its commit.
 
+### RUN LOG (main, local commits, nothing pushed; updated 2026-11-16)
+Merged: T1 `6e11c96..731ddb0`, T2 `07c3b71`, T3 `1ff6bd4`, T5+D1 `ac6028b`, Raju review `27034ea`, T12 `8e12ef2`,
+RL1 to RL3 `88d194b`, T4 `aeff4e5`, T9 `da4c88f`, Raju A+D+H `2f60ee3`. Catalog fix `0215c69` (DEAD-STRINGS.md).
+Running: RL4+RL5+RL6+RL8 (player ladder wiring, opus), T11 (anime episodes), T10 (skip sources).
+To confirm (user): star mode on the chat list (new, from Raju A), pill word "Choose chats", the strip hides at 8 or
+fewer chats, desktop Back dock removal (queued), ten `series.*` strings to translate.
+Next: FQ1+FQ2+FQ7, Raju B+R4, E+F, then R1, R3, R2, C+G, T8, TS rest, RL9 to RL14, FQ rest, review waves.
+
 ## Not in this pass
 Store text, the site.
 
@@ -476,6 +484,25 @@ Store text, the site.
   HX79 "film does not start with the mode on": hypothesis only (see the T4 reply): index larger than INDEX_TAIL_BYTES (8 MB)
   and SLACK (16 MB) makes the tail probe a "seek", whose plan() deletes the head, then the head read deletes the tail: a
   delete ping-pong. Not fixed, left for T7 (needs the film's moov/Cues size and logcat "Low storage: deleting file").
+
+- 2026-11-16 T9 (worktree agent-aadcb79e81d1f9f33, local commits 1da2d4f, a3ebc5e, 628fa2a, 07fb67b, not pushed):
+  done: series page lists every season and episode the metadata knows, merged with the chats' videos, on phone,
+  TV, desktop (shared `SeriesPanel`) and web (`Detail.tsx` Episodes). Merge is `EpisodeGuide` (core, extended: specials
+  last and only when held, caps 200 seasons / 3,000 episodes, count-made gaps, next-episode date, `agrees` for a
+  wrong match or another numbering, `rows()` Have or Gap, `covered()` for "S01E09E10"); table test
+  `SeriesGuideTableTest`; page tests `SeriesGuideTest` (desktop: gaps, unaired, wrong match, only mine, focus back on
+  the gap, 20 seasons ask twice at most); web `seriesGuide.ts` + test, worker extras carry `seasonList` and `next`.
+  UI: quiet gap rows with the data's title, a card (what it is, "Find in other chats" via `SearchRequest.ask` on
+  phone/TV, `searchEverywhere` on desktop, `/search?q=` on web), unaired with its date, a dot on held seasons,
+  "Only show what I have" as a round button on the show page (stored in `SettingsStore.seriesOnlyMine`, web
+  localStorage). Design note `design/redesign/series-all-seasons.md`. Bug fixed on the way:
+  `rememberSeasonEpisodes` kept the last season's list when the season changed (names of the new season never loaded).
+  Episode ranges take (TS1 parser half): `~`, `to`, `+`, `&`, commas, en dash, `S01-S03` (`ParsedName.seasonEnd`).
+  left: web TV (`webapp/tv`) series screen; no before/after screenshots (no emulator pass); the web has no per-episode
+  names for gaps (count only); `pack` flag and the season pack row (TS2) not done; phone/TV D-pad test of gap rows only
+  by the shared desktop focus test; "series sheet" read as the show page's action row (ShowMenu untouched).
+  gotchas: `SeriesPanel` has no local slots left (HX1): new logic lives in `SeriesGuide.kt`; a symlinked
+  `webapp/node_modules` is not git-ignored (remove it); canned TMDB for tests is in `SeriesGuideTest.kt`.
 
 ## Decisions made by Claude
 - T1: one shared `rememberVisitQuery` (not a patch per screen) so any later search box gets rule 3 by calling it; the phone keeps the query while a page is open (`keep = page != null`), the desktop while a category is open. No design note: small fix.
