@@ -60,6 +60,8 @@ import com.tmplayer.data.MediaItem
 import com.tmplayer.data.WatchPoint
 import com.tmplayer.online.OnlineMetadata
 import com.tmplayer.ui.components.BackdropSource
+import com.tmplayer.data.DeviceForm
+import com.tmplayer.ui.components.deviceForm
 import com.tmplayer.ui.components.IconTip
 import com.tmplayer.ui.components.SwapIcon
 import com.tmplayer.ui.components.TipSide
@@ -513,7 +515,7 @@ internal fun WideIconAction(
 
 /** One of the things done now and then, at the foot of the large detail: an outlined pill with its full name. */
 @Composable
-private fun WideTextAction(label: String, icon: ImageVector, onClick: () -> Unit, destructive: Boolean = false) {
+fun WideTextAction(label: String, icon: ImageVector, onClick: () -> Unit, destructive: Boolean = false) {
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusVisibleAsState()
     val ink = when {
@@ -524,17 +526,18 @@ private fun WideTextAction(label: String, icon: ImageVector, onClick: () -> Unit
     Row(
         Modifier
             .pressScale(interactions, com.tmplayer.ui.components.Micro.PillPressScale)
-            .heightIn(min = 40.dp)
+            // A finger needs 48 dp; a pointer or a remote keeps the slimmer pill.
+            .heightIn(min = if (deviceForm() == DeviceForm.Phone) 48.dp else 40.dp)
             .clip(CircleShape)
             .background(if (focused) (if (destructive) Danger else Tone.focusFill) else Color.Transparent)
             .border(1.dp, if (focused) Color.Transparent else Tone.outline, CircleShape)
-            .clickable(interactionSource = interactions, indication = LocalIndication.current, onClick = onClick)
+            .clickable(interactionSource = interactions, indication = LocalIndication.current, role = Role.Button, onClick = onClick)
             .padding(start = 14.dp, end = 18.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Icon(icon, contentDescription = null, tint = if (focused || destructive) ink else Tone.muted, modifier = Modifier.size(18.dp))
-        Text(label, style = MaterialTheme.typography.labelLarge, color = ink, maxLines = 1)
+        Text(label, style = MaterialTheme.typography.labelLarge, color = ink, maxLines = 2)
     }
 }
 
