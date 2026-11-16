@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
@@ -20,12 +22,15 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
@@ -45,8 +50,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -63,6 +70,9 @@ import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.icons.TmIcons
 import com.tmplayer.ui.theme.Motion
 import com.tmplayer.ui.theme.Tone
+import com.tmplayer.ui.theme.collectIsFocusVisibleAsState
+import com.tmplayer.ui.theme.focusDrawn
+import com.tmplayer.ui.theme.focusRingColor
 import java.util.Locale
 
 /** Everything the cast remote draws, as of now. */
@@ -147,8 +157,10 @@ fun CastRemote(state: CastRemoteState, actions: CastRemoteActions, modifier: Mod
         modifier
             .fillMaxSize()
             .background(Tone.background)
-            // Every touch stays here: none reaches the stopped picture's gestures underneath.
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {},
+            // Every touch stays here: none reaches the stopped picture's gestures underneath. A
+            // pointer handler rather than a click, so a keyboard's first Tab and a screen reader
+            // do not stop on an invisible screen-wide button (R8).
+            .pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } },
     ) {
         val compact = maxHeight < 480.dp && maxWidth > maxHeight
         Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
@@ -161,28 +173,35 @@ fun CastRemote(state: CastRemoteState, actions: CastRemoteActions, modifier: Mod
 
 @Composable
 private fun TallLayout(state: CastRemoteState, actions: CastRemoteActions, s: Messages) {
-    Column(
-        Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        TitleBar(state, actions, s, showStop = false)
-        Spacer(Modifier.weight(1f))
-        Column(Modifier.widthIn(max = 560.dp).fillMaxWidth().padding(horizontal = 8.dp)) {
-            TvCard(state, actions, s)
-            Spacer(Modifier.height(28.dp))
-            Timebar(state, actions)
-            Spacer(Modifier.height(12.dp))
-            Transport(state, actions, s, Modifier.fillMaxWidth(), playSize = 72.dp)
-            Spacer(Modifier.height(20.dp))
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Tracks(state, actions, s)
-                Spacer(Modifier.width(8.dp))
-                Volume(state, actions, s, Modifier.weight(1f))
+    // The title bar at the top, Stop at the bottom and the rest centred between them, as equal
+    // gaps; once that is taller than the screen (twice the font on a small phone) it scrolls
+    // rather than squeezing Stop casting off the bottom (R8).
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .heightIn(min = maxHeight)
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.SpaceBetween,
+        ) {
+            TitleBar(state, actions, s, showStop = false)
+            Column(Modifier.widthIn(max = 560.dp).fillMaxWidth().padding(horizontal = 8.dp, vertical = 16.dp)) {
+                TvCard(state, actions, s)
+                Spacer(Modifier.height(28.dp))
+                Timebar(state, actions)
+                Spacer(Modifier.height(12.dp))
+                Transport(state, actions, s, Modifier.fillMaxWidth(), playSize = 72.dp)
+                Spacer(Modifier.height(20.dp))
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Tracks(state, actions, s)
+                    Spacer(Modifier.width(8.dp))
+                    Volume(state, actions, s, Modifier.weight(1f))
+                }
             }
+            StopButton(s, actions, Modifier.widthIn(max = 560.dp).fillMaxWidth().padding(horizontal = 8.dp).padding(bottom = 8.dp))
         }
-        Spacer(Modifier.weight(1f))
-        StopButton(s, actions, Modifier.widthIn(max = 560.dp).fillMaxWidth().padding(horizontal = 8.dp))
-        Spacer(Modifier.height(8.dp))
     }
 }
 
@@ -247,6 +266,7 @@ private fun TvCard(state: CastRemoteState, actions: CastRemoteActions, s: Messag
 }
 
 /** The status: glyph, where, state; the note; the way on. [inline] keeps it to one block for a short screen. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun StatusPanel(state: CastRemoteState, actions: CastRemoteActions, s: Messages, modifier: Modifier, inline: Boolean) {
     val trouble = state.lost || state.error != null || state.phase == CastPhase.Stopped || state.phase == CastPhase.Failed
@@ -282,7 +302,8 @@ private fun StatusPanel(state: CastRemoteState, actions: CastRemoteActions, s: M
         }
         if (trouble) {
             Spacer(Modifier.height(if (inline) 8.dp else 16.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Whole pills wrap under each other at a large font rather than one squeezing the other.
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (state.lost) Pill(s.castReconnect, primary = true, onClick = actions::reconnect)
                 else Pill(s.commonTryAgain, primary = true, onClick = actions::retry)
                 Pill(s.castPlayHere, primary = false, onClick = actions::playHere)
@@ -390,6 +411,7 @@ private fun PlayButton(state: CastRemoteState, s: Messages, size: Dp, enabled: B
                 .padding(horizontal = 6.dp)
                 .size(size)
                 .pressScale(interactions)
+                .focusDrawn(interactions.collectIsFocusVisibleAsState(), focusRingColor(), CircleShape)
                 .clip(CircleShape)
                 .background(if (enabled) Tone.hero else Tone.surfaceHigh)
                 .clickable(interactionSource = interactions, indication = null, enabled = enabled, role = Role.Button, onClick = onClick)
@@ -417,6 +439,7 @@ private fun RowScope.Tracks(state: CastRemoteState, actions: CastRemoteActions, 
             s.tracksSubtitles,
             enabled = live,
             selected = state.subtitlesOn,
+            selectable = true,
             onClick = actions::subtitles,
         )
     }
@@ -429,6 +452,7 @@ private fun RowScope.Tracks(state: CastRemoteState, actions: CastRemoteActions, 
                 Modifier
                     .size(48.dp)
                     .pressScale(interactions)
+                    .focusDrawn(interactions.collectIsFocusVisibleAsState(), focusRingColor(), CircleShape)
                     .clip(CircleShape)
                     .clickable(interactionSource = interactions, indication = null, enabled = live, role = Role.Button, onClick = actions::speed)
                     .semantics { contentDescription = "$label, $text" },
@@ -502,7 +526,9 @@ private fun StopButton(s: Messages, actions: CastRemoteActions, modifier: Modifi
     val interactions = remember { MutableInteractionSource() }
     Row(
         modifier
+            .heightIn(min = 48.dp)
             .pressScale(interactions, depth = 0.97f)
+            .focusDrawn(interactions.collectIsFocusVisibleAsState(), focusRingColor(), CircleShape)
             .clip(CircleShape)
             .background(Tone.surface)
             .clickable(interactionSource = interactions, indication = null, role = Role.Button, onClick = actions::stop)
@@ -512,7 +538,7 @@ private fun StopButton(s: Messages, actions: CastRemoteActions, modifier: Modifi
     ) {
         Icon(TmIcons.Close, null, tint = Tone.text, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(8.dp))
-        Text(s.castStop, style = MaterialTheme.typography.labelLarge, color = Tone.text, maxLines = 1)
+        Text(s.castStop, style = MaterialTheme.typography.labelLarge, color = Tone.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -521,13 +547,16 @@ private fun Pill(label: String, primary: Boolean, onClick: () -> Unit) {
     val interactions = remember { MutableInteractionSource() }
     Box(
         Modifier
+            .heightIn(min = 48.dp)
             .pressScale(interactions, depth = 0.97f)
+            .focusDrawn(interactions.collectIsFocusVisibleAsState(), focusRingColor(), CircleShape)
             .clip(CircleShape)
             .background(if (primary) Tone.hero else Tone.surfaceHigh)
             .clickable(interactionSource = interactions, indication = null, role = Role.Button, onClick = onClick)
             .padding(horizontal = 18.dp, vertical = 10.dp),
+        contentAlignment = Alignment.Center,
     ) {
-        Text(label, style = MaterialTheme.typography.labelLarge, color = if (primary) Tone.onHero else Tone.text, maxLines = 1)
+        Text(label, style = MaterialTheme.typography.labelLarge, color = if (primary) Tone.onHero else Tone.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -539,6 +568,8 @@ private fun RoundIcon(
     tint: Color = Color.Unspecified,
     enabled: Boolean = true,
     selected: Boolean = false,
+    /** Says [selected] out loud: for a button that is on or off, rather than one that only acts. */
+    selectable: Boolean = false,
     swap: Boolean = false,
     side: TipSide = TipSide.Above,
     onClick: () -> Unit,
@@ -556,10 +587,15 @@ private fun RoundIcon(
             Modifier
                 .size(48.dp)
                 .pressScale(interactions)
+                .focusDrawn(interactions.collectIsFocusVisibleAsState(), focusRingColor(), CircleShape)
                 .clip(CircleShape)
                 .background(fill)
                 .clickable(interactionSource = interactions, indication = null, enabled = enabled, role = Role.Button, onClick = onClick)
-                .semantics { contentDescription = label },
+                .semantics {
+                    contentDescription = label
+                    // The subtitles button is a switch for a screen reader too: on or off, not only filled.
+                    if (selectable) this.selected = selected
+                },
             contentAlignment = Alignment.Center,
         ) {
             if (swap) SwapIcon(icon, tint = color, size = 24.dp) else Icon(icon, null, tint = color, modifier = Modifier.size(24.dp))

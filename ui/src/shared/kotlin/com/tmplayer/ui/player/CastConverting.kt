@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.LinearProgressIndicator
@@ -15,18 +16,23 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.tmplayer.cast.TranscodeProgress
 import com.tmplayer.i18n.Messages
 import com.tmplayer.ui.components.pressScale
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.theme.Tone
+import com.tmplayer.ui.theme.collectIsFocusVisibleAsState
+import com.tmplayer.ui.theme.focusDrawn
+import com.tmplayer.ui.theme.focusRingColor
 
 /** The progress line of a running transcode: how far it has got, of how much, and how fast. */
 fun transcodeLine(p: TranscodeProgress, s: Messages): String {
@@ -57,7 +63,7 @@ fun CastConvertingCard(progress: TranscodeProgress?, onCancel: () -> Unit, modif
     ) {
         Text(s.castTranscodeTitle, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = Tone.text)
         Spacer(Modifier.height(4.dp))
-        Text(transcodeLine(p, s), style = MaterialTheme.typography.bodySmall, color = Tone.muted, maxLines = 1)
+        Text(transcodeLine(p, s), style = MaterialTheme.typography.bodySmall, color = Tone.muted, maxLines = 2, overflow = TextOverflow.Ellipsis)
         Spacer(Modifier.height(8.dp))
         val fraction = p.fraction
         val bar = Modifier.fillMaxWidth().height(4.dp).clip(CircleShape)
@@ -74,14 +80,17 @@ fun CastConvertingCard(progress: TranscodeProgress?, onCancel: () -> Unit, modif
         val interactions = remember { MutableInteractionSource() }
         Box(
             Modifier
+                .heightIn(min = 48.dp)
                 .pressScale(interactions, depth = 0.97f)
+                .focusDrawn(interactions.collectIsFocusVisibleAsState(), focusRingColor(), CircleShape)
                 .clip(CircleShape)
                 .background(Tone.surface)
                 .clickable(interactionSource = interactions, indication = null, role = Role.Button, onClick = onCancel)
                 .semantics { contentDescription = s.castTranscodeCancel }
                 .padding(horizontal = 16.dp, vertical = 8.dp),
+            contentAlignment = Alignment.Center,
         ) {
-            Text(s.castTranscodeCancel, style = MaterialTheme.typography.labelLarge, color = Tone.text, maxLines = 1)
+            Text(s.castTranscodeCancel, style = MaterialTheme.typography.labelLarge, color = Tone.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
