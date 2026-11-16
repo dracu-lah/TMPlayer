@@ -453,7 +453,7 @@ private fun SpeedFigure(speed: Float, modifier: Modifier = Modifier) {
         contentAlignment = Alignment.Center,
         label = "fineSpeed",
     ) { shown ->
-        Text(PlaybackSpeed.label(shown), style = MaterialTheme.typography.headlineSmall, color = Tone.text, maxLines = 1)
+        FitText(PlaybackSpeed.label(shown), MaterialTheme.typography.headlineSmall, color = Tone.text)
     }
 }
 
@@ -578,9 +578,11 @@ private fun ColumnScope.SpeedTiles(current: Float, onPick: (Float) -> Unit) {
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.Center,
                         ) {
-                            Text(
+                            // One line, a step smaller when four tiles a row at twice the font leave
+                            // too little room: the speed broke across two lines and was cut (R8).
+                            FitText(
                                 PlaybackSpeed.label(choice),
-                                style = MaterialTheme.typography.headlineSmall,
+                                MaterialTheme.typography.headlineSmall,
                                 color = if (selected) Tone.onAccent else Tone.text,
                             )
                         }

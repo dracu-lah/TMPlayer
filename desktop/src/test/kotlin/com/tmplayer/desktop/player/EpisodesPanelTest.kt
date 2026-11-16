@@ -10,6 +10,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.test.rightClick
@@ -21,6 +22,7 @@ import com.tmplayer.ui.browse.SeriesWatch
 import com.tmplayer.ui.player.EpisodesActions
 import com.tmplayer.ui.player.EpisodesState
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -117,5 +119,48 @@ class EpisodesPanelTest {
         waitForIdle()
         onNodeWithText("Previous").assertHeightIsAtLeast(48.dp)
         onNodeWithText("Next").assertHeightIsAtLeast(48.dp)
+    }
+
+    @Test
+    fun `the autoplay switch's knob slides across, and snaps with less motion`() {
+        for (less in listOf(false, true)) runComposeUiTest {
+            com.tmplayer.ui.theme.Motion.reduced = less
+            try {
+                var autoplay by mutableStateOf(true)
+                val playing = items[2]
+                setContent {
+                    val steps = EpisodeNeighbours.around(playing, items)
+                    PlayerTheme {
+                        Box(Modifier.size(1280.dp, 720.dp)) {
+                            EpisodesSheet(
+                                state = EpisodesState(series = steps.series!!, playing = playing, autoplay = autoplay),
+                                watch = SeriesWatch.None,
+                                actions = EpisodesActions(onPlay = {}, onToggleWatched = {}, onAutoplay = { autoplay = it }),
+                                onClose = {},
+                            )
+                        }
+                    }
+                }
+                waitForIdle()
+                fun knobX() = onNodeWithTag(com.tmplayer.ui.player.AUTOPLAY_KNOB_TAG, useUnmergedTree = true)
+                    .fetchSemanticsNode().positionInRoot.x
+                val on = knobX()
+                mainClock.autoAdvance = false
+                onNodeWithText("Autoplay next episode").performClick()
+                mainClock.advanceTimeBy(64)
+                val midway = knobX()
+                mainClock.autoAdvance = true
+                waitForIdle()
+                val off = knobX()
+                assertTrue("the knob did not move ($on to $off)", off < on)
+                if (less) {
+                    assertEquals("with less motion the knob jumps", off, midway, 0.5f)
+                } else {
+                    assertTrue("the knob jumped instead of sliding ($on, $midway, $off)", midway < on - 0.5f && midway > off + 0.5f)
+                }
+            } finally {
+                com.tmplayer.ui.theme.Motion.reduced = false
+            }
+        }
     }
 }

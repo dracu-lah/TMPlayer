@@ -56,6 +56,7 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
 import androidx.media3.common.C
@@ -671,23 +672,25 @@ class TrackPickerFragment : Fragment() {
                 Modifier.fillMaxWidth().padding(horizontal = ADJUST_PAD).padding(top = 4.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                OutlinedButton(onClick = { nudge(-1) }, modifier = Modifier.weight(1f).height(48.dp)) {
+                // At least 48 dp rather than exactly, and the word a step smaller when it has to be:
+                // at a large font it was cut in half (R8).
+                OutlinedButton(onClick = { nudge(-1) }, modifier = Modifier.weight(1f).heightIn(min = 48.dp), contentPadding = STEP_PADDING) {
                     M3Icon(TmIcons.ChevronLeft, contentDescription = null)
                     Spacer(Modifier.width(4.dp))
-                    M3Text(L.tracksEarlier, maxLines = 1)
+                    FitText(L.tracksEarlier, M3Theme.typography.labelLarge)
                 }
                 Column(Modifier.width(112.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    M3Text(SyncDelays.label(ms), style = M3Theme.typography.titleLarge, color = Tone.text, maxLines = 1)
+                    FitText(SyncDelays.label(ms), M3Theme.typography.titleLarge, color = Tone.text)
                     if (ms != 0L) {
-                        TextButton(onClick = { nudge(0) }, modifier = Modifier.height(32.dp), contentPadding = PaddingValues(horizontal = 8.dp)) {
-                            M3Text(L.tracksResetTiming, maxLines = 1)
+                        TextButton(onClick = { nudge(0) }, modifier = Modifier.heightIn(min = 32.dp), contentPadding = PaddingValues(horizontal = 8.dp)) {
+                            FitText(L.tracksResetTiming, M3Theme.typography.labelLarge)
                         }
                     } else {
-                        M3Text(L.tracksDelayNone, style = M3Theme.typography.bodySmall, color = Tone.muted, maxLines = 2, textAlign = TextAlign.Center)
+                        FitText(L.tracksDelayNone, M3Theme.typography.bodySmall, lines = 2, color = Tone.muted)
                     }
                 }
-                OutlinedButton(onClick = { nudge(1) }, modifier = Modifier.weight(1f).height(48.dp)) {
-                    M3Text(L.tracksLater, maxLines = 1)
+                OutlinedButton(onClick = { nudge(1) }, modifier = Modifier.weight(1f).heightIn(min = 48.dp), contentPadding = STEP_PADDING) {
+                    FitText(L.tracksLater, M3Theme.typography.labelLarge)
                     Spacer(Modifier.width(4.dp))
                     M3Icon(TmIcons.ChevronRight, contentDescription = null)
                 }
@@ -741,7 +744,7 @@ class TrackPickerFragment : Fragment() {
                 TextButton(onClick = { change(SubtitleStyle()) }, enabled = !style.isDefault) {
                     M3Icon(TmIcons.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
-                    M3Text(L.subtitlesDefaultLook, maxLines = 1)
+                    FitText(L.subtitlesDefaultLook, M3Theme.typography.labelLarge)
                 }
             }
         }
@@ -804,7 +807,7 @@ class TrackPickerFragment : Fragment() {
                     selected = index == selected,
                     onClick = { if (index != selected) segmentTick(); onPick(index) },
                     shape = SegmentedButtonDefaults.itemShape(index, labels.size),
-                    label = { M3Text(label, maxLines = 1) },
+                    label = { FitText(label, M3Theme.typography.labelLarge, lines = 2) },
                 )
             }
         }
@@ -946,6 +949,9 @@ class TrackPickerFragment : Fragment() {
 
         /** The touch controls' inset, the same 24 dp the lines carry, so they line up with the radios. */
         private val ADJUST_PAD = 24.dp
+
+        /** Earlier and Later: room for the word beside its arrow in half a phone's width. */
+        private val STEP_PADDING = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
         private const val ARG_ONLINE = "online"
         private const val TAG = "track_picker"
         private const val BACK_STACK = "track_picker"
