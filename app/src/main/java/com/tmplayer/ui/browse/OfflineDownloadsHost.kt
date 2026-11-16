@@ -32,13 +32,17 @@ internal fun OfflineDownloadsHost(content: @Composable () -> Unit) {
     val connected by Td.connected.collectAsStateWithLifecycle()
     val offline = rememberSettledOffline(network == NetworkStatus.Offline && !connected)
     var downloads by remember { mutableStateOf<List<ResumeRecord>>(emptyList()) }
+    // False until the index has been read for this offline stretch: Home holds its rows till then.
+    var read by remember { mutableStateOf(false) }
     LaunchedEffect(offline) {
+        read = false
         downloads = if (offline) {
             runCatchingCancellable { LocalDownloads.presentRecords(SettingsStore(context)) }.getOrDefault(emptyList())
         } else {
             emptyList()
         }
+        read = true
     }
-    val home = remember(offline, downloads) { OfflineHome(offline, downloads) }
+    val home = remember(offline, downloads, read) { OfflineHome(offline, downloads, settled = !offline || read) }
     CompositionLocalProvider(LocalOfflineHome provides home, content = content)
 }

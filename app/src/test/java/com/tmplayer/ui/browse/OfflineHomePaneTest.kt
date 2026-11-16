@@ -95,7 +95,11 @@ class OfflineHomePaneTest {
     private val played = mutableListOf<Long>()
     private val opened = mutableListOf<Long>()
 
+    /** What the shell provides, changeable after the first frame as the reads finish. */
+    private val shell = androidx.compose.runtime.mutableStateOf(OfflineHome.Online)
+
     private fun show(touch: Boolean, fontScale: Float = 1f, offline: OfflineHome) {
+        shell.value = offline
         FormFactor.override(!touch)
         Motion.reduced = true
         // A television's window has the focus before Home is up, as the app's has: Home's own
@@ -105,7 +109,7 @@ class OfflineHomePaneTest {
             val base = LocalDensity.current
             CompositionLocalProvider(
                 LocalDensity provides Density(base.density, fontScale),
-                LocalOfflineHome provides offline,
+                LocalOfflineHome provides shell.value,
             ) {
                 TMPlayerTheme {
                     Box(Modifier.fillMaxSize().background(Tone.background)) {
@@ -130,7 +134,15 @@ class OfflineHomePaneTest {
                 }
             }
         }
+        settle()
+    }
+
+    /** Waits for the watch cache's answer (a background read) when Home is not holding for a shell read, then for Home's first focus. */
+    private fun settle() {
         rule.waitForIdle()
+        if (shell.value.settled) {
+            rule.waitUntil(5_000) { rule.onAllNodes(hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
+        }
         // Home's first focus is asked for a frame after its first row is in.
         rule.mainClock.advanceTimeBy(400)
         rule.waitForIdle()
@@ -146,6 +158,34 @@ class OfflineHomePaneTest {
         // Distant Lights and the chat's clip cannot play, so they say so; the other two do not.
         rule.onAllNodesWithText(L.homeNeedsInternet).assertCountEquals(2)
         rule.onNodeWithText(L.gridBadgeDownloaded).assertIsDisplayed()
+    }
+
+    @Test
+    fun `the first offline frame is held until the downloads are read, then nothing playable is grey`() {
+        // The shell has not finished reading the download index: Home holds its rows.
+        show(touch = true, offline = OfflineHome(true, settled = false))
+        rule.onAllNodesWithText(L.homeNeedsInternet).assertCountEquals(0)
+        rule.onNodeWithText("Harbour Notes", substring = true).assertDoesNotExist()
+        rule.onNodeWithText("Distant Lights", substring = true).assertDoesNotExist()
+        // The read lands: the saved video is a download and plays, and only the others are grey.
+        shell.value = offline
+        settle()
+        rule.onNodeWithText("Harbour Notes", substring = true).assertIsDisplayed()
+        rule.onAllNodesWithText(L.homeNeedsInternet).assertCountEquals(2)
+        rule.onNodeWithText(L.gridBadgeDownloaded).assertIsDisplayed()
+    }
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w960dp-h540dp-land-television-night-xhdpi")
+    fun `on a television the held first frame has no card to focus, and the first focus is on one that plays`() {
+        show(touch = false, offline = OfflineHome(true, settled = false))
+        assertTrue("nothing to focus in the held frame", focusedNow().isEmpty())
+        rule.onAllNodes(hasClickAction() and hasAnyDescendant(hasText("", substring = true)), useUnmergedTree = true)
+            .assertCountEquals(0)
+        shell.value = offline
+        settle()
+        val focused = focusedNow()
+        assertTrue("the remote is on a card that plays, not a greyed one: $focused", !focused.contains("[greyed]"))
     }
 
     @Test

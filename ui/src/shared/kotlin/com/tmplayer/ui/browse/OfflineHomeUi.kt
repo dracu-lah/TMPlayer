@@ -70,16 +70,23 @@ fun OfflineHomeScope(rows: List<HomeRow>, content: @Composable (List<HomeRow>) -
         return
     }
     val candidates = remember(rows, shell.downloads) { OfflineHomeRows.cacheCandidates(rows, shell.downloads) }
-    val cached by produceState(emptySet<String>(), candidates) {
-        value = withContext(Dispatchers.Default) {
+    // Null until the watch cache has answered the first time; later asks keep the last answer
+    // meanwhile, so the cards do not go back to a skeleton for a row that changed.
+    val cachedOrNull by produceState<Set<String>?>(null, candidates) {
+        value = if (candidates.isEmpty()) emptySet() else withContext(Dispatchers.Default) {
             candidates.filter { (_, fileId) ->
                 runCatchingCancellable { Td.localFileAvailability(fileId) }.getOrDefault(LocalFileAvailability.Missing) ==
                     LocalFileAvailability.Complete
             }.mapTo(HashSet()) { it.first }
         }
     }
-    val home = remember(shell, cached) { OfflineHome(true, shell.downloads, shell.cached + cached) }
-    val shown = remember(rows, home) { OfflineHomeRows.apply(rows, home) }
+    val settled = shell.settled && cachedOrNull != null
+    val home = remember(shell, cachedOrNull, settled) {
+        OfflineHome(true, shell.downloads, shell.cached + cachedOrNull.orEmpty(), settled)
+    }
+    // Held, not drawn: a frame built before both reads finish would grey every card that is in fact
+    // playable and could put the remote's first focus on one. Home shows its skeleton meanwhile.
+    val shown = remember(rows, home) { if (home.settled) OfflineHomeRows.apply(rows, home) else emptyList() }
     CompositionLocalProvider(LocalOfflineHome provides home) { content(shown) }
 }
 

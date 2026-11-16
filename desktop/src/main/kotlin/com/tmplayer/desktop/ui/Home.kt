@@ -334,11 +334,13 @@ internal fun HomeRowsView(
                 // first run's card, which flashed up at every start for accounts full of videos.
                 // Given up after a while, so a first run without a connection still says what to do.
                 var waitedOut by remember { mutableStateOf(false) }
-                if (!rowsReady) LaunchedEffect(Unit) {
+                // Offline, the rows are also held till the download index and watch cache have been read.
+                val held = !rowsReady || !com.tmplayer.ui.browse.LocalOfflineHome.current.settled
+                if (held) LaunchedEffect(Unit) {
                     kotlinx.coroutines.delay(10_000)
                     waitedOut = true
                 }
-                if (!rowsReady && !waitedOut) return@Column
+                if (held && !waitedOut) return@Column
                 // Nothing played and nothing starred: a first run, so say how to get a first video in:
                 // forward it to Saved Messages, which the button opens.
                 Box(

@@ -34,11 +34,15 @@ object OfflineSettle {
  * videos found complete in the watch cache. Only those two groups play without a line.
  *
  * [downloads] and [cached] are read once per offline stretch and are empty while online.
+ *
+ * [settled] is false while those reads are still running, so a frame built before them is held
+ * (a skeleton) instead of drawn with every card grey and the remote's first focus on one of them.
  */
 class OfflineHome(
     val offline: Boolean = false,
     val downloads: List<ResumeRecord> = emptyList(),
     val cached: Set<String> = emptySet(),
+    val settled: Boolean = true,
 ) {
     /** The keys ([ProgressKeys.of]) of the videos in Downloads, which say Downloaded offline. */
     val downloadedKeys: Set<String> by lazy(LazyThreadSafetyMode.NONE) {
