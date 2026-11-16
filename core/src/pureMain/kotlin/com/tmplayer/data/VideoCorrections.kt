@@ -90,7 +90,7 @@ data class PosterPick(val tmdbId: Int, val show: Boolean = false) {
         // A film pick drops the episode code the file's name carried: a film has none.
         val season = if (show) query.season else null
         val episode = if (show) query.episode else null
-        return query.copy(season = season, episode = episode, tmdbId = tmdbId, kind = kind, anime = false)
+        return query.copy(season = season, episode = episode, tmdbId = tmdbId, kind = kind, anime = false, imdbId = null)
     }
 }
 

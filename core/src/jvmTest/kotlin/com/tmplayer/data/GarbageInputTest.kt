@@ -125,7 +125,8 @@ class GarbageInputTest {
         "[Events]\nFormat: Layer, Start, End, Text\nDialogue: 0,0:00:01.00,0:00:00.00\nDialogue: ,,,,,,,,,,",
         "https://t.me/", "tg://", "tg://resolve?domain=", "t.me/c/", "t.me/c/-1/-1", "t.me/c/1/99999999999999999999",
         "https://t.me/proxy?server=&port=x&secret=", "tg://socks?server=a&port=70000", "%%%", "%E0%A4%A",
-        "S01E", "S99999E99999", "1080p", "Show.S01E01-E", "Ep.0", "Part 0 of 0", "(", ")", "[[[", "((((((((((",
+        "S01E", "S99999E99999", "S01-S", "S99-S1", "E01-", "E~~", "to to to", "E999999999-E1", "tt", "tt0111161", "imdb.com/title/", "themoviedb.org/tv/",
+        "Spanish (", "Hindi (Latin America", ".srt", "S01-S03 ".repeat(5_000), "1080p", "Show.S01E01-E", "Ep.0", "Part 0 of 0", "(", ")", "[[[", "((((((((((",
         "-", "--", "+-1", "1:", ":1", "::", "60:60:60", "-0", "1e3", "١٢٣",
         "\n".repeat(2_000), "a".repeat(100_000), "{\"a\":\"" + "x".repeat(50_000) + "\"}",
         "[".repeat(500) + "]".repeat(500), "{\"a\":".repeat(300) + "1" + "}".repeat(300),
@@ -461,6 +462,13 @@ class GarbageInputTest {
             survive("Decimal.parse", text) { Decimal.parse(text) }
             survive("MediaName.parse", text) { MediaName.parse(text); MediaName.parse(text, text) }
             survive("MediaName.spellingKey", text) { MediaName.spellingKey(text) }
+            survive("MediaName.pack", text) { MediaName.parse(text).let { it.pack; it.packSeason } }
+            survive("MetaLinks.read", text) { com.tmplayer.online.MetaLinks.read(text, text, null) }
+            survive("MetaQuery.of link", text) {
+                com.tmplayer.online.MetaQuery.of(text, "imdb.com/title/tt0111161 $text")
+                com.tmplayer.online.MetaQuery.of("x.mkv", "tt$text themoviedb.org/tv/$text")
+            }
+            survive("ChatSubtitles.tagsOf", text) { com.tmplayer.player.ChatSubtitles.tagsOf(text); com.tmplayer.player.ChatSubtitles.tagsOf("$text.Hindi ($text).srt") }
             survive("TitleShape.of", text) { TitleShape.of(text) }
             survive("TitleReport.parse", text) { TitleReport.parse(text) }
             survive("TitleLedger.decode", text) { TitleLedger.decode(text).let { TitleLedger.decode(it.encode()) } }

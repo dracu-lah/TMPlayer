@@ -127,7 +127,8 @@ export function createHandler(deps: Deps) {
         }
     }
 
-    type Found = { film: boolean; candidate: Candidate }
+    /** [linked]: found by an IMDb id in the post's words, which backs the match on its own (MetaInfo.linked). */
+    type Found = { film: boolean; candidate: Candidate; linked?: boolean }
     type Outcome = { kind: 'found'; found: Found } | { kind: 'none' } | { kind: 'blocked'; reason: string; waitS: number }
 
     function stopped(reply: Reply): Outcome {
@@ -142,8 +143,34 @@ export function createHandler(deps: Deps) {
         return { kind: 'blocked', reason: 'unavailable', waitS: 30 }
     }
 
+    /**
+     * The title an IMDb id names (OnlineMetadata.linkedTitle): one `find`, and null for an id TMDB
+     * does not know or a call that failed, which leaves the title guess to run.
+     */
+    async function linked(key: string, imdbId: string): Promise<{ film: boolean; id: number } | null> {
+        const reply = await retrying(key, `find/${imdbId}`, 'external_source=imdb_id')
+        if (reply.kind !== 'ok') return null
+        const json = (reply as { json: any }).json
+        const id = (list: unknown) => (Array.isArray(list) && Number.isInteger(list[0]?.id) && list[0].id > 0 ? (list[0].id as number) : null)
+        const film = id(json?.movie_results)
+        if (film !== null) return { film: true, id: film }
+        const show = id(json?.tv_results)
+        return show !== null ? { film: false, id: show } : null
+    }
+
     /** OnlineMetadata.tmdbLookup, in English. */
     async function lookup(key: string, ask: Ask): Promise<Outcome> {
+        const byImdb = ask.tmdbId === null && ask.imdbId ? await linked(key, ask.imdbId) : null
+        if (byImdb) {
+            const reply = await retrying(key, `${byImdb.film ? 'movie' : 'tv'}/${byImdb.id}`, 'language=en-US')
+            if (reply.kind !== 'ok' && reply.kind !== 'missing') return stopped(reply)
+            if (reply.kind === 'ok') {
+                const c = candidate(byImdb.film, reply.json)
+                // A link the file's own year or episode contradicts is another title's: the guess runs.
+                const contradicted = (byImdb.film && ask.series) || (ask.year !== null && c.year !== null && Math.abs(ask.year - c.year) > 1 && !(!byImdb.film && ask.year > c.year))
+                if (!contradicted) return { kind: 'found', found: { film: byImdb.film, candidate: c, linked: true } }
+            }
+        }
         if (ask.tmdbId !== null) {
             const film = ask.kind === 'film'
             const reply = await retrying(key, `${film ? 'movie' : 'tv'}/${ask.tmdbId}`, 'language=en-US')
@@ -192,12 +219,14 @@ export function createHandler(deps: Deps) {
         // A pick names its title by id; "picked" without one is no question.
         const picked = p.get('p') === '1'
         if (picked && id === null) return null
-        return { title, year, kind, tmdbId: id, series: p.get('s') === '1', languages, ...(picked ? { picked } : {}) }
+        const imdb = p.get('i')
+        const imdbId = id === null && imdb && /^tt\d{7,9}$/.test(imdb) ? imdb : null
+        return { title, year, kind, tmdbId: id, series: p.get('s') === '1', languages, ...(imdbId ? { imdbId } : {}), ...(picked ? { picked } : {}) }
     }
 
     /** What the cache files an answer under: the cleaned title, as MetaQuery.cacheKey does, never the raw one. */
     function cacheRequest(origin: string, ask: Ask): Request {
-        const q = new URLSearchParams({ k: ask.kind, t: normalise(ask.title), y: String(ask.year ?? ''), id: String(ask.tmdbId ?? ''), s: ask.series ? '1' : '0', l: ask.languages.join(','), p: ask.picked ? '1' : '0' })
+        const q = new URLSearchParams({ k: ask.kind, t: normalise(ask.title), y: String(ask.year ?? ''), id: String(ask.tmdbId ?? ''), s: ask.series ? '1' : '0', l: ask.languages.join(','), p: ask.picked ? '1' : '0', ...(ask.imdbId ? { i: ask.imdbId } : {}) })
         return new Request(`${origin}/tmdb/poster?${q}`)
     }
 
@@ -221,9 +250,9 @@ export function createHandler(deps: Deps) {
         let body: object = { match: false }
         let ttl = MISS_TTL
         if (outcome.kind === 'found') {
-            const { film, candidate: c } = outcome.found
+            const { film, candidate: c, linked: byLink } = outcome.found
             const kind = film ? 'film' : 'show'
-            if (trusted(ask, { kind, year: c.year })) {
+            if (byLink || trusted(ask, { kind, year: c.year })) {
                 body = { match: true, id: c.id, kind, title: c.names.find((n) => n.trim()) ?? ask.title, year: c.year, poster: c.poster, backdrop: c.backdrop ?? null, overview: c.overview ?? '' }
                 ttl = FOUND_TTL
             }

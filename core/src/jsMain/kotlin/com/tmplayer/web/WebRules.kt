@@ -144,6 +144,16 @@ interface ShelfTile {
     val piecesPlayable: Int
     val extra: String?
     val seasons: Array<WebSeason>
+
+    /** The whole-season files of a show ("Season 2 Complete"), listed under their season; empty for a file. */
+    val packs: Array<WebPack>
+}
+
+/** A season, or a span of seasons, posted as one file ([com.tmplayer.data.SeriesPack]). [seasonEnd] is 0 for one season. */
+interface WebPack {
+    val season: Int
+    val seasonEnd: Int
+    val video: Video
 }
 
 interface WebSeason {
@@ -214,6 +224,8 @@ interface PosterAsk {
     /** "film" or "show". */
     val kind: String
     val tmdbId: Int?
+    /** An IMDb id the post's own words give ("tt0111161"), or null; resolved by the worker's TMDB `find`. */
+    val imdbId: String?
     val series: Boolean
     /** ISO 639-1 codes, a hint for which of two titles of one name is meant. */
     val languages: Array<String>
@@ -390,6 +402,7 @@ fun posterAsk(video: Video): PosterAsk? {
         "year" to query.year,
         "kind" to if (query.kind == MetaKind.Show) "show" else "film",
         "tmdbId" to query.tmdbId,
+        "imdbId" to query.imdbId,
         "series" to item.parsedName.isSeries,
         "languages" to query.languages.toTypedArray(),
         "episode" to SeriesShelf.episodeOf(item).takeIf { it.isEpisode && it.extra == null && it.title.isNotBlank() }?.let { name ->
@@ -803,6 +816,7 @@ private fun tile(entry: ShelfEntry): ShelfTile = when (entry) {
             "piecesPlayable" to (report?.playable ?: 0),
             "extra" to item.extra?.name,
             "seasons" to emptyArray<WebSeason>(),
+            "packs" to emptyArray<WebPack>(),
         )
     }
 }
@@ -833,6 +847,9 @@ private fun show(key: String, series: Series): ShelfTile = plain(
             }.toTypedArray(),
             "covered" to EpisodeGuide.covered(season).toTypedArray(),
         )
+    }.toTypedArray(),
+    "packs" to series.packs.map { pack ->
+        plain<WebPack>("season" to pack.season, "seasonEnd" to (pack.seasonEnd ?: 0), "video" to toWeb(pack.item))
     }.toTypedArray(),
 )
 

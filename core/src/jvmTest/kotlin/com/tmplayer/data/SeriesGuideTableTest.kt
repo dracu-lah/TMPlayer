@@ -35,6 +35,7 @@ class SeriesGuideTableTest {
         when (it) {
             is Row.Have -> "have"
             is Row.Gap -> if (it.episode.state == State.Missing) "missing" else "unaired"
+            is Row.Pack -> "pack"
         }
     }
 

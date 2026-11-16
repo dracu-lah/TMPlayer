@@ -43,6 +43,8 @@ data class ParsedName(
      * [season] stays null for such a name, so the file never files as season one.
      */
     val seasonEnd: Int? = null,
+    /** The first season of a span ([seasonEnd] set): 1 for "S01-S03". Null for a name that is no span. */
+    val seasonFrom: Int? = null,
 ) {
     /**
      * [SeriesShelf.keyOf] of [title], worked out once: a parse is kept on its [MediaItem], and the
@@ -58,6 +60,16 @@ data class ParsedName(
 
     /** A single episode, as opposed to a season pack that names no episode at all. */
     val isEpisode: Boolean get() = episode != null
+
+    /**
+     * A season, or a span of seasons, posted as one file: "Season 2 Complete", "S02 Combined",
+     * "S01-S03". The name states a season and no episode, no air date and no trailer word, so the
+     * show's page can list it as a pack ([SeriesShelf]) rather than leave it a loose tile.
+     */
+    val pack: Boolean get() = episode == null && airDate == null && extra == null && (season != null || seasonEnd != null)
+
+    /** The first season a pack holds: its [season], or the start of its span. */
+    val packSeason: Int? get() = season ?: seasonFrom
 
     /** What to send to a search box: the year disambiguates remakes, so keep it attached. */
     val query: String get() = if (year != null) "$title $year" else title
@@ -321,6 +333,7 @@ object MediaName {
                 lastEpisode = episode?.last,
                 episodePart = episode?.part,
                 seasonEnd = episode?.seasonEnd,
+                seasonFrom = episode?.seasonFrom,
                 part = part?.number,
                 extra = (extra ?: leadingExtra)?.let { extraOf(it.value) },
                 airDate = date?.text,
@@ -447,7 +460,7 @@ object MediaName {
     }
 
     /** A season and episode number, and where in the name the code starts. */
-    private data class Episode(val season: Int?, val number: Int?, val at: Int, val last: Int? = null, val part: Int? = null, val seasonEnd: Int? = null)
+    private data class Episode(val season: Int?, val number: Int?, val at: Int, val last: Int? = null, val part: Int? = null, val seasonEnd: Int? = null, val seasonFrom: Int? = null)
 
     /**
      * Finds an episode however the uploader chose to write it.
@@ -486,7 +499,7 @@ object MediaName {
             // pack pads its last season (the letter form, "S01-S03", does).
             val padded = letterSpan == null && span.groupValues[2].length == 2 && span.groupValues[2].startsWith('0')
             if (from != null && to != null && from in 0 until to && to <= MAX_SEASON && !padded) {
-                return Episode(season = null, number = null, at = span.range.first, seasonEnd = to)
+                return Episode(season = null, number = null, at = span.range.first, seasonEnd = to, seasonFrom = from)
             }
         }
         val season = SEASON_ONLY.find(text)
