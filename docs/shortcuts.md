@@ -94,7 +94,7 @@ keys. When the player is open the window hands it the keys even if Compose's foc
 | Shift+Backspace | Back to where you were before a long jump |
 | I | Playback details |
 | T, Command+T | Always on top |
-| Command+P | Mini player |
+| Command+P | Small always on top window (not Back; Ctrl+P again brings the window back) |
 | Command+Q | Quit |
 | Shift+/ | The shortcut sheet |
 | Esc, Backspace | Back (the player or the video, see below) |
@@ -107,7 +107,8 @@ never read as a player key. The one window key the player takes over is Alt+Left
 Locked: every key is the lock's (hold Enter to unlock). Otherwise, in order: the episode list; the side
 panel (Esc closes, Backspace goes up a page); a sheet (shortcuts, details, online subtitles); a note or
 time prompt (a dialog, closes itself); full screen (Esc leaves it, never the video); otherwise Back,
-which docks the mini player while a video plays and closes the player otherwise.
+which stops the video, saves the place and returns to the page that opened it (2026-11-16: the desktop's in-app
+mini bar is gone; the phone follows with T12).
 
 ## Big screen on a computer (remote, `--tv` or Layout: TV)
 

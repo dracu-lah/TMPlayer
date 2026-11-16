@@ -668,3 +668,16 @@ not built on purpose (gate rule 2); TV focus return after "Fix match" relies on 
   leaving Downloads inside the Undo window leaves the download paused, never deletes it; the desktop's auto-saved row has Watch
   and Keep, its Delete stays in Free up space; TabSwitch now walks two or three answers.
 - Unrun: webapp e2e (no node_modules in the worktree; `tsc` on the new files was clean through a borrowed node_modules).
+- FQ10, FQ11, TV pause clock, desktop Back (player-small-features worker, 2026-11-16): look first found that all
+  three queued features already ship. FQ10: night mode exists on phone, TV and desktop since 1.x (processor
+  `VolumeBoostProcessor.night`, off is a plain copy, no timers); only renamed to "Quiet loud scenes" (new keys
+  `player.quiet_loud_scenes*`, `player.details_quiet_loud_scenes`; old ones dead). Bundled FFmpeg (libavfilter
+  11.4) has only aformat, anull, aresample: no `acompressor`, `dynaudnorm` or `volume`, so the desktop keeps its
+  Dolby range control and dialogue lift, with the honest detail line; NOT hidden (hiding takes a working feature
+  from users): user may overrule. FQ11: Pure black switch since 2026-10-19 on phone, TV, desktop, web; contrast
+  and focus ring tests cover black; no fourth segment (that was the replaced design). TV clock: `controls_clock`
+  shows on a paused TV (and in the web TV player); pinned by `PauseControlsRowTest`; no "ends at". Desktop Back:
+  dock deleted (MiniPlayerHost, ShellState mini, PlayerScreen docked mode); Ctrl+P untouched. The phone's dock
+  (MiniDock, MiniDockBar, shared MiniPlayerBar, core MiniPlayerState, Settings "Keep playing in a mini player",
+  its strings) stays until T12 lands: the phone still uses them. Note: `docs/shortcuts.md` is not in this worker's
+  worktree (T3's file), edited in the main tree only.
