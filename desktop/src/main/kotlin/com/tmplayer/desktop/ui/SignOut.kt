@@ -154,6 +154,7 @@ internal suspend fun signOut(
     }
     // The bookmarks go with it, for the same reason.
     bookmarks?.let { runCatching { it.clear() } }
+    runCatching { com.tmplayer.data.SavedMessagesBackup.forgetFiles() }
 }
 
 /** How long signing out waits for the video cache to be cleared before logging out regardless. */

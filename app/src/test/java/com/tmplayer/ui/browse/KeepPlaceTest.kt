@@ -31,6 +31,8 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollTo
@@ -210,6 +212,38 @@ class KeepPlaceTest {
         rule.waitForIdle()
         assertEquals(1, yes)
         assertEquals(0, no)
+    }
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w960dp-h540dp-land-television-night-xhdpi")
+    fun `after Yes the card goes and the remote stays on the row above, not lost`() {
+        runBlocking { settings.setResumeSync(false) }
+        val above = FocusRequester()
+        FormFactor.override(true)
+        rule.setContent {
+            TMPlayerTheme {
+                val state = rememberKeepPlaceCardState(settings, true) {}
+                Box(Modifier.fillMaxSize().background(Tone.background)) {
+                    LazyColumn {
+                        item {
+                            Box(Modifier.size(120.dp).background(Tone.surface).focusRequester(above).testTag("last-row").focusable())
+                        }
+                        if (state.visible) item { KeepPlaceCard(onYes = state::yes, onNotNow = state::notNow, start = 16.dp, end = 16.dp) }
+                    }
+                }
+            }
+        }
+        tvKeys()
+        rule.waitUntil(WRITE_MS) { rule.onAllNodesWithText("Yes, keep it").fetchSemanticsNodes().isNotEmpty() }
+        rule.runOnIdle { above.requestFocus() }
+        rule.waitForIdle()
+        rule.onRoot().performKeyInput { pressKey(Key.DirectionDown) }
+        rule.waitForIdle()
+        rule.onNode(hasText("Yes, keep it") and hasClickAction()).assertIsFocused()
+        rule.onNode(hasText("Yes, keep it") and hasClickAction()).performKeyInput { pressKey(Key.Enter) }
+        rule.waitUntil(WRITE_MS) { rule.onAllNodesWithText("Yes, keep it").fetchSemanticsNodes().isEmpty() }
+        rule.waitForIdle()
+        rule.onNodeWithTag("last-row").assertIsFocused()
     }
 
     // ---- its state: asked once, off until a yes -----------------------------------------------

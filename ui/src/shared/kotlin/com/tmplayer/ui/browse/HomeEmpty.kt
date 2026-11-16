@@ -271,6 +271,14 @@ private fun IconChip(icon: androidx.compose.ui.graphics.vector.ImageVector, size
 fun KeepPlaceCard(onYes: () -> Unit, onNotNow: () -> Unit, start: Dp, end: Dp, modifier: Modifier = Modifier, focus: FocusRequester? = null) {
     val s = com.tmplayer.ui.i18n.LocalStrings.current
     val touch = isTouch()
+    // The card goes the moment a button is pressed; the remote or the keyboard must not be on it
+    // then, or focus is lost with it. It moves up to the row above first (or is let go of).
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    fun leave() {
+        if (!focusManager.moveFocus(androidx.compose.ui.focus.FocusDirection.Up)) focusManager.clearFocus()
+    }
+    val yes = { leave(); onYes() }
+    val notNow = { leave(); onNotNow() }
     Column(
         modifier
             .fillMaxWidth()
@@ -304,13 +312,13 @@ fun KeepPlaceCard(onYes: () -> Unit, onNotNow: () -> Unit, start: Dp, end: Dp, m
         androidx.compose.foundation.layout.BoxWithConstraints {
             if (maxWidth < 480.dp) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    HeroPill(label = s.syncplaceCardYes, onClick = onYes, stretch = true, focus = focus, icon = TmIcons.Check)
-                    HeroPill(label = s.syncplaceCardNo, onClick = onNotNow, stretch = true, icon = null, calm = true)
+                    HeroPill(label = s.syncplaceCardYes, onClick = yes, stretch = true, focus = focus, icon = TmIcons.Check)
+                    HeroPill(label = s.syncplaceCardNo, onClick = notNow, stretch = true, icon = null, calm = true)
                 }
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    HeroPill(label = s.syncplaceCardYes, onClick = onYes, focus = focus, icon = TmIcons.Check)
-                    HeroPill(label = s.syncplaceCardNo, onClick = onNotNow, icon = null, calm = true)
+                    HeroPill(label = s.syncplaceCardYes, onClick = yes, focus = focus, icon = TmIcons.Check)
+                    HeroPill(label = s.syncplaceCardNo, onClick = notNow, icon = null, calm = true)
                 }
             }
         }

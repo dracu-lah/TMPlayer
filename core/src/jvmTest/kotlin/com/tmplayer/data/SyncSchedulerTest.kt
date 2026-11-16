@@ -35,7 +35,7 @@ class SyncSchedulerTest {
             foreground = { foreground },
             lowEnd = lowEnd,
             lastRunAt = { lastRun },
-            job = { why -> ran += (scope.testScheduler.currentTime to why) },
+            job = { why -> ran += (scope.testScheduler.currentTime to why); true },
             onRan = { lastRun = it },
         )
     }
@@ -153,6 +153,23 @@ class SyncSchedulerTest {
         rig.scheduler.foregrounded()
         advanceTimeBy(SyncScheduler.PUSH_SETTLE_MS + 1)
         assertEquals(1, rig.ran.size)
+    }
+
+    @Test
+    fun aRunThatDidNothingBecauseSyncIsOffDoesNotStartThePause() = runTest {
+        var ranAt = 0L
+        val scheduler = SyncScheduler(
+            scope = backgroundScope,
+            clock = { testScheduler.currentTime + EPOCH },
+            foreground = { true },
+            lowEnd = false,
+            lastRunAt = { ranAt },
+            job = { false },
+            onRan = { ranAt = it },
+        )
+        scheduler.ask(SyncScheduler.Why.Manual)
+        runCurrent()
+        assertEquals(0L, ranAt)
     }
 
     @Test

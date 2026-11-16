@@ -252,6 +252,9 @@ private sealed interface Prompt {
     /** A backup file picked, with what restoring it would change. */
     data class Restore(val plan: RestorePlan) : Prompt
 
+    /** The backup before signing out is being sent: Sign out anyway goes on without it, Cancel stops. */
+    data object SignOutSaving : Prompt
+
     /** The backup before signing out could not be saved: says why, and offers Sign out anyway. */
     data class SignOutBackupFailed(val reason: String) : Prompt
 }
@@ -463,12 +466,13 @@ fun SettingsScreen(
     var backupFirst by remember { mutableStateOf(true) }
     // Signing out, with the backup first when asked. A backup that cannot be saved is shown with
     // the way out (Prompt.SignOutBackupFailed) and never keeps the viewer from signing out.
+    var savingBackup by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     fun signOutNow(withBackup: Boolean) {
         val deleteDownloads = alsoDeleteDownloads
-        scope.launch {
+        savingBackup = scope.launch {
             if (withBackup) {
-                prompt = null
-                busy = s.signoutBackupSaving
+                // A prompt, not a spinner: Sign out anyway stays in reach while the backup is sent.
+                prompt = Prompt.SignOutSaving
                 val service = com.tmplayer.data.BackupService(
                     settings = settings,
                     watched = watchedStore,
@@ -477,7 +481,6 @@ fun SettingsScreen(
                     bookmarks = com.tmplayer.data.BookmarkStore(context),
                 )
                 val result = com.tmplayer.data.SignOutBackup.save({ service.export() }, service.fileName())
-                busy = null
                 if (result is com.tmplayer.data.BackupSend.Failed) {
                     prompt = Prompt.SignOutBackupFailed(result.reason)
                     return@launch
@@ -2598,6 +2601,20 @@ fun SettingsScreen(
                 prompt = null
                 alsoDeleteDownloads = false
                 backupFirst = true
+            },
+        )
+
+        Prompt.SignOutSaving -> TvConfirm(
+            title = s.settingsSignOutTitle,
+            message = s.signoutBackupSaving,
+            confirmLabel = s.signoutBackupAnyway,
+            onConfirm = {
+                savingBackup?.cancel()
+                signOutNow(withBackup = false)
+            },
+            onDismiss = {
+                savingBackup?.cancel()
+                prompt = null
             },
         )
 
