@@ -10,6 +10,9 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -27,6 +30,7 @@ import com.tmplayer.desktop.ui.WindowControls
 import com.tmplayer.desktop.ui.windowDrag
 import androidx.compose.foundation.TooltipPlacement
 import androidx.compose.foundation.background
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -558,11 +562,18 @@ internal fun BoxScope.PlayerOverlay(
                         }
                         Box {
                             Tip(s.playerSpeedHint) {
+                                val speedInteractions = remember { MutableInteractionSource() }
+                                val speedLabel = SeekMath.speedLabel(status.speed)
                                 Box(
                                     Modifier.height(40.dp).widthIn(min = 48.dp).clip(CircleShape)
-                                        .clickable { onOpenMenu(MenuAt(MenuPage.Speed, MenuAt.Anchor.Speed)) }.padding(horizontal = 10.dp),
+                                        .overlayFocusRing(speedInteractions, CircleShape)
+                                        .clickable(interactionSource = speedInteractions, indication = LocalIndication.current, role = Role.Button) {
+                                            onOpenMenu(MenuAt(MenuPage.Speed, MenuAt.Anchor.Speed))
+                                        }
+                                        .semantics { contentDescription = "${s.playerSpeedHint}: $speedLabel" }
+                                        .padding(horizontal = 10.dp),
                                     contentAlignment = Alignment.Center,
-                                ) { Text(SeekMath.speedLabel(status.speed), color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium) }
+                                ) { Text(speedLabel, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium) }
                             }
                             if (menu?.anchor == MenuAt.Anchor.Speed) {
                                 PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, sleepTimer, bookmarks, loop, onOpenMenu, onCloseMenu, onMenuAction, repeatVideo = repeatVideo)
@@ -764,9 +775,10 @@ internal fun OverlayButton(icon: ImageVector, label: String, onClick: () -> Unit
         Box(
             modifier.size(size.dp).clip(CircleShape)
                 .background(rest)
-                .background(if (hovered) Color(0x33FFFFFF) else Color.Transparent)
+                .background(if (hovered) OverlayHover else Color.Transparent)
+                .overlayFocusRing(hover, CircleShape)
                 .hoverable(hover)
-                .clickable(onClick = onClick),
+                .clickable(interactionSource = hover, indication = LocalIndication.current, role = Role.Button, onClick = onClick),
             contentAlignment = Alignment.Center,
         ) {
             Icon(icon, label, tint = Color.White, modifier = Modifier.size((size * 0.6f).dp))
@@ -848,12 +860,19 @@ private fun TimesAndBar(
             )
             Spacer(Modifier.weight(1f))
         }
-        Text(
-            if (showRemaining) SeekMath.remaining(position, durationMs) else SeekMath.clock(durationMs),
-            color = OnArtMuted,
-            fontSize = 13.sp,
-            modifier = Modifier.clip(RoundedCornerShape(4.dp)).clickable(onClick = onToggleRemaining).padding(horizontal = 4.dp, vertical = 2.dp),
-        )
+        val toggleLabel = if (showRemaining) s.playerShowTotalLength else s.playerShowTimeRemaining
+        val toggleInteractions = remember { MutableInteractionSource() }
+        Tip(toggleLabel) {
+            Text(
+                if (showRemaining) SeekMath.remaining(position, durationMs) else SeekMath.clock(durationMs),
+                color = OnArtMuted,
+                fontSize = 13.sp,
+                modifier = Modifier.clip(RoundedCornerShape(4.dp))
+                    .overlayFocusRing(toggleInteractions, RoundedCornerShape(4.dp))
+                    .clickable(interactionSource = toggleInteractions, indication = LocalIndication.current, onClickLabel = toggleLabel, role = Role.Button, onClick = onToggleRemaining)
+                    .padding(horizontal = 4.dp, vertical = 2.dp),
+            )
+        }
     }
     TimeBar(position, durationMs, bufferedMs(), onSeekTo, chapters, loop, bookmarks.orEmpty())
 }
@@ -1015,12 +1034,14 @@ internal fun PlayerMenu(
                 }
             },
             onClick = onClick,
-            modifier = if (firstFocus != null && !focusGiven) {
-                focusGiven = true
-                Modifier.focusRequester(firstFocus)
-            } else {
-                Modifier
-            },
+            modifier = (
+                if (firstFocus != null && !focusGiven) {
+                    focusGiven = true
+                    Modifier.focusRequester(firstFocus)
+                } else {
+                    Modifier
+                }
+                ).then(if (checked) Modifier.semantics { selected = true } else Modifier),
             leadingIcon = {
                 Box(Modifier.size(18.dp)) {
                     when {
@@ -1287,9 +1308,17 @@ internal fun PlayerMenu(
     val parent = menu.parentPage()
     if (panel) {
         // The page's title on its own line, which is the Back line on a page below the first.
+        val backInteractions = remember { MutableInteractionSource() }
         Row(
             Modifier.fillMaxWidth().heightIn(min = 56.dp)
-                .then(if (parent != null) Modifier.clickable { page(parent) } else Modifier)
+                .then(
+                    if (parent != null) {
+                        Modifier.overlayFocusRing(backInteractions, RoundedCornerShape(8.dp))
+                            .clickable(interactionSource = backInteractions, indication = LocalIndication.current, onClickLabel = s.commonBack, role = Role.Button) { page(parent) }
+                    } else {
+                        Modifier
+                    },
+                )
                 .padding(start = 12.dp, end = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -1519,10 +1548,11 @@ internal fun BoxScope.SkipPill(kind: SkipKind, lifted: Boolean, onSkip: () -> Un
             Row(
                 Modifier.testTag("skip-pill").height(44.dp).clip(RoundedCornerShape(22.dp))
                     .background(NextUpSurface)
-                    .background(if (hovered) Color(0x33FFFFFF) else Color.Transparent)
+                    .background(if (hovered) OverlayHover else Color.Transparent)
                     .border(1.dp, Color.White.copy(alpha = 0.35f), RoundedCornerShape(22.dp))
+                    .overlayFocusRing(hover, RoundedCornerShape(22.dp))
                     .hoverable(hover)
-                    .clickable(onClick = onSkip)
+                    .clickable(interactionSource = hover, indication = LocalIndication.current, role = Role.Button, onClick = onSkip)
                     .padding(start = 20.dp, end = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1565,10 +1595,11 @@ internal fun BoxScope.UndoSeekChip(backToMs: Long, lifted: Boolean, onUndo: () -
                 Modifier.testTag("undo-seek").graphicsLayer { scaleX = scale; scaleY = scale }
                     .height(44.dp).clip(RoundedCornerShape(22.dp))
                     .background(NextUpSurface)
-                    .background(if (hovered) Color(0x33FFFFFF) else Color.Transparent)
+                    .background(if (hovered) OverlayHover else Color.Transparent)
                     .border(1.dp, Color.White.copy(alpha = 0.35f), RoundedCornerShape(22.dp))
+                    .overlayFocusRing(interaction, RoundedCornerShape(22.dp))
                     .hoverable(interaction)
-                    .clickable(interactionSource = interaction, indication = androidx.compose.foundation.LocalIndication.current, onClick = onUndo)
+                    .clickable(interactionSource = interaction, indication = LocalIndication.current, role = Role.Button, onClick = onUndo)
                     .padding(start = 14.dp, end = 20.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1590,9 +1621,10 @@ private fun EpisodesButton(onClick: () -> Unit) {
         Modifier.padding(start = 8.dp).height(44.dp).clip(CircleShape)
             .background(ControlsPillFill)
             .border(1.dp, ControlsPillEdge, CircleShape)
-            .background(if (hovered) Color(0x33FFFFFF) else Color.Transparent)
+            .background(if (hovered) OverlayHover else Color.Transparent)
+            .overlayFocusRing(hover, CircleShape)
             .hoverable(hover)
-            .clickable(onClick = onClick)
+            .clickable(interactionSource = hover, indication = LocalIndication.current, role = Role.Button, onClick = onClick)
             .padding(start = 12.dp, end = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1875,8 +1907,11 @@ private fun PlayPauseButton(status: PlaybackStatus, onTogglePlay: () -> Unit) {
     val s = LocalStrings.current
     val reduced = com.tmplayer.ui.theme.rememberReducedMotion()
     Tip("${if (status.playing) s.playerPause else s.playerPlay} (${s.keysSpaceK})") {
+        val interactions = remember { MutableInteractionSource() }
         Box(
-            Modifier.size(72.dp).clip(CircleShape).background(PlayerTonalButton).clickable(onClick = onTogglePlay)
+            Modifier.size(72.dp).clip(CircleShape).background(PlayerTonalButton)
+                .overlayFocusRing(interactions, CircleShape)
+                .clickable(interactionSource = interactions, indication = LocalIndication.current, role = Role.Button, onClick = onTogglePlay)
                 .testTag("play-pause")
                 .semantics {
                     stateDescription = if (status.playing) s.playerPlaying else s.playerPaused

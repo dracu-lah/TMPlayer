@@ -1,5 +1,8 @@
 package com.tmplayer.desktop.ui
 
+import com.tmplayer.ui.theme.collectIsFocusVisibleAsState
+import com.tmplayer.ui.theme.focusDrawn
+import com.tmplayer.ui.theme.focusRingColor
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
@@ -524,6 +527,7 @@ private fun RoundButton(icon: ImageVector, label: String, size: Dp, onClick: () 
                 .clip(CircleShape)
                 .background(FloatingTone.menu.copy(alpha = 0.85f))
                 .border(floatingBorder(), CircleShape)
+                .focusDrawn(press.collectIsFocusVisibleAsState(), focusRingColor(), CircleShape)
                 .clickable(interactionSource = press, indication = androidx.compose.foundation.LocalIndication.current, role = Role.Button, onClick = onClick)
                 .semantics { contentDescription = label },
             contentAlignment = Alignment.Center,

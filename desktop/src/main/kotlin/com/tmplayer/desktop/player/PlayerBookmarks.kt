@@ -1,5 +1,9 @@
 package com.tmplayer.desktop.player
 
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -103,8 +107,12 @@ internal fun BookmarkLine(mark: Bookmark, onJump: () -> Unit, onEdit: () -> Unit
         Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        val jump = remember { MutableInteractionSource() }
         Row(
-            Modifier.weight(1f).heightIn(min = 48.dp).clickable(onClick = onJump).padding(start = 12.dp, end = 8.dp),
+            Modifier.weight(1f).heightIn(min = 48.dp)
+                .overlayFocusRing(jump, RoundedCornerShape(8.dp))
+                .clickable(interactionSource = jump, indication = LocalIndication.current, role = Role.Button, onClick = onJump)
+                .padding(start = 12.dp, end = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // Lines up with the entries' text, past the space their tick takes.
@@ -123,7 +131,7 @@ internal fun BookmarkLine(mark: Bookmark, onJump: () -> Unit, onEdit: () -> Unit
         }
         com.tmplayer.ui.components.IconTip(s.playerBookmarkDelete) {
             IconButton(onClick = onDelete) {
-                Icon(TmIcons.Close, contentDescription = s.playerBookmarkDelete, modifier = Modifier.size(18.dp))
+                Icon(TmIcons.Delete, contentDescription = s.playerBookmarkDelete, modifier = Modifier.size(18.dp))
             }
         }
     }
