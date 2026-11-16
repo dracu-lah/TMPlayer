@@ -1463,6 +1463,7 @@
     "resend_call": "Call me instead",
     "resend_fragment": "Send it to Fragment instead",
     "resend_in": "Resend in {time}",
+    "resend_none": "Telegram has no other way to send a code to this number. Check the latest message, or choose Wrong number to try another.",
     "resend_sms": "Send by SMS instead",
     "reset_account": "Reset account",
     "reset_account_confirm": "Delete everything and reset",

@@ -469,6 +469,9 @@ private fun TouchPhonePane(
                 else -> s.loginChooseCountry
             },
             onClick = { picking = true },
+            // The chip: "India +91", the whole row pressable, so the country and its code read as
+            // one thing and the small code box below is not the only place the code shows.
+            trailing = country?.let { SignInWords.dialChip(entry.dial) },
             loading = detecting,
         )
 
@@ -645,6 +648,9 @@ private fun CodePane(
                 ) {
                     Text(if (remaining > 0) s.loginResendIn(SignInWords.clock(remaining)) else SignInWords.resendLabel(state.next))
                 }
+            } else {
+                // Never just gone: with no other route the row says what is left to do.
+                SignInWords.resendNone(state)?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = Tone.muted) }
             }
             TmSecondaryButton(onClick = onChangeNumber) { Text(s.loginWrongNumber) }
         },
@@ -762,6 +768,9 @@ private fun TouchCodePane(
             ) {
                 Text(if (remaining > 0) s.loginResendIn(SignInWords.clock(remaining)) else SignInWords.resendLabel(state.next))
             }
+        } else {
+            // Never just gone: with no other route the row says what is left to do.
+            SignInWords.resendNone(state)?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = Tone.muted) }
         }
 
         TmSecondaryButton(onClick = onChangeNumber, modifier = Modifier.paneAction()) {

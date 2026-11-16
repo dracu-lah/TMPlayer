@@ -61,6 +61,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -119,6 +120,7 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -283,6 +285,7 @@ internal fun TouchNavHost(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
+    BarRest(bar)
     val talkBack = rememberTouchExploration()
     val keyboard = WindowInsets.isImeVisible
 
@@ -631,6 +634,14 @@ internal class BarVisibility {
         private set
     private var travelled by mutableFloatStateOf(0f)
 
+    /**
+     * How many times the list under the bar has moved. [BarRest] waits on it: while it keeps
+     * counting the list is in motion, and the bar comes back once it has stood still for
+     * [BAR_REST_MS].
+     */
+    var moves by mutableIntStateOf(0)
+        private set
+
     fun show() {
         shown = true
         travelled = 0f
@@ -639,6 +650,7 @@ internal class BarVisibility {
     val connection = object : NestedScrollConnection {
         override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
             val moved = consumed.y
+            if (moved != 0f) moves++
             when {
                 // A push or fling that reaches the end of the list (nothing left to scroll, so some of
                 // it comes back unconsumed) brings the bar back: at the end of Home there was no bar
@@ -654,6 +666,28 @@ internal class BarVisibility {
         }
     }
 }
+
+/**
+ * Brings the bar back after the list has rested for [BAR_REST_MS] (the bar returns after one
+ * second of stillness, so a person who stops reading to reach for a tab is not left to find that a
+ * pull down is needed). Every move of the list starts the wait again, so a slow scroll or a fling
+ * keeps the bar out; a bar that is already out has nothing to wait for.
+ */
+@Composable
+internal fun BarRest(bar: BarVisibility) {
+    // The reads sit in the flow, not in composition: the count changes every frame of a scroll.
+    LaunchedEffect(bar) {
+        snapshotFlow { if (bar.shown) -1 else bar.moves }.collectLatest { hidden ->
+            if (hidden >= 0) {
+                delay(BAR_REST_MS)
+                bar.show()
+            }
+        }
+    }
+}
+
+/** How long the list must stand still before a hidden bar returns. */
+internal const val BAR_REST_MS = 1_000L
 
 /** Whether TalkBack, or anything else exploring the screen by touch, is on, followed as it changes. */
 @Composable
