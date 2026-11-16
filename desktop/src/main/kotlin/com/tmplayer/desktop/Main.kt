@@ -443,7 +443,6 @@ fun main(args: Array<String>) {
                                             if (!com.tmplayer.desktop.ui.BigScreen.on) shell.fullscreen = false
                                             shell.freeUpSpace()
                                         },
-                                        mini = remember(shell) { com.tmplayer.desktop.ui.MiniLink(shell) },
                                     )
                                 }
                             }

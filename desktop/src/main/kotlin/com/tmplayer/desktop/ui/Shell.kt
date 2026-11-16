@@ -509,7 +509,7 @@ private fun Browse(state: ShellState, player: PlayerContent) {
         // Over the floating bar or a chat's bar: at the window's smallest width the card reaches
         // in over the bar's right end, and would hide the picture and its menu.
         if (!setupPending && !gateUp) {
-            val foot = (if (BigScreen.on) 24.dp else maxOf(NavBarClearance, ChatBarClearance)) + (if (state.mini.barVisible) MiniBarLift else 0.dp)
+            val foot = (if (BigScreen.on) 24.dp else maxOf(NavBarClearance, ChatBarClearance))
             ShellNotices(state, Modifier.align(Alignment.BottomEnd).padding(start = 24.dp, top = 24.dp, end = 24.dp, bottom = foot))
         }
         if (setupPending) {
@@ -535,24 +535,12 @@ private fun Browse(state: ShellState, player: PlayerContent) {
         // Over the page rather than instead of it, so the page keeps its scroll position and its
         // search, and closing the player is simply taking this away.
         val playing = state.nowPlaying
-        val casting by com.tmplayer.desktop.cast.DesktopCast.state.collectAsState()
-        LaunchedEffect(casting) { state.miniCasting(casting is com.tmplayer.desktop.cast.DesktopCast.State.Connected) }
         if (playing != null) {
-            // Docked (U8): the player stays composed, so the one engine plays on, but it is
-            // clipped to a point and draws and hears nothing; the bar below stands for it.
-            val docked = state.mini.phase == com.tmplayer.player.MiniPhase.Docked
-            Box(
-                if (docked) {
-                    Modifier.size(1.dp).clipToBounds()
-                } else {
-                    Modifier.fillMaxSize().then(if (seeThrough) Modifier else Modifier.background(Tone.background))
-                },
-            ) {
-                BackHandler(enabled = !docked) { state.closePlayer() }
+            Box(Modifier.fillMaxSize().then(if (seeThrough) Modifier else Modifier.background(Tone.background))) {
+                BackHandler { state.closePlayer() }
                 player(playing) { state.closePlayer() }
             }
         }
-        MiniBarHost(state, foot = maxOf(NavBarClearance, ChatBarClearance))
     }
 }
 
