@@ -13,6 +13,7 @@ import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.ContentProtection
 import com.tmplayer.data.EpisodeNeighbours
 import com.tmplayer.data.EpisodeTag
+import com.tmplayer.data.FormatFacts
 import com.tmplayer.data.Fuzzy
 import com.tmplayer.data.HomeLayout
 import com.tmplayer.data.HomeOrder
@@ -227,6 +228,8 @@ interface PosterAsk {
     /** An IMDb id the post's own words give ("tt0111161"), or null; resolved by the worker's TMDB `find`. */
     val imdbId: String?
     val series: Boolean
+    /** The name reads like fansub anime ("[Group] Show - 12", "Show - 12"): AniList is asked first (MetaQuery.anime). */
+    val anime: Boolean
     /** ISO 639-1 codes, a hint for which of two titles of one name is meant. */
     val languages: Array<String>
     /**
@@ -404,6 +407,7 @@ fun posterAsk(video: Video): PosterAsk? {
         "tmdbId" to query.tmdbId,
         "imdbId" to query.imdbId,
         "series" to item.parsedName.isSeries,
+        "anime" to query.anime,
         "languages" to query.languages.toTypedArray(),
         "episode" to SeriesShelf.episodeOf(item).takeIf { it.isEpisode && it.extra == null && it.title.isNotBlank() }?.let { name ->
             name.episode?.let { "S${(name.season ?: 1).toString().padStart(2, '0')}E${it.toString().padStart(2, '0')}" }
@@ -456,6 +460,13 @@ fun copyFacts(video: Video): Array<String> {
     val quality = VideoCopies.heightOf(item)?.let { item.copyQuality() }
     return listOfNotNull(quality, facts.videoCodec, facts.dynamicRange, facts.source).toTypedArray()
 }
+
+/**
+ * The one pill a poster tile wears (FormatFacts.tileTag): "720p", "1080p", "1440p", "4K" or "8K" from
+ * the size Telegram states, else a resolution word in the name; null for SD, an unknown size or a
+ * name that says nothing, so no empty pill is drawn.
+ */
+fun tileTag(video: Video): String? = FormatFacts.tileTag(toItem(video))?.text
 
 /** The quality a video is badged with on its page ("1080p", "4K"), or null when neither its name nor its size says (VideoCopies.qualityLabel). */
 fun qualityLabel(video: Video): String? = VideoCopies.qualityLabel(toItem(video))

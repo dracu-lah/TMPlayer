@@ -185,6 +185,34 @@ class WebRulesTest {
     }
 
     @Test
+    fun `a poster tile wears one resolution pill from 720p up and nothing for SD or an unknown size`() {
+        val videos = screen(
+            arrayOf(
+                raw(1, "Clap.2022.1080p.BluRay.x264.mkv"),
+                raw(2, "Clap.2022.2160p.HDR.HEVC.mkv"),
+                raw(3, "clap.mkv"),
+                raw(4, "Clap.2022.480p.mkv"),
+            ),
+        ).videos
+        assertEquals("1080p", tileTag(videos[0]))
+        assertEquals("4K", tileTag(videos[1]))
+        assertNull(tileTag(videos[2]))
+        assertNull(tileTag(videos[3]))
+    }
+
+    @Test
+    fun `a fansub name asks AniList first and a plain film does not`() {
+        val videos = screen(
+            arrayOf(
+                raw(1, "[Group] Harbour Notes - 12 [1080p].mkv"),
+                raw(2, "Clap.2022.1080p.mkv"),
+            ),
+        ).videos
+        assertTrue(posterAsk(videos[0])!!.anime)
+        assertFalse(posterAsk(videos[1])!!.anime)
+    }
+
+    @Test
     fun `fuzzy search forgives a typo and ranks the whole phrase first`() {
         val texts = arrayOf("Quiet Valley", "Harbour Notes", "Harbor Notes Extra")
         assertContentEquals(arrayOf(1, 2), rank(texts, "harbour notes"))

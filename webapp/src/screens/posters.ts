@@ -48,6 +48,7 @@ function query(a: PickedAsk): string {
     if (a.tmdbId) q.set('id', String(a.tmdbId))
     else if (a.imdbId) q.set('i', a.imdbId)
     if (a.series) q.set('s', '1')
+    if (a.anime) q.set('a', '1')
     if (a.languages.length) q.set('l', a.languages.join(','))
     return q.toString()
 }
@@ -104,6 +105,8 @@ export interface Answer {
     backdrop?: string | null
     /** The overview, in English. */
     overview?: string
+    /** Set to "anilist" when AniList, not TMDB, matched the title (the anime provider): its id is AniList's, its extras are asked there. */
+    source?: 'anilist'
 }
 
 /** The detail page's second helping (MetaExtras), as the worker's /tmdb/extras answers. */
@@ -314,6 +317,7 @@ async function keepTitleCopy(url: string, extras: Extras): Promise<void> {
 
 function extrasUrl(found: Answer, episode: { season: number; episode: number } | null): string {
     const q = new URLSearchParams({ k: found.kind!, id: found.id!, r: region() })
+    if (found.source === 'anilist') q.set('a', '1')
     if (found.kind === 'show' && episode) {
         q.set('s', String(episode.season))
         q.set('e', String(episode.episode))
@@ -339,7 +343,8 @@ export async function keptExtras(found: Answer, episode: { season: number; episo
  */
 export async function keptRating(a: PosterAsk): Promise<number | null> {
     const found = await kept<Answer>(`/tmdb/poster?${query(a)}`)
-    if (!found?.match) return null
+    // A card's mark is TMDB's: an AniList score is shown on the title's page, with its own name.
+    if (!found?.match || found.source === 'anilist') return null
     const rating = (await keptExtras(found, null))?.rating
     return typeof rating === 'number' && rating > 0 && rating <= 10 ? rating : null
 }

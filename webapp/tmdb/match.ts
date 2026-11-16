@@ -35,6 +35,8 @@ export interface Ask {
      * and no year or episode has to back it, the viewer's word being the backing.
      */
     picked?: boolean
+    /** The name reads like fansub anime (MetaQuery.anime): AniList is asked first for a show, after TMDB for a film. */
+    anime?: boolean
 }
 
 /** Lower case, accents and punctuation gone, "&" as "and", a leading article dropped. */

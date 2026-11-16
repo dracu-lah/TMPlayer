@@ -203,6 +203,8 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
     const year = () => found()?.year ?? null
     // TMDB's words first; else the caption, its file facts (File name, Size, Quality...) and lines
     // repeating the name taken off (MediaText.overviewOf), as the apps' detail falls back to it.
+    // The anime provider (AniList, anilist.ts) answers for a fansub name; its credit and score say so.
+    const provider = () => (found()?.source === 'anilist' ? 'AniList' : 'TMDB')
     const tmdbOverview = () => extras()?.episode?.overview || found()?.overview || ''
     const overview = () => tmdbOverview() || props.info?.overview || ''
     // What stands behind the words: a film's wide picture, else a show's poster (whole, over a soft
@@ -314,8 +316,9 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
                             <Show when={extras()?.rating}>
                                 {/* TMDB's score (MetaScore): its mark and the number out of ten. */}
                                 <p class="detail-scores">
-                                    <span class="detail-score" role="img" aria-label={t('metadata.score_out_of_ten', { site: 'TMDB', score: extras()!.rating! })}>
-                                        <TmdbMark height={14} />
+                                    <span class="detail-score" role="img" aria-label={t('metadata.score_out_of_ten', { site: provider(), score: extras()!.rating! })}>
+                                        <Show when={provider() === 'TMDB'}><TmdbMark height={14} /></Show>
+                                        <Show when={provider() !== 'TMDB'}><span>{provider()}</span></Show>
                                         <span>{extras()!.rating!.toFixed(1)}</span>
                                     </span>
                                 </p>
@@ -385,7 +388,7 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
                             <button type="button" class="link detail-more" onClick={() => setMore(!more())}>{more() ? t('common.less') : t('common.more')}</button>
                         </Show>
                         <Show when={tmdbOverview()}>
-                            <p class="muted small">{t('metadata.credit', { provider: 'TMDB' })}</p>
+                            <p class="muted small">{t('metadata.credit', { provider: provider() })}</p>
                         </Show>
                     </section>
                 </Show>
