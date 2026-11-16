@@ -15,11 +15,35 @@ enum class SyncList(val code: String) {
     Watched("watched"),
     WatchLater("later"),
     Favourite("favourite"),
+
+    /** A bookmark, named `<chat>_<message>_<id>`. */
+    Bookmark("bookmark"),
+
+    /** A viewer's correction of a title or poster, named `<chat>_<message>`. */
+    Correction("correction"),
     ;
 
     companion object {
         fun ofCode(code: String?): SyncList? = entries.firstOrNull { it.code == code }
     }
+}
+
+/** A bookmark with when it was last made or changed: its note's edit time, else its own id (the moment it was made). */
+data class SyncBookmark(val bookmark: Bookmark, val at: Long) {
+    /** The name removals use: `<chat>_<message>_<id>`. */
+    val key: String get() = keyOf(bookmark)
+
+    companion object {
+        fun keyOf(b: Bookmark): String = "${b.chatId}_${b.messageId}_${b.id}"
+    }
+}
+
+/**
+ * A correction the viewer made by hand ([VideoCorrection]) as [VideoCorrection.encode] writes it,
+ * with when it was last changed on the device that made it.
+ */
+data class SyncCorrection(val chatId: Long, val messageId: Long, val text: String, val at: Long) {
+    val key: String get() = ProgressKeys.of(chatId, messageId)
 }
 
 /**
@@ -36,7 +60,9 @@ data class SyncRemoval(val list: SyncList, val key: String, val at: Long)
  * Its records are the backup file's ([Backups]), field for field, so one reader serves both; what
  * the sync file leaves out is everything a list on another device can do without: no chat names,
  * no file names, no captions, no paths, and a title cut to [SyncDocuments.TITLE_MAX] characters.
- * Settings, memories, bookmarks and the app and kids locks never travel here.
+ * Settings, memories and the app and kids locks never travel here. Since version 3 the viewer's
+ * bookmarks (position and the short note they wrote) and corrections (their own renames and
+ * picks) do, each with the time it was last changed and a removal to tell it was taken off.
  */
 data class SyncDocument(
     /** The Telegram account the file belongs to; 0 when not known. Never merged across accounts. */
@@ -54,6 +80,10 @@ data class SyncDocument(
      * has any is written as [SyncDocuments.VERSION]; one without stays readable by older builds.
      */
     val lists: NamedLists = NamedLists(),
+    /** The viewer's bookmarks (version 3), notes cut to [BookmarkCodec.MAX_NOTE]. */
+    val bookmarks: List<SyncBookmark> = emptyList(),
+    /** The viewer's corrections (version 3): "Not the same video", "Wrong match", a rename, a poster pick. */
+    val corrections: List<SyncCorrection> = emptyList(),
     val version: Int = SyncDocuments.VERSION,
 )
 
@@ -79,8 +109,10 @@ data class SyncDropped(
     val removals: Int = 0,
     /** Lines of the named lists, the oldest added first: the last thing cut to fit. */
     val listEntries: Int = 0,
+    val bookmarks: Int = 0,
+    val corrections: Int = 0,
 ) {
-    val total: Int get() = resume + watched + watchLater + removals + listEntries
+    val total: Int get() = resume + watched + watchLater + removals + listEntries + bookmarks + corrections
 
     operator fun plus(other: SyncDropped) = SyncDropped(
         resume + other.resume,
@@ -88,6 +120,8 @@ data class SyncDropped(
         watchLater + other.watchLater,
         removals + other.removals,
         listEntries + other.listEntries,
+        bookmarks + other.bookmarks,
+        corrections + other.corrections,
     )
 }
 
@@ -112,9 +146,16 @@ data class SyncApply(
     val laterOut: Map<String, Long> = emptyMap(),
     val favouritesIn: Set<Long> = emptySet(),
     val favouritesOut: Set<Long> = emptySet(),
+    /** Bookmarks newer than this device's, or ones it has no copy of. */
+    val bookmarksIn: List<SyncBookmark> = emptyList(),
+    /** Bookmarks removed on another device after this one last changed them: [SyncBookmark.key] to removal time. */
+    val bookmarksOut: Map<String, Long> = emptyMap(),
+    val correctionsIn: List<SyncCorrection> = emptyList(),
+    /** Corrections cleared on another device after this one last changed them: [SyncCorrection.key] to removal time. */
+    val correctionsOut: Map<String, Long> = emptyMap(),
 ) {
-    val received: Int get() = resumeIn.size + watchedIn.size + laterIn.size + favouritesIn.size
-    val removing: Int get() = resumeOut.size + watchedOut.size + laterOut.size + favouritesOut.size
+    val received: Int get() = resumeIn.size + watchedIn.size + laterIn.size + favouritesIn.size + bookmarksIn.size + correctionsIn.size
+    val removing: Int get() = resumeOut.size + watchedOut.size + laterOut.size + favouritesOut.size + bookmarksOut.size + correctionsOut.size
     val nothing: Boolean get() = received + removing == 0
 }
 
@@ -145,10 +186,29 @@ object SyncDocuments {
      * leaves alone; a file without them is still written as [LISTLESS_VERSION], so devices on older
      * builds keep syncing until somebody makes a list.
      */
-    const val VERSION = 2
+    const val VERSION = 3
 
     /** What a file without named lists is written as: what every build since CP89 reads. */
     const val LISTLESS_VERSION = 1
+
+    /** What a file with named lists but no bookmarks or corrections is written as (HX43). */
+    const val LISTS_VERSION = 2
+
+    /** At most this many bookmarks travel, the newest changed (a video keeps [BookmarkCodec.MAX_PER_VIDEO]). */
+    const val MAX_BOOKMARKS = 2_000
+    const val MAX_CORRECTIONS = 1_000
+
+    /**
+     * A time further ahead than this is a clock that runs fast, not an edit made in the future: it
+     * counts as [mergeCounting]'s `now`, so one wrong clock cannot make its entries win for ever.
+     */
+    const val MAX_SKEW_MS = 24 * 60 * 60 * 1000L
+
+    /** The names the settings and bookmark files keep corrections' and bookmarks' times and removals under. */
+    const val CORRECTION_AT_PREFIX = "fixat_"
+    const val CORRECTION_REMOVAL_PREFIX = "xfix_"
+    const val BOOKMARK_AT_PREFIX = "bt_"
+    const val BOOKMARK_REMOVAL_PREFIX = "xb_"
 
     /** The first field of every file, so a backup or any other JSON is told apart from it. */
     const val FORMAT = "tmplayer-sync"
@@ -200,6 +260,7 @@ object SyncDocuments {
         account: Long,
         now: Long,
         appVersion: String,
+        bookmarks: Map<String, Any> = emptyMap(),
     ): SyncDocument {
         val resume = Backups.resumeOf(settings).mapNotNull(::strip)
         val resumeKeys = resume.mapTo(HashSet()) { ProgressKeys.of(it.chatId, it.messageId) }
@@ -211,6 +272,7 @@ object SyncDocuments {
             for (key in base.resumeKeys) if (key !in resumeKeys) add(SyncRemoval(SyncList.Resume, key, now))
             for (id in base.favourites) if (id !in favouriteIds) add(SyncRemoval(SyncList.Favourite, id.toString(), now))
             addAll(storedRemovals(watched))
+            addAll(extraRemovals(settings, bookmarks))
         }
         return SyncDocument(
             account = account,
@@ -222,8 +284,66 @@ object SyncDocuments {
             favourites = favourites,
             removed = removed,
             lists = strip(NamedListKeys.read(watched)),
+            bookmarks = bookmarksOf(bookmarks),
+            corrections = correctionsOf(settings),
         )
     }
+
+    /**
+     * The bookmarks in the bookmark file's raw entries, each with its time: the note's last edit
+     * where one was made (`bt_<chat>_<message>_<id>`), else the bookmark's own id, which is the
+     * moment it was made.
+     */
+    fun bookmarksOf(raw: Map<String, Any>): List<SyncBookmark> = buildList {
+        for ((name, value) in raw) {
+            val ids = name.removePrefixOrNull(BookmarkCodec.PREFIX)?.split('_') ?: continue
+            if (ids.size != 2) continue
+            val chatId = ids[0].toLongOrNull() ?: continue
+            val messageId = ids[1].toLongOrNull() ?: continue
+            for (mark in BookmarkCodec.decode(chatId, messageId, value as? String)) {
+                val stripped = strip(mark) ?: continue
+                val edited = (raw[BOOKMARK_AT_PREFIX + SyncBookmark.keyOf(mark)] as? Long) ?: 0L
+                add(SyncBookmark(stripped, maxOf(edited, mark.id)))
+            }
+        }
+    }.sortedWith(compareByDescending<SyncBookmark> { it.at }.thenBy { it.key }).take(MAX_BOOKMARKS * 2)
+
+    /** The corrections in the settings' raw entries: `fix_<chat>_<message>` with `fixat_` for when. */
+    fun correctionsOf(raw: Map<String, Any>): List<SyncCorrection> = buildList {
+        for ((name, value) in raw) {
+            val id = VideoCorrections.idOf(name) ?: continue
+            val ids = id.split(':')
+            val correction = stripCorrection(VideoCorrection.decode(value as? String)) ?: continue
+            val at = (raw[CORRECTION_AT_PREFIX + name.removePrefix(VideoCorrections.PREFIX)] as? Long) ?: 0L
+            add(SyncCorrection(ids[0].toLongOrNull() ?: continue, ids[1].toLongOrNull() ?: continue, correction.encode(), maxOf(at, 1L)))
+        }
+    }.sortedWith(compareByDescending<SyncCorrection> { it.at }.thenBy { it.key }).take(MAX_CORRECTIONS * 2)
+
+    /** The removals of bookmarks (`xb_`, in the bookmark file) and corrections (`xfix_`, in the settings). */
+    fun extraRemovals(settings: Map<String, Any>, bookmarks: Map<String, Any>): List<SyncRemoval> = buildList {
+        for ((name, value) in bookmarks) {
+            val at = (value as? Long)?.takeIf { it > 0 } ?: continue
+            val key = name.removePrefixOrNull(BOOKMARK_REMOVAL_PREFIX) ?: continue
+            if (validKey(SyncList.Bookmark, key)) add(SyncRemoval(SyncList.Bookmark, key, at))
+        }
+        for ((name, value) in settings) {
+            val at = (value as? Long)?.takeIf { it > 0 } ?: continue
+            val key = name.removePrefixOrNull(CORRECTION_REMOVAL_PREFIX) ?: continue
+            if (validKey(SyncList.Correction, key)) add(SyncRemoval(SyncList.Correction, key, at))
+        }
+    }
+
+    private fun String.removePrefixOrNull(prefix: String): String? = if (startsWith(prefix)) removePrefix(prefix) else null
+
+    /** A bookmark as it travels: a note of a line, a position and an id that mean something. */
+    private fun strip(mark: Bookmark): Bookmark? {
+        if (mark.id <= 0 || mark.positionMs < 0) return null
+        return mark.copy(note = BookmarkCodec.cleanNote(mark.note))
+    }
+
+    /** A correction as it travels: a rename cut to [TITLE_MAX]; one that says nothing is no correction. */
+    private fun stripCorrection(c: VideoCorrection): VideoCorrection? =
+        c.copy(title = c.title?.trim()?.take(TITLE_MAX)?.trim()?.ifEmpty { null }).takeIf { !it.isEmpty }
 
     /** The lists as they travel: each line with only what a card needs, as Watch later's do. */
     internal fun strip(lists: NamedLists): NamedLists =
@@ -261,7 +381,24 @@ object SyncDocuments {
     private fun validKey(list: SyncList, key: String): Boolean = when (list) {
         SyncList.Favourite -> key.toLongOrNull() != null
         SyncList.WatchLater -> key.length in 3..300 && '_' in key
-        SyncList.Resume, SyncList.Watched -> key.split('_').let { it.size == 2 && it[0].toLongOrNull() != null && it[1].toLongOrNull() != null }
+        SyncList.Resume, SyncList.Watched, SyncList.Correction ->
+            key.split('_').let { it.size == 2 && it[0].toLongOrNull() != null && it[1].toLongOrNull() != null }
+        SyncList.Bookmark -> key.split('_').let { it.size == 3 && it.all { part -> part.toLongOrNull() != null } }
+    }
+
+    /** [doc] with every time past [now] plus [MAX_SKEW_MS] read as [now]: see [MAX_SKEW_MS]. */
+    internal fun clamped(doc: SyncDocument, now: Long): SyncDocument {
+        val limit = now + MAX_SKEW_MS
+        fun t(at: Long) = if (at > limit) now else at
+        return doc.copy(
+            resume = doc.resume.map { if (it.updatedAt > limit) it.copy(updatedAt = now) else it },
+            watched = doc.watched.map { if (it.watchedAt > limit) it.copy(watchedAt = now) else it },
+            watchLater = doc.watchLater.map { if (it.addedAt > limit) it.copy(addedAt = now) else it },
+            favourites = doc.favourites.mapValues { t(it.value) },
+            removed = doc.removed.map { if (it.at > limit) it.copy(at = now) else it },
+            bookmarks = doc.bookmarks.map { if (it.at > limit) it.copy(at = now) else it },
+            corrections = doc.corrections.map { if (it.at > limit) it.copy(at = now) else it },
+        )
     }
 
     // ---- merging ----------------------------------------------------------------------------
@@ -270,7 +407,9 @@ object SyncDocuments {
     fun merge(a: SyncDocument, b: SyncDocument, now: Long): SyncDocument = mergeCounting(a, b, now).first
 
     /** [merge], with how many entries the caps left out. */
-    fun mergeCounting(a: SyncDocument, b: SyncDocument, now: Long): Pair<SyncDocument, SyncDropped> {
+    fun mergeCounting(left: SyncDocument, right: SyncDocument, now: Long): Pair<SyncDocument, SyncDropped> {
+        val a = clamped(left, now)
+        val b = clamped(right, now)
         val oldest = now - REMOVAL_DAYS * DAY_MS
         val removalAt = (a.removed + b.removed)
             .filter { it.at >= oldest && validKey(it.list, it.key) }
@@ -317,9 +456,31 @@ object SyncDocuments {
             .take(MAX_FAVOURITES)
             .toMap()
 
+        // Of two copies of one bookmark the one changed last; of two with the same time, the longer
+        // note, so the choice does not depend on which file is read first.
+        val bookmarksAll = (a.bookmarks + b.bookmarks)
+            .groupBy { it.key }
+            .mapNotNull { (key, all) ->
+                all.filter { it.at >= removedAt(SyncList.Bookmark, key) }
+                    .maxWithOrNull(compareBy<SyncBookmark>({ it.at }, { it.bookmark.note.length }).thenBy { it.toString() })
+            }
+            .sortedWith(compareByDescending<SyncBookmark> { it.at }.thenBy { it.key })
+        val bookmarks = bookmarksAll.take(MAX_BOOKMARKS)
+
+        val correctionsAll = (a.corrections + b.corrections)
+            .groupBy { it.key }
+            .mapNotNull { (key, all) ->
+                all.filter { it.at >= removedAt(SyncList.Correction, key) }
+                    .maxWithOrNull(compareBy<SyncCorrection> { it.at }.thenBy { it.text })
+            }
+            .sortedWith(compareByDescending<SyncCorrection> { it.at }.thenBy { it.key })
+        val corrections = correctionsAll.take(MAX_CORRECTIONS)
+
         // A removal with a newer entry kept over it has done its job; one whose entry a cap left
         // out of the file is kept, so that entry cannot come back from an older copy.
         val live: Map<Pair<SyncList, String>, Long> = buildMap {
+            bookmarks.forEach { put(SyncList.Bookmark to it.key, it.at) }
+            corrections.forEach { put(SyncList.Correction to it.key, it.at) }
             resume.forEach { put(SyncList.Resume to ProgressKeys.of(it.chatId, it.messageId), it.updatedAt) }
             watched.forEach { put(SyncList.Watched to it.key, it.watchedAt) }
             later.forEach { put(SyncList.WatchLater to it.id, it.addedAt) }
@@ -343,12 +504,16 @@ object SyncDocuments {
             favourites = favourites,
             removed = removed,
             lists = lists,
+            bookmarks = bookmarks,
+            corrections = corrections,
         )
         val dropped = SyncDropped(
             resume = resumeAll.size - resume.size,
             watched = watchedAll.size - watched.size,
             watchLater = laterAll.size - later.size,
             removals = removalsAll.size - removed.size,
+            bookmarks = bookmarksAll.size - bookmarks.size,
+            corrections = correctionsAll.size - corrections.size,
         )
         return doc to dropped
     }
@@ -426,7 +591,33 @@ object SyncDocuments {
             val removed = removedAt(SyncList.Favourite, id.toString()) ?: return@mapNotNullTo null
             if (removed > at) id else null
         }
-        return SyncApply(resumeIn, resumeOut, watchedIn, watchedOut, laterIn, laterOut, favouritesIn, favouritesOut)
+        val localBookmarks = local.bookmarks.associateBy { it.key }
+        val mergedBookmarks = merged.bookmarks.associateBy { it.key }
+        val bookmarksIn = merged.bookmarks.filter { m ->
+            val mine = localBookmarks[m.key]
+            mine == null || mine.at < m.at
+        }
+        val bookmarksOut = localBookmarks.mapNotNull { (key, mine) ->
+            if (key in mergedBookmarks) return@mapNotNull null
+            val at = removedAt(SyncList.Bookmark, key) ?: return@mapNotNull null
+            if (at > mine.at) key to at else null
+        }.toMap()
+
+        val localCorrections = local.corrections.associateBy { it.key }
+        val mergedCorrections = merged.corrections.associateBy { it.key }
+        val correctionsIn = merged.corrections.filter { m ->
+            val mine = localCorrections[m.key]
+            mine == null || mine.at < m.at
+        }
+        val correctionsOut = localCorrections.mapNotNull { (key, mine) ->
+            if (key in mergedCorrections) return@mapNotNull null
+            val at = removedAt(SyncList.Correction, key) ?: return@mapNotNull null
+            if (at > mine.at) key to at else null
+        }.toMap()
+        return SyncApply(
+            resumeIn, resumeOut, watchedIn, watchedOut, laterIn, laterOut, favouritesIn, favouritesOut,
+            bookmarksIn, bookmarksOut, correctionsIn, correctionsOut,
+        )
     }
 
     // ---- writing ----------------------------------------------------------------------------
@@ -470,6 +661,15 @@ object SyncDocuments {
                 val n = quarter(doc.watched.size)
                 doc.copy(watched = doc.watched.sortedByDescending { it.watchedAt }.dropLast(n)) to SyncDropped(watched = n)
             }
+            // What the viewer wrote or fixed by hand goes after what the app counted for them.
+            doc.corrections.isNotEmpty() -> {
+                val n = quarter(doc.corrections.size)
+                doc.copy(corrections = doc.corrections.sortedByDescending { it.at }.dropLast(n)) to SyncDropped(corrections = n)
+            }
+            doc.bookmarks.isNotEmpty() -> {
+                val n = quarter(doc.bookmarks.size)
+                doc.copy(bookmarks = doc.bookmarks.sortedByDescending { it.at }.dropLast(n)) to SyncDropped(bookmarks = n)
+            }
             // The viewer's own lists go last, the oldest added lines first; the lists themselves stay.
             doc.lists.entries.isNotEmpty() -> {
                 val n = quarter(doc.lists.entries.size)
@@ -486,7 +686,9 @@ object SyncDocuments {
 
     internal fun json(doc: SyncDocument): JSONObject = JSONObject().apply {
         put("format", FORMAT)
-        put("version", if (doc.lists.isEmpty) LISTLESS_VERSION else VERSION)
+        val extras = doc.bookmarks.isNotEmpty() || doc.corrections.isNotEmpty() ||
+            doc.removed.any { it.list == SyncList.Bookmark || it.list == SyncList.Correction }
+        put("version", if (extras) VERSION else if (doc.lists.isEmpty) LISTLESS_VERSION else LISTS_VERSION)
         put("account", doc.account)
         put("updatedAt", doc.updatedAt)
         put("app", doc.appVersion)
@@ -502,6 +704,23 @@ object SyncDocuments {
             JSONArray(doc.removed.map { JSONObject().put("list", it.list.code).put("key", it.key).put("at", it.at) }),
         )
         if (!doc.lists.isEmpty) put("lists", NamedListsJson.json(doc.lists))
+        if (doc.bookmarks.isNotEmpty()) {
+            put(
+                "bookmarks",
+                JSONArray(
+                    doc.bookmarks.map {
+                        JSONObject().put("chat", it.bookmark.chatId).put("msg", it.bookmark.messageId).put("id", it.bookmark.id)
+                            .put("pos", it.bookmark.positionMs).put("note", it.bookmark.note).put("at", it.at)
+                    },
+                ),
+            )
+        }
+        if (doc.corrections.isNotEmpty()) {
+            put(
+                "corrections",
+                JSONArray(doc.corrections.map { JSONObject().put("chat", it.chatId).put("msg", it.messageId).put("fix", it.text).put("at", it.at) }),
+            )
+        }
     }
 
     private fun gzip(bytes: ByteArray): ByteArray {
@@ -561,6 +780,23 @@ object SyncDocuments {
                 },
                 // A version 1 file has none: the field is new with version 2.
                 lists = strip(NamedListsJson.of(root.optJSONObject("lists"))),
+                // Version 3's: absent in older files.
+                bookmarks = Backups.objects(root.optJSONArray("bookmarks")).take(MAX_BOOKMARKS * 2).mapNotNull { json ->
+                    val chat = (json.opt("chat") as? Number)?.toLong() ?: return@mapNotNull null
+                    val msg = (json.opt("msg") as? Number)?.toLong() ?: return@mapNotNull null
+                    val id = (json.opt("id") as? Number)?.toLong() ?: return@mapNotNull null
+                    val pos = (json.opt("pos") as? Number)?.toLong() ?: return@mapNotNull null
+                    val note = (json.opt("note") as? String).orEmpty()
+                    val at = (json.opt("at") as? Number)?.toLong() ?: id
+                    strip(Bookmark(chat, msg, id, pos, note))?.let { SyncBookmark(it, at) }
+                },
+                corrections = Backups.objects(root.optJSONArray("corrections")).take(MAX_CORRECTIONS * 2).mapNotNull { json ->
+                    val chat = (json.opt("chat") as? Number)?.toLong() ?: return@mapNotNull null
+                    val msg = (json.opt("msg") as? Number)?.toLong() ?: return@mapNotNull null
+                    val fix = (json.opt("fix") as? String)?.take(1_000) ?: return@mapNotNull null
+                    val at = (json.opt("at") as? Number)?.toLong() ?: 0L
+                    stripCorrection(VideoCorrection.decode(fix))?.let { SyncCorrection(chat, msg, it.encode(), at) }
+                },
                 version = VERSION,
             ),
         )
