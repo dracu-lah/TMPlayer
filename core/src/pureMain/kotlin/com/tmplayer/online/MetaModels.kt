@@ -116,6 +116,11 @@ data class MetaEpisode(
     /** When it first aired (or will), as the provider writes it: `2026-10-14`. */
     val airDate: String? = null,
     val runtimeMin: Int? = null,
+    /**
+     * Which site gave the title, empty where the list is one provider's own (TMDB, TVmaze): an
+     * anime's episodes are merged from several ([AnimeEpisodes]), and each says whose words it carries.
+     */
+    val source: String = "",
 )
 
 /**
@@ -161,7 +166,7 @@ data class MetaInfo(
                 put(
                     "episode",
                     JSONObject().put("season", it.season).put("number", it.number).put("name", it.name)
-                        .put("overview", it.overview).put("still", it.stillUrl.orEmpty()),
+                        .put("overview", it.overview).put("still", it.stillUrl.orEmpty()).put("source", it.source),
                 )
             }
         }
@@ -186,6 +191,7 @@ data class MetaInfo(
                         name = it.optString("name"),
                         overview = it.optString("overview"),
                         stillUrl = it.optString("still").ifBlank { null },
+                        source = it.optString("source"),
                     )
                 },
             )

@@ -62,18 +62,19 @@ object AnimeEpisodes {
 
     /**
      * The merged answer for one show. [layout] is TMDB's seasons counted in order (empty where TMDB
-     * does not know the show); [next] is the next episode to air, numbered absolutely.
+     * does not know the show); [next] is the next episode to air, numbered absolutely; [declared] is
+     * how many episodes AniList says the run has (zero where it says none yet).
      */
-    class Guide(val entries: List<Entry>, val layout: List<MetaSeason>, val next: MetaAiring?) {
+    class Guide(val entries: List<Entry>, val layout: List<MetaSeason>, val next: MetaAiring?, val declared: Int = 0) {
         private val byAbsolute: Map<Int, Entry> = entries.associateBy { it.absolute }
         private val byPlace: Map<Long, Int> = entries.asSequence()
             .filter { it.season != null && it.episode != null }
             .associate { place(it.season!!, it.episode!!) to it.absolute }
 
-        /** The last absolute number, or the next episode's before it where nothing listed reaches it. */
-        val total: Int get() = maxOf(entries.maxOfOrNull { it.absolute } ?: 0, (next?.episode ?: 1) - 1)
+        /** The last absolute number: the last listed, the run's declared count, or the one before the next to air. */
+        val total: Int get() = maxOf(entries.maxOfOrNull { it.absolute } ?: 0, declared.coerceIn(0, MAX_EPISODES), (next?.episode ?: 1) - 1)
 
-        val isEmpty: Boolean get() = entries.isEmpty() && layout.isEmpty()
+        val isEmpty: Boolean get() = entries.isEmpty() && layout.isEmpty() && total <= 0
 
         fun entry(absolute: Int): Entry? = byAbsolute[absolute]
 
@@ -188,7 +189,7 @@ object AnimeEpisodes {
                 .toList(),
         )
 
-    private val STREAM_TITLE = Regex("""^\s*(?:episode|ep\.?|e|folge|épisode|episodio|ep)\s*(\d{1,4})\s*[-:–—.]\s*(.+)$""", RegexOption.IGNORE_CASE)
+    private val STREAM_TITLE = Regex("""^\s*(?:episode|ep\.?|e|folge|épisode|episodio|ep)\s*(\d{1,4})\s*[-:\u2013\u2014.]\s*(.+)$""", RegexOption.IGNORE_CASE)
 
     /**
      * An AniList streaming episode ("Episode 12 - The Title", a picture): the number is in the
@@ -219,7 +220,7 @@ object AnimeEpisodes {
      * [counts] TMDB's seasons (for the layout) and [next], the next episode to air with its absolute
      * number. [lists] a wrong match was found in are the caller's to drop ([plausible]).
      */
-    fun merge(lists: List<SourceList>, counts: List<MetaSeason>, next: MetaAiring?): Guide {
+    fun merge(lists: List<SourceList>, counts: List<MetaSeason>, next: MetaAiring?, declared: Int = 0): Guide {
         val clean = lists.map { l ->
             l.source to l.pieces.asSequence()
                 .filter { it.absolute in 1..MAX_EPISODES }
@@ -267,7 +268,7 @@ object AnimeEpisodes {
                 airDate = date, runtimeMin = runtime, source = nameSource ?: overviewSource ?: stillSource, stillSource = stillSource,
             )
         }
-        return Guide(entries, layout(counts), next)
+        return Guide(entries, layout(counts), next, declared)
     }
 
     private val DATE = Regex("""\d{4}-\d{2}-\d{2}""")
@@ -290,12 +291,15 @@ object AnimeEpisodes {
     fun flat(guide: Guide): List<MetaEpisode> {
         var last: String? = guide.entries.firstNotNullOfOrNull { it.airDate }
         val nextAt = guide.next?.episode
-        return guide.entries.map { e ->
-            if (e.airDate != null) last = e.airDate
-            val aired = nextAt == null || e.absolute < nextAt
+        // Every number up to the run's end, named or not: an episode no source describes is still one.
+        return (1..guide.total.coerceAtMost(MAX_EPISODES)).map { n ->
+            val e = guide.entry(n)
+            if (e?.airDate != null) last = e.airDate
+            val aired = nextAt == null || n < nextAt
             MetaEpisode(
-                season = 1, number = e.absolute, name = e.name, overview = e.overview, stillUrl = e.stillUrl,
-                airDate = e.airDate ?: if (aired) (last ?: DAWN) else null, runtimeMin = e.runtimeMin,
+                season = 1, number = n, name = e?.name.orEmpty(), overview = e?.overview.orEmpty(), stillUrl = e?.stillUrl,
+                airDate = e?.airDate ?: if (aired) (last ?: DAWN) else null, runtimeMin = e?.runtimeMin,
+                source = e?.source?.label.orEmpty(),
             )
         }
     }
@@ -313,7 +317,7 @@ object AnimeEpisodes {
             flat(guide)
         } else {
             guide.seasonEntries(season).mapNotNull { e ->
-                MetaEpisode(season, e.episode ?: return@mapNotNull null, e.name, e.overview, e.stillUrl, e.airDate, e.runtimeMin)
+                MetaEpisode(season, e.episode ?: return@mapNotNull null, e.name, e.overview, e.stillUrl, e.airDate, e.runtimeMin, e.source?.label.orEmpty())
             }
         }
 

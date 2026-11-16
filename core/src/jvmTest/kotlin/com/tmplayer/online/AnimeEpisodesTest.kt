@@ -189,7 +189,7 @@ class AnimeEpisodesTest {
         assertTrue(guide.entries.size <= AnimeEpisodes.MAX_EPISODES)
         assertTrue(guide.entries.all { it.absolute in 1..AnimeEpisodes.MAX_EPISODES && it.name.length <= 300 && it.overview.length <= 4_000 })
         assertEquals("only a numbered season of a sane count is laid out, once", listOf(3), guide.layout.map { it.number })
-        assertEquals(guide.entries.size, AnimeEpisodes.flat(guide).size)
+        assertEquals(guide.total.coerceAtMost(AnimeEpisodes.MAX_EPISODES), AnimeEpisodes.flat(guide).size)
         runCatching { guide.absoluteOf(Int.MAX_VALUE, Int.MAX_VALUE) }.getOrNull()
         assertNull(AnimeEpisodes.fromSeasons(emptyMap(), emptyList()).pieces.firstOrNull())
         assertTrue(AnimeEpisodes.fromGroup(emptyList()).pieces.isEmpty())

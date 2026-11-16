@@ -1054,7 +1054,7 @@ class OnlineMetadata(
             part.list?.let { lists += it }
         }
         if (run.streaming.isNotEmpty()) lists += AnimeEpisodes.SourceList(AnimeEpisodes.Source.AniList, run.streaming)
-        return GuideAnswer(AnimeEpisodes.merge(lists, counts, run.next), complete)
+        return GuideAnswer(AnimeEpisodes.merge(lists, counts, run.next, run.episodes ?: 0), complete)
     }
 
     private class AnimePart(val list: AnimeEpisodes.SourceList?, val complete: Boolean)
@@ -1247,7 +1247,7 @@ class OnlineMetadata(
         val guide = answer.guide
         val entry = guide.absoluteOf(season, number)?.let { guide.entry(it) }
             ?.takeIf { it.name.isNotBlank() || it.overview.isNotBlank() || it.stillUrl != null }
-        val found = entry?.let { MetaEpisode(season, number, it.name, it.overview, it.stillUrl, it.airDate, it.runtimeMin) }
+        val found = entry?.let { MetaEpisode(season, number, it.name, it.overview, it.stillUrl, it.airDate, it.runtimeMin, it.source?.label.orEmpty()) }
         return found to answer.complete
     }
 
