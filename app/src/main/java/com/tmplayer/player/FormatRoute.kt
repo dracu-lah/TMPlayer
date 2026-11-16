@@ -4,7 +4,7 @@ import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.UnstableApi
-import java.util.Locale
+import com.tmplayer.data.FormatFacts
 
 /**
  * Which decoder path a format is given before anything has failed. Pure, so the rules are tested
@@ -27,11 +27,7 @@ object FormatRoute {
      * The Dolby Vision profile a codecs string names ("dvhe.07.06", "dvh1.08.06", "dvav.09.05",
      * "dav1.10.09"), or null when it is not a Dolby Vision string.
      */
-    fun dolbyVisionProfile(codecs: String?): Int? {
-        val parts = codecs?.trim()?.lowercase(Locale.ROOT)?.split('.') ?: return null
-        if (parts.size < 2 || parts[0] !in DOLBY_VISION_TAGS) return null
-        return parts[1].toIntOrNull()
-    }
+    fun dolbyVisionProfile(codecs: String?): Int? = FormatFacts.dolbyVisionProfile(codecs)
 
     /**
      * The codec of the base layer a decoder without Dolby Vision shows correctly: HEVC for
@@ -102,8 +98,6 @@ object FormatRoute {
         if (trackType == C.TRACK_TYPE_VIDEO && (pictureStarted || (toFfmpeg && softwareTooSlow))) return false
         return trackType == C.TRACK_TYPE_VIDEO || trackType == C.TRACK_TYPE_AUDIO
     }
-
-    private val DOLBY_VISION_TAGS = setOf("dvhe", "dvh1", "dvav", "dva1", "dav1")
 
     private const val FULL_HD_HEIGHT = 1088
 }
