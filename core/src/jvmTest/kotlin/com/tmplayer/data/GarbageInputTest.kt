@@ -277,6 +277,26 @@ class GarbageInputTest {
     }
 
     @Test
+    fun formatFactsNeverThrow() {
+        for (text in texts + "a".repeat(2_048)) {
+            survive("FormatFacts.tags", text) {
+                val track = FormatFacts.AudioTrack(mime = text, codecs = text, profile = text, channels = text.length - 3)
+                val probe = FormatFacts.Probe(
+                    videoMime = text, videoCodecs = text, width = text.length * 977, height = -text.length, frameRate = text.length * 31f,
+                    bitDepth = text.length, audio = listOf(track, track), hdr10Plus = text.isNotEmpty(),
+                )
+                FormatFacts.tags(probe, FormatFacts.resolutionOf(text.length, text.length, text))
+                FormatFacts.resolutionOf(0, 0, text)
+                FormatFacts.dolbyVisionProfile(text)
+                FormatProbes.record(text, probe)
+                FormatProbes[text]
+            }
+        }
+        FormatProbes.clear()
+        assertNoFailures()
+    }
+
+    @Test
     fun formatLineNeverThrows() {
         for (text in texts + "a".repeat(2_048)) {
             survive("FormatLine.line", text) {
