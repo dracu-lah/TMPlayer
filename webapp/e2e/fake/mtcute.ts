@@ -106,7 +106,8 @@ function msg(chat: Peer, name: string, o: Opts = {}) {
             fileName: name,
             mimeType: o.mime ?? (name.endsWith('.pdf') ? 'application/pdf' : 'video/mp4'),
             // `big`: every video says 1.5 GB, past the carousel's 400 MB floor (its bytes stay the real file's).
-            fileSize: flags.has('big') && o.file ? 1_500_000_000 : size,
+            // `mid`: every video says 100 MB, over Home's 50 MB floor and under the carousel's 400 MB.
+            fileSize: flags.has('big') && o.file ? 1_500_000_000 : flags.has('mid') && o.file ? 100_000_000 : size,
             uniqueFileId: `file${id}`,
             location: { _: 'fake', file: o.file ?? null },
             dcId: 2,
