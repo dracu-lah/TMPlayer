@@ -633,7 +633,7 @@ export function SignIn() {
                 <Match when={step().kind === 'password' && (step() as { hint: string | null })}>
                     {(s) => (
                         <>
-                            <h1>{t('login.password_title')}</h1>
+                            <h1>{t('login.telegram_password_title')}</h1>
                             <p class="muted">{t('login.password_blurb')}</p>
                             <form onSubmit={sendPassword}>
                                 <div class="password-field">

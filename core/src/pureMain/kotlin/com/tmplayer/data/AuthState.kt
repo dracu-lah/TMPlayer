@@ -266,7 +266,7 @@ object AuthFlow {
         // its own apps can do. This used to fall through to Connecting, with no action, so the
         // screen said "Connecting to Telegram" for good on a perfectly good connection. A QR code
         // from the Telegram app needs no code at all.
-        TdAuthorization.WaitPremiumPurchase -> AuthStep(AuthState.Failed(L.errorsPremiumSignIn), AuthAction.None)
+        TdAuthorization.WaitPremiumPurchase -> AuthStep(AuthState.Failed(L.errorsPremiumQr), AuthAction.None)
 
         // A state newer than this app. Waiting on it would be Connecting for ever; saying so at
         // least gives the viewer a Try again and a way to report it.
