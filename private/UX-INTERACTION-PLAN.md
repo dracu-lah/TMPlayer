@@ -511,6 +511,44 @@ Store text, the site.
   gotchas: `SeriesPanel` has no local slots left (HX1): new logic lives in `SeriesGuide.kt`; a symlinked
   `webapp/node_modules` is not git-ignored (remove it); canned TMDB for tests is in `SeriesGuideTest.kt`.
 
+- 2026-11-16 FQ1+FQ2+FQ7+Raju E+F done (worktree branch worktree-agent-ab6a72262f73e90ad, local, `da84459`, `4c76e38`, `16f2256`):
+  - Found on main already: the stalled sheet (U1), `Td.unreachable` with the 20 s rule and 3 s hysteresis (U2), the banner with Retry and Proxy, and the Android sign in's `ConnectingHelp` (the research notes were stale). Added: `StartVerdict` (core pure, table test) used by the Android and desktop loaders; plain keys; More help.
+  - Banner and connecting card now lead with "Try again" and "More help" (proxy page, device report, Send logs behind it); on the TV the banner's Right reaches More help.
+  - Left: the banner stays up 3 s after the line returns (hysteresis, on purpose); web has no link state so no banner there; "visible help link" is More help on the card and the banner; the resend row (2.3) and country chip (2.1) are layout work, not words.
+  - Dead strings and new text to translate listed in DEAD-STRINGS.md.
+
+- 2026-11-16 T10 (worktree agent-a8846dfb15f6a7499, local commits not pushed; see `git log` there):
+  done: (1) `ChapterSkips` (core, `SkipChapters.kt`): title to kind in about 25 languages, accents folded, whole words
+  (substring for CJK/Thai/Hangul), "scene" titles refused, 5 s to 6 min (credits 10 min) and under 2/5 of the file;
+  tests `SkipChaptersTest`, garbage in `GarbageInputTest`. Chapters come from the reader the chapter list already uses
+  (MkvChapters/Mp4Chapters via `FileChapters`, not through each engine: same list on all engines, works offline).
+  (2) `AnimeSkipApi` (`AnimeSkipApi.kt`): GraphQL `findShowsByExternalId(service: ANILIST)`, ids only, one query per
+  show kept 10 min, X-Client-ID from `SkipSources.ANIME_SKIP_CLIENT_ID` (EMPTY: TODO for the user, nothing is asked while
+  blank), timestamps are points that run to the next one (Intro/New Intro/Mixed Intro to Opening, Credits family to
+  Ending, Recap, Preview; Canon, Title Card, Filler... only end a stretch); a 403 "Rate limit exceeded" (their limiter
+  answers 403) pauses that source for a minute and is not kept as "nobody timed it"; 404 and empty are kept
+  (`SkipLookupTest`, `AnimeSkipApiTest`). Their terms: no public terms page could be read by a script; the API is
+  GPL-3.0 open source, clients are registered per account (`myApiClients`), a per client per minute limit. User must
+  read anime-skip.com terms and register the client id. (3) `IdMapApi` (arm.haglund.dev, AniList id to MAL, IMDb,
+  TheTVDB, TMDB) when AniList has no idMal; TMDB shows with no TheIntroDB answer by tmdb id are asked by IMDb, then
+  TheTVDB id (Jikan not used: it has no id mapping). (4) "Mark this as the intro": two presses (`IntroMarking`),
+  saved in `UserSkipMarks` (own file `skip-marks.json`, bounded 2,000 / 500 seasons), the season of the same chat and
+  show gets it as a guess, pill "Skip intro (from your mark)"; phone and TV: a line in the More menu after Bookmarks
+  (only for an episode; "Remove my intro mark" only with a mark); desktop key O and the Options menu line.
+  (5) per kind Ask / Skip by itself (3 s, Cancel; TV: Back cancels, OK skips now) / Off for Recaps, Intros and
+  openings, Credits and endings, Previews: the existing "Skip intro buttons" row stays the master and four rows sit
+  under it (phone/TV `SkipModeSettings.kt`, desktop `ChoiceSetting`); the row now shows with lookups off too, since
+  chapters and marks need none; its one line is the privacy sentence. (6) shared model in core (`SkipSession`,
+  `SkipController`, `SkipMerge`), used by phone, TV and desktop; web: the same title table (generated, with a drift test)
+  for chapter skips; web has no modes, marks or online lookups yet.
+  tests: core `SkipChaptersTest`, `SkipPolicyTest` (merge: chapters, API, own mark, guess, overlapping and out of
+  range dropped), `AnimeSkipApiTest`, `SkipLookupTest`, `GarbageInputTest`; app `SkipMarkFocusTest` (TV D-pad to the
+  line, pill never focusable, countdown, phone Cancel); desktop `PlayerKeysTest` (O), `SkipPillRenderTest`; web
+  `skipTable.test.ts`.
+  left: web modes and marks; a PlayerActivity-level test of the countdown (the pure `SkipSession` and the pill are
+  tested, the activity wiring is not); privacy page and THIRD_PARTY_NOTICES need anime-skip.com and arm.haglund.dev
+  (public copy: waits for the user); TS/Compose focus test of the settings rows; phone/TV device pass.
+
 ## Decisions made by Claude
 - T1: one shared `rememberVisitQuery` (not a patch per screen) so any later search box gets rule 3 by calling it; the phone keeps the query while a page is open (`keep = page != null`), the desktop while a category is open. No design note: small fix.
 - T4: the TV gets the setup's two-answer switch (`TabSwitch`, extracted and shared) because Material segments cannot be reached with a D-pad; phone keeps Material segments, desktop keeps `Segments`. Words: setup choice titles now read Keep video / Save space; device card says "While streaming: Save space". The Free up space offer's button says Switch (was Turn on). No design note: a rename plus one row.
