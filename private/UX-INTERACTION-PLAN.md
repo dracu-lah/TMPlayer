@@ -795,3 +795,10 @@ Next session: run `:app:testDebugUnitTest` and `:desktop:test` in full (per modu
 - Next: after merge remove `Thread.sleep(3)` in DownloadsSelectionKeysTest (file only on main); desktop TrackLanguageSettings Forget all confirm (desktop-ui-3); translate the 2 new keys.
 - Gotchas: worktrees need local.properties copied from the main tree (gitignored) to build :app. The sync switch is under Library here, not Account; nothing moved.
 - Decision: tie-break is ascending key; Forget all gets a confirm (not Undo) because the sheet stays open under it.
+
+### Worker handoff: R5 phone-browse-2 review (branch worktree-agent-ab313160937a2d610, local, not pushed)
+- Done: c1167fe (Telegram copies named each, list page and picker button rows wrap), a4d6379 (button roles, 48 dp targets, Play button floor, action line wraps, empty season disabled, tests), review notes in private/ux-review/phone-browse-2.md.
+- Tests: app PhoneBrowseReview2Test (8, red before the fix for the wrapping rows). Green: TopicTabsFindTest, ListsTvFocusTest, AddChatsRenderTest, PhoneBrowseReviewTest, ui jvmTest AddChatsReopen / SeriesPlayLabel / DetailBackStack, final check line.
+- Gotchas: a worktree needs local.properties copied from the main tree to build (git-ignored). PlayButton, CopyChip, RoundAction, Synopsis, HeroPill (detail), DetailActionRow, WideTextAction are public now so the app tests reach them.
+- Next: QuietButton fixed 40 dp (onboarding/StepChrome.kt) left for R6 / the user; chip fade and hero dots are the user's call.
+- Decisions: 48 dp press box via minimumInteractiveComponentSize on phone only (TV and desktop pills unchanged); Role.Button for pill-like clickables, no new en.json keys.
