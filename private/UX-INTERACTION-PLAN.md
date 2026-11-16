@@ -801,3 +801,17 @@ Next session: run `:app:testDebugUnitTest` and `:desktop:test` in full (per modu
 - Next: Settings.kt L819 could use CheckRow (R3's file); show-password toggle on the Opensubtitles sign in dialog needs a design call.
 - Gotchas: 39e08c1 alone does not compile (uses FocusWhenShown, added in a70f4e0). Material controls get keyboard marks from ProvideFocusVisibility only (state layer).
 - Decisions: used R1's scrimDismiss and added swallowClicks beside it; palette rows made non-focusable (field keeps the keyboard); left settings files to R3.
+
+### Worker handoff: R8 review, player (branch worktree-agent-a85f85c015bf3a085, local, not pushed)
+- Done: ef64c58 Next up, Skip and corner chips keep edge margin and inset right to left (SideInsets,
+  ChipSidesRtlTest); 523470d cast remote focus ring, 48 dp pills/Stop/Cancel, upright layout
+  scrolls at 2x font, no invisible first Tab stop, subtitles button announces on (CastRemoteReachTest);
+  dc5e2c4 track picker touch controls fit at 2x font (FitText, TouchAdjustFontTest); 2b12d68 speed
+  tiles and figure fit at 2x (SpeedSheetFontTest); c3e80da episodes autoplay knob slides, snaps with
+  less motion, `!!` removed (EpisodesPanelTest). Review table: private/ux-review/player.md.
+- Next: the "Left for the user" list there (1x vs 1× word, error sheet Row at 2x, bookmark field label).
+- Gotchas: Robolectric `RuntimeEnvironment.setFontScale` must be reset in @After; desktop semantics
+  `boundsInRoot` is clipped by a scroll, use `size` for target checks; TextAutoSize floors in sp
+  scale with the font, so FitText floors in dp.
+- Decisions: Pill, Stop casting and Cancel grow from 36 to 40 dp visual to 48 dp (target over look);
+  FitText shrinks a word (to 10 dp) rather than cutting it at a large font.
