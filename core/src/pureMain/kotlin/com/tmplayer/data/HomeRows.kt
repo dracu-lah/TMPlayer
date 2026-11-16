@@ -28,8 +28,13 @@ sealed interface HomeRow {
     data class Continue(
         val records: List<ResumeRecord>,
         val more: List<ResumeRecord> = emptyList(),
+        /**
+         * Offline mode's "On this phone" row ([OfflineHomeRows]): the same cards, only the ones that
+         * play without a line, under that heading.
+         */
+        val onPhone: Boolean = false,
     ) : HomeRow {
-        override val key: String get() = "continue"
+        override val key: String get() = if (onPhone) "on-phone" else "continue"
         override val total: Int get() = records.size + more.size
         override val hasMore: Boolean get() = more.isNotEmpty()
     }
