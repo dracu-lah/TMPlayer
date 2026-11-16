@@ -98,26 +98,87 @@ object ChatSubtitles {
         var language: String? = null
         var forced = false
         var hearing = false
-        while (true) {
+        // Each pass peels the last word; a long run of dots and tags costs a bounded number of passes.
+        var passes = 0
+        while (passes++ < MAX_TAGS) {
             val at = stem.lastIndexOfAny(charArrayOf('.', '_', ' '))
-            if (at <= 0) break
             val tag = stem.substring(at + 1).lowercase()
-            when {
-                tag == "forced" -> forced = true
-                tag in HEARING -> hearing = true
-                tag in NEUTRAL -> {}
-                language == null && languageCode(tag) != null -> language = languageCode(tag)
-                else -> break
+            if (at > 0) {
+                val peeled = when {
+                    tag == "forced" -> { forced = true; true }
+                    tag in HEARING -> { hearing = true; true }
+                    tag in NEUTRAL -> true
+                    else -> false
+                }
+                if (peeled) {
+                    stem = stem.substring(0, at)
+                    continue
+                }
             }
-            stem = stem.substring(0, at)
+            // A language, written as a code, a full name ("Hindi"), a name with its place ("Spanish
+            // (Latin America)", "Brazilian Portuguese"). The last one counts, and it may be the whole name.
+            val found = (if (language == null) languageAtEnd(stem) else null) ?: break
+            language = found.first
+            stem = stem.substring(0, found.second).trimEnd('.', '_', ' ', '-')
         }
         return Tags(stem, language, forced, hearing)
     }
 
+    private const val MAX_TAGS = 12
+
+    /** Trailing "(Latin America)" or "[Simplified]". */
+    private val TRAILING_GROUP = Regex("""\s*[(\[]([^()\[\]]{2,24})[)\]]\s*$""")
+
+    /**
+     * The language the end of [stem] names and where in [stem] its words start, or null: the last
+     * word as a code or a name, two words that make one ("Brazilian Portuguese"), and a place or
+     * script in brackets after it. A bracket after something that is no language is left alone, so
+     * "Show (2020)" keeps its year.
+     */
+    private fun languageAtEnd(stem: String): Pair<String, Int>? {
+        val group = TRAILING_GROUP.find(stem)
+        val body = if (group != null) stem.substring(0, group.range.first) else stem
+        if (body.isBlank()) return null
+        val qualifier = group?.groupValues?.get(1)?.trim()?.lowercase()
+        val lower = body.lowercase()
+        val phrase = PHRASES.entries.firstOrNull { (words, _) -> lower.endsWith(words) && (lower.length == words.length || !lower[lower.length - words.length - 1].isLetterOrDigit()) }
+        if (phrase != null) return phrase.value to (body.length - phrase.key.length)
+        val start = body.lastIndexOfAny(charArrayOf('.', '_', ' ')) + 1
+        val word = body.substring(start)
+        val code = languageCode(word) ?: return null
+        return (if (qualifier != null) withPlace(code, qualifier) else code) to start
+    }
+
+    /** [code] narrowed by the place or script a name puts in brackets ("Latin America", "Brazil", "Simplified"). */
+    private fun withPlace(code: String, qualifier: String): String {
+        val base = code.substringBefore('-')
+        val place = qualifier.replace('_', ' ').replace('-', ' ')
+        return when {
+            base == "zh" && ("simplified" in place || place == "hans" || place == "cn" || "china" in place) -> "zh-hans"
+            base == "zh" && ("traditional" in place || place == "hant" || "taiwan" in place || "hong kong" in place) -> "zh-hant"
+            base == "pt" && ("brazil" in place || "brasil" in place || place == "br") -> "pt-br"
+            base == "pt" && ("portugal" in place || "european" in place || place == "pt") -> "pt-pt"
+            base == "es" && ("latin" in place || "latam" in place || "mexic" in place || place == "419") -> "es-419"
+            base == "es" && ("spain" in place || "castil" in place || "europe" in place) -> "es-es"
+            base == "fr" && "canad" in place -> "fr-ca"
+            else -> code
+        }
+    }
+
+    private val PHRASES = mapOf(
+        "brazilian portuguese" to "pt-br",
+        "european portuguese" to "pt-pt",
+        "latin american spanish" to "es-419",
+        "simplified chinese" to "zh-hans",
+        "traditional chinese" to "zh-hant",
+        "canadian french" to "fr-ca",
+    )
+
     /** A language tag ("en", "eng", "pt-BR", "pob") as the two letter code, or null when it is none. */
     fun languageCode(tag: String): String? {
         val raw = tag.trim().lowercase().replace('_', '-')
-        if (raw.isEmpty()) return null
+        if (raw.isEmpty() || raw.length > 40) return null
+        NAMES[raw]?.let { return it }
         if (raw == "pob" || raw == "pt-br") return "pt-br"
         val base = raw.substringBefore('-')
         val region = raw.substringAfter('-', "")
@@ -257,14 +318,95 @@ object ChatSubtitles {
         base.lowercase().filter { it.isLetterOrDigit() }
 
     private val HEARING = setOf("sdh", "cc", "hi", "hearing", "hoh")
-    private val NEUTRAL = setOf("default", "full", "sub", "subs", "subtitle", "subtitles", "srt", "text")
+    private val NEUTRAL = setOf("default", "full", "sub", "subs", "subtitle", "subtitles", "srt", "text", "dub", "dubs", "dubbed", "dubbing")
     private val GENERIC = setOf("sub", "subs", "subtitle", "subtitles", "srt", "english", "forced", "sdh", "cc", "caption", "captions", "text", "full", "default")
-    private val LANGUAGE_NAMES = setOf(
-        "english", "spanish", "french", "german", "italian", "portuguese", "russian", "arabic", "chinese", "japanese",
-        "korean", "hindi", "turkish", "polish", "dutch", "swedish", "norwegian", "danish", "finnish", "greek", "hebrew",
-        "thai", "vietnamese", "indonesian", "ukrainian", "czech", "hungarian", "romanian", "bulgarian", "persian",
-        "malayalam", "tamil", "telugu", "bengali", "urdu",
-    )
+    private val LANGUAGE_NAMES: Set<String> get() = NAMES.keys
+
+    /**
+     * A language by the name it goes by in English and by the one it calls itself, lower case, as
+     * the two letter code. The names of the languages release groups write after a title (Hindi,
+     * Tamil, Telugu) come with the ones every subtitle site lists.
+     */
+    private val NAMES: Map<String, String> = buildMap {
+        fun add(code: String, vararg names: String) = names.forEach { put(it, code) }
+        add("en", "english", "inglês", "ingles", "anglais", "englisch")
+        add("hi", "hindi", "हिन्दी", "हिंदी")
+        add("ta", "tamil", "தமிழ்")
+        add("te", "telugu", "తెలుగు")
+        add("kn", "kannada", "ಕನ್ನಡ")
+        add("ml", "malayalam", "മലയാളം")
+        add("bn", "bengali", "bangla", "বাংলা")
+        add("mr", "marathi", "मराठी")
+        add("pa", "punjabi", "panjabi", "ਪੰਜਾਬੀ")
+        add("gu", "gujarati", "ગુજરાતી")
+        add("ur", "urdu", "اردو")
+        add("ne", "nepali", "नेपाली")
+        add("si", "sinhala", "sinhalese")
+        add("es", "spanish", "español", "espanol", "castellano", "espagnol", "spanisch")
+        add("fr", "french", "français", "francais", "französisch")
+        add("de", "german", "deutsch", "allemand")
+        add("it", "italian", "italiano", "italien")
+        add("pt", "portuguese", "português", "portugues", "portugais")
+        add("ru", "russian", "русский", "russisch")
+        add("ar", "arabic", "العربية", "arabe")
+        add("ja", "japanese", "日本語", "japonais")
+        add("ko", "korean", "한국어", "coréen")
+        add("zh", "chinese", "mandarin", "cantonese", "中文", "chinois")
+        add("zh-hans", "简体中文", "简体")
+        add("zh-hant", "繁體中文", "繁体中文", "繁體")
+        add("th", "thai", "ไทย")
+        add("vi", "vietnamese", "tiếng việt", "tieng viet")
+        add("id", "indonesian", "bahasa indonesia")
+        add("ms", "malay", "bahasa melayu")
+        add("tl", "filipino", "tagalog")
+        add("tr", "turkish", "türkçe", "turkce")
+        add("nl", "dutch", "nederlands", "flemish")
+        add("pl", "polish", "polski")
+        add("sv", "swedish", "svenska")
+        add("no", "norwegian", "norsk", "bokmal", "bokmål")
+        add("da", "danish", "dansk")
+        add("fi", "finnish", "suomi")
+        add("el", "greek", "ελληνικά")
+        add("he", "hebrew", "עברית")
+        add("fa", "persian", "farsi", "فارسی")
+        add("uk", "ukrainian", "українська")
+        add("ro", "romanian", "română", "romana")
+        add("hu", "hungarian", "magyar")
+        add("cs", "czech", "čeština", "cestina")
+        add("sk", "slovak", "slovenčina")
+        add("sl", "slovenian", "slovene")
+        add("hr", "croatian", "hrvatski")
+        add("sr", "serbian", "srpski")
+        add("bs", "bosnian")
+        add("bg", "bulgarian", "български")
+        add("sq", "albanian")
+        add("lt", "lithuanian")
+        add("lv", "latvian")
+        add("et", "estonian")
+        add("is", "icelandic")
+        add("ga", "irish")
+        add("cy", "welsh")
+        add("ca", "catalan", "català")
+        add("gl", "galician")
+        add("eu", "basque")
+        add("mk", "macedonian")
+        add("sw", "swahili", "kiswahili")
+        add("af", "afrikaans")
+        add("am", "amharic")
+        add("as", "assamese")
+        add("be", "belarusian")
+        add("my", "burmese")
+        add("km", "khmer")
+        add("lo", "lao")
+        add("mn", "mongolian")
+        add("ka", "georgian")
+        add("hy", "armenian")
+        add("az", "azerbaijani")
+        add("kk", "kazakh")
+        add("uz", "uzbek")
+        add("ps", "pashto")
+        add("ku", "kurdish")
+    }
 
     private val TWO = setOf(
         "aa", "af", "ak", "am", "ar", "as", "az", "be", "bg", "bn", "bo", "bs", "ca", "cs", "cy", "da", "de", "el", "en",
