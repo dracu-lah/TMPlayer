@@ -142,6 +142,7 @@ export function ChatRow(props: { chat: ChatItem }) {
 }
 
 /** A chat's star, filled when on, as the app's favourites. */
+// The name says what a press does (Add to favourites, Remove from favourites), so the button carries no pressed state beside it: a screen reader would say both.
 export function StarButton(props: { chatId: number; round?: boolean }) {
     const on = () => starredIds().has(props.chatId)
     const label = () => (on() ? t('chats.unfavourite') : t('chats.favourite'))
@@ -150,7 +151,6 @@ export function StarButton(props: { chatId: number; round?: boolean }) {
             class={props.round ? 'round-button star' : 'icon-button star'}
             classList={{ on: on() }}
             type="button"
-            aria-pressed={on()}
             aria-label={label()}
             title={label()}
             onClick={() => setStarred(props.chatId, !on())}

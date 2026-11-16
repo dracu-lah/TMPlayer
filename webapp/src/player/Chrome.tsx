@@ -1377,7 +1377,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
             />
 
             {/* Tab into a row that has gone brings it back, so the ring is never on a control nobody sees. */}
-            <div class="pc-layer" aria-hidden={!visible() || undefined} on:focusin={() => !tv() && !visible() && show()}>
+            <div class="pc-layer" aria-hidden={!visible() || undefined} inert={!tv() && sheet() !== null} on:focusin={() => !tv() && !visible() && show()}>
                 <div class="pc-tint" />
                 <div class="pc-scrim top" />
                 <div class="pc-scrim bottom" />

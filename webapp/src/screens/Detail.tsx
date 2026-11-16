@@ -9,6 +9,7 @@ import { openListPicker } from './Lists'
 import { chatGone, forgetGone } from '../goneVideos'
 import { showChoices, type MarkChoice } from './showMarks'
 import { agrees, hasGaps, rows as guideRows, seasons as guideSeasons, type HeldSeason, type Row as GuideRow, type SeasonStop } from './seriesGuide'
+import { scrollBehavior } from '../ui/motion'
 import { Icon, type IconData } from '../ui/Icon'
 import { arrowKeys } from '../ui/arrows'
 import { form } from '../form'
@@ -345,7 +346,7 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
                     </button>
                     <div class="detail-rounds">
                         <Show when={props.info?.seasons.length}>
-                            <Round icon={ListVideoIcon} label={t('detail.episodes')} onClick={() => document.getElementById('detail-episodes')?.scrollIntoView({ behavior: 'smooth' })} />
+                            <Round icon={ListVideoIcon} label={t('detail.episodes')} onClick={() => document.getElementById('detail-episodes')?.scrollIntoView({ behavior: scrollBehavior() })} />
                         </Show>
                         <Show when={resumeAt() > 0}>
                             <Round icon={RepeatIcon} label={t('detail.start_over')} onClick={() => play('start')} />

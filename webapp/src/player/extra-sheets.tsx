@@ -209,7 +209,12 @@ export function ShortcutsSheet(props: { mac: boolean; onClose: () => void }) {
     ]
     return (
         <div class="pc-sheet-scrim shortcuts" onClick={(e) => e.target === e.currentTarget && props.onClose()}>
-            <div class="pc-sheet pc-shortcuts" role="dialog" aria-label={t('player.shortcuts')}>
+            <div
+                class="pc-sheet pc-shortcuts"
+                role="dialog"
+                aria-label={t('player.shortcuts')}
+                ref={(el) => queueMicrotask(() => el.querySelector<HTMLElement>('.pc-sheet-close')?.focus({ preventScroll: true }))}
+            >
                 <div class="pc-sheet-head">
                     <div><h2>{t('player.shortcuts')}</h2></div>
                     <button type="button" class="pc-sheet-close" aria-label={t('common.close')} onClick={props.onClose}>

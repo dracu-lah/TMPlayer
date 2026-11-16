@@ -95,6 +95,25 @@ test('Tab brings the hidden controls back and they stay while a control has the 
     await expect(page.locator('.pc-thumb')).toHaveCSS('box-shadow', /rgba\(255, 255, 255, 0\.9\) 0px 0px 0px 3px/)
 })
 
+// R9: a sheet over the player takes the keyboard (focus inside it) and the controls behind it are out of reach until it closes.
+test('the shortcuts sheet takes the keyboard and Tab cannot reach the controls behind it', async ({ page, isMobile }) => {
+    test.skip(isMobile, 'a keyboard is a desktop input')
+    await openCard(page, 'Native Clip')
+    await playsPast(page, 0.5)
+    await page.keyboard.press('?')
+    const sheet = page.locator('.pc-shortcuts')
+    await expect(sheet).toBeVisible()
+    await expect(sheet.locator('.pc-sheet-close')).toBeFocused()
+    for (let i = 0; i < 6; i++) {
+        await page.keyboard.press('Tab')
+        expect(await page.evaluate(() => !!document.activeElement?.closest('.pc-layer')), 'focus never lands on a control behind the sheet').toBe(false)
+    }
+    await page.keyboard.press('Escape')
+    await expect(sheet).toHaveCount(0)
+    await page.keyboard.press('Tab')
+    expect(await page.evaluate(() => !!document.activeElement?.closest('.pc-layer')), 'the controls answer again once it is closed').toBe(true)
+})
+
 test.describe('without a service worker', () => {
     test.use({ serviceWorkers: 'block' })
     test('an MP4 is repacked instead', async ({ page }) => {

@@ -49,6 +49,25 @@ test.describe('axe on the main screens', () => {
     })
 })
 
+// R9: where the system asks for less motion, pictures arrive at once and a scroll the page starts jumps.
+test('reduced motion: pictures do not fade in', async ({ page }) => {
+    await page.goto('/chats')
+    await expect(page.locator('main').first()).toBeVisible()
+    const names = async () =>
+        page.evaluate(() => {
+            const box = document.createElement('div')
+            box.innerHTML = '<div class="card-art"><img alt=""></div><img class="continue-img" alt=""><img class="detail-backdrop" alt=""><div class="cast-face"><img alt=""></div><div class="chat-picture"><img alt=""></div>'
+            document.body.append(box)
+            const out = [...box.querySelectorAll('img')].map((i) => getComputedStyle(i).animationName)
+            box.remove()
+            return out
+        })
+    await page.emulateMedia({ reducedMotion: 'no-preference' })
+    expect((await names()).every((n) => n === 'fade')).toBe(true)
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    expect(await names()).toEqual(['none', 'none', 'none', 'none', 'none'])
+})
+
 // R9: the sort menu is keyboard whole: Enter opens it on its first line, the arrows walk, Escape or a pick gives the keyboard back to its button.
 test('the sort menu opens on its first line, walks on arrows and hands the keyboard back', async ({ page }) => {
     await noSizeFloor(page)

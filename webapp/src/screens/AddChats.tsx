@@ -446,7 +446,7 @@ function PickerStar(props: { chatId: number; onStar: () => void }) {
     const on = () => starredIds().has(props.chatId)
     const label = () => (on() ? t('chats.unfavourite') : t('chats.favourite'))
     return (
-        <button class="icon-button star" classList={{ on: on() }} type="button" aria-pressed={on()} aria-label={label()} title={label()} onClick={() => { props.onStar(); setStarred(props.chatId, !on()) }}>
+        <button class="icon-button star" classList={{ on: on() }} type="button" aria-label={label()} title={label()} onClick={() => { props.onStar(); setStarred(props.chatId, !on()) }}>
             <Icon icon={StarIcon} size={22} selected={on()} />
         </button>
     )
