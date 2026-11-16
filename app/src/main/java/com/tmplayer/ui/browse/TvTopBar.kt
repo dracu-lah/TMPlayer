@@ -53,8 +53,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -108,10 +110,10 @@ internal object TvBarSignals {
 }
 
 /**
- * The bar: the account's picture at the start, which opens what the phone's picture opens
- * (Favourites, Downloads, History, Watch later, Settings, Refresh where the page has something to
- * fetch again ([onRefresh]), and Update when there is one); then Search, and the tabs Home and
- * Chats in the phone's order; and at the end the app's mark and name, which take no focus.
+ * The bar: the account's picture at the start, which opens the account's menu (Favourites, History,
+ * Watch later, Settings, Refresh where the page has something to fetch again ([onRefresh]), and
+ * Update when there is one); then Search, and the tabs Home, Chats and Downloads (R2: a place of
+ * its own, with the number running); and at the end the app's mark and name, which take no focus.
  *
  * Nothing is behind it: every page but Home starts below it and is clipped at its foot, and Home's
  * carousel picture melts into the page at its top; once Home's rows scroll up under the bar, the
@@ -163,6 +165,7 @@ internal fun TvTopBar(
     val chatsFocus = remember { FocusRequester() }
     val searchFocus = remember { FocusRequester() }
     val profileFocus = remember { FocusRequester() }
+    val downloadsFocus = remember { FocusRequester() }
     // Which item the shared requester sits on; every other one keeps its own.
     val target = if (searchOpen) null else current
     fun focusOf(tab: TvBarTab, own: FocusRequester) = if (target == tab) currentFocus else own
@@ -199,12 +202,9 @@ internal fun TvTopBar(
         ) {
             ProfileButton(
                 account = nav.account,
-                chosen = inProfile && !searchOpen,
-                badge = when {
-                    nav.updateVersion != null -> Tone.caution
-                    nav.downloadCount > 0 -> Tone.accent
-                    else -> null
-                },
+                chosen = inProfile && !searchOpen && !downloadsShown,
+                // An update waiting; the running downloads count on the Downloads tab now.
+                badge = if (nav.updateVersion != null) Tone.caution else null,
                 label = nav.account?.name ?: s.browseTabHistory,
                 onClick = { profileOpen = true },
                 open = profileOpen,
@@ -222,13 +222,14 @@ internal fun TvTopBar(
                 BarTab(s.commonSearch, TmIcons.Search, searchOpen, onSearch, Modifier.focusRequester(searchRequester).tvReturnPoint(searchRequester))
                 BarTab(s.browseTabHome, TmIcons.Home, current == TvBarTab.Home && !searchOpen, onHome, Modifier.focusRequester(focusOf(TvBarTab.Home, homeFocus)).tvReturnPoint(focusOf(TvBarTab.Home, homeFocus)))
                 BarTab(s.browseTabChats, TmIcons.Chats, current == TvBarTab.Chats && !searchOpen, onChats, Modifier.focusRequester(focusOf(TvBarTab.Chats, chatsFocus)).tvReturnPoint(focusOf(TvBarTab.Chats, chatsFocus)))
-                // Quick entries for the two places a viewer returns to most, which were an account
-                // menu away (Up, Left, OK, Down, OK from Home; PL-16, 2026-11-15): icons that name
-                // themselves under the remote, after the tabs, so Right from Chats reaches them.
+                // Downloads is a place of its own (R2, PL-16): its name written, after Chats, so Right
+                // from Chats reaches it and it shows how many are running.
                 BarTab(
-                    s.navDownloads, TmIcons.Download, selected = inProfile && !searchOpen && downloadsShown, onClick = { beforeProfile(); nav.onDownloads() },
-                    compact = true,
+                    s.navDownloads, TmIcons.Download, selected = downloadsShown && !searchOpen, onClick = { beforeProfile(); nav.onDownloads() },
+                    badge = nav.downloadCount,
+                    modifier = Modifier.focusRequester(downloadsFocus).tvReturnPoint(downloadsFocus),
                 )
+                // The other place a viewer returns to: an icon that names itself under the remote.
                 BarTab(
                     s.browseTabWatchLater, TmIcons.Clock, selected = false, onClick = { beforeProfile(); nav.onHistory(HistoryTab.WatchLater) },
                     compact = true,
@@ -276,7 +277,6 @@ internal fun TvTopBar(
             onDismiss = { profileOpen = false },
             actions = buildList {
                 add(MenuAction(s.browseTabFavourites, TmIcons.StarOutline, detail = nav.favoriteCount.takeIf { it > 0 }?.toString(), onSelect = go(nav.onFavourites)))
-                add(MenuAction(s.navDownloads, TmIcons.Download, detail = nav.downloadCount.takeIf { it > 0 }?.toString(), onSelect = go(nav.onDownloads)))
                 add(MenuAction(s.browseTabHistory, TmIcons.History, detail = nav.watchingCount.takeIf { it > 0 }?.toString(), onSelect = go { nav.onHistory(HistoryTab.Continue) }))
                 add(MenuAction(s.profileWatched, TmIcons.Check, detail = nav.watchedCount.takeIf { it > 0 }?.toString(), onSelect = go { nav.onHistory(HistoryTab.Watched) }))
                 add(MenuAction(s.browseTabWatchLater, TmIcons.Clock, onSelect = go { nav.onHistory(HistoryTab.WatchLater) }))
@@ -314,6 +314,8 @@ private fun BarTab(
     modifier: Modifier = Modifier,
     /** Only the icon until the remote is on it (or it is the page shown), which then names it. */
     compact: Boolean = false,
+    /** The number running, after the name; 0 says nothing (Downloads). */
+    badge: Int = 0,
 ) {
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
@@ -353,7 +355,13 @@ private fun BarTab(
                 .focusRingOnTv(focused, pill)
                 .clickable(interactionSource = interactions, indication = null, role = Role.Tab, onClick = onClick)
                 .padding(horizontal = if (compact && !focused && !selected) 10.dp else 14.dp)
-                .semantics { if (compact) contentDescription = label },
+                .semantics {
+                    // The page shown, said to a screen reader as it is drawn (the filled icon).
+                    this.selected = selected
+                    if (compact) contentDescription = label
+                    // "Downloads, 2": the count is read with the name.
+                    if (badge > 0) contentDescription = "$label, $badge"
+                },
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -365,6 +373,19 @@ private fun BarTab(
                 color = ink,
                 maxLines = 1,
             )
+            if (badge > 0) {
+                Text(
+                    if (badge > 99) "99+" else badge.toString(),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Tone.onAccent,
+                    maxLines = 1,
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(Tone.accent)
+                        .padding(horizontal = 7.dp, vertical = 1.dp)
+                        .testTag("tv-bar-badge"),
+                )
+            }
         }
     }
 }
