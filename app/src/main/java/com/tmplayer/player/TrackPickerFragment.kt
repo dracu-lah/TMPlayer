@@ -786,34 +786,6 @@ class TrackPickerFragment : Fragment() {
         }
     }
 
-    /**
-     * A control's word in [lines] at most, shrunk a step at a time (to [FIT_MIN]) when they cannot
-     * hold it: at twice the system font "Earlier", the figure and the segments' names were cut off
-     * mid letter (R8). One line for a button's word, which a second line would break inside.
-     * Centred, as a button's word is.
-     */
-    @Composable
-    private fun FitText(
-        text: String,
-        style: androidx.compose.ui.text.TextStyle,
-        lines: Int = 1,
-        color: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.Unspecified,
-    ) {
-        // Never more lines than words: a second line for one word is that word broken in two.
-        val words = text.trim().split(' ').count { it.isNotEmpty() }.coerceAtLeast(1)
-        // The floor in dp, not sp: at twice the font an sp floor is twice as large and fits nothing.
-        val floor = with(androidx.compose.ui.platform.LocalDensity.current) { FIT_MIN.toSp() }
-        M3Text(
-            text,
-            style = style,
-            color = color,
-            maxLines = minOf(lines, words),
-            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center,
-            autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(minFontSize = floor, maxFontSize = style.fontSize, stepSize = 0.5.sp),
-        )
-    }
-
     /** The name over a row of [Segments]. */
     @Composable
     private fun SegmentsLabel(title: String) {
@@ -980,9 +952,6 @@ class TrackPickerFragment : Fragment() {
 
         /** Earlier and Later: room for the word beside its arrow in half a phone's width. */
         private val STEP_PADDING = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
-
-        /** The smallest a control's word shrinks to before it is ellipsized, whatever the font size. */
-        private val FIT_MIN = 10.dp
         private const val ARG_ONLINE = "online"
         private const val TAG = "track_picker"
         private const val BACK_STACK = "track_picker"
