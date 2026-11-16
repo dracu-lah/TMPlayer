@@ -188,7 +188,7 @@ in a release yet: keep this table in step with the code when it ships.
 | Logs and upload | Send logs shares a scrubbed file; crash reports go to Sentry only when the viewer agrees; nothing is uploaded on its own | saves the file to the Download folder (no share sheet on every TV) | saves the file | none | none |
 | Filters | Quiet loud scenes (night mode), Volume boost, audio delay | the same | the same, through mpv's filters | none | none |
 | Archives and pieces | stored ZIPs and pieces play; other archives are listed greyed with the reason | the same | the same | the same, read in the browser | none |
-| Audio files | a chat's Audio list: queue, shuffle, repeat, background audio | the same, screen off while it plays | the same | none | none |
+| Audio files | none: videos only, music, audio files and voice messages are never listed (`VideosOnlyTest`); a video's sound plays on with the screen off when that setting is on | none | none | none | none |
 
 ## Constraints the design answers to
 

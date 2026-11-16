@@ -161,7 +161,7 @@ export const faqLd = {
       "name": "Does it play music and audio files?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Yes. A chat with music, audio files or voice messages has an Audio list beside its videos, on a phone, a TV and a computer: Play all starts from the oldest, or pick one, and each goes on to the next one posted. On a phone it keeps playing with the screen off. An audio file sent as a plain document, such as an MP3 attached as a file, is not listed yet. The sound inside a video plays too: AAC, MP3, Opus, FLAC, Dolby Digital, DTS, TrueHD and the rest, and a video with several audio tracks lets you switch between them during playback."
+        "text": "No. TMPlayer plays videos only, so music, audio files and voice messages in a chat are left out of its lists; TMPlayer Music is a separate app by the same author for those. The sound inside a video plays: AAC, MP3, Opus, FLAC, Dolby Digital, DTS, TrueHD and the rest, and a video with several audio tracks lets you switch between them during playback. On a phone a video can go on playing with the screen off, once that is turned on in Settings."
       }
     },
     {
