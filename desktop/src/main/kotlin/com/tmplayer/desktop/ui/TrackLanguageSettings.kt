@@ -157,6 +157,8 @@ internal fun LearntLanguagesSetting(settings: SettingsStore, scope: CoroutineSco
     val s = LocalStrings.current
     val learnt by settings.learntLanguages.collectAsState(initial = emptyList())
     var open by remember { mutableStateOf(false) }
+    var askForgetAll by remember { mutableStateOf(false) }
+    val toast = com.tmplayer.ui.components.rememberToast()
     Action(
         s.settingsLearntLanguages,
         if (learnt.isEmpty()) s.settingsLearntLanguagesEmpty else s.settingsLearntLanguagesCount(learnt.size),
@@ -190,7 +192,23 @@ internal fun LearntLanguagesSetting(settings: SettingsStore, scope: CoroutineSco
         dismissButton = if (learnt.isEmpty()) {
             null
         } else {
-            { TextButton(onClick = { scope.launch { settings.forgetAllLearntLanguages() } }) { Text(s.settingsLearntLanguagesForgetAll) } }
+            { TextButton(onClick = { askForgetAll = true }) { Text(s.settingsLearntLanguagesForgetAll) } }
         },
     )
+    if (askForgetAll) {
+        // Over the list: one click there would otherwise drop every series' languages at once.
+        ConfirmDialog(
+            title = s.settingsLearntLanguagesForgetAllTitle,
+            message = s.settingsLearntLanguagesForgetAllMessage,
+            confirmLabel = s.settingsLearntLanguagesForgetAll,
+            onConfirm = {
+                askForgetAll = false
+                scope.launch {
+                    settings.forgetAllLearntLanguages()
+                    toast(s.settingsLearntLanguagesForgetAllDone)
+                }
+            },
+            onDismiss = { askForgetAll = false },
+        )
+    }
 }
