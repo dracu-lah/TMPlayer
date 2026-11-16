@@ -63,6 +63,8 @@ class RemedyRunnerTest {
         var ready = true
         var playing = true
         var frames = true
+        var hidden = false
+        var reopenWorks = true
         var positionMs = 0L
         var rendered = 0L
         var otherDecoder = true
@@ -104,7 +106,7 @@ class RemedyRunnerTest {
                 skipped = 0,
                 audioPlaying = playing && ready,
                 pictureExpected = true,
-                hidden = false,
+                hidden = hidden,
                 software = false,
             )
         }
@@ -125,9 +127,11 @@ class RemedyRunnerTest {
         }
         override fun engineInput() = engineInput
         override fun engineRunning() = engine
-        override fun reopen() {
+        override fun reopen(): Boolean {
+            if (!reopenWorks) return false
             reopened += runner.policyForBuild()
             lastSample = 0L
+            return true
         }
         override fun switchEngine(decision: EngineDecision): Boolean {
             engines += decision
@@ -383,6 +387,55 @@ class RemedyRunnerTest {
     private object DefaultRenderersFactoryModes {
         const val ON = androidx.media3.exoplayer.DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON
         const val PREFER = androidx.media3.exoplayer.DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
+    }
+
+    @Test
+    fun aProvenPathTicksNoMoreUntilASeek() {
+        open()
+        clock.advance(RemedyLadder.WORKED_MS + 3_000)
+        assertTrue("proven after a clean minute", player.saved!!.records.isNotEmpty())
+        assertTrue("no tick for the rest of the film", clock.tasks.isEmpty())
+        clock.advance(10 * 60_000)
+        assertTrue(clock.tasks.isEmpty())
+        // A seek watches for a stall again for a while, then it rests by itself.
+        runner.seeked()
+        assertEquals(1, clock.tasks.size)
+        clock.advance(RemedyRunner.SEEK_WATCH_MS + 2_000)
+        assertTrue("the seek's watch ends by itself", clock.tasks.isEmpty())
+        // A stall right after a seek still gets its reload.
+        runner.seeked()
+        player.frames = false
+        clock.advance(FrozenOutputWatch.FROZEN_MS + 2_000)
+        assertEquals(listOf(com.tmplayer.i18n.L.playerRemedyPictureRestart), player.said)
+    }
+
+    @Test
+    fun backgroundAudioPostsNothingUntilThePictureIsBack() {
+        open()
+        clock.advance(3_000)
+        player.hidden = true
+        clock.advance(2_000)
+        assertTrue("the picture off on purpose: no tick", clock.tasks.isEmpty())
+        clock.advance(5 * 60_000)
+        assertTrue(clock.tasks.isEmpty())
+        assertTrue(player.reopened.isEmpty())
+        player.hidden = false
+        runner.firstFrame()
+        assertEquals(1, clock.tasks.size)
+    }
+
+    @Test
+    fun aReopenThatCannotHappenEndsInTheSheetNotALostHop() {
+        player.reopenWorks = false
+        open()
+        player.frames = false
+        clock.advance(FrozenOutputWatch.FROZEN_MS + 2_000)
+        assertTrue(player.reopened.isEmpty())
+        assertTrue("nothing said about a hop that did not happen", player.said.isEmpty())
+        assertEquals(listOf(com.tmplayer.i18n.L.playerRemedyPictureStopped), player.sheets)
+        assertTrue(clock.tasks.isEmpty())
+        // An error then is the player's own to show.
+        assertFalse(runner.onPlayerError(decoderError(PlaybackException.ERROR_CODE_DECODER_INIT_FAILED)))
     }
 
     @Test

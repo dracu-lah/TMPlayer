@@ -25,8 +25,9 @@ import com.tmplayer.i18n.L
  * - At most [RemedyLadder.MAX_HOPS] automatic hops per video, one per level (decoder, sound,
  *   engine); the player's older one-time switches ask [allowsDecoderSwitch] and [allowsEngineSwitch]
  *   first and say when they acted, so they share the same budget.
- * - The tick runs only while the player plays, and stops by itself once both watches answered and
- *   the path proved itself; a pause, a stall or a released player posts nothing.
+ * - The tick runs only while the player plays a picture someone can see, and stops by itself once
+ *   the first frame came and the path played [RemedyLadder.WORKED_MS] clean; a seek watches for a
+ *   stall again for [SEEK_WATCH_MS]. A pause, background audio or a released player posts nothing.
  * - The app's FFmpeg decoder failing, VLC failing, and any failure before the tracks are known are
  *   left to the player's existing handling (the switch back to the device's decoder, the engine
  *   sheet), as before.
@@ -72,8 +73,8 @@ class RemedyRunner(private val host: Host, private val clock: Clock) {
         /** The engine playing now. */
         fun engineRunning(): EngineDecision
 
-        /** ExoPlayer built again on [policyForBuild] at the same place, tracks, speed and subtitles. */
-        fun reopen()
+        /** ExoPlayer built again on [policyForBuild] at the same place, tracks, speed and subtitles; false when it cannot be. */
+        fun reopen(): Boolean
 
         /** The video moved into [decision]'s engine at the same place; false when it cannot go there. */
         fun switchEngine(decision: EngineDecision): Boolean
@@ -135,6 +136,8 @@ class RemedyRunner(private val host: Host, private val clock: Clock) {
     private var cleanMs = 0L
     private var lastCleanMs = -1L
     private var proven = false
+    /** Until then a proven path is watched again for a stall: the stretch after a seek. */
+    private var seekWatchUntilMs = -1L
     private var ticking = false
     private var codecErrors = 0
     private var later: Runnable? = null
@@ -214,7 +217,10 @@ class RemedyRunner(private val host: Host, private val clock: Clock) {
             made.running.engine != running.engine -> if (!host.switchEngine(made.running)) host.log("Remedy: the planned engine cannot play this video here")
             made.path.copy(engine = builtPath.engine) != builtPath -> {
                 replacing()
-                host.reopen()
+                if (!host.reopen()) {
+                    replacingUntilMs = -1L
+                    host.log("Remedy: the planned path could not be opened, the video stays on its own")
+                }
             }
             // Playing already when the tracks came: the tick starts now, not at the next play.
             host.sample()?.playing == true -> startTicking()
@@ -234,6 +240,8 @@ class RemedyRunner(private val host: Host, private val clock: Clock) {
             pictureSeen = true
             frozenWatch.arm()
         }
+        // The picture back after background audio: the watches go on where they stopped.
+        if (host.sample()?.playing == true) startTicking()
     }
 
     /** `onIsPlayingChanged`: the tick runs only while it plays. */
@@ -246,6 +254,9 @@ class RemedyRunner(private val host: Host, private val clock: Clock) {
         firstFrameWatch.seeked()
         frozenWatch.seeked()
         lastCleanMs = -1L
+        // A decoder that stalls does so after a seek most often: the frozen watch looks again for a while.
+        seekWatchUntilMs = clock.now() + SEEK_WATCH_MS
+        if (host.sample()?.playing == true) startTicking()
     }
 
     /**
@@ -328,9 +339,16 @@ class RemedyRunner(private val host: Host, private val clock: Clock) {
         lastCleanMs = -1L
     }
 
-    /** Something is left to watch: a first frame not seen, a picture not proven, a stall not yet caught. */
-    private fun wanted(): Boolean =
-        active && !exhausted && ladder != null && (!firstFrameWatch.done || !frozenWatch.fired || !proven)
+    /**
+     * Something is left to watch: a first frame not seen, or a stall not yet caught on a path not
+     * yet proven or just after a seek. A proven path posts nothing more until the next seek or hop,
+     * so a long film costs no tick after its first minute (the 1 GB stick's idle CPU).
+     */
+    private fun wanted(): Boolean {
+        if (!active || exhausted || ladder == null) return false
+        if (!firstFrameWatch.done) return true
+        return !frozenWatch.fired && (!proven || clock.now() < seekWatchUntilMs)
+    }
 
     internal fun sampleNow() {
         ticking = false
@@ -346,7 +364,8 @@ class RemedyRunner(private val host: Host, private val clock: Clock) {
             if (perform(l.onEvidence(RemedyEvidence.Frozen, host.facts(l.path.excluded), clock.now()), RemedyEvidence.Frozen, null)) return
         }
         countClean(l, steady, now)
-        if (s.playing) startTicking()
+        // The picture off on purpose (background audio): nothing to watch until it is back ([firstFrame]).
+        if (s.playing && !s.hidden) startTicking()
     }
 
     /** Clean playing time on this path since its first frame; at [RemedyLadder.WORKED_MS] the class learns it. */
@@ -411,7 +430,11 @@ class RemedyRunner(private val host: Host, private val clock: Clock) {
             return true
         }
         replacing()
-        host.reopen()
+        if (!host.reopen()) {
+            replacingUntilMs = -1L
+            exhaust(l, k, hop.evidence, error)
+            return error == null
+        }
         host.say(
             when (hop.remedy) {
                 Remedy.Reload -> L.playerRemedyPictureRestart
@@ -463,10 +486,14 @@ class RemedyRunner(private val host: Host, private val clock: Clock) {
         cleanMs = 0L
         lastCleanMs = -1L
         proven = false
+        seekWatchUntilMs = -1L
     }
 
     companion object {
         const val TICK_MS = 1_000L
+
+        /** How long after a seek a proven path is watched for a stall. */
+        const val SEEK_WATCH_MS = 15_000L
 
         /** How long the errors of a player being replaced are ignored, at most: the re-open is posted, then builds. */
         const val REPLACE_GRACE_MS = 2_000L

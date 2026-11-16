@@ -9562,10 +9562,14 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             engineDecision?.takeIf { it.engine == com.tmplayer.data.PlayerEngine.ExoPlayer } ?: EngineDecision(com.tmplayer.data.PlayerEngine.ExoPlayer, EngineReason.Default)
         }
         // Posted: a re-open from inside the player's own callback would release it mid-dispatch.
-        override fun reopen() {
+        // False without the session a re-open needs ([moveToEngine]), so the ladder gives up instead of losing the hop.
+        override fun reopen(): Boolean {
+            if (castClient == null) return false
             loopHandler.post { moveToEngine(com.tmplayer.data.PlayerEngine.ExoPlayer, engineDecision?.reason ?: EngineReason.Default, L.commonLoading) }
+            return true
         }
         override fun switchEngine(decision: EngineDecision): Boolean {
+            if (castClient == null) return false
             if (decision.engine == com.tmplayer.data.PlayerEngine.Vlc && !vlcCanTake()) return false
             engineSwitches++
             loopHandler.post { moveToEngine(decision.engine, decision.reason, L.commonLoading) }
@@ -9583,10 +9587,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             showError(text, retryable = true)
         }
         override fun redeliver(error: PlaybackException) = playerListener.onPlayerError(error)
-        override fun saveMemory(memory: com.tmplayer.data.RemedyMemory) {
-            val store = settings
-            com.tmplayer.App.backgroundScope.launch { runCatching { store.setRemedyMemory(memory) } }
-        }
+        // One writer for the app, so two quick saves never land out of order.
+        override fun saveMemory(memory: com.tmplayer.data.RemedyMemory) = RemedyMemoryWrites.save(settings, memory)
         override fun log(line: String) {
             Log.i(START_TAG, line)
         }
