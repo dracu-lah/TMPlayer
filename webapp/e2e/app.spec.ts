@@ -34,11 +34,42 @@ test('a chat is arranged by the app rules, with what Telegram restricts left out
     await expect(page.getByText('Sponsored', { exact: true })).toBeVisible()
 })
 
-test('the default size limits hide the small test files and say so', async ({ page }) => {
+test('every video is listed by default, and Hide small clips ends the chat with how many it hid and Show them', async ({ page }) => {
+    // Tall enough for the whole grid: a virtual grid draws only the rows near the screen.
+    await page.setViewportSize({ width: page.viewportSize()!.width, height: 2400 })
     await openClips(page)
-    // 400 MB is the default minimum, as in the apps, and the chat's chip counts what it hides.
-    await expect(page.getByText('No videos here of 400 MB or more.')).toBeVisible()
-    await expect(page.getByRole('button', { name: /^15 videos are hidden by their size/ })).toHaveText('15 hidden')
+    // No floor by default (R1): the small test files are there, and no row says anything is hidden.
+    await expect(page.locator('.card').filter({ hasText: 'Native Clip' })).toHaveCount(1)
+    await expect(page.getByText(/small videos? hidden/)).toHaveCount(0)
+    // The Sort menu's one switch hides the clips (under 50 MB) and the grid ends with how many.
+    await page.getByRole('button', { name: 'Sort videos by' }).first().click()
+    await page.getByRole('menuitemcheckbox', { name: /Hide small clips \(under 50 MB\)/ }).click()
+    await expect(page.getByText(/^\d+ small videos? hidden$/)).toBeVisible()
+    await expect(page.locator('.card').filter({ hasText: 'Native Clip' })).toHaveCount(0)
+    // Show them lists them for this visit.
+    await page.getByRole('button', { name: 'Show them' }).click()
+    await expect(page.locator('.card').filter({ hasText: 'Native Clip' })).toHaveCount(1)
+    await expect(page.getByText(/small videos? hidden/)).toHaveCount(0)
+})
+
+test('a saved 400 MB minimum, the old default, reads as not set', async ({ page }) => {
+    await page.goto('/__e2e/sizes')
+    await page.evaluate(
+        () =>
+            new Promise<void>((resolve, reject) => {
+                const open = indexedDB.open('tmplayer-app')
+                open.onupgradeneeded = () => open.result.createObjectStore('kv')
+                open.onerror = () => reject(open.error)
+                open.onsuccess = () => {
+                    const tx = open.result.transaction('kv', 'readwrite')
+                    tx.objectStore('kv').put({ sizeMin: 400 * 1024 * 1024 }, 'settings')
+                    tx.oncomplete = () => (open.result.close(), resolve())
+                }
+            }),
+    )
+    await page.setViewportSize({ width: page.viewportSize()!.width, height: 2400 })
+    await openClips(page)
+    await expect(page.locator('.card').filter({ hasText: 'Native Clip' })).toHaveCount(1)
 })
 
 test('thousands of chats stay a short list on the page', async ({ page }) => {

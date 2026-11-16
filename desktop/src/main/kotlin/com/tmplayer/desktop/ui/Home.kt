@@ -494,6 +494,15 @@ private fun RowPage(
             },
         )
         val side = pageMargin()
+        // Home keeps clips and trailers out of these rows (R1): said here, with where to find them.
+        if (row is HomeRow.Recent || row is HomeRow.Chat) {
+            Text(
+                s.homeSmallLeftOut(com.tmplayer.data.SizeFilter.label(com.tmplayer.data.SizeFilter.HOME_MIN)),
+                style = MaterialTheme.typography.bodySmall,
+                color = Tone.muted,
+                modifier = Modifier.padding(start = side, end = side, bottom = 8.dp),
+            )
+        }
         // The row's chats read on a page at a time as the foot comes near: the row's own tiles
         // first, then everything else, newest first, growing only at the foot.
         val fed = feed?.state?.collectAsState()?.value

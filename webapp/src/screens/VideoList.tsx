@@ -341,15 +341,3 @@ export function VideoList(props: { cards: CardData[]; label?: string; onEnd?: ()
         </VirtualGrid>
     )
 }
-
-/** "3 videos hidden by the size limits. Change the minimum and maximum size in Settings." */
-export function HiddenBySize(props: { count: number }) {
-    return (
-        <Show when={props.count}>
-            <p class="notice muted small">
-                {t('browse.hidden_by_size', { count: props.count })}{' '}
-                <A class="inline-link" href="/settings/library#size">{t('browse.size_limits_in_settings')}</A>
-            </p>
-        </Show>
-    )
-}

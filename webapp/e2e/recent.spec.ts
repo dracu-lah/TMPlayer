@@ -5,7 +5,7 @@ import { fakeCase, noSizeFloor } from './helpers'
 
 test('Recently added: the heading\'s See all opens the page, which reads on to the oldest video as it is scrolled', async ({ page, context }) => {
     test.setTimeout(60_000)
-    await fakeCase(context, 'manyrecent')
+    await fakeCase(context, 'manyrecent', 'big')
     await noSizeFloor(page)
     await page.goto('/')
     const row = page.locator('.home-row', { has: page.locator('.row-title', { hasText: 'Recently added' }) })
@@ -33,7 +33,7 @@ test('Recently added: the heading\'s See all opens the page, which reads on to t
 })
 
 test('Recently added: a failed first page says so with Try again, which loads it', async ({ page, context }) => {
-    await fakeCase(context, 'recentfails')
+    await fakeCase(context, 'recentfails', 'big')
     await noSizeFloor(page)
     await page.goto('/recent')
     await expect(page.locator('.error-notice')).toBeVisible()

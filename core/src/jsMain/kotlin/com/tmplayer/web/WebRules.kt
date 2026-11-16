@@ -237,11 +237,14 @@ interface Archive {
 interface SizeLimits {
     val floor: Double
     val ceiling: Double
-    val step: Double
     val defaultMin: Double
     val defaultMax: Double
-    /** The quick minimums a chat's "n hidden" picker lists ([SizeFilter.QUICK_MINIMUMS]). */
-    val quick: Array<Double>
+    /** What "Hide small clips" hides below ([SizeFilter.CLIP_MIN]). */
+    val clipMin: Double
+    /** Home's own floor ([SizeFilter.HOME_MIN]). */
+    val homeMin: Double
+    /** The stored minimum the old default wrote (400 MB), which reads as "not set". */
+    val oldDefaultMin: Double
 }
 
 /** A video left part way, as the page keeps its place, with the video read again off its message. */
@@ -484,29 +487,27 @@ fun rewindChoices(): Array<Double> = ResumeRewind.CHOICES_MS.map { it.toDouble()
 fun sizeLimits(): SizeLimits = plain(
     "floor" to SizeFilter.FLOOR.toDouble(),
     "ceiling" to SizeFilter.CEILING.toDouble(),
-    "step" to SizeFilter.STEP.toDouble(),
     "defaultMin" to SizeFilter.DEFAULT_MIN.toDouble(),
     "defaultMax" to SizeFilter.DEFAULT_MAX.toDouble(),
-    "quick" to SizeFilter.QUICK_MINIMUMS.map { it.toDouble() }.toTypedArray(),
+    "clipMin" to SizeFilter.CLIP_MIN.toDouble(),
+    "homeMin" to SizeFilter.HOME_MIN.toDouble(),
+    "oldDefaultMin" to SizeFilter.OLD_DEFAULT_MIN.toDouble(),
 )
+
+/** A stored minimum read as the apps read it: nothing, zero and the old 400 MB default are 0. */
+fun sizeEffectiveMin(stored: Double?): Double = SizeFilter.effectiveMin(stored?.toLong()).toDouble()
+
+/** Home's floor for a viewer's minimum: its own 50 MB, or a higher custom floor. */
+fun sizeHomeMin(minBytes: Double): Double = SizeFilter.homeMin(minBytes.toLong()).toDouble()
 
 /** Whether a file of [bytes] passes; an unknown size (0) always does, the top means no limit. */
 fun sizeMatches(bytes: Double, minBytes: Double, maxBytes: Double): Boolean =
     SizeFilter.matches(bytes.toLong(), minBytes.toLong(), maxBytes.toLong())
 
-/** One press of the slider in [direction] (+1 or -1), on the 100 MB grid. */
-fun sizeStep(bytes: Double, direction: Int): Double = SizeFilter.step(bytes.toLong(), direction).toDouble()
-
-/** Where the slider's thumb sits for [bytes], 0 to 1. */
-fun sizeFraction(bytes: Double): Double = SizeFilter.fraction(bytes.toLong()).toDouble()
-
-/** The size at [fraction] of the track, snapped to the grid. */
-fun sizeAt(fraction: Double): Double = SizeFilter.snap(SizeFilter.bytesAt(fraction.toFloat())).toDouble()
-
 /** "Any size", "50 MB and up" and the like, in the provided catalog's words. */
 fun sizeRange(minBytes: Double, maxBytes: Double): String = SizeFilter.describe(minBytes.toLong(), maxBytes.toLong())
 
-/** "50 MB", "1.5 GB", or the slider's ends ("No minimum", "No limit"), as the apps label a size limit. */
+/** "50 MB", "1.5 GB", as the apps label a size limit. */
 fun sizeLabel(bytes: Double): String = SizeFilter.label(bytes.toLong())
 
 /**

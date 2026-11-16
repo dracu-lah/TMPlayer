@@ -144,9 +144,6 @@ enum class SettingsLink(val from: String, val group: SettingsGroup, val row: Str
     /** "Posters are off. Turn them back on in Settings, Posters and details." */
     PostersOff("grid.meta_notice_turned_off", SettingsGroup.Library, "posters", setOf(DeviceForm.Phone, DeviceForm.Tv, DeviceForm.Desktop)),
 
-    /** A chat's "Change the minimum and maximum size in Settings." */
-    SizeLimits("browse.size_limits_in_settings", SettingsGroup.Library, "size_limits", setOf(DeviceForm.Phone, DeviceForm.Tv, DeviceForm.Desktop)),
-
     /** Not enough room to play: "choose another storage location in Settings". */
     NoSpace("player.no_space", SettingsGroup.Storage, "download_location", setOf(DeviceForm.Phone, DeviceForm.Tv, DeviceForm.Desktop)),
 

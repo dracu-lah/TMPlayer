@@ -914,7 +914,10 @@ class HomeViewModel(
 
     private suspend fun withinLimits(items: List<MediaItem>): List<MediaItem> {
         val (min, max) = runCatching { sizeLimits() }.getOrDefault(SizeFilter.DEFAULT_MIN to SizeFilter.DEFAULT_MAX)
-        return items.filter { SizeFilter.matches(it.sizeBytes, min, max) }
+        // Home keeps a floor of its own so trailers and samples do not fill Recently added; a
+        // chat's grid lists everything by default.
+        val floor = SizeFilter.homeMin(min)
+        return items.filter { SizeFilter.matches(it.sizeBytes, floor, max) }
     }
 
     companion object {

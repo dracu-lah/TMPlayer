@@ -3,8 +3,9 @@
 import { expect, test } from '@playwright/test'
 import { fakeCase, noSizeFloor } from './helpers'
 
+// 'big': Home leaves out videos under 50 MB (SizeFilter.HOME_MIN), and the test files are tiny.
 test.beforeEach(async ({ context, page }) => {
-    await fakeCase(context)
+    await fakeCase(context, 'big')
     await noSizeFloor(page)
 })
 

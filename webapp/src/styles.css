@@ -891,41 +891,9 @@ input.chat-tick[type=checkbox] { flex: none; width: 22px; height: 22px; margin: 
 .archives summary { cursor: pointer; font-weight: 500; }
 .archives ul { margin: 8px 0 0; padding-left: 20px; color: var(--muted); overflow-wrap: anywhere; }
 
-/* The size limits: two thumbs on one track, the span between them in the accent. */
-.size-readout { display: flex; justify-content: space-between; font-weight: 500; font-variant-numeric: tabular-nums; }
-.dual-range { position: relative; height: 32px; }
-.dual-track {
-  position: absolute; left: 10px; right: 10px; top: 50%; height: 4px; margin-top: -2px; border-radius: 2px;
-  background: linear-gradient(to right, var(--surface-high) var(--from), var(--accent) var(--from), var(--accent) var(--to), var(--surface-high) var(--to));
-}
-.dual-range input { position: absolute; inset: 0; width: 100%; margin: 0; background: none; -webkit-appearance: none; appearance: none; pointer-events: none; }
-.dual-range input::-webkit-slider-runnable-track { background: transparent; height: 32px; }
-.dual-range input::-moz-range-track { background: transparent; }
-.dual-range input::-webkit-slider-thumb {
-  -webkit-appearance: none; pointer-events: auto; width: 20px; height: 20px; margin-top: 6px; border-radius: 50%;
-  background: var(--accent); border: 2px solid var(--surface); cursor: grab; transition: transform var(--fast);
-}
-.dual-range input::-moz-range-thumb { pointer-events: auto; width: 20px; height: 20px; border-radius: 50%; background: var(--accent); border: 2px solid var(--surface); cursor: grab; }
-.dual-range input:active::-webkit-slider-thumb { transform: scale(1.15); }
-.dual-range input.above { z-index: 1; }
-.dual-range input:focus-visible { outline: none; }
-.dual-range input:focus-visible::-webkit-slider-thumb { outline: 2px solid var(--accent); outline-offset: 2px; }
-.dual-range input:focus-visible::-moz-range-thumb { outline: 2px solid var(--accent); outline-offset: 2px; }
-
-/* A chat's "n hidden" chip and its smallest-size picker. */
-.size-chip {
-  min-height: 32px; padding: 0 12px; border-radius: 16px; border: 1px solid var(--line); background: transparent;
-  color: var(--accent); font-size: 13px; font-weight: 500; white-space: nowrap; cursor: pointer;
-}
-.size-chip:hover, .size-chip:focus-visible { background: var(--surface-high); }
-.size-options { display: flex; flex-direction: column; margin: 0 -8px; }
-.size-options button {
-  display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 8px; border-radius: var(--r-md, 12px);
-  background: transparent; border: 0; color: var(--fg); font-size: 16px; text-align: left; cursor: pointer;
-}
-.size-options button span:first-child { flex: 1; }
-.size-options button:hover, .size-options button:focus-visible { background: var(--surface-high); }
-.size-options button.on { color: var(--accent); font-weight: 500; }
+/* A chat's end row: "3 small videos hidden" and Show them. */
+.small-hidden { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 16px 0 8px; }
+.small-hidden p { margin: 0; }
 
 /* A question before something that cannot be undone. */
 .confirm {

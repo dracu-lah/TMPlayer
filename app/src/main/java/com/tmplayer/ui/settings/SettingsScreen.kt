@@ -47,15 +47,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -90,7 +87,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
@@ -141,7 +137,6 @@ import com.tmplayer.data.OfflineDownloads
 import com.tmplayer.data.RestorePlan
 import com.tmplayer.data.ResumeRewind
 import com.tmplayer.data.SettingsStore
-import com.tmplayer.data.SizeFilter
 import com.tmplayer.data.StorageSplit
 import com.tmplayer.data.SupportReminder
 import com.tmplayer.data.Td
@@ -383,12 +378,6 @@ fun SettingsScreen(
     val liveFolders by Td.folders.collectAsStateWithLifecycle()
     val folders = accountFolders ?: liveFolders
     val lastChatId by settings.lastChatId.collectAsStateWithLifecycle(initialValue = 0L)
-    val minSize by settings.minSizeBytes.collectAsStateWithLifecycle(
-        initialValue = SizeFilter.DEFAULT_MIN,
-    )
-    val maxSize by settings.maxSizeBytes.collectAsStateWithLifecycle(
-        initialValue = SizeFilter.DEFAULT_MAX,
-    )
     // Both only reach the screen on a phone, but they are read here with the rest so the Appearance
     // rows are plain state readers like every other row rather than each holding a collector.
     val themeChoice by settings.themeChoice.collectAsStateWithLifecycle(
@@ -442,7 +431,6 @@ fun SettingsScreen(
     var pickingDecoder by remember { mutableStateOf(false) }
     // Playback's Advanced group, collapsed until asked for (PR5).
     var playbackAdvancedOpen by rememberSaveable { mutableStateOf(false) }
-    var editingSizes by remember { mutableStateOf(false) }
     var whatsNew by remember { mutableStateOf(false) }
     var reporting by remember { mutableStateOf(false) }
     var onlineDialog by remember { mutableStateOf<OnlineDialog?>(null) }
@@ -473,10 +461,6 @@ fun SettingsScreen(
     // The sign out dialog's tick box. Off every time the dialog opens: downloads are the viewer's
     // files, and losing them has to be asked for each time rather than remembered.
     var alsoDeleteDownloads by remember { mutableStateOf(false) }
-    // Which end of the range the D-pad is currently moving.
-    var editingUpper by remember { mutableStateOf(false) }
-    // Where focus is sent back to after a reset of the size limits.
-    val rangeRow = remember { FocusRequester() }
     // Resume on other devices' switch, where focus goes when the rows under it go (TV).
     val resumeSyncRow = remember { FocusRequester() }
     // Where focus lands on a TV when a page opens: on every page a row that Left and Right cannot
@@ -1330,23 +1314,11 @@ fun SettingsScreen(
             }
 
             SettingsPage.Library -> {
-                // One row with the range in words; the slider, the note and Reset open over the page
-                // (SizeLimitsDialog), so the block no longer pushes the rest of Settings down.
-
-                item {
-                    ActionRow(
-                        title = s.settingsSizeLimits,
-                        modifier = Modifier.focusRequester(landing),
-                        subtitle = s.formatter.sizeRange(minSize, maxSize),
-                        icon = TmIcons.List,
-                        onClick = { editingSizes = true },
-                    )
-                }
-
                 // What opens first, in the same card as which videos show: a heading of its own
                 // stood over a single row.
                 item {
                     ToggleRow(
+                        modifier = Modifier.focusRequester(landing),
                         title = s.settingsOpenLastChat,
                         subtitle = when {
                             lastChatTitle != null -> s.settingsOpenLastChatNamed(lastChatTitle)
@@ -2483,33 +2455,6 @@ fun SettingsScreen(
             onClose = { trackPicker = null },
         )
     }
-    if (editingSizes) {
-        SizeLimitsDialog(
-            minSize = minSize,
-            maxSize = maxSize,
-            editingUpper = editingUpper,
-            rangeRow = rangeRow,
-            onSwitchEnd = { editingUpper = !editingUpper },
-            onStep = { upper, direction ->
-                scope.launch {
-                    if (upper) {
-                        settings.setMaxSizeBytes(SizeFilter.step(maxSize, direction))
-                    } else {
-                        settings.setMinSizeBytes(SizeFilter.step(minSize, direction))
-                    }
-                }
-            },
-            onSetRange = { low, high ->
-                scope.launch {
-                    // Widen first: the clamp that stops the ends crossing would otherwise refuse
-                    // a new floor past the old ceiling.
-                    settings.setMaxSizeBytes(high)
-                    settings.setMinSizeBytes(low)
-                }
-            },
-            onClose = { editingSizes = false },
-        )
-    }
     if (whatsNew) {
         WhatsNewDialog(
             onClose = { whatsNew = false },
@@ -2739,365 +2684,6 @@ private fun KidsChatsSheet(
             }
         }
         FocusOnOpen(first)
-    }
-}
-
-/**
- * A slider a remote can actually drive: left and right nudge it, and the value is spelled out
- * rather than left to be guessed from the thumb position.
- *
- * Left/right are consumed here, so focus cannot escape sideways mid-adjustment. Settings is a
- * single vertical column, so nothing is lost by that.
- *
- * A phone sends no key events, so touch goes to [TouchRangeRow] instead.
- */
-@Composable
-private fun RangeRow(
-    minValue: Long,
-    maxValue: Long,
-    editingUpper: Boolean,
-    onSwitchEnd: () -> Unit,
-    /** Move one end of the range: the upper one when `upper`, by one step in `direction`. */
-    onStep: (upper: Boolean, direction: Int) -> Unit,
-    /** Both ends at once, which is what a dragged range slider reports on a phone. */
-    onSetRange: (min: Long, max: Long) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val s = LocalStrings.current
-    val touch = isTouch()
-    if (touch) {
-        TouchRangeRow(minValue, maxValue, onSetRange, modifier)
-        return
-    }
-
-    val interactions = remember { MutableInteractionSource() }
-    val focused by interactions.collectIsFocusedAsState()
-    val background by animateColorAsState(
-        targetValue = if (focused) Tone.focusFill else Tone.surface,
-        animationSpec = tween(140),
-        label = "rangeBackground",
-    )
-    val onSurface = if (focused) Tone.onFocusFill else Tone.text
-    // 0.8 at the least: the second line has to stay legible against the accent, and anything
-    // lighter drops under the 4.5:1 a small caption needs.
-    val dim = if (focused) Tone.onFocusFill.copy(alpha = 0.8f) else Tone.muted
-
-    Column(
-        modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(Corner.Large))
-            .background(background)
-            .onKeyEvent { event ->
-                if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
-                when (event.key) {
-                    Key.DirectionLeft -> { onStep(editingUpper, -1); true }
-                    Key.DirectionRight -> { onStep(editingUpper, 1); true }
-                    // OK swaps which end moves, so one control covers both ends.
-                    Key.DirectionCenter, Key.Enter -> { onSwitchEnd(); true }
-                    else -> false
-                }
-            }
-            .focusable(interactionSource = interactions)
-            .padding(horizontal = 20.dp, vertical = 16.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            End(s.settingsRangeFrom, s.formatter.sizeLimit(minValue), active = !editingUpper, onSurface, dim, focused)
-            Spacer(Modifier.weight(1f))
-            End(s.settingsRangeUpTo, s.formatter.sizeLimit(maxValue), active = editingUpper, onSurface, dim, focused)
-        }
-        Spacer(Modifier.height(12.dp))
-        RangeTrack(minValue, maxValue, editingUpper, focused)
-        Spacer(Modifier.height(10.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            // The ends of the track say what the ends of the range would read as, so the track
-            // and the "From" / "Up to" captions above it cannot disagree with each other.
-            Text(
-                s.formatter.sizeLimit(SizeFilter.FLOOR),
-                style = MaterialTheme.typography.bodyMedium,
-                color = dim,
-            )
-            Row(
-                Modifier.weight(1f),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                if (focused) {
-                    // Drawn icons rather than the \u25C0 \u25B6 characters: TV firmware fonts often have no
-                    // glyph for those, and tofu boxes would be the whole explanation of the
-                    // control.
-                    Icon(
-                        TmIcons.ChevronLeft,
-                        contentDescription = null,
-                        tint = Tone.onFocusFill,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Icon(
-                        TmIcons.ChevronRight,
-                        contentDescription = null,
-                        tint = Tone.onFocusFill,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    // Named after the captions overhead rather than "upper" and "lower", so the
-                    // hint and the labels match.
-                    Text(
-                        if (editingUpper) {
-                            s.settingsRangeHint(s.settingsRangeUpTo, s.settingsRangeFrom)
-                        } else {
-                            s.settingsRangeHint(s.settingsRangeFrom, s.settingsRangeUpTo)
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Tone.onFocusFill,
-                        textAlign = TextAlign.Center,
-                    )
-                }
-            }
-            Text(
-                s.formatter.sizeLimit(SizeFilter.CEILING),
-                style = MaterialTheme.typography.bodyMedium,
-                color = dim,
-            )
-        }
-    }
-}
-
-/**
- * The same range, for a screen that is touched rather than pointed at.
- *
- * Both ends are draggable at once, so there is no live end to keep in mind. The track stays,
- * because it is the only thing that says how far apart the two numbers are.
- */
-@Composable
-private fun TouchRangeRow(
-    minValue: Long,
-    maxValue: Long,
-    onSetRange: (min: Long, max: Long) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val s = LocalStrings.current
-    // Held locally while the thumb is down so the track follows the finger at frame rate; the
-    // store is written once, when the finger lifts. Keyed on the stored values so a reset from
-    // the chip above, or the first value arriving off disk, moves the thumbs.
-    // The slider runs over track positions, 0..1, not bytes: the scale is not linear (see
-    // SizeFilter.fraction), so 50 MB sits clearly to the right of "No minimum".
-    var range by remember(minValue, maxValue) {
-        mutableStateOf(SizeFilter.fraction(minValue)..SizeFilter.fraction(maxValue))
-    }
-    val low = SizeFilter.snap(SizeFilter.bytesAt(range.start))
-    val high = SizeFilter.snap(SizeFilter.bytesAt(range.endInclusive))
-    // A light tick at each snapped size the thumb passes, nothing between (HAPTICS-PLAN row 4).
-    val haptic = com.tmplayer.ui.components.rememberHaptics()
-
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        color = Tone.surface,
-        shape = M3Theme.shapes.large,
-    ) {
-    Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
-        // The two figures above the track, where the eye already is.
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            RangeEnd(s.settingsRangeFrom, s.formatter.sizeLimit(low))
-            Spacer(Modifier.weight(1f))
-            RangeEnd(s.settingsRangeUpTo, s.formatter.sizeLimit(high))
-        }
-        Spacer(Modifier.height(4.dp))
-        // Material's own control: dragging a range is what a phone is for, and it brings its own
-        // accessibility, with TalkBack announcing each thumb's value and moving it.
-        RangeSlider(
-            value = range,
-            onValueChange = { next ->
-                val nextLow = SizeFilter.snap(SizeFilter.bytesAt(next.start))
-                val nextHigh = SizeFilter.snap(SizeFilter.bytesAt(next.endInclusive))
-                if (nextLow != low || nextHigh != high) haptic(com.tmplayer.ui.components.Haptic.FrequentTick)
-                range = next
-            },
-            onValueChangeFinished = {
-                onSetRange(
-                    SizeFilter.snap(SizeFilter.bytesAt(range.start)),
-                    SizeFilter.snap(SizeFilter.bytesAt(range.endInclusive)),
-                )
-            },
-            valueRange = 0f..1f,
-        )
-        Box(Modifier.fillMaxWidth()) {
-            Text(
-                s.formatter.sizeLimit(SizeFilter.FLOOR),
-                style = MaterialTheme.typography.bodySmall,
-                color = Tone.muted,
-                modifier = Modifier.align(Alignment.CenterStart),
-            )
-            // A mark at 1 GB, because the scale is not linear and the ends alone would let the
-            // track pass for one. Placed by the same mapping the thumbs use.
-            Text(
-                s.formatter.sizeLimit(SizeFilter.GB),
-                style = MaterialTheme.typography.bodySmall,
-                color = Tone.muted,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .wrapContentWidth(BiasAlignment.Horizontal(SizeFilter.fraction(SizeFilter.GB) * 2 - 1)),
-            )
-            Text(
-                s.formatter.sizeLimit(SizeFilter.CEILING),
-                style = MaterialTheme.typography.bodySmall,
-                color = Tone.muted,
-                modifier = Modifier.align(Alignment.CenterEnd),
-            )
-        }
-    }
-    }
-}
-
-/** One end's caption and figure, above the thumb it belongs to. */
-@Composable
-private fun RangeEnd(caption: String, value: String) {
-    Column {
-        Text(caption, style = MaterialTheme.typography.bodySmall, color = Tone.muted)
-        Text(value, style = MaterialTheme.typography.titleMedium, color = Tone.text)
-    }
-}
-
-/** One end of the range. The active one is the only thing the D-pad will move. */
-@Composable
-private fun End(
-    caption: String,
-    value: String,
-    active: Boolean,
-    onSurface: Color,
-    dim: Color,
-    focused: Boolean,
-) {
-    Column {
-        Text(caption, style = MaterialTheme.typography.bodyMedium, color = dim)
-        Text(
-            value,
-            style = MaterialTheme.typography.titleLarge,
-            color = if (active) onSurface else dim,
-        )
-        // A rule under the live end, because on a TV a colour difference alone is easy to miss.
-        Box(
-            Modifier
-                .padding(top = 3.dp)
-                .height(3.dp)
-                .width(if (active) 56.dp else 0.dp)
-                .clip(CircleShape)
-                .background(if (focused) Tone.onFocusFill else Tone.accent),
-        )
-    }
-}
-
-@Composable
-private fun RangeTrack(minValue: Long, maxValue: Long, editingUpper: Boolean, focused: Boolean) {
-    BoxWithConstraints(
-        Modifier
-            .fillMaxWidth()
-            .height(18.dp)
-            .clip(CircleShape)
-            .background(if (focused) Tone.onFocusFill.copy(alpha = 0.22f) else Tone.surfaceHigh),
-    ) {
-        val width = maxWidth
-        val start = width * SizeFilter.fraction(minValue)
-        val span = (width * (SizeFilter.fraction(maxValue) - SizeFilter.fraction(minValue)))
-            .coerceAtLeast(3.dp)
-
-        Box(
-            Modifier
-                .padding(start = start)
-                .width(span)
-                .fillMaxHeight()
-                .background(if (focused) Tone.onFocusFill.copy(alpha = 0.55f) else Tone.accent.copy(alpha = 0.5f)),
-        )
-
-        Thumb(width, minValue, live = !editingUpper, focused = focused)
-        Thumb(width, maxValue, live = editingUpper, focused = focused)
-    }
-}
-
-@Composable
-private fun BoxWithConstraintsScope.Thumb(width: Dp, value: Long, live: Boolean, focused: Boolean) {
-    val w = if (live) 10.dp else 6.dp
-    Box(
-        Modifier
-            .padding(start = (width * SizeFilter.fraction(value) - w / 2).coerceIn(0.dp, width - w))
-            .width(w)
-            .fillMaxHeight()
-            .clip(CircleShape)
-            .background(
-                when {
-                    focused && live -> Tone.onFocusFill
-                    focused -> Tone.onFocusFill.copy(alpha = 0.7f)
-                    live -> Tone.accent
-                    else -> Tone.accent.copy(alpha = 0.6f)
-                },
-            ),
-    )
-}
-
-/** Right-aligned "Reset", greyed out when the range is already the default. */
-@Composable
-private fun ResetChip(enabled: Boolean, onClick: () -> Unit) {
-    val s = LocalStrings.current
-    if (isTouch()) {
-        // Material's own chip on a phone: height, ripple, disabled colours and outline for free.
-        // The television cannot use it, because a chip has no focus appearance to speak of.
-        AssistChip(
-            onClick = onClick,
-            enabled = enabled,
-            label = { M3Text(s.commonReset, maxLines = 1) },
-            leadingIcon = {
-                M3Icon(
-                    TmIcons.Refresh,
-                    contentDescription = null,
-                    modifier = Modifier.size(AssistChipDefaults.IconSize),
-                )
-            },
-        )
-        return
-    }
-
-    val interactions = remember { MutableInteractionSource() }
-    val focused by interactions.collectIsFocusedAsState()
-    val background by animateColorAsState(
-        targetValue = if (focused) Tone.focusFill else Tone.surfaceHigh,
-        animationSpec = tween(140),
-        label = "resetChip",
-    )
-    Row(
-        Modifier
-            .clip(CircleShape)
-            .background(if (enabled) background else Tone.surface)
-            // Always clickable, never `enabled = false`: a disabled clickable installs no focus
-            // target, so the node the viewer is standing on would vanish underneath them the
-            // moment the press greys the chip out. Greyed out it simply does nothing.
-            .clickable(
-                interactionSource = interactions,
-                // Focus colour is the whole of the feedback on a TV.
-                indication = null,
-                onClick = { if (enabled) onClick() },
-            )
-            .padding(horizontal = 18.dp, vertical = 9.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(
-            TmIcons.Refresh,
-            contentDescription = null,
-            tint = when {
-                !enabled -> Tone.muted
-                focused -> Tone.onFocusFill
-                else -> Tone.text
-            },
-            modifier = Modifier.size(20.dp),
-        )
-        Spacer(Modifier.width(8.dp))
-        Text(
-            s.commonReset,
-            style = MaterialTheme.typography.bodyLarge,
-            color = when {
-                !enabled -> Tone.muted
-                focused -> Tone.onFocusFill
-                else -> Tone.text
-            },
-            maxLines = 1,
-        )
     }
 }
 
@@ -3828,50 +3414,6 @@ private fun SubtitleStyleDialog(style: SubtitleStyle, onChange: (SubtitleStyle) 
             ) { onChange(SubtitleStyle()) }
         }
         FocusOnOpen(first)
-    }
-}
-
-/**
- * Settings, Video size limits: the range in words, the two-ended slider (a remote moves one end at
- * a time, OK switching ends), and Reset to the defaults beside Close.
- */
-@Composable
-private fun SizeLimitsDialog(
-    minSize: Long,
-    maxSize: Long,
-    editingUpper: Boolean,
-    rangeRow: FocusRequester,
-    onSwitchEnd: () -> Unit,
-    onStep: (upper: Boolean, direction: Int) -> Unit,
-    onSetRange: (min: Long, max: Long) -> Unit,
-    onClose: () -> Unit,
-) {
-    val s = LocalStrings.current
-    val range = s.formatter.sizeRange(minSize, maxSize)
-    ChoiceSheet(
-        title = s.settingsSizeLimits,
-        note = if (minSize > SizeFilter.FLOOR) s.settingsSizeLimitsNote(range) else range,
-        onDismiss = onClose,
-        onClose = onClose,
-    ) {
-        RangeRow(
-            minValue = minSize,
-            maxValue = maxSize,
-            modifier = Modifier.focusRequester(rangeRow),
-            editingUpper = editingUpper,
-            onSwitchEnd = onSwitchEnd,
-            onStep = onStep,
-            onSetRange = onSetRange,
-        )
-        Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.End) {
-            ResetChip(enabled = !SizeFilter.isDefault(minSize, maxSize)) {
-                // Hand focus to the range before resetting: the chip greys itself out the moment
-                // the defaults are back, and the range is what the press changed.
-                runCatching { rangeRow.requestFocus() }
-                onSetRange(SizeFilter.DEFAULT_MIN, SizeFilter.DEFAULT_MAX)
-            }
-        }
-        FocusOnOpen(rangeRow)
     }
 }
 

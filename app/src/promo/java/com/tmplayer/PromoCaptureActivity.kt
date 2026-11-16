@@ -945,7 +945,8 @@ private val PROMO_RECENT = listOf("quiet orbit", "harbour lines", "lesson 03", "
  */
 private fun promoState(variant: String): UiState<Unit>? = when (variant) {
     "empty-hidden" -> UiState.Empty(
-        "${noVideosWithin(SizeFilter.DEFAULT_MIN, SizeFilter.DEFAULT_MAX)}\n\n${L.browseHiddenBySize(12)} ${L.browseSizeLimitsInSettings}",
+        L.gridSmallHiddenAll(12),
+        StateAction.ShowSmall,
         icon = com.tmplayer.ui.icons.TmIcons.FilterHorizontal,
     )
     "empty-more" -> UiState.Empty(STILL_MORE_TO_SEARCH, StateAction.KeepLooking)

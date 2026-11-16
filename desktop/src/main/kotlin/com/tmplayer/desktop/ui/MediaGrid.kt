@@ -185,6 +185,9 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
         // Whether this chat's grid was last films and shows, so its placeholders take the shape of
         // the cards about to arrive, poster or wide, when a topic or a refresh loads it again.
         var postersLast by remember(chat.id) { mutableStateOf(false) }
+        // "Show them" on the row that says small videos are hidden lists them for this visit to
+        // the chat; the stored switch is not changed, so the next visit hides them again (R1).
+        var showAllThisVisit by remember(chat.id) { mutableStateOf(false) }
         if (min == null || max == null) {
             Column(Modifier.fillMaxSize()) {
                 Spacer(Modifier.height(ChatTopClearance))
@@ -193,7 +196,8 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
             ChatTopChrome(state, chat)
             return@Box
         }
-        val model = rememberViewModel(Triple(chat.id, min, max)) { MediaListViewModel(chat.id, min, max, onSearched = { state.settings.addRecentSearch(it) }, downloadedIds = { DownloadIndex.presentIds(state.settings) }, topicMemory = state.settings.topicMemory()) }
+        val floor = if (showAllThisVisit) com.tmplayer.data.SizeFilter.FLOOR else min
+        val model = rememberViewModel(Triple(chat.id, floor, max)) { MediaListViewModel(chat.id, floor, max, onSearched = { state.settings.addRecentSearch(it) }, downloadedIds = { DownloadIndex.presentIds(state.settings) }, topicMemory = state.settings.topicMemory()) }
         val ui by model.state.collectAsState()
         var query by remember(chat.id) { mutableStateOf("") }
         var openSeries by remember(chat.id) { mutableStateOf<com.tmplayer.data.Series?>(null) }
@@ -227,12 +231,10 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
         }
         val filtersOn = filter != com.tmplayer.data.VideoFilter.All || !facets.isDefault
         var gridLanguages by remember(chat.id) { mutableStateOf(emptyList<String>()) }
-        // Videos outside the size limits, said by an "n hidden" button in the bar for as long as
-        // the chat is open, which changes the smallest size there. A search ignores the limits.
+        // Small videos left out by "Hide small clips", said by the row that ends the grid. A
+        // search ignores the floor, so it hides nothing.
         val sizeHidden by model.sizeHidden.collectAsState()
         val shownHidden = if (query.isBlank()) sizeHidden else 0
-        var sizePicking by remember(chat.id) { mutableStateOf(false) }
-        val sizeAnchor = com.tmplayer.ui.components.rememberPopoverAnchor()
 
         // The search folds into the bar at the foot: "/", Ctrl+F and the bar's magnifier open it.
         var searching by remember(chat.id) { mutableStateOf(false) }
@@ -278,9 +280,6 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
                 onSort = { sorting = true },
                 sortAnchor = sortAnchor,
                 filtered = filtersOn,
-                sizeHidden = shownHidden,
-                onSizeHidden = { sizePicking = true },
-                sizeAnchor = sizeAnchor,
             )
         }
         val topicBar by model.topics.collectAsState()
@@ -307,6 +306,7 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
             onAction = { action ->
                 // The same words across every chat: the palette opens on them over this chat.
                 if (action == com.tmplayer.ui.components.StateAction.SearchAllChats) state.searchEverywhere(model.searchText) else model.act(action)
+                if (action == com.tmplayer.ui.components.StateAction.ShowSmall) showAllThisVisit = true
             },
             skeleton = skeleton,
         ) { content ->
@@ -498,9 +498,12 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
                 footerSlow = { SlowAnswerLine(content.items.size, onRetry = model::retryMore) },
                 scrollLabel = { key -> entryByKey[key]?.let { com.tmplayer.ui.browse.ScrollLabels.video(it, shownSort, s) } },
                 // Compressed files named like videos follow the videos, greyed with why (U10).
-                footer = if (!content.moreFailed && content.archives.isEmpty() && content.searchNote == null) null else {
+                footer = if (!content.moreFailed && content.archives.isEmpty() && content.searchNote == null && shownHidden == 0) null else {
                     {
                         Column(Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            // Small videos left out by "Hide small clips": said where the chat ends, with Show
+                            // them. The number only once the whole chat has been read (R1).
+                            if (shownHidden > 0) SmallHiddenFooter(shownHidden, exact = content.endReached) { showAllThisVisit = true }
                             // The last page failed: said, with Try again, not a listing that stops short.
                             if (content.moreFailed) {
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
@@ -580,26 +583,40 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
                     filterPaused = false
                     if (picked != facets) sortScope.launch { state.settings.setVideoFacets(chat.id, picked) }
                 },
+                // The switch reads what is applied now, and stays in the card when pressed.
+                hideSmall = com.tmplayer.data.SizeFilter.hidesSmallClips(floor),
+                onHideSmall = { on ->
+                    if (on && showAllThisVisit && com.tmplayer.data.SizeFilter.hidesSmallClips(min)) {
+                        showAllThisVisit = false
+                    } else {
+                        showAllThisVisit = false
+                        sortScope.launch { runCatching { state.settings.setHideSmallClips(on) }.onFailure { toast(com.tmplayer.data.Failures.humanise(it)) } }
+                    }
+                },
+                customLimits = if (com.tmplayer.data.SizeFilter.hasCustomLimits(min, max)) com.tmplayer.data.SizeFilter.describe(min, max) else null,
+                onResetLimits = {
+                    showAllThisVisit = false
+                    sortScope.launch { runCatching { state.settings.resetSizeLimits() }.onFailure { toast(com.tmplayer.data.Failures.humanise(it)) } }
+                },
             ),
             onDismiss = { sorting = false },
         )
-        com.tmplayer.ui.components.ChoicePopover(
-            open = sizePicking,
-            anchor = sizeAnchor,
-            choices = com.tmplayer.data.SizeFilter.quickMinimums(min).map { bytes ->
-                val label = com.tmplayer.data.SizeFilter.label(bytes)
-                com.tmplayer.ui.components.PopoverChoice(bytes, if (bytes == com.tmplayer.data.SizeFilter.DEFAULT_MIN) "$label (${s.gridSizeDefault})" else label)
-            },
-            selected = min,
-            onPick = { picked ->
-                sizePicking = false
-                val clamped = com.tmplayer.data.SizeFilter.clampMin(picked, max)
-                if (clamped != min) sortScope.launch { runCatching { state.settings.setMinSizeBytes(clamped) }.onFailure { toast(com.tmplayer.data.Failures.humanise(it)) } }
-            },
-            onDismiss = { sizePicking = false },
-            title = s.settingsSmallest,
-        )
     }
+    }
+}
+
+/**
+ * What ends a chat's grid when "Hide small clips" left videos out (R1): "3 small videos hidden" and
+ * Show them. The number only when [exact], once the whole chat has been read; before that the row
+ * says "Some small videos are hidden". Tab reaches the button, as it reaches the footer's others.
+ */
+@Composable
+internal fun SmallHiddenFooter(count: Int, exact: Boolean, onShow: () -> Unit) {
+    val s = LocalStrings.current
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+        Text(if (exact) s.gridSmallHidden(count) else s.gridSmallHiddenSome, color = Tone.muted)
+        Spacer(Modifier.width(12.dp))
+        OutlinedButton(onClick = onShow) { Text(s.gridFilterShowThem) }
     }
 }
 
