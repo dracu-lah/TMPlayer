@@ -127,6 +127,9 @@ object ResumeSync {
         if (visible) scheduler?.foregrounded()
     }
 
+    /** How long a sync waits for Telegram's line before it says "waiting for a connection"; a test shortens it. */
+    @Volatile var connectWaitMs: Long = 30_000L
+
     @Volatile private var scheduler: SyncScheduler? = null
     @Volatile private var foreground = true
     @Volatile private var lowEnd = false
@@ -219,7 +222,7 @@ object ResumeSync {
         val watched = watchedStore ?: return Outcome.Failed("not ready")
         val bookmarks = bookmarkStore
         if (!manual && holdForLine(settings)) return Outcome.WaitingForUnmetered
-        val session = Td.awaitConnectedSessionOrNull() ?: return Outcome.NoConnection
+        val session = Td.awaitConnectedSessionOrNull(connectWaitMs) ?: return Outcome.NoConnection
         val td = session.client
         return try {
             val myId = Td.myId().takeIf { it != 0L } ?: return Outcome.NoConnection

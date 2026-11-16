@@ -96,13 +96,17 @@ object SavedMessagesBackup : BackupSender {
  */
 object SignOutBackup {
 
-    /** A minute: a backup is small, and the viewer is waiting on a dialog. */
-    const val TIMEOUT_MS = 60_000L
+    /** Forty seconds: a backup is small, and the viewer is waiting on a dialog. */
+    const val TIMEOUT_MS = 40_000L
+
+    /** Where the file goes: Telegram's Saved Messages, replaced only by a test's fake. */
+    @Volatile
+    var sender: BackupSender = SavedMessagesBackup
 
     suspend fun save(
         export: suspend () -> String,
         fileName: String,
-        sender: BackupSender = SavedMessagesBackup,
+        sender: BackupSender = this.sender,
         timeoutMs: Long = TIMEOUT_MS,
     ): BackupSend {
         val text = try {

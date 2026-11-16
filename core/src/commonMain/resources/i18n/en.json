@@ -3339,7 +3339,9 @@
     "card_yes": "Yes, keep it",
     "privacy": "Only TMPlayer's own data goes into one file in your own Saved Messages: where you stopped, what you watched, Watch later, favourites, bookmarks and titles you fixed, by their ids and a short title. Nothing else, and nothing leaves your Telegram.",
     "started": "Your place is now kept on all your devices",
-    "switch": "Keep my place on all my devices"
+    "switch": "Keep my place on all my devices",
+    "switch_off": "Off. Nothing is kept in Saved Messages",
+    "switch_on": "On. One file in your own Saved Messages"
   },
   "theme": {
     "black": "Black",
