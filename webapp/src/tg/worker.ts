@@ -367,7 +367,7 @@ export const api = {
         const r = await rules()
         const raw = rawOf(msg as Message, chatProtects(msg as Message))
         const [v] = raw ? r.screen([raw]).videos : []
-        return (v && itemOf(msg as Message, v.title, r.posterAsk(v), r.continueTitle(v))) || toItem(msg as Message)
+        return (v && itemOf(msg as Message, v.title, r.posterAsk(v), r.continueTitle(v), undefined, r.tileTag(v))) || toItem(msg as Message)
     },
 
     /** The pieces of the video a message is one piece of (a cut video, a split ZIP), for a player opened on that message alone. Null when it is not a set. */

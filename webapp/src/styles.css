@@ -1178,6 +1178,12 @@ button.nav-cell { border: 0; background: none; padding: 0; font: inherit; cursor
   border-radius: 999px; background: rgb(0 0 0 / .64); color: #fff; font-size: 12px; line-height: 16px; font-weight: 600; pointer-events: none;
 }
 .card-score.lifted { bottom: 14px; }
+/* A poster tile's one resolution pill (the apps' FormatBadge on art): plain text in the dark plate, top end, not a control. */
+.card-format {
+  position: absolute; top: 8px; right: 8px; max-width: calc(100% - 16px); padding: 2px 8px; border-radius: 999px;
+  background: rgb(0 0 0 / .64); color: #fff; font-size: 12px; line-height: 16px; font-weight: 600; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; pointer-events: none;
+}
 
 /* A chat's own bar at the foot (ChatBar): Search, Favourite, Sort and Refresh in the main bar's pill. */
 .chat-bar .nav-cell[aria-pressed="true"] { color: var(--accent); }

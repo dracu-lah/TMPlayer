@@ -67,7 +67,7 @@ const cardPath = (v: VideoItem, direct?: boolean) => (direct ? watchPath(v) : de
  * a pointer over the card shows Play in the middle, which plays at once past the video's page
  * (the desktop app's poster hover).
  */
-function CardArt(props: { thumb: string | null; cover?: string | null; title: string; poster: PosterAsk | null; progress?: number; onPlay?: (e: MouseEvent) => void }) {
+function CardArt(props: { thumb: string | null; cover?: string | null; title: string; poster: PosterAsk | null; tile?: string; progress?: number; onPlay?: (e: MouseEvent) => void }) {
     let el!: HTMLDivElement
     const [src, setSrc] = createSignal<string | null>(null)
     const [seen, setSeen] = createSignal(false)
@@ -117,6 +117,10 @@ function CardArt(props: { thumb: string | null; cover?: string | null; title: st
             </Show>
             <Show when={picture()}>
                 <img class="card-poster" src={picture()!} alt="" decoding="async" />
+            </Show>
+            {/* The resolution pill (FormatBadge on a poster tile): 720p and up, only when known; text, not a control. */}
+            <Show when={props.tile}>
+                <span class="card-format">{props.tile}</span>
             </Show>
             <Show when={score()}>
                 <span class="card-score" classList={{ lifted: !!props.progress }} role="img" aria-label={t('metadata.score_out_of_ten', { site: 'TMDB', score: score()! })}>
@@ -231,7 +235,7 @@ export function Card(props: { card: CardData; progress?: number; replace?: boole
     }
     return (
         <A class="card" {...cardLink(props.card.item, props.direct, props.replace, props.history)}>
-            <CardArt thumb={props.card.item.thumb} cover={props.card.item.cover} title={props.card.title} poster={askOf(props.card.item)} progress={props.progress} onPlay={play} />
+            <CardArt thumb={props.card.item.thumb} cover={props.card.item.cover} title={props.card.title} poster={askOf(props.card.item)} tile={props.card.item.tile} progress={props.progress} onPlay={play} />
             {/* Under the card, as the apps write it (two lines kept, so the facts line up along a row). */}
             <div class="card-name">{props.card.title}</div>
             <div class="card-facts">{props.card.facts}</div>

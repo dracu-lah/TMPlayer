@@ -176,7 +176,7 @@ function absorb(r: Awaited<ReturnType<typeof rules>>, s: ChatState, messages: Me
     const added: Video[] = []
     for (const v of screened.videos) {
         const msg = byId.get(v.messageId)
-        const item = msg && itemOf(msg, v.title, r.posterAsk(v), r.continueTitle(v), v.albumPhoto && v.albumId ? s.albumPhotos.get(v.albumId) : null)
+        const item = msg && itemOf(msg, v.title, r.posterAsk(v), r.continueTitle(v), v.albumPhoto && v.albumId ? s.albumPhotos.get(v.albumId) : null, r.tileTag(v))
         if (!item) continue
         into.set(v.id, v)
         s.items.set(v.id, item)
@@ -718,7 +718,7 @@ export async function across(
     const videos: Video[] = []
     const items = new Map<string, VideoItem>()
     for (const v of r.screenAlbums(raws, photos).videos) {
-        const item = itemOf(byId.get(v.id)!, v.title, r.posterAsk(v), r.continueTitle(v), v.albumPhoto && v.albumId ? byAlbum.get(v.albumId) : null)
+        const item = itemOf(byId.get(v.id)!, v.title, r.posterAsk(v), r.continueTitle(v), v.albumPhoto && v.albumId ? byAlbum.get(v.albumId) : null, r.tileTag(v))
         if (!item || items.has(v.id)) continue
         items.set(v.id, item)
         videos.push(v)
@@ -917,7 +917,7 @@ async function loadRecent(tg: TelegramClient, s: RecentState, signal: AbortSigna
         for (const v of r.screen(raws).videos) {
             if (s.videos.size >= RECENT_MAX) break
             const msg = byId.get(v.id)
-            const item = msg && itemOf(msg, v.title, r.posterAsk(v), r.continueTitle(v))
+            const item = msg && itemOf(msg, v.title, r.posterAsk(v), r.continueTitle(v), undefined, r.tileTag(v))
             if (!item || s.videos.has(v.id)) continue
             s.videos.set(v.id, v)
             s.items.set(v.id, item)
@@ -995,7 +995,7 @@ async function addMessage(tg: TelegramClient, s: ChatState, messageId: number): 
     const raw = msg && rawOf(msg, s.protected)
     if (!msg || !raw) return null
     const [v] = r.screen([raw]).videos
-    const item = v && itemOf(msg, v.title, r.posterAsk(v), r.continueTitle(v))
+    const item = v && itemOf(msg, v.title, r.posterAsk(v), r.continueTitle(v), undefined, r.tileTag(v))
     if (!v || !item) return null
     s.videos.set(v.id, v)
     s.items.set(v.id, item)
