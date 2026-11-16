@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -45,6 +46,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -247,7 +250,7 @@ internal fun QuietButton(label: String, icon: Boolean = false, modifier: Modifie
         modifier
             // Sinks a little under a finger or a click, and comes back up on release.
             .pressScale(interactions, com.tmplayer.ui.components.Micro.PillPressScale)
-            .height(QUIET_HEIGHT)
+            .heightIn(min = QUIET_HEIGHT)
             .clip(CircleShape)
             .background(if (shown) Tone.focusFill else Color.Transparent)
             .focusRing(shown, CircleShape)
@@ -273,7 +276,7 @@ internal fun QuietButton(label: String, icon: Boolean = false, modifier: Modifie
 @Composable
 internal fun StepHeading(title: String, body: String?, modifier: Modifier = Modifier) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(title, style = MaterialTheme.typography.headlineMedium, color = Tone.text)
+        Text(title, style = MaterialTheme.typography.headlineMedium, color = Tone.text, modifier = Modifier.semantics { heading() })
         if (body != null) Text(body, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
     }
 }
@@ -281,7 +284,8 @@ internal fun StepHeading(title: String, body: String?, modifier: Modifier = Modi
 private val WIDE_FROM = 560.dp
 private val NARROW_MAX = 600.dp
 private val WIDE_MAX = 1200.dp
-private val QUIET_HEIGHT: Dp = 40.dp
+/** Material's 48 dp touch target, and room for the label at the largest font. */
+private val QUIET_HEIGHT: Dp = 48.dp
 private val BAR = 4.dp
 private val STEP_GAP = 3.dp
 private val GROUP_GAP = 12.dp

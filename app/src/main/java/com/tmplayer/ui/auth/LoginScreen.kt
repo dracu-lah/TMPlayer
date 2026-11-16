@@ -529,7 +529,7 @@ private fun TouchPhonePane(
         }
 
         if (error != null) {
-            Text(error, style = MaterialTheme.typography.bodyLarge, color = Tone.danger)
+            PaneError(error)
         }
 
         TmButton(
@@ -738,7 +738,7 @@ private fun TouchCodePane(
         }
 
         if (error != null) {
-            Text(error, style = MaterialTheme.typography.bodyLarge, color = Tone.danger)
+            PaneError(error)
         }
 
         TmButton(
@@ -1120,7 +1120,7 @@ private fun NoRecoveryPane(
         PaneHeader(onBack = onBack)
         Text(s.loginNoRecoveryTitle, style = MaterialTheme.typography.headlineLarge)
         Text(if (confirming) s.loginResetAccountSure else s.loginNoRecoveryBody, style = MaterialTheme.typography.bodyLarge)
-        if (error != null) Text(error, style = MaterialTheme.typography.bodyLarge, color = Tone.danger)
+        if (error != null) PaneError(error)
         val buttons: @Composable () -> Unit = {
             // Back first and in focus on a remote: a reset is never one stray press away.
             TmButton(onClick = onBack, modifier = (if (touch) Modifier.paneAction() else Modifier).focusRequester(back)) {
@@ -1394,7 +1394,7 @@ internal fun LoginForm(
         if (error != null) {
             // Red, not the accent blue: the accent is the focus colour on this very screen,
             // so a rejection painted in it reads as a status line rather than as a problem.
-            Text(error, style = MaterialTheme.typography.bodyLarge, color = Tone.danger)
+            PaneError(error)
         }
 
         if (touch) {

@@ -51,6 +51,7 @@ import com.tmplayer.data.ProxySpec
 import com.tmplayer.data.Td
 import com.tmplayer.i18n.Messages
 import com.tmplayer.ui.components.deviceForm
+import com.tmplayer.ui.components.liveMessage
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.icons.TmIcons
 import com.tmplayer.ui.nav.BackHandler
@@ -83,7 +84,27 @@ fun ProxyScreen(onClose: () -> Unit, modifier: Modifier = Modifier) {
     val proxyOn by Td.proxyOn.collectAsState()
     val linkFocus = remember { FocusRequester() }
 
+    // What the last Use, Remove or Stop answered when it failed, shown under the status line: a
+    // press that fails with nothing said looks like a dead button.
+    var notice by remember { mutableStateOf<String?>(null) }
+
     suspend fun reload() { entries = Td.proxies() }
+
+    // One proxy action: its failure, a returned error or a thrown one, becomes the notice; the list
+    // is read again either way so the screen shows what TDLib really holds.
+    fun act(block: suspend () -> String?) {
+        scope.launch {
+            notice = null
+            notice = try {
+                block()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                s.errorsNoAnswer
+            }
+            runCatching { reload() }
+        }
+    }
 
     suspend fun ping(entry: ProxyEntry) {
         pings = pings + (entry.id to s.proxyPinging)
@@ -96,15 +117,23 @@ fun ProxyScreen(onClose: () -> Unit, modifier: Modifier = Modifier) {
         if (busy) return
         busy = true
         scope.launch {
-            val error = Td.addProxy(spec, enable = true)
-            if (error == null) {
-                onAdded()
-                reload()
-                entries.firstOrNull { it.spec == spec }?.let { ping(it) }
-            } else {
-                linkError = error
+            // Busy always ends, whatever TDLib did: a stuck "Testing..." button cannot be pressed again.
+            try {
+                val error = Td.addProxy(spec, enable = true)
+                if (error == null) {
+                    onAdded()
+                    reload()
+                    entries.firstOrNull { it.spec == spec }?.let { ping(it) }
+                } else {
+                    linkError = error
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                linkError = s.errorsNoAnswer
+            } finally {
+                busy = false
             }
-            busy = false
         }
     }
 
@@ -131,6 +160,8 @@ fun ProxyScreen(onClose: () -> Unit, modifier: Modifier = Modifier) {
                 style = MaterialTheme.typography.labelLarge,
                 color = if (proxyOn) Tone.accent else Tone.muted,
             )
+
+            notice?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = Tone.danger, modifier = Modifier.liveMessage()) }
 
             val submitLink = {
                 val spec = ProxyLinks.parse(link)
@@ -165,14 +196,14 @@ fun ProxyScreen(onClose: () -> Unit, modifier: Modifier = Modifier) {
                 ProxyRow(
                     entry = entry,
                     ping = pings[entry.id],
-                    onUse = { scope.launch { Td.enableProxy(entry.id); reload(); ping(entry) } },
-                    onTest = { scope.launch { ping(entry) } },
-                    onRemove = { scope.launch { Td.removeProxy(entry.id); reload() } },
+                    onUse = { act { Td.enableProxy(entry.id).also { if (it == null) ping(entry) } } },
+                    onTest = { scope.launch { runCatching { ping(entry) } } },
+                    onRemove = { act { Td.removeProxy(entry.id) } },
                     s = s,
                 )
             }
             if (proxyOn) {
-                QuietButton(s.proxyStop, onClick = { scope.launch { Td.disableProxy(); reload() } })
+                QuietButton(s.proxyStop, onClick = { act { Td.disableProxy() } })
             }
             Text(s.proxyTrust, style = MaterialTheme.typography.bodySmall, color = Tone.muted)
             Spacer(Modifier.height(24.dp))
@@ -250,7 +281,7 @@ private fun ManualProxy(busy: Boolean, onAdd: (ProxySpec) -> Unit, s: Messages) 
             field(s.proxyUsername, user, KeyboardType.Ascii, false, ImeAction.Next) { user = it }
             field(s.proxyPassword, pass, KeyboardType.Password, true, ImeAction.Done) { pass = it }
         }
-        if (error != null) Text(error!!, style = MaterialTheme.typography.bodySmall, color = Tone.danger)
+        error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Tone.danger, modifier = Modifier.liveMessage()) }
         SetupButton(if (busy) s.proxyPinging else s.proxyAdd, primary = true, onClick = {
             val spec = ProxySpec(kind, server, port.toIntOrNull() ?: 0, secret = secret, username = user, password = pass)
             if (spec.isComplete) onAdd(spec) else error = s.proxyFormInvalid

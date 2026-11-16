@@ -1318,23 +1318,16 @@ fun DownloadsScreen(
                 // bar that has to be read before it can be ignored.
                 if (!picking || chosen.isEmpty()) return@Scaffold
                 Surface(color = MaterialTheme.colorScheme.surfaceContainer, tonalElevation = 3.dp) {
-                    Row(
-                        Modifier
+                    PickingActions(
+                        onShare = { share(chosen) },
+                        onSaveToFolder = if (canSaveToFolder) ({ saveToFolder(chosen) }) else null,
+                        onSaveToGallery = if (canSaveToGallery) ({ saveToGallery(chosen) }) else null,
+                        onDelete = { confirmingDeleteMany = true },
+                        modifier = Modifier
                             .fillMaxWidth()
                             .navigationBarsPadding()
                             .padding(horizontal = 16.dp, vertical = 12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        PrimaryAction(L.commonShare, TmIcons.Share) { share(chosen) }
-                        if (canSaveToFolder) SecondaryAction(L.downloadsSaveToFolder, TmIcons.Folder, { saveToFolder(chosen) })
-                        if (canSaveToGallery) SecondaryAction(L.downloadsSaveToGallery, TmIcons.Image, { saveToGallery(chosen) })
-                        SecondaryAction(
-                            label = L.commonDelete,
-                            icon = TmIcons.Delete,
-                            onClick = { confirmingDeleteMany = true },
-                            danger = true,
-                        )
-                    }
+                    )
                 }
             },
         ) { padding ->
@@ -1755,6 +1748,27 @@ private fun androidx.compose.foundation.layout.RowScope.PrimaryAction(
         Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(8.dp))
         Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+/**
+ * The bar under a selection on a phone or tablet: Share, with its word, takes the width; Save to
+ * folder, Save to gallery and Delete are 48 dp icons named for a screen reader. Four labelled
+ * buttons shared 330 dp, so every word was cut to "Sa..." before any font scaling.
+ */
+@Composable
+internal fun PickingActions(
+    onShare: () -> Unit,
+    onSaveToFolder: (() -> Unit)?,
+    onSaveToGallery: (() -> Unit)?,
+    onDelete: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        PrimaryAction(L.commonShare, TmIcons.Share, onShare)
+        if (onSaveToFolder != null) IconOnlyAction(L.downloadsSaveToFolder, TmIcons.Folder, onSaveToFolder)
+        if (onSaveToGallery != null) IconOnlyAction(L.downloadsSaveToGallery, TmIcons.Image, onSaveToGallery)
+        IconOnlyAction(L.commonDelete, TmIcons.Delete, onDelete, danger = true)
     }
 }
 
