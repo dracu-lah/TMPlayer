@@ -49,6 +49,9 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.Dp
@@ -335,6 +338,11 @@ fun TvChoiceRow(
                 indication = null,
                 role = if (selected != null) Role.RadioButton else Role.Button,
             ) { if (enabled) onClick() }
+            .semantics {
+                // The radio says which one is in force, and a greyed line says it is not available.
+                if (selected != null) this.selected = selected
+                if (!enabled) disabled()
+            }
             .padding(horizontal = 20.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

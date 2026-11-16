@@ -26,6 +26,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.theme.Motion
@@ -84,6 +85,6 @@ private fun Count(value: Int, label: String, onClick: () -> Unit, modifier: Modi
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(formatted, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold), color = Tone.text, maxLines = 1)
-        Text(label, style = MaterialTheme.typography.labelSmall, color = Tone.muted, maxLines = 1)
+        Text(label, style = MaterialTheme.typography.labelSmall, color = Tone.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }

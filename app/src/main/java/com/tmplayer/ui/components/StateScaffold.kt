@@ -202,6 +202,8 @@ fun SlowAnswerNotice(
                 SlowAnswer.MESSAGE,
                 style = MaterialTheme.typography.bodyLarge,
                 color = Tone.text,
+                // Shrinks first, so a long line (a big font, a longer language) never pushes Retry off the card.
+                modifier = Modifier.weight(1f, fill = false),
             )
             TmButton(onClick = onRetry, modifier = Modifier.focusRequester(focus)) {
                 Icon(TmIcons.Refresh, contentDescription = null, modifier = Modifier.size(20.dp))

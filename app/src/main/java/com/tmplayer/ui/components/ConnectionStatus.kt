@@ -59,7 +59,9 @@ fun ConnectionStatus(notice: ConnectionNotice, modifier: Modifier = Modifier) {
         val container = if (touch) SnackbarDefaults.color else Tone.surfaceHigh.copy(alpha = 0.96f)
         val onContainer = if (touch) SnackbarDefaults.contentColor else Tone.text
         Row(
+            // Heard when it appears: "Reconnecting" is news a screen reader would otherwise miss.
             Modifier
+                .liveMessage()
                 .background(container, if (touch) M3.shapes.extraSmall else CircleShape)
                 .padding(
                     horizontal = if (touch) 12.dp else 16.dp,
@@ -115,7 +117,9 @@ fun StartingStatus(modifier: Modifier = Modifier) {
         val container = if (touch) SnackbarDefaults.color else Tone.surfaceHigh.copy(alpha = 0.96f)
         val onContainer = if (touch) SnackbarDefaults.contentColor else Tone.text
         Row(
+            // Heard when it appears: "Reconnecting" is news a screen reader would otherwise miss.
             Modifier
+                .liveMessage()
                 .background(container, if (touch) M3.shapes.extraSmall else CircleShape)
                 .padding(horizontal = if (touch) 12.dp else 16.dp, vertical = if (touch) 8.dp else 10.dp),
             horizontalArrangement = Arrangement.spacedBy(if (touch) 8.dp else 10.dp),

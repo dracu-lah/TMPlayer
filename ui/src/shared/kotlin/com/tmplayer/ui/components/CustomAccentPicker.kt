@@ -30,6 +30,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.theme.LocalDarkTheme
@@ -88,6 +90,7 @@ fun CustomAccentPicker(initial: Int?, onPick: (Int) -> Unit, onDismiss: () -> Un
                         value = hue,
                         onValueChange = { next -> if ((next / HUE_TICK).toInt() != (hue / HUE_TICK).toInt()) step(); hue = next },
                         valueRange = 0f..359f,
+                        modifier = Modifier.semantics { contentDescription = s.accentCustomHue },
                         colors = SliderDefaults.colors(
                             thumbColor = shown,
                             activeTrackColor = Color.Transparent,
@@ -100,6 +103,7 @@ fun CustomAccentPicker(initial: Int?, onPick: (Int) -> Unit, onDismiss: () -> Un
                     value = strength,
                     onValueChange = { strength = it },
                     valueRange = MIN_STRENGTH..1f,
+                    modifier = Modifier.semantics { contentDescription = s.accentCustomSaturation },
                     colors = SliderDefaults.colors(thumbColor = shown, activeTrackColor = shown),
                 )
                 if (adjusted) Text(s.accentCustomAdjusted, style = MaterialTheme.typography.bodySmall, color = Tone.muted)
