@@ -2766,6 +2766,8 @@
     "learnt_languages_forget": "Forget",
     "learnt_languages_forget_all": "Forget all",
     "learnt_languages_forget_all_done": "Every series will start with your usual languages",
+    "learnt_languages_forget_all_message": "Every series will start with your usual languages again. They are learnt afresh from what you choose in the player.",
+    "learnt_languages_forget_all_title": "Forget the languages of every series?",
     "learnt_languages_forgotten": "{series} will start with your usual languages",
     "learnt_languages_line": "Sound: {sound}, Subtitles: {subtitles}",
     "learnt_languages_note": "What each series opens with, learnt from your choices in the player. Forget one and its next episode starts with your usual languages.",

@@ -110,6 +110,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
@@ -438,6 +439,7 @@ fun SettingsScreen(
     var pickingLayout by remember { mutableStateOf(false) }
     var stylingSubtitles by remember { mutableStateOf(false) }
     var showingLearnt by remember { mutableStateOf(false) }
+    var askForgetAllLearnt by remember { mutableStateOf(false) }
     var trackPicker by remember { mutableStateOf<TrackLanguagePicker?>(null) }
     var pickingDecoder by remember { mutableStateOf(false) }
     // Playback's Advanced group, collapsed until asked for (PR5).
@@ -2468,8 +2470,24 @@ fun SettingsScreen(
         LearntLanguagesSheet(
             learnt = learntLanguages,
             onForget = { series -> scope.launch { settings.forgetLearntLanguages(series.key) } },
-            onForgetAll = { scope.launch { settings.forgetAllLearntLanguages() } },
+            onForgetAll = { askForgetAllLearnt = true },
             onClose = { showingLearnt = false },
+        )
+    }
+    if (askForgetAllLearnt) {
+        // Over the sheet: one press there would otherwise drop every series' languages at once.
+        TvConfirm(
+            title = s.settingsLearntLanguagesForgetAllTitle,
+            message = s.settingsLearntLanguagesForgetAllMessage,
+            confirmLabel = s.settingsLearntLanguagesForgetAll,
+            onConfirm = {
+                askForgetAllLearnt = false
+                scope.launch {
+                    settings.forgetAllLearntLanguages()
+                    toast(s.settingsLearntLanguagesForgetAllDone)
+                }
+            },
+            onDismiss = { askForgetAllLearnt = false },
         )
     }
     if (stylingSubtitles) {
@@ -3599,8 +3617,15 @@ internal fun ToggleRow(
     // Every switch in Settings answers the thumb (a phone only; nothing on a television).
     val tick = com.tmplayer.ui.components.rememberToggleTick()
     val toggle = { tick(!checked); onToggle() }
+    val s = LocalStrings.current
+    val onWord = s.commonOn
+    val offWord = s.commonOff
     FocusRow(
-        modifier = modifier.seekable(title),
+        // The phone's real switch says its own state; the television's drawn pill is silent to a
+        // screen reader or a switch device, so the row says "On" or "Off" for it.
+        modifier = modifier.seekable(title).then(
+            if (isTouch()) Modifier else Modifier.semantics { stateDescription = if (checked) onWord else offWord },
+        ),
         onClick = toggle,
         headline = { M3Text(title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
         supporting = { M3Text(subtitle, maxLines = SUPPORTING_LINES, overflow = TextOverflow.Ellipsis) },

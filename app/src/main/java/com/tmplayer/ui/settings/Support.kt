@@ -200,7 +200,13 @@ fun CoffeeDialog(
                 UpiPay(modifier = Modifier.fillMaxWidth())
                 // The two free or quieter ways side by side: a sponsorship, and a star, which costs
                 // nothing and is worth asking for as much as a coffee (user, 2026-10-18).
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                // A flow, not a row: at a large font the second button drops under the first
+                // instead of being squeezed to nothing.
+                @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+                androidx.compose.foundation.layout.FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
+                    verticalArrangement = Arrangement.Center,
+                ) {
                     androidx.compose.material3.TextButton(onClick = { openLink(context, About.SPONSORS) }) {
                         androidx.compose.material3.Text(s.supportSponsorGithub)
                     }
