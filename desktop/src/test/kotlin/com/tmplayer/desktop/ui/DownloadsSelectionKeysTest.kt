@@ -78,6 +78,9 @@ class DownloadsSelectionKeysTest {
                     mimeType = "video/x-matroska", thumbnailFileId = 0, miniThumbnail = null, date = 0,
                 )
                 settings.noteDownload(item, "Old lectures", file.absolutePath)
+                // The page orders rows by the time each was noted (newest first); in a warm JVM five notes land
+                // in one millisecond and tie, which scrambles the order the focus handoff test counts on.
+                Thread.sleep(3)
             }
         }
         return folder
