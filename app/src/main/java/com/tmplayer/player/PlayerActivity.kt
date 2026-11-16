@@ -8892,7 +8892,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         val offer = if (duration <= 0 || locked || inPictureInPicture || statusOverlay.visibility == View.VISIBLE || nextUpCard?.isShown == true) {
             null
         } else {
-            skipCtl.offer(exo.currentPosition, duration, exo.isPlaying, android.os.SystemClock.elapsedRealtime(), skippedSegments, cardCoversTheEnd)
+            // The count holds while a television's remote is busy with the row (it could not cancel).
+            val counting = exo.isPlaying && !(FormFactor.isTv(this) && controlsUp)
+            skipCtl.offer(exo.currentPosition, duration, counting, android.os.SystemClock.elapsedRealtime(), skippedSegments, cardCoversTheEnd)
         }
         offeredSkip = offer?.segment
         val wasShown = pill.isShown
