@@ -2220,10 +2220,11 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
     val maxSizeBytes: Flow<Long> =
         read { SizeFilter.effectiveMax(it[MAX_SIZE]) }
 
-    /** The Sort sheet's "Hide small clips" switch: on stores [SizeFilter.CLIP_MIN], off stores nothing. */
+    /** The Sort sheet's "Hide small clips" switch: on stores [SizeFilter.CLIP_MIN] (a custom floor is kept), off stores nothing. */
     suspend fun setHideSmallClips(on: Boolean) {
         prefs.edit { prefs ->
-            if (on) prefs[MIN_SIZE] = SizeFilter.CLIP_MIN else prefs.remove(MIN_SIZE)
+            val floor = SizeFilter.clipSwitchFloor(prefs[MIN_SIZE], on)
+            if (floor != null) prefs[MIN_SIZE] = floor else prefs.remove(MIN_SIZE)
         }
     }
 

@@ -54,10 +54,29 @@ class SizeFilterTest {
     }
 
     @Test
-    fun `the clip switch reads on only for exactly 50 MB, a custom floor is told apart`() {
+    fun `turning Hide small clips on keeps a custom floor and off removes it`() {
+        val table = listOf(
+            // stored, on -> written (null: nothing stored)
+            Triple(null, true, CLIP_MIN),
+            Triple(0L, true, CLIP_MIN),
+            Triple(CLIP_MIN, true, CLIP_MIN),
+            Triple(300 * MB, true, 300 * MB),
+            Triple(10 * MB, true, 10 * MB),
+            Triple(SizeFilter.OLD_DEFAULT_MIN, true, CLIP_MIN),
+            Triple(null, false, null),
+            Triple(300 * MB, false, null),
+            Triple(CLIP_MIN, false, null),
+        )
+        for ((stored, on, written) in table) {
+            assertEquals("stored=$stored on=$on", written, SizeFilter.clipSwitchFloor(stored, on))
+        }
+    }
+
+    @Test
+    fun `the clip switch reads on for any floor, a custom floor is told apart`() {
         assertTrue(SizeFilter.hidesSmallClips(CLIP_MIN))
         assertFalse(SizeFilter.hidesSmallClips(FLOOR))
-        assertFalse(SizeFilter.hidesSmallClips(100 * MB))
+        assertTrue(SizeFilter.hidesSmallClips(100 * MB))
 
         assertFalse(SizeFilter.isCustomMin(FLOOR))
         assertFalse(SizeFilter.isCustomMin(CLIP_MIN))

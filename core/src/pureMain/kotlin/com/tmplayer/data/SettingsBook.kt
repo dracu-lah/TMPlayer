@@ -249,7 +249,8 @@ class SettingsBook(private val kv: KeyValueStore) : AllowedChatsSource, Correcti
     val maxSizeBytes: Flow<Long> = read { SizeFilter.effectiveMax(it.long(MAX_SIZE)) }
 
     suspend fun setHideSmallClips(on: Boolean) = kv.edit { e ->
-        if (on) e[MIN_SIZE] = SizeFilter.CLIP_MIN else e.remove(MIN_SIZE)
+        val floor = SizeFilter.clipSwitchFloor(e.long(MIN_SIZE), on)
+        if (floor != null) e[MIN_SIZE] = floor else e.remove(MIN_SIZE)
     }
 
     suspend fun resetSizeLimits() = kv.edit { e ->

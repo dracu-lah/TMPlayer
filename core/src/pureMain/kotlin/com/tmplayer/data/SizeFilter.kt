@@ -73,8 +73,22 @@ object SizeFilter {
         else -> stored
     }
 
-    /** Whether [minBytes] is exactly what the "Hide small clips" switch writes, so the switch reads on. */
-    fun hidesSmallClips(minBytes: Long): Boolean = minBytes == CLIP_MIN
+    /**
+     * Whether the "Hide small clips" switch reads on: any floor is hiding small videos, the switch's
+     * own 50 MB or a custom one chosen before (which the switch then keeps, see [clipSwitchFloor]).
+     */
+    fun hidesSmallClips(minBytes: Long): Boolean = minBytes > FLOOR
+
+    /**
+     * The floor to store when "Hide small clips" is pressed, or null to store none. On keeps a custom
+     * floor already chosen (a 300 MB floor is not overwritten by 50 MB; Reset still removes it) and
+     * writes [CLIP_MIN] otherwise; off removes the key, as before.
+     */
+    fun clipSwitchFloor(storedMin: Long?, on: Boolean): Long? {
+        if (!on) return null
+        val current = effectiveMin(storedMin)
+        return if (isCustomMin(current)) current else CLIP_MIN
+    }
 
     /** A floor that is neither off nor the switch's: one chosen on purpose before, kept and shown with a Reset. */
     fun isCustomMin(minBytes: Long): Boolean = minBytes > FLOOR && minBytes != CLIP_MIN
