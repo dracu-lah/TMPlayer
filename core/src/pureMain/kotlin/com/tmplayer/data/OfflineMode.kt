@@ -131,7 +131,7 @@ object OfflineHomeRows {
                 is HomeRow.WatchLater -> (row.records + row.more).map { it.key to it.fileId }
                 else -> emptyList()
             }
-            for ((key, fileId) in found) if (key !in have && out.size < CACHE_CHECKS) out.putIfAbsent(key, fileId)
+            for ((key, fileId) in found) if (key !in have && out.size < CACHE_CHECKS) if (key !in out) out[key] = fileId
             if (out.size >= CACHE_CHECKS) break
         }
         return out.map { it.key to it.value }

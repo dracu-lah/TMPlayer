@@ -91,6 +91,12 @@ export interface VideoItem extends FileRef {
     storyboard: Storyboard | null
     /** False under "restrict saving content" (the chat's or the message's): it streams, nothing is kept. */
     canBeSaved: boolean
+    /**
+     * The one pill a poster tile wears ("720p", "1080p", "4K"...), from the size Telegram states
+     * else a resolution word in the name, as the apps' FormatFacts.tileTag says; absent for SD or
+     * when nothing says (no empty pill), and in items kept before this existed.
+     */
+    tile?: string
     /** What the poster lookup asks about this video (the apps' MetaQuery), or null when its name holds nothing to ask. */
     poster: PosterAsk | null
 }

@@ -8,6 +8,7 @@ import { addedIds, addedMode, addedView, namedLists, progress, rememberHomeChats
 import { arrangeOrder, parseOrder } from '../ui/homeOrder'
 import { forgetGone } from '../goneVideos'
 import { Icon } from '../ui/Icon'
+import { KeepPlaceCard } from './KeepPlaceCard'
 import { useObservedCovers } from './promo'
 import { Card, ContinueCard, tileCard, useLeft, useProgress, useWarmDataCentres, videoCard, type CardData } from './VideoList'
 import { form } from '../form'
@@ -147,6 +148,8 @@ export function Home() {
                     </Switch>
                 )}
             </For>
+            {/* The one question about keeping the place on every device: after a Home that has rows, never over a first run or an empty page. */}
+            <KeepPlaceCard eligible={!!page()?.settled && rows().length > 0 && !firstRun() && !allOff()} />
         </>
     )
 }

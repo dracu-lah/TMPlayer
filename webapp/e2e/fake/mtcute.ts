@@ -7,6 +7,8 @@
 
 // Read synchronously (a worker may): a top-level await would hold back the worker's message
 // handler, and the page's first call would be lost.
+import { cloudFor } from './cloud'
+
 function get(url: string): string {
     const xhr = new XMLHttpRequest()
     xhr.open('GET', url, false)
@@ -14,6 +16,8 @@ function get(url: string): string {
     return xhr.responseText
 }
 const flags = new Set(get('/__e2e/flags').split(',').filter(Boolean))
+/** Saved Messages for the sync file: one per test (`cloud:<key>`), kept by the test server. */
+const cloud = cloudFor([...flags].find((f) => f.startsWith('cloud:'))?.slice('cloud:'.length) ?? 'default')
 const sizes: Record<string, number> = JSON.parse(get('/__e2e/sizes'))
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms))
@@ -278,8 +282,11 @@ export class TelegramClient {
         if (q._ === 'messages.viewSponsoredMessage' || q._ === 'messages.clickSponsoredMessage') return true
         throw rpcError('METHOD_NOT_FAKED')
     }
-    async searchMessages(p: { chatId: number; filter: { _: string }; offset?: number; limit: number }) {
+    async searchMessages(p: { chatId: number | 'self'; query?: string; filter?: { _: string }; offset?: number; limit: number }) {
         await delay(flags.has('slow') ? 3000 : 50)
+        // Saved Messages: the sync file, found by its caption.
+        if (p.chatId === 'self') return (await cloud.all(me)).filter((m) => m.text.includes(p.query ?? '')).slice(0, p.limit)
+        if (!p.filter) throw rpcError('FILTER_MISSING')
         if (!peers.has(p.chatId)) throw rpcError('PEER_ID_INVALID')
         const wantVideo = p.filter._ === 'inputMessagesFilterVideo'
         const all = (messages.get(p.chatId) ?? []).filter((m) => m.isVideo === wantVideo).sort((a, b) => b.id - a.id)
@@ -303,7 +310,30 @@ export class TelegramClient {
         const next = from + p.limit < all.length ? { rate: from + p.limit, id: from + p.limit, peer: { _: 'inputPeerEmpty' } } : undefined
         return Object.assign(all.slice(from, from + p.limit), { next })
     }
-    async getMessages(chatId: number, ids: number | number[]) {
+    async getHistory(_: 'self', p?: { limit?: number }) {
+        return (await cloud.all(me)).slice(0, p?.limit ?? 100)
+    }
+    async editMessage(p: { chatId: 'self'; message: number; text?: string; media: { file: Uint8Array; fileName: string } }) {
+        calls.push(`editMessage ${p.message}`)
+        return cloud.edit(me, p.message, { file: p.media.file, fileName: p.media.fileName, caption: p.text ?? '' })
+    }
+    async sendMedia(_: 'self', media: { file: Uint8Array; fileName: string; caption?: string }) {
+        calls.push('sendMedia')
+        return cloud.put(me, { file: media.file, fileName: media.fileName, caption: media.caption ?? '' })
+    }
+    async pinMessage(_: { chatId: 'self'; message: number }) {
+        calls.push('pinMessage')
+        return null
+    }
+    async deleteMessagesById(_: 'self', ids: number[]) {
+        calls.push(`deleteMessages ${ids.join(',')}`)
+        await cloud.remove(ids)
+    }
+    async getMessages(chatId: number | 'self', ids: number | number[]) {
+        if (chatId === 'self') {
+            const all = await cloud.all(me)
+            return [ids].flat().map((id) => all.find((m) => m.id === id) ?? null)
+        }
         if (!peers.has(chatId)) throw rpcError('PEER_ID_INVALID')
         return [ids].flat().map((id) => (messages.get(chatId) ?? []).find((m) => m.id === id) ?? null)
     }
@@ -315,7 +345,8 @@ export class TelegramClient {
             yield { peer: list[i], isPinned: p?.archived !== 'only' && i < 2 }
         }
     }
-    async downloadAsBuffer(t: { url: string }) {
+    async downloadAsBuffer(t: { url: string; bytes?: Uint8Array }) {
+        if (t.bytes) return t.bytes
         return new Uint8Array(await (await fetch(t.url)).arrayBuffer())
     }
 }

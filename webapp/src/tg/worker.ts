@@ -8,6 +8,7 @@ import { findChatSubtitles, forgetChatSubtitles } from './chatsubs'
 import { homePage } from './home'
 import { archivedList, chatList, chatPage, forgetAll, joinedFor, listTiles, rankChats, recentPage, searchAll, videoCounts, watchInfo } from './library'
 import { clickSponsored, reportSponsored, viewSponsored } from './sponsored'
+import { deleteEverything, deleteMessages, readFiles, writeFile, type FoundFile } from './syncfile'
 import { chatProtects, files, itemOf, rawOf, thumbnails, toItem } from './media'
 import type { ChatInfo, ChatItem, ChatPage, ChatSubtitle, ChatsEvent, ChatView, Country, Found, HomePage, HomeView, ListView, Me, RecentPage, QrEvent, RpcError, SentCode, SponsoredReport, Tile, VideoItem, WatchInfo } from './types'
 
@@ -359,6 +360,29 @@ export const api = {
         return listTiles(lines)
     },
 
+    /**
+     * Resume across devices (src/sync): every sync file in the viewer's own Saved Messages, read.
+     * Asked for only once the viewer turned the sync on. `known` is the message the last sync used.
+     */
+    async syncFiles(_: Ctx, known: number): Promise<FoundFile[]> {
+        return readFiles(tg, known)
+    },
+
+    /** The sync file written: `target` edited in place, else sent once and pinned. `gone`: the message was deleted meanwhile. */
+    async syncWrite(_: Ctx, target: number | null, bytes: Uint8Array, caption: string): Promise<{ id: number } | { gone: true }> {
+        return writeFile(tg, target, bytes, caption)
+    },
+
+    /** Other copies of the sync file, once merged in. */
+    async syncDelete(_: Ctx, ids: number[]): Promise<void> {
+        await deleteMessages(tg, ids)
+    },
+
+    /** "Turn off and delete the sync file": the file and an older TMPlayer's message gone from Saved Messages. */
+    async syncDeleteAll(_: Ctx, known: number): Promise<boolean> {
+        return deleteEverything(tg, known)
+    },
+
     /** One message's video, for a watch page opened by its address. Null when it is gone or not a video. */
     async video(_: Ctx, chatId: number, messageId: number): Promise<VideoItem | null> {
         const [msg] = await tg.getMessages(chatId, messageId)
@@ -367,7 +391,7 @@ export const api = {
         const r = await rules()
         const raw = rawOf(msg as Message, chatProtects(msg as Message))
         const [v] = raw ? r.screen([raw]).videos : []
-        return (v && itemOf(msg as Message, v.title, r.posterAsk(v), r.continueTitle(v))) || toItem(msg as Message)
+        return (v && itemOf(msg as Message, v.title, r.posterAsk(v), r.continueTitle(v), undefined, r.tileTag(v))) || toItem(msg as Message)
     },
 
     /** The pieces of the video a message is one piece of (a cut video, a split ZIP), for a player opened on that message alone. Null when it is not a set. */
