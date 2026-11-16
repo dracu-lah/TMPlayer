@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Raju second pass</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; padding: 24px 16px 64px; background: #0c0e10; color: #f2f4f5; font: 15px/1.5 system-ui, sans-serif; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 17px; margin: 36px 0 12px; }
+  p.lede { color: #aeb5bb; max-width: 72ch; }
+  .row { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+  figure { margin: 0; width: 230px; }
+  figure.tv { width: 400px; }
+  figure.desk { width: 400px; }
+  img { display: block; width: 100%; height: auto; border: 1px solid #23272a; border-radius: 8px; background: #fff; }
+  figcaption { color: #aeb5bb; font-size: 13px; margin-top: 6px; }
+  code { background: #15181b; padding: 1px 4px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<h1>Raju, second pass</h1>
+<p class="lede">Rendered by <code>RajuSignInPhoneTest</code>, <code>RajuSignInTvTest</code>, <code>RajuFirstRunPhoneTest</code>, <code>RajuFirstRunTvTest</code> (app render tests, no device) and <code>RajuSignInDesktopTest</code>. Phone 360 x 800 dp, TV 960 x 540 dp, desktop 1280 x 800, font scale 2.0 where marked 200. The keyboard is not drawn. Notes and what is left: <code>private/ux-review/raju-pass-2.md</code>.</p>
+
+<h2>Phone: sign in (steps 1 and 2)</h2>
+<div class="row">
+  <figure><img src="phone-signin-1-number.png" alt=""><figcaption>Number page</figcaption></figure>
+  <figure><img src="phone-signin-1-number-200.png" alt=""><figcaption>Number page, 200%</figcaption></figure>
+  <figure><img src="phone-signin-2-code.png" alt=""><figcaption>Code page, resend greyed under its clock</figcaption></figure>
+  <figure><img src="phone-signin-2-code-200.png" alt=""><figcaption>Code page, 200%</figcaption></figure>
+  <figure><img src="phone-signin-3-password.png" alt=""><figcaption>Password page: "Your Telegram password"</figcaption></figure>
+  <figure><img src="phone-signin-4-failed.png" alt=""><figcaption>Failed, Try again</figcaption></figure>
+</div>
+
+<h2>Phone: first Home, no chat chosen, library off, Downloads empty (steps 3, 4, 7)</h2>
+<div class="row">
+  <figure><img src="phone-home-empty.png" alt=""><figcaption>Home with nothing</figcaption></figure>
+  <figure><img src="phone-home-empty-200.png" alt=""><figcaption>Home with nothing, 200%</figcaption></figure>
+  <figure><img src="phone-home-none-chosen.png" alt=""><figcaption>No chat chosen</figcaption></figure>
+  <figure><img src="phone-home-none-chosen-200.png" alt=""><figcaption>No chat chosen, 200%</figcaption></figure>
+  <figure><img src="phone-home-off.png" alt=""><figcaption>Library off</figcaption></figure>
+  <figure><img src="phone-downloads-empty.png" alt=""><figcaption>Downloads empty: no Free up space</figcaption></figure>
+</div>
+
+<h2>TV</h2>
+<div class="row">
+  <figure class="tv"><img src="tv-signin-qr.png" alt=""><figcaption>QR page, three steps</figcaption></figure>
+  <figure class="tv"><img src="tv-signin-number.png" alt=""><figcaption>Number page</figcaption></figure>
+  <figure class="tv"><img src="tv-signin-code.png" alt=""><figcaption>Code page</figcaption></figure>
+  <figure class="tv"><img src="tv-signin-password.png" alt=""><figcaption>Password page</figcaption></figure>
+  <figure class="tv"><img src="tv-home-empty.png" alt=""><figcaption>Home with nothing</figcaption></figure>
+  <figure class="tv"><img src="tv-home-none-chosen.png" alt=""><figcaption>No chat chosen</figcaption></figure>
+  <figure class="tv"><img src="tv-downloads-empty.png" alt=""><figcaption>Downloads empty, remote on the button</figcaption></figure>
+</div>
+
+<h2>Desktop</h2>
+<div class="row">
+  <figure class="desk"><img src="desktop-signin-qr.png" alt=""><figcaption>QR page</figcaption></figure>
+  <figure class="desk"><img src="desktop-signin-number.png" alt=""><figcaption>Number page</figcaption></figure>
+  <figure class="desk"><img src="desktop-signin-code.png" alt=""><figcaption>Code page</figcaption></figure>
+  <figure class="desk"><img src="desktop-signin-password.png" alt=""><figcaption>Password page</figcaption></figure>
+  <figure class="desk"><img src="desktop-signin-failed.png" alt=""><figcaption>Failed, Try again</figcaption></figure>
+</div>
+</body>
+</html>
