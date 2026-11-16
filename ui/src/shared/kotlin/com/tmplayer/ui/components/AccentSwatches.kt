@@ -22,7 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -108,8 +108,10 @@ private fun Swatch(accent: Accent, chosen: Boolean, enabled: Boolean, size: Dp, 
     val focused by interactions.collectIsFocusVisibleAsState()
     val hovered by interactions.collectIsHoveredAsState()
     val pressed by interactions.collectIsPressedAsState()
+    val less = rememberLessMotion()
     val scale by animateFloatAsState(
         when {
+            less -> 1f
             pressed -> 0.92f
             focused -> 1.15f
             hovered -> 1.08f
@@ -125,7 +127,11 @@ private fun Swatch(accent: Accent, chosen: Boolean, enabled: Boolean, size: Dp, 
     }
     Box(
         Modifier
-            .scale(scale)
+            // Read in the draw phase: the swatch is not recomposed on every frame of its grow.
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
             .size(size + 12.dp)
             .border(if (focused) 3.dp else 2.dp, ring, CircleShape)
             .padding(5.dp)
