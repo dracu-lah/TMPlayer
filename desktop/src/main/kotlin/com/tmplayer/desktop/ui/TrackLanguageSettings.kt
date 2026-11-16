@@ -39,7 +39,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 /** One line of a [ChoiceSetting]: what it reads, an optional second line, and whether it is set. */
-private class MenuChoice(val label: String, val detail: String?, val selected: Boolean, val pick: () -> Unit)
+internal class MenuChoice(val label: String, val detail: String?, val selected: Boolean, val pick: () -> Unit)
 
 /**
  * The preferred audio language row, for the Playback page. Each of these rows drops its choices
@@ -111,7 +111,7 @@ internal fun SubtitleLanguageSettings(settings: SettingsStore, prefs: TrackPrefe
  * down from there, the set one ticked.
  */
 @Composable
-private fun ChoiceSetting(title: String, detail: String, icon: ImageVector, current: String, choices: List<MenuChoice>) {
+internal fun ChoiceSetting(title: String, detail: String, icon: ImageVector, current: String, choices: List<MenuChoice>) {
     var open by remember { mutableStateOf(false) }
     Setting(title, detail, icon = icon, onClick = { open = true }) {
         Box {

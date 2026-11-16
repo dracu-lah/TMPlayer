@@ -39,6 +39,9 @@ sealed interface PlayerAction {
      * while no pill is up. See [com.tmplayer.online.SkipSegments].
      */
     data object SkipSegment : PlayerAction
+
+    /** "Mark this as the intro": the first press is where it starts, the second where it ends. */
+    data object MarkIntro : PlayerAction
     data object PreviousEpisode : PlayerAction
     data object AlwaysOnTop : PlayerAction
     data object MiniPlayer : PlayerAction
@@ -234,6 +237,8 @@ object PlayerKeys {
             // "Go past": S, the obvious letter, has been mpv's screenshot key since before there
             // was anything to skip, and G was free in both tables.
             Key.G -> if (shift) PlayerAction.SubtitleSize(1) else PlayerAction.SkipSegment
+            // O for the opening: free in both tables, and the menu line says so.
+            Key.O -> if (shift) null else PlayerAction.MarkIntro
             Key.Slash -> if (shift) PlayerAction.ShortcutSheet else null
             else -> null
         }
@@ -279,6 +284,7 @@ object PlayerKeys {
                 L.keysRowEpisodes to L.keysEpisodesKeys,
                 // The pill's own words name the row; it skips a recap or the credits the same way.
                 L.playerSkipIntro to "G",
+                L.keysRowMarkIntro to "O",
                 L.keysRowJump to L.keysDigits,
                 L.playerGoToTime to L.playerKeyCommandG(cmd),
                 L.keysRowUndoSeek to L.keysShiftBackspace,

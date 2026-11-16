@@ -64,6 +64,8 @@ import com.tmplayer.online.EpisodeNames
 import com.tmplayer.online.OnlineMetadata
 import com.tmplayer.online.SkipKind
 import com.tmplayer.online.SkipSegment
+import com.tmplayer.online.SkipController
+import com.tmplayer.online.SkipOffer
 import com.tmplayer.online.SkipSegments
 import com.tmplayer.data.ResumeRecord
 import com.tmplayer.data.ResumeRules
@@ -464,6 +466,12 @@ fun PlayerScreen(
     // belong to the video playing: an episode switch starts with none until its own answer.
     var skips by remember(current) { mutableStateOf(emptyList<SkipSegment>()) }
     var skipped by remember(current) { mutableStateOf(emptySet<Long>()) }
+    // Chapters, the online lists and the viewer's marks merged, with the per kind choice and the
+    // countdown; and what the pill shows now, which the loop below keeps current.
+    val skipSay = remember { arrayOf<(String) -> Unit>({}) }
+    val skipCtl = remember(current) { SkipController { skipSay[0](it) }.also { it.start(current.item) } }
+    var skipOffer by remember(current) { mutableStateOf<SkipOffer?>(null) }
+    var introMarking by remember(current) { mutableStateOf(false) }
     // A-B repeat, for the video playing only: a new video starts with none.
     var abLoop by remember(current) { mutableStateOf<AbLoop?>(null) }
     // Repeat this video (EG-F52): lasts for the video it was switched on for; "Keep repeat on"
@@ -513,6 +521,7 @@ fun PlayerScreen(
     fun showFlash(kind: Flash.Kind, text: String = "") {
         flash = Flash(kind, text, System.nanoTime())
     }
+    skipSay[0] = { showFlash(Flash.Kind.Text, it) }
 
     // ---- free zoom ---------------------------------------------------------------------------
     // Ctrl+wheel around the pointer (a Windows touchpad's pinch arrives as exactly that), Alt+=
@@ -633,7 +642,10 @@ fun PlayerScreen(
             Logger.w("PlayerScreen", "Skip times lookup failed", e)
             emptyList()
         }
+        skipCtl.online(skips)
     }
+    // The file's own chapters are the first and best source: free, exact, and offline.
+    LaunchedEffect(skipCtl, status.chapters) { skipCtl.chapters(status.chapters) }
 
     LaunchedEffect(current, attempt) {
         // No video engine: nothing to open, and Try again says the same until the app restarts.
@@ -1212,20 +1224,49 @@ fun PlayerScreen(
     // when there is a next episode, so they get no pill of their own; without one, the pill
     // skips to the end like any other. Never while the card is up, which has the same corner.
     // Derived from the live position, so the body hears of it as a pill comes and goes only.
-    val skipAtPosition by remember(liveStatus, skips, skipped) {
-        derivedStateOf { liveStatus.value.let { SkipSegments.active(skips, it.positionMs, it.durationMs, skipped) } }
-    }
-    val activeSkip = if (phase == Phase.Playing && status.durationMs > 0 && !nextUpVisible) {
-        skipAtPosition?.takeUnless { next != null && isClosing(it, status.durationMs) }
-    } else {
-        null
-    }
+    val activeSkip = skipOffer?.segment
 
     /** The pill, or G: past the segment, which is then left alone for the rest of this playback. */
     fun skipSegment() {
         val segment = activeSkip ?: return
         skipped = skipped + segment.startMs
+        skipOffer = null
         jumpTo(segment.target(status.durationMs))
+    }
+    // A few times a second, from the live position: what the pill offers (a button, or the count of a
+    // stretch set to skip by itself), and the jump when the count runs out. Only the answer reaches
+    // the body, so a position tick that changes nothing redraws nothing.
+    val skipSuppressed by rememberUpdatedState(phase != Phase.Playing || nextUpVisible)
+    val skipCardCovers by rememberUpdatedState(next != null)
+    val skipNow by rememberUpdatedState(::skipSegment)
+    LaunchedEffect(skipCtl) {
+        while (true) {
+            delay(SKIP_TICK_MS)
+            val live = liveStatus.value
+            val offer = if (skipSuppressed || live.durationMs <= 0) {
+                null
+            } else {
+                skipCtl.offer(live.positionMs, live.durationMs, live.playing, System.nanoTime() / 1_000_000L, skipped, skipCardCovers)
+            }
+            if (offer is SkipOffer.Fire) {
+                skipOffer = offer
+                skipNow()
+            } else if (offer != skipOffer) {
+                skipOffer = offer
+            }
+        }
+    }
+
+    /** Cancel on the countdown: this stretch stays a plain button. */
+    fun cancelAutoSkip() {
+        skipOffer?.segment?.let { skipCtl.cancel(it) }
+    }
+
+    /** "Mark this as the intro", O: the first press is the start, the second the end and saves. */
+    fun markIntro() {
+        if (!skipCtl.canMark) return
+        skipCtl.markTap(liveStatus.value.positionMs, status.durationMs)
+        introMarking = skipCtl.introMarking
     }
 
     // The subtitle look is one setting for every video: a change in Settings (or in the subtitle
@@ -1630,6 +1671,7 @@ fun PlayerScreen(
             PlayerAction.SpeedReset -> setSpeed(1f)
             PlayerAction.NextEpisode -> episodes.next?.let(::switchTo) ?: showFlash(Flash.Kind.Text, L.playerNoNextEpisode)
             PlayerAction.SkipSegment -> skipSegment()
+            PlayerAction.MarkIntro -> markIntro()
             PlayerAction.PreviousEpisode -> episodes.previous?.let(::switchTo)
                 ?: showFlash(Flash.Kind.Text, L.playerNoPreviousEpisode)
             PlayerAction.AlwaysOnTop -> onToggleAlwaysOnTop?.invoke()
@@ -2030,6 +2072,7 @@ fun PlayerScreen(
                 sleepTimer = sleepTimerDetail(),
                 loop = abLoop,
                 repeatVideo = repeatVideo.takeUnless { com.tmplayer.data.ChatAudio.isAudio(current.item) },
+                markIntro = if (skipCtl.canMark) (if (introMarking) s.playerMarkIntroEnd else s.playerMarkIntro) else null,
                 bookmarks = if (marksOn) marks else null,
                 onMenuAction = { action ->
                     noteInput()
@@ -2167,10 +2210,20 @@ fun PlayerScreen(
             }
 
             activeSkip?.let { segment ->
-                SkipPill(kind = segment.kind, lifted = showControls, onSkip = {
-                    skipSegment()
-                    refocus()
-                })
+                val counting = skipOffer as? SkipOffer.Counting
+                SkipPill(
+                    segment = segment,
+                    lifted = showControls,
+                    secondsLeft = counting?.secondsLeft,
+                    onCancel = {
+                        cancelAutoSkip()
+                        refocus()
+                    },
+                    onSkip = {
+                        skipSegment()
+                        refocus()
+                    },
+                )
             }
 
             // Not while the screen is locked: nothing under the shield takes a click.
@@ -2566,6 +2619,9 @@ private fun isClosing(segment: SkipSegment, durationMs: Long): Boolean =
 private const val AUTOPLAY_COUNTDOWN_SEC = 8
 private const val SEEK_RUN_MS = 1_000L
 private const val STILL_WATCHING_TICK_MS = 5_000L
+
+/** How often the skip pill looks at the playhead: a countdown of whole seconds needs no more. */
+private const val SKIP_TICK_MS = 250L
 
 /**
  * Two statuses are the same to the player screen's body when only the clock moved: the position
