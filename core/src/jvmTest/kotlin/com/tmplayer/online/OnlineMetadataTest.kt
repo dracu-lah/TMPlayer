@@ -157,7 +157,8 @@ class OnlineMetadataTest {
         http.on("graphql.anilist.co") { frieren }
         val q = query("[SubsPlease] Sousou no Frieren - 05 (1080p) [ABCD1234].mkv")
         assertTrue("fansub shapes read as anime", q.anime)
-        val info = (metadata().lookup(q) as MetaResult.Found).info
+        // The show alone: an episode's name is also asked for, from the episode guide (AnimeEpisodesTest).
+        val info = (metadata().lookup(q.showOnly()) as MetaResult.Found).info
         assertEquals(MetaProvider.AniList, info.provider)
         assertEquals("Frieren: Beyond Journey's End", info.title)
         assertEquals("An elf mage\noutlives her friends.", info.overview)

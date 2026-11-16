@@ -47,6 +47,7 @@ internal class AnimeWorld : HttpTransport {
                     val wanted = Regex("""season/(\d+)""").findAll(url.substringAfter("append_to_response=")).map { it.groupValues[1].toInt() }.toList()
                     ok(AnimeFixtures.tmdbSeasons(tmdbSizes, wanted.min(), wanted.max()))
                 }
+                "tv/${AnimeFixtures.TMDB}/season/" in url && "/episode/" in url -> missing
                 "tv/${AnimeFixtures.TMDB}/season/" in url -> {
                     val season = Regex("""season/(\d+)""").find(url)!!.groupValues[1].toInt()
                     ok(AnimeFixtures.tmdbSeasons(tmdbSizes, season, season))
