@@ -24,12 +24,16 @@ import com.tmplayer.ui.theme.Tone
  */
 @Composable
 internal fun SearchNoteRow(note: String, onDeeper: (() -> Unit)?, modifier: Modifier = Modifier) {
-    Row(
+    // A flow, not a row: the words take the width they need and the button wraps under them when it
+    // would squeeze them to a column (a large font, a narrow phone).
+    @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+    androidx.compose.foundation.layout.FlowRow(
         modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        itemVerticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(note, style = MaterialTheme.typography.bodyMedium, color = Tone.muted, modifier = Modifier.weight(1f, fill = false))
+        Text(note, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
         if (onDeeper != null) {
             TmButton(onClick = onDeeper) { Text(L.commonKeepLooking) }
         }

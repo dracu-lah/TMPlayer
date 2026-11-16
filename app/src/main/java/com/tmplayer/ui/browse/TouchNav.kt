@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -1037,7 +1038,7 @@ private fun YouPopover(
 }
 
 @Composable
-private fun PopoverRow(
+internal fun PopoverRow(
     icon: ImageVector,
     label: String,
     badge: String?,
@@ -1058,7 +1059,8 @@ private fun PopoverRow(
     Row(
         modifier
             .fillMaxWidth()
-            .height(POPOVER_ROW)
+            // A floor, not a fixed height: a thumb's 48 dp, and a longer word or a larger font grows the row.
+            .heightIn(min = POPOVER_ROW)
             .padding(horizontal = 6.dp)
             // The card's 20 dp corner less the 6 dp inset, so a filled row runs parallel to it.
             .clip(RoundedCornerShape(14.dp))
@@ -1069,7 +1071,7 @@ private fun PopoverRow(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Icon(icon, contentDescription = null, tint = ink, modifier = Modifier.size(22.dp).pressScale(press))
-        Text(label, style = MaterialTheme.typography.bodyMedium, color = ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = ink, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
         if (badge != null) {
             Text(
                 badge,
@@ -1133,7 +1135,7 @@ private val BAR_SPACING = 4.dp
 private val PICTURE = 30.dp
 internal val BAR_SHADOW = 8.dp
 private val POPOVER_WIDTH = 208.dp
-private val POPOVER_ROW = 44.dp
+internal val POPOVER_ROW = 48.dp
 
 /** The popover's rows before the divider: the three lists; Settings and Update come after it. */
 private const val POPOVER_LISTS = 3

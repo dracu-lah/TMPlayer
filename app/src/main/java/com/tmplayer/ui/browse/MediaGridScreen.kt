@@ -14,7 +14,6 @@ import android.os.Build
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -1779,6 +1778,15 @@ private fun TouchRecentSearches(
 }
 
 /**
+ * True from a font 1.3 times the normal: a phone's bar of words and buttons no longer fits side by
+ * side, and the actions drop their words (selection bars, [SelectionBar]).
+ */
+@Composable
+internal fun rememberLargeFont(): Boolean = androidx.compose.ui.platform.LocalDensity.current.fontScale >= LARGE_FONT_SCALE
+
+private const val LARGE_FONT_SCALE = 1.3f
+
+/**
  * What is on offer while videos are being ticked, on the two devices this screen runs on.
  *
  * A phone gets the contextual app bar it already knows: a cross where the back arrow was, the count
@@ -1788,7 +1796,7 @@ private fun TouchRecentSearches(
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SelectionBar(
+internal fun SelectionBar(
     count: Int,
     /** Null while nothing ticked may be saved, which leaves the bar without a Download. */
     onDownload: (() -> Unit)?,
@@ -1801,6 +1809,7 @@ private fun SelectionBar(
 
     if (isTouch()) {
         // At the foot, where the sticky bar was; Close is the round button at the top start.
+        val largeFont = rememberLargeFont()
         StickyActionBar(compact = rememberCompactChrome(), fill = true) {
             M3Text(
                 label,
@@ -1809,6 +1818,14 @@ private fun SelectionBar(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f).padding(start = 14.dp),
             )
+            if (largeFont) {
+                // At a large font the words would push the count out of the bar, and the count is
+                // what the viewer needs to see: the two actions shrink to icons, named for a screen
+                // reader and in a tooltip.
+                FloatingBarIcon(TmIcons.Check, s.gridSelectAll, onSelectAll)
+                if (onDownload != null) FloatingBarIcon(TmIcons.Download, s.gridDownloadSelected, onDownload, enabled = count > 0)
+                return@StickyActionBar
+            }
             TextButton(onClick = onSelectAll) { M3Text(s.gridSelectAll, maxLines = 1) }
             // Words, not a bare arrow: this is the one control on the bar that acts on the
             // ticked videos, and a corner glyph would say nothing about what it starts.
@@ -2008,7 +2025,7 @@ private fun SponsoredButton(label: String, primary: Boolean, onClick: () -> Unit
     val focused by interactions.collectIsFocusedAsState()
     val background by animateColorAsState(
         targetValue = if (focused) Color.White else if (primary) Tone.accent else Tone.surface,
-        animationSpec = tween(140),
+        animationSpec = Motion.standard(Motion.Fast),
         label = "sponsoredButton",
     )
     Text(
@@ -2045,7 +2062,7 @@ private fun Pill(
     val focused by interactions.collectIsFocusedAsState()
     val background by animateColorAsState(
         targetValue = if (focused) Tone.focusFill else if (plain) Color.Transparent else Tone.surfaceHigh,
-        animationSpec = tween(140),
+        animationSpec = Motion.standard(Motion.Fast),
         label = "pill",
     )
     val foreground = if (focused) Tone.onFocusFill else tintWhenIdle
