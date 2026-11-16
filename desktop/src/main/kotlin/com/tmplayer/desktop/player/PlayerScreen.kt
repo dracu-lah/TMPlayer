@@ -260,6 +260,8 @@ fun PlayerScreen(
     onFreeUpSpace: (() -> Unit)? = null,
 ) {
     val s = LocalStrings.current
+    // One search for the Cast button per player session (FQ8), not one per reveal of the controls.
+    val castPresence = rememberCastBarPresence()
     // What the TV is told the video is called, read when a cast loads it.
     val castTitle = remember { arrayOf(com.tmplayer.desktop.cast.CastTitle("")) }
     // mpv on this computer, or the TV while a cast is on (CP73): a video opened with a session up
@@ -2113,7 +2115,7 @@ fun PlayerScreen(
                 } else {
                     null
                 },
-                castButton = { CastButton() },
+                castButton = { CastButton(castPresence) },
                 subtitlesButton = com.tmplayer.cast.CAST_SUBTITLES || activeEngine !is com.tmplayer.desktop.cast.CastPlaybackEngine,
             ) }
 

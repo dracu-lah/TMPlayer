@@ -83,3 +83,18 @@ class CastPresenceScan(
         const val SCAN_MS = 15_000L
     }
 }
+
+/**
+ * Shows or hides a View Cast button for [CastPresenceScan.shown]. A button that goes while it holds
+ * the focus (a keyboard or D-pad on a phone or tablet) hands it to [neighbour] first, so the keys
+ * are never left on nothing.
+ */
+fun showCastButton(button: android.view.View, shown: Boolean, neighbour: android.view.View?) {
+    if (shown) {
+        button.visibility = android.view.View.VISIBLE
+        return
+    }
+    if (button.visibility == android.view.View.GONE) return
+    if (button.hasFocus()) neighbour?.takeIf { it.isShown && it.isFocusable }?.requestFocus()
+    button.visibility = android.view.View.GONE
+}

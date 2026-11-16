@@ -2156,7 +2156,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             }
         }
         lifecycleScope.launch {
-            presence.shown.collect { shown -> castButton?.visibility = if (shown) View.VISIBLE else View.GONE }
+            presence.shown.collect { shown ->
+                castButton?.let { com.tmplayer.cast.showCastButton(it, shown, neighbour = findViewById(R.id.control_more)) }
+            }
         }
         subtitleFiles.onCastFile = { file, mime, label -> cast?.addSubtitle(file, mime, label) == true }
         // Remembered per video, so a handover to VLC or MX Player later carries it (ExternalSubtitleFile).
