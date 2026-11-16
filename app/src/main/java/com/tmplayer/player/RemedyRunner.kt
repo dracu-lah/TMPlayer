@@ -94,6 +94,30 @@ class RemedyRunner(private val host: Host, private val clock: Clock) {
         fun saveMemory(memory: RemedyMemory)
 
         fun log(line: String)
+
+        /** A ladder hop for the playback trace (RL11): the step as taken, or the same step again with its result. */
+        fun traceHop(hop: TraceHop) = Unit
+
+        /** The ladder's facts for the playback trace (RL11): its class, remedies taken, paths visited and hops. */
+        fun traceFacts(facts: Map<String, String>) = Unit
+    }
+
+    /** What the viewer pressed in the player's menu ("Report stutter", "Picture looks wrong"), see [viewerReported]. */
+    enum class ViewerReport(val evidence: RemedyEvidence) {
+        Stutter(RemedyEvidence.UserStutter),
+        WrongPicture(RemedyEvidence.UserReport),
+    }
+
+    /** What [viewerReported] did, so the player can say it in words. */
+    enum class ViewerOutcome {
+        /** The picture's class is not known yet, or this is not ExoPlayer's picture: only the mark was kept. */
+        NoClass,
+
+        /** The press was recorded for the class; no step was taken (one was taken already, or none applies here). */
+        Recorded,
+
+        /** The press was recorded and the next step taken: the video plays another way now, said on screen by the runner. */
+        Tried,
     }
 
     /** One look at ExoPlayer for the watches. */
@@ -138,6 +162,9 @@ class RemedyRunner(private val host: Host, private val clock: Clock) {
     private var proven = false
     /** Until then a proven path is watched again for a stall: the stretch after a seek. */
     private var seekWatchUntilMs = -1L
+    private var viewerStepTaken = false
+    /** The last hop written to the trace with its result still "pending". */
+    private var pendingHop: TraceHop? = null
     private var ticking = false
     private var codecErrors = 0
     private var later: Runnable? = null
@@ -167,6 +194,8 @@ class RemedyRunner(private val host: Host, private val clock: Clock) {
         decoderSwitchedByItself = false
         engineSwitchedByItself = false
         codecErrors = 0
+        viewerStepTaken = false
+        pendingHop = null
         rearm()
     }
 
@@ -213,6 +242,7 @@ class RemedyRunner(private val host: Host, private val clock: Clock) {
         val made = RemedyLadder(engineInput(), running, plan, host.facts(emptySet()))
         ladder = made
         host.log("Remedy: class $k, start ${made.taken.joinToString(",") { it.code }.ifEmpty { "default" }}")
+        host.traceFacts(SessionFacts.ladder(k, made.taken, made.visited.size, made.hops.size))
         when {
             made.running.engine != running.engine -> if (!host.switchEngine(made.running)) host.log("Remedy: the planned engine cannot play this video here")
             made.path.copy(engine = builtPath.engine) != builtPath -> {
@@ -377,6 +407,7 @@ class RemedyRunner(private val host: Host, private val clock: Clock) {
         val step = if (lastCleanMs < 0) 0L else now - lastCleanMs
         if (step in 1..FrozenOutputWatch.MAX_GAP_MS) cleanMs += step
         lastCleanMs = now
+        if (cleanMs >= RemedyLadder.STABLE_MS) traceResult(TraceHop.WORKED)
         if (!l.played(cleanMs)) return
         proven = true
         val k = key ?: return
@@ -413,6 +444,12 @@ class RemedyRunner(private val host: Host, private val clock: Clock) {
     private fun hop(l: RemedyLadder, k: String, hop: RemedyAction.Hop, error: PlaybackException?): Boolean {
         memory = memory.hopped(k, hop, host.videoTag(), host.appVersion, host.today())
         host.saveMemory(memory)
+        // The step before this one, if it was still on probation, did not hold: the trace says so.
+        traceResult(TraceHop.FAILED)
+        val traced = TraceHop(System.currentTimeMillis(), hop.evidence.name, hop.replaced?.code ?: "default", hop.remedy.code)
+        pendingHop = traced
+        host.traceHop(traced)
+        host.traceFacts(SessionFacts.ladder(k, l.taken, l.visited.size, l.hops.size))
         host.log(
             "Remedy: ${hop.evidence.name} -> ${hop.remedy.code} (${hop.remedy.rung}), replaced ${hop.replaced?.code ?: "default"}, " +
                 "hop ${l.hops.size} of ${RemedyLadder.MAX_HOPS}, class $k" + (error?.let { ", ${it.errorCodeName}" } ?: ""),
@@ -458,13 +495,48 @@ class RemedyRunner(private val host: Host, private val clock: Clock) {
         clock.post((atMs - clock.now()).coerceIn(0L, RemedyLadder.PROBATION_MS), task)
     }
 
+    /** The pending hop got its [result]: written again, the same step with its answer. Once per hop. */
+    private fun traceResult(result: String) {
+        val pending = pendingHop ?: return
+        pendingHop = null
+        host.traceHop(pending.copy(result = result))
+    }
+
+    /**
+     * The viewer pressed "Report stutter" or "Picture looks wrong" (RL10). The press is hard
+     * evidence for the picture's class: a stutter is counted in the class memory (its next stutter
+     * steps by itself), and the ladder's next step is taken once for this video, whatever the
+     * "Never switch by itself" choice says, because the press is the consent. A second press, a
+     * press while the last step is on probation, one with nothing left to try and one on a picture
+     * that is not ExoPlayer's change nothing more than the mark the caller keeps for Send logs, and
+     * never open the status sheet: the video plays, the viewer only said it could be better.
+     */
+    fun viewerReported(report: ViewerReport): ViewerOutcome {
+        val l = ladder ?: return ViewerOutcome.NoClass
+        val k = key ?: return ViewerOutcome.NoClass
+        if (!active) return ViewerOutcome.NoClass
+        host.log("Remedy: viewer reported ${report.name}, class $k")
+        if (report == ViewerReport.Stutter) {
+            memory = memory.stuttered(k, host.today())
+            host.saveMemory(memory)
+        }
+        if (viewerStepTaken || exhausted || host.engineRunning().engine != PlayerEngine.ExoPlayer) return ViewerOutcome.Recorded
+        val action = l.onEvidence(report.evidence, host.facts(l.path.excluded), clock.now())
+        if (action !is RemedyAction.Hop) return ViewerOutcome.Recorded
+        viewerStepTaken = true
+        stopTicking()
+        val dealt = hop(l, k, action, null)
+        return if (dealt && !exhausted) ViewerOutcome.Tried else ViewerOutcome.Recorded
+    }
+
     private fun exhaust(l: RemedyLadder, k: String, evidence: RemedyEvidence, error: PlaybackException?) {
         exhausted = true
         stopTicking()
         memory = memory.failed(k, l.taken.lastOrNull(), host.videoTag(), host.appVersion, host.today())
         host.saveMemory(memory)
         host.log("Remedy: no step left for ${evidence.name} after ${l.hops.size} hops, class $k")
-        if (error != null) return
+        // The viewer's press never opens the sheet: the video was playing, see [viewerReported].
+        if (error != null || evidence.fromViewer) return
         host.sheet(if (evidence == RemedyEvidence.NoFirstFrame) L.playerRemedyNoPicture else L.playerRemedyPictureStopped)
     }
 

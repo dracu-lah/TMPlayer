@@ -30,6 +30,11 @@ object DecoderLister {
         }
     }.getOrDefault(emptyList())
 
+    /** The device's own entry for the decoder named [name] (RL12's [DecoderFacts]), or null when it is not listed or the list cannot be read. */
+    fun infoOf(name: String): MediaCodecInfo? = runCatching {
+        MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.firstOrNull { !it.isEncoder && it.name == name }
+    }.getOrNull()
+
     private fun describe(info: MediaCodecInfo, type: String): DecoderReport.Decoder {
         val hardware = when {
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q -> runCatching { info.isHardwareAccelerated && !info.isSoftwareOnly }.getOrNull()

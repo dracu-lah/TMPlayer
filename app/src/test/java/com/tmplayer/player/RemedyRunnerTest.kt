@@ -70,6 +70,7 @@ class RemedyRunnerTest {
         var otherDecoder = true
         var softwareTakes = true
         var audioSoftwareTakes = true
+        var autoSwitch = true
         var engineInput: EngineInput? = null
         var engine = EngineDecision(PlayerEngine.ExoPlayer, EngineReason.Default)
         var key: String? = "amlogic1/28/hevc:10:1080:30/2/mkv/eac3"
@@ -117,6 +118,7 @@ class RemedyRunnerTest {
             otherDecoder = otherDecoder,
             softwareTakes = softwareTakes,
             audioSoftwareTakes = audioSoftwareTakes,
+            autoSwitch = autoSwitch,
         )
 
         override fun classKey() = key
@@ -152,6 +154,14 @@ class RemedyRunnerTest {
             saved = memory
         }
         override fun log(line: String) = Unit
+        val traced = mutableListOf<TraceHop>()
+        val tracedFacts = mutableListOf<Map<String, String>>()
+        override fun traceHop(hop: TraceHop) {
+            traced += hop
+        }
+        override fun traceFacts(facts: Map<String, String>) {
+            tracedFacts += facts
+        }
     }
 
     private val clock = FakeClock()
@@ -280,6 +290,78 @@ class RemedyRunnerTest {
         assertTrue("the player's own switch may still act", runner.allowsDecoderSwitch(video = true))
         runner.decoderSwitched(video = true)
         assertFalse("then the decoder level is spent", runner.onPlayerError(decoderError(PlaybackException.ERROR_CODE_DECODING_FAILED)))
+    }
+
+    @Test
+    fun theViewersStutterPressIsCountedAndTakesTheNextStepOnce() {
+        open()
+        assertEquals(RemedyRunner.ViewerOutcome.Tried, runner.viewerReported(RemedyRunner.ViewerReport.Stutter))
+        assertEquals(1, player.reopened.size)
+        assertEquals("the stutter steps: async queueing first on API 28", DecoderPolicy.Async.On, player.reopened.single().async)
+        assertEquals(listOf(com.tmplayer.i18n.L.playerRemedyAnotherWay), player.said)
+        val record = player.saved!!.records.values.single()
+        assertEquals("hard evidence for the class", 1, record.stutters)
+        assertEquals(1, record.hops)
+        // A second press in the same video is the mark and the count, no second step, no sheet.
+        play()
+        clock.advance(3_000)
+        assertEquals(RemedyRunner.ViewerOutcome.Recorded, runner.viewerReported(RemedyRunner.ViewerReport.Stutter))
+        assertEquals(RemedyRunner.ViewerOutcome.Recorded, runner.viewerReported(RemedyRunner.ViewerReport.WrongPicture))
+        assertEquals(1, player.reopened.size)
+        assertTrue(player.sheets.isEmpty())
+        assertEquals(2, player.saved!!.records.values.single().stutters)
+    }
+
+    @Test
+    fun pictureLooksWrongLeavesTheDecoderNameOutEvenWithNeverSwitchOn() {
+        player.autoSwitch = false
+        open()
+        assertEquals(RemedyRunner.ViewerOutcome.Tried, runner.viewerReported(RemedyRunner.ViewerReport.WrongPicture))
+        assertEquals(setOf("OMX.amlogic.hevc.decoder.awesome2"), player.reopened.single().excluded)
+        assertEquals("a wrong picture is not a stutter", 0, player.saved!!.records.values.single().stutters)
+    }
+
+    @Test
+    fun aPressWithNothingToTryOrNoClassOrAnotherEngineChangesNothingAndNeverOpensTheSheet() {
+        player.otherDecoder = false
+        player.softwareTakes = false
+        open()
+        assertEquals(RemedyRunner.ViewerOutcome.Recorded, runner.viewerReported(RemedyRunner.ViewerReport.WrongPicture))
+        assertTrue(player.reopened.isEmpty())
+        assertTrue(player.sheets.isEmpty())
+        assertTrue("a press after nothing applied still works later", runner.current!!.hops.isEmpty())
+
+        val other = FakePlayer().also { it.key = null }
+        val noClass = RemedyRunner(other, clock)
+        noClass.newVideo(KnownRemedies(), active = true)
+        noClass.policyForBuild()
+        noClass.tracksKnown()
+        assertEquals(RemedyRunner.ViewerOutcome.NoClass, noClass.viewerReported(RemedyRunner.ViewerReport.Stutter))
+        assertNull(other.saved)
+
+        val vlc = FakePlayer().also { it.engine = EngineDecision(PlayerEngine.Vlc, EngineReason.Default) }
+        val onVlc = RemedyRunner(vlc, clock)
+        onVlc.newVideo(KnownRemedies(), active = true)
+        onVlc.policyForBuild()
+        onVlc.tracksKnown()
+        assertEquals(RemedyRunner.ViewerOutcome.Recorded, onVlc.viewerReported(RemedyRunner.ViewerReport.Stutter))
+        assertTrue(vlc.reopened.isEmpty())
+        assertTrue(vlc.engines.isEmpty())
+    }
+
+    @Test
+    fun aViewerHopIsInTheTraceAndLearnsItsResult() {
+        open()
+        assertTrue("the class and its start are traced when the tracks are known", player.tracedFacts.first()["class"] == player.key)
+        runner.viewerReported(RemedyRunner.ViewerReport.Stutter)
+        assertEquals(listOf(TraceHop.PENDING), player.traced.map { it.result })
+        assertEquals("UserStutter", player.traced.single().evidence)
+        assertEquals("as", player.traced.single().to)
+        assertEquals("rung", "as", player.tracedFacts.last()["rung"])
+        play()
+        clock.advance(RemedyLadder.STABLE_MS + 3_000)
+        assertEquals(listOf(TraceHop.PENDING, TraceHop.WORKED), player.traced.map { it.result })
+        assertTrue(player.traced[0].sameStep(player.traced[1]))
     }
 
     @Test

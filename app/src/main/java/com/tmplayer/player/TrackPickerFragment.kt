@@ -267,7 +267,8 @@ class TrackPickerFragment : Fragment() {
                 return@buildList
             }
             if (none) {
-                add(Line("none", if (trackType == C.TRACK_TYPE_AUDIO) L.tracksNoOtherAudio else L.tracksNoSubtitles) { close() })
+                // Audio: one track says so in plain words (AudioButtonAnswer), so the press never looks unanswered.
+                add(Line("none", if (trackType == C.TRACK_TYPE_AUDIO) AudioButtonAnswer.line(options.size) ?: L.tracksNoOtherAudio else L.tracksNoSubtitles) { close() })
                 // Sound can still be out of step with only the one track to choose from.
                 if (trackType == C.TRACK_TYPE_AUDIO && options.isNotEmpty()) addAll(timingLines(host, onInPlace))
                 // No subtitles in the file is exactly when looking online is worth it.
@@ -277,6 +278,10 @@ class TrackPickerFragment : Fragment() {
                     msoneLine(onMsone)?.let(::add)
                 }
                 return@buildList
+            }
+            // One sound track: no choice to make, and the press says so rather than showing a list of one (Raju 6.3).
+            if (trackType == C.TRACK_TYPE_AUDIO && options.size == 1) {
+                AudioButtonAnswer.line(1)?.let { add(Line("single", it) { close() }) }
             }
             options.forEachIndexed { index, option ->
                 val selected = isSelected(player.currentTracks, option)

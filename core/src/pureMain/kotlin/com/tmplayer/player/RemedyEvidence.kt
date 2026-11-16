@@ -20,8 +20,14 @@ enum class RemedyEvidence(val hard: Boolean) {
     /** Green, blocky or garbage frames (the green frame sentinel). */
     WrongPicture(true),
 
-    /** The viewer pressed "Picture looks wrong" or "Report stutter": hard evidence for the class. */
+    /** The viewer pressed "Picture looks wrong": hard evidence for the class. */
     UserReport(true),
+
+    /**
+     * The viewer pressed "Report stutter": hard evidence for the class (research 4.2), answered by
+     * the stutter steps (async queueing, tunneling, software, the other engine), once.
+     */
+    UserStutter(true),
 
     /** The audio output or decoder failed (`AUDIO_TRACK_INIT_FAILED`): the audio steps, never the picture's. */
     AudioFailed(true),
@@ -34,6 +40,14 @@ enum class RemedyEvidence(val hard: Boolean) {
 
     /** The bytes are not arriving (a stall, `NETWORK_BOUND`): another decoder would wait just the same. */
     Source(false),
+    ;
+
+    /**
+     * Said by the viewer with a button. It is allowed to act even with "Never switch by itself"
+     * (the press is the consent), and when nothing is left to try it ends in a plain word, never
+     * the status sheet: the video plays, the viewer only said it could be better.
+     */
+    val fromViewer: Boolean get() = this == UserReport || this == UserStutter
 }
 
 /** The ladder's rungs (research 4.1). One remedy changes one thing, so a result can be attributed. */

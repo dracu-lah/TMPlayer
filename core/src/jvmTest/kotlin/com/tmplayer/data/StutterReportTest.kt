@@ -68,6 +68,19 @@ class StutterReportTest {
     }
 
     @Test
+    fun theLadderFieldsRideAsShortTagsAndNothingElse() {
+        val tags = StutterReport.tagsOf(facts().copy(remedies = "ex,sw", hops = 2))
+        assertEquals("ex,sw".filter { it.isLetterOrDigit() }, tags["remedies"]!!.filter { it.isLetterOrDigit() })
+        assertEquals("2", tags["hops"])
+        val dirty = StutterReport.tagsOf(facts().copy(remedies = "/sdcard/Secret.Show.mkv\n" + "x".repeat(200), hops = 4_000))
+        assertFalse(dirty["remedies"]!!.contains('/'))
+        assertEquals(64, dirty["remedies"]!!.length)
+        assertEquals("10", dirty["hops"])
+        assertEquals("0", StutterReport.tagsOf(facts())["hops"])
+        assertEquals("", StutterReport.tagsOf(facts())["remedies"])
+    }
+
+    @Test
     fun scrubbingKeepsOnlyAllowedTagsAndContexts() {
         val event = StutterReport.build(facts()).apply {
             user = User().apply { id = "installation-id" }

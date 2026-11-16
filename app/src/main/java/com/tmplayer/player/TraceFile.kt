@@ -52,6 +52,28 @@ class TraceFile(private val file: File) {
         }
     }
 
+    /** Adds facts to the current session (version 2's `f` lines): a key said again takes the later line's value on read. */
+    @Synchronized
+    fun appendFacts(atMs: Long, facts: Map<String, String>) {
+        if (givenUp) return
+        val lines = PlaybackTrace.factsLines(atMs, facts)
+        if (lines.isEmpty()) return
+        attempt {
+            file.parentFile?.mkdirs()
+            FileOutputStream(file, true).use { out -> lines.forEach { out.write((it + "\n").toByteArray(Charsets.UTF_8)) } }
+        }
+    }
+
+    /** Adds a ladder hop to the current session. */
+    @Synchronized
+    fun appendHop(hop: TraceHop) {
+        if (givenUp) return
+        attempt {
+            file.parentFile?.mkdirs()
+            FileOutputStream(file, true).use { it.write((PlaybackTrace.hopLine(hop) + "\n").toByteArray(Charsets.UTF_8)) }
+        }
+    }
+
     /** Every session kept, oldest first; empty when there is no file or it cannot be read. */
     @Synchronized
     fun read(): List<TraceSession> = try {
@@ -74,6 +96,8 @@ class TraceFile(private val file: File) {
         val ring = PlaybackTraceRing(maxSessions = TraceLimits.MAX_SESSIONS)
         for (session in PlaybackTrace.read(text, maxSessions = keep)) {
             ring.startSession(session.startedAtMs)
+            ring.addFacts(session.facts)
+            for (hop in session.hops) ring.addHop(hop)
             for (sample in session.samples) ring.add(sample)
         }
         return ring

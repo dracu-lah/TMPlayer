@@ -94,6 +94,22 @@ class TvRowFocusTest {
     }
 
     @Test
+    fun `every button of the row, words under it or not, is the one the remote returns to`() {
+        // PL-8 with the words under the icons: the labelled buttons sit in slots, so the row's own
+        // test for "a button of mine" has to see through them.
+        for (id in listOf(R.id.control_subtitles, R.id.control_audio, R.id.control_speed, R.id.control_shape, R.id.control_tv_more)) {
+            val (controls, root) = row()
+            controls.setLabelsShown(true)
+            controls.show()
+            val button = root.findViewById<View>(id)
+            assertTrue("button $id can take the focus", button.requestFocus())
+            root.findViewById<View>(R.id.controls_timebar).requestFocus()
+            controls.focusRow()
+            assertTrue("back on button $id", button.isFocused)
+        }
+    }
+
+    @Test
     fun `with no button visited the first one gets the focus`() {
         val (controls, root) = row()
         controls.show()

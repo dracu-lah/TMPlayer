@@ -132,9 +132,10 @@ Player (`PlayerActivity.dispatchKeyEvent`).
 | Left, Right | Seek (small jump, side flash) | Walk the row; on the bar a stride |
 | Up | Take "Back to" or the subtitle offer if one stands, else raise the bar | Walk |
 | Down | Raise the row on its first button | Walk |
-| Back | Dismiss an offer, the next up card, or the row; then leave the video (or dock it) | Hides the row |
+| Back | Dismiss an offer, the next up card, or the row; then leave the video (paused or playing: it stops) | Hides the row |
 | Fast forward (hold) | Hold speed until released | same |
 | Rewind, Fast forward, Play, Pause, Play/Pause, Next, Previous | As named (10 s jumps, episodes) | same |
+| Back 10 and Forward 10 beside the play disc | not on screen | Left and Right from the disc reach them, OK jumps 10 s (`Skip.BUTTON_MS`), Down goes to the bar |
 | Captions, Audio track, Aspect, 3D keys | The picker or step the remote names | same |
 | 0 to 9 | Jump to that tenth | same |
 | Menu (Fire TV) | Player options (long press: play in another app) | Closes More options |
@@ -154,15 +155,21 @@ Gestures in the player (`PlayerGestures`), each with its visible twin:
 | Gesture | Does | Button twin |
 | --- | --- | --- |
 | Tap | Raise or hide the controls (or play and pause, by setting) | the play button |
-| Double tap, left or right | Skip back or forward, with a running total | the row's skip buttons, the bar |
+| Double tap, left or right | Skip back or forward, with a running total | the Back 10 and Forward 10 buttons beside play, the bar |
 | Double tap, middle | Play or pause | the play button |
 | Hold | Fast play until the finger lifts | the Speed button |
 | Drag sideways | Scrub, finer when the finger moves away from the bar | the scrub bar |
 | Drag up or down, left edge | Brightness | the system's quick settings (no in-app button) |
 | Drag up or down, right edge | Volume | the volume keys, the system slider |
 | Pinch, then one or two finger drag | Zoom and pan the picture | the picture shape button |
-| Back gesture or button | Closes the topmost sheet, then the row (only when a sheet is open; else the video) | the bar's back arrow |
+| Back gesture or button | Closes the topmost sheet, then the row (only when a sheet is open; else the video, paused or playing, and the sound stops with it: `BackStopsThePlayerTest`) | the bar's back arrow |
 | Lock | Everything but the unlock hold is ignored | the lock button |
+
+The six icons under the controls carry their word (Subtitles, Sound, Speed, the shape in force,
+Rotate, Lock) for the first three openings of the player, then icons only (`ControlLabels`); on a TV the
+focus tip that names a button is left out while the words show. The row remembers the last focused
+button after a sheet closes (`PlayerControls.focusRow`, `TvRowFocusTest`). The desktop's tooltips with
+their keys are the `player.*_hint` strings on `OverlayButton`/`Tip` and were already in place.
 
 Keyboard on a tablet or a phone (a Bluetooth keyboard, headset or remote): while the row is down, Left
 and Right seek, Space, Enter, OK and media play pause toggle playback, digits jump to a tenth. Esc is
