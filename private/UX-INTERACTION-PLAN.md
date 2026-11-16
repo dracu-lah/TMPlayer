@@ -477,6 +477,11 @@ Store text, the site.
   and SLACK (16 MB) makes the tail probe a "seek", whose plan() deletes the head, then the head read deletes the tail: a
   delete ping-pong. Not fixed, left for T7 (needs the film's moov/Cues size and logcat "Low storage: deleting file").
 
+- 2026-11-16 T11 anime episodes (worktree agent-a06d96ab6698dda2c, local commits not pushed; `git log` there; note `design/redesign/anime-episodes.md`):
+  done: step 1 failing `AnimeEpisodeCauseTest` (fixture world `AnimeFixtures`/`AnimeWorld`: Naruto Shippuden shape, 500 episodes, 21 TMDB seasons, AniList one entry, Kitsu, Jikan) proved the four causes; step 2 pure `AnimeEpisodes` (absolute to season and episode and back, merge in order TMDB absolute group, TMDB seasons in 2 appended calls, Kitsu by MAL id, Jikan, AniList streamingEpisodes; source named per episode; wrong match dropped by `plausible`) and the guide in `OnlineMetadata` (`animeGuide`, one answer per show, each source kept a day, resumes when cut short, `season()`, `animeExtras`, name through `episodeFor` so `EpisodeNames.named`, the player label and the next-up card get it with no PlayerActivity change); step 3 and 5 in `MetaExtrasUi` (overlay, first paint held 2.5 s), `SeriesGuide.kt` (GapRow picture: show art dimmed with the number, "Episode N", credit on the facts line and the gap card, find query `Show 123`); step 4 `AnimeName` fallback in `MediaName` (one digit after a fansub dash, 123v2, OVA/SP/Special/Recap as season 0, NCOP as extra, 12-13 and 12~13 ranges, "Season 2 - 05" no longer seasons 2 to 5) with `AnimeNameTest` and GarbageInputTest lines.
+  checks: `:core:jvmTest`, `:ui:jvmTest`, `:desktop:test` (AnimeSeriesGuideTest incl. 500 rows; 2 DownloadsSelectionKey desktop tests are flaky under load and untouched by T11), core JS and desktop compile. `:app` not compiled here (no local.properties in the worktree); app code unchanged.
+  left: web (no AniList, Kitsu or Jikan there and no per-episode lists: needs a worker route, web files belong to Raju H); no TV D-pad test beyond T9's (gap rows are unchanged focusables); no new strings; MetaApis.kt and OnlineMetadata.kt will conflict with T10 on merge (additive).
+
 ## Decisions made by Claude
 - T1: one shared `rememberVisitQuery` (not a patch per screen) so any later search box gets rule 3 by calling it; the phone keeps the query while a page is open (`keep = page != null`), the desktop while a category is open. No design note: small fix.
 - T4: the TV gets the setup's two-answer switch (`TabSwitch`, extracted and shared) because Material segments cannot be reached with a D-pad; phone keeps Material segments, desktop keeps `Segments`. Words: setup choice titles now read Keep video / Save space; device card says "While streaming: Save space". The Free up space offer's button says Switch (was Turn on). No design note: a rename plus one row.
@@ -490,6 +495,7 @@ Store text, the site.
   stop it (the activity stays, the cast goes on, as before the dock). If the user wants an ask instead, it is one dialog in
   `leaveByBack()`.
 - T12 desktop: only the phone's half removed; core `MiniPlayerState`/`MiniPlayerBar` stay for the desktop's in-app bar.
+- T11: the anime guide lives behind `OnlineMetadata.season()`/`animeExtras` and the lookup's episode, not in each screen, so phone, TV, desktop, the player label and the next-up card all read one answer; AniList's season list is one season counted straight through (what fansub files say), a per-season file finds its title through TMDB's own place. Kitsu and Jikan are asked only while titles are still missing. A TMDB match that lacks an episode above 24 is retried as an anime through AniList. The title of a TMDB search may be an AniList alias (kept on `MetaInfo.aliases`).
 
 ## Sources
 - Search patterns: https://carbondesignsystem.com/patterns/search-pattern ,
