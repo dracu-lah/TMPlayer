@@ -13,11 +13,12 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * FQ8: the Cast button exists only once a TV is found (Google Cast or DLNA, in one merged list) or
- * a cast is under way, and the search behind it stops by itself.
+ * FQ8: the phone's search behind the Cast button ([CastPresenceScan]) stops by itself, leaving the
+ * screen ends it, the button follows the merged list of both kinds and a cast under way; the rule
+ * itself is tested in core (CastPresenceTest).
  */
 @OptIn(ExperimentalCoroutinesApi::class)
-class CastPresenceTest {
+class CastPresenceScanTest {
 
     private class Fake(override val available: Boolean = true) : CastSupport {
         val list = MutableStateFlow<List<CastDeviceInfo>>(emptyList())
@@ -53,82 +54,6 @@ class CastPresenceTest {
 
     private fun scanOf(support: CastSupport, scope: TestScope, memory: CastPresence.Memory = CastPresence.Memory(), canSearch: Boolean = true) =
         CastPresenceScan(support, scope, canSearch = { canSearch }, presence = CastPresence(clock, memory))
-
-    // The rule alone.
-
-    @Test
-    fun `no TV found and nothing casting draws no button`() {
-        val p = CastPresence(clock, CastPresence.Memory())
-        p.scanStarted()
-        p.devices(emptyList())
-        assertFalse(p.visible(true, CastSessionState.Idle))
-        p.scanEnded()
-        assertFalse(p.visible(true, CastSessionState.Idle))
-    }
-
-    @Test
-    fun `a TV found draws it, for either kind`() {
-        for (row in listOf(tv, dlnaTv)) {
-            val p = CastPresence(clock, CastPresence.Memory())
-            p.scanStarted()
-            p.devices(listOf(row))
-            assertTrue(row.name, p.visible(true, CastSessionState.Idle))
-        }
-    }
-
-    @Test
-    fun `a build without casting never draws it`() {
-        val p = CastPresence(clock, CastPresence.Memory())
-        p.devices(listOf(tv))
-        assertFalse(p.visible(false, CastSessionState.Connected("Bedroom", "Chromecast", null)))
-    }
-
-    @Test
-    fun `a cast under way always has the button, a found TV keeps it for the visit`() {
-        val p = CastPresence(clock, CastPresence.Memory())
-        for (state in listOf(CastSessionState.Connecting("TV"), CastSessionState.Connected("TV", "", null), CastSessionState.Suspended("TV"), CastSessionState.Lost("TV"), CastSessionState.Failed("TV"))) {
-            assertTrue(state.toString(), p.visible(true, state))
-        }
-        p.scanStarted()
-        p.devices(listOf(tv))
-        p.scanEnded()
-        // The picker's own search starts its list empty: the button stays.
-        p.scanStarted()
-        p.devices(emptyList())
-        p.scanEnded()
-        assertTrue(p.visible(true, CastSessionState.Idle))
-    }
-
-    @Test
-    fun `a TV seen a moment ago shows at once, and is forgotten when the search finds nothing`() {
-        val memory = CastPresence.Memory()
-        CastPresence(clock, memory).apply {
-            scanStarted()
-            devices(listOf(tv))
-        }
-        now += 60_000
-        val next = CastPresence(clock, memory)
-        assertFalse("not before the search starts", next.visible(true, CastSessionState.Idle))
-        next.scanStarted()
-        assertTrue(next.visible(true, CastSessionState.Idle))
-        next.scanEnded()
-        assertFalse(next.visible(true, CastSessionState.Idle))
-        val third = CastPresence(clock, memory)
-        third.scanStarted()
-        assertFalse("forgotten", third.visible(true, CastSessionState.Idle))
-    }
-
-    @Test
-    fun `a TV seen long ago is not shown before it answers again`() {
-        val memory = CastPresence.Memory()
-        CastPresence(clock, memory).devices(listOf(tv))
-        now += CastPresence.REMEMBER_MS + 1
-        val p = CastPresence(clock, memory)
-        p.scanStarted()
-        assertFalse(p.visible(true, CastSessionState.Idle))
-    }
-
-    // The search behind it.
 
     @Test
     fun `the search stops by itself after the scan window`() {

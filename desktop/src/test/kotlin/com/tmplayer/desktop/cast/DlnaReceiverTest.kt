@@ -201,4 +201,23 @@ class DlnaReceiverTest {
         assertTrue(finder.devices.value.isEmpty() && finder.saved.value.isEmpty() && store.locations().isEmpty())
         finder.stop()
     }
+
+    @Test
+    fun `the picker and the bar's short search share one counted search`() {
+        var starts = 0
+        var stops = 0
+        val finder = CastFinder(MutableStateFlow(emptyList<CastDevice>()), { starts++ }, { stops++ }) { l -> DlnaDiscovery(l, interfaces = { emptyList() }) }
+        finder.start()
+        finder.start()
+        assertEquals("one search for two holders", 1, starts)
+        finder.stop()
+        assertEquals("the picker still holds it", 0, stops)
+        finder.restart()
+        assertEquals(2, starts)
+        assertEquals(1, stops)
+        finder.stop()
+        assertEquals(2, stops)
+        finder.stop()
+        assertEquals("a stop too many does nothing", 2, stops)
+    }
 }

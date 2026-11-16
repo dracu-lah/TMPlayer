@@ -37,6 +37,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tmplayer.cast.CastPhase
+import com.tmplayer.cast.CastPresence
 import com.tmplayer.desktop.cast.CastPlaybackEngine
 import com.tmplayer.desktop.cast.DesktopCast
 import com.tmplayer.desktop.cast.ReceiverKind
@@ -46,10 +47,13 @@ import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.icons.TmIcons
 import com.tmplayer.ui.theme.Tone
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * The player bar's Cast button and its popover: the Chromecasts and Google TVs on the network,
  * found while it is open, the one in use ticked, and Stop casting under them while a cast is on.
+ * The button is drawn only once a TV is found or a cast is under way ([castShown], FQ8).
  */
 @Composable
 internal fun CastButton() {
@@ -58,6 +62,9 @@ internal fun CastButton() {
     val devices by DesktopCast.discovery.devices.collectAsState()
     var open by remember { mutableStateOf(false) }
     var adding by remember { mutableStateOf(false) }
+    val shown = castShown()
+    // An open popover or add dialog keeps its button, whatever the search decides meanwhile.
+    if (!shown && !open && !adding) return
     var waitedLong by remember { mutableStateOf(false) }
     var tries by remember { mutableStateOf(0) }
     // Searching goes on while the add dialog is up too, so a TV added there is listed at once.
@@ -258,4 +265,38 @@ internal fun BoxScope.CastingPanel(
 
 /** The Cast glyph's colour while a cast is on: Google's cast blue, which viewers know it by. */
 private val CastOn = Color(0xFF8AB4F8)
+/**
+ * Whether the bar draws its Cast button ([CastPresence]): a search of [CAST_SCAN_MS] when the player
+ * opens, stopped by itself (nothing searches while a video plays on), and the button follows the
+ * list and the cast's state after it.
+ */
+@Composable
+private fun castShown(): Boolean {
+    val presence = remember { CastPresence() }
+    var shown by remember { mutableStateOf(DesktopCast.state.value !is DesktopCast.State.Idle) }
+    LaunchedEffect(presence) {
+        val follow = combine(DesktopCast.discovery.devices, DesktopCast.state) { list, st -> list.isNotEmpty() to (st !is DesktopCast.State.Idle) }
+        presence.scanStarted()
+        DesktopCast.discovery.start()
+        try {
+            withTimeoutOrNull(CAST_SCAN_MS) {
+                follow.collect { (found, underWay) ->
+                    presence.seen(found)
+                    shown = presence.visible(available = true, castUnderWay = underWay)
+                }
+            }
+        } finally {
+            presence.scanEnded()
+            DesktopCast.discovery.stop()
+        }
+        follow.collect { (found, underWay) ->
+            presence.seen(found)
+            shown = presence.visible(available = true, castUnderWay = underWay)
+        }
+    }
+    return shown
+}
+
+private const val CAST_SCAN_MS = 15_000L
+
 private const val NONE_FOUND_AFTER_MS = 8_000L
