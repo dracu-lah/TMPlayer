@@ -11,6 +11,7 @@ import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onLast
@@ -163,5 +164,27 @@ class SettingsGroupsTvTest {
         rule.waitForIdle()
         rule.onNodeWithText("Nothing in Settings matches zzqx", substring = true).assertIsDisplayed()
         rule.onNodeWithText("Playback").assertDoesNotExist()
+    }
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w411dp-h891dp-port-night-xhdpi")
+    fun `the search's clear control empties the box and Back clears before it leaves`() {
+        show(page = null, tv = false)
+        rule.onNodeWithTag(SEARCH_TAG).performTextInput("audio lang")
+        rule.waitForIdle()
+        row("Preferred audio language").assertIsDisplayed()
+        // The shared round clear control, one press empties the box and the list comes back.
+        rule.onNode(hasContentDescription("Clear the search") and hasClickAction()).performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("Playback").assertIsDisplayed()
+
+        // Back clears first: with words in the box the list stays up and the box is empty after it.
+        rule.onNodeWithTag(SEARCH_TAG).performTextInput("zzqx")
+        rule.waitForIdle()
+        rule.onNodeWithText("Nothing in Settings matches zzqx", substring = true).assertIsDisplayed()
+        rule.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
+        rule.waitForIdle()
+        rule.onNodeWithText("Nothing in Settings matches zzqx", substring = true).assertDoesNotExist()
+        rule.onNodeWithText("Playback").assertIsDisplayed()
     }
 }

@@ -564,6 +564,8 @@ fun SettingsScreen(
     // The search box over the category list (U20): a phone's only, past 25 rows. The query is
     // kept while a page found by it is open, so Back comes back to the results.
     var searchQuery by rememberSaveable { mutableStateOf("") }
+    // On the list with words in the search box, Back empties the box first and only then leaves.
+    BackHandler(enabled = page == null && searchQuery.isNotEmpty()) { searchQuery = "" }
     val seek = remember { SettingsSeek() }
     val needs = SettingsNeeds(
         vlc = vlcShown,

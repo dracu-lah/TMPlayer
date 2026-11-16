@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -44,7 +43,8 @@ internal fun SettingsSearchBox(query: String, onQuery: (String) -> Unit, modifie
             null
         } else {
             {
-                IconButton(onClick = { onQuery("") }) { Icon(TmIcons.Close, contentDescription = s.settingsSearchClear) }
+                // The one clear control of every search box, not a Close icon (which dismisses).
+                com.tmplayer.ui.components.ClearButton(s.settingsSearchClear, onClick = { onQuery("") })
             }
         },
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
