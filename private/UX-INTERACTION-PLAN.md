@@ -834,3 +834,10 @@ Next session: run `:app:testDebugUnitTest` and `:desktop:test` in full (per modu
 - Next: other Tab-stop scrims (CastRemote, MetaExtrasUi, TouchNav, PlayerOverlay) could share one scrimDismiss/swallowClicks in ui; MiniPlayerBar ring.
 - Gotchas: collectIsFocusVisibleAsState is com.tmplayer.ui.theme's, not foundation's; a new worktree needs local.properties copied for :app.
 - Decision: kept Role.Button on the popover's chosen line (RadioButton would change reader wording and tests).
+
+### Worker handoff: T7 Raju second pass (branch worktree-agent-a7a3953c4e0fcc95f, local, not pushed)
+- Done: render and focus tests per journey step on phone, TV and desktop (sign in panes, first Home cards, empty Downloads), 48 dp and 200% font checks, frames in `design/raju-pass-2/` (index.html), notes and Left for the user in `private/ux-review/raju-pass-2.md`.
+- Found and fixed: on a TV the remote was trapped in the sign in number, code and password box once the keyboard was down (a one line field keeps the D-pad). New `Modifier.dpadLeavesField()` (app `FieldDpad.kt`) on `AuthField`'s TV branch and `CodeBoxes`.
+- Not done, listed in the note: 1.1 promise line, 4.7 one primary button, 7.5 Open folder on the phone, 11.1 and 11.3 settings regrouping, 2.4 footer help; the same D-pad trap may remain in TV text fields in the shared ui module (Proxy, new list name, Add a TV, country picker); webapp rows are R9's.
+- Gotchas: a worktree needs `local.properties` copied from the main tree (not committed). Render tests that show text need a `Surface(color = Tone.background)` or the text paints black.
+- Existing tests cited in the note were not re-run (brief: only new tests plus the final check line).
