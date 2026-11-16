@@ -900,7 +900,7 @@ fun PlayerScreen(
             }
             // Out to the other devices once the saves stop (a pause, the player closed): the
             // push waits for them to settle, so the heartbeat never edits the message (ResumeSync).
-            com.tmplayer.data.ResumeSync.pushSoon(settings)
+            if (leaving) com.tmplayer.data.ResumeSync.leavingPlayer(settings) else com.tmplayer.data.ResumeSync.pushSoon(settings)
         }
     }
 

@@ -10221,7 +10221,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         rebufferWatch?.cancel()
         saveResumePosition(leaving = !inPictureInPicture)
         // This place out to the other devices, once the saves have settled (ResumeSync).
-        com.tmplayer.data.ResumeSync.pushSoon(settings)
+        com.tmplayer.data.ResumeSync.leavingPlayer(settings)
         // On a TV the video carries on with the phone put away; nothing here to pause.
         if (cast?.casting == true) {
             dockOnLeave()
