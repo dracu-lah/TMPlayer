@@ -149,6 +149,8 @@ internal fun HomePane(
      * Not needed when [rows] is empty: the empty state already says the same.
      */
     noFavourites: Boolean = false,
+    /** The one question about keeping the viewer's place on all their devices, asked once at the end of Home. */
+    keepPlace: KeepPlaceCardState? = null,
     /** False when Settings turned the carousel off: Home opens on its rows, Recently added among them. */
     carouselOn: Boolean = true,
     /** Every row of Home off in Settings ([com.tmplayer.data.HomeLayout.allOff]): a card says so, with the way back. */
@@ -782,6 +784,14 @@ internal fun HomePane(
                 if (noFavourites) {
                     item(key = "favourites-hint", contentType = "favourites-hint") {
                         FavouritesHintCard(s.homeFavouritesHint(if (touch) "phone" else "tv"), start = start, end = end)
+                    }
+                }
+                // Asked once, last: "Keep my place on all my devices?" (FQ12). Counted as shown when
+                // its item comes into the list, so it is one showing and never again.
+                if (keepPlace?.visible == true) {
+                    item(key = "keep-place", contentType = "keep-place") {
+                        LaunchedEffect(Unit) { keepPlace.shown() }
+                        KeepPlaceCard(onYes = keepPlace::yes, onNotNow = keepPlace::notNow, start = start, end = end, modifier = Modifier.padding(top = 16.dp))
                     }
                 }
             }

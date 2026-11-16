@@ -248,9 +248,6 @@ private sealed interface Prompt {
     data object ClearFavorites : Prompt
     data object SignOut : Prompt
 
-    /** Resume on other devices being switched on: it writes a file to Saved Messages, so it says what first. */
-    data object EnableResumeSync : Prompt
-
     /** "Turn off and delete the sync file", which takes the file out of Saved Messages. */
     data object DeleteResumeSync : Prompt
 
@@ -259,6 +256,9 @@ private sealed interface Prompt {
 
     /** A backup file picked, with what restoring it would change. */
     data class Restore(val plan: RestorePlan) : Prompt
+
+    /** The backup before signing out could not be saved: says why, and offers Sign out anyway. */
+    data class SignOutBackupFailed(val reason: String) : Prompt
 }
 
 /**
@@ -473,6 +473,40 @@ fun SettingsScreen(
     // The sign out dialog's tick box. Off every time the dialog opens: downloads are the viewer's
     // files, and losing them has to be asked for each time rather than remembered.
     var alsoDeleteDownloads by remember { mutableStateOf(false) }
+    // "Save a backup before you sign out" (FQ12): on every time the dialog opens, one tick to turn it off.
+    var backupFirst by remember { mutableStateOf(true) }
+    // Signing out, with the backup first when asked. A backup that cannot be saved is shown with
+    // the way out (Prompt.SignOutBackupFailed) and never keeps the viewer from signing out.
+    fun signOutNow(withBackup: Boolean) {
+        val deleteDownloads = alsoDeleteDownloads
+        scope.launch {
+            if (withBackup) {
+                prompt = null
+                busy = s.signoutBackupSaving
+                val service = com.tmplayer.data.BackupService(
+                    settings = settings,
+                    watched = watchedStore,
+                    metadata = com.tmplayer.online.OnlineMetadata.current?.store,
+                    appVersion = com.tmplayer.BuildConfig.VERSION_NAME,
+                    bookmarks = com.tmplayer.data.BookmarkStore(context),
+                )
+                val result = com.tmplayer.data.SignOutBackup.save({ service.export() }, service.fileName())
+                busy = null
+                if (result is com.tmplayer.data.BackupSend.Failed) {
+                    prompt = Prompt.SignOutBackupFailed(result.reason)
+                    return@launch
+                }
+            }
+            prompt = null
+            alsoDeleteDownloads = false
+            backupFirst = true
+            busy = s.settingsSigningOut
+            // The downloads stay unless the box was ticked (forgetAccount says the rest).
+            forgetAccount(context, settings, watchedStore, deleteDownloads)
+            Td.logOut()
+            onLoggedOut()
+        }
+    }
     // Which end of the range the D-pad is currently moving.
     var editingUpper by remember { mutableStateOf(false) }
     // Where focus is sent back to after a reset of the size limits.
@@ -1398,54 +1432,6 @@ fun SettingsScreen(
                         onToggle = { scope.launch { settings.setRememberSearches(!rememberSearches) } },
                     )
                 }
-                // Resume on other devices (U7): opt in, the row saying what goes into the viewer's
-                // own Saved Messages. On asks first (Prompt.EnableResumeSync); off keeps the file,
-                // which "Turn off and delete the sync file" takes away.
-                item {
-                    ToggleRow(
-                        title = s.settingsResumeSync,
-                        subtitle = if (resumeSync) s.settingsResumeSyncOn else s.settingsResumeSyncOff,
-                        icon = TmIcons.History,
-                        checked = resumeSync,
-                        modifier = Modifier.focusRequester(resumeSyncRow),
-                        onToggle = {
-                            if (!resumeSync) {
-                                prompt = Prompt.EnableResumeSync
-                            } else {
-                                scope.launch { settings.setResumeSync(false) }
-                            }
-                        },
-                    )
-                }
-                if (resumeSync) {
-                    // Sync now, with how the last sync went under it; Replace when the file there
-                    // could not be read, which asks first.
-                    item {
-                        ActionRow(
-                            title = com.tmplayer.data.SyncWords.action(resumeSyncStatus),
-                            subtitle = com.tmplayer.data.SyncWords.status(resumeSyncStatus, resumeSyncAt, resumeSyncRunning),
-                            icon = TmIcons.Refresh,
-                            onClick = {
-                                when {
-                                    resumeSyncRunning -> Unit
-                                    resumeSyncStatus?.kind == com.tmplayer.data.SyncStatus.Kind.Unreadable -> prompt = Prompt.ReplaceResumeSync
-                                    // In the app's own scope: leaving Settings does not stop it half way.
-                                    else -> com.tmplayer.platform.Background.scope.launch {
-                                        com.tmplayer.data.ResumeSync.sync(settings, manual = true)
-                                    }
-                                }
-                            },
-                        )
-                    }
-                    item {
-                        ActionRow(
-                            title = s.settingsResumeSyncDelete,
-                            subtitle = s.settingsResumeSyncDeleteDetail,
-                            icon = TmIcons.Delete,
-                            onClick = { prompt = Prompt.DeleteResumeSync },
-                        )
-                    }
-                }
                 // The picker, always listed: the chats added decide what Chats, Home and search
                 // show. The one list of which chats TMPlayer shows (2026-11-01): a chat's menu
                 // "Remove from TMPlayer" unticks a chat here, and Home's Recently added follows it.
@@ -1907,6 +1893,73 @@ fun SettingsScreen(
                         modifier = Modifier.focusRequester(devicesFocus),
                         onClick = { devicesOpen = true },
                     )
+                }
+                // Keep my place on all my devices (FQ12, moved here from Library): the one switch for
+                // the sync file in the viewer's own Saved Messages, with the privacy line as its words.
+                // Turning it on is the answer to the question, so it asks nothing more; off keeps the
+                // file, which "Turn off and delete the sync file" takes away.
+                item {
+                    ToggleRow(
+                        title = s.syncplaceSwitch,
+                        subtitle = if (resumeSync) s.syncplaceSwitchOn else s.syncplaceSwitchOff,
+                        icon = TmIcons.History,
+                        checked = resumeSync,
+                        modifier = Modifier.focusRequester(resumeSyncRow),
+                        onToggle = {
+                            if (!resumeSync) {
+                                scope.launch {
+                                    settings.setResumeSync(true)
+                                    settings.setKeepPlaceCardSeen()
+                                    com.tmplayer.data.ResumeSync.syncSoon(settings, afterMs = 0)
+                                }
+                                toast(s.syncplaceStarted)
+                            } else {
+                                scope.launch { settings.setResumeSync(false) }
+                            }
+                        },
+                    )
+                }
+                // What goes into the file, in one plain line, in full under the switch.
+                settingsNote {
+                    Text(
+                        s.syncplacePrivacy,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Tone.muted,
+                        modifier = Modifier.padding(
+                            top = 8.dp,
+                            start = if (touch) 16.dp else 0.dp,
+                            end = if (touch) 16.dp else 0.dp,
+                        ),
+                    )
+                }
+                if (resumeSync) {
+                    // Sync now, with how the last sync went under it; Replace when the file there
+                    // could not be read, which asks first.
+                    item {
+                        ActionRow(
+                            title = com.tmplayer.data.SyncWords.action(resumeSyncStatus),
+                            subtitle = com.tmplayer.data.SyncWords.status(resumeSyncStatus, resumeSyncAt, resumeSyncRunning),
+                            icon = TmIcons.Refresh,
+                            onClick = {
+                                when {
+                                    resumeSyncRunning -> Unit
+                                    resumeSyncStatus?.kind == com.tmplayer.data.SyncStatus.Kind.Unreadable -> prompt = Prompt.ReplaceResumeSync
+                                    // In the app's own scope: leaving Settings does not stop it half way.
+                                    else -> com.tmplayer.platform.Background.scope.launch {
+                                        com.tmplayer.data.ResumeSync.sync(settings, manual = true)
+                                    }
+                                }
+                            },
+                        )
+                    }
+                    item {
+                        ActionRow(
+                            title = s.settingsResumeSyncDelete,
+                            subtitle = s.settingsResumeSyncDeleteDetail,
+                            icon = TmIcons.Delete,
+                            onClick = { prompt = Prompt.DeleteResumeSync },
+                        )
+                    }
                 }
                 // Last, under the cards rather than in one: the one press here that ends the
                 // session, asked first (Prompt.SignOut).
@@ -2587,21 +2640,6 @@ fun SettingsScreen(
             onDismiss = { prompt = null },
         )
 
-        Prompt.EnableResumeSync -> TvConfirm(
-            title = s.settingsResumeSyncEnableTitle,
-            message = s.settingsResumeSyncEnableMessage,
-            confirmLabel = s.confirmTurnOn,
-            destructive = false,
-            onConfirm = {
-                prompt = null
-                scope.launch {
-                    settings.setResumeSync(true)
-                    com.tmplayer.data.ResumeSync.syncSoon(settings, afterMs = 0)
-                }
-            },
-            onDismiss = { prompt = null },
-        )
-
         Prompt.DeleteResumeSync -> TvConfirm(
             title = s.settingsResumeSyncDeleteTitle,
             message = s.settingsResumeSyncDeleteMessage,
@@ -2654,33 +2692,42 @@ fun SettingsScreen(
             message = s.settingsSignOutMessage,
             detail = if (split.downloadBytes > 0) s.settingsSignOutDownloadsStay else null,
             confirmLabel = s.settingsSignOutConfirm,
-            extra = if (split.downloadBytes > 0) {
-                {
+            extra = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    // On by default (FQ12): a backup of the settings, places and bookmarks in the
+                    // viewer's own Saved Messages, sent before anything is cleared.
                     TickRow(
-                        label = s.settingsSignOutDeleteDownloads(s.formatter.bytes(split.downloadBytes)),
-                        checked = alsoDeleteDownloads,
-                        onToggle = { alsoDeleteDownloads = !alsoDeleteDownloads },
+                        label = s.signoutBackupTick,
+                        checked = backupFirst,
+                        onToggle = { backupFirst = !backupFirst },
                     )
-                }
-            } else {
-                null
-            },
-            onConfirm = {
-                prompt = null
-                val deleteDownloads = alsoDeleteDownloads
-                alsoDeleteDownloads = false
-                scope.launch {
-                    busy = s.settingsSigningOut
-                    // The downloads stay unless the box was ticked (forgetAccount says the rest).
-                    forgetAccount(context, settings, watchedStore, deleteDownloads)
-                    Td.logOut()
-                    onLoggedOut()
+                    if (split.downloadBytes > 0) {
+                        TickRow(
+                            label = s.settingsSignOutDeleteDownloads(s.formatter.bytes(split.downloadBytes)),
+                            checked = alsoDeleteDownloads,
+                            onToggle = { alsoDeleteDownloads = !alsoDeleteDownloads },
+                        )
+                    }
                 }
             },
+            onConfirm = { signOutNow(withBackup = backupFirst) },
             onDismiss = {
                 prompt = null
                 alsoDeleteDownloads = false
+                backupFirst = true
             },
+        )
+
+        // The backup could not be saved: the reason, and the way out. Back returns to the first
+        // dialog (where Sign out tries again, or the tick can be turned off); Sign out anyway goes on.
+        is Prompt.SignOutBackupFailed -> TvConfirm(
+            title = s.signoutBackupFailedTitle,
+            message = s.signoutBackupFailedMessage((prompt as Prompt.SignOutBackupFailed).reason),
+            detail = s.signoutBackupFailedDetail,
+            confirmLabel = s.signoutBackupAnyway,
+            cancelLabel = s.commonBack,
+            onConfirm = { signOutNow(withBackup = false) },
+            onDismiss = { prompt = Prompt.SignOut },
         )
 
         is Prompt.Restore -> {
