@@ -79,6 +79,7 @@ import com.tmplayer.data.videoFollowsTransforms
 import com.tmplayer.data.LocalDownloads
 import com.tmplayer.data.LocalVideo
 import com.tmplayer.data.OpeningStall
+import com.tmplayer.data.StartVerdict
 import com.tmplayer.data.start
 import com.tmplayer.data.pauseAll
 import com.tmplayer.data.resume
@@ -9338,16 +9339,35 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         // TDLib's download speed, or the rate the player is being handed bytes where TDLib is
         // quiet (the start already on the disk from the warm-up).
         val rate = maxOf(speed.bytesPerSec, readSpeed.bytesPerSec)
-        host.note = if (slow && rate >= StreamStats.MIN_MEANINGFUL_SPEED && !downloadComplete) {
+        val now = SystemClock.elapsedRealtime()
+        val waited = now - host.shownAt
+        // One decision for every screen (FQ1, StartVerdict): the stall sheet itself is
+        // showSlowStart's, this is the line under the loader before it.
+        val verdict = StartVerdict.of(
+            StartVerdict.Facts(
+                waitedMs = waited,
+                quietMs = if (lastProgressAtMs > 0) now - lastProgressAtMs else waited,
+                local = downloadComplete,
+                deviceOffline = networkOffline,
+                bytesPerSec = rate,
+                speedLimited = Td.speedLimitedNow(),
+            ),
+            slowAfterMs = LOADER_SLOW_MS,
+        )
+        val speedLine = if (rate >= StreamStats.MIN_MEANINGFUL_SPEED) {
             val figure = Translator.messages.formatter.speed(rate)
-            val line = if (isRealDownload()) L.playerDownloadingRate(figure) else L.playerCachingRate(figure)
-            // Telegram's own cap on an account without Premium (CP83): said, nothing offered.
-            if (Td.speedLimitedNow()) "$line\n${L.playerSpeedLimited}" else line
-        } else if (slow && !downloadComplete) {
-            // Nothing measurable arriving yet: said quietly, long before the stall sheet's minute.
-            L.connectSlowTitle
+            if (isRealDownload()) L.playerDownloadingRate(figure) else L.playerCachingRate(figure)
         } else {
             null
+        }
+        host.note = when (verdict) {
+            // Telegram's own cap on an account without Premium (CP83): said, nothing offered.
+            StartVerdict.State.Quota -> listOfNotNull(speedLine, L.playerSpeedLimited).joinToString("\n")
+            // Nothing measurable arriving yet: said quietly, long before the stall sheet.
+            StartVerdict.State.Slow, StartVerdict.State.Stalled -> L.connectSlowTitle
+            StartVerdict.State.Waiting -> speedLine.takeIf { slow && !downloadComplete }
+            // The offline notice already says it.
+            StartVerdict.State.Offline -> null
         }
     }
 
@@ -9962,7 +9982,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         }
         statusTitle.text = if (stalledMidPlay) L.playerStalledMidTitle else L.playerStalledTitle
         statusText.text = when (OpeningStall.reason(Td.link.value)) {
-            OpeningStall.Reason.NoLine -> L.playerStalledNoLine
+            OpeningStall.Reason.NoLine -> L.playerStalledNoLinePlain
             OpeningStall.Reason.Slow -> if (stalledMidPlay) L.playerStalledMidSlow else L.playerStalledSlow
         }
         // Telegram's lighter copy (CP80), said where it applies. Not Telegram's cap on an account
