@@ -37,6 +37,7 @@ Command is Ctrl, or Cmd on a Mac. Read in `ShellState.onPreviewKey` (works insid
 | Command+F, `/` | Focus the page's search box | `/` is not taken inside a text field |
 | Command+Shift+A | Choose chats | Ctrl+A alone is the picker's Select all |
 | Command+, | Settings | |
+| Command+J | Downloads, again to close it | the floating bar's Downloads button; Ctrl+Shift+J is not taken |
 | Command+1, Command+2 | Home, Chats | the floating bar's first two places |
 | Command+R, F5 | Refresh the page | only where the page can refresh |
 | F11, Ctrl+Cmd+F (Mac) | Full screen | |

@@ -38,6 +38,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.ui.platform.testTag
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -171,8 +172,11 @@ fun NavFrame(
     }
 }
 
-/** Which of the bar's buttons the page on screen lights, or null for none (a page behind the picture). */
-internal enum class NavPlace { Home, Chats, Search }
+/**
+ * Which of the bar's buttons the page on screen lights, or null for none (a page behind the
+ * picture). The order is the bar's: the highlight slides to the place's ordinal.
+ */
+internal enum class NavPlace { Home, Chats, Search, Downloads }
 
 /** The bar's lit button for where the window is. */
 internal fun navPlaceOf(state: ShellState): NavPlace? = when {
@@ -181,20 +185,24 @@ internal fun navPlaceOf(state: ShellState): NavPlace? = when {
     else -> when (state.destination) {
         Destination.Home -> NavPlace.Home
         Destination.Chats -> NavPlace.Chats
-        Destination.Settings, Destination.Favourites, Destination.History, Destination.Downloads -> null
+        Destination.Downloads -> NavPlace.Downloads
+        Destination.Settings, Destination.Favourites, Destination.History -> null
     }
 }
 
 /** True on the pages behind the picture, which then wears a ring. */
 private fun inProfile(state: ShellState): Boolean =
     !state.paletteOpen && state.openChat == null &&
-        state.destination in setOf(Destination.Favourites, Destination.History, Destination.Downloads, Destination.Settings)
+        state.destination in setOf(Destination.Favourites, Destination.History, Destination.Settings)
 
 /** The command key as the OS names it, for the tooltips. */
 private val COMMAND = if (OsInfo.isMac) "⌘" else "Ctrl+"
 
 /** The Choose chats button's size on the desktop's headers and bar, a header icon button's. */
 internal val CHOOSE_CHATS_SIZE = 40.dp
+
+/** The Downloads button's key as the tooltips name it (ShellState.onPreviewKey). */
+internal val DOWNLOADS_SHORTCUT = "${COMMAND}J"
 
 /** The Choose chats button's key as the tooltips name it (ShellState.onPreviewKey). */
 internal val CHOOSE_CHATS_SHORTCUT = "${COMMAND}Shift+A"
@@ -265,10 +273,12 @@ private fun NavBar(
                         state.showChats(if (open.onChatsPage) open else BrowseSection.of(BrowseTab.Chats))
                     }
                     NavButton(TmIcons.Search, s.commonSearch, "${COMMAND}K", current == NavPlace.Search) { state.paletteOpen = !state.paletteOpen }
+                    // Downloads is a place of its own (R2), with the number running; the key opens it from anywhere.
+                    NavButton(TmIcons.Download, s.navDownloads, DOWNLOADS_SHORTCUT, current == NavPlace.Downloads, badge = inFlight) { state.toggleDownloads() }
                     ProfileButton(
                         account = account,
                         ringed = inProfile(state),
-                        badged = inFlight > 0 || update != null,
+                        badged = update != null,
                         open = state.profileOpen,
                         onPlaced = onPicturePlaced,
                         onClick = { state.profileOpen = !state.profileOpen },
@@ -298,15 +308,38 @@ private fun NavButton(
     label: String,
     shortcut: String?,
     chosen: Boolean,
+    /** A count over the icon's top end (Downloads running); 0 draws none. */
+    badge: Int = 0,
     onClick: () -> Unit,
 ) {
     BarTooltip(label, shortcut) {
-        NavCell(label, chosen, onClick, role = Role.Tab) { tint ->
-            // Fills in with a drop as the place is chosen, as the phone's bar does.
-            com.tmplayer.ui.components.SelectableIcon(icon, selected = chosen, tint = tint, size = 22.dp)
+        NavCell(label, chosen, onClick, role = Role.Tab, description = if (badge > 0) "$label, $badge" else label) { tint ->
+            Box(contentAlignment = Alignment.Center) {
+                // Fills in with a drop as the place is chosen, as the phone's bar does.
+                com.tmplayer.ui.components.SelectableIcon(icon, selected = chosen, tint = tint, size = 22.dp)
+                if (badge > 0) {
+                    Text(
+                        if (badge > 99) "99+" else badge.toString(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Tone.onAccent,
+                        maxLines = 1,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .offset(x = 10.dp, y = (-6).dp)
+                            .clip(CircleShape)
+                            .background(Tone.accent)
+                            .border(1.5.dp, FloatingTone.menu, CircleShape)
+                            .padding(horizontal = 4.dp)
+                            .testTag(NAV_BADGE_TAG),
+                    )
+                }
+            }
         }
     }
 }
+
+/** The test tag of the count over the Downloads button. */
+internal const val NAV_BADGE_TAG = "nav-badge"
 
 @Composable
 private fun NavCell(
@@ -511,7 +544,6 @@ private fun BoxScope.ProfilePopover(state: ShellState, update: NavUpdate?, ancho
                 )
                 HorizontalDivider(Modifier.padding(horizontal = 14.dp, vertical = 4.dp), color = Tone.outline)
                 PopoverRow(TmIcons.StarOutline, s.browseTabFavourites, favourites.size.takeIf { it > 0 }?.toString(), Modifier.focusRequester(first), onClick = close { state.go(Destination.Favourites) })
-                PopoverRow(TmIcons.Download, s.navDownloads, inFlight.takeIf { it > 0 }?.toString(), onClick = close { state.go(Destination.Downloads) })
                 PopoverRow(TmIcons.History, s.browseTabHistory, null, onClick = close { state.showHistory(HistoryTab.Continue) })
                 PopoverRow(TmIcons.Clock, s.browseTabWatchLater, null, onClick = close { state.showHistory(HistoryTab.WatchLater) })
                 HorizontalDivider(Modifier.padding(horizontal = 14.dp, vertical = 4.dp), color = Tone.outline)

@@ -179,12 +179,6 @@ class ShellState(
     /** History's order, one for its three lists: most recent first, or by title. */
     var historySort by mutableStateOf(ChatSort.Recent)
 
-    /**
-     * Set by Settings' Recently played row: Downloads opens with that section, folded away at the
-     * page's foot otherwise, unfolded and in view. The page clears it once it has done so.
-     */
-    var downloadsOpenRecent by mutableStateOf(false)
-
     /** Set by the low storage notification (CP76): Downloads opens with Free up space up. */
     var downloadsOpenFreeUp by mutableStateOf(false)
     /**
@@ -425,6 +419,18 @@ class ShellState(
         openList = id
     }
 
+    /**
+     * Ctrl+J (Cmd+J) and the bar's Downloads button: open Downloads, and the same again from there
+     * closes it back to the page it was reached from, as Settings' key does not (it only opens).
+     */
+    fun toggleDownloads() {
+        if (destination == Destination.Downloads) {
+            if (modalOpen) closeModal() else go(Destination.Home)
+        } else {
+            go(Destination.Downloads)
+        }
+    }
+
     fun go(to: Destination) {
         openChat = null
         chatToRefocus = null
@@ -660,7 +666,7 @@ class ShellState(
     /**
      * Shortcuts that work wherever focus is, even inside a text field: Ctrl+F (Cmd+F) to search
      * the page, Ctrl+K (Cmd+K) to open or close the search across every chat, Ctrl+, (Cmd+,) for
-     * Settings, Ctrl+Shift+A (Cmd+Shift+A) for Choose chats, Ctrl+Q (Cmd+Q) to quit. The command key is the OS's own, as
+     * Settings, Ctrl+J (Cmd+J) for Downloads, Ctrl+Shift+A (Cmd+Shift+A) for Choose chats, Ctrl+Q (Cmd+Q) to quit. The command key is the OS's own, as
      * the player reads it: Ctrl on a Mac is a text field's caret key, and Super+Q on Linux belongs
      * to the window manager.
      */
@@ -688,6 +694,11 @@ class ShellState(
             }
             command && event.key == Key.F -> {
                 focusSearch()
+                true
+            }
+            // Downloads, the bar's own button's key (R2); again closes it.
+            command && event.key == Key.J && !event.isShiftPressed -> {
+                toggleDownloads()
                 true
             }
             // Choose chats, the person-with-a-plus button's key (Ctrl+A is the picker's own Select all).

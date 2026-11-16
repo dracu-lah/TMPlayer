@@ -46,6 +46,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
@@ -170,11 +171,7 @@ internal fun TvTopBar(
                 account = account,
                 chosen = current == null && !state.paletteOpen,
                 open = state.profileOpen,
-                badge = when {
-                    update != null -> Tone.caution
-                    inFlight > 0 -> Tone.accent
-                    else -> null
-                },
+                badge = if (update != null) Tone.caution else null,
                 label = s.navProfile,
                 onClick = { state.profileOpen = !state.profileOpen },
                 modifier = Modifier
@@ -196,6 +193,10 @@ internal fun TvTopBar(
                 TvTab(s.navChats, TmIcons.Chats, current == NavPlace.Chats, Modifier.focusRequester(bar.chats)) {
                     val open = state.chatSection
                     state.showChats(if (open.onChatsPage) open else BrowseSection.of(BrowseTab.Chats))
+                }
+                // Downloads, with the number running (R2): a place of its own, after Chats.
+                TvTab(s.navDownloads, TmIcons.Download, current == NavPlace.Downloads, Modifier.focusRequester(bar.downloads), badge = inFlight) {
+                    state.toggleDownloads()
                 }
                 // Add or remove chats: an action rather than a place, so an icon named under the
                 // remote's focus, a Right from Chats away. Only on Chats (and in Settings), not on
@@ -231,7 +232,7 @@ internal fun TvTopBar(
 
 /** One of the bar's places: its icon and name in a pill, the icon filled while its page is shown. */
 @Composable
-private fun TvTab(label: String, icon: ImageVector, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun TvTab(label: String, icon: ImageVector, selected: Boolean, modifier: Modifier = Modifier, badge: Int = 0, onClick: () -> Unit) {
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusVisibleAsState()
     val pressed by interactions.collectIsPressedAsState()
@@ -269,7 +270,8 @@ private fun TvTab(label: String, icon: ImageVector, selected: Boolean, modifier:
                 .focusRing(focused, CircleShape)
                 .clickable(interactionSource = interactions, indication = null, role = Role.Tab, onClick = onClick)
                 .semantics {
-                    contentDescription = label
+                    // "Downloads, 2": the count is read with the name.
+                    contentDescription = if (badge > 0) "$label, $badge" else label
                     this.selected = selected
                 }
                 .padding(horizontal = 14.dp),
@@ -284,6 +286,19 @@ private fun TvTab(label: String, icon: ImageVector, selected: Boolean, modifier:
                 color = ink,
                 maxLines = 1,
             )
+            if (badge > 0) {
+                Text(
+                    if (badge > 99) "99+" else badge.toString(),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Tone.onAccent,
+                    maxLines = 1,
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(Tone.accent)
+                        .padding(horizontal = 7.dp, vertical = 1.dp)
+                        .testTag(NAV_BADGE_TAG),
+                )
+            }
         }
     }
 }
