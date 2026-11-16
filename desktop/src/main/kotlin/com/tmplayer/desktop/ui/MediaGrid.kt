@@ -70,6 +70,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
+import androidx.compose.ui.semantics.Role
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -1147,7 +1148,8 @@ internal fun Poster(
                 }
             }
             .then(if (nav != null) Modifier.navCell(nav, index, requester) else Modifier.focusRequester(requester))
-            .onFocusChanged { hasFocus = it.isFocused }
+            // hasFocus, not isFocused: Tab into the Play disc or the overflow button must not take the buttons away.
+            .onFocusChanged { hasFocus = it.hasFocus }
             .onPreviewKeyEvent { event ->
                 when {
                     GridNav.isMenuKey(event) -> {
@@ -1182,9 +1184,9 @@ internal fun Poster(
             // No hover or press plate: the lift and the ring on the art are the feedback.
             .then(
                 if (detailFirst) {
-                    Modifier.combinedClickable(interactionSource = interaction, indication = null, onDoubleClick = play, onClick = click)
+                    Modifier.combinedClickable(interactionSource = interaction, indication = null, role = Role.Button, onDoubleClick = play, onClick = click)
                 } else {
-                    Modifier.clickable(interactionSource = interaction, indication = null, onClick = play)
+                    Modifier.clickable(interactionSource = interaction, indication = null, role = Role.Button, onClick = play)
                 },
             )
     Column(
@@ -1249,9 +1251,10 @@ internal fun Poster(
                 if (!needsInternet) Box(Modifier.align(Alignment.Center)) {
                     BarTooltip(s.playerPlay, null) {
                         Surface(
+                            onClick = { state.openPlayer(item, startFromBeginning = false) },
                             shape = CircleShape,
                             color = Tone.accent,
-                            modifier = Modifier.size(48.dp).clickable { state.openPlayer(item, startFromBeginning = false) },
+                            modifier = Modifier.size(48.dp),
                         ) {
                             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                 Icon(TmIcons.PlaySolid, contentDescription = s.playerPlay, tint = Tone.onAccent, modifier = Modifier.size(24.dp))

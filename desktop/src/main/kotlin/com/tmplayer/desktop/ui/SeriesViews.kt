@@ -128,7 +128,7 @@ internal fun SeriesPoster(
     val behaviour = Modifier
             .hoverable(interaction)
             .then(if (nav != null) Modifier.navCell(nav, index, requester) else Modifier.focusRequester(requester))
-            .onFocusChanged { hasFocus = it.isFocused }
+            .onFocusChanged { hasFocus = it.hasFocus }
             .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 when {
@@ -153,7 +153,7 @@ internal fun SeriesPoster(
                     Modifier
                 },
             )
-            .clickable(interactionSource = interaction, indication = null, onClick = onOpen)
+            .clickable(interactionSource = interaction, indication = null, role = androidx.compose.ui.semantics.Role.Button, onClick = onOpen)
     if (menu && state != null) {
         val whole = com.tmplayer.ui.browse.rememberWholeSeries(series)
         val toast = rememberToast()
@@ -297,7 +297,8 @@ internal fun SeasonDropdown(
 ) {
     val s = LocalStrings.current
     var open by remember { mutableStateOf(startOpen) }
-    val current = seasons.firstOrNull { it.number == selected } ?: seasons.first()
+    // No seasons, nothing to pick from: the button is left out rather than crash on a show with none.
+    val current = seasons.firstOrNull { it.number == selected } ?: seasons.firstOrNull() ?: return
     Box {
         OutlinedButton(onClick = { open = true }) {
             Text(
@@ -306,7 +307,7 @@ internal fun SeasonDropdown(
             )
             Icon(TmIcons.ChevronDown, contentDescription = s.seriesSeasonPicker, modifier = Modifier.size(20.dp))
         }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        com.tmplayer.ui.components.TmDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             seasons.forEach { season ->
                 val held = season.state == EpisodeGuide.State.InChat
                 DropdownMenuItem(
