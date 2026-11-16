@@ -1,5 +1,10 @@
 package com.tmplayer.desktop.ui
 
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -129,24 +134,35 @@ internal fun MetadataKeyDialog(onClose: () -> Unit) {
     val s = LocalStrings.current
     val online = OnlineMetadata.current ?: return
     var key by remember { mutableStateOf(online.store.now.ownKey) }
+    val field = remember { FocusRequester() }
+    fun save() {
+        online.setOwnKey(key)
+        onClose()
+    }
     TmAlertDialog(
         onDismissRequest = onClose,
         title = { Text(s.metadataKeyTitle) },
         text = {
             Column(Modifier.width(420.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(MetaWords.keyMessage(online.buildHasKey))
-                OutlinedTextField(key, { key = it }, label = { Text(s.metadataKey) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(
+                    key,
+                    { key = it },
+                    label = { Text(s.metadataKey) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { save() }),
+                    modifier = Modifier.fillMaxWidth().focusRequester(field),
+                )
                 Text(MetaWords.key(online.tmdbState()), style = MaterialTheme.typography.bodySmall, color = Tone.muted)
             }
         },
         confirmButton = {
-            TextButton(onClick = {
-                online.setOwnKey(key)
-                onClose()
-            }) { Text(s.commonOk) }
+            TextButton(onClick = { save() }) { Text(s.commonOk) }
         },
         dismissButton = { TextButton(onClick = onClose) { Text(s.commonCancel) } },
     )
+    FocusWhenShown(field)
 }
 
 /** The viewer's own OMDb key, for IMDb's score. Empty goes back to the build's. */
@@ -155,24 +171,35 @@ internal fun OmdbKeyDialog(onClose: () -> Unit) {
     val s = LocalStrings.current
     val online = OnlineMetadata.current ?: return
     var key by remember { mutableStateOf(online.store.now.omdbKey) }
+    val field = remember { FocusRequester() }
+    fun save() {
+        online.setOmdbKey(key)
+        onClose()
+    }
     TmAlertDialog(
         onDismissRequest = onClose,
         title = { Text(s.metadataOmdbKeyTitle) },
         text = {
             Column(Modifier.width(420.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(MetaWords.omdbKeyMessage(online.buildHasOmdbKey))
-                OutlinedTextField(key, { key = it }, label = { Text(s.metadataOmdbKey) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(
+                    key,
+                    { key = it },
+                    label = { Text(s.metadataOmdbKey) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { save() }),
+                    modifier = Modifier.fillMaxWidth().focusRequester(field),
+                )
                 Text(MetaWords.omdbKey(online.omdbState()), style = MaterialTheme.typography.bodySmall, color = Tone.muted)
             }
         },
         confirmButton = {
-            TextButton(onClick = {
-                online.setOmdbKey(key)
-                onClose()
-            }) { Text(s.commonOk) }
+            TextButton(onClick = { save() }) { Text(s.commonOk) }
         },
         dismissButton = { TextButton(onClick = onClose) { Text(s.commonCancel) } },
     )
+    FocusWhenShown(field)
 }
 
 internal fun com.tmplayer.i18n.Strings.skipGroupName(group: com.tmplayer.online.SkipGroup): String = when (group) {

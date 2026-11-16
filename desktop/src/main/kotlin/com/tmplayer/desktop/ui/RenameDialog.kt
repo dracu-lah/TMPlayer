@@ -68,11 +68,5 @@ internal fun RenameDialog(initial: String, onSave: (String?) -> Unit, onDismiss:
             }
         },
     )
-    // After the dialog's first frame: its window is not attached when the effect first runs.
-    LaunchedEffect(Unit) {
-        repeat(5) {
-            withFrameNanos { }
-            if (runCatching { field.requestFocus() }.isSuccess) return@LaunchedEffect
-        }
-    }
+    FocusWhenShown(field)
 }

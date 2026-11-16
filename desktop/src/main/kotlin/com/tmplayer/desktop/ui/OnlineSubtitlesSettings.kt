@@ -1,5 +1,10 @@
 package com.tmplayer.desktop.ui
 
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -174,43 +179,57 @@ internal fun SignInDialog(onClose: () -> Unit) {
     var password by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
+    val first = remember { FocusRequester() }
+    val ready = !busy && username.isNotBlank() && password.isNotEmpty()
+    fun signIn() {
+        if (!ready) return
+        busy = true
+        error = null
+        scope.launch {
+            when (val result = online.signIn(username, password)) {
+                OnlineSubtitles.SignIn.Ok -> {
+                    toast(s.onlineSignedIn(username.trim()))
+                    onClose()
+                }
+                OnlineSubtitles.SignIn.WrongPassword -> error = s.onlineWrongPassword
+                is OnlineSubtitles.SignIn.Failed -> error = OnlineWords.notice(result.notice)
+            }
+            busy = false
+        }
+    }
     TmAlertDialog(
         onDismissRequest = onClose,
         title = { Text(s.onlineSignIn) },
         text = {
             Column(Modifier.width(380.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(s.onlineSignInMessage)
-                OutlinedTextField(username, { username = it }, label = { Text(s.onlineUsername) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(
+                    username,
+                    { username = it },
+                    label = { Text(s.onlineUsername) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    modifier = Modifier.fillMaxWidth().focusRequester(first),
+                )
                 OutlinedTextField(
                     password,
                     { password = it },
                     label = { Text(s.onlinePassword) },
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { signIn() }),
                     modifier = Modifier.fillMaxWidth(),
                 )
                 error?.let { Text(it, color = Tone.danger, style = MaterialTheme.typography.bodySmall) }
             }
         },
         confirmButton = {
-            TextButton(enabled = !busy && username.isNotBlank() && password.isNotEmpty(), onClick = {
-                busy = true
-                error = null
-                scope.launch {
-                    when (val result = online.signIn(username, password)) {
-                        OnlineSubtitles.SignIn.Ok -> {
-                            toast(s.onlineSignedIn(username.trim()))
-                            onClose()
-                        }
-                        OnlineSubtitles.SignIn.WrongPassword -> error = s.onlineWrongPassword
-                        is OnlineSubtitles.SignIn.Failed -> error = OnlineWords.notice(result.notice)
-                    }
-                    busy = false
-                }
-            }) { Text(if (busy) s.onlineSigningIn else s.onlineSignInButton) }
+            TextButton(enabled = ready, onClick = { signIn() }) { Text(if (busy) s.onlineSigningIn else s.onlineSignInButton) }
         },
         dismissButton = { TextButton(onClick = onClose) { Text(s.commonCancel) } },
     )
+    FocusWhenShown(first)
 }
 
 @Composable
@@ -219,22 +238,33 @@ private fun SubdlKeyDialog(onClose: () -> Unit) {
     val online = OnlineSubtitles.current ?: return
     val toast = rememberToast()
     var key by remember { mutableStateOf(online.store.now.subdlKey) }
+    val field = remember { FocusRequester() }
+    fun save() {
+        // `msone` is the hidden switch for MSone's search, not a key.
+        online.setSubdlKey(key)?.let { shown -> toast(if (shown) s.msoneHiddenOn else s.msoneHiddenOff) }
+        onClose()
+    }
     TmAlertDialog(
         onDismissRequest = onClose,
         title = { Text(s.onlineSubdlTitle) },
         text = {
             Column(Modifier.width(380.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(s.onlineSubdlMessage)
-                OutlinedTextField(key, { key = it }, label = { Text(s.onlineSubdl) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(
+                    key,
+                    { key = it },
+                    label = { Text(s.onlineSubdl) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { save() }),
+                    modifier = Modifier.fillMaxWidth().focusRequester(field),
+                )
             }
         },
         confirmButton = {
-            TextButton(onClick = {
-                // `msone` is the hidden switch for MSone's search, not a key.
-                online.setSubdlKey(key)?.let { shown -> toast(if (shown) s.msoneHiddenOn else s.msoneHiddenOff) }
-                onClose()
-            }) { Text(s.commonOk) }
+            TextButton(onClick = { save() }) { Text(s.commonOk) }
         },
         dismissButton = { TextButton(onClick = onClose) { Text(s.commonCancel) } },
     )
+    FocusWhenShown(field)
 }
