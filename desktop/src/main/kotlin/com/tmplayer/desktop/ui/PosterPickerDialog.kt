@@ -14,7 +14,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -29,6 +28,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -90,14 +90,8 @@ internal fun PosterPickerDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(s.commonCancel) } },
     )
-    // After the dialog's first frame: its window is not attached when the effect first runs. Keyed
-    // on the answer, so the keyboard lands on the first title (or Try again) once they are there.
-    LaunchedEffect(load) {
-        repeat(5) {
-            withFrameNanos { }
-            if (runCatching { first.requestFocus() }.isSuccess) return@LaunchedEffect
-        }
-    }
+    // Keyed on the answer, so the keyboard lands on the first title (or Try again) once they are there.
+    FocusWhenShown(first, load)
 }
 
 /**
@@ -122,13 +116,7 @@ internal fun PosterPickerBody(
     Column(Modifier.width(480.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(s.posterNote, color = Tone.muted, style = MaterialTheme.typography.bodySmall)
         if (ready != null && ready.choices.isNotEmpty() && others.isNotEmpty()) {
-            Row(
-                Modifier.fillMaxWidth().testTag("poster-others").clickable { alsoOthers = !alsoOthers },
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Checkbox(checked = alsoOthers, onCheckedChange = { alsoOthers = it })
-                Text(s.posterOthers(others.size))
-            }
+            CheckRow(alsoOthers, { alsoOthers = it }, s.posterOthers(others.size), Modifier.testTag("poster-others"))
         }
         when (load) {
             PickerLoad.Loading -> Row(verticalAlignment = Alignment.CenterVertically) {
@@ -177,7 +165,7 @@ internal fun PosterPickerBody(
                                     }
                                 }
                                 .border(if (focused) 2.dp else 1.dp, if (focused) Tone.accent else Tone.outline, RoundedCornerShape(8.dp))
-                                .clickable {
+                                .clickable(role = Role.Button) {
                                     if (!chosen) {
                                         chosen = true
                                         onPick(choice.pick, if (alsoOthers) others else emptyList())

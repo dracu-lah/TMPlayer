@@ -2,7 +2,6 @@ package com.tmplayer.desktop.ui
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -91,14 +90,12 @@ internal fun SignOutDialog(state: ShellState, onDismiss: () -> Unit) {
             onConfirm = { if (backupFirst) saveThenSignOut() else signOutNow() },
             extra = {
                 Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = backupFirst, onCheckedChange = { backupFirst = it })
-                        Text(s.signoutBackupTick)
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = alsoDownloads, onCheckedChange = { alsoDownloads = it })
-                        Text(if (size > 0) s.commonWithDetail(s.signoutDeleteDownloads, StorageRelocationPlan.size(size)) else s.signoutDeleteDownloads)
-                    }
+                    CheckRow(backupFirst, { backupFirst = it }, s.signoutBackupTick)
+                    CheckRow(
+                        alsoDownloads,
+                        { alsoDownloads = it },
+                        if (size > 0) s.commonWithDetail(s.signoutDeleteDownloads, StorageRelocationPlan.size(size)) else s.signoutDeleteDownloads,
+                    )
                 }
             },
         )
