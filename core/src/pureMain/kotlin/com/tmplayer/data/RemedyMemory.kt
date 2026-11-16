@@ -87,6 +87,16 @@ class RemedyMemory private constructor(val records: Map<String, RemedyRecord>) {
         record.copy(working = working, fails = record.fails - kept.toSet(), crashes = 0)
     }
 
+    /**
+     * [remedy] is known to be the way for [key] without waiting for a clean play, because the
+     * failure itself said so (the sound output refused a bitstream, so PCM it is: RL8): it is the
+     * class's start at its level and its failures are forgotten. Crash counts are left as they are.
+     */
+    fun learned(key: String, remedy: Remedy, day: Int): RemedyMemory = touch(key, day) { record ->
+        if (remedy == Remedy.LighterCopy) return@touch record
+        record.copy(working = record.working.filter { it.level != remedy.level }.toSet() + remedy, fails = record.fails - remedy)
+    }
+
     /** A video of [key] got a stutter verdict: its next stutter steps by itself. */
     fun stuttered(key: String, day: Int): RemedyMemory = touch(key, day) { it.copy(stutters = bump(it.stutters)) }
 

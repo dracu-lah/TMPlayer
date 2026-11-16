@@ -68,6 +68,8 @@ class BackupCoverageTest {
         "decode_memory", "heavy_ask_skip",
         // How each player engine did here (PR2), from this device's decoders and native library.
         "engine_history",
+        // What the remedy ladder learned per class of video (RL6): this device's decoders too.
+        "remedy_memory",
         // Title reports (N1): which pairs this device sent or was asked about, and the few waiting
         // for a connection. File names the viewer agreed to send from this device, never carried to another.
         "title_ledger",

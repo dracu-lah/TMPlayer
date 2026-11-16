@@ -2282,6 +2282,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         piecesNotice = null
         piecesIncomplete = false
         piecesNoticeShown = false
+        // The remedy ladder starts afresh for this video, with what the device list says here (RL6).
+        remedies.newVideo(com.tmplayer.data.KnownDevices.remediesFor(com.tmplayer.data.KnownDevices.builtIn, EngineDevice.facts(), mediaMime.ifBlank { null }), active = !isAudio)
     }
 
     /**
@@ -2521,6 +2523,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             if (!session.isCurrent()) return@launch
             // The engine's inputs (PR2): nothing is read, and ExoPlayer plays, unless VLC can run here.
             engineInput = runCatching { readEngineInput() }.getOrNull()
+            remedies.memoryLoaded(runCatching { settings.remedyMemoryNow(RemedyFacts.today()) }.getOrDefault(com.tmplayer.data.RemedyMemory.Empty))
             markStart("file and settings decided", STAGE_DECIDED)
             startPlayback(session.client)
         }
@@ -2806,7 +2809,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * the engine before it released in full first (a 1 GB stick holds one), the resume point
      * written on the way.
      */
-    private fun moveToEngine(target: com.tmplayer.data.PlayerEngine, reason: EngineReason) {
+    private fun moveToEngine(target: com.tmplayer.data.PlayerEngine, reason: EngineReason, status: String? = null) {
         val client = castClient ?: return
         val carry = currentEngine()?.carry() ?: EngineCarry(positionMs = resumeMs, speed = playbackSpeed)
         Log.i(START_TAG, "Engine switch to ${target.key} ($reason) at ${carry.positionMs} ms, file $fileId")
@@ -2814,7 +2817,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         engineOffer = null
         hideFailureActions()
         failurePinned = false
-        showStatus(if (target == com.tmplayer.data.PlayerEngine.Vlc) L.playerEngineTryingVlc else L.playerEngineTryingExoplayer)
+        showStatus(status ?: if (target == com.tmplayer.data.PlayerEngine.Vlc) L.playerEngineTryingVlc else L.playerEngineTryingExoplayer)
         releasePlayerAndSurface()
         engineDecision = EngineDecision(target, reason)
         if (target == com.tmplayer.data.PlayerEngine.Vlc) {
@@ -2865,9 +2868,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         if (!vlcRunning) {
             if (failure != EngineFailure.Decoder || !vlcCanTake()) return false
             val running0 = engineDecision ?: EngineDecision(running, EngineReason.Default)
-            val auto = if (engineSwitchOnError) EngineSelector.afterFailure(input, running0, failure, engineSwitches) else null
+            val auto = if (engineSwitchOnError && remedies.allowsEngineSwitch()) EngineSelector.afterFailure(input, running0, failure, engineSwitches) else null
             if (auto != null && com.tmplayer.data.PlayerEngine.Vlc !in enginesFailed) {
                 engineSwitches++
+                remedies.engineSwitched()
                 moveToEngine(com.tmplayer.data.PlayerEngine.Vlc, EngineReason.SwitchedAfterFailure)
                 feedback?.message(L.playerEngineSwitchedVlc, holdMs = SEEK_NOTICE_MS)
                 return true
@@ -4216,6 +4220,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         .setUsage(C.USAGE_MEDIA)
         .build()
 
+    /** The path the next player is built on ([DecoderPolicy]): the remedy ladder's, else the known device list's. */
+    private fun decoderPolicyForBuild(): DecoderPolicy = remedies.policyForBuild()
+
     private fun buildPlayer(client: TdlClient): ExoPlayer {
         failurePinned = false
         stereoPipeline = false
@@ -4228,6 +4235,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         // constructor gets round to it.
         val maskHdr10Plus = HevcHdr10PlusMasker.affectedDevice(android.os.Build.MANUFACTURER, android.os.Build.MODEL)
         val fireTv = DeviceQuirks.isFireTv(this@PlayerActivity)
+        // The remedy ladder's path for this build: decoder names left out, queueing, software first ([DecoderPolicy]).
+        val policy = decoderPolicyForBuild().also { Log.i(START_TAG, "${it.describe()} (file $fileId)") }
         val renderers = object : NextRenderersFactory(this@PlayerActivity) {
             /**
              * The stock codec adapters, except on the Fire TV sticks with the MediaTek MT8696
@@ -4353,11 +4362,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 eventListener: androidx.media3.exoplayer.audio.AudioRendererEventListener,
                 out: ArrayList<Renderer>,
             ) {
-                val audioMode = if (extensionRendererMode == DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER) {
-                    DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON
-                } else {
-                    extensionRendererMode
-                }
+                // Unless the sound's own ladder put the app's decoder first (A1, [AudioPolicy]).
+                val audioMode = AudioPolicy.rendererMode(extensionRendererMode, softwareFirst = policy.softwareAudio)
                 super.buildAudioRenderers(
                     context, audioMode, mediaCodecSelector, enableDecoderFallback, audioSink, eventHandler, eventListener, out,
                 )
@@ -4402,14 +4408,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         }
             // Prefer software video puts the app's FFmpeg video decoder ahead of the device's;
             // a format FFmpeg has no decoder for still goes to the device's.
-            .setExtensionRendererMode(
-                if (videoDecoder == com.tmplayer.data.VideoDecoder.Software) {
-                    DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
-                } else {
-                    DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON
-                },
-            )
-            .setEnableDecoderFallback(true)
+            .setExtensionRendererMode(policy.extensionMode(preferSoftwareVideo = videoDecoder == com.tmplayer.data.VideoDecoder.Software))
+            // Decoder fallback on, the codec list without the decoders that failed, the queueing mode.
+            .let(policy::applyTo)
 
         // Sized by the memory the system gives the app ([targetBufferBytes]): small on a 1 GB
         // stick, where a generous buffer is what gets the app killed, generous elsewhere.
@@ -4454,7 +4455,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
         val plan = trackPlan
         val subtitles = plan.subtitles
-        val tunneling = tunnelingDecision()
+        val tunneling = tunnelingDecision().let {
+            if (policy.tunnelingOff && it.tunneled) TunnelingPolicy.Decision(false, TunnelingPolicy.Reason.FailedBefore) else it
+        }
         val trackSelector = DefaultTrackSelector(this).apply {
             parameters = buildUponParameters()
                 // Off stays off, so a series watched without captions does not get them back on an
@@ -4600,6 +4603,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                         watchDecoder = decoderName
                         crashNote.decoder(decoderName)
                     }
+
+                    // Logged and counted for the remedy ladder; Media3 itself retries a recoverable one.
+                    override fun onVideoCodecError(eventTime: AnalyticsListener.EventTime, videoCodecError: Exception) =
+                        remedies.codecError(videoCodecError)
 
                     override fun onAudioDecoderInitialized(
                         eventTime: AnalyticsListener.EventTime,
@@ -5040,6 +5047,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             // After a switch of engine: the languages, the speed and the volume of the one before.
             pendingCarry?.let { carry -> if (currentEngine()?.restore(carry) == true) pendingCarry = null }
             logSubtitleTracks(tracks)
+            // The class is known now: its remedy plan, and a re-open on its path when it starts elsewhere (RL6).
+            if (!tracks.isEmpty && vlcEngine == null) remedies.tracksKnown()
             if (pictureUnplayable(tracks)) return
             if (checkSoftwareDecode(tracks)) return
             restoreResumeTracks(tracks)
@@ -5050,6 +5059,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
         override fun onRenderedFirstFrame() {
             logFirstFrame()
+            remedies.firstFrame()
             // A few seconds in, once the picture and the tracks have settled: subtitles found for the viewer (U5).
             if (OnlineSubtitles.current?.store?.now?.suggest == true) {
                 loopHandler.removeCallbacks(suggestStart)
@@ -5091,6 +5101,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             wakeEndWatch()
+            // The remedy watches tick only while it plays: nothing posted while paused or stalled.
+            remedies.playingChanged(isPlaying && vlcEngine == null && !castUp())
             // A pause and play inside one sample interval would read as a slow clock (HX37).
             if (!isPlaying) watch.interrupted()
             if (isPlaying) startWatch()
@@ -5134,6 +5146,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                         seekStartedAt = 0L
                     }
                     recoveryAttempts = 0
+                    remedies.ready()
                     // Playing: a failure sheet's offer of the other engine is spent.
                     engineOffer = null
                     markStart("ready to play", STAGE_READY)
@@ -5197,6 +5210,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 return
             }
             if (!watch.done) watch.reset()
+            remedies.seeked()
             seekStartedAt = SystemClock.elapsedRealtime()
             noteSeek(oldPosition.positionMs, newPosition.positionMs)
         }
@@ -5224,6 +5238,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 return
             }
             if (retryWithoutTunneling(error)) return
+            // The remedy ladder first (RL6): another decoder, the app's, the other engine, once each.
+            if (remedies.onPlayerError(error)) return
             if (switchDecoderByItself(error)) return
             // With a second engine here (PR2): VLC by itself, or its button on the sheet below.
             if (handleEngineError(error)) return
@@ -9503,6 +9519,59 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     /** The track types this player already moved to the other decoder by itself ([switchDecoderByItself]). */
     private val decodersSwitched = mutableSetOf<Int>()
 
+    /** The remedy ladder for this screen's videos (RL6); its logic is [RemedyRunner]'s, these lines only reach the player. */
+    private val remedies: RemedyRunner by lazy { RemedyRunner(remedyHost, RemedyRunner.clockOf(loopHandler)) }
+
+    private val remedyHost = object : RemedyRunner.Host {
+        override val sdk = android.os.Build.VERSION.SDK_INT
+        override val appVersion: String = com.tmplayer.BuildConfig.VERSION_NAME
+        override fun today() = RemedyFacts.today()
+        override fun videoTag() = RemedyFacts.videoTag(chatId, messageId, fileId)
+        override fun sample() = player?.takeIf { vlcEngine == null && !castUp() }
+            ?.let { RemedyFacts.sample(it, hidden = videoHiddenUnseen || inBackgroundAudio, nowMs = SystemClock.elapsedRealtime()) }
+        override fun facts(excluded: Set<String>) = RemedyFacts.ladder(
+            player, watchDecoder, excluded, decoderPicked = videoDecoder != com.tmplayer.data.VideoDecoder.Automatic,
+            tunneling = tunnelingActive, tunnelingPicked = tunneledMode != com.tmplayer.player.TunneledMode.Auto,
+        )
+        override fun classKey() = RemedyFacts.classKey(player, mediaMime.ifBlank { mediaFileName })
+        override fun failedRenderer(error: PlaybackException) = RemedyFacts.failedRenderer(player, error)
+        override fun engineInput() = engineInput?.takeIf { engineSwitchOnError && vlcCanTake() && stereo == Stereo3d.OFF }
+        override fun engineRunning() = if (vlcEngine != null) {
+            EngineDecision(com.tmplayer.data.PlayerEngine.Vlc, engineDecision?.reason ?: EngineReason.Default)
+        } else {
+            engineDecision?.takeIf { it.engine == com.tmplayer.data.PlayerEngine.ExoPlayer } ?: EngineDecision(com.tmplayer.data.PlayerEngine.ExoPlayer, EngineReason.Default)
+        }
+        // Posted: a re-open from inside the player's own callback would release it mid-dispatch.
+        override fun reopen() {
+            loopHandler.post { moveToEngine(com.tmplayer.data.PlayerEngine.ExoPlayer, engineDecision?.reason ?: EngineReason.Default, L.commonLoading) }
+        }
+        override fun switchEngine(decision: EngineDecision): Boolean {
+            if (decision.engine == com.tmplayer.data.PlayerEngine.Vlc && !vlcCanTake()) return false
+            engineSwitches++
+            loopHandler.post { moveToEngine(decision.engine, decision.reason, L.commonLoading) }
+            return true
+        }
+        override fun say(text: String) {
+            feedback?.message(text, holdMs = SEEK_NOTICE_MS)
+        }
+        override fun offer(text: String, action: String, onTap: () -> Unit) {
+            feedback?.offer(text, action, holdMs = STUTTER_OFFER_MS, focus = FormFactor.isTv(this@PlayerActivity)) { onTap() }
+        }
+        override fun sheet(text: String) {
+            playing?.pause()
+            engineOffer = engineInput?.let { EngineSelector.toOffer(it, com.tmplayer.data.PlayerEngine.ExoPlayer) }?.takeIf { otherEngineOffered() }
+            showError(text, retryable = true)
+        }
+        override fun redeliver(error: PlaybackException) = playerListener.onPlayerError(error)
+        override fun saveMemory(memory: com.tmplayer.data.RemedyMemory) {
+            val store = settings
+            com.tmplayer.App.backgroundScope.launch { runCatching { store.setRemedyMemory(memory) } }
+        }
+        override fun log(line: String) {
+            Log.i(START_TAG, line)
+        }
+    }
+
     /**
      * The first decoder failure of a picture or a soundtrack goes straight to the other decoder,
      * the way the failure sheet's "Try the other decoder" would, without the viewer having to read
@@ -9525,6 +9594,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             weak = true,
         )
         if (!FormatRoute.switchesByItself(plan.trackType, plan.toFfmpeg, decodersSwitched, tooSlow, firstFrameReady)) return false
+        // One budget with the remedy ladder: not once it spent this level or gave up ([RemedyRunner]).
+        val video = plan.trackType == C.TRACK_TYPE_VIDEO
+        if (!remedies.allowsDecoderSwitch(video)) return false
+        remedies.decoderSwitched(video)
         decodersSwitched += plan.trackType
         Log.w(
             "TMPlayer",
@@ -10067,6 +10140,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         crashNote.ended()
         com.tmplayer.data.SelfInstaller.removeBeforeInstall(saveBeforeInstall)
         loopHandler.removeCallbacks(watchTick)
+        remedies.stop()
         // Every runnable on this handler, the undo chip's expiry among them: a delayed one holds
         // the whole activity until it fires.
         loopHandler.removeCallbacksAndMessages(null)
