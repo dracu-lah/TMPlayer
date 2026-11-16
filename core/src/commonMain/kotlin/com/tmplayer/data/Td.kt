@@ -752,7 +752,7 @@ object Td {
             is TdlResult.Failure -> {
                 _auth.value = AuthState.Phone(wrong = true)
                 if (result.message.contains("PHONE_NUMBER_INVALID")) {
-                    L.errorsPhoneInvalid
+                    L.errorsPhoneCheck
                 } else {
                     Failures.humanise(result.message)
                 }
@@ -771,7 +771,7 @@ object Td {
             is TdlResult.Failure -> {
                 _auth.value = current.copy(wrong = true)
                 when {
-                    result.message.contains("PHONE_CODE_INVALID") -> L.errorsWrongCode
+                    result.message.contains("PHONE_CODE_INVALID") -> L.errorsCodeCheck
                     result.message.contains("PHONE_CODE_EXPIRED") ->
                         L.errorsCodeExpired
                     else -> Failures.humanise(result.message)

@@ -816,6 +816,7 @@
   "errors": {
     "channel_private": "You're not in this channel any more, so its videos aren't available.",
     "chat_gone": "That chat isn't there any more. It was deleted, or you left it.",
+    "code_check": "Wrong code. Check the latest message from Telegram.",
     "code_expired": "That code has expired. Start over to have a new one sent.",
     "code_unavailable": "Telegram can't send the code another way. Use the one you have, or start over.",
     "email_invalid": "That email address doesn't look right. Check it and try again.",
@@ -828,6 +829,7 @@
     "not_connected": "Not connected",
     "offline": "Can't reach Telegram. Check this device's internet connection.",
     "phone_banned": "Telegram has blocked this number, so it can't sign in. Telegram's support can say why.",
+    "phone_check": "Check the number. Pick your country first, then type the number as you dial it.",
     "phone_invalid": "That number isn't one Telegram recognises. Include the country code, as in +44.",
     "premium_sign_in": "Telegram won't send this number a code here. Sign in with a QR code from the Telegram app instead: start over, then choose Scan a QR code.",
     "screen_failed": "This part of TMPlayer ran into a problem, so it was stopped before it could close the app. Try again, or save the logs to report it.",
@@ -1420,6 +1422,7 @@
     "resend_call": "Call me instead",
     "resend_fragment": "Send it to Fragment instead",
     "resend_in": "Resend in {time}",
+    "resend_none": "Telegram has no other way to send a code to this number. Check the latest message, or choose Wrong number to try another.",
     "resend_sms": "Send by SMS instead",
     "reset_account": "Reset account",
     "reset_account_confirm": "Delete everything and reset",

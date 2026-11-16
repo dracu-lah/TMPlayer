@@ -56,6 +56,21 @@ object SignInWords {
     /** The code length to expect: TDLib's when it says, else Telegram's usual five. */
     fun codeLength(state: AuthState.Code): Int = state.length.takeIf { it in 1..MAX_CODE_LENGTH } ?: DEFAULT_CODE_LENGTH
 
+    /**
+     * The dial code as it sits at the end of the country row ("+91"), so the row reads "India +91"
+     * and says what the number's first digits are without the viewer finding the small box.
+     * Null while there is no code to show.
+     */
+    fun dialChip(dial: String): String? =
+        dial.filter { it.isDigit() }.takeIf { it.isNotEmpty() }?.let { "+$it" }
+
+    /**
+     * The line that stands where the resend button would, when TDLib offers no other way to send
+     * the code: the row is never just gone, it says what is left to do. Null when it can be sent
+     * again (the button itself, greyed under its countdown, is the row then).
+     */
+    fun resendNone(state: AuthState.Code): String? = if (state.canResend) null else L.loginResendNone
+
     fun clock(seconds: Int): String = "${seconds / 60}:${(seconds % 60).toString().padStart(2, '0')}"
 
     const val DEFAULT_CODE_LENGTH = 5
