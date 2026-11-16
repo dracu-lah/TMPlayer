@@ -16,7 +16,7 @@ import kotlin.test.assertTrue
 class ChatOrderTest {
 
     @After
-    fun tearDown() = PlayQueue.reset()
+    fun tearDown() = RepeatVideo.reset()
 
     private fun video(id: Long, size: Long = 100, name: String = "clip $id.mp4", chat: Long = 7) = MediaItem(
         chatId = chat, messageId = id, fileId = id.toInt(), title = name.substringBeforeLast('.'), fileName = name, sizeBytes = size,
@@ -158,34 +158,33 @@ class ChatOrderTest {
     fun `repeat lasts for the video it was set on and lapses when another starts`() {
         val first = video(10)
         val second = video(20)
-        assertEquals(QueuePlan.AtEnd.Continue, PlayQueue.atEnd(first))
-        PlayQueue.setRepeatVideo(true, first)
-        assertEquals(QueuePlan.AtEnd.Replay, PlayQueue.atEnd(first))
-        assertEquals(QueuePlan.AtEnd.Continue, PlayQueue.atEnd(second))
-        assertFalse(PlayQueue.repeatsVideo(second))
-        PlayQueue.setRepeatVideo(false)
-        assertEquals(QueuePlan.AtEnd.Continue, PlayQueue.atEnd(first))
+        assertFalse(RepeatVideo.replaysAtEnd(first))
+        RepeatVideo.set(true, first)
+        assertTrue(RepeatVideo.replaysAtEnd(first))
+        assertFalse(RepeatVideo.replaysAtEnd(second))
+        assertFalse(RepeatVideo.repeats(second))
+        RepeatVideo.set(false)
+        assertFalse(RepeatVideo.replaysAtEnd(first))
     }
 
     @Test
     fun `Keep repeat on carries it to the next video`() {
-        PlayQueue.setRepeatVideo(true, video(10))
-        assertEquals(QueuePlan.AtEnd.Replay, PlayQueue.atEnd(video(20), keepRepeat = true))
-        assertEquals(QueuePlan.AtEnd.Continue, PlayQueue.atEnd(video(20), keepRepeat = false))
+        RepeatVideo.set(true, video(10))
+        assertTrue(RepeatVideo.replaysAtEnd(video(20), keepRepeat = true))
+        assertFalse(RepeatVideo.replaysAtEnd(video(20), keepRepeat = false))
     }
 
     @Test
     fun `a sleep timer for the end of the video wins over repeat`() {
         val clip = video(10)
-        PlayQueue.setRepeatVideo(true, clip)
-        assertEquals(QueuePlan.AtEnd.Continue, PlayQueue.atEnd(clip, sleepAtTheEnd = true))
-        assertEquals(QueuePlan.AtEnd.Replay, PlayQueue.atEnd(clip, sleepAtTheEnd = false))
+        RepeatVideo.set(true, clip)
+        assertFalse(RepeatVideo.replaysAtEnd(clip, sleepAtTheEnd = true))
+        assertTrue(RepeatVideo.replaysAtEnd(clip, sleepAtTheEnd = false))
     }
 
     @Test
-    fun `repeat this video never touches an audio file's own repeat`() {
-        val song = video(10).copy(mimeType = "audio/mpeg")
-        PlayQueue.setRepeatVideo(true, song)
-        assertEquals(QueuePlan.AtEnd.Continue, PlayQueue.atEnd(song))
+    fun `turning repeat on with no video leaves it off`() {
+        RepeatVideo.set(true, null)
+        assertFalse(RepeatVideo.repeats(video(10), keepRepeat = true))
     }
 }

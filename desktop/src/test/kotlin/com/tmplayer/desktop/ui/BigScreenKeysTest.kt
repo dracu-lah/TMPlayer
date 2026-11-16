@@ -277,8 +277,9 @@ class BigScreenKeysTest {
         // Left and Right go nowhere while the menu is open.
         press(Key.DirectionRight)
         onNode(hasText(L.browseTabFavourites) and hasClickAction()).assertIsFocused()
+        // Downloads is a tab on the bar since R2, not a row here: Down goes on to History.
         press(Key.DirectionDown)
-        onNode(hasText(L.navDownloads) and hasClickAction()).assertIsFocused()
+        onNode(hasText(L.browseTabHistory) and hasClickAction()).assertIsFocused()
         press(Key.Escape)
         assertFalse(shell.profileOpen)
         onNode(picture).assertIsFocused()
@@ -287,7 +288,7 @@ class BigScreenKeysTest {
         press(Key.Enter)
         press(Key.DirectionDown)
         press(Key.Enter)
-        assertEquals(Destination.Downloads, shell.destination)
+        assertEquals(Destination.History, shell.destination)
         onNode(picture).assertIsFocused()
     }
 

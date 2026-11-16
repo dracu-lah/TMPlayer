@@ -136,16 +136,16 @@ export function changed(start: ReadonlySet<number>, now: ReadonlySet<number>): b
 
 /** Videos a chat needs before it is recommended. */
 export const MIN_VIDEOS = 20
-/** At most this many are ticked for the viewer, fullest first. */
-export const MAX_PRETICKED = 30
+/** At most this many chats are recommended: the band is a short list, the rest is the list below it. */
+export const MAX_BAND = 30
 /** Offered when nothing reaches MIN_VIDEOS, and never ticked. */
 export const FALLBACK = 5
-/** How far down the list the counts run before the viewer scrolls; the recommendation is made from these. */
+/** How many chats are counted first, in Telegram's recency order; the band is made from these within RECOMMEND_BY_MS. */
 export const COUNT_AHEAD = 60
 /** The band is made from whatever has been counted by then, so it shows within the first seconds. */
 export const RECOMMEND_BY_MS = 3000
 
-/** One chat as the recommendation weighs it: its place in the list and its videos, null while not known. */
+/** One chat as the recommendation weighs it: its place in the list and its videos, null while not known. The figure only ranks: no screen shows it. */
 export interface CountedChat {
     id: number
     order: number
@@ -156,8 +156,6 @@ export interface CountedChat {
 export interface Suggestion {
     /** The recommended chats, in the order the band lists them. */
     ids: number[]
-    /** The ones ticked for the viewer, always a subset of `ids`. */
-    ticked: Set<number>
     /** True when nothing reached MIN_VIDEOS and these are the fullest chats instead. */
     belowBar: boolean
 }
@@ -171,12 +169,44 @@ export function recommend(chats: readonly CountedChat[]): Suggestion {
     const counted = chats
         .filter((c) => !c.savedMessages && c.videos != null && c.videos > 0)
         .sort((a, b) => (b.videos ?? 0) - (a.videos ?? 0) || a.order - b.order)
-    if (!counted.length) return { ids: [], ticked: new Set(), belowBar: false }
+    if (!counted.length) return { ids: [], belowBar: false }
     const over = counted.filter((c) => (c.videos ?? 0) >= MIN_VIDEOS)
     // Shown so the band is never empty, unticked because none of them clears the bar.
-    if (!over.length) return { ids: counted.slice(0, FALLBACK).map((c) => c.id), ticked: new Set(), belowBar: true }
-    const ids = over.map((c) => c.id)
-    return { ids, ticked: new Set(ids.slice(0, MAX_PRETICKED)), belowBar: false }
+    if (!over.length) return { ids: counted.slice(0, FALLBACK).map((c) => c.id), belowBar: true }
+    return { ids: over.slice(0, MAX_BAND).map((c) => c.id), belowBar: false }
+}
+
+/**
+ * The band after more counts came in (core's ChatSuggestions.refine). While `settled` is false the
+ * viewer has touched nothing and the band is ranked again, so a video channel found late takes its
+ * place at the top. Once they have, no row moves: a chat that qualifies later is added at the end,
+ * and once the band is full it takes the slot of the last row that was outranked (never one in
+ * `pinned`, the chats the viewer ticked). A fallback band is replaced by a real one.
+ */
+export function refine(current: Suggestion, chats: readonly CountedChat[], settled: boolean, pinned: ReadonlySet<number> = new Set()): Suggestion {
+    const ranked = recommend(chats)
+    if (!ranked.ids.length) return current
+    if (!settled || !current.ids.length) return ranked
+    if (ranked.belowBar) return current
+    if (current.belowBar) return ranked
+    const have = new Set(current.ids)
+    const more = ranked.ids.filter((id) => !have.has(id))
+    if (!more.length) return current
+    const out = [...current.ids]
+    let next = 0
+    while (out.length < MAX_BAND && next < more.length) out.push(more[next++])
+    if (next < more.length) {
+        const still = new Set(ranked.ids)
+        const slots = out.map((id, i) => (!still.has(id) && !pinned.has(id) ? i : -1)).filter((i) => i >= 0).slice(-(more.length - next))
+        for (const slot of slots) out[slot] = more[next++]
+    }
+    return out.every((id, i) => id === current.ids[i]) && out.length === current.ids.length ? current : { ids: out, belowBar: false }
+}
+
+/** The order the account is counted in behind the head start: Saved Messages, channels, groups, people; recency inside each. */
+export function scanOrder<C extends PickChat>(chats: readonly C[]): C[] {
+    const rank = (c: PickChat) => (c.self ? 0 : c.kind === 'channel' ? 1 : c.kind === 'group' ? 2 : 3)
+    return chats.map((c, i) => ({ c, i })).sort((a, b) => rank(a.c) - rank(b.c) || a.i - b.i).map((x) => x.c)
 }
 
 /** The chats counted before any row is drawn: Saved Messages, then the head of the list in Telegram's order. */

@@ -43,7 +43,6 @@ internal fun SettingsSearchBox(query: String, onQuery: (String) -> Unit, modifie
             null
         } else {
             {
-                // The one clear control of every search box, not a Close icon (which dismisses).
                 com.tmplayer.ui.components.ClearButton(s.settingsSearchClear, onClick = { onQuery("") })
             }
         },

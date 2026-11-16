@@ -20,8 +20,8 @@ import kotlinx.coroutines.launch
 
 /**
  * The picker's one list: Cast receivers ([CastDiscovery], mDNS) and DLNA renderers
- * ([DlnaDiscovery], SSDP), found together while the picker is open and stopped together when it
- * closes. A TV that answers both ways is one row by its address, and Cast wins.
+ * ([DlnaDiscovery], SSDP), found together while the picker is open (or the player bar's short
+ * search for its button runs) and stopped together when the last of them closes. A TV that answers both ways is one row by its address, and Cast wins.
  *
  * [dlna] is how DLNA discovery is made, so a test can hand in one that talks to a fake on loopback.
  */
@@ -108,8 +108,23 @@ class CastFinder(
 
     private val discovery = runCatching { dlna(listener) }.onFailure { Logger.w(TAG, "No DLNA discovery", it) }.getOrNull()
 
+    /** How many asked for a search (the picker, the player bar's short search for its button); counted. */
+    private var users = 0
+
+    /** Each start has its [stop]; the search runs while any is open. */
     @Synchronized
     fun start() {
+        if (users++ > 0) return
+        begin()
+    }
+
+    @Synchronized
+    fun stop() {
+        if (users == 0 || --users > 0) return
+        end()
+    }
+
+    private fun begin() {
         synchronized(dlnaFound) { dlnaFound.clear() }
         _searching.value = true
         startCast()
@@ -120,8 +135,7 @@ class CastFinder(
         publish()
     }
 
-    @Synchronized
-    fun stop() {
+    private fun end() {
         stopCast()
         runCatching { discovery?.stop() }
         watching?.cancel()
@@ -129,10 +143,12 @@ class CastFinder(
         _searching.value = false
     }
 
-    /** The help card's Try again. */
+    /** The help card's Try again: the search from the start, whoever else holds it. */
+    @Synchronized
     fun restart() {
-        stop()
-        start()
+        if (users == 0) return start()
+        end()
+        begin()
     }
 
     private fun publish() {

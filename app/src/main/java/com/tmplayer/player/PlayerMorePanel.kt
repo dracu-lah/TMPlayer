@@ -136,6 +136,9 @@ interface PlayerMoreHost {
 
     /** Whether Repeat this video is on (EG-F52), the line's detail. */
     fun repeatVideo(): Boolean = false
+
+    /** Between the two presses of Mark this as the intro: the line then asks for the end. */
+    fun introMarking(): Boolean = false
     fun chapter(): String?
     fun watched(): Boolean
 
@@ -389,8 +392,8 @@ class PlayerMorePanel(
     private enum class Kind {
         LockScreen, PictureInPicture, PlaybackDetails, StartOver, PictureShape, ResetZoom, Stereo, Speed,
         VolumeBoost, NightMode, EvenVolume, SleepTimer, AbLoop, RepeatVideo, NextChapter, PreviousChapter,
-        NextFrame, PreviousFrame, SaveFrame, AddBookmark, Bookmarks, OtherEngine, OpenInAnotherApp,
-        CopyLinkAtTime, LoadSubtitleFile, SaveToDownloads, MarkWatched, ReportStutter, RemoteKeys,
+        NextFrame, PreviousFrame, SaveFrame, AddBookmark, Bookmarks, MarkIntro, RemoveIntroMark, OtherEngine, OpenInAnotherApp,
+        CopyLinkAtTime, LoadSubtitleFile, SaveToDownloads, MarkWatched, ReportStutter, ReportWrongPicture, RemoteKeys,
     }
 
     private class Line(val kind: Kind, val label: String, val icon: ImageVector, val detail: String?)
@@ -445,7 +448,7 @@ class PlayerMorePanel(
             Kind.Stereo -> Line(kind, s.playerStereo, TmIcons.Visibility, host.stereoDetail() ?: s.commonOff)
             Kind.Speed -> Line(kind, s.playerSpeed, ImageVector.vectorResource(R.drawable.ic_speed), PlaybackSpeed.label(host.speed()))
             Kind.VolumeBoost -> Line(kind, s.playerVolumeBoost, volume, if (host.volumeBoost()) s.playerVolumeBoostOnDetail else s.commonOff)
-            Kind.NightMode -> Line(kind, s.playerNightMode, TmIcons.VolumeDown, if (host.nightMode()) s.playerNightModeOnDetail else s.commonOff)
+            Kind.NightMode -> Line(kind, s.playerQuietLoudScenes, TmIcons.VolumeDown, if (host.nightMode()) s.playerQuietLoudScenesOnDetail else s.commonOff)
             Kind.EvenVolume -> Line(kind, s.playerEvenVolume, volume, if (host.evenVolume()) s.playerEvenVolumeOnDetail else s.commonOff)
             Kind.SleepTimer -> Line(kind, s.playerSleepTimer, TmIcons.Clock, host.sleepDetail() ?: s.commonOff)
             Kind.AbLoop -> {
@@ -470,6 +473,8 @@ class PlayerMorePanel(
             Kind.SaveFrame -> Line(kind, s.playerSaveFrame, TmIcons.Image, null)
             Kind.AddBookmark -> Line(kind, s.playerAddBookmark, TmIcons.Add, null)
             Kind.Bookmarks -> Line(kind, s.playerBookmarks, TmIcons.Bookmark, bookmarkCount.takeIf { it > 0 }?.let { s.playerBookmarksCount(it) })
+            Kind.MarkIntro -> Line(kind, if (host.introMarking()) s.playerMarkIntroEnd else s.playerMarkIntro, TmIcons.SkipNext, null)
+            Kind.RemoveIntroMark -> Line(kind, s.playerMarkIntroRemove, TmIcons.Close, null)
             Kind.OtherEngine -> Line(kind, s.playerEngineOther, TmIcons.Play, host.engineNow()?.let { s.playerEngineOtherDetail(it) })
             Kind.OpenInAnotherApp -> Line(kind, s.playerOpenInAnotherApp, TmIcons.OpenExternal, null)
             Kind.CopyLinkAtTime -> Line(kind, s.playerCopyLinkAtTime, TmIcons.Copy, null)
@@ -481,6 +486,7 @@ class PlayerMorePanel(
                 Line(kind, s.playerMarkWatched, TmIcons.Check, s.playerMarkWatchedDetail)
             }
             Kind.ReportStutter -> Line(kind, s.playerReportStutter, TmIcons.Info, if (host.tv) s.playerReportStutterDetailTv else s.playerReportStutterDetail)
+            Kind.ReportWrongPicture -> Line(kind, s.playerReportWrongPicture, TmIcons.Info, s.playerReportWrongPictureDetail)
             Kind.RemoteKeys -> Line(kind, s.playerRemoteKeys, TmIcons.Remote, s.playerRemoteKeysDetail)
         }
     }

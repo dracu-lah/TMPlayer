@@ -33,7 +33,7 @@ class SettingsMapTest {
     @Test
     fun `every key the map and the links name is in the catalog`() {
         val keys = SettingsMap.rows.flatMap { row ->
-            listOfNotNull(row.title, row.desktopTitle) + row.details + row.drawnAs
+            listOfNotNull(row.title, row.desktopTitle, row.keywords) + row.details + row.drawnAs
         } + SettingsGroup.entries.flatMap { listOf(it.title, it.summary) } + SettingsLink.entries.map { it.from }
         val missing = keys.filter { it !in english }
         assertTrue("not in en.json: $missing", missing.isEmpty())
@@ -70,7 +70,7 @@ class SettingsMapTest {
         val homes = mapOf(
             "default_player" to SettingsGroup.Playback,
             "player_engine" to SettingsGroup.Playback,
-            "pause_downloads" to SettingsGroup.Storage,
+            "mobile_data" to SettingsGroup.Storage,
             "resume_sync" to SettingsGroup.Library,
             "find_subtitles" to SettingsGroup.Subtitles,
             "detailed_logs" to SettingsGroup.About,
@@ -128,13 +128,61 @@ class SettingsMapTest {
         assertEquals(emptyList<String>(), search("wallpaper", DeviceForm.Desktop))
         assertTrue("wheel_seeks" in search("wheel", DeviceForm.Desktop))
         assertEquals(emptyList<String>(), search("wheel"))
-        // The desktop's own words for a row.
-        assertEquals("size_limits", search("smallest video", DeviceForm.Desktop).first())
         // Accents and case as typed.
         assertEquals("remember_searches", search("RÉMEMBER sear").first())
         assertEquals("pin", search("pin").first())
         // A row drawn under another title is found by it too.
         assertTrue("pin" in search("change the pin"))
+    }
+
+    /**
+     * The words a person thinks in (Raju 11.2): the search matches meanings, not only titles. Each
+     * phrase must find its row, on the phone and the desktop where both have it, and the rows the
+     * review named must come first.
+     */
+    @Test
+    fun `a viewer's own words find the row, on the phone and the desktop`() {
+        val phrases = mapOf(
+            "bigger" to "interface_size",
+            "larger" to "interface_size",
+            "font" to "interface_size",
+            "zoom" to "interface_size",
+            "text size" to "interface_size",
+            "big text" to "interface_size",
+            "delete" to "free_up_space",
+            "delete everything" to "free_up_space",
+            "log out" to "sign_out",
+            "logout" to "sign_out",
+            "sign off" to "sign_out",
+            "mobile data" to "mobile_data",
+            "data" to "mobile_data",
+            "wifi" to "mobile_data",
+            "internet" to "mobile_data",
+            // The While streaming row, whatever its title says now: the old name and the new words.
+            "low storage" to "low_storage",
+            "save space" to "low_storage",
+            "streaming" to "low_storage",
+            "space" to "free_up_space",
+        )
+        for ((phrase, id) in phrases) {
+            val phone = search(phrase, DeviceForm.Phone)
+            assertTrue("phone: \"$phrase\" must find $id, found $phone", id in phone)
+            val desktop = search(phrase, DeviceForm.Desktop)
+            if (SettingsMap.row(id)!!.forms.contains(DeviceForm.Desktop)) {
+                assertTrue("desktop: \"$phrase\" must find $id, found $desktop", id in desktop)
+            }
+        }
+        // The first answer is the row the words are for, not a line that happens to hold one.
+        assertEquals("interface_size", search("bigger").first())
+        assertEquals("interface_size", search("big").first())
+        assertEquals("sign_out", search("log out").first())
+        assertEquals("sign_out", search("logout").first())
+        assertEquals("low_storage", search("low storage").first())
+        assertTrue("remove after watching is found by delete too", "remove_after_watching" in search("delete"))
+        // The matcher reads the key a row names: a locale's own words are found as well.
+        val row = SettingsMap.row("interface_size")!!
+        val hits = SettingsSearch.match("grande", listOf(row), DeviceForm.Phone) { key -> if (key == row.keywords) "grande texto" else text(key) }
+        assertEquals(listOf("interface_size"), hits.map { it.row.id })
     }
 
     @Test

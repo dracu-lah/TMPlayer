@@ -11,12 +11,11 @@ class ChatSuggestionsTest {
         CountedChat(id, order, videos, saved)
 
     @Test
-    fun `the chats over the bar are recommended, fullest first, and ticked`() {
+    fun `the chats over the bar are recommended, fullest first`() {
         val answer = ChatSuggestions.recommend(
             listOf(chat(1, 25), chat(2, 4), chat(3, 900), chat(4, ChatSuggestions.MIN_VIDEOS)),
         )
         assertEquals(listOf(3L, 1L, 4L), answer.ids)
-        assertEquals(setOf(3L, 1L, 4L), answer.ticked)
         assertFalse(answer.belowBar)
     }
 
@@ -28,14 +27,13 @@ class ChatSuggestionsTest {
     }
 
     @Test
-    fun `no more than the cap are ticked, though all of them are offered`() {
+    fun `no more than the cap are recommended, the fullest of them`() {
         val many = (1L..40L).map { chat(it, 100 + it.toInt()) }
         val answer = ChatSuggestions.recommend(many)
-        assertEquals(40, answer.ids.size)
-        assertEquals(ChatSuggestions.MAX_PRETICKED, answer.ticked.size)
-        // The fullest are the ones ticked, not the first ones listed by Telegram.
-        assertTrue(answer.ticked.contains(40L))
-        assertFalse(answer.ticked.contains(1L))
+        assertEquals(ChatSuggestions.MAX_BAND, answer.ids.size)
+        // The fullest are the ones offered, not the first ones listed by Telegram.
+        assertTrue(answer.ids.contains(40L))
+        assertFalse(answer.ids.contains(1L))
     }
 
     @Test
@@ -43,7 +41,6 @@ class ChatSuggestionsTest {
         val answer = ChatSuggestions.recommend((1L..9L).map { chat(it, it.toInt()) })
         assertEquals(ChatSuggestions.FALLBACK, answer.ids.size)
         assertEquals(listOf(9L, 8L, 7L, 6L, 5L), answer.ids)
-        assertEquals(emptySet<Long>(), answer.ticked)
         assertTrue(answer.belowBar)
     }
 
@@ -51,7 +48,6 @@ class ChatSuggestionsTest {
     fun `an account whose chats hold no videos recommends nothing at all`() {
         val answer = ChatSuggestions.recommend(listOf(chat(1, 0), chat(2, null), chat(3, 0)))
         assertEquals(emptyList<Long>(), answer.ids)
-        assertEquals(emptySet<Long>(), answer.ticked)
         assertFalse(answer.belowBar)
     }
 
@@ -73,12 +69,51 @@ class ChatSuggestionsTest {
         assertEquals(listOf(2L), answer.ids)
     }
 
+    private fun suggestion(vararg ids: Long, below: Boolean = false) = ChatSuggestions.Suggestion(ids.toList(), below)
+
     @Test
-    fun `a count reads as a number, as many, or as nothing at all`() {
-        assertEquals(ChatSuggestions.CountShape.Counting, ChatSuggestions.shape(null))
-        assertEquals(ChatSuggestions.CountShape.Unknown, ChatSuggestions.shape(ChatCount.Unknown))
-        assertEquals(ChatSuggestions.CountShape.Exact(0), ChatSuggestions.shape(ChatCount.Known(0)))
-        assertEquals(ChatSuggestions.CountShape.Exact(ChatSuggestions.MANY), ChatSuggestions.shape(ChatCount.Known(ChatSuggestions.MANY)))
-        assertEquals(ChatSuggestions.CountShape.Many, ChatSuggestions.shape(ChatCount.Known(ChatSuggestions.MANY + 1)))
+    fun `a channel with thousands of videos found late takes the top while the viewer has not touched the band`() {
+        val first = ChatSuggestions.recommend(listOf(chat(1, 40), chat(2, 60)))
+        val later = ChatSuggestions.refine(first, listOf(chat(1, 40), chat(2, 60), chat(900, 20_000, order = 900)), settled = false)
+        assertEquals(listOf(900L, 2L, 1L), later.ids)
+    }
+
+    @Test
+    fun `once the viewer has touched the band nothing moves, a later one is added at the end`() {
+        val first = suggestion(2, 1)
+        val later = ChatSuggestions.refine(first, listOf(chat(1, 40), chat(2, 60), chat(900, 20_000, order = 900)), settled = true)
+        assertEquals(listOf(2L, 1L, 900L), later.ids)
+        // Nothing new: the very same band.
+        assertEquals(later, ChatSuggestions.refine(later, listOf(chat(1, 40), chat(2, 60), chat(900, 20_000, order = 900)), settled = true))
+    }
+
+    @Test
+    fun `a full settled band gives the last outranked row to a fuller chat, and keeps what the viewer ticked`() {
+        val all = (1L..30L).map { chat(it, 100 + it.toInt()) }
+        val full = ChatSuggestions.recommend(all)
+        assertEquals(30, full.ids.size)
+        val withBig = all + chat(900, 20_000, order = 900)
+        // Chat 1 holds the fewest videos, so it is the one outranked.
+        val later = ChatSuggestions.refine(full, withBig, settled = true)
+        assertEquals(full.ids.dropLast(1) + 900L, later.ids)
+        assertEquals(full.ids.size, later.ids.size)
+        // The viewer ticked it: it stays, and the band does not grow past the cap.
+        assertEquals(full, ChatSuggestions.refine(full, withBig, settled = true, pinned = setOf(1L)))
+    }
+
+    @Test
+    fun `a band that only said nothing reached the bar is replaced by a real one, and never by another fallback`() {
+        val fallback = ChatSuggestions.recommend(listOf(chat(1, 3), chat(2, 4)))
+        assertTrue(fallback.belowBar)
+        val real = ChatSuggestions.refine(fallback, listOf(chat(1, 3), chat(2, 4), chat(900, 20_000)), settled = true)
+        assertEquals(listOf(900L), real.ids)
+        assertFalse(real.belowBar)
+        assertEquals(real, ChatSuggestions.refine(real, listOf(chat(900, 20_000), chat(5, 2)), settled = true))
+    }
+
+    @Test
+    fun `no new count keeps the band as it is`() {
+        val current = suggestion(1, 2)
+        assertEquals(current, ChatSuggestions.refine(current, listOf(chat(3, null), chat(4, 0)), settled = false))
     }
 }

@@ -17,7 +17,11 @@
 //        the detail page's second helping (MetaExtras): genres, length, rating, age rating, directors
 //        or creators, cast, a trailer's YouTube id, and for a show's episode its own name and words.
 //        { found: true, ... } or { found: false }; 503 as above. extras.ts holds the rules.
-//   GET /tmdb/img/<w185|w300|w342|w500|w780>/<file>.jpg
+//   Anime (anilist.ts): a question with a=1 (the name reads like fansub anime, MetaQuery.anime) asks AniList
+//        first for a show and TMDB first for a film, as OnlineMetadata.resolve does; AniList needs no key.
+//        The answer then also says `source: "anilist"` when AniList matched; its pictures are "/al/<tail>",
+//        and /tmdb/extras?...&a=1 asks AniList by that id. Each provider is paused on its own after a throttle.
+//   GET /tmdb/img/<w185|w300|w342|w500|w780>/<file>.jpg   (and .../al/<cover|banner|character>/... for AniList's)
 //        a picture's bytes from TMDB's image host, same origin so the page can keep them in the
 //        Cache API as it keeps thumbnails.
 //
@@ -31,7 +35,8 @@
 // that leaves for TMDB: no chat, file or account.
 import { extras, type Extras } from './extras.ts'
 import { mergeChoices } from './choices.ts'
-import { best, normalise, trusted, type Ask, type Candidate } from './match.ts'
+import { best, accepts, normalise, trusted, type Ask, type Candidate } from './match.ts'
+import { BASE as ANILIST, DEFAULT_WAIT_MS as ANILIST_WAIT, EXTRAS_QUERY, SEARCH_QUERY, candidates as aniCandidates, extrasOf as aniExtras, imageAddress } from './anilist.ts'
 
 export interface Env {
     /** A TMDB v3 key or v4 read token. Absent: every lookup answers 503 and the page keeps its thumbnails. */
@@ -59,6 +64,8 @@ export const MISS_TTL = 7 * DAY
 const REFUSED_RETRY = DAY * 1000
 const DEFAULT_WAIT = 10_000
 const RETRY = 1_000
+/** How long AniList is left alone after a server error (a 429 names its own time, up to 600 s). */
+const ANILIST_BACKOFF = 30_000
 const SIZES = new Set(['w185', 'w300', 'w342', 'w500', 'w780'])
 const FILE = /^\/[A-Za-z0-9_-]{8,64}\.(jpg|png|webp)$/
 
@@ -110,6 +117,50 @@ export function createHandler(deps: Deps) {
         return call(key, path, params)
     }
 
+    // AniList (anilist.ts): no key, and a pause of its own after a throttle.
+    let aniPausedUntil = 0
+
+    async function aniCall(query: string, variables: Record<string, unknown>): Promise<Reply> {
+        let response: Response
+        try {
+            response = await deps.fetch(
+                new Request(ANILIST, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'User-Agent': 'TMPlayer-web-posters' },
+                    body: JSON.stringify({ query, variables }),
+                }),
+            )
+        } catch {
+            return { kind: 'failed' }
+        }
+        if (response.status === 429) {
+            const seconds = Number(response.headers.get('retry-after'))
+            const waitMs = seconds > 0 ? Math.min(600, Math.max(1, seconds)) * 1000 : ANILIST_WAIT
+            aniPausedUntil = now() + waitMs
+            return { kind: 'throttled', waitMs }
+        }
+        if (response.status === 404) return { kind: 'missing' }
+        if (!response.ok) {
+            // An outage is not asked again at once: AniList is left alone for a short while (the retry below does not double it).
+            aniPausedUntil = now() + ANILIST_BACKOFF
+            return { kind: 'failed' }
+        }
+        try {
+            return { kind: 'ok', json: await response.json() }
+        } catch {
+            return { kind: 'failed' }
+        }
+    }
+
+    /** One more try after a second for a dropped connection or a server error, then give up. */
+    async function aniRetrying(query: string, variables: Record<string, unknown>): Promise<Reply> {
+        const first = await aniCall(query, variables)
+        // A server error paused AniList (aniCall): no second ask into an outage. A dropped connection is tried once more.
+        if (first.kind !== 'failed' || now() < aniPausedUntil) return first
+        await sleep(RETRY)
+        return aniCall(query, variables)
+    }
+
     const yearOf = (date: unknown) => {
         const y = Number(String(date ?? '').slice(0, 4))
         return y > 1800 ? y : null
@@ -127,7 +178,8 @@ export function createHandler(deps: Deps) {
         }
     }
 
-    type Found = { film: boolean; candidate: Candidate }
+    /** [linked]: found by an IMDb id in the post's words, which backs the match on its own (MetaInfo.linked). */
+    type Found = { film: boolean; candidate: Candidate; linked?: boolean; source?: 'anilist' }
     type Outcome = { kind: 'found'; found: Found } | { kind: 'none' } | { kind: 'blocked'; reason: string; waitS: number }
 
     function stopped(reply: Reply): Outcome {
@@ -142,15 +194,76 @@ export function createHandler(deps: Deps) {
         return { kind: 'blocked', reason: 'unavailable', waitS: 30 }
     }
 
+    /**
+     * The title an IMDb id names (OnlineMetadata.linkedTitle): one `find`, and null for an id TMDB
+     * does not know or a call that failed, which leaves the title guess to run.
+     */
+    async function linked(key: string, imdbId: string): Promise<{ film: boolean; id: number } | null> {
+        const reply = await retrying(key, `find/${imdbId}`, 'external_source=imdb_id')
+        if (reply.kind !== 'ok') return null
+        const json = (reply as { json: any }).json
+        const id = (list: unknown) => (Array.isArray(list) && Number.isInteger(list[0]?.id) && list[0].id > 0 ? (list[0].id as number) : null)
+        const film = id(json?.movie_results)
+        if (film !== null) return { film: true, id: film }
+        const show = id(json?.tv_results)
+        return show !== null ? { film: false, id: show } : null
+    }
+
     /** OnlineMetadata.tmdbLookup, in English. */
-    async function lookup(key: string, ask: Ask): Promise<Outcome> {
+    async function lookup(key: string | null, ask: Ask): Promise<Outcome> {
+        const noKey: Outcome = { kind: 'blocked', reason: 'no key', waitS: 300 }
+        const byImdb = key && ask.tmdbId === null && ask.imdbId ? await linked(key, ask.imdbId) : null
+        if (byImdb && key) {
+            const reply = await retrying(key, `${byImdb.film ? 'movie' : 'tv'}/${byImdb.id}`, 'language=en-US')
+            if (reply.kind !== 'ok' && reply.kind !== 'missing') return stopped(reply)
+            if (reply.kind === 'ok') {
+                const c = candidate(byImdb.film, reply.json)
+                // A link the file's own year or episode contradicts is another title's: the guess runs.
+                const contradicted = (byImdb.film && ask.series) || (ask.year !== null && c.year !== null && Math.abs(ask.year - c.year) > 1 && !(!byImdb.film && ask.year > c.year))
+                if (!contradicted) return { kind: 'found', found: { film: byImdb.film, candidate: c, linked: true } }
+            }
+        }
         if (ask.tmdbId !== null) {
+            if (!key) return noKey
             const film = ask.kind === 'film'
             const reply = await retrying(key, `${film ? 'movie' : 'tv'}/${ask.tmdbId}`, 'language=en-US')
             if (reply.kind === 'missing') return { kind: 'none' }
             if (reply.kind !== 'ok') return stopped(reply)
             return { kind: 'found', found: { film, candidate: candidate(film, reply.json) } }
         }
+        // OnlineMetadata.resolve's order for a name that reads like fansub anime: a show asks AniList
+        // first and TMDB after it, a film TMDB first. The web has no TVmaze to ask third.
+        if (ask.anime) {
+            let blocked: Outcome | null = null
+            for (const step of ask.kind === 'film' ? [tmdbSearch, aniLookup] : [aniLookup, tmdbSearch]) {
+                const outcome = await step(key, ask)
+                if (outcome.kind === 'found') return outcome
+                if (outcome.kind === 'blocked') blocked = outcome
+            }
+            return blocked ?? { kind: 'none' }
+        }
+        return tmdbSearch(key, ask)
+    }
+
+    /** OnlineMetadata.anilistLookup: AniList's titles of the kind asked, the first the name accepts. */
+    async function aniLookup(_key: string | null, ask: Ask): Promise<Outcome> {
+        if (now() < aniPausedUntil) return { kind: 'blocked', reason: 'throttled', waitS: (aniPausedUntil - now()) / 1000 }
+        const reply = await aniRetrying(SEARCH_QUERY, { search: ask.title })
+        if (reply.kind === 'throttled') return { kind: 'blocked', reason: 'throttled', waitS: reply.waitMs / 1000 }
+        if (reply.kind === 'failed' || reply.kind === 'refused') return { kind: 'blocked', reason: 'unavailable', waitS: 30 }
+        if (reply.kind === 'missing') return { kind: 'none' }
+        const film = ask.kind === 'film'
+        const found = aniCandidates((reply as { json: unknown }).json)
+            .filter((c) => (c.format === 'MOVIE') === film)
+            .find((c) => accepts(ask.title, ask.year, c.names, c.year, !film))
+        return found ? { kind: 'found', found: { film, candidate: found, source: 'anilist' } } : { kind: 'none' }
+    }
+
+    /** The TMDB half of OnlineMetadata.tmdbLookup: the name searched, and the pause and refusal that stop asking. */
+    async function tmdbSearch(key: string | null, ask: Ask): Promise<Outcome> {
+        if (!key) return { kind: 'blocked', reason: 'no key', waitS: 300 }
+        if (now() < pausedUntil) return { kind: 'blocked', reason: 'throttled', waitS: (pausedUntil - now()) / 1000 }
+        if (refusedAt && now() - refusedAt < REFUSED_RETRY) return { kind: 'blocked', reason: 'refused', waitS: (REFUSED_RETRY - (now() - refusedAt)) / 1000 }
         // A name with no episode code is asked as a film first and, once no film matches, as a
         // show (a season posted whole as "Scam 1992 Complete"); trusted() still has to back it.
         for (const film of ask.kind === 'film' ? [true, false] : [false]) {
@@ -192,20 +305,23 @@ export function createHandler(deps: Deps) {
         // A pick names its title by id; "picked" without one is no question.
         const picked = p.get('p') === '1'
         if (picked && id === null) return null
-        return { title, year, kind, tmdbId: id, series: p.get('s') === '1', languages, ...(picked ? { picked } : {}) }
+        const anime = p.get('a') === '1'
+        const imdb = p.get('i')
+        const imdbId = id === null && imdb && /^tt\d{7,9}$/.test(imdb) ? imdb : null
+        return { title, year, kind, tmdbId: id, series: p.get('s') === '1', languages, ...(imdbId ? { imdbId } : {}), ...(picked ? { picked } : {}), ...(anime ? { anime } : {}) }
     }
 
     /** What the cache files an answer under: the cleaned title, as MetaQuery.cacheKey does, never the raw one. */
     function cacheRequest(origin: string, ask: Ask): Request {
-        const q = new URLSearchParams({ k: ask.kind, t: normalise(ask.title), y: String(ask.year ?? ''), id: String(ask.tmdbId ?? ''), s: ask.series ? '1' : '0', l: ask.languages.join(','), p: ask.picked ? '1' : '0' })
+        const q = new URLSearchParams({ k: ask.kind, t: normalise(ask.title), y: String(ask.year ?? ''), id: String(ask.tmdbId ?? ''), s: ask.series ? '1' : '0', l: ask.languages.join(','), p: ask.picked ? '1' : '0', ...(ask.imdbId ? { i: ask.imdbId } : {}), ...(ask.anime ? { a: '1' } : {}) })
         return new Request(`${origin}/tmdb/poster?${q}`)
     }
 
     async function poster(request: Request, url: URL, env: Env): Promise<Response> {
         const ask = parse(url)
         if (!ask) return json({ error: 'bad request' }, 400)
-        const key = env.TMDB_API_KEY?.trim()
-        if (!key) return unavailable('no key', 300)
+        const key = env.TMDB_API_KEY?.trim() || null
+        if (!key && !ask.anime) return unavailable('no key', 300)
         const cacheKey = cacheRequest(url.origin, ask)
         const kept = await deps.cache?.match(cacheKey).catch(() => undefined)
         if (kept) {
@@ -213,18 +329,18 @@ export function createHandler(deps: Deps) {
             headers.set('X-Poster-Cache', 'hit')
             return new Response(kept.body, { status: kept.status, headers })
         }
-        if (now() < pausedUntil) return unavailable('throttled', (pausedUntil - now()) / 1000)
-        if (refusedAt && now() - refusedAt < REFUSED_RETRY) return unavailable('refused', (REFUSED_RETRY - (now() - refusedAt)) / 1000)
+        if (!ask.anime && now() < pausedUntil) return unavailable('throttled', (pausedUntil - now()) / 1000)
+        if (!ask.anime && refusedAt && now() - refusedAt < REFUSED_RETRY) return unavailable('refused', (REFUSED_RETRY - (now() - refusedAt)) / 1000)
         const outcome = await lookup(key, ask)
         if (outcome.kind === 'blocked') return unavailable(outcome.reason, outcome.waitS)
-        refusedAt = 0
+        if (!(outcome.kind === 'found' && outcome.found.source)) refusedAt = 0
         let body: object = { match: false }
         let ttl = MISS_TTL
         if (outcome.kind === 'found') {
-            const { film, candidate: c } = outcome.found
+            const { film, candidate: c, linked: byLink, source } = outcome.found
             const kind = film ? 'film' : 'show'
-            if (trusted(ask, { kind, year: c.year })) {
-                body = { match: true, id: c.id, kind, title: c.names.find((n) => n.trim()) ?? ask.title, year: c.year, poster: c.poster, backdrop: c.backdrop ?? null, overview: c.overview ?? '' }
+            if (byLink || trusted(ask, { kind, year: c.year })) {
+                body = { match: true, id: c.id, kind, title: c.names.find((n) => n.trim()) ?? ask.title, year: c.year, poster: c.poster, backdrop: c.backdrop ?? null, overview: c.overview ?? '', ...(source ? { source } : {}) }
                 ttl = FOUND_TTL
             }
         }
@@ -290,6 +406,29 @@ export function createHandler(deps: Deps) {
         return new Request(`${origin}/tmdb/extras?${p}`)
     }
 
+    /**
+     * AniListApi.extras: genres, episode length, score, main characters with their voice, trailer.
+     * AniList lists no episodes, so a show's episode asks nothing more (the apps' guide merges TMDB,
+     * Kitsu and Jikan, which the web does not yet).
+     */
+    async function aniDetails(url: URL, id: number): Promise<Response> {
+        const cacheKey = new Request(`${url.origin}/tmdb/extras?${new URLSearchParams({ v: '2', a: '1', id: String(id) })}`)
+        const kept = await deps.cache?.match(cacheKey).catch(() => undefined)
+        if (kept) {
+            const headers = new Headers(kept.headers)
+            headers.set('X-Poster-Cache', 'hit')
+            return new Response(kept.body, { status: kept.status, headers })
+        }
+        if (now() < aniPausedUntil) return unavailable('throttled', (aniPausedUntil - now()) / 1000)
+        const reply = await aniRetrying(EXTRAS_QUERY, { id })
+        if (reply.kind === 'throttled') return unavailable('throttled', reply.waitMs / 1000)
+        if (reply.kind === 'failed' || reply.kind === 'refused') return unavailable('unavailable')
+        const found = reply.kind === 'ok' ? aniExtras(reply.json) : null
+        const response = json(found ?? { found: false }, 200, { 'Cache-Control': `public, max-age=3600, s-maxage=${found ? FOUND_TTL : MISS_TTL}`, 'X-Poster-Cache': 'miss' })
+        if (deps.cache) deps.later?.(deps.cache.put(cacheKey, response.clone()).catch(() => {}))
+        return response
+    }
+
     async function details(url: URL, env: Env): Promise<Response> {
         const p = url.searchParams
         const kind = p.get('k')
@@ -304,6 +443,8 @@ export function createHandler(deps: Deps) {
         const episode = num('e', 1, 99_999)
         const region = (p.get('r') ?? 'US').toUpperCase()
         if ((kind !== 'film' && kind !== 'show') || id === null || Number.isNaN(id) || Number.isNaN(season) || Number.isNaN(episode) || !/^[A-Z]{2}$/.test(region)) return json({ error: 'bad request' }, 400)
+        // A title AniList matched (the poster answer's `source`): its own page, no key.
+        if (p.get('a') === '1') return aniDetails(url, id)
         const key = env.TMDB_API_KEY?.trim()
         if (!key) return unavailable('no key', 300)
         const film = kind === 'film'
@@ -353,10 +494,12 @@ export function createHandler(deps: Deps) {
     async function image(url: URL): Promise<Response> {
         const [, , , size, ...rest] = url.pathname.split('/')
         const file = '/' + rest.join('/')
-        if (!SIZES.has(size) || !FILE.test(file)) return new Response('Not found', { status: 404 })
+        // "/al/<tail>" is an AniList picture (anilist.ts): one size only, from AniList's image host.
+        const aniAddress = rest[0] === 'al' ? imageAddress(rest.slice(1).join('/')) : null
+        if (!SIZES.has(size) || (rest[0] === 'al' ? !aniAddress : !FILE.test(file))) return new Response('Not found', { status: 404 })
         let upstream: Response
         try {
-            upstream = await deps.fetch(new Request(`${IMAGES}/${size}${file}`))
+            upstream = await deps.fetch(new Request(aniAddress ?? `${IMAGES}/${size}${file}`))
         } catch {
             return unavailable('unavailable')
         }

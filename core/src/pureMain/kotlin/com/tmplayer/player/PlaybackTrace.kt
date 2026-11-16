@@ -109,23 +109,38 @@ object TraceLimits {
     }
 }
 
-/** One playback: when it began and its readings, oldest first. */
-data class TraceSession(val startedAtMs: Long, val samples: List<TraceSample>)
+/**
+ * One playback: when it began, its readings (oldest first), the [facts] the readings cannot say
+ * ([TraceFacts]) and the ladder's [hops]. Both are empty for a session an older app wrote.
+ */
+data class TraceSession(
+    val startedAtMs: Long,
+    val samples: List<TraceSample>,
+    val facts: Map<String, String> = emptyMap(),
+    val hops: List<TraceHop> = emptyList(),
+)
 
 /**
- * The JSON-lines form of a trace: a `session` header line, then one `s` line per sample.
+ * The JSON-lines form of a trace: a `session` header line, an `f` line of facts and `h` lines of
+ * ladder hops when there are any, then one `s` line per sample.
  *
  * ```
- * {"t":"session","v":1,"at":1763200000000}
+ * {"t":"session","v":2,"at":1763200000000}
+ * {"t":"f","at":1763200000500,"k":{"dec.name":"c2.qti.avc.decoder","class":"..."}}
+ * {"t":"h","at":1763200003000,"ev":"Frozen","from":"default","to":"ex","res":"pending"}
  * {"t":"s","at":1763200005000,"iv":5000,"df":0,"ur":0,"ba":8200,...}
  * ```
+ *
+ * Version 2 added the `f` and `h` lines. The reader takes both versions (and a future one: it
+ * reads the lines and fields it knows and skips the rest), so a file an older app left and a file
+ * with new kinds of line in it both read.
  *
  * A recorder appends one line at a time, so a process killed mid-write leaves a file whose only
  * damage is a cut last line, which [read] skips.
  */
 object PlaybackTrace {
 
-    const val VERSION = 1
+    const val VERSION = 2
 
     fun sessionLine(startedAtMs: Long): String =
         JSONObject().put("t", "session").put("v", VERSION).put("at", startedAtMs.coerceIn(0L, TraceLimits.MAX_TIME_MS)).toString()
@@ -152,10 +167,25 @@ object PlaybackTrace {
             .toString()
     }
 
+    /** The facts lines of a session: [facts] cleaned and cut into lines of [TraceFacts.PER_LINE], at [atMs]. */
+    fun factsLines(atMs: Long, facts: Map<String, String>): List<String> =
+        TraceFacts.clean(facts).entries.chunked(TraceFacts.PER_LINE).map { chunk ->
+            val keys = JSONObject()
+            for ((k, v) in chunk) keys.put(k, v)
+            JSONObject().put("t", "f").put("at", atMs.coerceIn(0L, TraceLimits.MAX_TIME_MS)).put("k", keys).toString()
+        }
+
+    fun hopLine(hop: TraceHop): String {
+        val h = hop.clamped()
+        return JSONObject().put("t", "h").put("at", h.atMs).put("ev", h.evidence).put("from", h.from).put("to", h.to).put("res", h.result).toString()
+    }
+
     /** The whole file's text for [sessions], one line each, the newest session last. */
     fun encode(sessions: List<TraceSession>): String = buildString {
         for (session in sessions) {
             append(sessionLine(session.startedAtMs)).append('\n')
+            for (line in factsLines(session.startedAtMs, session.facts)) append(line).append('\n')
+            for (hop in session.hops.takeLast(TraceFacts.MAX_HOPS)) append(hopLine(hop)).append('\n')
             for (sample in session.samples) append(sampleLine(sample)).append('\n')
         }
     }
@@ -173,7 +203,7 @@ object PlaybackTrace {
         maxSamples: Int = TraceLimits.MAX_SAMPLES_PER_SESSION,
     ): List<TraceSession> {
         if (maxSessions <= 0 || maxSamples <= 0) return emptyList()
-        val sessions = ArrayDeque<Pair<Long, ArrayDeque<TraceSample>>>()
+        val sessions = ArrayDeque<Reading>()
         var last = 0L
         // A huge file: look only at the end, which is where the newest readings are.
         var from = if (text.length > MAX_READ_CHARS) text.length - MAX_READ_CHARS else 0
@@ -197,25 +227,66 @@ object PlaybackTrace {
                         "session" -> if (timeOk(obj)) {
                             val at = obj.optLong("at", 0L).coerceAtLeast(last)
                             last = at
-                            sessions.addLast(at to ArrayDeque())
+                            sessions.addLast(Reading(at))
                             while (sessions.size > maxSessions) sessions.removeFirst()
                         }
                         "s" -> if (timeOk(obj)) {
                             val sample = sampleOf(obj).clamped()
                             val at = sample.atMs.coerceAtLeast(last)
                             last = at
-                            if (sessions.isEmpty()) sessions.addLast(at to ArrayDeque())
-                            val samples = sessions.last().second
+                            if (sessions.isEmpty()) sessions.addLast(Reading(at))
+                            val samples = sessions.last().samples
                             samples.addLast(sample.copy(atMs = at))
                             if (samples.size > maxSamples) samples.removeFirst()
+                        }
+                        // Version 2's lines. One with no session before it (the head was cut off) is skipped.
+                        "f" -> if (timeOk(obj)) sessions.lastOrNull()?.facts?.putAll(factsOf(obj))
+                        "h" -> if (timeOk(obj)) sessions.lastOrNull()?.let {
+                            // A hop said again (its result came later) replaces the line it updates.
+                            val hop = hopOf(obj)
+                            val same = it.hops.indexOfFirst { h -> h.sameStep(hop) }
+                            if (same >= 0) it.hops[same] = hop else it.hops.addLast(hop)
+                            if (it.hops.size > TraceFacts.MAX_HOPS) it.hops.removeFirst()
                         }
                     }
                 }
             }
             pos = end + 1
         }
-        return sessions.map { TraceSession(it.first, it.second.toList()) }
+        return sessions.map { TraceSession(it.startedAtMs, it.samples.toList(), TraceFacts.clean(it.facts), it.hops.toList()) }
     }
+
+    /** A session being read: its readings, facts and hops so far. */
+    private class Reading(val startedAtMs: Long) {
+        val samples = ArrayDeque<TraceSample>()
+        val facts = LinkedHashMap<String, String>()
+        val hops = ArrayDeque<TraceHop>()
+    }
+
+    /** The `k` object of a facts line: string values of known keys only; anything else is skipped. */
+    private fun factsOf(o: JSONObject): Map<String, String> {
+        val k = o.optJSONObject("k") ?: return emptyMap()
+        val out = LinkedHashMap<String, String>()
+        for (key in k.keys()) {
+            if (key !in TraceFacts.KEYS) continue
+            // Text, a number or a flag; an object or an array is not a fact.
+            val value = when (val v = k.get(key)) {
+                is String -> v
+                is Number, is Boolean -> v.toString()
+                else -> ""
+            }
+            if (value.isNotEmpty()) out[key] = value
+        }
+        return TraceFacts.clean(out)
+    }
+
+    private fun hopOf(o: JSONObject) = TraceHop(
+        atMs = o.optLong("at", 0L),
+        evidence = o.optString("ev", ""),
+        from = o.optString("from", "default"),
+        to = o.optString("to", ""),
+        result = o.optString("res", TraceHop.PENDING),
+    ).clamped()
 
     /** A line with no time, or one before 1970 or after 2100, is not from this app: skipped, so it cannot drag the whole session's clock along. */
     private fun timeOk(o: JSONObject): Boolean = o.has("at") && o.optLong("at", -1L) in 0L..TraceLimits.MAX_TIME_MS
@@ -259,6 +330,10 @@ class PlaybackTraceRing(
 
     private class Open(val startedAtMs: Long) {
         val entries = ArrayDeque<Entry>()
+        var facts: Map<String, String> = emptyMap()
+        var factsBytes = 0
+        val hops = ArrayDeque<TraceHop>()
+        var hopBytes = 0
     }
 
     private val open = ArrayDeque<Open>()
@@ -278,6 +353,51 @@ class PlaybackTraceRing(
         trim()
     }
 
+    /** Adds [facts] to the current session (a key said again takes its new value), starting one when there is none. */
+    fun addFacts(facts: Map<String, String>) {
+        val clean = TraceFacts.clean(facts)
+        if (clean.isEmpty()) return
+        if (open.isEmpty()) startSession(lastAtMs)
+        val current = open.last()
+        current.facts = current.facts + clean
+        val now = PlaybackTrace.factsLines(current.startedAtMs, current.facts).sumOf { it.length + 1 }
+        bytes += now - current.factsBytes
+        current.factsBytes = now
+        trim()
+    }
+
+    /** Adds a ladder hop to the current session; only the last [TraceFacts.MAX_HOPS] are kept. */
+    fun addHop(hop: TraceHop) {
+        if (open.isEmpty()) startSession(lastAtMs)
+        val current = open.last()
+        val clean = hop.clamped()
+        val same = current.hops.indexOfFirst { it.sameStep(clean) }
+        if (same >= 0) {
+            val old = PlaybackTrace.hopLine(current.hops[same]).length + 1
+            current.hops[same] = clean
+            val delta = PlaybackTrace.hopLine(clean).length + 1 - old
+            current.hopBytes += delta
+            bytes += delta
+            trim()
+            return
+        }
+        current.hops.addLast(clean)
+        current.hopBytes += PlaybackTrace.hopLine(clean).length + 1
+        while (current.hops.size > TraceFacts.MAX_HOPS) {
+            val gone = current.hops.removeFirst()
+            current.hopBytes -= PlaybackTrace.hopLine(gone).length + 1
+            bytes -= PlaybackTrace.hopLine(gone).length + 1
+        }
+        bytes += PlaybackTrace.hopLine(clean).length + 1
+        trim()
+    }
+
+    /** The facts of the current session so far. */
+    fun currentFacts(): Map<String, String> = open.lastOrNull()?.facts.orEmpty()
+
+    /** The hops of the current session so far, oldest first. */
+    fun currentHops(): List<TraceHop> = open.lastOrNull()?.hops?.toList().orEmpty()
+
     /** Adds a reading to the current session, starting one at its time when there is none. */
     fun add(sample: TraceSample) {
         val clean = sample.clamped()
@@ -294,7 +414,7 @@ class PlaybackTraceRing(
     }
 
     /** What is kept, oldest session first. */
-    fun sessions(): List<TraceSession> = open.map { s -> TraceSession(s.startedAtMs, s.entries.map { it.sample }) }
+    fun sessions(): List<TraceSession> = open.map { s -> TraceSession(s.startedAtMs, s.entries.map { it.sample }, s.facts, s.hops.toList()) }
 
     /** The samples of the current session, for the verdict and for "the last 60 s". */
     fun currentSamples(): List<TraceSample> = open.lastOrNull()?.entries?.map { it.sample }.orEmpty()
@@ -306,7 +426,7 @@ class PlaybackTraceRing(
 
     private fun dropOldestSession() {
         val gone = open.removeFirst()
-        bytes -= PlaybackTrace.sessionLine(gone.startedAtMs).length + 1 + gone.entries.sumOf { it.bytes }
+        bytes -= PlaybackTrace.sessionLine(gone.startedAtMs).length + 1 + gone.entries.sumOf { it.bytes } + gone.factsBytes + gone.hopBytes
     }
 
     /** Over the byte cap: the oldest session's oldest readings first; the session being recorded keeps at least its newest reading. */
@@ -327,6 +447,8 @@ class PlaybackTraceRing(
             val ring = PlaybackTraceRing()
             for (session in PlaybackTrace.read(text)) {
                 ring.startSession(session.startedAtMs)
+                ring.addFacts(session.facts)
+                for (hop in session.hops) ring.addHop(hop)
                 for (sample in session.samples) ring.add(sample)
             }
             return ring

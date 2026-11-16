@@ -1,5 +1,6 @@
 package com.tmplayer.desktop.ui
 
+import com.tmplayer.ui.browse.NeedsInternetCover
 import com.tmplayer.ui.browse.continueCardTitle
 import com.tmplayer.ui.browse.HistoryTab
 import com.tmplayer.ui.browse.BrowseTab
@@ -185,6 +186,9 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
         // Whether this chat's grid was last films and shows, so its placeholders take the shape of
         // the cards about to arrive, poster or wide, when a topic or a refresh loads it again.
         var postersLast by remember(chat.id) { mutableStateOf(false) }
+        // "Show them" on the row that says small videos are hidden lists them for this visit to
+        // the chat; the stored switch is not changed, so the next visit hides them again (R1).
+        var showAllThisVisit by remember(chat.id) { mutableStateOf(false) }
         if (min == null || max == null) {
             Column(Modifier.fillMaxSize()) {
                 Spacer(Modifier.height(ChatTopClearance))
@@ -193,7 +197,8 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
             ChatTopChrome(state, chat)
             return@Box
         }
-        val model = rememberViewModel(Triple(chat.id, min, max)) { MediaListViewModel(chat.id, min, max, onSearched = { state.settings.addRecentSearch(it) }, downloadedIds = { DownloadIndex.presentIds(state.settings) }, topicMemory = state.settings.topicMemory()) }
+        val floor = if (showAllThisVisit) com.tmplayer.data.SizeFilter.FLOOR else min
+        val model = rememberViewModel(Triple(chat.id, floor, max)) { MediaListViewModel(chat.id, floor, max, onSearched = { state.settings.addRecentSearch(it) }, downloadedIds = { DownloadIndex.presentIds(state.settings) }, topicMemory = state.settings.topicMemory()) }
         val ui by model.state.collectAsState()
         var query by remember(chat.id) { mutableStateOf("") }
         var openSeries by remember(chat.id) { mutableStateOf<com.tmplayer.data.Series?>(null) }
@@ -227,12 +232,10 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
         }
         val filtersOn = filter != com.tmplayer.data.VideoFilter.All || !facets.isDefault
         var gridLanguages by remember(chat.id) { mutableStateOf(emptyList<String>()) }
-        // Videos outside the size limits, said by an "n hidden" button in the bar for as long as
-        // the chat is open, which changes the smallest size there. A search ignores the limits.
+        // Small videos left out by "Hide small clips", said by the row that ends the grid. A
+        // search ignores the floor, so it hides nothing.
         val sizeHidden by model.sizeHidden.collectAsState()
         val shownHidden = if (query.isBlank()) sizeHidden else 0
-        var sizePicking by remember(chat.id) { mutableStateOf(false) }
-        val sizeAnchor = com.tmplayer.ui.components.rememberPopoverAnchor()
 
         // The search folds into the bar at the foot: "/", Ctrl+F and the bar's magnifier open it.
         var searching by remember(chat.id) { mutableStateOf(false) }
@@ -272,15 +275,13 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
                 onSearchDown = { gridNav?.focus(0) },
                 recent = recent,
                 onClearRecent = { scope.launch { state.settings.clearRecentSearches() } },
+                onRemoveRecent = { entry -> scope.launch { state.settings.removeRecentSearch(entry) } },
                 favourite = favourite,
                 // The star says it, filled or not; a message about it would only repeat that.
                 onToggleFavourite = { scope.launch { state.settings.toggleFavorite(chat.id) } },
                 onSort = { sorting = true },
                 sortAnchor = sortAnchor,
                 filtered = filtersOn,
-                sizeHidden = shownHidden,
-                onSizeHidden = { sizePicking = true },
-                sizeAnchor = sizeAnchor,
             )
         }
         val topicBar by model.topics.collectAsState()
@@ -307,6 +308,7 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
             onAction = { action ->
                 // The same words across every chat: the palette opens on them over this chat.
                 if (action == com.tmplayer.ui.components.StateAction.SearchAllChats) state.searchEverywhere(model.searchText) else model.act(action)
+                if (action == com.tmplayer.ui.components.StateAction.ShowSmall) showAllThisVisit = true
             },
             skeleton = skeleton,
         ) { content ->
@@ -498,9 +500,12 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
                 footerSlow = { SlowAnswerLine(content.items.size, onRetry = model::retryMore) },
                 scrollLabel = { key -> entryByKey[key]?.let { com.tmplayer.ui.browse.ScrollLabels.video(it, shownSort, s) } },
                 // Compressed files named like videos follow the videos, greyed with why (U10).
-                footer = if (!content.moreFailed && content.archives.isEmpty() && content.searchNote == null) null else {
+                footer = if (!content.moreFailed && content.archives.isEmpty() && content.searchNote == null && shownHidden == 0) null else {
                     {
                         Column(Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            // Small videos left out by "Hide small clips": said where the chat ends, with Show
+                            // them. The number only once the whole chat has been read (R1).
+                            if (shownHidden > 0) SmallHiddenFooter(shownHidden, exact = content.endReached) { showAllThisVisit = true }
                             // The last page failed: said, with Try again, not a listing that stops short.
                             if (content.moreFailed) {
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
@@ -580,26 +585,40 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
                     filterPaused = false
                     if (picked != facets) sortScope.launch { state.settings.setVideoFacets(chat.id, picked) }
                 },
+                // The switch reads what is applied now, and stays in the card when pressed.
+                hideSmall = com.tmplayer.data.SizeFilter.hidesSmallClips(floor),
+                onHideSmall = { on ->
+                    if (on && showAllThisVisit && com.tmplayer.data.SizeFilter.hidesSmallClips(min)) {
+                        showAllThisVisit = false
+                    } else {
+                        showAllThisVisit = false
+                        sortScope.launch { runCatching { state.settings.setHideSmallClips(on) }.onFailure { toast(com.tmplayer.data.Failures.humanise(it)) } }
+                    }
+                },
+                customLimits = if (com.tmplayer.data.SizeFilter.hasCustomLimits(min, max)) com.tmplayer.data.SizeFilter.describe(min, max) else null,
+                onResetLimits = {
+                    showAllThisVisit = false
+                    sortScope.launch { runCatching { state.settings.resetSizeLimits() }.onFailure { toast(com.tmplayer.data.Failures.humanise(it)) } }
+                },
             ),
             onDismiss = { sorting = false },
         )
-        com.tmplayer.ui.components.ChoicePopover(
-            open = sizePicking,
-            anchor = sizeAnchor,
-            choices = com.tmplayer.data.SizeFilter.quickMinimums(min).map { bytes ->
-                val label = com.tmplayer.data.SizeFilter.label(bytes)
-                com.tmplayer.ui.components.PopoverChoice(bytes, if (bytes == com.tmplayer.data.SizeFilter.DEFAULT_MIN) "$label (${s.gridSizeDefault})" else label)
-            },
-            selected = min,
-            onPick = { picked ->
-                sizePicking = false
-                val clamped = com.tmplayer.data.SizeFilter.clampMin(picked, max)
-                if (clamped != min) sortScope.launch { runCatching { state.settings.setMinSizeBytes(clamped) }.onFailure { toast(com.tmplayer.data.Failures.humanise(it)) } }
-            },
-            onDismiss = { sizePicking = false },
-            title = s.settingsSmallest,
-        )
     }
+    }
+}
+
+/**
+ * What ends a chat's grid when "Hide small clips" left videos out (R1): "3 small videos hidden" and
+ * Show them. The number only when [exact], once the whole chat has been read; before that the row
+ * says "Some small videos are hidden". Tab reaches the button, as it reaches the footer's others.
+ */
+@Composable
+internal fun SmallHiddenFooter(count: Int, exact: Boolean, onShow: () -> Unit) {
+    val s = LocalStrings.current
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+        Text(if (exact) s.gridSmallHidden(count) else s.gridSmallHiddenSome, color = Tone.muted)
+        Spacer(Modifier.width(12.dp))
+        OutlinedButton(onClick = onShow) { Text(s.gridFilterShowThem) }
     }
 }
 
@@ -651,7 +670,9 @@ internal fun VideoGrid(
     val index = remember(history) { history.associateBy { "${it.chatId}:${it.messageId}" } }
     val selection = remember(grid) { GridSelection { cells.getOrNull(it)?.id } }
     BackHandler(enabled = selection.active) { selection.clear() }
-    Box(Modifier.fillMaxSize()) {
+    // Ctrl+A picks every video the chat lets anyone keep, as Select all in the bar does.
+    val pickable = { cells.filter { it.canBeSaved }.map { it.id } }
+    Box(Modifier.fillMaxSize().selectAllKey({ pickable().isNotEmpty() }) { selection.selectAll(pickable()) }) {
       CompositionLocalProvider(LocalGridSelection provides selection, LocalDownloadIndex provides index) {
         LazyVerticalGrid(
             columns = when {
@@ -914,6 +935,8 @@ internal fun MediaTile(
     poster: Boolean = false,
     /** The caller's own lines at the right click menu's foot: a named list's Remove from list (HX43). */
     extraMenu: (@Composable (close: () -> Unit) -> Unit)? = null,
+    /** Offline Home (R4): see [Poster]. */
+    needsInternet: Boolean = false,
 ) {
     val s = LocalStrings.current
     // The grid's selection, when there is one, so the pane can start one with this poster.
@@ -936,6 +959,7 @@ internal fun MediaTile(
         badge = badge,
         poster = poster,
         extraMenu = extraMenu,
+        needsInternet = needsInternet,
         onDetails = { refocus ->
             state.openDetail(
                 DetailRequest(
@@ -1025,6 +1049,8 @@ internal fun Poster(
     onDetails: ((refocus: () -> Unit) -> Unit)? = null,
     /** What a click, Enter and Play do in place of playing or the pane: a saved show's page (HX20). */
     onOpen: (() -> Unit)? = null,
+    /** Offline Home (R4): cannot play with no line, so it is dimmed and a press opens its page, which says so. */
+    needsInternet: Boolean = false,
 ) {
     val s = LocalStrings.current
     val interaction = remember { MutableInteractionSource() }
@@ -1059,12 +1085,16 @@ internal fun Poster(
     // poster instead of playing it.
     var picking by remember { mutableStateOf(false) }
     // On a History page in select mode a plain click ticks the card, as a tap does on the phone.
-    val ticksOnClick = selection?.history == true && selection.active
+    // Once anything is picked a click, Enter or Space picks too, as the phone's tap does: the
+    // keyboard has no other way to add the next one.
+    val ticksOnClick = selection != null && selection.active
     val play: () -> Unit = {
         if (picking && selection != null) {
             picking = false
         } else if (ticksOnClick) {
             selection?.toggle(index)
+        } else if (needsInternet) {
+            state.openDetail(DetailRequest(item = item, chatTitle = chatTitle, outsideChat = true, onClosed = { runCatching { requester.requestFocus() } }))
         } else {
             if (onOpen != null) onOpen() else state.openPlayer(item, startFromBeginning = false)
         }
@@ -1084,7 +1114,7 @@ internal fun Poster(
     }
     val detailFirst = state.detailFirst
     val click: () -> Unit = {
-        if (onOpen != null && !(picking && selection != null) && !ticksOnClick) onOpen() else if (detailFirst && !(picking && selection != null) && !ticksOnClick) page() else play()
+        if (needsInternet && !(picking && selection != null) && !ticksOnClick) play() else if (onOpen != null && !(picking && selection != null) && !ticksOnClick) onOpen() else if (detailFirst && !(picking && selection != null) && !ticksOnClick) page() else play()
     }
     val openMenu: () -> Unit = {
         if (details != null) {
@@ -1124,6 +1154,17 @@ internal fun Poster(
                         openMenu()
                         true
                     }
+                    // Ctrl+Space: this poster in or out of the selection, as Ctrl+click does.
+                    selection != null && isToggleChord(event) -> {
+                        selection.toggle(index)
+                        true
+                    }
+                    // Enter or Space with a selection up adds or drops this one rather than playing it.
+                    ticksOnClick && event.type == KeyEventType.KeyDown && event.key in TICK_KEYS && !event.keyCtrl &&
+                        !event.isAltPressed && !event.isMetaPressed && !event.isShiftPressed -> {
+                        selection?.toggle(index)
+                        true
+                    }
                     // I for "info", the detail pane, as the remote's info key opens it on a TV.
                     details != null && event.type == KeyEventType.KeyDown && event.key == Key.I && !event.keyCtrl &&
                         !event.isAltPressed && !event.isMetaPressed && !event.isShiftPressed -> {
@@ -1160,6 +1201,7 @@ internal fun Poster(
                 .then(if (focused || selected) Modifier.border(Focus.Ring, Tone.accent, MaterialTheme.shapes.medium) else Modifier),
         ) {
             art()
+            if (needsInternet) NeedsInternetCover()
             if (progress != null && progress > 0f) {
                 ProgressLine(progress, Modifier.align(Alignment.BottomCenter))
             }
@@ -1173,7 +1215,7 @@ internal fun Poster(
                     when (download.stage) {
                         OfflineDownloads.Stage.Running -> download.fraction?.let { s.formatter.percent(it.toDouble()) } ?: s.gridStageDownloading
                         OfflineDownloads.Stage.Queued -> s.gridStageQueued
-                        OfflineDownloads.Stage.Paused -> s.gridStagePaused
+                        OfflineDownloads.Stage.Paused -> s.gridStagePausedLong
                         OfflineDownloads.Stage.Offline, OfflineDownloads.Stage.Yielding -> s.gridStageWaiting
                         OfflineDownloads.Stage.NoWifi -> s.gridStageNoWifi
                         OfflineDownloads.Stage.Moving -> s.gridStageMoving
@@ -1192,18 +1234,19 @@ internal fun Poster(
             if (selection?.history == true && (showing || selection.active)) {
                 TickBox(selected, Modifier.align(Alignment.TopStart).padding(TileBadgeInset)) { selection.toggle(index) }
             }
-            // The top end corner: the caller's mark, else on a poster the quality its name states.
-            val quality = item.qualityTags.firstOrNull()
+            // The top end corner: the caller's mark, else on a poster the resolution (720p and up, FormatFacts.tileTag).
+            val quality = remember(item.width, item.height, item.fileName, item.title) { com.tmplayer.data.FormatFacts.tileTag(item) }
             if (!showing) when {
                 badge != null -> Box(Modifier.align(Alignment.TopEnd).padding(TileBadgeInset)) { badge() }
                 // Only on its own: two chips across a narrow poster would meet in the middle.
-                poster && quality != null && !selected && record == null && download == null && !item.onDevice && !finished -> TileBadge(quality, Modifier.align(Alignment.TopEnd).padding(TileBadgeInset))
+                poster && quality != null && !selected && record == null && download == null && !item.onDevice && !finished -> com.tmplayer.ui.components.FormatBadge(quality, Modifier.align(Alignment.TopEnd).padding(TileBadgeInset), onArt = true)
             }
             if (showing) {
                 Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.25f)))
                 // The tooltip wraps the whole disc: inside it the glyph sat in a top-left Box and the
                 // Play drew 2 dp up and left of the circle's middle.
-                Box(Modifier.align(Alignment.Center)) {
+                // Offline and not on this device (R4): no Play disc, the press opens the page that says why.
+                if (!needsInternet) Box(Modifier.align(Alignment.Center)) {
                     BarTooltip(s.playerPlay, null) {
                         Surface(
                             shape = CircleShape,
@@ -1571,6 +1614,9 @@ internal fun MetaNoticeCard(state: ShellState, modifier: Modifier = Modifier) {
 }
 
 private val PLAY_KEYS = setOf(Key.Enter, Key.NumPadEnter, Key.Spacebar, Key.P)
+
+/** The keys that tick a poster while a selection is up, instead of playing it. */
+private val TICK_KEYS = setOf(Key.Enter, Key.NumPadEnter, Key.Spacebar)
 // From OsInfo rather than os.name, which the browser build has no answer for: a Mac browser
 // gets Cmd+click and Ctrl+click as the Mac app does.
 private val IS_MAC: Boolean get() = com.tmplayer.desktop.os.OsInfo.isMac
@@ -1635,116 +1681,6 @@ internal fun ArchiveList(archives: List<com.tmplayer.data.ArchiveFile>, noVideos
                     }
                     Spacer(Modifier.width(12.dp))
                     Text(listOfNotNull(file.kind.label, size).joinToString(" · "), color = Tone.muted, style = MaterialTheme.typography.bodySmall)
-                }
-            }
-        }
-    }
-}
-
-/** The way into a chat's audio over its posters ([com.tmplayer.data.ChatAudio]); a click opens the list. */
-@Composable
-internal fun AudioEntryRow(count: Int, noVideos: Boolean, onOpen: () -> Unit) {
-    val s = LocalStrings.current
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        if (noVideos) Text(s.browseNoPlayableVideos, style = MaterialTheme.typography.titleMedium)
-        androidx.compose.material3.Surface(onClick = onOpen, shape = MaterialTheme.shapes.medium, color = Tone.surface, modifier = Modifier.fillMaxWidth()) {
-            Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(TmIcons.Audio, contentDescription = null, tint = Tone.accent, modifier = Modifier.size(24.dp))
-                Spacer(Modifier.width(16.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(s.gridAudioTitle, style = MaterialTheme.typography.titleSmall)
-                    Text(s.gridAudioCount(count), color = Tone.muted, style = MaterialTheme.typography.bodySmall)
-                }
-                Icon(TmIcons.ChevronRight, contentDescription = null, tint = Tone.muted)
-            }
-        }
-    }
-}
-
-/**
- * A chat's audio as a list on the desktop: Play all from the oldest, or one file, each going on to
- * the next one posted after it ([com.tmplayer.data.PlayQueue]); a failed or slow page says so with
- * Try again.
- */
-@Composable
-internal fun AudioListSheet(state: ShellState, chat: ChatSummary, onDismiss: () -> Unit) {
-    val s = LocalStrings.current
-    val scope = rememberCoroutineScope()
-    val list = remember(chat.id) { com.tmplayer.ui.browse.ChatAudioList(chat.id, scope) }
-    val shown by list.state.collectAsState()
-    fun play(item: com.tmplayer.data.MediaItem) {
-        onDismiss()
-        state.noteChatTitle(chat.id, chat.title)
-        state.openPlayer(item, startFromBeginning = false)
-    }
-    DesktopSheet(onDismiss) {
-        Column(Modifier.fillMaxWidth().padding(24.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(s.gridAudioTitle, style = MaterialTheme.typography.headlineSmall)
-            Text(chat.title, color = Tone.muted)
-            Spacer(Modifier.height(8.dp))
-            var shuffle by remember { mutableStateOf(com.tmplayer.data.PlayQueue.shuffle) }
-            var repeatAll by remember { mutableStateOf(com.tmplayer.data.PlayQueue.repeatAll) }
-            var repeatOne by remember { mutableStateOf(com.tmplayer.data.PlayQueue.repeatOne) }
-            if (shown.items.isNotEmpty()) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { scope.launch { list.playAll()?.let(::play) } }) {
-                        Icon(TmIcons.Play, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text(if (shuffle) s.gridAudioPlayAllShuffled else s.gridAudioPlayAll)
-                    }
-                    // Kept for the session in PlayQueue, so the next course starts the same way.
-                    androidx.compose.material3.FilterChip(
-                        selected = shuffle,
-                        onClick = { shuffle = !shuffle; com.tmplayer.data.PlayQueue.setShuffle(shuffle) },
-                        label = { Text(s.gridAudioShuffle) },
-                    )
-                    androidx.compose.material3.FilterChip(
-                        selected = repeatAll,
-                        onClick = {
-                            repeatAll = !repeatAll
-                            com.tmplayer.data.PlayQueue.setRepeatAll(repeatAll)
-                            repeatOne = com.tmplayer.data.PlayQueue.repeatOne
-                        },
-                        label = { Text(s.gridAudioRepeatAll) },
-                        leadingIcon = { Icon(TmIcons.Repeat, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                    )
-                    androidx.compose.material3.FilterChip(
-                        selected = repeatOne,
-                        onClick = {
-                            repeatOne = !repeatOne
-                            com.tmplayer.data.PlayQueue.setRepeatOne(repeatOne)
-                            repeatAll = com.tmplayer.data.PlayQueue.repeatAll
-                        },
-                        label = { Text(s.gridAudioRepeatOne) },
-                        leadingIcon = { Icon(TmIcons.Repeat, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                    )
-                }
-            }
-            Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState())) {
-                shown.items.forEach { item ->
-                    val detail = listOfNotNull(
-                        s.messages.formatter.duration(item.durationSec.toLong()).takeIf { item.durationSec > 0 },
-                        s.messages.formatter.size(item.sizeBytes).takeIf { item.sizeBytes > 0 },
-                    ).joinToString(" · ")
-                    androidx.compose.material3.Surface(onClick = { play(list.queueFrom(item)) }, shape = MaterialTheme.shapes.small, color = androidx.compose.ui.graphics.Color.Transparent, modifier = Modifier.fillMaxWidth()) {
-                        Row(Modifier.padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(TmIcons.Audio, contentDescription = null, tint = Tone.muted, modifier = Modifier.size(20.dp))
-                            Spacer(Modifier.width(12.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(item.title, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                                if (detail.isNotBlank()) Text(detail, color = Tone.muted, style = MaterialTheme.typography.bodySmall)
-                            }
-                        }
-                    }
-                }
-                when {
-                    shown.loading -> CircularProgressIndicator(Modifier.padding(16.dp).size(24.dp))
-                    shown.failure != null -> Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(shown.failure.orEmpty(), color = Tone.muted, modifier = Modifier.weight(1f))
-                        OutlinedButton(onClick = list::loadMore) { Text(s.commonTryAgain) }
-                    }
-                    !shown.done -> TextButton(onClick = list::loadMore, modifier = Modifier.loadWhenShown(list::loadMore)) { Text(s.gridAudioMore) }
-                    shown.items.isEmpty() -> Text(s.gridAudioNone, color = Tone.muted)
                 }
             }
         }

@@ -74,9 +74,9 @@ import com.tmplayer.ui.theme.focusRing
  * and the desktop: the small storage ring beside what TMPlayer uses and what is free, and the one
  * Free up space button under them (user, 2026-10-22: "keep one Free up space button").
  *
- * The button opens the review ([FreeUpReviewDialog]). It is off, with a line saying so, when there
- * is nothing at all to free, and while a run is going ([busy]); after one, [result] says what it
- * freed. [focus] goes on the button, for a television page that lands the remote there.
+ * The button opens the review ([FreeUpReviewDialog]). It is not there, with a line saying so, when
+ * there is nothing at all to free (R2, 7.3), and is off while a run is going ([busy]); after one,
+ * [result] says what it freed. [focus] goes on the button, for a television page that lands the remote there.
  */
 @Composable
 fun StorageOverview(
@@ -116,18 +116,22 @@ fun StorageOverview(
                 }
             }
         }
-        ReviewButton(
-            label = if (busy) s.downloadsReviewFreeing else s.downloadsFreeUpSpace,
-            icon = TmIcons.Delete,
-            onClick = onFreeUp,
-            kind = ButtonKind.Primary,
-            // Not greyed while the figures are measured or when nothing is listed: the press opens the
-            // review, which says so itself, and a dimmed button read as broken (user, 2026-10-27).
-            enabled = !busy,
-            busy = busy,
-            large = large,
-            modifier = Modifier.fillMaxWidth().then(if (focus != null) Modifier.focusRequester(focus) else Modifier),
-        )
+        // Only when there is something to free (7.3): the page's loudest button used to stand over
+        // nothing. A quiet step, not the accent fill, since freeing is an errand and not the page's
+        // job; while a run goes it stays, saying Freeing, so the press is answered.
+        val somethingToFree = measured && !nothingToFree
+        if (somethingToFree || busy) {
+            ReviewButton(
+                label = if (busy) s.downloadsReviewFreeing else s.downloadsFreeUpSpace,
+                icon = TmIcons.Delete,
+                onClick = onFreeUp,
+                kind = ButtonKind.Quiet,
+                enabled = !busy,
+                busy = busy,
+                large = large,
+                modifier = Modifier.fillMaxWidth().then(if (focus != null) Modifier.focusRequester(focus) else Modifier),
+            )
+        }
         val line = when {
             busy -> null
             result != null -> result
@@ -196,8 +200,8 @@ fun freeUpResult(outcome: FreeUpReview.Outcome): String {
     return if (outcome.skipped > 0) freed + ". " + com.tmplayer.i18n.L.downloadsReviewSkipped(count = outcome.skipped) else freed
 }
 
-/** Low storage mode as the review offers it: [on] once it has been turned on from here. */
-class LowStorageOffer(val mode: String, val windowBytes: Long, val on: Boolean, val onTurnOn: () -> Unit)
+/** "While streaming: Save space" as the review offers it: [on] once it has been switched on from here. */
+class LowStorageOffer(val windowBytes: Long, val on: Boolean, val onTurnOn: () -> Unit)
 
 /**
  * The review's panel without its window, so a test can draw it as it stands. [confirming] is the
@@ -531,7 +535,7 @@ private fun TickLine(
     }
 }
 
-/** Low storage mode at the head of the review, while it is off and the device is short of room. */
+/** Save space at the head of the review, while While streaming is on Keep video and the device is short of room. */
 @Composable
 private fun LowStorageLine(offer: LowStorageOffer, pad: Dp, focus: FocusRequester?) {
     val s = LocalStrings.current
@@ -545,17 +549,17 @@ private fun LowStorageLine(offer: LowStorageOffer, pad: Dp, focus: FocusRequeste
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         if (offer.on) {
-            Text(s.downloadsFreeLowStorageDone(mode = offer.mode), style = MaterialTheme.typography.bodyMedium, color = Tone.text)
+            Text(s.downloadsFreeSaveSpaceDone, style = MaterialTheme.typography.bodyMedium, color = Tone.text)
             return@Column
         }
-        Text(s.downloadsFreeLowStorage(mode = offer.mode), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = Tone.text)
+        Text(s.downloadsFreeSaveSpace, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = Tone.text)
         Text(
             s.downloadsFreeLowStorageDetail(size = s.formatter.bytes(offer.windowBytes)),
             style = MaterialTheme.typography.bodySmall,
             color = Tone.muted,
         )
         ReviewButton(
-            s.confirmTurnOn,
+            s.downloadsFreeSwitch,
             null,
             offer.onTurnOn,
             ButtonKind.Quiet,
@@ -602,7 +606,7 @@ internal fun ReviewButton(
     }
     Row(
         modifier
-            .heightIn(min = if (large) 48.dp else 44.dp)
+            .heightIn(min = 48.dp)
             .clip(CircleShape)
             .focusRing(focused && kind != ButtonKind.Danger, CircleShape)
             .background(background)

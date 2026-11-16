@@ -91,6 +91,12 @@ export interface VideoItem extends FileRef {
     storyboard: Storyboard | null
     /** False under "restrict saving content" (the chat's or the message's): it streams, nothing is kept. */
     canBeSaved: boolean
+    /**
+     * The one pill a poster tile wears ("720p", "1080p", "4K"...), from the size Telegram states
+     * else a resolution word in the name, as the apps' FormatFacts.tileTag says; absent for SD or
+     * when nothing says (no empty pill), and in items kept before this existed.
+     */
+    tile?: string
     /** What the poster lookup asks about this video (the apps' MetaQuery), or null when its name holds nothing to ask. */
     poster: PosterAsk | null
 }
@@ -383,7 +389,9 @@ export interface WatchInfo {
     next: VideoItem | null
     nextCode: string | null
     /** The show's seasons, when it is an episode; empty otherwise. */
-    seasons: { number: number; episodes: EpisodeRef[] }[]
+    seasons: { number: number; episodes: EpisodeRef[]; covered: number[] }[]
+    /** Whole-season files of the show ("Season 2 Complete"), listed under their season; `seasonEnd` is set for a span of seasons. */
+    packs: { season: number; seasonEnd: number | null; item: VideoItem }[]
     /** Other cards of the chat, newest first, when it is not an episode. */
     more: Tile[]
     fileName: string

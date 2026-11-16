@@ -10,6 +10,9 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -27,6 +30,7 @@ import com.tmplayer.desktop.ui.WindowControls
 import com.tmplayer.desktop.ui.windowDrag
 import androidx.compose.foundation.TooltipPlacement
 import androidx.compose.foundation.background
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -117,6 +121,8 @@ import androidx.compose.ui.unit.sp
 import com.tmplayer.data.Bookmark
 import com.tmplayer.data.MediaItem
 import com.tmplayer.online.SkipKind
+import com.tmplayer.online.SkipSegment
+import com.tmplayer.online.SkipSource
 import com.tmplayer.data.EpisodeNeighbours
 import com.tmplayer.player.PlaybackSpeed
 import com.tmplayer.player.Stereo3d
@@ -424,8 +430,10 @@ internal fun BoxScope.PlayerOverlay(
     sleepTimer: String? = null,
     /** The A-B repeat as marked so far, drawn on the timebar and named above it; null for none. */
     loop: AbLoop? = null,
-    /** Whether Repeat this video is on, or null where the menu has no such line (sound alone). */
+    /** Whether Repeat this video is on, or null where the menu has no such line. */
     repeatVideo: Boolean? = null,
+    /** The label of "Mark this as the intro" (an episode only), or null for no such line. */
+    markIntro: String? = null,
     /** This video's bookmarks for the menu and the timebar; null where the video can have none. */
     bookmarks: List<Bookmark>? = null,
     onHoverControls: (Boolean) -> Unit,
@@ -546,26 +554,33 @@ internal fun BoxScope.PlayerOverlay(
                             Box {
                                 OverlayButton(TmIcons.Subtitles, s.playerSubtitlesHint, onClick = { onOpenMenu(MenuAt(MenuPage.Subtitles, MenuAt.Anchor.Subtitles)) })
                                 if (menu?.anchor == MenuAt.Anchor.Subtitles) {
-                                    PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, sleepTimer, bookmarks, loop, onOpenMenu, onCloseMenu, onMenuAction, repeatVideo = repeatVideo)
+                                    PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, sleepTimer, bookmarks, loop, onOpenMenu, onCloseMenu, onMenuAction, repeatVideo = repeatVideo, markIntro = markIntro)
                                 }
                             }
                         }
                         Box {
                             OverlayButton(TmIcons.Audio, s.playerAudioHint, onClick = { onOpenMenu(MenuAt(MenuPage.Audio, MenuAt.Anchor.Audio)) })
                             if (menu?.anchor == MenuAt.Anchor.Audio) {
-                                PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, sleepTimer, bookmarks, loop, onOpenMenu, onCloseMenu, onMenuAction, repeatVideo = repeatVideo)
+                                PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, sleepTimer, bookmarks, loop, onOpenMenu, onCloseMenu, onMenuAction, repeatVideo = repeatVideo, markIntro = markIntro)
                             }
                         }
                         Box {
                             Tip(s.playerSpeedHint) {
+                                val speedInteractions = remember { MutableInteractionSource() }
+                                val speedLabel = SeekMath.speedLabel(status.speed)
                                 Box(
                                     Modifier.height(40.dp).widthIn(min = 48.dp).clip(CircleShape)
-                                        .clickable { onOpenMenu(MenuAt(MenuPage.Speed, MenuAt.Anchor.Speed)) }.padding(horizontal = 10.dp),
+                                        .overlayFocusRing(speedInteractions, CircleShape)
+                                        .clickable(interactionSource = speedInteractions, indication = LocalIndication.current, role = Role.Button) {
+                                            onOpenMenu(MenuAt(MenuPage.Speed, MenuAt.Anchor.Speed))
+                                        }
+                                        .semantics { contentDescription = "${s.playerSpeedHint}: $speedLabel" }
+                                        .padding(horizontal = 10.dp),
                                     contentAlignment = Alignment.Center,
-                                ) { Text(SeekMath.speedLabel(status.speed), color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium) }
+                                ) { Text(speedLabel, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium) }
                             }
                             if (menu?.anchor == MenuAt.Anchor.Speed) {
-                                PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, sleepTimer, bookmarks, loop, onOpenMenu, onCloseMenu, onMenuAction, repeatVideo = repeatVideo)
+                                PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, sleepTimer, bookmarks, loop, onOpenMenu, onCloseMenu, onMenuAction, repeatVideo = repeatVideo, markIntro = markIntro)
                             }
                         }
                         // A click steps the shape through all eight, as W does; the panel has its page of them.
@@ -595,7 +610,7 @@ internal fun BoxScope.PlayerOverlay(
         PlayerMenu(
             open, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable,
             watchedLabel, sleepTimer, bookmarks, loop, onOpenMenu, onCloseMenu, onMenuAction,
-            panel = true, subtitles = subtitlesButton, firstFocus = firstFocus, repeatVideo = repeatVideo,
+            panel = true, subtitles = subtitlesButton, firstFocus = firstFocus, repeatVideo = repeatVideo, markIntro = markIntro,
         )
     }
 }
@@ -764,9 +779,10 @@ internal fun OverlayButton(icon: ImageVector, label: String, onClick: () -> Unit
         Box(
             modifier.size(size.dp).clip(CircleShape)
                 .background(rest)
-                .background(if (hovered) Color(0x33FFFFFF) else Color.Transparent)
+                .background(if (hovered) OverlayHover else Color.Transparent)
+                .overlayFocusRing(hover, CircleShape)
                 .hoverable(hover)
-                .clickable(onClick = onClick),
+                .clickable(interactionSource = hover, indication = LocalIndication.current, role = Role.Button, onClick = onClick),
             contentAlignment = Alignment.Center,
         ) {
             Icon(icon, label, tint = Color.White, modifier = Modifier.size((size * 0.6f).dp))
@@ -848,12 +864,19 @@ private fun TimesAndBar(
             )
             Spacer(Modifier.weight(1f))
         }
-        Text(
-            if (showRemaining) SeekMath.remaining(position, durationMs) else SeekMath.clock(durationMs),
-            color = OnArtMuted,
-            fontSize = 13.sp,
-            modifier = Modifier.clip(RoundedCornerShape(4.dp)).clickable(onClick = onToggleRemaining).padding(horizontal = 4.dp, vertical = 2.dp),
-        )
+        val toggleLabel = if (showRemaining) s.playerShowTotalLength else s.playerShowTimeRemaining
+        val toggleInteractions = remember { MutableInteractionSource() }
+        Tip(toggleLabel) {
+            Text(
+                if (showRemaining) SeekMath.remaining(position, durationMs) else SeekMath.clock(durationMs),
+                color = OnArtMuted,
+                fontSize = 13.sp,
+                modifier = Modifier.clip(RoundedCornerShape(4.dp))
+                    .overlayFocusRing(toggleInteractions, RoundedCornerShape(4.dp))
+                    .clickable(interactionSource = toggleInteractions, indication = LocalIndication.current, onClickLabel = toggleLabel, role = Role.Button, onClick = onToggleRemaining)
+                    .padding(horizontal = 4.dp, vertical = 2.dp),
+            )
+        }
     }
     TimeBar(position, durationMs, bufferedMs(), onSeekTo, chapters, loop, bookmarks.orEmpty())
 }
@@ -986,8 +1009,9 @@ internal fun PlayerMenu(
     subtitles: Boolean = true,
     /** Given to the page's first line, where the panel puts the keyboard as a page opens. */
     firstFocus: FocusRequester? = null,
-    /** Whether Repeat this video is on, or null where the menu has no such line (sound alone). */
+    /** Whether Repeat this video is on, or null where the menu has no such line. */
     repeatVideo: Boolean? = null,
+    markIntro: String? = null,
 ) {
     val s = LocalStrings.current
     val copies = LocalPlayerCopies.current
@@ -1015,12 +1039,14 @@ internal fun PlayerMenu(
                 }
             },
             onClick = onClick,
-            modifier = if (firstFocus != null && !focusGiven) {
-                focusGiven = true
-                Modifier.focusRequester(firstFocus)
-            } else {
-                Modifier
-            },
+            modifier = (
+                if (firstFocus != null && !focusGiven) {
+                    focusGiven = true
+                    Modifier.focusRequester(firstFocus)
+                } else {
+                    Modifier
+                }
+                ).then(if (checked) Modifier.semantics { selected = true } else Modifier),
             leadingIcon = {
                 Box(Modifier.size(18.dp)) {
                     when {
@@ -1101,7 +1127,7 @@ internal fun PlayerMenu(
             MenuPage.Options -> {
                 Entry(s.playerDownmix, checked = status.downmix) { pick(MenuAction.ToggleDownmix) }
                 Entry(s.playerVolumeBoost, checked = status.volumeBoost) { pick(MenuAction.ToggleVolumeBoost) }
-                Entry(s.playerNightMode, checked = status.nightMode) { pick(MenuAction.ToggleNightMode) }
+                Entry(s.playerQuietLoudScenes, checked = status.nightMode) { pick(MenuAction.ToggleNightMode) }
                 Entry(s.playerSleepTimer, trailing = sleepTimer ?: s.commonOff) { page(MenuPage.Sleep) }
                 val repeat = when {
                     loop == null -> s.playerLoopSetStart
@@ -1112,6 +1138,8 @@ internal fun PlayerMenu(
                 // A switch: the menu stays up with the new value, as the volume lines do.
                 if (repeatVideo != null) Entry(s.playerRepeatVideo, checked = repeatVideo) { onAction(MenuAction.ToggleRepeatVideo) }
                 Entry(s.playerGoToTime, trailing = s.playerKeyCommandG(commandKey(s))) { pick(MenuAction.Do(PlayerAction.GoToTime)) }
+                // An episode only: two presses, the start and the end; the menu closes so the picture shows.
+                if (markIntro != null) Entry(markIntro, trailing = "O") { pick(MenuAction.Do(PlayerAction.MarkIntro)) }
                 // A chaptered file only; the menu stays open for the next step, as the frame steps do.
                 if (status.chapters.isNotEmpty()) {
                     Entry(s.playerChapterNext) { onAction(MenuAction.Do(PlayerAction.ChapterStep(forward = true))) }
@@ -1287,9 +1315,17 @@ internal fun PlayerMenu(
     val parent = menu.parentPage()
     if (panel) {
         // The page's title on its own line, which is the Back line on a page below the first.
+        val backInteractions = remember { MutableInteractionSource() }
         Row(
             Modifier.fillMaxWidth().heightIn(min = 56.dp)
-                .then(if (parent != null) Modifier.clickable { page(parent) } else Modifier)
+                .then(
+                    if (parent != null) {
+                        Modifier.overlayFocusRing(backInteractions, RoundedCornerShape(8.dp))
+                            .clickable(interactionSource = backInteractions, indication = LocalIndication.current, onClickLabel = s.commonBack, role = Role.Button) { page(parent) }
+                    } else {
+                        Modifier
+                    },
+                )
                 .padding(start = 12.dp, end = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -1487,6 +1523,10 @@ internal fun BoxScope.NextUpCard(label: String, secondsLeft: Int, lifted: Boolea
 /** The next-up card's surface, which the skip pill shares so the two read as one family. */
 private val NextUpSurface = Color(0xE61C1C1E)
 
+/** The pill's words for [segment]: an intro the viewer marked says so, the rest by kind. */
+internal fun skipLabel(segment: SkipSegment, s: com.tmplayer.i18n.Strings): String =
+    if (segment.source == SkipSource.Mark || segment.source == SkipSource.Guess) s.playerSkipIntroMark else skipLabel(segment.kind, s)
+
 /** The words on the pill for each kind of segment: "Skip intro", "Skip credits" and the rest. */
 internal fun skipLabel(kind: SkipKind, s: com.tmplayer.i18n.Strings): String = when (kind) {
     SkipKind.Intro -> s.playerSkipIntro
@@ -1504,9 +1544,16 @@ internal fun skipLabel(kind: SkipKind, s: com.tmplayer.i18n.Strings): String = w
  * since the "?" sheet is a long way from the moment it is wanted.
  */
 @Composable
-internal fun BoxScope.SkipPill(kind: SkipKind, lifted: Boolean, onSkip: () -> Unit) {
+internal fun BoxScope.SkipPill(
+    segment: SkipSegment,
+    lifted: Boolean,
+    onSkip: () -> Unit,
+    /** Seconds left on a countdown for a stretch set to skip by itself, with a Cancel beside the words. */
+    secondsLeft: Int? = null,
+    onCancel: () -> Unit = {},
+) {
     val s = LocalStrings.current
-    val label = skipLabel(kind, s)
+    val label = if (secondsLeft == null) skipLabel(segment, s) else s.playerSkipIn(secondsLeft)
     val hover = remember { MutableInteractionSource() }
     val hovered by hover.collectIsHoveredAsState()
     AnimatedVisibility(
@@ -1519,16 +1566,30 @@ internal fun BoxScope.SkipPill(kind: SkipKind, lifted: Boolean, onSkip: () -> Un
             Row(
                 Modifier.testTag("skip-pill").height(44.dp).clip(RoundedCornerShape(22.dp))
                     .background(NextUpSurface)
-                    .background(if (hovered) Color(0x33FFFFFF) else Color.Transparent)
+                    .background(if (hovered) OverlayHover else Color.Transparent)
                     .border(1.dp, Color.White.copy(alpha = 0.35f), RoundedCornerShape(22.dp))
+                    .overlayFocusRing(hover, RoundedCornerShape(22.dp))
                     .hoverable(hover)
-                    .clickable(onClick = onSkip)
+                    .clickable(interactionSource = hover, indication = LocalIndication.current, role = Role.Button, onClick = onSkip)
                     .padding(start = 20.dp, end = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(label, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                Icon(TmIcons.SkipNext, null, tint = Color.White, modifier = Modifier.size(20.dp))
+                if (secondsLeft == null) {
+                    Icon(TmIcons.SkipNext, null, tint = Color.White, modifier = Modifier.size(20.dp))
+                } else {
+                    // Its own target: a click on Cancel does not also skip.
+                    Text(
+                        L.commonCancel,
+                        color = Tone.accent,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        modifier = Modifier.testTag("skip-cancel").clip(RoundedCornerShape(12.dp)).clickable(onClick = onCancel)
+                            .padding(horizontal = 6.dp, vertical = 4.dp),
+                    )
+                }
             }
         }
     }
@@ -1565,10 +1626,11 @@ internal fun BoxScope.UndoSeekChip(backToMs: Long, lifted: Boolean, onUndo: () -
                 Modifier.testTag("undo-seek").graphicsLayer { scaleX = scale; scaleY = scale }
                     .height(44.dp).clip(RoundedCornerShape(22.dp))
                     .background(NextUpSurface)
-                    .background(if (hovered) Color(0x33FFFFFF) else Color.Transparent)
+                    .background(if (hovered) OverlayHover else Color.Transparent)
                     .border(1.dp, Color.White.copy(alpha = 0.35f), RoundedCornerShape(22.dp))
+                    .overlayFocusRing(interaction, RoundedCornerShape(22.dp))
                     .hoverable(interaction)
-                    .clickable(interactionSource = interaction, indication = androidx.compose.foundation.LocalIndication.current, onClick = onUndo)
+                    .clickable(interactionSource = interaction, indication = LocalIndication.current, role = Role.Button, onClick = onUndo)
                     .padding(start = 14.dp, end = 20.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1590,9 +1652,10 @@ private fun EpisodesButton(onClick: () -> Unit) {
         Modifier.padding(start = 8.dp).height(44.dp).clip(CircleShape)
             .background(ControlsPillFill)
             .border(1.dp, ControlsPillEdge, CircleShape)
-            .background(if (hovered) Color(0x33FFFFFF) else Color.Transparent)
+            .background(if (hovered) OverlayHover else Color.Transparent)
+            .overlayFocusRing(hover, CircleShape)
             .hoverable(hover)
-            .clickable(onClick = onClick)
+            .clickable(interactionSource = hover, indication = LocalIndication.current, role = Role.Button, onClick = onClick)
             .padding(start = 12.dp, end = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1617,7 +1680,7 @@ internal fun BoxScope.EpisodesSheet(
     val s = LocalStrings.current
     val focus = androidx.compose.ui.platform.LocalFocusManager.current
     BoxWithConstraints(
-        Modifier.matchParentSize().background(FloatingTone.scrim).clickable(onClick = onClose),
+        Modifier.matchParentSize().background(FloatingTone.scrim).scrimDismiss(onClose),
         contentAlignment = Alignment.Center,
     ) {
         Surface(
@@ -1817,7 +1880,7 @@ internal fun BoxScope.StatusSheet(
 internal fun BoxScope.ShortcutSheet(onClose: () -> Unit, mac: Boolean = false, wheelSeeks: Boolean = false) {
     val s = LocalStrings.current
     BoxWithConstraints(
-        Modifier.matchParentSize().background(FloatingTone.scrim).clickable(onClick = onClose),
+        Modifier.matchParentSize().background(FloatingTone.scrim).scrimDismiss(onClose),
         contentAlignment = Alignment.Center,
     ) {
         val groups = PlayerKeys.sheetGroups(mac, wheelSeeks)
@@ -1875,8 +1938,11 @@ private fun PlayPauseButton(status: PlaybackStatus, onTogglePlay: () -> Unit) {
     val s = LocalStrings.current
     val reduced = com.tmplayer.ui.theme.rememberReducedMotion()
     Tip("${if (status.playing) s.playerPause else s.playerPlay} (${s.keysSpaceK})") {
+        val interactions = remember { MutableInteractionSource() }
         Box(
-            Modifier.size(72.dp).clip(CircleShape).background(PlayerTonalButton).clickable(onClick = onTogglePlay)
+            Modifier.size(72.dp).clip(CircleShape).background(PlayerTonalButton)
+                .overlayFocusRing(interactions, CircleShape)
+                .clickable(interactionSource = interactions, indication = LocalIndication.current, role = Role.Button, onClick = onTogglePlay)
                 .testTag("play-pause")
                 .semantics {
                     stateDescription = if (status.playing) s.playerPlaying else s.playerPaused

@@ -38,6 +38,13 @@ data class ParsedName(
      * length episode a broadcaster cut in two). Null for an episode written with no letter.
      */
     val episodePart: Int? = null,
+    /**
+     * The last season a pack of several names: 3 for "S01-S03", "Seasons 1-3" and "S01 to S03".
+     * [season] stays null for such a name, so the file never files as season one.
+     */
+    val seasonEnd: Int? = null,
+    /** The first season of a span ([seasonEnd] set): 1 for "S01-S03". Null for a name that is no span. */
+    val seasonFrom: Int? = null,
 ) {
     /**
      * [SeriesShelf.keyOf] of [title], worked out once: a parse is kept on its [MediaItem], and the
@@ -49,10 +56,20 @@ data class ParsedName(
     @Volatile private var titleKeyRead: String? = null
 
     /** Episodic media rather than a standalone video. */
-    val isSeries: Boolean get() = season != null || episode != null || airDate != null
+    val isSeries: Boolean get() = season != null || episode != null || airDate != null || seasonEnd != null
 
     /** A single episode, as opposed to a season pack that names no episode at all. */
     val isEpisode: Boolean get() = episode != null
+
+    /**
+     * A season, or a span of seasons, posted as one file: "Season 2 Complete", "S02 Combined",
+     * "S01-S03". The name states a season and no episode, no air date and no trailer word, so the
+     * show's page can list it as a pack ([SeriesShelf]) rather than leave it a loose tile.
+     */
+    val pack: Boolean get() = episode == null && airDate == null && extra == null && (season != null || seasonEnd != null)
+
+    /** The first season a pack holds: its [season], or the start of its span. */
+    val packSeason: Int? get() = season ?: seasonFrom
 
     /** What to send to a search box: the year disambiguates remakes, so keep it attached. */
     val query: String get() = if (year != null) "$title $year" else title
@@ -288,7 +305,7 @@ object MediaName {
 
         // A daily show or a match is numbered by the day it aired, "Show 2024.10.14 720p".
         val date = findAirDate(normalised)
-        val episode = if (date == null) findEpisode(normalised) else null
+        val episode = if (date == null) findEpisode(normalised, fansub = GROUP_TAG.containsMatchIn(text)) else null
         val year = if (date != null) Year(date.year, date.at) else findYear(normalised, maxYear)
 
         // The title ends at whichever marker comes first: the year, the episode code, the air date,
@@ -315,6 +332,8 @@ object MediaName {
                 episode = episode?.number,
                 lastEpisode = episode?.last,
                 episodePart = episode?.part,
+                seasonEnd = episode?.seasonEnd,
+                seasonFrom = episode?.seasonFrom,
                 part = part?.number,
                 extra = (extra ?: leadingExtra)?.let { extraOf(it.value) },
                 airDate = date?.text,
@@ -441,7 +460,7 @@ object MediaName {
     }
 
     /** A season and episode number, and where in the name the code starts. */
-    private data class Episode(val season: Int?, val number: Int?, val at: Int, val last: Int? = null, val part: Int? = null)
+    private data class Episode(val season: Int?, val number: Int?, val at: Int, val last: Int? = null, val part: Int? = null, val seasonEnd: Int? = null, val seasonFrom: Int? = null)
 
     /**
      * Finds an episode however the uploader chose to write it.
@@ -453,35 +472,104 @@ object MediaName {
      * A season with no episode is a whole-season pack, and that is a real answer rather than a
      * failure: it still belongs to the television index, it just has no single episode to show.
      */
-    private fun findEpisode(text: String): Episode? {
+    private fun findEpisode(text: String, fansub: Boolean = false): Episode? {
         PAIRED_EPISODE.asSequence()
             .mapNotNull { it.find(text) }
             .minByOrNull { it.range.first }
             ?.let {
                 val number = it.groupValues[2].toIntOrNull()
+                // A second code straight after the first, the file's last episode.
+                val second = (it.groupValues.getOrNull(3)?.toIntOrNull() ?: it.groupValues.getOrNull(4)?.toIntOrNull())
+                    ?.takeIf { last -> number != null && last > number }
                 return Episode(
                     season = it.groupValues[1].toIntOrNull(),
                     number = number,
                     at = it.range.first,
-                    // A second code straight after the first, the file's last episode.
-                    last = (it.groupValues.getOrNull(3)?.toIntOrNull() ?: it.groupValues.getOrNull(4)?.toIntOrNull())
-                        ?.takeIf { last -> number != null && last > number },
+                    last = if (number == null) null else rangeAfter(text, it.range.last + 1, second ?: number) ?: second,
                     part = it.groupValues.getOrNull(5)?.firstOrNull()?.lowercaseChar()?.let { c -> c - 'a' + 1 },
                 )
             }
 
+        // "S01-S03", "Seasons 1-3": a pack of several seasons, which is no season at all.
+        val letterSpan = SEASON_SPAN.find(text)
+        (letterSpan ?: SEASONS_SPAN.find(text))?.let { span ->
+            val from = span.groupValues[1].toIntOrNull()
+            val to = span.groupValues[2].toIntOrNull()
+            // "Season 2 - 05" is a fansub's season and episode, not seasons 2 to 5: no "Seasons 1-3"
+            // pack pads its last season (the letter form, "S01-S03", does).
+            val padded = letterSpan == null && span.groupValues[2].length == 2 && span.groupValues[2].startsWith('0')
+            if (from != null && to != null && from in 0 until to && to <= MAX_SEASON && !padded) {
+                return Episode(season = null, number = null, at = span.range.first, seasonEnd = to, seasonFrom = from)
+            }
+        }
         val season = SEASON_ONLY.find(text)
         val range = EPISODE_RANGE.find(text)
         val number = range ?: EPISODE_ONLY.find(text) ?: DASHED_EPISODE.find(text)?.takeUnless { notAnEpisode(it, text) }
-        if (season == null && number == null) return null
+        if (season == null && number == null) {
+            // The forms only an anime's files take: a special, one digit after a fansub's dash, "123v2".
+            val anime = AnimeName.find(text, fansub) ?: return null
+            return Episode(anime.season, anime.number, anime.at, last = rangeAfter(text, anime.end, anime.number))
+        }
         val first = number?.groupValues?.get(1)?.toIntOrNull()
+        val last = range?.groupValues?.get(2)?.toIntOrNull()?.takeIf { last -> first != null && last > first }
         return Episode(
             season = season?.groupValues?.get(1)?.toIntOrNull(),
             number = first,
             at = listOfNotNull(season?.range?.first, number?.range?.first).min(),
-            last = range?.groupValues?.get(2)?.toIntOrNull()?.takeIf { last -> first != null && last > first },
+            // "Ep 1~4", "Ep 1 to 4", "Ep 1, 2, 3": the codes after the first, where the name has them.
+            last = if (first == null || number == null) null else rangeAfter(text, number.range.last + 1, last ?: first) ?: last,
         )
     }
+
+    /**
+     * The last episode of a file that names several after the first code at [from]: "~04", " to E04",
+     * "+E02", "&E02", ", E03", "-S01E04", "\u2013E06", read one after another while each is higher
+     * than the one before (a list that is not ascending is not a range). Null when nothing follows.
+     * Only a window of the text after the code is read, so a long garbage name costs the same.
+     */
+    private fun rangeAfter(text: String, from: Int, first: Int): Int? {
+        var last: Int? = null
+        var at = from
+        repeat(MAX_RANGE_STEPS) {
+            if (at >= text.length) return last
+            val window = text.substring(at, minOf(text.length, at + RANGE_WINDOW))
+            val match = RANGE_TAIL.find(window) ?: return last
+            val number = (1..3).firstNotNullOfOrNull { match.groupValues[it].toIntOrNull() } ?: return last
+            if (number <= (last ?: first) || number > MAX_EPISODE) return last
+            last = number
+            at += match.range.last + 1
+        }
+        return last
+    }
+
+    private const val MAX_RANGE_STEPS = 60
+    private const val RANGE_WINDOW = 40
+    private const val MAX_EPISODE = 999
+    private const val MAX_SEASON = 99
+
+    /**
+     * What may follow an episode code to make it a range: "~" or "to" (a bare number is fine),
+     * a hyphen, en dash, "+", "&" or a comma before an "E" (so "S01E05 - 1080p" and "E05, 5 Stars"
+     * stay one episode), or one of them straight against a number ("E01,02", "E01\u201306").
+     */
+    private val RANGE_TAIL = Regex(
+        """^(?:\s*(?:~|\bto\b)\s*(?:s\d{1,2}\s*)?(?:e(?:p(?:isode)?)?\s*)?(\d{1,3})""" +
+            """|\s*[-\u2013\u2014+&,]\s*(?:s\d{1,2}\s*)?e\s?(\d{1,3})""" +
+            """|[-\u2013\u2014+&,](\d{1,3}))(?![\dxXpPiI])""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /** "S01-S03", "S01 to S03": the word season, or its letter, on both numbers. */
+    private val SEASON_SPAN = Regex(
+        """\bs(\d{1,2})\s*(?:[-\u2013\u2014~+&,]|\bto\b)\s*s(\d{1,2})\b""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /** "Seasons 1-3", "Season 1 to 3", "Seasons 1 & 2": the plural, or "season", then two numbers. */
+    private val SEASONS_SPAN = Regex(
+        """\bseasons?\s?(\d{1,2})\s*(?:[-\u2013\u2014~+&,]|\bto\b)\s*(?:season\s?)?(\d{1,2})\b(?!\s?e)""",
+        RegexOption.IGNORE_CASE,
+    )
 
     /**
      * "Show - 2019" is a year, not episode 2019. A number after the release tags, "Film 2026
@@ -801,6 +889,8 @@ object MediaName {
      */
     private val EXTRA = Regex(
         """\b(?:official\s+)?(?:trailer|teaser|promo|sample|sneak\s?peek|first\s?look|glimpse|making\s?of)\b(?:\s?\d{1,2}\b)?""" +
+            // A fansub's creditless opening and ending: an extra of the show, never one of its episodes.
+            """|\b(?:nc(?:op|ed)\d{0,2}|creditless(?:\s?(?:op|ed)\d{0,2})?)\b(?:\s?\d{1,2}\b)?""" +
             // The same words as the Tamil, Hindi and Malayalam channels write them, which end on a
             // vowel sign, so the edges are spelt out rather than left to \b.
             """|(?<![\p{L}\p{M}])(?:${TRAILER_WORDS.joinToString("|")}|${TEASER_WORDS.joinToString("|")})(?![\p{L}\p{M}])""",
@@ -897,7 +987,7 @@ object MediaName {
      * one of these, so that "S.W.A.T" and a title ending in a short word are not mistaken for one.
      */
     private val SITE = Regex(
-        """\b(?:www\.)?[a-z0-9][a-z0-9-]{2,}\.(?:com|net|org|to|me|cc|io|xyz|site|link|club|ws|sbs|top|pw|info|biz)\b""",
+        """\b(?:www\.)?[a-z0-9][a-z0-9-]{2,62}\.(?:com|net|org|to|me|cc|io|xyz|site|link|club|ws|sbs|top|pw|info|biz)\b""",
         RegexOption.IGNORE_CASE,
     )
 
@@ -922,7 +1012,7 @@ object MediaName {
      * title. A resolution never matches, because the number has to end the word, and a year is
      * turned away by [notAnEpisode].
      */
-    private val DASHED_EPISODE = Regex("""\s-\s(\d{2,4})(?:v\d)?(?=\s|$)""")
+    private val DASHED_EPISODE = Regex("""\s-\s(\d{2,4})(?:v\d)?(?=\s|$|[-~]\d)""")
 
     /** A bracketed group name at the very front, before any title. Never a year. */
     private val GROUP_TAG = Regex("""^\s*\[(?!\s*(?:19|20)\d{2}\s*\])[^\]]{1,40}\]\s*""")

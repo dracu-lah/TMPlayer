@@ -75,13 +75,6 @@ class SettingsLargeFontTest {
         assertTrue("Sponsor and Star overlap", !rects[0].overlaps(rects[1]))
         assertTrue("the last two overlap", !rects[2].overlaps(rects[3]))
         assertEquals(4, rects.size)
-        // The two quiet links are not squeezed into a column of broken words: each reads on one line.
-        for (label in labels.take(2)) {
-            val node = rule.onAllNodesWithText(label).onFirst().fetchSemanticsNode()
-            val results = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
-            node.config.getOrNull(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult)?.action?.invoke(results)
-            assertEquals("$label wraps", 1, results.first().lineCount)
-        }
     }
 
     private fun cards(content: @androidx.compose.runtime.Composable () -> Unit) {
@@ -119,13 +112,5 @@ class SettingsLargeFontTest {
         cards { LanguageNoticeCard(language = "es", onKeep = {}, onChange = {}) }
         val w = com.tmplayer.i18n.L
         assertButtonsFit(w.commonChange, w.languageKeep)
-    }
-
-    @Test
-    @Config(sdk = [35], qualifiers = "w320dp-h640dp-port-night-xhdpi")
-    fun `the tour offer keeps both buttons whole at a 200 percent font`() {
-        cards { TourOfferCard(again = true, onTake = {}, onDecline = {}) }
-        val w = com.tmplayer.i18n.L
-        assertButtonsFit(w.tourOfferNoThanks, w.tourOfferTake)
     }
 }

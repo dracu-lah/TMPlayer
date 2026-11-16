@@ -378,7 +378,7 @@ object Td {
                 if (startFailure == null) startFailure = reason
                 val retry = CompletableDeferred<Unit>()
                 clientRetry = retry
-                _auth.value = AuthState.Failed(L.errorsTdlibUnavailable(reason))
+                _auth.value = AuthState.Failed(L.errorsStartFailed(reason))
                 retry.await()
                 clientRetry = null
                 _auth.value = AuthState.Connecting
@@ -752,7 +752,7 @@ object Td {
             is TdlResult.Failure -> {
                 _auth.value = AuthState.Phone(wrong = true)
                 if (result.message.contains("PHONE_NUMBER_INVALID")) {
-                    L.errorsPhoneInvalid
+                    L.errorsPhoneCheck
                 } else {
                     Failures.humanise(result.message)
                 }
@@ -771,7 +771,7 @@ object Td {
             is TdlResult.Failure -> {
                 _auth.value = current.copy(wrong = true)
                 when {
-                    result.message.contains("PHONE_CODE_INVALID") -> L.errorsWrongCode
+                    result.message.contains("PHONE_CODE_INVALID") -> L.errorsCodeCheck
                     result.message.contains("PHONE_CODE_EXPIRED") ->
                         L.errorsCodeExpired
                     else -> Failures.humanise(result.message)
@@ -809,7 +809,7 @@ object Td {
             is TdlResult.Failure -> {
                 _auth.value = asked.copy(wrong = true)
                 when {
-                    result.message.contains("CODE_INVALID") -> L.errorsWrongCode
+                    result.message.contains("CODE_INVALID") -> L.errorsCodeCheck
                     result.message.contains("CODE_EXPIRED") -> L.errorsCodeExpired
                     else -> Failures.humanise(result.message)
                 }
@@ -852,7 +852,7 @@ object Td {
         val paths = currentPaths ?: return
         if (!credentials.present) {
             _auth.value = AuthState.Failed(
-                L.errorsNoApiCredentials,
+                L.errorsNoCredentials,
             )
             return
         }
@@ -873,7 +873,7 @@ object Td {
             applicationVersion = device.appVersion,
         )
         if (result is TdlResult.Failure) {
-            _auth.value = AuthState.Failed(L.errorsTdlibParameters(result.message))
+            _auth.value = AuthState.Failed(L.errorsStartRejected(result.message))
             return
         }
         // Both are answered from TDLib's own database, so they work with no line to Telegram:
@@ -941,7 +941,7 @@ object Td {
             }
             is TdlResult.Failure -> {
                 _auth.value = asked.copy(wrong = true)
-                if (result.message.contains("CODE_INVALID")) L.errorsWrongCode else Failures.humanise(result.message)
+                if (result.message.contains("CODE_INVALID")) L.errorsCodeCheck else Failures.humanise(result.message)
             }
         }
     }

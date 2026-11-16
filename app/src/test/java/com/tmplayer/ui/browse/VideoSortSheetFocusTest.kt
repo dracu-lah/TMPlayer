@@ -185,4 +185,65 @@ class VideoSortSheetFocusTest {
         rule.onNodeWithText(L.gridSortNewest).assertExists()
         rule.onNodeWithText(L.gridPlayRandom).assertDoesNotExist()
     }
+
+    private var clipSwitch = false
+    private var resets = 0
+
+    private fun openWithSizeSwitch(custom: String? = null) {
+        FormFactor.override(true)
+        Motion.reduced = true
+        rule.setContent {
+            TMPlayerTheme {
+                var on by remember { mutableStateOf(false) }
+                clipSwitch = on
+                // Like the chat's screen: the switch does not close the panel; the grid changes behind it.
+                VideoSortSheet(
+                    VideoMenuState(
+                        VideoSort.Newest, VideoFilter.All, onSort = {}, onFilter = {},
+                        hideSmall = on, onHideSmall = { on = it; clipSwitch = it },
+                        customLimits = custom, onResetLimits = { resets++ },
+                    ),
+                    onDismiss = {},
+                )
+            }
+        }
+        remoteMode()
+    }
+
+    @Test
+    fun `Down reaches the Hide small clips switch, OK toggles it and the remote stays on it`() {
+        openWithSizeSwitch()
+        rule.onNodeWithText("Newest").requestFocus()
+        val label = L.gridHideSmallClips("50 MB")
+        downTo(label)
+        assertEquals(false, clipSwitch)
+        press(Key.DirectionCenter)
+        rule.waitForIdle()
+        assertEquals("the switch is on", true, clipSwitch)
+        // The panel is still open and the remote is still on the switch (focus stays after toggling).
+        rule.onNodeWithText(label).assertIsFocused()
+        press(Key.DirectionCenter)
+        rule.waitForIdle()
+        assertEquals("and off again", false, clipSwitch)
+        rule.onNodeWithText(label).assertIsFocused()
+    }
+
+    @Test
+    fun `a floor chosen before gets one line with a Reset, below the switch`() {
+        openWithSizeSwitch(custom = "You'll see videos from 700 MB upwards.")
+        rule.onNodeWithText("Newest").requestFocus()
+        val line = L.gridSizeLimitOn("You'll see videos from 700 MB upwards.")
+        downTo(L.gridHideSmallClips("50 MB"))
+        press(Key.DirectionDown)
+        rule.onNodeWithText(line).assertIsFocused()
+        press(Key.DirectionCenter)
+        assertEquals(1, resets)
+    }
+
+    @Test
+    fun `no custom limits means no extra line`() {
+        openWithSizeSwitch()
+        rule.onNodeWithText(L.gridHideSmallClips("50 MB")).assertExists()
+        rule.onNodeWithText(L.gridFilterSizeLabel).assertExists()
+    }
 }

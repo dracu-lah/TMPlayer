@@ -1,5 +1,6 @@
 package com.tmplayer.desktop.ui
 
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -98,7 +99,7 @@ internal fun AboutPage(version: String, supporter: Boolean = false, onBack: () -
 private fun Links(version: String, supporter: Boolean, onRead: () -> Unit) {
     val s = LocalStrings.current
     var supporting by remember { mutableStateOf(false) }
-    if (supporting) SupportPopup(from = "about", onClose = { supporting = false })
+    if (supporting) SupportPopup(onClose = { supporting = false })
 
     // The mark and the name, then the version and the licence under them, in line with the rows.
     Column(
@@ -112,7 +113,8 @@ private fun Links(version: String, supporter: Boolean, onRead: () -> Unit) {
             "${s.settingsVersion} $version",
             style = MaterialTheme.typography.titleMedium,
             color = Tone.text,
-            modifier = Modifier.clickable(
+            // A pointer-only easter egg: no Tab stop, which would sit there with no mark on it.
+            modifier = Modifier.focusProperties { canFocus = false }.clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 onClick = DevOptions::tap,

@@ -16,6 +16,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.test.assertCountEquals
@@ -27,6 +28,7 @@ import com.tmplayer.ui.theme.Tone
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
+import org.junit.Before
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -38,10 +40,11 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * Resume on other devices on Library (U7), on a phone and by remote on a television: the switch
- * asks before it turns on, Sync now and "Turn off and delete the sync file" show under it only
- * while it is on, with the last sync's line, and a file that could not be read turns Sync now into
- * Replace the sync file. On the television Down from the switch reaches Sync now.
+ * Keep my place on all my devices under Account (FQ12, moved from Library), on a phone and by
+ * remote on a television: the switch is the one question, so it turns on at once with no second
+ * dialog, Sync now and "Turn off and delete the sync file" show under it only while it is on, with
+ * the last sync's line, and a file that could not be read turns Sync now into Replace the sync
+ * file. On the television Down from the switch reaches Sync now.
  */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -50,6 +53,7 @@ class ResumeSyncRowsTest {
     private companion object {
         /** How long a store write may take on a slow runner before the test gives up. */
         const val WRITE_MS = 10_000L
+        const val SWITCH = "Keep my place on all my devices"
     }
 
     @get:Rule
@@ -57,10 +61,26 @@ class ResumeSyncRowsTest {
 
     private val settings get() = SettingsStore(RuntimeEnvironment.getApplication())
 
+    @Before
+    fun noWaitingForALine() {
+        // A switch turned on here starts a real sync; with no Telegram it gives up at once, not after half a minute.
+        com.tmplayer.data.ResumeSync.connectWaitMs = 50L
+    }
+
     @After
     fun tearDown() {
+        com.tmplayer.data.ResumeSync.connectWaitMs = 30_000L
         FormFactor.override(false)
         runBlocking { settings.setResumeSync(false) }
+    }
+
+    /** Scrolls whichever list holds [matcher] to it: a lazy list has no node for a row it has not drawn. */
+    private fun reveal(matcher: androidx.compose.ui.test.SemanticsMatcher) {
+        val lists = rule.onAllNodes(androidx.compose.ui.test.hasScrollToNodeAction()).fetchSemanticsNodes().size
+        for (i in 0 until lists) {
+            if (rule.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty()) return
+            runCatching { rule.onAllNodes(androidx.compose.ui.test.hasScrollToNodeAction())[i].performScrollToNode(matcher) }
+        }
     }
 
     private fun show(tv: Boolean) {
@@ -68,7 +88,7 @@ class ResumeSyncRowsTest {
         rule.setContent {
             TMPlayerTheme {
                 Box(Modifier.fillMaxSize().background(Tone.background)) {
-                    SettingsScreen(chats = emptyList(), onLoggedOut = {}, initialPage = SettingsPage.Library, accountFolders = emptyList())
+                    SettingsScreen(chats = emptyList(), onLoggedOut = {}, initialPage = SettingsPage.Account, accountFolders = emptyList())
                 }
             }
         }
@@ -77,45 +97,53 @@ class ResumeSyncRowsTest {
 
     @Test
     @Config(sdk = [35], qualifiers = "w411dp-h891dp-port-night-xhdpi")
-    fun `the switch asks first and the rows follow it`() {
+    fun `the switch turns on with no second question and the rows follow it`() {
         runBlocking { settings.setResumeSync(false) }
         show(tv = false)
-        rule.onNodeWithText("Resume on your other devices").performScrollTo()
+        reveal(hasText(SWITCH))
+        // The privacy line is the switch's words, so nobody has to open anything to know what goes where.
+        reveal(hasText("Only TMPlayer's own data goes into one file in your own Saved Messages", substring = true))
+        rule.onNodeWithText("Only TMPlayer's own data goes into one file in your own Saved Messages", substring = true).assertExists()
         rule.onAllNodesWithText("Sync now").assertCountEquals(0)
 
-        // On asks first, and Cancel leaves it off.
-        rule.onNode(hasText("Resume on your other devices") and hasClickAction()).performClick()
+        rule.onNode(hasText(SWITCH) and hasClickAction()).performClick()
+        rule.waitUntil(WRITE_MS) { runBlocking { settings.resumeSync.first() } }
         rule.waitForIdle()
-        rule.onNodeWithText("Resume on your other devices?").assertExists()
-        rule.onNodeWithText("Cancel").performClick()
+        // No dialog stood in the way: the switch is on, the rows are there, and the question card is spent.
+        rule.onAllNodesWithText("Keep my place on all my devices?").assertCountEquals(0)
+        reveal(hasText("Sync now")); rule.onNodeWithText("Sync now").assertExists()
+        reveal(hasText("Turn off and delete the sync file")); rule.onNodeWithText("Turn off and delete the sync file").assertExists()
+        assertFalse(runBlocking { settings.keepPlaceCardPending.first() })
+        // Off again: no question either, the rows go, the file is left for the delete row.
+        reveal(hasText(SWITCH) and hasClickAction()); rule.onNode(hasText(SWITCH) and hasClickAction()).performClick()
+        rule.waitUntil(WRITE_MS) { !runBlocking { settings.resumeSync.first() } }
         rule.waitForIdle()
-        assertFalse(runBlocking { settings.resumeSyncNow() })
+        rule.onAllNodesWithText("Sync now").assertCountEquals(0)
+    }
 
+    @Test
+    @Config(sdk = [35], qualifiers = "w411dp-h891dp-port-night-xhdpi")
+    fun `the last result shows under the switch and a file that cannot be read can be replaced`() {
+        runBlocking { settings.setResumeSync(false) }
+        show(tv = false)
+        reveal(hasText(SWITCH))
         // Turned on from elsewhere (a restored backup): the rows and the last result show.
         runBlocking {
             settings.setResumeSync(true)
             settings.setResumeSyncStatus(SyncStatus(SyncStatus.Kind.NoConnection, System.currentTimeMillis()))
         }
         rule.waitForIdle()
-        rule.onNodeWithText("Sync now").performScrollTo()
+        reveal(hasText("Sync now"))
         rule.onNodeWithText("Waiting for a connection to Telegram.", substring = true).assertExists()
-        rule.onNodeWithText("Turn off and delete the sync file").performScrollTo().assertExists()
+        reveal(hasText("Turn off and delete the sync file")); rule.onNodeWithText("Turn off and delete the sync file").assertExists()
 
         runBlocking { settings.setResumeSyncStatus(SyncStatus(SyncStatus.Kind.Unreadable, System.currentTimeMillis())) }
         rule.waitForIdle()
-        rule.onNodeWithText("Replace the sync file").performScrollTo().performClick()
+        reveal(hasText("Replace the sync file")); rule.onNodeWithText("Replace the sync file").performClick()
         rule.waitForIdle()
         rule.onNodeWithText("Replace the sync file?").assertExists()
         rule.onNodeWithText("Cancel").performClick()
         rule.waitForIdle()
-
-        // Off from the switch: no question, the rows go, the file is left for the delete row.
-        rule.onNode(hasText("Resume on your other devices") and hasClickAction()).performScrollTo().performClick()
-        rule.waitForIdle()
-        // The store writes on its own thread, which waitForIdle does not wait for.
-        rule.waitUntil(WRITE_MS) { !runBlocking { settings.resumeSync.first() } }
-        assertFalse(runBlocking { settings.resumeSync.first() })
-        rule.onAllNodesWithText("Sync now").assertCountEquals(0)
     }
 
     @Test
@@ -133,8 +161,9 @@ class ResumeSyncRowsTest {
             org.robolectric.util.ReflectionHelpers.ClassParameter.from(Boolean::class.javaPrimitiveType, true),
         )
         rule.waitForIdle()
-        val toggle = hasText("Resume on your other devices") and hasClickAction()
-        rule.onNode(toggle).performScrollTo().requestFocus()
+        val toggle = hasText(SWITCH) and hasClickAction()
+        reveal(toggle)
+        rule.onNode(toggle).requestFocus()
         rule.onNode(toggle).assertIsFocused()
         rule.onNode(toggle).performKeyInput { pressKey(Key.DirectionDown) }
         rule.waitForIdle()

@@ -79,6 +79,7 @@ import com.tmplayer.data.videoFollowsTransforms
 import com.tmplayer.data.LocalDownloads
 import com.tmplayer.data.LocalVideo
 import com.tmplayer.data.OpeningStall
+import com.tmplayer.data.StartVerdict
 import com.tmplayer.data.start
 import com.tmplayer.data.pauseAll
 import com.tmplayer.data.resume
@@ -154,6 +155,8 @@ import kotlinx.coroutines.withTimeoutOrNull
 import com.tmplayer.online.MovieHash
 import com.tmplayer.online.EpisodeNames
 import com.tmplayer.online.OnlineMetadata
+import com.tmplayer.online.SkipController
+import com.tmplayer.online.SkipOffer
 import com.tmplayer.online.SkipSegment
 import com.tmplayer.online.SkipSegments
 import com.tmplayer.online.OnlineSubtitles
@@ -224,12 +227,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     private var mediaFileName = ""
     private var mediaCaption = ""
 
-    /** The file's type, for telling sound alone (a chat's audio, [ChatAudio]) from a video. */
+    /** The file's type, as the chat gave it. */
     private var mediaMime = ""
-    private val isAudio: Boolean get() = mediaMime.startsWith("audio/", ignoreCase = true)
-
-    /** What stands in for the picture while sound alone plays: its name and where it is from. */
-    private var audioCard: View? = null
 
     /** The forum topic the post is in, or 0, for the speed remembered per topic. */
     private var mediaTopicId = 0
@@ -578,6 +577,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             bufferedAheadMs = runCatching { player?.let { (it.bufferedPosition - it.currentPosition).coerceAtLeast(0).toInt() } ?: -1 }.getOrDefault(-1),
             // What the playback trace of this session says (L2): decoder, line, render path, heat or memory.
             verdict = runCatching { com.tmplayer.data.StutterReport.verdictName(traceRecorder.verdict()) }.getOrDefault(com.tmplayer.data.StutterReport.UNKNOWN_VERDICT),
+            // Whether the picture that stuttered was already on a changed path (RL11).
+            remedies = remedies.current?.taken?.joinToString(",") { it.code }.orEmpty(),
+            hops = remedies.current?.hops?.size ?: 0,
         )
         Thread { runCatching { com.tmplayer.data.CrashReports.reportStutter(facts) } }.start()
     }
@@ -1095,7 +1097,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * while one is playable, is not this case; nor is a picture that is only cover art.
      */
     private fun pictureUnplayable(tracks: Tracks): Boolean {
-        if (pictureChecked || isAudio) return false
+        if (pictureChecked) return false
         val video = tracks.groups.filter { group ->
             group.type == C.TRACK_TYPE_VIDEO &&
                 (0 until group.length).none { group.getTrackFormat(it).sampleMimeType?.startsWith("image/") == true }
@@ -1131,7 +1133,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * the one there is), or while casting, where the TV decodes the picture.
      */
     private fun checkSoftwareDecode(tracks: Tracks): Boolean {
-        if (softwareChecked || isAudio) return false
+        if (softwareChecked) return false
         val group = tracks.groups.firstOrNull { it.type == C.TRACK_TYPE_VIDEO && it.isSelected } ?: return false
         val format = (0 until group.length).firstOrNull { group.isTrackSelected(it) }?.let { group.getTrackFormat(it) } ?: return false
         if (format.sampleMimeType?.startsWith("image/") == true) return false
@@ -1364,7 +1366,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
     /** Samples the watch once a second while the video plays ([PlaybackWatch]). */
     private fun startWatch() {
-        if (watch.done || isAudio || !firstFrameReady) return
+        if (watch.done || !firstFrameReady) return
         loopHandler.removeCallbacks(watchTick)
         loopHandler.postDelayed(watchTick, WATCH_TICK_MS)
     }
@@ -1693,18 +1695,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     /** True while the session is in [PlaybackService]'s hands: the player left, the sound playing on. */
     private var inBackgroundAudio = false
 
-    /** Settings, Playback: Back keeps the video going in a bar over browsing (U8, [MiniDock]). */
-    private var miniPlayerOn = true
-
-    /** Out of sight and on [MiniDock]: the browse shell's bar shows this video. */
-    private var docked = false
-
-    /**
-     * Docked by Back ([dockOnBack]) rather than by leaving the app: the viewer is still in the
-     * app, so the sound plays on whatever the background audio setting says.
-     */
-    private var dockedByBack = false
-
     /**
      * True while the video track is off because nobody can see it ([BackgroundPlayback.withoutVideo]),
      * so coming back turns on only what going away turned off.
@@ -1800,6 +1790,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      */
     private var skipPill: SkipPill? = null
     private var skipSegments: List<SkipSegment> = emptyList()
+    /** Chapters, online lists and the viewer's marks, merged, with the per kind choice and the countdown. */
+    private val skipCtl = SkipController { showGestureFeedback(it) }
     private val skippedSegments = mutableSetOf<Long>()
     private var offeredSkip: SkipSegment? = null
 
@@ -2015,6 +2007,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             // The row's picture shape button: the next shape along, as W does on the desktop.
             onCycleShape = { applyScale(videoScale.next()) },
             onLock = ::lockScreen,
+            // Back and forward beside play (R5): ten seconds each way, the figure on the button.
+            onSeekButton = { forward -> jumpFromRemote(forward, fixedStepMs = Skip.BUTTON_MS) },
+            // The words under the six icons for the first openings of the player, then icons only.
+            showLabels = ControlLabels.takeSession(this),
             onBack = ::finish,
             onMore = ::showOverflow,
             onRemainingToggled = { remaining ->
@@ -2069,9 +2065,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             lifecycleScope.launch {
                 runCatching { settings.backgroundAudio.collect { backgroundAudioOn = it } }
             }
-            lifecycleScope.launch {
-                runCatching { settings.miniPlayer.collect { miniPlayerOn = it } }
-            }
             // Followed too: turning it off with a video open updates the system's request at once,
             // so Home from here no longer shrinks the video (Android 12 decided that in advance).
             lifecycleScope.launch {
@@ -2125,7 +2118,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         // arrives in [dispatchKeyEvent] as a key: it comes here, and without this a locked screen,
         // the next-up card or the row up all ended the film on the first press.
         onBackPressedDispatcher.addCallback(this) {
-            if (!peelOneOverlay() && !dockOnBack()) finish()
+            if (!peelOneOverlay()) leaveByBack()
         }
         subtitleView.setApplyEmbeddedStyles(true)
         applySubtitleStyle()
@@ -2148,9 +2141,24 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         val support = com.tmplayer.cast.Cast.support(this)
         if (!support.available) return
         cast = PlayerCast(this, findViewById(R.id.player_root), support, castHooks)
-        findViewById<View>(R.id.control_cast)?.apply {
-            visibility = View.VISIBLE
-            setOnClickListener { cast?.openPicker() }
+        // FQ8: the button is drawn only once a TV is found (or a cast is under way). The search for
+        // it runs 15 s each time the player comes into sight and stops by itself.
+        val castButton = findViewById<View>(R.id.control_cast)?.apply { setOnClickListener { cast?.openPicker() } }
+        val presence = com.tmplayer.cast.CastPresenceScan(support, lifecycleScope, canSearch = { com.tmplayer.cast.LocalNetworkPermission.granted(this) })
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                presence.start()
+                try {
+                    kotlinx.coroutines.awaitCancellation()
+                } finally {
+                    presence.stop()
+                }
+            }
+        }
+        lifecycleScope.launch {
+            presence.shown.collect { shown ->
+                castButton?.let { com.tmplayer.cast.showCastButton(it, shown, neighbour = findViewById(R.id.control_more)) }
+            }
         }
         subtitleFiles.onCastFile = { file, mime, label -> cast?.addSubtitle(file, mime, label) == true }
         // Remembered per video, so a handover to VLC or MX Player later carries it (ExternalSubtitleFile).
@@ -2297,6 +2305,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         piecesNotice = null
         piecesIncomplete = false
         piecesNoticeShown = false
+        // The remedy ladder starts afresh for this video, with what the device list says here (RL6).
+        remedies.newVideo(com.tmplayer.data.KnownDevices.remediesFor(com.tmplayer.data.KnownDevices.builtIn, EngineDevice.facts(), mediaMime.ifBlank { null }), active = true)
     }
 
     /**
@@ -2536,6 +2546,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             if (!session.isCurrent()) return@launch
             // The engine's inputs (PR2): nothing is read, and ExoPlayer plays, unless VLC can run here.
             engineInput = runCatching { readEngineInput() }.getOrNull()
+            remedies.memoryLoaded(runCatching { settings.remedyMemoryNow(RemedyFacts.today()) }.getOrDefault(com.tmplayer.data.RemedyMemory.Empty))
             markStart("file and settings decided", STAGE_DECIDED)
             startPlayback(session.client)
         }
@@ -2674,12 +2685,12 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
     /**
      * Whether VLC can play this video here: one file (not a video in pieces, which only ExoPlayer
-     * joins), a picture (sound alone stays on ExoPlayer, which has the audio effects), no cast
+     * joins), no cast
      * (the TV plays it), and, when it streams, a size known (the loopback server needs one) and a
      * chat not known to restrict saving: its bytes are never put on a socket, even 127.0.0.1's.
      */
     private fun vlcCanTake(): Boolean =
-        joinedSource == null && !isAudio && !castUp() && fileId > 0 &&
+        joinedSource == null && !castUp() && fileId > 0 &&
             (downloadedVideo != null || (fileSizeBytes > 0 && savable != false))
 
     /** The engine on screen, as an [Engine]: VLC's, or ExoPlayer's wrapped for the switch. */
@@ -2821,7 +2832,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * the engine before it released in full first (a 1 GB stick holds one), the resume point
      * written on the way.
      */
-    private fun moveToEngine(target: com.tmplayer.data.PlayerEngine, reason: EngineReason) {
+    private fun moveToEngine(target: com.tmplayer.data.PlayerEngine, reason: EngineReason, status: String? = null) {
         val client = castClient ?: return
         val carry = currentEngine()?.carry() ?: EngineCarry(positionMs = resumeMs, speed = playbackSpeed)
         Log.i(START_TAG, "Engine switch to ${target.key} ($reason) at ${carry.positionMs} ms, file $fileId")
@@ -2829,7 +2840,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         engineOffer = null
         hideFailureActions()
         failurePinned = false
-        showStatus(if (target == com.tmplayer.data.PlayerEngine.Vlc) L.playerEngineTryingVlc else L.playerEngineTryingExoplayer)
+        showStatus(status ?: if (target == com.tmplayer.data.PlayerEngine.Vlc) L.playerEngineTryingVlc else L.playerEngineTryingExoplayer)
         releasePlayerAndSurface()
         engineDecision = EngineDecision(target, reason)
         if (target == com.tmplayer.data.PlayerEngine.Vlc) {
@@ -2880,9 +2891,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         if (!vlcRunning) {
             if (failure != EngineFailure.Decoder || !vlcCanTake()) return false
             val running0 = engineDecision ?: EngineDecision(running, EngineReason.Default)
-            val auto = if (engineSwitchOnError) EngineSelector.afterFailure(input, running0, failure, engineSwitches) else null
+            val auto = if (engineSwitchOnError && remedies.allowsEngineSwitch()) EngineSelector.afterFailure(input, running0, failure, engineSwitches) else null
             if (auto != null && com.tmplayer.data.PlayerEngine.Vlc !in enginesFailed) {
                 engineSwitches++
+                remedies.engineSwitched()
                 moveToEngine(com.tmplayer.data.PlayerEngine.Vlc, EngineReason.SwitchedAfterFailure)
                 feedback?.message(L.playerEngineSwitchedVlc, holdMs = SEEK_NOTICE_MS)
                 return true
@@ -3007,7 +3019,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         findViewById<FrameLayout>(R.id.playback_container).addView(view)
         touchSurface = view
         controls?.setShape(videoScale)
-        controls?.setShapeOffered(!isAudio)
         // On a television only while 3D is drawn for a headset, which needs a copy per eye.
         view.findViewById<View>(androidx.media3.ui.R.id.exo_content_frame)
             ?.addOnLayoutChangeListener { frame, _, _, _, _, _, _, _, _ ->
@@ -3203,11 +3214,11 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * the seek lands at once, and the only thing drawn is the double tap's chevrons and the run's
      * total on the side the jump went.
      */
-    private fun jumpFromRemote(forward: Boolean, repeatCount: Int = 0) {
-        val base = if (forward) Skip.FORWARD_MS else Skip.BACK_MS
+    private fun jumpFromRemote(forward: Boolean, repeatCount: Int = 0, fixedStepMs: Long? = null) {
+        val base = fixedStepMs ?: if (forward) Skip.FORWARD_MS else Skip.BACK_MS
         // A held rewind or fast forward on a Fire TV remote scans in growing steps, the way
         // Amazon's own players answer it; elsewhere every repeat is the plain jump it always was.
-        val step = if (remoteQuirks.holdSeekAccelerates) RemoteQuirks.holdStepMs(repeatCount, base) else base
+        val step = if (fixedStepMs == null && remoteQuirks.holdSeekAccelerates) RemoteQuirks.holdStepMs(repeatCount, base) else base
         if (step <= 0) return
         skipBy(if (forward) step else -step)
         val zone = if (forward) TapZone.Right else TapZone.Left
@@ -3633,14 +3644,14 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     private fun contentFrame(): View? = touchSurface?.findViewById(androidx.media3.ui.R.id.exo_content_frame)
 
     /**
-     * Whether a pinch zooms freely now. Not on a television (no gestures there at all), not for
-     * sound alone, not while locked, in the corner window or casting, not in 3D (a headset's two
+     * Whether a pinch zooms freely now. Not on a television (no gestures there at all), not
+     * while locked, in the corner window or casting, not in 3D (a headset's two
      * halves and the anaglyph are drawn for the whole frame), and not where the video surface
      * cannot follow a view's scale (Android 6's SurfaceView, [videoFollowsTransforms]); there the
      * pinch steps the shape as it always did.
      */
     private fun zoomAllowed(): Boolean =
-        !FormFactor.isTv(this) && !isAudio && !locked && !inPictureInPicture && !stereo.on &&
+        !FormFactor.isTv(this) && !locked && !inPictureInPicture && !stereo.on &&
             cast?.casting != true && videoFollowsTransforms(touchSurface?.videoSurfaceView)
 
     /**
@@ -4172,12 +4183,14 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             alreadyDownloaded = availability == LocalFileAvailability.Complete,
             warnedThisSession = meteredWarningAccepted,
             sizeBytes = fileSizeBytes,
+            // "On mobile data: Allow" is the viewer's answer in advance: nothing to ask.
+            asks = runCatching { settings.mobileDataNow().asks }.getOrDefault(true),
         )
         return when (decision) {
             MeteredDecision.Allow -> true
             MeteredDecision.Block -> {
                 showError(
-                    L.playerWifiOnly,
+                    L.playerMobileDataNever,
                     retryable = false,
                 )
                 false
@@ -4231,6 +4244,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         .setUsage(C.USAGE_MEDIA)
         .build()
 
+    /** The path the next player is built on ([DecoderPolicy]): the remedy ladder's, else the known device list's. */
+    private fun decoderPolicyForBuild(): DecoderPolicy = remedies.policyForBuild()
+
     private fun buildPlayer(client: TdlClient): ExoPlayer {
         failurePinned = false
         stereoPipeline = false
@@ -4243,6 +4259,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         // constructor gets round to it.
         val maskHdr10Plus = HevcHdr10PlusMasker.affectedDevice(android.os.Build.MANUFACTURER, android.os.Build.MODEL)
         val fireTv = DeviceQuirks.isFireTv(this@PlayerActivity)
+        // The remedy ladder's path for this build: decoder names left out, queueing, software first ([DecoderPolicy]).
+        val policy = decoderPolicyForBuild().also { Log.i(START_TAG, "${it.describe()} (file $fileId)") }
         val renderers = object : NextRenderersFactory(this@PlayerActivity) {
             /**
              * The stock codec adapters, except on the Fire TV sticks with the MediaTek MT8696
@@ -4254,7 +4272,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
              */
             override fun getCodecAdapterFactory(): androidx.media3.exoplayer.mediacodec.MediaCodecAdapter.Factory {
                 val stock = super.getCodecAdapterFactory()
-                return if (maskHdr10Plus) Hdr10PlusMaskingCodecAdapterFactory(stock) else stock
+                val inner = if (maskHdr10Plus) Hdr10PlusMaskingCodecAdapterFactory(stock) else stock
+                // The codec's output format (colour standard, transfer, range, crop) for the trace (RL12).
+                return OutputFactsCodecAdapterFactory(inner) { facts -> loopHandler.post { traceRecorder.noteFacts(facts) } }
             }
 
             /**
@@ -4368,11 +4388,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 eventListener: androidx.media3.exoplayer.audio.AudioRendererEventListener,
                 out: ArrayList<Renderer>,
             ) {
-                val audioMode = if (extensionRendererMode == DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER) {
-                    DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON
-                } else {
-                    extensionRendererMode
-                }
+                // Unless the sound's own ladder put the app's decoder first (A1, [AudioPolicy]).
+                val audioMode = AudioPolicy.rendererMode(extensionRendererMode, softwareFirst = policy.softwareAudio)
                 super.buildAudioRenderers(
                     context, audioMode, mediaCodecSelector, enableDecoderFallback, audioSink, eventHandler, eventListener, out,
                 )
@@ -4417,14 +4434,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         }
             // Prefer software video puts the app's FFmpeg video decoder ahead of the device's;
             // a format FFmpeg has no decoder for still goes to the device's.
-            .setExtensionRendererMode(
-                if (videoDecoder == com.tmplayer.data.VideoDecoder.Software) {
-                    DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
-                } else {
-                    DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON
-                },
-            )
-            .setEnableDecoderFallback(true)
+            .setExtensionRendererMode(policy.extensionMode(preferSoftwareVideo = videoDecoder == com.tmplayer.data.VideoDecoder.Software))
+            // Decoder fallback on, the codec list without the decoders that failed, the queueing mode.
+            .let(policy::applyTo)
 
         // Sized by the memory the system gives the app ([targetBufferBytes]): small on a 1 GB
         // stick, where a generous buffer is what gets the app killed, generous elsewhere.
@@ -4469,7 +4481,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
         val plan = trackPlan
         val subtitles = plan.subtitles
-        val tunneling = tunnelingDecision()
+        val tunneling = tunnelingDecision().let {
+            if (policy.tunnelingOff && it.tunneled) TunnelingPolicy.Decision(false, TunnelingPolicy.Reason.FailedBefore) else it
+        }
         val trackSelector = DefaultTrackSelector(this).apply {
             parameters = buildUponParameters()
                 // Off stays off, so a series watched without captions does not get them back on an
@@ -4615,6 +4629,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                         watchDecoder = decoderName
                         crashNote.decoder(decoderName)
                     }
+
+                    // Logged and counted for the remedy ladder; Media3 itself retries a recoverable one.
+                    override fun onVideoCodecError(eventTime: AnalyticsListener.EventTime, videoCodecError: Exception) =
+                        remedies.codecError(videoCodecError)
 
                     override fun onAudioDecoderInitialized(
                         eventTime: AnalyticsListener.EventTime,
@@ -4807,9 +4825,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * first: while it is up the activity is never stopped, and closing its window means stop.
      */
     private fun keepsPlayingUnseen(): Boolean =
-        // Sound alone plays on with the screen off whatever the setting: that is what it is for.
-        // Docked by Back the viewer is still in the app, browsing: it plays on as they asked.
-        (backgroundAudioOn || isAudio || dockedByBack) && !FormFactor.isTv(this) && !isFinishing && !inPictureInPicture &&
+        backgroundAudioOn && !FormFactor.isTv(this) && !isFinishing && !inPictureInPicture &&
             mediaSession != null && playing?.playWhenReady == true &&
             // The sheet is up for a failure, a question or "Still watching?", none of which
             // plays on; the countdown to the next episode is the one sheet that does.
@@ -4838,8 +4854,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             playWhenReady = playing?.playWhenReady == true,
             onStop = { endBackgroundAudio(finish = true) },
             onCannotContinue = { stopUnseen() },
-            // In a task of its own the launcher's task is the shell's: the tap goes through it.
-            tapExpandsDock = ownTask(),
         )
         if (!started) {
             // Android would not start the service: the sound cannot go on unseen, and stopping
@@ -4903,159 +4917,18 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         exo.trackSelectionParameters = BackgroundPlayback.withVideo(exo.trackSelectionParameters)
     }
 
-    /*
-     * The mini player (U8, docs/mini-player-phone.md). The player opens in a task of its own while
-     * the setting is on ([PlayerLaunch]); leaving it then leaves it alive, out of sight, and
-     * [MiniDock] gives the browse shell a bar to see and steer it by. Nothing in the playback path
-     * changes: out of sight is background audio's handover, with the video track off.
-     */
-
-    /** The root of a task of its own, on a phone: leaving it does not finish it. */
-    private fun ownTask(): Boolean = isTaskRoot && !FormFactor.isTv(this)
-
-    private fun pictureInPictureJustEnded(): Boolean =
-        SystemClock.elapsedRealtime() - pictureInPictureEndedAt <= PIP_CLOSE_GRACE_MS
-
-    /** What [MiniPlayerState.verdict] needs to know of this player as Back is pressed. */
-    private fun miniContext(): MiniContext = MiniContext(
-        platformAllowed = MiniPlayerState.allowedOn(FormFactor.isTv(this)) && ownTask() && !handingOver && !isFinishing,
-        enabled = miniPlayerOn,
-        opened = playing != null,
-        ended = playing?.playbackState == Player.STATE_ENDED,
-        failed = failurePinned,
-        asking = statusOverlay.visibility == View.VISIBLE && !countingDownToNext,
-        casting = cast?.casting == true,
-        locked = locked,
-        inPictureInPicture = inPictureInPicture || pictureInPictureJustEnded(),
-        pausedForMs = pausedForMs(),
-    )
-
-    /** When the viewer's pause began ([SystemClock.elapsedRealtime]), 0 while the video plays. */
-    private var pausedSince = 0L
-
-    /** How long the video has been paused, for [MiniContext.pausedForMs]: 0 while it plays or is still opening. */
-    private fun pausedForMs(): Long {
-        val exo = playing ?: return 0L
-        if (exo.playWhenReady || pausedSince == 0L || exo.playbackState == Player.STATE_IDLE) return 0L
-        return SystemClock.elapsedRealtime() - pausedSince
-    }
-
     /**
-     * Back with nothing left to peel: docks the video into the browse shell's bar when
-     * [MiniPlayerState.verdict] says so, and says whether it did. [onStop] then hands the session
-     * to [PlaybackService] as background audio does, whatever that setting says: the viewer is
-     * still in the app.
+     * Back with nothing left to peel (T12): stop and go back to the page that opened the player.
+     * Paused first so the sound ends at once, not when the window is gone; the place is saved on
+     * the way out ([onStop] and [onDestroy]) and everything is released ([onDestroy]). The mini
+     * player that kept the video going behind browsing is gone on the phone. A second Back while
+     * the first is finishing does nothing more. Casting: the TV is stopped as well, as it always
+     * was ([PlayerCast.release]), and the place it reached is the one kept.
      */
-    private fun dockOnBack(): Boolean {
-        if (MiniPlayerState.verdict(miniContext()) != MiniVerdict.Dock) return false
-        docked = true
-        dockedByBack = true
-        // No corner window by itself on the way out ([pictureInPictureParams] reads [docked]),
-        // and NO_USER_ACTION so leaving for the shell is not taken as the viewer going Home.
-        updatePictureInPictureParams()
-        MiniDock.dock(dockHandle)
-        val shell = Intent(this, com.tmplayer.MainActivity::class.java)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_USER_ACTION)
-        val shown = runCatching { startActivity(shell) }
-            .onFailure { Log.w("TMPlayer", "Mini player: the browse shell would not open", it) }
-            .isSuccess
-        if (!shown) {
-            docked = false
-            dockedByBack = false
-            MiniDock.undock(dockHandle)
-            updatePictureInPictureParams()
-        }
-        return shown
-    }
-
-    /**
-     * Out of sight in a task of its own, however it was left: on the dock, so the shell has a bar
-     * to carry on from (the launcher, Recents, the notification's tap), and with the picture's
-     * decoder let go until the player is back. Home follows the background audio setting, decided
-     * in [onStop] before this; a sheet waiting for an answer stays, and the bar opens the player
-     * to it. Docked whatever the mini player setting says now: a player in its own task always
-     * has a way back.
-     */
-    private fun dockOnLeave() {
-        if (!docked) {
-            if (!ownTask() || handingOver || isFinishing || isChangingConfigurations || inPictureInPicture || pictureInPictureJustEnded()) return
-            docked = true
-            MiniDock.dock(dockHandle)
-        }
-        if (cast?.casting != true) playing?.let(::hideVideoUnseen)
-    }
-
-    /** Back in front ([onStart]): off the dock; the session and the picture come back as before. */
-    private fun undock() {
-        if (!docked) return
-        docked = false
-        dockedByBack = false
-        MiniDock.undock(dockHandle)
-        updatePictureInPictureParams()
-    }
-
-    /** The bar's X or swipe, or a docked video that ended: paused and finished, which frees it all. */
-    private fun dismissDocked() {
-        MiniDock.undock(dockHandle)
-        docked = false
-        dockedByBack = false
+    private fun leaveByBack() {
+        if (isFinishing) return
         playing?.pause()
-        endBackgroundAudio()
-        if (!isFinishing) finish()
-    }
-
-    /** A failure, a question, the end or a cast: only the player itself can show it. */
-    private fun needsTheViewer(): Boolean =
-        resumeWhenSeen || failurePinned || cast?.casting == true ||
-            (statusOverlay.visibility == View.VISIBLE && !countingDownToNext) ||
-            playing?.playbackState == Player.STATE_ENDED
-
-    /**
-     * The bar's play and pause. A pause is always a pause; a play that needs the viewer (see
-     * [needsTheViewer]) opens the player instead, and one that plays out of sight takes the
-     * foreground service first, which the app in front may start.
-     */
-    private fun dockedTogglePlay() {
-        val exo = playing
-        if (exo != null && exo.playWhenReady && exo.playbackState != Player.STATE_ENDED) {
-            exo.pause()
-            return
-        }
-        if (exo == null || needsTheViewer()) {
-            MiniDock.expand(this)
-            return
-        }
-        exo.play()
-        if (!inBackgroundAudio) startBackgroundAudio()
-        if (!inBackgroundAudio) {
-            // No session to hand over (or Android said no): the player shows it instead.
-            exo.pause()
-            MiniDock.expand(this)
-        }
-    }
-
-    /** This player as the browse shell's bar sees it ([MiniDock]). */
-    private val dockHandle: DockedPlayer = object : DockedPlayer {
-        override val chatId: Long get() = this@PlayerActivity.chatId
-        override val title: String get() = runCatching { displayName() }.getOrDefault("")
-        override val playing: Boolean
-            get() = this@PlayerActivity.playing?.let { it.playWhenReady && it.playbackState != Player.STATE_ENDED } == true
-        override val positionMs: Long get() = this@PlayerActivity.playing?.currentPosition ?: 0L
-        override val durationMs: Long
-            get() = this@PlayerActivity.playing?.duration?.takeIf { it > 0 } ?: (durationSec * 1000L)
-        override val casting: Boolean get() = cast?.casting == true
-
-        override fun togglePlay() = dockedTogglePlay()
-
-        override fun expand(context: Context): Boolean =
-            !isFinishing && !isDestroyed && MiniDock.moveTaskToFront(context, taskId)
-
-        override fun dismiss() = dismissDocked()
-
-        // Leaving the app from the shell is leaving it: off, the sound stops as it would from here.
-        override fun shellHidden() {
-            if (!(backgroundAudioOn || isAudio)) this@PlayerActivity.playing?.pause()
-        }
+        finish()
     }
 
     /**
@@ -5127,6 +5000,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         chaptersAsked = false
         controls?.chapters = emptyList()
         skipSegments = emptyList()
+        skipCtl.online(emptyList())
+        skipCtl.chapters(emptyList())
         skippedSegments.clear()
         offeredSkip = null
         hideSkipPill()
@@ -5196,9 +5071,14 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
          */
         override fun onTracksChanged(tracks: Tracks) {
             if (!tracks.isEmpty) markStart("tracks known", STAGE_TRACKS)
+            // What the file declares, for the badges on its details page (T8). Cheap, once per listing.
+            // Not for Telegram's lighter copy, whose picture is not the upload the page is about.
+            if (!tracks.isEmpty && playingQuality == 0) runCatching { com.tmplayer.data.FormatProbes.record("$chatId:$messageId", Media3Probe.of(tracks)) }
             // After a switch of engine: the languages, the speed and the volume of the one before.
             pendingCarry?.let { carry -> if (currentEngine()?.restore(carry) == true) pendingCarry = null }
             logSubtitleTracks(tracks)
+            // The class is known now: its remedy plan, and a re-open on its path when it starts elsewhere (RL6).
+            if (!tracks.isEmpty && vlcEngine == null) remedies.tracksKnown()
             if (pictureUnplayable(tracks)) return
             if (checkSoftwareDecode(tracks)) return
             restoreResumeTracks(tracks)
@@ -5209,6 +5089,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
         override fun onRenderedFirstFrame() {
             logFirstFrame()
+            remedies.firstFrame()
             // A few seconds in, once the picture and the tracks have settled: subtitles found for the viewer (U5).
             if (OnlineSubtitles.current?.store?.now?.suggest == true) {
                 loopHandler.removeCallbacks(suggestStart)
@@ -5244,14 +5125,14 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             // Heard here before Media3's notification hears it: a pause lets the service out of
             // the foreground at once, so the paused notification can be swiped away.
             if (inBackgroundAudio) PlaybackService.setPlayWhenReady(playWhenReady)
-            // Back on a video paused for a few seconds closes it instead of docking it (PL-18).
-            pausedSince = if (playWhenReady) 0L else SystemClock.elapsedRealtime()
             onPauseChanged(playWhenReady, reason)
             reportWatching()
         }
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             wakeEndWatch()
+            // The remedy watches tick only while it plays: nothing posted while paused or stalled.
+            remedies.playingChanged(isPlaying && vlcEngine == null && !castUp())
             // A pause and play inside one sample interval would read as a slow clock (HX37).
             if (!isPlaying) watch.interrupted()
             if (isPlaying) startWatch()
@@ -5295,10 +5176,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                         seekStartedAt = 0L
                     }
                     recoveryAttempts = 0
+                    remedies.ready()
                     // Playing: a failure sheet's offer of the other engine is spent.
                     engineOffer = null
                     markStart("ready to play", STAGE_READY)
-                    // Sound alone has no first frame: ready is its picture.
                     openedGate.complete(Unit)
                     firstFrameReady = true
                     noteSeekIndex()
@@ -5306,7 +5187,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                     offerStartOver()
                     controls?.setBuffering(false)
                     if (!failurePinned) hideStatus()
-                    showAudioCard()
                     // Once, as the picture first lands: the viewer sees the name of what they
                     // opened and where the controls live, and the row folds away on its own.
                     if (!controlsShownOnStart) {
@@ -5358,6 +5238,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 return
             }
             if (!watch.done) watch.reset()
+            remedies.seeked()
             seekStartedAt = SystemClock.elapsedRealtime()
             noteSeek(oldPosition.positionMs, newPosition.positionMs)
         }
@@ -5385,6 +5266,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 return
             }
             if (retryWithoutTunneling(error)) return
+            // The remedy ladder first (RL6): another decoder, the app's, the other engine, once each.
+            if (remedies.onPlayerError(error)) return
             if (switchDecoderByItself(error)) return
             // With a second engine here (PR2): VLC by itself, or its button on the sheet below.
             if (handleEngineError(error)) return
@@ -5869,11 +5752,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      */
     private fun findEpisodes() {
         val here = currentItem()
-        // Started from a chat's audio: the list is the order, the next file plays when one ends.
-        com.tmplayer.data.PlayQueue.stepsFor(here)?.let { steps ->
-            _episodes.value = steps
-            return
-        }
         val show = EpisodeNeighbours.showOf(here)
         if (show == null) {
             // A video that is not an episode: the chat's own next one, where the setting asks.
@@ -5923,13 +5801,13 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * After a video that is not an episode (EG-F30): with the setting on, the chat's next video
      * in the order its grid is sorted in is what autoplay goes on to ([com.tmplayer.data.ChatOrder]),
      * through the same next-up card, countdown and "Still watching?" as an episode. Off the critical
-     * path like [findEpisodes]; nothing is asked of Telegram with the setting off, for sound alone,
+     * path like [findEpisodes]; nothing is asked of Telegram with the setting off, for
      * a local file or a video with no chat, and a chat that cannot be asked (offline) leaves it as
      * it was: the video ends and stays on its last frame. The size limits the grid applies skip a
      * video above them, and another copy of the same file is not played again.
      */
     private fun findChatOrder(here: MediaItem) {
-        if (chatId == 0L || com.tmplayer.data.ChatAudio.isAudio(here)) return
+        if (chatId == 0L) return
         itemScope.launch {
             if (!playsChatOrder()) return@launch
             afterOpening()
@@ -6004,7 +5882,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 val short = Translator.messages.formatter.bytes(plan.shortfallBytes)
                 showError(
                     if (lowStorageOff) {
-                        L.playerNotEnoughRoomLowStorage(size = short, mode = L.settingsLowStorage)
+                        L.playerNotEnoughRoomStream(size = short)
                     } else {
                         L.playerNotEnoughRoom(size = short)
                     },
@@ -6517,8 +6395,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * no next episode the last frame stays up with a way to watch it again.
      */
     private fun onVideoEnded() {
-        // Repeat one on a chat's audio: from the start again in this same player, not marked
-        // watched and no countdown to a next file; unseen too, so the sound carries on.
+        // Repeat this video: from the start again in this same player, not marked watched and no
+        // countdown to a next video; unseen too, so the sound carries on.
         if (repeatsAtTheEnd()) {
             player?.let {
                 it.seekTo(0)
@@ -6528,8 +6406,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         }
         // Repeat this video gives way to a sleep timer set for this video's end: the video ends,
         // and Repeat is off for whatever is played next.
-        if (sleepAtTheEnd && com.tmplayer.data.PlayQueue.repeatsVideo(currentItem(), keepRepeat)) {
-            com.tmplayer.data.PlayQueue.setRepeatVideo(false)
+        if (sleepAtTheEnd && com.tmplayer.data.RepeatVideo.repeats(currentItem(), keepRepeat)) {
+            com.tmplayer.data.RepeatVideo.set(false)
         }
         if (piecesIncomplete) {
             // Only up to a missing piece: said again, and nothing marked or played next.
@@ -6543,7 +6421,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             val next = _episodes.value.next
             val autoplay = runCatching { settings.autoplayNextNow() }.getOrDefault(true)
             hideNextUp()
-            val unseen = inBackgroundAudio || docked
+            val unseen = inBackgroundAudio
             val end = BackgroundPlayback.atTheEnd(
                 hasNext = next != null,
                 autoplay = autoplay,
@@ -6560,12 +6438,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                     return@launch
                 }
                 BackgroundPlayback.AtTheEnd.Finished -> {
-                    // Nothing comes next and nobody is looking: the bar goes, and the player with it.
-                    if (docked) {
-                        MiniDock.undock(dockHandle)
-                        dockHandle.dismiss()
-                        return@launch
-                    }
                     showFinished()
                     return@launch
                 }
@@ -6616,20 +6488,20 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     ) is BackgroundPlayback.AtTheEnd.Next
 
     /**
-     * Whether the end now reached plays this video again: Repeat one on a chat's audio, or Repeat
-     * this video ([com.tmplayer.data.PlayQueue.repeatsVideo]). A replay is nobody's autoplay, so it
+     * Whether the end now reached plays this video again: Repeat this video
+     * ([com.tmplayer.data.RepeatVideo.repeats]). A replay is nobody's autoplay, so it
      * neither counts towards "Still watching?" nor shows the next-up card; the idle question still
      * comes after two hours with nothing pressed. A sleep timer for the end of the video wins.
      */
     private fun repeatsAtTheEnd(): Boolean =
-        com.tmplayer.data.PlayQueue.atEnd(currentItem(), keepRepeat, sleepAtTheEnd) == com.tmplayer.data.QueuePlan.AtEnd.Replay
+        com.tmplayer.data.RepeatVideo.replaysAtEnd(currentItem(), keepRepeat, sleepAtTheEnd)
 
     /** [playEpisode] for an episode nobody asked for, counted towards "Still watching?". */
     private fun autoplay(next: MediaItem) {
         autoplayedInARow++
         // Out of sight no new activity may start, so the episode plays in this one; the count
         // carries on in it as it would across activities.
-        if (inBackgroundAudio || docked) {
+        if (inBackgroundAudio) {
             continueUnseen(next)
             return
         }
@@ -6955,6 +6827,11 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             if (event.repeatCount == 0) skipOffered()
             return true
         }
+        // A stretch set to skip by itself counts down over the bare picture: Back cancels it.
+        if (skipHasTheRemote() && skipPill?.isCounting == true && event.keyCode == KeyEvent.KEYCODE_BACK) {
+            if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) cancelAutoSkip()
+            return true
+        }
 
         // The next-up card on a television: left, right and OK stay on its one button,
         // Back puts it away. Up and down still raise the row below.
@@ -6979,9 +6856,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
         when (event.keyCode) {
             // A remote's own Aspect (zoom) key steps the picture shape, as the row's button does,
-            // with nothing to reach first (HX16). Not for sound alone.
+            // with nothing to reach first (HX16).
             KeyEvent.KEYCODE_TV_ZOOM_MODE -> {
-                if (event.repeatCount == 0 && !isAudio) applyScale(videoScale.next())
+                if (event.repeatCount == 0) applyScale(videoScale.next())
                 return true
             }
             // A remote's 3D key steps 3D: off, one eye, both eyes for a headset or a 3D TV, red and
@@ -7506,7 +7383,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         if (!hasPictureInPicture()) return
         if (!PictureInPictureRules.entersOnLeaveHint(
                 sdk = android.os.Build.VERSION.SDK_INT,
-                settingOn = pipOnLeave && !docked,
+                settingOn = pipOnLeave,
                 tv = false,
                 playing = playing?.isPlaying == true,
                 casting = cast?.casting == true,
@@ -7541,7 +7418,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             // Never on a television: Home there means leaving the film (Decision E10), and the
             // corner window is only for a viewer who asked for it from the row or More.
             val autoEnter = PictureInPictureRules.autoEnter(
-                settingOn = pipOnLeave && !docked,
+                settingOn = pipOnLeave,
                 tv = FormFactor.isTv(this),
                 playing = playing?.isPlaying == true,
                 sheetUp = statusOverlay.visibility == View.VISIBLE,
@@ -7646,14 +7523,16 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             chapters = chapters.isNotEmpty(),
             // Only once the chat is known to allow saving: a protected chat's frames stay in it.
             saveFrame = savable == true,
-            // A picture to shape, as for 3D: not sound alone, not while a cast plays it.
+            // A picture to shape, as for 3D: not while a cast plays it.
             pictureShape = stereoOffered(),
             stereo = stereoOffered(),
             zoomed = zoom.zoomed,
             reportStutter = stutterReportable(),
             copyLinkAtTime = linkAtTimeOffered(),
             otherEngine = otherEngineOffered(),
-            repeatVideo = repeatVideoOffered(),
+            repeatVideo = true,
+            markIntro = skipCtl.canMark,
+            removeIntroMark = skipCtl.canMark && skipCtl.hasOwnMark,
         )
         override fun zoomDetail(): String? =
             zoom.takeIf { it.zoomed }?.let { L.messages.formatter.scalePercent(it.percent) }
@@ -7670,7 +7549,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             reportStutter = stutterReportable(),
             copyLinkAtTime = linkAtTimeOffered(),
             otherEngine = otherEngineOffered(),
-            repeatVideo = repeatVideoOffered(),
+            repeatVideo = true,
+            markIntro = skipCtl.canMark,
+            removeIntroMark = skipCtl.canMark && skipCtl.hasOwnMark,
         )
         override fun shape() = videoScale
         override fun speed() = playbackSpeed
@@ -7684,7 +7565,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         override fun sleepDetail() = sleepTimerDetail()
         override fun sleepChoice() = this@PlayerActivity.sleepChoice()
         override fun loop() = abLoop
-        override fun repeatVideo() = com.tmplayer.data.PlayQueue.repeatsVideo(currentItem(), keepRepeat)
+        override fun repeatVideo() = com.tmplayer.data.RepeatVideo.repeats(currentItem(), keepRepeat)
+        override fun introMarking() = skipCtl.introMarking
         override fun chapter(): String? =
             if (chapters.isEmpty()) null
             else Chapters.labelAt(chapters, playing?.currentPosition ?: 0L) ?: L.playerBeforeFirstChapter
@@ -7732,7 +7614,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             PhoneMenuEntry.MarkWatched -> toggleWatched()
             PhoneMenuEntry.ResetZoom -> resetZoom()
             PhoneMenuEntry.ReportStutter -> reportStutter()
+            PhoneMenuEntry.ReportWrongPicture -> reportWrongPicture()
             PhoneMenuEntry.CopyLinkAtTime -> copyLinkAtTime()
+            PhoneMenuEntry.MarkIntro -> markIntroTap()
+            PhoneMenuEntry.RemoveIntroMark -> removeIntroMark()
             // Pages of the panel itself, opened there.
             PhoneMenuEntry.PictureShape, PhoneMenuEntry.Stereo, PhoneMenuEntry.Speed, PhoneMenuEntry.SleepTimer,
             PhoneMenuEntry.AddBookmark, PhoneMenuEntry.Bookmarks, PhoneMenuEntry.PlaybackDetails,
@@ -7764,7 +7649,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             PlayerMenuEntry.AddBookmark -> addBookmark(playing?.currentPosition ?: 0L, "")
             PlayerMenuEntry.Bookmarks -> showSheet { it.showBookmarks(bookmarkActions()) }
             PlayerMenuEntry.ReportStutter -> reportStutter()
+            PlayerMenuEntry.ReportWrongPicture -> reportWrongPicture()
             PlayerMenuEntry.CopyLinkAtTime -> copyLinkAtTime()
+            PlayerMenuEntry.MarkIntro -> markIntroTap()
+            PlayerMenuEntry.RemoveIntroMark -> removeIntroMark()
             // Pages of the panel itself, opened there.
             PlayerMenuEntry.SleepTimer, PlayerMenuEntry.RemoteKeys, PlayerMenuEntry.Speed, PlayerMenuEntry.PictureShape -> Unit
         }
@@ -7813,13 +7701,26 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * the middle of a seek, one with no reading yet or on a cast never throws: the first two say
      * "Already marked", the others mark with what there is or do nothing.
      */
-    private fun reportStutter() {
+    private fun reportStutter() = markMoment(RemedyRunner.ViewerReport.Stutter)
+
+    /**
+     * "Picture looks wrong" (RL10): the same mark as [reportStutter], and the ladder's next way to
+     * show the picture, once ([RemedyRunner.viewerReported]).
+     */
+    private fun reportWrongPicture() = markMoment(RemedyRunner.ViewerReport.WrongPicture)
+
+    private fun markMoment(report: RemedyRunner.ViewerReport) {
         if (!stutterReportable()) return
         val window = runCatching { traceRecorder.momentWindow(PlaybackMarks.WINDOW_MS) }.getOrDefault(emptyList())
         lifecycleScope.launch {
             val result = withContext(Dispatchers.IO) { runCatching { stutterMarks.mark(window) }.getOrDefault(PlaybackMarks.Result.FAILED) }
             if (isFinishing || isDestroyed) return@launch
-            showGestureFeedback(if (result == PlaybackMarks.Result.ALREADY) L.playerStutterMarkedAlready else L.playerStutterMarked)
+            if (result == PlaybackMarks.Result.ALREADY) return@launch showGestureFeedback(L.playerStutterMarkedAlready)
+            // The ladder takes its step once; when it did, its own line says so and nothing is added.
+            val outcome = runCatching { remedies.viewerReported(report) }.getOrDefault(RemedyRunner.ViewerOutcome.NoClass)
+            if (outcome == RemedyRunner.ViewerOutcome.Tried) return@launch
+            val wrong = report == RemedyRunner.ViewerReport.WrongPicture
+            showGestureFeedback(if (wrong) L.playerReportWrongPictureMarked else L.playerStutterMarked)
         }
     }
 
@@ -7834,8 +7735,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         val exo = player ?: return
         val clock = Translator.messages.formatter::clock
         // The two repeats exclude each other: marking a stretch turns Repeat this video off.
-        if (com.tmplayer.data.PlayQueue.repeatsVideo(currentItem(), keepRepeat)) {
-            com.tmplayer.data.PlayQueue.setRepeatVideo(false)
+        if (com.tmplayer.data.RepeatVideo.repeats(currentItem(), keepRepeat)) {
+            com.tmplayer.data.RepeatVideo.set(false)
         }
         val before = abLoop
         val after = AbLoop.press(before, exo.currentPosition)
@@ -7856,19 +7757,15 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         }
     }
 
-    /** Repeat this video is offered for a video; a chat's audio has its own repeat in the list. */
-    private fun repeatVideoOffered(): Boolean = !com.tmplayer.data.ChatAudio.isAudio(currentItem())
-
     /**
      * Repeat this video (EG-F52): the end seeks to the start and plays on, with no next-up card and
      * no count towards "Still watching?". Turning it on clears the A-B repeat, and it lapses by
-     * itself when another video starts unless "Keep repeat on" is set ([com.tmplayer.data.PlayQueue]).
+     * itself when another video starts unless "Keep repeat on" is set ([com.tmplayer.data.RepeatVideo]).
      * Nothing polls: the end of the video is what asks.
      */
     private fun toggleRepeatVideo() {
-        if (!repeatVideoOffered()) return
-        val on = !com.tmplayer.data.PlayQueue.repeatsVideo(currentItem(), keepRepeat)
-        com.tmplayer.data.PlayQueue.setRepeatVideo(on, currentItem())
+        val on = !com.tmplayer.data.RepeatVideo.repeats(currentItem(), keepRepeat)
+        com.tmplayer.data.RepeatVideo.set(on, currentItem())
         if (on) {
             if (abLoop != null) {
                 abLoop = null
@@ -8048,6 +7945,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 if (found.isNotEmpty()) {
                     chapters = found
                     controls?.chapters = found
+                    skipCtl.chapters(found)
+                    wakeEndWatch()
                     return@launch
                 }
                 // All of it is here and there are none: nothing later will change that.
@@ -8117,12 +8016,12 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         val on = !nightModeOn
         nightModeOn = on
         volumeBoost?.night = on
-        showGestureFeedback(if (on) L.playerNightModeOn else L.playerNightModeOff)
+        showGestureFeedback(if (on) L.playerQuietLoudScenesOn else L.playerQuietLoudScenesOff)
         lifecycleScope.launch { runCatching { settings.setNightMode(on) } }
     }
 
-    /** 3D video is for a picture: not sound alone, and not while a cast plays the video. */
-    private fun stereoOffered(): Boolean = !isAudio && cast?.connected != true && cast?.casting != true
+    /** 3D video is not offered while a cast plays the video. */
+    private fun stereoOffered(): Boolean = cast?.connected != true && cast?.casting != true
 
     /**
      * Before the player is first prepared: what the file's name says about 3D, and the effects
@@ -8130,9 +8029,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * that follows in a new player), so turning it on there needs no second start.
      */
     private fun prepareStereo(exo: ExoPlayer) {
-        stereoTagged = if (isAudio) null else Stereo3d.detect(listOf(mediaFileName, mediaCaption, mediaTitle).joinToString(" "))
+        stereoTagged = Stereo3d.detect(listOf(mediaFileName, mediaCaption, mediaTitle).joinToString(" "))
         stereoHinted = false
-        if (stereoPipeline || isAudio) return
+        if (stereoPipeline) return
         if (stereo.on || stereoTagged != null) {
             stereoPipeline = true
             // Before the player is attached, so read here rather than through [player].
@@ -8730,6 +8629,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             below = findViewById(R.id.overlay_container),
             tv = FormFactor.isTv(this),
             onSkip = ::skipOffered,
+            onCancel = ::cancelAutoSkip,
         )
         undoChip = UndoSeekChip(
             root = findViewById(R.id.player_root),
@@ -8785,7 +8685,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                     if (sleepAtTheEnd || StillWatching.askBeforeAutoplay(autoplayedInARow)) continue
                     val position = exo.currentPosition
                     val left = duration - position
-                    val credits = SkipSegments.creditsStart(skipSegments, duration)
+                    val credits = SkipSegments.creditsStart(skipCtl.segments(duration), duration)
                     val lead = maxOf(NEXT_UP_LEAD_MS, credits?.let { duration - it } ?: 0L)
                     // Credits timed to start well before the last half minute: the card counts
                     // [CREDITS_COUNTDOWN_MS] down from where they begin and then moves on, as the
@@ -8829,6 +8729,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * this runs again for it from [onCreate].
      */
     private fun findSkipTimes() {
+        skipCtl.start(currentItem())
         val metadata = OnlineMetadata.current ?: return
         itemScope.launch {
             afterOpening()
@@ -8849,6 +8750,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             skipSegments = withContext(Dispatchers.IO) {
                 runCatching { metadata.skipTimes(item) }.getOrDefault(emptyList())
             }
+            skipCtl.online(skipSegments)
             wakeEndWatch()
         }
     }
@@ -8864,19 +8766,40 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         val pill = skipPill ?: return
         val duration = exo.duration
         val cardCoversTheEnd = autoplay && !nextUpDismissed && !repeatsAtTheEnd() && _episodes.value.next != null
-        val segment = if (
-            skipSegments.isEmpty() || duration <= 0 || locked || inPictureInPicture ||
-            statusOverlay.visibility == View.VISIBLE || nextUpCard?.isShown == true
-        ) {
+        val offer = if (duration <= 0 || locked || inPictureInPicture || statusOverlay.visibility == View.VISIBLE || nextUpCard?.isShown == true) {
             null
         } else {
-            SkipSegments.active(skipSegments, exo.currentPosition, duration, skippedSegments)
-                ?.takeUnless { cardCoversTheEnd && it.runsToEnd(duration) }
+            // The count holds while a television's remote is busy with the row (it could not cancel).
+            val counting = exo.isPlaying && !(FormFactor.isTv(this) && controlsUp)
+            skipCtl.offer(exo.currentPosition, duration, counting, android.os.SystemClock.elapsedRealtime(), skippedSegments, cardCoversTheEnd)
         }
-        offeredSkip = segment
+        offeredSkip = offer?.segment
         val wasShown = pill.isShown
-        if (segment == null) pill.hide() else pill.show(segment.kind)
+        when (offer) {
+            null -> pill.hide()
+            is SkipOffer.Ask -> pill.show(offer.segment)
+            is SkipOffer.Counting -> pill.show(offer.segment, offer.secondsLeft)
+            is SkipOffer.Fire -> skipOffered()
+        }
         if (!wasShown && pill.isShown) liftCornerOffers()
+    }
+
+    /** Cancel on the countdown (the phone's button, a television's Back): this stretch stays a plain button. */
+    private fun cancelAutoSkip() {
+        val segment = offeredSkip ?: return
+        skipCtl.cancel(segment)
+        player?.let { updateSkipPill(it, autoplayNext) }
+    }
+
+    /** One tap of "Mark this as the intro": the start the first time, the end and a saved mark the second. */
+    private fun markIntroTap() {
+        skipCtl.markTap(playing?.currentPosition ?: 0L, playing?.duration?.coerceAtLeast(0L) ?: 0L)
+        wakeEndWatch()
+    }
+
+    private fun removeIntroMark() {
+        skipCtl.removeMark(playing?.duration?.coerceAtLeast(0L) ?: 0L)
+        wakeEndWatch()
     }
 
     /** The pill's press, or OK on a television: past the stretch on offer, which then stays gone. */
@@ -9200,7 +9123,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             isRealDownload() && moving -> L.playerDownloadedPercentSpeed(percent, rate)
             isRealDownload() -> L.playerDownloadedPercent(percent)
             // Playing on a short buffer: no figures, the line speed is in Playback details.
-            !starting -> L.playerGettingNextPart
+            // "The next part" is for a video that is in parts; a single file is just loading more of itself.
+            !starting -> if (pieces.isNotEmpty()) L.playerGettingNextPart else L.playerGettingMore
             else -> L.playerCachingPercent(percent)
         }
     }
@@ -9489,60 +9413,36 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         // TDLib's download speed, or the rate the player is being handed bytes where TDLib is
         // quiet (the start already on the disk from the warm-up).
         val rate = maxOf(speed.bytesPerSec, readSpeed.bytesPerSec)
-        host.note = if (slow && rate >= StreamStats.MIN_MEANINGFUL_SPEED && !downloadComplete) {
+        val now = SystemClock.elapsedRealtime()
+        val waited = now - host.shownAt
+        // One decision for every screen (FQ1, StartVerdict): the stall sheet itself is
+        // showSlowStart's, this is the line under the loader before it.
+        val verdict = StartVerdict.of(
+            StartVerdict.Facts(
+                waitedMs = waited,
+                quietMs = if (lastProgressAtMs > 0) now - lastProgressAtMs else waited,
+                local = downloadComplete,
+                deviceOffline = networkOffline,
+                bytesPerSec = rate,
+                speedLimited = Td.speedLimitedNow(),
+            ),
+            slowAfterMs = LOADER_SLOW_MS,
+        )
+        val speedLine = if (rate >= StreamStats.MIN_MEANINGFUL_SPEED) {
             val figure = Translator.messages.formatter.speed(rate)
-            val line = if (isRealDownload()) L.playerDownloadingRate(figure) else L.playerCachingRate(figure)
-            // Telegram's own cap on an account without Premium (CP83): said, nothing offered.
-            if (Td.speedLimitedNow()) "$line\n${L.playerSpeedLimited}" else line
-        } else if (slow && !downloadComplete) {
-            // Nothing measurable arriving yet: said quietly, long before the stall sheet's minute.
-            L.connectSlowTitle
+            if (isRealDownload()) L.playerDownloadingRate(figure) else L.playerCachingRate(figure)
         } else {
             null
         }
-    }
-
-    /**
-     * Sound alone has no picture, so the black where it would be carries the file's name and its
-     * chat instead, centred, under the controls. Built once and kept; gone for a video.
-     */
-    private fun showAudioCard() {
-        if (!isAudio) {
-            audioCard?.visibility = View.GONE
-            return
+        host.note = when (verdict) {
+            // Telegram's own cap on an account without Premium (CP83): said, nothing offered.
+            StartVerdict.State.Quota -> listOfNotNull(speedLine, L.playerSpeedLimited).joinToString("\n")
+            // Nothing measurable arriving yet: said quietly, long before the stall sheet.
+            StartVerdict.State.Slow, StartVerdict.State.Stalled -> L.connectSlowTitle
+            StartVerdict.State.Waiting -> speedLine.takeIf { slow && !downloadComplete }
+            // The offline notice already says it.
+            StartVerdict.State.Offline -> null
         }
-        val root = findViewById<FrameLayout>(R.id.player_root)
-        val card = audioCard ?: android.widget.LinearLayout(this).apply {
-            orientation = android.widget.LinearLayout.VERTICAL
-            gravity = android.view.Gravity.CENTER
-            val density = resources.displayMetrics.density
-            setPadding((32 * density).toInt(), 0, (32 * density).toInt(), 0)
-            addView(android.widget.ImageView(context).apply {
-                setImageResource(R.drawable.ic_audio_language)
-                setColorFilter(android.graphics.Color.WHITE)
-                alpha = 0.7f
-                layoutParams = android.widget.LinearLayout.LayoutParams((72 * density).toInt(), (72 * density).toInt())
-            })
-            addView(android.widget.TextView(context).apply {
-                tag = "title"
-                setTextColor(android.graphics.Color.WHITE)
-                textSize = 22f
-                gravity = android.view.Gravity.CENTER
-                setPadding(0, (16 * density).toInt(), 0, 0)
-            })
-            addView(android.widget.TextView(context).apply {
-                tag = "detail"
-                setTextColor(android.graphics.Color.argb(184, 255, 255, 255))
-                textSize = 15f
-                gravity = android.view.Gravity.CENTER
-                setPadding(0, (6 * density).toInt(), 0, 0)
-            })
-            root.addView(this, 1, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-            audioCard = this
-        }
-        card.findViewWithTag<android.widget.TextView>("title")?.text = mediaTitle
-        card.findViewWithTag<android.widget.TextView>("detail")?.text = chatTitle
-        card.visibility = View.VISIBLE
     }
 
     /** A stall after playback has begun: a small chip, so the video stays on screen. */
@@ -9670,6 +9570,66 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     /** The track types this player already moved to the other decoder by itself ([switchDecoderByItself]). */
     private val decodersSwitched = mutableSetOf<Int>()
 
+    /** The remedy ladder for this screen's videos (RL6); its logic is [RemedyRunner]'s, these lines only reach the player. */
+    private val remedies: RemedyRunner by lazy { RemedyRunner(remedyHost, RemedyRunner.clockOf(loopHandler)) }
+
+    private val remedyHost = object : RemedyRunner.Host {
+        override val sdk = android.os.Build.VERSION.SDK_INT
+        override val appVersion: String = com.tmplayer.BuildConfig.VERSION_NAME
+        override fun today() = RemedyFacts.today()
+        override fun videoTag() = RemedyFacts.videoTag(chatId, messageId, fileId)
+        override fun sample() = player?.takeIf { vlcEngine == null && !castUp() }
+            ?.let { RemedyFacts.sample(it, hidden = videoHiddenUnseen || inBackgroundAudio, nowMs = SystemClock.elapsedRealtime()) }
+        override fun facts(excluded: Set<String>) = RemedyFacts.ladder(
+            player, watchDecoder, excluded, decoderPicked = videoDecoder != com.tmplayer.data.VideoDecoder.Automatic,
+            tunneling = tunnelingActive, tunnelingPicked = tunneledMode != com.tmplayer.player.TunneledMode.Auto,
+        )
+        override fun classKey() = RemedyFacts.classKey(player, mediaMime.ifBlank { mediaFileName })
+        override fun failedRenderer(error: PlaybackException) = RemedyFacts.failedRenderer(player, error)
+        override fun engineInput() = engineInput?.takeIf { engineSwitchOnError && vlcCanTake() && stereo == Stereo3d.OFF }
+        override fun engineRunning() = if (vlcEngine != null) {
+            EngineDecision(com.tmplayer.data.PlayerEngine.Vlc, engineDecision?.reason ?: EngineReason.Default)
+        } else {
+            engineDecision?.takeIf { it.engine == com.tmplayer.data.PlayerEngine.ExoPlayer } ?: EngineDecision(com.tmplayer.data.PlayerEngine.ExoPlayer, EngineReason.Default)
+        }
+        // Posted: a re-open from inside the player's own callback would release it mid-dispatch.
+        // False without the session a re-open needs ([moveToEngine]), so the ladder gives up instead of losing the hop.
+        override fun reopen(): Boolean {
+            if (castClient == null) return false
+            loopHandler.post { moveToEngine(com.tmplayer.data.PlayerEngine.ExoPlayer, engineDecision?.reason ?: EngineReason.Default, L.commonLoading) }
+            return true
+        }
+        override fun switchEngine(decision: EngineDecision): Boolean {
+            if (castClient == null) return false
+            if (decision.engine == com.tmplayer.data.PlayerEngine.Vlc && !vlcCanTake()) return false
+            engineSwitches++
+            loopHandler.post { moveToEngine(decision.engine, decision.reason, L.commonLoading) }
+            return true
+        }
+        override fun say(text: String) {
+            feedback?.message(text, holdMs = SEEK_NOTICE_MS)
+        }
+        override fun offer(text: String, action: String, onTap: () -> Unit) {
+            feedback?.offer(text, action, holdMs = STUTTER_OFFER_MS, focus = FormFactor.isTv(this@PlayerActivity)) { onTap() }
+        }
+        override fun sheet(text: String) {
+            playing?.pause()
+            engineOffer = engineInput?.let { EngineSelector.toOffer(it, com.tmplayer.data.PlayerEngine.ExoPlayer) }?.takeIf { otherEngineOffered() }
+            showError(text, retryable = true)
+        }
+        override fun redeliver(error: PlaybackException) = playerListener.onPlayerError(error)
+        // One writer for the app, so two quick saves never land out of order.
+        override fun saveMemory(memory: com.tmplayer.data.RemedyMemory) = RemedyMemoryWrites.save(settings, memory)
+        override fun log(line: String) {
+            Log.i(START_TAG, line)
+        }
+        override fun traceHop(hop: TraceHop) {
+            traceRecorder.noteHop(hop)
+            traceRecorder.noteCounters()
+        }
+        override fun traceFacts(facts: Map<String, String>) = traceRecorder.noteFacts(facts)
+    }
+
     /**
      * The first decoder failure of a picture or a soundtrack goes straight to the other decoder,
      * the way the failure sheet's "Try the other decoder" would, without the viewer having to read
@@ -9692,6 +9652,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             weak = true,
         )
         if (!FormatRoute.switchesByItself(plan.trackType, plan.toFfmpeg, decodersSwitched, tooSlow, firstFrameReady)) return false
+        // One budget with the remedy ladder: not once it spent this level or gave up ([RemedyRunner]).
+        val video = plan.trackType == C.TRACK_TYPE_VIDEO
+        if (!remedies.allowsDecoderSwitch(video)) return false
+        remedies.decoderSwitched(video)
         decodersSwitched += plan.trackType
         Log.w(
             "TMPlayer",
@@ -10056,7 +10020,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         }
         statusTitle.text = if (stalledMidPlay) L.playerStalledMidTitle else L.playerStalledTitle
         statusText.text = when (OpeningStall.reason(Td.link.value)) {
-            OpeningStall.Reason.NoLine -> L.playerStalledNoLine
+            OpeningStall.Reason.NoLine -> L.playerStalledNoLinePlain
             OpeningStall.Reason.Slow -> if (stalledMidPlay) L.playerStalledMidSlow else L.playerStalledSlow
         }
         // Telegram's lighter copy (CP80), said where it applies. Not Telegram's cap on an account
@@ -10183,7 +10147,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      */
     override fun onStart() {
         super.onStart()
-        undock()
         if (openingFilm) watchOpening()
         // Back in front: the session comes home from the notification, the sound never stopped,
         // and the picture comes back on (turned off only while nobody could see it).
@@ -10221,26 +10184,21 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         rebufferWatch?.cancel()
         saveResumePosition(leaving = !inPictureInPicture)
         // This place out to the other devices, once the saves have settled (ResumeSync).
-        com.tmplayer.data.ResumeSync.pushSoon(settings)
+        com.tmplayer.data.ResumeSync.leavingPlayer(settings)
         // On a TV the video carries on with the phone put away; nothing here to pause.
-        if (cast?.casting == true) {
-            dockOnLeave()
-            return
-        }
+        if (cast?.casting == true) return
         // In picture in picture the activity is stopped while the video is still on screen and
         // still the point of it; pausing here would stop the very thing the mode exists for.
         // With background audio on, the sound carries on from the notification instead.
         if (inPictureInPicture) return
         if (keepsPlayingUnseen()) startBackgroundAudio() else playing?.pause()
-        dockOnLeave()
     }
 
     override fun onDestroy() {
-        MiniDock.undock(dockHandle)
-        docked = false
         crashNote.ended()
         com.tmplayer.data.SelfInstaller.removeBeforeInstall(saveBeforeInstall)
         loopHandler.removeCallbacks(watchTick)
+        remedies.stop()
         // Every runnable on this handler, the undo chip's expiry among them: a delayed one holds
         // the whole activity until it fires.
         loopHandler.removeCallbacksAndMessages(null)

@@ -21,6 +21,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -186,14 +187,19 @@ internal fun PhoneSearchScreen(
     // Clearing the box empties the results, the filters and the sort at once, back to the recent
     // searches, with the cursor in the field and the keyboard up. Back does the same while there
     // is text, and closes the page only on an empty field (there is no separate close button).
-    val clear: () -> Unit = {
+    val clear: (Boolean) -> Unit = { keyboardUp ->
         onText(TextFieldValue(""))
         onFilters(SearchFilters())
         onSort(SearchSort.BestMatch)
-        runCatching { focus.requestFocus() }
-        keyboard?.show()
+        if (keyboardUp) {
+            runCatching { focus.requestFocus() }
+            keyboard?.show()
+        }
     }
-    BackHandler(enabled = !sheetOpen) { if (text.text.isNotEmpty()) clear() else onClose() }
+    // Back is how a viewer leaves, and the keyboard is already down when Back reaches the page (the
+    // system closes it first), so clearing by Back must not raise it again: that made a typed
+    // search take four Backs to leave (Raju 4.8). The cross is a tap in the field, so it keeps it.
+    BackHandler(enabled = !sheetOpen) { if (text.text.isNotEmpty()) clear(false) else onClose() }
 
     // The keyboard comes up once the field has finished growing out of the magnifier. Asked for at
     // once, it rose during the growth, and the field chased a spot the keyboard kept moving.
@@ -300,7 +306,7 @@ internal fun PhoneSearchScreen(
                     onText = onText,
                     onSubmit = { keyboard?.hide(); onSubmit() },
                     onVoice = onVoice,
-                    onClear = clear,
+                    onClear = { clear(true) },
                     modifier = Modifier.weight(1f).then(fieldModifier).focusRequester(focus),
                 )
             }
@@ -501,7 +507,8 @@ private fun androidx.compose.foundation.lazy.LazyListScope.emptySearch(
             ) {
                 ResultPoster(item, Modifier.width(48.dp), fraction = record.fraction())
                 Column(Modifier.weight(1f)) {
-                    Text(record.title, style = MaterialTheme.typography.titleSmall, color = Tone.text, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    // The name Home's tiles use, not the file's with its dots and handle (Raju 4.6).
+                    Text(continueTitle(record), style = MaterialTheme.typography.titleSmall, color = Tone.text, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     if (record.chatTitle.isNotBlank()) {
                         Text(record.chatTitle, style = MaterialTheme.typography.bodySmall, color = Tone.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
@@ -510,6 +517,10 @@ private fun androidx.compose.foundation.lazy.LazyListScope.emptySearch(
         }
     }
 }
+
+/** What a Continue watching line calls the video: the tile's name ([SeriesShelf.tileTitle]), the stored title when that reads blank. */
+internal fun continueTitle(record: ResumeRecord): String =
+    com.tmplayer.data.SeriesShelf.tileTitle(record.toMediaItem()).ifBlank { record.title }
 
 private fun ResumeRecord.fraction(): Float? =
     if (durationMs <= 0) null else (positionMs.toFloat() / durationMs).coerceIn(0f, 1f)
@@ -708,19 +719,28 @@ private fun androidx.compose.foundation.lazy.LazyListScope.topicResults(
         }
     }
     when {
-        failed != null -> item(key = "topics-failed") {
-            val s = LocalStrings.current
-            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(s.searchTopicsFailed(failed), style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TmSecondaryButton(onClick = onRetryTopics) { Text(s.commonRetry) }
-                    com.tmplayer.ui.settings.SendLogsButton()
-                }
-            }
-        }
+        failed != null -> item(key = "topics-failed") { TopicsFailed(failed, onRetryTopics) }
         state.topicsSearching -> item(key = "topics-busy") { Note(LocalStrings.current.searchStillSearching, spinner = true) }
         state.topicsPartial -> item(key = "topics-partial") {
             Note(LocalStrings.current.searchTopicsPartial(com.tmplayer.data.TopicSearch.CHATS_PER_SEARCH))
+        }
+    }
+}
+
+/** Why every group refused the topic search: the reason, Try again and Send logs, which wrap at a large font. */
+@Composable
+internal fun TopicsFailed(failed: String, onRetry: () -> Unit) {
+    val s = LocalStrings.current
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(s.searchTopicsFailed(failed), style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
+        // Wraps at a large font: Retry and Send logs side by side ran off a narrow phone.
+        @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+        androidx.compose.foundation.layout.FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            TmSecondaryButton(onClick = onRetry) { Text(s.commonRetry) }
+            com.tmplayer.ui.settings.SendLogsButton()
         }
     }
 }
@@ -817,11 +837,20 @@ private fun ChoiceLine(label: String, chosen: Boolean, onClick: () -> Unit) {
     com.tmplayer.ui.components.ChoiceRow(label, icon = null, chosen = chosen, modifier = Modifier.padding(horizontal = 8.dp), onClick = onClick)
 }
 
+/**
+ * A switch and its words as one line that toggles. Toggleable, not clickable: a screen reader then
+ * says on or off, which a plain click with a state-less [Switch] inside it never did. A floor of
+ * 56 dp rather than a fixed height, so a label that wraps at a large font is not cut.
+ */
 @Composable
-private fun SwitchLine(label: String, on: Boolean, onChange: (Boolean) -> Unit) {
+internal fun SwitchLine(label: String, on: Boolean, onChange: (Boolean) -> Unit) {
     val tick = com.tmplayer.ui.components.rememberToggleTick()
     Row(
-        Modifier.fillMaxWidth().clickable(role = Role.Switch) { tick(!on); onChange(!on) }.padding(horizontal = 16.dp).height(56.dp),
+        Modifier
+            .fillMaxWidth()
+            .toggleable(value = on, role = Role.Switch) { tick(it); onChange(it) }
+            .padding(horizontal = 16.dp)
+            .heightIn(min = 56.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(label, style = MaterialTheme.typography.bodyLarge, color = Tone.text, modifier = Modifier.weight(1f))

@@ -128,6 +128,13 @@ object OfflineDownloads {
     /** Keyed by TDLib file id, which is what a media row already has to hand. */
     val active: StateFlow<Map<Int, Progress>> = _active.asStateFlow()
 
+    /**
+     * What the Downloads badge on the phone, TV and desktop bars shows: the downloads being fetched
+     * right now. Waiting, held (no Wi-Fi, no connection), paused and failed ones are on the page but
+     * are not "downloading", so they are not counted.
+     */
+    fun runningCount(rows: Map<Int, Progress>): Int = rows.values.count { it.stage == Stage.Running }
+
     /** Oldest request first, so a queue reads top to bottom and does not reshuffle as it moves. */
     val ordered: List<Progress> get() = _active.value.values.sortedBy { it.order }
 

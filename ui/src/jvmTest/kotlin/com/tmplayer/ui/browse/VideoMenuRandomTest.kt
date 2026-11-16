@@ -54,4 +54,34 @@ class VideoMenuRandomTest {
         )
         assertNull(groups.getOrNull(7))
     }
+
+    @Test
+    fun `the Hide small clips switch sits right under Show, and is absent without a handler`() {
+        val withSwitch = VideoMenuState(VideoSort.Newest, VideoFilter.All, onSort = {}, onFilter = {}, hideSmall = true, onHideSmall = {})
+        val groups = videoMenuGroups(withSwitch, Translator.messages)
+        assertEquals(Translator.messages.gridFilterSizeLabel, groups[2].title)
+        assertEquals(Translator.messages.gridFilterLengthLabel, groups[3].title)
+        val line = groups[2].choices.single()
+        assertEquals("Hide small clips (under 50 MB)", line.label)
+        assertTrue("reads on", line.chosen)
+        assertTrue(videoMenuGroups(state(null), Translator.messages).none { it.title == Translator.messages.gridFilterSizeLabel })
+    }
+
+    @Test
+    fun `a switch press asks for the opposite, and a custom floor gets a line that resets it`() {
+        var asked: Boolean? = null
+        var reset = 0
+        val st = VideoMenuState(
+            VideoSort.Newest, VideoFilter.All, onSort = {}, onFilter = {},
+            hideSmall = false, onHideSmall = { asked = it },
+            customLimits = "You'll see videos from 700 MB upwards.", onResetLimits = { reset++ },
+        )
+        val lines = videoMenuGroups(st, Translator.messages)[2].choices
+        assertEquals(2, lines.size)
+        lines[0].onPick()
+        assertEquals(true, asked)
+        assertTrue(lines[1].label, "700 MB" in lines[1].label)
+        lines[1].onPick()
+        assertEquals(1, reset)
+    }
 }

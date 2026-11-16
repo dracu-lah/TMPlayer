@@ -63,6 +63,8 @@ class PlaybackRecorder(
     private var decoder = ""
     private var hardware = true
     private var bitrateKbps = 0
+    private var videoFormat: Format? = null
+    private var audioFormat: Format? = null
     private var memoryLevel = 0
     private var memoryLevelAt = 0L
 
@@ -84,13 +86,26 @@ class PlaybackRecorder(
         override fun onVideoDecoderInitialized(eventTime: AnalyticsListener.EventTime, decoderName: String, initializedTimestampMs: Long, initializationDurationMs: Long) {
             decoder = decoderName
             hardware = !DecoderNames.isSoftware(decoderName) && !DecoderSwitch.softwareVideoChosen(player)
+            // The decoder's claims and its start time (RL12), read off the main thread: the codec list is a few milliseconds.
+            val format = videoFormat
+            collect {
+                val claims = if (format == null) mapOf("dec.name" to decoderName) else {
+                    DecoderFacts.claims(decoderName, format.sampleMimeType.orEmpty(), format.width, format.height, format.frameRate.toDouble())
+                }
+                claims + SessionFacts.format(format, audioFormat) + ("t.decoderInit" to initializationDurationMs.toString())
+            }
         }
 
         override fun onVideoInputFormatChanged(eventTime: AnalyticsListener.EventTime, format: Format, decoderReuseEvaluation: DecoderReuseEvaluation?) {
+            videoFormat = format
             val rate = maxOf(format.averageBitrate, format.bitrate)
             if (rate > 0) bitrateKbps = rate / 1000
             // The codec, kept for Send logs' list of the decoders the device has for it (L5).
             format.sampleMimeType?.let { mime -> writer?.let { w -> runCatching { w.execute { LastVideoCodec.remember(DiagnosticFiles.codecFile(context), mime) } } } }
+        }
+
+        override fun onAudioInputFormatChanged(eventTime: AnalyticsListener.EventTime, format: Format, decoderReuseEvaluation: DecoderReuseEvaluation?) {
+            audioFormat = format
         }
 
         override fun onPlaybackStateChanged(eventTime: AnalyticsListener.EventTime, state: Int) = playStateChanged()
@@ -127,6 +142,8 @@ class PlaybackRecorder(
         decoder = ""
         hardware = true
         bitrateKbps = 0
+        videoFormat = null
+        audioFormat = null
         memoryLevel = 0
         TdReadCounters.reset()
         val started = wallClock()
@@ -140,6 +157,8 @@ class PlaybackRecorder(
         writer = thread
         runCatching { thread.execute { file.startSession(started) } }
         runCatching { exo.addAnalyticsListener(listener) }
+        // The device, the screen and how the last run ended: once per session, off the main thread.
+        collect { SessionFacts.device(context) + SessionFacts.display(context) + SessionFacts.earlierExit(context) }
         runCatching {
             context.applicationContext.registerComponentCallbacks(trimCallbacks)
             registered = true
@@ -154,6 +173,7 @@ class PlaybackRecorder(
         scheduled = false
         if (windowOpen) takeSample()
         setWindow(false)
+        noteCounters()
         runCatching { exo.removeAnalyticsListener(listener) }
         if (registered) {
             runCatching { context.applicationContext.unregisterComponentCallbacks(trimCallbacks) }
@@ -182,6 +202,47 @@ class PlaybackRecorder(
         if (windowOpen) takeSample()
         return lastWindow(windowMs)
     }
+
+    /**
+     * Adds [facts] to this session (research section 6: the ladder, the decoder, the counters, the
+     * device): kept in the ring for the verdict and written on the writer thread. Unknown keys are
+     * dropped by [TraceFacts.clean]. Cheap and safe to call at any moment, also before [attach].
+     */
+    fun noteFacts(facts: Map<String, String>) {
+        val clean = TraceFacts.clean(facts)
+        if (clean.isEmpty()) return
+        ring.addFacts(clean)
+        val at = wallClock()
+        val thread = writer ?: return
+        runCatching { thread.execute { file.appendFacts(at, clean) } }
+    }
+
+    /** The decoder's counters now, as facts: at a hop and at the end of the session (research: "frozen versus slow"). */
+    fun noteCounters() = noteFacts(SessionFacts.counters(player))
+
+    /**
+     * Runs [read] on the writer thread and notes what it returns as facts, on the main thread. A
+     * reading that throws, or that comes back after the session ended, is dropped.
+     */
+    private fun collect(read: () -> Map<String, String>) {
+        val thread = writer ?: return
+        runCatching {
+            thread.execute {
+                val facts = runCatching(read).getOrNull() ?: return@execute
+                handler.post { if (player != null) noteFacts(facts) }
+            }
+        }
+    }
+
+    /** Adds one ladder hop to this session. */
+    fun noteHop(hop: TraceHop) {
+        ring.addHop(hop)
+        val thread = writer ?: return
+        runCatching { thread.execute { file.appendHop(hop) } }
+    }
+
+    /** The facts of this session so far. */
+    fun facts(): Map<String, String> = ring.currentFacts()
 
     /** What the verdict says about this session so far. */
     fun verdict(): StutterCause = StutterVerdict.classify(ring.currentSamples())

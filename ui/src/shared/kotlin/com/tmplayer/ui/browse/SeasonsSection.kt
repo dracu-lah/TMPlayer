@@ -114,8 +114,13 @@ fun SeasonsSection(
         value = found
     }
     val today = remember { LocalDate.now().toString() }
-    val seasons = remember(series, extras, today) {
-        EpisodeGuide.seasons(series, extras?.seasonList.orEmpty(), extras?.nextEpisode, today)
+    // The provider's seasons only where the chats' episodes sit in them: another show of the same
+    // name, or a release numbered another way, would call everything missing.
+    val listedSeasons = remember(series, extras) {
+        extras?.seasonList.orEmpty().takeIf { EpisodeGuide.agrees(series, it) }.orEmpty()
+    }
+    val seasons = remember(series, listedSeasons, extras, today) {
+        EpisodeGuide.seasons(series, listedSeasons, extras?.nextEpisode, today)
     }
     // A lone episode with nothing else to say: the page already shows it.
     if (seasons.isEmpty() || (series == null && extras?.seasonList.isNullOrEmpty())) return
@@ -126,7 +131,9 @@ fun SeasonsSection(
     val listed by produceState(meta?.let { online?.peekSeason(it, selected) }, meta, selected) {
         value = if (meta == null || online == null) null else withContext(Dispatchers.IO) { online.season(meta, selected) }
     }
-    val episodes = remember(selected, series, listed, today) { EpisodeGuide.episodes(selected, series, listed, today) }
+    val episodes = remember(selected, series, listed, listedSeasons, today) {
+        EpisodeGuide.episodes(selected, series, listed, today, listedSeasons.firstOrNull { it.number == selected }, extras?.nextEpisode)
+    }
 
     Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -195,7 +202,7 @@ private fun statusLine(extras: MetaExtras?, s: com.tmplayer.i18n.Messages): Stri
 }
 
 /** A provider's `2026-10-14` in the UI language's own way of writing a date. */
-private fun day(iso: String, s: com.tmplayer.i18n.Messages): String =
+fun day(iso: String, s: com.tmplayer.i18n.Messages): String =
     runCatching { s.formatter.date(LocalDate.parse(iso).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()) }.getOrDefault(iso)
 
 /**

@@ -16,6 +16,13 @@ export interface Person {
     photo: string | null
 }
 
+/** One season as TMDB lists it (MetaSeason): its number, how many episodes, when it began. */
+export interface SeasonStop {
+    number: number
+    episodes: number
+    airDate: string | null
+}
+
 export interface Extras {
     found: true
     genres: string[]
@@ -31,6 +38,10 @@ export interface Extras {
     /** YouTube's video id. */
     trailer: string | null
     ended: boolean
+    /** A show's seasons, specials left out, so the series page can list the ones the chats lack (MetaExtras.seasonList). */
+    seasonList: SeasonStop[]
+    /** The next episode to air, where TMDB knows one (MetaExtras.nextEpisode). */
+    next: { season: number; episode: number; airDate: string } | null
     /** IMDb's id ("tt0903747"), for a later look at its scores. */
     imdb: string | null
     /** The title logo's file (MetaRules.logo): PNG, wide, English or wordless; null for none. */
@@ -117,6 +128,24 @@ export function logo(logos: Json[]): string | null {
 }
 
 /** MetaApis.tmdbExtras. */
+/** MetaApis.tmdbExtras' season list: season 0 (TMDB's specials) left out, in order; garbage skipped. */
+export function seasonList(list: unknown): SeasonStop[] {
+    return objects(list)
+        .map((o) => ({ number: Math.trunc(Number(o.season_number)), episodes: Math.trunc(Number(o.episode_count)) || 0, airDate: String(o.air_date ?? '').trim() || null }))
+        .filter((o) => Number.isFinite(o.number) && o.number > 0 && o.number <= 200)
+        .sort((a, b) => a.number - b.number)
+}
+
+/** The next episode to air, only when it has a day and is in a numbered season. */
+export function nextEpisode(o: unknown): Extras['next'] {
+    const j = o && typeof o === 'object' ? (o as Json) : null
+    if (!j) return null
+    const season = Math.trunc(Number(j.season_number))
+    const episode = Math.trunc(Number(j.episode_number))
+    const airDate = String(j.air_date ?? '').trim()
+    return season > 0 && episode > 0 && airDate ? { season, episode, airDate } : null
+}
+
 export function extras(json: Json, film: boolean, region: string): Extras {
     const genres = strings(objects(json.genres), 'name')
     const usual = (Array.isArray(json.episode_run_time) ? json.episode_run_time : []).map(Number).find((n: number) => n > 0)
@@ -149,6 +178,8 @@ export function extras(json: Json, film: boolean, region: string): Extras {
         cast,
         trailer: trailer(objects(json.videos?.results)),
         ended: !film && ['Ended', 'Canceled'].includes(String(json.status ?? '')),
+        seasonList: film ? [] : seasonList(json.seasons),
+        next: film ? null : nextEpisode(json.next_episode_to_air),
         imdb: /^tt\d+$/.test(imdb) ? imdb : null,
         logo: logo(objects(json.images?.logos)),
     }

@@ -2,6 +2,10 @@ package com.tmplayer.data
 
 import com.tmplayer.json.JSONArray
 import com.tmplayer.json.JSONObject
+import com.tmplayer.player.Remedy
+import com.tmplayer.player.RemedyLadder
+import com.tmplayer.player.RemedyPlan
+import com.tmplayer.player.Rung
 
 /** The engine that plays a video in the app on Android: Media3 ExoPlayer, or libVLC (PR2). */
 enum class PlayerEngine(val key: String) {
@@ -76,6 +80,15 @@ data class KnownDevice(
      * An entry may carry only this, with no engine or decoder preference.
      */
     val tunneling: Boolean? = null,
+    /**
+     * MediaCodec asynchronous queueing: true asks for it below API 31 (the ladder's R1a, off by
+     * default there), false keeps it off on API 31 and later too; null leaves Media3's default.
+     */
+    val async: Boolean? = null,
+    /** Decoder names (`MediaCodecInfo.name`, as the device spells them) left out of the codec list. */
+    val excludeDecoders: List<String> = emptyList(),
+    /** The remedy a video starts on here ([RemedyLadder]'s start) while the class memory knows none. */
+    val startRung: Remedy? = null,
 ) {
 
     /** Whether this entry covers [device] playing a video of [mime] (null when not known yet). */
@@ -108,6 +121,14 @@ data class KnownDevice(
     }
 }
 
+/** What [KnownDevices.remediesFor] read for one device and video: see [KnownDevice]. */
+data class KnownRemedies(
+    val async: Boolean? = null,
+    val exclude: List<String> = emptyList(),
+    val start: Remedy? = null,
+    val note: String = "",
+)
+
 /**
  * The known device list (PR1): devices whose own decoder or ExoPlayer is known to play badly, and
  * what to prefer on them while the engine is Automatic. The app ships [builtIn]; the update feed
@@ -118,8 +139,12 @@ data class KnownDevice(
  * The feed's shape, either the object or the bare array:
  * ```
  * {"devices": [{"id": "allwinner-h6", "chipsets": ["sun50iw6"], "models": [], "sdkMin": 24,
- *   "sdkMax": null, "codecs": ["video/hevc"], "engine": "vlc", "decoder": "software", "note": ""}]}
+ *   "sdkMax": null, "codecs": ["video/hevc"], "engine": "vlc", "decoder": "software", "note": "",
+ *   "tunneling": false, "async": true, "excludeDecoders": ["OMX.allwinner.video.decoder.hevc"],
+ *   "startRung": "sw"}]}
  * ```
+ * `startRung` is a remedy's stored code (`sw`, `au`, `pt`, `en`, `as`, `tu`, `ex`), its name, or a
+ * rung (`R2`, `R3`, `A1`, `A2`); anything else leaves the entry without one ([startOf]).
  */
 object KnownDevices {
 
@@ -130,6 +155,8 @@ object KnownDevices {
     const val MAX_VALUES = 50
 
     private const val MAX_TOKEN = 64
+    private const val MAX_NAMES = 8
+    private const val MAX_NAME = 48
     private const val MAX_NOTE = 300
     private const val MIN_CHIPSET = 2
     private const val MAX_SDK = 1000
@@ -187,11 +214,61 @@ object KnownDevices {
     fun tunnelingFor(list: List<KnownDevice>, device: DeviceFacts, mime: String?): Boolean? =
         list.firstOrNull { it.tunneling != null && it.matches(device, mime) }?.tunneling
 
+    /**
+     * What the list says about the remedy ladder on [device] for a video of [mime], each field from
+     * the first matching entry that states it: async queueing, decoder names to leave out, and the
+     * start remedy with its entry's note.
+     */
+    fun remediesFor(list: List<KnownDevice>, device: DeviceFacts, mime: String?): KnownRemedies {
+        val matching = list.filter { it.matches(device, mime) }
+        val start = matching.firstOrNull { it.startRung != null }
+        return KnownRemedies(
+            async = matching.firstOrNull { it.async != null }?.async,
+            exclude = matching.firstOrNull { it.excludeDecoders.isNotEmpty() }?.excludeDecoders.orEmpty(),
+            start = start?.startRung,
+            note = start?.note.orEmpty(),
+        )
+    }
+
+    /**
+     * Where a video starts (research 4.3: what the class memory learned, else the list, else the
+     * defaults): [memory]'s plan, with [known]'s start remedy only when the memory starts on nothing
+     * at that level, async queueing added when the list asks for it, neither when the memory skips
+     * it, and the list's decoder names after the memory's, [RemedyLadder.MAX_EXCLUDED] at most.
+     */
+    fun plan(memory: RemedyPlan, known: KnownRemedies): RemedyPlan {
+        val start = memory.start.toMutableSet()
+        known.start?.let { listed -> if (start.none { it.level == listed.level }) start += listed }
+        if (known.async == true) start += Remedy.FlipAsync
+        val exclude = (memory.exclude + known.exclude).take(RemedyLadder.MAX_EXCLUDED).toSet()
+        return memory.copy(start = start - memory.skip, exclude = exclude)
+    }
+
+    /** A start remedy as a feed writes it, or null for anything a video cannot start on. */
+    fun startOf(text: String?): Remedy? {
+        val clean = text?.trim()?.takeIf { it.isNotEmpty() && it.length <= MAX_TOKEN } ?: return null
+        val remedy = Remedy.ofCode(clean.lowercase())
+            ?: Remedy.entries.firstOrNull { it.name.equals(clean, ignoreCase = true) }
+            ?: when (Rung.entries.firstOrNull { it.name.equals(clean, ignoreCase = true) }) {
+                Rung.R2 -> Remedy.Software
+                Rung.R3 -> Remedy.OtherEngine
+                Rung.A1 -> Remedy.AudioSoftware
+                Rung.A2 -> Remedy.PassthroughOff
+                else -> null
+            }
+        // A reload and a lighter copy answer something that happened in one video: neither is a start.
+        return remedy?.takeIf { it != Remedy.Reload && it != Remedy.LighterCopy }
+    }
+
     private fun entryOf(entry: JSONObject): KnownDevice? {
         val engine = PlayerEngine.ofKey(entry.opt("engine") as? String)
         val decoder = DecoderHint.ofKey(entry.opt("decoder") as? String)
         val tunneling = entry.opt("tunneling") as? Boolean
-        if (engine == null && decoder == null && tunneling == null) return null
+        val async = entry.opt("async") as? Boolean
+        val exclude = names(entry.opt("excludeDecoders"))
+        val startRung = startOf(entry.opt("startRung") as? String)
+        val remedies = async != null || exclude.isNotEmpty() || startRung != null
+        if (engine == null && decoder == null && tunneling == null && !remedies) return null
         val chipsets = tokens(entry.opt("chipsets")).filter { it.length >= MIN_CHIPSET }
         val models = tokens(entry.opt("models"))
         if (chipsets.isEmpty() && models.isEmpty()) return null
@@ -209,7 +286,27 @@ object KnownDevices {
             decoder = decoder,
             note = (entry.opt("note") as? String)?.take(MAX_NOTE).orEmpty(),
             tunneling = tunneling,
+            async = async,
+            excludeDecoders = exclude,
+            startRung = startRung,
         )
+    }
+
+    /**
+     * Decoder names from a JSON array as the device spells them (MediaCodec names keep their case):
+     * trimmed, only ASCII letters, digits, `.`, `_` and `-`, without blanks, duplicates or overlong ones.
+     */
+    private fun names(value: Any?): List<String> {
+        val array = value as? JSONArray ?: return emptyList()
+        val out = ArrayList<String>()
+        for (index in 0 until array.length()) {
+            if (out.size >= MAX_NAMES) break
+            val text = (array.opt(index) as? String)?.trim() ?: continue
+            if (text.isEmpty() || text.length > MAX_NAME) continue
+            if (text.any { !(it.isLetterOrDigit() && it.code < 128) && it !in "._-" }) continue
+            if (out.none { it.equals(text, ignoreCase = true) }) out += text
+        }
+        return out
     }
 
     /** The strings of a JSON array, trimmed, lower case, without blanks, duplicates or overlong ones. */

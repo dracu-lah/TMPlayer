@@ -44,6 +44,41 @@ class BooksMatchStoresTest {
     }
 
     @Test
+    fun `a stored minimum migrates in both stores, the old default reads as not set`() = runBlocking {
+        val file = WatchedStore.openDataStore(dir.resolve("settings-sizes.preferences_pb"))
+        val store = SettingsStore(file)
+        val kv = DataStoreKeyValueStore(file)
+        val book = SettingsBook(kv)
+        val mb = SizeFilter.MB
+        // The default until 2026-11 was never a choice, so a stored 400 MB is "not set".
+        for ((stored, shown) in listOf(400 * mb to 0L, 0L to 0L, 50 * mb to 50 * mb, 700 * mb to 700 * mb, 1024 * mb to 1024 * mb)) {
+            kv.edit { it["min_size_bytes"] = stored }
+            assertEquals("store reads $stored", shown, store.minSizeBytes.first())
+            assertEquals("book reads $stored", shown, book.minSizeBytes.first())
+        }
+        kv.edit { it["max_size_bytes"] = 2048 * mb }
+        assertEquals(2048 * mb, store.maxSizeBytes.first())
+        assertEquals(2048 * mb, book.maxSizeBytes.first())
+        // Reset removes both, so every video is listed again.
+        store.resetSizeLimits()
+        assertEquals(0L, book.minSizeBytes.first())
+        assertEquals(SizeFilter.CEILING, book.maxSizeBytes.first())
+        // The clip switch writes 50 MB and nothing else; off removes the key.
+        book.setHideSmallClips(true)
+        assertEquals(SizeFilter.CLIP_MIN, store.minSizeBytes.first())
+        store.setHideSmallClips(false)
+        assertEquals(0L, book.minSizeBytes.first())
+        // A custom floor survives the switch going on, in both stores; off removes it.
+        kv.edit { it["min_size_bytes"] = 300 * mb }
+        store.setHideSmallClips(true)
+        assertEquals(300 * mb, book.minSizeBytes.first())
+        book.setHideSmallClips(true)
+        assertEquals(300 * mb, store.minSizeBytes.first())
+        book.setHideSmallClips(false)
+        assertEquals(0L, store.minSizeBytes.first())
+    }
+
+    @Test
     fun `the settings book and the settings store read each other`() = runBlocking {
         val file = WatchedStore.openDataStore(dir.resolve("settings.preferences_pb"))
         val store = SettingsStore(file)
@@ -61,8 +96,17 @@ class BooksMatchStoresTest {
         book.setPureBlack(true)
         assertTrue(store.pureBlack.first())
 
-        store.setMinSizeBytes(100L * 1024 * 1024)
+        assertEquals("every video by default", 0L, store.minSizeBytes.first())
         assertEquals(store.minSizeBytes.first(), book.minSizeBytes.first())
+        store.setHideSmallClips(true)
+        assertEquals(SizeFilter.CLIP_MIN, store.minSizeBytes.first())
+        assertEquals(store.minSizeBytes.first(), book.minSizeBytes.first())
+        book.setHideSmallClips(true)
+        book.resetSizeLimits()
+        store.resetSizeLimits()
+        assertEquals(0L, store.minSizeBytes.first())
+        assertEquals(store.minSizeBytes.first(), book.minSizeBytes.first())
+        assertEquals(SizeFilter.CEILING, store.maxSizeBytes.first())
         book.setVideoSort(5L, VideoSort.entries.last())
         assertEquals(VideoSort.entries.last(), store.videoSort(5L).first())
 

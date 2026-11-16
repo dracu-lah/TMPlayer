@@ -2,15 +2,18 @@
 // a loader with nothing to press, which reads the first page of the chat list and decides. Enough
 // chats opens the picker in its gate form; too few, or a list that will not load, goes on with
 // nothing written, so the gate asks again on a later visit (the apps' ChatsGate.decide).
-import { createEffect, createResource, createSignal, onCleanup, onMount } from 'solid-js'
+import { createEffect, createResource, createSignal, onCleanup, onMount, Show } from 'solid-js'
 import { useNavigate, useSearchParams } from '@solidjs/router'
 import { call } from '../tg/rpc'
 import { t } from '../i18n'
 import { addedMode, setChatsGateWaived } from '../store'
 import type { ChatItem, ChatsEvent } from '../tg/types'
 
-/** Fewer chats than this and there is nothing worth choosing from: the mirror of the apps' ChatsGate.MIN_CHATS. */
-const STEP_MIN = 4
+/**
+ * Fewer chats than this and there is nothing to ask about. The apps' setup asks about even one
+ * chat (SetupFlow: Saved Messages alone gets the "Forward a video" hint), so the web does too.
+ */
+const STEP_MIN = 1
 /** How long the first page may take before the visitor goes on without the gate (the apps' Setup.WAIT_FOR_CHATS_MS). */
 const WAIT_MS = 8000
 
@@ -51,6 +54,16 @@ export function SetupChats() {
             navigate(`/added-chats?setup=1&next=${encodeURIComponent(next())}`, { replace: true })
         } else if (chats.error || whole()) waive()
     })
+    // No network and nothing in yet: say so under the heading, as the apps' offline card does.
+    const [offline, setOffline] = createSignal(typeof navigator !== 'undefined' && navigator.onLine === false)
+    const goOffline = () => setOffline(true)
+    const goOnline = () => setOffline(false)
+    window.addEventListener('offline', goOffline)
+    window.addEventListener('online', goOnline)
+    onCleanup(() => {
+        window.removeEventListener('offline', goOffline)
+        window.removeEventListener('online', goOnline)
+    })
     // A list that never answers (offline, a stalled connection) does not hold the visitor here.
     const timer = window.setTimeout(() => {
         if (!enough()) waive()
@@ -59,8 +72,11 @@ export function SetupChats() {
 
     return (
         <section class="setup-step" aria-labelledby="setup-chats-title" aria-busy="true">
-            <h1 id="setup-chats-title" class="page-title">{t('picker.gate_title')}</h1>
-            <p class="muted">{t('picker.loading')}</p>
+            <h1 id="setup-chats-title" class="page-title">{t('setup.which_title')}</h1>
+            <p class="muted">{t(offline() ? 'setup.offline_title' : 'picker.loading')}</p>
+            <Show when={offline()}>
+                <p class="muted">{t('setup.offline_body')}</p>
+            </Show>
         </section>
     )
 }

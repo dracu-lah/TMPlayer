@@ -195,28 +195,19 @@ internal fun StorageGroup(state: ShellState, jumps: Map<com.tmplayer.ui.onboardi
     Toggle(REMOVE_AFTER_WATCHING, REMOVE_AFTER_WATCHING_DETAIL, removeAfterWatching, icon = TmIcons.Delete) { on ->
         if (on) dialog = StorageDialog.RemoveAfterWatching else scope.launch { settings.setRemoveAfterWatching(false) }
     }
-    // A rolling window of the video on disk, for a drive with less room than the video; the line
-    // under it says the cost.
-    Toggle(
-        s.settingsLowStorage,
-        if (lowStorage) s.settingsLowStorageOn else s.settingsLowStorageOff,
-        lowStorage,
-        Modifier.jumpTarget(jumps[com.tmplayer.ui.onboarding.SetupStep.Storage]),
+    // "While streaming": Keep video, or Save space, a rolling window of the video on disk for a
+    // drive with less room than the video. The line under the title says the cost of the chosen
+    // tab; a download kept on purpose is never windowed.
+    Setting(
+        s.settingsStreamTitle,
+        if (lowStorage) s.settingsStreamSaveDetail else s.settingsStreamKeepDetail,
+        modifier = Modifier.jumpTarget(jumps[com.tmplayer.ui.onboarding.SetupStep.Storage]),
         icon = TmIcons.Archive,
-    ) { on -> scope.launch { settings.setLowStorageMode(on) } }
-    // Its notification, beside the mode it is about rather than on the Notifications page (2026-11-01).
-    val lowStorageAlert by settings.noticeOn(com.tmplayer.data.Notice.LowStorage).collectAsState(initial = com.tmplayer.data.Notice.LowStorage.defaultOn)
-    Toggle(s.settingsLowStorageAlert, s.settingsAlertLowStorageDetail, lowStorageAlert, icon = TmIcons.Bell) { on ->
-        scope.launch { settings.setNoticeOn(com.tmplayer.data.Notice.LowStorage, on) }
+    ) {
+        Segments(listOf(false, true), lowStorage, { if (it) s.settingsStreamSave else s.settingsStreamKeep }) { on ->
+            scope.launch { settings.setLowStorageMode(on) }
+        }
     }
-    // Beside the downloads' other settings: a stream first, then the downloads (DownloadYield).
-    val pauseWhilePlaying by settings.pauseDownloadsWhilePlaying.collectAsState(initial = true)
-    Toggle(
-        s.settingsPauseDownloadsWhilePlaying,
-        if (pauseWhilePlaying) s.settingsPauseDownloadsWhilePlayingOn else s.settingsPauseDownloadsWhilePlayingOff,
-        pauseWhilePlaying,
-        icon = TmIcons.Pause,
-    ) { on -> scope.launch { settings.setPauseDownloadsWhilePlaying(on) } }
     Action(s.storageScan, s.storageScanDetail(DesktopPaths.downloadsDir.path), TmIcons.Search, end = RowEnd.None) {
         scope.launch {
             val found = DownloadIndex.scan(settings)

@@ -18,6 +18,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
 import com.tmplayer.data.CacheShelf
 import com.tmplayer.data.DownloadRunner
@@ -34,7 +44,7 @@ import com.tmplayer.ui.theme.Tone
 import kotlinx.coroutines.launch
 
 /**
- * The posters picked in a chat's grid for "Download selected": Ctrl+click (Cmd+click on macOS)
+ * The selection every list on the desktop shares (a chat's grid, History, Downloads): Ctrl+click (Cmd+click on macOS)
  * adds or takes away one, Shift+click takes in everything from the last one picked.
  *
  * Indices are the grid's, ids are [MediaItem.id]; the ids are what is kept, so a page loading
@@ -74,10 +84,24 @@ class GridSelection(
 
     /** Shift+click: everything between the last poster picked and this one, added. */
     fun extend(index: Int) {
+        if (index < 0) return
         val from = anchor ?: return toggle(index)
         val range = if (from <= index) from..index else index..from
         ids = ids + range.mapNotNull(idAt)
         anchor = index
+    }
+
+    /** This row in or out, by its index (the page's own checkbox, a menu's Select). */
+    fun pick(index: Int, on: Boolean) {
+        if (index < 0) return
+        val id = idAt(index) ?: return
+        ids = if (on) ids + id else ids - id
+        anchor = index
+    }
+
+    /** Takes [gone] out of the selection: rows deleted or moved while work ran. */
+    fun remove(gone: Set<String>) {
+        if (ids.any { it in gone }) ids = ids - gone
     }
 
     fun selectAll(all: List<String>) {
@@ -95,6 +119,31 @@ class GridSelection(
         if (ids.any { it !in present }) ids = ids.filterTo(HashSet()) { it in present }
     }
 }
+
+/** Ctrl+A, or Cmd+A on a Mac: the chord every list answers with "pick everything". */
+internal fun isSelectAllChord(event: KeyEvent): Boolean =
+    event.type == KeyEventType.KeyDown && event.key == Key.A && !event.isAltPressed && !event.isShiftPressed &&
+        (event.isCtrlPressed || event.isMetaPressed)
+
+/**
+ * Ctrl+Space (Cmd+Space is the system's, so Ctrl there too): one row in or out, the keyboard's way
+ * of the Ctrl+click, as a list box does it (WAI-ARIA).
+ */
+internal fun isToggleChord(event: KeyEvent): Boolean =
+    event.type == KeyEventType.KeyDown && event.key == Key.Spacebar && event.isCtrlPressed && !event.isAltPressed &&
+        !event.isShiftPressed && !event.isMetaPressed
+
+/**
+ * Ctrl+A over a grid or list: [onSelectAll] is told, and the key is taken only when [hasRows] says
+ * there is something to pick, so on an empty page it is left to whatever has focus. Read on the
+ * way down, before a text field inside could take it.
+ */
+internal fun Modifier.selectAllKey(hasRows: () -> Boolean, onSelectAll: () -> Unit): Modifier =
+    onPreviewKeyEvent { event ->
+        if (!isSelectAllChord(event) || !hasRows()) return@onPreviewKeyEvent false
+        onSelectAll()
+        true
+    }
 
 /** The grid's selection, for the posters inside it; null where nothing can be picked. */
 internal val LocalGridSelection = compositionLocalOf<GridSelection?> { null }

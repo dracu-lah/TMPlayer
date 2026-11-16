@@ -5,12 +5,11 @@ Not legal advice. Check any change of basis with whoever you trust for GDPR.
 ## What ships (S1, 2026-11-15)
 
 - Crash reports stay **consent**: off until the viewer says yes. Nothing starts Sentry before that.
-- The setup after sign in asks (its last step, CP102f). An install that never saw that step (signed
-  in before it existed, or Skip all) gets a one-time card on the chat list: "Help fix crashes?",
-  Yes, No and the privacy page. Code: `CrashAsk` (core, the decision), `CrashAskCard` and
-  `CrashAskHost` (ui, onboarding), wired in `MainActivity` and the desktop's `ShellNotices`.
-- Asked once: the card writes `crash_ask_done` as it shows; any stored answer counts as asked too.
-  No DSN (forks, CI), the kids lock, a safe start or another card up: no card, and nothing used up.
+- Nothing asks in the setup after sign in (R3: that setup is one question, which chats have your videos) and
+  there is no card on the chat list: the one-time "Help fix crashes?" card (`CrashAskCard`, `CrashAskHost`) was
+  removed. The question is asked in one place: the "Send crash reports" row in Settings (Privacy and lock), which
+  says what is sent, and after a crash (the per-crash question). `CrashAsk` (core) keeps only
+  `OPT_OUT_DEFAULT_ON`; `crash_ask_done` and any stored answer stay readable (`SettingsStore.crashReportsAsked`).
 - The answer is Settings' "Send crash reports" switch; the per-crash question stays for anyone at No.
 
 ## The alternative: on by default with an opt-out (NOT enabled)

@@ -30,7 +30,9 @@ const chatGone = (e: unknown) => /^(CHANNEL_PRIVATE|CHAT_FORBIDDEN|USER_BANNED_I
 
 export async function homePage(tg: TelegramClient, view: HomeView, signal: AbortSignal, emit: (page: HomePage) => void): Promise<HomePage> {
     const r = await rules()
-    const within = (v: Video) => r.sizeMatches(v.size, view.minBytes, view.maxBytes)
+    // Home keeps its own floor so trailers and samples do not fill Recently added (SizeFilter.HOME_MIN).
+    const homeMin = r.sizeHomeMin(view.minBytes)
+    const within = (v: Video) => r.sizeMatches(v.size, homeMin, view.maxBytes)
     // The chats the viewer added (HX27), or null for every chat: narrows the rows Home builds
     // (starred chat rows, Recently added) and the search across chats it reads for the carousel.
     const gate = view.added ? new Set(view.added) : null
@@ -167,7 +169,7 @@ export async function homePage(tg: TelegramClient, view: HomeView, signal: Abort
                     if (!msg || !raw) return void gone.push({ chatId: mark.chatId, messageId: mark.messageId })
                     // Withheld or self-destructing now: not played, but its place is kept.
                     const video = r.screen([raw]).videos[0]
-                    const item = video && itemOf(msg, video.title, r.posterAsk(video), r.continueTitle(video))
+                    const item = video && itemOf(msg, video.title, r.posterAsk(video), r.continueTitle(video), undefined, r.tileTag(video))
                     if (!video || !item) return
                     items.set(video.id, item)
                     resumeTitles.set(video.id, r.tileTitle(video))

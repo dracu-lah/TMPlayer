@@ -13,6 +13,7 @@ import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.ContentProtection
 import com.tmplayer.data.EpisodeNeighbours
 import com.tmplayer.data.EpisodeTag
+import com.tmplayer.data.FormatFacts
 import com.tmplayer.data.Fuzzy
 import com.tmplayer.data.HomeLayout
 import com.tmplayer.data.HomeOrder
@@ -26,6 +27,7 @@ import com.tmplayer.data.MediaText
 import com.tmplayer.data.ResumeRecord
 import com.tmplayer.data.ResumeRewind
 import com.tmplayer.data.Series
+import com.tmplayer.data.EpisodeGuide
 import com.tmplayer.data.SeriesShelf
 import com.tmplayer.data.copyQuality
 import com.tmplayer.data.ShelfEntry
@@ -143,11 +145,23 @@ interface ShelfTile {
     val piecesPlayable: Int
     val extra: String?
     val seasons: Array<WebSeason>
+
+    /** The whole-season files of a show ("Season 2 Complete"), listed under their season; empty for a file. */
+    val packs: Array<WebPack>
+}
+
+/** A season, or a span of seasons, posted as one file ([com.tmplayer.data.SeriesPack]). [seasonEnd] is 0 for one season. */
+interface WebPack {
+    val season: Int
+    val seasonEnd: Int
+    val video: Video
 }
 
 interface WebSeason {
     val number: Int
     val episodes: Array<WebEpisode>
+    /** Episode numbers a longer file holds ("S01E09E10" holds 10), so the show's page does not list them as missing. */
+    val covered: Array<Int>
 }
 
 interface WebEpisode {
@@ -211,7 +225,11 @@ interface PosterAsk {
     /** "film" or "show". */
     val kind: String
     val tmdbId: Int?
+    /** An IMDb id the post's own words give ("tt0111161"), or null; resolved by the worker's TMDB `find`. */
+    val imdbId: String?
     val series: Boolean
+    /** The name reads like fansub anime ("[Group] Show - 12", "Show - 12"): AniList is asked first (MetaQuery.anime). */
+    val anime: Boolean
     /** ISO 639-1 codes, a hint for which of two titles of one name is meant. */
     val languages: Array<String>
     /**
@@ -234,11 +252,14 @@ interface Archive {
 interface SizeLimits {
     val floor: Double
     val ceiling: Double
-    val step: Double
     val defaultMin: Double
     val defaultMax: Double
-    /** The quick minimums a chat's "n hidden" picker lists ([SizeFilter.QUICK_MINIMUMS]). */
-    val quick: Array<Double>
+    /** What "Hide small clips" hides below ([SizeFilter.CLIP_MIN]). */
+    val clipMin: Double
+    /** Home's own floor ([SizeFilter.HOME_MIN]). */
+    val homeMin: Double
+    /** The stored minimum the old default wrote (400 MB), which reads as "not set". */
+    val oldDefaultMin: Double
 }
 
 /** A video left part way, as the page keeps its place, with the video read again off its message. */
@@ -384,7 +405,9 @@ fun posterAsk(video: Video): PosterAsk? {
         "year" to query.year,
         "kind" to if (query.kind == MetaKind.Show) "show" else "film",
         "tmdbId" to query.tmdbId,
+        "imdbId" to query.imdbId,
         "series" to item.parsedName.isSeries,
+        "anime" to query.anime,
         "languages" to query.languages.toTypedArray(),
         "episode" to SeriesShelf.episodeOf(item).takeIf { it.isEpisode && it.extra == null && it.title.isNotBlank() }?.let { name ->
             name.episode?.let { "S${(name.season ?: 1).toString().padStart(2, '0')}E${it.toString().padStart(2, '0')}" }
@@ -438,6 +461,13 @@ fun copyFacts(video: Video): Array<String> {
     return listOfNotNull(quality, facts.videoCodec, facts.dynamicRange, facts.source).toTypedArray()
 }
 
+/**
+ * The one pill a poster tile wears (FormatFacts.tileTag): "720p", "1080p", "1440p", "4K" or "8K" from
+ * the size Telegram states, else a resolution word in the name; null for SD, an unknown size or a
+ * name that says nothing, so no empty pill is drawn.
+ */
+fun tileTag(video: Video): String? = FormatFacts.tileTag(toItem(video))?.text
+
 /** The quality a video is badged with on its page ("1080p", "4K"), or null when neither its name nor its size says (VideoCopies.qualityLabel). */
 fun qualityLabel(video: Video): String? = VideoCopies.qualityLabel(toItem(video))
 
@@ -481,29 +511,27 @@ fun rewindChoices(): Array<Double> = ResumeRewind.CHOICES_MS.map { it.toDouble()
 fun sizeLimits(): SizeLimits = plain(
     "floor" to SizeFilter.FLOOR.toDouble(),
     "ceiling" to SizeFilter.CEILING.toDouble(),
-    "step" to SizeFilter.STEP.toDouble(),
     "defaultMin" to SizeFilter.DEFAULT_MIN.toDouble(),
     "defaultMax" to SizeFilter.DEFAULT_MAX.toDouble(),
-    "quick" to SizeFilter.QUICK_MINIMUMS.map { it.toDouble() }.toTypedArray(),
+    "clipMin" to SizeFilter.CLIP_MIN.toDouble(),
+    "homeMin" to SizeFilter.HOME_MIN.toDouble(),
+    "oldDefaultMin" to SizeFilter.OLD_DEFAULT_MIN.toDouble(),
 )
+
+/** A stored minimum read as the apps read it: nothing, zero and the old 400 MB default are 0. */
+fun sizeEffectiveMin(stored: Double?): Double = SizeFilter.effectiveMin(stored?.toLong()).toDouble()
+
+/** Home's floor for a viewer's minimum: its own 50 MB, or a higher custom floor. */
+fun sizeHomeMin(minBytes: Double): Double = SizeFilter.homeMin(minBytes.toLong()).toDouble()
 
 /** Whether a file of [bytes] passes; an unknown size (0) always does, the top means no limit. */
 fun sizeMatches(bytes: Double, minBytes: Double, maxBytes: Double): Boolean =
     SizeFilter.matches(bytes.toLong(), minBytes.toLong(), maxBytes.toLong())
 
-/** One press of the slider in [direction] (+1 or -1), on the 100 MB grid. */
-fun sizeStep(bytes: Double, direction: Int): Double = SizeFilter.step(bytes.toLong(), direction).toDouble()
-
-/** Where the slider's thumb sits for [bytes], 0 to 1. */
-fun sizeFraction(bytes: Double): Double = SizeFilter.fraction(bytes.toLong()).toDouble()
-
-/** The size at [fraction] of the track, snapped to the grid. */
-fun sizeAt(fraction: Double): Double = SizeFilter.snap(SizeFilter.bytesAt(fraction.toFloat())).toDouble()
-
 /** "Any size", "50 MB and up" and the like, in the provided catalog's words. */
 fun sizeRange(minBytes: Double, maxBytes: Double): String = SizeFilter.describe(minBytes.toLong(), maxBytes.toLong())
 
-/** "50 MB", "1.5 GB", or the slider's ends ("No minimum", "No limit"), as the apps label a size limit. */
+/** "50 MB", "1.5 GB", as the apps label a size limit. */
 fun sizeLabel(bytes: Double): String = SizeFilter.label(bytes.toLong())
 
 /**
@@ -799,6 +827,7 @@ private fun tile(entry: ShelfEntry): ShelfTile = when (entry) {
             "piecesPlayable" to (report?.playable ?: 0),
             "extra" to item.extra?.name,
             "seasons" to emptyArray<WebSeason>(),
+            "packs" to emptyArray<WebPack>(),
         )
     }
 }
@@ -827,7 +856,11 @@ private fun show(key: String, series: Series): ShelfTile = plain(
                     "copies" to ids(episode.copies),
                 )
             }.toTypedArray(),
+            "covered" to EpisodeGuide.covered(season).toTypedArray(),
         )
+    }.toTypedArray(),
+    "packs" to series.packs.map { pack ->
+        plain<WebPack>("season" to pack.season, "seasonEnd" to (pack.seasonEnd ?: 0), "video" to toWeb(pack.item))
     }.toTypedArray(),
 )
 

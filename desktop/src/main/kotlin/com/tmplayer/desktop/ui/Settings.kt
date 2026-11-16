@@ -176,7 +176,7 @@ internal fun titleOf(category: SettingsCategory): String {
         SettingsCategory.Library -> s.settingsLibrary
         SettingsCategory.Home -> s.settingsPageHome
         SettingsCategory.Notifications -> s.settingsPageNotifications
-        SettingsCategory.Storage -> s.settingsPageStorage
+        SettingsCategory.Storage -> s.settingsPageDownloadsData
         SettingsCategory.Account -> s.settingsPagePrivacyLock
         SettingsCategory.About -> s.settingsPageAbout
     }
@@ -242,7 +242,7 @@ fun SettingsPage(
     val open = openName?.let { name -> SettingsCategory.entries.firstOrNull { it.name == name } }
     // The search box over the list (U20): its words, kept while a page found by it is open, and
     // the row it is taking the viewer to.
-    var searchQuery by rememberSaveable { mutableStateOf("") }
+    var searchQuery by com.tmplayer.ui.components.rememberVisitQuery(keep = open != null)
     val seek = remember { SettingsSeek() }
     val searchFocus = remember { FocusRequester() }
     val strings = LocalStrings.current

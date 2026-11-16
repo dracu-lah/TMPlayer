@@ -9,6 +9,8 @@ import android.widget.TextView
 import com.tmplayer.R
 import com.tmplayer.i18n.L
 import com.tmplayer.online.SkipKind
+import com.tmplayer.online.SkipSegment
+import com.tmplayer.online.SkipSource
 
 /**
  * The "Skip intro" pill: raised while the playhead is inside a stretch somebody has timed (a
@@ -32,6 +34,8 @@ class SkipPill(
     below: View,
     private val tv: Boolean,
     onSkip: () -> Unit,
+    /** Cancel on the countdown of a stretch set to skip by itself; a television cancels with Back instead. */
+    onCancel: () -> Unit = {},
 ) {
     private val context = root.context
     private val density = context.resources.displayMetrics.density
@@ -53,6 +57,19 @@ class SkipPill(
         visibility = if (tv) View.VISIBLE else View.GONE
     }
 
+    /** The phone's Cancel under the words while a countdown runs; its own target, so a tap on it does not skip. */
+    private val cancel = TextView(context).apply {
+        setTextColor(context.getColor(R.color.accent))
+        textSize = 14f
+        maxLines = 1
+        gravity = Gravity.CENTER
+        text = L.commonCancel
+        setPadding(px(16), px(6), px(16), px(2))
+        visibility = View.GONE
+        isClickable = true
+        setOnClickListener { onCancel() }
+    }
+
     val view: LinearLayout = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
         gravity = Gravity.CENTER_HORIZONTAL
@@ -68,6 +85,7 @@ class SkipPill(
         }
         addView(label)
         addView(hint)
+        addView(cancel)
     }
 
     init {
@@ -87,20 +105,47 @@ class SkipPill(
 
     val isShown: Boolean get() = view.visibility == View.VISIBLE
 
-    /** Writes the words for [kind] and shows the pill. */
-    fun show(kind: SkipKind) {
-        label.text = when (kind) {
-            SkipKind.Recap -> L.playerSkipRecap
-            SkipKind.Intro -> L.playerSkipIntro
-            SkipKind.Opening -> L.playerSkipOpening
-            SkipKind.Credits -> L.playerSkipCredits
-            SkipKind.Ending -> L.playerSkipEnding
-            SkipKind.Preview -> L.playerSkipPreview
+    /**
+     * Writes the words for [segment] and shows the pill: "Skip intro", or while a stretch set to
+     * skip by itself counts down ([secondsLeft]) "Skipping in 3" with Cancel (Back on a television).
+     */
+    fun show(segment: SkipSegment, secondsLeft: Int? = null) {
+        isCounting = secondsLeft != null
+        if (secondsLeft == null) {
+            label.text = words(segment)
+            hint.text = L.playerSkipOkHint
+            hint.visibility = if (tv) View.VISIBLE else View.GONE
+            cancel.visibility = View.GONE
+        } else {
+            label.text = L.playerSkipIn(secondsLeft)
+            hint.text = L.playerSkipBackCancel
+            hint.visibility = if (tv) View.VISIBLE else View.GONE
+            cancel.visibility = if (tv) View.GONE else View.VISIBLE
         }
         view.visibility = View.VISIBLE
     }
 
+    /** Whether a countdown is what the pill shows now. */
+    var isCounting: Boolean = false
+        private set
+
+    /** The pill's words; an intro the viewer marked says so. */
+    private fun words(segment: SkipSegment): String =
+        if (segment.source == SkipSource.Mark || segment.source == SkipSource.Guess) {
+            L.playerSkipIntroMark
+        } else {
+            when (segment.kind) {
+                SkipKind.Recap -> L.playerSkipRecap
+                SkipKind.Intro -> L.playerSkipIntro
+                SkipKind.Opening -> L.playerSkipOpening
+                SkipKind.Credits -> L.playerSkipCredits
+                SkipKind.Ending -> L.playerSkipEnding
+                SkipKind.Preview -> L.playerSkipPreview
+            }
+        }
+
     fun hide() {
+        isCounting = false
         view.visibility = View.GONE
     }
 }

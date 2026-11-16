@@ -56,12 +56,14 @@ object MeteredPolicy {
         alreadyDownloaded: Boolean,
         warnedThisSession: Boolean,
         sizeBytes: Long,
+        /** False under "On mobile data: Allow": the viewer said it is fine, so a large video is not asked about. */
+        asks: Boolean = true,
     ): MeteredDecision = when {
         // A complete local file is played off disk; the connection it arrived over is history.
         alreadyDownloaded -> MeteredDecision.Allow
         !metered -> MeteredDecision.Allow
         wifiOnly -> MeteredDecision.Block
-        warnedThisSession -> MeteredDecision.Allow
+        warnedThisSession || !asks -> MeteredDecision.Allow
         sizeBytes >= LARGE_DOWNLOAD_BYTES -> MeteredDecision.Warn
         else -> MeteredDecision.Allow
     }

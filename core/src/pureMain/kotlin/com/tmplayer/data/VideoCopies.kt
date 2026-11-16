@@ -266,6 +266,39 @@ object VideoCopies {
     @Volatile
     var deviceWord: String = "phone"
 
+    /**
+     * The tallest picture that suits this device, for the one choice nothing else settles (no
+     * pick, no download, nothing started, no habit): the highest copy at or under [cap] (1080 on a
+     * phone, 2160 elsewhere), else the lowest above it; the newest of equals. Copies that [tooSlow]
+     * says this device decodes too slowly are left out while any other remains. Null when no copy
+     * says its height, so a caller keeps its own default (the newest).
+     */
+    fun bestForDevice(
+        copies: List<MediaItem>,
+        tooSlow: (MediaItem) -> Boolean = tooSlowHere,
+        cap: Int = heightCap(deviceWord),
+    ): MediaItem? {
+        if (copies.size <= 1) return copies.firstOrNull()
+        return bestOf(copies.filterNot(tooSlow).ifEmpty { copies }, cap)
+    }
+
+    /** The tallest picture a device of this kind is offered first: a phone's screen shows 1080p in full. */
+    fun heightCap(device: String): Int = if (device == "phone") PHONE_CAP else Int.MAX_VALUE
+
+    private const val PHONE_CAP = 1080
+
+    private fun bestOf(copies: List<MediaItem>, cap: Int): MediaItem? {
+        val known = copies.mapNotNull { copy -> heightOf(copy)?.let { copy to it } }
+        if (known.isEmpty()) return null
+        val within = known.filter { it.second <= cap }
+        val newest = compareBy<Pair<MediaItem, Int>> { it.first.date }.thenBy { it.first.messageId }
+        return if (within.isNotEmpty()) {
+            within.maxWithOrNull(compareBy<Pair<MediaItem, Int>> { it.second }.thenBy { it.first.sizeBytes }.then(newest))?.first
+        } else {
+            known.minWithOrNull(compareBy<Pair<MediaItem, Int>> { it.second }.thenByDescending { it.first.date })?.first
+        }
+    }
+
     private fun pickAmong(
         copies: List<MediaItem>,
         started: (MediaItem) -> Boolean,
@@ -278,7 +311,8 @@ object VideoCopies {
         copies.firstOrNull(started)?.let { return it }
         val pool = language?.let { code -> copies.filter { code in languagesOf(it) }.ifEmpty { null } } ?: copies
         val newest = pool.maxWith(compareBy<MediaItem> { it.date }.thenBy { it.messageId })
-        val usual = habit.usual ?: return newest
+        // With nothing to go on, the best picture this device suits, not simply the newest post.
+        val usual = habit.usual ?: return bestOf(pool, heightCap(deviceWord)) ?: newest
         return pool
             .mapNotNull { copy -> heightOf(copy)?.let { copy to it } }
             .minWithOrNull(

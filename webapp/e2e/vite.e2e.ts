@@ -16,6 +16,18 @@ const MEDIA = fileURLToPath(new URL('./media/', import.meta.url))
  */
 const ANSWERED = `(function(){try{if(/(?:^|;\\s*)e2e=[^;]*unanswered/.test(document.cookie))return;var o=indexedDB.open('tmplayer-app');o.onupgradeneeded=function(){o.result.createObjectStore('kv')};o.onsuccess=function(){var s=o.result.transaction('kv','readwrite').objectStore('kv'),g=s.get('addedMode');g.onsuccess=function(){if(g.result===undefined)s.put('all','addedMode')};s.transaction.oncomplete=function(){o.result.close()}}}catch(e){}})()`
 
+/** One account's Saved Messages per test (the `cloud:<key>` flag): the messages that hold a sync file. */
+interface CloudMessage {
+    id: number
+    date: number
+    text: string
+    fileName: string
+    /** The file's bytes, base64. */
+    bytes: string
+}
+const clouds = new Map<string, CloudMessage[]>()
+let nextCloudId = 100
+
 const testServer: Plugin = {
     name: 'tmplayer-e2e',
     transformIndexHtml: (html) => html.replace('<head>', `<head>\n  <script>${ANSWERED}</script>`),
@@ -27,6 +39,25 @@ const testServer: Plugin = {
         // The case a test picked, from its `e2e` cookie, for the fake in the worker.
         server.middlewares.use('/__e2e/flags', (req, res) => {
             res.end(/(?:^|;\s*)e2e=([^;]*)/.exec(req.headers.cookie ?? '')?.[1] ?? '')
+        })
+        // The account's Saved Messages as the fake keeps them (fake/mtcute.ts, flag `cloud:<key>`): in this server, so the
+        // test reads what the page put there, and a second browser context is a second device on the same account.
+        server.middlewares.use('/__e2e/cloud', (req, res) => {
+            const url = new URL(req.url ?? '/', 'http://x')
+            const key = url.searchParams.get('key') ?? 'default'
+            const list = (clouds.get(key) ?? clouds.set(key, []).get(key))!
+            const chunks: Buffer[] = []
+            req.on('data', (c) => chunks.push(c))
+            req.on('end', () => {
+                const op = url.searchParams.get('op')
+                const body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : null
+                if (op === 'put') list.push({ ...body, id: nextCloudId++ })
+                else if (op === 'edit') Object.assign(list.find((m) => m.id === body.id) ?? {}, body)
+                else if (op === 'delete') list.splice(0, list.length, ...list.filter((m) => !body.ids.includes(m.id)))
+                else if (op === 'reset') list.length = 0
+                res.setHeader('Content-Type', 'application/json')
+                res.end(JSON.stringify(op === 'put' ? list[list.length - 1] : list))
+            })
         })
         server.middlewares.use('/__e2e/sizes', (_, res) => {
             res.setHeader('Content-Type', 'application/json')

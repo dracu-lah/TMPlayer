@@ -176,6 +176,112 @@ class PlaybackTraceTest {
     }
 
     @Test
+    fun version2KeepsFactsAndHopsThroughTheFile() {
+        val facts = linkedMapOf("class" to "amlogic1/28/hevc", "dec.name" to "OMX.amlogic.hevc.decoder", "dev.sdk" to "28", "cnt.dropped" to "12")
+        val hop = TraceHop(atMs = 3_000, evidence = "Frozen", from = "default", to = "ex")
+        val session = TraceSession(1_000, listOf(sample(4_000)), facts, listOf(hop))
+        val text = PlaybackTrace.encode(listOf(session))
+        assertTrue("\"v\":2" in text)
+        assertEquals(listOf(session), PlaybackTrace.read(text))
+    }
+
+    @Test
+    fun aFileAnOlderAppWroteStillReadsWithNoFacts() {
+        val v1 = "{\"t\":\"session\",\"v\":1,\"at\":1000}\n" + PlaybackTrace.sampleLine(sample(2_000)) + "\n"
+        val read = PlaybackTrace.read(v1)
+        assertEquals(1, read.size)
+        assertEquals(emptyMap(), read.single().facts)
+        assertEquals(emptyList(), read.single().hops)
+        assertEquals(listOf(2_000L), read.single().samples.map { it.atMs })
+    }
+
+    @Test
+    fun aNewerFileWithLinesAndKeysWeDoNotKnowStillReads() {
+        val text = listOf(
+            "{\"t\":\"session\",\"v\":9,\"at\":1000,\"extra\":1}",
+            "{\"t\":\"f\",\"at\":1001,\"k\":{\"dev.sdk\":\"34\",\"unknown.key\":\"free text\",\"dev.model\":\"a\\nb\\\"c@d\"}}",
+            "{\"t\":\"q\",\"at\":1002,\"new\":true}",
+            PlaybackTrace.sampleLine(sample(2_000)),
+        ).joinToString("\n")
+        val session = PlaybackTrace.read(text).single()
+        assertEquals(mapOf("dev.sdk" to "34", "dev.model" to "a_b_c_d"), session.facts)
+        assertEquals(1, session.samples.size)
+    }
+
+    @Test
+    fun aLongSetOfFactsStaysInLinesTheReaderTakes() {
+        val facts = TraceFacts.KEYS.associateWith { "v".repeat(300) }
+        val text = PlaybackTrace.encode(listOf(TraceSession(1_000, emptyList(), facts)))
+        assertTrue(text.lines().all { it.length <= TraceLimits.MAX_LINE_CHARS })
+        val read = PlaybackTrace.read(text).single().facts
+        assertEquals(TraceFacts.KEYS, read.keys)
+        assertTrue(read.values.all { it.length == TraceFacts.MAX_VALUE_CHARS })
+    }
+
+    @Test
+    fun hopsAreCappedAndBadFactLinesSkipped() {
+        val hops = (1..30).map { TraceHop(atMs = it * 1_000L, evidence = "Frozen", to = "rl") }
+        val text = PlaybackTrace.encode(listOf(TraceSession(500, emptyList(), emptyMap(), hops)))
+        assertEquals(TraceFacts.MAX_HOPS, PlaybackTrace.read(text).single().hops.size)
+        val bad = listOf(
+            PlaybackTrace.sessionLine(500), "{\"t\":\"f\",\"at\":600,\"k\":\"nope\"}", "{\"t\":\"f\",\"at\":600,\"k\":{\"dev.sdk\":{\"a\":1}}}",
+            "{\"t\":\"h\"}", "{\"t\":\"f\",\"at\":-4,\"k\":{\"dev.sdk\":\"1\"}}",
+        ).joinToString("\n")
+        assertEquals(emptyMap(), PlaybackTrace.read(bad).single().facts)
+    }
+
+    @Test
+    fun theRingCountsFactsAndHopsInItsBytesAndDropsThemWithTheirSession() {
+        val ring = PlaybackTraceRing()
+        ring.startSession(1_000)
+        ring.addFacts(mapOf("dev.sdk" to "28", "bad.key" to "x"))
+        ring.addFacts(mapOf("dev.sdk" to "29", "dec.hw" to "true"))
+        ring.addHop(TraceHop(2_000, "Frozen", to = "rl"))
+        ring.add(sample(3_000))
+        assertEquals(mapOf("dev.sdk" to "29", "dec.hw" to "true"), ring.currentFacts())
+        assertEquals(1, ring.currentHops().size)
+        assertEquals(PlaybackTrace.encode(ring.sessions()).length, ring.size)
+        val small = PlaybackTraceRing(maxSessions = 1)
+        small.startSession(1)
+        small.addFacts(mapOf("dev.sdk" to "28"))
+        small.startSession(2)
+        assertEquals(PlaybackTrace.encode(small.sessions()).length, small.size)
+        assertEquals(emptyMap(), small.currentFacts())
+        assertEquals(ring.sessions(), PlaybackTraceRing.from(PlaybackTrace.encode(ring.sessions())).sessions())
+    }
+
+    @Test
+    fun aHopSaidAgainWithItsResultReplacesTheLineItUpdates() {
+        val pending = TraceHop(5_000, "Frozen", "default", "ex")
+        val ring = PlaybackTraceRing()
+        ring.startSession(1_000)
+        ring.addHop(pending)
+        ring.addHop(pending.copy(result = TraceHop.WORKED))
+        assertEquals(listOf(TraceHop.WORKED), ring.currentHops().map { it.result })
+        assertEquals(PlaybackTrace.encode(ring.sessions()).length, ring.size)
+        // The file has both lines, the reader keeps the later one.
+        val text = PlaybackTrace.sessionLine(1_000) + "\n" + PlaybackTrace.hopLine(pending) + "\n" +
+            PlaybackTrace.hopLine(pending.copy(result = TraceHop.FAILED)) + "\n"
+        assertEquals(listOf(TraceHop.FAILED), PlaybackTrace.read(text).single().hops.map { it.result })
+        assertTrue(pending.sameStep(pending.copy(result = "x")))
+        assertEquals(false, pending.sameStep(pending.copy(to = "sw")))
+    }
+
+    @Test
+    fun factLinesGroupAndOrderForTheBundle() {
+        val lines = TraceFacts.lines(
+            mapOf("dev.sdk" to "28", "class" to "k1", "dec.name" to "c2.a"),
+            listOf(TraceHop(10_000, "Frozen", "default", "ex", "worked"), TraceHop(15_000, "Stutter", "ex", "sw")),
+        )
+        assertEquals("  Ladder: class=k1", lines[0])
+        assertEquals("  Decoder: dec.name=c2.a", lines[1])
+        assertEquals("  Device: dev.sdk=28", lines[2])
+        assertEquals("  Hop +0s Frozen: default -> ex, worked", lines[3])
+        assertEquals("  Hop +5s Stutter: ex -> sw, pending", lines[4])
+        assertEquals(emptyList(), TraceFacts.lines(emptyMap(), emptyList()))
+    }
+
+    @Test
     fun randomTextNeverThrows() {
         val random = Random(7)
         val alphabet = "{}[]\":,.-0123456789etsaUdfrbpchmn\n\r \u0000é😀\\"

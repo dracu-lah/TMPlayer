@@ -1,11 +1,11 @@
 // The app's navigation, as the phone and the desktop draw it: one rounded pill floating at the foot
-// of the page, holding Home, Chats, Search and the viewer's picture, which opens the "You" menu
+// of the page, holding Home, Chats, Search, Downloads and the viewer's picture, which opens the "You" menu
 // (the viewer's own lists and Settings). A pointer gets a short name under each icon; a phone held
 // sideways, where height is short, gets the compact bar of round icon buttons (CSS). One highlight
 // slides to the chosen place.
 import { createResource, createSignal, For, onCleanup, onMount, Show } from 'solid-js'
 import { A, useLocation, useNavigate } from '@solidjs/router'
-import { Clock01Icon, History, Home03Icon, Message01Icon, Search01Icon, Settings01Icon, StarIcon } from '@hugeicons/core-free-icons'
+import { Clock01Icon, Download04Icon, History, Home03Icon, Message01Icon, Search01Icon, Settings01Icon, StarIcon } from '@hugeicons/core-free-icons'
 import { Icon, type IconData } from './Icon'
 import { initialOf } from './initial'
 import { nameArt } from './colour'
@@ -25,6 +25,8 @@ const PLACES: Place[] = [
     { href: '/', label: () => t('browse.tab_home'), icon: Home03Icon, on: (p) => p === '/' || p === '/recent' },
     { href: '/chats', label: () => t('nav.chats'), icon: Message01Icon, on: (p) => p === '/chats' || p.startsWith('/chat/') },
     { href: '/search', label: () => t('common.search'), icon: Search01Icon, on: (p) => p === '/search' },
+    // Downloads is a place on every platform (R2); the browser cannot keep videos, so its page is the app's card.
+    { href: '/downloads', label: () => t('nav.downloads'), icon: Download04Icon, on: (p) => p === '/downloads' },
 ]
 
 /** The card's width (POPOVER_WIDTH). */

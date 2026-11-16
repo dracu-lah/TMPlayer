@@ -177,10 +177,9 @@ fun WideDetailPanel(
         }
     }
     // At the foot: the chat, the corrections, the hand offs, the switch for posters while off.
-    val rest = buildList {
-        addAll(rows.drop(1).filter { it.action !in WIDE_HEADLINE })
-        if (metadataOff) add(DetailRow(DetailAction.Play, s.metadataTurnOn, TmIcons.Info, s.metadataTurnOnDetail, onSelect = { online?.setEnabled(true) }))
-    }
+    val rest = rows.drop(1).filter { it.action !in WIDE_HEADLINE }
+    // Why there is no poster, in one line with the action that fixes it (TS); it replaced the "turn on" button.
+    val posterWhy = rememberPosterWhy(item, matched = meta != null, settled = metaState.settled)
 
     BoxWithConstraints(modifier.fillMaxSize()) {
         val roomy = maxWidth >= ROOMY
@@ -235,14 +234,14 @@ fun WideDetailPanel(
                     listOfNotNull(
                         (parsed.year ?: matchYear.takeIf { yearInFacts })?.let { Fact(it.toString()) },
                         item.durationSec.takeIf { it > 0 }?.let { Fact(s.formatter.duration(it.toLong())) },
-                        // As the copy under Play names it ([VideoCopies.qualityLabel]).
-                        (com.tmplayer.data.VideoCopies.qualityLabel(item) ?: facts.resolution)?.let { Fact(it, chip = true) },
                         item.sizeBytes.takeIf { it > 0 }?.let { Fact(com.tmplayer.data.SplitPieces.sizeFact(item, s.formatter.size(it))) },
                         chatTitle.takeIf { it.isNotBlank() }?.let { Fact(it) },
                         Fact(s.detailWatchedLine, accent = true).takeIf { finished },
                     ),
                     style = MaterialTheme.typography.titleSmall,
                 )
+                // The picture and the sound the file declares (resolution first, then what a player saw): FormatFacts.
+                com.tmplayer.ui.components.FormatBadgeRow(com.tmplayer.ui.components.rememberFormatTags(item))
                 DetailMetaLines(
                     extrasState,
                     year = matchYear.takeIf { !yearInFacts },
@@ -404,6 +403,7 @@ fun WideDetailPanel(
                         }
                     }
                 }
+                posterWhy?.takeIf { meta == null }?.let { PosterWhyLine(it, onTurnOn = { online?.setEnabled(true) }, onFix = fixMatchOf(rows)) }
                 // Where the name came from: the provider's match and what backed it, or the file.
                 if (lookupsOn) {
                     Text(

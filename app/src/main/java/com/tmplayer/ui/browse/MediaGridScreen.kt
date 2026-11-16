@@ -14,7 +14,6 @@ import android.os.Build
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -124,6 +123,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.tmplayer.data.SizeFilter
 import com.tmplayer.data.AndroidPaths
 import com.tmplayer.data.CacheShelf
 import com.tmplayer.data.DiskInfo
@@ -317,12 +317,16 @@ fun MediaGridScreen(
     // not leave a stale one filtered by the old bounds. Scoped to this screen rather than to the
     // activity, so a session's chats do not each leave behind an item list full of minithumbnail
     // byte arrays. The cost is one re-listing when a chat is reopened.
-    val owner = remember(chatId, minSizeBytes, maxSizeBytes) { MediaScreenStore() }
+    // "Show them" on the row that says small videos are hidden lists them for this visit to the
+    // chat: the stored switch is not changed, so the next visit hides them again (R1).
+    var showAllThisVisit by remember(chatId) { mutableStateOf(false) }
+    val floor = if (showAllThisVisit) SizeFilter.FLOOR else minSizeBytes
+    val owner = remember(chatId, floor, maxSizeBytes) { MediaScreenStore() }
     DisposableEffect(owner) { onDispose { owner.viewModelStore.clear() } }
     val viewModel: MediaListViewModel = viewModel(
         viewModelStoreOwner = owner,
-        key = "media-$chatId-$minSizeBytes-$maxSizeBytes",
-        factory = MediaListViewModelFactory(chatId, minSizeBytes, maxSizeBytes, SettingsStore(context)),
+        key = "media-$chatId-$floor-$maxSizeBytes",
+        factory = MediaListViewModelFactory(chatId, floor, maxSizeBytes, SettingsStore(context)),
     )
     // A download leaving the queue has usually just landed in Downloads, so the tiles are asked
     // again: the badge on it moves from the queue's figure to Downloaded.
@@ -353,8 +357,8 @@ fun MediaGridScreen(
     }
     val filtersOn = filter != com.tmplayer.data.VideoFilter.All || !facets.isDefault
     var gridLanguages by remember(chatId) { mutableStateOf(emptyList<String>()) }
-    // One menu for the order and the Show filter, the same groups on every device. The size limits
-    // have their own "n hidden" button (sizeHidden below) and the full pair is in Settings.
+    // One menu for the order, the Show filter and the one size switch ("Hide small clips"), the
+    // same groups on every device.
     // What "Select all" and "Play random" mean, which is every video the listing has fetched so far. The bar lives
     // above the listing and cannot see inside it, so the loaded page is passed out to here.
     var listedItems by remember(chatId) { mutableStateOf<List<MediaItem>>(emptyList()) }
@@ -387,24 +391,27 @@ fun MediaGridScreen(
             filterPaused = false
             if (picked != facets) recentScope.launch { recentStore.setVideoFacets(chatId, picked) }
         },
+        // The switch reads what is applied now: off while "Show them" has the small ones up. It
+        // stays in the menu when pressed, so the remote stays on it while the grid changes behind.
+        hideSmall = SizeFilter.hidesSmallClips(floor),
+        onHideSmall = { on ->
+            if (on && showAllThisVisit && SizeFilter.hidesSmallClips(minSizeBytes)) {
+                showAllThisVisit = false
+            } else {
+                showAllThisVisit = false
+                recentScope.launch { runCatching { recentStore.setHideSmallClips(on) } }
+            }
+        },
+        customLimits = if (SizeFilter.hasCustomLimits(minSizeBytes, maxSizeBytes)) SizeFilter.describe(minSizeBytes, maxSizeBytes) else null,
+        onResetLimits = {
+            showAllThisVisit = false
+            recentScope.launch { runCatching { recentStore.resetSizeLimits() } }
+        },
     )
-    // Videos outside the size limits, said by an "n hidden" button for as long as the chat is open
-    // and changed from there (SizeQuickSheet). A search ignores the limits, so it hides nothing.
+    // Small videos left out by "Hide small clips", said by the row that ends the grid and, for a
+    // chat with nothing else, by the empty state. A search ignores the floor, so it hides nothing.
     val sizeHidden by viewModel.sizeHidden.collectAsStateWithLifecycle()
     val shownHidden = if (query.isBlank()) sizeHidden else 0
-    var sizePicking by remember { mutableStateOf(false) }
-    if (sizePicking) {
-        SizeQuickSheet(
-            current = minSizeBytes,
-            max = maxSizeBytes,
-            hidden = shownHidden,
-            onPick = { picked ->
-                sizePicking = false
-                if (picked != minSizeBytes) recentScope.launch { runCatching { recentStore.setMinSizeBytes(picked) } }
-            },
-            onDismiss = { sizePicking = false },
-        )
-    }
     // A search for the developer phrase turns on the hidden name check in Settings instead.
     val submit: () -> Unit = {
         if (query.trim().equals(com.tmplayer.data.DEVELOPER_PHRASE, ignoreCase = true)) {
@@ -599,6 +606,7 @@ fun MediaGridScreen(
                 viewModel.act(action)
                 // The search across every chat lives with the chat list: back there, where it opens.
                 if (action == com.tmplayer.ui.components.StateAction.SearchAllChats) onBack()
+                if (action == com.tmplayer.ui.components.StateAction.ShowSmall) showAllThisVisit = true
             },
         ) { list ->
             // On a phone the column count follows the width, which follows the orientation.
@@ -911,6 +919,8 @@ fun MediaGridScreen(
                     if (!list.loadingMore && feed.isNotEmpty()) {
                         searchNoteItem(list.searchNote, if (list.canSearchDeeper) viewModel::searchDeeper else null)
                     }
+                    // Small videos left out by "Hide small clips": said where the chat ends, with Show them.
+                    smallHiddenItem(shownHidden, exact = list.endReached, onShow = { showAllThisVisit = true })
                     // The chat's compressed files named like videos, greyed, each with why (U10).
                     archiveItems(
                         list.archives,
@@ -949,6 +959,8 @@ fun MediaGridScreen(
                             scope.launch { queueSeason(context, settings, request) { chatTitle }?.let(onOfflineAction) }
                         },
                         chatTitle = chatTitle,
+                        // The search across every chat lives with the chat list: back there, where it opens.
+                        onSearchOpened = onBack,
                     )
                 }
 
@@ -1143,8 +1155,6 @@ fun MediaGridScreen(
                 VideoMenuPopover(open = sorting, anchor = anchor, state = menu, onDismiss = { sorting = false })
             },
             filtered = filtersOn,
-            sizeHidden = shownHidden,
-            onSizeHidden = { sizePicking = true },
             topicTabs = topicBar?.let { bar ->
                 { TopicTabs(bar, viewModel::selectTopic, Modifier.padding(vertical = 6.dp), edge = edge) }
             },
@@ -1208,8 +1218,6 @@ fun MediaGridScreen(
                     onClearRecent = clearRecent,
                     onSort = { sorting = true },
                     filtered = filtersOn,
-                    sizeHidden = shownHidden,
-                    onSizeHidden = { sizePicking = true },
                     onChatInfo = { chatInfoOpen = true },
                     onTyping = { typing = it },
                 )
@@ -1289,10 +1297,6 @@ internal fun TouchMediaScaffold(
     sortPopover: (@Composable (anchor: PopoverAnchor) -> Unit)? = null,
     /** A filter is on: the Sort button is drawn in the accent, so the filtered state shows from the bar. */
     filtered: Boolean = false,
-    /** Videos the size limits keep out of this chat, for the "n hidden" button; 0 leaves it out. */
-    sizeHidden: Int = 0,
-    /** Opens the quick size picker ([SizeQuickSheet]) from that button. */
-    onSizeHidden: () -> Unit = {},
     /** The topic row of a group with topics, under the title. Null for every other chat. */
     topicTabs: (@Composable () -> Unit)? = null,
     /** Opens with the search already showing, for the screenshot fixture. */
@@ -1464,16 +1468,6 @@ internal fun TouchMediaScaffold(
                         // The star pops as it fills and dips as it empties.
                         glyph = { StarIcon(isFavorite, TmIcons.Star, TmIcons.StarOutline, on = Tone.accent, off = Tone.text) },
                     )
-                    // Says that the size limits hide some, and changes them, from the chat itself.
-                    if (sizeHidden > 0) {
-                        FloatingBarIcon(
-                            TmIcons.FilterHorizontal,
-                            s.gridSizeHiddenLabel(sizeHidden),
-                            onSizeHidden,
-                            tint = Tone.accent,
-                            caption = s.gridSizeHidden(sizeHidden),
-                        )
-                    }
                     // Search and Sort at the end, Sort last, where the thumb reaches first.
                     FloatingBarIcon(TmIcons.Search, s.gridSearchThisChat, { searching = true }, caption = caption(s.commonSearch))
                     onSort?.let {
@@ -1605,10 +1599,6 @@ internal fun Header(
     onSort: (() -> Unit)? = null,
     /** A filter is on: the Sort pill's glyph is drawn in the accent. */
     filtered: Boolean = false,
-    /** Videos the size limits keep out of this chat, for the "n hidden" pill; 0 leaves it out. */
-    sizeHidden: Int = 0,
-    /** Opens the quick size picker ([SizeQuickSheet]) from that pill. */
-    onSizeHidden: () -> Unit = {},
     /** Opens the chat's info panel, from a button beside its name; null leaves it out. */
     onChatInfo: (() -> Unit)? = null,
     /** Told whether the search field is being typed into (its text field holds the focus). */
@@ -1663,13 +1653,6 @@ internal fun Header(
         }
         Spacer(Modifier.height(12.dp))
         val searchField = remember { FocusRequester() }
-        var sizePillFocused by remember { mutableStateOf(false) }
-        LaunchedEffect(sizeHidden > 0) {
-            if (sizeHidden == 0 && sizePillFocused) {
-                sizePillFocused = false
-                runCatching { searchField.requestFocus() }
-            }
-        }
         // The recent searches belong to the search, so they are shown only while the remote is up
         // here with it: down in the grid they would cost a row of posters for nothing.
         var headerFocused by remember { mutableStateOf(false) }
@@ -1713,13 +1696,6 @@ internal fun Header(
                 starred = isFavorite,
                 onClick = onToggleFavorite,
             )
-            if (sizeHidden > 0) {
-                // Labelled, as the one pill here that says something rather than does it. When a
-                // new limit takes it away while it has the focus, the search field takes it.
-                Box(Modifier.onFocusChanged { sizePillFocused = it.hasFocus }) {
-                    Pill(s.gridSizeHidden(sizeHidden), TmIcons.FilterHorizontal, tintWhenIdle = Tone.accent, onClick = onSizeHidden)
-                }
-            }
             onSort?.let { Pill(if (filtered) s.gridFilterOn else s.gridSort, TmIcons.Sort, tintWhenIdle = if (filtered) Tone.accent else Tone.text, showLabel = false, onClick = it) }
             // Telegram pushes new messages into TDLib's database, but this grid was built from a
             // search that ran when it opened, so a video posted since then needs a fresh search.
@@ -1802,6 +1778,15 @@ private fun TouchRecentSearches(
 }
 
 /**
+ * True from a font 1.3 times the normal: a phone's bar of words and buttons no longer fits side by
+ * side, and the actions drop their words (selection bars, [SelectionBar]).
+ */
+@Composable
+internal fun rememberLargeFont(): Boolean = androidx.compose.ui.platform.LocalDensity.current.fontScale >= LARGE_FONT_SCALE
+
+private const val LARGE_FONT_SCALE = 1.3f
+
+/**
  * What is on offer while videos are being ticked, on the two devices this screen runs on.
  *
  * A phone gets the contextual app bar it already knows: a cross where the back arrow was, the count
@@ -1811,7 +1796,7 @@ private fun TouchRecentSearches(
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SelectionBar(
+internal fun SelectionBar(
     count: Int,
     /** Null while nothing ticked may be saved, which leaves the bar without a Download. */
     onDownload: (() -> Unit)?,
@@ -1824,6 +1809,7 @@ private fun SelectionBar(
 
     if (isTouch()) {
         // At the foot, where the sticky bar was; Close is the round button at the top start.
+        val largeFont = rememberLargeFont()
         StickyActionBar(compact = rememberCompactChrome(), fill = true) {
             M3Text(
                 label,
@@ -1832,6 +1818,14 @@ private fun SelectionBar(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f).padding(start = 14.dp),
             )
+            if (largeFont) {
+                // At a large font the words would push the count out of the bar, and the count is
+                // what the viewer needs to see: the two actions shrink to icons, named for a screen
+                // reader and in a tooltip.
+                FloatingBarIcon(TmIcons.Check, s.gridSelectAll, onSelectAll)
+                if (onDownload != null) FloatingBarIcon(TmIcons.Download, s.gridDownloadSelected, onDownload, enabled = count > 0)
+                return@StickyActionBar
+            }
             TextButton(onClick = onSelectAll) { M3Text(s.gridSelectAll, maxLines = 1) }
             // Words, not a bare arrow: this is the one control on the bar that acts on the
             // ticked videos, and a corner glyph would say nothing about what it starts.
@@ -2031,7 +2025,7 @@ private fun SponsoredButton(label: String, primary: Boolean, onClick: () -> Unit
     val focused by interactions.collectIsFocusedAsState()
     val background by animateColorAsState(
         targetValue = if (focused) Color.White else if (primary) Tone.accent else Tone.surface,
-        animationSpec = tween(140),
+        animationSpec = Motion.standard(Motion.Fast),
         label = "sponsoredButton",
     )
     Text(
@@ -2068,7 +2062,7 @@ private fun Pill(
     val focused by interactions.collectIsFocusedAsState()
     val background by animateColorAsState(
         targetValue = if (focused) Tone.focusFill else if (plain) Color.Transparent else Tone.surfaceHigh,
-        animationSpec = tween(140),
+        animationSpec = Motion.standard(Motion.Fast),
         label = "pill",
     )
     val foreground = if (focused) Tone.onFocusFill else tintWhenIdle
@@ -2195,6 +2189,8 @@ internal fun MediaCard(
     title: String? = null,
     /** The line of facts in place of the file's own (Home's New episodes row: the chat, quality and size). */
     meta: (@Composable (ink: androidx.compose.ui.graphics.ColorProducer) -> Unit)? = null,
+    /** Offline Home (R4): the card cannot play with no line, so it is dimmed and says "Needs internet". */
+    needsInternet: Boolean = false,
 ) {
     // This video's correction alone, from the screen's one collector ([LocalTileShared]).
     val renamed = com.tmplayer.ui.components.rememberCorrection(item.id)?.title
@@ -2207,6 +2203,7 @@ internal fun MediaCard(
         dense = dense,
         poster = poster,
         selected = selected,
+        needsInternet = needsInternet,
         // Every video card, in a chat's grid, Home and search: its stream warmed on focus or press.
         modifier = modifier.then(Modifier.warmUpOnIntent(item)),
         meta = meta ?: { ink -> MetaLine(item, watched, ink, finished = finished, poster = poster) },
@@ -2255,6 +2252,8 @@ internal fun VideoTile(
     meta: (@Composable (ink: androidx.compose.ui.graphics.ColorProducer) -> Unit)? = null,
     /** False for a card that writes its name on the art (Home's Continue watching), keeping only [meta] under it. */
     showTitle: Boolean = true,
+    /** Offline Home (R4): dimmed with "Needs internet" over the art; still focusable and pressable. */
+    needsInternet: Boolean = false,
     art: @Composable BoxScope.() -> Unit,
 ) {
     val touch = isTouch()
@@ -2306,9 +2305,11 @@ internal fun VideoTile(
         // on every tile in view.
         ring = Modifier.focusDrawn(focusedState, accent, shape)
     }
+    val needsInternetLabel = LocalStrings.current.homeNeedsInternet
     Column(
         modifier
             .fillMaxWidth()
+            .needsInternetSemantics(needsInternet, needsInternetLabel)
             .then(
                 if (touch) {
                     // The ripple is drawn on the art below rather than across the whole column.
@@ -2340,7 +2341,10 @@ internal fun VideoTile(
                 .then(if (touch) Modifier.indication(interactions, LocalIndication.current) else Modifier)
                 .then(ring)
                 .selectionEdge(selected, shape),
-            content = art,
+            content = {
+                art()
+                if (needsInternet) NeedsInternetCover()
+            },
         )
         Spacer(Modifier.height(if (touch) 8.dp else 10.dp))
         // Two lines, and always two where a row of tiles sits under this one, so the pictures
@@ -2646,7 +2650,7 @@ private fun MediaArt(
                     OfflineDownloads.Stage.Running ->
                         waiting.fraction?.let { s.formatter.percent(it.toDouble()) } ?: s.gridStageDownloading
                     OfflineDownloads.Stage.Queued -> s.gridStageQueued
-                    OfflineDownloads.Stage.Paused -> s.gridStagePaused
+                    OfflineDownloads.Stage.Paused -> s.gridStagePausedLong
                     OfflineDownloads.Stage.Offline, OfflineDownloads.Stage.Yielding -> s.gridStageWaiting
                     OfflineDownloads.Stage.NoWifi -> s.gridStageNoWifi
                     OfflineDownloads.Stage.Moving -> s.gridStageMoving
@@ -2663,13 +2667,14 @@ private fun MediaArt(
             )
             finished -> WatchedBadge(corner)
         }
-        // The top end corner: the caller's own mark, else on a poster the quality the name
-        // states, which a film's card shows where a video's carries it in its line of facts.
-        val quality = item.qualityTags.firstOrNull()
+        // The top end corner: the caller's own mark, else on a poster the resolution (720p and up,
+        // from the stated size, else the name: FormatFacts.tileTag), which a film's card shows
+        // where a video's carries it in its line of facts.
+        val quality = remember(item.width, item.height, item.fileName, item.title) { com.tmplayer.data.FormatFacts.tileTag(item) }
         when {
             badge != null -> Box(Modifier.align(Alignment.TopEnd).padding(inset)) { badge() }
             // Only on its own: two chips across a narrow poster would meet in the middle.
-            poster && !thumb && quality != null && waiting == null && !item.onDevice && !finished -> TileBadge(quality, Modifier.align(Alignment.TopEnd).padding(inset))
+            poster && !thumb && quality != null && waiting == null && !item.onDevice && !finished -> com.tmplayer.ui.components.FormatBadge(quality, Modifier.align(Alignment.TopEnd).padding(inset), onArt = true)
         }
 
         // Where playback stopped, as a line laid on the foot of the picture. Only with a saved

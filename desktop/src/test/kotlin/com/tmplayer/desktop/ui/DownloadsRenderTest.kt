@@ -26,8 +26,8 @@ import java.nio.file.Files
 /**
  * Draws the Downloads page off screen at the window sizes people use, light and dark, with a video
  * coming down, one waiting, a show with three episodes, videos on their own, a file gone from the
- * folder and recently played videos, under the floating bar as the window shows it. Once with the
- * page at its top and once landed on Recently played, unfolded. With TMPLAYER_SHOTS=<dir> in the
+ * folder and auto-saved videos in the one list, under the floating bar as the window shows it.
+ * With TMPLAYER_SHOTS=<dir> in the
  * environment the frames are written there as PNGs for a person to look at.
  */
 class DownloadsRenderTest {
@@ -98,10 +98,8 @@ class DownloadsRenderTest {
         try {
             for ((w, h) in SIZES) for (dark in listOf(true, false)) {
                 val theme = if (dark) "dark" else "light"
+                // One list, with the auto-saved videos among the downloads and tagged (R2).
                 save("downloads-${w}x$h-$theme.png", render(w, h, dark) { DownloadsPage(shell, folder) })
-                shell.downloadsOpenRecent = true
-                save("downloads-${w}x$h-$theme-recent.png", render(w, h, dark) { DownloadsPage(shell, folder) })
-                shell.downloadsOpenRecent = false
             }
         } finally {
             OfflineDownloads.forget(41)

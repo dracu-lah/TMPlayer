@@ -92,6 +92,8 @@ export function itemOf(
     name?: string,
     /** The album's photo message, when the rules say it is this video's picture (an uploader's own cover is not read here, so a photo beats Telegram's frame). */
     albumPhoto?: Message | null,
+    /** The poster tile's resolution pill (the rules' tileTag), or null for none. */
+    tile?: string | null,
 ): VideoItem | null {
     const m = msg.media
     if (!m || (m.type !== 'video' && m.type !== 'document')) return null
@@ -127,6 +129,7 @@ export function itemOf(
         ...alternatives(msg, raw?.media),
         canBeSaved: !raw?.noforwards && !chatProtects(msg),
         poster: poster ?? null,
+        ...(tile ? { tile } : {}),
     }
 }
 

@@ -3,7 +3,7 @@ package com.tmplayer.data
 /**
  * One chat as the picker's Recommended section weighs it: its id, how far down the chat list it
  * sits ([order], Telegram's own recency), and how many videos it holds, or null while that is not
- * known or could not be counted.
+ * known or could not be counted. The figure only ranks: no screen shows it.
  */
 data class CountedChat(val id: Long, val order: Int, val videos: Int?, val savedMessages: Boolean = false)
 
@@ -12,8 +12,10 @@ data class CountedChat(val id: Long, val order: Int, val videos: Int?, val saved
  *
  * The numbers are here, in one place, rather than spread through the screen, so they can be moved
  * after seeing real accounts: [MIN_VIDEOS] is the line between a chat that is a video library and
- * a chat where a few clips were shared, and [MAX_PRETICKED] caps [Suggestion.ticked] (the old pre-tick, kept so
- * the cap stays measured).
+ * a chat where a few clips were shared, and [MAX_BAND] caps the band.
+ *
+ * Telegram's count is evidence for the ranking and never a figure to print (it can be wrong), so
+ * the screens say why in words ("Has many videos") and show no number.
  *
  * An account where nothing reaches the line (a new sign in, a viewer whose chats are all chatter)
  * must not meet an empty section, so the [FALLBACK] fullest chats are offered instead, unticked:
@@ -24,25 +26,19 @@ object ChatSuggestions {
     /** Videos a chat needs before it is recommended. */
     const val MIN_VIDEOS = 20
 
-    /**
-     * At most this many of [Suggestion.ids] are in [Suggestion.ticked], fullest first. The picker
-     * does not tick them for the viewer (user, 2026-11-04): it lists them under Recommended and
-     * offers one button that adds the band, which is an act of the viewer's own.
-     */
-    const val MAX_PRETICKED = 30
+    /** At most this many chats are recommended: the band is a short list, the rest is the list below it. */
+    const val MAX_BAND = 30
 
     /** Offered when nothing reaches [MIN_VIDEOS], and never ticked. */
     const val FALLBACK = 5
 
     /**
      * @param ids the recommended chats, in the order the section lists them.
-     * @param ticked the fullest of [ids], always a subset of [ids]. Not applied by the pickers: nothing is ticked for the viewer.
      * @param belowBar true when nothing reached [MIN_VIDEOS] and these are the fullest chats
-     *   instead, which is what the section's foot says out loud.
+     *   instead, which is what the section's note says out loud.
      */
     data class Suggestion(
         val ids: List<Long> = emptyList(),
-        val ticked: Set<Long> = emptySet(),
         val belowBar: Boolean = false,
     )
 
@@ -68,35 +64,38 @@ object ChatSuggestions {
             // Shown so the section is never empty, unticked because none of them clears the bar.
             return Suggestion(ids = counted.take(FALLBACK).map { it.id }, belowBar = true)
         }
-        val ids = over.map { it.id }
-        return Suggestion(ids = ids, ticked = ids.take(MAX_PRETICKED).toSet())
+        return Suggestion(ids = over.take(MAX_BAND).map { it.id })
     }
-
-    /** Above this a row says "many": an exact figure stops meaning anything, and TDLib's is stale anyway. */
-    const val MANY = 999
 
     /**
-     * How a count reads on a row: the number up to [MANY], then "many", and nothing at all when
-     * it could not be counted. The words are the screen's; this only decides which of the four it
-     * is, so the rule can be tested without a screen, and the web app can share it.
+     * The band after more counts came in, over [chats] (everything counted so far).
+     *
+     * While [settled] is false (the viewer has not ticked, starred, searched or filtered) the band
+     * is simply ranked again, so a video channel found late takes its place at the top. Once the
+     * viewer has touched the list no row moves under a finger: chats that qualify later are added at
+     * the end, and once the band is full they take the place of the last rows that have been
+     * outranked (never one in [pinned], the chats the viewer ticked), so a channel of 20,000 videos
+     * found late is not shut out by a full band. The one exception is the fallback band (nothing
+     * had reached the bar), which a real recommendation replaces, since it only said "nothing yet".
      */
-    fun shape(count: ChatCount?): CountShape = when {
-        count == null -> CountShape.Counting
-        count is ChatCount.Known && count.videos > MANY -> CountShape.Many
-        count is ChatCount.Known -> CountShape.Exact(count.videos)
-        else -> CountShape.Unknown
-    }
-
-    sealed interface CountShape {
-        /** No answer yet: the row keeps its placeholder, and its height does not change. */
-        data object Counting : CountShape
-
-        data class Exact(val videos: Int) : CountShape
-
-        /** Past the point where an exact figure means anything. */
-        data object Many : CountShape
-
-        /** Telegram would not count it: the row says so and offers another try. */
-        data object Unknown : CountShape
+    fun refine(current: Suggestion, chats: List<CountedChat>, settled: Boolean, pinned: Set<Long> = emptySet()): Suggestion {
+        val ranked = recommend(chats)
+        if (ranked.ids.isEmpty()) return current
+        if (!settled || current.ids.isEmpty()) return ranked
+        if (ranked.belowBar) return current
+        if (current.belowBar) return ranked
+        val have = current.ids.toHashSet()
+        val more = ranked.ids.filter { it !in have }
+        if (more.isEmpty()) return current
+        val out = current.ids.toMutableList()
+        var next = 0
+        while (out.size < MAX_BAND && next < more.size) out += more[next++]
+        if (next < more.size) {
+            val stillRanked = ranked.ids.toHashSet()
+            // The last rows that were outranked, filled front to back so the fuller chat sits higher.
+            val slots = out.indices.filter { out[it] !in stillRanked && out[it] !in pinned }.takeLast(more.size - next)
+            for (slot in slots) out[slot] = more[next++]
+        }
+        return if (out == current.ids) current else Suggestion(ids = out)
     }
 }

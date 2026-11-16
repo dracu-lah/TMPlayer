@@ -185,6 +185,34 @@ class WebRulesTest {
     }
 
     @Test
+    fun `a poster tile wears one resolution pill from 720p up and nothing for SD or an unknown size`() {
+        val videos = screen(
+            arrayOf(
+                raw(1, "Clap.2022.1080p.BluRay.x264.mkv"),
+                raw(2, "Clap.2022.2160p.HDR.HEVC.mkv"),
+                raw(3, "clap.mkv"),
+                raw(4, "Clap.2022.480p.mkv"),
+            ),
+        ).videos
+        assertEquals("1080p", tileTag(videos[0]))
+        assertEquals("4K", tileTag(videos[1]))
+        assertNull(tileTag(videos[2]))
+        assertNull(tileTag(videos[3]))
+    }
+
+    @Test
+    fun `a fansub name asks AniList first and a plain film does not`() {
+        val videos = screen(
+            arrayOf(
+                raw(1, "[Group] Harbour Notes - 12 [1080p].mkv"),
+                raw(2, "Clap.2022.1080p.mkv"),
+            ),
+        ).videos
+        assertTrue(posterAsk(videos[0])!!.anime)
+        assertFalse(posterAsk(videos[1])!!.anime)
+    }
+
+    @Test
     fun `fuzzy search forgives a typo and ranks the whole phrase first`() {
         val texts = arrayOf("Quiet Valley", "Harbour Notes", "Harbor Notes Extra")
         assertContentEquals(arrayOf(1, 2), rank(texts, "harbour notes"))
@@ -200,12 +228,18 @@ class WebRulesTest {
         assertEquals(60_000.0, resumeKept(60_000.0, 57_200.0, 3_000.0))
         assertEquals(3_000.0, rewindSetting(7.0))
         val limits = sizeLimits()
-        assertEquals(400 * mb, limits.defaultMin)
-        assertEquals(listOf(0.0, 50 * mb, 100 * mb, 200 * mb, 400 * mb, 1024 * mb), limits.quick.toList())
-        assertEquals(100 * mb, sizeStep(50 * mb, 1))
-        assertEquals(0.05, sizeFraction(50 * mb), 0.0001)
-        assertEquals(limits.ceiling, sizeAt(1.0))
-        assertTrue(sizeMatches(0.0, limits.defaultMin, limits.ceiling))
+        // Every video by default; the clip switch is 50 MB; the old 400 MB default reads as unset.
+        assertEquals(0.0, limits.defaultMin)
+        assertEquals(50 * mb, limits.clipMin)
+        assertEquals(50 * mb, limits.homeMin)
+        assertEquals(0.0, sizeEffectiveMin(400 * mb))
+        assertEquals(0.0, sizeEffectiveMin(null))
+        assertEquals(50 * mb, sizeEffectiveMin(50 * mb))
+        assertEquals(700 * mb, sizeEffectiveMin(700 * mb))
+        assertEquals(700 * mb, sizeHomeMin(700 * mb))
+        assertEquals(50 * mb, sizeHomeMin(0.0))
+        assertTrue(sizeMatches(0.0, limits.clipMin, limits.ceiling))
+        assertTrue(!sizeMatches(10 * mb, limits.clipMin, limits.ceiling))
     }
 
     @Test

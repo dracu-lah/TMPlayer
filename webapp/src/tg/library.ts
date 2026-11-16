@@ -176,7 +176,7 @@ function absorb(r: Awaited<ReturnType<typeof rules>>, s: ChatState, messages: Me
     const added: Video[] = []
     for (const v of screened.videos) {
         const msg = byId.get(v.messageId)
-        const item = msg && itemOf(msg, v.title, r.posterAsk(v), r.continueTitle(v), v.albumPhoto && v.albumId ? s.albumPhotos.get(v.albumId) : null)
+        const item = msg && itemOf(msg, v.title, r.posterAsk(v), r.continueTitle(v), v.albumPhoto && v.albumId ? s.albumPhotos.get(v.albumId) : null, r.tileTag(v))
         if (!item) continue
         into.set(v.id, v)
         s.items.set(v.id, item)
@@ -718,7 +718,7 @@ export async function across(
     const videos: Video[] = []
     const items = new Map<string, VideoItem>()
     for (const v of r.screenAlbums(raws, photos).videos) {
-        const item = itemOf(byId.get(v.id)!, v.title, r.posterAsk(v), r.continueTitle(v), v.albumPhoto && v.albumId ? byAlbum.get(v.albumId) : null)
+        const item = itemOf(byId.get(v.id)!, v.title, r.posterAsk(v), r.continueTitle(v), v.albumPhoto && v.albumId ? byAlbum.get(v.albumId) : null, r.tileTag(v))
         if (!item || items.has(v.id)) continue
         items.set(v.id, item)
         videos.push(v)
@@ -917,7 +917,7 @@ async function loadRecent(tg: TelegramClient, s: RecentState, signal: AbortSigna
         for (const v of r.screen(raws).videos) {
             if (s.videos.size >= RECENT_MAX) break
             const msg = byId.get(v.id)
-            const item = msg && itemOf(msg, v.title, r.posterAsk(v), r.continueTitle(v))
+            const item = msg && itemOf(msg, v.title, r.posterAsk(v), r.continueTitle(v), undefined, r.tileTag(v))
             if (!item || s.videos.has(v.id)) continue
             s.videos.set(v.id, v)
             s.items.set(v.id, item)
@@ -964,7 +964,8 @@ export async function recentPage(tg: TelegramClient, view: ListView, mode: 'open
     const shown = [...st.videos.values()]
         .filter((v) => v.date >= edge && (!gate || gate.has(v.chatId)))
         .sort((a, b) => b.date - a.date || b.messageId - a.messageId)
-    const shelf = r.shelf(shown, 'Newest', view.minBytes, view.maxBytes, view.watched, view.started)
+    // The same floor as Home's row (SizeFilter.HOME_MIN), said on the page.
+    const shelf = r.shelf(shown, 'Newest', r.sizeHomeMin(view.minBytes), view.maxBytes, view.watched, view.started)
     return {
         tiles: tilesOf(shelf, st.items, view),
         hiddenBySize: shelf.hiddenBySize,
@@ -994,7 +995,7 @@ async function addMessage(tg: TelegramClient, s: ChatState, messageId: number): 
     const raw = msg && rawOf(msg, s.protected)
     if (!msg || !raw) return null
     const [v] = r.screen([raw]).videos
-    const item = v && itemOf(msg, v.title, r.posterAsk(v), r.continueTitle(v))
+    const item = v && itemOf(msg, v.title, r.posterAsk(v), r.continueTitle(v), undefined, r.tileTag(v))
     if (!v || !item) return null
     s.videos.set(v.id, v)
     s.items.set(v.id, item)
@@ -1069,11 +1070,21 @@ export async function watchInfo(tg: TelegramClient, chatId: number, messageId: n
     const item = (v: Video | null | undefined) => (v ? (s.items.get(v.id) ?? null) : null)
     const seasons = (steps.series?.seasons ?? []).map((season) => ({
         number: season.number,
+        covered: Array.from(season.covered ?? []),
         episodes: season.episodes.flatMap((e) => {
             const it = s.items.get(e.video.id)
             return it ? [{ code: e.code, name: e.video.id === id ? (steps.current?.name ?? null) : null, item: it }] : []
         }),
     }))
+    // A season, or a span, posted as one file; a season the chat holds only so is a season of the page too.
+    const packs = (steps.series?.packs ?? []).flatMap((p) => {
+        const it = s.items.get(p.video.id)
+        return it ? [{ season: p.season, seasonEnd: p.seasonEnd > p.season ? p.seasonEnd : null, item: it }] : []
+    })
+    for (const n of new Set(packs.map((p) => p.season))) {
+        if (!seasons.some((season) => season.number === n)) seasons.push({ number: n, covered: [], episodes: [] })
+    }
+    if (packs.length) seasons.sort((a, b) => a.number - b.number)
     let more: Tile[] = []
     if (!seasons.length) {
         more = arrange(s, { ...view, sort: 'Newest', query: '' })
@@ -1121,6 +1132,7 @@ export async function watchInfo(tg: TelegramClient, chatId: number, messageId: n
         next: item(steps.next) ?? around?.next ?? null,
         nextCode: steps.nextLabel?.code ?? null,
         seasons,
+        packs,
         more,
         fileName: current.fileName,
         width: current.width,

@@ -68,10 +68,21 @@ class PhoneSearchTest {
         Motion.reduced = false
     }
 
-    private fun open(start: String) {
+    /** The soft keyboard as the page asks for it: how often it was raised and how often put away. */
+    private class FakeKeyboard : androidx.compose.ui.platform.SoftwareKeyboardController {
+        var shown = 0
+        var hidden = 0
+        override fun show() { shown++ }
+        override fun hide() { hidden++ }
+    }
+
+    private val keyboard = FakeKeyboard()
+
+    private fun open(start: String, continuing: List<com.tmplayer.data.ResumeRecord> = emptyList()) {
         Motion.reduced = true
         words = start
         rule.setContent {
+            androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalSoftwareKeyboardController provides keyboard) {
             TMPlayerTheme {
                 var text by remember { mutableStateOf(TextFieldValue(start, TextRange(start.length))) }
                 // The words as the page reads them, so the test can see what Back did to the field.
@@ -86,7 +97,7 @@ class PhoneSearchTest {
                     chats = emptyList(),
                     favourites = emptySet(),
                     recentSearches = listOf("harbour lights"),
-                    continueWatching = emptyList(),
+                    continueWatching = continuing,
                     continueArt = { it.toMediaItem() },
                     progress = { null },
                     onOpenChat = {},
@@ -102,6 +113,7 @@ class PhoneSearchTest {
                     onVoice = {},
                     listState = rememberLazyListState(),
                 )
+            }
             }
         }
         rule.waitForIdle()
@@ -127,6 +139,41 @@ class PhoneSearchTest {
         rule.onNodeWithText("harbour lights").assertIsDisplayed()
         back()
         assertEquals(1, closed)
+    }
+
+    @Test
+    fun `Back that clears the words does not raise the keyboard again, the cross does`() {
+        open("harbour")
+        val before = keyboard.shown
+        back()
+        assertEquals("", words)
+        assertEquals("Back leaves the keyboard down: it was already closed when Back reached the page", before, keyboard.shown)
+        // Two Backs in all: one clears, one closes. No third, no keyboard to put away in between.
+        back()
+        assertEquals(1, closed)
+    }
+
+    @Test
+    fun `the cross keeps the keyboard up`() {
+        open("night")
+        val shownBefore = keyboard.shown
+        rule.onNodeWithContentDescription("Clear search").performClickOn()
+        assertEquals("the cross is a tap in the field, which keeps the keyboard up", shownBefore + 1, keyboard.shown)
+    }
+
+    @Test
+    fun `Continue watching on the idle search names a video as Home does, not by its file name`() {
+        val record = com.tmplayer.data.ResumeRecord(
+            chatId = 1, messageId = 2, fileId = 3,
+            title = "The.Mongoose.@ArcheMovie.2026.mp4", chatTitle = "Archive",
+            sizeBytes = 100_000_000, durationSec = 5_000, positionMs = 1_000_000, durationMs = 5_000_000, updatedAt = 1,
+        )
+        open("", continuing = listOf(record))
+        // The tile's name, with its year as Home's tiles read it, and not the file's.
+        val name = com.tmplayer.data.SeriesShelf.tileTitle(record.toMediaItem())
+        assertTrue("no dots, handle or extension in $name", '@' !in name && !name.endsWith(".mp4") && "The Mongoose" in name)
+        rule.onNodeWithText(name).assertIsDisplayed()
+        rule.onNodeWithText("The.Mongoose.@ArcheMovie.2026.mp4").assertDoesNotExist()
     }
 
     @Test

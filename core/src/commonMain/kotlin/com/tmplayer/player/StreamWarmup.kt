@@ -193,6 +193,8 @@ object StreamWarmup {
             if (!fetch(td, fileId, 0, head, heard)) return
             val bytes = readAt(td, fileId, 0, head) ?: return
             val index = StreamIndex.locate(bytes, size)
+            // Low storage mode reads a read anywhere in it as the index, whatever its size (HX79).
+            index?.let { LowStorageStreams.knowIndex(fileId, it.start, size) }
             val indexHere = index != null && fetch(td, fileId, index.start, index.length, heard)
             Logger.i(TAG, "Warmed file $fileId: head ${head / 1024} KB${index?.let { ", index ${it.length / 1024} KB at ${it.start}" } ?: ""} in ${System.currentTimeMillis() - started} ms")
             // Low storage mode: the head and the index only; the player's window does the rest.

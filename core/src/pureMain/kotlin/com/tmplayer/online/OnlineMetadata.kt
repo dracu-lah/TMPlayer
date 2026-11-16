@@ -56,11 +56,15 @@ class OnlineMetadata(
     private val region: () -> String = { MetaRules.region() },
     /** The build's OMDb key for the other sites' scores; blank, with no key of the viewer's own, asks OMDb nothing. */
     private val omdbKey: String = "",
+    /** The build's anime-skip.com client id; blank (the default until the user registers one) asks that site nothing. */
+    animeSkipClientId: String = SkipSources.ANIME_SKIP_CLIENT_ID,
 ) {
     private val userAgent = "TMPlayer/$appVersion (+https://tmplayer.org)"
     private val tmdb = TmdbApi(http, RateLimiter(TmdbApi.GAP_MS, now, sleep), userAgent)
     private val tvmaze = TvMazeApi(http, RateLimiter(TvMazeApi.GAP_MS, now, sleep), userAgent)
     private val anilist = AniListApi(http, RateLimiter(AniListApi.GAP_MS, now, sleep), userAgent)
+    private val kitsu = KitsuApi(http, RateLimiter(KitsuApi.GAP_MS, now, sleep), userAgent)
+    private val jikan = JikanApi(http, RateLimiter(JikanApi.GAP_MS, now, sleep), userAgent)
     private val omdb = OmdbApi(http, RateLimiter(OmdbApi.GAP_MS, now, sleep), userAgent)
     private val wikidata = WikidataApi(http, RateLimiter(WikidataApi.GAP_MS, now, sleep), userAgent)
     /**
@@ -76,6 +80,11 @@ class OnlineMetadata(
         RateLimiter(SkipTimesApi.ANISKIP_GAP_MS, now, sleep),
         userAgent,
     )
+    private val animeSkip = AnimeSkipApi(http, RateLimiter(AnimeSkipApi.GAP_MS, now, sleep), userAgent, animeSkipClientId, now)
+    private val idMap = IdMapApi(http, RateLimiter(IdMapApi.GAP_MS, now, sleep), userAgent)
+    private val idMaps = LruMap<String, AnimeIds>(64)
+    private var animeSkipPausedUntil = 0L
+    private var idMapPausedUntil = 0L
 
     private val locks = HashMap<String, Mutex>()
     private val locksLock = PlainLock()
@@ -94,6 +103,9 @@ class OnlineMetadata(
     fun setEnabled(value: Boolean) = store.update { it.copy(enabled = value, offByChoice = !value) }
 
     fun setSkipTimes(value: Boolean) = store.update { it.copy(skipTimes = value) }
+
+    /** What the player does at [group]'s stretches: ask, skip by itself, or leave them alone. */
+    fun setSkipMode(group: SkipGroup, mode: SkipMode) = store.update { it.copy(skipModes = it.skipModes.with(group, mode)) }
 
     /** The viewer's own TMDB key; blank goes back to the build's. A new key gets a fresh chance. */
     fun setOwnKey(key: String) = store.update { it.copy(ownKey = key.trim(), refusedKey = "", refusedAt = 0) }
@@ -345,14 +357,46 @@ class OnlineMetadata(
         return first
     }
 
+    private val linkedMemory = LruMap<String, LinkedAnswer>(MEMORY_ENTRIES)
+
+    /** What `find` said for an IMDb id, kept for this run (a miss too, so a wrong link is asked once). */
+    private class LinkedAnswer(val title: TmdbFound?)
+
+    /** The TMDB title an IMDb id names, asked once per id per run; null for none, offline or refused. */
+    private suspend fun linkedTitle(key: String, imdbId: String): TmdbFound? {
+        linkedMemory[imdbId]?.let { return it.title }
+        val reply = retrying { tmdb.findByImdb(key, imdbId) }
+        if (reply !is MetaReply.Ok) return null
+        linkedMemory[imdbId] = LinkedAnswer(reply.value)
+        return reply.value
+    }
+
     private suspend fun tmdbLookup(key: String, query: MetaQuery, lang: String): Outcome {
         var film = query.kind == MetaKind.Film
+        // The title an IMDb id in the post's words names (TS): found once per id, and a miss or a
+        // failure leaves the title guess to run below.
+        val linked = if (query.tmdbId == null) query.imdbId?.let { linkedTitle(key, it) } else null
+        if (linked != null) film = linked.film
+        var forcedId = query.tmdbId?.toString() ?: linked?.id
+        var forcedCandidate: MetaCandidate? = null
+        if (forcedId != null) {
+            val reply = retrying { if (film) tmdb.movie(key, forcedId!!, lang) else tmdb.tv(key, forcedId!!, lang) }
+            if (query.fromLink && reply is MetaReply.Failed && reply.code == 404) {
+                // A link to a title TMDB does not have: the title guess runs.
+                forcedId = null
+            } else {
+                trouble(MetaProvider.Tmdb, reply, key)?.let { return it }
+                forcedCandidate = (reply as MetaReply.Ok).value
+            }
+            // A link that the file's own year or episode contradicts is another title's: not taken.
+            if (query.fromLink && forcedCandidate != null && !linkAgrees(query, forcedCandidate, film)) forcedCandidate = null
+            if (forcedCandidate == null) film = query.episode == null && query.season == null
+        }
+        val viaLink = query.fromLink && forcedCandidate != null
         // The match as the English search gave it, when that is where it was found.
         var inEnglish: MetaCandidate? = null
-        var candidate: MetaCandidate = if (query.tmdbId != null) {
-            val reply = retrying { if (film) tmdb.movie(key, query.tmdbId.toString(), lang) else tmdb.tv(key, query.tmdbId.toString(), lang) }
-            trouble(MetaProvider.Tmdb, reply, key)?.let { return it }
-            (reply as MetaReply.Ok).value
+        var candidate: MetaCandidate = if (forcedCandidate != null) {
+            forcedCandidate
         } else {
             // In another language the titles TMDB answers with are that language's, or the original
             // where nobody translated it ("Le Fabuleux Destin d'Amélie Poulain" in Arabic), and a
@@ -401,7 +445,7 @@ class OnlineMetadata(
                 )
             } else if (inEnglish != null) {
                 // Not localized after all: what is shown came from the English search.
-                return Outcome.Found(info(query, candidate, film, poster, candidate.overview, ENGLISH))
+                return Outcome.Found(info(query, candidate, film, poster, candidate.overview, ENGLISH, viaLink))
             }
         }
         var overview = candidate.overview
@@ -414,10 +458,24 @@ class OnlineMetadata(
                 overviewLang = ENGLISH
             }
         }
-        return Outcome.Found(info(query, candidate, film, poster, overview, overviewLang))
+        return Outcome.Found(info(query, candidate, film, poster, overview, overviewLang, viaLink))
     }
 
-    private fun info(query: MetaQuery, candidate: MetaCandidate, film: Boolean, poster: String?, overview: String, overviewLang: String) = MetaInfo(
+    /**
+     * Whether the title a link names can be the video's: not a film for a file that names an
+     * episode, and not a title from another year than the file's own (a year one off is allowed,
+     * and a later season's year on an older show). Nothing else is compared: a link is the
+     * poster's word for a file whose name says nothing ("clip_720p").
+     */
+    private fun linkAgrees(query: MetaQuery, candidate: MetaCandidate, film: Boolean): Boolean {
+        if (film && query.episode != null) return false
+        val wanted = query.year
+        val year = candidate.year
+        if (wanted != null && year != null && kotlin.math.abs(wanted - year) > 1 && !(!film && wanted > year)) return false
+        return true
+    }
+
+    private fun info(query: MetaQuery, candidate: MetaCandidate, film: Boolean, poster: String?, overview: String, overviewLang: String, linked: Boolean = false) = MetaInfo(
         provider = MetaProvider.Tmdb,
         id = candidate.id,
         kind = if (film) MetaKind.Film else MetaKind.Show,
@@ -427,6 +485,7 @@ class OnlineMetadata(
         posterUrl = poster,
         backdropUrl = candidate.backdropUrl,
         language = overviewLang,
+        linked = linked,
     )
 
     private sealed interface SearchOutcome {
@@ -495,6 +554,7 @@ class OnlineMetadata(
                 posterUrl = found.posterUrl,
                 backdropUrl = found.backdropUrl,
                 language = ENGLISH,
+                aliases = found.names.filter { it.isNotBlank() }.distinct().take(ALIASES),
             ),
         )
     }
@@ -510,7 +570,11 @@ class OnlineMetadata(
                 if (!tmdbUsable(s)) return null to false
                 val key = activeKey(s)
                 val reply = retrying { tmdb.episode(key, show.id, season, number, lang) }
-                if (reply is MetaReply.Failed && reply.code == 404) return null to true
+                if (reply is MetaReply.Failed && reply.code == 404) {
+                    // A number no season of a TMDB show reaches is an anime counted straight through
+                    // ("Show 123.mkv" with nothing to say so): the same title asked of AniList finds the run.
+                    return (if (number > ABSOLUTE_FROM) absoluteFallback(query, season, number) else null) to true
+                }
                 trouble(MetaProvider.Tmdb, reply, key)?.let { return null to false }
                 var episode = (reply as MetaReply.Ok).value
                 if (episode.overview.isBlank() && lang != ENGLISH) {
@@ -529,8 +593,9 @@ class OnlineMetadata(
                 trouble(MetaProvider.TvMaze, reply)?.let { return null to false }
                 (reply as MetaReply.Ok).value to true
             }
-            // AniList lists no episodes; the show's own words stand for each one.
-            MetaProvider.AniList -> null to true
+            // AniList lists no episodes: the guide (TMDB's groups and seasons, Kitsu, Jikan, AniList's
+            // streaming list) names this one by its absolute number, or the show's words stand for it.
+            MetaProvider.AniList -> animeEpisodeFor(show, season, number, query.title)
         }
     }
 
@@ -567,7 +632,8 @@ class OnlineMetadata(
         val settings = store.now
         if (!settings.enabled || !settings.skipTimes) return emptyList()
         val query = item.metaQuery ?: return emptyList()
-        val info = (lookup(query) as? MetaResult.Found)?.info ?: return emptyList()
+        // The show alone: the skip lookup needs its ids, not this episode's name, so it does not wake the episode guide.
+        val info = (lookup(query.showOnly()) as? MetaResult.Found)?.info ?: return emptyList()
         val show = info.kind == MetaKind.Show
         if (show && query.episode == null) return emptyList()
         val season = if (show) query.season ?: 1 else null
@@ -577,16 +643,28 @@ class OnlineMetadata(
         return lockFor(key).withLock {
             cache.skipTimes(key)?.let { return@withLock it }
             val reply = when (info.provider) {
-                MetaProvider.Tmdb -> skipApi.theIntroDb(info.id, null, null, season, episode)
+                MetaProvider.Tmdb -> {
+                    val first = skipApi.theIntroDb(info.id, null, null, season, episode)
+                    // TheIntroDB keys some titles by IMDb or TheTVDB id only: the ids TMDB lists are the second try.
+                    val ids = if (first is MetaReply.Ok && first.value.isEmpty()) providerExtras(info) else null
+                    if (ids == null) {
+                        first
+                    } else {
+                        // IMDb first, then TheTVDB: it keys by one id at a time.
+                        var reply: MetaReply<List<SkipSegment>> = first
+                        if (ids.imdbId != null) reply = skipApi.theIntroDb(null, ids.imdbId, null, season, episode)
+                        if (ids.tvdbId != null && (reply as? MetaReply.Ok)?.value?.isEmpty() == true) {
+                            reply = skipApi.theIntroDb(null, null, ids.tvdbId, season, episode)
+                        }
+                        reply
+                    }
+                }
                 MetaProvider.TvMaze -> {
                     val ids = providerExtras(info) ?: return@withLock emptyList()
                     if (ids.imdbId == null && ids.tvdbId == null) return@withLock emptyList()
                     skipApi.theIntroDb(null, ids.imdbId, ids.tvdbId, season, episode)
                 }
-                MetaProvider.AniList -> {
-                    val mal = providerExtras(info)?.malId ?: return@withLock emptyList()
-                    skipApi.aniSkip(mal, episode ?: 1, item.durationSec.coerceAtLeast(0))
-                }
+                MetaProvider.AniList -> animeSkips(info, episode ?: 1, item.durationSec.coerceAtLeast(0))
             }
             // Only a real answer is kept; a failure is asked about again next time.
             var segments = (reply as? MetaReply.Ok)?.value ?: return@withLock emptyList()
@@ -604,15 +682,59 @@ class OnlineMetadata(
             if (segments.isEmpty() && show && info.provider != MetaProvider.AniList) {
                 val anime = (lookup(query.showOnly().copy(anime = true)) as? MetaResult.Found)?.info
                     ?.takeIf { it.provider == MetaProvider.AniList }
-                val mal = anime?.let { providerExtras(it)?.malId }
-                if (mal != null) {
-                    val aniReply = skipApi.aniSkip(mal, episode ?: 1, item.durationSec.coerceAtLeast(0))
+                if (anime != null) {
+                    val aniReply = animeSkips(anime, episode ?: 1, item.durationSec.coerceAtLeast(0))
                     segments = (aniReply as? MetaReply.Ok)?.value ?: return@withLock emptyList()
                 }
             }
             cache.putSkipTimes(key, segments)
             segments
         }
+    }
+
+    /**
+     * The anime databases for AniList title [anime]'s episode: AniSkip by MyAnimeList id (AniList's
+     * own, else the id mapping service's when AniList has none), then anime-skip.com by AniList id
+     * when AniSkip has nothing. Ok with an empty list only when every source asked answered; a
+     * source that is paused (it said to wait) or failed makes the whole answer a failure, which is
+     * not kept, so it is asked again later rather than remembered as "nobody timed this".
+     */
+    private suspend fun animeSkips(anime: MetaInfo, episode: Int, lengthSec: Int): MetaReply<List<SkipSegment>> {
+        var complete = true
+        var mal = providerExtras(anime)?.malId
+        if (mal == null) {
+            var ids = idMaps[anime.id]
+            if (ids == null) {
+                if (now() < idMapPausedUntil) {
+                    complete = false
+                } else {
+                    when (val reply = idMap.forAniList(anime.id)) {
+                        is MetaReply.Ok -> { ids = reply.value; idMaps[anime.id] = reply.value }
+                        is MetaReply.Throttled -> { idMapPausedUntil = now() + reply.retryAfterMs; complete = false }
+                        else -> complete = false
+                    }
+                }
+            }
+            mal = ids?.mal
+        }
+        if (mal != null) {
+            when (val reply = skipApi.aniSkip(mal, episode, lengthSec)) {
+                is MetaReply.Ok -> if (reply.value.isNotEmpty()) return reply
+                else -> complete = false
+            }
+        }
+        if (animeSkip.configured) {
+            if (now() < animeSkipPausedUntil) {
+                complete = false
+            } else {
+                when (val reply = animeSkip.segments(anime.id, episode, lengthSec)) {
+                    is MetaReply.Ok -> if (reply.value.isNotEmpty()) return reply
+                    is MetaReply.Throttled -> { animeSkipPausedUntil = now() + reply.retryAfterMs; complete = false }
+                    else -> complete = false
+                }
+            }
+        }
+        return if (complete) MetaReply.Ok(emptyList()) else MetaReply.Failed(0)
     }
 
     /**
@@ -886,24 +1008,29 @@ class OnlineMetadata(
 
     private val seasonMemory = LruMap<String, List<MetaEpisode>>(EXTRAS_MEMORY_ENTRIES)
 
-    private fun seasonKey(info: MetaInfo, season: Int, lang: String): String =
-        listOf("season", info.provider.name, info.id, season, lang).joinToString("|")
+    private fun seasonKey(info: MetaInfo, season: Int, lang: String): String = seasonKey(info.provider, info.id, season, lang)
+
+    private fun seasonKey(provider: MetaProvider, id: String, season: Int, lang: String): String =
+        listOf("season", provider.name, id, season, lang).joinToString("|")
 
     /** [season]'s list already in memory, for the first frame. */
     fun peekSeason(info: MetaInfo, season: Int): List<MetaEpisode>? {
         if (!store.now.enabled || info.kind != MetaKind.Show) return null
+        if (info.provider == MetaProvider.AniList) return peekAnimeGuide(info)?.let { AnimeEpisodes.seasonEpisodes(it, season) }
         return seasonMemory[seasonKey(info, season, tmdbLanguage())]
     }
 
     /**
      * Every episode of [season] of the show [info], with names, pictures and air dates, so the
      * detail page can list the ones the chat lacks and the ones still to air. TMDB asks for the
-     * season; TVmaze answers every season at once, which is kept per season. AniList numbers an
-     * anime's episodes without seasons and is not asked. Null while off or when nobody could be
-     * asked; kept a day (see [MetadataCache.season]).
+     * season; TVmaze answers every season at once, which is kept per season. AniList lists no
+     * episodes, so an anime from it is answered by [animeGuide]: season 1 is the whole run counted
+     * straight through. Null while off or when nobody could be asked; kept a day (see
+     * [MetadataCache.season]).
      */
     suspend fun season(info: MetaInfo, season: Int): List<MetaEpisode>? {
-        if (!store.now.enabled || info.kind != MetaKind.Show || info.provider == MetaProvider.AniList) return null
+        if (!store.now.enabled || info.kind != MetaKind.Show) return null
+        if (info.provider == MetaProvider.AniList) return animeGuide(info)?.let { AnimeEpisodes.seasonEpisodes(it, season) }
         val lang = tmdbLanguage()
         val key = seasonKey(info, season, lang)
         seasonMemory[key]?.let { return it }
@@ -953,6 +1080,303 @@ class OnlineMetadata(
             }
         }
     }
+
+    // ---- a long anime's episodes (T11) ---------------------------------------------------------
+
+    private val guideMemory = LruMap<String, AnimeEpisodes.Guide>(GUIDE_MEMORY_ENTRIES)
+
+    private fun animeShow(info: MetaInfo): Boolean = info.kind == MetaKind.Show && info.provider == MetaProvider.AniList
+
+    private fun guideKey(info: MetaInfo, lang: String): String = listOf("anime", info.id, lang).joinToString("|")
+
+    /** [info]'s episode guide already in memory, for the first frame. Never touches the disk or the network. */
+    fun peekAnimeGuide(info: MetaInfo): AnimeEpisodes.Guide? {
+        if (!store.now.enabled || !animeShow(info)) return null
+        return guideMemory[guideKey(info, tmdbLanguage())]
+    }
+
+    /**
+     * The episodes of the anime [info] (an AniList match) numbered the way its files are, with a
+     * title, an overview, a picture and a date wherever a source has them, and each episode's place
+     * in TMDB's seasons. One answer for the show: each source is asked once (not once a row), in
+     * the order TMDB's absolute episode group, TMDB's seasons, Kitsu, Jikan, AniList's streaming
+     * list, and a later one only while the earlier left titles missing. Every answer is kept for a
+     * day, so a guide cut short by the network resumes where it stopped. Null while off, for a film,
+     * offline with nothing kept, or when no source knows the show. [hint] is another name for the
+     * show (the file's), tried for TMDB beside the provider's own.
+     */
+    suspend fun animeGuide(info: MetaInfo, hint: String? = null): AnimeEpisodes.Guide? =
+        animeAnswer(info, hint)?.guide?.takeIf { !it.isEmpty }
+
+    private class GuideAnswer(val guide: AnimeEpisodes.Guide, val complete: Boolean)
+
+    private suspend fun animeAnswer(info: MetaInfo, hint: String? = null): GuideAnswer? {
+        if (!store.now.enabled || !animeShow(info)) return null
+        val lang = tmdbLanguage()
+        val key = guideKey(info, lang)
+        guideMemory[key]?.let { return GuideAnswer(it, true) }
+        return lockFor(key).withLock {
+            guideMemory[key]?.let { return@withLock GuideAnswer(it, true) }
+            val built = buildGuide(info, hint, lang) ?: return@withLock null
+            // Only a guide every source answered for is kept in memory; a cut one is asked for the rest next time.
+            if (built.complete) guideMemory[key] = built.guide
+            built
+        }
+    }
+
+    private suspend fun buildGuide(info: MetaInfo, hint: String?, lang: String): GuideAnswer? {
+        var complete = true
+        // AniList's own facts: how many episodes the run has, the next to air, the MyAnimeList id, the streaming list.
+        val runKey = "anime|run|${info.id}"
+        val run = AnimeStored.readRun(cache.season(runKey)) ?: run {
+            if (paused(MetaProvider.AniList)) return null
+            val reply = retrying { anilist.episodes(info.id) }
+            val found = when (trouble(MetaProvider.AniList, reply)) {
+                null -> (reply as MetaReply.Ok).value
+                Outcome.Nothing -> AniListRun(null, null, null, emptyList(), null)
+                else -> return null
+            }
+            cache.putSeason(runKey, AnimeStored.run(found))
+            found
+        }
+        val expected = run.episodes ?: run.next?.let { it.episode - 1 }?.takeIf { it > 0 }
+        val lists = ArrayList<AnimeEpisodes.SourceList>()
+        var counts = emptyList<MetaSeason>()
+
+        val tmdbPart = tmdbAnime(info, hint, lang, expected)
+        complete = complete && tmdbPart.complete
+        lists += tmdbPart.lists
+        counts = tmdbPart.counts
+
+        fun missingTitles(): Boolean {
+            val sofar = AnimeEpisodes.merge(lists, counts, run.next)
+            val total = expected ?: sofar.total
+            if (total <= 0) return true
+            val named = sofar.entries.count { it.absolute <= total && it.name.isNotBlank() }
+            return total - named > maxOf(MISSING_TITLES_OK, total / 50)
+        }
+
+        val mal = run.malId
+        if (mal != null && missingTitles()) {
+            val part = kitsuEpisodes(mal, expected)
+            complete = complete && part.complete
+            part.list?.let { lists += it }
+        }
+        if (mal != null && missingTitles()) {
+            val part = jikanEpisodes(mal, expected)
+            complete = complete && part.complete
+            part.list?.let { lists += it }
+        }
+        if (run.streaming.isNotEmpty()) lists += AnimeEpisodes.SourceList(AnimeEpisodes.Source.AniList, run.streaming)
+        return GuideAnswer(AnimeEpisodes.merge(lists, counts, run.next, run.episodes ?: 0), complete)
+    }
+
+    private class AnimePart(val list: AnimeEpisodes.SourceList?, val complete: Boolean)
+
+    private class TmdbAnimePart(val lists: List<AnimeEpisodes.SourceList>, val counts: List<MetaSeason>, val complete: Boolean)
+
+    /**
+     * TMDB's side of the guide: the show found by the provider's names (kept, a miss too), its
+     * seasons with their counts, and then its "Absolute order" episode group, or failing that its
+     * seasons' episodes, twenty to a call. A list too short or too long for the run ([AnimeEpisodes.plausible])
+     * is another show of a similar name and is dropped with its counts.
+     */
+    private suspend fun tmdbAnime(info: MetaInfo, hint: String?, lang: String, expected: Int?): TmdbAnimePart {
+        val none = TmdbAnimePart(emptyList(), emptyList(), true)
+        val s = store.now
+        if (!tmdbUsable(s) || paused(MetaProvider.Tmdb)) return TmdbAnimePart(emptyList(), emptyList(), !tmdbUsable(s))
+        val key = activeKey(s)
+        val idKey = "anime|tmdbid|${info.id}"
+        var id = AnimeStored.readId(cache.season(idKey))
+        if (id == AnimeStored.MISSING) {
+            val names = listOfNotNull(hint) + info.title + info.aliases
+            id = null
+            var answered = true
+            for (name in names.filter { it.isNotBlank() }.distinct().take(TMDB_NAMES)) {
+                when (val outcome = tmdbSearch(key, MetaQuery(title = name, kind = MetaKind.Show), ENGLISH, film = false)) {
+                    is SearchOutcome.Found -> {
+                        id = outcome.candidate.id
+                        break
+                    }
+                    is SearchOutcome.Stopped -> {
+                        answered = false
+                        break
+                    }
+                    SearchOutcome.None -> Unit
+                }
+            }
+            if (!answered) return TmdbAnimePart(emptyList(), emptyList(), false)
+            cache.putSeason(idKey, AnimeStored.id(id))
+        }
+        val tmdbId = id ?: return none
+
+        val showKey = "anime|tmdbshow|$tmdbId|$lang"
+        val show = AnimeStored.readShowGuide(cache.season(showKey)) ?: run {
+            val reply = retrying { tmdb.showGuide(key, tmdbId, lang) }
+            when (trouble(MetaProvider.Tmdb, reply, key)) {
+                null -> (reply as MetaReply.Ok).value.also { cache.putSeason(showKey, AnimeStored.showGuide(it)) }
+                Outcome.Nothing -> return none
+                else -> return TmdbAnimePart(emptyList(), emptyList(), false)
+            }
+        }
+        val layout = AnimeEpisodes.layout(show.seasons)
+        val total = layout.sumOf { it.episodeCount }
+        val wrong = !AnimeEpisodes.plausible(expected, AnimeEpisodes.SourceList(AnimeEpisodes.Source.TmdbSeasons, listOf(AnimeEpisodes.Piece(total.coerceAtLeast(1)))))
+        if (layout.isEmpty() || wrong) return none
+
+        var complete = true
+        // The absolute order group, the one with the most episodes where TMDB has several.
+        val group = show.groups.filter { it.absolute }.maxByOrNull { it.episodeCount }
+        if (group != null) {
+            val groupKey = "anime|tmdbgroup|${group.id}|$lang"
+            val stored = AnimeStored.readGroup(cache.season(groupKey))
+            val list = stored ?: run {
+                val reply = retrying { tmdb.episodeGroup(key, group.id, lang) }
+                when (trouble(MetaProvider.Tmdb, reply, key)) {
+                    null -> {
+                        val episodes = (reply as MetaReply.Ok).value
+                        cache.putSeason(groupKey, AnimeStored.group(episodes))
+                        AnimeEpisodes.fromGroup(episodes)
+                    }
+                    Outcome.Nothing -> null
+                    else -> {
+                        complete = false
+                        null
+                    }
+                }
+            }
+            if (list != null && AnimeEpisodes.plausible(expected, list)) return TmdbAnimePart(listOf(list), layout, complete)
+        }
+        if (!complete) return TmdbAnimePart(emptyList(), layout, false)
+
+        // The seasons counted in order: one call for each twenty not yet kept.
+        val bySeason = HashMap<Int, List<MetaEpisode>>()
+        val needed = ArrayList<Int>()
+        for (s in layout) {
+            val kept = cache.season(seasonKey(MetaProvider.Tmdb, tmdbId, s.number, lang))
+            if (kept != null) bySeason[s.number] = kept else needed += s.number
+        }
+        for (chunk in needed.chunked(TmdbApi.APPEND_LIMIT)) {
+            val reply = retrying { tmdb.seasons(key, tmdbId, chunk, lang) }
+            when (trouble(MetaProvider.Tmdb, reply, key)) {
+                null -> (reply as MetaReply.Ok).value.forEach { (number, list) ->
+                    bySeason[number] = list
+                    cache.putSeason(seasonKey(MetaProvider.Tmdb, tmdbId, number, lang), list)
+                }
+                Outcome.Nothing -> Unit
+                else -> {
+                    complete = false
+                    break
+                }
+            }
+        }
+        val list = AnimeEpisodes.fromSeasons(bySeason, layout)
+        return TmdbAnimePart(listOf(list), layout, complete)
+    }
+
+    /** Kitsu's episodes for the MyAnimeList id [mal], twenty a page, kept whole once all pages came. */
+    private suspend fun kitsuEpisodes(mal: String, expected: Int?): AnimePart {
+        val idKey = "anime|kitsuid|$mal"
+        var id = AnimeStored.readId(cache.season(idKey))
+        if (id == AnimeStored.MISSING) {
+            // Kitsu has no place among the three providers a 429 pauses: a throttled or failed call only leaves this source for next time.
+            val reply = retrying { kitsu.idFor(mal) }
+            id = when {
+                reply is MetaReply.Ok -> reply.value
+                reply is MetaReply.Failed && reply.code == 404 -> null
+                else -> return AnimePart(null, false)
+            }
+            cache.putSeason(idKey, AnimeStored.id(id))
+        }
+        val kitsuId = id ?: return AnimePart(null, true)
+        val listKey = "anime|kitsu|$kitsuId"
+        cache.season(listKey)?.let { kept ->
+            val list = AnimeEpisodes.fromNumbered(AnimeEpisodes.Source.Kitsu, kept)
+            return AnimePart(list.takeIf { AnimeEpisodes.plausible(expected, it) }, true)
+        }
+        val all = ArrayList<MetaEpisode>()
+        var offset = 0
+        var pages = 0
+        while (pages < KitsuApi.MAX_PAGES) {
+            val reply = retrying { kitsu.episodes(kitsuId, offset) }
+            when (reply) {
+                is MetaReply.Ok -> {
+                    all += reply.value.first
+                    pages++
+                    offset += KitsuApi.PAGE
+                    if (!reply.value.second) break
+                }
+                is MetaReply.Failed -> if (reply.code == 404 && pages == 0) return AnimePart(null, true) else return partial(AnimeEpisodes.Source.Kitsu, all, expected)
+                else -> return partial(AnimeEpisodes.Source.Kitsu, all, expected)
+            }
+        }
+        cache.putSeason(listKey, all)
+        val list = AnimeEpisodes.fromNumbered(AnimeEpisodes.Source.Kitsu, all)
+        return AnimePart(list.takeIf { AnimeEpisodes.plausible(expected, it) }, true)
+    }
+
+    /** Jikan's episodes for MyAnimeList's [mal], a hundred a page, kept whole once all pages came. */
+    private suspend fun jikanEpisodes(mal: String, expected: Int?): AnimePart {
+        val listKey = "anime|jikan|$mal"
+        cache.season(listKey)?.let { kept ->
+            val list = AnimeEpisodes.fromNumbered(AnimeEpisodes.Source.Jikan, kept)
+            return AnimePart(list.takeIf { AnimeEpisodes.plausible(expected, it) }, true)
+        }
+        val all = ArrayList<MetaEpisode>()
+        var page = 1
+        while (page <= JikanApi.MAX_PAGES) {
+            val reply = retrying { jikan.episodes(mal, page) }
+            when (reply) {
+                is MetaReply.Ok -> {
+                    all += reply.value.first
+                    page++
+                    if (!reply.value.second) break
+                }
+                is MetaReply.Failed -> if (reply.code == 404 && page == 1) return AnimePart(null, true) else return partial(AnimeEpisodes.Source.Jikan, all, expected)
+                else -> return partial(AnimeEpisodes.Source.Jikan, all, expected)
+            }
+        }
+        cache.putSeason(listKey, all)
+        val list = AnimeEpisodes.fromNumbered(AnimeEpisodes.Source.Jikan, all)
+        return AnimePart(list.takeIf { AnimeEpisodes.plausible(expected, it) }, true)
+    }
+
+    /** What came before a page failed: used for now, kept for nothing, and the guide is marked cut short. */
+    private fun partial(source: AnimeEpisodes.Source, got: List<MetaEpisode>, expected: Int?): AnimePart =
+        AnimePart(got.takeIf { it.isNotEmpty() }?.let { AnimeEpisodes.fromNumbered(source, it) }, false)
+
+    /** The guide's name for episode [number] of a TMDB show that has no such episode, found through AniList; null when it is no anime. */
+    private suspend fun absoluteFallback(query: MetaQuery, season: Int, number: Int): MetaEpisode? {
+        val anime = (lookup(query.showOnly().copy(anime = true)) as? MetaResult.Found)?.info?.takeIf { animeShow(it) } ?: return null
+        return animeEpisodeFor(anime, season, number, query.title).first
+    }
+
+    /**
+     * Episode [number] of [season] as the guide names it, for [show] (an AniList match): its title,
+     * overview and picture, carrying the file's own season and number so [EpisodeNames.named] takes
+     * it. The second part says whether the answer is final (not kept while a source was cut short).
+     */
+    private suspend fun animeEpisodeFor(show: MetaInfo, season: Int, number: Int, hint: String): Pair<MetaEpisode?, Boolean> {
+        val answer = animeAnswer(show, hint) ?: return null to false
+        val guide = answer.guide
+        val entry = guide.absoluteOf(season, number)?.let { guide.entry(it) }
+            ?.takeIf { it.name.isNotBlank() || it.overview.isNotBlank() || it.stillUrl != null }
+        val found = entry?.let { MetaEpisode(season, number, it.name, it.overview, it.stillUrl, it.airDate, it.runtimeMin, it.source?.label.orEmpty()) }
+        return found to answer.complete
+    }
+
+    /**
+     * [extras] with the anime's run in them, for a show AniList lists no seasons for: one season
+     * counted straight through and the next episode, so the series page can list what the chats
+     * lack as it does for a TMDB show. [extras] as it was for any other show, and while the guide
+     * is not known.
+     */
+    suspend fun animeExtras(info: MetaInfo, extras: MetaExtras): MetaExtras =
+        animeGuide(info)?.let { AnimeEpisodes.overlay(extras, it) } ?: extras
+
+    /** [animeExtras] from what is in memory, for the first frame. */
+    fun peekAnimeExtras(info: MetaInfo, extras: MetaExtras): MetaExtras =
+        peekAnimeGuide(info)?.let { AnimeEpisodes.overlay(extras, it) } ?: extras
 
     /**
      * What is already known for [query], from memory or the disk, with no lookup: how "More like
@@ -1130,6 +1554,7 @@ class OnlineMetadata(
         memory.clear()
         extrasMemory.clear()
         seasonMemory.clear()
+        guideMemory.clear()
         logoMemory.clear()
         runtimeVerdicts.clear()
     }
@@ -1165,7 +1590,22 @@ class OnlineMetadata(
         private const val CARD_SCORE_ENTRIES = 4_096
 
         /** Where posters may come from. Nothing else is fetched, whatever an answer says. */
-        val IMAGE_HOSTS = setOf("image.tmdb.org", "static.tvmaze.com", "s4.anilist.co", "img.anili.st")
+        val IMAGE_HOSTS = setOf("image.tmdb.org", "static.tvmaze.com", "s4.anilist.co", "img.anili.st", "media.kitsu.app", "media.kitsu.io", "img1.ak.crunchyroll.com")
+
+        /** An episode number past this that a TMDB show lacks is tried as an anime numbered straight through. */
+        private const val ABSOLUTE_FROM = 24
+
+        /** Episode guides kept for this run: a few shows opened by hand, a few hundred rows each. */
+        private const val GUIDE_MEMORY_ENTRIES = 8
+
+        /** The other names an AniList match keeps (English, romaji, native, synonyms), for finding the same show elsewhere. */
+        private const val ALIASES = 8
+
+        /** A guide with this few episodes untitled is complete enough not to ask another source. */
+        private const val MISSING_TITLES_OK = 2
+
+        /** The names tried for TMDB when finding an anime's show: the file's, the provider's, then the aliases. */
+        private const val TMDB_NAMES = 4
 
         /** Lookups are on, in a build that set the feature up. */
         val enabled: Boolean get() = current?.store?.now?.enabled == true

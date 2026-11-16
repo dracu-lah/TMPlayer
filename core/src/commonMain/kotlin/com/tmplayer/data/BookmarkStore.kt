@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -54,7 +55,10 @@ class BookmarkStore(private val store: DataStore<Preferences>) {
             val list = decode(chatId, messageId, prefs[key]).toMutableList()
             val near = list.indexOfFirst { abs(it.positionMs - positionMs) < SAME_MOMENT_MS }
             if (near >= 0) {
-                if (clean.isNotEmpty()) list[near] = list[near].copy(note = clean)
+                if (clean.isNotEmpty()) {
+                    list[near] = list[near].copy(note = clean)
+                    prefs[stampKey(list[near])] = now
+                }
                 saved = list[near]
             } else {
                 // Never the id of one already there, even for two made within the same millisecond.
@@ -62,7 +66,7 @@ class BookmarkStore(private val store: DataStore<Preferences>) {
                 val made = Bookmark(chatId, messageId, id, positionMs.coerceAtLeast(0L), clean)
                 list += made
                 saved = made
-                if (list.size > MAX_PER_VIDEO) list.remove(list.minBy { it.id })
+                if (list.size > MAX_PER_VIDEO) evict(prefs, list, now)
             }
             write(prefs, chatId, messageId, list)
         }
@@ -70,19 +74,79 @@ class BookmarkStore(private val store: DataStore<Preferences>) {
     }
 
     /** Gives bookmark [id] a new note; a blank one clears it. */
-    suspend fun rename(chatId: Long, messageId: Long, id: Long, note: String) {
+    suspend fun rename(chatId: Long, messageId: Long, id: Long, note: String, now: Long = System.currentTimeMillis()) {
         val clean = cleanNote(note)
         store.edit { prefs ->
             val list = decode(chatId, messageId, prefs[keyOf(chatId, messageId)])
+            val mark = list.firstOrNull { it.id == id } ?: return@edit
+            // The time of the change travels with the note, so another device keeps the newer one.
+            prefs[stampKey(mark)] = now
             write(prefs, chatId, messageId, list.map { if (it.id == id) it.copy(note = clean) else it })
         }
     }
 
-    suspend fun delete(chatId: Long, messageId: Long, id: Long) {
+    /** Takes bookmark [id] off; the time is kept so a synced copy on another device goes too. */
+    suspend fun delete(chatId: Long, messageId: Long, id: Long, now: Long = System.currentTimeMillis()) {
         store.edit { prefs ->
             val list = decode(chatId, messageId, prefs[keyOf(chatId, messageId)])
+            val mark = list.firstOrNull { it.id == id } ?: return@edit
+            prefs.remove(stampKey(mark))
+            prefs[goneKey(mark)] = now
+            // Removals older than the sync file remembers are no use to anybody.
+            val stale = now - SyncDocuments.REMOVAL_DAYS * 24 * 60 * 60 * 1000L
+            prefs.asMap().filter { (k, v) -> k.name.startsWith(SyncDocuments.BOOKMARK_REMOVAL_PREFIX) && (v as? Long ?: 0L) < stale }
+                .keys.forEach { prefs.remove(it) }
             write(prefs, chatId, messageId, list.filterNot { it.id == id })
         }
+    }
+
+    /** Every entry as stored, for the sync file's collecting ([SyncDocuments.bookmarksOf]). */
+    suspend fun rawEntries(): Map<String, Any> = store.data.first().asMap().mapKeys { it.key.name }
+
+    /**
+     * What resume on other devices ([ResumeSync]) takes in, in one edit, each checked again against
+     * the file as it is then: a note changed here while the sync ran is never overwritten by an
+     * older one, and a bookmark is removed only if it was not changed here after the removal.
+     * Returns how many bookmarks changed.
+     */
+    suspend fun applySync(add: List<SyncBookmark>, remove: Map<String, Long>): Int {
+        if (add.isEmpty() && remove.isEmpty()) return 0
+        var changed = 0
+        store.edit { prefs ->
+            for ((video, marks) in add.groupBy { it.bookmark.chatId to it.bookmark.messageId }) {
+                val (chatId, messageId) = video
+                val list = decode(chatId, messageId, prefs[keyOf(chatId, messageId)]).toMutableList()
+                for (incoming in marks) {
+                    val mark = incoming.bookmark
+                    val index = list.indexOfFirst { it.id == mark.id }
+                    val mine = list.getOrNull(index)
+                    val mineAt = mine?.let { prefs[stampKey(it)] ?: it.id } ?: 0L
+                    val gone = prefs[goneKey(mark)] ?: 0L
+                    // Taken off here since: stays off. A newer copy here: stays.
+                    if (gone > incoming.at || (mine != null && mineAt >= incoming.at)) continue
+                    if (mine == null) list += mark else list[index] = mark
+                    prefs[stampKey(mark)] = incoming.at
+                    prefs.remove(goneKey(mark))
+                    changed++
+                }
+                while (list.size > MAX_PER_VIDEO) evict(prefs, list, System.currentTimeMillis())
+                write(prefs, chatId, messageId, list)
+            }
+            for ((key, at) in remove) {
+                val ids = key.split('_').takeIf { it.size == 3 } ?: continue
+                val chatId = ids[0].toLongOrNull() ?: continue
+                val messageId = ids[1].toLongOrNull() ?: continue
+                val id = ids[2].toLongOrNull() ?: continue
+                val list = decode(chatId, messageId, prefs[keyOf(chatId, messageId)])
+                val mine = list.firstOrNull { it.id == id } ?: continue
+                if ((prefs[stampKey(mine)] ?: mine.id) >= at) continue
+                prefs.remove(stampKey(mine))
+                prefs[goneKey(mine)] = at
+                write(prefs, chatId, messageId, list.filterNot { it.id == id })
+                changed++
+            }
+        }
+        return changed
     }
 
     /** Every video's bookmarks, for a backup. */
@@ -109,18 +173,39 @@ class BookmarkStore(private val store: DataStore<Preferences>) {
                 for (mark in adds) {
                     val taken = list.any { it.id == mark.id }
                     val id = if (taken) (list.maxOf { it.id } + 1) else mark.id
-                    list += mark.copy(id = id, note = cleanNote(mark.note))
+                    val restored = mark.copy(id = id, note = cleanNote(mark.note))
+                    list += restored
+                    // Brought back on purpose: a removal noted earlier (here or in a synced file) must not undo it.
+                    if (prefs[goneKey(restored)] != null) {
+                        prefs.remove(goneKey(restored))
+                        prefs[stampKey(restored)] = System.currentTimeMillis()
+                    }
                 }
-                while (list.size > MAX_PER_VIDEO) list.remove(list.minBy { it.id })
+                while (list.size > MAX_PER_VIDEO) evict(prefs, list, System.currentTimeMillis())
                 write(prefs, chatId, messageId, list)
             }
         }
     }
 
+    /**
+     * Drops the oldest made from [list] past [MAX_PER_VIDEO] and notes it as removed, so a synced
+     * copy on another device goes too instead of coming back and being cut again at every sync.
+     */
+    private fun evict(prefs: MutablePreferences, list: MutableList<Bookmark>, now: Long) {
+        val oldest = list.minBy { it.id }
+        list.remove(oldest)
+        val stamp = prefs[stampKey(oldest)] ?: 0L
+        prefs.remove(stampKey(oldest))
+        prefs[goneKey(oldest)] = maxOf(now, stamp + 1, oldest.id + 1)
+    }
+
     /** Empties the file, for sign out. Keys are collected first: the map cannot be walked while it is written. */
     suspend fun clear() {
         store.edit { prefs ->
-            val doomed = prefs.asMap().keys.filter { it.name.startsWith(PREFIX) }
+            val doomed = prefs.asMap().keys.filter {
+                it.name.startsWith(PREFIX) || it.name.startsWith(SyncDocuments.BOOKMARK_AT_PREFIX) ||
+                    it.name.startsWith(SyncDocuments.BOOKMARK_REMOVAL_PREFIX)
+            }
             for (key in doomed) prefs.remove(key)
         }
     }
@@ -146,6 +231,14 @@ class BookmarkStore(private val store: DataStore<Preferences>) {
 
         private fun keyOf(chatId: Long, messageId: Long) =
             stringPreferencesKey(PREFIX + ProgressKeys.of(chatId, messageId))
+
+        /** When this bookmark's note last changed here, for the sync file: `bt_<chat>_<message>_<id>`. */
+        private fun stampKey(mark: Bookmark) =
+            longPreferencesKey(SyncDocuments.BOOKMARK_AT_PREFIX + SyncBookmark.keyOf(mark))
+
+        /** When this bookmark was taken off here: `xb_<chat>_<message>_<id>`. */
+        private fun goneKey(mark: Bookmark) =
+            longPreferencesKey(SyncDocuments.BOOKMARK_REMOVAL_PREFIX + SyncBookmark.keyOf(mark))
 
         /** A note as stored: see [BookmarkCodec.cleanNote]. */
         fun cleanNote(note: String): String = BookmarkCodec.cleanNote(note)

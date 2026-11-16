@@ -24,6 +24,8 @@ class BackupCoverageTest {
         // The account and cold start snapshots, and the device's own bookkeeping.
         "account_snapshot", "chat_snapshot", "last_chat", "last_seen_version", "language_announced",
         "downloads_migrated", "download_queue", "developer_options",
+        // Keep my place on all my devices: the Home question was shown, and when this device last synced.
+        "keep_place_card_seen", "keep_place_wrote_at",
         // Locks: a PIN's hash has no place in a mailed file, and a restore never undoes a lock.
         "app_lock_on_open", "app_pin", "app_pin_failures", "app_pin_wait_left_ms", "app_pin_wait_stamp",
         "kids_chats", "kids_lock",
@@ -41,8 +43,10 @@ class BackupCoverageTest {
         "update_auto_install", "update_auto_tried", "update_silent_refused", "update_installing",
         // Hints, walkthroughs and notices already seen.
         "device_card_dismissed", "device_hint_shown", "first_video_tip_dismissed", "online_meta_invite_seen",
-        "online_meta_notice_dismissed", "player_hint_seen", "tv_browse_hint_seen", "setup", "tour", "tour_offer_after",
+        "online_meta_notice_dismissed", "player_hint_seen", "tv_browse_hint_seen", "setup", "tour",
         "hide_default_groups", "external_hint_seen",
+        // The retired mini player switch (T12): removed on first read, never carried.
+        "mini_player",
         // The update check's and the support card's bookkeeping.
         "update_last_check", "update_popup_shown", "update_skipped_version", "update_snoozed_until",
         "support_asked", "support_first_seen", "support_never", "support_recent", "support_snoozed_until",
@@ -66,6 +70,8 @@ class BackupCoverageTest {
         "decode_memory", "heavy_ask_skip",
         // How each player engine did here (PR2), from this device's decoders and native library.
         "engine_history",
+        // What the remedy ladder learned per class of video (RL6): this device's decoders too.
+        "remedy_memory",
         // Title reports (N1): which pairs this device sent or was asked about, and the few waiting
         // for a connection. File names the viewer agreed to send from this device, never carried to another.
         "title_ledger",

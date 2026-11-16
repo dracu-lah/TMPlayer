@@ -161,12 +161,14 @@ fun HomePage(state: ShellState, chats: ChatListViewModel) {
         return
     }
     val stalled by model.stalled.collectAsState()
+    // Offline (R4): the rows as an offline Home draws them, and the cards' greying.
+    com.tmplayer.ui.browse.OfflineHomeScope(rows) { offlineRows ->
     HomeRowsView(
         rowsReady = model.rowsSettled,
         layout = layout ?: HomeLayout(),
         onOpenHomeSettings = { state.openSettings(SettingsCategory.Home) },
         state = state,
-        rows = rows,
+        rows = offlineRows,
         chats = list.ifEmpty { ownChats },
         stalled = stalled,
         art = art,
@@ -182,6 +184,7 @@ fun HomePage(state: ShellState, chats: ChatListViewModel) {
         onRefresh = model::refreshInPlace,
         seeAll = model::seeAll,
     )
+    }
 }
 
 /**
@@ -270,7 +273,17 @@ internal fun HomeRowsView(
     LaunchedEffect(continueRow?.records) { continueRow?.records?.forEach(onArtWanted) }
     // Settings can turn the carousel off: then nothing is picked or turned over for it either.
     val carouselOn = layout.carousel
-    val featured = rememberFeatured(recentRow.takeIf { carouselOn }, continueRow.takeIf { carouselOn }, art)
+    val onlineFeatured = rememberFeatured(recentRow.takeIf { carouselOn }, continueRow.takeIf { carouselOn }, art)
+    // Offline the hero is the first video on this phone, and with none there is no hero (R4).
+    val offlineHome = com.tmplayer.ui.browse.LocalOfflineHome.current
+    val offlineHero = remember(rows, offlineHome.offline) {
+        if (!offlineHome.offline) {
+            null
+        } else {
+            com.tmplayer.data.OfflineHomeRows.hero(rows)?.let { listOf(com.tmplayer.data.FeaturedPick(ShelfEntry.File(it.toMediaItem()))) }.orEmpty()
+        }
+    }
+    val featured = offlineHero ?: onlineFeatured
     // Every discovered tile on Home has a picture of its own (Continue watching and Watch later keep
     // every card, with the generated cover); "See all" still lists the whole row. Recently
     // added is a row too, under Continue watching, as well as the carousel (user, 2026-10-23).
@@ -282,6 +295,9 @@ internal fun HomeRowsView(
     val watch = rememberSeriesWatch(state)
     // In line with the page header's title, whatever the window's width.
     val side = pageMargin()
+    // "Keep my place on all my devices?", asked once at the end of Home (FQ12).
+    val toast = com.tmplayer.ui.components.rememberToast()
+    val keepPlace = com.tmplayer.ui.browse.rememberKeepPlaceCardState(state.settings, eligible = rows.isNotEmpty() && rowsReady, say = toast)
     // The big-screen mode's bar is drawn over Home while its carousel is up: the picture runs up
     // under it and the bar takes the page's ground only once the rows have scrolled up there
     // (the Android TV app's Home: `underBar` and `homeScrolled`).
@@ -321,11 +337,13 @@ internal fun HomeRowsView(
                 // first run's card, which flashed up at every start for accounts full of videos.
                 // Given up after a while, so a first run without a connection still says what to do.
                 var waitedOut by remember { mutableStateOf(false) }
-                if (!rowsReady) LaunchedEffect(Unit) {
+                // Offline, the rows are also held till the download index and watch cache have been read.
+                val held = !rowsReady || !com.tmplayer.ui.browse.LocalOfflineHome.current.settled
+                if (held) LaunchedEffect(Unit) {
                     kotlinx.coroutines.delay(10_000)
                     waitedOut = true
                 }
-                if (!rowsReady && !waitedOut) return@Column
+                if (held && !waitedOut) return@Column
                 // Nothing played and nothing starred: a first run, so say how to get a first video in:
                 // forward it to Saved Messages, which the button opens.
                 Box(
@@ -441,6 +459,14 @@ internal fun HomeRowsView(
                             }
                         }
                     }
+                    // Asked once, last: "Keep my place on all my devices?" (FQ12). Counted as shown when
+                    // its item comes into the list, so it is one showing and never again.
+                    if (keepPlace.visible) {
+                        item(key = "keep-place", contentType = "keep-place") {
+                            LaunchedEffect(Unit) { keepPlace.shown() }
+                            com.tmplayer.ui.browse.KeepPlaceCard(onYes = keepPlace::yes, onNotNow = keepPlace::notNow, start = side, end = side)
+                        }
+                    }
                 }
                 ScrollToTop(list)
                 FastScroller(list)
@@ -480,8 +506,12 @@ private fun RowPage(
             title,
             row.countLabel(s),
             leading = {
-                BarTooltip(s.commonBack, null, below = true) {
-                    IconButton(onClick = onBack) { Icon(TmIcons.ArrowBack, contentDescription = s.commonBack) }
+                // As About's back arrow: the keyboard's ring, and Esc named, which this page's Back also takes.
+                val interactions = remember { MutableInteractionSource() }
+                BarTooltip(s.commonBack, "Esc", below = true) {
+                    IconButton(onClick = onBack, interactionSource = interactions, modifier = Modifier.keyboardRing(interactions, CircleShape)) {
+                        Icon(TmIcons.ArrowBack, contentDescription = s.commonBack)
+                    }
                 }
             },
             actions = {
@@ -494,6 +524,15 @@ private fun RowPage(
             },
         )
         val side = pageMargin()
+        // Home keeps clips and trailers out of these rows (R1): said here, with where to find them.
+        if (row is HomeRow.Recent || row is HomeRow.Chat) {
+            Text(
+                s.homeSmallLeftOut(com.tmplayer.data.SizeFilter.label(com.tmplayer.data.SizeFilter.HOME_MIN)),
+                style = MaterialTheme.typography.bodySmall,
+                color = Tone.muted,
+                modifier = Modifier.padding(start = side, end = side, bottom = 8.dp),
+            )
+        }
         // The row's chats read on a page at a time as the foot comes near: the row's own tiles
         // first, then everything else, newest first, growing only at the foot.
         val fed = feed?.state?.collectAsState()?.value
@@ -640,12 +679,14 @@ private fun ContinueCell(
     val item = art[key] ?: remember(record) { record.toMediaItem() }
     val chatTitle = record.chatTitle.ifEmpty { titles[record.chatId].orEmpty() }
     val s = LocalStrings.current
+    val offlineHome = com.tmplayer.ui.browse.LocalOfflineHome.current
     Poster(
         state = state,
         nav = null,
         index = 0,
         item = item,
         chatTitle = chatTitle,
+        needsInternet = offlineHome.offline && !offlineHome.plays(record.chatId, record.messageId),
         // The card draws its own pill of progress, under the name.
         progress = null,
         art = { OnHome { ContinueCardArt(record, item, Modifier.fillMaxSize()) } },
@@ -689,7 +730,8 @@ internal fun LaterCell(
         val removeLine: (@Composable (close: () -> Unit) -> Unit)? = onRemove?.let { remove ->
             { close -> androidx.compose.material3.DropdownMenuItem(text = { Text(LocalStrings.current.listsRemove) }, onClick = { close(); remove() }) }
         }
-        OnHome { MediaTile(state, item, record.chatTitle, outsideChat = true, extraMenu = removeLine) }
+        val offlineHome = com.tmplayer.ui.browse.LocalOfflineHome.current
+        OnHome { MediaTile(state, item, record.chatTitle, outsideChat = true, extraMenu = removeLine, needsInternet = offlineHome.needsInternet(item)) }
         return
     }
     // A show saved whole: named as the show, its episode's picture on it, opening the show's page.
@@ -731,6 +773,7 @@ private fun NewEpisodeCell(state: ShellState, episode: NewEpisode, titles: Map<L
         index = 0,
         item = item,
         chatTitle = chatTitle,
+        needsInternet = com.tmplayer.ui.browse.LocalOfflineHome.current.needsInternet(item),
         progress = null,
         badge = { NewBadge(compact = false) },
         art = { OnHome { OnlineArt(item, Modifier.fillMaxSize()) { RecordArt(item) } } },
@@ -753,7 +796,12 @@ private fun ShelfCell(
     onOpenSeries: (Series) -> Unit,
 ) {
     when (entry) {
-        is ShelfEntry.File -> OnHome { MediaTile(state, entry.item, chatTitle(entry.item.chatId), outsideChat = true, poster = poster) }
+        is ShelfEntry.File -> OnHome {
+            MediaTile(
+                state, entry.item, chatTitle(entry.item.chatId), outsideChat = true, poster = poster,
+                needsInternet = com.tmplayer.ui.browse.LocalOfflineHome.current.needsInternet(entry.item),
+            )
+        }
         is ShelfEntry.Show -> SeriesPoster(entry.series, rememberSeriesWatch(state), onOpen = { onOpenSeries(entry.series) }, poster = poster, state = state)
     }
 }

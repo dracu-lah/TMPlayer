@@ -60,7 +60,6 @@ import androidx.compose.ui.semantics.stateDescription
 import com.tmplayer.ui.icons.TmIcons
 import com.tmplayer.ui.theme.Focus
 import com.tmplayer.data.SettingsStore
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
@@ -74,6 +73,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme as M3MaterialTheme
 import androidx.compose.material3.Text as M3Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -356,6 +356,8 @@ internal fun BrowseScreen(
     var chatMenu by remember { mutableStateOf<ChatSummary?>(null) }
     // The chat just starred from its menu, whose row's star pops in rather than simply appearing.
     var justStarred by remember { mutableStateOf<Long?>(null) }
+    // Home's "Choose favourites" (phone): the chat list answers a tap with a star until Done.
+    var starMode by rememberSaveable { mutableStateOf(false) }
     var mediaMenu by remember { mutableStateOf<ResumeRecord?>(null) }
     var watchedMenu by remember { mutableStateOf<WatchedRecord?>(null) }
     var laterMenu by remember { mutableStateOf<WatchLaterRecord?>(null) }
@@ -396,6 +398,8 @@ internal fun BrowseScreen(
     LaunchedEffect(searchConnected) { if (searchConnected) search.reconnected() }
     val panelScope = rememberCoroutineScope()
     val panelContext = LocalContext.current
+    // "Keep my place on all my devices?", asked once at the end of Home (FQ12).
+    val keepPlaceCard = rememberKeepPlaceCardState(remember(panelContext) { SettingsStore(panelContext) }, eligible = homeRowsReady, say = onMessage)
     // A hold, the info key or a right click: the quick menu, which leads to the page by Details.
     var held by remember { mutableStateOf<Pair<MediaItem, String>?>(null) }
     val holdMedia: (MediaItem, String) -> Unit = { item, title -> held = item to title }
@@ -551,7 +555,11 @@ internal fun BrowseScreen(
     val touch = !FormFactor.isTv(LocalContext.current)
     // The phone's lists end clear of the floating bar (TouchNav), which their container already
     // lifts above the navigation bar.
-    val insets = if (touch) TouchInsets.clearing(touchShellClearance(withActions = true, rail = LocalTouchRail.current)) else TvInsets
+    val insets = if (touch) {
+        TouchInsets.clearing(touchShellClearance(withActions = true, rail = LocalTouchRail.current) + com.tmplayer.ui.components.LocalBannerRoom.current)
+    } else {
+        TvInsets
+    }
 
     // While a chip has the remote's focus, a list that changes under it (because OK picked that
     // chip) must not pull focus down to its first row: the viewer is still choosing.
@@ -643,6 +651,9 @@ internal fun BrowseScreen(
         onPickTab(BrowseSection.of(BrowseTab.Chats))
         query = ""
     }
+    // Star mode lives on the chat list: leaving it (another tab, a folder) ends the mode, and Back does.
+    LaunchedEffect(tab) { if (!tab.isChats) starMode = false }
+    BackHandler(enabled = starMode) { starMode = false }
     val paneOf: @Composable (BrowseSection) -> Unit = { tab ->
         val showsContinue = tab.listsVideos && historyTab == HistoryTab.Continue
         val showsWatched = tab.listsVideos && historyTab == HistoryTab.Watched
@@ -675,8 +686,10 @@ internal fun BrowseScreen(
                         // A show card held on Home opens its menu (HX20), drawn below with the other menus.
                         androidx.compose.runtime.CompositionLocalProvider(LocalSeriesHold provides { show -> heldShow = show to titles[show.cover.chatId].orEmpty() }) {
                         Box(Modifier.fillMaxSize()) {
+                            // Offline (R4): the rows as an offline Home draws them, and the cards' greying.
+                            OfflineHomeScope(homeRows) { shownRows ->
                             HomePane(
-                                rows = homeRows,
+                                rows = shownRows,
                                 rowsReady = homeRowsReady,
                                 carouselOn = homeLayout.carousel,
                                 allOff = homeLayout.allOff,
@@ -706,6 +719,15 @@ internal fun BrowseScreen(
                                 // with none the hint says how to add them; only once the rows are
                                 // built, since it flashed up while they were still coming in.
                                 noFavourites = favorites.isEmpty() && homeRowsReady && homeLayout.starredRows,
+                                onChooseFavourites = if (touch) {
+                                    {
+                                        starMode = true
+                                        goToChats()
+                                    }
+                                } else {
+                                    null
+                                },
+                                keepPlace = keepPlaceCard,
                                 onOpenSection = { onPickTab(it); query = "" },
                                 onOpenWatchLater = openLater,
                                 onLaterArtWanted = onHomeLaterArtWanted,
@@ -727,6 +749,7 @@ internal fun BrowseScreen(
                                 // Room for the television's top bar, which stands over the carousel's picture.
                                 tvHeader = if (touch) null else { _ -> Spacer(Modifier.fillMaxWidth().height(TV_BAR_HEIGHT)) },
                             )
+                            }
                         }
                         }
                     } else if (tab.listsVideos) {
@@ -876,7 +899,7 @@ internal fun BrowseScreen(
                                 sort = chatSort,
                                 // Recency order comes straight from Telegram, so the top of the
                                 // unfiltered list already is "recent".
-                                recent = if (
+                                recentChats = if (
                                     tab.isChats &&
                                     chatFilter == ChatFilter.All &&
                                     chatSort == ChatSort.Recent &&
@@ -894,6 +917,12 @@ internal fun BrowseScreen(
                                 launchChatId = launchChatId,
                                 paging = chatPaging,
                                 onMoreChats = onMoreChats,
+                                starMode = starMode,
+                                onStar = { chat ->
+                                    justStarred = if (chat.id in favorites) null else chat.id
+                                    onToggleFavorite(chat)
+                                },
+                                onStarDone = { starMode = false },
                             )
                         }
                     }
@@ -1788,7 +1817,7 @@ private fun TickedCard(ticked: Boolean?, row: Boolean, content: @Composable () -
  * all are), Remove (n) and Done. On a television Up from the first row reaches it.
  */
 @Composable
-private fun HistorySelectionBar(
+internal fun HistorySelectionBar(
     count: Int,
     all: Boolean,
     insets: BrowseInsets,
@@ -1813,6 +1842,14 @@ private fun HistorySelectionBar(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
+            if (rememberLargeFont()) {
+                // At a large font the words would push the count out of the row, and the count is
+                // what the viewer needs to see: the two actions shrink to icons with their names.
+                val toggleLabel = if (all) s.browseSelectNone else s.browseSelectAll
+                IconButton(onClick = if (all) onSelectNone else onSelectAll) { M3Icon(TmIcons.Check, contentDescription = toggleLabel) }
+                IconButton(onClick = onRemove, enabled = count > 0) { M3Icon(TmIcons.Delete, contentDescription = removeLabel) }
+                return
+            }
             androidx.compose.material3.TextButton(onClick = if (all) onSelectNone else onSelectAll) {
                 M3Text(if (all) s.browseSelectNone else s.browseSelectAll, maxLines = 1)
             }
@@ -1919,7 +1956,7 @@ internal fun AccountPicture(account: Account?) {
  * and an icon with no name is a button nobody can identify.
  */
 @Composable
-private fun HeaderAction(
+internal fun HeaderAction(
     label: String,
     icon: ImageVector,
     onClick: () -> Unit,
@@ -1929,7 +1966,7 @@ private fun HeaderAction(
     val focused by interactions.collectIsFocusedAsState()
     val background by animateColorAsState(
         targetValue = if (focused) Tone.focusFill else Tone.surface,
-        animationSpec = tween(140),
+        animationSpec = Motion.standard(Motion.Fast),
         label = "headerAction",
     )
     val foreground = if (focused) Tone.onFocusFill else Tone.text
@@ -1942,13 +1979,14 @@ private fun HeaderAction(
                 .clip(CircleShape)
                 .background(background)
                 .focusRing(focused, CircleShape)
-                .clickable(interactionSource = interactions, indication = null, onClick = onClick)
+                .clickable(interactionSource = interactions, indication = null, role = Role.Button, onClick = onClick)
                 // Even padding with no words, so a wordless chip comes out round rather than wide.
                 .padding(horizontal = if (showLabel) 18.dp else 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center,
         ) {
-            Icon(icon, contentDescription = label, tint = foreground, modifier = Modifier.size(20.dp))
+            // Named once: by the words beside it, or by itself when it stands alone.
+            Icon(icon, contentDescription = if (showLabel) null else label, tint = foreground, modifier = Modifier.size(20.dp))
             if (showLabel) {
                 Spacer(Modifier.width(8.dp))
                 Text(label, style = MaterialTheme.typography.bodyLarge, color = foreground, maxLines = 1)
@@ -2285,7 +2323,7 @@ private fun TvChip(chip: ChipSpec) {
             chip.selected -> Tone.accent.copy(alpha = 0.16f)
             else -> Tone.surfaceHigh
         },
-        animationSpec = tween(FOCUS_FADE_MS),
+        animationSpec = Motion.standard(Motion.Fast),
         label = "chipBackground",
     )
     val foreground = when {
@@ -2319,7 +2357,7 @@ private fun TvChip(chip: ChipSpec) {
 }
 
 @Composable
-private fun PillButton(
+internal fun PillButton(
     label: String,
     icon: ImageVector?,
     /** False draws the icon alone; the label is still what a screen reader says. */
@@ -2330,7 +2368,7 @@ private fun PillButton(
     val focused by interactions.collectIsFocusedAsState()
     val background by animateColorAsState(
         targetValue = if (focused) Tone.focusFill else Tone.surfaceHigh,
-        animationSpec = tween(FOCUS_FADE_MS),
+        animationSpec = Motion.standard(Motion.Fast),
         label = "pillBackground",
     )
     val foreground = if (focused) Tone.onFocusFill else Tone.text
@@ -2343,7 +2381,7 @@ private fun PillButton(
                 .height(48.dp)
                 .clip(CircleShape)
                 .background(background)
-                .clickable(interactionSource = interactions, indication = null, onClick = onClick)
+                .clickable(interactionSource = interactions, indication = null, role = Role.Button, onClick = onClick)
                 // An icon on its own gets even padding, so the pill comes out round rather than wide.
                 .padding(horizontal = if (showLabel) 18.dp else 13.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -2394,14 +2432,33 @@ private fun MoreChatsFoot(paging: com.tmplayer.ui.browse.ChatPaging, onRetry: ()
     }
 }
 
+/**
+ * The line over the chat list while it is in star mode: what a tap does, and Done to leave. The
+ * mode ends by itself on leaving the list, and Back ends it too.
+ */
+@Composable
+internal fun StarModeBar(onDone: () -> Unit, modifier: Modifier = Modifier) {
+    val s = LocalStrings.current
+    Row(
+        modifier.fillMaxWidth().padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Icon(TmIcons.StarOutline, contentDescription = null, tint = Tone.accent, modifier = Modifier.size(20.dp))
+        Text(s.browseStarModeHint, style = MaterialTheme.typography.bodyMedium, color = Tone.muted, modifier = Modifier.weight(1f))
+        TextButton(onClick = onDone) { M3Text(s.commonDone) }
+    }
+}
+
 /** Placeholder rows at the chat list's foot while its older chats are read. */
 private const val MORE_CHATS_PLACEHOLDERS = 2
 
 @Composable
-private fun ChatSection(
+internal fun ChatSection(
     chats: List<ChatSummary>,
     favorites: Set<Long>,
-    recent: List<ChatSummary>,
+    /** The strip's chats ([JUMP_BACK_IN_COUNT] of them); it shows only over a list longer than that ([jumpBackInShown]). */
+    recentChats: List<ChatSummary>,
     insets: BrowseInsets,
     /** Only a remote needs somewhere to stand; on a phone a stolen focus only opens the keyboard. */
     autoFocus: Boolean,
@@ -2416,9 +2473,19 @@ private fun ChatSection(
     paging: com.tmplayer.ui.browse.ChatPaging = com.tmplayer.ui.browse.ChatPaging(),
     /** Reads the next chats, as the list's end comes near. */
     onMoreChats: () -> Unit = {},
+    /**
+     * The phone's star mode (Raju 4.4, Home's "Choose favourites"): a tap on a chat stars or
+     * unstars it ([onStar]) instead of opening it, under a line that says so with a Done
+     * ([onStarDone]). A touch screen only: a remote has the hold menu.
+     */
+    starMode: Boolean = false,
+    onStar: (ChatSummary) -> Unit = {},
+    onStarDone: () -> Unit = {},
 ) {
     val s = LocalStrings.current
     val rowsAreFullBleed = isTouch()
+    val recent = if (jumpBackInShown(chats.size)) recentChats else emptyList()
+    val starring = starMode && rowsAreFullBleed
     // Around the strip's tiles, for the television's focus scale. A phone does not grow them.
     val clearance = if (rowsAreFullBleed) 0.dp else Tv.FocusClearance
     val first = remember { FocusRequester() }
@@ -2460,12 +2527,16 @@ private fun ChatSection(
     val shownGrid: LazyGridState? = if (twoColumns) rowsState else null
     // Opening a chat on a television notes which card it was and where the list stood.
     val open: (ChatSummary, Any) -> Unit = { chat, key ->
-        if (autoFocus && shownGrid != null) {
-            ChatListReturn.key = key
-            ChatListReturn.firstIndex = shownGrid.firstVisibleItemIndex
-            ChatListReturn.firstOffset = shownGrid.firstVisibleItemScrollOffset
+        if (starring) {
+            onStar(chat)
+        } else {
+            if (autoFocus && shownGrid != null) {
+                ChatListReturn.key = key
+                ChatListReturn.firstIndex = shownGrid.firstVisibleItemIndex
+                ChatListReturn.firstOffset = shownGrid.firstVisibleItemScrollOffset
+            }
+            onOpenChat(chat)
         }
-        onOpenChat(chat)
     }
     // The strip of recent chats is the grid's first line, across both columns.
     val stripLines = if (recent.isNotEmpty()) 1 else 0
@@ -2577,6 +2648,9 @@ private fun ChatSection(
                 },
                 verticalArrangement = Arrangement.spacedBy(if (rowsAreFullBleed) 0.dp else 14.dp),
             ) {
+                if (starring) {
+                    item(key = "star-mode", contentType = "star-mode") { StarModeBar(onStarDone, Modifier.padding(horizontal = insets.start)) }
+                }
                 if (recent.isNotEmpty()) {
                     item(key = "recent-strip") { strip() }
                 }
@@ -2685,7 +2759,7 @@ private const val CHAT_RETURN_SETTLED_FRAMES = 3
  * [modifier] is what sets that width rather than the tile deciding for itself.
  */
 @Composable
-private fun ChatTile(
+internal fun ChatTile(
     chat: ChatSummary,
     favorite: Boolean,
     opensOnLaunch: Boolean,
@@ -2698,6 +2772,7 @@ private fun ChatTile(
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
     PrefetchWhileFocused(chat.id, focused)
+    val tileHeight = recentTileHeight()
 
     val body: @Composable ColumnScope.() -> Unit = {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -2748,7 +2823,7 @@ private fun ChatTile(
             modifier = modifier
                 // Fixed, not wrapped: a chat whose name runs to two lines would otherwise stand
                 // taller than its neighbours and leave the row visibly ragged.
-                .height(RECENT_TILE_HEIGHT)
+                .height(tileHeight)
                 .holdable(interactionSource = interactions, onClick = onClick, onHold = onHold),
             shape = M3MaterialTheme.shapes.large,
             colors = CardDefaults.cardColors(containerColor = Tone.surface),
@@ -2758,7 +2833,7 @@ private fun ChatTile(
     } else {
         Column(
             modifier
-                .height(RECENT_TILE_HEIGHT)
+                .height(tileHeight)
                 .focusGrow(focused, focusScale)
                 .clip(RoundedCornerShape(Corner.Large))
                 .background(if (focused) Tone.surfaceHigh else Tone.surface)
@@ -3118,7 +3193,13 @@ private fun EmptyTab(
 }
 
 private const val RECENT_COUNT = 8
-private const val FOCUS_FADE_MS = 140
+
+/**
+ * Whether the "Jump back in" strip is worth its place over a list of [chatCount] chats. A strip
+ * that is the list's first [RECENT_COUNT] chats shows the same chats twice when the list is no
+ * longer than that, so it appears only once the list has chats the strip leaves out (Raju 4.2).
+ */
+internal fun jumpBackInShown(chatCount: Int): Boolean = chatCount > RECENT_COUNT
 
 /**
  * Shown on the focused row only.
@@ -3129,6 +3210,19 @@ private const val FOCUS_FADE_MS = 140
 private val HOLD_HINT: String get() = L.browseHoldHint
 private val RECENT_TILE_WIDTH = 224.dp
 private val RECENT_TILE_HEIGHT = 154.dp
+
+/** What the tile's two lines of words add to its height for each whole step the font grows past normal. */
+private val RECENT_TILE_TEXT_ROOM = 48.dp
+
+/**
+ * The recent chat tile's height. Fixed so a row of tiles stays level, but taller as the font grows:
+ * at 154 dp the name had 20 dp left at a 1.3 font and was cut off.
+ */
+@Composable
+internal fun recentTileHeight(): androidx.compose.ui.unit.Dp {
+    val scale = LocalDensity.current.fontScale
+    return RECENT_TILE_HEIGHT + RECENT_TILE_TEXT_ROOM * (scale - 1f).coerceIn(0f, 1f)
+}
 
 /**
  * A phone chat row, at Material's list-item metrics.
@@ -3160,14 +3254,14 @@ private fun Modifier.bleed(by: Dp): Modifier = layout { measurable, constraints 
     layout(constraints.maxWidth, placeable.height - extra * 2) { placeable.place(-extra, -extra) }
 }
 
-private class BrowseInsets(val start: Dp, val end: Dp, val top: Dp, val bottom: Dp) {
+internal class BrowseInsets(val start: Dp, val end: Dp, val top: Dp, val bottom: Dp) {
     /** The same insets with [extra] more at the bottom, for something floating over the end of the list. */
     fun clearing(extra: Dp) = BrowseInsets(start, end, top, bottom + extra)
 }
 
 /** Under the top bar: the page starts at the bar's first item, right under the bar. */
 private val TvInsets = BrowseInsets(start = TV_START, end = Tv.FocusClearance, top = 4.dp, bottom = Tv.SafeV)
-private val TouchInsets = BrowseInsets(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp)
+internal val TouchInsets = BrowseInsets(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp)
 
 /** The longest chat list whose rows move to a new order rather than being redrawn in it. */
 private const val ANIMATED_ROWS_MAX = 300

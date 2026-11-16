@@ -1,5 +1,8 @@
 package com.tmplayer.desktop.ui
 
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -134,16 +137,14 @@ internal fun ChatBar(
     onSearchDown: () -> Unit,
     recent: List<String>,
     onClearRecent: () -> Unit,
+    /** One recent search taken off the list (rule 6), the cross at the end of its entry. */
+    onRemoveRecent: (String) -> Unit = {},
     favourite: Boolean,
     onToggleFavourite: () -> Unit,
     onSort: () -> Unit,
     sortAnchor: com.tmplayer.ui.components.PopoverAnchor,
     /** A filter is on in this chat: the Sort button is drawn in the accent. */
     filtered: Boolean = false,
-    /** Videos the size limits keep out of this chat, for the "n hidden" button; 0 leaves it out. */
-    sizeHidden: Int = 0,
-    onSizeHidden: () -> Unit = {},
-    sizeAnchor: com.tmplayer.ui.components.PopoverAnchor? = null,
 ) {
     val s = LocalStrings.current
     val command = if (OsInfo.isMac) "⌘" else "Ctrl+"
@@ -158,7 +159,7 @@ internal fun ChatBar(
             enter = fadeIn() + slideInVertically { it / 3 },
             exit = fadeOut() + slideOutVertically { it / 3 },
         ) {
-            RecentPanel(recent, onPick = { onQuery(it); onSubmit(it) }, onClear = onClearRecent)
+            RecentPanel(recent, onPick = { onQuery(it); onSubmit(it) }, onClear = onClearRecent, onRemove = onRemoveRecent)
         }
         if (searching) {
             BarPill(Modifier.widthIn(min = 360.dp, max = SEARCH_WIDTH).fillMaxWidth()) {
@@ -231,18 +232,6 @@ internal fun ChatBar(
                         },
                     )
                 }
-                // Says that the size limits hide some, and changes the smallest size from here.
-                if (sizeHidden > 0) {
-                    BarIcon(
-                        TmIcons.FilterHorizontal,
-                        s.gridSizeHiddenLabel(sizeHidden),
-                        null,
-                        onSizeHidden,
-                        caption = s.gridSizeHidden(sizeHidden),
-                        modifier = sizeAnchor?.modifier ?: Modifier,
-                        tint = Tone.accent,
-                    )
-                }
                 BarIcon(TmIcons.Sort, if (filtered) s.gridFilterOn else s.gridSort, null, onSort, caption = s.gridSort, modifier = sortAnchor.modifier, tint = if (filtered) Tone.accent else Tone.text)
             }
         }
@@ -289,7 +278,7 @@ private fun BarIcon(
 
 /** The recent searches, plain words with a history mark on one panel, Clear at its end. */
 @Composable
-private fun RecentPanel(searches: List<String>, onPick: (String) -> Unit, onClear: () -> Unit) {
+internal fun RecentPanel(searches: List<String>, onPick: (String) -> Unit, onClear: () -> Unit, onRemove: (String) -> Unit = {}) {
     val s = LocalStrings.current
     Row(
         Modifier
@@ -305,17 +294,32 @@ private fun RecentPanel(searches: List<String>, onPick: (String) -> Unit, onClea
         verticalAlignment = Alignment.CenterVertically,
     ) {
         for (recent in searches) {
-            // No box round each: the panel already says these go together.
-            Row(
-                Modifier
-                    .clip(CircleShape)
-                    .clickable(role = Role.Button) { onPick(recent) }
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Icon(TmIcons.History, contentDescription = null, tint = Tone.muted, modifier = Modifier.size(18.dp))
-                Text(recent, style = MaterialTheme.typography.bodyMedium, color = Tone.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // No box round each: the panel already says these go together. The cross takes the one
+            // search off the list; Clear takes them all.
+            Row(Modifier.clip(CircleShape), verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    Modifier
+                        .clip(CircleShape)
+                        .clickable(role = Role.Button) { onPick(recent) }
+                        .padding(start = 12.dp, end = 6.dp, top = 10.dp, bottom = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Icon(TmIcons.History, contentDescription = null, tint = Tone.muted, modifier = Modifier.size(18.dp))
+                    Text(recent, style = MaterialTheme.typography.bodyMedium, color = Tone.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                val removeLabel = "${s.commonRemove}: $recent"
+                Box(
+                    Modifier
+                        .size(RECENT_REMOVE)
+                        .clip(CircleShape)
+                        .testTag("recent-remove")
+                        .clickable(role = Role.Button, onClickLabel = removeLabel) { onRemove(recent) }
+                        .semantics { contentDescription = removeLabel },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(TmIcons.Close, contentDescription = null, tint = Tone.muted, modifier = Modifier.size(14.dp))
+                }
             }
         }
         Spacer(Modifier.width(4.dp))
@@ -324,3 +328,6 @@ private fun RecentPanel(searches: List<String>, onPick: (String) -> Unit, onClea
 }
 
 private val SEARCH_WIDTH = 600.dp
+
+/** The cross that takes one recent search off the list: a pointer target, as the panel's pills are. */
+private val RECENT_REMOVE = 32.dp

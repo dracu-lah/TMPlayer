@@ -80,7 +80,6 @@ class LinkAndKeepShotsTest {
                 Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     PinnedEntryRow(PinnedPost(9, video, null, "Welcome, start here"), noVideos = false) {}
                     PinnedEntryRow(PinnedPost(10, null, TgLink.Post("nature_clips", null, 4), "Start here"), noVideos = false) {}
-                    AudioEntryRow(14, noVideos = false) {}
                     RoundEntryRow(6, noVideos = false) {}
                 }
             },

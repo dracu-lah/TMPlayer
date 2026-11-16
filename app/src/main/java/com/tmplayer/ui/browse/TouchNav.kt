@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -61,6 +62,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -77,6 +79,7 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -93,8 +96,9 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tmplayer.data.Account
+import com.tmplayer.ui.components.FloatingChrome
 import com.tmplayer.ui.components.LocalBottomChrome
-import com.tmplayer.ui.components.MediaPreview
+import androidx.compose.ui.platform.testTag
 import com.tmplayer.ui.components.captionStyle
 import com.tmplayer.ui.components.pressScale
 import androidx.compose.material3.ripple
@@ -117,6 +121,7 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -129,21 +134,16 @@ import com.tmplayer.ui.theme.floatingBorder
 import com.tmplayer.ui.theme.rememberReducedMotion
 
 /**
- * Where the phone's floating bar can take the viewer, in the bar's order. Search comes after them,
- * a button that opens the search over the page rather than a page of its own, and the profile
- * picture last, which opens [ProfilePopover] with the viewer's own lists and Settings.
+ * Where the phone's floating bar can take the viewer, with the slot each button stands in: Home,
+ * Chats, Search (a button the search field grows out of rather than a page of its own, so no
+ * destination), then Downloads (R2: a place of its own, no longer behind the profile picture).
+ * Your lists and Settings are behind the gear at the top end of Home and of the Downloads page
+ * ([YouGearButton]).
  */
-internal enum class TouchDestination { Home, Chats }
+internal enum class TouchDestination(val slot: Int) { Home(0), Chats(1), Downloads(3) }
 
-/** The profile picture's place on the bar: after every [TouchDestination] and Search. */
-internal val PROFILE_SLOT = TouchDestination.entries.size + 1
-
-/**
- * Which of the bar's slots carries the sliding highlight: [current]'s button, or the picture on a
- * page behind it ([inProfile]: Favourites, History, Watch later, Downloads), or none.
- */
-internal fun barHighlightIndex(current: TouchDestination?, inProfile: Boolean = false): Int? =
-    current?.ordinal ?: if (inProfile) PROFILE_SLOT else null
+/** Which of the bar's slots carries the sliding highlight: [current]'s button, or none. */
+internal fun barHighlightIndex(current: TouchDestination?): Int? = current?.slot
 
 /**
  * What the floating bar and the popover behind the picture show and do, the same on every page
@@ -153,7 +153,7 @@ internal fun barHighlightIndex(current: TouchDestination?, inProfile: Boolean = 
 internal class TouchNav(
     val account: Account?,
     val favoriteCount: Int,
-    /** Downloads in flight, badged on the Downloads row and on the picture. */
+    /** Downloads running now, the number on the Downloads button of the bar. */
     val downloadCount: Int,
     /** "Your viewing" over the picture's menu: videos part way through, and videos watched. */
     val watchingCount: Int = 0,
@@ -162,7 +162,7 @@ internal class TouchNav(
     val onHome: () -> Unit,
     val onChats: () -> Unit,
     val onSearch: () -> Unit,
-    /** Settings, from the picture's popover (the phone, the television's account menu). */
+    /** Settings, from the gear's card (the phone), the picture's menu (the television, the desktop). */
     val onSettings: () -> Unit,
     val onFavourites: () -> Unit,
     val onDownloads: () -> Unit,
@@ -173,15 +173,14 @@ internal class TouchNav(
 /**
  * What one page asks of the floating bar while it is the page on screen.
  *
- * @param current the bar button lit for this page, or null for a page behind the picture.
- * @param inProfile the picture is ringed: Favourites, History, Watch later and Downloads.
+ * @param current the bar button lit for this page, or null for a page behind the gear (Favourites,
+ *   History, Watch later).
  * @param hidden the bar steps out of the way for now (a search open, a selection under way)
  *   while the page still keeps its room at the foot.
  * @param actions the page's own buttons, in a small pill above the bar; null for none.
  */
 internal class TouchPageSpec(
     val current: TouchDestination?,
-    val inProfile: Boolean = false,
     val hidden: Boolean = false,
     val actions: (@Composable RowScope.() -> Unit)? = null,
     /**
@@ -206,6 +205,12 @@ internal class TouchChrome {
 
     /** Set by the bar's magnifier on a page without a search; the browser opens its search and clears it. */
     var searchAsked by mutableStateOf(false)
+
+    /** The gear's card (Favourites, History, Watch later, Settings, Update) is open. */
+    var youOpen by mutableStateOf(false)
+
+    /** An update is waiting: the gear wears a dot, as the picture did. */
+    var youBadge by mutableStateOf(false)
 
     /** A bar button pressed again on its own page, for that page to go back to its top ([ScrollToTopOnReselect]). */
     internal val reselected = MutableSharedFlow<TouchDestination>(extraBufferCapacity = 1)
@@ -237,9 +242,9 @@ internal fun TouchPage(spec: TouchPageSpec?) {
 }
 
 /**
- * The phone's floating bar, hosted once over every page: Home, Chats, Search and the viewer's
- * picture, with the popover of Favourites, Downloads, History, Watch later, Settings and Update
- * behind the picture.
+ * The phone's floating bar, hosted once over every page: Home, Chats, Search and Downloads (badged
+ * with how many are running), with the card of Favourites, History, Watch later, Settings and
+ * Update behind the gear ([YouGearButton]).
  *
  * The bar floats, so it takes no room from the listing: it slides away as the list is pushed up
  * and comes back on the first pull down, on a change of page and on the way back from the player.
@@ -255,20 +260,25 @@ internal fun TouchNavHost(
     chrome: TouchChrome,
     /** The page on screen: whatever [LocalTouchPageKey] its [TouchPage] reports under. */
     pageKey: Any,
+    /** The connection banner, drawn above the bar and never over it (R4, 9.1); [bannerShown] says when. */
+    bannerShown: Boolean = false,
+    banner: @Composable () -> Unit = {},
     content: @Composable () -> Unit,
 ) {
     val reduced = rememberReducedMotion() || Motion.reduced
     val bar = chrome.bar
-    var profileOpen by remember { mutableStateOf(false) }
-    SideEffect { chrome.pageKey = pageKey }
+    SideEffect {
+        chrome.pageKey = pageKey
+        chrome.youBadge = nav.updateVersion != null
+    }
     val spec = chrome.specs[pageKey]
 
-    // Back closes the popover before it leaves the screen.
-    BackHandler(enabled = profileOpen) { profileOpen = false }
+    // Back closes the card before it leaves the screen.
+    BackHandler(enabled = chrome.youOpen) { chrome.youOpen = false }
 
     // The bar comes back whenever the page underneath changes: a bar left hidden across a change
     // of page has no pull-down to restore it on a page too short to scroll.
-    LaunchedEffect(pageKey, spec?.current, spec?.inProfile, spec?.hidden) { bar.show() }
+    LaunchedEffect(pageKey, spec?.current, spec?.hidden) { bar.show() }
     // And on the way back from the player, an activity coming forward rather than a recomposition.
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -276,6 +286,7 @@ internal fun TouchNavHost(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
+    BarRest(bar)
     val talkBack = rememberTouchExploration()
     val keyboard = WindowInsets.isImeVisible
 
@@ -313,33 +324,21 @@ internal fun TouchNavHost(
             animationSpec = Motion.standard(if (reduced) 0 else Motion.Normal),
             label = "railRoom",
         )
-        // The mini player (U8): a docked video's bar, over every page, above the floating bar
-        // when that is out and at the foot when it is not. Out of the way while typing.
-        val docked by com.tmplayer.player.MiniDock.docked.collectAsStateWithLifecycle()
-        val miniShown = docked != null && !keyboard
-        // The kids lock stays in force: a docked video from a chat it now leaves out goes.
-        val kidsAllowed by com.tmplayer.data.ChatGate.allowed.collectAsStateWithLifecycle()
-        LaunchedEffect(docked, kidsAllowed) {
-            val player = docked ?: return@LaunchedEffect
-            if (!com.tmplayer.data.KidsLock.allows(kidsAllowed, player.chatId)) com.tmplayer.player.MiniDock.dismiss()
-        }
-        val miniFoot by animateDpAsState(
-            targetValue = miniFootOf(
-                navigationBar = navigationBar,
-                rail = rail,
-                barShown = barShown,
-                withActions = spec?.actions != null,
-                room = room,
-            ),
+        // The banner's own height, measured, so the pages end above it and nothing it covers is lost.
+        var bannerHeight by remember { mutableStateOf(0.dp) }
+        val bannerRoom = if (bannerShown && !rail) bannerHeight + BAR_GAP else 0.dp
+        // Its foot: on the bar's top edge while the bar is out, at the window's foot when it is not.
+        val bannerFoot by animateDpAsState(
+            targetValue = if (barShown && !rail) room else navigationBar + BAR_MARGIN,
             animationSpec = Motion.standard(if (reduced) 0 else Motion.Normal),
-            label = "miniFoot",
+            label = "bannerFoot",
         )
-        val miniRoom = if (miniShown) MINI_DOCK_HEIGHT + BAR_GAP + if (spec == null) BAR_MARGIN else 0.dp else 0.dp
 
         SharedTransitionLayout(Modifier.fillMaxSize()) {
             Box(Modifier.fillMaxSize()) {
                 CompositionLocalProvider(
-                    LocalBottomChrome provides room + miniRoom,
+                    LocalBottomChrome provides room + bannerRoom,
+                    com.tmplayer.ui.components.LocalBannerRoom provides bannerRoom,
                     LocalTouchChrome provides chrome,
                     LocalTouchShared provides this@SharedTransitionLayout,
                     LocalTouchRail provides rail,
@@ -385,14 +384,12 @@ internal fun TouchNavHost(
                     val barContent: @Composable () -> Unit = {
                         FloatingBar(
                             current = shown.current,
-                            inProfile = shown.inProfile,
                             position = shown.position,
-                            account = nav.account,
-                            badged = nav.downloadCount > 0 || nav.updateVersion != null,
+                            downloading = nav.downloadCount,
                             onHome = retap(TouchDestination.Home, nav.onHome),
                             onChats = retap(TouchDestination.Chats, nav.onChats),
                             onSearch = nav.onSearch,
-                            onProfile = { profileOpen = true },
+                            onDownloads = retap(TouchDestination.Downloads, nav.onDownloads),
                             searchShared = searchShared,
                             vertical = rail,
                         )
@@ -429,39 +426,35 @@ internal fun TouchNavHost(
                     }
                 }
 
+                // The connection banner: a card with its own buttons, above the bar, so a tap meant for
+                // the bar never lands on it. Beside a rail it keeps the window's foot, off the rail.
                 AnimatedVisibility(
-                    visible = miniShown,
+                    visible = bannerShown,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
-                        .padding(start = 16.dp + railRoom, end = 16.dp, bottom = miniFoot)
-                        .widthIn(max = MINI_DOCK_MAX_WIDTH),
-                    enter = if (reduced) fadeIn(Motion.standard(0)) else slideInVertically(BAR_SPRING) { it / 2 } + fadeIn(Motion.standard(Motion.Fast)),
-                    exit = if (reduced) fadeOut(Motion.standard(0)) else slideOutVertically(Motion.standard(Motion.Normal)) { it / 2 } + fadeOut(Motion.standard(Motion.Fast)),
+                        .padding(start = 16.dp + railRoom, end = 16.dp, bottom = bannerFoot)
+                        .widthIn(max = 560.dp),
+                    enter = fadeIn(Motion.standard(if (reduced) 0 else Motion.Fast)),
+                    exit = fadeOut(Motion.standard(if (reduced) 0 else Motion.Fast)),
                 ) {
-                    // The last player docked, so the bar does not redraw empty on its way out.
-                    val shownPlayer = remember { arrayOf<com.tmplayer.player.DockedPlayer?>(null) }
-                    docked?.let { shownPlayer[0] = it }
-                    shownPlayer[0]?.let { MiniDockBar(it) }
+                    val bannerDensity = LocalDensity.current
+                    Box(Modifier.onSizeChanged { bannerHeight = with(bannerDensity) { it.height.toDp() } }) { banner() }
                 }
 
-                ProfilePopover(
-                    open = profileOpen,
+                YouPopover(
+                    open = chrome.youOpen,
                     reduced = reduced,
-                    rail = rail,
-                    railRoom = railRoom,
                     favoriteCount = nav.favoriteCount,
-                    downloadCount = nav.downloadCount,
                     watchingCount = nav.watchingCount,
                     watchedCount = nav.watchedCount,
                     updateVersion = nav.updateVersion,
-                    onDismiss = { profileOpen = false },
-                    onWatched = { profileOpen = false; nav.onHistory(HistoryTab.Watched) },
-                    onFavourites = { profileOpen = false; nav.onFavourites() },
-                    onDownloads = { profileOpen = false; nav.onDownloads() },
-                    onHistory = { profileOpen = false; nav.onHistory(HistoryTab.Continue) },
-                    onWatchLater = { profileOpen = false; nav.onHistory(HistoryTab.WatchLater) },
-                    onSettings = { profileOpen = false; nav.onSettings() },
-                    onUpdate = { profileOpen = false; nav.onUpdate() },
+                    onDismiss = { chrome.youOpen = false },
+                    onWatched = { chrome.youOpen = false; nav.onHistory(HistoryTab.Watched) },
+                    onFavourites = { chrome.youOpen = false; nav.onFavourites() },
+                    onHistory = { chrome.youOpen = false; nav.onHistory(HistoryTab.Continue) },
+                    onWatchLater = { chrome.youOpen = false; nav.onHistory(HistoryTab.WatchLater) },
+                    onSettings = { chrome.youOpen = false; nav.onSettings() },
+                    onUpdate = { chrome.youOpen = false; nav.onUpdate() },
                 )
             }
         }
@@ -567,7 +560,6 @@ internal fun TouchBrowseShell(
                 selected.onChatsPage -> TouchDestination.Chats
                 else -> null
             },
-            inProfile = !selected.isHome && !selected.onChatsPage,
             hidden = searchOpen,
             actions = actions,
             position = barPosition,
@@ -584,6 +576,10 @@ internal fun TouchBrowseShell(
     Box(Modifier.fillMaxSize()) {
         // Each page draws its own title ([PhonePageFrame]), so a title swiped in moves with its page.
         content()
+
+        // Home has no title bar to hold the gear: it floats over the carousel's top end, as the
+        // detail page's Cast does over its picture.
+        if (selected.isHome && !searchOpen) YouGearButton(Modifier.align(Alignment.TopEnd))
 
         val shared = LocalTouchShared.current
         AnimatedVisibility(
@@ -621,20 +617,6 @@ internal val LocalSearchEntered = staticCompositionLocalOf<() -> Boolean> { { tr
  * the bar, its margin and gap, and the pill of the page's own buttons when it has one. Beside a
  * [rail] the foot keeps only that pill, on its margin.
  */
-/** The mini player bar's widest, on a tablet or a phone on its side. */
-internal val MINI_DOCK_MAX_WIDTH = 560.dp
-
-/**
- * How far above the window's foot the mini player's bar sits: over the floating bar and the
- * page's pill of buttons while they are out ([room]), at the foot beside a rail (over its pill
- * when there is one), and at the foot when the bar is away.
- */
-internal fun miniFootOf(navigationBar: Dp, rail: Boolean, barShown: Boolean, withActions: Boolean, room: Dp): Dp = when {
-    rail -> navigationBar + maxOf(BAR_MARGIN, touchShellClearance(withActions = withActions, rail = true))
-    barShown -> room
-    else -> navigationBar + BAR_MARGIN
-}
-
 internal fun touchShellClearance(withActions: Boolean, rail: Boolean = false): Dp = when {
     !rail -> BAR_MARGIN + BAR_HEIGHT + BAR_GAP + if (withActions) ACTIONS_HEIGHT + BAR_GAP else 0.dp
     withActions -> BAR_MARGIN + ACTIONS_HEIGHT + BAR_GAP
@@ -653,6 +635,14 @@ internal class BarVisibility {
         private set
     private var travelled by mutableFloatStateOf(0f)
 
+    /**
+     * How many times the list under the bar has moved. [BarRest] waits on it: while it keeps
+     * counting the list is in motion, and the bar comes back once it has stood still for
+     * [BAR_REST_MS].
+     */
+    var moves by mutableIntStateOf(0)
+        private set
+
     fun show() {
         shown = true
         travelled = 0f
@@ -661,7 +651,12 @@ internal class BarVisibility {
     val connection = object : NestedScrollConnection {
         override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
             val moved = consumed.y
+            if (moved != 0f) moves++
             when {
+                // A push or fling that reaches the end of the list (nothing left to scroll, so some of
+                // it comes back unconsumed) brings the bar back: at the end of Home there was no bar
+                // to reach Chats with (R4, 4.5).
+                available.y < 0f && moved <= 0f -> show()
                 moved < 0f -> {
                     travelled = (travelled + moved).coerceAtMost(0f)
                     if (travelled < -HIDE_AFTER_PX) shown = false
@@ -672,6 +667,28 @@ internal class BarVisibility {
         }
     }
 }
+
+/**
+ * Brings the bar back after the list has rested for [BAR_REST_MS] (the bar returns after one
+ * second of stillness, so a person who stops reading to reach for a tab is not left to find that a
+ * pull down is needed). Every move of the list starts the wait again, so a slow scroll or a fling
+ * keeps the bar out; a bar that is already out has nothing to wait for.
+ */
+@Composable
+internal fun BarRest(bar: BarVisibility) {
+    // The reads sit in the flow, not in composition: the count changes every frame of a scroll.
+    LaunchedEffect(bar) {
+        snapshotFlow { if (bar.shown) -1 else bar.moves }.collectLatest { hidden ->
+            if (hidden >= 0) {
+                delay(BAR_REST_MS)
+                bar.show()
+            }
+        }
+    }
+}
+
+/** How long the list must stand still before a hidden bar returns. */
+internal const val BAR_REST_MS = 1_000L
 
 /** Whether TalkBack, or anything else exploring the screen by touch, is on, followed as it changes. */
 @Composable
@@ -692,9 +709,9 @@ internal fun rememberTouchExploration(): Boolean {
  * soft shadow and the floating hairline. Each button is its icon with its name in small type under
  * it, as a tab bar has. The current page's button sits on a rounded pill in the accent, which
  * slides from button to button (and follows a swipe between Home and Chats as it goes). On a page
- * behind the picture (Favourites, History, Watch later, Downloads) the pill moves under the
- * picture, which wears an accent ring too. Search is the button the search field grows out of
- * ([searchShared]). Every press and the highlight are pills, round like the bar they sit in.
+ * behind the gear (Favourites, History, Watch later) no button is lit. Search is the button the
+ * search field grows out of ([searchShared]); Downloads wears the number running ([downloading]).
+ * Every press and the highlight are pills, round like the bar they sit in.
  *
  * [vertical] stands the same bar up as a rail down the start edge, for a wide window: the same
  * buttons in the same order, top to bottom, with the highlight sliding down rather than across.
@@ -702,14 +719,12 @@ internal fun rememberTouchExploration(): Boolean {
 @Composable
 private fun FloatingBar(
     current: TouchDestination?,
-    inProfile: Boolean,
     position: (() -> Float)?,
-    account: Account?,
-    badged: Boolean,
+    downloading: Int,
     onHome: () -> Unit,
     onChats: () -> Unit,
     onSearch: () -> Unit,
-    onProfile: () -> Unit,
+    onDownloads: () -> Unit,
     searchShared: Modifier,
     vertical: Boolean = false,
 ) {
@@ -746,7 +761,7 @@ private fun FloatingBar(
           Box(contentAlignment = if (vertical) Alignment.TopCenter else Alignment.CenterStart) {
             // One highlight under the chosen page, sliding to the next one rather than blinking
             // off under one button and on under another, so the bar shows where the page went.
-            val index = barHighlightIndex(current, inProfile)
+            val index = barHighlightIndex(current)
             val step = with(LocalDensity.current) { ((if (vertical) BUTTON_HEIGHT else BUTTON_WIDTH) + BAR_SPACING).toPx() }
             // Where the highlight stands, in buttons from the start: sprung to the chosen one, or,
             // while Home and Chats are on screen, following the pager (sprung only the first time,
@@ -801,7 +816,13 @@ private fun FloatingBar(
                 BarButton(TmIcons.Home, s.browseTabHome, current == TouchDestination.Home, onHome)
                 BarButton(TmIcons.Chats, s.browseTabChats, current == TouchDestination.Chats, onChats)
                 BarButton(TmIcons.Search, s.commonSearch, false, onSearch, role = Role.Button, modifier = searchShared)
-                ProfileButton(account, inProfile, badged, onProfile)
+                BarButton(
+                    TmIcons.Download,
+                    s.navDownloads,
+                    current == TouchDestination.Downloads,
+                    onDownloads,
+                    badge = downloading,
+                )
             }
             if (vertical) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(BAR_SPACING)) { buttons() }
@@ -813,50 +834,33 @@ private fun FloatingBar(
     }
 }
 
-/** The viewer's picture on the bar, which opens the popover of their own lists. */
+/**
+ * The gear at the top end of Home and of the Downloads page: it opens the card of the viewer's own
+ * lists (Favourites, History, Watch later) and Settings, which used to hide behind the picture on
+ * the bar. Nothing outside a [TouchNavHost] (no card to open). It wears a dot when an update waits.
+ */
 @Composable
-private fun ProfileButton(account: Account?, inProfile: Boolean, badged: Boolean, onProfile: () -> Unit) {
+internal fun YouGearButton(modifier: Modifier = Modifier) {
+    val chrome = LocalTouchChrome.current ?: return
     val s = LocalStrings.current
-    val reduced = rememberReducedMotion() || Motion.reduced
-    val profilePress = remember { MutableInteractionSource() }
-    // The one button on the bar with no caption under it: its name is in a tooltip.
-    com.tmplayer.ui.components.IconTip(s.navProfile) {
-        Column(
-            Modifier
-                .size(BUTTON_WIDTH, BUTTON_HEIGHT)
-                .pressScale(profilePress)
-                .clip(HIGHLIGHT_SHAPE)
-                .clickable(interactionSource = profilePress, indication = ripple(), role = Role.Button, onClick = onProfile)
-                .semantics {
-                    contentDescription = s.navProfile
-                    selected = inProfile
-                },
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-        ) {
-          Box(contentAlignment = Alignment.Center) {
-            // A ring round the picture while one of its pages is open: the lists behind it are
-            // somewhere the bar can say the viewer is, without lighting a button they are not on.
-            val ring by androidx.compose.animation.animateColorAsState(
-                if (inProfile) Tone.accent else Color.Transparent,
-                animationSpec = Motion.standard(if (reduced) 0 else Motion.Fast),
-                label = "profileRing",
+    Box(modifier) {
+        com.tmplayer.ui.components.FloatingEndButton(
+            icon = TmIcons.Settings,
+            label = s.navYou,
+            onClick = { chrome.youOpen = true },
+        )
+        if (chrome.youBadge) {
+            // Over the button's top end corner, clear of the status bar and the page's own inset.
+            Box(
+                Modifier
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
+                    .padding(end = com.tmplayer.ui.components.FloatingChrome.Inset + 2.dp, top = 12.dp)
+                    .size(10.dp)
+                    .align(Alignment.TopEnd)
+                    .clip(CircleShape)
+                    .background(Tone.caution)
+                    .border(1.5.dp, FloatingTone.menu, CircleShape),
             )
-            Box(Modifier.size(PICTURE + 6.dp).border(1.5.dp, ring, CircleShape))
-            ProfilePicture(account, PICTURE)
-            if (badged) {
-                // News behind the picture: a download running, or an update to install.
-                Box(
-                    Modifier
-                        .align(Alignment.TopEnd)
-                        .offset(x = 2.dp, y = (-2).dp)
-                        .size(9.dp)
-                        .clip(CircleShape)
-                        .background(Tone.caution)
-                        .border(1.5.dp, FloatingTone.menu, CircleShape),
-                )
-            }
-          }
         }
     }
 }
@@ -889,6 +893,8 @@ private fun BarButton(
     onClick: () -> Unit,
     role: Role = Role.Tab,
     modifier: Modifier = Modifier,
+    /** A count over the icon's top end (Downloads running); 0 draws none. */
+    badge: Int = 0,
 ) {
     val press = remember { MutableInteractionSource() }
     Column(
@@ -898,7 +904,8 @@ private fun BarButton(
             .clip(HIGHLIGHT_SHAPE)
             .clickable(interactionSource = press, indication = ripple(), role = role, onClick = onClick)
             .semantics {
-                contentDescription = label
+                // The count is read with the name ("Downloads, 2 running"), not as a stray number.
+                contentDescription = if (badge > 0) "$label, $badge" else label
                 if (role == Role.Tab) selected = chosen
                 this.role = role
             },
@@ -908,49 +915,46 @@ private fun BarButton(
         // The highlight behind is the bar's (see FloatingBar); the icon takes its colour as it lands
         // and fills in with a drop (SelectableIcon).
         val tint by androidx.compose.animation.animateColorAsState(if (chosen) Tone.accent else Tone.text, label = "barIcon")
-        com.tmplayer.ui.components.SelectableIcon(icon, selected = chosen, tint = tint, size = 24.dp)
+        Box(contentAlignment = Alignment.Center) {
+            com.tmplayer.ui.components.SelectableIcon(icon, selected = chosen, tint = tint, size = 24.dp)
+            if (badge > 0) {
+                Text(
+                    if (badge > 99) "99+" else badge.toString(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Tone.onAccent,
+                    maxLines = 1,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .offset(x = 10.dp, y = (-6).dp)
+                        .clip(CircleShape)
+                        .background(Tone.accent)
+                        .border(1.5.dp, FloatingTone.menu, CircleShape)
+                        .padding(horizontal = 4.dp)
+                        .testTag(BAR_BADGE_TAG),
+                )
+            }
+        }
         BarCaption(label, chosen)
     }
 }
 
-@Composable
-private fun ProfilePicture(account: Account?, size: Dp) {
-    Box(Modifier.size(size).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceContainerHighest)) {
-        if (account != null) {
-            MediaPreview(
-                miniThumbnail = account.miniThumbnail,
-                thumbnailFileId = account.photoFileId,
-                fallbackLabel = account.name,
-                modifier = Modifier.fillMaxSize().clip(CircleShape),
-            )
-        } else {
-            Icon(TmIcons.Account, contentDescription = null, tint = Tone.muted, modifier = Modifier.align(Alignment.Center).size(size * 0.7f))
-        }
-    }
-}
-
 /**
- * The viewer's own lists, behind their picture: a small card that grows out of the bottom end
- * corner over a dimmed screen, with Favourites, Downloads, History and Watch later, then Settings
- * (which carries the account, Sign out and About) and Update when there is one.
- * A tap outside, Back, or picking a row closes it.
+ * The viewer's own lists, behind the gear: a small card that grows out of the top end corner over a
+ * dimmed screen, with Favourites, History and Watch later, then Settings (which carries the
+ * account, Sign out and About) and Update when there is one. Downloads is on the bar now, so it is
+ * not here. A tap outside, Back, or picking a row closes it.
  */
 @Composable
-private fun ProfilePopover(
+private fun YouPopover(
     open: Boolean,
     reduced: Boolean,
-    /** Beside a rail the card grows out of the bottom start corner, next to the picture. */
-    rail: Boolean,
-    railRoom: Dp,
     favoriteCount: Int,
-    downloadCount: Int,
     watchingCount: Int,
     watchedCount: Int,
     updateVersion: String?,
     onDismiss: () -> Unit,
     onWatched: () -> Unit,
     onFavourites: () -> Unit,
-    onDownloads: () -> Unit,
     onHistory: () -> Unit,
     onWatchLater: () -> Unit,
     onSettings: () -> Unit,
@@ -970,28 +974,18 @@ private fun ProfilePopover(
         )
     }
     val ltr = LocalLayoutDirection.current == LayoutDirection.Ltr
-    // The corner the card grows from, in screen terms: the end one over a bar, the start one
-    // beside a rail.
-    val origin = TransformOrigin(if (rail == ltr) 0f else 1f, 1f)
+    // The corner the card grows from, in screen terms: the top end one, under the gear.
+    val origin = TransformOrigin(if (ltr) 1f else 0f, 0f)
     Box(
         Modifier
             .fillMaxSize()
-            .then(
-                if (rail) {
-                    Modifier
-                        .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Vertical))
-                        .padding(top = 8.dp, bottom = BAR_MARGIN, start = railRoom + BAR_GAP, end = 16.dp)
-                } else {
-                    Modifier
-                        .statusBarsPadding()
-                        .navigationBarsPadding()
-                        .padding(top = 8.dp, bottom = BAR_MARGIN + BAR_HEIGHT + BAR_GAP, end = 16.dp, start = 16.dp)
-                },
-            ),
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .padding(top = FloatingChrome.Button + 16.dp, end = 16.dp, start = 16.dp),
     ) {
         AnimatedVisibility(
             visible = open,
-            modifier = Modifier.align(if (rail) Alignment.BottomStart else Alignment.BottomEnd),
+            modifier = Modifier.align(Alignment.TopEnd),
             enter = if (reduced) {
                 fadeIn(Motion.standard(0))
             } else {
@@ -1027,7 +1021,6 @@ private fun ProfilePopover(
                 HorizontalDivider(Modifier.padding(horizontal = 14.dp, vertical = 2.dp))
                 val rows = buildList<@Composable (Modifier) -> Unit> {
                     add { m -> PopoverRow(TmIcons.StarOutline, s.browseTabFavourites, favoriteCount.takeIf { it > 0 }?.toString(), modifier = m, onClick = onFavourites) }
-                    add { m -> PopoverRow(TmIcons.Download, s.navDownloads, downloadCount.takeIf { it > 0 }?.toString(), modifier = m, onClick = onDownloads) }
                     add { m -> PopoverRow(TmIcons.History, s.browseTabHistory, null, modifier = m, onClick = onHistory) }
                     add { m -> PopoverRow(TmIcons.Clock, s.browseTabWatchLater, null, modifier = m, onClick = onWatchLater) }
                     add { m -> PopoverRow(TmIcons.Settings, s.navSettings, null, modifier = m, onClick = onSettings) }
@@ -1045,7 +1038,7 @@ private fun ProfilePopover(
 }
 
 @Composable
-private fun PopoverRow(
+internal fun PopoverRow(
     icon: ImageVector,
     label: String,
     badge: String?,
@@ -1066,7 +1059,8 @@ private fun PopoverRow(
     Row(
         modifier
             .fillMaxWidth()
-            .height(POPOVER_ROW)
+            // A floor, not a fixed height: a thumb's 48 dp, and a longer word or a larger font grows the row.
+            .heightIn(min = POPOVER_ROW)
             .padding(horizontal = 6.dp)
             // The card's 20 dp corner less the 6 dp inset, so a filled row runs parallel to it.
             .clip(RoundedCornerShape(14.dp))
@@ -1077,7 +1071,7 @@ private fun PopoverRow(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Icon(icon, contentDescription = null, tint = ink, modifier = Modifier.size(22.dp).pressScale(press))
-        Text(label, style = MaterialTheme.typography.bodyMedium, color = ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = ink, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
         if (badge != null) {
             Text(
                 badge,
@@ -1091,6 +1085,9 @@ private fun PopoverRow(
         }
     }
 }
+
+/** The test tag of the count over the Downloads button. */
+internal const val BAR_BADGE_TAG = "bar-badge"
 
 /** The key the bar's magnifier and the search field share, for the one to grow into the other. */
 private const val SEARCH_KEY = "search-field"
@@ -1138,10 +1135,10 @@ private val BAR_SPACING = 4.dp
 private val PICTURE = 30.dp
 internal val BAR_SHADOW = 8.dp
 private val POPOVER_WIDTH = 208.dp
-private val POPOVER_ROW = 44.dp
+internal val POPOVER_ROW = 48.dp
 
-/** The popover's rows before the divider: the four lists; Settings and Update come after it. */
-private const val POPOVER_LISTS = 4
+/** The popover's rows before the divider: the three lists; Settings and Update come after it. */
+private const val POPOVER_LISTS = 3
 private val POPOVER_SHAPE = RoundedCornerShape(20.dp)
 
 /** The bar coming back: quick, with a little give as it lands. */

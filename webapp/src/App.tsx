@@ -4,6 +4,7 @@ import { api, errorText, sessionHere, useHere } from './tg/rpc'
 import { online } from './net'
 import { entryState, me, sessionEndedElsewhere, setMe } from './session'
 import { chatsGated as gated, loadSettings, setChatsGateWaived } from './store'
+import { openSync, stopSync } from './sync'
 import { form, holdForm } from './form'
 import { Home } from './screens/Home'
 import { Nav } from './ui/Nav'
@@ -39,6 +40,7 @@ const Recent = lazy(loadRecent)
 const Settings = lazy(loadSettingsPage)
 const Detail = lazy(loadDetail)
 const AddChats = lazy(loadAddChats)
+const Downloads = lazy(() => import('./screens/Downloads').then((m) => ({ default: m.Downloads })))
 const Favourites = lazy(() => loadLibrary().then((m) => ({ default: m.Favourites })))
 const HistoryPage = lazy(() => loadLibrary().then((m) => ({ default: m.HistoryPage })))
 const later = [loadChats, loadChat, loadChatInfo, loadSearch, loadRecent, loadSettingsPage, loadDetail, loadWatch, loadAddChats]
@@ -82,7 +84,7 @@ function Shell(props: ParentProps) {
         if (user === undefined) return
         const onSignIn = location.pathname === '/signin'
         // Signed out: whoever signs in next is weighed by the gate afresh.
-        if (!user) setChatsGateWaived(false)
+        if (!user) (setChatsGateWaived(false), stopSync())
         if (!user && !onSignIn) {
             const next = location.pathname + location.search
             navigate(next === '/' ? '/signin' : `/signin?next=${encodeURIComponent(next)}`, { replace: true, state: entryState() })
@@ -94,6 +96,8 @@ function Shell(props: ParentProps) {
         }
         // Fetched ahead only: one that fails now (offline) is fetched again when its page opens.
         if (user) idle(() => later.forEach((load) => load().catch(() => {})))
+        // Resume on your other devices: what was kept is read, and a sync follows if the viewer turned it on.
+        if (user) openSync()
     })
     // Every other page, not only the one after signing in: a visitor already signed in who never
     // chose (an answer left open before choosing was required) meets the gate on their next visit.
@@ -191,6 +195,7 @@ export function App() {
             <Route path="/video/:chatId/:messageId" component={Detail} />
             <Route path="/watch/:chatId/:messageId" component={Watch} />
             <Route path="/settings/:page?" component={Settings} />
+            <Route path="/downloads" component={Downloads} />
             <Route path="/favourites" component={Favourites} />
             <Route path="/history/:tab?" component={HistoryPage} />
             <Route path="/lists/:id?" component={ListsPage} />

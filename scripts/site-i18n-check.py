@@ -31,6 +31,9 @@ LANGS = ["es-419", "pt-BR", "fr", "de", "it", "pl", "cs", "ru", "uk", "tr", "id"
          "zh-TW", "ja", "ko", "hi", "bn", "ml"]
 # Strings the layout keeps for languages that still carry them, though no page shows them today.
 UNUSED_OK = {"build.languages"}
+# The old FAQ answer that promised an Audio list (TMPlayer plays videos only since 2026-11-16). The
+# catalogs still hold it; drop it from en.json and every catalog at the next sync, then this line.
+UNUSED_OK |= {"ld.yes_a_chat_with_48f9"}
 # The support popup (SupportPopup.astro) is switched off by SHOW_SUPPORT_POPUP in Base.astro since
 # 2026-11-03, so the build never looks these up. Its strings stay translated for when it comes
 # back; delete these four lines then. (They failed the Style job on every push until 2026-11-08.)

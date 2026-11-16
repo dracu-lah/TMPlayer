@@ -25,6 +25,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.isCtrlPressed
+import androidx.compose.ui.input.pointer.isMetaPressed as pointerMeta
+import androidx.compose.ui.input.pointer.isShiftPressed
 import androidx.compose.ui.input.pointer.isPrimaryPressed
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.onPointerEvent
@@ -138,7 +140,13 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
     val toast = rememberToast()
     val queue = active.values.sortedBy { it.order }
 
-    var picked by remember { mutableStateOf<Set<String>>(emptySet()) }
+    // The kept rows as the page lists them, for the selection's indices (set where the shelf is).
+    val rowOrderRef = remember { arrayOf(emptyList<String>()) }
+    // The same selection the grids use: Ctrl+click, Shift+click's range, Ctrl+A, Esc.
+    val selection = remember { GridSelection { rowOrderRef[0].getOrNull(it) } }
+    // A deleted row hands the keyboard to the one after it, else the one before.
+    val rowHandoff = remember { RowFocusHandoff() }
+    val picked = selection.ids
     var confirm by remember { mutableStateOf<List<ResumeRecord>?>(null) }
     // The other prompts on this page: a stray file to delete.
     var confirmUnlisted by remember { mutableStateOf<File?>(null) }
@@ -154,11 +162,10 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
     var freeUpBusy by remember { mutableStateOf(false) }
     // The downloads that stopped part way or are still arriving, with what each holds here.
     val unfinished = queue.filter { it.downloadedBytes > 0 }
-    // Recently played is folded away at the foot of the page until it is opened.
-    var cachedOpen by remember { mutableStateOf(state.downloadsOpenRecent) }
-    // Where the Recently played heading sits, for Settings' Recently played row to land on.
-    val cachedHeadingAt = remember { intArrayOf(-1) }
-    BackHandler(enabled = picked.isNotEmpty()) { picked = emptySet() }
+    // One list (R2): the downloads and what playing left behind ("Auto-saved"), together.
+    val everything = remember(history, cached) { history + cached }
+    val cachedKeys = remember(cached) { cached.mapTo(HashSet()) { it.key } }
+    BackHandler(enabled = picked.isNotEmpty()) { selection.clear() }
 
     // Save to folder: the question, the progress and the result live in DesktopFolderExport, so
     // a batch keeps going while the viewer is on another page and is drawn again on return.
@@ -172,7 +179,9 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
             lastFolderFree = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { DesktopFolderExport.lastFolderFree() }
         }
     }
-    val selectAll = { picked = history.map { it.key }.toSet() }
+    val selectAll = { selection.selectAll(history.map { it.key }) }
+    // A download that went (deleted, moved, its record gone) leaves the selection at once.
+    LaunchedEffect(history) { selection.keepOnly(history.mapTo(HashSet()) { it.key }) }
 
     val reviewSections = freeUpSections(sources, unfinished, figures?.picturesBytes ?: 0L)
 
@@ -187,7 +196,7 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
         scope.launch {
             val outcome = runFreeUp(state, picks, sections, records, recents)
             // A download that went leaves the selection too.
-            picked = picked - com.tmplayer.data.FreeUpReview.downloadsPicked(picks, sections).map { it.key }.toSet()
+            selection.remove(com.tmplayer.data.FreeUpReview.downloadsPicked(picks, sections).map { it.key }.toSet())
             refresh++
             freeUpBusy = false
             // A toast, not a line inside the card.
@@ -237,23 +246,13 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
     // The episodes of one show together in watching order, other videos newest first.
     // The page's order, remembered once: newest, by name, or the largest first, to make room.
     val downloadsSort by state.settings.downloadsSort.collectAsState(initial = com.tmplayer.data.DownloadShelf.Sort.Newest)
-    val shelf = remember(history, downloadsSort) {
-        com.tmplayer.data.DownloadShelf.arrange(history, { it.toMediaItem() }, { it.key }, { it.updatedAt }, sort = downloadsSort)
+    val shelf = remember(everything, downloadsSort) {
+        com.tmplayer.data.DownloadShelf.arrange(everything, { it.toMediaItem() }, { it.key }, { it.updatedAt }, sort = downloadsSort)
     }
     val list = rememberLazyListState()
 
     Column(
-        Modifier.fillMaxSize().onPreviewKeyEvent { event ->
-            // Ctrl+A (Cmd+A on a Mac) picks every download while a selection is on; with none,
-            // the key is left to whatever has focus.
-            val chord = event.isCtrlPressed || event.isMetaPressed
-            if (picked.isNotEmpty() && chord && event.key == Key.A && event.type == KeyEventType.KeyDown) {
-                selectAll()
-                true
-            } else {
-                false
-            }
-        },
+        Modifier.fillMaxSize().selectAllChord(enabled = history.isNotEmpty(), onSelectAll = selectAll),
     ) {
         PageHeader(
             s.navDownloads,
@@ -268,7 +267,7 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
             },
             actions = {
                 if (picked.isNotEmpty()) {
-                    TextButton(onClick = { picked = emptySet() }) { Text(s.commonClearSelection) }
+                    TextButton(onClick = { selection.clear() }) { Text(s.commonClearSelection) }
                     TextButton(onClick = selectAll, enabled = picked.size < history.size) { Text(s.downloadsSelectAll) }
                     OutlinedButton(onClick = { saveToFolder(pickedRecords) }) {
                         Icon(TmIcons.Folder, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -313,6 +312,14 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
                     }
                 }
             }
+        val rowOrder = shelf.flatMap { entry ->
+            when (entry) {
+                is com.tmplayer.data.DownloadShelf.Entry.Single -> listOf(entry.row.key)
+                is com.tmplayer.data.DownloadShelf.Entry.Show -> entry.episodes.map { it.key }
+            }
+        }
+        rowOrderRef[0] = rowOrder
+        LaunchedEffect(rowOrder) { rowHandoff.rowsChanged(rowOrder) }
         val keptRow: @Composable (ResumeRecord) -> Unit = { record ->
             KeptRow(
                 record = record,
@@ -320,7 +327,9 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
                 legacy = legacy[record.key],
                 picked = record.key in picked,
                 picking = picked.isNotEmpty(),
-                onPick = { on -> picked = if (on) picked + record.key else picked - record.key },
+                onPick = { on -> selection.pick(rowOrder.indexOf(record.key), on) },
+                onPickRange = { selection.extend(rowOrder.indexOf(record.key)) },
+                rowModifier = Modifier.handoffRow(rowHandoff, record.key),
                 onPlay = {
                     state.noteChatTitle(record.chatId, record.chatTitle)
                     state.openPlayer(record.toMediaItem(), startFromBeginning = false)
@@ -350,6 +359,36 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
                 folderGone = remember(record) { DownloadIndex.folderGone(record) },
             )
         }
+        // Whatever the shelf lists: a download's row, or an auto-saved video's with Keep.
+        val listRow: @Composable (ResumeRecord) -> Unit = { record ->
+            if (record.key in cachedKeys) {
+                CachedRow(
+                    record = record,
+                    bytes = cachedBytes[record.key],
+                    queued = active.values.any { it.request.chatId == record.chatId && it.request.messageId == record.messageId },
+                    onPlay = {
+                        state.noteChatTitle(record.chatId, record.chatTitle)
+                        state.openPlayer(record.toMediaItem(), startFromBeginning = false)
+                    },
+                    onKeep = {
+                        scope.launch {
+                            // A cached record does not say whether its chat allows keeping a
+                            // copy, so Telegram is asked before the file leaves the cache.
+                            if (!Td.maySave(record.chatId, record.messageId)) {
+                                toast(ContentProtection.NOT_SAVABLE)
+                                return@launch
+                            }
+                            val id = runCatching { Td.currentFileId(record.chatId, record.messageId, record.fileId) }
+                                .getOrDefault(record.fileId)
+                            // Not said: the row moves up to Downloading.
+                            OfflineDownloads.start(state.downloads, record.toMediaItem().copy(fileId = id), record.chatTitle)
+                        }
+                    },
+                )
+            } else {
+                keptRow(record)
+            }
+        }
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val margin = pageMargin()
             val bottom = com.tmplayer.ui.components.LocalBottomChrome.current
@@ -370,7 +409,6 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
                         .homeEndScrolls(list)
                         .remembersRemoteItem(),
                 ) {
-                    var at = 0
                     // What TMPlayer uses, what is free, and the one Free up space: first, so the
                     // page answers "where did my space go" before it lists anything.
                     item(key = "storage") {
@@ -382,7 +420,6 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
                             ) { if (!freeUpBusy) freeingUp = true }
                         }
                     }
-                    at += 1
                     // Only while something is on its way, with the one control for all of it.
                     if (queue.isNotEmpty()) {
                         item(key = "h-active") {
@@ -397,11 +434,10 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
                             }
                         }
                         items(queue, key = { "a${it.fileId}" }) { row -> ActiveRow(state, row, onFreeUp = { freeingUp = true }) }
-                        at += 1 + queue.size
                     }
 
                     item(key = "h-done") {
-                        Section(if (history.isEmpty()) s.downloadsDownloaded else s.downloadsTabDownloadedCount(history.size)) {
+                        Section(if (everything.isEmpty()) s.downloadsOnThisComputer else s.downloadsOnThisComputerCount(everything.size)) {
                             if (picked.isEmpty()) {
                                 TextButton(onClick = { OpenExternal.open(downloadsDir.apply { mkdirs() }) }) { Text(s.downloadsOpenFolder) }
                                 // Starts a selection with everything in it, for Save to folder or
@@ -412,8 +448,7 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
                             }
                         }
                     }
-                    at += 1
-                    if (history.size > 1) {
+                    if (everything.size > 1) {
                         item(key = "t-sort") {
                             Box(Modifier.padding(vertical = 4.dp)) {
                                 ChoiceChips(
@@ -439,9 +474,19 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
                                 )
                             }
                         }
-                        at += 1
                     }
-                    if (history.isEmpty()) {
+                    // What "Auto-saved" means, once, over a list that has such a video in it.
+                    if (cached.isNotEmpty()) {
+                        item(key = "t-auto-note") {
+                            Text(
+                                s.downloadsAutoSavedNote,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Tone.muted,
+                                modifier = Modifier.padding(horizontal = ROW_INSET, vertical = 4.dp),
+                            )
+                        }
+                    }
+                    if (everything.isEmpty()) {
                         item(key = "e-done") {
                             Empty(
                                 s.downloadsEmptyDone(downloadsDir.path),
@@ -454,13 +499,11 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
                                 onSecondAction = { state.go(Destination.Home) },
                             )
                         }
-                        at += 1
                     }
                     shelf.forEach { entry ->
                         when (entry) {
                             is com.tmplayer.data.DownloadShelf.Entry.Single -> {
-                                item(key = "d${entry.key}") { keptRow(entry.row) }
-                                at += 1
+                                item(key = "d${entry.key}") { listRow(entry.row) }
                             }
                             is com.tmplayer.data.DownloadShelf.Entry.Show -> {
                                 item(key = "s${entry.key}") {
@@ -472,8 +515,7 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
                                         ).joinToString("  ·  "),
                                     )
                                 }
-                                items(entry.episodes, key = { "d${it.key}" }) { record -> keptRow(record) }
-                                at += 1 + entry.episodes.size
+                                items(entry.episodes, key = { "d${it.key}" }) { record -> listRow(record) }
                             }
                         }
                     }
@@ -487,56 +529,6 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
                                 onDelete = { confirmUnlisted = file },
                             )
                         }
-                        at += 1 + unlisted.size
-                    }
-
-                    // Not downloads, so folded away at the foot until somebody opens it.
-                    cachedHeadingAt[0] = at
-                    item(key = "h-cached") {
-                        Box(Modifier.padding(top = 12.dp)) {
-                            Setting(
-                                if (cached.isEmpty()) s.downloadsCached else s.downloadsTabCachedCount(cached.size),
-                                s.downloadsCachedDetail(
-                                    MediaMapper.formatSize(desktop.cacheLimitBytes.takeIf { it > 0 } ?: DesktopSettings.DEFAULT_CACHE_LIMIT_BYTES),
-                                ),
-                                icon = TmIcons.Clock,
-                                onClick = { cachedOpen = !cachedOpen },
-                            ) {
-                                Icon(
-                                    if (cachedOpen) TmIcons.ChevronUp else TmIcons.ChevronDown,
-                                    contentDescription = if (cachedOpen) s.commonHide else s.commonShow,
-                                    tint = Tone.muted,
-                                )
-                            }
-                        }
-                    }
-                    if (cachedOpen && cached.isEmpty()) {
-                        item(key = "e-cached") { Empty(s.downloadsEmptyCacheLimit) }
-                    }
-                    if (cachedOpen) items(cached, key = { "c${it.key}" }) { record ->
-                        CachedRow(
-                            record = record,
-                            bytes = cachedBytes[record.key],
-                            queued = active.values.any { it.request.chatId == record.chatId && it.request.messageId == record.messageId },
-                            onPlay = {
-                                state.noteChatTitle(record.chatId, record.chatTitle)
-                                state.openPlayer(record.toMediaItem(), startFromBeginning = false)
-                            },
-                            onSave = {
-                                scope.launch {
-                                    // A cached record does not say whether its chat allows keeping a
-                                    // copy, so Telegram is asked before the file leaves the cache.
-                                    if (!Td.maySave(record.chatId, record.messageId)) {
-                                        toast(ContentProtection.NOT_SAVABLE)
-                                        return@launch
-                                    }
-                                    val id = runCatching { Td.currentFileId(record.chatId, record.messageId, record.fileId) }
-                                        .getOrDefault(record.fileId)
-                                    // Not said: the row moves up to Downloading.
-                                    OfflineDownloads.start(state.downloads, record.toMediaItem().copy(fileId = id), record.chatTitle)
-                                }
-                            },
-                        )
                     }
                 }
                 ScrollToTop(list)
@@ -546,19 +538,6 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
                 }
             }
         }
-    }
-
-    // Opened from Settings' Recently played row: that section, unfolded, in view.
-    LaunchedEffect(Unit) {
-        if (!state.downloadsOpenRecent) return@LaunchedEffect
-        state.downloadsOpenRecent = false
-        // The lists arrive after the first frame, and the heading's place with them: wait for
-        // them, or the page lands where the heading was while the lists were still empty.
-        runCatching { state.settings.downloadHistory.first() }
-        runCatching { state.settings.cachedVideos.first() }
-        androidx.compose.runtime.withFrameNanos { }
-        androidx.compose.runtime.withFrameNanos { }
-        if (cachedHeadingAt[0] > 0) runCatching { list.scrollToItem(cachedHeadingAt[0]) }
     }
 
     // Opened from the low storage notification or Settings' Free up space: the review, already up.
@@ -618,7 +597,7 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
     // A whole run is a toast; the selection is left once anything was saved.
     LaunchedEffect(folder.outcome) {
         val outcome = folder.outcome ?: return@LaunchedEffect
-        if (outcome.copied > 0) picked = emptySet()
+        if (outcome.copied > 0) selection.clear()
         if (outcome.clean) {
             toast(outcome.headline + (if (outcome.moved > 0) ". " + s.downloadsSaveToFolderMoved(count = outcome.moved) else ""))
             DesktopFolderExport.consume()
@@ -636,7 +615,7 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
             onDismiss = { confirm = null },
             onConfirm = {
                 confirm = null
-                picked = picked - doomed.map { it.key }.toSet()
+                selection.remove(doomed.map { it.key }.toSet())
                 scope.launch {
                     val locked = doomed.count { !DownloadIndex.delete(state.settings, it) }
                     if (locked > 0) toast(s.downloadsLocked(locked))
@@ -819,7 +798,6 @@ internal fun FreeUpReviewHost(
         onDismiss = onDismiss,
         lowStorage = if (short && (!lowStorageOn || lowStorageTurned)) {
             com.tmplayer.ui.components.LowStorageOffer(
-                mode = s.settingsLowStorage,
                 windowBytes = com.tmplayer.player.LowStorageWindow.WINDOW_BYTES,
                 on = lowStorageTurned,
             ) {
@@ -848,13 +826,13 @@ private suspend fun dropUnfinished(state: ShellState, fileId: Int) {
     if (fileId !in cachedIds) runCatching { Td.deleteFile(fileId) }
 }
 
-/** How many downloads are coming down or moving, for the badge on the side bar and the rail. */
+/** How many downloads are coming down right now, for the badge on the side bar and the rail. */
 @Composable
 internal fun rememberDownloadsInFlight(): Int {
     // The count only: the map changes with every download's progress, and reading it here
     // recomposed the whole bar each time, where the count changes as a download starts or ends.
     val active = OfflineDownloads.active.collectAsState()
-    val inFlight by remember(active) { androidx.compose.runtime.derivedStateOf { active.value.values.count { it.busy } } }
+    val inFlight by remember(active) { androidx.compose.runtime.derivedStateOf { OfflineDownloads.runningCount(active.value) } }
     return inFlight
 }
 
@@ -962,12 +940,19 @@ private fun VideoRow(
     menu: List<RowMenuEntry>,
     start: Dp = ROW_INSET,
     more: Boolean = false,
+    /** Ctrl+click, Cmd+click on a Mac, and Ctrl+Space: this row in or out of the selection. */
+    onToggle: (() -> Unit)? = null,
+    /** Shift+click: the rows from the last one picked to this one. */
+    onRange: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
     content: @Composable RowScope.(lit: Boolean) -> Unit,
 ) {
     val interactions = remember { MutableInteractionSource() }
     val hovered by interactions.collectIsHoveredAsState()
     val ring = keyboardFocused(interactions)
     var open by remember { mutableStateOf(false) }
+    // Set by a Shift or Ctrl press just before the click it belongs to: that click picks, not plays.
+    var chorded by remember { mutableStateOf(false) }
     val shape = MaterialTheme.shapes.medium
     Box {
         Row(
@@ -981,9 +966,36 @@ private fun VideoRow(
                     val macContext = ON_MAC && event.keyboardModifiers.isCtrlPressed && event.buttons.isPrimaryPressed
                     if (menu.isNotEmpty() && (event.buttons.isSecondaryPressed || macContext)) open = true
                 }
+                .onPointerEvent(PointerEventType.Press, androidx.compose.ui.input.pointer.PointerEventPass.Initial) { event ->
+                    chorded = false
+                    if (!event.buttons.isPrimaryPressed) return@onPointerEvent
+                    val mods = event.keyboardModifiers
+                    val toggle = if (ON_MAC) mods.pointerMeta else mods.isCtrlPressed
+                    when {
+                        mods.isShiftPressed && onRange != null -> {
+                            chorded = true
+                            onRange()
+                        }
+                        toggle && onToggle != null -> {
+                            chorded = true
+                            onToggle()
+                        }
+                    }
+                }
+                .onPreviewKeyEvent { event ->
+                    if (onToggle != null && isToggleChord(event)) {
+                        onToggle()
+                        true
+                    } else {
+                        false
+                    }
+                }
+                .then(modifier)
                 .then(
                     if (onClick != null) {
-                        Modifier.clickable(interactionSource = interactions, indication = null, role = Role.Button, onClick = onClick)
+                        Modifier.clickable(interactionSource = interactions, indication = null, role = Role.Button) {
+                            if (chorded) chorded = false else onClick()
+                        }
                     } else {
                         Modifier
                     },
@@ -1112,7 +1124,7 @@ private fun ActiveRow(state: ShellState, row: OfflineDownloads.Progress, onFreeU
             row.stage == OfflineDownloads.Stage.Moving -> Unit
             row.busy -> add(RowMenuEntry(s.playerPause, TmIcons.Pause, action = pause))
             failed -> {
-                if (noSpace) add(RowMenuEntry(s.downloadsFreeUpSpace, TmIcons.Delete, action = onFreeUp!!))
+                if (noSpace && onFreeUp != null) add(RowMenuEntry(s.downloadsFreeUpSpace, TmIcons.Delete, action = onFreeUp))
                 if (savable) add(RowMenuEntry(s.commonTryAgain, TmIcons.Refresh, action = resume))
             }
             else -> add(RowMenuEntry(s.downloadsResume, TmIcons.Play, action = resume))
@@ -1141,7 +1153,7 @@ private fun ActiveRow(state: ShellState, row: OfflineDownloads.Progress, onFreeU
             row.stage == OfflineDownloads.Stage.Moving -> Unit
             row.busy -> TipIconButton(TmIcons.Pause, s.playerPause, pause)
             failed -> {
-                if (noSpace) TipIconButton(TmIcons.Delete, s.downloadsFreeUpSpace, onFreeUp!!)
+                if (noSpace && onFreeUp != null) TipIconButton(TmIcons.Delete, s.downloadsFreeUpSpace, onFreeUp)
                 if (savable) TipIconButton(TmIcons.Refresh, s.commonTryAgain, resume)
             }
             else -> TipIconButton(TmIcons.Play, s.downloadsResume, resume)
@@ -1164,6 +1176,10 @@ private fun KeptRow(
     /** Something on the page is picked: a click then picks rather than plays, and every tick shows. */
     picking: Boolean,
     onPick: (Boolean) -> Unit,
+    /** Shift+click: everything from the last row picked to this one. */
+    onPickRange: () -> Unit,
+    /** What the page needs on the row's focusable (the focus handoff after a delete). */
+    rowModifier: Modifier = Modifier,
     onPlay: () -> Unit,
     onShowInFolder: () -> Unit,
     onOpenElsewhere: () -> Unit,
@@ -1220,7 +1236,14 @@ private fun KeptRow(
     // A whole download plays on a click and keeps the rest behind More (and a right click): four
     // icon buttons on every row were most of the page's clutter. A row with one thing to do (gone
     // from the folder, or part downloaded) keeps that one word.
-    VideoRow(onClick = click, menu = menu, more = playable) { lit ->
+    VideoRow(
+        onClick = click,
+        menu = menu,
+        more = playable,
+        onToggle = { onPick(!picked) },
+        onRange = onPickRange,
+        modifier = rowModifier,
+    ) { lit ->
         Thumb(
             item.copy(title = correctedTitle(record.chatId, record.messageId, record.title)),
             Pick(picked, shown = lit || picking, onPick = onPick),
@@ -1229,7 +1252,11 @@ private fun KeptRow(
             name,
             detail,
             detailColor = if (missing) Tone.danger else Tone.muted,
-        ) { fileName?.let { FileNameLine(it) } }
+        ) {
+            fileName?.let { FileNameLine(it) }
+            // The picture and the sound the file declares, where known (the one slot for format badges).
+            com.tmplayer.ui.components.FormatBadgeRow(com.tmplayer.ui.components.rememberFormatTags(item), Modifier.padding(top = 4.dp))
+        }
         when {
             missing -> {
                 TextButton(onClick = onDownloadAgain) { Text(s.downloadsDownloadAgain) }
@@ -1261,15 +1288,15 @@ private fun CachedRow(
     bytes: Long?,
     queued: Boolean,
     onPlay: () -> Unit,
-    onSave: () -> Unit,
+    onKeep: () -> Unit,
 ) {
     val s = LocalStrings.current
     val size = bytes?.takeIf { it > 0 }?.let(MediaMapper::formatSize) ?: MediaMapper.formatSize(record.sizeBytes)
-    // Watch and Save to Downloads, the two things only this list does. Clearing a recently played
-    // video is Free up space's review, with the rest of what playing left behind.
+    // Watch and Keep, the two things only an auto-saved video has. Clearing one is Free up space's
+    // review, with the rest of what playing left behind.
     val menu = buildList {
         add(RowMenuEntry(s.navWatch, TmIcons.Play, action = onPlay))
-        if (!queued) add(RowMenuEntry(s.downloadsSave, TmIcons.Download, action = onSave))
+        if (!queued) add(RowMenuEntry(s.downloadsKeep, TmIcons.Download, action = onKeep))
     }
     val item = remember(record) { record.toMediaItem() }
     val name = com.tmplayer.ui.browse.rememberVideoName(item)
@@ -1278,15 +1305,16 @@ private fun CachedRow(
         Thumb(item.copy(title = correctedTitle(record.chatId, record.messageId, record.title)))
         Words(
             name,
-            listOf(size, record.chatTitle).filter { it.isNotBlank() }.joinToString("  ·  "),
+            // The one word the list's note explains: an auto-saved video, kept for a faster start.
+            listOf(s.downloadsAutoSaved, size, record.chatTitle).filter { it.isNotBlank() }.joinToString("  ·  "),
         ) { fileName?.let { FileNameLine(it) } }
         if (queued) {
             Text(s.downloadsSaving, style = MaterialTheme.typography.bodySmall, color = Tone.muted, modifier = Modifier.padding(end = 12.dp))
         } else {
-            TextButton(onClick = onSave) {
+            TextButton(onClick = onKeep) {
                 Icon(TmIcons.Download, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
-                Text(s.downloadsSave, maxLines = 1)
+                Text(s.downloadsKeep, maxLines = 1)
             }
         }
     }
@@ -1311,3 +1339,16 @@ private val LIST_MAX = 920.dp
 private val OVERVIEW_MAX = 560.dp
 
 private val ON_MAC = System.getProperty("os.name").orEmpty().lowercase().contains("mac")
+
+/**
+ * Ctrl+A (Cmd+A on a Mac) picks everything on the page, with or without a selection already on:
+ * the page has no text field to leave the key to (rule 8). Left alone while [enabled] is false.
+ */
+internal fun Modifier.selectAllChord(enabled: Boolean, onSelectAll: () -> Unit): Modifier = onPreviewKeyEvent { event ->
+    if (enabled && (event.isCtrlPressed || event.isMetaPressed) && event.key == Key.A && event.type == KeyEventType.KeyDown) {
+        onSelectAll()
+        true
+    } else {
+        false
+    }
+}

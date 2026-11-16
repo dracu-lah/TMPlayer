@@ -57,12 +57,4 @@ class ChatPickingFoldTest {
         val counts = mapOf(1L to none, 2L to some, 3L to none)
         assertEquals(listOf(1L, 3L), ChatPicking.foldedIn(rows, counts, emptySet(), ChatPicking.Band.Chats).map { it.id })
     }
-
-    @Test
-    fun `toCount skips counted and gone chats and honours the limit`() {
-        val rows = listOf(row(1), row(2), row(3, ChatPicking.Band.Gone), row(4), row(5))
-        val counts = mapOf(1L to some)
-        assertEquals(listOf(2L, 4L, 5L), ChatPicking.toCount(rows, counts))
-        assertEquals(listOf(2L, 4L), ChatPicking.toCount(rows, counts, limit = 2))
-    }
 }

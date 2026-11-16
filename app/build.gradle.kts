@@ -47,6 +47,16 @@ val releaseAbis: List<String> = (findProperty("tmAbis") as String?)
 // Off, which is every other build, nothing changes.
 val fdroidBuild: Boolean = (findProperty("tmFdroid") as String?)?.trim()?.toBoolean() ?: false
 
+// The build for Google Play, switched on by its own recipe (not built yet, CP35):
+//
+//     ./gradlew :app:bundleRelease -PtmPlay=true
+//
+// Play does not allow donation links or payment prompts that bypass its billing
+// (docs/distribution/play.md), so that build has no support window, no Settings row, no About group
+// and no reminder: BuildConfig.SUPPORT_LINKS is false, which App reads into SupportReminder.enabled.
+// Every other build keeps them (F-Droid and Amazon allow voluntary links that unlock nothing).
+val playBuild: Boolean = (findProperty("tmPlay") as String?)?.trim()?.toBoolean() ?: false
+
 // libVLC as a second engine (PR2), off unless asked for:
 //
 //     ./gradlew :app:assembleDebug -PtmVlc=true
@@ -179,10 +189,10 @@ android {
             ?: ""
         buildConfigField("String", "OMDB_API_KEY", "\"$omdbKey\"")
 
-        // Donation links and the support card, all behind one switch (SupportReminder.enabled).
-        // The `play` flavor planned in CP35 sets this to false: Play does not allow donation links
-        // that bypass its billing.
-        buildConfigField("boolean", "SUPPORT_LINKS", "true")
+        // Donation links and the support window, all behind one switch (SupportReminder.enabled).
+        // The Google Play build (-PtmPlay=true, see playBuild above) sets this to false: Play does
+        // not allow donation links that bypass its billing.
+        buildConfigField("boolean", "SUPPORT_LINKS", "${!playBuild}")
 
         // The update check and the APK install that follows it, off in the F-Droid build (see
         // fdroidBuild above): F-Droid is what updates that build.

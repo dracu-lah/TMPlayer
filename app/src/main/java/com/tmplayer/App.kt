@@ -230,6 +230,8 @@ class App : Application() {
             appVersion = BuildConfig.VERSION_NAME,
             omdbKey = BuildConfig.OMDB_API_KEY,
         ).also { metadata -> if (!safe) backgroundScope.launch { runCatching { metadata.warmUp() }; runCatching { metadata.cache.prune() } } }
+        // The intros the viewer marked in the player, kept here and sent nowhere.
+        com.tmplayer.online.UserSkipMarks.open(com.tmplayer.online.FileSkipMarks(java.io.File(filesDir, "online/skip-marks.json")))
         Thumbnails.connectivity = NetworkMonitor
         // Resume on other devices (ResumeSync): the shared watched file, the line's metered state for
         // Save mobile data, and whether this is a TV, where that switch holds nothing back.
@@ -238,6 +240,8 @@ class App : Application() {
             connectivity = NetworkMonitor,
             television = com.tmplayer.data.FormFactor.isTv(this),
             appVersion = BuildConfig.VERSION_NAME,
+            bookmarks = com.tmplayer.data.BookmarkStore(this),
+            lowEnd = (getSystemService(android.content.Context.ACTIVITY_SERVICE) as? android.app.ActivityManager)?.isLowRamDevice == true,
         )
         NetworkMonitor.start(this)
         // TDLib takes a moment to open its database; starting here means the login screen is
@@ -300,6 +304,8 @@ class App : Application() {
             com.tmplayer.data.AutoUpdater.onForeground()
             // Back in view: TDLib reopens a line it lost in the background at once (Td).
             Td.onForegroundChanged(true)
+            // A sync held back while the app was away (a low end device) goes on now.
+            com.tmplayer.data.ResumeSync.setForeground(true)
         }
 
         override fun onActivityStopped(activity: android.app.Activity) {
@@ -309,6 +315,7 @@ class App : Application() {
             if (started == 0 && !activity.isChangingConfigurations) {
                 AppLockSession.lock()
                 Td.onForegroundChanged(false)
+                com.tmplayer.data.ResumeSync.setForeground(false)
                 // With "Install updates by itself" on, one look a few minutes from now (HX5).
                 com.tmplayer.data.AutoUpdater.onBackground(activity.applicationContext)
             }
@@ -370,7 +377,7 @@ private fun setupDrawable(choice: SetupChoice, tv: Boolean, dark: Boolean): Int 
         else -> R.drawable.setup_posters_off
     }
     SetupChoice.KeepWhilePlaying, SetupChoice.LowStorage, SetupChoice.SaveData, SetupChoice.NoLimits,
-    SetupChoice.ApplyRecommended, SetupChoice.NotNow, SetupChoice.CrashReportsOff, SetupChoice.CrashReportsOn -> 0
+    SetupChoice.ApplyRecommended, SetupChoice.NotNow -> 0
     SetupChoice.FullQuality -> when {
         tv -> R.drawable.setup_performance_full_tv
         dark -> R.drawable.setup_performance_full_dark

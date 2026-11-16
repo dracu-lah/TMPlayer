@@ -21,7 +21,6 @@ class MiniPlayerTest {
     @Test
     fun `back closes when the verdict is not dock`() {
         val table = listOf(
-            MiniContext(enabled = false) to MiniVerdict.Disabled,
             MiniContext(platformAllowed = false) to MiniVerdict.Disabled,
             MiniContext(ended = true) to MiniVerdict.Ended,
             MiniContext(failed = true) to MiniVerdict.Failed,
@@ -56,18 +55,13 @@ class MiniPlayerTest {
         val long = MiniPlayerState.PAUSED_CLOSES_AFTER_MS
         assertEquals(MiniVerdict.Casting, MiniPlayerState.verdict(MiniContext(casting = true, pausedForMs = long)))
         assertEquals(MiniVerdict.Locked, MiniPlayerState.verdict(MiniContext(locked = true, pausedForMs = long)))
-        assertEquals(MiniVerdict.Disabled, MiniPlayerState.verdict(MiniContext(enabled = false, pausedForMs = long)))
+        assertEquals(MiniVerdict.Disabled, MiniPlayerState.verdict(MiniContext(platformAllowed = false, pausedForMs = long)))
         assertEquals(MiniVerdict.PictureInPicture, MiniPlayerState.verdict(MiniContext(inPictureInPicture = true, pausedForMs = long)))
     }
 
     @Test
-    fun `the tv never docks`() {
-        assertFalse(MiniPlayerState.allowedOn(tv = true))
-        assertTrue(MiniPlayerState.allowedOn(tv = false))
-        assertEquals(
-            MiniVerdict.Disabled,
-            MiniPlayerState.verdict(MiniContext(platformAllowed = MiniPlayerState.allowedOn(tv = true))),
-        )
+    fun `a big screen never docks`() {
+        assertEquals(MiniVerdict.Disabled, MiniPlayerState.verdict(MiniContext(platformAllowed = false)))
     }
 
     @Test

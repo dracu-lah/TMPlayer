@@ -1,5 +1,6 @@
 package com.tmplayer.desktop.ui
 
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.runtime.SideEffect
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -543,7 +544,7 @@ internal fun ChatRow(
                 }
                 true
             }
-            .clickable(onClick = onOpen)
+            .clickable(role = Role.Button, onClick = onOpen)
             .padding(horizontal = ChatRowInset, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),

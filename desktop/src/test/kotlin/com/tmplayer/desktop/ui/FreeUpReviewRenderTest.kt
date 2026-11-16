@@ -110,7 +110,7 @@ class FreeUpReviewRenderTest {
                 onDismiss = {},
                 confirming = confirming,
                 startPicks = picks,
-                lowStorage = if (lowStorage) LowStorageOffer("Low storage mode", 64 * mb, on = false) {} else null,
+                lowStorage = if (lowStorage) LowStorageOffer(64 * mb, on = false) {} else null,
                 modifier = Modifier.width(min(maxWidth - 32.dp, 640.dp)).heightIn(max = maxHeight - if (maxHeight < 480.dp) 16.dp else 48.dp),
             )
         }

@@ -84,6 +84,10 @@ class PlayerControls(
      * false for nothing to swap to, opens the list as before; a long press always opens it.
      */
     private val onQuickSpeed: (() -> Boolean)? = null,
+    /** The back and forward buttons beside play ([Skip.BUTTON_MS] each way): true for forward. */
+    private val onSeekButton: (forward: Boolean) -> Unit = {},
+    /** Whether this opening of the player says the words under the six icons ([ControlLabels]). */
+    showLabels: Boolean = false,
 ) {
 
     private val container: View = root.findViewById(R.id.player_controls)
@@ -94,10 +98,32 @@ class PlayerControls(
     private val rotate: ImageButton = root.findViewById(R.id.control_rotate)
     private val shapeButton: ImageButton = root.findViewById(R.id.control_shape)
 
-    /** Whether the video has a picture to shape: sound alone has none. Before any init that fits the row. */
-    private var shapeOffered = true
-
     private val lockButton: ImageButton = root.findViewById(R.id.control_lock)
+
+    /**
+     * Back and forward beside play, on the phone and the television alike: the same buttons for a
+     * thumb and a remote (a remote's Left and Right do the same jump over the bare picture, a
+     * touchscreen's double tap too, but nobody has to know that).
+     */
+    private val seekBack: ImageButton = root.findViewById(R.id.center_seek_back)
+    private val seekForward: ImageButton = root.findViewById(R.id.center_seek_forward)
+
+    /** Each labelled button's word, in the order of [labelledButtons]. */
+    private val labelViews: Map<View, TextView> = mapOf(
+        root.findViewById<View>(R.id.control_subtitles) to root.findViewById<TextView>(R.id.label_subtitles),
+        root.findViewById<View>(R.id.control_audio) to root.findViewById(R.id.label_audio),
+        root.findViewById<View>(R.id.control_speed) to root.findViewById(R.id.label_speed),
+        root.findViewById<View>(R.id.control_shape) to root.findViewById(R.id.label_shape),
+        root.findViewById<View>(R.id.control_rotate) to root.findViewById(R.id.label_rotate),
+        root.findViewById<View>(R.id.control_lock) to root.findViewById(R.id.label_lock),
+    )
+
+    /** Whether the words under the icons show: the first few openings of the player. */
+    var labelsShown = false
+        private set
+
+    /** The slot a labelled button sits in with its word: what the row shows and hides. */
+    private fun slotOf(button: View): View = button.parent as? View ?: button
     private val time: TextView get() = timeText
 
     // The phone's pieces. Present in the layout on every device, shown only on a phone.
@@ -140,7 +166,7 @@ class PlayerControls(
     private var lastRowButton: View? = null
 
     private fun isRowButton(view: View): Boolean =
-        view.parent === buttons || view === episodesButton || view === copyButton
+        view.parent === buttons || view.parent?.parent === buttons || view === episodesButton || view === copyButton
 
     /** The phone's times line shows what is left rather than the total. */
     var showRemaining = false
@@ -309,7 +335,14 @@ class PlayerControls(
                 if (now != null && isRowButton(now)) lastRowButton = now
             }
         }
-        rotate.visibility = if (isTv) View.GONE else View.VISIBLE
+        slotOf(rotate).visibility = if (isTv) View.GONE else View.VISIBLE
+        wire(seekBack) { onSeekButton(false) }
+        wire(seekForward) { onSeekButton(true) }
+        listOf(R.id.center_seek_back_frame, R.id.center_seek_forward_frame).forEach { root.findViewById<View>(it).visibility = View.VISIBLE }
+        // Down from either lands on the bar, as from the play disc.
+        seekBack.nextFocusDownId = R.id.controls_timebar
+        seekForward.nextFocusDownId = R.id.controls_timebar
+        setLabelsShown(showLabels)
         // The scrims on five stops, which their XML stand-ins cannot hold without a seam.
         root.findViewById<View>(R.id.controls_scrim_top).background = ControlsScrim.top()
         root.findViewById<View>(R.id.controls_scrim_bottom).background = ControlsScrim.bottom()
@@ -556,7 +589,7 @@ class PlayerControls(
     private fun showTip(anchor: View) {
         val tip = focusTip ?: return
         val name = anchor.contentDescription?.toString().orEmpty()
-        if (name.isEmpty()) return hideTip()
+        if (name.isEmpty() || (labelsShown && anchor in labelViews)) return hideTip()
         tipFor = anchor
         tip.text = name
         tip.animate().cancel()
@@ -645,10 +678,10 @@ class PlayerControls(
      * shape (the lock stays first in More there, where a held OK undoes it); on a phone only when
      * the row is at least [WIDE_ROW_DP] across, which a phone held sideways or a tablet is and a
      * phone held upright is not. The overflow leaves out what the row shows, and offers what it
-     * does not. Sound alone has no picture to shape, so the overflow leaves it out there too.
+     * does not.
      */
-    val shapeOnRow: Boolean get() = shapeButton.visibility == View.VISIBLE || !shapeOffered
-    val lockOnRow: Boolean get() = lockButton.visibility == View.VISIBLE
+    val shapeOnRow: Boolean get() = slotOf(shapeButton).visibility == View.VISIBLE
+    val lockOnRow: Boolean get() = slotOf(lockButton).visibility == View.VISIBLE
 
     /**
      * Shows or hides the phone's two extra buttons by the room the row has. Before the first
@@ -656,24 +689,16 @@ class PlayerControls(
      */
     private fun fitRow() {
         if (isTv) {
-            shapeButton.visibility = if (shapeOffered) View.VISIBLE else View.GONE
+            slotOf(shapeButton).visibility = View.VISIBLE
             return
         }
         val metrics = cluster.resources.displayMetrics
         val width = cluster.width.takeIf { it > 0 } ?: metrics.widthPixels
         val across = (width - cluster.paddingLeft - cluster.paddingRight) / metrics.density
         val wanted = if (across >= WIDE_ROW_DP) View.VISIBLE else View.GONE
-        val shapeWanted = if (shapeOffered) wanted else View.GONE
-        if (shapeButton.visibility == shapeWanted && lockButton.visibility == wanted) return
-        shapeButton.visibility = shapeWanted
-        lockButton.visibility = wanted
-    }
-
-    /** Offers or takes away the picture shape button, for a video that is sound alone. */
-    fun setShapeOffered(offered: Boolean) {
-        if (shapeOffered == offered) return
-        shapeOffered = offered
-        fitRow()
+        if (slotOf(shapeButton).visibility == wanted && slotOf(lockButton).visibility == wanted) return
+        slotOf(shapeButton).visibility = wanted
+        slotOf(lockButton).visibility = wanted
     }
 
     /**
@@ -701,7 +726,7 @@ class PlayerControls(
         more.visibility = View.VISIBLE
         // Between speed and More: a press steps the shape, focus stays put for the next press,
         // and the glyph and the answer over the picture say which shape it is on.
-        shapeButton.visibility = View.VISIBLE
+        slotOf(shapeButton).visibility = View.VISIBLE
         wire(more) { onMore(more) }
         timeText.isFocusable = true
         timeText.isClickable = true
@@ -762,8 +787,41 @@ class PlayerControls(
             R.id.control_tv_next_episode to L.playerNextEpisode,
             R.id.control_episodes to L.episodesTitle,
             R.id.control_copy to L.playerCopies,
+            R.id.center_seek_back to L.playerSkipBackButton(SKIP_SECONDS),
+            R.id.center_seek_forward to L.playerSkipForwardButton(SKIP_SECONDS),
         )
         for ((id, name) in names) root.findViewById<View>(id)?.contentDescription = name
+        // The figure sits inside the arrow's circle, so it keeps its size whatever the system font is.
+        for (id in listOf(R.id.center_seek_back_text, R.id.center_seek_forward_text)) {
+            root.findViewById<TextView>(id).apply {
+                text = L.messages.formatter.number(SKIP_SECONDS)
+                setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, SEEK_FIGURE_DP * resources.displayMetrics.density)
+            }
+        }
+        val words = mapOf(
+            R.id.label_subtitles to L.playerSubtitles,
+            R.id.label_audio to L.playerLabelSound,
+            R.id.label_speed to L.playerSpeed,
+            R.id.label_rotate to L.playerLabelRotate,
+            R.id.label_lock to L.playerLabelLock,
+        )
+        for ((id, word) in words) root.findViewById<TextView>(id).text = word
+    }
+
+    /**
+     * Shows or hides the words under the six icons ([ControlLabels]). Their size follows the system
+     * font up to [ControlLabels.MAX_FONT_SCALE]. On a television the focus tip that names a button
+     * is left out while the words show: it would say the same thing twice.
+     */
+    fun setLabelsShown(show: Boolean) {
+        labelsShown = show
+        val metrics = container.resources.displayMetrics
+        val px = ControlLabels.textPx(metrics.density, container.resources.configuration.fontScale)
+        for (word in labelViews.values) {
+            word.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, px)
+            word.visibility = if (show) View.VISIBLE else View.GONE
+        }
+        if (show) hideTip()
     }
 
     private fun describe(view: View?, text: String) {
@@ -951,6 +1009,7 @@ class PlayerControls(
             },
         )
         describe(shapeButton, L.playerPictureShapeNow(scale.label))
+        labelViews[shapeButton]?.text = scale.label
         if (!animate || !visible || com.tmplayer.ui.theme.Motion.reduced ||
             !com.tmplayer.ui.theme.systemAnimatorsEnabled(container.context)
         ) return
@@ -1255,6 +1314,12 @@ class PlayerControls(
          * (360 to 430 wide) stays under it, one held sideways (640 and up) is well over.
          */
         const val WIDE_ROW_DP = 540f
+
+        /** The seconds the back and forward buttons name and jump ([Skip.BUTTON_MS]). */
+        const val SKIP_SECONDS = (Skip.BUTTON_MS / 1000).toInt()
+
+        /** The figure inside the skip buttons' arrow, in dp (not sp: it must stay inside the circle). */
+        const val SEEK_FIGURE_DP = 10f
 
         /** Where the picture shape glyph starts its pop from, and how long the pop takes. */
         const val SHAPE_POP = 0.82f

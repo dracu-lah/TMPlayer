@@ -41,8 +41,7 @@ object WholeSeries {
         kept[keyOf(series)]?.takeIf { it.episodeCount >= series.episodeCount && it.key == series.key }
 
     /**
-     * Searches [series]' chat for it ([fetch], Telegram by default), within the default size
-     * limits so a short sample is not taken for an episode, and folds in what belongs to it.
+     * Searches [series]' chat for it ([fetch], Telegram by default), within Home's size floor so a short sample is not taken for an episode, and folds in what belongs to it.
      */
     suspend fun read(
         series: Series,
@@ -55,7 +54,7 @@ object WholeSeries {
         var cursors = MediaCursors()
         for (page in 0 until SeriesFill.MAX_PAGES) {
             val read = fetch(chatId, query, cursors, topic) ?: break
-            found += read.items.filter { SizeFilter.matches(it.sizeBytes, SizeFilter.DEFAULT_MIN, SizeFilter.DEFAULT_MAX) }
+            found += read.items.filter { SizeFilter.matches(it.sizeBytes, SizeFilter.HOME_MIN, SizeFilter.DEFAULT_MAX) }
             if (read.endReached || read.cursors.allDone) break
             cursors = read.cursors
         }

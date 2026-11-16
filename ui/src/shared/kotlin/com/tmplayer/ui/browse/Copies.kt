@@ -100,6 +100,7 @@ fun copyDetail(
     /** The copies listed with it, for [copyFit]. */
     among: List<MediaItem> = emptyList(),
 ): String = listOfNotNull(
+    copyBest(copy, s, among),
     copyFit(copy, s, among),
     copy.sizeBytes.takeIf { it > 0 && VideoCopies.heightOf(copy) != null }?.let { s.formatter.size(it) },
     copy.durationSec.takeIf { it > 0 }?.let { s.formatter.duration(it.toLong()) },
@@ -113,6 +114,19 @@ fun copyDetail(
     s.detailCopyStarted.takeIf { started },
     s.detailCopyNoSaving.takeIf { !copy.canBeSaved },
 ).joinToString("  ·  ")
+
+/**
+ * "Best for this device" on the copy the app plays when nothing else decides ([VideoCopies.bestForDevice]),
+ * only where [among] holds two copies that differ in picture, so a list of equals says nothing. The
+ * viewer's own pick, a download or a started copy may be the one playing instead; the tag still names
+ * the best, and choosing another row is the switch.
+ */
+fun copyBest(copy: MediaItem, s: Messages, among: List<MediaItem>): String? {
+    if (among.size < 2) return null
+    val heights = among.mapNotNull { VideoCopies.heightOf(it) }.distinct()
+    if (heights.size < 2) return null
+    return if (VideoCopies.bestForDevice(among)?.id == copy.id) s.detailCopyBest else null
+}
 
 /**
  * Whether this device plays [copy] smoothly, as far as its name says (HX2,

@@ -202,10 +202,13 @@ class ChooseChatsButtonTest {
     }
 
     @Test
-    fun `on the big-screen bar Right from Chats reaches the button, Enter opens, and Back lands on it again`() = runComposeUiTest {
+    fun `on the big-screen bar Right from Chats and Downloads reaches the button, Enter opens, and Back lands on it again`() = runComposeUiTest {
         television()
         setContent { Window { Box(Modifier.size(10.dp)) } }
         onNode(tab(L.navChats)).requestFocus()
+        // The places first (Downloads is one since R2), then the action after them.
+        press(Key.DirectionRight)
+        onNode(tab(L.navDownloads)).assertIsFocused()
         press(Key.DirectionRight)
         onNode(button).assertIsFocused()
         press(Key.Enter)
@@ -221,6 +224,8 @@ class ChooseChatsButtonTest {
         onNode(button).assertIsFocused()
 
         press(Key.DirectionLeft)
+        onNode(tab(L.navDownloads)).assertIsFocused()
+        press(Key.DirectionLeft)
         onNode(tab(L.navChats)).assertIsFocused()
     }
 
@@ -230,8 +235,11 @@ class ChooseChatsButtonTest {
         setContent { Window { Box(Modifier.size(10.dp)) } }
         onNode(button).assertDoesNotExist()
         onNode(tab(L.navChats)).requestFocus()
+        // Downloads is the last item, so there is nothing past it for the remote to reach.
         press(Key.DirectionRight)
-        onNode(tab(L.navChats)).assertIsFocused()
+        onNode(tab(L.navDownloads)).assertIsFocused()
+        press(Key.DirectionRight)
+        onNode(tab(L.navDownloads)).assertIsFocused()
     }
 
     @Test
@@ -242,6 +250,8 @@ class ChooseChatsButtonTest {
         onNode(button).assertDoesNotExist()
         onNode(tab(L.navChats)).requestFocus()
         press(Key.DirectionRight)
-        onNode(tab(L.navChats)).assertIsFocused()
+        onNode(tab(L.navDownloads)).assertIsFocused()
+        press(Key.DirectionRight)
+        onNode(tab(L.navDownloads)).assertIsFocused()
     }
 }

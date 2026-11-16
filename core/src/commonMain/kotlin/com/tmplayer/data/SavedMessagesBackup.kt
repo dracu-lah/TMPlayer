@@ -1,0 +1,149 @@
+package com.tmplayer.data
+
+import com.tmplayer.i18n.L
+import com.tmplayer.platform.Logger
+import dev.g000sha256.tdl.TdlResult
+import dev.g000sha256.tdl.dto.FormattedText
+import dev.g000sha256.tdl.dto.InputDocument
+import dev.g000sha256.tdl.dto.InputFileLocal
+import dev.g000sha256.tdl.dto.InputMessageDocument
+import dev.g000sha256.tdl.dto.MessageSendOptions
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
+import java.io.File
+
+/** What sending one backup to the viewer's own Saved Messages came to. */
+sealed interface BackupSend {
+    data object Sent : BackupSend
+
+    /** [reason] is plain words for the viewer, never a stack trace. */
+    data class Failed(val reason: String) : BackupSend
+}
+
+/** Where a backup goes; Telegram's Saved Messages in the app, a fake in tests. */
+fun interface BackupSender {
+    suspend fun send(text: String, fileName: String): BackupSend
+}
+
+/**
+ * One settings backup ([Backups]) put into the viewer's own Saved Messages as a file, for the
+ * moment before signing out ("Save a backup before you sign out"): the account being left is
+ * the only one it is sent for, to its own chat with itself, one file, once, by the viewer's
+ * own press. It is not the sync file ([ResumeSync]): that one is replaced in place and pinned;
+ * this one is a dated copy the viewer can keep or delete, and a restore reads it back (Settings,
+ * About and help, Restore).
+ *
+ * The file is waited for until Telegram has it, because signing out destroys the upload that
+ * was still under way.
+ */
+object SavedMessagesBackup : BackupSender {
+
+    /** The caption the file is told apart by, a hashtag so Telegram's search finds it. */
+    const val TAG = "#TMPlayerBackup"
+
+    override suspend fun send(text: String, fileName: String): BackupSend {
+        val session = Td.awaitConnectedSessionOrNull() ?: return BackupSend.Failed(L.signoutBackupOffline)
+        var folder: File? = null
+        return try {
+            val td = session.client
+            val myId = Td.myId().takeIf { it != 0L } ?: return BackupSend.Failed(L.signoutBackupOffline)
+            val chat = td.createPrivateChat(myId, false).valueOrNull?.id ?: myId
+            val dir = ResumeSync.uploadDir() ?: return BackupSend.Failed(L.signoutBackupNoFolder)
+            ResumeSync.sweep(dir)
+            folder = File(dir, "$FOLDER_PREFIX${System.currentTimeMillis()}").apply { mkdirs() }
+            val local = File(folder, fileName)
+            local.writeText(text)
+            val caption = FormattedText("$TAG\n${L.signoutBackupCaption}", emptyArray())
+            val content = InputMessageDocument(InputDocument(InputFileLocal(local.absolutePath), null, true), caption)
+            val options = MessageSendOptions(null, true, false, false, false, 0L, false, null, 0L, 0, false)
+            // Telegram's own word that the file arrived, by the temporary id the send gave: no clock
+            // is compared, so a device whose clock is wrong confirms like any other. Subscribed
+            // before the send, so an answer that beats the send's own reply is not missed.
+            val results = java.util.concurrent.ConcurrentHashMap<Long, BackupSend>()
+            coroutineScope {
+                val ok = launch(start = CoroutineStart.UNDISPATCHED) {
+                    td.messageSendSucceededUpdates.collect { results[it.oldMessageId] = BackupSend.Sent }
+                }
+                val failed = launch(start = CoroutineStart.UNDISPATCHED) {
+                    td.messageSendFailedUpdates.collect { results[it.oldMessageId] = BackupSend.Failed(Failures.humanise(it.error.message)) }
+                }
+                try {
+                    val sent = waitingOutFlood(3, 60, { r: TdlResult<*> -> (r as? TdlResult.Failure)?.let { Failures.floodWaitSeconds(it.message) } }) {
+                        td.sendMessage(chat, null, null, options, null, content)
+                    }
+                    if (sent !is TdlResult.Success) return@coroutineScope BackupSend.Failed(Failures.humanise(sent.errorMessage ?: "send"))
+                    val id = sent.result.id
+                    // Already past "sending" in the reply itself: nothing to wait for.
+                    if (sent.result.sendingState == null) return@coroutineScope BackupSend.Sent
+                    repeat(CONFIRM_TRIES) {
+                        results[id]?.let { return@coroutineScope it }
+                        delay(CONFIRM_STEP_MS)
+                    }
+                    results[id] ?: BackupSend.Failed(L.signoutBackupSlow)
+                } finally {
+                    ok.cancel()
+                    failed.cancel()
+                }
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Logger.w("SavedMessagesBackup", "Sending the backup failed", e)
+            BackupSend.Failed(Failures.humanise(e))
+        } finally {
+            // Sent or not, the copy of the viewer's lists made for the upload does not stay on disk.
+            folder?.deleteRecursively()
+        }
+    }
+
+    /** Leftovers of an upload that never finished: gone with the account (sign out). */
+    fun forgetFiles() {
+        val dir = ResumeSync.uploadDir() ?: return
+        dir.listFiles()?.filter { it.name.startsWith(FOLDER_PREFIX) }?.forEach { it.deleteRecursively() }
+    }
+
+    private const val FOLDER_PREFIX = "backup-"
+    private const val CONFIRM_TRIES = 15
+    private const val CONFIRM_STEP_MS = 2_000L
+}
+
+/**
+ * The backup before signing out: builds the file, sends it, and never throws and never takes
+ * longer than [timeoutMs], so a dead line cannot keep the viewer from signing out. What comes
+ * back is for the dialog to show, with the way out next to it (Sign out anyway).
+ */
+object SignOutBackup {
+
+    /** Forty seconds: a backup is small, and the viewer is waiting on a dialog. */
+    const val TIMEOUT_MS = 40_000L
+
+    /** Where the file goes: Telegram's Saved Messages, replaced only by a test's fake. */
+    @Volatile
+    var sender: BackupSender = SavedMessagesBackup
+
+    suspend fun save(
+        export: suspend () -> String,
+        fileName: String,
+        sender: BackupSender = this.sender,
+        timeoutMs: Long = TIMEOUT_MS,
+    ): BackupSend {
+        val text = try {
+            export()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return BackupSend.Failed(L.backupFailed)
+        }
+        return try {
+            withTimeoutOrNull(timeoutMs) { sender.send(text, fileName) } ?: BackupSend.Failed(L.signoutBackupSlow)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            BackupSend.Failed(Failures.humanise(e))
+        }
+    }
+}

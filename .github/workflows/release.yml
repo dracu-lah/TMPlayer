@@ -225,6 +225,12 @@ jobs:
           cp app/build/outputs/mapping/release/mapping.txt "mapping/mapping-$VERSION.txt"
           ls -la dist mapping
 
+      # Google Play (apps targeting Android 15 or later) and 16 KB page-size devices need every
+      # 64-bit native library aligned to 16 KB, in the zip and in its ELF segments. This only
+      # reads the APK and fails the job before anything is handed on or published (RL13).
+      - name: Check 16 KB page alignment
+        run: scripts/check-16kb.sh app/build/outputs/apk/release/app-universal-release.apk
+
       # Anything holding the signing key is deleted before the job can reach a step that
       # uploads output. Workflow files are cleaned up by the runner anyway; this is belt
       # and braces against a future step accidentally archiving the workspace.

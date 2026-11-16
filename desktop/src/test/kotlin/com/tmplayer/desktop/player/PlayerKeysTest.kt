@@ -3,6 +3,7 @@ package com.tmplayer.desktop.player
 import androidx.compose.ui.input.key.Key
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PlayerKeysTest {
@@ -172,6 +173,15 @@ class PlayerKeysTest {
     }
 
     @Test
+    fun `O marks the intro, and only O alone`() {
+        assertEquals(PlayerAction.MarkIntro, action(Key.O))
+        assertEquals(null, action(Key.O, shift = true))
+        assertEquals(null, action(Key.O, ctrl = true))
+        // The sheet lists the key, so the sheet and the table cannot drift apart.
+        assertTrue(PlayerKeys.sheet().any { it.first == com.tmplayer.i18n.L.keysRowMarkIntro && it.second == "O" })
+    }
+
+    @Test
     fun `unbound keys and stray modifiers do nothing`() {
         assertNull(action(Key.H))
         assertNull(action(Key.W, shift = true))
@@ -191,5 +201,15 @@ class PlayerKeysTest {
         // F and F11 still leave full screen, for the keyboard.
         assertEquals(PlayerAction.ToggleFullscreen, action(Key.F11, context = tv))
         assertEquals(PlayerAction.TogglePlay, action(Key.Enter, context = tv))
+    }
+
+    @Test
+    fun `the keys everyone owns are never player keys, with Ctrl or with Cmd`() {
+        val owned = listOf(Key.C, Key.V, Key.X, Key.Z, Key.A, Key.Y, Key.F, Key.S, Key.W, Key.N)
+        for (key in owned) {
+            assertNull("Ctrl+$key", action(key, ctrl = true))
+            assertNull("Ctrl+Shift+$key", action(key, ctrl = true, shift = true))
+            assertNull("Cmd+$key", action(key, meta = true, context = KeyContext(mac = true)))
+        }
     }
 }

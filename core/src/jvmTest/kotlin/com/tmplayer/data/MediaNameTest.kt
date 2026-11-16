@@ -474,4 +474,76 @@ class MediaNameTest {
             MediaName.looseEpisode(name, maxYear = 2027)
         }
     }
+
+    @Test
+    fun `a file of several episodes reads its last whatever the separator`() {
+        data class Case(val name: String, val season: Int?, val first: Int?, val last: Int?)
+        val cases = listOf(
+            Case("Harbour.Notes.S01E01-E13.1080p.mkv", 1, 1, 13),
+            Case("Harbour.Notes.S01E01~E04.1080p.mkv", 1, 1, 4),
+            Case("Harbour.Notes.S01E01~04.1080p.mkv", 1, 1, 4),
+            Case("Harbour.Notes.S01E01 to E04.1080p.mkv", 1, 1, 4),
+            // "S01E01.to.04" with dots reads ".to" as a web address and drops it: only the spaced form is a range.
+            Case("Harbour Notes S01E01 to 04 1080p.mkv", 1, 1, 4),
+            Case("Harbour.Notes.S01E01 + E02.1080p.mkv", 1, 1, 2),
+            Case("Harbour.Notes.S01E01 & E02.1080p.mkv", 1, 1, 2),
+            Case("Harbour.Notes.S01E01, E02, E03.1080p.mkv", 1, 1, 3),
+            Case("Harbour.Notes.S01E01,02,03.1080p.mkv", 1, 1, 3),
+            Case("Harbour.Notes.S01E01\u2013E06.1080p.mkv", 1, 1, 6),
+            Case("Harbour.Notes.S01E01\u201306.1080p.mkv", 1, 1, 6),
+            Case("Harbour.Notes.S01E01-S01E04.1080p.mkv", 1, 1, 4),
+            Case("Harbour Notes S01E01 - E02 1080p.mkv", 1, 1, 2),
+            Case("Harbour Notes Ep 1~4 1080p.mkv", null, 1, 4),
+            Case("Harbour Notes Ep 1 to 4 1080p.mkv", null, 1, 4),
+            Case("Harbour Notes Ep 1,2,3 1080p.mkv", null, 1, 3),
+            Case("Harbour Notes Ep 1, 2, 3 1080p.mkv", null, 1, null),
+            // One episode: a resolution, a count or an out of order list is no range.
+            Case("Harbour.Notes.S01E05-720p.mkv", 1, 5, null),
+            Case("Harbour Notes S01E05 - 1080p.mkv", 1, 5, null),
+            Case("Harbour Notes S01E05, 5 Stars.mkv", 1, 5, null),
+            Case("Harbour.Notes.S01E05,03.mkv", 1, 5, null),
+            Case("Harbour.Notes.S01E05-E03.mkv", 1, 5, null),
+            Case("Harbour.Notes.S01E05 to E05.mkv", 1, 5, null),
+            Case("Harbour.Notes.S01E05.mkv", 1, 5, null),
+        )
+        for (case in cases) {
+            val parsed = parse(case.name)
+            assertEquals(case.name, case.season, parsed.season)
+            assertEquals(case.name, case.first, parsed.episode)
+            assertEquals(case.name, case.last, parsed.lastEpisode)
+        }
+    }
+
+    @Test
+    fun `several seasons in one name are no season at all`() {
+        for ((name, end) in listOf(
+            "Harbour.Notes.S01-S03.1080p.mkv" to 3,
+            "Harbour Notes S01 to S03 1080p.mkv" to 3,
+            "Harbour Notes S01~S04 Complete.mkv" to 4,
+            "Harbour Notes Seasons 1-3 1080p.mkv" to 3,
+            "Harbour Notes Season 1 to 2 1080p.mkv" to 2,
+        )) {
+            val parsed = parse(name)
+            assertEquals(name, null, parsed.season)
+            assertEquals(name, null, parsed.episode)
+            assertEquals(name, end, parsed.seasonEnd)
+            assertEquals(name, "Harbour Notes", parsed.title)
+            assertTrue(name, parsed.isSeries)
+        }
+        // One season, an episode of a season, or a bad span stays what it was.
+        assertEquals(null, parse("Harbour.Notes.S01.1080p.mkv").seasonEnd)
+        assertEquals(1, parse("Harbour.Notes.S01.1080p.mkv").season)
+        assertEquals(null, parse("Harbour.Notes.S01E01-S01E04.mkv").seasonEnd)
+        assertEquals(null, parse("Harbour.Notes.S05-S02.mkv").seasonEnd)
+        assertEquals(null, parse("Harbour.Notes.S01-S250.mkv").seasonEnd)
+    }
+
+    @Test
+    fun `a name of endless range separators is read at once`() {
+        val started = System.nanoTime()
+        for (name in listOf("1-1-1-".repeat(20_000), "E01,".repeat(20_000), "S01E01 to E02 ".repeat(5_000), "E1~2~3~".repeat(20_000))) {
+            parse(name)
+        }
+        assertTrue("took ${(System.nanoTime() - started) / 1_000_000} ms", System.nanoTime() - started < 3_000_000_000L)
+    }
 }

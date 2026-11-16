@@ -26,7 +26,7 @@ enum class PlayerMenuEntry {
     PictureShape,
     /**
      * 3D video: a page of how the file keeps its two pictures and which glasses are on
-     * ([Stereo3d]). Not for sound alone, nor while the video plays on a cast.
+     * ([Stereo3d]). Not while the video plays on a cast.
      */
     Stereo,
     /** The speeds as a page, the one playing on the line; the row's button opens the same page. */
@@ -56,13 +56,17 @@ enum class PlayerMenuEntry {
     AddBookmark,
     /** This video's bookmarks: play from one, give it a note, delete it. */
     Bookmarks,
+    /** Two presses: where the intro starts, then where it ends; saved here and used as a guess for the season. Episodes only. */
+    MarkIntro,
+    /** Takes the viewer's intro mark off this video; only while it has one. */
+    RemoveIntroMark,
     SaveToDownloads,
     /** "Mark as watched", or "Mark as unwatched" once it is on the list. */
     MarkWatched,
     PictureInPicture,
     /**
      * The same video in the other engine (PR2), at the same place with the same tracks: ExoPlayer
-     * to VLC or back. Only where the VLC library loads, never for 3D, sound alone or a cast.
+     * to VLC or back. Only where the VLC library loads, never for 3D or a cast.
      */
     OtherEngine,
     OpenInAnotherApp,
@@ -73,6 +77,12 @@ enum class PlayerMenuEntry {
      * (L3). Also a held Info key on the remote. Not offered on a cast, which plays on the other TV.
      */
     ReportStutter,
+
+    /**
+     * "Picture looks wrong" (RL10): marks the moment like [ReportStutter] and tries another way to
+     * show the picture, once. Offered and hidden with it.
+     */
+    ReportWrongPicture,
     RemoteKeys,
 }
 
@@ -122,6 +132,9 @@ enum class PhoneMenuEntry {
     /** Asks for an optional note, then saves the moment the note was asked at. */
     AddBookmark,
     Bookmarks,
+    /** Two presses: where the intro starts, then where it ends, as on the television. */
+    MarkIntro,
+    RemoveIntroMark,
     /** The other engine, as on the television. */
     OtherEngine,
     OpenInAnotherApp,
@@ -132,6 +145,8 @@ enum class PhoneMenuEntry {
     MarkWatched,
     /** The moment marked as stuttering, with the last minute of the trace kept for Send logs (L3). */
     ReportStutter,
+    /** "Picture looks wrong" (RL10): the mark, and another way to show the picture, once. */
+    ReportWrongPicture,
     /** Last: a line for bug reports, not for watching. */
     PlaybackDetails,
 }
@@ -148,6 +163,7 @@ fun PhoneMenuEntry.label(
     bookmarks: Int = 0,
     shape: VideoScale? = null,
     stereo: String? = null,
+    introMarking: Boolean = false,
 ): String = when (this) {
     PhoneMenuEntry.LockScreen -> L.playerLockScreen
     PhoneMenuEntry.PictureInPicture -> L.playerPictureInPicture
@@ -156,7 +172,7 @@ fun PhoneMenuEntry.label(
     PhoneMenuEntry.Stereo -> stereo?.let { L.commonWithDetail(L.playerStereo, it) } ?: L.playerStereo
     PhoneMenuEntry.Speed -> L.playerSpeed
     PhoneMenuEntry.VolumeBoost -> L.playerVolumeBoost
-    PhoneMenuEntry.NightMode -> L.playerNightMode
+    PhoneMenuEntry.NightMode -> L.playerQuietLoudScenes
     PhoneMenuEntry.EvenVolume -> L.playerEvenVolume
     PhoneMenuEntry.SleepTimer -> sleepDetail?.let { L.playerSleepTimerNow(it) } ?: L.playerSleepTimer
     PhoneMenuEntry.AbLoop -> PlayerMenu.loopLabel(loop)
@@ -173,8 +189,11 @@ fun PhoneMenuEntry.label(
     PhoneMenuEntry.SaveToDownloads -> L.playerSaveToDownloads
     PhoneMenuEntry.MarkWatched -> if (watched) L.playerMarkUnwatched else L.playerMarkWatched
     PhoneMenuEntry.AddBookmark -> L.playerAddBookmark
+    PhoneMenuEntry.MarkIntro -> if (introMarking) L.playerMarkIntroEnd else L.playerMarkIntro
+    PhoneMenuEntry.RemoveIntroMark -> L.playerMarkIntroRemove
     PhoneMenuEntry.Bookmarks -> if (bookmarks > 0) L.commonWithDetail(L.playerBookmarks, L.messages.formatter.number(bookmarks)) else L.playerBookmarks
     PhoneMenuEntry.ReportStutter -> L.playerReportStutter
+    PhoneMenuEntry.ReportWrongPicture -> L.playerReportWrongPicture
     PhoneMenuEntry.PlaybackDetails -> L.playerPlaybackDetails
 }
 
@@ -213,12 +232,15 @@ object PlayerMenu {
      *
      * [chapters] is whether the file has chapter marks, which adds the chapter steps.
      *
-     * [stereo] is whether 3D video is offered: a picture to draw, not sound alone, and
+     * [stereo] is whether 3D video is offered: not while a cast plays it, and
      * [pictureShape] the same for the shapes' page. [reportStutter] is false on a cast. [copyLinkAtTime] is false for a chat that restricts saving, a video with no message and one built from pieces.
      *
      * [otherEngine] is whether the video can move to the other engine (PR2): a build whose VLC
      * library loads here, a picture that is not 3D, no cast. It sits just above Open in another
      * app, the other way to a different player.
+     *
+     * [markIntro] is whether the video is an episode of a show, which has a season to share a
+     * mark with; [removeIntroMark] whether this episode has a mark of its own to take off.
      */
     fun tvEntries(
         pictureInPicture: Boolean,
@@ -234,6 +256,8 @@ object PlayerMenu {
         copyLinkAtTime: Boolean = false,
         otherEngine: Boolean = false,
         repeatVideo: Boolean = false,
+        markIntro: Boolean = false,
+        removeIntroMark: Boolean = false,
     ): List<PlayerMenuEntry> = buildList {
         add(PlayerMenuEntry.LockScreen)
         add(PlayerMenuEntry.PlaybackDetails)
@@ -259,13 +283,18 @@ object PlayerMenu {
             add(PlayerMenuEntry.AddBookmark)
             add(PlayerMenuEntry.Bookmarks)
         }
+        if (markIntro) add(PlayerMenuEntry.MarkIntro)
+        if (removeIntroMark) add(PlayerMenuEntry.RemoveIntroMark)
         if (saveToDownloads) add(PlayerMenuEntry.SaveToDownloads)
         if (markWatched) add(PlayerMenuEntry.MarkWatched)
         if (pictureInPicture) add(PlayerMenuEntry.PictureInPicture)
         if (otherEngine) add(PlayerMenuEntry.OtherEngine)
         if (openInAnotherApp) add(PlayerMenuEntry.OpenInAnotherApp)
         if (copyLinkAtTime) add(PlayerMenuEntry.CopyLinkAtTime)
-        if (reportStutter) add(PlayerMenuEntry.ReportStutter)
+        if (reportStutter) {
+            add(PlayerMenuEntry.ReportStutter)
+            add(PlayerMenuEntry.ReportWrongPicture)
+        }
         add(PlayerMenuEntry.RemoteKeys)
     }
 
@@ -276,7 +305,7 @@ object PlayerMenu {
      * can still become one; [paused] adds the frame steps. Lines rather than buttons, so the row
      * CP37 cleared stays clear. [chapters] adds the chapter steps. [saveFrame] is false for a
      * chat that restricts saving (or while that is still being asked), whose frames stay in it.
-     * [pictureShape] is whether there is a picture to shape (not sound alone, not a cast), and
+     * [pictureShape] is whether there is a picture to shape (not a cast), and
      * [stereo] offers 3D video beside it; Speed follows them. [reportStutter] adds Report stutter
      * (false on a cast, which plays on the other screen). [copyLinkAtTime] is false for a chat that
      * restricts saving, a video with no message and one built from pieces. [zoomed] adds Reset zoom under the
@@ -300,6 +329,8 @@ object PlayerMenu {
         copyLinkAtTime: Boolean = false,
         otherEngine: Boolean = false,
         repeatVideo: Boolean = false,
+        markIntro: Boolean = false,
+        removeIntroMark: Boolean = false,
     ): List<PhoneMenuEntry> = buildList {
         add(PhoneMenuEntry.LockScreen)
         if (pictureInPicture) add(PhoneMenuEntry.PictureInPicture)
@@ -326,13 +357,18 @@ object PlayerMenu {
             add(PhoneMenuEntry.AddBookmark)
             add(PhoneMenuEntry.Bookmarks)
         }
+        if (markIntro) add(PhoneMenuEntry.MarkIntro)
+        if (removeIntroMark) add(PhoneMenuEntry.RemoveIntroMark)
         if (otherEngine) add(PhoneMenuEntry.OtherEngine)
         if (openInAnotherApp) add(PhoneMenuEntry.OpenInAnotherApp)
         if (copyLinkAtTime) add(PhoneMenuEntry.CopyLinkAtTime)
         add(PhoneMenuEntry.LoadSubtitleFile)
         if (saveToDownloads) add(PhoneMenuEntry.SaveToDownloads)
         if (markWatched) add(PhoneMenuEntry.MarkWatched)
-        if (reportStutter) add(PhoneMenuEntry.ReportStutter)
+        if (reportStutter) {
+            add(PhoneMenuEntry.ReportStutter)
+            add(PhoneMenuEntry.ReportWrongPicture)
+        }
         add(PhoneMenuEntry.PlaybackDetails)
     }
 }

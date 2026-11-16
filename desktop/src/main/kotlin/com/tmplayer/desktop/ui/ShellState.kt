@@ -179,12 +179,6 @@ class ShellState(
     /** History's order, one for its three lists: most recent first, or by title. */
     var historySort by mutableStateOf(ChatSort.Recent)
 
-    /**
-     * Set by Settings' Recently played row: Downloads opens with that section, folded away at the
-     * page's foot otherwise, unfolded and in view. The page clears it once it has done so.
-     */
-    var downloadsOpenRecent by mutableStateOf(false)
-
     /** Set by the low storage notification (CP76): Downloads opens with Free up space up. */
     var downloadsOpenFreeUp by mutableStateOf(false)
     /**
@@ -250,46 +244,11 @@ class ShellState(
         private set
 
     /**
-     * The mini player (U8): Back from a playing video docks it into a bar over the page instead
-     * of closing it. The player stays composed (one engine, never a second decoder) and the page
-     * is in front: [playerUp] is what "the player is on screen" means to the keys and popups.
+     * The full player is the thing on screen: a video is open. Back closes it (the resume point
+     * is saved by the player) and the page that opened it is what is left; there is no bar that
+     * keeps a video playing over a page.
      */
-    var mini by mutableStateOf(com.tmplayer.player.MiniPlayerState())
-        private set
-
-    /** What the bar shows, written by the player host while docked. */
-    var miniBar by mutableStateOf<MiniBarInfo?>(null)
-
-    /** The bar's play and pause, set by the player host. */
-    var miniTogglePlay: () -> Unit = {}
-
-    /** The full player is the thing on screen: a video is open and not docked. */
-    val playerUp: Boolean get() = nowPlaying != null && mini.phase != com.tmplayer.player.MiniPhase.Docked
-
-    /**
-     * Back from the player: docks it when [context] allows ([com.tmplayer.player.MiniPlayerState.verdict]),
-     * closes it otherwise. A television in the big-screen mode never docks.
-     */
-    fun leavePlayer(context: com.tmplayer.player.MiniContext) {
-        mini = mini.leave(context)
-        if (!mini.holdsPlayer) {
-            closePlayer()
-            return
-        }
-        // Out of fullscreen, as a close would: the page and its bar are what comes next.
-        if (!BigScreen.on) fullscreen = false
-    }
-
-    /** A cast session began or ended: a docked bar hides for it and comes back after. */
-    fun miniCasting(on: Boolean) {
-        mini = mini.casting(on)
-    }
-
-    /** A tap on the bar, or a question the docked video has for the viewer. */
-    fun expandPlayer() {
-        mini = mini.expand()
-        miniBar = null
-    }
+    val playerUp: Boolean get() = nowPlaying != null
 
     /**
      * Whether the window is fullscreen: the first rung of the Esc ladder, and the last in the
@@ -425,6 +384,18 @@ class ShellState(
         openList = id
     }
 
+    /**
+     * Ctrl+J (Cmd+J) and the bar's Downloads button: open Downloads, and the same again from there
+     * closes it back to the page it was reached from, as Settings' key does not (it only opens).
+     */
+    fun toggleDownloads() {
+        if (destination == Destination.Downloads) {
+            if (modalOpen) closeModal() else go(Destination.Home)
+        } else {
+            go(Destination.Downloads)
+        }
+    }
+
     fun go(to: Destination) {
         openChat = null
         chatToRefocus = null
@@ -499,9 +470,6 @@ class ShellState(
     val notices = kotlinx.coroutines.flow.MutableSharedFlow<String>(extraBufferCapacity = 4)
 
     private fun openPlayerNow(item: MediaItem, startFromBeginning: Boolean) {
-        // A video opened while one is docked takes its place in the same player: never two.
-        mini = mini.opened()
-        miniBar = null
         if (detail != null) detailUnderPlayer = true
         warmStream(item, fromStart = startFromBeginning)
         if (item.versions.size <= 1) {
@@ -534,8 +502,6 @@ class ShellState(
 
     fun closePlayer() {
         nowPlaying = null
-        mini = mini.dismiss()
-        miniBar = null
         // The big-screen mode is full screen for the whole app, not for the video alone.
         if (!BigScreen.on) fullscreen = false
         detailUnderPlayer = false
@@ -660,7 +626,7 @@ class ShellState(
     /**
      * Shortcuts that work wherever focus is, even inside a text field: Ctrl+F (Cmd+F) to search
      * the page, Ctrl+K (Cmd+K) to open or close the search across every chat, Ctrl+, (Cmd+,) for
-     * Settings, Ctrl+Shift+A (Cmd+Shift+A) for Choose chats, Ctrl+Q (Cmd+Q) to quit. The command key is the OS's own, as
+     * Settings, Ctrl+J (Cmd+J) for Downloads, Ctrl+Shift+A (Cmd+Shift+A) for Choose chats, Ctrl+Q (Cmd+Q) to quit. The command key is the OS's own, as
      * the player reads it: Ctrl on a Mac is a text field's caret key, and Super+Q on Linux belongs
      * to the window manager.
      */
@@ -688,6 +654,11 @@ class ShellState(
             }
             command && event.key == Key.F -> {
                 focusSearch()
+                true
+            }
+            // Downloads, the bar's own button's key (R2); again closes it.
+            command && event.key == Key.J && !event.isShiftPressed -> {
+                toggleDownloads()
                 true
             }
             // Choose chats, the person-with-a-plus button's key (Ctrl+A is the picker's own Select all).
@@ -723,6 +694,14 @@ class ShellState(
     }
 
     /**
+     * Whether something sits over the page that Esc should close before it does anything to the
+     * window: the profile menu, the search palette, a detail pane or a modal page (Settings).
+     * Dialogs are their own layer and take the key before it gets here.
+     */
+    val transientLayerOpen: Boolean
+        get() = profileOpen || paletteOpen || detail != null || modalOpen
+
+    /**
      * Keys nothing focused wanted: "/" to search (a text field keeps its own slash), and the back
      * keys, which unwind the [backStack] one rung at a time.
      */
@@ -732,7 +711,8 @@ class ShellState(
             // On a television full screen is the last rung rather than the first: Back unwinds
             // the pages, and only then leaves it.
             if (BigScreen.on) return backStack.handleBack() || lastBack()
-            if (fullscreen) {
+            // Esc is spent on the layer over the page (a menu, a pane, Settings) before the window.
+            if (fullscreen && !transientLayerOpen) {
                 fullscreen = false
                 return true
             }

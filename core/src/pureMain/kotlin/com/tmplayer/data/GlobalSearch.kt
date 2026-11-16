@@ -47,7 +47,7 @@ enum class SearchSort { BestMatch, Newest, BestQuality, Largest }
 data class SearchFilters(
     val chatType: SearchChatType = SearchChatType.All,
     val quality: SearchQuality = SearchQuality.Any,
-    /** Leaves out the copies under [SizeFilter.DEFAULT_MIN]: trailers, samples, clips. */
+    /** Leaves out the copies under [SizeFilter.CLIP_MIN]: trailers, samples, clips. */
     val hideSmall: Boolean = false,
     /** On by default: somebody looking for a video does not care which list its chat was filed in. */
     val includeArchived: Boolean = true,
@@ -566,7 +566,7 @@ object GlobalSearch {
         return groups.mapNotNull { group ->
             val kept = group.copies.filter { copy ->
                 (quality.tag == null || qualityOf(copy) == quality.tag) &&
-                    (!filters.hideSmall || SizeFilter.matches(copy.sizeBytes, SizeFilter.DEFAULT_MIN, SizeFilter.DEFAULT_MAX))
+                    (!filters.hideSmall || SizeFilter.matches(copy.sizeBytes, SizeFilter.CLIP_MIN, SizeFilter.DEFAULT_MAX))
             }
             when {
                 kept.isEmpty() -> null

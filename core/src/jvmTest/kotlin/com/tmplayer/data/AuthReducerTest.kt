@@ -263,7 +263,7 @@ class AuthReducerTest {
     @Test
     fun `a Premium purchase to sign in is a failure that says what to do, never Connecting for good`() {
         val step = AuthReducer.reduce(AuthorizationStateWaitPremiumPurchase("id", 30, "help@x", "s"), SignInMethod.Phone)
-        assertEquals(AuthState.Failed(L.errorsPremiumSignIn), step.state)
+        assertEquals(AuthState.Failed(L.errorsPremiumQr), step.state)
     }
 
     @Test

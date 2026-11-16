@@ -22,7 +22,6 @@ import com.tmplayer.data.BackupWords
 import com.tmplayer.data.LogExport
 import com.tmplayer.data.ResumeRewind
 import com.tmplayer.data.RestorePlan
-import com.tmplayer.data.SizeFilter
 import com.tmplayer.data.SupportReminder
 import com.tmplayer.data.ThemeChoice
 import com.tmplayer.data.UiScale
@@ -52,6 +51,7 @@ import com.tmplayer.ui.onboarding.SetupStep
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.rememberUiScale
 import kotlinx.coroutines.Dispatchers
+import com.tmplayer.platform.Background
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -338,15 +338,9 @@ internal fun LibraryRows(state: ShellState, chatList: List<com.tmplayer.data.Cha
     val settings = state.settings
     val scope = rememberCoroutineScope()
     val toast = rememberToast()
-    val minSize by settings.minSizeBytes.collectAsState(initial = SizeFilter.DEFAULT_MIN)
-    val maxSize by settings.maxSizeBytes.collectAsState(initial = SizeFilter.DEFAULT_MAX)
     val openLast by settings.openLastChat.collectAsState(initial = false)
     val lastChatId by settings.lastChatId.collectAsState(initial = 0L)
     val rememberSearches by settings.rememberSearches.collectAsState(initial = true)
-    val resumeSync by settings.resumeSync.collectAsState(initial = false)
-    val resumeSyncStatus by settings.resumeSyncStatus.collectAsState(initial = null)
-    val resumeSyncAt by settings.resumeSyncAt.collectAsState(initial = 0L)
-    val resumeSyncRunning by com.tmplayer.data.ResumeSync.running.collectAsState()
     val newVideoAlerts by settings.newVideoAlerts.collectAsState(initial = false)
     val history by settings.continueWatching.collectAsState(initial = emptyList())
     // Only those the kids lock shows, as the Favourites section counts them.
@@ -356,37 +350,6 @@ internal fun LibraryRows(state: ShellState, chatList: List<com.tmplayer.data.Cha
     val watchedList by state.watched.history.collectAsState(initial = emptyList())
     var confirm by remember { mutableStateOf<Confirm?>(null) }
     val undoToast = com.tmplayer.ui.components.rememberActionToast()
-
-    Setting(s.settingsSmallest, SizeFilter.label(minSize), icon = TmIcons.FilterHorizontal) {
-        Stepper(
-            onLess = { scope.launch { settings.setMinSizeBytes(SizeFilter.clampMin(SizeFilter.step(minSize, -1), maxSize)) } },
-            onMore = { scope.launch { settings.setMinSizeBytes(SizeFilter.clampMin(SizeFilter.step(minSize, 1), maxSize)) } },
-        )
-    }
-    Setting(s.settingsLargest, SizeFilter.label(maxSize), icon = TmIcons.FilterHorizontal) {
-        Stepper(
-            onLess = { scope.launch { settings.setMaxSizeBytes(SizeFilter.clampMax(SizeFilter.step(maxSize, -1), minSize)) } },
-            onMore = { scope.launch { settings.setMaxSizeBytes(SizeFilter.clampMax(SizeFilter.step(maxSize, 1), minSize)) } },
-        )
-    }
-    // Reset means the defaults, as on the phone and TV: offering it at the defaults and then
-    // clearing both ends contradicted the 50 MB the filter was still applying.
-    if (!SizeFilter.isDefault(minSize, maxSize)) {
-        Action(
-            s.settingsSizeLimitsReset,
-            s.settingsSizeLimitsResetDetail(SizeFilter.describe(SizeFilter.DEFAULT_MIN, SizeFilter.DEFAULT_MAX)),
-            TmIcons.Refresh,
-            value = s.commonReset,
-            end = RowEnd.None,
-        ) {
-            scope.launch {
-                // Widen first, so the clamp that stops the ends crossing cannot refuse the new
-                // floor on its way past the old ceiling.
-                settings.setMaxSizeBytes(SizeFilter.DEFAULT_MAX)
-                settings.setMinSizeBytes(SizeFilter.DEFAULT_MIN)
-            }
-        }
-    }
 
     // What opens first, in the same card as which videos show, as on the phone and the TV.
     val lastChatTitle = remember(chatList, lastChatId) { chatList.firstOrNull { it.id == lastChatId }?.title }
@@ -420,73 +383,6 @@ internal fun LibraryRows(state: ShellState, chatList: List<com.tmplayer.data.Cha
         rememberSearches,
         icon = TmIcons.Search,
     ) { on -> scope.launch { settings.setRememberSearches(on) } }
-    // Resume on other devices (U7, ResumeSync): opt in, the row saying what goes into the viewer's
-    // own Saved Messages. On asks first; off keeps the file, which the row below takes away.
-    Toggle(
-        s.settingsResumeSync,
-        if (resumeSync) s.settingsResumeSyncOn else s.settingsResumeSyncOff,
-        resumeSync,
-        icon = TmIcons.History,
-    ) { on ->
-        if (on) {
-            confirm = Confirm(
-                title = s.settingsResumeSyncEnableTitle,
-                message = s.settingsResumeSyncEnableMessage,
-                detail = null,
-                confirmLabel = s.confirmTurnOn,
-                destructive = false,
-            ) {
-                scope.launch {
-                    settings.setResumeSync(true)
-                    com.tmplayer.data.ResumeSync.syncSoon(settings, afterMs = 0)
-                }
-            }
-        } else {
-            scope.launch { settings.setResumeSync(false) }
-        }
-    }
-    if (resumeSync) {
-        // Sync now, with how the last sync went under it; Replace when the file there could not
-        // be read, which asks first. Run in the app's own scope, so leaving Settings does not
-        // stop it half way.
-        Action(
-            com.tmplayer.data.SyncWords.action(resumeSyncStatus),
-            com.tmplayer.data.SyncWords.status(resumeSyncStatus, resumeSyncAt, resumeSyncRunning),
-            TmIcons.Refresh,
-            end = RowEnd.None,
-            enabled = !resumeSyncRunning,
-        ) {
-            if (resumeSyncStatus?.kind == com.tmplayer.data.SyncStatus.Kind.Unreadable) {
-                confirm = Confirm(
-                    title = s.settingsResumeSyncReplaceTitle,
-                    message = s.settingsResumeSyncReplaceMessage,
-                    detail = null,
-                    confirmLabel = s.settingsResumeSyncReplace,
-                ) {
-                    com.tmplayer.platform.Background.scope.launch {
-                        com.tmplayer.data.ResumeSync.sync(settings, manual = true, replace = true)
-                    }
-                }
-            } else {
-                com.tmplayer.platform.Background.scope.launch { com.tmplayer.data.ResumeSync.sync(settings, manual = true) }
-            }
-        }
-        Action(s.settingsResumeSyncDelete, s.settingsResumeSyncDeleteDetail, TmIcons.Delete, end = RowEnd.None) {
-            confirm = Confirm(
-                title = s.settingsResumeSyncDeleteTitle,
-                message = s.settingsResumeSyncDeleteMessage,
-                detail = null,
-                confirmLabel = s.commonDelete,
-            ) {
-                scope.launch {
-                    val deleted = kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
-                        runCatching { com.tmplayer.data.ResumeSync.turnOffAndDelete(settings) }.getOrDefault(false)
-                    }
-                    toast(if (deleted) s.settingsResumeSyncDeleted else s.settingsResumeSyncDeleteFailed)
-                }
-            }
-        }
-    }
     // The picker: the chats added decide what Chats, Home and search show (HX27). The one list of
     // which chats TMPlayer shows: a chat's "Remove from TMPlayer" unticks a chat here (2026-11-01).
     val added by com.tmplayer.data.AddedChats.choice.collectAsState()
@@ -606,6 +502,91 @@ internal fun AccountRows(state: ShellState, onPin: (DesktopPinFlow) -> Unit, onK
     Group(s.settingsAccountSignedIn)
     // Where the account is signed in, and ending a session (CP83): behind this page's PIN.
     Action(s.settingsDevices, s.settingsDevicesDetail, TmIcons.Phone) { com.tmplayer.ui.settings.DevicesScreenState.open = true }
+    // Keep my place on all my devices (FQ12, moved here from Library): the one switch for the sync
+    // file in the viewer's own Saved Messages, the privacy line as its words. Turning it on is the
+    // answer to the question, so it asks nothing more; off keeps the file, which the row below
+    // takes away.
+    val toast = rememberToast()
+    val resumeSync by settings.resumeSync.collectAsState(initial = false)
+    val resumeSyncStatus by settings.resumeSyncStatus.collectAsState(initial = null)
+    val resumeSyncAt by settings.resumeSyncAt.collectAsState(initial = 0L)
+    val resumeSyncRunning by com.tmplayer.data.ResumeSync.running.collectAsState()
+    var syncConfirm by remember { mutableStateOf<Confirm?>(null) }
+    Toggle(s.syncplaceSwitch, if (resumeSync) s.syncplaceSwitchOn else s.syncplaceSwitchOff, resumeSync, icon = TmIcons.History) { on ->
+        if (on) {
+            scope.launch {
+                settings.setResumeSync(true)
+                settings.setKeepPlaceCardSeen()
+                com.tmplayer.data.ResumeSync.syncSoon(settings, afterMs = 0)
+            }
+            toast(s.syncplaceStarted)
+        } else {
+            scope.launch { settings.setResumeSync(false) }
+        }
+    }
+    // What goes into the file, in one plain line, in full under the switch.
+    Text(
+        s.syncplacePrivacy,
+        style = MaterialTheme.typography.bodySmall,
+        color = Tone.muted,
+        modifier = Modifier.padding(horizontal = SETTING_INSET),
+    )
+    if (resumeSync) {
+        // Sync now, with how the last sync went under it; Replace when the file there could not
+        // be read, which asks first. Run in the app's own scope, so leaving Settings does not
+        // stop it half way.
+        Action(
+            com.tmplayer.data.SyncWords.action(resumeSyncStatus),
+            com.tmplayer.data.SyncWords.status(resumeSyncStatus, resumeSyncAt, resumeSyncRunning),
+            TmIcons.Refresh,
+            end = RowEnd.None,
+            enabled = !resumeSyncRunning,
+        ) {
+            if (resumeSyncStatus?.kind == com.tmplayer.data.SyncStatus.Kind.Unreadable) {
+                syncConfirm = Confirm(
+                    title = s.settingsResumeSyncReplaceTitle,
+                    message = s.settingsResumeSyncReplaceMessage,
+                    detail = null,
+                    confirmLabel = s.settingsResumeSyncReplace,
+                ) {
+                    com.tmplayer.platform.Background.scope.launch {
+                        com.tmplayer.data.ResumeSync.sync(settings, manual = true, replace = true)
+                    }
+                }
+            } else {
+                com.tmplayer.platform.Background.scope.launch { com.tmplayer.data.ResumeSync.sync(settings, manual = true) }
+            }
+        }
+        Action(s.settingsResumeSyncDelete, s.settingsResumeSyncDeleteDetail, TmIcons.Delete, end = RowEnd.None) {
+            syncConfirm = Confirm(
+                title = s.settingsResumeSyncDeleteTitle,
+                message = s.settingsResumeSyncDeleteMessage,
+                detail = null,
+                confirmLabel = s.commonDelete,
+            ) {
+                scope.launch {
+                    val deleted = kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+                        runCatching { com.tmplayer.data.ResumeSync.turnOffAndDelete(settings) }.getOrDefault(false)
+                    }
+                    toast(if (deleted) s.settingsResumeSyncDeleted else s.settingsResumeSyncDeleteFailed)
+                }
+            }
+        }
+    }
+    syncConfirm?.let { asked ->
+        ConfirmDialog(
+            title = asked.title,
+            message = asked.message,
+            detail = asked.detail,
+            confirmLabel = asked.confirmLabel ?: s.commonClear,
+            destructive = asked.destructive,
+            onConfirm = {
+                syncConfirm = null
+                asked.action()
+            },
+            onDismiss = { syncConfirm = null },
+        )
+    }
     // Last, under the card rather than in it: the one press here that ends the session. It asks first.
     SignOutButton(s.settingsSignOut) { confirmSignOut = true }
     if (confirmSignOut) SignOutDialog(state, onDismiss = { confirmSignOut = false })
@@ -817,7 +798,7 @@ internal fun AboutRows(state: ShellState, version: String, onShowAbout: () -> Un
         modifier = Modifier.padding(start = SETTING_INSET, end = SETTING_INSET, top = 12.dp),
     )
 
-    if (supporting) SupportPopup(from = "settings", onClose = { supporting = false })
+    if (supporting) SupportPopup(onClose = { supporting = false }, onStarred = { Background.scope.launch { runCatching { settings.markSupportStarred() } } })
     if (whatsNew) WhatsNewPopup(onClose = { whatsNew = false })
     if (reporting) FeedbackPopup(onClose = { reporting = false })
 }

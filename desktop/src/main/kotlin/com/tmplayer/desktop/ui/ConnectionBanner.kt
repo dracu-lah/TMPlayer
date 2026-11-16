@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -23,9 +22,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.tmplayer.data.NetworkStatus
+import com.tmplayer.ui.connect.OfflineBanner
 import com.tmplayer.ui.i18n.LocalStrings
-import com.tmplayer.ui.icons.TmIcons
 import com.tmplayer.ui.theme.Tone
 import kotlinx.coroutines.delay
 
@@ -33,20 +31,19 @@ import kotlinx.coroutines.delay
 enum class ConnectionNotice { Hidden, Offline, Reconnecting }
 
 /**
- * The phone's offline rule, on the desktop: Offline once the computer has no network *and* TDLib
- * has no connection, held for a moment so a blip does not flash the pill; Reconnecting while the
- * network is back and TDLib is not yet; and when both are back, [onBackOnline] once (the chat list
- * reloads and the toast says so).
+ * The phone's offline rule, on the desktop: Offline once the settled offline answer says so (the
+ * computer has no network *and* TDLib has no connection, held for 2 s each way by
+ * [com.tmplayer.data.OfflineSettle], so a blip does not flash); Reconnecting while the network is
+ * back and TDLib is not yet; and when both are back, [onBackOnline] once (the chat list reloads).
  */
 @Composable
-fun rememberConnectionNotice(network: NetworkStatus, telegramConnected: Boolean, onBackOnline: () -> Unit): ConnectionNotice {
+fun rememberConnectionNotice(offline: Boolean, telegramConnected: Boolean, onBackOnline: () -> Unit): ConnectionNotice {
     var notice by remember { mutableStateOf(ConnectionNotice.Hidden) }
     var wasOffline by remember { mutableStateOf(false) }
     val backOnline by rememberUpdatedState(onBackOnline)
-    LaunchedEffect(network, telegramConnected) {
+    LaunchedEffect(offline, telegramConnected) {
         when {
-            network == NetworkStatus.Offline && !telegramConnected -> {
-                delay(OFFLINE_SETTLE_MS)
+            offline -> {
                 wasOffline = true
                 notice = ConnectionNotice.Offline
             }
@@ -62,11 +59,18 @@ fun rememberConnectionNotice(network: NetworkStatus, telegramConnected: Boolean,
     return notice
 }
 
-/** A passive pill: it never takes focus, and saved videos and playback carry on under it. */
+/**
+ * Offline is the Connect banner's card with Try again and Downloads ([OfflineBanner]); Reconnecting
+ * is a passive pill that never takes focus. Saved videos and playback carry on under either.
+ */
 @Composable
-fun ConnectionBanner(notice: ConnectionNotice, modifier: Modifier = Modifier) {
+fun ConnectionBanner(notice: ConnectionNotice, modifier: Modifier = Modifier, onOpenDownloads: (() -> Unit)? = null) {
     val s = LocalStrings.current
-    AnimatedVisibility(visible = notice != ConnectionNotice.Hidden, modifier = modifier, enter = fadeIn(), exit = fadeOut()) {
+    if (notice == ConnectionNotice.Offline) {
+        OfflineBanner(modifier, onOpenDownloads)
+        return
+    }
+    AnimatedVisibility(visible = notice == ConnectionNotice.Reconnecting, modifier = modifier, enter = fadeIn(), exit = fadeOut()) {
         Row(
             Modifier
                 .background(Tone.surfaceHigh.copy(alpha = 0.96f), CircleShape)
@@ -74,22 +78,8 @@ fun ConnectionBanner(notice: ConnectionNotice, modifier: Modifier = Modifier) {
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            when (notice) {
-                ConnectionNotice.Offline -> Icon(TmIcons.WifiOff, contentDescription = null, tint = Tone.text, modifier = Modifier.size(20.dp))
-                ConnectionNotice.Reconnecting -> CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                ConnectionNotice.Hidden -> Unit
-            }
-            Text(
-                when (notice) {
-                    ConnectionNotice.Offline -> s.connectionOffline
-                    ConnectionNotice.Reconnecting -> s.connectionReconnecting
-                    ConnectionNotice.Hidden -> ""
-                },
-                style = MaterialTheme.typography.bodyMedium,
-                color = Tone.text,
-            )
+            CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+            Text(s.connectionReconnecting, style = MaterialTheme.typography.bodyMedium, color = Tone.text)
         }
     }
 }
-
-private const val OFFLINE_SETTLE_MS = 750L

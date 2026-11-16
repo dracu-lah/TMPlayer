@@ -10,10 +10,18 @@ import com.tmplayer.json.JSONObject
 enum class SkipKind { Recap, Intro, Opening, Credits, Ending, Preview }
 
 /**
- * One stretch a viewer may want to jump over, in milliseconds from the start of the file. A null
- * [endMs] runs to the end, which is how credits usually come.
+ * Where a [SkipSegment] came from, which is also how much it is trusted: the viewer's own mark on
+ * this very video, then the file's chapters, then an online database, then the viewer's mark on
+ * another episode of the season applied as a guess. See [SkipMerge].
  */
-data class SkipSegment(val kind: SkipKind, val startMs: Long, val endMs: Long?) {
+enum class SkipSource { Mark, Chapter, Online, Guess }
+
+/**
+ * One stretch a viewer may want to jump over, in milliseconds from the start of the file. A null
+ * [endMs] runs to the end, which is how credits usually come. [source] is not stored with the
+ * answers the databases are asked for (they are all [SkipSource.Online]).
+ */
+data class SkipSegment(val kind: SkipKind, val startMs: Long, val endMs: Long?, val source: SkipSource = SkipSource.Online) {
     /** Where a skip lands: the segment's end, or the file's for one that runs to it. */
     fun target(durationMs: Long): Long = endMs ?: durationMs
 

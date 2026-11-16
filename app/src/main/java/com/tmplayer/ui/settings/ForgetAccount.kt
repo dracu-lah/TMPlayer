@@ -34,6 +34,8 @@ suspend fun forgetAccount(context: Context, settings: SettingsStore, watchedStor
     runCatching { watchedStore.watchLater.clear() }
     // The bookmarks go with it, for the same reason.
     runCatching { BookmarkStore(context).clear() }
+    // An upload of the backup before sign out that never finished: its copy of the lists goes too.
+    runCatching { com.tmplayer.data.SavedMessagesBackup.forgetFiles() }
     // And what was kept to help with a bug report: the playback trace and its marks, the last
     // Playback test, the app log and a report waiting to be shared. They hold what was watched.
     withContext(Dispatchers.IO) { runCatching { DiagnosticFiles.forget(context) } }

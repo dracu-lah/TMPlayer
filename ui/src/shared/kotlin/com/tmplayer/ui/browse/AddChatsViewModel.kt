@@ -52,8 +52,9 @@ class AddChatsViewModel(
      * @param counted each chat's videos as they arrive; a chat absent from here is still counting.
      * @param added the chats the viewer had added when the picker opened (the stored choice when
      *   it is a pick), fixed for the opening: the Added band, and what Recommended leaves out.
-     * @param recommended the Recommended band, taken once and then left alone, so no row moves
-     *   under a finger as the counts come in.
+     * @param recommended the Recommended band: taken within seconds from the head start, ranked
+     *   again as the rest of the account is counted until the viewer touches the list, then only
+     *   added to at its end, so no row moves under a finger.
      * @param recommending true from the first open until the Recommended band is taken (at most
      *   [RECOMMEND_BY_MS]), while the screen holds the band's place with a skeleton so no row
      *   moves under a finger or a click when it lands. Not held when the viewer already has chats
@@ -87,6 +88,16 @@ class AddChatsViewModel(
 
     private var headStart: Job? = null
     private var background: Job? = null
+
+    /** The account as the screen gave it, so each batch of counts can rank the band again. */
+    private var scanned: List<ChatSummary> = emptyList()
+
+    /**
+     * True once the viewer has done anything to the list (ticked, starred, searched, filtered):
+     * from then on nothing in the band moves under their finger, and a chat that qualifies later is
+     * added at its end ([ChatSuggestions.refine]).
+     */
+    private var settled = false
 
     /** True while the remote is jumping: the background count waits so the list is not rebuilt mid jump. */
     @Volatile private var held = false
@@ -135,6 +146,7 @@ class AddChatsViewModel(
      */
     fun start(chats: List<ChatSummary>) {
         if (headStart != null || chats.isEmpty() || counts == null) return
+        scanned = chats
         if (_state.value.recommended.isEmpty() && _state.value.added.isEmpty()) _state.update { it.copy(recommending = true) }
         headStart = viewModelScope.launch {
             val jobs = ChatPicking.headStart(chats).mapNotNull { id ->
@@ -160,23 +172,24 @@ class AddChatsViewModel(
     }
 
     /**
-     * Counts the rest of the account in the background once the head start is done (HX76), so the
-     * television's short list can fold the chats with no videos. At most [BACKGROUND_AT_ONCE] at a
-     * time, in list order, each one the counter's own budget (FLOOD_WAIT waited out by the call that
-     * got it, the others go on). It stops with [stop], and a chat counted by its row is skipped.
-     * The answers are applied in batches every [BATCH_MS] and not while the remote is jumping, since
-     * each update re-folds every row (4,500 chats took 1.1 to 1.4 cores of the Mi TV).
+     * Counts the rest of the account in the background once the head start is done, channels first
+     * ([ChatPicking.scanOrder]), so the Recommended band can find a video channel however far down
+     * the list it sits and the television's short list can fold the chats with no videos (HX76).
+     * At most [atOnce] at a time, each one the counter's own budget (FLOOD_WAIT waited out by the
+     * call that got it, the others go on). It stops with [stop], and a chat counted by its row is
+     * skipped. A chat that could not be counted is asked once more at the end, at most [RETRY_MAX]
+     * of them. The answers are applied in batches every [batchMs] and not while the remote is
+     * jumping, since each update re-folds every row (4,500 chats took 1.1 to 1.4 cores of the Mi
+     * TV); each batch ranks the band again.
      * @param atOnce how many chats are asked at a time; the television passes [BACKGROUND_ON_TV].
      * @param batchMs the gap between batches; the television passes [BATCH_ON_TV_MS], since a batch
      * still re-folds 4,500 rows and 500 ms kept the Mi TV's main thread at half a core.
      */
     fun countRest(chats: List<ChatSummary>, atOnce: Int = BACKGROUND_AT_ONCE, batchMs: Long = BATCH_MS) {
         if (counts == null || !countsRest || background != null || chats.isEmpty()) return
+        scanned = chats
         background = viewModelScope.launch {
             headStart?.join()
-            val queue = Channel<Long>(Channel.UNLIMITED)
-            for (chat in chats) queue.trySend(chat.id)
-            queue.close()
             coroutineScope {
                 val flusher = launch {
                     while (true) {
@@ -184,30 +197,46 @@ class AddChatsViewModel(
                         if (!held) flush()
                     }
                 }
-                val workers = List(atOnce.coerceAtLeast(1)) {
-                    launch {
-                        for (id in queue) {
-                            while (held) delay(HOLD_POLL_MS)
-                            if (_state.value.counted.containsKey(id) || pending.containsKey(id)) continue
-                            count(id, batched = true)
-                            counting[id]?.join()
-                        }
-                    }
+                scan(ChatPicking.scanOrder(chats).map { it.id }, atOnce)
+                flush()
+                val failed = chats.asSequence().map { it.id }
+                    .filter { _state.value.counted[it] == ChatCount.Unknown }
+                    .take(RETRY_MAX).toList()
+                if (failed.isNotEmpty()) {
+                    _state.update { it.copy(counted = it.counted - failed.toSet()) }
+                    scan(failed, atOnce)
                 }
-                workers.joinAll()
                 flusher.cancel()
             }
             flush()
         }
     }
 
-    /** Applies the waiting background answers in one state update. */
+    /** Counts [ids] in order, [atOnce] at a time, skipping any already counted. */
+    private suspend fun scan(ids: List<Long>, atOnce: Int) = coroutineScope {
+        val queue = Channel<Long>(Channel.UNLIMITED)
+        for (id in ids) queue.trySend(id)
+        queue.close()
+        List(atOnce.coerceAtLeast(1)) {
+            launch {
+                for (id in queue) {
+                    while (held) delay(HOLD_POLL_MS)
+                    if (_state.value.counted.containsKey(id) || pending.containsKey(id)) continue
+                    count(id, batched = true)
+                    counting[id]?.join()
+                }
+            }
+        }.joinAll()
+    }
+
+    /** Applies the waiting background answers in one state update, and ranks the band again from them. */
     private fun flush() {
         if (pending.isEmpty()) return
         val batch = HashMap(pending)
         pending.clear()
         stateUpdates++
         _state.update { it.copy(counted = it.counted + batch) }
+        if (scanned.isNotEmpty()) recommend(scanned)
     }
 
     /** Pauses and resumes the background count: the screen holds it while the remote is jumping. */
@@ -239,39 +268,38 @@ class AddChatsViewModel(
         }.also { job -> job.invokeOnCompletion { counting.remove(chatId) } }
     }
 
-    /** Asks again for a chat that could not be counted, from its row. */
-    fun countAgain(chatId: Long) {
-        _state.update { it.copy(counted = it.counted - chatId) }
-        count(chatId)
-    }
-
     /**
-     * Takes the recommendation, once. Later counts fill the rows' numbers but never re-sort the
-     * band: a list that rearranges itself under a finger ticks the wrong chat.
+     * Ranks the band from the counts in hand. The first take (within [RECOMMEND_BY_MS]) fills it,
+     * later batches rank it again until the viewer touches the list, and after that only add to its
+     * end: a list that rearranges itself under a finger ticks the wrong chat
+     * ([ChatSuggestions.refine]).
      */
     private fun recommend(chats: List<ChatSummary>) {
-        if (_state.value.recommended.isNotEmpty()) return
+        val now = _state.value
         // What is added already is not recommended again: it has its own band.
-        val added = _state.value.added
-        val answer = ChatSuggestions.recommend(ChatPicking.counted(chats, _state.value.counted).filter { it.id !in added })
-        if (answer.ids.isEmpty()) return
-        _state.update { now ->
-            // Shown only: nothing is ticked for the viewer (user, 2026-11-04).
-            now.copy(
-                recommended = answer.ids,
-                belowBar = answer.belowBar,
-            )
-        }
+        val counted = ChatPicking.counted(chats, now.counted).filter { it.id !in now.added }
+        val current = ChatSuggestions.Suggestion(now.recommended, now.belowBar)
+        val next = ChatSuggestions.refine(current, counted, settled, pinned = now.ticked)
+        if (next == current) return
+        // Shown only: nothing is ticked for the viewer (user, 2026-11-04).
+        _state.update { it.copy(recommended = next.ids, belowBar = next.belowBar) }
     }
 
-    fun type(text: String) = _state.update { it.copy(query = text.take(MAX_QUERY)) }
+    fun type(text: String) {
+        settled = true
+        _state.update { it.copy(query = text.take(MAX_QUERY)) }
+    }
 
-    fun scope(scope: ChatPicking.Scope) = _state.update { it.copy(scope = scope) }
+    fun scope(scope: ChatPicking.Scope) {
+        settled = true
+        _state.update { it.copy(scope = scope) }
+    }
 
     /** Whether the choice is being written or is written: the selection is then fixed, so what is saved is what the foot showed. */
     private val locked: Boolean get() = _state.value.saving || _state.value.saved
 
     fun toggle(chatId: Long) {
+        settled = true
         if (!locked) _state.update { it.copy(ticked = ChatPicking.toggle(it.ticked, chatId)) }
     }
 
@@ -281,16 +309,19 @@ class AddChatsViewModel(
      * here. A chat can be starred whether or not it ends up ticked, and the other way round.
      */
     fun toggleStar(chatId: Long) {
+        settled = true
         val store = settings ?: return
         viewModelScope.launch { store.toggleFavorite(chatId) }
     }
 
     /** Select all, or Clear, over the rows on screen. [visible] is [ChatPicking.visible]. */
     fun selectAll(visible: Set<Long>) {
+        settled = true
         if (!locked) _state.update { it.copy(ticked = ChatPicking.selectAll(it.ticked, visible)) }
     }
 
     fun clear(visible: Set<Long>) {
+        settled = true
         if (!locked) _state.update { it.copy(ticked = ChatPicking.clear(it.ticked, visible)) }
     }
 
@@ -359,7 +390,11 @@ class AddChatsViewModel(
 
         /** One at a time on the television: its four weak cores cannot spare more (HX76). */
         const val BACKGROUND_ON_TV = 1
-        private const val BATCH_MS = 500L
+        /** The gap between batches of background counts: each one ranks the band again, so it is not every few hundred ms. */
+        private const val BATCH_MS = 2_000L
+
+        /** Chats that could not be counted and are asked once more at the end of the pass. */
+        private const val RETRY_MAX = 100
         const val BATCH_ON_TV_MS = 5_000L
         private const val HOLD_POLL_MS = 150L
 

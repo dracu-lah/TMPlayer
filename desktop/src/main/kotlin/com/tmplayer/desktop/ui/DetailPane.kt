@@ -66,6 +66,7 @@ import com.tmplayer.desktop.DownloadIndex
 import com.tmplayer.desktop.os.OpenExternal
 import com.tmplayer.desktop.setWatchLater
 import com.tmplayer.desktop.setWatched
+import com.tmplayer.ui.browse.downloadStatusLine
 import com.tmplayer.ui.browse.DetailRow
 import com.tmplayer.ui.browse.WideDetailPanel
 import com.tmplayer.ui.browse.detailRow
@@ -431,7 +432,15 @@ private fun DetailPane(state: ShellState, request: DetailRequest) {
             .let { if (it.action == DetailAction.ExportCopy) it.copy(label = s.keepExportFolder, detail = s.keepExportFolderDetail, icon = TmIcons.Folder) else it }
         // The desktop's own words where it has them: the queue lives on the Downloads page.
         // and the ring round the button fills as the download comes down.
-        if (action == DetailAction.CancelDownload) row.copy(label = s.downloadsCancel, progress = coming?.fraction ?: 0f) else row
+        if (action == DetailAction.CancelDownload) {
+            row.copy(
+                label = s.downloadsCancel,
+                progress = coming?.fraction ?: 0f,
+                status = coming?.let { downloadStatusLine(it, s) },
+            )
+        } else {
+            row
+        }
     }
 
     Box(Modifier.fillMaxSize()) {

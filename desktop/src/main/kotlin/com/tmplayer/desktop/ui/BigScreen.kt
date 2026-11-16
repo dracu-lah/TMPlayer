@@ -121,6 +121,7 @@ class TvBarFocus {
     val search = FocusRequester()
     val home = FocusRequester()
     val chats = FocusRequester()
+    val downloads = FocusRequester()
 
     /** The Choose chats button, after the places: Back from that screen puts the remote on it. */
     val chooseChats = FocusRequester()
@@ -149,6 +150,7 @@ class TvBarFocus {
         NavPlace.Home -> home
         NavPlace.Chats -> chats
         NavPlace.Search -> search
+        NavPlace.Downloads -> downloads
         null -> picture
     }
 }

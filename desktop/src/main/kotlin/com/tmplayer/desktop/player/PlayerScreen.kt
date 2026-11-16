@@ -64,6 +64,8 @@ import com.tmplayer.online.EpisodeNames
 import com.tmplayer.online.OnlineMetadata
 import com.tmplayer.online.SkipKind
 import com.tmplayer.online.SkipSegment
+import com.tmplayer.online.SkipController
+import com.tmplayer.online.SkipOffer
 import com.tmplayer.online.SkipSegments
 import com.tmplayer.data.ResumeRecord
 import com.tmplayer.data.ResumeRules
@@ -82,7 +84,6 @@ import com.tmplayer.desktop.DesktopPrefs
 import com.tmplayer.desktop.WatchedWords
 import com.tmplayer.data.DownloadRunner
 import com.tmplayer.data.OfflineDownloads
-import com.tmplayer.player.MiniContext
 import com.tmplayer.player.PictureZoom
 import com.tmplayer.player.PlaybackSpeed
 import com.tmplayer.player.Stereo3d
@@ -257,17 +258,10 @@ fun PlayerScreen(
     lockedAtStart: Boolean = false,
     /** "Not enough space": close the player for Downloads with Free up space up. Null hides it. */
     onFreeUpSpace: (() -> Unit)? = null,
-    /**
-     * Back from a playing video, with what is true then ([MiniContext]): the shell docks the
-     * player into the mini bar or closes it ([MiniPlayerState.leave]). Null closes with [onBack].
-     */
-    onDock: ((MiniContext) -> Unit)? = null,
-    /** Docked: the player draws nowhere and hears no key, and plays on in the one engine. */
-    docked: Boolean = false,
-    /** While docked the video ended (false), or failed or asked a question the viewer must see (true). */
-    onDockedStopped: (needsAnswer: Boolean) -> Unit = {},
 ) {
     val s = LocalStrings.current
+    // One search for the Cast button per player session (FQ8), not one per reveal of the controls.
+    val castPresence = rememberCastBarPresence()
     // What the TV is told the video is called, read when a cast loads it.
     val castTitle = remember { arrayOf(com.tmplayer.desktop.cast.CastTitle("")) }
     // mpv on this computer, or the TV while a cast is on (CP73): a video opened with a session up
@@ -327,14 +321,6 @@ fun PlayerScreen(
             if (error != null && phase == Phase.Playing && engine.cast == null) {
                 phase = Phase.Failed(error, format = engine.state.value.failedFormat, details = engine.state.value.failedDetails)
             }
-        }
-    }
-    // When the viewer's pause began, 0 while it plays: Back on a video paused for a few seconds
-    // closes it instead of docking it (PL-18, [MiniContext.pausedForMs]).
-    val pausedAt = remember { longArrayOf(0L) }
-    LaunchedEffect(engine) {
-        engine.state.map { it.playing }.distinctUntilChanged().collect { on ->
-            pausedAt[0] = if (on) 0L else System.currentTimeMillis()
         }
     }
     // The opening's start point and [StreamReads] when it began, for the loader's staged line.
@@ -464,12 +450,18 @@ fun PlayerScreen(
     // belong to the video playing: an episode switch starts with none until its own answer.
     var skips by remember(current) { mutableStateOf(emptyList<SkipSegment>()) }
     var skipped by remember(current) { mutableStateOf(emptySet<Long>()) }
+    // Chapters, the online lists and the viewer's marks merged, with the per kind choice and the
+    // countdown; and what the pill shows now, which the loop below keeps current.
+    val skipSay = remember { arrayOf<(String) -> Unit>({}) }
+    val skipCtl = remember(current) { SkipController { skipSay[0](it) }.also { it.start(current.item) } }
+    var skipOffer by remember(current) { mutableStateOf<SkipOffer?>(null) }
+    var introMarking by remember(current) { mutableStateOf(false) }
     // A-B repeat, for the video playing only: a new video starts with none.
     var abLoop by remember(current) { mutableStateOf<AbLoop?>(null) }
     // Repeat this video (EG-F52): lasts for the video it was switched on for; "Keep repeat on"
-    // carries it to the next ([com.tmplayer.data.PlayQueue.repeatsVideo]). Excludes the A-B repeat.
+    // carries it to the next ([com.tmplayer.data.RepeatVideo.repeats]). Excludes the A-B repeat.
     var keepRepeat by remember { mutableStateOf(false) }
-    var repeatVideo by remember(current) { mutableStateOf(com.tmplayer.data.PlayQueue.repeatsVideo(current.item, keepRepeat)) }
+    var repeatVideo by remember(current) { mutableStateOf(com.tmplayer.data.RepeatVideo.repeats(current.item, keepRepeat)) }
 
     // "Still watching?" and the sleep timer (CP07). The counts live for the whole player session,
     // so they carry across the episodes autoplay moves on to, and any input starts them again.
@@ -513,6 +505,7 @@ fun PlayerScreen(
     fun showFlash(kind: Flash.Kind, text: String = "") {
         flash = Flash(kind, text, System.nanoTime())
     }
+    skipSay[0] = { showFlash(Flash.Kind.Text, it) }
 
     // ---- free zoom ---------------------------------------------------------------------------
     // Ctrl+wheel around the pointer (a Windows touchpad's pinch arrives as exactly that), Alt+=
@@ -558,38 +551,8 @@ fun PlayerScreen(
         applyZoom(PictureZoom.NONE, say)
     }
 
-    val dockedNow by rememberUpdatedState(docked)
-
     fun refocus() {
-        // A docked player is out of sight and must not take the window's keys from the page.
-        if (dockedNow) return
         runCatching { focus.requestFocus() }
-    }
-
-    /**
-     * Back, the mouse's back button and the bar's arrow: the mini bar when the shell has one and
-     * the video is playing, the player closed otherwise ([MiniPlayerState.verdict]).
-     */
-    fun leave() {
-        val dock = onDock
-        if (dock == null) {
-            onBack()
-            return
-        }
-        dock(
-            MiniContext(
-                platformAllowed = !com.tmplayer.desktop.ui.BigScreen.on,
-                opened = engine.state.value.opened,
-                ended = phase == Phase.Finished || engine.state.value.ended,
-                failed = phase is Phase.Failed || engine.state.value.error != null,
-                asking = phase is Phase.StillWatching,
-                casting = castState is com.tmplayer.desktop.cast.DesktopCast.State.Connected,
-                locked = screenLocked,
-                pausedForMs = engine.state.value.let { st ->
-                    if (st.opened && !st.playing && !st.ended && pausedAt[0] > 0L) System.currentTimeMillis() - pausedAt[0] else 0L
-                },
-            ),
-        )
     }
 
     /**
@@ -633,7 +596,10 @@ fun PlayerScreen(
             Logger.w("PlayerScreen", "Skip times lookup failed", e)
             emptyList()
         }
+        skipCtl.online(skips)
     }
+    // The file's own chapters are the first and best source: free, exact, and offline.
+    LaunchedEffect(skipCtl, status.chapters) { skipCtl.chapters(status.chapters) }
 
     LaunchedEffect(current, attempt) {
         // No video engine: nothing to open, and Try again says the same until the app restarts.
@@ -701,7 +667,7 @@ fun PlayerScreen(
         launch { tdlibVersion = current.tdlibVersion() }
         autoplayNext = runCatching { settings.autoplayNextNow() }.getOrDefault(true)
         keepRepeat = runCatching { settings.keepRepeatNow() }.getOrDefault(false)
-        repeatVideo = com.tmplayer.data.PlayQueue.repeatsVideo(current.item, keepRepeat)
+        repeatVideo = com.tmplayer.data.RepeatVideo.repeats(current.item, keepRepeat)
         showRemaining = runCatching { settings.touchPrefsNow().showRemaining }.getOrDefault(false)
         // A saved position opens a few seconds early, as Settings has it ([ResumeRewind]); Keep
         // watching reopens exactly where the file stopped, and a bookmark chosen on the detail
@@ -787,6 +753,9 @@ fun PlayerScreen(
         }
         // Every file opens whole; the engine puts mpv's own zoom back as it opens.
         zoom = PictureZoom.NONE
+        // What the file declares goes to the badges on its details page once mpv lists its tracks.
+        // Not for Telegram's lighter copy, whose picture is not the upload the page is about.
+        if (item.playingQuality == 0) engine.probeFor(item.id)
         engine.open(data, start, prefs)
         val error = engine.state.value.error
         // On a TV the casting panel says what went wrong, with Play here beside it.
@@ -900,7 +869,7 @@ fun PlayerScreen(
             }
             // Out to the other devices once the saves stop (a pause, the player closed): the
             // push waits for them to settle, so the heartbeat never edits the message (ResumeSync).
-            com.tmplayer.data.ResumeSync.pushSoon(settings)
+            if (leaving) com.tmplayer.data.ResumeSync.leavingPlayer(settings) else com.tmplayer.data.ResumeSync.pushSoon(settings)
         }
     }
 
@@ -1039,15 +1008,15 @@ fun PlayerScreen(
     // The end: the next episode after a countdown, or the last frame with a way to watch again.
     LaunchedEffect(status.ended) {
         if (!status.ended || phase != Phase.Playing) return@LaunchedEffect
-        // Repeat one on a chat's audio, or Repeat this video: again from the start, not watched,
+        // Repeat this video: again from the start, not watched,
         // no next-up and no count towards "Still watching?". A sleep timer for the end wins.
-        if (com.tmplayer.data.PlayQueue.atEnd(current.item, keepRepeat, sleepAtTheEnd) == com.tmplayer.data.QueuePlan.AtEnd.Replay) {
+        if (com.tmplayer.data.RepeatVideo.replaysAtEnd(current.item, keepRepeat, sleepAtTheEnd)) {
             engine.seekToExact(0)
             engine.play()
             return@LaunchedEffect
         }
         if (sleepAtTheEnd && repeatVideo) {
-            com.tmplayer.data.PlayQueue.setRepeatVideo(false)
+            com.tmplayer.data.RepeatVideo.set(false)
             repeatVideo = false
         }
         if (current.incomplete) {
@@ -1165,7 +1134,7 @@ fun PlayerScreen(
     fun toggleNightMode() {
         val on = !status.nightMode
         engine.setNightMode(on)
-        showFlash(Flash.Kind.Text, if (on) L.playerNightModeOn else L.playerNightModeOff)
+        showFlash(Flash.Kind.Text, if (on) L.playerQuietLoudScenesOn else L.playerQuietLoudScenesOff)
         playerScope.launch { runCatching { settings.setNightMode(on) } }
     }
 
@@ -1212,20 +1181,49 @@ fun PlayerScreen(
     // when there is a next episode, so they get no pill of their own; without one, the pill
     // skips to the end like any other. Never while the card is up, which has the same corner.
     // Derived from the live position, so the body hears of it as a pill comes and goes only.
-    val skipAtPosition by remember(liveStatus, skips, skipped) {
-        derivedStateOf { liveStatus.value.let { SkipSegments.active(skips, it.positionMs, it.durationMs, skipped) } }
-    }
-    val activeSkip = if (phase == Phase.Playing && status.durationMs > 0 && !nextUpVisible) {
-        skipAtPosition?.takeUnless { next != null && isClosing(it, status.durationMs) }
-    } else {
-        null
-    }
+    val activeSkip = skipOffer?.segment
 
     /** The pill, or G: past the segment, which is then left alone for the rest of this playback. */
     fun skipSegment() {
         val segment = activeSkip ?: return
         skipped = skipped + segment.startMs
+        skipOffer = null
         jumpTo(segment.target(status.durationMs))
+    }
+    // A few times a second, from the live position: what the pill offers (a button, or the count of a
+    // stretch set to skip by itself), and the jump when the count runs out. Only the answer reaches
+    // the body, so a position tick that changes nothing redraws nothing.
+    val skipSuppressed by rememberUpdatedState(phase != Phase.Playing || nextUpVisible)
+    val skipCardCovers by rememberUpdatedState(next != null)
+    val skipNow by rememberUpdatedState(::skipSegment)
+    LaunchedEffect(skipCtl) {
+        while (true) {
+            delay(SKIP_TICK_MS)
+            val live = liveStatus.value
+            val offer = if (skipSuppressed || live.durationMs <= 0) {
+                null
+            } else {
+                skipCtl.offer(live.positionMs, live.durationMs, live.playing, System.nanoTime() / 1_000_000L, skipped, skipCardCovers)
+            }
+            if (offer is SkipOffer.Fire) {
+                skipOffer = offer
+                skipNow()
+            } else if (offer != skipOffer) {
+                skipOffer = offer
+            }
+        }
+    }
+
+    /** Cancel on the countdown: this stretch stays a plain button. */
+    fun cancelAutoSkip() {
+        skipOffer?.segment?.let { skipCtl.cancel(it) }
+    }
+
+    /** "Mark this as the intro", O: the first press is the start, the second the end and saves. */
+    fun markIntro() {
+        if (!skipCtl.canMark) return
+        skipCtl.markTap(liveStatus.value.positionMs, status.durationMs)
+        introMarking = skipCtl.introMarking
     }
 
     // The subtitle look is one setting for every video: a change in Settings (or in the subtitle
@@ -1506,9 +1504,8 @@ fun PlayerScreen(
 
     /** Repeat this video on or off; turning it on clears the A-B repeat, which it excludes. */
     fun toggleRepeatVideo() {
-        if (com.tmplayer.data.ChatAudio.isAudio(current.item)) return
         val on = !repeatVideo
-        com.tmplayer.data.PlayQueue.setRepeatVideo(on, current.item)
+        com.tmplayer.data.RepeatVideo.set(on, current.item)
         repeatVideo = on
         if (on && abLoop != null) {
             abLoop = null
@@ -1522,7 +1519,7 @@ fun PlayerScreen(
     fun pressAbRepeat() {
         // The two repeats exclude each other: marking a stretch turns Repeat this video off.
         if (repeatVideo) {
-            com.tmplayer.data.PlayQueue.setRepeatVideo(false)
+            com.tmplayer.data.RepeatVideo.set(false)
             repeatVideo = false
         }
         val at = liveStatus.value.positionMs
@@ -1630,6 +1627,7 @@ fun PlayerScreen(
             PlayerAction.SpeedReset -> setSpeed(1f)
             PlayerAction.NextEpisode -> episodes.next?.let(::switchTo) ?: showFlash(Flash.Kind.Text, L.playerNoNextEpisode)
             PlayerAction.SkipSegment -> skipSegment()
+            PlayerAction.MarkIntro -> markIntro()
             PlayerAction.PreviousEpisode -> episodes.previous?.let(::switchTo)
                 ?: showFlash(Flash.Kind.Text, L.playerNoPreviousEpisode)
             PlayerAction.AlwaysOnTop -> onToggleAlwaysOnTop?.invoke()
@@ -1637,7 +1635,7 @@ fun PlayerScreen(
             PlayerAction.MiniPlayer -> onMiniPlayer?.invoke()
                 ?: showFlash(Flash.Kind.Text, L.playerNoMiniPlayer)
             PlayerAction.Stats -> showDetails = !showDetails
-            PlayerAction.Back -> leave()
+            PlayerAction.Back -> onBack()
             PlayerAction.Quit -> onQuit?.invoke()
             PlayerAction.ShortcutSheet -> showShortcuts = !showShortcuts
             is PlayerAction.Screenshot -> takeScreenshot(action.withSubtitles)
@@ -1757,8 +1755,6 @@ fun PlayerScreen(
      * window when Compose's focus is somewhere else (see [PlayerKeyRoute]).
      */
     fun playerKey(event: androidx.compose.ui.input.key.KeyEvent): Boolean {
-        // Docked: the page is in front and every key is its own.
-        if (dockedNow) return false
         // Locked: every key is the lock's, the downs and the ups, so not even the
         // window's Esc and Backspace hear one. Enter held unlocks; any key shows how.
         if (screenLocked) {
@@ -1861,18 +1857,8 @@ fun PlayerScreen(
     val typingUp = notePrompt != null || timePrompt || showOnline || menu != null
     val typingUpNow by rememberUpdatedState(typingUp)
     val sheetUpNow by rememberUpdatedState(showEpisodes || showShortcuts || showDetails)
-    // Docked: no route, so the window keeps its keys for the page; the player is back on expand.
-    LaunchedEffect(docked) {
-        if (!docked) refocus()
-    }
-    LaunchedEffect(docked, phase) {
-        // The end leaves no bar; a failure or a question out of sight brings the player back to answer it.
-        if (!docked) return@LaunchedEffect
-        if (phase == Phase.Finished) onDockedStopped(false)
-        else if (phase is Phase.Failed || phase is Phase.StillWatching) onDockedStopped(true)
-    }
-    DisposableEffect(docked) {
-        if (docked) return@DisposableEffect onDispose { }
+    LaunchedEffect(Unit) { refocus() }
+    DisposableEffect(Unit) {
         val route = PlayerKeyRoute.Route(
             handle = { playerKeyNow(it) },
             focusInside = { focusInside },
@@ -1950,7 +1936,7 @@ fun PlayerScreen(
                 },
                 onDoubleClick = { if (!ignoreClicks) onToggleFullscreen() },
                 onRightClick = { at -> menu = if (menu?.panel == true) null else MenuAt(MenuPage.Main, MenuAt.Anchor.Cursor, at) },
-                onMouseBack = ::leave,
+                onMouseBack = onBack,
                 scope = scope,
                 canPan = { zoom.zoomed && zoomAllowed() },
                 onPan = { delta -> zoomFrame()?.let { frame -> applyZoom(zoom.panBy(delta.x, delta.y, frame), say = false) } },
@@ -2008,7 +1994,7 @@ fun PlayerScreen(
                     null
                 },
                 onHoverControls = { overControls = it },
-                onBack = ::leave,
+                onBack = onBack,
                 onTogglePlay = ::togglePlay,
                 onSeekBy = { dispatch(PlayerAction.SeekBy(it)) },
                 onSeekTo = ::jumpTo,
@@ -2029,7 +2015,8 @@ fun PlayerScreen(
                 },
                 sleepTimer = sleepTimerDetail(),
                 loop = abLoop,
-                repeatVideo = repeatVideo.takeUnless { com.tmplayer.data.ChatAudio.isAudio(current.item) },
+                repeatVideo = repeatVideo,
+                markIntro = if (skipCtl.canMark) (if (introMarking) s.playerMarkIntroEnd else s.playerMarkIntro) else null,
                 bookmarks = if (marksOn) marks else null,
                 onMenuAction = { action ->
                     noteInput()
@@ -2128,23 +2115,9 @@ fun PlayerScreen(
                 } else {
                     null
                 },
-                castButton = { CastButton() },
+                castButton = { CastButton(castPresence) },
                 subtitlesButton = com.tmplayer.cast.CAST_SUBTITLES || activeEngine !is com.tmplayer.desktop.cast.CastPlaybackEngine,
             ) }
-
-            // Sound alone: its name and chat where the picture would be, unless the file carries
-            // a cover, which mpv draws as the picture.
-            if (com.tmplayer.data.ChatAudio.isAudio(current.item) && phase == Phase.Playing && status.videoWidth == 0) {
-                Column(
-                    Modifier.align(Alignment.Center).padding(32.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    androidx.compose.material3.Icon(com.tmplayer.ui.icons.TmIcons.Audio, contentDescription = null, tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(72.dp))
-                    Text(current.item.title, color = Color.White, fontSize = 22.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-                    if (current.chatTitle.isNotBlank()) Text(current.chatTitle, color = Color.White.copy(alpha = 0.72f), fontSize = 15.sp)
-                }
-            }
 
             FeedbackLayer(
                 flash = flash,
@@ -2167,10 +2140,20 @@ fun PlayerScreen(
             }
 
             activeSkip?.let { segment ->
-                SkipPill(kind = segment.kind, lifted = showControls, onSkip = {
-                    skipSegment()
-                    refocus()
-                })
+                val counting = skipOffer as? SkipOffer.Counting
+                SkipPill(
+                    segment = segment,
+                    lifted = showControls,
+                    secondsLeft = counting?.secondsLeft,
+                    onCancel = {
+                        cancelAutoSkip()
+                        refocus()
+                    },
+                    onSkip = {
+                        skipSegment()
+                        refocus()
+                    },
+                )
             }
 
             // Not while the screen is locked: nothing under the shield takes a click.
@@ -2566,6 +2549,9 @@ private fun isClosing(segment: SkipSegment, durationMs: Long): Boolean =
 private const val AUTOPLAY_COUNTDOWN_SEC = 8
 private const val SEEK_RUN_MS = 1_000L
 private const val STILL_WATCHING_TICK_MS = 5_000L
+
+/** How often the skip pill looks at the playhead: a countdown of whole seconds needs no more. */
+private const val SKIP_TICK_MS = 250L
 
 /**
  * Two statuses are the same to the player screen's body when only the clock moved: the position

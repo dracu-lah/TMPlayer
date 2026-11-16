@@ -91,7 +91,6 @@ class TvReachTest {
                     if (bannerShown) {
                         ConnectBannerView(
                             text = "Telegram may be blocked on this network.",
-                            proxyOn = false,
                             onRetry = { retried++ },
                             onOpenProxies = { proxies++ },
                             modifier = Modifier.align(Alignment.TopEnd).padding(top = 27.dp, end = 48.dp).widthIn(max = 440.dp),
@@ -140,7 +139,7 @@ class TvReachTest {
         assertEquals(1, retried)
         assertEquals(null, focused)
 
-        // Right walks to Use a proxy; Right again at the banner's edge goes back, never to the page behind.
+        // Right walks to More help (the proxy page, Raju group F); Right again at the banner's edge goes back, never to the page behind.
         key(KeyEvent.KEYCODE_DPAD_RIGHT)
         key(KeyEvent.KEYCODE_DPAD_CENTER)
         assertEquals(1, proxies)

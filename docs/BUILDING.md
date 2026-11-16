@@ -46,6 +46,7 @@ Downloads work without an account; signing in with a free one gives the viewer t
 ./gradlew :app:testDebugUnitTest      # the Android app's own unit tests (AGP 9 makes them for debug only)
 ./gradlew assembleDebug     # one debug APK, every architecture, emulator included
 ./gradlew assembleRelease   # signed release, needs keystore.properties
+scripts/check-16kb.sh app/build/outputs/apk/release/app-universal-release.apk   # 16 KB page-size gate
 ```
 
 ## The desktop app
@@ -141,6 +142,18 @@ toolchain was moved forward on 2026-10-18 (Gradle 9.8.1, AGP 9.4.1, Kotlin 2.4.2
   the desktop's fonts and onboarding pictures in `ui/src/jvmMain/resources`, so the plugin's
   known gap with Compose Multiplatform resources does not apply) and no Android host tests:
   their tests are `jvmTest`.
+- **16 KB page size.** Every 64-bit native library in the APK must have its ELF LOAD segments
+  aligned to `0x4000` or more, and the zip must keep an uncompressed `.so` on a 16 KB boundary, or
+  the app does not load on a 16 KB device and Google Play refuses the upload (apps targeting
+  Android 15 or later, from 2025-11-01). NDK 25.2, which builds the FFmpeg extension, links at 4 KB
+  by default, so `scripts/media3ext/tmplayer-decoders.patch` passes `-Wl,-z,max-page-size=16384`
+  (NDK r28 and newer default to it). TDLib's 32-bit library is `0x1000`, which is allowed: 16 KB
+  devices run 64-bit apps. `scripts/check-16kb.sh <apk|aab|jar|so|folder>` checks all of it
+  (`--self-test` tests the script itself with generated 4 KB and 16 KB fixtures); the release job
+  runs it on the universal APK, and `docs/RELEASING.md` lists it before tagging. Run it by hand on
+  a build that adds or bumps a native package before the PR opens: libVLC (PR2, 3.7.7 measured
+  `0x4000` on its 64-bit libraries, `docs/distribution/libvlc-spike.md`) and libmpv (PR2b) are
+  checked this way before they ship, and a desktop bundle folder takes the same call.
 - **`compileSdk` is 37** because `tdl-coroutines` 14+ declares that minimum in its AAR metadata.
   `targetSdk` deliberately stays at 35.
 - **Local network permission (DLNA casting).** Verified 2026-11-15 against the Android developer
