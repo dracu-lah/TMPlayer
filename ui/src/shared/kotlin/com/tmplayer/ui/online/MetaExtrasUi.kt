@@ -82,6 +82,7 @@ import com.tmplayer.ui.theme.Focus
 import com.tmplayer.ui.theme.Tone
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.roundToInt
 
 /*
@@ -113,10 +114,32 @@ fun rememberMetaExtrasState(info: MetaInfo?, infoSettled: Boolean): MetaState<Me
     val language by Translator.active.collectAsState()
     val known = remember(info.provider, info.kind, info.id, language.tag) { online.peekExtras(info) }
     val done = known?.scoresAsked == true
-    val extras by produceState(MetaState(known, done), info.provider, info.kind, info.id, language.tag) {
-        value = MetaState(known, done)
+    // An anime AniList lists no seasons for: its run, counted straight through, comes from the
+    // episode guide (T11) and is laid in the extras so every page lists it as it lists a TMDB show's.
+    val anime = info.provider == MetaProvider.AniList && info.kind == MetaKind.Show
+    val peeked = known?.let { if (anime) online.peekAnimeExtras(info, it) else it }
+    val extras by produceState(MetaState(peeked, done && (!anime || online.peekAnimeGuide(info) != null)), info.provider, info.kind, info.id, language.tag) {
+        value = MetaState(peeked, done && (!anime || online.peekAnimeGuide(info) != null))
         // An answer kept from before the scores were asked for is shown at once, then refreshed with them.
-        if (!done) value = MetaState(withContext(Dispatchers.IO) { runCatching { online.extras(info) }.getOrNull() } ?: known, true)
+        val base = if (done) known else withContext(Dispatchers.IO) { runCatching { online.extras(info) }.getOrNull() } ?: known
+        if (!anime || base == null) {
+            if (!done) value = MetaState(base, true)
+            return@produceState
+        }
+        if (online.peekAnimeGuide(info) != null) {
+            value = MetaState(online.peekAnimeExtras(info, base), true)
+            return@produceState
+        }
+        // The page waits a moment for the guide so its first paint already lists the run; a slow
+        // answer lands when it comes, and each source asked so far is kept, so nothing is asked twice.
+        value = MetaState(base, false)
+        val quick = withTimeoutOrNull(ANIME_GUIDE_WAIT_MS) { withContext(Dispatchers.IO) { runCatching { online.animeExtras(info, base) }.getOrNull() } }
+        if (quick != null) {
+            value = MetaState(quick, true)
+            return@produceState
+        }
+        value = MetaState(base, true)
+        value = MetaState(withContext(Dispatchers.IO) { runCatching { online.animeExtras(info, base) }.getOrNull() } ?: base, true)
     }
     return extras
 }
@@ -300,6 +323,9 @@ private fun metacriticBand(value: Double): Color = when {
     value >= 40 -> Color(0xFFFFBD3F)
     else -> Color(0xFFFF6874)
 }
+
+/** How long a show's page holds its first paint for the anime episode guide (T11), before it lists what it has. */
+private const val ANIME_GUIDE_WAIT_MS = 2_500L
 
 private val LOGO_HEIGHT: Dp = 16.dp
 

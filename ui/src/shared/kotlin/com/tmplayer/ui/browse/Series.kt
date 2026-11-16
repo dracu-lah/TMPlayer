@@ -438,6 +438,7 @@ fun EpisodeRow(
         overview = guide?.overview?.trim()?.takeIf { showOverview && it.isNotEmpty() },
         large = large,
         holdOverview = showOverview && holdOverview,
+        credit = guide?.source?.takeIf { it.isNotBlank() }?.let { com.tmplayer.online.MetaWords.creditFrom(it) },
     )
 }
 
@@ -538,6 +539,8 @@ private fun EpisodeLine(
     overview: String? = null,
     large: Boolean = false,
     holdOverview: Boolean = false,
+    /** "From Kitsu": whose words an anime's episode carries, on the line of the video's own facts. */
+    credit: String? = null,
 ) {
     val s = LocalStrings.current
     val tv = !isTouch()
@@ -637,6 +640,7 @@ private fun EpisodeLine(
                 item.takeIf { episode.copies.size > 1 && VideoCopies.heightOf(it) != null }?.copyQuality(),
                 MediaMapper.formatSize(item.sizeBytes).ifEmpty { null },
                 stopped ?: s.seriesWatchedLabel.takeIf { finished },
+                credit,
             ).joinToString("  ·  ")
             if (meta.isNotEmpty()) {
                 Text(
@@ -1349,6 +1353,7 @@ fun SeriesPanel(
                         onClick = { gapPrompt.show(row.episode) { runCatching { gapFocus.requestFocus() } } },
                         modifier = cardModifier,
                         focusRequester = gapFocus,
+                        art = meta?.let { it.backdropUrl ?: it.posterUrl },
                     )
                 }
             }
