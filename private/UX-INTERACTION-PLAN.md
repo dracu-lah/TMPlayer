@@ -741,3 +741,7 @@ For each merge, in this order:
 - SeriesTvScrollTest: passes alone at HEAD; not seen failing, likely load or frame stall in a full run.
 - Still flaky: DownloadsSelectionKeysTest (desktop). Passes alone at HEAD and at 6ca92f2; failed 2 of 4 in the full :desktop:test run (Shift range never reached "5 selected"; focus handoff after delete). Suspect global state from another test class. Not fixed.
 - Runs done green: :core:jvmTest (3120 tests), :ui:jvmTest (296). :desktop:test: only that class failed (635 tests). Not run: full :app:testDebugUnitTest.
+
+## FINAL STATE of this run (2026-11-16, main at "Settings map: the sync switch lives under Account", 210 commits ahead of origin, nothing pushed)
+CP1 DONE (sync fixes, merge 7c5e567). CP2 DONE (test fixes merged; still open: DownloadsSelectionKeysTest fails 2 of 4 only in the full desktop run, full :app:testDebugUnitTest never run). CP3 MERGED with one WIP commit (f9e6b3e: RL10 + player labels; AudioButtonAnswerTest, BackStopsThePlayerTest and the full player suite not seen finishing; compile and the 6 targeted tests I ran are green). CP4 dash grep clean. Checks green: CatalogTest, compile of app, app tests, desktop, desktop tests.
+Next session: run `:app:testDebugUnitTest` and `:desktop:test` in full (per module, --max-workers=3), fix what fails, then the LATER list in "WRAP UP NOW".
