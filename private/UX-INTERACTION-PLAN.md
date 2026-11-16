@@ -856,3 +856,16 @@ Next session: run `:app:testDebugUnitTest` and `:desktop:test` in full (per modu
 - a11y.spec "Search" was already updated by R9 (`94fe3b8`, types its words); green.
 - Sort menu first line focused on open on the TV skin: green (Chats and a chat test).
 - Gotcha: playwright with a private `E2E_PORT` plus `vite --config e2e/vite.e2e.ts` (dummy TG_API_ID/TG_API_HASH) started by hand; `webapp/node_modules` symlinked to the main tree, `./gradlew :core:webRules` run once for `src/rules/core`.
+
+## FINAL STATE of run 2 (2026-11-16, hands-free LATER list, nothing pushed)
+Merged on main (all local): T0 stabilise (82c3de3, 5123a5e), T1 videos only (5fed104..e6bb46e), T2 cast presence + review fixes (ce710f1..690c917), T3 RL13/RL14 (fe5acd0), T4 web anime/badge/sync/offer + review fixes (1960239..9358208), T5 Raju leftovers (4eee2d2, b88623f), R1 to R9 review waves (private/ux-review/*.md), T7 Raju pass 2 (bbd8788..fb0dd05), T8 web tv.spec (09f876f), FitText clamp (c99f3ca), SettingsMapTest (302bce0).
+Checks green at the end: :core:jvmTest, :ui:jvmTest, :app:testDebugUnitTest, :desktop:test, F-Droid compile, CatalogTest; web e2e chromium (tv, a11y, sync, library, home-settings). Not run: WebKit/iPhone e2e, any device, `pnpm -C site build`, langsync.
+### Decisions made by Claude (run 2)
+- Ran 3 editing workers at most, but 2 to 3 builds at once on 15 GB free; worktrees can start stale, so workers merge main first (rule added).
+- FAQ and llms.txt now say TMPlayer Music is a separate app (public copy, user to confirm or cut); the empty chat line still counts audio files to explain "no videos".
+- Cast: TV build has no casting; Cast button only after a device is found; CAST_SUBTITLES stays off.
+- Web sync off by default; TV switch has no confirm dialog; the "restore offer" is the apps' "Keep my place" card.
+- FitText floor clamped to the style size (reviewer's unverified crash claim).
+- Resolved en.json conflict keeping main's errors.phone_check text; Downloads Ctrl+A kept R1's selectAllChord; DownloadShelf ties break by key (Thread.sleep(3) stays in DownloadsSelectionKeysTest).
+### Left for the user (run 2)
+Cast: no way to reach "Add a TV by its address" when discovery never finds it (add a Settings line). Cancel running download has no confirm; desktop recents Clear all has no Undo. Same Tab-stop scrim pattern in CastRemote, MetaExtrasUi, TouchNav. TV D-pad field trap possibly in Proxy, list name, Add TV, country picker (use Modifier.dpadLeavesField). Web sign in lacks the country chip and new error texts. Anime: Kitsu/Jikan episode guide and skip times not ported. Raju pass 2 "Left": 1.1, 2.4, 4.7, 7.5, 11.1, 11.3.
