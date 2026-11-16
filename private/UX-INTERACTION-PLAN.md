@@ -699,3 +699,15 @@ Merge main into its branch first. 1 (medium) SavedMessagesBackup.kt:71 confirmat
 - "Add more chats to the devices": user said "later". Do not touch the real selection.
 
 ### DECISION (user, 2026-11-16): FQ9 "Play a lighter copy" (CP80) DROPPED for now. Do not build; the "too slow for this chip" end state stays the status sheet text (and external app) from RL5/RL6. Revisit later only if the user asks.
+
+## WRAP UP NOW, THE REST IS LATER (user, 2026-11-16: "i don't have that much time left ... cut down new works to plans to do later")
+No new workers start. Finish only: the three running (RL10-12 + player labels, sync fixes, test stabiliser), merge them, run the
+full checks, write the device checklist. Everything below is LATER, in this order, each ready to run as a hands-free task:
+1. Remove audio and voice messages (ChatAudio.kt, isAudio in PlayerActivity, chat lists, web, desktop); keep a video's background sound. After the player labels merge.
+2. FQ8 cast: Chromecast and Google TV sender behind a build flag (not FOSS), plus existing DLNA.
+3. RL13 (16 KB page-size gate script) and RL14 (docs).
+4. Web follow-ups: anime provider on web, poster-tile badge on web, web sync (not built), restore offer after sign in.
+5. Raju leftovers: resend row 2.3, country chip 2.1, bar returns after 1 s of rest.
+6. Inventory review waves R1 to R9 over private/ux-inventory (dimensions D1 to D8, compose-performance skill), then Raju's second pass.
+7. Blocked on the user: Trakt and Simkl sync (keys), anime-skip client id, add more chats to the devices ("later").
+DROPPED: live streams, FQ9 lighter copy, FQ14 audio playlists.
