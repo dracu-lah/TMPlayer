@@ -301,6 +301,24 @@ class BrowseRenderTest {
         }
     }
 
+    /**
+     * R1: a chat's grid ends with how many small videos "Hide small clips" left out and Show them
+     * (the number only once the whole chat is read), in both themes.
+     */
+    @Test
+    fun smallHiddenFooter() {
+        val items = releaseItems()
+        for (dark in listOf(true, false)) {
+            val theme = if (dark) "dark" else "light"
+            save("desktop-small-hidden-exact-$theme.png", render(dark = dark) {
+                VideoGrid(shell, items, "Weekend series", footer = { SmallHiddenFooter(12, exact = true) {} })
+            })
+            save("desktop-small-hidden-some-$theme.png", render(dark = dark) {
+                VideoGrid(shell, items, "Weekend series", footer = { SmallHiddenFooter(12, exact = false) {} })
+            })
+        }
+    }
+
     /** Home with a starred chat's poster opened: the pane offers to go to that chat. */
     @Test
     fun detailPaneFromHome() {
@@ -400,12 +418,12 @@ class BrowseRenderTest {
                 StateBox(state, onRetry = {}, onAction = {}, slowAfterMs = 100) {}
             }
         }
-        val hidden = "${com.tmplayer.i18n.L.browseHiddenBySize(12)} ${com.tmplayer.i18n.L.browseSizeLimitsInSettings}"
         save(
             "state-empty-hidden.png",
             page(
                 com.tmplayer.ui.components.UiState.Empty(
-                    "${com.tmplayer.ui.browse.noVideosWithin(com.tmplayer.data.SizeFilter.DEFAULT_MIN, com.tmplayer.data.SizeFilter.DEFAULT_MAX)}\n\n$hidden",
+                    com.tmplayer.i18n.L.gridSmallHiddenAll(12),
+                    com.tmplayer.ui.components.StateAction.ShowSmall,
                     icon = com.tmplayer.ui.icons.TmIcons.FilterHorizontal,
                 ),
             ),
@@ -711,6 +729,8 @@ class BrowseRenderTest {
                             com.tmplayer.data.VideoFilter.Unwatched,
                             onSort = {},
                             onFilter = {},
+                            hideSmall = true,
+                            onHideSmall = {},
                         ),
                         onDismiss = {},
                     )

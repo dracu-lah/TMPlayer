@@ -44,6 +44,33 @@ class BooksMatchStoresTest {
     }
 
     @Test
+    fun `a stored minimum migrates in both stores, the old default reads as not set`() = runBlocking {
+        val file = WatchedStore.openDataStore(dir.resolve("settings-sizes.preferences_pb"))
+        val store = SettingsStore(file)
+        val kv = DataStoreKeyValueStore(file)
+        val book = SettingsBook(kv)
+        val mb = SizeFilter.MB
+        // The default until 2026-11 was never a choice, so a stored 400 MB is "not set".
+        for ((stored, shown) in listOf(400 * mb to 0L, 0L to 0L, 50 * mb to 50 * mb, 700 * mb to 700 * mb, 1024 * mb to 1024 * mb)) {
+            kv.edit { it["min_size_bytes"] = stored }
+            assertEquals("store reads $stored", shown, store.minSizeBytes.first())
+            assertEquals("book reads $stored", shown, book.minSizeBytes.first())
+        }
+        kv.edit { it["max_size_bytes"] = 2048 * mb }
+        assertEquals(2048 * mb, store.maxSizeBytes.first())
+        assertEquals(2048 * mb, book.maxSizeBytes.first())
+        // Reset removes both, so every video is listed again.
+        store.resetSizeLimits()
+        assertEquals(0L, book.minSizeBytes.first())
+        assertEquals(SizeFilter.CEILING, book.maxSizeBytes.first())
+        // The clip switch writes 50 MB and nothing else; off removes the key.
+        book.setHideSmallClips(true)
+        assertEquals(SizeFilter.CLIP_MIN, store.minSizeBytes.first())
+        store.setHideSmallClips(false)
+        assertEquals(0L, book.minSizeBytes.first())
+    }
+
+    @Test
     fun `the settings book and the settings store read each other`() = runBlocking {
         val file = WatchedStore.openDataStore(dir.resolve("settings.preferences_pb"))
         val store = SettingsStore(file)

@@ -96,7 +96,6 @@ security, About and help, Redo setup choices.
 
 | Row | Title | Detail | Stored | Forms |
 | --- | --- | --- | --- | --- |
-| Size limits (dialog) | `settings.size_limits` | size range | `min_size_bytes`, `max_size_bytes` | P T |
 | Open the last chat | `settings.open_last_chat` | `_named/_unnamed/_off` | `open_last_chat` | P T |
 | Forget the last chat | `settings.forget_last_chat` | `_detail` | `last_chat` | P T, while set |
 | Lists: Remember searches | `settings.remember_searches` | `_on/_off` | `remember_searches` | P T |

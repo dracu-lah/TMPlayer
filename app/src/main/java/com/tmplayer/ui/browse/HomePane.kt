@@ -1052,6 +1052,13 @@ private fun RowSeeAll(
                 )
             }
         }
+        // Home keeps clips and trailers out of its rows (R1): said here, with where to find them.
+        M3Text(
+            s.homeSmallLeftOut(com.tmplayer.data.SizeFilter.label(com.tmplayer.data.SizeFilter.HOME_MIN)),
+            style = M3MaterialTheme.typography.bodySmall,
+            color = Tone.muted,
+            modifier = Modifier.padding(start = if (touch) 16.dp else start, end = end, bottom = 4.dp),
+        )
         androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
             columns = androidx.compose.foundation.lazy.grid.GridCells.Adaptive(if (poster) posterWidth(touch) else wideWidth(touch)),
             state = grid,

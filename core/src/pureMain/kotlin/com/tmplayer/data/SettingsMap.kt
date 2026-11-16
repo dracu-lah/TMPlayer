@@ -239,7 +239,6 @@ object SettingsMap {
         row("sign_out", lock, "settings.sign_out", PTD)
 
         val lib = SettingsGroup.Library
-        row("size_limits", lib, "settings.size_limits", PTD, desktopTitle = "settings.smallest", drawnAs = listOf("settings.largest"))
         row("open_last_chat", lib, "settings.open_last_chat", PTD)
         row("forget_last_chat", lib, "settings.forget_last_chat", PTD, need = SettingsNeed.State)
         row("remember_searches", lib, "settings.remember_searches", PTD, onOff("settings.remember_searches"))

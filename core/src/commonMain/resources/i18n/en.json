@@ -961,7 +961,7 @@
     "filter_showing": "Showing {filter}: {shown} of {total}",
     "filter_shows": "Shows",
     "filter_singles": "Single videos",
-    "filter_size_label": "Size",
+    "filter_size_label": "Small videos",
     "filter_subtitles": "Subtitles",
     "filter_unknown": "{count, plural, one {# of them has no stated length or picture size} other {# of them have no stated length or picture size}}",
     "filter_unwatched": "Unwatched",

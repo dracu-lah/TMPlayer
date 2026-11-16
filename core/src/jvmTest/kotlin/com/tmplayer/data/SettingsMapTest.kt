@@ -128,8 +128,6 @@ class SettingsMapTest {
         assertEquals(emptyList<String>(), search("wallpaper", DeviceForm.Desktop))
         assertTrue("wheel_seeks" in search("wheel", DeviceForm.Desktop))
         assertEquals(emptyList<String>(), search("wheel"))
-        // The desktop's own words for a row.
-        assertEquals("size_limits", search("smallest video", DeviceForm.Desktop).first())
         // Accents and case as typed.
         assertEquals("remember_searches", search("RÉMEMBER sear").first())
         assertEquals("pin", search("pin").first())

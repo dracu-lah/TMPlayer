@@ -22,7 +22,6 @@ import com.tmplayer.data.BackupWords
 import com.tmplayer.data.LogExport
 import com.tmplayer.data.ResumeRewind
 import com.tmplayer.data.RestorePlan
-import com.tmplayer.data.SizeFilter
 import com.tmplayer.data.SupportReminder
 import com.tmplayer.data.ThemeChoice
 import com.tmplayer.data.UiScale
@@ -338,8 +337,6 @@ internal fun LibraryRows(state: ShellState, chatList: List<com.tmplayer.data.Cha
     val settings = state.settings
     val scope = rememberCoroutineScope()
     val toast = rememberToast()
-    val minSize by settings.minSizeBytes.collectAsState(initial = SizeFilter.DEFAULT_MIN)
-    val maxSize by settings.maxSizeBytes.collectAsState(initial = SizeFilter.DEFAULT_MAX)
     val openLast by settings.openLastChat.collectAsState(initial = false)
     val lastChatId by settings.lastChatId.collectAsState(initial = 0L)
     val rememberSearches by settings.rememberSearches.collectAsState(initial = true)
@@ -356,37 +353,6 @@ internal fun LibraryRows(state: ShellState, chatList: List<com.tmplayer.data.Cha
     val watchedList by state.watched.history.collectAsState(initial = emptyList())
     var confirm by remember { mutableStateOf<Confirm?>(null) }
     val undoToast = com.tmplayer.ui.components.rememberActionToast()
-
-    Setting(s.settingsSmallest, SizeFilter.label(minSize), icon = TmIcons.FilterHorizontal) {
-        Stepper(
-            onLess = { scope.launch { settings.setMinSizeBytes(SizeFilter.clampMin(SizeFilter.step(minSize, -1), maxSize)) } },
-            onMore = { scope.launch { settings.setMinSizeBytes(SizeFilter.clampMin(SizeFilter.step(minSize, 1), maxSize)) } },
-        )
-    }
-    Setting(s.settingsLargest, SizeFilter.label(maxSize), icon = TmIcons.FilterHorizontal) {
-        Stepper(
-            onLess = { scope.launch { settings.setMaxSizeBytes(SizeFilter.clampMax(SizeFilter.step(maxSize, -1), minSize)) } },
-            onMore = { scope.launch { settings.setMaxSizeBytes(SizeFilter.clampMax(SizeFilter.step(maxSize, 1), minSize)) } },
-        )
-    }
-    // Reset means the defaults, as on the phone and TV: offering it at the defaults and then
-    // clearing both ends contradicted the 50 MB the filter was still applying.
-    if (!SizeFilter.isDefault(minSize, maxSize)) {
-        Action(
-            s.settingsSizeLimitsReset,
-            s.settingsSizeLimitsResetDetail(SizeFilter.describe(SizeFilter.DEFAULT_MIN, SizeFilter.DEFAULT_MAX)),
-            TmIcons.Refresh,
-            value = s.commonReset,
-            end = RowEnd.None,
-        ) {
-            scope.launch {
-                // Widen first, so the clamp that stops the ends crossing cannot refuse the new
-                // floor on its way past the old ceiling.
-                settings.setMaxSizeBytes(SizeFilter.DEFAULT_MAX)
-                settings.setMinSizeBytes(SizeFilter.DEFAULT_MIN)
-            }
-        }
-    }
 
     // What opens first, in the same card as which videos show, as on the phone and the TV.
     val lastChatTitle = remember(chatList, lastChatId) { chatList.firstOrNull { it.id == lastChatId }?.title }
