@@ -18,7 +18,7 @@ enum class SettingsGroup(val title: String, val summary: String) {
     Gestures("settings.page_gestures", "settings.page_gestures_summary"),
     Mouse("settings.page_mouse", "settings.page_mouse_summary"),
     Subtitles("settings.page_subtitles_audio", "settings.group_subtitles_audio_summary"),
-    Storage("settings.page_storage", "settings.group_storage_summary"),
+    Storage("settings.page_downloads_data", "settings.group_storage_summary"),
     Notifications("settings.page_notifications", "settings.page_notifications_summary_short"),
     Appearance("settings.page_appearance", "settings.page_appearance_summary"),
     Account("settings.page_privacy_lock", "settings.group_privacy_lock_summary"),

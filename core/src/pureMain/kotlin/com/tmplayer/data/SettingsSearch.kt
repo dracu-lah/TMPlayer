@@ -148,7 +148,7 @@ enum class SettingsLink(val from: String, val group: SettingsGroup, val row: Str
     NoSpace("player.no_space", SettingsGroup.Storage, "download_location", setOf(DeviceForm.Phone, DeviceForm.Tv, DeviceForm.Desktop)),
 
     /** "Wi-Fi only is on ... turn Wi-Fi only off in Settings" (a phone's row). */
-    WifiOnly("player.wifi_only", SettingsGroup.Storage, "mobile_data", setOf(DeviceForm.Phone)),
+    WifiOnly("player.mobile_data_never", SettingsGroup.Storage, "mobile_data", setOf(DeviceForm.Phone)),
 
     /** "Developer options are on. Save name check is in Settings, under Save logs." */
     DeveloperOn("logs.developer_on", SettingsGroup.About, "name_report", setOf(DeviceForm.Phone, DeviceForm.Tv, DeviceForm.Desktop)),

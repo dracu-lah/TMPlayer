@@ -117,7 +117,7 @@ fun Strings.tourCopy(page: TourPage, form: DeviceForm): TourCopy {
             // lock, Appearance.
             listOf(
                 tourSettingsPlaybackPage,
-                if (tv) tourSettingsStreamPageTv else tourSettingsStreamPage,
+                if (tv) tourSettingsDownloadsPageTv else tourSettingsDownloadsPage,
                 tourSettingsPrivacyPage,
                 tourSettingsAppearance,
             ) +
