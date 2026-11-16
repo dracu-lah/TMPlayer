@@ -44,6 +44,8 @@ internal fun LazyListScope.onlineMetadataSection(
     sectionTitle { LocalStrings.current.metadataTitle }
     item { MetadataToggleRow(toggleModifier) }
     item { SkipTimesToggleRow() }
+    // One line per kind of skip, under the switch they belong to.
+    for (group in com.tmplayer.online.SkipGroup.entries) item { SkipModeRow(group) }
     item { MetadataKeyRow(onEditKey) }
     item { OmdbKeyRow(onEditOmdbKey) }
     item { MetadataCacheRow() }
@@ -65,18 +67,18 @@ private fun MetadataToggleRow(modifier: Modifier) {
 }
 
 /**
- * The player's skip intro button, which rides on lookups: the title it is asked about is the one
- * the lookup matched. Shown only while lookups are on, since it means nothing without them.
+ * The player's skip buttons. The online lists ride on lookups (the title they are asked about is the
+ * one the lookup matched), but chapters in the file and the viewer's own marks need no lookup, so
+ * the switch is there with lookups off too; the one line under it says what is sent.
  */
 @Composable
 private fun SkipTimesToggleRow() {
     val s = LocalStrings.current
     val online = OnlineMetadata.current ?: return
     val settings by online.settings.collectAsState()
-    if (!settings.enabled) return
     ToggleRow(
         title = s.metadataSkipTimes,
-        subtitle = s.metadataSkipTimesDetail,
+        subtitle = s.metadataSkipTimesPrivacy,
         icon = TmIcons.Episodes,
         checked = settings.skipTimes,
         onToggle = { online.setSkipTimes(!settings.skipTimes) },

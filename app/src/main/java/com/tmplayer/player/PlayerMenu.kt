@@ -56,6 +56,10 @@ enum class PlayerMenuEntry {
     AddBookmark,
     /** This video's bookmarks: play from one, give it a note, delete it. */
     Bookmarks,
+    /** Two presses: where the intro starts, then where it ends; saved here and used as a guess for the season. Episodes only. */
+    MarkIntro,
+    /** Takes the viewer's intro mark off this video; only while it has one. */
+    RemoveIntroMark,
     SaveToDownloads,
     /** "Mark as watched", or "Mark as unwatched" once it is on the list. */
     MarkWatched,
@@ -122,6 +126,9 @@ enum class PhoneMenuEntry {
     /** Asks for an optional note, then saves the moment the note was asked at. */
     AddBookmark,
     Bookmarks,
+    /** Two presses: where the intro starts, then where it ends, as on the television. */
+    MarkIntro,
+    RemoveIntroMark,
     /** The other engine, as on the television. */
     OtherEngine,
     OpenInAnotherApp,
@@ -148,6 +155,7 @@ fun PhoneMenuEntry.label(
     bookmarks: Int = 0,
     shape: VideoScale? = null,
     stereo: String? = null,
+    introMarking: Boolean = false,
 ): String = when (this) {
     PhoneMenuEntry.LockScreen -> L.playerLockScreen
     PhoneMenuEntry.PictureInPicture -> L.playerPictureInPicture
@@ -173,6 +181,8 @@ fun PhoneMenuEntry.label(
     PhoneMenuEntry.SaveToDownloads -> L.playerSaveToDownloads
     PhoneMenuEntry.MarkWatched -> if (watched) L.playerMarkUnwatched else L.playerMarkWatched
     PhoneMenuEntry.AddBookmark -> L.playerAddBookmark
+    PhoneMenuEntry.MarkIntro -> if (introMarking) L.playerMarkIntroEnd else L.playerMarkIntro
+    PhoneMenuEntry.RemoveIntroMark -> L.playerMarkIntroRemove
     PhoneMenuEntry.Bookmarks -> if (bookmarks > 0) L.commonWithDetail(L.playerBookmarks, L.messages.formatter.number(bookmarks)) else L.playerBookmarks
     PhoneMenuEntry.ReportStutter -> L.playerReportStutter
     PhoneMenuEntry.PlaybackDetails -> L.playerPlaybackDetails
@@ -219,6 +229,9 @@ object PlayerMenu {
      * [otherEngine] is whether the video can move to the other engine (PR2): a build whose VLC
      * library loads here, a picture that is not 3D, no cast. It sits just above Open in another
      * app, the other way to a different player.
+     *
+     * [markIntro] is whether the video is an episode of a show, which has a season to share a
+     * mark with; [removeIntroMark] whether this episode has a mark of its own to take off.
      */
     fun tvEntries(
         pictureInPicture: Boolean,
@@ -234,6 +247,8 @@ object PlayerMenu {
         copyLinkAtTime: Boolean = false,
         otherEngine: Boolean = false,
         repeatVideo: Boolean = false,
+        markIntro: Boolean = false,
+        removeIntroMark: Boolean = false,
     ): List<PlayerMenuEntry> = buildList {
         add(PlayerMenuEntry.LockScreen)
         add(PlayerMenuEntry.PlaybackDetails)
@@ -259,6 +274,8 @@ object PlayerMenu {
             add(PlayerMenuEntry.AddBookmark)
             add(PlayerMenuEntry.Bookmarks)
         }
+        if (markIntro) add(PlayerMenuEntry.MarkIntro)
+        if (removeIntroMark) add(PlayerMenuEntry.RemoveIntroMark)
         if (saveToDownloads) add(PlayerMenuEntry.SaveToDownloads)
         if (markWatched) add(PlayerMenuEntry.MarkWatched)
         if (pictureInPicture) add(PlayerMenuEntry.PictureInPicture)
@@ -300,6 +317,8 @@ object PlayerMenu {
         copyLinkAtTime: Boolean = false,
         otherEngine: Boolean = false,
         repeatVideo: Boolean = false,
+        markIntro: Boolean = false,
+        removeIntroMark: Boolean = false,
     ): List<PhoneMenuEntry> = buildList {
         add(PhoneMenuEntry.LockScreen)
         if (pictureInPicture) add(PhoneMenuEntry.PictureInPicture)
@@ -326,6 +345,8 @@ object PlayerMenu {
             add(PhoneMenuEntry.AddBookmark)
             add(PhoneMenuEntry.Bookmarks)
         }
+        if (markIntro) add(PhoneMenuEntry.MarkIntro)
+        if (removeIntroMark) add(PhoneMenuEntry.RemoveIntroMark)
         if (otherEngine) add(PhoneMenuEntry.OtherEngine)
         if (openInAnotherApp) add(PhoneMenuEntry.OpenInAnotherApp)
         if (copyLinkAtTime) add(PhoneMenuEntry.CopyLinkAtTime)

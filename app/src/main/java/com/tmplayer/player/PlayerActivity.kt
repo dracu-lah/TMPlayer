@@ -154,6 +154,8 @@ import kotlinx.coroutines.withTimeoutOrNull
 import com.tmplayer.online.MovieHash
 import com.tmplayer.online.EpisodeNames
 import com.tmplayer.online.OnlineMetadata
+import com.tmplayer.online.SkipController
+import com.tmplayer.online.SkipOffer
 import com.tmplayer.online.SkipSegment
 import com.tmplayer.online.SkipSegments
 import com.tmplayer.online.OnlineSubtitles
@@ -1800,6 +1802,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      */
     private var skipPill: SkipPill? = null
     private var skipSegments: List<SkipSegment> = emptyList()
+    /** Chapters, online lists and the viewer's marks, merged, with the per kind choice and the countdown. */
+    private val skipCtl = SkipController { showGestureFeedback(it) }
     private val skippedSegments = mutableSetOf<Long>()
     private var offeredSkip: SkipSegment? = null
 
@@ -5127,6 +5131,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         chaptersAsked = false
         controls?.chapters = emptyList()
         skipSegments = emptyList()
+        skipCtl.online(emptyList())
+        skipCtl.chapters(emptyList())
         skippedSegments.clear()
         offeredSkip = null
         hideSkipPill()
@@ -6955,6 +6961,11 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             if (event.repeatCount == 0) skipOffered()
             return true
         }
+        // A stretch set to skip by itself counts down over the bare picture: Back cancels it.
+        if (skipHasTheRemote() && skipPill?.isCounting == true && event.keyCode == KeyEvent.KEYCODE_BACK) {
+            if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) cancelAutoSkip()
+            return true
+        }
 
         // The next-up card on a television: left, right and OK stay on its one button,
         // Back puts it away. Up and down still raise the row below.
@@ -7654,6 +7665,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             copyLinkAtTime = linkAtTimeOffered(),
             otherEngine = otherEngineOffered(),
             repeatVideo = repeatVideoOffered(),
+            markIntro = skipCtl.canMark,
+            removeIntroMark = skipCtl.canMark && skipCtl.hasOwnMark,
         )
         override fun zoomDetail(): String? =
             zoom.takeIf { it.zoomed }?.let { L.messages.formatter.scalePercent(it.percent) }
@@ -7671,6 +7684,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             copyLinkAtTime = linkAtTimeOffered(),
             otherEngine = otherEngineOffered(),
             repeatVideo = repeatVideoOffered(),
+            markIntro = skipCtl.canMark,
+            removeIntroMark = skipCtl.canMark && skipCtl.hasOwnMark,
         )
         override fun shape() = videoScale
         override fun speed() = playbackSpeed
@@ -7685,6 +7700,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         override fun sleepChoice() = this@PlayerActivity.sleepChoice()
         override fun loop() = abLoop
         override fun repeatVideo() = com.tmplayer.data.PlayQueue.repeatsVideo(currentItem(), keepRepeat)
+        override fun introMarking() = skipCtl.introMarking
         override fun chapter(): String? =
             if (chapters.isEmpty()) null
             else Chapters.labelAt(chapters, playing?.currentPosition ?: 0L) ?: L.playerBeforeFirstChapter
@@ -7733,6 +7749,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             PhoneMenuEntry.ResetZoom -> resetZoom()
             PhoneMenuEntry.ReportStutter -> reportStutter()
             PhoneMenuEntry.CopyLinkAtTime -> copyLinkAtTime()
+            PhoneMenuEntry.MarkIntro -> markIntroTap()
+            PhoneMenuEntry.RemoveIntroMark -> removeIntroMark()
             // Pages of the panel itself, opened there.
             PhoneMenuEntry.PictureShape, PhoneMenuEntry.Stereo, PhoneMenuEntry.Speed, PhoneMenuEntry.SleepTimer,
             PhoneMenuEntry.AddBookmark, PhoneMenuEntry.Bookmarks, PhoneMenuEntry.PlaybackDetails,
@@ -7765,6 +7783,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             PlayerMenuEntry.Bookmarks -> showSheet { it.showBookmarks(bookmarkActions()) }
             PlayerMenuEntry.ReportStutter -> reportStutter()
             PlayerMenuEntry.CopyLinkAtTime -> copyLinkAtTime()
+            PlayerMenuEntry.MarkIntro -> markIntroTap()
+            PlayerMenuEntry.RemoveIntroMark -> removeIntroMark()
             // Pages of the panel itself, opened there.
             PlayerMenuEntry.SleepTimer, PlayerMenuEntry.RemoteKeys, PlayerMenuEntry.Speed, PlayerMenuEntry.PictureShape -> Unit
         }
@@ -8048,6 +8068,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 if (found.isNotEmpty()) {
                     chapters = found
                     controls?.chapters = found
+                    skipCtl.chapters(found)
+                    wakeEndWatch()
                     return@launch
                 }
                 // All of it is here and there are none: nothing later will change that.
@@ -8730,6 +8752,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             below = findViewById(R.id.overlay_container),
             tv = FormFactor.isTv(this),
             onSkip = ::skipOffered,
+            onCancel = ::cancelAutoSkip,
         )
         undoChip = UndoSeekChip(
             root = findViewById(R.id.player_root),
@@ -8785,7 +8808,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                     if (sleepAtTheEnd || StillWatching.askBeforeAutoplay(autoplayedInARow)) continue
                     val position = exo.currentPosition
                     val left = duration - position
-                    val credits = SkipSegments.creditsStart(skipSegments, duration)
+                    val credits = SkipSegments.creditsStart(skipCtl.segments(duration), duration)
                     val lead = maxOf(NEXT_UP_LEAD_MS, credits?.let { duration - it } ?: 0L)
                     // Credits timed to start well before the last half minute: the card counts
                     // [CREDITS_COUNTDOWN_MS] down from where they begin and then moves on, as the
@@ -8829,6 +8852,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * this runs again for it from [onCreate].
      */
     private fun findSkipTimes() {
+        skipCtl.start(currentItem())
         val metadata = OnlineMetadata.current ?: return
         itemScope.launch {
             afterOpening()
@@ -8849,6 +8873,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             skipSegments = withContext(Dispatchers.IO) {
                 runCatching { metadata.skipTimes(item) }.getOrDefault(emptyList())
             }
+            skipCtl.online(skipSegments)
             wakeEndWatch()
         }
     }
@@ -8864,19 +8889,38 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         val pill = skipPill ?: return
         val duration = exo.duration
         val cardCoversTheEnd = autoplay && !nextUpDismissed && !repeatsAtTheEnd() && _episodes.value.next != null
-        val segment = if (
-            skipSegments.isEmpty() || duration <= 0 || locked || inPictureInPicture ||
-            statusOverlay.visibility == View.VISIBLE || nextUpCard?.isShown == true
-        ) {
+        val offer = if (duration <= 0 || locked || inPictureInPicture || statusOverlay.visibility == View.VISIBLE || nextUpCard?.isShown == true) {
             null
         } else {
-            SkipSegments.active(skipSegments, exo.currentPosition, duration, skippedSegments)
-                ?.takeUnless { cardCoversTheEnd && it.runsToEnd(duration) }
+            skipCtl.offer(exo.currentPosition, duration, exo.isPlaying, android.os.SystemClock.elapsedRealtime(), skippedSegments, cardCoversTheEnd)
         }
-        offeredSkip = segment
+        offeredSkip = offer?.segment
         val wasShown = pill.isShown
-        if (segment == null) pill.hide() else pill.show(segment.kind)
+        when (offer) {
+            null -> pill.hide()
+            is SkipOffer.Ask -> pill.show(offer.segment)
+            is SkipOffer.Counting -> pill.show(offer.segment, offer.secondsLeft)
+            is SkipOffer.Fire -> skipOffered()
+        }
         if (!wasShown && pill.isShown) liftCornerOffers()
+    }
+
+    /** Cancel on the countdown (the phone's button, a television's Back): this stretch stays a plain button. */
+    private fun cancelAutoSkip() {
+        val segment = offeredSkip ?: return
+        skipCtl.cancel(segment)
+        player?.let { updateSkipPill(it, autoplayNext) }
+    }
+
+    /** One tap of "Mark this as the intro": the start the first time, the end and a saved mark the second. */
+    private fun markIntroTap() {
+        skipCtl.markTap(playing?.currentPosition ?: 0L, playing?.duration?.coerceAtLeast(0L) ?: 0L)
+        wakeEndWatch()
+    }
+
+    private fun removeIntroMark() {
+        skipCtl.removeMark(playing?.duration?.coerceAtLeast(0L) ?: 0L)
+        wakeEndWatch()
     }
 
     /** The pill's press, or OK on a television: past the stretch on offer, which then stays gone. */
