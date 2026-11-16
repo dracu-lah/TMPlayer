@@ -28,6 +28,8 @@ export interface Ask {
     /** The name says an episode (S01E02, an air date). */
     series: boolean
     languages: string[]
+    /** An IMDb id (`tt0111161`) the post's own words give (MetaLinks), resolved through TMDB's `find`; null for none. */
+    imdbId?: string | null
     /**
      * The viewer picked this title for the video ("Choose the right poster"): its id is asked for,
      * and no year or episode has to back it, the viewer's word being the backing.

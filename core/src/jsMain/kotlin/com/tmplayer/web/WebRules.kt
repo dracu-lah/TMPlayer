@@ -224,6 +224,8 @@ interface PosterAsk {
     /** "film" or "show". */
     val kind: String
     val tmdbId: Int?
+    /** An IMDb id the post's own words give ("tt0111161"), or null; resolved by the worker's TMDB `find`. */
+    val imdbId: String?
     val series: Boolean
     /** ISO 639-1 codes, a hint for which of two titles of one name is meant. */
     val languages: Array<String>
@@ -400,6 +402,7 @@ fun posterAsk(video: Video): PosterAsk? {
         "year" to query.year,
         "kind" to if (query.kind == MetaKind.Show) "show" else "film",
         "tmdbId" to query.tmdbId,
+        "imdbId" to query.imdbId,
         "series" to item.parsedName.isSeries,
         "languages" to query.languages.toTypedArray(),
         "episode" to SeriesShelf.episodeOf(item).takeIf { it.isEpisode && it.extra == null && it.title.isNotBlank() }?.let { name ->

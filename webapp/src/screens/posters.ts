@@ -46,6 +46,7 @@ function query(a: PickedAsk): string {
     if (a.picked && a.tmdbId) q.set('p', '1')
     if (a.year) q.set('y', String(a.year))
     if (a.tmdbId) q.set('id', String(a.tmdbId))
+    else if (a.imdbId) q.set('i', a.imdbId)
     if (a.series) q.set('s', '1')
     if (a.languages.length) q.set('l', a.languages.join(','))
     return q.toString()

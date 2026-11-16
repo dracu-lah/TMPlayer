@@ -357,14 +357,46 @@ class OnlineMetadata(
         return first
     }
 
+    private val linkedMemory = LruMap<String, LinkedAnswer>(MEMORY_ENTRIES)
+
+    /** What `find` said for an IMDb id, kept for this run (a miss too, so a wrong link is asked once). */
+    private class LinkedAnswer(val title: TmdbFound?)
+
+    /** The TMDB title an IMDb id names, asked once per id per run; null for none, offline or refused. */
+    private suspend fun linkedTitle(key: String, imdbId: String): TmdbFound? {
+        linkedMemory[imdbId]?.let { return it.title }
+        val reply = retrying { tmdb.findByImdb(key, imdbId) }
+        if (reply !is MetaReply.Ok) return null
+        linkedMemory[imdbId] = LinkedAnswer(reply.value)
+        return reply.value
+    }
+
     private suspend fun tmdbLookup(key: String, query: MetaQuery, lang: String): Outcome {
         var film = query.kind == MetaKind.Film
+        // The title an IMDb id in the post's words names (TS): found once per id, and a miss or a
+        // failure leaves the title guess to run below.
+        val linked = if (query.tmdbId == null) query.imdbId?.let { linkedTitle(key, it) } else null
+        if (linked != null) film = linked.film
+        var forcedId = query.tmdbId?.toString() ?: linked?.id
+        var forcedCandidate: MetaCandidate? = null
+        if (forcedId != null) {
+            val reply = retrying { if (film) tmdb.movie(key, forcedId!!, lang) else tmdb.tv(key, forcedId!!, lang) }
+            if (query.fromLink && reply is MetaReply.Failed && reply.code == 404) {
+                // A link to a title TMDB does not have: the title guess runs.
+                forcedId = null
+            } else {
+                trouble(MetaProvider.Tmdb, reply, key)?.let { return it }
+                forcedCandidate = (reply as MetaReply.Ok).value
+            }
+            // A link that the file's own year or episode contradicts is another title's: not taken.
+            if (query.fromLink && forcedCandidate != null && !linkAgrees(query, forcedCandidate, film)) forcedCandidate = null
+            if (forcedCandidate == null) film = query.episode == null && query.season == null
+        }
+        val viaLink = query.fromLink && forcedCandidate != null
         // The match as the English search gave it, when that is where it was found.
         var inEnglish: MetaCandidate? = null
-        var candidate: MetaCandidate = if (query.tmdbId != null) {
-            val reply = retrying { if (film) tmdb.movie(key, query.tmdbId.toString(), lang) else tmdb.tv(key, query.tmdbId.toString(), lang) }
-            trouble(MetaProvider.Tmdb, reply, key)?.let { return it }
-            (reply as MetaReply.Ok).value
+        var candidate: MetaCandidate = if (forcedCandidate != null) {
+            forcedCandidate
         } else {
             // In another language the titles TMDB answers with are that language's, or the original
             // where nobody translated it ("Le Fabuleux Destin d'Amélie Poulain" in Arabic), and a
@@ -413,7 +445,7 @@ class OnlineMetadata(
                 )
             } else if (inEnglish != null) {
                 // Not localized after all: what is shown came from the English search.
-                return Outcome.Found(info(query, candidate, film, poster, candidate.overview, ENGLISH))
+                return Outcome.Found(info(query, candidate, film, poster, candidate.overview, ENGLISH, viaLink))
             }
         }
         var overview = candidate.overview
@@ -426,10 +458,24 @@ class OnlineMetadata(
                 overviewLang = ENGLISH
             }
         }
-        return Outcome.Found(info(query, candidate, film, poster, overview, overviewLang))
+        return Outcome.Found(info(query, candidate, film, poster, overview, overviewLang, viaLink))
     }
 
-    private fun info(query: MetaQuery, candidate: MetaCandidate, film: Boolean, poster: String?, overview: String, overviewLang: String) = MetaInfo(
+    /**
+     * Whether the title a link names can be the video's: not a film for a file that names an
+     * episode, and not a title from another year than the file's own (a year one off is allowed,
+     * and a later season's year on an older show). Nothing else is compared: a link is the
+     * poster's word for a file whose name says nothing ("clip_720p").
+     */
+    private fun linkAgrees(query: MetaQuery, candidate: MetaCandidate, film: Boolean): Boolean {
+        if (film && query.episode != null) return false
+        val wanted = query.year
+        val year = candidate.year
+        if (wanted != null && year != null && kotlin.math.abs(wanted - year) > 1 && !(!film && wanted > year)) return false
+        return true
+    }
+
+    private fun info(query: MetaQuery, candidate: MetaCandidate, film: Boolean, poster: String?, overview: String, overviewLang: String, linked: Boolean = false) = MetaInfo(
         provider = MetaProvider.Tmdb,
         id = candidate.id,
         kind = if (film) MetaKind.Film else MetaKind.Show,
@@ -439,6 +485,7 @@ class OnlineMetadata(
         posterUrl = poster,
         backdropUrl = candidate.backdropUrl,
         language = overviewLang,
+        linked = linked,
     )
 
     private sealed interface SearchOutcome {

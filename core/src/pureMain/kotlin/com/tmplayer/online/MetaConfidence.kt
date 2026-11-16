@@ -17,6 +17,9 @@ enum class MatchBasis {
 
     /** The viewer picked this title for the video ("Choose the right poster"): nothing else has to back it. */
     Chosen,
+
+    /** The post's own IMDb or TMDB link names this title ([MetaInfo.linked]), and the file's year and episode do not contradict it. */
+    Linked,
 }
 
 /** A provider's answer for one video, with what it rests on. */
@@ -45,6 +48,7 @@ object MetaConfidence {
      * for, or not known).
      */
     fun basis(name: ParsedName, info: MetaInfo, durationSec: Int = 0, runtimeMin: Int? = null): MatchBasis? {
+        if (info.linked) return MatchBasis.Linked
         val wanted = name.year
         val year = info.year
         if (wanted != null && year != null) {

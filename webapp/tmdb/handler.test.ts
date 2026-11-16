@@ -297,3 +297,29 @@ test('extras: nothing is kept for a failure, a missing title is kept as a miss, 
     assert.equal((await get(h, '/tmdb/extras?k=film&id=abc')).status, 400)
     assert.equal((await get(createHandler(ok.deps), '/tmdb/extras?k=film&id=2', {})).status, 503)
 })
+
+test('an IMDb id in the words is found once and names the film, with the data\'s own title', async () => {
+    const m = mock((u) => {
+        if (u.pathname.endsWith('/find/tt0111161')) return j({ movie_results: [{ id: 278 }], tv_results: [] })
+        if (u.pathname.endsWith('/movie/278')) return j(film(278, 'The Shawshank Redemption', 1994))
+        return j({}, 500)
+    })
+    const handle = createHandler(m.deps)
+    const r = await get(handle, '/tmdb/poster?k=film&t=clip&i=tt0111161')
+    assert.equal(r.status, 200)
+    const body = (await r.json()) as { match: boolean; title: string }
+    assert.equal(body.match, true)
+    assert.equal(body.title, 'The Shawshank Redemption')
+    assert.equal(m.calls.filter((u) => u.pathname.includes('/find/')).length, 1)
+    assert.equal(m.calls.filter((u) => u.pathname.includes('/search/')).length, 0)
+})
+
+test('an IMDb id TMDB does not know, or a malformed one, falls back to the title search', async () => {
+    const m = mock((u) => (u.pathname.includes('/find/') ? j({ movie_results: [], tv_results: [] }) : u.pathname.endsWith('/search/movie') ? j({ results: [film(2, 'Clap', 2022)] }) : j({}, 500)))
+    const handle = createHandler(m.deps)
+    const r = await get(handle, '/tmdb/poster?k=film&t=Clap&y=2022&i=tt0000000')
+    assert.equal(((await r.json()) as { id: string }).id, '2')
+    const bad = await get(handle, '/tmdb/poster?k=film&t=Clap&y=2022&i=tt12')
+    assert.equal(bad.status, 200)
+    assert.equal(m.calls.filter((u) => u.pathname.includes('/find/')).length, 1)
+})

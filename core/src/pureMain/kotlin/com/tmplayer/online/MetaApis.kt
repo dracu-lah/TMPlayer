@@ -20,6 +20,9 @@ sealed interface MetaReply<out T> {
 }
 
 /** A TMDB show's seasons with their episode counts, and its episode groups (T11). */
+/** A title TMDB found by another site's id: its TMDB id, and whether it is a film (else a show). */
+data class TmdbFound(val id: String, val film: Boolean)
+
 data class TmdbShowGuide(val seasons: List<MetaSeason>, val groups: List<TmdbEpisodeGroup>)
 
 /** One TMDB episode group: its id, its type (2 is "Absolute order") and how many episodes it holds. */
@@ -108,6 +111,21 @@ class TmdbApi(
 
     suspend fun tv(key: String, id: String, language: String): MetaReply<MetaCandidate> =
         get(key, "tv/$id", "language=$language") { tvCandidate(it) }
+
+    /**
+     * The film or show an IMDb id (`tt0111161`) names, through TMDB's `find`: one call. Null when
+     * TMDB knows no such id. A film wins where an id somehow names both.
+     */
+    suspend fun findByImdb(key: String, imdbId: String): MetaReply<TmdbFound?> =
+        get(key, "find/$imdbId", "external_source=imdb_id") { json ->
+            val film = objects(json.optJSONArray("movie_results")).firstNotNullOfOrNull { it.optInt("id").takeIf { id -> id > 0 } }
+            val show = objects(json.optJSONArray("tv_results")).firstNotNullOfOrNull { it.optInt("id").takeIf { id -> id > 0 } }
+            when {
+                film != null -> TmdbFound(film.toString(), film = true)
+                show != null -> TmdbFound(show.toString(), film = false)
+                else -> null
+            }
+        }
 
     /**
      * A film or show in [language] with its posters in [imageLanguages] appended (ISO 639-1
