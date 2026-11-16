@@ -85,6 +85,7 @@ import com.tmplayer.ui.components.BrandLoader
 import com.tmplayer.ui.components.Pane
 import com.tmplayer.ui.components.TmButton
 import com.tmplayer.ui.components.TmSecondaryButton
+import com.tmplayer.ui.components.dpadLeavesField
 import com.tmplayer.ui.components.isTouch
 import com.tmplayer.ui.components.paneAction
 import com.tmplayer.ui.icons.TmIcons
@@ -812,6 +813,8 @@ private fun CodeBoxes(
         ),
         modifier = modifier
             .fillMaxWidth()
+            // A remote's arrows leave the code box (a one line field keeps them for its cursor).
+            .then(if (isTouch()) Modifier else Modifier.dpadLeavesField())
             .semantics {
                 contentType = ContentType.SmsOtpCode
                 onFillData { data ->

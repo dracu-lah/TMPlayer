@@ -32,6 +32,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.tmplayer.ui.components.dpadLeavesField
 import com.tmplayer.ui.components.isTouch
 import com.tmplayer.ui.components.liveMessage
 import com.tmplayer.ui.i18n.LocalStrings
@@ -122,7 +123,7 @@ fun PaneField(
                 visualTransformation = visualTransformation,
                 keyboardOptions = keyboardOptions,
                 keyboardActions = keyboardActions,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().dpadLeavesField(),
                 // Placeholder and field must be stacked, not siblings: emitted flat they are laid
                 // out one after the other and the text lands off to the side.
                 decorationBox = { inner ->
