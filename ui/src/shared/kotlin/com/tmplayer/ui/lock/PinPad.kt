@@ -64,6 +64,7 @@ import com.tmplayer.data.PinHash
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.i18n.L
 import com.tmplayer.ui.components.deviceForm
+import com.tmplayer.ui.components.liveMessage
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.icons.TmIcons
 import com.tmplayer.ui.nav.BackHandler
@@ -229,6 +230,9 @@ fun PinPad(
         waiting -> waitWords(waitUntil - now)
         else -> message
     }
+    // What a screen reader says: a wrong PIN as it appears, and a wait once, as it starts, not the
+    // countdown's every second (the words on screen move, the spoken ones stay fixed per wait).
+    val spoken = if (waiting) remember(waitUntil) { shown } else shown
     val heading = when {
         purpose == PinPurpose.Choose && first != null -> s.lockRepeatPin
         else -> title
@@ -282,7 +286,10 @@ fun PinPad(
                 color = if (waiting) Tone.caution else Tone.danger,
                 textAlign = TextAlign.Center,
                 minLines = 2,
-                modifier = Modifier.padding(top = 12.dp, bottom = 8.dp),
+                modifier = Modifier
+                    .padding(top = 12.dp, bottom = 8.dp)
+                    .liveMessage()
+                    .semantics { if (waiting) contentDescription = spoken.orEmpty() },
             )
         }
         // Always 1 2 3 from the left, as a phone's dialler and every number pad are, also in Arabic

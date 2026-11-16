@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.tmplayer.ui.components.isTouch
+import com.tmplayer.ui.components.liveMessage
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.icons.TmIcons
 import com.tmplayer.ui.theme.Corner
@@ -139,6 +140,20 @@ fun PaneField(
             )
         }
     }
+}
+
+/**
+ * What went wrong on a sign-in pane, in the danger colour and read out by a screen reader the moment
+ * it appears (a rejected code that nobody hears is a button that seems to do nothing).
+ */
+@Composable
+internal fun PaneError(error: String, modifier: Modifier = Modifier) {
+    Text(
+        error,
+        style = MaterialTheme.typography.bodyLarge,
+        color = Tone.danger,
+        modifier = modifier.liveMessage(),
+    )
 }
 
 /**
