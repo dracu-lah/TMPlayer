@@ -75,6 +75,20 @@ class MobileDataTest {
     }
 
     @Test
+    fun `any pick ends a stored Save mobile data, so Allow no longer bounds a stream`() = runBlocking {
+        for (pick in MobileData.entries) {
+            val store = store()
+            store.setSaveMobileData(true)
+            assertTrue(store.saveMobileDataNow())
+            store.setMobileData(pick)
+            assertEquals(pick.name, false, store.saveMobileDataNow())
+            assertEquals(false, store.saveMobileData.first())
+            assertEquals(pick, store.mobileDataNow())
+            assertEquals(pick == MobileData.Never, store.wifiOnlyDownloadsNow())
+        }
+    }
+
+    @Test
     fun `the setup's No limits turns Never off but leaves Allow alone`() = runBlocking {
         val store = store()
         store.setMobileData(MobileData.Never)

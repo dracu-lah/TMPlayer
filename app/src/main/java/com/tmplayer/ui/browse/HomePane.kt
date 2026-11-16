@@ -232,11 +232,13 @@ internal fun HomePane(
         // A list of the chats' videos that never comes back gives way to the card after a while,
         // so a first run without a connection still says what to do.
         var waitedOut by remember { mutableStateOf(false) }
-        if (!rowsReady) LaunchedEffect(Unit) {
+        // Offline, the rows are also held till the download index and watch cache have been read.
+        val held = !rowsReady || !LocalOfflineHome.current.settled
+        if (held) LaunchedEffect(Unit) {
             kotlinx.coroutines.delay(ROWS_WAIT_MS)
             waitedOut = true
         }
-        if (!rowsReady && !waitedOut) {
+        if (held && !waitedOut) {
             Column(Modifier.fillMaxSize().padding(top = under)) {
                 tvHeader?.invoke(false)
                 if (touch) PhoneHomeBrand(Modifier.padding(start = start, top = BRAND_TOP), onArt = false)

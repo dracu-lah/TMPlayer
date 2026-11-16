@@ -133,7 +133,9 @@ fun DesktopShell(
     val telegramConnected by Td.connected.collectAsState()
     val offline = com.tmplayer.ui.browse.rememberSettledOffline(network == NetworkStatus.Offline && !telegramConnected)
     var offlineDownloads by remember { mutableStateOf<List<com.tmplayer.data.ResumeRecord>>(emptyList()) }
+    var offlineRead by remember { mutableStateOf(false) }
     LaunchedEffect(offline) {
+        offlineRead = false
         offlineDownloads = if (offline) {
             com.tmplayer.data.runCatchingCancellable {
                 state.settings.downloadsNow().filter { com.tmplayer.desktop.DownloadIndex.state(it) == com.tmplayer.desktop.DownloadIndex.FileState.Present }
@@ -141,8 +143,11 @@ fun DesktopShell(
         } else {
             emptyList()
         }
+        offlineRead = true
     }
-    val offlineHome = remember(offline, offlineDownloads) { com.tmplayer.data.OfflineHome(offline, offlineDownloads) }
+    val offlineHome = remember(offline, offlineDownloads, offlineRead) {
+        com.tmplayer.data.OfflineHome(offline, offlineDownloads, settled = !offline || offlineRead)
+    }
     CompositionLocalProvider(
         com.tmplayer.ui.browse.LocalOfflineHome provides offlineHome,
         LocalBackStack provides state.backStack,

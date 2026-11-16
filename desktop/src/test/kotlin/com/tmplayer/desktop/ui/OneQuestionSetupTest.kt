@@ -196,6 +196,24 @@ class OneQuestionSetupTest {
         }
     }
 
+    /** Esc on the desktop goes back a page; only a remote's Back is "Not now", or one stray key turns the card off for good. */
+    @Test
+    fun `Esc on the desktop does not dismiss the Tips card`() = runComposeUiTest {
+        var dismissed = 0
+        val stack = BackStack()
+        setContent {
+            CompositionLocalProvider(LocalBackStack provides stack) {
+                TmMaterialTheme(dark = true) {
+                    Box(Modifier.size(900.dp, 300.dp)) { TipsCard(onShow = {}, onDismiss = { dismissed++ }) }
+                }
+            }
+        }
+        waitForIdle()
+        assertFalse("nobody on the back stack wants Esc", stack.canGoBack)
+        assertFalse(stack.handleBack())
+        assertEquals(0, dismissed)
+    }
+
     // What runs beside the question.
 
     @Test

@@ -68,6 +68,14 @@ class BooksMatchStoresTest {
         assertEquals(SizeFilter.CLIP_MIN, store.minSizeBytes.first())
         store.setHideSmallClips(false)
         assertEquals(0L, book.minSizeBytes.first())
+        // A custom floor survives the switch going on, in both stores; off removes it.
+        kv.edit { it["min_size_bytes"] = 300 * mb }
+        store.setHideSmallClips(true)
+        assertEquals(300 * mb, book.minSizeBytes.first())
+        book.setHideSmallClips(true)
+        assertEquals(300 * mb, store.minSizeBytes.first())
+        book.setHideSmallClips(false)
+        assertEquals(0L, store.minSizeBytes.first())
     }
 
     @Test
