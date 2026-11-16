@@ -12,6 +12,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
@@ -80,9 +82,9 @@ fun connectStepLabel(step: ConnectStep, s: Messages): String = when (step) {
 fun connectHintLabel(hint: ConnectHint, s: Messages): String = when (hint) {
     ConnectHint.Offline -> s.connectHintOffline
     ConnectHint.CaptivePortal -> s.connectHintPortal
-    ConnectHint.ProxyNotAnswering -> s.connectHintProxy
+    ConnectHint.ProxyNotAnswering -> s.connectHintProxyPlain
     ConnectHint.Vpn -> s.connectHintVpn
-    ConnectHint.MaybeBlocked -> s.connectHintBlocked
+    ConnectHint.MaybeBlocked -> s.connectHintBlockedPlain
     ConnectHint.NotAnswering -> s.connectHintNotAnswering
 }
 
@@ -187,30 +189,42 @@ private fun HelpBody(
     val s = LocalStrings.current
     val form = deviceForm()
     val focus = remember { FocusRequester() }
+    // Plain words and one button first (Raju group F): the proxy, the device's report and the logs
+    // wait behind More help, one press away.
+    var more by remember { mutableStateOf(false) }
     Column(
         Modifier.widthIn(max = 480.dp).padding(top = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(s.connectSlowTitle, style = MaterialTheme.typography.titleMedium, color = Tone.text, textAlign = TextAlign.Center)
+        Text(s.connectSlowPlain, style = MaterialTheme.typography.titleMedium, color = Tone.text, textAlign = TextAlign.Center)
         Text(hint, style = MaterialTheme.typography.bodyMedium, color = Tone.muted, textAlign = TextAlign.Center)
-        if (network != null) {
-            Text(network, style = MaterialTheme.typography.labelMedium, color = Tone.muted.copy(alpha = 0.8f), textAlign = TextAlign.Center)
-        }
         Spacer(Modifier.height(8.dp))
         val buttons: @Composable () -> Unit = {
-            SetupButton(s.commonRetry, primary = true, modifier = Modifier.focusRequester(focus), onClick = onRetry)
-            SetupButton(if (proxyOn) s.connectProxyOn else s.connectUseProxy, onClick = onOpenProxies)
+            SetupButton(s.commonTryAgain, primary = true, modifier = Modifier.focusRequester(focus), onClick = onRetry)
+            QuietButton(if (more) s.connectLessHelp else s.connectMoreHelp, onClick = { more = !more })
         }
         if (form == DeviceForm.Phone) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) { buttons() }
         } else {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) { buttons() }
         }
-        sendLogs()
+        AnimatedVisibility(more, enter = fadeIn(tween(FADE_MS)), exit = fadeOut(tween(FADE_MS))) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (network != null) {
+                    Text(network, style = MaterialTheme.typography.labelMedium, color = Tone.muted.copy(alpha = 0.8f), textAlign = TextAlign.Center)
+                }
+                SetupButton(if (proxyOn) s.connectProxyOn else s.connectUseProxy, onClick = onOpenProxies)
+                sendLogs()
+            }
+        }
     }
     // A remote has nothing else to land on; a desktop and a phone are left as they are.
-    if (form == DeviceForm.Tv) LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    if (form == DeviceForm.Tv) LaunchedEffect(Unit) {
+        // After the first frame, so the button is laid out and attached however it came up.
+        androidx.compose.runtime.withFrameNanos { }
+        runCatching { focus.requestFocus() }
+    }
 }
 
 /**
@@ -226,12 +240,11 @@ fun ConnectBanner(onOpenProxies: () -> Unit, modifier: Modifier = Modifier) {
     val proxyOn by Td.proxyOn.collectAsState()
     val evidence by Td.lineEvidence.collectAsState()
     val retry = rememberRetry()
-    // A block is said, and a proxy suggested, only with a sign of one (HX23): on the Mi TV this
-    // banner told a session Telegram had ended to try a proxy, on a network that was fine.
+    // A block is said only with a sign of one (HX23): on the Mi TV this banner told a session
+    // Telegram had ended to try a proxy, on a network that was fine.
     val hint = ConnectAdvice.hint(link, network, proxyOn, evidence)
     ConnectBannerView(
         text = if (retry.busy) s.connectRetrying else connectHintLabel(hint, s),
-        proxyOn = !ConnectAdvice.suggestsProxy(hint, proxyOn),
         onRetry = retry.run,
         onOpenProxies = onOpenProxies,
         modifier = modifier,
@@ -239,8 +252,9 @@ fun ConnectBanner(onOpenProxies: () -> Unit, modifier: Modifier = Modifier) {
 }
 
 /** [ConnectBanner] as plain values. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun ConnectBannerView(text: String, proxyOn: Boolean, onRetry: () -> Unit, onOpenProxies: () -> Unit, modifier: Modifier = Modifier) {
+fun ConnectBannerView(text: String, onRetry: () -> Unit, onOpenProxies: () -> Unit, modifier: Modifier = Modifier) {
     val s = LocalStrings.current
     val phone = deviceForm() == DeviceForm.Phone
     Column(
@@ -260,11 +274,12 @@ fun ConnectBannerView(text: String, proxyOn: Boolean, onRetry: () -> Unit, onOpe
             Text(s.connectBanner, style = MaterialTheme.typography.titleSmall, color = Tone.text)
         }
         Text(text, style = MaterialTheme.typography.bodySmall, color = Tone.muted)
-        val buttons: @Composable () -> Unit = {
-            QuietButton(s.commonRetry, onClick = onRetry)
-            QuietButton(if (proxyOn) s.connectProxyOn else s.connectUseProxy, onClick = onOpenProxies)
+        // Try again, and More help for the rest (Raju group F): the proxy page is one press away,
+        // so a person who has never heard of one is never shown the word first.
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(if (phone) 0.dp else 8.dp)) {
+            QuietButton(s.commonTryAgain, onClick = onRetry)
+            QuietButton(s.connectMoreHelp, onClick = onOpenProxies)
         }
-        if (phone) Row { buttons() } else Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { buttons() }
     }
 }
 
