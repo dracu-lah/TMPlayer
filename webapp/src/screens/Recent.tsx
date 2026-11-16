@@ -5,8 +5,8 @@ import { onBackOnline } from '../net'
 import { t } from '../i18n'
 import { addedView, progress as readProgress, settings, watchedTick } from '../store'
 import { PageBar } from '../ui/PageBar'
-import { noVideosWithin } from './sizes'
-import { HiddenBySize, stableCards, tileCard, VideoList, type CardData } from './VideoList'
+import { sizeLimits } from './sizes'
+import { stableCards, tileCard, VideoList, type CardData } from './VideoList'
 import type { ListView, RecentPage, Tile } from '../tg/types'
 
 /** Asks for more in a row that brought no new card before the page stops by itself and offers a button. */
@@ -91,7 +91,6 @@ export function Recent() {
     const empty = () => {
         const p = page()
         if (!p || p.tiles.length || !p.done) return null
-        if (p.hiddenBySize) return noVideosWithin(view().minBytes, view().maxBytes)
         return t('browse.no_playable_videos')
     }
     // A failed first page opens again; a failed arranging (the only other failure shown here) arranges again.
@@ -110,7 +109,10 @@ export function Recent() {
                     <button class="link" type="button" onClick={retry}>{t('common.try_again')}</button>
                 </div>
             </Show>
-            <HiddenBySize count={page()?.hiddenBySize ?? 0} />
+            {/* Home keeps clips and trailers out of its rows: said here, with where to find them (R1). */}
+            <Show when={sizeLimits()}>
+                <p class="notice muted small">{t('home.small_left_out', { size: sizeLimits()!.homeLabel })}</p>
+            </Show>
             <Show when={empty()}>
                 <p class="muted">{empty()}</p>
             </Show>

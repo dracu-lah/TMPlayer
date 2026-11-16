@@ -11,7 +11,7 @@ Root cause: `SizeFilter.DEFAULT_MIN = 400 MB` is a default that suits a chat of 
 ## The new flow
 
 - Default minimum is 0: every video of a chat is listed. Nobody opens Settings to see their videos.
-- One switch in a chat's Sort sheet (menu on phone and desktop, panel on TV): **Hide small clips (under 50 MB)**, off by default. It is a group of its own, "Size", under "With". It applies to every chat and is remembered (the stored `min_size_bytes` is 50 MB when on).
+- One switch in a chat's Sort sheet (menu on phone and desktop, panel on TV): **Hide small clips (under 50 MB)**, off by default. It is a group of its own, "Small videos", under "With". It applies to every chat and is remembered (the stored `min_size_bytes` is 50 MB when on).
 - When it is on and clips were left out, the grid ends with a row: "3 small videos hidden" and a **Show them** button. One tap shows them for this visit to the chat (the switch reads off while they are shown; the stored choice is not changed, so the next visit hides them again). The number is exact only when the whole chat has been read (the hidden set is the one the app filtered itself, counted once while paging, one pass, no extra query); until then the row says "Some small videos are hidden".
 - A chat that is empty only because of the switch says "3 small videos are hidden" with the same button.
 - Home keeps its own floor of 50 MB (`SizeFilter.HOME_MIN`) so trailers and samples do not fill Recently added. Recently added's See all page says: "Videos under 50 MB are not on Home. Open a chat to see them."
@@ -49,7 +49,7 @@ No write on read: the stored number is interpreted by `SizeFilter.effectiveMin`,
 
 | Platform | Switch | End row | Focus and keys |
 | --- | --- | --- | --- |
-| Phone | Sort popover, group "Size", line with a tick | full width grid item, text and Show them | 48 dp targets, press haptic as other toggles |
+| Phone | Sort popover, group "Small videos", line with a tick | full width grid item, text and Show them | 48 dp targets, press haptic as other toggles |
 | TV | Sort panel (`VideoSortSheet`), Down from the order lines | grid item, button reached with Down from the last row | the panel stays open after the toggle and the remote stays on the line; Back closes |
 | Desktop | Sort popover, Tab and Enter, Space | grid item with a button | Tab order follows reading order |
 | Web | Sort menu in the chat bar | end row with the same words | Tab reaches both |

@@ -15,8 +15,9 @@ export type Theme = 'system' | 'dark' | 'light' | 'black'
 export interface Settings {
     theme: Theme
     /**
-     * The app's size limits (SizeFilter), in bytes: smaller videos are left out of every list,
-     * and larger ones unless the top is at its ceiling, which means no limit.
+     * The app's size limits (SizeFilter), in bytes: 0 lists every video; 50 MB is the chat's
+     * "Hide small clips" switch; anything else is a floor chosen before the switch, kept.
+     * Larger videos are left out unless the top is at its ceiling, which means no limit.
      */
     sizeMin: number
     sizeMax: number
@@ -47,8 +48,10 @@ export interface Resume {
 }
 
 const MB = 1024 * 1024
-/** SizeFilter.DEFAULT_MIN and DEFAULT_MAX: 400 MB up, no top. */
-export const SIZE_DEFAULTS = { sizeMin: 400 * MB, sizeMax: 8 * 1024 * MB }
+/** SizeFilter.DEFAULT_MIN and DEFAULT_MAX: every video, no top (R1, design/redesign/show-every-video.md). */
+export const SIZE_DEFAULTS = { sizeMin: 0, sizeMax: 8 * 1024 * MB }
+/** SizeFilter.OLD_DEFAULT_MIN: the default until 2026-11. It was never a choice, so a saved 400 MB reads as "not set". */
+const OLD_DEFAULT_MIN = 400 * MB
 const DEFAULTS: Settings = {
     theme: 'system',
     ...SIZE_DEFAULTS,
@@ -215,6 +218,7 @@ export async function loadSettings() {
     setHomeChatRows(cleanHomeChats(chatRows))
     // Keys of settings since removed (`rows`, the As rows layout) are dropped, so the next write leaves them behind.
     const known = Object.fromEntries(Object.entries(saved ?? {}).filter(([k]) => k in DEFAULTS)) as Partial<Settings>
+    if (known.sizeMin === OLD_DEFAULT_MIN) delete known.sizeMin
     setSettings({ ...DEFAULTS, ...cleanHome(known) })
     setAddedIdsSignal(new Set(added.map((a) => a.chatId)))
     setAddedModeSignal(readMode(mode))

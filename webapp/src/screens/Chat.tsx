@@ -1,7 +1,7 @@
 import { createEffect, createMemo, createResource, createSignal, For, on, onCleanup, Show } from 'solid-js'
 import { A, useParams, useSearchParams } from '@solidjs/router'
 import { Cancel01Icon, InformationCircleIcon, RefreshIcon, Search01Icon, Sorting01Icon, StarIcon, Tick02Icon } from '@hugeicons/core-free-icons'
-import { call, errorText } from '../tg/rpc'
+import { api, call, errorText } from '../tg/rpc'
 import { onBackOnline } from '../net'
 import { t } from '../i18n'
 import { progress as readProgress, settings, setSetting, setStarred, starredIds } from '../store'
@@ -11,7 +11,7 @@ import { PageBar } from '../ui/PageBar'
 import { notePool } from '../ui/PosterPicker'
 import { ChatPicture } from './ChatPicture'
 import { chatName, StarButton } from './Chats'
-import { noVideosWithin, sizeLabel, sizeScale } from './sizes'
+import { sizeLimits } from './sizes'
 import { stableCards, tileCard, VideoList, type CardData } from './VideoList'
 import type { ChatPage, ChatView, RpcError, Sort, Tile } from '../tg/types'
 
@@ -30,8 +30,8 @@ const IDLE_PAGES = 3
 
 /**
  * One chat's videos as the app arranges them: shows, copies and pieces folded together by its
- * rules, in the chosen order, inside the size limits, with "N hidden by the size limits" when
- * they hide any. More loads near the foot; the words to look for are in the address (`?q=`).
+ * rules, in the chosen order, every video unless "Hide small clips" is on, which ends the grid
+ * with "N small videos hidden" and Show them. More loads near the foot; the words to look for are in the address (`?q=`).
  */
 export function Chat() {
     const params = useParams<{ chatId: string }>()
@@ -45,9 +45,11 @@ export function Chat() {
     const [idlePages, setIdlePages] = createSignal(0)
     const [searching, setSearching] = createSignal(!!search.q)
     const [progress] = createResource(readProgress)
+    // "Show them" on the end row lists the small videos for this visit; the saved switch is not changed (R1).
+    const [showAll, setShowAll] = createSignal(false)
     const view = (): ChatView => ({
         sort: settings().sort,
-        minBytes: settings().sizeMin,
+        minBytes: showAll() ? 0 : settings().sizeMin,
         maxBytes: settings().sizeMax,
         watched: progress()?.watched ?? [],
         started: progress()?.started ?? [],
@@ -84,6 +86,7 @@ export function Chat() {
         on(chatId, () => {
             setPage(null)
             setError(null)
+            setShowAll(false)
             setIdlePages(0)
             setMoreFailed(false)
             run('open')
@@ -127,7 +130,8 @@ export function Chat() {
         // Words: Telegram's search of the chat said nothing yet; Keep looking reads its pages on.
         if (view().query) return busy() ? t('browse.searching') : t('browse.no_match', { query: view().query })
         if (!p.done) return null
-        if (p.hiddenBySize) return noVideosWithin(view().minBytes, view().maxBytes)
+        // Videos left out by the floor are said by the end row, with the way to show them.
+        if (p.hiddenBySize) return null
         return t('browse.no_playable_videos')
     }
 
@@ -151,34 +155,43 @@ export function Chat() {
         setSearch({ q: undefined }, { replace: true })
     }
 
-    // "n hidden": the videos under the smallest size shown, opening the quick picks. Not while searching.
-    const SizeChip = () => (
-        <Show when={!view().query && !searching() && (page()?.hiddenBySize ?? 0) > 0}>
-            <button
-                class="size-chip"
-                type="button"
-                aria-label={t('grid.size_hidden_label', { count: page()!.hiddenBySize })}
-                title={t('grid.size_hidden_label', { count: page()!.hiddenBySize })}
-                onClick={() => sizeDialog.showModal()}
-            >
-                {t('grid.size_hidden', { count: page()!.hiddenBySize })}
-            </button>
-        </Show>
+    // "Hide small clips" (the Sort menu's switch) on: the saved floor is the clip floor, and "Show them" is not in force.
+    const hidesSmall = () => !showAll() && sizeLimits() !== undefined && settings().sizeMin === sizeLimits()!.clipMin
+    const setHideSmall = (on: boolean) => {
+        const clip = sizeLimits()?.clipMin
+        if (clip === undefined) return
+        if (on && showAll() && settings().sizeMin === clip) setShowAll(false)
+        else {
+            setShowAll(false)
+            setSetting('sizeMin', on ? clip : 0)
+        }
+    }
+    // A floor chosen before the switch (or a ceiling), kept working: one line in the menu with a Reset.
+    const custom = () => {
+        const l = sizeLimits()
+        if (!l) return false
+        const min = settings().sizeMin
+        return (min > 0 && min !== l.clipMin) || settings().sizeMax < l.ceiling
+    }
+    const [range] = createResource(
+        () => (custom() ? ([settings().sizeMin, settings().sizeMax] as const) : false),
+        ([min, max]) => api.sizeRange(min, max),
     )
-    let sizeDialog!: HTMLDialogElement
-    /** The quick minimums, with the one on when it is off the list, sorted. */
-    const quick = () => {
-        const q = sizeScale()?.quick ?? []
-        const now = settings().sizeMin
-        return q.includes(now) ? q : [...q, now].sort((a, b) => a - b)
+    const resetLimits = () => {
+        setShowAll(false)
+        setSetting('sizeMin', 0)
+        setSetting('sizeMax', sizeLimits()?.ceiling ?? settings().sizeMax)
     }
-    const pickMin = (bytes: number) => {
-        sizeDialog.close()
-        if (bytes === settings().sizeMin) return
-        // Never above the largest size shown: the apps' clampMin keeps one stop under it.
-        const top = sizeScale()?.stops.filter((s) => s.bytes < settings().sizeMax).at(-1)?.bytes ?? bytes
-        setSetting('sizeMin', Math.min(bytes, top))
-    }
+    const sortMenu = (cell?: boolean) => (
+        <SortMenu
+            cell={cell}
+            hideSmall={hidesSmall()}
+            clipLabel={sizeLimits()?.clipLabel}
+            onHideSmall={sizeLimits() ? setHideSmall : undefined}
+            customRange={custom() ? range.latest : undefined}
+            onReset={resetLimits}
+        />
+    )
     const SearchCell = () => (
         <button type="button" class="nav-cell" aria-pressed={searching()} title={t('browse.search_chat')} onClick={() => (searching() ? closeSearch() : setSearching(true))}>
             <span class="nav-glyph"><Icon icon={searching() ? Cancel01Icon : Search01Icon} size={22} /></span>
@@ -209,9 +222,8 @@ export function Chat() {
                         fallback={
                             // The TV keeps the chat's buttons at the top; a phone and a desktop have them on the chat's own bar at the foot.
                             <>
-                                <SizeChip />
                                 <StarButton chatId={chatId()} round />
-                                <SortMenu />
+                                {sortMenu()}
                                 <button
                                     class="round-button"
                                     type="button"
@@ -237,7 +249,6 @@ export function Chat() {
                         }
                     >
                         {/* The chat's info beside its name (the apps' Info button), then Refresh, which the apps have as a pull or a key. */}
-                        <SizeChip />
                         <A class="round-button" href={`/chat/${chatId()}/info`} state={{ chat: page() ? { title: title(), photo: page()!.photo, self: page()!.self } : undefined }} aria-label={t('chats.info_about')} title={t('chats.info_about')}>
                             <Icon icon={InformationCircleIcon} size={22} />
                         </A>
@@ -266,7 +277,7 @@ export function Chat() {
                         <Show when={form() === 'desktop'} fallback={<SearchCell />}>
                             <StarCell />
                         </Show>
-                        <SortMenu cell />
+                        {sortMenu(true)}
                     </div>
                 </nav>
             </Show>
@@ -296,28 +307,6 @@ export function Chat() {
                     <button class="link" type="button" onClick={() => run(page() ? 'refresh' : 'open')}>{t('common.try_again')}</button>
                 </div>
             </Show>
-            <dialog class="confirm size-picker" ref={sizeDialog} aria-labelledby="size-picker-title" onClick={(e) => e.target === sizeDialog && sizeDialog.close()}>
-                <h2 id="size-picker-title">{t('settings.smallest')}</h2>
-                <div role="radiogroup" aria-labelledby="size-picker-title" class="size-options">
-                    <For each={quick()}>
-                        {(bytes) => (
-                            <button type="button" role="radio" aria-checked={settings().sizeMin === bytes} classList={{ on: settings().sizeMin === bytes }} onClick={() => pickMin(bytes)}>
-                                <span>{sizeLabel(bytes)}</span>
-                                <Show when={bytes === sizeScale()?.min}>
-                                    <span class="muted small">{t('grid.size_default')}</span>
-                                </Show>
-                                <Show when={settings().sizeMin === bytes}>
-                                    <Icon icon={Tick02Icon} size={20} />
-                                </Show>
-                            </button>
-                        )}
-                    </For>
-                </div>
-                <p class="muted small">{t('grid.size_quick_note', { count: page()?.hiddenBySize ?? 0 })}</p>
-                <div class="confirm-buttons">
-                    <button class="link" type="button" onClick={() => sizeDialog.close()}>{t('common.cancel')}</button>
-                </div>
-            </dialog>
             <Show when={page()?.protected}>
                 <p class="notice muted small">{t('detail.protected')}</p>
             </Show>
@@ -350,6 +339,15 @@ export function Chat() {
                     </button>
                 </Show>
             </div>
+            {/* Small videos left out by "Hide small clips": said where the chat ends, with Show them. The number only once the whole chat has been read. */}
+            <Show when={!view().query && !searching() && (page()?.hiddenBySize ?? 0) > 0}>
+                <div class="small-hidden">
+                    <p class="muted">
+                        {page()!.done ? t('grid.small_hidden', { count: page()!.hiddenBySize }) : t('grid.small_hidden_some')}
+                    </p>
+                    <button class="outline-button" type="button" onClick={() => setShowAll(true)}>{t('grid.filter_show_them')}</button>
+                </div>
+            </Show>
             <Show when={page()?.archives.length}>
                 <details class="archives">
                     <summary>{t('grid.archives_heading', { count: page()!.archives.length })}</summary>
@@ -363,7 +361,16 @@ export function Chat() {
 }
 
 /** Sort videos by: the app's seven orders in one list, the chosen one ticked. Kept for every chat. */
-function SortMenu(props: { cell?: boolean }) {
+function SortMenu(props: {
+    cell?: boolean
+    /** The "Hide small clips" switch: on or off now, its words, and what turning it does; undefined until the limits are known. */
+    hideSmall: boolean
+    clipLabel?: string
+    onHideSmall?: (on: boolean) => void
+    /** A floor chosen before the switch, as a sentence, with a Reset. */
+    customRange?: string
+    onReset: () => void
+}) {
     const [open, setOpen] = createSignal(false)
     let box!: HTMLDivElement
     const close = (e: Event) => {
@@ -416,6 +423,27 @@ function SortMenu(props: { cell?: boolean }) {
                             </button>
                         )}
                     </For>
+                    <Show when={props.onHideSmall}>
+                        <p class="pop-title">{t('grid.filter_size_label')}</p>
+                        {/* Stays open when pressed, so the grid is seen to change behind it. */}
+                        <button
+                            type="button"
+                            role="menuitemcheckbox"
+                            aria-checked={props.hideSmall}
+                            classList={{ on: props.hideSmall }}
+                            onClick={() => props.onHideSmall!(!props.hideSmall)}
+                        >
+                            <span>{t('grid.hide_small_clips', { size: props.clipLabel ?? '' })}</span>
+                            <Show when={props.hideSmall}>
+                                <Icon icon={Tick02Icon} size={20} />
+                            </Show>
+                        </button>
+                        <Show when={props.customRange}>
+                            <button type="button" role="menuitem" class="on" onClick={() => { props.onReset(); setOpen(false) }}>
+                                <span>{t('grid.size_limit_on', { range: props.customRange! })}</span>
+                            </button>
+                        </Show>
+                    </Show>
                 </div>
             </Show>
         </div>

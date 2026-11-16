@@ -262,13 +262,6 @@ html[data-form=tv] .segmented label { min-height: calc(var(--dp) * 40); font-siz
 html[data-form=tv] .segmented label:has(input:focus-visible) { outline: none; }
 html[data-form=tv][data-tv-keys] .segmented label:has(input:focus) { background: var(--focus-fill); color: var(--on-focus-fill); transform: scale(var(--focus-scale)); }
 html[data-form=tv][data-tv-keys] .segmented input:focus { outline: none; }
-html[data-form=tv] .size-readout { font-size: calc(var(--dp) * 16); }
-html[data-form=tv] .dual-range { height: calc(var(--dp) * 32); }
-html[data-form=tv] .dual-range input::-webkit-slider-runnable-track { height: calc(var(--dp) * 32); }
-html[data-form=tv] .dual-range input::-webkit-slider-thumb { width: calc(var(--dp) * 20); height: calc(var(--dp) * 20); }
-html[data-form=tv][data-tv-keys] .dual-range input:focus { outline: none; }
-html[data-form=tv][data-tv-keys] .dual-range input:focus::-webkit-slider-thumb { transform: scale(1.3); box-shadow: 0 0 0 calc(var(--dp) * 3) var(--bg), 0 0 0 calc(var(--dp) * 6) var(--accent); }
-html[data-form=tv][data-tv-keys] .dual-range input:focus::-moz-range-thumb { box-shadow: 0 0 0 calc(var(--dp) * 3) var(--bg), 0 0 0 calc(var(--dp) * 6) var(--accent); }
 html[data-form=tv] .install-steps { padding-left: calc(var(--dp) * 20); }
 
 /* ---- Dialogs, notices, the first run ---- */

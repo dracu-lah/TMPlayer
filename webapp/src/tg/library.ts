@@ -964,7 +964,8 @@ export async function recentPage(tg: TelegramClient, view: ListView, mode: 'open
     const shown = [...st.videos.values()]
         .filter((v) => v.date >= edge && (!gate || gate.has(v.chatId)))
         .sort((a, b) => b.date - a.date || b.messageId - a.messageId)
-    const shelf = r.shelf(shown, 'Newest', view.minBytes, view.maxBytes, view.watched, view.started)
+    // The same floor as Home's row (SizeFilter.HOME_MIN), said on the page.
+    const shelf = r.shelf(shown, 'Newest', r.sizeHomeMin(view.minBytes), view.maxBytes, view.watched, view.started)
     return {
         tiles: tilesOf(shelf, st.items, view),
         hiddenBySize: shelf.hiddenBySize,
