@@ -139,7 +139,8 @@ input:not([type=range]):not([type=radio]):not([type=checkbox]) {
   font: inherit; font-size: 16px; color: var(--fg); background: var(--surface); border: 1px solid var(--line);
   border-radius: var(--r-m); padding: 11px 14px; width: 100%; outline: none;
 }
-input:not([type=range]):not([type=radio]):not([type=checkbox]):focus { border-color: var(--accent); }
+/* The ring is the border in the accent plus a 1 px line outside it: two pixels, clear on every surface. */
+input:not([type=range]):not([type=radio]):not([type=checkbox]):focus { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 
 /*
  * Layout. The page takes the whole width, as the app's do, with the app's gutters: 16 on a phone,
@@ -1269,8 +1270,8 @@ button.primary.danger:disabled { opacity: .4; }
  * buttons stay 40 or 44 to the eye, the hit area grows round them without moving anything.
  */
 @media (pointer: coarse) {
-  .round-button, .icon-button, .see-all, button.tonal { position: relative; }
-  .round-button::after, .icon-button::after, .see-all::after, button.tonal::after {
+  .round-button, .icon-button, .see-all, button.tonal, .history-tab, .outline-button, button.link, a.link { position: relative; }
+  .round-button::after, .icon-button::after, .see-all::after, button.tonal::after, .history-tab::after, .outline-button::after, button.link::after, a.link::after {
     content: ''; position: absolute; left: 50%; top: 50%; width: max(100%, 48px); height: max(100%, 48px);
     transform: translate(-50%, -50%);
   }
@@ -1282,5 +1283,10 @@ button.primary.danger:disabled { opacity: .4; }
 .list-card { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .list-card > .link { align-self: flex-start; }
 .list-name { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 4px; font-size: 13px; color: var(--muted); }
-.list-name input { height: 40px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--fg); font: inherit; font-size: 15px; }
+.list-name input { height: 40px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--fg); font: inherit; font-size: 16px; }
 .list-name input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* Last, so it beats every rule above it: pictures and the sign-in tick arrive at once instead of fading or popping in. */
+@media (prefers-reduced-motion: reduce) {
+  .card-art img, .continue-img, .detail-backdrop, .cast-face img, .chat-picture img, .qr-tick { animation: none; }
+}

@@ -96,23 +96,26 @@ export function Search() {
             </label>
             <Show when={results.error}>
                 <div class="notice error-notice">
-                    <p class="error">{errorText(results.error)}</p>
+                    <p class="error" role="alert">{errorText(results.error)}</p>
                     <button class="link" type="button" onClick={refetch}>{t('common.try_again')}</button>
                 </div>
             </Show>
-            <Show when={results.loading && !found()}>
-                <p class="muted">{t('browse.finding_videos')}</p>
-            </Show>
-            <Show when={found() && !results.loading && found()!.tiles.length}>
-                <p class="muted search-count">{t('search.count', { videos: found()!.videos, chats: found()!.chats })}</p>
-            </Show>
-            <Show when={found() && !results.loading && !found()!.tiles.length}>
-                <p class="muted">{t('search.none', { query: params.q!.trim() })}</p>
-                <Show when={found()!.addedOnly}>
-                    <p class="muted">{t('search.none_added')}</p>
+            {/* One live region that stays, so a screen reader hears the count, the wait or the empty answer as it changes. */}
+            <div class="search-status" role="status">
+                <Show when={results.loading && !found()}>
+                    <p class="muted">{t('browse.finding_videos')}</p>
                 </Show>
-                <A class="link" href="/added-chats">{t('picker.add_more')}</A>
-            </Show>
+                <Show when={found() && !results.loading && found()!.tiles.length}>
+                    <p class="muted search-count">{t('search.count', { videos: found()!.videos, chats: found()!.chats })}</p>
+                </Show>
+                <Show when={found() && !results.loading && !found()!.tiles.length}>
+                    <p class="muted">{t('search.none', { query: params.q!.trim() })}</p>
+                    <Show when={found()!.addedOnly}>
+                        <p class="muted">{t('search.none_added')}</p>
+                    </Show>
+                    <A class="link" href="/added-chats">{t('picker.add_more')}</A>
+                </Show>
+            </div>
             <VideoList cards={found()?.tiles.map((tile) => tileCard(tile, true)) ?? []} label={t('common.search')} />
             {/* The ways to search further come after the results, so Down from the field reaches the first video on a
                 remote and nothing that can take the focus stands between them (tv.spec, Search). */}

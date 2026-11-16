@@ -9,7 +9,10 @@ import { openListPicker } from './Lists'
 import { chatGone, forgetGone } from '../goneVideos'
 import { showChoices, type MarkChoice } from './showMarks'
 import { agrees, hasGaps, rows as guideRows, seasons as guideSeasons, type HeldSeason, type Row as GuideRow, type SeasonStop } from './seriesGuide'
+import { scrollBehavior } from '../ui/motion'
 import { Icon, type IconData } from '../ui/Icon'
+import { arrowKeys } from '../ui/arrows'
+import { form } from '../form'
 import { TmdbMark } from '../ui/TmdbMark'
 import { TitleLogo } from '../ui/TitleLogo'
 import { openPosterPicker } from '../ui/PosterPicker'
@@ -73,7 +76,7 @@ export function Detail() {
         <Switch fallback={<div class="detail"><div class="detail-hero" /></div>}>
             <Match when={video.error}>
                 <div class="boot">
-                    <p class="error">{errorText(video.error)}</p>
+                    <p class="error" role="alert">{errorText(video.error)}</p>
                     <button class="primary" onClick={close}>{t('common.back')}</button>
                 </div>
             </Match>
@@ -343,7 +346,7 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
                     </button>
                     <div class="detail-rounds">
                         <Show when={props.info?.seasons.length}>
-                            <Round icon={ListVideoIcon} label={t('detail.episodes')} onClick={() => document.getElementById('detail-episodes')?.scrollIntoView({ behavior: 'smooth' })} />
+                            <Round icon={ListVideoIcon} label={t('detail.episodes')} onClick={() => document.getElementById('detail-episodes')?.scrollIntoView({ behavior: scrollBehavior() })} />
                         </Show>
                         <Show when={resumeAt() > 0}>
                             <Round icon={RepeatIcon} label={t('detail.start_over')} onClick={() => play('start')} />
@@ -466,10 +469,10 @@ function Versions(props: { item: VideoItem; info: WatchInfo }) {
                 <span class="detail-copy-change">{open() ? t('detail.copy_done') : t('detail.copy_change')}</span>
             </button>
             <Show when={open()}>
-                <ul class="detail-copy-list" role="listbox" aria-label={t('detail.copies_title')}>
+                <ul class="detail-copy-list" role="listbox" aria-label={t('detail.copies_title')} onKeyDown={(e) => form() !== 'tv' && arrowKeys(e, e.currentTarget, '[role=option]', { vertical: true })}>
                     <For each={props.info.copies}>
                         {(c) => (
-                            <li>
+                            <li role="presentation">
                                 <button type="button" role="option" class="detail-copy" aria-selected={c === here()} onClick={() => pick(c)}>
                                     <span class="detail-copy-text">
                                         <span class="detail-copy-line">{heading(c)}</span>
@@ -673,7 +676,7 @@ function Episodes(props: { info: WatchInfo; current: VideoItem; extras: Extras |
                     <button class="link" type="button" onClick={() => marks.close()}>{t('common.cancel')}</button>
                 </div>
             </dialog>
-            <div class="season-tabs" role="tablist">
+            <div class="season-tabs" role="tablist" onKeyDown={(e) => form() !== 'tv' && arrowKeys(e, e.currentTarget, '[role=tab]', { press: true })}>
                 <For each={stops()}>
                     {(s) => (
                         <button role="tab" class="season-chip" classList={{ on: s.number === shown(), quiet: s.state !== 'have' }} aria-selected={s.number === shown()} onClick={() => setPicked(s.number)}>

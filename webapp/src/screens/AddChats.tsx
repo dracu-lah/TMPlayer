@@ -345,7 +345,7 @@ export function AddChats() {
             </div>
             <Show when={failed()}>
                 <div class="notice error-notice">
-                    <p class="error">{t('chats.some_not_loaded')}</p>
+                    <p class="error" role="alert">{t('chats.some_not_loaded')}</p>
                     <button class="link" type="button" onClick={retry}>{t('common.try_again')}</button>
                 </div>
             </Show>
@@ -446,7 +446,7 @@ function PickerStar(props: { chatId: number; onStar: () => void }) {
     const on = () => starredIds().has(props.chatId)
     const label = () => (on() ? t('chats.unfavourite') : t('chats.favourite'))
     return (
-        <button class="icon-button star" classList={{ on: on() }} type="button" aria-pressed={on()} aria-label={label()} title={label()} onClick={() => { props.onStar(); setStarred(props.chatId, !on()) }}>
+        <button class="icon-button star" classList={{ on: on() }} type="button" aria-label={label()} title={label()} onClick={() => { props.onStar(); setStarred(props.chatId, !on()) }}>
             <Icon icon={StarIcon} size={22} selected={on()} />
         </button>
     )

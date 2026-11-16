@@ -298,7 +298,12 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
     const poke = () => {
         clearTimeout(hideTimer)
         if (v.paused || held() || sheet() || dragTime() !== null || c.blocked()) return
-        hideTimer = window.setTimeout(() => setVisible(false), HIDE_MS)
+        hideTimer = window.setTimeout(() => (keyboardOnRow() ? poke() : setVisible(false)), HIDE_MS)
+    }
+    /** A keyboard user's ring must not vanish under them: the row stays up while one of its controls has the keyboard. */
+    const keyboardOnRow = () => {
+        const a = document.activeElement
+        return !tv() && a instanceof HTMLElement && !!c.root.querySelector('.pc-layer')?.contains(a) && a.matches(':focus-visible')
     }
     function show() {
         if (locked()) return
@@ -1371,7 +1376,8 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                 }}
             />
 
-            <div class="pc-layer" aria-hidden={!visible() || undefined}>
+            {/* Tab into a row that has gone brings it back, so the ring is never on a control nobody sees. */}
+            <div class="pc-layer" aria-hidden={!visible() || undefined} inert={!tv() && sheet() !== null} on:focusin={() => !tv() && !visible() && show()}>
                 <div class="pc-tint" />
                 <div class="pc-scrim top" />
                 <div class="pc-scrim bottom" />

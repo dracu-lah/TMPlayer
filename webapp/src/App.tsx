@@ -134,7 +134,7 @@ function Shell(props: ParentProps) {
             <Switch fallback={<Boot />}>
                 <Match when={error()}>
                     <div class="boot">
-                        <p class="error">{error()}</p>
+                        <p class="error" role="alert">{error()}</p>
                         <button class="primary" onClick={() => window.location.reload()}>{t('common.try_again')}</button>
                     </div>
                 </Match>
@@ -144,8 +144,8 @@ function Shell(props: ParentProps) {
                         <ErrorBoundary
                             fallback={(e, reset) => (
                                 <div class="boot">
-                                    <p class="error">{errorText(e)}</p>
-                                    <button class="primary" onClick={reset}>Try again</button>
+                                    <p class="error" role="alert">{errorText(e)}</p>
+                                    <button class="primary" onClick={reset}>{t('common.try_again')}</button>
                                 </div>
                             )}
                         >
@@ -220,7 +220,8 @@ function OtherTab() {
             <img class="boot-mark" src="/icon.svg" alt="" width="64" height="64" />
             <h1 id="other-tab-title">{t('web.other_tab_title')}</h1>
             <p class="muted">{t('web.other_tab_body')}</p>
-            <button class="primary" type="button" onClick={useHere}>{t('web.use_here')}</button>
+            {/* An alert dialog takes the keyboard: Enter on its one button works at once. */}
+            <button class="primary" type="button" ref={(el) => queueMicrotask(() => el.focus())} onClick={useHere}>{t('web.use_here')}</button>
         </div>
     )
 }

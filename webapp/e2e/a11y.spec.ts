@@ -25,13 +25,15 @@ test.describe('axe on the main screens', () => {
         ['Home', '/', 'main'],
         ['Chats', '/chats', 'a[href^="/chat/"]'],
         ['a chat', '/chat/-1001', '.card'],
-        ['Search', '/search?q=Clip', '.card'],
+        ['Search', '/search', '.card'],
         ['History', '/history', 'main'],
         ['Settings', '/settings/appearance', 'main'],
         ['a video page', '/video/-1001/1', '.detail-title'],
     ] as const)
         test(name, async ({ page }) => {
             await page.goto(path)
+            // A search opened by its address starts empty on purpose (a reload never brings an old one back): type the words.
+            if (name === 'Search') await page.getByRole('searchbox').fill('Clip')
             await expect(page.locator(ready).first()).toBeVisible()
             await page.waitForTimeout(500)
             await audit(page, name)
@@ -47,16 +49,59 @@ test.describe('axe on the main screens', () => {
     })
 })
 
+// R9: where the system asks for less motion, pictures arrive at once and a scroll the page starts jumps.
+test('reduced motion: pictures do not fade in', async ({ page }) => {
+    await page.goto('/chats')
+    await expect(page.locator('main').first()).toBeVisible()
+    const names = async () =>
+        page.evaluate(() => {
+            const box = document.createElement('div')
+            box.innerHTML = '<div class="card-art"><img alt=""></div><img class="continue-img" alt=""><img class="detail-backdrop" alt=""><div class="cast-face"><img alt=""></div><div class="chat-picture"><img alt=""></div>'
+            document.body.append(box)
+            const out = [...box.querySelectorAll('img')].map((i) => getComputedStyle(i).animationName)
+            box.remove()
+            return out
+        })
+    await page.emulateMedia({ reducedMotion: 'no-preference' })
+    expect((await names()).every((n) => n === 'fade')).toBe(true)
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    expect(await names()).toEqual(['none', 'none', 'none', 'none', 'none'])
+})
+
+// R9: the sort menu is keyboard whole: Enter opens it on its first line, the arrows walk, Escape or a pick gives the keyboard back to its button.
+test('the sort menu opens on its first line, walks on arrows and hands the keyboard back', async ({ page }) => {
+    await noSizeFloor(page)
+    await page.goto('/chat/-1001')
+    await expect(page.locator('.card').first()).toBeVisible()
+    const trigger = page.getByRole('button', { name: 'Sort videos by' }).first()
+    await trigger.focus()
+    await page.keyboard.press('Enter')
+    const items = page.getByRole('menuitemradio')
+    await expect(items.first()).toBeFocused()
+    await page.keyboard.press('ArrowDown')
+    await expect(items.nth(1)).toBeFocused()
+    await page.keyboard.press('End')
+    await expect(page.locator('[role^=menuitem]').last()).toBeFocused()
+    await page.keyboard.press('Escape')
+    await expect(items.first()).toHaveCount(0)
+    await expect(trigger).toBeFocused()
+    await page.keyboard.press('Enter')
+    await page.keyboard.press('ArrowDown')
+    await page.keyboard.press('Enter')
+    await expect(items.first()).toHaveCount(0)
+    await expect(trigger).toBeFocused()
+})
+
 // U19: under a finger the small round buttons answer a 48 px square, though they look 40 or 44.
 test('small controls answer 48 px under a finger', async ({ page, isMobile }) => {
     test.skip(!isMobile, 'a touch screen only')
     await noSizeFloor(page)
-    for (const path of ['/chats', '/chat/-1001']) {
+    for (const path of ['/chats', '/chat/-1001', '/history', '/lists']) {
         await page.goto(path)
-        await expect(page.locator('.round-button').first()).toBeVisible()
+        await expect(page.locator('main').first()).toBeVisible()
         await page.waitForTimeout(500)
         const misses = await page.evaluate(() =>
-            [...document.querySelectorAll<HTMLElement>('.round-button, .icon-button, .see-all, button.tonal')]
+            [...document.querySelectorAll<HTMLElement>('.round-button, .icon-button, .see-all, button.tonal, .history-tab, .outline-button, button.link, a.link')]
                 .filter((el) => el.getBoundingClientRect().width > 0)
                 .flatMap((el) => {
                     const r = el.getBoundingClientRect()

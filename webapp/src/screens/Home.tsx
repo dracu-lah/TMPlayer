@@ -7,6 +7,7 @@ import { t } from '../i18n'
 import { addedIds, addedMode, addedView, namedLists, progress, rememberHomeChats, resumes, settings, starredIds, watchedTick } from '../store'
 import { arrangeOrder, parseOrder } from '../ui/homeOrder'
 import { forgetGone } from '../goneVideos'
+import { scrollBehavior } from '../ui/motion'
 import { Icon } from '../ui/Icon'
 import { KeepPlaceCard } from './KeepPlaceCard'
 import { useObservedCovers } from './promo'
@@ -91,14 +92,14 @@ export function Home() {
             </Show>
             {/* Offline with nothing to show: the Reload card says so (R4), instead of a row of cards that cannot load. */}
             <Show when={!online() && !page()?.rows.length}>
-                <div class="notice error-notice" role="status">
-                    <p class="error">{t('errors.offline')}</p>
+                <div class="notice error-notice">
+                    <p class="error" role="alert">{t('errors.offline')}</p>
                     <button class="link" type="button" onClick={load}>{t('common.reload')}</button>
                 </div>
             </Show>
             <Show when={error() && online() && !page()?.rows.length}>
                 <div class="notice error-notice">
-                    <p class="error">{errorText(error())}</p>
+                    <p class="error" role="alert">{errorText(error())}</p>
                     <button class="link" type="button" onClick={load}>{t('common.try_again')}</button>
                 </div>
             </Show>
@@ -218,7 +219,7 @@ function Row(props: { row: HomeRow; selfId: number | null }) {
         setAtEnd(strip.scrollLeft + strip.clientWidth >= strip.scrollWidth - 1)
     }
     createEffect(on(cards, () => queueMicrotask(edges)))
-    const scroll = (dir: 1 | -1) => strip?.scrollBy({ left: dir * strip.clientWidth * 0.9, behavior: 'smooth' })
+    const scroll = (dir: 1 | -1) => strip?.scrollBy({ left: dir * strip.clientWidth * 0.9, behavior: scrollBehavior() })
     const id = `row-${props.row.key}`
     const seeAll = () => seeAllOf(props.row)
     // Recently added's page says "in starred chats" as the row does, from its first frame.
