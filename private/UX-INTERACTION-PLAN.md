@@ -795,3 +795,9 @@ Next session: run `:app:testDebugUnitTest` and `:desktop:test` in full (per modu
 - Next: after merge remove `Thread.sleep(3)` in DownloadsSelectionKeysTest (file only on main); desktop TrackLanguageSettings Forget all confirm (desktop-ui-3); translate the 2 new keys.
 - Gotchas: worktrees need local.properties copied from the main tree (gitignored) to build :app. The sync switch is under Library here, not Account; nothing moved.
 - Decision: tie-break is ascending key; Forget all gets a confirm (not Undo) because the sheet stays open under it.
+
+### Worker handoff: R4 review, desktop-ui-2
+- Done: c376561 (dims and palette not Tab stops, rows buttons), 39e08c1 (CheckRow, picker rows), 9196edc (poster keeps buttons under child focus, Play disc button, show poster role, season menu), a70f4e0 (key/sign-in/rename dialogs focus and Enter, ControlReviewR4Test), review notes in private/ux-review/desktop-ui-2.md. Main merged in locally after.
+- Next: Settings.kt L819 could use CheckRow (R3's file); show-password toggle on the Opensubtitles sign in dialog needs a design call.
+- Gotchas: 39e08c1 alone does not compile (uses FocusWhenShown, added in a70f4e0). Material controls get keyboard marks from ProvideFocusVisibility only (state layer).
+- Decisions: used R1's scrimDismiss and added swallowClicks beside it; palette rows made non-focusable (field keeps the keyboard); left settings files to R3.
