@@ -69,6 +69,11 @@ object LocalDownloads {
             presentVideo(runCatching { settings.downloadRecord(chatId, messageId) }.getOrNull())
         }
 
+    /** The records of every download whose file is really there, as Offline Home's "On this phone" row draws them. */
+    suspend fun presentRecords(settings: SettingsStore): List<ResumeRecord> = withContext(Dispatchers.IO) {
+        runCatching { settings.downloadsNow() }.getOrDefault(emptyList()).filter { presentVideo(it) != null }
+    }
+
     /** [MediaItem.id] of every present download, for the grid to tell Downloaded from Cached. */
     suspend fun presentIds(settings: SettingsStore): Set<String> = withContext(Dispatchers.IO) {
         runCatching { settings.downloadsNow() }.getOrDefault(emptyList())

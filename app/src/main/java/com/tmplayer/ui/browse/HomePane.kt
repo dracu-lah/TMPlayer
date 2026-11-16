@@ -98,6 +98,7 @@ import com.tmplayer.ui.components.isTouch
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.icons.TmIcons
 import com.tmplayer.ui.online.LocalOnlineArt
+import com.tmplayer.data.OfflineHomeRows
 import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.Tv
@@ -196,6 +197,13 @@ internal fun HomePane(
 ) {
     val s = LocalStrings.current
     val touch = isTouch()
+    // Offline (R4): a press on a card that cannot play with no line opens its page, which says so,
+    // instead of starting something that fails after the press.
+    val offlineHome = LocalOfflineHome.current
+    val onPlay = remember(offlineHome, onPlay, onDetails) { offlineHome.gate(onPlay, onDetails) }
+    val onPlayNow = remember(offlineHome, onPlayNow, onDetails) { offlineHome.gate(onPlayNow, onDetails) }
+    val onResume = remember(offlineHome, onResume, onDetails) { offlineHome.gateResume(onResume, onDetails) }
+    val onOpenWatchLater = remember(offlineHome, onOpenWatchLater, onDetails) { offlineHome.gateLater(onOpenWatchLater, onDetails) }
     // On a phone the page runs up under the status bar (see LocalUnderStatusBar).
     val under = if (touch) LocalUnderStatusBar.current else 0.dp
     if (rows.isEmpty() && allOff) {
@@ -250,8 +258,17 @@ internal fun HomePane(
     val recent = rows.firstNotNullOfOrNull { it as? HomeRow.Recent }
     // Off in Settings, nothing is picked or turned over for it either.
     // It leads with the video being watched (PL-1): see [rememberFeatured].
-    val featured = rememberFeatured(recent.takeIf { carouselOn }, rows.firstNotNullOfOrNull { it as? HomeRow.Continue }.takeIf { carouselOn }, art)
-    val carousel = carouselOn && recent != null && featured?.isEmpty() != true
+    val onlineFeatured = rememberFeatured(recent.takeIf { carouselOn }, rows.firstNotNullOfOrNull { it as? HomeRow.Continue }.takeIf { carouselOn }, art)
+    // Offline the hero is the first video on this phone, and with none there is no hero (R4).
+    val offlineHero = remember(rows, offlineHome.offline) {
+        if (!offlineHome.offline) {
+            null
+        } else {
+            OfflineHomeRows.hero(rows)?.let { listOf(com.tmplayer.data.FeaturedPick(com.tmplayer.data.ShelfEntry.File(it.toMediaItem()))) }.orEmpty()
+        }
+    }
+    val featured = offlineHero ?: onlineFeatured
+    val carousel = carouselOn && (recent != null || offlineHero != null) && featured?.isEmpty() != true
     // With no carousel the rows are the whole first screen; with one, its first picture tells
     // HomeFirstPaint (through the carousel), so the loader lifts over a finished Home.
     // Not at once: the starred chats' row can arrive a moment after the rest, bringing the carousel
@@ -692,6 +709,7 @@ internal fun HomePane(
                                             heldContinue = key to row.records.indexOf(record)
                                             onHoldMedia(item, chat)
                                         },
+                                        needsInternet = offlineHome.offline && !offlineHome.plays(record.chatId, record.messageId),
                                         modifier = Modifier.width(continueWidth(touch))
                                             .then(if (isFirst && record === row.records.first()) Modifier.focusRequester(first) else Modifier)
                                             .then(if (record === continueStandIn) Modifier.focusRequester(continueRefocus) else Modifier),
@@ -709,7 +727,7 @@ internal fun HomePane(
                                     LaunchedEffect(record.key) { onLaterArtWanted(record) }
                                     val known = art[record.key] ?: remember(record) { record.toMediaItem() }
                                     // Offline: a video in Downloads says so, as every grid tile does (PL-13).
-                                    val downloaded = record.key in LocalOfflineDownloads.current
+                                    val downloaded = offlineHome.offline && record.key in offlineHome.downloadedKeys
                                     val item = remember(known, downloaded) { if (downloaded) known.withLocality(MediaItem.Locality.Downloaded) else known }
                                     val holdShow = LocalSeriesHold.current
                                     val stub = remember(record) { record.stubSeries() }
@@ -726,6 +744,7 @@ internal fun HomePane(
                                             { onHoldMedia(item, record.chatTitle.ifEmpty { chatTitle(record.chatId) }) }
                                         },
                                         dense = touch,
+                                        needsInternet = !record.isShow && offlineHome.offline && !offlineHome.plays(item),
                                         modifier = Modifier.width(wideWidth(touch))
                                             .then(if (isFirst && record === laterRecords.first()) Modifier.focusRequester(first) else Modifier),
                                     )
@@ -747,6 +766,7 @@ internal fun HomePane(
                                         dense = touch,
                                         title = if (episode.show.isBlank()) episode.code else "${episode.show}  ·  ${episode.code}",
                                         badge = { NewBadge(compact = touch) },
+                                        needsInternet = offlineHome.needsInternet(item),
                                         meta = { ink -> CaptionLine(telegramFacts(chat, item), ink) },
                                         modifier = Modifier.width(wideWidth(touch))
                                             .then(if (isFirst && episode === row.episodes.first()) Modifier.focusRequester(first) else Modifier),
@@ -1139,6 +1159,7 @@ private fun ShelfTile(
             onLongClick = { onHold(entry.item, chatTitle(entry.item.chatId)) },
             dense = touch,
             poster = poster,
+            needsInternet = LocalOfflineHome.current.needsInternet(entry.item),
             // Its first bytes asked for while the card is in focus or under the finger.
             modifier = modifier,
         )

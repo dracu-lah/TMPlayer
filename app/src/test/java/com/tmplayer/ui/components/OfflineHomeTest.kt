@@ -8,10 +8,12 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.tmplayer.data.FormFactor
+import com.tmplayer.data.OfflineHome
 import com.tmplayer.data.ResumeRecord
 import com.tmplayer.i18n.L
 import com.tmplayer.ui.browse.ContinueCardArt
-import com.tmplayer.ui.browse.LocalOfflineDownloads
+import com.tmplayer.ui.browse.LocalOfflineHome
+import com.tmplayer.ui.connect.OfflineBanner
 import com.tmplayer.ui.theme.Motion
 import com.tmplayer.ui.theme.TMPlayerTheme
 import org.junit.After
@@ -23,7 +25,10 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/** Offline Home (PL-13): the Offline pill leads to Downloads on a touch screen, and cards in Downloads say so. */
+/**
+ * Offline Home (PL-13, R4): the offline card leads to Downloads where Downloads is a place to go,
+ * has Try again, and cards in Downloads say Downloaded.
+ */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -45,28 +50,27 @@ class OfflineHomeTest {
     )
 
     @Test
-    fun `the offline pill opens Downloads on a touch screen`() {
+    fun `the offline card says so and opens Downloads on a touch screen`() {
         FormFactor.override(false)
         Motion.reduced = true
         var opened = 0
         rule.setContent {
-            TMPlayerTheme {
-                ConnectionStatus(ConnectionNotice.Offline, onOpenDownloads = { opened++ })
-            }
+            TMPlayerTheme { OfflineBanner(onOpenDownloads = { opened++ }) }
         }
+        rule.onNodeWithText(L.stateOffline).assertIsDisplayed()
+        rule.onNodeWithText(L.commonRetry).assertIsDisplayed()
         rule.onNodeWithText(L.downloadsTitle).assertIsDisplayed().performClick()
         assertEquals(1, opened)
     }
 
     @Test
-    fun `the offline pill stays passive on a television`() {
+    fun `the offline card on a television has Try again and no Downloads button`() {
         FormFactor.override(true)
         Motion.reduced = true
         rule.setContent {
-            TMPlayerTheme {
-                ConnectionStatus(ConnectionNotice.Offline, onOpenDownloads = { })
-            }
+            TMPlayerTheme { OfflineBanner(onOpenDownloads = null) }
         }
+        rule.onNodeWithText(L.commonRetry).assertIsDisplayed()
         rule.onNodeWithText(L.downloadsTitle).assertDoesNotExist()
     }
 
@@ -75,7 +79,7 @@ class OfflineHomeTest {
         Motion.reduced = true
         rule.setContent {
             TMPlayerTheme {
-                CompositionLocalProvider(LocalOfflineDownloads provides setOf("-100_7")) {
+                CompositionLocalProvider(LocalOfflineHome provides OfflineHome(true, downloads = listOf(record))) {
                     ContinueCardArt(record, record.toMediaItem())
                 }
             }
@@ -86,9 +90,10 @@ class OfflineHomeTest {
     @Test
     fun `a continue card not in Downloads, or online, has no badge`() {
         Motion.reduced = true
+        val other = record.copy(messageId = 8)
         rule.setContent {
             TMPlayerTheme {
-                CompositionLocalProvider(LocalOfflineDownloads provides setOf("-100_8")) {
+                CompositionLocalProvider(LocalOfflineHome provides OfflineHome(true, downloads = listOf(other))) {
                     ContinueCardArt(record, record.toMediaItem())
                 }
             }

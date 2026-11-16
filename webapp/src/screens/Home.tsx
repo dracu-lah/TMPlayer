@@ -2,7 +2,7 @@ import { createEffect, createMemo, createResource, createSignal, For, Index, laz
 import { A } from '@solidjs/router'
 import { ArrowLeft01Icon, ArrowRight01Icon, UserAdd01Icon } from '@hugeicons/core-free-icons'
 import { call, errorText } from '../tg/rpc'
-import { onBackOnline } from '../net'
+import { online, onBackOnline } from '../net'
 import { t } from '../i18n'
 import { addedIds, addedMode, addedView, namedLists, progress, rememberHomeChats, resumes, settings, starredIds, watchedTick } from '../store'
 import { arrangeOrder, parseOrder } from '../ui/homeOrder'
@@ -88,7 +88,14 @@ export function Home() {
                     <TvHero rows={page()?.rows} />
                 </Show>
             </Show>
-            <Show when={error() && !page()?.rows.length}>
+            {/* Offline with nothing to show: the Reload card says so (R4), instead of a row of cards that cannot load. */}
+            <Show when={!online() && !page()?.rows.length}>
+                <div class="notice error-notice" role="status">
+                    <p class="error">{t('errors.offline')}</p>
+                    <button class="link" type="button" onClick={load}>{t('common.reload')}</button>
+                </div>
+            </Show>
+            <Show when={error() && online() && !page()?.rows.length}>
                 <div class="notice error-notice">
                     <p class="error">{errorText(error())}</p>
                     <button class="link" type="button" onClick={load}>{t('common.try_again')}</button>

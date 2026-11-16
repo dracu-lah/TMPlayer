@@ -1006,11 +1006,12 @@ private fun Root() {
     var connectionNotice by remember { mutableStateOf(ConnectionNotice.Hidden) }
     var wasOffline by remember { mutableStateOf(false) }
     var wasDisconnected by remember { mutableStateOf(false) }
-    LaunchedEffect(networkStatus, telegramConnected, auth) {
-        val effectivelyOffline = networkStatus == NetworkStatus.Offline && !telegramConnected
+    // Offline as the screens believe it: held for 2 s each way by the host (OfflineSettle), so the
+    // banner and Home's cards never flash on a flaky link (R4).
+    val settledOffline = com.tmplayer.ui.browse.LocalOfflineHome.current.offline
+    LaunchedEffect(settledOffline, networkStatus, telegramConnected, auth) {
         when {
-            effectivelyOffline -> {
-                delay(OFFLINE_SETTLE_MS)
+            settledOffline -> {
                 wasOffline = true
                 connectionNotice = ConnectionNotice.Offline
             }
@@ -2295,7 +2296,23 @@ private fun Root() {
                 val holder = rememberSaveableStateHolder()
                 // The end a pushed screen comes in from: the right, or the left in a right to left language.
                 val endSign = if (androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl) -1 else 1
-                TouchNavHost(nav = touchNav, chrome = touchChrome, pageKey = TouchScreens.key(screen)) {
+                TouchNavHost(
+                    nav = touchNav,
+                    chrome = touchChrome,
+                    pageKey = TouchScreens.key(screen),
+                    // The connection notice stands above the bar, never over it, and the pages make
+                    // room for it (R4, 9.1): Offline is a card with Try again and Downloads.
+                    bannerShown = connectionNotice != ConnectionNotice.Hidden && auth is AuthState.Ready,
+                    banner = {
+                        if (connectionNotice == ConnectionNotice.Offline) {
+                            com.tmplayer.ui.connect.OfflineBanner(
+                                onOpenDownloads = openDownloads.takeIf { screen !is Screen.Downloads },
+                            )
+                        } else {
+                            ConnectionStatus(notice = connectionNotice)
+                        }
+                    },
+                ) {
                     AnimatedContent(
                         targetState = screen,
                         contentKey = { TouchScreens.key(it) },
@@ -2514,14 +2531,35 @@ private fun Root() {
         }
         supporting?.let { SupportDialog(onClose = { supporting = null }) }
 
-        ConnectionStatus(
-            notice = connectionNotice,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 20.dp),
-            // Offline, the way to a video that plays: Downloads (not from Downloads itself).
-            onOpenDownloads = openDownloads.takeIf { screen !is Screen.Downloads && auth is AuthState.Ready },
-        )
+        // The phone's notice stands in the floating bar's host, above the bar (TouchNavHost's banner).
+        // Elsewhere the pills keep the foot of the screen and Offline is the card at the top (R4).
+        if (FormFactor.isTv(context)) {
+            ConnectionStatus(
+                notice = connectionNotice,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 20.dp),
+            )
+        }
+        if (connectionNotice == ConnectionNotice.Offline && auth is AuthState.Ready && FormFactor.isTv(context)) {
+            com.tmplayer.ui.connect.OfflineBanner(
+                modifier = if (FormFactor.isTv(context)) {
+                    // On a TV, in the Connect banner's place: Up from the bar goes into it (HX22).
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .zIndex(2f)
+                        .padding(top = com.tmplayer.ui.theme.Tv.SafeV, end = com.tmplayer.ui.theme.Tv.SafeH)
+                        .widthIn(max = TV_BANNER_MAX)
+                } else {
+                    Modifier
+                        .align(Alignment.TopCenter)
+                        .zIndex(2f)
+                        .windowInsetsPadding(WindowInsets.statusBars)
+                        .padding(top = 8.dp, start = 16.dp, end = 16.dp)
+                },
+                onOpenDownloads = openDownloads.takeIf { !FormFactor.isTv(context) && screen !is Screen.Downloads },
+            )
+        }
         // Over the connection notice's place, a little higher when both are up.
         com.tmplayer.ui.components.StartingStatus(
             Modifier
@@ -2554,8 +2592,6 @@ private fun Root() {
         com.tmplayer.ui.connect.ProxyScreenHost()
     }
 }
-
-private const val OFFLINE_SETTLE_MS = 750L
 
 /** The connection banner's width on a TV, clear of the bar's tabs at the start. */
 private val TV_BANNER_MAX = 440.dp
