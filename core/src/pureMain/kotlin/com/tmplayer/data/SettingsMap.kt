@@ -241,13 +241,13 @@ object SettingsMap {
         row("privacy_page", lock, "about.privacy", PTD, listOf("settings.privacy_detail"), desktopTitle = "settings.privacy")
         row("crash_reports", lock, "settings.crash_reports", PTD, onOff("settings.crash_reports"), SettingsNeed.CrashReports)
         row("devices", lock, "settings.devices", PTD, listOf("settings.devices_detail"))
+        row("resume_sync", lock, "syncplace.switch", PTD, onOff("syncplace.switch"))
         row("sign_out", lock, "settings.sign_out", PTD, keywords = true)
 
         val lib = SettingsGroup.Library
         row("open_last_chat", lib, "settings.open_last_chat", PTD)
         row("forget_last_chat", lib, "settings.forget_last_chat", PTD, need = SettingsNeed.State)
         row("remember_searches", lib, "settings.remember_searches", PTD, onOff("settings.remember_searches"))
-        row("resume_sync", lib, "settings.resume_sync", PTD, onOff("settings.resume_sync"))
         row("resume_sync_delete", lib, "settings.resume_sync_delete", PTD, need = SettingsNeed.State)
         row("chosen_chats", lib, "picker.row_title", PTD)
         row("clear_favourites", lib, "settings.clear_favourites", PTD, need = SettingsNeed.State)

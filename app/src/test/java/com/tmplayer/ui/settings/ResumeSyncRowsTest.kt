@@ -102,6 +102,7 @@ class ResumeSyncRowsTest {
         show(tv = false)
         reveal(hasText(SWITCH))
         // The privacy line is the switch's words, so nobody has to open anything to know what goes where.
+        reveal(hasText("Only TMPlayer's own data goes into one file in your own Saved Messages", substring = true))
         rule.onNodeWithText("Only TMPlayer's own data goes into one file in your own Saved Messages", substring = true).assertExists()
         rule.onAllNodesWithText("Sync now").assertCountEquals(0)
 
