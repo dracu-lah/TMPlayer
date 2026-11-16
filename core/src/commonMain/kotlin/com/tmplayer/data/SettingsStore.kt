@@ -1346,11 +1346,16 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
     /**
      * Picks the answer and keeps the old Wi-Fi only switch in step with it (Never is on, the others
      * off), so a backup restored on a build before R2 holds back exactly what this one does.
+     *
+     * Also ends the old "Save mobile data" streaming bound: its row is gone, so a stored true could
+     * never be turned off again, and Allow would still have limited every stream. A pick is the
+     * viewer's one answer about mobile data, so the old key is removed (it maps once, here).
      */
     suspend fun setMobileData(value: MobileData) {
         prefs.edit {
             it[MOBILE_DATA] = value.stored
             it[WIFI_ONLY] = value == MobileData.Never
+            it.remove(SAVE_MOBILE_DATA)
         }
     }
 

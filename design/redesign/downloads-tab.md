@@ -61,7 +61,7 @@ Mobile data, the stored values (`MobileDataPolicy`):
 
 Picking writes `mobile_data` and keeps the old keys in step (`wifi_only_downloads` = Never; the others clear it), so a
 restore on an older build still behaves. "Save mobile data" (a streaming bound) keeps its stored value and its effect for
-the people who set it; it is no longer shown.
+the people who set it until they pick an answer: any pick removes the key, so Allow really lifts the bound.
 - **Ask first**: a video that has to be streamed over 300 MB on mobile data asks once per session (today's default, in the
   player). A download is the viewer's own press and is not asked about.
 - **Never**: nothing that is not already on the phone starts on mobile data: a stream says so with the way out, a download
