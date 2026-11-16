@@ -60,7 +60,6 @@ import androidx.compose.ui.semantics.stateDescription
 import com.tmplayer.ui.icons.TmIcons
 import com.tmplayer.ui.theme.Focus
 import com.tmplayer.data.SettingsStore
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
@@ -1788,7 +1787,7 @@ private fun TickedCard(ticked: Boolean?, row: Boolean, content: @Composable () -
  * all are), Remove (n) and Done. On a television Up from the first row reaches it.
  */
 @Composable
-private fun HistorySelectionBar(
+internal fun HistorySelectionBar(
     count: Int,
     all: Boolean,
     insets: BrowseInsets,
@@ -1813,6 +1812,14 @@ private fun HistorySelectionBar(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
+            if (rememberLargeFont()) {
+                // At a large font the words would push the count out of the row, and the count is
+                // what the viewer needs to see: the two actions shrink to icons with their names.
+                val toggleLabel = if (all) s.browseSelectNone else s.browseSelectAll
+                IconButton(onClick = if (all) onSelectNone else onSelectAll) { M3Icon(TmIcons.Check, contentDescription = toggleLabel) }
+                IconButton(onClick = onRemove, enabled = count > 0) { M3Icon(TmIcons.Delete, contentDescription = removeLabel) }
+                return
+            }
             androidx.compose.material3.TextButton(onClick = if (all) onSelectNone else onSelectAll) {
                 M3Text(if (all) s.browseSelectNone else s.browseSelectAll, maxLines = 1)
             }
@@ -1919,7 +1926,7 @@ internal fun AccountPicture(account: Account?) {
  * and an icon with no name is a button nobody can identify.
  */
 @Composable
-private fun HeaderAction(
+internal fun HeaderAction(
     label: String,
     icon: ImageVector,
     onClick: () -> Unit,
@@ -1929,7 +1936,7 @@ private fun HeaderAction(
     val focused by interactions.collectIsFocusedAsState()
     val background by animateColorAsState(
         targetValue = if (focused) Tone.focusFill else Tone.surface,
-        animationSpec = tween(140),
+        animationSpec = Motion.standard(Motion.Fast),
         label = "headerAction",
     )
     val foreground = if (focused) Tone.onFocusFill else Tone.text
@@ -1942,13 +1949,14 @@ private fun HeaderAction(
                 .clip(CircleShape)
                 .background(background)
                 .focusRing(focused, CircleShape)
-                .clickable(interactionSource = interactions, indication = null, onClick = onClick)
+                .clickable(interactionSource = interactions, indication = null, role = Role.Button, onClick = onClick)
                 // Even padding with no words, so a wordless chip comes out round rather than wide.
                 .padding(horizontal = if (showLabel) 18.dp else 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center,
         ) {
-            Icon(icon, contentDescription = label, tint = foreground, modifier = Modifier.size(20.dp))
+            // Named once: by the words beside it, or by itself when it stands alone.
+            Icon(icon, contentDescription = if (showLabel) null else label, tint = foreground, modifier = Modifier.size(20.dp))
             if (showLabel) {
                 Spacer(Modifier.width(8.dp))
                 Text(label, style = MaterialTheme.typography.bodyLarge, color = foreground, maxLines = 1)
@@ -2285,7 +2293,7 @@ private fun TvChip(chip: ChipSpec) {
             chip.selected -> Tone.accent.copy(alpha = 0.16f)
             else -> Tone.surfaceHigh
         },
-        animationSpec = tween(FOCUS_FADE_MS),
+        animationSpec = Motion.standard(Motion.Fast),
         label = "chipBackground",
     )
     val foreground = when {
@@ -2319,7 +2327,7 @@ private fun TvChip(chip: ChipSpec) {
 }
 
 @Composable
-private fun PillButton(
+internal fun PillButton(
     label: String,
     icon: ImageVector?,
     /** False draws the icon alone; the label is still what a screen reader says. */
@@ -2330,7 +2338,7 @@ private fun PillButton(
     val focused by interactions.collectIsFocusedAsState()
     val background by animateColorAsState(
         targetValue = if (focused) Tone.focusFill else Tone.surfaceHigh,
-        animationSpec = tween(FOCUS_FADE_MS),
+        animationSpec = Motion.standard(Motion.Fast),
         label = "pillBackground",
     )
     val foreground = if (focused) Tone.onFocusFill else Tone.text
@@ -2343,7 +2351,7 @@ private fun PillButton(
                 .height(48.dp)
                 .clip(CircleShape)
                 .background(background)
-                .clickable(interactionSource = interactions, indication = null, onClick = onClick)
+                .clickable(interactionSource = interactions, indication = null, role = Role.Button, onClick = onClick)
                 // An icon on its own gets even padding, so the pill comes out round rather than wide.
                 .padding(horizontal = if (showLabel) 18.dp else 13.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -2685,7 +2693,7 @@ private const val CHAT_RETURN_SETTLED_FRAMES = 3
  * [modifier] is what sets that width rather than the tile deciding for itself.
  */
 @Composable
-private fun ChatTile(
+internal fun ChatTile(
     chat: ChatSummary,
     favorite: Boolean,
     opensOnLaunch: Boolean,
@@ -2698,6 +2706,7 @@ private fun ChatTile(
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
     PrefetchWhileFocused(chat.id, focused)
+    val tileHeight = recentTileHeight()
 
     val body: @Composable ColumnScope.() -> Unit = {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -2748,7 +2757,7 @@ private fun ChatTile(
             modifier = modifier
                 // Fixed, not wrapped: a chat whose name runs to two lines would otherwise stand
                 // taller than its neighbours and leave the row visibly ragged.
-                .height(RECENT_TILE_HEIGHT)
+                .height(tileHeight)
                 .holdable(interactionSource = interactions, onClick = onClick, onHold = onHold),
             shape = M3MaterialTheme.shapes.large,
             colors = CardDefaults.cardColors(containerColor = Tone.surface),
@@ -2758,7 +2767,7 @@ private fun ChatTile(
     } else {
         Column(
             modifier
-                .height(RECENT_TILE_HEIGHT)
+                .height(tileHeight)
                 .focusGrow(focused, focusScale)
                 .clip(RoundedCornerShape(Corner.Large))
                 .background(if (focused) Tone.surfaceHigh else Tone.surface)
@@ -3118,7 +3127,6 @@ private fun EmptyTab(
 }
 
 private const val RECENT_COUNT = 8
-private const val FOCUS_FADE_MS = 140
 
 /**
  * Shown on the focused row only.
@@ -3129,6 +3137,19 @@ private const val FOCUS_FADE_MS = 140
 private val HOLD_HINT: String get() = L.browseHoldHint
 private val RECENT_TILE_WIDTH = 224.dp
 private val RECENT_TILE_HEIGHT = 154.dp
+
+/** What the tile's two lines of words add to its height for each whole step the font grows past normal. */
+private val RECENT_TILE_TEXT_ROOM = 48.dp
+
+/**
+ * The recent chat tile's height. Fixed so a row of tiles stays level, but taller as the font grows:
+ * at 154 dp the name had 20 dp left at a 1.3 font and was cut off.
+ */
+@Composable
+internal fun recentTileHeight(): androidx.compose.ui.unit.Dp {
+    val scale = LocalDensity.current.fontScale
+    return RECENT_TILE_HEIGHT + RECENT_TILE_TEXT_ROOM * (scale - 1f).coerceIn(0f, 1f)
+}
 
 /**
  * A phone chat row, at Material's list-item metrics.
@@ -3160,7 +3181,7 @@ private fun Modifier.bleed(by: Dp): Modifier = layout { measurable, constraints 
     layout(constraints.maxWidth, placeable.height - extra * 2) { placeable.place(-extra, -extra) }
 }
 
-private class BrowseInsets(val start: Dp, val end: Dp, val top: Dp, val bottom: Dp) {
+internal class BrowseInsets(val start: Dp, val end: Dp, val top: Dp, val bottom: Dp) {
     /** The same insets with [extra] more at the bottom, for something floating over the end of the list. */
     fun clearing(extra: Dp) = BrowseInsets(start, end, top, bottom + extra)
 }
