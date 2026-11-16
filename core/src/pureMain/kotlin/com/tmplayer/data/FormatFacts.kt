@@ -249,11 +249,17 @@ object FormatFacts {
         }
     }
 
-    /** The layout a channel count is known by: "7.1", "5.1", "Stereo"; other counts say nothing. */
+    /**
+     * The text of the stereo layout tag. The one tag that is a word of the viewer's language, so a
+     * screen shows its own translation of it (the others, "5.1" and "Atmos", read the same everywhere).
+     */
+    const val STEREO = "Stereo"
+
+    /** The layout a channel count is known by: "7.1", "5.1", [STEREO]; other counts say nothing. */
     fun channelLayout(channels: Int): String? = when (channels) {
         8 -> "7.1"
         6 -> "5.1"
-        2 -> "Stereo"
+        2 -> STEREO
         else -> null
     }
 
