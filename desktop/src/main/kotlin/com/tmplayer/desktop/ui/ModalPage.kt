@@ -7,9 +7,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusGroup
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
@@ -32,6 +30,7 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.tmplayer.desktop.player.scrimDismiss
 import com.tmplayer.ui.components.LocalBottomChrome
 import com.tmplayer.ui.components.rememberLessMotion
 import com.tmplayer.ui.theme.FloatingTone
@@ -101,7 +100,7 @@ fun ModalPageHost(state: ShellState, content: @Composable () -> Unit) {
                 Modifier
                     .fillMaxSize()
                     .background(FloatingTone.scrim)
-                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { state.closeModal() },
+                    .scrimDismiss { state.closeModal() },
             )
             Surface(
                 shape = if (size.full) RoundedCornerShape(0.dp) else RoundedCornerShape(24.dp),

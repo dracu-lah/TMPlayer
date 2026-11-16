@@ -4,7 +4,6 @@ import com.tmplayer.ui.components.FastScroller
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -84,6 +83,10 @@ import com.tmplayer.data.SearchSort
 import com.tmplayer.data.SeriesShelf
 import com.tmplayer.data.ShelfEntry
 import com.tmplayer.desktop.os.OsInfo
+import com.tmplayer.desktop.player.scrimDismiss
+import com.tmplayer.desktop.player.swallowClicks
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.semantics.Role
 import com.tmplayer.ui.browse.BrowseSection
 import com.tmplayer.ui.browse.BrowseTab
 import com.tmplayer.ui.browse.ChatAvatar
@@ -394,7 +397,7 @@ internal fun BoxScope.SearchPalette(
         Modifier
             .matchParentSize()
             .background(FloatingTone.scrim)
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = ::close),
+            .scrimDismiss(::close),
         contentAlignment = Alignment.TopCenter,
     ) {
         Column(
@@ -404,7 +407,7 @@ internal fun BoxScope.SearchPalette(
                 .fillMaxWidth()
                 .floatingSurface(FloatingTone.dialog, Floating.DialogShape)
                 // A click inside the card is not a click on the scrim.
-                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = {}),
+                .swallowClicks(),
         ) {
             androidx.compose.runtime.CompositionLocalProvider(LocalOnFloating provides true) {
                 Row(
@@ -609,7 +612,9 @@ private fun PaletteLine(
         .fillMaxWidth()
         .clip(RoundedCornerShape(Corner.Medium))
         .onPointerEvent(PointerEventType.Enter) { onHover() }
-        .clickable(onClick = onClick)
+        // The field keeps the keyboard (arrows pick, Enter opens): a row is no Tab stop with nothing to show for it.
+        .focusProperties { canFocus = false }
+        .clickable(role = Role.Button, onClick = onClick)
     when (row) {
         is PaletteRow.Heading -> Text(
             row.text,

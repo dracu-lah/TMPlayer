@@ -84,6 +84,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tmplayer.data.Account
 import com.tmplayer.desktop.os.OsInfo
+import com.tmplayer.desktop.player.scrimDismiss
 import com.tmplayer.ui.browse.BrowseSection
 import com.tmplayer.ui.browse.BrowseTab
 import com.tmplayer.ui.browse.HistoryTab
@@ -487,7 +488,7 @@ private fun BoxScope.ProfilePopover(state: ShellState, update: NavUpdate?, ancho
         Box(
             Modifier
                 .matchParentSize()
-                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { state.profileOpen = false },
+                .scrimDismiss { state.profileOpen = false },
         )
     }
     val favourites by state.settings.favorites.collectAsState(initial = emptySet())

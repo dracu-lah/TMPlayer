@@ -1,6 +1,7 @@
 package com.tmplayer.desktop.player
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.InteractionSource
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.runtime.remember
@@ -9,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.input.pointer.pointerInput
 import com.tmplayer.ui.theme.collectIsFocusVisibleAsState
 import com.tmplayer.ui.theme.focusDrawn
 
@@ -35,3 +37,10 @@ internal fun Modifier.overlayFocusRing(interactions: InteractionSource, shape: S
 internal fun Modifier.scrimDismiss(onClose: () -> Unit): Modifier = this
     .focusProperties { canFocus = false }
     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClose)
+
+/**
+ * A card that sits on a [scrimDismiss] dim: a click inside it is not a click on the dim. A tap
+ * handler rather than a clickable, so the card is no Tab stop with nothing on it and a screen
+ * reader hears no button that does nothing.
+ */
+internal fun Modifier.swallowClicks(): Modifier = this.pointerInput(Unit) { detectTapGestures { } }
