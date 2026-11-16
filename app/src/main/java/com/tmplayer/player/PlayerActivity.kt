@@ -581,6 +581,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             bufferedAheadMs = runCatching { player?.let { (it.bufferedPosition - it.currentPosition).coerceAtLeast(0).toInt() } ?: -1 }.getOrDefault(-1),
             // What the playback trace of this session says (L2): decoder, line, render path, heat or memory.
             verdict = runCatching { com.tmplayer.data.StutterReport.verdictName(traceRecorder.verdict()) }.getOrDefault(com.tmplayer.data.StutterReport.UNKNOWN_VERDICT),
+            // Whether the picture that stuttered was already on a changed path (RL11).
+            remedies = remedies.current?.taken?.joinToString(",") { it.code }.orEmpty(),
+            hops = remedies.current?.hops?.size ?: 0,
         )
         Thread { runCatching { com.tmplayer.data.CrashReports.reportStutter(facts) } }.start()
     }
@@ -2008,6 +2011,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             // The row's picture shape button: the next shape along, as W does on the desktop.
             onCycleShape = { applyScale(videoScale.next()) },
             onLock = ::lockScreen,
+            // Back and forward beside play (R5): ten seconds each way, the figure on the button.
+            onSeekButton = { forward -> jumpFromRemote(forward, fixedStepMs = Skip.BUTTON_MS) },
+            // The words under the six icons for the first openings of the player, then icons only.
+            showLabels = ControlLabels.takeSession(this),
             onBack = ::finish,
             onMore = ::showOverflow,
             onRemainingToggled = { remaining ->
@@ -3197,11 +3204,11 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * the seek lands at once, and the only thing drawn is the double tap's chevrons and the run's
      * total on the side the jump went.
      */
-    private fun jumpFromRemote(forward: Boolean, repeatCount: Int = 0) {
-        val base = if (forward) Skip.FORWARD_MS else Skip.BACK_MS
+    private fun jumpFromRemote(forward: Boolean, repeatCount: Int = 0, fixedStepMs: Long? = null) {
+        val base = fixedStepMs ?: if (forward) Skip.FORWARD_MS else Skip.BACK_MS
         // A held rewind or fast forward on a Fire TV remote scans in growing steps, the way
         // Amazon's own players answer it; elsewhere every repeat is the plain jump it always was.
-        val step = if (remoteQuirks.holdSeekAccelerates) RemoteQuirks.holdStepMs(repeatCount, base) else base
+        val step = if (fixedStepMs == null && remoteQuirks.holdSeekAccelerates) RemoteQuirks.holdStepMs(repeatCount, base) else base
         if (step <= 0) return
         skipBy(if (forward) step else -step)
         val zone = if (forward) TapZone.Right else TapZone.Left
@@ -4255,7 +4262,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
              */
             override fun getCodecAdapterFactory(): androidx.media3.exoplayer.mediacodec.MediaCodecAdapter.Factory {
                 val stock = super.getCodecAdapterFactory()
-                return if (maskHdr10Plus) Hdr10PlusMaskingCodecAdapterFactory(stock) else stock
+                val inner = if (maskHdr10Plus) Hdr10PlusMaskingCodecAdapterFactory(stock) else stock
+                // The codec's output format (colour standard, transfer, range, crop) for the trace (RL12).
+                return OutputFactsCodecAdapterFactory(inner) { facts -> loopHandler.post { traceRecorder.noteFacts(facts) } }
             }
 
             /**
@@ -7603,6 +7612,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             PhoneMenuEntry.MarkWatched -> toggleWatched()
             PhoneMenuEntry.ResetZoom -> resetZoom()
             PhoneMenuEntry.ReportStutter -> reportStutter()
+            PhoneMenuEntry.ReportWrongPicture -> reportWrongPicture()
             PhoneMenuEntry.CopyLinkAtTime -> copyLinkAtTime()
             PhoneMenuEntry.MarkIntro -> markIntroTap()
             PhoneMenuEntry.RemoveIntroMark -> removeIntroMark()
@@ -7637,6 +7647,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             PlayerMenuEntry.AddBookmark -> addBookmark(playing?.currentPosition ?: 0L, "")
             PlayerMenuEntry.Bookmarks -> showSheet { it.showBookmarks(bookmarkActions()) }
             PlayerMenuEntry.ReportStutter -> reportStutter()
+            PlayerMenuEntry.ReportWrongPicture -> reportWrongPicture()
             PlayerMenuEntry.CopyLinkAtTime -> copyLinkAtTime()
             PlayerMenuEntry.MarkIntro -> markIntroTap()
             PlayerMenuEntry.RemoveIntroMark -> removeIntroMark()
@@ -7688,13 +7699,26 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * the middle of a seek, one with no reading yet or on a cast never throws: the first two say
      * "Already marked", the others mark with what there is or do nothing.
      */
-    private fun reportStutter() {
+    private fun reportStutter() = markMoment(RemedyRunner.ViewerReport.Stutter)
+
+    /**
+     * "Picture looks wrong" (RL10): the same mark as [reportStutter], and the ladder's next way to
+     * show the picture, once ([RemedyRunner.viewerReported]).
+     */
+    private fun reportWrongPicture() = markMoment(RemedyRunner.ViewerReport.WrongPicture)
+
+    private fun markMoment(report: RemedyRunner.ViewerReport) {
         if (!stutterReportable()) return
         val window = runCatching { traceRecorder.momentWindow(PlaybackMarks.WINDOW_MS) }.getOrDefault(emptyList())
         lifecycleScope.launch {
             val result = withContext(Dispatchers.IO) { runCatching { stutterMarks.mark(window) }.getOrDefault(PlaybackMarks.Result.FAILED) }
             if (isFinishing || isDestroyed) return@launch
-            showGestureFeedback(if (result == PlaybackMarks.Result.ALREADY) L.playerStutterMarkedAlready else L.playerStutterMarked)
+            if (result == PlaybackMarks.Result.ALREADY) return@launch showGestureFeedback(L.playerStutterMarkedAlready)
+            // The ladder takes its step once; when it did, its own line says so and nothing is added.
+            val outcome = runCatching { remedies.viewerReported(report) }.getOrDefault(RemedyRunner.ViewerOutcome.NoClass)
+            if (outcome == RemedyRunner.ViewerOutcome.Tried) return@launch
+            val wrong = report == RemedyRunner.ViewerReport.WrongPicture
+            showGestureFeedback(if (wrong) L.playerReportWrongPictureMarked else L.playerStutterMarked)
         }
     }
 
@@ -9101,7 +9125,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             isRealDownload() && moving -> L.playerDownloadedPercentSpeed(percent, rate)
             isRealDownload() -> L.playerDownloadedPercent(percent)
             // Playing on a short buffer: no figures, the line speed is in Playback details.
-            !starting -> L.playerGettingNextPart
+            // "The next part" is for a video that is in parts; a single file is just loading more of itself.
+            !starting -> if (pieces.isNotEmpty()) L.playerGettingNextPart else L.playerGettingMore
             else -> L.playerCachingPercent(percent)
         }
     }
@@ -9643,6 +9668,11 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         override fun log(line: String) {
             Log.i(START_TAG, line)
         }
+        override fun traceHop(hop: TraceHop) {
+            traceRecorder.noteHop(hop)
+            traceRecorder.noteCounters()
+        }
+        override fun traceFacts(facts: Map<String, String>) = traceRecorder.noteFacts(facts)
     }
 
     /**

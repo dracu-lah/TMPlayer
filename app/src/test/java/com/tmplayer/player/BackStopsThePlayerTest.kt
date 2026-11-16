@@ -51,4 +51,29 @@ class BackStopsThePlayerTest {
         assertTrue("a second Back while finishing is ignored", "if (isFinishing) return" in body)
         assertTrue(body.indexOf("pause()") in 0 until body.indexOf("finish()"))
     }
+
+    /**
+     * Raju step 6.4: a paused video is left with one Back on a phone, the same as a playing one, and
+     * the sound goes with it. Nothing on the way from the key to `finish()` may read whether the
+     * video plays: a branch there is how a paused video once kept a mini bar and a sound alive.
+     */
+    @Test
+    fun `Back on a paused video closes it, nothing between the key and finish reads the play state`() {
+        val source = text("src/main/java/com/tmplayer/player/PlayerActivity.kt")
+        val callback = source.substringAfter("onBackPressedDispatcher.addCallback(this) {").substringBefore("\n        }")
+        assertEquals("if (!peelOneOverlay()) leaveByBack()", callback.trim())
+        val peel = source.substringAfter("private fun peelOneOverlay(): Boolean {").substringBefore("\n    }")
+        val rowRule = source.substringAfter("private fun backPeelsTheRow(): Boolean =").substringBefore("\n\n")
+        val leave = source.substringAfter("private fun leaveByBack() {").substringBefore("\n    }")
+        for ((name, body) in listOf("peelOneOverlay" to peel, "backPeelsTheRow" to rowRule, "leaveByBack" to leave)) {
+            for (word in listOf("isPlaying", "playWhenReady", "isPaused", "playbackState")) {
+                assertFalse("$name must not branch on $word", word in body)
+            }
+        }
+        // A phone's row is held up while paused, and does not take the first Back: only a sheet opened from it does.
+        assertTrue("FormFactor.isTv(this) || menuOpen" in rowRule)
+        assertFalse("controlsUp" in rowRule)
+        // The sound stops before the screen goes.
+        assertTrue(leave.indexOf("pause()") in 0 until leave.indexOf("finish()"))
+    }
 }

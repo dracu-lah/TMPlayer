@@ -77,6 +77,12 @@ enum class PlayerMenuEntry {
      * (L3). Also a held Info key on the remote. Not offered on a cast, which plays on the other TV.
      */
     ReportStutter,
+
+    /**
+     * "Picture looks wrong" (RL10): marks the moment like [ReportStutter] and tries another way to
+     * show the picture, once. Offered and hidden with it.
+     */
+    ReportWrongPicture,
     RemoteKeys,
 }
 
@@ -139,6 +145,8 @@ enum class PhoneMenuEntry {
     MarkWatched,
     /** The moment marked as stuttering, with the last minute of the trace kept for Send logs (L3). */
     ReportStutter,
+    /** "Picture looks wrong" (RL10): the mark, and another way to show the picture, once. */
+    ReportWrongPicture,
     /** Last: a line for bug reports, not for watching. */
     PlaybackDetails,
 }
@@ -185,6 +193,7 @@ fun PhoneMenuEntry.label(
     PhoneMenuEntry.RemoveIntroMark -> L.playerMarkIntroRemove
     PhoneMenuEntry.Bookmarks -> if (bookmarks > 0) L.commonWithDetail(L.playerBookmarks, L.messages.formatter.number(bookmarks)) else L.playerBookmarks
     PhoneMenuEntry.ReportStutter -> L.playerReportStutter
+    PhoneMenuEntry.ReportWrongPicture -> L.playerReportWrongPicture
     PhoneMenuEntry.PlaybackDetails -> L.playerPlaybackDetails
 }
 
@@ -282,7 +291,10 @@ object PlayerMenu {
         if (otherEngine) add(PlayerMenuEntry.OtherEngine)
         if (openInAnotherApp) add(PlayerMenuEntry.OpenInAnotherApp)
         if (copyLinkAtTime) add(PlayerMenuEntry.CopyLinkAtTime)
-        if (reportStutter) add(PlayerMenuEntry.ReportStutter)
+        if (reportStutter) {
+            add(PlayerMenuEntry.ReportStutter)
+            add(PlayerMenuEntry.ReportWrongPicture)
+        }
         add(PlayerMenuEntry.RemoteKeys)
     }
 
@@ -353,7 +365,10 @@ object PlayerMenu {
         add(PhoneMenuEntry.LoadSubtitleFile)
         if (saveToDownloads) add(PhoneMenuEntry.SaveToDownloads)
         if (markWatched) add(PhoneMenuEntry.MarkWatched)
-        if (reportStutter) add(PhoneMenuEntry.ReportStutter)
+        if (reportStutter) {
+            add(PhoneMenuEntry.ReportStutter)
+            add(PhoneMenuEntry.ReportWrongPicture)
+        }
         add(PhoneMenuEntry.PlaybackDetails)
     }
 }

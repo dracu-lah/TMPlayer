@@ -200,19 +200,23 @@ class RemedyLadder(
     /** What to do about [evidence], given [facts] as they are now, at [atMs] (any monotonic clock). */
     fun onEvidence(evidence: RemedyEvidence, facts: LadderFacts, atMs: Long): RemedyAction {
         if (evidence == RemedyEvidence.Source) return RemedyAction.Stay
-        if (phase == Phase.Exhausted) return if (evidence.hard) RemedyAction.Sheet else RemedyAction.Stay
+        val viewer = evidence.fromViewer
+        if (phase == Phase.Exhausted) return if (evidence.hard && !viewer) RemedyAction.Sheet else RemedyAction.Stay
         lastHopAtMs?.let { if (atMs - it < PROBATION_MS) return RemedyAction.Later(it + PROBATION_MS) }
         val onSoftware = path.software && path.engine == PlayerEngine.ExoPlayer
-        if (evidence == RemedyEvidence.SoftwareTooSlow || (evidence == RemedyEvidence.Stutter && onSoftware)) {
+        val stutter = evidence == RemedyEvidence.Stutter || evidence == RemedyEvidence.UserStutter
+        if (evidence == RemedyEvidence.SoftwareTooSlow || (stutter && onSoftware)) {
             return offer(Remedy.LighterCopy, evidence) ?: RemedyAction.Stay
         }
         if (evidence == RemedyEvidence.NoFirstFrame && hopList.isNotEmpty()) return exhaust()
-        val auto = facts.autoSwitch && (evidence.hard || (evidence == RemedyEvidence.Stutter && plan.stutteredBefore))
+        val auto = (facts.autoSwitch || viewer) && (evidence.hard || (evidence == RemedyEvidence.Stutter && plan.stutteredBefore))
         val pick = pick(ladderFor(evidence), facts)
+        // A viewer's press with nothing left to try is "Stay", not the sheet: see [RemedyEvidence.fromViewer].
+        fun dead(): RemedyAction = if (evidence.hard && !viewer) exhaust() else RemedyAction.Stay
         return when {
-            pick == null -> if (evidence.hard) exhaust() else RemedyAction.Stay
+            pick == null -> dead()
             auto -> hop(pick, evidence, atMs)
-            else -> offer(pick.remedy, evidence) ?: if (evidence.hard) exhaust() else RemedyAction.Stay
+            else -> offer(pick.remedy, evidence) ?: dead()
         }
     }
 
@@ -325,7 +329,8 @@ class RemedyLadder(
             RemedyEvidence.WrongPicture, RemedyEvidence.UserReport ->
                 listOf(Remedy.ExcludeDecoder, Remedy.Software, Remedy.OtherEngine)
             RemedyEvidence.AudioFailed -> listOf(Remedy.AudioSoftware, Remedy.PassthroughOff, Remedy.OtherEngine)
-            RemedyEvidence.Stutter -> listOf(Remedy.FlipAsync, Remedy.FlipTunneling, Remedy.Software, Remedy.OtherEngine)
+            RemedyEvidence.Stutter, RemedyEvidence.UserStutter ->
+                listOf(Remedy.FlipAsync, Remedy.FlipTunneling, Remedy.Software, Remedy.OtherEngine)
             RemedyEvidence.SoftwareTooSlow, RemedyEvidence.Source -> emptyList()
         }
     }

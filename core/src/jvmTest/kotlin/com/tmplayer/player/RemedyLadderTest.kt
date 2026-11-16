@@ -12,6 +12,7 @@ import com.tmplayer.player.RemedyEvidence.SoftwareTooSlow
 import com.tmplayer.player.RemedyEvidence.Source
 import com.tmplayer.player.RemedyEvidence.Stutter
 import com.tmplayer.player.RemedyEvidence.UserReport
+import com.tmplayer.player.RemedyEvidence.UserStutter
 import com.tmplayer.player.RemedyEvidence.WrongPicture
 import kotlin.random.Random
 import kotlin.test.Test
@@ -102,6 +103,19 @@ class RemedyLadderTest {
             rich.copy(softwareVerdict = Verdict.SOFTWARE_TOO_SLOW), plan = RemedyPlan(skip = setOf(Remedy.ExcludeDecoder))),
         Row("viewer says the picture is wrong: other name, then engine", listOf(UserReport, UserReport),
             listOf("hop:ExcludeDecoder", "hop:OtherEngine"), rich),
+        // The viewer's press is consent and never ends in the sheet (RL10).
+        Row("viewer reports stutter on API 28: async at once, then the other engine", listOf(UserStutter, UserStutter),
+            listOf("hop:FlipAsync", "hop:OtherEngine"), rich),
+        Row("viewer reports stutter with Never switch by itself: it still acts", listOf(UserStutter), listOf("hop:FlipAsync"),
+            rich.copy(autoSwitch = false)),
+        Row("viewer says picture is wrong with Never switch by itself: it still acts", listOf(UserReport), listOf("hop:ExcludeDecoder"),
+            rich.copy(autoSwitch = false)),
+        Row("viewer reports stutter on software: lighter copy, once", listOf(UserStutter, UserStutter), listOf("offer:LighterCopy", "stay"), rich,
+            plan = RemedyPlan(start = setOf(Remedy.Software))),
+        Row("viewer reports and nothing applies: stay, not the sheet", listOf(UserStutter, UserReport),
+            listOf("stay", "stay"), rich.copy(sdk = 33, otherDecoder = false, softwareTakes = false), vlc = false),
+        Row("viewer reports after the sheet: stay", listOf(DecoderError, DecoderError, DecoderError, UserReport, UserStutter),
+            listOf("hop:ExcludeDecoder", "hop:OtherEngine", "sheet", "stay", "stay"), rich),
         // Stutter on hardware below API 31: offer R1a (auto on a second video of the class), R1b, R2 or R3.
         Row("stutter, API 28: offer async once", listOf(Stutter, Stutter), listOf("offer:FlipAsync", "stay"), rich),
         Row("stutter, API 28, class stuttered before: async by itself", listOf(Stutter), listOf("hop:FlipAsync"), rich,
@@ -254,7 +268,7 @@ class RemedyLadderTest {
                 if (action is RemedyAction.Hop) {
                     hops++
                     assertTrue(e.hard || (e == Stutter && plan.stutteredBefore), "soft evidence hopped: $where")
-                    assertTrue(f.autoSwitch, "hopped with Never switch by itself: $where")
+                    assertTrue(f.autoSwitch || e.fromViewer, "hopped with Never switch by itself: $where")
                     assertTrue(seen.add(action.path), "revisited a path: $where")
                     assertTrue(action.remedy !in plan.skip, "took a skipped remedy: $where")
                     if (action.remedy == Remedy.OtherEngine) {
