@@ -7,7 +7,16 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.isFocusable
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -27,11 +36,13 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * The television's top bar quick entries for Downloads and Watch later (PL-16, 2026-11-15): they
- * stand after Chats in the bar's order (so Right from Chats reaches them and Left walks back, the
- * order the focus search follows), take the remote like the tabs, name themselves only under the
- * remote and open their page from OK. The remote's own movement through the bar (Left, Right, Down
- * into the page, Back) is the device leftover: a bar's items take no focus in this harness.
+ * The television's top bar: Downloads is a place of its own after Chats, its name written, with the
+ * number running (R2, PL-16), and Watch later the one quick entry left (an icon that names itself
+ * under the remote). Both are focus targets in the bar's order, after Chats, and OK opens their page
+ * from the bar's own beforeProfile. The arrows themselves (Right from Chats onto Downloads, then the
+ * Choose chats button) are the desktop's big-screen bar tests, ChooseChatsButtonTest and
+ * BigScreenKeysTest, where key traversal runs: a bar's items take no focus in this harness. Down into
+ * the page and Back from the player are the device leftovers.
  */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -50,11 +61,11 @@ class TvTopBarQuickEntriesTest {
         Motion.reduced = false
     }
 
-    private fun open() {
+    private fun open(running: Int = 0, downloadsShown: Boolean = false) {
         FormFactor.override(true)
         Motion.reduced = true
         val nav = TouchNav(
-            account = null, favoriteCount = 0, downloadCount = 0, updateVersion = null,
+            account = null, favoriteCount = 0, downloadCount = running, updateVersion = null,
             onHome = {}, onChats = {}, onSearch = {}, onSettings = {},
             onFavourites = {}, onDownloads = { calls += "downloads" },
             onHistory = { calls += "history:$it" }, onUpdate = {},
@@ -63,10 +74,11 @@ class TvTopBarQuickEntriesTest {
             TMPlayerTheme {
                 Column {
                     TvTopBar(
-                        nav = nav, current = TvBarTab.Chats, inProfile = false, searchOpen = false,
+                        nav = nav, current = if (downloadsShown) null else TvBarTab.Chats, inProfile = downloadsShown, searchOpen = false,
                         onHome = {}, onChats = {}, onSearch = {}, onRefresh = null,
                         currentFocus = FocusRequester(), contentFocus = FocusRequester(), overArt = false,
                         beforeProfile = { calls += "before" },
+                        downloadsShown = downloadsShown,
                     )
                 }
             }
@@ -74,11 +86,11 @@ class TvTopBarQuickEntriesTest {
         rule.waitForIdle()
     }
 
-    private fun downloads() = rule.onNodeWithContentDescription(L.navDownloads)
+    private fun downloads() = rule.onNodeWithText(L.navDownloads)
     private fun later() = rule.onNodeWithContentDescription(L.browseTabWatchLater)
 
     @Test
-    fun `both entries stand after Chats in the focus order, the way Right from Chats runs`() {
+    fun `Downloads has its name written after Chats, and Watch later is an icon after it`() {
         open()
         val chats = rule.onNodeWithText(L.browseTabChats).fetchSemanticsNode().boundsInRoot
         val downloads = downloads().fetchSemanticsNode().boundsInRoot
@@ -88,6 +100,8 @@ class TvTopBarQuickEntriesTest {
         // The same row, so Left and Right move across and Down is the bar's own (into the page).
         assertEquals(chats.top, downloads.top, 1f)
         assertEquals(chats.top, later.top, 1f)
+        // Downloads is a tab like Home and Chats: named, not an icon waiting for the remote.
+        rule.onNodeWithText(L.navDownloads).assertExists()
     }
 
     @Test
@@ -112,13 +126,27 @@ class TvTopBarQuickEntriesTest {
     }
 
     @Test
-    fun `an entry is only an icon until the remote is on it, and says its name to a screen reader`() {
+    fun `the number running is on Downloads and read out with its name, and nothing at zero`() {
+        open(running = 3)
+        rule.onNodeWithTag("tv-bar-badge", useUnmergedTree = true).assertExists()
+        rule.onNodeWithText("3", useUnmergedTree = true).assertExists()
+        rule.onNode(androidx.compose.ui.test.hasContentDescription("${L.navDownloads}, 3")).assertExists()
+    }
+
+    @Test
+    fun `no badge when nothing is running, and the page shown marks its tab`() {
+        open(running = 0, downloadsShown = true)
+        rule.onAllNodesWithTag("tv-bar-badge", useUnmergedTree = true).assertCountEquals(0)
+        downloads().assertIsSelected()
+    }
+
+    @Test
+    fun `Watch later is only an icon until the remote is on it, and says its name to a screen reader`() {
         open()
-        rule.onNodeWithText(L.navDownloads).assertDoesNotExist()
         rule.onNodeWithText(L.browseTabWatchLater).assertDoesNotExist()
         assertEquals(
-            listOf(L.navDownloads),
-            downloads().fetchSemanticsNode().config.getOrNull(SemanticsProperties.ContentDescription),
+            listOf(L.browseTabWatchLater),
+            later().fetchSemanticsNode().config.getOrNull(SemanticsProperties.ContentDescription),
         )
     }
 }

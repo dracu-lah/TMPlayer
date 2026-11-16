@@ -74,9 +74,9 @@ import com.tmplayer.ui.theme.focusRing
  * and the desktop: the small storage ring beside what TMPlayer uses and what is free, and the one
  * Free up space button under them (user, 2026-10-22: "keep one Free up space button").
  *
- * The button opens the review ([FreeUpReviewDialog]). It is off, with a line saying so, when there
- * is nothing at all to free, and while a run is going ([busy]); after one, [result] says what it
- * freed. [focus] goes on the button, for a television page that lands the remote there.
+ * The button opens the review ([FreeUpReviewDialog]). It is not there, with a line saying so, when
+ * there is nothing at all to free (R2, 7.3), and is off while a run is going ([busy]); after one,
+ * [result] says what it freed. [focus] goes on the button, for a television page that lands the remote there.
  */
 @Composable
 fun StorageOverview(
@@ -116,18 +116,22 @@ fun StorageOverview(
                 }
             }
         }
-        ReviewButton(
-            label = if (busy) s.downloadsReviewFreeing else s.downloadsFreeUpSpace,
-            icon = TmIcons.Delete,
-            onClick = onFreeUp,
-            kind = ButtonKind.Primary,
-            // Not greyed while the figures are measured or when nothing is listed: the press opens the
-            // review, which says so itself, and a dimmed button read as broken (user, 2026-10-27).
-            enabled = !busy,
-            busy = busy,
-            large = large,
-            modifier = Modifier.fillMaxWidth().then(if (focus != null) Modifier.focusRequester(focus) else Modifier),
-        )
+        // Only when there is something to free (7.3): the page's loudest button used to stand over
+        // nothing. A quiet step, not the accent fill, since freeing is an errand and not the page's
+        // job; while a run goes it stays, saying Freeing, so the press is answered.
+        val somethingToFree = measured && !nothingToFree
+        if (somethingToFree || busy) {
+            ReviewButton(
+                label = if (busy) s.downloadsReviewFreeing else s.downloadsFreeUpSpace,
+                icon = TmIcons.Delete,
+                onClick = onFreeUp,
+                kind = ButtonKind.Quiet,
+                enabled = !busy,
+                busy = busy,
+                large = large,
+                modifier = Modifier.fillMaxWidth().then(if (focus != null) Modifier.focusRequester(focus) else Modifier),
+            )
+        }
         val line = when {
             busy -> null
             result != null -> result

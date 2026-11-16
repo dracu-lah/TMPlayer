@@ -49,11 +49,12 @@ import com.tmplayer.ui.theme.collectIsFocusVisibleAsState
 import com.tmplayer.ui.theme.focusRing
 
 /**
- * Two answers as one segmented control: the setup's storage step and Settings' "While streaming"
- * row on a television. A touch or a click picks the answer under it; on a remote or a keyboard the
- * control is one stop, where Left and Right pick the answer on that side and OK swaps to the other.
+ * A few answers (two or three) as one segmented control: the setup's storage step, Settings'
+ * "While streaming" and "On mobile data" rows on a television. A touch or a click picks the answer
+ * under it; on a remote or a keyboard the control is one stop, where Left and Right move to the
+ * answer on that side (and stop at the ends) and OK goes on to the next, round to the first.
  *
- * [choices] is exactly two, in reading order (flipped under right to left). [title] is each one's
+ * [choices] is two or three, in reading order (flipped under right to left). [title] is each one's
  * words and [tag] its test tag.
  */
 @Composable
@@ -82,11 +83,15 @@ fun <T> TabSwitch(
             .focusRing(focused, outer)
             .onKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
-                val other = choices.firstOrNull { it != selected } ?: choices.first()
+                // Left and Right walk the choices (two or three) and stop at the ends; OK goes on to the
+                // next, wrapping, which for two is the other one.
+                val at = choices.indexOf(selected).coerceAtLeast(0)
+                fun step(by: Int) = choices[(at + by).coerceIn(0, choices.lastIndex)]
                 val pick = when (event.key) {
-                    Key.DirectionLeft -> choices[if (rtl) 1 else 0]
-                    Key.DirectionRight -> choices[if (rtl) 0 else 1]
-                    Key.DirectionCenter, Key.Enter, Key.NumPadEnter, Key.Spacebar -> other
+                    Key.DirectionLeft -> step(if (rtl) 1 else -1)
+                    Key.DirectionRight -> step(if (rtl) -1 else 1)
+                    Key.DirectionCenter, Key.Enter, Key.NumPadEnter, Key.Spacebar ->
+                        choices[(choices.indexOf(selected) + 1).mod(choices.size)]
                     else -> return@onKeyEvent false
                 }
                 if (pick != selected) picked(pick)

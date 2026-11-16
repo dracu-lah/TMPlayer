@@ -204,6 +204,7 @@ object Backups {
         "remove_after_watching" to Kind.BOOL,
         "resume_sync" to Kind.BOOL,
         "rewind_on_resume_ms" to Kind.LONG,
+        "mobile_data" to Kind.TEXT,
         "save_mobile_data" to Kind.BOOL,
         "screen_orientation" to Kind.TEXT,
         "show_remaining_time" to Kind.BOOL,

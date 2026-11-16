@@ -14,6 +14,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.Density
@@ -113,8 +114,15 @@ class OfflineBannerBarTest {
     @Test
     fun `the banner's buttons work`() {
         show(1f)
-        rule.onNodeWithText(L.downloadsTitle).performClick()
+        // "Downloads" is on the banner and, since R2, on the bar as a place: the banner's stands above.
+        val words = rule.onAllNodesWithText(L.downloadsTitle)
+        assertEquals(2, words.fetchSemanticsNodes().size)
+        val banners = (0..1).minBy { words[it].fetchSemanticsNode().boundsInRoot.top }
+        words[banners].performClick()
         assertEquals(1, downloads)
+        // The bar's own button asks for the page too, and is not the banner's.
+        words[1 - banners].performClick()
+        assertEquals(2, downloads)
         rule.onNodeWithText(L.commonRetry).assertIsDisplayed()
     }
 

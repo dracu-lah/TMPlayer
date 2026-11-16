@@ -107,7 +107,45 @@ data class DetailRow(
      * elsewhere when the Download button it was on turns into this.
      */
     val enabled: Boolean = true,
-)
+    /**
+     * The icon the round button wears while this line is a switch that is ON (Watched, Watch later):
+     * the button then draws filled, so it reads as a button that is pressed in and not as a status
+     * (Raju 5.1). Null for a step, and for a switch that is off.
+     */
+    val stateIcon: ImageVector? = null,
+    /** A live line about this row under the buttons ("Downloading, 5 percent, 140 MB of 2.6 GB"); null for none. */
+    val status: String? = null,
+) {
+    /** The icon the round button draws: [stateIcon] while the switch is on. */
+    val roundIcon: ImageVector get() = stateIcon ?: icon
+
+    /** Whether the round button draws as a switch that is on. */
+    val on: Boolean get() = stateIcon != null
+}
+
+/**
+ * The line under the round buttons while this video is coming down (Raju 5.2): where it stands, how far, and how much.
+ * "Downloading, 5 percent, 140.2 MB of 2.59 GB"; a download that waits or stopped says that instead of "Downloading".
+ * Pure so a test can hold the words to the figures.
+ */
+fun downloadStatusLine(progress: com.tmplayer.data.OfflineDownloads.Progress, s: Messages): String {
+    val stage = when (progress.stage) {
+        com.tmplayer.data.OfflineDownloads.Stage.Running, com.tmplayer.data.OfflineDownloads.Stage.Moving -> s.gridStageDownloading
+        com.tmplayer.data.OfflineDownloads.Stage.Paused -> s.gridStagePausedLong
+        com.tmplayer.data.OfflineDownloads.Stage.Queued -> s.gridStageQueued
+        com.tmplayer.data.OfflineDownloads.Stage.Offline, com.tmplayer.data.OfflineDownloads.Stage.Yielding -> s.gridStageWaiting
+        com.tmplayer.data.OfflineDownloads.Stage.NoWifi -> s.gridStageNoWifi
+        com.tmplayer.data.OfflineDownloads.Stage.Failed -> s.gridStageFailed
+    }
+    val percent = progress.fraction?.let { s.formatter.percent(it.toDouble()) }
+    val size = when {
+        progress.totalBytes > 0 && progress.downloadedBytes > 0 ->
+            s.commonOfTotal(done = s.formatter.bytes(progress.downloadedBytes), total = s.formatter.bytes(progress.totalBytes))
+        progress.totalBytes > 0 -> s.formatter.bytes(progress.totalBytes)
+        else -> null
+    }
+    return listOfNotNull(stage, percent.takeIf { progress.downloadedBytes > 0 }, size).joinToString(", ")
+}
 
 /**
  * The usual wording and icon for [action]. A platform overrides a line where it knows more, such
@@ -135,9 +173,9 @@ fun detailRow(
         DetailAction.PlayInTmPlayer -> DetailRow(action, s.externalPlayInTmplayer, TmIcons.Play, s.externalPlayInTmplayerDetail, onSelect = onSelect)
         DetailAction.StartOver -> DetailRow(action, s.detailStartOver, TmIcons.Refresh, s.detailStartOverDetail, onSelect = onSelect)
         DetailAction.MarkWatched -> DetailRow(action, s.gridMarkWatched, TmIcons.Check, s.gridMarkWatchedDetail, onSelect = onSelect)
-        DetailAction.MarkUnwatched -> DetailRow(action, s.gridMarkUnwatched, TmIcons.Close, s.gridMarkUnwatchedDetail, onSelect = onSelect)
+        DetailAction.MarkUnwatched -> DetailRow(action, s.gridMarkUnwatched, TmIcons.Close, s.gridMarkUnwatchedDetail, onSelect = onSelect, stateIcon = TmIcons.Check)
         DetailAction.AddWatchLater -> DetailRow(action, s.detailWatchLaterAdd, TmIcons.Clock, s.detailWatchLaterAddDetail, onSelect = onSelect)
-        DetailAction.RemoveWatchLater -> DetailRow(action, s.detailWatchLaterRemove, TmIcons.Close, onSelect = onSelect)
+        DetailAction.RemoveWatchLater -> DetailRow(action, s.detailWatchLaterRemove, TmIcons.Close, onSelect = onSelect, stateIcon = TmIcons.Clock)
         DetailAction.AddToList -> DetailRow(action, s.listsAddTo, TmIcons.List, s.listsAddToDetail, onSelect = onSelect)
         DetailAction.RemoveFromHistory ->
             DetailRow(action, s.browseRemoveFromHistory, TmIcons.History, s.browseRemoveFromHistoryDetail, destructive = true, onSelect = onSelect)
@@ -370,7 +408,7 @@ fun MediaDetailPanel(
                 horizontalArrangement = Arrangement.spacedBy(4.dp, if (centred) Alignment.CenterHorizontally else Alignment.Start),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                others.forEach { RoundAction(it.label, it.icon, it.onSelect, destructive = it.destructive, detail = it.detail, short = roundLabel(it, s), progress = it.progress, enabled = it.enabled) }
+                others.forEach { RoundAction(it.label, it.roundIcon, it.onSelect, destructive = it.destructive, detail = it.detail, short = roundLabel(it, s), progress = it.progress, enabled = it.enabled, on = it.on) }
             }
         }
         extras?.trailer?.let { trailer -> trailers.unopened?.takeIf { it == trailer }?.let { TrailerQr(it, Modifier.padding(vertical = 8.dp)) } }
@@ -405,7 +443,7 @@ fun MediaDetailPanel(
                     horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    rest.forEach { RoundAction(it.label, it.icon, it.onSelect, destructive = it.destructive, detail = it.detail, short = roundLabel(it, s), progress = it.progress, enabled = it.enabled) }
+                    rest.forEach { RoundAction(it.label, it.roundIcon, it.onSelect, destructive = it.destructive, detail = it.detail, short = roundLabel(it, s), progress = it.progress, enabled = it.enabled, on = it.on) }
                 }
             }
         }

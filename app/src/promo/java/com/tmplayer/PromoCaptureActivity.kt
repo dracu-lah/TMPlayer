@@ -1135,6 +1135,7 @@ private fun PromoTvBar(
                 nav = nav,
                 current = current,
                 inProfile = inProfile,
+                downloadsShown = inProfile,
                 searchOpen = false,
                 onHome = nav.onHome,
                 onChats = nav.onChats,

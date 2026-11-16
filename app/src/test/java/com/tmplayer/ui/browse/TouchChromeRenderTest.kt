@@ -35,7 +35,7 @@ import java.io.File
 
 /**
  * The phone's floating chrome, composed for real and drawn to PNGs under
- * `build/device-test/review/`: the bar lit on Home, the bar on a page behind the picture (Settings among them)
+ * `build/device-test/review/`: the bar lit on Home, the bar on the Downloads page
  * with its pill of buttons, and a chat's page with its round Back and sticky bar, upright and on
  * its side. Each page's say over the bar is checked as the host reads it.
  */
@@ -93,9 +93,8 @@ class TouchChromeRenderTest {
             TouchPage(TouchPageSpec(current = TouchDestination.Chats))
             rows()()
         }
-        // Chats is on the bar itself, so its own button is lit and the picture is not.
+        // Chats is on the bar itself, so its own button is lit.
         assertEquals(TouchDestination.Chats, chrome.specs["chats"]?.current)
-        assertFalse(chrome.specs["chats"]!!.inProfile)
         assertEquals("chats", chrome.pageKey)
     }
 
@@ -116,11 +115,11 @@ class TouchChromeRenderTest {
 
     @Test
     @Config(sdk = [35], qualifiers = "w411dp-h891dp-port-notnight-xhdpi")
-    fun profilePageRingsThePictureAndCarriesItsPill() {
+    fun downloadsPageLightsItsButtonAndCarriesItsPill() {
         val chrome = TouchChrome()
         render("chrome-profile-page.png", chrome, "downloads") {
             TouchPage(
-                TouchPageSpec(current = null, inProfile = true, actions = {
+                TouchPageSpec(current = TouchDestination.Downloads, actions = {
                     com.tmplayer.ui.components.FloatingBarIcon(TmIcons.Checklist, "Select", {})
                 }),
             )
@@ -128,8 +127,7 @@ class TouchChromeRenderTest {
         }
         val spec = chrome.specs["downloads"]
         assertNotNull(spec)
-        assertNull(spec!!.current)
-        assertTrue(spec.inProfile)
+        assertEquals(TouchDestination.Downloads, spec!!.current)
         assertNotNull(spec.actions)
     }
 

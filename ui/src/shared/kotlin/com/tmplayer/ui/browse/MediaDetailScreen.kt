@@ -55,7 +55,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import com.tmplayer.ui.components.pressScale
@@ -592,7 +594,7 @@ private fun Actions(
         if (tv) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 hero(Modifier)
-                others.forEach { androidx.compose.runtime.key(slotOf(it)) { RoundAction(it.label, it.icon, it.onSelect, destructive = it.destructive, detail = it.detail, short = roundLabel(it, s), toggles = togglesOn(it.action), progress = it.progress, enabled = it.enabled, ghost = it.placeholder, waiting = it.placeholder && !page.extrasState.settled) } }
+                others.forEach { androidx.compose.runtime.key(slotOf(it)) { RoundAction(it.label, it.roundIcon, it.onSelect, destructive = it.destructive, detail = it.detail, short = roundLabel(it, s), toggles = togglesOn(it.action), on = it.on, progress = it.progress, enabled = it.enabled, ghost = it.placeholder, waiting = it.placeholder && !page.extrasState.settled) } }
             }
         } else if (!primaryFullWidth) {
             // A phone on its side: the round buttons in Play's row, after it, wrapping only when
@@ -600,7 +602,7 @@ private fun Actions(
             // first at the start, so a trailer arriving later never moves it.
             FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 hero(Modifier)
-                others.forEach { androidx.compose.runtime.key(slotOf(it)) { RoundAction(it.label, it.icon, it.onSelect, destructive = it.destructive, detail = it.detail, short = roundLabel(it, s), toggles = togglesOn(it.action), progress = it.progress, enabled = it.enabled, ghost = it.placeholder, waiting = it.placeholder && !page.extrasState.settled) } }
+                others.forEach { androidx.compose.runtime.key(slotOf(it)) { RoundAction(it.label, it.roundIcon, it.onSelect, destructive = it.destructive, detail = it.detail, short = roundLabel(it, s), toggles = togglesOn(it.action), on = it.on, progress = it.progress, enabled = it.enabled, ghost = it.placeholder, waiting = it.placeholder && !page.extrasState.settled) } }
             }
         } else {
             hero(Modifier.fillMaxWidth())
@@ -609,8 +611,17 @@ private fun Actions(
                 horizontalArrangement = Arrangement.spacedBy(4.dp, if (headlineOnly) Alignment.CenterHorizontally else Alignment.Start),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                others.forEach { androidx.compose.runtime.key(slotOf(it)) { RoundAction(it.label, it.icon, it.onSelect, destructive = it.destructive, detail = it.detail, short = roundLabel(it, s), toggles = togglesOn(it.action), progress = it.progress, enabled = it.enabled, ghost = it.placeholder, waiting = it.placeholder && !page.extrasState.settled) } }
+                others.forEach { androidx.compose.runtime.key(slotOf(it)) { RoundAction(it.label, it.roundIcon, it.onSelect, destructive = it.destructive, detail = it.detail, short = roundLabel(it, s), toggles = togglesOn(it.action), on = it.on, progress = it.progress, enabled = it.enabled, ghost = it.placeholder, waiting = it.placeholder && !page.extrasState.settled) } }
             }
+        }
+        // The live line of a download under way, under the buttons (Raju 5.2): a number, not only a ring.
+        page.rows.firstNotNullOfOrNull { it.status }?.let { line ->
+            Text(
+                line,
+                style = MaterialTheme.typography.bodyMedium,
+                color = Tone.muted,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+            )
         }
         trailers.unopened?.let { TrailerQr(it, Modifier.padding(vertical = 8.dp)) }
         // No poster: why, and the one thing that fixes it (one Down from the buttons for a remote). It also
@@ -676,7 +687,7 @@ private fun MoreActions(page: DetailPage) {
         horizontalArrangement = Arrangement.spacedBy(if (tv) 12.dp else 4.dp, if (tv) Alignment.Start else Alignment.CenterHorizontally),
         verticalArrangement = Arrangement.spacedBy(if (tv) 12.dp else 8.dp),
     ) {
-        rest.forEach { androidx.compose.runtime.key(slotOf(it)) { RoundAction(it.label, it.icon, it.onSelect, destructive = it.destructive, detail = it.detail, short = roundLabel(it, s), toggles = togglesOn(it.action), progress = it.progress, enabled = it.enabled) } }
+        rest.forEach { androidx.compose.runtime.key(slotOf(it)) { RoundAction(it.label, it.roundIcon, it.onSelect, destructive = it.destructive, detail = it.detail, short = roundLabel(it, s), toggles = togglesOn(it.action), on = it.on, progress = it.progress, enabled = it.enabled) } }
     }
 }
 

@@ -130,7 +130,7 @@ security, About and help, Redo setup choices.
 ladder runs), each with its `_detail`, stored as `notify_downloads`, `notify_episodes`,
 `new_video_alerts`, `notify_pieces`, `notify_update`, `sponsor_reminders`.
 
-### Storage and downloads (`settings.page_storage`)
+### Downloads and data (`settings.page_downloads_data`; was Storage and downloads)
 
 | Row | Title | Detail | Stored | Forms |
 | --- | --- | --- | --- | --- |
@@ -138,10 +138,12 @@ ladder runs), each with its `_detail`, stored as `notify_downloads`, `notify_epi
 | Download location | `storage.location` | location state | `download_root` | P T, more than one volume |
 | Remove after watching | `downloads.remove_after_watching` | `_body` | `remove_after_watching` | P T |
 | While streaming: Keep video / Save space (two tabs) | `settings.stream_title` | `settings.stream_keep_detail` / `stream_save_detail` under the tabs | `low_storage_mode` (on is Save space) | P T D |
-| Low storage notification | `settings.low_storage_alert` | `settings.alert_low_storage_detail` | `notify_low_storage` | P |
-| Wi-Fi only downloads | `settings.wifi_only` | `_on/_off` | `wifi_only_downloads` | P |
-| Save mobile data | `settings.save_mobile_data` | `_on/_off` | `save_mobile_data` | P |
-| Pause downloads while playing | `settings.pause_downloads_while_playing` | `_on/_off` | `pause_downloads_while_playing` | P T |
+| Download the whole video first | `settings.download_first` | `_on/_off` | `download_before_playing` | P T D |
+| On mobile data: Ask first / Never / Allow (three tabs; R2, replaces Wi-Fi only and Save mobile data) | `settings.mobile_data_title` | `settings.mobile_data_ask_detail` / `_never_detail` / `_allow_detail` under the tabs | `mobile_data` (`ask`, `never`, `allow`; until chosen read from `wifi_only_downloads` and `save_mobile_data`: Never if Wi-Fi only, else Ask first; Wi-Fi only is kept in step) | P |
+
+Gone in R2, behaviour kept on (nothing reads their stored value as an off switch): the low storage notification
+(`notify_low_storage`) and Pause downloads while playing (`pause_downloads_while_playing`). `save_mobile_data` still
+bounds a stream on a metered line for whoever set it; the setup choices' Mobile data step still writes it.
 
 ### Account and security (`settings.page_account`)
 
@@ -210,7 +212,8 @@ gestures, no Launcher, and Notifications kept. The differences from the phone, r
 - Home, Notifications: the phone's rows (desktop details for episodes, new videos and updates).
 - Storage: Free up space, Location (Change and Reset, `DesktopSettings.storageRoot`), Cache limit
   (`DesktopSettings.cacheLimitBytes`), Remove after watching, While streaming (Keep video or
-  Save space), Low storage notification, Pause downloads while playing, Scan the folder.
+  Save space), Scan the folder. (R2: the low storage notification and Pause downloads while playing have no
+  switch, they are always on; the desktop has no mobile data row.)
 - Account: the phone's rows.
 - About: Version group (no auto install, no detailed logs, no playback test, no send to the
   developer), Backup, Help with Proxy, Tour, What's new, Changelog, Report a problem, Save logs,
@@ -360,7 +363,7 @@ lock's state, an update waiting):
 | Playback | how a video starts and plays: autoplay, the default player, the engine and decoder, the controls, rewinding on resume, Advanced | P T D |
 | Player gestures / Mouse in the player | the player's touch gestures, or the mouse | P / D |
 | Subtitles and audio | subtitle look and languages, the audio language, remembered languages, Sound (downmix, even volume), Online subtitles | P T D |
-| Storage and downloads | the free space, where downloads go, Download the whole video first, Remove after watching, While streaming, Wi-Fi only, Save mobile data, Pause downloads while playing | P T D |
+| Downloads and data | the free space, where downloads go, On mobile data, While streaming, Download the whole video first, Remove after watching | P T D |
 | Notifications | every notification, one switch each | P D |
 | Appearance and language | theme, colours, type, language, layout, size, motion | P T D |
 | Privacy and lock | App lock, Privacy (the privacy page, Send crash reports), Signed in (devices, Sign out) | P T D |

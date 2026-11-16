@@ -566,6 +566,7 @@ private fun HoldMenu(
 private fun cancelRow(s: Messages, entry: OfflineDownloads.Progress, run: () -> Unit): DetailRow {
     val base = detailRow(DetailAction.CancelDownload, s, null, "", run)
     return base.copy(
+        status = downloadStatusLine(entry, s),
         label = when (entry.stage) {
             OfflineDownloads.Stage.Queued, OfflineDownloads.Stage.Yielding -> s.gridCancelQueued
             OfflineDownloads.Stage.Paused -> s.gridCancelPaused

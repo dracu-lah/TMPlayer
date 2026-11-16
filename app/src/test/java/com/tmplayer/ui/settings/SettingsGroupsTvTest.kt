@@ -124,13 +124,22 @@ class SettingsGroupsTvTest {
 
     @Test
     @Config(sdk = [35], qualifiers = "w960dp-h540dp-land-television-night-xhdpi")
-    fun `Storage and downloads reaches Download the whole video first`() {
+    fun `Downloads and data reaches While streaming, Download the whole video first and Remove after watching`() {
         show(SettingsPage.Storage)
-        walk("Storage location", "Download the whole video first", "Remove after watching")
-        // "While streaming" is one stop for both tabs, right under it.
-        row("Remove after watching").performKeyInput { pressKey(Key.DirectionDown) }
+        // Where to save, then "While streaming" (one stop for both tabs), then the two switches. A
+        // television has no "On mobile data" row (it is never on a data allowance).
+        row("Storage location").performScrollTo().requestFocus()
+        row("Storage location").assertIsFocused()
+        row("Storage location").performKeyInput { pressKey(Key.DirectionDown) }
         rule.waitForIdle()
         rule.onNodeWithTag(STREAM_SWITCH_TAG).assertIsFocused()
+        rule.onNodeWithTag(STREAM_SWITCH_TAG).performKeyInput { pressKey(Key.DirectionDown) }
+        rule.waitForIdle()
+        row("Download the whole video first").assertIsFocused()
+        row("Download the whole video first").performKeyInput { pressKey(Key.DirectionDown) }
+        rule.waitForIdle()
+        row("Remove after watching").assertIsFocused()
+        rule.onNodeWithText("On mobile data").assertDoesNotExist()
     }
 
     @Test

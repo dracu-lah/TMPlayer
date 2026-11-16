@@ -154,7 +154,7 @@ fun metaFactsLine(extras: MetaExtras, s: Messages, runtime: Boolean = true, seas
     extras.genres.take(3).joinToString(", ").ifBlank { null },
     extras.runtimeMin?.takeIf { runtime }?.let { s.formatter.duration(it * 60L) },
     extras.seasons?.takeIf { seasons }?.let { s.metadataSeasons(it) },
-    extras.certification,
+    com.tmplayer.online.CertificationText.readable(extras.certification, s.detailRatingAdults, s.detailRatingEveryone),
 ).joinToString("  ·  ").ifBlank { null }
 
 /** "Directed by …" for a film, "Created by …" for a show, or null. */

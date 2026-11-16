@@ -65,6 +65,15 @@ touches them. Coming back to a video you stopped half way through keeps the half
 instead of starting the download again, and backing out of one stops the download rather than
 leaving it running in the background.
 
+**Downloads is a place of its own.** A tab on the phone's bar (Home, Chats, Search, Downloads, with
+the number running on it), a tab on the television's top bar, a button on the desktop's bar (Ctrl+J)
+and, on the web, a page that says downloads are in the app. The page is the running cards (Pause,
+Cancel with Undo on a touch screen) over one list, "On this phone", where what you downloaded and
+what playing left behind ("Auto-saved", with Keep) stand together; Free up space shows only when
+there is something to free. Settings, Downloads and data holds Where to save, On mobile data
+(Ask first, Never, Allow), While streaming, Download the whole video first and Remove after
+watching. Your lists and Settings are behind the gear at the top of Home and of Downloads.
+
 **Is a phone app on a phone.** The same library, drawn the way Android draws things in the hand:
 a Material 3 type scale, full-bleed chat rows, search that expands into the app bar, actions as
 toolbar icons, real switches and dialogs and sheets, a back arrow on every screen, and a player
@@ -99,7 +108,7 @@ do it.
 **Keeps itself current.** Shortly after every launch, and every six hours while it runs, it looks
 for a newer release, puts an amber *Update* on the rail and in the drawer when there is one, and
 offers it once in a popup (Update now, Remind me later, Skip this version). It downloads and
-installs it for you, and waits for Wi-Fi when Wi-Fi only is on. Signing out clears everything it
+installs it for you, and waits for Wi-Fi when On mobile data is Never. Signing out clears everything it
 ever kept: the Telegram session, your history, favourites, settings, and downloaded media.
 
 <p align="center">

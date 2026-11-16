@@ -18,7 +18,7 @@ enum class SettingsGroup(val title: String, val summary: String) {
     Gestures("settings.page_gestures", "settings.page_gestures_summary"),
     Mouse("settings.page_mouse", "settings.page_mouse_summary"),
     Subtitles("settings.page_subtitles_audio", "settings.group_subtitles_audio_summary"),
-    Storage("settings.page_storage", "settings.group_storage_summary"),
+    Storage("settings.page_downloads_data", "settings.group_storage_summary"),
     Notifications("settings.page_notifications", "settings.page_notifications_summary_short"),
     Appearance("settings.page_appearance", "settings.page_appearance_summary"),
     Account("settings.page_privacy_lock", "settings.group_privacy_lock_summary"),
@@ -199,10 +199,9 @@ object SettingsMap {
         row("download_first", st, "settings.download_first", PTD, onOff("settings.download_first"))
         row("remove_after_watching", st, "downloads.remove_after_watching", PTD, listOf("downloads.remove_after_watching_body"), keywords = true)
         row("low_storage", st, "settings.stream_title", PTD, listOf("settings.stream_keep_detail", "settings.stream_save_detail"), keywords = true)
-        row("low_storage_alert", st, "settings.low_storage_alert", PD, listOf("settings.alert_low_storage_detail"))
-        row("wifi_only", st, "settings.wifi_only", P, onOff("settings.wifi_only"), keywords = true)
-        row("save_mobile_data", st, "settings.save_mobile_data", P, onOff("settings.save_mobile_data"), keywords = true)
-        row("pause_downloads", st, "settings.pause_downloads_while_playing", PTD, onOff("settings.pause_downloads_while_playing"))
+        // The twin switches Wi-Fi only and Save mobile data became one question (R2); the low space alert and
+        // pausing downloads while playing are always on, so neither has a row.
+        row("mobile_data", st, "settings.mobile_data_title", P, listOf("settings.mobile_data_ask_detail", "settings.mobile_data_never_detail", "settings.mobile_data_allow_detail"), keywords = true)
         row("scan_folder", st, "storage.scan", D)
 
         val n = SettingsGroup.Notifications

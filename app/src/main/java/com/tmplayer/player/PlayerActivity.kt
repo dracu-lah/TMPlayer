@@ -4166,12 +4166,14 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             alreadyDownloaded = availability == LocalFileAvailability.Complete,
             warnedThisSession = meteredWarningAccepted,
             sizeBytes = fileSizeBytes,
+            // "On mobile data: Allow" is the viewer's answer in advance: nothing to ask.
+            asks = runCatching { settings.mobileDataNow().asks }.getOrDefault(true),
         )
         return when (decision) {
             MeteredDecision.Allow -> true
             MeteredDecision.Block -> {
                 showError(
-                    L.playerWifiOnly,
+                    L.playerMobileDataNever,
                     retryable = false,
                 )
                 false
