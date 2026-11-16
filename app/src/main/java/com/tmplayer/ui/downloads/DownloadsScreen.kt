@@ -31,6 +31,7 @@ import com.tmplayer.ui.browse.TouchChipStrip
 import com.tmplayer.ui.browse.TouchFilterChip
 import com.tmplayer.ui.browse.TouchPage
 import com.tmplayer.ui.browse.TouchPageSpec
+import com.tmplayer.ui.browse.toTop
 import com.tmplayer.ui.browse.VideoPosterThumb
 import com.tmplayer.ui.components.FloatingBackButton
 import com.tmplayer.ui.components.FloatingBarIcon
@@ -1856,6 +1857,9 @@ internal fun DownloadCard(
     var menuOpen by remember { mutableStateOf(false) }
     val s = LocalStrings.current
     val details = listOfNotNull(
+        // A video playing left behind says so, in the one word the page's note explains (R2), first so a
+        // large font that cuts the line short cuts the chat's name and not the tag.
+        if (row.cached) s.downloadsAutoSaved else null,
         // A part-loaded video says both figures: "710 MB" alone reads as the size of the video,
         // while "710 MB of 1.4 GB" says what is on the disk and what would finish it.
         if (row.partial && row.totalBytes > row.bytes) {
@@ -1867,8 +1871,6 @@ internal fun DownloadCard(
         row.chatTitle.ifBlank { null },
         // A part-loaded file still occupies its bytes, and that is the row a viewer looking for
         // space is most likely to want gone.
-        // A video playing left behind says so, in the one word the page's note explains (R2).
-        if (row.cached) s.downloadsAutoSaved else null,
         // A download that stopped part way says so, and what it holds here (user, 2026-10-18).
         if (row.partial) (if (row.cached) s.downloadsPartCached else s.downloadsUnfinishedOnDevice(size = s.formatter.bytes(row.bytes))) else null,
         if (row.missing) s.downloadsFileMissing else null,
@@ -2262,6 +2264,8 @@ private fun PhoneDownloads(
         null
     }
     TouchPage(TouchPageSpec(current = com.tmplayer.ui.browse.TouchDestination.Downloads, hidden = picking, actions = actions))
+    // The Downloads button pressed again on its own page takes the list back to its top, as a tab bar does.
+    com.tmplayer.ui.browse.ScrollToTopOnReselect(com.tmplayer.ui.browse.TouchDestination.Downloads) { animate -> listState.toTop(animate) }
 
     val compact = rememberCompactChrome()
     val navigationBar = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()

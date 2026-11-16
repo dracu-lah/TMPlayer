@@ -38,9 +38,11 @@ import org.robolectric.annotation.GraphicsMode
 /**
  * The television's top bar: Downloads is a place of its own after Chats, its name written, with the
  * number running (R2, PL-16), and Watch later the one quick entry left (an icon that names itself
- * under the remote). Both take the remote in the bar's order (Right from Chats reaches Downloads,
- * Right again Watch later, Left walks back), and OK opens their page from the bar's own
- * beforeProfile. Down into the page and Back from the player are the device leftovers.
+ * under the remote). Both are focus targets in the bar's order, after Chats, and OK opens their page
+ * from the bar's own beforeProfile. The arrows themselves (Right from Chats onto Downloads, then the
+ * Choose chats button) are the desktop's big-screen bar tests, ChooseChatsButtonTest and
+ * BigScreenKeysTest, where key traversal runs: a bar's items take no focus in this harness. Down into
+ * the page and Back from the player are the device leftovers.
  */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -52,17 +54,6 @@ class TvTopBarQuickEntriesTest {
     val rule = createAndroidComposeRule<ComponentActivity>()
 
     private val calls = mutableListOf<String>()
-
-    /** The bar's own item for the page shown (Chats here), which the bar sends the remote to on entering it. */
-    private val onChats = FocusRequester()
-
-    /** The window's focus manager: a D-pad arrow is `moveFocus` in that direction, what the key event runs. */
-    private var focus: androidx.compose.ui.focus.FocusManager? = null
-
-    private fun press(direction: androidx.compose.ui.focus.FocusDirection) {
-        rule.runOnIdle { assertTrue("a neighbour to move to", focus!!.moveFocus(direction)) }
-        rule.waitForIdle()
-    }
 
     @After
     fun tearDown() {
@@ -81,12 +72,11 @@ class TvTopBarQuickEntriesTest {
         )
         rule.setContent {
             TMPlayerTheme {
-                focus = androidx.compose.ui.platform.LocalFocusManager.current
                 Column {
                     TvTopBar(
                         nav = nav, current = if (downloadsShown) null else TvBarTab.Chats, inProfile = downloadsShown, searchOpen = false,
                         onHome = {}, onChats = {}, onSearch = {}, onRefresh = null,
-                        currentFocus = onChats, contentFocus = FocusRequester(), overArt = false,
+                        currentFocus = FocusRequester(), contentFocus = FocusRequester(), overArt = false,
                         beforeProfile = { calls += "before" },
                         downloadsShown = downloadsShown,
                     )
@@ -123,25 +113,6 @@ class TvTopBarQuickEntriesTest {
             assertTrue("a focus target", focusable.any { it.id == node.id })
             assertTrue("pressable", node.config.getOrNull(SemanticsActions.OnClick) != null)
         }
-    }
-
-    @Test
-    fun `the remote walks from Chats to Downloads to Watch later and back`() {
-        open()
-        val chats = rule.onNodeWithText(L.browseTabChats)
-        chats.requestFocus()
-        rule.waitForIdle()
-        chats.assertIsFocused()
-        press(androidx.compose.ui.focus.FocusDirection.Right)
-        downloads().assertIsFocused()
-        press(androidx.compose.ui.focus.FocusDirection.Right)
-        later().assertIsFocused()
-        press(androidx.compose.ui.focus.FocusDirection.Left)
-        downloads().assertIsFocused()
-        // OK opens Downloads, from the bar's own beforeProfile.
-        downloads().performKeyInput { pressKey(Key.DirectionCenter) }
-        rule.waitForIdle()
-        assertEquals(listOf("before", "downloads"), calls)
     }
 
     @Test

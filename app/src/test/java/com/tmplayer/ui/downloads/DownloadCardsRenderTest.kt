@@ -144,8 +144,8 @@ class DownloadCardsRenderTest {
     @Config(sdk = [35], qualifiers = "w411dp-h891dp-port-night-xhdpi")
     fun `a phone tags the auto-saved video and keeps it behind Keep, a download is not tagged`() {
         show(tv = false)
-        // One tag, on the auto-saved ones only: the download's line has none.
-        assertEquals(2, rule.onAllNodes(hasText(L.downloadsAutoSaved, substring = true)).fetchSemanticsNodes().size)
+        // One tag, on the auto-saved card only: the download's line has none.
+        assertEquals(1, rule.onAllNodes(hasText(L.downloadsAutoSaved, substring = true)).fetchSemanticsNodes().size)
         shot("cards-phone-dark.png")
 
         // The auto-saved card plays on a tap, as a download does.

@@ -1311,7 +1311,7 @@ private fun CachedRow(
         Words(
             name,
             // The one word the list's note explains: an auto-saved video, kept for a faster start.
-            listOf(size, record.chatTitle, s.downloadsAutoSaved).filter { it.isNotBlank() }.joinToString("  ·  "),
+            listOf(s.downloadsAutoSaved, size, record.chatTitle).filter { it.isNotBlank() }.joinToString("  ·  "),
         ) { fileName?.let { FileNameLine(it) } }
         if (queued) {
             Text(s.downloadsSaving, style = MaterialTheme.typography.bodySmall, color = Tone.muted, modifier = Modifier.padding(end = 12.dp))

@@ -103,3 +103,13 @@ card without a Downloads row); TV D-pad test (Right from Chats reaches Downloads
 Ctrl+J test; render tests of the Downloads page, the settings page and the bar per form factor at 1.0 and 2.0 font; a
 test of the cancel window. Leftovers for the user: a real phone with a SIM for the warning dialog, the TV remote on the
 couch, TalkBack on the gear.
+
+## Before and after
+Before (the phone, Raju's review): `design/ux-review/raju/downloads-active.webp` (the page two taps deep, Free up space as the
+loudest button, Recently played as a second list), `downloads-empty-nav-overlap.webp`, `storage-top.webp` and
+`storage-bottom.webp` (seven switches), `detail-page.webp`, `detail-download-ring.webp`, `history-pause-label.webp`.
+
+After (render tests, `design/redesign/downloads-tab/`, WebP q88): `bar-home-dark` (four places, the gear at the top end),
+`bar-badge-2-dark` (two running), `bar-narrow-2x-dark` (360 dp at twice the font), `gear-card-dark` (the card, no Downloads row),
+`cards-phone-dark`, `cards-phone-narrow-2x-dark` (the Auto-saved tag survives a large font), `cards-tv-dark` (Watch and Keep as
+named buttons), `mobile-data-phone-ask-dark`, `mobile-data-phone-narrow-2x`, `mobile-data-tv-allow-focused`.
