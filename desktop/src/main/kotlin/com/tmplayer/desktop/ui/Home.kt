@@ -282,6 +282,9 @@ internal fun HomeRowsView(
     val watch = rememberSeriesWatch(state)
     // In line with the page header's title, whatever the window's width.
     val side = pageMargin()
+    // "Keep my place on all my devices?", asked once at the end of Home (FQ12).
+    val toast = com.tmplayer.ui.components.rememberToast()
+    val keepPlace = com.tmplayer.ui.browse.rememberKeepPlaceCardState(state.settings, eligible = rows.isNotEmpty() && rowsReady, say = toast)
     // The big-screen mode's bar is drawn over Home while its carousel is up: the picture runs up
     // under it and the bar takes the page's ground only once the rows have scrolled up there
     // (the Android TV app's Home: `underBar` and `homeScrolled`).
@@ -439,6 +442,14 @@ internal fun HomeRowsView(
                                     ShelfStrips(state, side, sizes, row.entries, { titles[it].orEmpty() }) { openSeries = it }
                                 }
                             }
+                        }
+                    }
+                    // Asked once, last: "Keep my place on all my devices?" (FQ12). Counted as shown when
+                    // its item comes into the list, so it is one showing and never again.
+                    if (keepPlace.visible) {
+                        item(key = "keep-place", contentType = "keep-place") {
+                            LaunchedEffect(Unit) { keepPlace.shown() }
+                            com.tmplayer.ui.browse.KeepPlaceCard(onYes = keepPlace::yes, onNotNow = keepPlace::notNow, start = side, end = side)
                         }
                     }
                 }
