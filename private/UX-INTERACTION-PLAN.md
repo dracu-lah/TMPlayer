@@ -697,3 +697,5 @@ Merge main into its branch first. 1 (medium) SavedMessagesBackup.kt:71 confirmat
 - FQ8 cast: Chromecast and Google TV sender plus the existing DLNA. Google Cast library is not FOSS: put it behind a build flag so the F-Droid flavour leaves it out. Same wave rule: after the player-labels worker merges.
 - Live streams: DROPPED.
 - "Add more chats to the devices": user said "later". Do not touch the real selection.
+
+### DECISION (user, 2026-11-16): FQ9 "Play a lighter copy" (CP80) DROPPED for now. Do not build; the "too slow for this chip" end state stays the status sheet text (and external app) from RL5/RL6. Revisit later only if the user asks.
