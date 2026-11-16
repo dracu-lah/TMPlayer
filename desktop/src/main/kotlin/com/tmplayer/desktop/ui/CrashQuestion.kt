@@ -1,6 +1,7 @@
 package com.tmplayer.desktop.ui
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.Checkbox
@@ -60,7 +61,7 @@ internal fun CrashQuestion(onSend: (always: Boolean) -> Unit, onDismiss: () -> U
         focusConfirm = true,
         extra = {
             Row(
-                Modifier.fillMaxWidth().clickable { always = !always },
+                Modifier.fillMaxWidth().toggleable(value = always, role = Role.Checkbox, onValueChange = { always = it }),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Checkbox(checked = always, onCheckedChange = null)

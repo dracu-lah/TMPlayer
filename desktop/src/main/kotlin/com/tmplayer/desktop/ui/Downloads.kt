@@ -252,16 +252,7 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
     val list = rememberLazyListState()
 
     Column(
-        Modifier.fillMaxSize().onPreviewKeyEvent { event ->
-            // Ctrl+A (Cmd+A on a Mac) picks every download, starting a selection when none is on.
-            // The page has no text field, so the key is not taken from one.
-            if (isSelectAllChord(event) && history.isNotEmpty()) {
-                selectAll()
-                true
-            } else {
-                false
-            }
-        },
+        Modifier.fillMaxSize().selectAllChord(enabled = history.isNotEmpty(), onSelectAll = selectAll),
     ) {
         PageHeader(
             s.navDownloads,
@@ -1133,7 +1124,7 @@ private fun ActiveRow(state: ShellState, row: OfflineDownloads.Progress, onFreeU
             row.stage == OfflineDownloads.Stage.Moving -> Unit
             row.busy -> add(RowMenuEntry(s.playerPause, TmIcons.Pause, action = pause))
             failed -> {
-                if (noSpace) add(RowMenuEntry(s.downloadsFreeUpSpace, TmIcons.Delete, action = onFreeUp!!))
+                if (noSpace && onFreeUp != null) add(RowMenuEntry(s.downloadsFreeUpSpace, TmIcons.Delete, action = onFreeUp))
                 if (savable) add(RowMenuEntry(s.commonTryAgain, TmIcons.Refresh, action = resume))
             }
             else -> add(RowMenuEntry(s.downloadsResume, TmIcons.Play, action = resume))
@@ -1162,7 +1153,7 @@ private fun ActiveRow(state: ShellState, row: OfflineDownloads.Progress, onFreeU
             row.stage == OfflineDownloads.Stage.Moving -> Unit
             row.busy -> TipIconButton(TmIcons.Pause, s.playerPause, pause)
             failed -> {
-                if (noSpace) TipIconButton(TmIcons.Delete, s.downloadsFreeUpSpace, onFreeUp!!)
+                if (noSpace && onFreeUp != null) TipIconButton(TmIcons.Delete, s.downloadsFreeUpSpace, onFreeUp)
                 if (savable) TipIconButton(TmIcons.Refresh, s.commonTryAgain, resume)
             }
             else -> TipIconButton(TmIcons.Play, s.downloadsResume, resume)
@@ -1348,3 +1339,16 @@ private val LIST_MAX = 920.dp
 private val OVERVIEW_MAX = 560.dp
 
 private val ON_MAC = System.getProperty("os.name").orEmpty().lowercase().contains("mac")
+
+/**
+ * Ctrl+A (Cmd+A on a Mac) picks everything on the page, with or without a selection already on:
+ * the page has no text field to leave the key to (rule 8). Left alone while [enabled] is false.
+ */
+internal fun Modifier.selectAllChord(enabled: Boolean, onSelectAll: () -> Unit): Modifier = onPreviewKeyEvent { event ->
+    if (enabled && (event.isCtrlPressed || event.isMetaPressed) && event.key == Key.A && event.type == KeyEventType.KeyDown) {
+        onSelectAll()
+        true
+    } else {
+        false
+    }
+}

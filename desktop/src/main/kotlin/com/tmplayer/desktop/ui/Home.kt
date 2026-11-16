@@ -506,8 +506,12 @@ private fun RowPage(
             title,
             row.countLabel(s),
             leading = {
-                BarTooltip(s.commonBack, null, below = true) {
-                    IconButton(onClick = onBack) { Icon(TmIcons.ArrowBack, contentDescription = s.commonBack) }
+                // As About's back arrow: the keyboard's ring, and Esc named, which this page's Back also takes.
+                val interactions = remember { MutableInteractionSource() }
+                BarTooltip(s.commonBack, "Esc", below = true) {
+                    IconButton(onClick = onBack, interactionSource = interactions, modifier = Modifier.keyboardRing(interactions, CircleShape)) {
+                        Icon(TmIcons.ArrowBack, contentDescription = s.commonBack)
+                    }
                 }
             },
             actions = {

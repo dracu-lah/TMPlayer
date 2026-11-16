@@ -1,5 +1,6 @@
 package com.tmplayer.desktop.ui
 
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
@@ -21,16 +22,12 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
 import com.tmplayer.ui.icons.TmIcons
 import com.tmplayer.data.HistoryEdits
 import com.tmplayer.data.HistoryUndo
@@ -131,8 +128,7 @@ internal fun TickBox(ticked: Boolean, modifier: Modifier = Modifier, onToggle: (
             .clip(CircleShape)
             .background(if (ticked) Tone.accent else Color.Black.copy(alpha = 0.55f))
             .border(2.dp, Color.White, CircleShape)
-            .semantics { role = Role.Checkbox; stateDescription = if (ticked) s.browseBadgeSelected else "" }
-            .clickable(onClick = onToggle),
+            .toggleable(value = ticked, role = Role.Checkbox, onValueChange = { onToggle() }),
         contentAlignment = Alignment.Center,
     ) {
         if (ticked) Icon(TmIcons.Check, contentDescription = s.browseBadgeSelected, tint = Tone.onAccent, modifier = Modifier.size(16.dp))

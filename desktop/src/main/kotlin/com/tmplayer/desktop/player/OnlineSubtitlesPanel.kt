@@ -1,5 +1,8 @@
 package com.tmplayer.desktop.player
 
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.BoxScope
@@ -152,9 +155,11 @@ internal fun BoxScope.OnlineSubtitlesPanel(
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 shown.hits.forEach { hit ->
                     val enabled = online.blockedFor(hit) == null && busy == null
+                    val hitInteractions = remember { MutableInteractionSource() }
                     Column(
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
-                            .clickable(enabled = enabled) {
+                            .overlayFocusRing(hitInteractions, RoundedCornerShape(8.dp))
+                            .clickable(interactionSource = hitInteractions, indication = LocalIndication.current, enabled = enabled, role = Role.Button) {
                                 busy = hit
                                 scope.launch {
                                     when (val done = online.download(hit, wanted)) {
