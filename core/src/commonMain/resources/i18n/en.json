@@ -3333,7 +3333,7 @@
   },
   "syncplace": {
     "card_body": "TMPlayer keeps one small file in your own Saved Messages, so your phone, TV and computer remember where you stopped, your bookmarks and the titles you fixed. Nothing else is kept, and it stays in your own Telegram.",
-    "card_hint": "You can change this any time in Settings, Account.",
+    "card_hint": "You can change this any time in Settings, Privacy and lock.",
     "card_no": "Not now",
     "card_title": "Keep my place on all my devices?",
     "card_yes": "Yes, keep it",

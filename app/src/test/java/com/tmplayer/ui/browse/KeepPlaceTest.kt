@@ -167,7 +167,7 @@ class KeepPlaceTest {
         rule.onNodeWithText(TITLE).assertExists()
         rule.onNodeWithText("one small file in your own Saved Messages", substring = true).assertExists()
         rule.onNodeWithText("Nothing else is kept", substring = true).assertExists()
-        rule.onNodeWithText("You can change this any time in Settings, Account.").assertExists()
+        rule.onNodeWithText("You can change this any time in Settings, Privacy and lock.").assertExists()
         shot("keep-place-card-phone-411.png")
         rule.onNode(hasText("Not now") and hasClickAction()).performScrollTo().performClick()
         rule.onNode(hasText("Yes, keep it") and hasClickAction()).performScrollTo().performClick()

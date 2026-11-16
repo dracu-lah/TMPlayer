@@ -212,8 +212,8 @@ class NamedListsTest {
         val read = SyncDocuments.decode(SyncDocuments.encode(SyncDocument(account = 5)).bytes, 5) as SyncRead.Ok
         assertTrue(read.doc.lists.isEmpty)
         // A file of a version past this build's is too new: never read nor written over.
-        val newer = "{\"format\":\"tmplayer-sync\",\"version\":3,\"lists\":{}}".encodeToByteArray()
-        assertEquals(SyncRead.TooNew(3), SyncDocuments.decode(newer, 5))
+        val newer = "{\"format\":\"tmplayer-sync\",\"version\":4,\"lists\":{}}".encodeToByteArray()
+        assertEquals(SyncRead.TooNew(4), SyncDocuments.decode(newer, 5))
     }
 
     @Test

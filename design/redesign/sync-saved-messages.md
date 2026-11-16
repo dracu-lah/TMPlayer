@@ -25,7 +25,7 @@ FQ12 (progress and bookmark sync through your own Saved Messages) and COMPETITOR
 3. Appears when relevant: the card shows only once, at the end of the first Home visit that has rows,
    and never when sync is already on. The sign out tick shows only in the sign out dialog.
    "One in, one out": the old row "Resume on your other devices" in Library (and its enable dialog) goes.
-4. One place, one name: the switch moves to Settings, Account as "Keep my place on all my devices"; the
+4. One place, one name: the switch moves to Settings, Privacy and lock (the Account page) as "Keep my place on all my devices"; the
    old row and its "Resume on your other devices" wording are removed (keys stay in en.json for the
    locales, listed in DEAD-STRINGS.md). Sync now and "Turn off and delete the sync file" move with it.
 5. No silent change: sync stays off until a yes. Users who already turned it on keep it on (same
@@ -42,8 +42,8 @@ FQ12 (progress and bookmark sync through your own Saved Messages) and COMPETITOR
 | --- | --- | --- | --- | --- |
 | Question | Card as the last item of Home, after the rows, shown once. "Yes, keep it" / "Not now" | Same card, last item; Down from the last row lands on "Yes, keep it", Right moves to "Not now"; Back leaves it | Same card at the end of Home; Tab and arrows; Enter | Not built (see below) |
 | Yes | Switch on, first sync at once, toast "Your place is now kept on all your devices" | same | same | |
-| Not now / leaving Home | Card gone for good (stored as seen). Settings, Account holds the switch | same | same | |
-| Switch | Settings, Account, "Keep my place on all my devices", subtitle is the privacy line. On: Sync now (with last result) and "Turn off and delete the sync file" under it | Same rows, D-pad, focus returns to the switch when rows disappear | Same page rows, Space toggles | |
+| Not now / leaving Home | Card gone for good (stored as seen). Settings, Privacy and lock (the Account page) holds the switch | same | same | |
+| Switch | Settings, Privacy and lock (the Account page), "Keep my place on all my devices", subtitle is the privacy line. On: Sync now (with last result) and "Turn off and delete the sync file" under it | Same rows, D-pad, focus returns to the switch when rows disappear | Same page rows, Space toggles | |
 | Off | Switch off, file stays in Saved Messages (delete is the second row) | same | same | |
 | Sign out | Dialog: one sentence, tick "Save my settings backup to my Saved Messages first" (on). Confirm: "Saving your backup to Saved Messages", then signs out | Same dialog, tick is a row focusable by remote | Same dialog with the checkbox | |
 | Sign out, backup fails | Dialog "The backup was not saved" with the reason, "You are not signed out yet", buttons "Sign out anyway" and Back (Back returns to the first dialog, where Sign out tries again or the tick can be turned off) | same | same | |
@@ -105,7 +105,7 @@ FQ12 (progress and bookmark sync through your own Saved Messages) and COMPETITOR
 - **Another account signed in.** The switch turns itself off and says so (existing). Sign out clears
   the switch, the card state and the bookmark times and removals with the account's data.
 - **Kids lock / app lock.** The file is collected from the raw stores, so a hidden chat's places are
-  still synced (a place hidden here is not a removal). Settings, Account is behind its PIN already.
+  still synced (a place hidden here is not a removal). Settings, Privacy and lock (the Account page) is behind its PIN already.
 - **Sign out backup, no line.** Fails within the minute with "TMPlayer could not reach Telegram."; the
   dialog offers Sign out anyway. Never blocks, never signs out half way (the send is confirmed before
   the sign out starts, because signing out destroys an upload under way).
@@ -120,12 +120,12 @@ FQ12 (progress and bookmark sync through your own Saved Messages) and COMPETITOR
 
 ## Platforms
 
-- Phone: card in Home's list, switch and rows in Settings, Account, sign out tick in the dialog.
+- Phone: card in Home's list, switch and rows in Settings, Privacy and lock (the Account page), sign out tick in the dialog.
 - TV: the same widgets; the card's two buttons are plain focusable buttons (Down from the last row
   reaches them, Back goes up), the switch row and its two action rows follow the remote, focus goes
   back to the switch when the rows vanish. Sign out tick is a focusable row. Machine checks: D-pad test
   for the card and the switch, render per form factor.
-- Desktop: the card in Home, the switch in Settings, Account with Space and Enter, the checkbox in
+- Desktop: the card in Home, the switch in Settings, Privacy and lock (the Account page) with Space and Enter, the checkbox in
   the sign out dialog.
 - Web app (webapp): it has no Saved Messages sync yet (its lists live in the page's IndexedDB). Adding
   it needs the browser client to send, find and pin a document and to read the gzip file; that is its own
