@@ -544,8 +544,6 @@ class TelegramPlayerMedia(
      * names no episode, not even a bare "E5", is a film and asks nothing.
      */
     override suspend fun episodes(): Episodes {
-        // Started from a chat's audio: the list is the order, the next file plays when one ends.
-        com.tmplayer.data.PlayQueue.stepsFor(item)?.let { return it }
         val tag = EpisodeNeighbours.tagOf(item)
         val show = EpisodeNeighbours.showOf(item) ?: return chatOrder()
         if (item.chatId == 0L) return Episodes(current = tag)
@@ -567,11 +565,11 @@ class TelegramPlayerMedia(
      * After a video that is not an episode (EG-F30): with the setting on, the chat's next video in
      * the order its grid is sorted in ([com.tmplayer.data.ChatOrder]), which autoplay, the next-up
      * card and "Still watching?" then treat as the next episode. Nothing is asked of Telegram with
-     * the setting off, for sound alone or a video with no chat; a chat that cannot be asked leaves
+     * the setting off or for a video with no chat; a chat that cannot be asked leaves
      * it as a film is: the video ends on its last frame.
      */
     private suspend fun chatOrder(): Episodes {
-        if (item.chatId == 0L || com.tmplayer.data.ChatAudio.isAudio(item)) return Episodes()
+        if (item.chatId == 0L) return Episodes()
         val settings = DesktopServices.settings
         if (!runCatching { settings.playChatOrderNow() }.getOrDefault(false)) return Episodes()
         val session = Td.awaitAuthorizedSession()

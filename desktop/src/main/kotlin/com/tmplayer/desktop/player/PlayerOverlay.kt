@@ -426,7 +426,7 @@ internal fun BoxScope.PlayerOverlay(
     sleepTimer: String? = null,
     /** The A-B repeat as marked so far, drawn on the timebar and named above it; null for none. */
     loop: AbLoop? = null,
-    /** Whether Repeat this video is on, or null where the menu has no such line (sound alone). */
+    /** Whether Repeat this video is on, or null where the menu has no such line. */
     repeatVideo: Boolean? = null,
     /** The label of "Mark this as the intro" (an episode only), or null for no such line. */
     markIntro: String? = null,
@@ -990,7 +990,7 @@ internal fun PlayerMenu(
     subtitles: Boolean = true,
     /** Given to the page's first line, where the panel puts the keyboard as a page opens. */
     firstFocus: FocusRequester? = null,
-    /** Whether Repeat this video is on, or null where the menu has no such line (sound alone). */
+    /** Whether Repeat this video is on, or null where the menu has no such line. */
     repeatVideo: Boolean? = null,
     markIntro: String? = null,
 ) {

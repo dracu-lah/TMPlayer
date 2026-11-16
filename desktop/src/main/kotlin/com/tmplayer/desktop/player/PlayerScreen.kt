@@ -457,9 +457,9 @@ fun PlayerScreen(
     // A-B repeat, for the video playing only: a new video starts with none.
     var abLoop by remember(current) { mutableStateOf<AbLoop?>(null) }
     // Repeat this video (EG-F52): lasts for the video it was switched on for; "Keep repeat on"
-    // carries it to the next ([com.tmplayer.data.PlayQueue.repeatsVideo]). Excludes the A-B repeat.
+    // carries it to the next ([com.tmplayer.data.RepeatVideo.repeats]). Excludes the A-B repeat.
     var keepRepeat by remember { mutableStateOf(false) }
-    var repeatVideo by remember(current) { mutableStateOf(com.tmplayer.data.PlayQueue.repeatsVideo(current.item, keepRepeat)) }
+    var repeatVideo by remember(current) { mutableStateOf(com.tmplayer.data.RepeatVideo.repeats(current.item, keepRepeat)) }
 
     // "Still watching?" and the sleep timer (CP07). The counts live for the whole player session,
     // so they carry across the episodes autoplay moves on to, and any input starts them again.
@@ -665,7 +665,7 @@ fun PlayerScreen(
         launch { tdlibVersion = current.tdlibVersion() }
         autoplayNext = runCatching { settings.autoplayNextNow() }.getOrDefault(true)
         keepRepeat = runCatching { settings.keepRepeatNow() }.getOrDefault(false)
-        repeatVideo = com.tmplayer.data.PlayQueue.repeatsVideo(current.item, keepRepeat)
+        repeatVideo = com.tmplayer.data.RepeatVideo.repeats(current.item, keepRepeat)
         showRemaining = runCatching { settings.touchPrefsNow().showRemaining }.getOrDefault(false)
         // A saved position opens a few seconds early, as Settings has it ([ResumeRewind]); Keep
         // watching reopens exactly where the file stopped, and a bookmark chosen on the detail
@@ -1006,15 +1006,15 @@ fun PlayerScreen(
     // The end: the next episode after a countdown, or the last frame with a way to watch again.
     LaunchedEffect(status.ended) {
         if (!status.ended || phase != Phase.Playing) return@LaunchedEffect
-        // Repeat one on a chat's audio, or Repeat this video: again from the start, not watched,
+        // Repeat this video: again from the start, not watched,
         // no next-up and no count towards "Still watching?". A sleep timer for the end wins.
-        if (com.tmplayer.data.PlayQueue.atEnd(current.item, keepRepeat, sleepAtTheEnd) == com.tmplayer.data.QueuePlan.AtEnd.Replay) {
+        if (com.tmplayer.data.RepeatVideo.replaysAtEnd(current.item, keepRepeat, sleepAtTheEnd)) {
             engine.seekToExact(0)
             engine.play()
             return@LaunchedEffect
         }
         if (sleepAtTheEnd && repeatVideo) {
-            com.tmplayer.data.PlayQueue.setRepeatVideo(false)
+            com.tmplayer.data.RepeatVideo.set(false)
             repeatVideo = false
         }
         if (current.incomplete) {
@@ -1502,9 +1502,8 @@ fun PlayerScreen(
 
     /** Repeat this video on or off; turning it on clears the A-B repeat, which it excludes. */
     fun toggleRepeatVideo() {
-        if (com.tmplayer.data.ChatAudio.isAudio(current.item)) return
         val on = !repeatVideo
-        com.tmplayer.data.PlayQueue.setRepeatVideo(on, current.item)
+        com.tmplayer.data.RepeatVideo.set(on, current.item)
         repeatVideo = on
         if (on && abLoop != null) {
             abLoop = null
@@ -1518,7 +1517,7 @@ fun PlayerScreen(
     fun pressAbRepeat() {
         // The two repeats exclude each other: marking a stretch turns Repeat this video off.
         if (repeatVideo) {
-            com.tmplayer.data.PlayQueue.setRepeatVideo(false)
+            com.tmplayer.data.RepeatVideo.set(false)
             repeatVideo = false
         }
         val at = liveStatus.value.positionMs
@@ -2014,7 +2013,7 @@ fun PlayerScreen(
                 },
                 sleepTimer = sleepTimerDetail(),
                 loop = abLoop,
-                repeatVideo = repeatVideo.takeUnless { com.tmplayer.data.ChatAudio.isAudio(current.item) },
+                repeatVideo = repeatVideo,
                 markIntro = if (skipCtl.canMark) (if (introMarking) s.playerMarkIntroEnd else s.playerMarkIntro) else null,
                 bookmarks = if (marksOn) marks else null,
                 onMenuAction = { action ->
@@ -2117,20 +2116,6 @@ fun PlayerScreen(
                 castButton = { CastButton() },
                 subtitlesButton = com.tmplayer.cast.CAST_SUBTITLES || activeEngine !is com.tmplayer.desktop.cast.CastPlaybackEngine,
             ) }
-
-            // Sound alone: its name and chat where the picture would be, unless the file carries
-            // a cover, which mpv draws as the picture.
-            if (com.tmplayer.data.ChatAudio.isAudio(current.item) && phase == Phase.Playing && status.videoWidth == 0) {
-                Column(
-                    Modifier.align(Alignment.Center).padding(32.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    androidx.compose.material3.Icon(com.tmplayer.ui.icons.TmIcons.Audio, contentDescription = null, tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(72.dp))
-                    Text(current.item.title, color = Color.White, fontSize = 22.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-                    if (current.chatTitle.isNotBlank()) Text(current.chatTitle, color = Color.White.copy(alpha = 0.72f), fontSize = 15.sp)
-                }
-            }
 
             FeedbackLayer(
                 flash = flash,
