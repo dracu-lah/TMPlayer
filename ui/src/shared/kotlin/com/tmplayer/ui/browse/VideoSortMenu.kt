@@ -107,9 +107,11 @@ fun videoFiltersLabel(filter: VideoFilter, facets: VideoFacets, s: Messages): St
 /**
  * What a chat's Sort menu holds, the same on a phone, a television and a computer: the order
  * ([VideoSort]), which videos show ([VideoFilter]) and the filters by what a video is
- * ([VideoFacets]: length, picture, HDR and subtitles, language, when added), which combine. Each
- * pick applies at once. The size limits are not here: they are set in Settings only, and a chat
- * says when they hid something.
+ * ([VideoFacets]: length, picture, HDR and subtitles, language, when added), which combine, and one
+ * switch, "Hide small clips" ([onHideSmall], under [com.tmplayer.data.SizeFilter.CLIP_MIN]). Each
+ * pick applies at once. The switch stays in the menu when pressed (the grid changes behind it); a
+ * chat that hid something ends in a row that says so, and a floor chosen before the switch
+ * existed gets its own line with a Reset ([customLimits]).
  *
  * @param languages the languages the loaded videos' names state ([VideoFaceting.languagesIn]);
  *   the Language group is left out while there are none.
@@ -127,6 +129,19 @@ class VideoMenuState(
     val facets: VideoFacets = VideoFacets.NONE,
     val languages: List<String> = emptyList(),
     val onFacets: (VideoFacets) -> Unit = {},
+    /**
+     * The "Hide small clips" switch: whether it reads on, and what turning it on or off does.
+     * Null [onHideSmall] leaves the Size group out (a screen with no size limits to set).
+     */
+    val hideSmall: Boolean = false,
+    val onHideSmall: ((Boolean) -> Unit)? = null,
+    /**
+     * A floor or ceiling chosen before the sliders went, kept working: the sentence for the line
+     * under the switch ("You'll see videos from 700 MB upwards."), pressing which ([onResetLimits])
+     * shows every video again. Null when there is none.
+     */
+    val customLimits: String? = null,
+    val onResetLimits: (() -> Unit)? = null,
 )
 
 /**
@@ -156,6 +171,16 @@ fun videoMenuGroups(state: VideoMenuState, s: Messages): List<ChoiceGroup> = bui
         GroupedChoice(s.gridFilterHdr, TmIcons.Theme, facets.hdr) { pick(facets.copy(hdr = !facets.hdr)) },
         GroupedChoice(s.gridFilterSubtitles, TmIcons.Subtitles, facets.subtitles) { pick(facets.copy(subtitles = !facets.subtitles)) },
     )))
+    state.onHideSmall?.let { toggle ->
+        val size = com.tmplayer.data.SizeFilter.label(com.tmplayer.data.SizeFilter.CLIP_MIN)
+        val lines = buildList {
+            add(GroupedChoice(s.gridHideSmallClips(size), TmIcons.FilterHorizontal, state.hideSmall) { toggle(!state.hideSmall) })
+            val custom = state.customLimits
+            val reset = state.onResetLimits
+            if (custom != null && reset != null) add(GroupedChoice(s.gridSizeLimitOn(custom), TmIcons.Close, true, reset))
+        }
+        add(ChoiceGroup(s.gridFilterSizeLabel, lines))
+    }
     val languages = state.languages.let { found -> facets.language?.let { if (it in found) found else listOf(it) + found } ?: found }
     if (languages.isNotEmpty()) {
         add(ChoiceGroup(s.gridFilterLanguageLabel, listOf(GroupedChoice(s.gridFilterAny, TmIcons.Grid, facets.language == null) { pick(facets.copy(language = null)) }) +

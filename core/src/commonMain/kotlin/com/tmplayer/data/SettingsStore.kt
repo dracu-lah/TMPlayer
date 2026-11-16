@@ -2137,23 +2137,29 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
 
     // ---- size filter ------------------------------------------------------------------------
 
+    /**
+     * The smallest video a chat lists ([SizeFilter.effectiveMin]): 0 unless the viewer turned on
+     * "Hide small clips" (50 MB) or chose a floor before the sliders went. A stored 400 MB, the old
+     * default, reads as 0.
+     */
     val minSizeBytes: Flow<Long> =
-        read { it[MIN_SIZE] ?: SizeFilter.DEFAULT_MIN }
+        read { SizeFilter.effectiveMin(it[MIN_SIZE]) }
 
     val maxSizeBytes: Flow<Long> =
-        read { it[MAX_SIZE] ?: SizeFilter.DEFAULT_MAX }
+        read { SizeFilter.effectiveMax(it[MAX_SIZE]) }
 
-    suspend fun setMinSizeBytes(value: Long) {
+    /** The Sort sheet's "Hide small clips" switch: on stores [SizeFilter.CLIP_MIN], off stores nothing. */
+    suspend fun setHideSmallClips(on: Boolean) {
         prefs.edit { prefs ->
-            val max = prefs[MAX_SIZE] ?: SizeFilter.DEFAULT_MAX
-            prefs[MIN_SIZE] = SizeFilter.clampMin(value, max)
+            if (on) prefs[MIN_SIZE] = SizeFilter.CLIP_MIN else prefs.remove(MIN_SIZE)
         }
     }
 
-    suspend fun setMaxSizeBytes(value: Long) {
+    /** Reset on the Sort sheet's custom limits line: both stored bounds go, every video is listed. */
+    suspend fun resetSizeLimits() {
         prefs.edit { prefs ->
-            val min = prefs[MIN_SIZE] ?: SizeFilter.DEFAULT_MIN
-            prefs[MAX_SIZE] = SizeFilter.clampMax(value, min)
+            prefs.remove(MIN_SIZE)
+            prefs.remove(MAX_SIZE)
         }
     }
 

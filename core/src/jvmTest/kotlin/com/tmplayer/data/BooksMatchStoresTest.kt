@@ -61,8 +61,17 @@ class BooksMatchStoresTest {
         book.setPureBlack(true)
         assertTrue(store.pureBlack.first())
 
-        store.setMinSizeBytes(100L * 1024 * 1024)
+        assertEquals("every video by default", 0L, store.minSizeBytes.first())
         assertEquals(store.minSizeBytes.first(), book.minSizeBytes.first())
+        store.setHideSmallClips(true)
+        assertEquals(SizeFilter.CLIP_MIN, store.minSizeBytes.first())
+        assertEquals(store.minSizeBytes.first(), book.minSizeBytes.first())
+        book.setHideSmallClips(true)
+        book.resetSizeLimits()
+        store.resetSizeLimits()
+        assertEquals(0L, store.minSizeBytes.first())
+        assertEquals(store.minSizeBytes.first(), book.minSizeBytes.first())
+        assertEquals(SizeFilter.CEILING, store.maxSizeBytes.first())
         book.setVideoSort(5L, VideoSort.entries.last())
         assertEquals(VideoSort.entries.last(), store.videoSort(5L).first())
 

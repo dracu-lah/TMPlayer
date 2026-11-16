@@ -37,6 +37,7 @@ sealed interface UiState<out T> {
             StateAction.Refresh -> TmIcons.Refresh
             StateAction.AddChats -> TmIcons.ChatsMany
             StateAction.ClearFilters -> TmIcons.FilterHorizontal
+            StateAction.ShowSmall -> TmIcons.FilterHorizontal
             null -> TmIcons.VideoOff
         }
     }
@@ -72,6 +73,12 @@ enum class StateAction {
      * video is, rather than leave the viewer facing an empty grid of a full chat.
      */
     ClearFilters,
+
+    /**
+     * Only small videos are in this chat and "Hide small clips" is hiding them: list them for this
+     * visit (R1). The screen does it, as it does [ClearFilters].
+     */
+    ShowSmall,
     ;
 
     /** The button's words. */
@@ -81,6 +88,7 @@ enum class StateAction {
         Refresh -> L.commonRefresh
         AddChats -> L.pickerChooseChats
         ClearFilters -> L.searchClearFilters
+        ShowSmall -> L.gridFilterShowThem
     }
 
     /**

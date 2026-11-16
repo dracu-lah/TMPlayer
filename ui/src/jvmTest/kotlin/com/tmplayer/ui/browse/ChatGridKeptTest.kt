@@ -5,6 +5,7 @@ import com.tmplayer.data.MediaCursors
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.PageQueries
 import com.tmplayer.data.QueryKey
+import com.tmplayer.data.SizeFilter
 import com.tmplayer.ui.components.UiState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -72,12 +73,61 @@ class ChatGridKeptTest {
     }
 
     @Test
-    fun `videos hidden by the size limits are told once per opening of the chat`() {
-        val model = MediaListViewModel(chatId, minSizeBytes = 100, maxSizeBytes = Long.MAX_VALUE)
-        assertEquals("the settled listing's count, for one message", 100, model.hiddenNotice.value)
-        model.hiddenNoticeShown()
-        assertEquals("shown, and not raised again by the same opening", 0, model.hiddenNotice.value)
-        val wide = MediaListViewModel(chatId, minSizeBytes = 0, maxSizeBytes = Long.MAX_VALUE)
-        assertEquals("nothing hidden, nothing to say", 0, wide.hiddenNotice.value)
+    fun `every video is listed by default and nothing is counted as hidden`() {
+        val model = MediaListViewModel(chatId, minSizeBytes = SizeFilter.DEFAULT_MIN, maxSizeBytes = SizeFilter.DEFAULT_MAX)
+        assertEquals(300, (model.state.value as UiState.Content).value.items.size)
+        assertEquals(0, model.sizeHidden.value)
+    }
+
+    @Test
+    fun `Hide small clips counts the hidden set once, exactly, for a whole chat read to its start`() {
+        PageQueries.cache.put(
+            QueryKey.ChatMedia(chatId),
+            ChatGrid(
+                items = (300L downTo 1L).map { video(it, if (it % 3 == 0L) 10L * SizeFilter.MB else 500L * SizeFilter.MB) },
+                cursors = MediaCursors(video = 1, document = 1, animation = 1),
+                endReached = true,
+            ),
+        )
+        val model = MediaListViewModel(chatId, minSizeBytes = SizeFilter.CLIP_MIN, maxSizeBytes = SizeFilter.DEFAULT_MAX)
+        val shown = model.state.value as UiState.Content
+        assertEquals(200, shown.value.items.size)
+        assertTrue(shown.value.endReached)
+        assertEquals("the hidden set, one pass", 100, model.sizeHidden.value)
+    }
+
+    @Test
+    fun `a hundred thousand videos are counted in one pass from the kept listing`() {
+        PageQueries.cache.put(
+            QueryKey.ChatMedia(chatId),
+            ChatGrid(
+                items = (100_000L downTo 1L).map { video(it, if (it % 4 == 0L) 5L * SizeFilter.MB else 300L * SizeFilter.MB) },
+                cursors = MediaCursors(video = 1, document = 1, animation = 1),
+                endReached = true,
+            ),
+        )
+        val started = System.nanoTime()
+        val model = MediaListViewModel(chatId, minSizeBytes = SizeFilter.CLIP_MIN, maxSizeBytes = SizeFilter.DEFAULT_MAX)
+        val tookMs = (System.nanoTime() - started) / 1_000_000
+        assertEquals(75_000, (model.state.value as UiState.Content).value.items.size)
+        assertEquals(25_000, model.sizeHidden.value)
+        assertTrue("100,000 videos drawn from the kept listing in $tookMs ms", tookMs < 5_000)
+    }
+
+    @Test
+    fun `a chat of only small videos says so and offers Show them`() {
+        PageQueries.cache.put(
+            QueryKey.ChatMedia(chatId),
+            ChatGrid(
+                items = (5L downTo 1L).map { video(it, 8L * SizeFilter.MB) },
+                cursors = MediaCursors(video = 1, document = 1, animation = 1),
+                endReached = true,
+            ),
+        )
+        val model = MediaListViewModel(chatId, minSizeBytes = SizeFilter.CLIP_MIN, maxSizeBytes = SizeFilter.DEFAULT_MAX)
+        val empty = model.state.value as UiState.Empty
+        assertEquals(com.tmplayer.ui.components.StateAction.ShowSmall, empty.action)
+        assertTrue(empty.message, "5 small videos are hidden" in empty.message)
+        assertEquals(5, model.sizeHidden.value)
     }
 }
