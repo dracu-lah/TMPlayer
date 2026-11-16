@@ -394,6 +394,13 @@ RL1 to RL3 `88d194b`, T4 `aeff4e5`, T9 `da4c88f`, Raju A+D+H `2f60ee3`. Catalog 
 Running: RL4+RL5+RL6+RL8 (player ladder wiring, opus), T11 (anime episodes), T10 (skip sources).
 To confirm (user): star mode on the chat list (new, from Raju A), pill word "Choose chats", the strip hides at 8 or
 fewer chats, desktop Back dock removal (queued), ten `series.*` strings to translate.
+PRIORITY FIX (reviewer finding on `e42f689`, next free slot, by the RL worker `acef092900fca8fb1` via SendMessage): (1) SERIOUS
+`RemedyRunner.kt:333` `wanted()` keeps the 1 Hz tick running for the whole video (`FrozenOutputWatch.fired` is only true
+on a freeze): stop once `proven && firstFrameWatch.done`, re-arm on seek or hop, add a test that the tick stops after
+proven (idle CPU on the 1 GB stick); (2) `PlayerActivity.kt:2811` `moveToEngine` `castClient ?: return` loses a hop: make
+`reopen()` return Boolean and call `exhaust` on false; (3) `saveMemory` launches per call, out of order writes: one serial
+writer. Then RL9 (index bigger than 8 MB, HX79) and RL10 to RL14.
+
 Next: FQ1+FQ2+FQ7, Raju B+R4, E+F, then R1, R3, R2, C+G, T8, TS rest, RL9 to RL14, FQ rest, review waves.
 
 ## Not in this pass
