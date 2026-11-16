@@ -77,6 +77,7 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -256,6 +257,9 @@ internal fun TouchNavHost(
     chrome: TouchChrome,
     /** The page on screen: whatever [LocalTouchPageKey] its [TouchPage] reports under. */
     pageKey: Any,
+    /** The connection banner, drawn above the bar and never over it (R4, 9.1); [bannerShown] says when. */
+    bannerShown: Boolean = false,
+    banner: @Composable () -> Unit = {},
     content: @Composable () -> Unit,
 ) {
     val reduced = rememberReducedMotion() || Motion.reduced
@@ -316,10 +320,21 @@ internal fun TouchNavHost(
             animationSpec = Motion.standard(if (reduced) 0 else Motion.Normal),
             label = "railRoom",
         )
+        // The banner's own height, measured, so the pages end above it and nothing it covers is lost.
+        var bannerHeight by remember { mutableStateOf(0.dp) }
+        val bannerRoom = if (bannerShown && !rail) bannerHeight + BAR_GAP else 0.dp
+        // Its foot: on the bar's top edge while the bar is out, at the window's foot when it is not.
+        val bannerFoot by animateDpAsState(
+            targetValue = if (barShown && !rail) room else navigationBar + BAR_MARGIN,
+            animationSpec = Motion.standard(if (reduced) 0 else Motion.Normal),
+            label = "bannerFoot",
+        )
+
         SharedTransitionLayout(Modifier.fillMaxSize()) {
             Box(Modifier.fillMaxSize()) {
                 CompositionLocalProvider(
-                    LocalBottomChrome provides room,
+                    LocalBottomChrome provides room + bannerRoom,
+                    com.tmplayer.ui.components.LocalBannerRoom provides bannerRoom,
                     LocalTouchChrome provides chrome,
                     LocalTouchShared provides this@SharedTransitionLayout,
                     LocalTouchRail provides rail,
@@ -405,6 +420,21 @@ internal fun TouchNavHost(
                             )
                         }
                     }
+                }
+
+                // The connection banner: a card with its own buttons, above the bar, so a tap meant for
+                // the bar never lands on it. Beside a rail it keeps the window's foot, off the rail.
+                AnimatedVisibility(
+                    visible = bannerShown,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(start = 16.dp + railRoom, end = 16.dp, bottom = bannerFoot)
+                        .widthIn(max = 560.dp),
+                    enter = fadeIn(Motion.standard(if (reduced) 0 else Motion.Fast)),
+                    exit = fadeOut(Motion.standard(if (reduced) 0 else Motion.Fast)),
+                ) {
+                    val bannerDensity = LocalDensity.current
+                    Box(Modifier.onSizeChanged { bannerHeight = with(bannerDensity) { it.height.toDp() } }) { banner() }
                 }
 
                 YouPopover(
@@ -610,6 +640,10 @@ internal class BarVisibility {
         override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
             val moved = consumed.y
             when {
+                // A push or fling that reaches the end of the list (nothing left to scroll, so some of
+                // it comes back unconsumed) brings the bar back: at the end of Home there was no bar
+                // to reach Chats with (R4, 4.5).
+                available.y < 0f && moved <= 0f -> show()
                 moved < 0f -> {
                     travelled = (travelled + moved).coerceAtMost(0f)
                     if (travelled < -HIDE_AFTER_PX) shown = false

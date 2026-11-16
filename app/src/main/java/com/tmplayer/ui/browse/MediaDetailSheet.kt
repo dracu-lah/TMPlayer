@@ -147,6 +147,18 @@ internal fun MediaDetailOpened(
     val cachedHere by produceState(initialValue = false, item.fileId, downloading) {
         value = runCatching { Td.isFileCached(item.fileId) }.getOrDefault(false)
     }
+    // Offline (R4): a video that is neither downloaded nor whole in the watch cache cannot start,
+    // so its Play says why in place of a press that would fail.
+    val offlineHome = LocalOfflineHome.current
+    val offlineNoPlay by produceState(
+        initialValue = offlineHome.offline && !inDownloads && item.locality == MediaItem.Locality.Remote && !offlineHome.plays(item.chatId, item.messageId),
+        offlineHome.offline, item.fileId, inDownloads,
+    ) {
+        value = offlineHome.offline && !inDownloads && item.locality == MediaItem.Locality.Remote &&
+            !offlineHome.plays(item.chatId, item.messageId) &&
+            com.tmplayer.data.runCatchingCancellable { Td.localFileAvailability(item.fileId) }
+                .getOrDefault(com.tmplayer.data.LocalFileAvailability.Missing) != com.tmplayer.data.LocalFileAvailability.Complete
+    }
     // Room on the volume downloads go to, measured off the UI thread (a statvfs), for the
     // "x GB free" on the download line.
     val freeBytes by produceState(initialValue = 0L) {
@@ -468,6 +480,15 @@ internal fun MediaDetailOpened(
             } }
         }
         when {
+            // Offline and not on this phone: no Play, the one line that says what to do (R4).
+            (action == DetailAction.Resume || action == DetailAction.Play) && offlineNoPlay ->
+                detailRow(action, s, watched, chatTitle, run).copy(
+                    label = s.detailConnectOrDownload,
+                    icon = com.tmplayer.ui.icons.TmIcons.WifiOff,
+                    enabled = false,
+                    // The page's big button ignores `enabled`: a press must not start what cannot start.
+                    onSelect = {},
+                )
             action == DetailAction.CancelDownload && downloading != null -> cancelRow(s, downloading, run)
             // Being copied to the gallery: the button's ring fills as it goes.
             action == DetailAction.ExportCopy && exportKey in exporting.keys && exporting.progress != null ->

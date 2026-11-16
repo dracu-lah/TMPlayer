@@ -554,7 +554,11 @@ internal fun BrowseScreen(
     val touch = !FormFactor.isTv(LocalContext.current)
     // The phone's lists end clear of the floating bar (TouchNav), which their container already
     // lifts above the navigation bar.
-    val insets = if (touch) TouchInsets.clearing(touchShellClearance(withActions = true, rail = LocalTouchRail.current)) else TvInsets
+    val insets = if (touch) {
+        TouchInsets.clearing(touchShellClearance(withActions = true, rail = LocalTouchRail.current) + com.tmplayer.ui.components.LocalBannerRoom.current)
+    } else {
+        TvInsets
+    }
 
     // While a chip has the remote's focus, a list that changes under it (because OK picked that
     // chip) must not pull focus down to its first row: the viewer is still choosing.
@@ -681,8 +685,10 @@ internal fun BrowseScreen(
                         // A show card held on Home opens its menu (HX20), drawn below with the other menus.
                         androidx.compose.runtime.CompositionLocalProvider(LocalSeriesHold provides { show -> heldShow = show to titles[show.cover.chatId].orEmpty() }) {
                         Box(Modifier.fillMaxSize()) {
+                            // Offline (R4): the rows as an offline Home draws them, and the cards' greying.
+                            OfflineHomeScope(homeRows) { shownRows ->
                             HomePane(
-                                rows = homeRows,
+                                rows = shownRows,
                                 rowsReady = homeRowsReady,
                                 carouselOn = homeLayout.carousel,
                                 allOff = homeLayout.allOff,
@@ -741,6 +747,7 @@ internal fun BrowseScreen(
                                 // Room for the television's top bar, which stands over the carousel's picture.
                                 tvHeader = if (touch) null else { _ -> Spacer(Modifier.fillMaxWidth().height(TV_BAR_HEIGHT)) },
                             )
+                            }
                         }
                         }
                     } else if (tab.listsVideos) {
