@@ -1,5 +1,6 @@
 package com.tmplayer.desktop.ui
 
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -112,7 +113,8 @@ private fun Links(version: String, supporter: Boolean, onRead: () -> Unit) {
             "${s.settingsVersion} $version",
             style = MaterialTheme.typography.titleMedium,
             color = Tone.text,
-            modifier = Modifier.clickable(
+            // A pointer-only easter egg: no Tab stop, which would sit there with no mark on it.
+            modifier = Modifier.focusProperties { canFocus = false }.clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 onClick = DevOptions::tap,
