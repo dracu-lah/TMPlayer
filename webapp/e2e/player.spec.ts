@@ -89,6 +89,10 @@ test('Tab brings the hidden controls back and they stay while a control has the 
     // Past the 3.5 s hide time the row is still there.
     await page.waitForTimeout(5000)
     await expect(page.locator('.pc.shown')).toHaveCount(1)
+    // The seek bar shows where the keyboard is: its thumb grows a ring (no outline round a round bar).
+    for (let i = 0; i < 30 && (await page.evaluate(() => document.activeElement?.getAttribute('role'))) !== 'slider'; i++) await page.keyboard.press('Tab')
+    await expect(page.locator('.pc-bar')).toBeFocused()
+    await expect(page.locator('.pc-thumb')).toHaveCSS('box-shadow', /rgba\(255, 255, 255, 0\.9\) 0px 0px 0px 3px/)
 })
 
 test.describe('without a service worker', () => {

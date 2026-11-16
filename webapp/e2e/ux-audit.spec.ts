@@ -50,22 +50,35 @@ async function sweep(page: Page) {
 }
 
 for (const zoom of [false, true])
-    test.describe(zoom ? 'at 200% text' : 'at normal text', () => {
+    test.describe(zoom ? 'reflowed to 320 px wide (page zoom 400% on a desktop)' : 'at normal text', () => {
         test.beforeEach(async ({ page }) => {
             await noSizeFloor(page)
         })
         for (const [title, path, ready] of SCREENS)
             test(title, async ({ page }, info) => {
+                if (zoom) await page.setViewportSize({ width: 320, height: 640 })
                 await page.goto(path)
                 await expect(page.locator(ready).first()).toBeVisible()
-                if (zoom) await page.addStyleTag({ content: 'html { font-size: 200% !important; }' })
                 await page.waitForTimeout(600)
                 const all = await sweep(page)
                 const unnamed = all.filter((e) => !e.named && e.tag !== 'input')
                 const small = all.filter((e) => (e.w < 44 || e.h < 44) && e.tag !== 'input')
                 if (!zoom && small.length) console.log(`SMALL ${info.project.name} ${title}: ` + small.map((e) => `${e.tag}.${e.cls}[${e.label}] ${e.w}x${e.h}`).join(' | '))
-                const sideways = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
-                if (zoom && sideways > 1) console.log(`SIDEWAYS ${info.project.name} ${title}: ${sideways}px`)
+                // WCAG reflow: nothing but a scroller's own content may reach past the right edge of a 320 px window.
+                const wide = zoom
+                    ? await page.evaluate(() =>
+                          [...document.querySelectorAll<HTMLElement>('body *')]
+                              .filter((el) => {
+                                  const r = el.getBoundingClientRect()
+                                  if (r.width === 0 || r.right <= innerWidth + 1 || getComputedStyle(el).position === 'fixed') return false
+                                  for (let p = el.parentElement; p; p = p.parentElement) if (/(auto|scroll|hidden|clip)/.test(getComputedStyle(p).overflowX)) return false
+                                  return true
+                              })
+                              .slice(0, 6)
+                              .map((el) => `${el.tagName.toLowerCase()}.${el.className?.toString?.().slice(0, 40)} right=${Math.round(el.getBoundingClientRect().right)}`),
+                      )
+                    : []
+                if (wide.length) console.log(`SIDEWAYS ${info.project.name} ${title}: ${wide.join(' | ')}`)
                 expect(unnamed.map((e) => `${e.tag}.${e.cls}`), `${title}: controls with no name`).toEqual([])
             })
     })
