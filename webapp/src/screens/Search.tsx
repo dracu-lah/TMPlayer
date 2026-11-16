@@ -96,7 +96,7 @@ export function Search() {
             </label>
             <Show when={results.error}>
                 <div class="notice error-notice">
-                    <p class="error">{errorText(results.error)}</p>
+                    <p class="error" role="alert">{errorText(results.error)}</p>
                     <button class="link" type="button" onClick={refetch}>{t('common.try_again')}</button>
                 </div>
             </Show>

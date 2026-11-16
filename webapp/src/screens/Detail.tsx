@@ -73,7 +73,7 @@ export function Detail() {
         <Switch fallback={<div class="detail"><div class="detail-hero" /></div>}>
             <Match when={video.error}>
                 <div class="boot">
-                    <p class="error">{errorText(video.error)}</p>
+                    <p class="error" role="alert">{errorText(video.error)}</p>
                     <button class="primary" onClick={close}>{t('common.back')}</button>
                 </div>
             </Match>

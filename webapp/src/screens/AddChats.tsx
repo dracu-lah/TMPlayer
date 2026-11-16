@@ -345,7 +345,7 @@ export function AddChats() {
             </div>
             <Show when={failed()}>
                 <div class="notice error-notice">
-                    <p class="error">{t('chats.some_not_loaded')}</p>
+                    <p class="error" role="alert">{t('chats.some_not_loaded')}</p>
                     <button class="link" type="button" onClick={retry}>{t('common.try_again')}</button>
                 </div>
             </Show>

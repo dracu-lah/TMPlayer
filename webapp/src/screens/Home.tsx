@@ -91,14 +91,14 @@ export function Home() {
             </Show>
             {/* Offline with nothing to show: the Reload card says so (R4), instead of a row of cards that cannot load. */}
             <Show when={!online() && !page()?.rows.length}>
-                <div class="notice error-notice" role="status">
-                    <p class="error">{t('errors.offline')}</p>
+                <div class="notice error-notice">
+                    <p class="error" role="alert">{t('errors.offline')}</p>
                     <button class="link" type="button" onClick={load}>{t('common.reload')}</button>
                 </div>
             </Show>
             <Show when={error() && online() && !page()?.rows.length}>
                 <div class="notice error-notice">
-                    <p class="error">{errorText(error())}</p>
+                    <p class="error" role="alert">{errorText(error())}</p>
                     <button class="link" type="button" onClick={load}>{t('common.try_again')}</button>
                 </div>
             </Show>

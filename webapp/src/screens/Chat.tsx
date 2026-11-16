@@ -303,7 +303,7 @@ export function Chat() {
             </Show>
             <Show when={error()}>
                 <div class="notice error-notice">
-                    <p class="error">{errorText(error())}</p>
+                    <p class="error" role="alert">{errorText(error())}</p>
                     <button class="link" type="button" onClick={() => run(page() ? 'refresh' : 'open')}>{t('common.try_again')}</button>
                 </div>
             </Show>
@@ -322,7 +322,7 @@ export function Chat() {
                     <p class="muted">{t('grid.loading_more')}</p>
                 </Show>
                 <Show when={moreFailed()}>
-                    <p class="error">{t('grid.more_failed')}</p>
+                    <p class="error" role="alert">{t('grid.more_failed')}</p>
                     <button class="link" type="button" onClick={() => run('more')}>{t('common.try_again')}</button>
                 </Show>
                 {/* A search that has not read the whole chat: the rest on a press, as the apps' Keep looking. */}

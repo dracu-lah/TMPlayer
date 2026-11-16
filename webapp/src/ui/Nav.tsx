@@ -54,7 +54,7 @@ export function Nav() {
     onMount(() => document.addEventListener('keydown', onKey))
     onCleanup(() => document.removeEventListener('keydown', onKey))
     return (
-        <nav class="nav" aria-label="Main">
+        <nav class="nav" aria-label="TMPlayer">
             <div class="nav-cells" style={{ '--i': Math.max(0, chosen()) }}>
                 <span class="nav-highlight" classList={{ shown: chosen() >= 0 }} aria-hidden="true" />
                 <For each={PLACES}>
@@ -123,10 +123,13 @@ function YouMenu(props: { anchor: HTMLElement; onClose: () => void }) {
             e.preventDefault()
             return
         }
-        if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
+        // Tab leaves a menu: it closes and the keyboard goes on from where the menu was.
+        if (e.key === 'Tab') return (props.anchor.focus(), props.onClose())
+        if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Home' && e.key !== 'End') return
         const items = [...card.querySelectorAll<HTMLElement>('button')]
         const at = items.indexOf(document.activeElement as HTMLElement)
-        items[(at + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]?.focus()
+        const to = e.key === 'Home' ? 0 : e.key === 'End' ? items.length - 1 : (at + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length
+        items[to]?.focus()
         e.preventDefault()
     }
     const outside = (e: PointerEvent) => {

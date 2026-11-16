@@ -43,3 +43,22 @@ test('Recently added follows the chats added in Add chats, with no picker of its
     expect(facts.length).toBeGreaterThan(0)
     for (const f of facts) expect(f).toContain('Test Clips')
 })
+
+// R9: a row moved from the keyboard keeps the keyboard: Enter on Move down leaves the focus on that row's Move down.
+test('moving a Home row from the keyboard keeps the focus on the row', async ({ page }) => {
+    await page.goto('/settings/home')
+    const titles = () => page.locator('.order-row .set-title').allTextContents()
+    await expect(page.locator('.order-row').first()).toBeVisible()
+    const before = await titles()
+    const down = page.locator('.order-row').first().locator('.order-move').nth(1)
+    await down.focus()
+    await page.keyboard.press('Enter')
+    await expect.poll(titles).not.toEqual(before)
+    const after = await titles()
+    expect(after[1]).toBe(before[0])
+    const onRow = await page.evaluate(() => {
+        const a = document.activeElement
+        return a?.classList.contains('order-move') ? (a.closest('.order-row')?.querySelector('.set-title')?.textContent ?? '') : 'lost'
+    })
+    expect(onRow, 'the focus stays on the moved row').toBe(before[0])
+})

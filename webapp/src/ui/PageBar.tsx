@@ -7,13 +7,14 @@ import { Icon } from './Icon'
 import { initialOf } from './initial'
 import { nameArt } from './colour'
 import { back } from '../session'
+import { t } from '../i18n'
 
 /** `actions`, round buttons, sit at the far end, as the chat's own bar has Star, Sort, Search and Refresh. */
 export function PageBar(props: { title: string; picture?: JSX.Element; actions?: JSX.Element }) {
     const navigate = useNavigate()
     return (
         <div class="page-bar">
-            <button class="round-button" type="button" aria-label="Back" title="Back" onClick={() => back(navigate)}>
+            <button class="round-button" type="button" aria-label={t('common.back')} title={t('common.back')} onClick={() => back(navigate)}>
                 <Icon icon={ArrowLeft02Icon} size={22} />
             </button>
             <div class="title-pill" hidden={!props.title}>

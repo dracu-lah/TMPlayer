@@ -95,7 +95,7 @@ export function Chats() {
             <Show when={chats.error}>
                 <div class="notice error-notice">
                     {/* Part of the list came before the failure: it stays, and the line says the rest is missing (HX32). */}
-                    <p class="error">{partial().length ? t('chats.some_not_loaded') : errorText(chats.error)}</p>
+                    <p class="error" role="alert">{partial().length ? t('chats.some_not_loaded') : errorText(chats.error)}</p>
                     <button class="link" type="button" onClick={refetch}>{t('common.try_again')}</button>
                 </div>
             </Show>

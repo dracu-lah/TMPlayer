@@ -148,7 +148,7 @@ export function TvBar() {
                         {initial()}
                     </Show>
                 </A>
-                <nav class="tv-tabs" aria-label="Main">
+                <nav class="tv-tabs" aria-label="TMPlayer">
                     <For each={TABS}>
                         {(tab) => (
                             <A class="tv-tab" href={tab.href} aria-current={place() === tab.href ? 'page' : undefined}>

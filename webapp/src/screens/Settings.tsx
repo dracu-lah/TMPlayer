@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createResource, createSignal, For, Match, onMount, Show, Switch, type JSX } from 'solid-js'
+import { createEffect, createMemo, createResource, createSignal, For, Match, on, onMount, Show, Switch, type JSX } from 'solid-js'
 import { A, useNavigate, useParams } from '@solidjs/router'
 import { renderSVG } from 'uqr'
 import {
@@ -423,7 +423,29 @@ function HomeOrder() {
     const rows = createMemo(homeOrderRows)
     const [dragging, setDragging] = createSignal<string | null>(null)
     const put = (keys: string[]) => setSetting('homeOrder', encodeOrder(keys))
-    const move = (key: string, by: number) => put(moveKey(rows().map((r) => r.key), key, by))
+    // The rows are drawn again after a move: the keyboard follows the row (its same button, or the other where this one has reached the end).
+    let list!: HTMLOListElement
+    let follow: { key: string; by: number } | null = null
+    createEffect(
+        on(
+            rows,
+            () => {
+                const f = follow
+                follow = null
+                if (!f) return
+                queueMicrotask(() => {
+                    const buttons = [...(list.querySelectorAll<HTMLElement>(`[data-key="${CSS.escape(f.key)}"] .order-move`) ?? [])]
+                    const same = buttons[f.by > 0 ? 1 : 0]
+                    ;((same as HTMLButtonElement | undefined)?.disabled ? buttons[f.by > 0 ? 0 : 1] : same)?.focus()
+                })
+            },
+            { defer: true },
+        ),
+    )
+    const move = (key: string, by: number) => {
+        follow = { key, by }
+        put(moveKey(rows().map((r) => r.key), key, by))
+    }
     // A row dropped on another takes that row's place.
     const drop = (onto: string) => {
         const from = dragging()
@@ -435,11 +457,12 @@ function HomeOrder() {
     return (
         <div class="set-card">
             <h3 class="set-block-title set-card-title">{t('settings.home_order')}</h3>
-            <ol class="order-list">
+            <ol class="order-list" ref={list}>
                 <For each={rows()}>
                     {(row, i) => (
                         <li
                             class="order-row"
+                            data-key={row.key}
                             classList={{ 'order-dragging': dragging() === row.key }}
                             draggable={form() === 'desktop'}
                             onDragStart={() => setDragging(row.key)}
