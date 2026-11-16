@@ -1,7 +1,13 @@
 package com.tmplayer.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import com.tmplayer.ui.theme.collectIsFocusVisibleAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import com.tmplayer.ui.theme.focusRing
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -68,15 +74,25 @@ fun ChoiceRow(
     val shape = RoundedCornerShape(Corner.Medium)
     // A new choice taken is one tick; the one already chosen pressed again is not news.
     val tick = rememberStepTick()
+    val interactions = remember { MutableInteractionSource() }
+    val focused by interactions.collectIsFocusVisibleAsState()
     val target = if (selected != null) {
-        Modifier.selectable(selected = selected, enabled = enabled, role = Role.RadioButton, onClick = { if (!selected) tick(); onClick() })
+        Modifier.selectable(
+            selected = selected,
+            interactionSource = interactions,
+            indication = LocalIndication.current,
+            enabled = enabled,
+            role = Role.RadioButton,
+            onClick = { if (!selected) tick(); onClick() },
+        )
     } else {
-        Modifier.clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+        Modifier.clickable(interactionSource = interactions, indication = LocalIndication.current, enabled = enabled, role = Role.Button, onClick = onClick)
     }
     Row(
         modifier
             .heightIn(min = if (detail == null && tags.isEmpty()) 56.dp else 72.dp)
             .clip(shape)
+            .focusRing(focused, shape)
             .then(target)
             .padding(horizontal = LocalChoiceInset.current, vertical = 2.dp)
             .alpha(if (enabled) 1f else DISABLED_ALPHA),

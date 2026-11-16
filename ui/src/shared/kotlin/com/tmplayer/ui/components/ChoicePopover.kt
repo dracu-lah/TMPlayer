@@ -16,7 +16,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.gestures.detectTapGestures
+import com.tmplayer.ui.theme.collectIsFocusVisibleAsState
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.input.pointer.pointerInput
+import com.tmplayer.ui.theme.focusRing
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -157,6 +162,9 @@ private fun PopoverCard(
             Modifier
                 .fillMaxSize()
                 .background(FloatingTone.scrim)
+                // Pointer only: a screen sized, markless Tab stop that Enter would close the card
+                // from is no help (Esc and Back are the keyboard's way).
+                .focusProperties { canFocus = false }
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss),
         )
     }
@@ -204,8 +212,9 @@ private fun PopoverCard(
                     .clip(POPOVER_SHAPE)
                     .background(FloatingTone.dialog)
                     .border(floatingBorder(), POPOVER_SHAPE)
-                    // Taps inside the card stay inside it rather than reaching the scrim.
-                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}
+                    // Taps inside the card stay inside it rather than reaching the scrim. A tap
+                    // handler, not a clickable: no Tab stop and no button a reader hears that does nothing.
+                    .pointerInput(Unit) { detectTapGestures { } }
                     .verticalScroll(rememberScrollState())
                     .padding(4.dp),
                 content = content,
@@ -222,6 +231,7 @@ private fun PopoverCard(
 @Composable
 fun ChoiceRow(label: String, icon: ImageVector?, chosen: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val press = remember { MutableInteractionSource() }
+    val focused by press.collectIsFocusVisibleAsState()
     // A new choice taken is one tick; the one already chosen pressed again is not news.
     val tick = rememberStepTick()
     val back by animateColorAsState(if (chosen) Tone.accent.copy(alpha = 0.14f) else Color.Transparent, Motion.standard(Motion.Fast), label = "choiceBack")
@@ -229,16 +239,18 @@ fun ChoiceRow(label: String, icon: ImageVector?, chosen: Boolean, modifier: Modi
     Row(
         modifier
             .fillMaxWidth()
-            .height(ROW_HEIGHT)
+            // At least 44 dp, and taller when a big font wraps the words to a second line.
+            .heightIn(min = ROW_HEIGHT)
             .clip(ROW_SHAPE)
             .background(back)
+            .focusRing(focused, ROW_SHAPE)
             .selectable(selected = chosen, interactionSource = press, indication = ripple(), role = Role.Button, onClick = { if (!chosen) tick(); onClick() })
-            .padding(horizontal = 12.dp),
+            .padding(horizontal = 12.dp, vertical = 4.dp),
         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         if (icon != null) Icon(icon, contentDescription = null, tint = ink, modifier = Modifier.size(20.dp).pressScale(press))
-        Text(label, style = MaterialTheme.typography.bodyMedium, color = ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = ink, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
         AnimatedVisibility(visible = chosen, enter = fadeIn(Motion.standard(Motion.Fast)) + scaleIn(Motion.standard(Motion.Fast), initialScale = 0.6f), exit = fadeOut(Motion.standard(Motion.Fast))) {
             Icon(TmIcons.Check, contentDescription = null, tint = Tone.accent, modifier = Modifier.size(18.dp))
         }
