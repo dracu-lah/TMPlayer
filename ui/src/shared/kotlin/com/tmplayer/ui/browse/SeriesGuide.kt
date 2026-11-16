@@ -5,13 +5,16 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -129,13 +132,17 @@ internal fun GapRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     focusRequester: FocusRequester? = null,
+    /** The show's own picture, drawn dim under the episode's number where the provider has no still for it. */
+    art: String? = null,
 ) {
     val s = LocalStrings.current
     val tv = !isTouch()
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusVisibleAsState()
     val shape = RoundedCornerShape(Corner.Medium)
-    val name = episode.meta?.name?.trim()?.takeIf { it.isNotEmpty() } ?: s.seriesEpisode(episode.number)
+    // A placeholder the provider writes for an episode nobody has named ("Episode 5") is no name.
+    val name = episode.meta?.name?.trim()?.takeIf { it.isNotEmpty() && !com.tmplayer.online.EpisodeNames.placeholder(it, episode.number) }
+        ?: s.seriesEpisode(episode.number)
     val why = gapLine(episode, s)
     val ink = if (focused) Tone.onFocusFill else Tone.text
     Row(
@@ -158,14 +165,14 @@ internal fun GapRow(
         horizontalArrangement = Arrangement.spacedBy(if (tv || large) 16.dp else 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            s.seriesEpisodeShort(episode.season, episode.number),
-            style = if (tv || large) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleSmall,
-            color = if (focused) ink else Tone.muted,
-            maxLines = 1,
-            modifier = Modifier.widthIn(min = 56.dp),
-        )
+        GapPicture(episode.meta?.stillUrl, art, episode.number, large || tv)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                s.seriesEpisodeShort(episode.season, episode.number),
+                style = MaterialTheme.typography.labelMedium,
+                color = if (focused) ink else Tone.muted,
+                maxLines = 1,
+            )
             Text(
                 name,
                 style = if (tv || large) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleSmall,
@@ -183,6 +190,37 @@ internal fun GapRow(
         }
     }
 }
+
+/**
+ * The picture of an episode no chat holds (T11): the provider's still once it is decoded, and
+ * until then, and for an episode it has none for, the show's own picture dimmed with the
+ * episode's number over it, never an empty box. It holds its 16:9 place from the first frame, so
+ * the still arriving, or the title, moves nothing.
+ */
+@Composable
+private fun GapPicture(still: String?, art: String?, number: Int, wide: Boolean) {
+    Box(
+        Modifier
+            .width(if (wide) GAP_ART_WIDE else GAP_ART)
+            .aspectRatio(16f / 9f)
+            .clip(RoundedCornerShape(Corner.Small))
+            .background(Tone.surfaceHigh),
+    ) {
+        com.tmplayer.ui.online.MetaPicture(art, Modifier.fillMaxSize())
+        Box(Modifier.matchParentSize().background(Color.Black.copy(alpha = 0.6f)))
+        Text(
+            number.toString(),
+            style = MaterialTheme.typography.titleMedium,
+            color = Color.White,
+            maxLines = 1,
+            modifier = Modifier.align(Alignment.Center),
+        )
+        EpisodeStill(still, Modifier.fillMaxSize())
+    }
+}
+
+private val GAP_ART = 96.dp
+private val GAP_ART_WIDE = 128.dp
 
 private fun gapLine(episode: EpisodeGuide.Episode, s: Messages): String = when (episode.state) {
     EpisodeGuide.State.Upcoming -> episode.airDate?.let { s.detailAirsOn(day(it, s)) } ?: s.detailUpcoming
@@ -205,14 +243,18 @@ internal fun GapCard(
     val title = listOfNotNull(episode.code, episode.meta?.name?.trim()?.takeIf { it.isNotEmpty() }).joinToString("  ")
     val lines = buildList {
         if (episode.state == EpisodeGuide.State.Missing && onFind != null) {
-            add(MenuLine(s.seriesFindElsewhere, TmIcons.Search, null) { onDismiss(); onFind(findQuery(showTitle, episode.code)) })
+            // An anime counted straight through is named "Show - 123", not "S01E123": ask for its number.
+            val code = if (episode.meta?.source.isNullOrBlank()) episode.code else episode.number.toString()
+            add(MenuLine(s.seriesFindElsewhere, TmIcons.Search, null) { onDismiss(); onFind(findQuery(showTitle, code)) })
         }
     }
     val body = when (episode.state) {
         EpisodeGuide.State.Upcoming -> episode.airDate?.let { s.detailAirsOn(day(it, s)) } ?: s.detailUpcoming
         else -> s.seriesGapMissing(episode.code)
     }
-    MenuCard(title = title, subtitle = showTitle, lines = lines, empty = body, onDismiss = onDismiss, cancel = s.commonClose)
+    // Whose words the title is, where the episode's list is merged from several sites (an anime's).
+    val source = episode.meta?.source?.takeIf { it.isNotBlank() }?.let { com.tmplayer.online.MetaWords.creditFrom(it) }
+    MenuCard(title = title, subtitle = listOfNotNull(showTitle, source).joinToString("  ·  "), lines = lines, empty = body, onDismiss = onDismiss, cancel = s.commonClose)
 }
 
 /** "Harbour Notes S02E04": the show and the code, as a file or a caption writes them. */

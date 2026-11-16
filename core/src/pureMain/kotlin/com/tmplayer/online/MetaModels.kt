@@ -116,6 +116,11 @@ data class MetaEpisode(
     /** When it first aired (or will), as the provider writes it: `2026-10-14`. */
     val airDate: String? = null,
     val runtimeMin: Int? = null,
+    /**
+     * Which site gave the title, empty where the list is one provider's own (TMDB, TVmaze): an
+     * anime's episodes are merged from several ([AnimeEpisodes]), and each says whose words it carries.
+     */
+    val source: String = "",
 )
 
 /**
@@ -135,6 +140,12 @@ data class MetaInfo(
     /** The language [overview] is in, as the provider was asked for it. */
     val language: String = "en",
     val episode: MetaEpisode? = null,
+    /**
+     * The other names the provider gave the title (AniList's English, romaji and synonyms), kept so
+     * the same show can be found on another provider by a name it spells the same way. Empty for the
+     * others, and for an answer kept before it was added.
+     */
+    val aliases: List<String> = emptyList(),
 ) {
     /** The best picture for a 16:9 tile: the episode's own still, the show's backdrop, its poster. */
     val wideUrl: String? get() = episode?.stillUrl ?: backdropUrl
@@ -149,12 +160,13 @@ data class MetaInfo(
         .put("poster", posterUrl.orEmpty())
         .put("backdrop", backdropUrl.orEmpty())
         .put("language", language)
+        .apply { if (aliases.isNotEmpty()) put("aliases", com.tmplayer.json.JSONArray(aliases)) }
         .apply {
             episode?.let {
                 put(
                     "episode",
                     JSONObject().put("season", it.season).put("number", it.number).put("name", it.name)
-                        .put("overview", it.overview).put("still", it.stillUrl.orEmpty()),
+                        .put("overview", it.overview).put("still", it.stillUrl.orEmpty()).put("source", it.source),
                 )
             }
         }
@@ -171,6 +183,7 @@ data class MetaInfo(
                 posterUrl = json.optString("poster").ifBlank { null },
                 backdropUrl = json.optString("backdrop").ifBlank { null },
                 language = json.optString("language", "en"),
+                aliases = json.optJSONArray("aliases")?.let { list -> (0 until minOf(list.length(), 16)).map { list.optString(it) }.filter { it.isNotBlank() } }.orEmpty(),
                 episode = json.optJSONObject("episode")?.let {
                     MetaEpisode(
                         season = it.optInt("season"),
@@ -178,6 +191,7 @@ data class MetaInfo(
                         name = it.optString("name"),
                         overview = it.optString("overview"),
                         stillUrl = it.optString("still").ifBlank { null },
+                        source = it.optString("source"),
                     )
                 },
             )

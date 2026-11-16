@@ -19,6 +19,23 @@ sealed interface MetaReply<out T> {
     data class Failed(val code: Int) : MetaReply<Nothing>
 }
 
+/** A TMDB show's seasons with their episode counts, and its episode groups (T11). */
+data class TmdbShowGuide(val seasons: List<MetaSeason>, val groups: List<TmdbEpisodeGroup>)
+
+/** One TMDB episode group: its id, its type (2 is "Absolute order") and how many episodes it holds. */
+data class TmdbEpisodeGroup(val id: String, val type: Int, val episodeCount: Int) {
+    val absolute: Boolean get() = type == 2
+}
+
+/** What AniList knows of one run's episodes: its count, the next to air, and the streaming list (T11). */
+data class AniListRun(
+    val episodes: Int?,
+    val malId: String?,
+    val next: MetaAiring?,
+    val streaming: List<AnimeEpisodes.Piece>,
+    val startDate: String?,
+)
+
 /** A title as a search lists it, before the closer look at the one that matched. */
 data class MetaCandidate(
     val id: String,
@@ -152,20 +169,85 @@ class TmdbApi(
 
     /** Every episode of one season, in order, with its name, picture, air date and length. */
     suspend fun season(key: String, id: String, season: Int, language: String): MetaReply<List<MetaEpisode>> =
-        get(key, "tv/$id/season/$season", "language=$language") { json ->
-            objects(json.optJSONArray("episodes")).mapNotNull { e ->
-                val number = e.optInt("episode_number").takeIf { it > 0 } ?: return@mapNotNull null
-                MetaEpisode(
-                    season = season,
-                    number = number,
-                    name = e.optString("name"),
-                    overview = e.optString("overview"),
-                    stillUrl = image(e, "still_path", STILL_SIZE),
-                    airDate = e.optString("air_date").ifBlank { null },
-                    runtimeMin = e.optInt("runtime").takeIf { it > 0 },
+        get(key, "tv/$id/season/$season", "language=$language") { json -> seasonEpisodes(season, json) }
+
+    private fun seasonEpisodes(season: Int, json: JSONObject): List<MetaEpisode> =
+        objects(json.optJSONArray("episodes")).mapNotNull { e ->
+            val number = e.optInt("episode_number").takeIf { it > 0 } ?: return@mapNotNull null
+            MetaEpisode(
+                season = season,
+                number = number,
+                name = e.optString("name"),
+                overview = e.optString("overview"),
+                stillUrl = image(e, "still_path", STILL_SIZE),
+                airDate = e.optString("air_date").ifBlank { null },
+                runtimeMin = e.optInt("runtime").takeIf { it > 0 },
+            )
+        }.sortedBy { it.number }
+
+    /**
+     * A show's seasons (each with its episode count) and the episode groups it has, in one call
+     * (T11): the groups' list is appended to the show's own page. Specials are left in; the guide
+     * counts only the numbered seasons.
+     */
+    suspend fun showGuide(key: String, id: String, language: String): MetaReply<TmdbShowGuide> =
+        get(key, "tv/$id", "language=$language&append_to_response=episode_groups") { json ->
+            val seasons = objects(json.optJSONArray("seasons")).mapNotNull { s ->
+                MetaSeason(
+                    number = s.optInt("season_number", -1).takeIf { it >= 0 } ?: return@mapNotNull null,
+                    episodeCount = s.optInt("episode_count").coerceAtLeast(0),
+                    airDate = s.optString("air_date").ifBlank { null },
                 )
-            }.sortedBy { it.number }
+            }
+            val groups = objects(json.optJSONObject("episode_groups")?.optJSONArray("results")).mapNotNull { g ->
+                TmdbEpisodeGroup(
+                    id = g.optString("id").takeIf { it.isNotBlank() } ?: return@mapNotNull null,
+                    type = g.optInt("type"),
+                    episodeCount = g.optInt("episode_count"),
+                )
+            }
+            TmdbShowGuide(seasons, groups)
         }
+
+    /**
+     * One episode group (the "Absolute order" one): its groups in order, each with its episodes,
+     * every episode with the season and episode number TMDB files it under.
+     */
+    suspend fun episodeGroup(key: String, groupId: String, language: String): MetaReply<List<AnimeEpisodes.GroupEpisode>> =
+        get(key, "tv/episode_group/${enc(groupId)}", "language=$language") { json ->
+            objects(json.optJSONArray("groups")).flatMapIndexed { gi, group ->
+                val groupOrder = group.optInt("order", gi)
+                objects(group.optJSONArray("episodes")).mapIndexedNotNull { ei, e ->
+                    val season = e.optInt("season_number", -1).takeIf { it >= 0 } ?: return@mapIndexedNotNull null
+                    val episode = e.optInt("episode_number").takeIf { it > 0 } ?: return@mapIndexedNotNull null
+                    AnimeEpisodes.GroupEpisode(
+                        groupOrder = groupOrder,
+                        order = e.optInt("order", ei),
+                        season = season,
+                        episode = episode,
+                        piece = AnimeEpisodes.Piece(
+                            absolute = 0,
+                            name = e.optString("name"),
+                            overview = e.optString("overview"),
+                            stillUrl = image(e, "still_path", STILL_SIZE),
+                            airDate = e.optString("air_date").ifBlank { null },
+                            runtimeMin = e.optInt("runtime").takeIf { it > 0 },
+                        ),
+                    )
+                }
+            }
+        }
+
+    /**
+     * Several seasons' episodes in one call: their pages are appended to the show's own, up to
+     * [APPEND_LIMIT] of them (TMDB's cap), so 21 seasons cost two calls and not 21.
+     */
+    suspend fun seasons(key: String, id: String, numbers: List<Int>, language: String): MetaReply<Map<Int, List<MetaEpisode>>> {
+        val wanted = numbers.distinct().take(APPEND_LIMIT)
+        return get(key, "tv/$id", "language=$language&append_to_response=" + wanted.joinToString(",") { "season/$it" }) { json ->
+            wanted.associateWith { n -> json.optJSONObject("season/$n")?.let { seasonEpisodes(n, it) }.orEmpty() }
+        }
+    }
 
     /**
      * The detail page's extras in one call: [MetaExtras] from the title's own page with its credits,
@@ -328,6 +410,9 @@ class TmdbApi(
 
         /** A face in the cast row, drawn at most ~96 dp wide. */
         const val PROFILE_SIZE = "w185"
+
+        /** How many `append_to_response` pieces TMDB takes in one call. */
+        const val APPEND_LIMIT = 20
     }
 }
 
@@ -723,6 +808,46 @@ class AniListApi(
         }
     }
 
+    /**
+     * One run's episode facts, by id (T11): how many AniList counts, the next to air, the
+     * MyAnimeList id the other lists are found by, and the streaming episodes (a title and a picture each).
+     */
+    suspend fun episodes(id: String): MetaReply<AniListRun> {
+        limiter.acquire()
+        val body = JSONObject()
+            .put("query", EPISODES_QUERY)
+            .put("variables", JSONObject().put("id", id.toIntOrNull() ?: 0))
+            .toString()
+        val headers = mapOf(
+            "Content-Type" to "application/json",
+            "Accept" to "application/json",
+            "User-Agent" to userAgent,
+        )
+        return call(http, HttpRequest("POST", BASE, headers, body), DEFAULT_WAIT_MS) { json ->
+            val media = json.optJSONObject("data")?.optJSONObject("Media") ?: JSONObject()
+            val next = media.optJSONObject("nextAiringEpisode")?.let { n ->
+                val episode = n.optInt("episode").takeIf { it > 0 } ?: return@let null
+                val date = AnimeEpisodes.dateOf(n.optLong("airingAt")) ?: return@let null
+                MetaAiring(season = 1, episode = episode, airDate = date)
+            }
+            val start = media.optJSONObject("startDate")?.let { d ->
+                val y = d.optInt("year").takeIf { it > 1900 } ?: return@let null
+                val m = d.optInt("month").takeIf { it in 1..12 } ?: 1
+                val day = d.optInt("day").takeIf { it in 1..31 } ?: 1
+                "$y-${m.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}"
+            }
+            AniListRun(
+                episodes = media.optInt("episodes").takeIf { it > 0 },
+                malId = media.optInt("idMal").takeIf { it > 0 }?.toString(),
+                next = next,
+                streaming = objects(media.optJSONArray("streamingEpisodes")).take(AnimeEpisodes.MAX_EPISODES).mapNotNull { e ->
+                    AnimeEpisodes.streamingPiece(e.optString("title"), e.optString("thumbnail").takeIf { it.startsWith("https://") })
+                },
+                startDate = start,
+            )
+        }
+    }
+
     companion object {
         const val BASE = "https://graphql.anilist.co"
         const val GAP_MS = 2_100L
@@ -733,11 +858,110 @@ class AniListApi(
                 "id format seasonYear startDate { year } title { romaji english native } synonyms " +
                 "description(asHtml: false) coverImage { large } bannerImage } } }"
 
+        private const val EPISODES_QUERY =
+            "query (\$id: Int) { Media(id: \$id, type: ANIME) { idMal episodes nextAiringEpisode { episode airingAt } " +
+                "startDate { year month day } streamingEpisodes { title thumbnail } } }"
+
         private const val EXTRAS_QUERY =
             "query (\$id: Int) { Media(id: \$id, type: ANIME) { idMal genres averageScore duration trailer { id site } " +
                 "characters(sort: [ROLE, RELEVANCE], perPage: 10) { edges { node { name { full } image { medium } } " +
                 "voiceActors(language: JAPANESE) { name { full } } } } " +
                 "recommendations(perPage: 20, sort: RATING_DESC) { nodes { mediaRecommendation { id format isAdult title { romaji english } } } } } }"
+    }
+}
+
+/**
+ * Kitsu's JSON API for an anime's episodes (T11): a title, a synopsis, a picture and a date for
+ * each, found by the MyAnimeList id through Kitsu's mappings. No key. Twenty episodes a page is its
+ * ceiling, so a long show is several calls (made once and kept), spaced out. https://kitsu.docs.apiary.io
+ */
+class KitsuApi(
+    private val http: HttpTransport,
+    private val limiter: RateLimiter,
+    private val userAgent: String,
+) {
+    /** Kitsu's own id for the anime with MyAnimeList id [malId], or null where Kitsu has none. */
+    suspend fun idFor(malId: String): MetaReply<String?> =
+        get("mappings?filter%5BexternalSite%5D=myanimelist%2Fanime&filter%5BexternalId%5D=${enc(malId)}&include=item") { json ->
+            objects(json.optJSONArray("data")).firstNotNullOfOrNull { mapping ->
+                val item = mapping.optJSONObject("relationships")?.optJSONObject("item")?.optJSONObject("data")
+                item?.takeIf { it.optString("type") == "anime" }?.opt("id")?.toString()?.takeIf { id -> id.isNotBlank() && id.all(Char::isDigit) }
+            }
+        }
+
+    /** One page of [kitsuId]'s episodes from [offset], and whether another follows. */
+    suspend fun episodes(kitsuId: String, offset: Int): MetaReply<Pair<List<MetaEpisode>, Boolean>> =
+        get("anime/${enc(kitsuId)}/episodes?page%5Blimit%5D=$PAGE&page%5Boffset%5D=$offset&sort=number") { json ->
+            val list = objects(json.optJSONArray("data")).mapNotNull { e ->
+                val a = e.optJSONObject("attributes") ?: return@mapNotNull null
+                val number = a.optInt("number").takeIf { it in 1..AnimeEpisodes.MAX_NUMBER } ?: return@mapNotNull null
+                val titles = a.optJSONObject("titles")
+                MetaEpisode(
+                    season = 1,
+                    number = number,
+                    name = titles?.optString("en_us")?.takeIf { it.isNotBlank() && it != "null" }
+                        ?: titles?.optString("en")?.takeIf { it.isNotBlank() && it != "null" }
+                        ?: a.optString("canonicalTitle").takeIf { it != "null" }.orEmpty(),
+                    overview = a.optString("synopsis").takeIf { it != "null" }.orEmpty(),
+                    stillUrl = a.optJSONObject("thumbnail")?.optString("original")?.takeIf { it.startsWith("https://") },
+                    airDate = a.optString("airdate").take(10).takeIf { it.length == 10 && it[4] == '-' },
+                    runtimeMin = a.optInt("length").takeIf { it > 0 },
+                )
+            }
+            list to (json.optJSONObject("links")?.optString("next")?.isNotBlank() == true && list.isNotEmpty())
+        }
+
+    private suspend fun <T> get(path: String, read: (JSONObject) -> T): MetaReply<T> {
+        limiter.acquire()
+        val headers = mapOf("Accept" to "application/vnd.api+json", "User-Agent" to userAgent)
+        return call(http, HttpRequest("GET", "$BASE/$path", headers), DEFAULT_WAIT_MS, read)
+    }
+
+    companion object {
+        const val BASE = "https://kitsu.io/api/edge"
+        const val PAGE = 20
+        const val GAP_MS = 400L
+        const val DEFAULT_WAIT_MS = 30_000L
+
+        /** The most pages one show costs: 3,000 episodes. */
+        const val MAX_PAGES = AnimeEpisodes.MAX_EPISODES / PAGE
+    }
+}
+
+/**
+ * Jikan, the open MyAnimeList API, for an anime's episode titles and air dates (T11): a hundred a
+ * page, 3 calls a second and 60 a minute at most. No key. https://docs.api.jikan.moe
+ */
+class JikanApi(
+    private val http: HttpTransport,
+    private val limiter: RateLimiter,
+    private val userAgent: String,
+) {
+    /** Page [page] of the episodes of MyAnimeList's [malId], and whether another follows. */
+    suspend fun episodes(malId: String, page: Int): MetaReply<Pair<List<MetaEpisode>, Boolean>> {
+        limiter.acquire()
+        val headers = mapOf("Accept" to "application/json", "User-Agent" to userAgent)
+        return call(http, HttpRequest("GET", "$BASE/anime/${enc(malId)}/episodes?page=$page", headers), DEFAULT_WAIT_MS) { json ->
+            val list = objects(json.optJSONArray("data")).mapNotNull { e ->
+                val number = e.optInt("mal_id").takeIf { it in 1..AnimeEpisodes.MAX_NUMBER } ?: return@mapNotNull null
+                MetaEpisode(
+                    season = 1,
+                    number = number,
+                    name = e.optString("title").takeIf { it != "null" }.orEmpty(),
+                    airDate = e.optString("aired").take(10).takeIf { it.length == 10 && it[4] == '-' },
+                )
+            }
+            list to (json.optJSONObject("pagination")?.optBoolean("has_next_page") == true && list.isNotEmpty())
+        }
+    }
+
+    companion object {
+        const val BASE = "https://api.jikan.moe/v4"
+        const val GAP_MS = 1_100L
+        const val DEFAULT_WAIT_MS = 30_000L
+
+        /** The most pages one show costs: 3,000 episodes. */
+        const val MAX_PAGES = AnimeEpisodes.MAX_EPISODES / 100
     }
 }
 

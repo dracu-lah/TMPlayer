@@ -28,6 +28,9 @@ object MetaWords {
     /** Above the key field: why a key of one's own, worded for whether the build has one. */
     fun keyMessage(buildHasKey: Boolean): String = if (buildHasKey) L.metadataKeyMessage else L.metadataKeyMessageNone
 
+    /** "From Kitsu": whose words an anime episode's title and overview are ([MetaEpisode.source]). */
+    fun creditFrom(source: String): String = L.metadataCredit(source)
+
     /** The credit under an overview. TVmaze's words are CC BY-SA, which asks for the licence by name. */
     fun credit(provider: MetaProvider): String = when (provider) {
         MetaProvider.TvMaze -> L.metadataCreditTvmaze

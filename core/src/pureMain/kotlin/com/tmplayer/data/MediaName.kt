@@ -293,7 +293,7 @@ object MediaName {
 
         // A daily show or a match is numbered by the day it aired, "Show 2024.10.14 720p".
         val date = findAirDate(normalised)
-        val episode = if (date == null) findEpisode(normalised) else null
+        val episode = if (date == null) findEpisode(normalised, fansub = GROUP_TAG.containsMatchIn(text)) else null
         val year = if (date != null) Year(date.year, date.at) else findYear(normalised, maxYear)
 
         // The title ends at whichever marker comes first: the year, the episode code, the air date,
@@ -459,7 +459,7 @@ object MediaName {
      * A season with no episode is a whole-season pack, and that is a real answer rather than a
      * failure: it still belongs to the television index, it just has no single episode to show.
      */
-    private fun findEpisode(text: String): Episode? {
+    private fun findEpisode(text: String, fansub: Boolean = false): Episode? {
         PAIRED_EPISODE.asSequence()
             .mapNotNull { it.find(text) }
             .minByOrNull { it.range.first }
@@ -478,17 +478,25 @@ object MediaName {
             }
 
         // "S01-S03", "Seasons 1-3": a pack of several seasons, which is no season at all.
-        (SEASON_SPAN.find(text) ?: SEASONS_SPAN.find(text))?.let { span ->
+        val letterSpan = SEASON_SPAN.find(text)
+        (letterSpan ?: SEASONS_SPAN.find(text))?.let { span ->
             val from = span.groupValues[1].toIntOrNull()
             val to = span.groupValues[2].toIntOrNull()
-            if (from != null && to != null && from in 0 until to && to <= MAX_SEASON) {
+            // "Season 2 - 05" is a fansub's season and episode, not seasons 2 to 5: no "Seasons 1-3"
+            // pack pads its last season (the letter form, "S01-S03", does).
+            val padded = letterSpan == null && span.groupValues[2].length == 2 && span.groupValues[2].startsWith('0')
+            if (from != null && to != null && from in 0 until to && to <= MAX_SEASON && !padded) {
                 return Episode(season = null, number = null, at = span.range.first, seasonEnd = to)
             }
         }
         val season = SEASON_ONLY.find(text)
         val range = EPISODE_RANGE.find(text)
         val number = range ?: EPISODE_ONLY.find(text) ?: DASHED_EPISODE.find(text)?.takeUnless { notAnEpisode(it, text) }
-        if (season == null && number == null) return null
+        if (season == null && number == null) {
+            // The forms only an anime's files take: a special, one digit after a fansub's dash, "123v2".
+            val anime = AnimeName.find(text, fansub) ?: return null
+            return Episode(anime.season, anime.number, anime.at, last = rangeAfter(text, anime.end, anime.number))
+        }
         val first = number?.groupValues?.get(1)?.toIntOrNull()
         val last = range?.groupValues?.get(2)?.toIntOrNull()?.takeIf { last -> first != null && last > first }
         return Episode(
@@ -868,6 +876,8 @@ object MediaName {
      */
     private val EXTRA = Regex(
         """\b(?:official\s+)?(?:trailer|teaser|promo|sample|sneak\s?peek|first\s?look|glimpse|making\s?of)\b(?:\s?\d{1,2}\b)?""" +
+            // A fansub's creditless opening and ending: an extra of the show, never one of its episodes.
+            """|\b(?:nc(?:op|ed)\d{0,2}|creditless(?:\s?(?:op|ed)\d{0,2})?)\b(?:\s?\d{1,2}\b)?""" +
             // The same words as the Tamil, Hindi and Malayalam channels write them, which end on a
             // vowel sign, so the edges are spelt out rather than left to \b.
             """|(?<![\p{L}\p{M}])(?:${TRAILER_WORDS.joinToString("|")}|${TEASER_WORDS.joinToString("|")})(?![\p{L}\p{M}])""",
@@ -989,7 +999,7 @@ object MediaName {
      * title. A resolution never matches, because the number has to end the word, and a year is
      * turned away by [notAnEpisode].
      */
-    private val DASHED_EPISODE = Regex("""\s-\s(\d{2,4})(?:v\d)?(?=\s|$)""")
+    private val DASHED_EPISODE = Regex("""\s-\s(\d{2,4})(?:v\d)?(?=\s|$|[-~]\d)""")
 
     /** A bracketed group name at the very front, before any title. Never a year. */
     private val GROUP_TAG = Regex("""^\s*\[(?!\s*(?:19|20)\d{2}\s*\])[^\]]{1,40}\]\s*""")
