@@ -230,6 +230,8 @@ class App : Application() {
             appVersion = BuildConfig.VERSION_NAME,
             omdbKey = BuildConfig.OMDB_API_KEY,
         ).also { metadata -> if (!safe) backgroundScope.launch { runCatching { metadata.warmUp() }; runCatching { metadata.cache.prune() } } }
+        // The intros the viewer marked in the player, kept here and sent nowhere.
+        com.tmplayer.online.UserSkipMarks.open(com.tmplayer.online.FileSkipMarks(java.io.File(filesDir, "online/skip-marks.json")))
         Thumbnails.connectivity = NetworkMonitor
         // Resume on other devices (ResumeSync): the shared watched file, the line's metered state for
         // Save mobile data, and whether this is a TV, where that switch holds nothing back.

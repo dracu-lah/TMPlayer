@@ -25,6 +25,12 @@ import com.tmplayer.cast.dlna.UpnpTime
 import com.tmplayer.i18n.Decimal
 import com.tmplayer.json.JSONObject
 import com.tmplayer.online.AniListApi
+import com.tmplayer.online.AnimeSkipApi
+import com.tmplayer.online.ChapterSkips
+import com.tmplayer.online.IdMapApi
+import com.tmplayer.online.SkipModes
+import com.tmplayer.online.SkipSession
+import com.tmplayer.online.UserSkipMarks
 import com.tmplayer.online.HttpResponse
 import com.tmplayer.online.HttpTransport
 import com.tmplayer.online.MetaExtras
@@ -651,6 +657,30 @@ class GarbageInputTest {
         assertNoFailures()
     }
 
+    /** Chapter titles are free text, the modes line and the marks file are read from the disk: none may throw. */
+    @Test
+    fun skipTitlesModesAndMarksNeverThrow() {
+        for (text in texts) {
+            survive("ChapterSkips.kindOf", text) { ChapterSkips.kindOf(text) }
+            survive("SkipModes.decode", text) { SkipModes.decode(text) }
+            survive("UserSkipMarks.open", text) {
+                UserSkipMarks.open(object : UserSkipMarks.Persistence {
+                    override fun read() = text
+                    override fun write(text: String) = Unit
+                })
+                UserSkipMarks.segmentsFor("1:1", "k", 1_400_000)
+            }
+            survive("SkipSession.chapters", text) {
+                SkipSession().apply {
+                    chapters(listOf(com.tmplayer.player.Chapter(Random(text.hashCode()).nextLong(-5, 2_000_000), text)))
+                    offer(1_000, 1_400_000, true, 0)
+                }
+            }
+        }
+        UserSkipMarks.reset()
+        assertNoFailures()
+    }
+
     /** TMDB, TVmaze, OMDb, Wikidata, AniList, MSone's gateway and the skip-times sites answering nonsense. */
     @Test
     fun onlineProvidersNeverThrow() = runBlocking {
@@ -718,6 +748,11 @@ class GarbageInputTest {
                     skips.introDbApp("tt1", 1, 1)
                 }
             }
+            // A fake client id, so the asking code runs; the real one is the user's to register.
+            survive("AnimeSkipApi", shown) {
+                runBlocking { AnimeSkipApi(http, limiter, "t", "fake-client", { 0L }).segments("1", 1, 1_400) }
+            }
+            survive("IdMapApi", shown) { runBlocking { IdMapApi(http, limiter, "t").forAniList("1") } }
         }
         assertNoFailures()
     }

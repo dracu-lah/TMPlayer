@@ -5,6 +5,7 @@
 // player is streaming from. QuickTime chapter tracks (a text track whose samples are the titles)
 // are not read here; the apps do (session 13b).
 import type { MediaFile } from '../stream/reader'
+import { NOT_A_SKIP, SKIP_RULES, type SkipKindName } from './skipTable.ts'
 
 export interface Chapter {
     /** Seconds from the start. */
@@ -324,7 +325,7 @@ function chpl(b: Uint8Array, from: number, to: number): Chapter[] {
 
 // ---- skip offers ---------------------------------------------------------------------------
 
-export type SkipKind = 'recap' | 'intro' | 'opening' | 'credits' | 'ending' | 'preview'
+export type SkipKind = SkipKindName
 
 export interface SkipSegment {
     kind: SkipKind
@@ -332,28 +333,80 @@ export interface SkipSegment {
     end: number
 }
 
-const SKIP_NAMES: [RegExp, SkipKind][] = [
-    [/\b(recap|previously)\b/i, 'recap'],
-    [/\bopening\b|^op\d*$/i, 'opening'],
-    [/\bintro(duction)?\b/i, 'intro'],
-    [/\bending\b|^ed\d*$/i, 'ending'],
-    [/\bcredits?\b/i, 'credits'],
-    [/\b(preview|next time|coming up)\b/i, 'preview'],
-]
+// ---- chapter titles to kinds: core's ChapterSkips, same table (skipTable.ts is generated from it) ----
+
+const FOLDS: Record<string, string> = Object.fromEntries(
+    'àáâãäåāą:a çćč:c ďð:d èéêëēęě:e ìíîïīı:i ğ:g ł:l ñńň:n òóôõöøōő:o ř:r śšş:s ť:t ùúûüūůű:u ý:y ÿ:y źżž:z ё:е'
+        .split(' ')
+        .flatMap((group) => {
+            const [from, to] = group.split(':')
+            return [...from].map((c) => [c, to] as const)
+        }),
+)
+
+/** Lower case with the accents of the Latin scripts folded; other scripts keep their letters (ChapterSkips.fold). */
+export function foldTitle(text: string): string {
+    let out = ''
+    for (const c of text.toLowerCase()) {
+        if (c === 'ß') out += 'ss'
+        else if (c === 'æ') out += 'ae'
+        else if (c === 'œ') out += 'oe'
+        else if (c >= '̀' && c <= 'ͯ') continue
+        else out += FOLDS[c] ?? c
+    }
+    return out
+}
+
+const UNSPACED = /[぀-ヿ㐀-鿿가-힯฀-๿豈-﫿]/
+const spaced = (text: string) => text.replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
+
+const RULES = SKIP_RULES.flatMap(([kind, phrases]) =>
+    phrases.map((p) => {
+        const phrase = foldTitle(p)
+        return { kind, phrase, unspaced: UNSPACED.test(phrase), padded: ` ${phrase} ` }
+    }),
+)
+const NEGATIVE = NOT_A_SKIP.map((p) => {
+    const phrase = foldTitle(p)
+    return { phrase, unspaced: UNSPACED.test(phrase), padded: ` ${phrase} ` }
+})
+const CODE = /^(nc)?(op|ed)( ?\d{1,2}[a-z]?)?$/
+
+/** ChapterSkips.kindOf: what a chapter's title names, or null for an ordinary chapter. */
+export function skipKindOf(title: string | null | undefined): SkipKind | null {
+    if (!title || !title.trim()) return null
+    const text = foldTitle(title.slice(0, 120))
+    if (!text.trim()) return null
+    const words = spaced(text)
+    const padded = ` ${words} `
+    if (NEGATIVE.some((n) => padded.includes(n.padded) || (n.unspaced && text.includes(n.phrase)))) return null
+    const code = CODE.exec(words)
+    if (code) return code[2] === 'op' ? 'opening' : 'ending'
+    for (const r of RULES) {
+        if (r.unspaced ? text.includes(r.phrase) : padded.includes(r.padded)) return r.kind
+    }
+    return null
+}
 
 /**
- * The stretches a file's own chapters name as a recap, intro, opening, credits, ending or preview
- * (the apps also time these from online lists, which a page cannot ask: a chapter titled that way
- * is what is left). One under five seconds or over two fifths of the video is not an intro.
+ * ChapterSkips.segments: the stretches a file's own chapters name as a recap, intro, opening,
+ * credits, ending or preview (the apps also time these from online lists, which a page cannot ask:
+ * a chapter titled that way is what is left). Each runs to the next chapter; one under five seconds,
+ * over six minutes (ten for credits) or over two fifths of the video is not one.
  */
 export function skipSegments(chapters: Chapter[], duration: number): SkipSegment[] {
+    const sorted = chapters.filter((c) => c.start >= 0 && (duration <= 0 || c.start < duration)).sort((a, b) => a.start - b.start)
     const out: SkipSegment[] = []
-    chapters.forEach((c, i) => {
-        const name = c.title?.trim()
-        const kind = name ? SKIP_NAMES.find(([re]) => re.test(name))?.[1] : undefined
+    sorted.forEach((c, i) => {
+        const kind = skipKindOf(c.title)
         if (!kind) return
-        const end = chapters[i + 1]?.start ?? duration
-        if (!(end - c.start >= 5) || (duration > 0 && end - c.start > duration * 0.4)) return
+        const next = sorted[i + 1]?.start
+        const end = next !== undefined && next > c.start ? next : duration > c.start ? duration : null
+        if (end === null) return
+        const closing = kind === 'credits' || kind === 'ending'
+        const length = end - c.start
+        if (length < 5 || length > (closing ? 600 : 360)) return
+        if (duration > 0 && length * 5 > duration * 2) return
         out.push({ kind, start: c.start, end })
     })
     return out

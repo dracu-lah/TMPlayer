@@ -56,6 +56,8 @@ class OnlineMetadata(
     private val region: () -> String = { MetaRules.region() },
     /** The build's OMDb key for the other sites' scores; blank, with no key of the viewer's own, asks OMDb nothing. */
     private val omdbKey: String = "",
+    /** The build's anime-skip.com client id; blank (the default until the user registers one) asks that site nothing. */
+    animeSkipClientId: String = SkipSources.ANIME_SKIP_CLIENT_ID,
 ) {
     private val userAgent = "TMPlayer/$appVersion (+https://tmplayer.org)"
     private val tmdb = TmdbApi(http, RateLimiter(TmdbApi.GAP_MS, now, sleep), userAgent)
@@ -78,6 +80,11 @@ class OnlineMetadata(
         RateLimiter(SkipTimesApi.ANISKIP_GAP_MS, now, sleep),
         userAgent,
     )
+    private val animeSkip = AnimeSkipApi(http, RateLimiter(AnimeSkipApi.GAP_MS, now, sleep), userAgent, animeSkipClientId, now)
+    private val idMap = IdMapApi(http, RateLimiter(IdMapApi.GAP_MS, now, sleep), userAgent)
+    private val idMaps = LruMap<String, AnimeIds>(64)
+    private var animeSkipPausedUntil = 0L
+    private var idMapPausedUntil = 0L
 
     private val locks = HashMap<String, Mutex>()
     private val locksLock = PlainLock()
@@ -96,6 +103,9 @@ class OnlineMetadata(
     fun setEnabled(value: Boolean) = store.update { it.copy(enabled = value, offByChoice = !value) }
 
     fun setSkipTimes(value: Boolean) = store.update { it.copy(skipTimes = value) }
+
+    /** What the player does at [group]'s stretches: ask, skip by itself, or leave them alone. */
+    fun setSkipMode(group: SkipGroup, mode: SkipMode) = store.update { it.copy(skipModes = it.skipModes.with(group, mode)) }
 
     /** The viewer's own TMDB key; blank goes back to the build's. A new key gets a fresh chance. */
     fun setOwnKey(key: String) = store.update { it.copy(ownKey = key.trim(), refusedKey = "", refusedAt = 0) }
@@ -585,16 +595,28 @@ class OnlineMetadata(
         return lockFor(key).withLock {
             cache.skipTimes(key)?.let { return@withLock it }
             val reply = when (info.provider) {
-                MetaProvider.Tmdb -> skipApi.theIntroDb(info.id, null, null, season, episode)
+                MetaProvider.Tmdb -> {
+                    val first = skipApi.theIntroDb(info.id, null, null, season, episode)
+                    // TheIntroDB keys some titles by IMDb or TheTVDB id only: the ids TMDB lists are the second try.
+                    val ids = if (first is MetaReply.Ok && first.value.isEmpty()) providerExtras(info) else null
+                    if (ids == null) {
+                        first
+                    } else {
+                        // IMDb first, then TheTVDB: it keys by one id at a time.
+                        var reply: MetaReply<List<SkipSegment>> = first
+                        if (ids.imdbId != null) reply = skipApi.theIntroDb(null, ids.imdbId, null, season, episode)
+                        if (ids.tvdbId != null && (reply as? MetaReply.Ok)?.value?.isEmpty() == true) {
+                            reply = skipApi.theIntroDb(null, null, ids.tvdbId, season, episode)
+                        }
+                        reply
+                    }
+                }
                 MetaProvider.TvMaze -> {
                     val ids = providerExtras(info) ?: return@withLock emptyList()
                     if (ids.imdbId == null && ids.tvdbId == null) return@withLock emptyList()
                     skipApi.theIntroDb(null, ids.imdbId, ids.tvdbId, season, episode)
                 }
-                MetaProvider.AniList -> {
-                    val mal = providerExtras(info)?.malId ?: return@withLock emptyList()
-                    skipApi.aniSkip(mal, episode ?: 1, item.durationSec.coerceAtLeast(0))
-                }
+                MetaProvider.AniList -> animeSkips(info, episode ?: 1, item.durationSec.coerceAtLeast(0))
             }
             // Only a real answer is kept; a failure is asked about again next time.
             var segments = (reply as? MetaReply.Ok)?.value ?: return@withLock emptyList()
@@ -612,15 +634,59 @@ class OnlineMetadata(
             if (segments.isEmpty() && show && info.provider != MetaProvider.AniList) {
                 val anime = (lookup(query.showOnly().copy(anime = true)) as? MetaResult.Found)?.info
                     ?.takeIf { it.provider == MetaProvider.AniList }
-                val mal = anime?.let { providerExtras(it)?.malId }
-                if (mal != null) {
-                    val aniReply = skipApi.aniSkip(mal, episode ?: 1, item.durationSec.coerceAtLeast(0))
+                if (anime != null) {
+                    val aniReply = animeSkips(anime, episode ?: 1, item.durationSec.coerceAtLeast(0))
                     segments = (aniReply as? MetaReply.Ok)?.value ?: return@withLock emptyList()
                 }
             }
             cache.putSkipTimes(key, segments)
             segments
         }
+    }
+
+    /**
+     * The anime databases for AniList title [anime]'s episode: AniSkip by MyAnimeList id (AniList's
+     * own, else the id mapping service's when AniList has none), then anime-skip.com by AniList id
+     * when AniSkip has nothing. Ok with an empty list only when every source asked answered; a
+     * source that is paused (it said to wait) or failed makes the whole answer a failure, which is
+     * not kept, so it is asked again later rather than remembered as "nobody timed this".
+     */
+    private suspend fun animeSkips(anime: MetaInfo, episode: Int, lengthSec: Int): MetaReply<List<SkipSegment>> {
+        var complete = true
+        var mal = providerExtras(anime)?.malId
+        if (mal == null) {
+            var ids = idMaps[anime.id]
+            if (ids == null) {
+                if (now() < idMapPausedUntil) {
+                    complete = false
+                } else {
+                    when (val reply = idMap.forAniList(anime.id)) {
+                        is MetaReply.Ok -> { ids = reply.value; idMaps[anime.id] = reply.value }
+                        is MetaReply.Throttled -> { idMapPausedUntil = now() + reply.retryAfterMs; complete = false }
+                        else -> complete = false
+                    }
+                }
+            }
+            mal = ids?.mal
+        }
+        if (mal != null) {
+            when (val reply = skipApi.aniSkip(mal, episode, lengthSec)) {
+                is MetaReply.Ok -> if (reply.value.isNotEmpty()) return reply
+                else -> complete = false
+            }
+        }
+        if (animeSkip.configured) {
+            if (now() < animeSkipPausedUntil) {
+                complete = false
+            } else {
+                when (val reply = animeSkip.segments(anime.id, episode, lengthSec)) {
+                    is MetaReply.Ok -> if (reply.value.isNotEmpty()) return reply
+                    is MetaReply.Throttled -> { animeSkipPausedUntil = now() + reply.retryAfterMs; complete = false }
+                    else -> complete = false
+                }
+            }
+        }
+        return if (complete) MetaReply.Ok(emptyList()) else MetaReply.Failed(0)
     }
 
     /**

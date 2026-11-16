@@ -124,6 +124,8 @@ class PlayerMenuTest {
             copyLinkAtTime = true,
             otherEngine = true,
             repeatVideo = true,
+            markIntro = true,
+            removeIntroMark = true,
         )
         assertFalse(PlayerMenuEntry.PictureInPicture in entries)
         assertEquals(PlayerMenuEntry.entries.size - 1, entries.size)
@@ -146,6 +148,8 @@ class PlayerMenuTest {
                 copyLinkAtTime = true,
                 otherEngine = true,
                 repeatVideo = true,
+                markIntro = true,
+                removeIntroMark = true,
             ).toSet(),
         )
     }
@@ -202,7 +206,7 @@ class PlayerMenuTest {
                 copyLinkAtTime = true,
             ),
         )
-        assertEquals(PhoneMenuEntry.entries.toSet(), PlayerMenu.phoneEntries(true, true, true, true, paused = true, bookmarks = true, chapters = true, saveFrame = true, pictureShape = true, stereo = true, zoomed = true, reportStutter = true, copyLinkAtTime = true, otherEngine = true, repeatVideo = true).toSet())
+        assertEquals(PhoneMenuEntry.entries.toSet(), PlayerMenu.phoneEntries(true, true, true, true, paused = true, bookmarks = true, chapters = true, saveFrame = true, pictureShape = true, stereo = true, zoomed = true, reportStutter = true, copyLinkAtTime = true, otherEngine = true, repeatVideo = true, markIntro = true, removeIntroMark = true).toSet())
     }
 
     @Test

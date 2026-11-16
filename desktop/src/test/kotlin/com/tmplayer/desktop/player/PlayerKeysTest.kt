@@ -3,6 +3,7 @@ package com.tmplayer.desktop.player
 import androidx.compose.ui.input.key.Key
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PlayerKeysTest {
@@ -169,6 +170,15 @@ class PlayerKeysTest {
         assertEquals(PlayerAction.SubtitleSize(-1), action(Key.F, shift = true))
         assertEquals(PlayerAction.ToggleFullscreen, action(Key.F))
         assertEquals(PlayerAction.SkipSegment, action(Key.G))
+    }
+
+    @Test
+    fun `O marks the intro, and only O alone`() {
+        assertEquals(PlayerAction.MarkIntro, action(Key.O))
+        assertEquals(null, action(Key.O, shift = true))
+        assertEquals(null, action(Key.O, ctrl = true))
+        // The sheet lists the key, so the sheet and the table cannot drift apart.
+        assertTrue(PlayerKeys.sheet().any { it.first == com.tmplayer.i18n.L.keysRowMarkIntro && it.second == "O" })
     }
 
     @Test

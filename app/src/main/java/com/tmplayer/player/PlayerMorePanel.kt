@@ -136,6 +136,9 @@ interface PlayerMoreHost {
 
     /** Whether Repeat this video is on (EG-F52), the line's detail. */
     fun repeatVideo(): Boolean = false
+
+    /** Between the two presses of Mark this as the intro: the line then asks for the end. */
+    fun introMarking(): Boolean = false
     fun chapter(): String?
     fun watched(): Boolean
 
@@ -389,7 +392,7 @@ class PlayerMorePanel(
     private enum class Kind {
         LockScreen, PictureInPicture, PlaybackDetails, StartOver, PictureShape, ResetZoom, Stereo, Speed,
         VolumeBoost, NightMode, EvenVolume, SleepTimer, AbLoop, RepeatVideo, NextChapter, PreviousChapter,
-        NextFrame, PreviousFrame, SaveFrame, AddBookmark, Bookmarks, OtherEngine, OpenInAnotherApp,
+        NextFrame, PreviousFrame, SaveFrame, AddBookmark, Bookmarks, MarkIntro, RemoveIntroMark, OtherEngine, OpenInAnotherApp,
         CopyLinkAtTime, LoadSubtitleFile, SaveToDownloads, MarkWatched, ReportStutter, RemoteKeys,
     }
 
@@ -470,6 +473,8 @@ class PlayerMorePanel(
             Kind.SaveFrame -> Line(kind, s.playerSaveFrame, TmIcons.Image, null)
             Kind.AddBookmark -> Line(kind, s.playerAddBookmark, TmIcons.Add, null)
             Kind.Bookmarks -> Line(kind, s.playerBookmarks, TmIcons.Bookmark, bookmarkCount.takeIf { it > 0 }?.let { s.playerBookmarksCount(it) })
+            Kind.MarkIntro -> Line(kind, if (host.introMarking()) s.playerMarkIntroEnd else s.playerMarkIntro, TmIcons.SkipNext, null)
+            Kind.RemoveIntroMark -> Line(kind, s.playerMarkIntroRemove, TmIcons.Close, null)
             Kind.OtherEngine -> Line(kind, s.playerEngineOther, TmIcons.Play, host.engineNow()?.let { s.playerEngineOtherDetail(it) })
             Kind.OpenInAnotherApp -> Line(kind, s.playerOpenInAnotherApp, TmIcons.OpenExternal, null)
             Kind.CopyLinkAtTime -> Line(kind, s.playerCopyLinkAtTime, TmIcons.Copy, null)
