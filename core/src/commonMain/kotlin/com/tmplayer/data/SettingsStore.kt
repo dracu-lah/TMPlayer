@@ -319,7 +319,7 @@ private val FRAME_RATE_MATCHING = booleanPreferencesKey("frame_rate_matching")
 private val TUNNELED_PLAYBACK = stringPreferencesKey("tunneled_playback")
 private val PLAYBACK_STATS = booleanPreferencesKey("playback_stats")
 
-// Play the chat in order, and Repeat this video (EG-F30, EG-F52): see [ChatOrder] and [PlayQueue].
+// Play the chat in order, and Repeat this video (EG-F30, EG-F52): see [ChatOrder] and [RepeatVideo].
 private val PLAY_CHAT_ORDER = booleanPreferencesKey("play_chat_order")
 private val KEEP_REPEAT = booleanPreferencesKey("keep_repeat")
 
