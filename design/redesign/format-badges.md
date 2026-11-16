@@ -64,7 +64,7 @@ Zero, negative, missing one side, or a side over 20,000: no class (null). Never 
 | Poster tile (phone, TV, desktop, web) | one resolution pill, top end corner, 720p and up, only when known | the name based chip that also said "SD" |
 | Details page (phone, TV, desktop, web) | a row under the facts line: resolution, HDR kind, codec, 50+ fps, audio | the one outlined quality chip in the facts line |
 | Player track picker (phone, TV) | per audio track: Atmos or DTS kind, and 5.1 / 7.1 / Stereo, as one pill each, in the line's detail | the plain word "Dolby" / "DTS" in the track name |
-| Player More panel / info (desktop) | the video's row of pills in the info line | none (new line only when a probe exists) |
+| Desktop player's track list | the audio track's name says its kind and layout ("English (Atmos 5.1)", "(DTS-HD 7.1)") | the raw codec word where a kind has a name |
 | Downloads rows | one slot: `FormatBadgeRow` with the resolution, plus the probe's tags when known | none |
 
 Nothing on Home rows beyond the tile pill; list rows (non-poster tiles) keep the quality in the facts line
@@ -74,9 +74,9 @@ under the title as today, so a row is not crowded.
 
 | | Phone | TV | Desktop | Web |
 | --- | --- | --- | --- | --- |
-| Tile pill | yes | yes (same pill on the tile; the tile keeps its focus ring, the pill is not a stop) | yes | yes (size from the message) |
-| Details row | yes, wraps to a second line | yes; the facts block already is the D-pad stop, the row is inside it | yes | yes |
-| Track picker | yes | yes (rows already focusable, pills are text inside the row) | mpv audio list shows the same text | not shown (the browser gives no codec facts) |
+| Tile pill | yes | yes (same pill on the tile; the tile keeps its focus ring, the pill is not a stop) | yes | not yet: the web's items carry no picture size (see Follow-ups) |
+| Details row | yes, wraps to a second line | yes; the facts block already is the D-pad stop, the row is inside it | yes | already wears the outlined resolution badge from the rules; no probe pills (no codec facts in a browser) |
+| Track picker | yes | yes (rows already focusable, pills are text inside the row) | mpv audio list shows the same words | not shown (the browser gives no codec facts) |
 | Probe source | Media3 tracks | Media3 tracks | mpv track list | none: only the size based pill |
 
 ## Edge cases
@@ -98,6 +98,30 @@ under the title as today, so a row is not crowded.
   the classifier and its table are ready.
 - Atmos on TrueHD: Media3 does not say, so it is not shown; E-AC-3 JOC says so and is shown.
 - Interrupted play: the probe is stored when the tracks first list; a failed play leaves what was known.
+
+## Follow-ups (not in this pass)
+
+- Web poster tile: `VideoItem` has no width or height, and the rules only run in the worker, so the pill needs
+  `itemOf` to carry the size and a worker side `FormatFacts.tileTag` answer. Not done: the web build cannot be run here.
+- A probe for a file on disk without playing it (MediaExtractor on Android, ffprobe on the desktop).
+- Persisting probes across restarts, and a Dolby Vision profile on Android before the base layer relabelling.
+
+## After
+
+Rendered by `FormatBadgeRenderTest` (phone, the same at a 2.0 font, television) into `format-badges/`:
+
+| | |
+| --- | --- |
+| Details row, phone | ![row](format-badges/format-badges-row-phone.png) |
+| Details row, phone, 200% font (wraps whole pills) | ![row 2.0](format-badges/format-badges-row-phone-font20.png) |
+| Details row, television | ![row tv](format-badges/format-badges-row-tv.png) |
+| Poster tile, phone | ![tile](format-badges/format-badges-tile-phone.png) |
+| Poster tile, phone, 200% font | ![tile 2.0](format-badges/format-badges-tile-phone-font20.png) |
+| Poster tile, television | ![tile tv](format-badges/format-badges-tile-tv.png) |
+| A pill read from the name (hollow) | ![name](format-badges/format-badges-row-name.png) |
+
+Before: a poster wore a name based chip (also "SD"), the details page one outlined quality chip, nothing else
+showed a format. No before picture is stored: it is the same tile without the corner pill.
 
 ## Raju check
 
