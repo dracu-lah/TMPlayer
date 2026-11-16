@@ -253,7 +253,12 @@ object SettingsMap {
         row("clear_favourites", lib, "settings.clear_favourites", PTD, need = SettingsNeed.State)
         row("clear_history", lib, "browse.clear_history", PTD, listOf("browse.clear_history_detail"), SettingsNeed.State)
         row("posters", lib, "metadata.toggle", PTD, onOff("metadata.toggle"), SettingsNeed.OnlineMetadata)
-        row("skip_times", lib, "metadata.skip_times", PTD, listOf("metadata.skip_times_detail"), SettingsNeed.OnlineMetadata)
+        row("skip_times", lib, "metadata.skip_times", PTD, listOf("metadata.skip_times_privacy"), SettingsNeed.OnlineMetadata)
+        // One line per kind of skip, drawn only while the switch above is on (T10).
+        row("skip_mode_recap", lib, "settings.skip_recap", PTD, listOf("settings.skip_mode_note"), SettingsNeed.State)
+        row("skip_mode_intro", lib, "settings.skip_intro", PTD, listOf("settings.skip_mode_note"), SettingsNeed.State)
+        row("skip_mode_credits", lib, "settings.skip_credits", PTD, listOf("settings.skip_mode_note"), SettingsNeed.State)
+        row("skip_mode_preview", lib, "settings.skip_preview", PTD, listOf("settings.skip_mode_note"), SettingsNeed.State)
         row("tmdb_key", lib, "metadata.key", PTD, need = SettingsNeed.OnlineMetadata)
         row("omdb_key", lib, "metadata.omdb_key", PTD, need = SettingsNeed.OnlineMetadata)
         row("details_cache", lib, "metadata.clear_cache", PTD, need = SettingsNeed.OnlineMetadata)

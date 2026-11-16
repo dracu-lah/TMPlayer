@@ -106,7 +106,7 @@ security, About and help, Redo setup choices.
 | Lists: Clear favourites | `settings.clear_favourites` | `_detail` | `favorite_chats` | P T, while any |
 | Lists: Clear history | `browse.clear_history` | `browse.clear_history_detail` | history | P T, while any |
 | Posters and details | `metadata.toggle` | `metadata.toggle_on/_off` | metadata settings | P T |
-| Skip intro times | `metadata.skip_times` | `metadata.skip_times_detail` | metadata settings | P T, while on |
+| Skip intro times | `metadata.skip_times` | `metadata.skip_times_privacy` | metadata settings | P T D, while on, then four per kind rows (`settings.skip_recap` and kin) |
 | TMDB key | `metadata.key` | `MetaWords.key` | metadata settings | P T |
 | OMDb key | `metadata.omdb_key` | `MetaWords.omdbKey` | metadata settings | P T |
 | Clear details cache | `metadata.clear_cache` | `metadata.cache_detail/_empty` | cache | P T |

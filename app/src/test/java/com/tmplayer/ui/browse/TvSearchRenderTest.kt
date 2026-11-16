@@ -16,6 +16,8 @@ import androidx.compose.foundation.onFocusedBoundsChanged
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.semantics.getAllSemanticsNodes
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.unit.dp
 import com.tmplayer.data.FormFactor
 import com.tmplayer.data.GlobalSearch
@@ -119,6 +121,12 @@ abstract class TvSearchWalk {
             org.robolectric.util.ReflectionHelpers.ClassParameter.from(Boolean::class.javaPrimitiveType, true),
         )
         activity.findViewById<android.view.ViewGroup>(android.R.id.content).getChildAt(0).requestFocus()
+        // Right to left, the view's first focus lands on the clear control (the row's last, the
+        // leftmost there), whose tip is a Popup. A Popup runs a per frame loop that, under this
+        // test's paused looper (no compose test clock), never lets idle() return: the class hung
+        // 20 to 27 minutes (2026-11-16). On a television the field has the focus at the start (the
+        // screen asks for it), so put it there before the next frame is composed.
+        focusField(activity)
         idle()
         val root = activity.window.decorView
         val density = activity.resources.displayMetrics.density
@@ -151,6 +159,23 @@ abstract class TvSearchWalk {
         file.parentFile?.mkdirs()
         file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         assertEquals(true, file.length() > 0)
+    }
+
+    private fun focusField(activity: ComponentActivity) {
+        val nodes = mutableListOf<androidx.compose.ui.semantics.SemanticsNode>()
+        fun walkViews(view: android.view.View) {
+            if (view is androidx.compose.ui.platform.ViewRootForTest) {
+                nodes += view.semanticsOwner.getAllSemanticsNodes(mergingEnabled = true)
+            }
+            if (view is android.view.ViewGroup) for (i in 0 until view.childCount) walkViews(view.getChildAt(i))
+        }
+        walkViews(activity.window.decorView)
+        val field = nodes.firstOrNull { node ->
+            node.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Text)?.any { it.text == "night harbour" } == true &&
+                node.config.getOrNull(androidx.compose.ui.semantics.SemanticsActions.RequestFocus) != null
+        }
+        assertTrue("the search field is in the semantics tree", field != null)
+        field?.config?.getOrNull(androidx.compose.ui.semantics.SemanticsActions.RequestFocus)?.action?.invoke()
     }
 
     private fun key(code: Int) {
