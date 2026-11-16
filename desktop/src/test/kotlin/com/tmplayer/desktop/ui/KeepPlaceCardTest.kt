@@ -47,7 +47,9 @@ class KeepPlaceCardTest {
         onNode(hasText("Yes, keep it") and hasClickAction()).assertIsFocused()
         onRoot().performKeyInput { pressKey(Key.Enter) }
         assertEquals(1, yes)
-        onRoot().performKeyInput { pressKey(Key.Tab) }
+        // A pressed button lets go of focus (the card is about to go), so the next Tab starts from the
+        // first button again: Yes, then Not now.
+        repeat(2) { onRoot().performKeyInput { pressKey(Key.Tab) } }
         onNode(hasText("Not now") and hasClickAction()).assertIsFocused()
         onRoot().performKeyInput { pressKey(Key.Enter) }
         assertEquals(1, no)
