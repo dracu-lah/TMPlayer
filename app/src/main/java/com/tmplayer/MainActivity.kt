@@ -1076,7 +1076,6 @@ private fun Root() {
     var railReturn by remember { mutableStateOf<com.tmplayer.ui.browse.RailReturn?>(null) }
     // Whether the Downloads screen opens on its cached videos, which is how Settings' Cached
     // videos row reaches the list of them.
-    var downloadsOnCached by remember { mutableStateOf(false) }
     // How many times the Downloads screen has been asked to open with Free up space up (0: not),
     // which is where "Not enough space" sends the viewer: straight to what can go, not to a tab
     // to work it out from. A count, so a second refusal while the page is up opens it again.
@@ -1101,7 +1100,6 @@ private fun Root() {
         // Back from the Downloads screen goes wherever the viewer already was, not to the chat
         // list: they were reading a chat, pressed a notification, and Back should return them to it.
         if (screen !is Screen.Downloads) downloadsCameFrom = screen
-        downloadsOnCached = false
         // The player's "Not enough space" asks for Free up space itself.
         downloadsFreeUp = if (requestedScreen == MainActivity.OPEN_FREE_UP_SPACE) downloadsFreeUp + 1 else 0
         downloadsAskedForRoom = true
@@ -1893,7 +1891,6 @@ private fun Root() {
                     home = Screen.Chats,
                 )
             }
-            downloadsOnCached = false
             downloadsFreeUp = 0
             screen = Screen.Downloads
         }
@@ -2119,13 +2116,13 @@ private fun Root() {
                     if (downloadsCameFrom is Screen.Chats) railReturn = com.tmplayer.ui.browse.RailReturn.Downloads
                     screen = downloadsCameFrom
                 }
-                // On a television one Back leaves too, the remote landing on the account's picture
-                // whose menu opened Downloads, as Back from Settings does: going by way of the bar
-                // took two presses (2026-10-21).
+                // On a television one Back leaves too, the remote landing on the bar, on the page it
+                // comes back to: Downloads is a place on the bar now (R2), not behind the picture, so
+                // there is no account item to go back to.
                 BackHandler(
                     onBack = {
                         if (tvBarShown) {
-                            if (downloadsCameFrom is Screen.Chats) railReturn = com.tmplayer.ui.browse.RailReturn.Profile
+                            if (downloadsCameFrom is Screen.Chats) railReturn = com.tmplayer.ui.browse.RailReturn.Downloads
                             screen = downloadsCameFrom
                         } else {
                             leaveDownloads()
@@ -2138,7 +2135,6 @@ private fun Root() {
                     DownloadsScreen(
                         onPlay = { record -> resumeMedia(record) },
                         onBack = leaveDownloads,
-                        openOnCached = downloadsOnCached,
                         openFreeUp = downloadsFreeUp > 0,
                         askedForRoom = downloadsFreeUp > 0 && downloadsAskedForRoom,
                         // An empty Downloads page: to the chats, where Download is.
@@ -2197,7 +2193,6 @@ private fun Root() {
                     // Storage's Free up space: the Downloads page with the review up, Back to Settings.
                     onFreeUpSpace = {
                         downloadsCameFrom = Screen.Settings
-                        downloadsOnCached = false
                         downloadsFreeUp += 1
                         downloadsAskedForRoom = false
                         screen = Screen.Downloads
@@ -2423,7 +2418,6 @@ private fun Root() {
                 onConfirm = {
                     roomPrompt = null
                     if (screen !is Screen.Downloads) downloadsCameFrom = screen
-                    downloadsOnCached = false
                     downloadsFreeUp += 1
                     downloadsAskedForRoom = true
                     screen = Screen.Downloads
