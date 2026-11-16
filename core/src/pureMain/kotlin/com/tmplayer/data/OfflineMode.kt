@@ -40,13 +40,13 @@ class OfflineHome(
     val downloads: List<ResumeRecord> = emptyList(),
     val cached: Set<String> = emptySet(),
 ) {
-    /** The keys ([ProgressKeys.of]) of everything that plays with no line. */
-    val playableKeys: Set<String> by lazy(LazyThreadSafetyMode.NONE) {
-        val keys = HashSet<String>(downloads.size + cached.size)
-        downloads.mapTo(keys) { ProgressKeys.of(it.chatId, it.messageId) }
-        keys.addAll(cached)
-        keys
+    /** The keys ([ProgressKeys.of]) of the videos in Downloads, which say Downloaded offline. */
+    val downloadedKeys: Set<String> by lazy(LazyThreadSafetyMode.NONE) {
+        downloads.mapTo(HashSet(downloads.size)) { ProgressKeys.of(it.chatId, it.messageId) }
     }
+
+    /** The keys of everything that plays with no line: the downloads and the cached videos. */
+    val playableKeys: Set<String> by lazy(LazyThreadSafetyMode.NONE) { downloadedKeys + cached }
 
     /** Whether a press on this video may start it now. Always true while online. */
     fun plays(chatId: Long, messageId: Long): Boolean = !offline || ProgressKeys.of(chatId, messageId) in playableKeys

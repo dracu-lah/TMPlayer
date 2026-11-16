@@ -15,3 +15,10 @@ import androidx.compose.ui.unit.dp
  * at the bottom ([ScrollToTop], a snackbar) sits above it.
  */
 val LocalBottomChrome = compositionLocalOf { 0.dp }
+
+/**
+ * How much room the connection banner takes above the floating bar while it is up (R4, 9.1): its
+ * height and the gap under it. [LocalBottomChrome] already includes it, for the lists that pad by
+ * that; Home pads by its own insets and adds this one.
+ */
+val LocalBannerRoom = compositionLocalOf { 0.dp }

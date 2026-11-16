@@ -8,7 +8,7 @@ import com.tmplayer.i18n.Messages
  * row is headed by the chat's name.
  */
 fun homeRowTitle(row: HomeRow, s: Messages): String = when (row) {
-    is HomeRow.Continue -> s.homeRowContinue
+    is HomeRow.Continue -> if (row.onPhone) s.homeRowOnPhone else s.homeRowContinue
     is HomeRow.WatchLater -> s.homeRowWatchLater
     is HomeRow.Listed -> row.name
     is HomeRow.NewEpisodes -> s.homeRowNewEpisodes

@@ -268,6 +268,45 @@ fun ConnectBannerView(text: String, proxyOn: Boolean, onRetry: () -> Unit, onOpe
     }
 }
 
+/**
+ * The device has no internet (R4): the Connect banner's card with its one button, Try again, and
+ * [onOpenDownloads] as a second where Downloads is a place to go (a touch screen and the desktop;
+ * null on a television, whose Home already leads with what is on the device). Shown only once the
+ * offline answer has settled ([com.tmplayer.data.OfflineSettle]). It is a card with its own press
+ * targets and sits where the host puts it, clear of the tab bar, so it never covers a tap meant for
+ * the bar; on a television it is reachable from the top edge as the Connect banner is.
+ */
+@Composable
+fun OfflineBanner(modifier: Modifier = Modifier, onOpenDownloads: (() -> Unit)? = null) {
+    val retry = rememberRetry()
+    OfflineBannerView(retrying = retry.busy, onRetry = retry.run, onOpenDownloads = onOpenDownloads, modifier = modifier)
+}
+
+/** [OfflineBanner] as plain values. */
+@Composable
+fun OfflineBannerView(retrying: Boolean, onRetry: () -> Unit, onOpenDownloads: (() -> Unit)?, modifier: Modifier = Modifier) {
+    val s = LocalStrings.current
+    Column(
+        modifier
+            .tvReachable(TvReach.Edge.Top)
+            .widthIn(max = 560.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .background(Tone.surfaceHigh)
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .semantics { liveRegion = LiveRegionMode.Polite },
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(TmIcons.WifiOff, contentDescription = null, tint = Tone.caution, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(10.dp))
+            Text(if (retrying) s.connectRetrying else s.stateOffline, style = MaterialTheme.typography.bodyMedium, color = Tone.text)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            QuietButton(s.commonRetry, onClick = onRetry)
+            if (onOpenDownloads != null) QuietButton(s.downloadsTitle, onClick = onOpenDownloads)
+        }
+    }
+}
+
 /** A Retry that says "Trying again" for a moment, so a press that changes nothing yet still shows. */
 private class Retry(val run: () -> Unit, private val state: androidx.compose.runtime.MutableState<Boolean>) {
     val busy: Boolean get() = state.value
