@@ -448,7 +448,7 @@ class PlayerMorePanel(
             Kind.Stereo -> Line(kind, s.playerStereo, TmIcons.Visibility, host.stereoDetail() ?: s.commonOff)
             Kind.Speed -> Line(kind, s.playerSpeed, ImageVector.vectorResource(R.drawable.ic_speed), PlaybackSpeed.label(host.speed()))
             Kind.VolumeBoost -> Line(kind, s.playerVolumeBoost, volume, if (host.volumeBoost()) s.playerVolumeBoostOnDetail else s.commonOff)
-            Kind.NightMode -> Line(kind, s.playerNightMode, TmIcons.VolumeDown, if (host.nightMode()) s.playerNightModeOnDetail else s.commonOff)
+            Kind.NightMode -> Line(kind, s.playerQuietLoudScenes, TmIcons.VolumeDown, if (host.nightMode()) s.playerQuietLoudScenesOnDetail else s.commonOff)
             Kind.EvenVolume -> Line(kind, s.playerEvenVolume, volume, if (host.evenVolume()) s.playerEvenVolumeOnDetail else s.commonOff)
             Kind.SleepTimer -> Line(kind, s.playerSleepTimer, TmIcons.Clock, host.sleepDetail() ?: s.commonOff)
             Kind.AbLoop -> {

@@ -7992,7 +7992,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         val on = !nightModeOn
         nightModeOn = on
         volumeBoost?.night = on
-        showGestureFeedback(if (on) L.playerNightModeOn else L.playerNightModeOff)
+        showGestureFeedback(if (on) L.playerQuietLoudScenesOn else L.playerQuietLoudScenesOff)
         lifecycleScope.launch { runCatching { settings.setNightMode(on) } }
     }
 

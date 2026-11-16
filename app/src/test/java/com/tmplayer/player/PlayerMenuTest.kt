@@ -337,4 +337,13 @@ class PlayerMenuTest {
         assertFalse(PlayerMenuEntry.RepeatVideo in PlayerMenu.tvEntries(pictureInPicture = true))
         assertEquals(com.tmplayer.i18n.L.playerRepeatVideo, PhoneMenuEntry.RepeatVideo.label())
     }
+
+    @Test
+    fun `the sound switch is called Quiet loud scenes, not Night mode, wherever the menu draws it`() {
+        assertEquals("Quiet loud scenes", PhoneMenuEntry.NightMode.label())
+        assertEquals("Quiet loud scenes", com.tmplayer.i18n.L.playerQuietLoudScenes)
+        assertEquals("Quiet loud scenes off", com.tmplayer.i18n.L.playerQuietLoudScenesOff)
+        assertTrue(com.tmplayer.i18n.L.playerQuietLoudScenesOn.startsWith("Quiet loud scenes on"))
+        assertFalse(com.tmplayer.i18n.L.playerDetailsQuietLoudScenes.contains("Night", ignoreCase = true))
+    }
 }

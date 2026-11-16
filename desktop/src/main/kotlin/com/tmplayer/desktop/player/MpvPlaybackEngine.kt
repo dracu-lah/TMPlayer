@@ -943,7 +943,7 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
                 },
             )
             add(
-                L.playerDetailsNightMode to when {
+                L.playerDetailsQuietLoudScenes to when {
                     !_state.value.nightMode -> L.commonOff
                     h.string("af").orEmpty().contains("acompressor") -> L.playerDetailsNightCompressed
                     else -> L.playerDetailsNightDolby

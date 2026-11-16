@@ -84,7 +84,6 @@ import com.tmplayer.desktop.DesktopPrefs
 import com.tmplayer.desktop.WatchedWords
 import com.tmplayer.data.DownloadRunner
 import com.tmplayer.data.OfflineDownloads
-import com.tmplayer.player.MiniContext
 import com.tmplayer.player.PictureZoom
 import com.tmplayer.player.PlaybackSpeed
 import com.tmplayer.player.Stereo3d
@@ -259,15 +258,6 @@ fun PlayerScreen(
     lockedAtStart: Boolean = false,
     /** "Not enough space": close the player for Downloads with Free up space up. Null hides it. */
     onFreeUpSpace: (() -> Unit)? = null,
-    /**
-     * Back from a playing video, with what is true then ([MiniContext]): the shell docks the
-     * player into the mini bar or closes it ([MiniPlayerState.leave]). Null closes with [onBack].
-     */
-    onDock: ((MiniContext) -> Unit)? = null,
-    /** Docked: the player draws nowhere and hears no key, and plays on in the one engine. */
-    docked: Boolean = false,
-    /** While docked the video ended (false), or failed or asked a question the viewer must see (true). */
-    onDockedStopped: (needsAnswer: Boolean) -> Unit = {},
 ) {
     val s = LocalStrings.current
     // What the TV is told the video is called, read when a cast loads it.
@@ -329,14 +319,6 @@ fun PlayerScreen(
             if (error != null && phase == Phase.Playing && engine.cast == null) {
                 phase = Phase.Failed(error, format = engine.state.value.failedFormat, details = engine.state.value.failedDetails)
             }
-        }
-    }
-    // When the viewer's pause began, 0 while it plays: Back on a video paused for a few seconds
-    // closes it instead of docking it (PL-18, [MiniContext.pausedForMs]).
-    val pausedAt = remember { longArrayOf(0L) }
-    LaunchedEffect(engine) {
-        engine.state.map { it.playing }.distinctUntilChanged().collect { on ->
-            pausedAt[0] = if (on) 0L else System.currentTimeMillis()
         }
     }
     // The opening's start point and [StreamReads] when it began, for the loader's staged line.
@@ -567,38 +549,8 @@ fun PlayerScreen(
         applyZoom(PictureZoom.NONE, say)
     }
 
-    val dockedNow by rememberUpdatedState(docked)
-
     fun refocus() {
-        // A docked player is out of sight and must not take the window's keys from the page.
-        if (dockedNow) return
         runCatching { focus.requestFocus() }
-    }
-
-    /**
-     * Back, the mouse's back button and the bar's arrow: the mini bar when the shell has one and
-     * the video is playing, the player closed otherwise ([MiniPlayerState.verdict]).
-     */
-    fun leave() {
-        val dock = onDock
-        if (dock == null) {
-            onBack()
-            return
-        }
-        dock(
-            MiniContext(
-                platformAllowed = !com.tmplayer.desktop.ui.BigScreen.on,
-                opened = engine.state.value.opened,
-                ended = phase == Phase.Finished || engine.state.value.ended,
-                failed = phase is Phase.Failed || engine.state.value.error != null,
-                asking = phase is Phase.StillWatching,
-                casting = castState is com.tmplayer.desktop.cast.DesktopCast.State.Connected,
-                locked = screenLocked,
-                pausedForMs = engine.state.value.let { st ->
-                    if (st.opened && !st.playing && !st.ended && pausedAt[0] > 0L) System.currentTimeMillis() - pausedAt[0] else 0L
-                },
-            ),
-        )
     }
 
     /**
@@ -1180,7 +1132,7 @@ fun PlayerScreen(
     fun toggleNightMode() {
         val on = !status.nightMode
         engine.setNightMode(on)
-        showFlash(Flash.Kind.Text, if (on) L.playerNightModeOn else L.playerNightModeOff)
+        showFlash(Flash.Kind.Text, if (on) L.playerQuietLoudScenesOn else L.playerQuietLoudScenesOff)
         playerScope.launch { runCatching { settings.setNightMode(on) } }
     }
 
@@ -1682,7 +1634,7 @@ fun PlayerScreen(
             PlayerAction.MiniPlayer -> onMiniPlayer?.invoke()
                 ?: showFlash(Flash.Kind.Text, L.playerNoMiniPlayer)
             PlayerAction.Stats -> showDetails = !showDetails
-            PlayerAction.Back -> leave()
+            PlayerAction.Back -> onBack()
             PlayerAction.Quit -> onQuit?.invoke()
             PlayerAction.ShortcutSheet -> showShortcuts = !showShortcuts
             is PlayerAction.Screenshot -> takeScreenshot(action.withSubtitles)
@@ -1802,8 +1754,6 @@ fun PlayerScreen(
      * window when Compose's focus is somewhere else (see [PlayerKeyRoute]).
      */
     fun playerKey(event: androidx.compose.ui.input.key.KeyEvent): Boolean {
-        // Docked: the page is in front and every key is its own.
-        if (dockedNow) return false
         // Locked: every key is the lock's, the downs and the ups, so not even the
         // window's Esc and Backspace hear one. Enter held unlocks; any key shows how.
         if (screenLocked) {
@@ -1906,18 +1856,8 @@ fun PlayerScreen(
     val typingUp = notePrompt != null || timePrompt || showOnline || menu != null
     val typingUpNow by rememberUpdatedState(typingUp)
     val sheetUpNow by rememberUpdatedState(showEpisodes || showShortcuts || showDetails)
-    // Docked: no route, so the window keeps its keys for the page; the player is back on expand.
-    LaunchedEffect(docked) {
-        if (!docked) refocus()
-    }
-    LaunchedEffect(docked, phase) {
-        // The end leaves no bar; a failure or a question out of sight brings the player back to answer it.
-        if (!docked) return@LaunchedEffect
-        if (phase == Phase.Finished) onDockedStopped(false)
-        else if (phase is Phase.Failed || phase is Phase.StillWatching) onDockedStopped(true)
-    }
-    DisposableEffect(docked) {
-        if (docked) return@DisposableEffect onDispose { }
+    LaunchedEffect(Unit) { refocus() }
+    DisposableEffect(Unit) {
         val route = PlayerKeyRoute.Route(
             handle = { playerKeyNow(it) },
             focusInside = { focusInside },
@@ -1995,7 +1935,7 @@ fun PlayerScreen(
                 },
                 onDoubleClick = { if (!ignoreClicks) onToggleFullscreen() },
                 onRightClick = { at -> menu = if (menu?.panel == true) null else MenuAt(MenuPage.Main, MenuAt.Anchor.Cursor, at) },
-                onMouseBack = ::leave,
+                onMouseBack = onBack,
                 scope = scope,
                 canPan = { zoom.zoomed && zoomAllowed() },
                 onPan = { delta -> zoomFrame()?.let { frame -> applyZoom(zoom.panBy(delta.x, delta.y, frame), say = false) } },
@@ -2053,7 +1993,7 @@ fun PlayerScreen(
                     null
                 },
                 onHoverControls = { overControls = it },
-                onBack = ::leave,
+                onBack = onBack,
                 onTogglePlay = ::togglePlay,
                 onSeekBy = { dispatch(PlayerAction.SeekBy(it)) },
                 onSeekTo = ::jumpTo,

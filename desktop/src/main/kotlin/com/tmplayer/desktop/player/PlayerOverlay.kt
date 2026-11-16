@@ -1106,7 +1106,7 @@ internal fun PlayerMenu(
             MenuPage.Options -> {
                 Entry(s.playerDownmix, checked = status.downmix) { pick(MenuAction.ToggleDownmix) }
                 Entry(s.playerVolumeBoost, checked = status.volumeBoost) { pick(MenuAction.ToggleVolumeBoost) }
-                Entry(s.playerNightMode, checked = status.nightMode) { pick(MenuAction.ToggleNightMode) }
+                Entry(s.playerQuietLoudScenes, checked = status.nightMode) { pick(MenuAction.ToggleNightMode) }
                 Entry(s.playerSleepTimer, trailing = sleepTimer ?: s.commonOff) { page(MenuPage.Sleep) }
                 val repeat = when {
                     loop == null -> s.playerLoopSetStart

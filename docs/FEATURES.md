@@ -147,8 +147,20 @@ Windows), remembers its window size and
 place, and opening it a second time brings the first window forward. Downloads stay on the
 computer until you remove them, on their own page.
 
-**Mini player and shortcuts.** Ctrl+P shrinks the window to a small always on top picture in a
-corner of the screen and brings it back; `?` lists every key.
+**Back leaves the video.** Back (Esc, Backspace, Alt+Left, the mouse's back button) stops the video, keeps
+your place and returns to the page that opened it, as on the phone. There is no bar that keeps a video
+playing over a page. Ctrl+P is a different thing: it shrinks the window to a small always on top picture in
+a corner of the screen and brings it back. `?` lists every key.
+
+**Quiet loud scenes.** One switch in the player menu, off until you turn it on, remembered. On Android and
+Android TV it squeezes the loudest scenes down and lifts quiet speech. On the computer the bundled FFmpeg
+has no compressor (only `aformat`, `anull` and `aresample`, checked 2026-11-16), so it uses the track's own
+Dolby range control and a clearer speech channel on a surround fold; its detail line in Playback details
+says so. The web app has no audio chain and does not offer it.
+
+**Pure black and a clock.** Appearance has a Pure black switch under the theme (System and Dark, phone, TV,
+computer, web) for OLED screens. The television's controls show the time of day in the top corner for as
+long as a video is paused; the end time of a video is not shown (removed on purpose in 1.16.0).
 
 **Updates itself.** Shortly after every launch, and every six hours while it runs, it looks for a
 newer release; when there is one, an amber *Update* item joins the side bar and a popup offers it

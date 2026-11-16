@@ -250,46 +250,11 @@ class ShellState(
         private set
 
     /**
-     * The mini player (U8): Back from a playing video docks it into a bar over the page instead
-     * of closing it. The player stays composed (one engine, never a second decoder) and the page
-     * is in front: [playerUp] is what "the player is on screen" means to the keys and popups.
+     * The full player is the thing on screen: a video is open. Back closes it (the resume point
+     * is saved by the player) and the page that opened it is what is left; there is no bar that
+     * keeps a video playing over a page.
      */
-    var mini by mutableStateOf(com.tmplayer.player.MiniPlayerState())
-        private set
-
-    /** What the bar shows, written by the player host while docked. */
-    var miniBar by mutableStateOf<MiniBarInfo?>(null)
-
-    /** The bar's play and pause, set by the player host. */
-    var miniTogglePlay: () -> Unit = {}
-
-    /** The full player is the thing on screen: a video is open and not docked. */
-    val playerUp: Boolean get() = nowPlaying != null && mini.phase != com.tmplayer.player.MiniPhase.Docked
-
-    /**
-     * Back from the player: docks it when [context] allows ([com.tmplayer.player.MiniPlayerState.verdict]),
-     * closes it otherwise. A television in the big-screen mode never docks.
-     */
-    fun leavePlayer(context: com.tmplayer.player.MiniContext) {
-        mini = mini.leave(context)
-        if (!mini.holdsPlayer) {
-            closePlayer()
-            return
-        }
-        // Out of fullscreen, as a close would: the page and its bar are what comes next.
-        if (!BigScreen.on) fullscreen = false
-    }
-
-    /** A cast session began or ended: a docked bar hides for it and comes back after. */
-    fun miniCasting(on: Boolean) {
-        mini = mini.casting(on)
-    }
-
-    /** A tap on the bar, or a question the docked video has for the viewer. */
-    fun expandPlayer() {
-        mini = mini.expand()
-        miniBar = null
-    }
+    val playerUp: Boolean get() = nowPlaying != null
 
     /**
      * Whether the window is fullscreen: the first rung of the Esc ladder, and the last in the
@@ -499,9 +464,6 @@ class ShellState(
     val notices = kotlinx.coroutines.flow.MutableSharedFlow<String>(extraBufferCapacity = 4)
 
     private fun openPlayerNow(item: MediaItem, startFromBeginning: Boolean) {
-        // A video opened while one is docked takes its place in the same player: never two.
-        mini = mini.opened()
-        miniBar = null
         if (detail != null) detailUnderPlayer = true
         warmStream(item, fromStart = startFromBeginning)
         if (item.versions.size <= 1) {
@@ -534,8 +496,6 @@ class ShellState(
 
     fun closePlayer() {
         nowPlaying = null
-        mini = mini.dismiss()
-        miniBar = null
         // The big-screen mode is full screen for the whole app, not for the video alone.
         if (!BigScreen.on) fullscreen = false
         detailUnderPlayer = false

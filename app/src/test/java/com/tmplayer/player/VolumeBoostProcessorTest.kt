@@ -86,6 +86,28 @@ class VolumeBoostProcessorTest {
     }
 
     @Test
+    fun `quiet loud scenes switched off again settles back to a plain copy, so idle costs nothing`() {
+        val p = processor(false, night = true)
+        run(p, square(0.5f, 48_000))
+        p.night = false
+        // The gain walks back to 1 within the ramp, and from then on the bytes are copied as they came.
+        run(p, square(0.5f, 96_000))
+        val input = square(0.4f, 4_800)
+        val expected = ByteBuffer.allocate(input.remaining()).also { it.put(input.duplicate()); it.flip() }
+        p.queueInput(input)
+        val out = p.output
+        assertEquals(expected.remaining(), out.remaining())
+        while (out.hasRemaining()) assertEquals(expected.get(), out.get())
+    }
+
+    @Test
+    fun `quiet loud scenes is off by default and the processor never starts a timer or a thread`() {
+        val p = VolumeBoostProcessor()
+        assertTrue(!p.enabled && !p.night)
+        assertTrue(VolumeBoostProcessor::class.java.declaredFields.none { Thread::class.java.isAssignableFrom(it.type) || it.type.name.contains("Timer") || it.type.name.contains("Handler") })
+    }
+
+    @Test
     fun `boost and night mode together never clip`() {
         val out = run(processor(true, night = true), square(1f, 48_000))
         assertTrue(out.all { abs(it) <= 1f })
