@@ -5,7 +5,12 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -115,22 +120,53 @@ internal fun deviceCounts(devices: List<CastDeviceInfo>): Pair<Int, Int> {
 
 /**
  * The detail page's Cast button, on the page's round disc: opens the picker, so the video plays on
- * the TV from the moment Play is pressed. Drawn only where casting exists (a phone or tablet in the
- * regular build, with Google Play services).
+ * the TV from the moment Play is pressed. Drawn only where casting exists (a phone or tablet; Google
+ * Cast in the regular build, DLNA in both) and only once a TV has been found or a cast is under way
+ * ([CastPresence], FQ8): a page in sight looks for 15 s and then stops by itself.
  */
 @Composable
 fun CastPageButton(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val support = remember(context) { Cast.support(context) }
     if (!support.available) return
+    val shown by rememberCastShown(support)
+    var open by remember { mutableStateOf(false) }
+    // An open picker keeps its button, whatever the search decides meanwhile.
+    if (!shown && !open) return
     val s = LocalStrings.current
     val session by support.session.collectAsState()
-    var open by remember { mutableStateOf(false) }
     val connected = session as? CastSessionState.Connected
     val label = connected?.let { s.castCastingTo(it.name) } ?: s.castButton
     // Filled in the hero colour while a TV is connected; the same size as the page's Back.
     PageDiscButton(TmIcons.Cast, label, { open = true }, modifier, active = connected != null, prominent = true)
     if (open) CastPickerSheet(support, onDismiss = { open = false })
+}
+
+/**
+ * Whether a screen draws its Cast button ([CastPresence]): the bounded search runs while the
+ * screen's lifecycle is started and stops when it is not, or after [CastPresenceScan.SCAN_MS].
+ */
+@Composable
+fun rememberCastShown(support: CastSupport): State<Boolean> {
+    val context = LocalContext.current
+    val owner = LocalLifecycleOwner.current
+    val scope = rememberCoroutineScope()
+    val scan = remember(support) { CastPresenceScan(support, scope, canSearch = { LocalNetworkPermission.granted(context) }) }
+    DisposableEffect(scan, owner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_START -> scan.start()
+                Lifecycle.Event.ON_STOP -> scan.stop()
+                else -> Unit
+            }
+        }
+        owner.lifecycle.addObserver(observer)
+        onDispose {
+            owner.lifecycle.removeObserver(observer)
+            scan.stop()
+        }
+    }
+    return scan.shown.collectAsState()
 }
 
 /** "Model" for a Cast TV, "Model · DLNA" for one found by DLNA (the protocol's name, in small print). */

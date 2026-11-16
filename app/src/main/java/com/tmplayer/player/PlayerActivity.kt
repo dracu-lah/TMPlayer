@@ -2148,9 +2148,22 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         val support = com.tmplayer.cast.Cast.support(this)
         if (!support.available) return
         cast = PlayerCast(this, findViewById(R.id.player_root), support, castHooks)
-        findViewById<View>(R.id.control_cast)?.apply {
-            visibility = View.VISIBLE
-            setOnClickListener { cast?.openPicker() }
+        // FQ8: the button is drawn only once a TV is found (or a cast is under way). The search for
+        // it runs 15 s each time the player comes into sight and stops by itself.
+        val castButton = findViewById<View>(R.id.control_cast)?.apply { setOnClickListener { cast?.openPicker() } }
+        val presence = com.tmplayer.cast.CastPresenceScan(support, lifecycleScope, canSearch = { com.tmplayer.cast.LocalNetworkPermission.granted(this) })
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                presence.start()
+                try {
+                    kotlinx.coroutines.awaitCancellation()
+                } finally {
+                    presence.stop()
+                }
+            }
+        }
+        lifecycleScope.launch {
+            presence.shown.collect { shown -> castButton?.visibility = if (shown) View.VISIBLE else View.GONE }
         }
         subtitleFiles.onCastFile = { file, mime, label -> cast?.addSubtitle(file, mime, label) == true }
         // Remembered per video, so a handover to VLC or MX Player later carries it (ExternalSubtitleFile).

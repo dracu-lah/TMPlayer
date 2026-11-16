@@ -140,7 +140,10 @@ interface CastSupport {
     /** TVs added by their address ("Add a TV by its address"); null where that has no meaning (Google Cast alone). */
     val manualTvs: ManualTvs? get() = null
 
-    /** Starts looking for receivers, for a picker that is open; [stopDiscovery] when it closes. */
+    /**
+     * Starts looking for receivers, for a picker that is open or a screen's short search for its
+     * Cast button ([CastPresenceScan]); [stopDiscovery] when it closes. Counted: each start has its stop.
+     */
     fun startDiscovery()
     fun stopDiscovery()
 
