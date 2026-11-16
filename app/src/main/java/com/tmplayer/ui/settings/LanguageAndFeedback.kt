@@ -104,6 +104,7 @@ fun LanguageDialog(settings: SettingsStore, onClose: () -> Unit) {
  * The one-time "Now in Español" card, over the chat list like the support card: the app has
  * followed the device into a language, and this says so in that language, once, with a way out.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun LanguageNoticeCard(language: String, onKeep: () -> Unit, onChange: () -> Unit, modifier: Modifier = Modifier) {
     val s = LocalStrings.current
@@ -126,10 +127,11 @@ fun LanguageNoticeCard(language: String, onKeep: () -> Unit, onChange: () -> Uni
         }
         Text(s.languageNowInBody, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
         CompositionLocalProvider(LocalOnFloating provides true) {
-            Row(
+            // Wraps whole buttons at a large font or in a long translation.
+            FlowRow(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-                verticalAlignment = Alignment.CenterVertically,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 TmSecondaryButton(onClick = onChange) { Label(s.commonChange) }
                 TmButton(onClick = onKeep, modifier = Modifier.focusRequester(keep)) { Label(s.languageKeep) }
@@ -147,6 +149,7 @@ fun LanguageNoticeCard(language: String, onKeep: () -> Unit, onChange: () -> Uni
  * first only puts it off for a week. On a television it is one slim line (text left, buttons
  * right); on a phone the text sits over the buttons.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun TourOfferCard(again: Boolean, onTake: () -> Unit, onDecline: () -> Unit, modifier: Modifier = Modifier) {
     val s = LocalStrings.current
@@ -155,9 +158,9 @@ fun TourOfferCard(again: Boolean, onTake: () -> Unit, onDecline: () -> Unit, mod
     if (!touch) BackHandler(onBack = onDecline)
     val buttons: @Composable () -> Unit = {
         CompositionLocalProvider(LocalOnFloating provides true) {
-            Row(
+            FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-                verticalAlignment = Alignment.CenterVertically,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 TmSecondaryButton(onClick = onDecline) { Label(if (again) s.tourOfferNoThanks else s.deviceNotNow) }
                 TmButton(onClick = onTake, modifier = Modifier.focusRequester(take)) { Label(s.tourOfferTake) }

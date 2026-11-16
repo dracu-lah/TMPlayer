@@ -83,4 +83,49 @@ class SettingsLargeFontTest {
             assertEquals("$label wraps", 1, results.first().lineCount)
         }
     }
+
+    private fun cards(content: @androidx.compose.runtime.Composable () -> Unit) {
+        FormFactor.override(false)
+        rule.setContent {
+            val base = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(base.density, 2f)) {
+                TMPlayerTheme { Box(Modifier.fillMaxSize().background(Tone.background)) { content() } }
+            }
+        }
+        rule.waitForIdle()
+    }
+
+    private fun assertButtonsFit(vararg labels: String) {
+        val width = rule.activity.resources.displayMetrics.widthPixels.toFloat()
+        val rects = labels.map { rule.onAllNodesWithText(it).onFirst().fetchSemanticsNode().boundsInRoot }
+        rects.forEachIndexed { i, r ->
+            assertTrue("${labels[i]} $r is off the screen of $width", r.left >= 0f && r.right <= width)
+        }
+        for (a in rects.indices) for (b in a + 1 until rects.size) {
+            assertTrue("${labels[a]} overlaps ${labels[b]}", !rects[a].overlaps(rects[b]))
+        }
+        // Whole words: a button reads on one line, it is the row that wraps.
+        for (label in labels) {
+            val results = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+            rule.onAllNodesWithText(label).onFirst().fetchSemanticsNode().config
+                .getOrNull(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult)?.action?.invoke(results)
+            assertEquals("$label wraps inside its button", 1, results.first().lineCount)
+        }
+    }
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w320dp-h640dp-port-night-xhdpi")
+    fun `the language notice keeps both buttons whole at a 200 percent font`() {
+        cards { LanguageNoticeCard(language = "es", onKeep = {}, onChange = {}) }
+        val w = com.tmplayer.i18n.L
+        assertButtonsFit(w.commonChange, w.languageKeep)
+    }
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w320dp-h640dp-port-night-xhdpi")
+    fun `the tour offer keeps both buttons whole at a 200 percent font`() {
+        cards { TourOfferCard(again = true, onTake = {}, onDecline = {}) }
+        val w = com.tmplayer.i18n.L
+        assertButtonsFit(w.tourOfferNoThanks, w.tourOfferTake)
+    }
 }
