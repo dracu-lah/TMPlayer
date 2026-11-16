@@ -11,7 +11,7 @@ Root cause: `SizeFilter.DEFAULT_MIN = 400 MB` is a default that suits a chat of 
 ## The new flow
 
 - Default minimum is 0: every video of a chat is listed. Nobody opens Settings to see their videos.
-- One switch in a chat's Sort sheet (menu on phone and desktop, panel on TV): **Hide small clips (under 50 MB)**, off by default. It is a group of its own, "Small videos", under "With". It applies to every chat and is remembered (the stored `min_size_bytes` is 50 MB when on).
+- One switch in a chat's Sort sheet (menu on phone and desktop, panel on TV): **Hide small clips (under 50 MB)**, off by default. It is a group of its own, "Small videos", directly under "Show". It applies to every chat and is remembered (the stored `min_size_bytes` is 50 MB when on).
 - When it is on and clips were left out, the grid ends with a row: "3 small videos hidden" and a **Show them** button. One tap shows them for this visit to the chat (the switch reads off while they are shown; the stored choice is not changed, so the next visit hides them again). The number is exact only when the whole chat has been read (the hidden set is the one the app filtered itself, counted once while paging, one pass, no extra query); until then the row says "Some small videos are hidden".
 - A chat that is empty only because of the switch says "3 small videos are hidden" with the same button.
 - Home keeps its own floor of 50 MB (`SizeFilter.HOME_MIN`) so trailers and samples do not fill Recently added. Recently added's See all page says: "Videos under 50 MB are not on Home. Open a chat to see them."
@@ -70,4 +70,15 @@ Settings min and max sliders and Reset (phone and TV: `SettingsScreen.kt`; deskt
 
 ## Shots
 
-Before: `private/ux-review` frames `chat-videos`, `chat-min-size-dialog`, `state-empty-hidden`. After shots come with the render tests (phone, TV and desktop) of this change.
+Before: `private/ux-review` frames `chat-videos`, `chat-min-size-dialog`, `state-empty-hidden` (400 MB wording).
+
+After (desktop render tests, `TMPLAYER_SHOTS` set; phone and TV are covered by focus and layout tests, no device pass as asked), in `design/redesign/show-every-video/`:
+
+- `parity-chat-sort-dark.png`, `parity-chat-sort-light.png`: the Sort menu with the "Small videos" group directly under Show.
+- `desktop-small-hidden-exact-dark.png`, `desktop-small-hidden-exact-light.png`: the grid's end row, "12 small videos hidden" and Show them.
+- `desktop-small-hidden-some-dark.png`: the same row before the whole chat is read ("Some small videos are hidden").
+- `state-empty-hidden.png`: a chat of only small videos.
+
+## Machine checks
+
+`SizeFilterTest` (default, migrated 400 MB, custom, clip switch, hidden set, 100,000 videos in one pass), `BooksMatchStoresTest` (both stores migrate and reset the same), `ChatGridKeptTest` (hidden set exact, 100,000 videos from the kept listing, empty state with Show them), `VideoMenuRandomTest` (group order, switch, custom line), `VideoSortSheetFocusTest` (TV: Down reaches the switch, OK toggles, focus stays, panel stays open), `SmallHiddenRowTest` (TV Down to Show them, exact or "Some", singular, large font on a phone), `SmallHiddenKeyboardTest` (desktop keyboard), `WebRulesTest`, web e2e `app.spec.ts` (default lists every video, switch, end row, Show them, saved 400 MB reads as not set).
