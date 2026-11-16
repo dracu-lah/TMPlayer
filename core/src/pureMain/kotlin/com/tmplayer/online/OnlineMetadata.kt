@@ -591,10 +591,16 @@ class OnlineMetadata(
                     val first = skipApi.theIntroDb(info.id, null, null, season, episode)
                     // TheIntroDB keys some titles by IMDb or TheTVDB id only: the ids TMDB lists are the second try.
                     val ids = if (first is MetaReply.Ok && first.value.isEmpty()) providerExtras(info) else null
-                    if (ids != null && (ids.imdbId != null || ids.tvdbId != null)) {
-                        skipApi.theIntroDb(null, ids.imdbId, ids.tvdbId, season, episode)
-                    } else {
+                    if (ids == null) {
                         first
+                    } else {
+                        // IMDb first, then TheTVDB: it keys by one id at a time.
+                        var reply: MetaReply<List<SkipSegment>> = first
+                        if (ids.imdbId != null) reply = skipApi.theIntroDb(null, ids.imdbId, null, season, episode)
+                        if (ids.tvdbId != null && (reply as? MetaReply.Ok)?.value?.isEmpty() == true) {
+                            reply = skipApi.theIntroDb(null, null, ids.tvdbId, season, episode)
+                        }
+                        reply
                     }
                 }
                 MetaProvider.TvMaze -> {

@@ -104,6 +104,10 @@ object SkipMerge {
     }
 }
 
+/** The modes the player works to: the viewer's, or Off for every group while "Skip intro buttons" is switched off. */
+val MetaSettings.skipModesInForce: SkipModes
+    get() = if (skipTimes) skipModes else SkipModes(SkipGroup.entries.associateWith { SkipMode.Off })
+
 /** What the pill should be doing for the playhead's place. */
 sealed interface SkipOffer {
     val segment: SkipSegment

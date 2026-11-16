@@ -94,6 +94,13 @@ object UserSkipMarks {
     fun seasonKey(chatId: Long, titleKey: String, season: Int?): String? =
         titleKey.takeIf { it.isNotBlank() }?.let { "$chatId|${it.take(80)}|${season ?: 0}" }
 
+    /** [seasonKey] for a video: its chat, show and season, or null for a film, an extra or a video of no show. */
+    fun seasonKeyOf(item: com.tmplayer.data.MediaItem): String? {
+        val name = item.parsedName
+        if (!name.isSeries || name.extra != null) return null
+        return seasonKey(item.chatId, name.titleKey, name.season)
+    }
+
     /** Keeps [mark] for [itemId] and, when [seasonKey] is given, as the guess for the rest of the season. */
     fun save(itemId: String, seasonKey: String?, mark: SkipMark): Boolean = lock.locked {
         if (!mark.valid || itemId.isBlank()) return@locked false
