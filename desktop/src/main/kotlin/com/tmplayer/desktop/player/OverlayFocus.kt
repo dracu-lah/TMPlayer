@@ -1,6 +1,10 @@
 package com.tmplayer.desktop.player
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.InteractionSource
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.runtime.remember
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -21,3 +25,13 @@ internal val OverlayHover = Color(0x33FFFFFF)
 @Composable
 internal fun Modifier.overlayFocusRing(interactions: InteractionSource, shape: Shape): Modifier =
     focusDrawn(interactions.collectIsFocusVisibleAsState(), Color.White, shape)
+
+/**
+ * A click on the dim behind a panel closes it. Pointer only: the dim is no Tab stop (a screen
+ * sized, markless stop that Enter would close the panel from) and no ripple floods the picture;
+ * Esc is the keyboard's way, as every panel says.
+ */
+@Composable
+internal fun Modifier.scrimDismiss(onClose: () -> Unit): Modifier = this
+    .focusProperties { canFocus = false }
+    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClose)

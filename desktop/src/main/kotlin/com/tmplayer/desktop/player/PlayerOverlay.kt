@@ -1649,7 +1649,7 @@ internal fun BoxScope.EpisodesSheet(
     val s = LocalStrings.current
     val focus = androidx.compose.ui.platform.LocalFocusManager.current
     BoxWithConstraints(
-        Modifier.matchParentSize().background(FloatingTone.scrim).clickable(onClick = onClose),
+        Modifier.matchParentSize().background(FloatingTone.scrim).scrimDismiss(onClose),
         contentAlignment = Alignment.Center,
     ) {
         Surface(
@@ -1849,7 +1849,7 @@ internal fun BoxScope.StatusSheet(
 internal fun BoxScope.ShortcutSheet(onClose: () -> Unit, mac: Boolean = false, wheelSeeks: Boolean = false) {
     val s = LocalStrings.current
     BoxWithConstraints(
-        Modifier.matchParentSize().background(FloatingTone.scrim).clickable(onClick = onClose),
+        Modifier.matchParentSize().background(FloatingTone.scrim).scrimDismiss(onClose),
         contentAlignment = Alignment.Center,
     ) {
         val groups = PlayerKeys.sheetGroups(mac, wheelSeeks)

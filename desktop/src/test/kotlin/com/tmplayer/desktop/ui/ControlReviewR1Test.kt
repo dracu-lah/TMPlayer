@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import com.tmplayer.data.Bookmark
 import com.tmplayer.desktop.player.BookmarkLine
 import com.tmplayer.desktop.player.OverlayButton
+import com.tmplayer.desktop.player.scrimDismiss
 import com.tmplayer.i18n.L
 import com.tmplayer.ui.icons.TmIcons
 import com.tmplayer.ui.theme.FocusVisibility
@@ -227,5 +228,29 @@ class ControlReviewR1Test {
         assertEquals(0, cleared)
         onNode(hasClickAction() and androidx.compose.ui.test.hasText("harbour")).performClick()
         assertEquals(listOf("harbour"), picked)
+    }
+
+    @Test
+    fun `the dim behind a panel closes on a click and is no Tab stop`() = runComposeUiTest {
+        var closed = 0
+        setContent {
+            TmMaterialTheme(dark = true) {
+                Box(Modifier.size(300.dp)) {
+                    Box(Modifier.fillMaxSize().testTag("dim").scrimDismiss { closed++ })
+                    Column {
+                        Box(Modifier.size(40.dp).testTag("a").focusable())
+                        Box(Modifier.size(40.dp).testTag("b").focusable())
+                    }
+                }
+            }
+        }
+        onNodeWithTag("a").requestFocus()
+        onNode(isFocused()).performKeyInput { pressKey(Key.Tab) }
+        onNodeWithTag("b").assertIsFocused()
+        // Past the last: Tab wraps to the first control, never to the dim that comes before it.
+        onNode(isFocused()).performKeyInput { pressKey(Key.Tab) }
+        onNodeWithTag("a").assertIsFocused()
+        onNodeWithTag("dim").performClick()
+        assertEquals(1, closed)
     }
 }
