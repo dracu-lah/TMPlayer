@@ -146,4 +146,37 @@ class PauseControlsRowTest {
         controls.onPlayingChanged()
         assertTrue(disc.isFocused)
     }
+
+    @Test
+    fun `on a television a pause shows the time of day in the corner and never an ends at line`() {
+        val (controls, disc) = row(tv = true)
+        playing = false
+        controls.paused()
+        controls.onPlayingChanged()
+        idle(30_000)
+        assertTrue(controls.visible)
+        val clock = disc.rootView.findViewById<android.widget.TextView>(R.id.controls_clock)
+        assertEquals(View.VISIBLE, clock.visibility)
+        val expected = android.text.format.DateFormat.getTimeFormat(clock.context).format(java.util.Date())
+        // The minute may have turned between the two reads: compare the shape, not the minute.
+        assertEquals(expected.length, clock.text.length)
+        assertTrue(clock.text.any { it.isDigit() })
+        val all = buildList {
+            fun walk(v: View) {
+                if (v is android.widget.TextView) add(v.text.toString())
+                if (v is android.view.ViewGroup) for (i in 0 until v.childCount) walk(v.getChildAt(i))
+            }
+            walk(disc.rootView)
+        }
+        assertTrue(all.none { it.contains("ends at", ignoreCase = true) })
+    }
+
+    @Test
+    fun `a phone has no clock of its own, its status bar has the time`() {
+        val (controls, disc) = row(tv = false)
+        playing = false
+        controls.paused()
+        val clock = disc.rootView.findViewById<View>(R.id.controls_clock)
+        assertEquals(View.GONE, clock.visibility)
+    }
 }
