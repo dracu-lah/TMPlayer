@@ -553,6 +553,21 @@ Store text, the site.
   checks: `:core:jvmTest`, `:ui:jvmTest`, `:desktop:test` (AnimeSeriesGuideTest incl. 500 rows; 2 DownloadsSelectionKey desktop tests are flaky under load and untouched by T11), core JS and desktop compile. `:app` not compiled here (no local.properties in the worktree); app code unchanged.
   left: web (no AniList, Kitsu or Jikan there and no per-episode lists: needs a worker route, web files belong to Raju H); no TV D-pad test beyond T9's (gap rows are unchanged focusables); no new strings; MetaApis.kt and OnlineMetadata.kt will conflict with T10 on merge (additive).
 
+- 2026-11-16 R3 one question setup (worktree agent-a62424d2271f34c48, local commits, not pushed; note `design/redesign/one-question-setup.md`):
+  done: `SetupFlow` (core, pure: Idle/Hold/Wait/Offline/Choose/Finish) with `SetupFlowTest`; `rememberSetupFlow`, `SetupOffline`
+  (ui browse), `SetupFlowEffects` (silent DeviceFit apply once, language seen, Finish marks the setup done), `TipsCard` (shared)
+  replace `SetupAndTour`, `AppearanceStep`, the setup pages, `CrashAskCard`/`CrashAskHost`, `CrashReportsQuestion`, the modal
+  tour offer; `SetupScreen.kt` is now `SetupParts.kt` (only what Settings' Setup choices still uses). Replay: `replaySetup()`
+  writes `replay`, shows the ordinary picker. `SettingsStore`: `setupReplay`, `tipsDue`; `tourOfferAfter`, `putOffTourOffer` gone.
+  Picker: Back always asks "Leave without choosing?", hint "Forward a video to Saved Messages" when nothing is recommended.
+  Web: heading, hint, min one chat, offline line. Strings: dead ones in DEAD-STRINGS.md, new ones listed there.
+  tests: core `SetupFlowTest`, `SetupFlagTest` (fresh install: streaming on, crash off), `CrashAskTest` trimmed; ui `SetupTest`,
+  `SetupChoicesTest` (silent Lighter or Full); desktop `OneQuestionSetupTest` (new), `SetupRenderTest` trimmed to tour and first
+  run Home; app `AddChatsTvKeysTest` (TV: first chat, OK ticks, Right to Done, Back asks), `AddChatsRenderTest` (hint, offline
+  card, Tips card, phone and TV), `TourOfferFrameTest` (Tips card focus).
+  left: no phone or TV device pass; web edits are not run (no node_modules here); the `awaitingSync` skip in `SetupTest` stays
+  (the Storage step lives on in Settings' Setup choices); SkipLookupTest (T10) fails in core on this branch, not touched by R3.
+
 ## Decisions made by Claude
 - T1: one shared `rememberVisitQuery` (not a patch per screen) so any later search box gets rule 3 by calling it; the phone keeps the query while a page is open (`keep = page != null`), the desktop while a category is open. No design note: small fix.
 - T4: the TV gets the setup's two-answer switch (`TabSwitch`, extracted and shared) because Material segments cannot be reached with a D-pad; phone keeps Material segments, desktop keeps `Segments`. Words: setup choice titles now read Keep video / Save space; device card says "While streaming: Save space". The Free up space offer's button says Switch (was Turn on). No design note: a rename plus one row.
@@ -567,6 +582,13 @@ Store text, the site.
   `leaveByBack()`.
 - T12 desktop: only the phone's half removed; core `MiniPlayerState`/`MiniPlayerBar` stay for the desktop's in-app bar.
 - T11: the anime guide lives behind `OnlineMetadata.season()`/`animeExtras` and the lookup's episode, not in each screen, so phone, TV, desktop, the player label and the next-up card all read one answer; AniList's season list is one season counted straight through (what fansub files say), a per-season file finds its title through TMDB's own place. Kitsu and Jikan are asked only while titles are still missing. A TMDB match that lacks an episode above 24 is retried as an anime through AniList. The title of a TMDB search may be an AniList alias (kept on `MetaInfo.aliases`).
+- R1 (show every video by default, `design/redesign/show-every-video.md`): the switch is one more line group ("Small videos") in the shared Sort menu (`videoMenuGroups`), so phone, TV, desktop and web read one definition and none needs its own dialog; it does not close the sheet so the grid changes behind it and the TV remote stays on it. "Show them" is a per-visit override held in the screen (`showAllThisVisit`), not a write, as the brief said "for this visit". The Home floor is 50 MB (`SizeFilter.HOME_MIN`, equal to the clip floor) rather than 400 MB: one meaning of "small" everywhere; a custom floor above it still wins. Search's "Hide small clips" moved from 400 MB to the same 50 MB for the same reason (one name, one meaning). The stored `max_size_bytes` stays readable and shows in the same custom limits line with Reset, since the slider that could change it is gone. The web chat search and global search ignore the floor (as the apps' chat search does). The group is called "Small videos", not "Size", because the Sort by group already has a "Size" line. 100,000 videos: the hidden set is the existing one-pass split per page, no extra query; the end row says "Some small videos are hidden" until the chat has been read to its start.
+- R3: the crash question lives only in Settings (the "Send crash reports" row under Privacy and lock, with its sentence);
+  no card after Skip and nothing in the setup. The pure `CrashAsk` decision and its tests went; `OPT_OUT_DEFAULT_ON` stays false.
+- R3: "Run the setup again" is a replay of the one question as the ordinary picker (Back, Done closes it), not a repeat of the
+  old pages; the old pages' answers are the rows of Settings > Redo setup choices, unchanged.
+- R3: the setup asks about even one chat (Saved Messages alone gets the hint); the chat choice after an update still waits for four.
+- R3: the offline card shows after 3 s without a list and without network, so connecting after sign in does not flash it.
 
 ## Sources
 - Search patterns: https://carbondesignsystem.com/patterns/search-pattern ,
@@ -580,3 +602,21 @@ Store text, the site.
 - IME actions: https://developer.android.com/training/keyboard-input/style
 - Gaps (not found in the searches): official focus-restore guidance, inline validation and predictive
   back. Check m3.material.io and developer.android.com directly before relying on them.
+
+### Raju group B + R4 offline mode (worker, 2026-11-16, branch worktree-agent-a7e741aeed041d07d, local, not pushed)
+- Done: `design/redesign/offline-mode.md` first, then `0f1781f` pure rules (OfflineSettle 2 s both ways, OfflineHome,
+  OfflineHomeRows: On this phone row, no duplicates, placeholders dropped, hero = first video on the phone), then shared
+  parts, phone and TV, desktop, web (Reload card on Home when offline with no rows).
+- Banner: the Connect banner's card (`OfflineBanner`: Try again, Downloads on touch and desktop) stands above the tab bar
+  (`TouchNavHost` banner slot, pages padded by `LocalBannerRoom`), TV in the Connect banner's top end place, desktop top
+  centre. The passive Offline pill is deleted; Reconnecting and Connecting pills stay.
+- 4.5: the bar returns when a push or fling hits the end of a list (`BarVisibility`). Not done: "show again after 1 s of rest".
+- Tests: core OfflineModeTest (debounce, rows), app OfflineBannerBarTest (tab tappable under the banner, 1.0 and 2.0 font),
+  OfflineHomePaneTest (states, gating, cached resume, TV card order and OK on a greyed card), OfflineHomeTest, desktop
+  OfflineHomeTest. The test found a bug: the desktop hover Play disc on a greyed tile (now hidden).
+- Decisions made by Claude: offline hold 2 s each way; greyed means locality Remote and not in the download index or the
+  fully cached set (at most 40 videos asked, once per offline stretch); a greyed press opens the detail page whose Play row
+  says "Connect to play, or download it first" (disabled, no press); series cards are not greyed (their episodes are
+  gated on the page); `main.connect_to_play` kept for grids and search; the web keeps its existing offline line.
+- Unrun: webapp type check and e2e (no node_modules in the worktree). Leftovers for the user on devices: real Wi-Fi off
+  on the phone and the TV (first focus on the On this phone row, the banner over the bar), flaky link feel.
