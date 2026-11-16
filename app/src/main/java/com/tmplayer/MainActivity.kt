@@ -1198,7 +1198,7 @@ private fun Root() {
     // Only the count: the map itself changes with every download's progress, several times a
     // second, and reading it here recomposed the whole shell for each one.
     val activeDownloadsState = OfflineDownloads.active.collectAsStateWithLifecycle()
-    val activeDownloadCount by remember(activeDownloadsState) { derivedStateOf { activeDownloadsState.value.size } }
+    val activeDownloadCount by remember(activeDownloadsState) { derivedStateOf { OfflineDownloads.runningCount(activeDownloadsState.value) } }
 
     /**
      * The preparation itself, split out only so [play] can wrap the whole of it in one pending
