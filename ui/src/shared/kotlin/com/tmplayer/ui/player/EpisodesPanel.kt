@@ -64,8 +64,14 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.platform.testTag
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.snap
+import com.tmplayer.ui.theme.Motion
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.tmplayer.data.DeviceForm
 import com.tmplayer.data.MediaItem
@@ -202,7 +208,7 @@ fun EpisodesPanel(
                     val stepNext = state.next?.let { n -> episode.copies.any { it.id == n.id } } == true
                     val chosen = when {
                         isPlaying -> state.playing
-                        stepNext -> state.next!!
+                        stepNext -> state.next ?: watch.pick(episode, progress)
                         next != null && episode.sameAs(next) -> next.item
                         else -> watch.pick(episode, progress)
                     }
@@ -445,8 +451,20 @@ private fun SwitchLine(label: String, on: Boolean, onToggle: () -> Unit) {
             modifier = Modifier.weight(1f),
         )
         // Drawn rather than Material's Switch: the same track on a phone, a television and a
-        // desktop, and nothing in it that takes focus away from the line.
-        val track = if (on) Tone.accent else Tone.muted.copy(alpha = 0.45f)
+        // desktop, and nothing in it that takes focus away from the line. The knob slides and the
+        // track fades on the Fast token (they jumped before, R8); with less motion asked for, both
+        // snap. The slide is read in the layout phase, so it composes nothing per frame.
+        val still = com.tmplayer.ui.components.rememberLessMotion()
+        val knobX by animateDpAsState(
+            if (on) KNOB_ON else KNOB_OFF,
+            if (still) snap() else Motion.standard(Motion.Fast),
+            label = "knob",
+        )
+        val track by animateColorAsState(
+            if (on) Tone.accent else Tone.muted.copy(alpha = 0.45f),
+            if (still) snap() else Motion.standard(Motion.Fast),
+            label = "track",
+        )
         Box(
             Modifier.size(width = 40.dp, height = 24.dp).clip(CircleShape).background(track)
                 .then(if (focused) Modifier.border(2.dp, Tone.onFocusFill, CircleShape) else Modifier),
@@ -454,7 +472,8 @@ private fun SwitchLine(label: String, on: Boolean, onToggle: () -> Unit) {
         ) {
             Box(
                 Modifier
-                    .offset(x = if (on) 19.dp else 3.dp)
+                    .offset { IntOffset(knobX.roundToPx(), 0) }
+                    .testTag(AUTOPLAY_KNOB_TAG)
                     .size(18.dp)
                     .clip(CircleShape)
                     .background(if (on) Tone.onAccent else Color.White),
@@ -478,6 +497,12 @@ private fun Modifier.secondaryClick(onClick: () -> Unit): Modifier = pointerInpu
         }
     }
 }
+
+/** The autoplay switch's knob, for the test that watches it slide. */
+const val AUTOPLAY_KNOB_TAG = "episodes-autoplay-knob"
+
+private val KNOB_OFF: Dp = 3.dp
+private val KNOB_ON: Dp = 19.dp
 
 /** From this width the choices take a column of their own beside the episodes. */
 private val WIDE_FROM: Dp = 640.dp
