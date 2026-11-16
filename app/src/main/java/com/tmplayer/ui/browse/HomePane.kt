@@ -152,6 +152,8 @@ internal fun HomePane(
     noFavourites: Boolean = false,
     /** The phone's "Choose favourites": the chat list, its rows answering a tap with a star. Null leaves the card without a button. */
     onChooseFavourites: (() -> Unit)? = null,
+    /** The one question about keeping the viewer's place on all their devices, asked once at the end of Home. */
+    keepPlace: KeepPlaceCardState? = null,
     /** False when Settings turned the carousel off: Home opens on its rows, Recently added among them. */
     carouselOn: Boolean = true,
     /** Every row of Home off in Settings ([com.tmplayer.data.HomeLayout.allOff]): a card says so, with the way back. */
@@ -818,6 +820,14 @@ internal fun HomePane(
                         } else {
                             FavouritesHintCard(s.homeFavouritesHint(if (touch) "phone" else "tv"), start = start, end = end)
                         }
+                    }
+                }
+                // Asked once, last: "Keep my place on all my devices?" (FQ12). Counted as shown when
+                // its item comes into the list, so it is one showing and never again.
+                if (keepPlace?.visible == true) {
+                    item(key = "keep-place", contentType = "keep-place") {
+                        LaunchedEffect(Unit) { keepPlace.shown() }
+                        KeepPlaceCard(onYes = keepPlace::yes, onNotNow = keepPlace::notNow, start = start, end = end, modifier = Modifier.padding(top = 16.dp))
                     }
                 }
             }

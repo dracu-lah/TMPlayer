@@ -240,6 +240,8 @@ class App : Application() {
             connectivity = NetworkMonitor,
             television = com.tmplayer.data.FormFactor.isTv(this),
             appVersion = BuildConfig.VERSION_NAME,
+            bookmarks = com.tmplayer.data.BookmarkStore(this),
+            lowEnd = (getSystemService(android.content.Context.ACTIVITY_SERVICE) as? android.app.ActivityManager)?.isLowRamDevice == true,
         )
         NetworkMonitor.start(this)
         // TDLib takes a moment to open its database; starting here means the login screen is
@@ -302,6 +304,8 @@ class App : Application() {
             com.tmplayer.data.AutoUpdater.onForeground()
             // Back in view: TDLib reopens a line it lost in the background at once (Td).
             Td.onForegroundChanged(true)
+            // A sync held back while the app was away (a low end device) goes on now.
+            com.tmplayer.data.ResumeSync.setForeground(true)
         }
 
         override fun onActivityStopped(activity: android.app.Activity) {
@@ -311,6 +315,7 @@ class App : Application() {
             if (started == 0 && !activity.isChangingConfigurations) {
                 AppLockSession.lock()
                 Td.onForegroundChanged(false)
+                com.tmplayer.data.ResumeSync.setForeground(false)
                 // With "Install updates by itself" on, one look a few minutes from now (HX5).
                 com.tmplayer.data.AutoUpdater.onBackground(activity.applicationContext)
             }

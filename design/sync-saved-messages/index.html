@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Keep my place on all my devices</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; padding: 24px 16px 64px; background: #0c0e10; color: #f2f4f5; font: 15px/1.5 system-ui, sans-serif; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 17px; margin: 36px 0 12px; }
+  p.lede { color: #aeb5bb; max-width: 70ch; }
+  .row { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+  figure { margin: 0; width: 230px; }
+  figure.wide { width: 460px; }
+  figure.tv { width: 400px; }
+  img { display: block; width: 100%; height: auto; border: 1px solid #23272a; border-radius: 8px; }
+  figcaption { color: #aeb5bb; font-size: 13px; margin-top: 6px; }
+  code { background: #15181b; padding: 1px 4px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<h1>Keep my place on all my devices, and the backup before sign out</h1>
+<p class="lede">Rendered by <code>KeepPlaceTest</code> (app render tests, dark theme, no device) and the desktop <code>KeepPlaceCardTest</code>. Design note: <code>design/redesign/sync-saved-messages.md</code>.</p>
+
+<h2>The question, asked once at the end of Home</h2>
+<div class="row">
+  <figure><img src="keep-place-card-phone-411.png" alt="Phone card"><figcaption>Phone 411 dp: the buttons stack and are as wide as the card.</figcaption></figure>
+  <figure><img src="keep-place-card-phone-320-font15.png" alt="Phone card at 320 dp and a 1.5 font"><figcaption>320 dp at a 1.5 font: the list scrolls, nothing is cut.</figcaption></figure>
+  <figure class="tv"><img src="keep-place-card-tv-960.png" alt="TV card"><figcaption>TV 960 x 540 dp: side by side; Down from the last row lands on Yes, Right goes to Not now.</figcaption></figure>
+</div>
+<div class="row">
+  <figure class="wide"><img src="desktop-keep-place-1280-dark.png" alt="Desktop dark"><figcaption>Desktop 1280, dark. Tab and Enter.</figcaption></figure>
+  <figure class="wide"><img src="desktop-keep-place-1280-light.png" alt="Desktop light"><figcaption>Desktop 1280, light.</figcaption></figure>
+  <figure class="wide"><img src="desktop-keep-place-640-dark.png" alt="Desktop narrow"><figcaption>Desktop at the window's narrowest (640).</figcaption></figure>
+</div>
+
+<h2>Sign out saves a backup first</h2>
+<div class="row">
+  <figure><img src="keep-place-signout-phone-411.png" alt="Sign out dialog on the phone"><figcaption>Phone: the tick is on; Account's new switch is visible behind.</figcaption></figure>
+  <figure><img src="keep-place-signout-failed-phone-411.png" alt="Backup failed dialog"><figcaption>A failed backup says why, and offers Sign out anyway or Back.</figcaption></figure>
+  <figure class="tv"><img src="keep-place-signout-tv-960.png" alt="Sign out dialog on the TV"><figcaption>TV: the same dialog; focus starts on Cancel.</figcaption></figure>
+</div>
+</body>
+</html>

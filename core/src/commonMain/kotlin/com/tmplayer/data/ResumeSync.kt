@@ -18,8 +18,6 @@ import dev.g000sha256.tdl.dto.MessageText
 import dev.g000sha256.tdl.dto.SearchMessagesFilterDocument
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -56,7 +54,6 @@ import java.io.File
 object ResumeSync {
 
     private val lock = Mutex()
-    private var pending: Job? = null
     @Volatile private var lastAutoAt = 0L
     @Volatile private var lastPullAt = 0L
     @Volatile private var lastSendAt = 0L
@@ -65,6 +62,7 @@ object ResumeSync {
     private val healTried: MutableSet<String> = java.util.Collections.synchronizedSet(HashSet())
 
     @Volatile private var watchedStore: WatchedStore? = null
+    @Volatile private var bookmarkStore: BookmarkStore? = null
     @Volatile private var connectivity: Connectivity? = null
     @Volatile private var television = false
     @Volatile private var appVersion = ""
@@ -79,8 +77,18 @@ object ResumeSync {
      * state where the platform has one, and whether this is a television (where Save mobile data
      * holds nothing back, [MeteredPolicy.saveMobileDataInForce]).
      */
-    fun install(watched: WatchedStore, connectivity: Connectivity?, television: Boolean, appVersion: String) {
+    fun install(
+        watched: WatchedStore,
+        connectivity: Connectivity?,
+        television: Boolean,
+        appVersion: String,
+        bookmarks: BookmarkStore? = null,
+        /** A device short of memory: nothing runs by itself while the app is in the background. */
+        lowEnd: Boolean = false,
+    ) {
         watchedStore = watched
+        bookmarkStore = bookmarks
+        this.lowEnd = lowEnd
         this.connectivity = connectivity
         this.television = television
         this.appVersion = appVersion
@@ -99,23 +107,51 @@ object ResumeSync {
         data class Failed(val reason: String) : Outcome
     }
 
-    /** A sync in the background, soon: after sign in, at start, and when a list changed. */
-    fun syncSoon(settings: SettingsStore, afterMs: Long = START_DELAY_MS) {
-        pending?.cancel()
-        // Turned on just now (afterMs 0): at once. Otherwise no more than once in MIN_INTERVAL_MS.
-        val wait = if (afterMs <= 0) 0L else maxOf(afterMs, lastAutoAt + MIN_INTERVAL_MS - System.currentTimeMillis())
-        pending = Background.scope.launch {
-            delay(wait)
-            // Only the wait is cancelled by a newer request: a sync under way finishes.
-            withContext(NonCancellable) {
-                lastAutoAt = System.currentTimeMillis()
-                runCatching { sync(settings) }
-            }
-        }
-    }
+    /**
+     * A sync in the background, soon: after sign in, at start, and when a list changed. [afterMs]
+     * 0 is the viewer's own "turn on": at once. The rest is [SyncScheduler]'s: at most once in
+     * [MIN_INTERVAL_MS], and nothing in the background on a low end device.
+     */
+    fun syncSoon(settings: SettingsStore, afterMs: Long = START_DELAY_MS) =
+        scheduler(settings).ask(if (afterMs <= 0) SyncScheduler.Why.TurnedOn else SyncScheduler.Why.Start)
 
     /** After the player saved a place or a list changed: written once the saves have settled. */
-    fun pushSoon(settings: SettingsStore) = syncSoon(settings, PUSH_SETTLE_MS)
+    fun pushSoon(settings: SettingsStore) = scheduler(settings).ask(SyncScheduler.Why.Settled)
+
+    /** The player is closing: this place goes out soon, at most twice a minute. */
+    fun leavingPlayer(settings: SettingsStore) = scheduler(settings).ask(SyncScheduler.Why.LeftPlayer)
+
+    /** The app is in front ([visible]) or not; a sync held in the background on a low end device goes on when it is. */
+    fun setForeground(visible: Boolean) {
+        foreground = visible
+        if (visible) scheduler?.foregrounded()
+    }
+
+    /** How long a sync waits for Telegram's line before it says "waiting for a connection"; a test shortens it. */
+    @Volatile var connectWaitMs: Long = 30_000L
+
+    @Volatile private var scheduler: SyncScheduler? = null
+    @Volatile private var foreground = true
+    @Volatile private var lowEnd = false
+
+    private fun scheduler(settings: SettingsStore): SyncScheduler = scheduler ?: synchronized(this) {
+        scheduler ?: SyncScheduler(
+            scope = Background.scope,
+            clock = System::currentTimeMillis,
+            foreground = { foreground },
+            lowEnd = lowEnd,
+            lastRunAt = { lastAutoAt },
+            job = { why -> runCatching { sync(settings, manual = why == SyncScheduler.Why.Manual) } },
+            onRan = { at ->
+                lastAutoAt = at
+                Background.scope.launch { runCatching { settings.setResumeSyncWroteAt(at) } }
+            },
+        ).also {
+            scheduler = it
+            // Where the last run stood before this process: a restart does not start the pause over.
+            Background.scope.launch { lastAutoAt = maxOf(lastAutoAt, runCatching { settings.resumeSyncWroteAtNow() }.getOrDefault(0L)) }
+        }
+    }
 
     /**
      * Before a video opens: the other devices' places taken in, so a video half watched on the
@@ -184,8 +220,9 @@ object ResumeSync {
     private suspend fun run(settings: SettingsStore, push: Boolean, manual: Boolean, replace: Boolean): Outcome {
         if (!settings.resumeSyncNow()) return Outcome.Off
         val watched = watchedStore ?: return Outcome.Failed("not ready")
+        val bookmarks = bookmarkStore
         if (!manual && holdForLine(settings)) return Outcome.WaitingForUnmetered
-        val session = Td.awaitConnectedSessionOrNull() ?: return Outcome.NoConnection
+        val session = Td.awaitConnectedSessionOrNull(connectWaitMs) ?: return Outcome.NoConnection
         val td = session.client
         return try {
             val myId = Td.myId().takeIf { it != 0L } ?: return Outcome.NoConnection
@@ -236,6 +273,7 @@ object ResumeSync {
                 account = myId,
                 now = now,
                 appVersion = appVersion,
+                bookmarks = bookmarks?.rawEntries().orEmpty(),
             )
             val (merged, cappedOut) = SyncDocuments.mergeCounting(remote, local, now)
             val apply = SyncDocuments.apply(local, merged)
@@ -251,7 +289,9 @@ object ResumeSync {
                 }
             }
             for ((key, at) in apply.resumeOut) settings.dropSyncedResume(key, at)
-            val listChanges = watched.applySync(apply) + watched.lists.mergeIn(merged.lists)
+            val listChanges = watched.applySync(apply) + watched.lists.mergeIn(merged.lists) +
+                (bookmarks?.applySync(apply.bookmarksIn, apply.bookmarksOut) ?: 0) +
+                settings.applySyncedCorrections(apply.correctionsIn, apply.correctionsOut)
             settings.applySyncedFavourites(apply.favouritesIn, apply.favouritesOut)
             received += imported.size + listChanges + apply.favouritesIn.size + apply.favouritesOut.size
             heal(watched, repository, budget, ::chatTitle)
@@ -423,14 +463,14 @@ object ResumeSync {
     }
 
     /** Where the file is written before Telegram uploads it: beside TDLib's own folders. */
-    private fun uploadDir(): File? {
+    internal fun uploadDir(): File? {
         val paths = Td.paths ?: return null
         val parent = paths.databaseDir.parentFile ?: paths.databaseDir
         return File(parent, "tmplayer-sync").takeIf { it.isDirectory || it.mkdirs() }
     }
 
     /** Uploads of an hour ago and more: Telegram has them by now. */
-    private fun sweep(dir: File) {
+    internal fun sweep(dir: File) {
         val old = System.currentTimeMillis() - 60 * 60 * 1000L
         dir.listFiles()?.forEach { if (it.lastModified() < old) it.deleteRecursively() }
     }
@@ -525,28 +565,19 @@ object ResumeSync {
      * [call], with a FLOOD_WAIT waited out by this call alone, up to [MAX_FLOOD_WAIT_S] and
      * [TRIES] times; any other answer, or a longer wait, is handed back as it came.
      */
-    private suspend fun <T> waited(call: suspend () -> TdlResult<T>): TdlResult<T> {
-        repeat(TRIES - 1) {
-            val result = call()
-            val failure = result as? TdlResult.Failure ?: return result
-            val wait = Failures.floodWaitSeconds(failure.message) ?: return result
-            if (wait > MAX_FLOOD_WAIT_S) return result
-            delay(wait * 1000L + 250L)
-        }
-        return call()
-    }
+    private suspend fun <T> waited(call: suspend () -> TdlResult<T>): TdlResult<T> =
+        waitingOutFlood(TRIES, MAX_FLOOD_WAIT_S, { result -> (result as? TdlResult.Failure)?.let { Failures.floodWaitSeconds(it.message) } }, call = call)
 
     /** The caption the file is found by; a hashtag, so Telegram's search finds it at once. */
     const val FILE_TAG = "#TMPlayerSyncFile"
     private const val FILE_STEM = "tmplayer-sync"
     private const val TAG = "ResumeSync"
-    private const val START_DELAY_MS = 8_000L
-    private const val PUSH_SETTLE_MS = 20_000L
+    private const val START_DELAY_MS = SyncScheduler.START_DELAY_MS
     private const val PULL_TIMEOUT_MS = 2_500L
     private const val MIN_PULL_INTERVAL_MS = 60_000L
 
     /** Automatic syncs, at most this often. */
-    const val MIN_INTERVAL_MS = 3 * 60 * 1000L
+    const val MIN_INTERVAL_MS = SyncScheduler.MIN_GAP_MS
     private const val DOWNLOAD_TIMEOUT_MS = 30_000L
     private const val SEARCH_LIMIT = 10
     private const val HISTORY_LIMIT = 30

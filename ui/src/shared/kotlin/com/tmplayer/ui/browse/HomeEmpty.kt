@@ -259,3 +259,60 @@ private fun IconChip(icon: androidx.compose.ui.graphics.vector.ImageVector, size
         Icon(icon, contentDescription = null, tint = Tone.accent, modifier = Modifier.size(size * 0.56f))
     }
 }
+
+/**
+ * The one question about keeping the viewer's place on all their devices (FQ12), asked once as the
+ * last item of Home: what is kept and where, "Yes, keep it" and "Not now". It never comes back
+ * after it was shown: Settings, Account holds the same switch. On a phone the buttons stack and
+ * are as wide as the card; on a television and the desktop they stand side by side, and the
+ * remote reaches them like any other button (Down from the last row, Left and Right between them).
+ */
+@Composable
+fun KeepPlaceCard(onYes: () -> Unit, onNotNow: () -> Unit, start: Dp, end: Dp, modifier: Modifier = Modifier, focus: FocusRequester? = null) {
+    val s = com.tmplayer.ui.i18n.LocalStrings.current
+    val touch = isTouch()
+    Column(
+        modifier
+            .fillMaxWidth()
+            .padding(start = start, end = end)
+            .clip(RoundedCornerShape(Corner.Large))
+            .background(Tone.surface)
+            .padding(horizontal = 16.dp, vertical = if (touch) 16.dp else 20.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(if (touch) 14.dp else 18.dp)) {
+            IconChip(TmIcons.History, size = if (touch) 36.dp else 44.dp)
+            Text(
+                s.syncplaceCardTitle,
+                style = (if (touch) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLarge).copy(fontWeight = FontWeight.SemiBold),
+                color = Tone.text,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        Text(
+            s.syncplaceCardBody,
+            style = if (touch) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge,
+            color = Tone.muted,
+        )
+        Text(
+            s.syncplaceCardHint,
+            style = if (touch) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium,
+            color = Tone.muted,
+        )
+        // Stacked and as wide as the card where it is narrow (a phone upright); side by side where
+        // there is room (a television, the desktop, a phone on its side).
+        androidx.compose.foundation.layout.BoxWithConstraints {
+            if (maxWidth < 480.dp) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    HeroPill(label = s.syncplaceCardYes, onClick = onYes, stretch = true, focus = focus, icon = TmIcons.Check)
+                    HeroPill(label = s.syncplaceCardNo, onClick = onNotNow, stretch = true, icon = null, calm = true)
+                }
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    HeroPill(label = s.syncplaceCardYes, onClick = onYes, focus = focus, icon = TmIcons.Check)
+                    HeroPill(label = s.syncplaceCardNo, onClick = onNotNow, icon = null, calm = true)
+                }
+            }
+        }
+    }
+}

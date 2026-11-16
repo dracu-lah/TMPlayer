@@ -65,6 +65,10 @@ private val RESUME_SYNC_AT = longPreferencesKey("resume_sync_at")
 private val RESUME_SYNC_ACCOUNT = longPreferencesKey("resume_sync_account")
 private val RESUME_SYNC_SENT_AT = longPreferencesKey("resume_sync_sent_at")
 private val RESUME_SYNC_STATUS = stringPreferencesKey("resume_sync_status")
+// "Keep my place on all my devices": the Home card that asks once (answered or left), and when this
+// device last wrote the file, so a restart does not start the few minutes' pause over.
+private val KEEP_PLACE_CARD_SEEN = booleanPreferencesKey("keep_place_card_seen")
+private val KEEP_PLACE_WROTE_AT = longPreferencesKey("keep_place_wrote_at")
 private val SKIP_SILENCE = booleanPreferencesKey("skip_silence")
 private val BACKGROUND_AUDIO = booleanPreferencesKey("background_audio")
 private val PIP_ON_LEAVE = booleanPreferencesKey("pip_on_leave")
@@ -774,13 +778,62 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
     suspend fun correct(items: List<MediaItem>, change: (VideoCorrection) -> VideoCorrection) {
         val now = VideoCorrections.current
         val updated = items.distinctBy { it.id }.map { it to change(now[it.id] ?: VideoCorrection()) }
+        val at = System.currentTimeMillis()
         prefs.edit { prefs ->
             for ((item, correction) in updated) {
                 val key = stringPreferencesKey(VideoCorrections.keyName(item.chatId, item.messageId))
-                if (correction.isEmpty) prefs.remove(key) else prefs[key] = correction.encode()
+                val name = ProgressKeys.of(item.chatId, item.messageId)
+                val stamp = longPreferencesKey(SyncDocuments.CORRECTION_AT_PREFIX + name)
+                val gone = longPreferencesKey(SyncDocuments.CORRECTION_REMOVAL_PREFIX + name)
+                // When it changed, and when it was cleared, so another device with sync on follows.
+                if (correction.isEmpty) {
+                    val existed = prefs[key] != null
+                    prefs.remove(key)
+                    prefs.remove(stamp)
+                    if (existed) prefs[gone] = at
+                } else {
+                    prefs.remove(gone)
+                    prefs[key] = correction.encode()
+                    prefs[stamp] = at
+                }
             }
         }
         updated.forEach { (item, correction) -> VideoCorrections.put(item.id, correction) }
+    }
+
+    /**
+     * Corrections made on another device ([ResumeSync]), in one edit, each checked again against
+     * what is here now: a correction changed here after it was made there stays, and a clear
+     * only clears a correction that was not changed here since. Returns how many changed.
+     */
+    suspend fun applySyncedCorrections(add: List<SyncCorrection>, remove: Map<String, Long>): Int {
+        if (add.isEmpty() && remove.isEmpty()) return 0
+        var changed = 0
+        prefs.edit { prefs ->
+            for (incoming in add) {
+                val name = incoming.key
+                val key = stringPreferencesKey(VideoCorrections.PREFIX + name)
+                val stamp = longPreferencesKey(SyncDocuments.CORRECTION_AT_PREFIX + name)
+                val gone = longPreferencesKey(SyncDocuments.CORRECTION_REMOVAL_PREFIX + name)
+                val mineAt = if (prefs[key] != null) (prefs[stamp] ?: 1L) else 0L
+                if ((prefs[gone] ?: 0L) > incoming.at || mineAt >= incoming.at) continue
+                prefs[key] = incoming.text
+                prefs[stamp] = incoming.at
+                prefs.remove(gone)
+                changed++
+            }
+            for ((name, at) in remove) {
+                val key = stringPreferencesKey(VideoCorrections.PREFIX + name)
+                val stamp = longPreferencesKey(SyncDocuments.CORRECTION_AT_PREFIX + name)
+                val gone = longPreferencesKey(SyncDocuments.CORRECTION_REMOVAL_PREFIX + name)
+                if (prefs[key] == null || (prefs[stamp] ?: 1L) >= at) continue
+                prefs.remove(key)
+                prefs.remove(stamp)
+                prefs[gone] = at
+                changed++
+            }
+        }
+        return changed
     }
 
     /**
@@ -1003,11 +1056,30 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
                 it.remove(RESUME_SYNC_AT)
                 it.remove(RESUME_SYNC_ACCOUNT)
                 it.remove(RESUME_SYNC_STATUS)
+                it.remove(KEEP_PLACE_WROTE_AT)
             }
         }
     }
 
     suspend fun resumeSyncNow(): Boolean = prefs.data.first()[RESUME_SYNC] ?: false
+
+    /**
+     * Whether the one question about keeping the viewer's place on all their devices still waits
+     * to be asked on Home: not once it was shown, answered or sync was turned on in Settings.
+     */
+    val keepPlaceCardPending: Flow<Boolean> = read { !(it[KEEP_PLACE_CARD_SEEN] ?: false) && !(it[RESUME_SYNC] ?: false) }
+
+    /** The card was shown (or answered): it is not shown again, whatever came of it. */
+    suspend fun setKeepPlaceCardSeen() {
+        prefs.edit { it[KEEP_PLACE_CARD_SEEN] = true }
+    }
+
+    /** When this device last wrote the sync file; 0 before. */
+    suspend fun resumeSyncWroteAtNow(): Long = prefs.data.first()[KEEP_PLACE_WROTE_AT] ?: 0L
+
+    suspend fun setResumeSyncWroteAt(at: Long) {
+        prefs.edit { it[KEEP_PLACE_WROTE_AT] = at }
+    }
 
     /** The Saved Messages message the places are kept in, once found or sent; 0 before. */
     suspend fun resumeSyncMessageNow(): Long = prefs.data.first()[RESUME_SYNC_MESSAGE] ?: 0L

@@ -3271,6 +3271,16 @@
     "use_qr": "Use a QR code instead"
   },
   "signout": {
+    "backup_anyway": "Sign out anyway",
+    "backup_caption": "TMPlayer backup, saved before signing out. To use it, download this file and choose it under Restore in TMPlayer's Settings. You can delete this message any time.",
+    "backup_failed_detail": "You are not signed out yet. Sign out anyway, or go back and try again.",
+    "backup_failed_message": "The backup could not be saved: {reason}",
+    "backup_failed_title": "The backup was not saved",
+    "backup_no_folder": "TMPlayer has no place to prepare the file.",
+    "backup_offline": "TMPlayer could not reach Telegram.",
+    "backup_saving": "Saving your backup to Saved Messages",
+    "backup_slow": "Telegram took too long to take the file.",
+    "backup_tick": "Save my settings backup to my Saved Messages first",
     "body": "You'll be signed out and taken back to the sign-in screen. Your favourites, your watched list and everything you were part way through go with it. Downloads stay in {folder}.",
     "confirm": "Sign out",
     "delete_downloads": "Also delete my downloads",
@@ -3466,6 +3476,18 @@
     "upi_no_app": "No UPI app answered on this device. Scan the code from a phone, or copy the ID into your UPI app.",
     "upi_note": "If the app that opened is not the one you use, or none opened, scan the code or copy the ID and pay in your own UPI app.",
     "upi_page_note": "Scan the code with a UPI app on your phone, or copy the ID and pay it in your own app."
+  },
+  "syncplace": {
+    "card_body": "TMPlayer keeps one small file in your own Saved Messages, so your phone, TV and computer remember where you stopped, your bookmarks and the titles you fixed. Nothing else is kept, and it stays in your own Telegram.",
+    "card_hint": "You can change this any time in Settings, Privacy and lock.",
+    "card_no": "Not now",
+    "card_title": "Keep my place on all my devices?",
+    "card_yes": "Yes, keep it",
+    "privacy": "Only TMPlayer's own data goes into one file in your own Saved Messages: where you stopped, what you watched, Watch later, favourites, bookmarks and titles you fixed, by their ids and a short title. Nothing else, and nothing leaves your Telegram.",
+    "started": "Your place is now kept on all your devices",
+    "switch": "Keep my place on all my devices",
+    "switch_off": "Off. Nothing is kept in Saved Messages",
+    "switch_on": "On. One file in your own Saved Messages"
   },
   "theme": {
     "black": "Black",

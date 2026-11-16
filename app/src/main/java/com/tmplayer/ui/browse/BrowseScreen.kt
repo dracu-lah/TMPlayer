@@ -399,6 +399,8 @@ internal fun BrowseScreen(
     LaunchedEffect(searchConnected) { if (searchConnected) search.reconnected() }
     val panelScope = rememberCoroutineScope()
     val panelContext = LocalContext.current
+    // "Keep my place on all my devices?", asked once at the end of Home (FQ12).
+    val keepPlaceCard = rememberKeepPlaceCardState(remember(panelContext) { SettingsStore(panelContext) }, eligible = homeRowsReady, say = onMessage)
     // A hold, the info key or a right click: the quick menu, which leads to the page by Details.
     var held by remember { mutableStateOf<Pair<MediaItem, String>?>(null) }
     val holdMedia: (MediaItem, String) -> Unit = { item, title -> held = item to title }
@@ -726,6 +728,7 @@ internal fun BrowseScreen(
                                 } else {
                                     null
                                 },
+                                keepPlace = keepPlaceCard,
                                 onOpenSection = { onPickTab(it); query = "" },
                                 onOpenWatchLater = openLater,
                                 onLaterArtWanted = onHomeLaterArtWanted,

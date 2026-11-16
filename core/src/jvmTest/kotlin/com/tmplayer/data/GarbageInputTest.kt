@@ -654,6 +654,73 @@ class GarbageInputTest {
         assertNoFailures()
     }
 
+    /**
+     * Keep my place on all my devices, version 3: the bookmarks and corrections in the sync file
+     * (truncated, wrong types, huge, random) and the raw entries their stores keep their times and
+     * removals under. Whatever comes in reads as nothing, or as a bounded list the merge and the
+     * writer take without throwing.
+     */
+    @Test
+    fun syncedBookmarksAndCorrectionsNeverThrow() {
+        fun sync(fields: String) = "{\"format\":\"tmplayer-sync\",\"version\":3,$fields}"
+        val mark = "{\"chat\":-100,\"msg\":5,\"id\":1700000000000,\"pos\":9000,\"note\":\"the twist\",\"at\":1700000000001}"
+        val fix = "{\"chat\":-100,\"msg\":5,\"fix\":\"title=Night Train\",\"at\":1700000000001}"
+        val shapes = texts.take(200).flatMap { t ->
+            listOf("\"bookmarks\":$t", "\"corrections\":$t", "\"bookmarks\":[$t],\"corrections\":[$t]", "\"bookmarks\":[{\"note\":$t,\"chat\":1,\"msg\":1,\"id\":1,\"pos\":1}]")
+        } + listOf(
+            "\"bookmarks\":{}", "\"bookmarks\":\"x\"", "\"bookmarks\":7,\"corrections\":null",
+            "\"bookmarks\":[{\"chat\":\"a\",\"msg\":[],\"id\":null,\"pos\":{},\"note\":5,\"at\":\"now\"}]",
+            "\"bookmarks\":[{\"chat\":1e999,\"msg\":-1e999,\"id\":1e999,\"pos\":1e999,\"at\":1e999}]",
+            "\"bookmarks\":[{\"chat\":1,\"msg\":1,\"id\":-5,\"pos\":-1,\"note\":\"x\"},{\"chat\":1,\"msg\":1,\"id\":0,\"pos\":0}]",
+            "\"bookmarks\":[{\"chat\":1,\"msg\":1,\"id\":5,\"pos\":1,\"note\":\"" + "n".repeat(1_000_000) + "\"}]",
+            "\"bookmarks\":[{\"chat\":1,\"msg\":1,\"id\":5,\"pos\":1,\"note\":\"\u001e\u001f\u0000\\n\"}]",
+            "\"bookmarks\":[" + List(30_000) { mark }.joinToString(",") + "]",
+            "\"corrections\":[{\"chat\":1,\"msg\":1,\"fix\":5,\"at\":1},{\"chat\":1,\"msg\":1,\"at\":1},{\"fix\":\"separate\"}]",
+            "\"corrections\":[{\"chat\":1,\"msg\":1,\"fix\":\"title=" + "t".repeat(2_000_000) + "\",\"at\":1}]",
+            "\"corrections\":[{\"chat\":1,\"msg\":1,\"fix\":\"tmdb=film:99999999999999999999\\ntmdb=show:-5\\nwrong\\nseparate\",\"at\":-1}]",
+            "\"corrections\":[" + List(20_000) { fix }.joinToString(",") + "]",
+            "\"removed\":[{\"list\":\"bookmark\",\"key\":\"1_2\",\"at\":1},{\"list\":\"bookmark\",\"key\":\"a_b_c\",\"at\":1},{\"list\":\"correction\",\"key\":5,\"at\":1},{\"list\":\"correction\",\"key\":\"1_2_3\",\"at\":1}]",
+            "\"bookmarks\":[$mark],\"corrections\":[$fix],\"removed\":[{\"list\":\"bookmark\",\"key\":\"-100_5_1700000000000\",\"at\":1700000000002}]",
+        )
+        for (shape in shapes) {
+            survive("SyncDocuments.decode bookmarks", shape) {
+                val read = SyncDocuments.decode(sync(shape).encodeToByteArray(), 0)
+                if (read is SyncRead.Ok) {
+                    val doc = read.doc
+                    assertTrue(doc.bookmarks.size <= SyncDocuments.MAX_BOOKMARKS * 2 && doc.corrections.size <= SyncDocuments.MAX_CORRECTIONS * 2)
+                    assertTrue(doc.bookmarks.all { it.bookmark.note.length <= BookmarkCodec.MAX_NOTE && it.bookmark.id > 0 && it.bookmark.positionMs >= 0 })
+                    assertTrue(doc.corrections.all { VideoCorrection.decode(it.text).title?.length ?: 0 <= SyncDocuments.TITLE_MAX })
+                    val merged = SyncDocuments.merge(doc, SyncDocument(), 1_800_000_000_000L)
+                    assertTrue(merged.bookmarks.size <= SyncDocuments.MAX_BOOKMARKS && merged.corrections.size <= SyncDocuments.MAX_CORRECTIONS)
+                    SyncDocuments.apply(SyncDocument(), merged)
+                    SyncDocuments.decode(SyncDocuments.encode(merged).bytes, 0)
+                }
+            }
+        }
+        for (text in texts) {
+            survive("SyncDocuments.bookmarksOf", text) {
+                SyncDocuments.bookmarksOf(
+                    mapOf(
+                        "b_$text" to text, "b_-100_5" to text, "b_-100_5" to "\u001f\u001f", "bt_$text" to text, "bt_-100_5_1" to text,
+                        "xb_$text" to 5L, "xb_-100_5_1" to text, "xb_-100_5_1" to -1L, "b_1_1_1" to text, "b_-100_6" to "1\u001f2\u001f$text",
+                    ),
+                )
+            }
+            survive("SyncDocuments.correctionsOf", text) {
+                SyncDocuments.correctionsOf(
+                    mapOf("fix_$text" to text, "fix_-100_5" to text, "fixat_-100_5" to text, "fixat_$text" to 5L, "fix_1_1" to "title=$text\ntmdb=film:$text"),
+                )
+            }
+            survive("SyncDocuments.extraRemovals", text) {
+                SyncDocuments.extraRemovals(
+                    mapOf("xfix_$text" to 5L, "xfix_-100_5" to text, "xfix_1_2_3" to 5L),
+                    mapOf("xb_$text" to 5L, "xb_-100_5_1" to text, "xb_1_2" to 5L),
+                )
+            }
+        }
+        assertNoFailures()
+    }
+
     @Test
     fun savedRecordsNeverThrow() {
         val dir = kotlin.io.path.createTempDirectory("garbage").toFile()
