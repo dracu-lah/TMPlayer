@@ -2,23 +2,38 @@ TMPlayer is a player for the videos already in your own Telegram chats and chann
 
 A video starts within seconds while it is still arriving, so a large file never has to download first, and seeking jumps straight to the part you asked for.
 
+Easy to start:
+- Sign in with your phone number, or on a TV by scanning a QR code with the phone you already use for Telegram.
+- One question after sign in: which chats hold your videos. Everything else is chosen for your device and can be changed later in Settings.
+- Videos you forward to your Saved Messages show up too.
+
+On a phone:
+- Stream without downloading first, or download a whole season. The Downloads tab shows what is running, paused or saved, and Free up space gives room back without touching Telegram.
+- While streaming, choose Save space (keeps only the part you are watching, for phones that are always full) or Keep video (keeps the whole file, so going back is instant).
+- Offline, Home puts what is on your phone first and says what needs the internet.
+- Picture in picture, background audio, gestures for seeking, volume and brightness, and a screen lock for small hands.
+
 On a TV:
-- Sign in by scanning a QR code with the phone you already use for Telegram.
 - Everything works with the remote: rows for Continue watching and your starred chats, search across all your chats, and a player that keeps the picture clear.
 - Runs on Android TV and Google TV boxes, Chromecast with Google TV, NVIDIA Shield, Mi Box, projectors and Fire TV.
 
-On a phone:
-- Stream Telegram videos without downloading them first, or download a whole season for the train.
-- Picture in picture, background audio, gestures for seeking, volume and brightness, and a screen lock for small hands.
-- Low storage mode keeps only the part of a video you are watching, for phones that are always full.
+Series and anime:
+- Series pages put every season and episode in order, with season packs and episode ranges understood, and a button that resumes the episode you were on.
+- Anime gets its own episode titles and pictures, even when the files count episodes straight through.
+- Skip intro, recap and credits buttons use the chapters inside the file, then community timing databases, then your own mark. Choose per kind: ask, skip by itself, or off.
 
-Everywhere:
+Playing well:
 - MKV, MP4, HEVC, AV1 and more, with subtitles from the file, from a file of your own or found online, and every audio track the file carries.
-- Resume where you stopped, series pages that put episodes in order, skip intro and next episode, and course progress for numbered lessons.
+- Small badges show 4K, 1080p, HDR, Dolby Vision, Atmos or 5.1 where the file says so.
+- If the picture does not start or freezes while the sound goes on, TMPlayer tries another decoder or player by itself, and a Report stutter button marks the moment for the logs.
 - Night mode for sound keeps dialogue clear and loud scenes quiet; volume boost for quiet files.
+- Light, Dark and Pure black themes for OLED screens, and 22 languages.
 - Videos posted in pieces play as one video; archives that cannot be played are listed with the reason.
-- Light and Dark themes with a Pure black switch for OLED screens, nine accent colours, and 22 languages.
-- No ads of its own, no analytics, no server run by the developer. TMPlayer talks to Telegram directly through TDLib, Telegram's own library, and your data stays on your devices.
+
+Keep my place on all my devices:
+- Optional, off until you say yes. Where you stopped, what you watched, Watch later, favourites, bookmarks and the titles you fixed are kept in one small file in your own Saved Messages, so your phone, TV and computer agree. There is no TMPlayer server in between.
+
+Free, with no ads of its own, no analytics and no server run by the developer. TMPlayer talks to Telegram directly through TDLib, Telegram's own library, and your data stays on your devices. Optional lookups for posters, subtitles and skip times send only a title or an id, never your videos or anything from Telegram. If it is useful to you, you can support it through Buy Me a Coffee or UPI; nothing is locked behind it.
 
 TMPlayer only plays what is already in your chats. Use it with videos you are allowed to watch.
 
