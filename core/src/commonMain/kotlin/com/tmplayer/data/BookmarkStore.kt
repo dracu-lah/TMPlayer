@@ -66,7 +66,7 @@ class BookmarkStore(private val store: DataStore<Preferences>) {
                 val made = Bookmark(chatId, messageId, id, positionMs.coerceAtLeast(0L), clean)
                 list += made
                 saved = made
-                if (list.size > MAX_PER_VIDEO) list.remove(list.minBy { it.id })
+                if (list.size > MAX_PER_VIDEO) evict(prefs, list, now)
             }
             write(prefs, chatId, messageId, list)
         }
@@ -129,7 +129,7 @@ class BookmarkStore(private val store: DataStore<Preferences>) {
                     prefs.remove(goneKey(mark))
                     changed++
                 }
-                while (list.size > MAX_PER_VIDEO) list.remove(list.minBy { it.id })
+                while (list.size > MAX_PER_VIDEO) evict(prefs, list, System.currentTimeMillis())
                 write(prefs, chatId, messageId, list)
             }
             for ((key, at) in remove) {
@@ -173,12 +173,30 @@ class BookmarkStore(private val store: DataStore<Preferences>) {
                 for (mark in adds) {
                     val taken = list.any { it.id == mark.id }
                     val id = if (taken) (list.maxOf { it.id } + 1) else mark.id
-                    list += mark.copy(id = id, note = cleanNote(mark.note))
+                    val restored = mark.copy(id = id, note = cleanNote(mark.note))
+                    list += restored
+                    // Brought back on purpose: a removal noted earlier (here or in a synced file) must not undo it.
+                    if (prefs[goneKey(restored)] != null) {
+                        prefs.remove(goneKey(restored))
+                        prefs[stampKey(restored)] = System.currentTimeMillis()
+                    }
                 }
-                while (list.size > MAX_PER_VIDEO) list.remove(list.minBy { it.id })
+                while (list.size > MAX_PER_VIDEO) evict(prefs, list, System.currentTimeMillis())
                 write(prefs, chatId, messageId, list)
             }
         }
+    }
+
+    /**
+     * Drops the oldest made from [list] past [MAX_PER_VIDEO] and notes it as removed, so a synced
+     * copy on another device goes too instead of coming back and being cut again at every sync.
+     */
+    private fun evict(prefs: MutablePreferences, list: MutableList<Bookmark>, now: Long) {
+        val oldest = list.minBy { it.id }
+        list.remove(oldest)
+        val stamp = prefs[stampKey(oldest)] ?: 0L
+        prefs.remove(stampKey(oldest))
+        prefs[goneKey(oldest)] = maxOf(now, stamp + 1, oldest.id + 1)
     }
 
     /** Empties the file, for sign out. Keys are collected first: the map cannot be walked while it is written. */

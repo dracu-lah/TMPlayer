@@ -3330,7 +3330,20 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
     suspend fun restoreEntries(writes: (Map<String, Any>) -> Map<String, Any>) {
         prefs.edit { prefs ->
             val now = prefs.asMap().mapKeys { it.key.name }
-            for ((name, value) in writes(now)) prefs.putRaw(name, value)
+            val written = writes(now)
+            for ((name, value) in written) prefs.putRaw(name, value)
+            // A correction brought back by a restore is the viewer's choice: a removal noted for it
+            // (here or in a synced file) must not undo it, so it is stamped as changed now.
+            val at = System.currentTimeMillis()
+            for (name in written.keys) {
+                if (VideoCorrections.idOf(name) == null) continue
+                val id = name.removePrefix(VideoCorrections.PREFIX)
+                val gone = longPreferencesKey(SyncDocuments.CORRECTION_REMOVAL_PREFIX + id)
+                if (prefs[gone] != null) {
+                    prefs.remove(gone)
+                    prefs[longPreferencesKey(SyncDocuments.CORRECTION_AT_PREFIX + id)] = at
+                }
+            }
             evictOldestHistory(prefs)
         }
     }

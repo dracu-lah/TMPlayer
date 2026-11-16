@@ -30,8 +30,8 @@ class SyncScheduler(
     private val lowEnd: Boolean,
     /** When this device last ran a sync; 0 before. Survives a restart where the caller keeps it. */
     private val lastRunAt: () -> Long,
-    /** Runs a sync, which writes the file when something changed. Never throws. */
-    private val job: suspend (Why) -> Unit,
+    /** Runs a sync, which writes the file when something changed; false when it did nothing at all (sync is off). Never throws. */
+    private val job: suspend (Why) -> Boolean,
     private val onRan: (Long) -> Unit = {},
 ) {
     enum class Why(val settleMs: Long) {
@@ -76,8 +76,7 @@ class SyncScheduler(
             // Only the wait is cancelled by a newer ask: a sync under way finishes.
             withContext(NonCancellable) {
                 runs++
-                runCatching { job(why) }
-                onRan(clock())
+                if (runCatching { job(why) }.getOrDefault(true)) onRan(clock())
             }
         }
     }

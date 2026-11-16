@@ -7,9 +7,11 @@ import dev.g000sha256.tdl.dto.FormattedText
 import dev.g000sha256.tdl.dto.InputDocument
 import dev.g000sha256.tdl.dto.InputFileLocal
 import dev.g000sha256.tdl.dto.InputMessageDocument
-import dev.g000sha256.tdl.dto.MessageDocument
 import dev.g000sha256.tdl.dto.MessageSendOptions
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
@@ -45,46 +47,66 @@ object SavedMessagesBackup : BackupSender {
 
     override suspend fun send(text: String, fileName: String): BackupSend {
         val session = Td.awaitConnectedSessionOrNull() ?: return BackupSend.Failed(L.signoutBackupOffline)
+        var folder: File? = null
         return try {
             val td = session.client
             val myId = Td.myId().takeIf { it != 0L } ?: return BackupSend.Failed(L.signoutBackupOffline)
             val chat = td.createPrivateChat(myId, false).valueOrNull?.id ?: myId
             val dir = ResumeSync.uploadDir() ?: return BackupSend.Failed(L.signoutBackupNoFolder)
             ResumeSync.sweep(dir)
-            val now = System.currentTimeMillis()
-            val local = File(File(dir, "backup-$now").apply { mkdirs() }, fileName)
+            folder = File(dir, "$FOLDER_PREFIX${System.currentTimeMillis()}").apply { mkdirs() }
+            val local = File(folder, fileName)
             local.writeText(text)
             val caption = FormattedText("$TAG\n${L.signoutBackupCaption}", emptyArray())
             val content = InputMessageDocument(InputDocument(InputFileLocal(local.absolutePath), null, true), caption)
             val options = MessageSendOptions(null, true, false, false, false, 0L, false, null, 0L, 0, false)
-            val sent = waitingOutFlood(3, 60, { r: TdlResult<*> -> (r as? TdlResult.Failure)?.let { Failures.floodWaitSeconds(it.message) } }) {
-                td.sendMessage(chat, null, null, options, null, content)
-            }
-            if (sent !is TdlResult.Success) {
-                return BackupSend.Failed(Failures.humanise(sent.errorMessage ?: "send"))
-            }
-            // Telegram has it once the message loses its "sending" state; the viewer is left on
-            // the dialog until then, not signed out over a half sent file.
-            repeat(CONFIRM_TRIES) {
-                delay(CONFIRM_STEP_MS)
-                val confirmed = td.getChatHistory(chat, 0, 0, 10, false).valueOrNull?.messages?.any { m ->
-                    m != null && m.sendingState == null && m.date * 1000L >= now - 120_000L &&
-                        (m.content as? MessageDocument)?.caption?.text?.trimStart()?.startsWith(TAG) == true
-                } == true
-                if (confirmed) {
-                    local.parentFile?.deleteRecursively()
-                    return BackupSend.Sent
+            // Telegram's own word that the file arrived, by the temporary id the send gave: no clock
+            // is compared, so a device whose clock is wrong confirms like any other. Subscribed
+            // before the send, so an answer that beats the send's own reply is not missed.
+            val results = java.util.concurrent.ConcurrentHashMap<Long, BackupSend>()
+            coroutineScope {
+                val ok = launch(start = CoroutineStart.UNDISPATCHED) {
+                    td.messageSendSucceededUpdates.collect { results[it.oldMessageId] = BackupSend.Sent }
+                }
+                val failed = launch(start = CoroutineStart.UNDISPATCHED) {
+                    td.messageSendFailedUpdates.collect { results[it.oldMessageId] = BackupSend.Failed(Failures.humanise(it.error.message)) }
+                }
+                try {
+                    val sent = waitingOutFlood(3, 60, { r: TdlResult<*> -> (r as? TdlResult.Failure)?.let { Failures.floodWaitSeconds(it.message) } }) {
+                        td.sendMessage(chat, null, null, options, null, content)
+                    }
+                    if (sent !is TdlResult.Success) return@coroutineScope BackupSend.Failed(Failures.humanise(sent.errorMessage ?: "send"))
+                    val id = sent.result.id
+                    // Already past "sending" in the reply itself: nothing to wait for.
+                    if (sent.result.sendingState == null) return@coroutineScope BackupSend.Sent
+                    repeat(CONFIRM_TRIES) {
+                        results[id]?.let { return@coroutineScope it }
+                        delay(CONFIRM_STEP_MS)
+                    }
+                    results[id] ?: BackupSend.Failed(L.signoutBackupSlow)
+                } finally {
+                    ok.cancel()
+                    failed.cancel()
                 }
             }
-            BackupSend.Failed(L.signoutBackupSlow)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             Logger.w("SavedMessagesBackup", "Sending the backup failed", e)
             BackupSend.Failed(Failures.humanise(e))
+        } finally {
+            // Sent or not, the copy of the viewer's lists made for the upload does not stay on disk.
+            folder?.deleteRecursively()
         }
     }
 
+    /** Leftovers of an upload that never finished: gone with the account (sign out). */
+    fun forgetFiles() {
+        val dir = ResumeSync.uploadDir() ?: return
+        dir.listFiles()?.filter { it.name.startsWith(FOLDER_PREFIX) }?.forEach { it.deleteRecursively() }
+    }
+
+    private const val FOLDER_PREFIX = "backup-"
     private const val CONFIRM_TRIES = 15
     private const val CONFIRM_STEP_MS = 2_000L
 }

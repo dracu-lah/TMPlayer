@@ -141,7 +141,7 @@ object ResumeSync {
             foreground = { foreground },
             lowEnd = lowEnd,
             lastRunAt = { lastAutoAt },
-            job = { why -> runCatching { sync(settings, manual = why == SyncScheduler.Why.Manual) } },
+            job = { why -> sync(settings, manual = why == SyncScheduler.Why.Manual) != Outcome.Off },
             onRan = { at ->
                 lastAutoAt = at
                 Background.scope.launch { runCatching { settings.setResumeSyncWroteAt(at) } }

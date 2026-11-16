@@ -325,4 +325,43 @@ class SyncBookmarksCorrectionsTest {
         device.bookmarks.clear()
         assertTrue(device.bookmarks.rawEntries().isEmpty())
     }
+
+    @Test
+    fun aVideoPastTheCapDropsItsOldestWithARemovalSoItDoesNotComeBackAtEverySync() = runBlocking {
+        val device = Device("cap")
+        val incoming = List(BookmarkStore.MAX_PER_VIDEO + 3) { SyncBookmark(mark(1, 1_000L + it, "n$it"), now - 10_000 + it) }
+        val first = device.bookmarks.applySync(incoming, emptyMap())
+        assertTrue(first > 0)
+        assertEquals(BookmarkStore.MAX_PER_VIDEO, device.bookmarks.bookmarksNow(-100L, 1).size)
+        // The three oldest are noted as removed, so the same file again changes nothing here.
+        assertEquals(3, device.bookmarks.rawEntries().keys.count { it.startsWith("xb_") })
+        assertEquals(0, device.bookmarks.applySync(incoming, emptyMap()))
+        // ... and the removals go out to the other devices in the next file.
+        val removals = SyncDocuments.extraRemovals(emptyMap(), device.bookmarks.rawEntries())
+        assertEquals(3, removals.count { it.list == SyncList.Bookmark })
+    }
+
+    @Test
+    fun aRestoreOfSomethingDeletedSinceIsNotUndoneByItsRemoval() = runBlocking {
+        val device = Device("restore")
+        val real = System.currentTimeMillis()
+        val made = device.bookmarks.add(-100L, 1, 1_000, "keep", now = real - 5_000)
+        device.bookmarks.delete(-100L, 1, made.id, now = real - 4_000)
+        assertTrue(device.bookmarks.rawEntries().keys.any { it.startsWith("xb_") })
+        device.bookmarks.restore(listOf(made))
+        assertTrue(device.bookmarks.rawEntries().keys.none { it.startsWith("xb_") })
+        // A synced file with the older removal does not take it off again.
+        val doc = SyncDocument(removed = listOf(SyncRemoval(SyncList.Bookmark, SyncBookmark.keyOf(made), real - 4_000)))
+        val local = SyncDocuments.collect(device.settings.rawEntries(), device.watched.rawEntries(), SyncBase(), emptyMap(), 1L, real, "t", bookmarks = device.bookmarks.rawEntries())
+        val apply = SyncDocuments.apply(local, SyncDocuments.merge(doc, local, real))
+        assertTrue(apply.bookmarksOut.isEmpty())
+
+        VideoCorrections.set(emptyMap())
+        device.settings.correct(listOf(item(1))) { it.copy(separate = true) }
+        device.settings.correct(listOf(item(1))) { VideoCorrection() }
+        assertTrue(device.settings.rawEntries().keys.any { it.startsWith("xfix_") })
+        device.settings.restoreEntries { mapOf("fix_-100_1" to "separate") }
+        assertTrue(device.settings.rawEntries().keys.none { it.startsWith("xfix_") })
+        assertTrue(runBlocking { device.settings.corrections.first() }["-100:1"]?.separate == true)
+    }
 }
