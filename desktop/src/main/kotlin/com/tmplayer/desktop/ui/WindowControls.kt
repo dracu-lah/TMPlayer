@@ -9,6 +9,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import com.tmplayer.ui.theme.collectIsFocusVisibleAsState
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -38,6 +39,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import com.tmplayer.ui.theme.focusRing
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
@@ -188,6 +191,7 @@ fun WindowControlsFallback(modifier: Modifier = Modifier) {
 private fun WindowButton(icon: ImageVector, label: String, onArt: Boolean, danger: Boolean, onClick: () -> Unit) {
     val hover = remember { MutableInteractionSource() }
     val hovered by hover.collectIsHoveredAsState()
+    val focused by hover.collectIsFocusVisibleAsState()
     val ink = if (onArt) Color.White else LocalContentColor.current
     val fill = when {
         !hovered -> Color.Transparent
@@ -208,7 +212,9 @@ private fun WindowButton(icon: ImageVector, label: String, onArt: Boolean, dange
             Modifier.size(40.dp).clip(CircleShape)
                 .background(fill)
                 .hoverable(hover)
-                .clickable(onClick = onClick, onClickLabel = label)
+                // The keyboard's Tab lands here too: the shared ring, as on every other button.
+                .focusRing(focused, CircleShape)
+                .clickable(interactionSource = hover, indication = androidx.compose.foundation.LocalIndication.current, role = Role.Button, onClickLabel = label, onClick = onClick)
                 .semantics { contentDescription = label },
             contentAlignment = Alignment.Center,
         ) {
