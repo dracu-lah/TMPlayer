@@ -1,6 +1,8 @@
 package com.tmplayer.ui.browse
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -120,7 +122,9 @@ fun ListPageScaffold(
             }
         }
         if (shown != null) {
-            Row(Modifier.padding(sides), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Wraps: Rename, On Home and Delete in one line ran off a narrow phone at a large font.
+            @OptIn(ExperimentalLayoutApi::class)
+            FlowRow(Modifier.padding(sides), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 CopyChip(s.listsRename, chosen = false, onClick = { renaming = shown })
                 CopyChip(s.listsOnHome, chosen = shown.info.home, onClick = { actions.setHome(shown.info.id, !shown.info.home) }, description = "${s.listsOnHome}: ${if (shown.info.home) s.commonOn else s.commonOff}")
                 CopyChip(s.listsDelete, chosen = false, onClick = { deleting = shown })

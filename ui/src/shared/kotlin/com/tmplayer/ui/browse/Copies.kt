@@ -482,6 +482,8 @@ private fun CopyOption(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     focusRequester: androidx.compose.ui.focus.FocusRequester? = null,
+    /** What a screen reader calls it: the copy's quality, or for Telegram's own copies of one file, each one's own name. */
+    name: String = copyHeading(copy),
 ) {
     val s = LocalStrings.current
     val tv = !isTouch()
@@ -503,7 +505,7 @@ private fun CopyOption(
             .focusRing(focused, shape)
             .semantics {
                 selected = chosen
-                contentDescription = s.seriesCopy(copyHeading(copy))
+                contentDescription = s.seriesCopy(name)
             }
             .clickable(interactionSource = interactions, indication = if (tv) null else androidx.compose.foundation.LocalIndication.current, role = Role.RadioButton, onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 12.dp),
@@ -729,6 +731,7 @@ fun TelegramQualityLine(item: MediaItem) {
                         chosen = playing == q,
                         onClick = { pick(q.height) },
                         modifier = Modifier.riseIn(row++, enabled = touch),
+                        name = s.detailTelegramQuality(com.tmplayer.data.TelegramQualities.label(q.height)),
                     )
                 }
             }
