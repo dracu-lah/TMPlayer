@@ -30,9 +30,9 @@ User approved R3 on 2026-11-16 ("do all"), with one change: no video counts anyw
 | | Phone | TV (remote) | Desktop (keyboard) | Web |
 | --- | --- | --- | --- | --- |
 | The question | picker in place of the app, full screen | same picker, 10 foot sizes | picker over the window, no Back | `/setup/chats` then `/added-chats?setup=1`, already one step |
-| First focus | search box not focused (no keyboard pop) | first chat row | search box (Ctrl+F also) | search field |
-| Tick | tap row | OK on a row | Space or click | click |
-| Done | foot button, disabled with "Choose at least one chat" | Right from the list moves to Done | Tab to Done, Enter | Done button, disabled until one |
+| First focus | as the picker is today | first chat row (tested) | as the picker is today | search field |
+| Tick | tap row | OK on a row (tested) | Space, Enter or click | click |
+| Done | foot button, disabled with "Choose at least one chat" | Right from the list moves to Done (tested) | Tab to Done, Enter (tested by click) | Done button, disabled until one |
 | Back | asks "Leave without choosing?" (Leave closes the app) | Back climbs to the top of the list, then asks the same | Esc: nothing to go back to | browser Back: nothing behind it, gate is entered again |
 | Waiting for chats | spinner with `picker.loading` under it, "Continue without choosing" after 4 s | same, remote lands on the button | same | text `picker.loading` |
 | Offline | offline card ("You are offline"), Try again, Continue without choosing | same, remote on Try again | same | same words in the loader |
@@ -47,9 +47,9 @@ User approved R3 on 2026-11-16 ("do all"), with one change: no video counts anyw
   written, asked again next start); after 8 s the setup still waits, it never ends by itself without a choice.
 - **Offline during setup**: the offline card after 3 s with no list and no network. It goes by itself when the
   list comes. Continue without choosing is the way out.
-- **Sign in on a device that already had a setup**: the account's answer is stored. A stored answer (picked or
-  all) ends the setup at once, no screen and no recommendations written again. Sign out clears the answer, so a new
-  account is asked.
+- **Sign in on a device that already had a setup** (a session that ended elsewhere, not a Sign out, which clears
+  the settings): the account's answer is stored. A stored answer (picked or all) ends the setup at once, no screen
+  and no recommendations written again. A new account or a cleared install has no answer, so it is asked.
 - **Kids lock**: not asked (as before).
 - **Run again from Settings**: shows the picker with the chosen chats ticked, a normal Back and Done, and ends the
   setup when closed. Nothing else is repeated.

@@ -62,7 +62,7 @@ class TourOfferFrameTvTest {
                 TourOfferFrame(
                     offer = offer,
                     hintUp = hintUp,
-                    card = { m -> TourOfferCard(again = false, onTake = {}, onDecline = { declines += Unit }, modifier = m) },
+                    card = { m -> com.tmplayer.ui.onboarding.TipsCard(onShow = {}, onDismiss = { declines += Unit }, modifier = m) },
                     modifier = Modifier.fillMaxSize(),
                 ) {
                     // A page whose last row title hugs the bottom edge, as Home's "Recently added".
@@ -90,7 +90,7 @@ class TourOfferFrameTvTest {
     private fun count(text: String, substring: Boolean = false) =
         rule.onAllNodes(hasText(text, substring = substring)).fetchSemanticsNodes().size
 
-    private fun cardUp() = count("Take a quick tour?") > 0
+    private fun cardUp() = count("Tips") > 0
     private fun hintUpNow() = count("OK opens a chat or plays a video.", substring = true) > 0
 
     @Test
@@ -110,7 +110,7 @@ class TourOfferFrameTvTest {
         hintUp = false
         show()
         val title = rule.onNodeWithText("Recently added").getUnclippedBoundsInRoot()
-        val card = rule.onNodeWithText("Take a quick tour?").getUnclippedBoundsInRoot()
+        val card = rule.onNodeWithText("Tips").getUnclippedBoundsInRoot()
         assertTrue("title bottom ${title.bottom} must be above the card top ${card.top}", title.bottom <= card.top)
     }
 
@@ -125,10 +125,10 @@ class TourOfferFrameTvTest {
     }
 
     @Test
-    fun `the remote lands on Take the tour and Back declines`() {
+    fun `the remote lands on Show me and Back is Not now`() {
         hintUp = false
         show()
-        rule.onNode(hasText("Take the tour") and hasClickAction()).assertIsFocused()
+        rule.onNode(hasText("Show me") and hasClickAction()).assertIsFocused()
         rule.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
         rule.waitForIdle()
         assertEquals(1, declines.size)
@@ -152,7 +152,7 @@ class TourOfferFramePhoneTest {
                 TourOfferFrame(
                     offer = true,
                     hintUp = false,
-                    card = { m -> TourOfferCard(again = true, onTake = {}, onDecline = {}, modifier = m) },
+                    card = { m -> com.tmplayer.ui.onboarding.TipsCard(onShow = {}, onDismiss = {}, modifier = m) },
                     modifier = Modifier.fillMaxSize(),
                 ) {
                     Box(Modifier.fillMaxSize()) {
@@ -163,8 +163,8 @@ class TourOfferFramePhoneTest {
         }
         rule.waitForIdle()
         val title = rule.onNodeWithText("Recently added").getUnclippedBoundsInRoot()
-        val card = rule.onNodeWithText("Take a quick tour?").getUnclippedBoundsInRoot()
+        val card = rule.onNodeWithText("Tips").getUnclippedBoundsInRoot()
         assertTrue("title bottom ${title.bottom} must be above the card top ${card.top}", title.bottom <= card.top)
-        rule.onNode(hasText("No thanks") and hasClickAction()).assertExists()
+        rule.onNode(hasText("Not now") and hasClickAction()).assertExists()
     }
 }

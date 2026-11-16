@@ -41,7 +41,7 @@ class BackupCoverageTest {
         "update_auto_install", "update_auto_tried", "update_silent_refused", "update_installing",
         // Hints, walkthroughs and notices already seen.
         "device_card_dismissed", "device_hint_shown", "first_video_tip_dismissed", "online_meta_invite_seen",
-        "online_meta_notice_dismissed", "player_hint_seen", "tv_browse_hint_seen", "setup", "tour", "tour_offer_after",
+        "online_meta_notice_dismissed", "player_hint_seen", "tv_browse_hint_seen", "setup", "tour",
         "hide_default_groups", "external_hint_seen",
         // The retired mini player switch (T12): removed on first read, never carried.
         "mini_player",

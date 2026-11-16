@@ -1843,7 +1843,7 @@
     "done_none": "Save with no chats",
     "empty": "No chats to show here yet.",
     "fold": "{count, plural, one {# chat with no videos} other {# chats with no videos}}",
-    "forward_hint": "No videos found yet? Forward a video to Saved Messages in Telegram. It shows up here, and Saved Messages can be ticked now.",
+    "forward_hint": "Forward a video to Saved Messages in Telegram, then tick Saved Messages here.",
     "gate_body": "TMPlayer shows videos only from the chats you choose. The chats with the most videos are listed first, under Recommended. Tick the ones you want. Nothing changes in Telegram, and you can choose more anytime in Settings.",
     "gate_done_none": "Choose at least one chat",
     "gate_title": "Choose chats to watch",

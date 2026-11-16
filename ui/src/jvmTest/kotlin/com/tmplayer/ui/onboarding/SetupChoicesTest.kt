@@ -93,12 +93,41 @@ class SetupChoicesTest {
         assertEquals(null, values(settings, true).chosen(SetupStep.Device))
     }
 
+    @Test
+    fun `the device picks Lighter or Full silently, once, and Settings can still undo each row`() = runBlocking {
+        // A short device: what the rules recommend is turned on in one write, nothing is asked.
+        val short = store()
+        short.armSetup()
+        val fit = com.tmplayer.data.DeviceFit(shortOfMemory = true, shortOfStorage = false)
+        val wanted = com.tmplayer.data.DeviceFitRules.recommendations(fit, short.lightSettings.first(), seekThumbnailsShown = true)
+        short.applyRecommendations(wanted)
+        assertTrue(short.lighterPictures.first())
+        assertTrue(short.reduceMotion.first())
+        assertFalse(short.trickplay.first())
+        // Applied once, nothing is left to apply, so a second pass writes nothing.
+        assertTrue(com.tmplayer.data.DeviceFitRules.recommendations(fit, short.lightSettings.first(), seekThumbnailsShown = true).isEmpty())
+        // Undone in its own row.
+        SetupChoice.FullQuality.applyTo(short, posters = null)
+        assertFalse(short.lighterPictures.first())
+
+        // A fine device has nothing to turn on: Full stays.
+        val fine = store()
+        fine.armSetup()
+        val none = com.tmplayer.data.DeviceFitRules.recommendations(com.tmplayer.data.DeviceFit.Fine, fine.lightSettings.first(), seekThumbnailsShown = true)
+        assertTrue(none.isEmpty())
+        fine.applyRecommendations(none)
+        assertFalse(fine.lighterPictures.first())
+        assertFalse(fine.reduceMotion.first())
+        assertTrue(fine.trickplay.first())
+        // The streaming mode (Save space) is on for a fresh install either way.
+        assertTrue(fine.lowStorageModeNow())
+    }
+
     private suspend fun values(settings: SettingsStore, posters: Boolean) = SetupValues(
         posters = posters,
         lowStorage = settings.lowStorageMode.first(),
         lighter = settings.lighterPictures.first(),
         saveData = settings.saveMobileData.first(),
-        crashReports = settings.crashReports.first(),
     )
 
     private fun store(): SettingsStore {

@@ -102,7 +102,7 @@ class AddChatsRenderTest {
             }
         }
         waitForIdle()
-        onNode(hasText("Choose chats to watch")).assertExists()
+        onNode(hasText("Which chats have your videos?")).assertExists()
         onNode(hasText("Back") and hasClickAction()).assertDoesNotExist()
         // Nothing ticked: Done says what is missing and cannot be pressed.
         onNode(hasText("Choose at least one chat")).assertExists()
