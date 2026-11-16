@@ -98,9 +98,6 @@ class PlayerControls(
     private val rotate: ImageButton = root.findViewById(R.id.control_rotate)
     private val shapeButton: ImageButton = root.findViewById(R.id.control_shape)
 
-    /** Whether the video has a picture to shape: sound alone has none. Before any init that fits the row. */
-    private var shapeOffered = true
-
     private val lockButton: ImageButton = root.findViewById(R.id.control_lock)
 
     /**
@@ -681,9 +678,9 @@ class PlayerControls(
      * shape (the lock stays first in More there, where a held OK undoes it); on a phone only when
      * the row is at least [WIDE_ROW_DP] across, which a phone held sideways or a tablet is and a
      * phone held upright is not. The overflow leaves out what the row shows, and offers what it
-     * does not. Sound alone has no picture to shape, so the overflow leaves it out there too.
+     * does not.
      */
-    val shapeOnRow: Boolean get() = slotOf(shapeButton).visibility == View.VISIBLE || !shapeOffered
+    val shapeOnRow: Boolean get() = slotOf(shapeButton).visibility == View.VISIBLE
     val lockOnRow: Boolean get() = slotOf(lockButton).visibility == View.VISIBLE
 
     /**
@@ -692,24 +689,16 @@ class PlayerControls(
      */
     private fun fitRow() {
         if (isTv) {
-            slotOf(shapeButton).visibility = if (shapeOffered) View.VISIBLE else View.GONE
+            slotOf(shapeButton).visibility = View.VISIBLE
             return
         }
         val metrics = cluster.resources.displayMetrics
         val width = cluster.width.takeIf { it > 0 } ?: metrics.widthPixels
         val across = (width - cluster.paddingLeft - cluster.paddingRight) / metrics.density
         val wanted = if (across >= WIDE_ROW_DP) View.VISIBLE else View.GONE
-        val shapeWanted = if (shapeOffered) wanted else View.GONE
-        if (slotOf(shapeButton).visibility == shapeWanted && slotOf(lockButton).visibility == wanted) return
-        slotOf(shapeButton).visibility = shapeWanted
+        if (slotOf(shapeButton).visibility == wanted && slotOf(lockButton).visibility == wanted) return
+        slotOf(shapeButton).visibility = wanted
         slotOf(lockButton).visibility = wanted
-    }
-
-    /** Offers or takes away the picture shape button, for a video that is sound alone. */
-    fun setShapeOffered(offered: Boolean) {
-        if (shapeOffered == offered) return
-        shapeOffered = offered
-        fitRow()
     }
 
     /**

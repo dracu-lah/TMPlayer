@@ -47,7 +47,7 @@ class PlayerGestures(
     private val onPinch: (expanding: Boolean) -> Unit = {},
     /**
      * Whether a pinch starting now zooms freely ([onZoom]) rather than stepping the fitting
-     * ([onPinch]): false in 3D, while locked, for sound alone, and where the surface cannot follow.
+     * ([onPinch]): false in 3D, while locked, and where the surface cannot follow.
      */
     private val zoomAllowed: () -> Boolean = { false },
     /** True while the picture is enlarged, when a one finger drag moves it instead of its usual job. */

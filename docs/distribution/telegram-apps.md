@@ -69,7 +69,7 @@ Status: draft. Submit at <https://alternativeto.net> (log in, "Add new applicati
 - **Source:** https://github.com/dracu-lah/TMPlayer
 - **License:** Open source (GPL-3.0), Free
 - **Platforms:** Android, Android TV, Windows, macOS, Linux, Fire TV (if offered), AppImage
-- **Category:** Video and Movies (or Audio and Music, Media Player)
+- **Category:** Video and Movies (or Media Player; TMPlayer plays videos only)
 - **Tags / features:** video-player, media-player, telegram, streaming, android-tv,
   subtitle-support, ad-free, open-source, lightweight, remote-control. Do not pick
   "no registration required": it needs a Telegram account.

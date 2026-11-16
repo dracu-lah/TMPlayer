@@ -26,7 +26,7 @@ enum class PlayerMenuEntry {
     PictureShape,
     /**
      * 3D video: a page of how the file keeps its two pictures and which glasses are on
-     * ([Stereo3d]). Not for sound alone, nor while the video plays on a cast.
+     * ([Stereo3d]). Not while the video plays on a cast.
      */
     Stereo,
     /** The speeds as a page, the one playing on the line; the row's button opens the same page. */
@@ -66,7 +66,7 @@ enum class PlayerMenuEntry {
     PictureInPicture,
     /**
      * The same video in the other engine (PR2), at the same place with the same tracks: ExoPlayer
-     * to VLC or back. Only where the VLC library loads, never for 3D, sound alone or a cast.
+     * to VLC or back. Only where the VLC library loads, never for 3D or a cast.
      */
     OtherEngine,
     OpenInAnotherApp,
@@ -232,7 +232,7 @@ object PlayerMenu {
      *
      * [chapters] is whether the file has chapter marks, which adds the chapter steps.
      *
-     * [stereo] is whether 3D video is offered: a picture to draw, not sound alone, and
+     * [stereo] is whether 3D video is offered: not while a cast plays it, and
      * [pictureShape] the same for the shapes' page. [reportStutter] is false on a cast. [copyLinkAtTime] is false for a chat that restricts saving, a video with no message and one built from pieces.
      *
      * [otherEngine] is whether the video can move to the other engine (PR2): a build whose VLC
@@ -305,7 +305,7 @@ object PlayerMenu {
      * can still become one; [paused] adds the frame steps. Lines rather than buttons, so the row
      * CP37 cleared stays clear. [chapters] adds the chapter steps. [saveFrame] is false for a
      * chat that restricts saving (or while that is still being asked), whose frames stay in it.
-     * [pictureShape] is whether there is a picture to shape (not sound alone, not a cast), and
+     * [pictureShape] is whether there is a picture to shape (not a cast), and
      * [stereo] offers 3D video beside it; Speed follows them. [reportStutter] adds Report stutter
      * (false on a cast, which plays on the other screen). [copyLinkAtTime] is false for a chat that
      * restricts saving, a video with no message and one built from pieces. [zoomed] adds Reset zoom under the
