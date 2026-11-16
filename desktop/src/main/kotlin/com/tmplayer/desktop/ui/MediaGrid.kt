@@ -1212,7 +1212,8 @@ internal fun Poster(
                 Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.25f)))
                 // The tooltip wraps the whole disc: inside it the glyph sat in a top-left Box and the
                 // Play drew 2 dp up and left of the circle's middle.
-                Box(Modifier.align(Alignment.Center)) {
+                // Offline and not on this device (R4): no Play disc, the press opens the page that says why.
+                if (!needsInternet) Box(Modifier.align(Alignment.Center)) {
                     BarTooltip(s.playerPlay, null) {
                         Surface(
                             shape = CircleShape,

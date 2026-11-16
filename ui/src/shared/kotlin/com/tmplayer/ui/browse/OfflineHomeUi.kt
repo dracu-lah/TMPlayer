@@ -78,7 +78,7 @@ fun OfflineHomeScope(rows: List<HomeRow>, content: @Composable (List<HomeRow>) -
             }.mapTo(HashSet()) { it.first }
         }
     }
-    val home = remember(shell, cached) { OfflineHome(true, shell.downloads, cached) }
+    val home = remember(shell, cached) { OfflineHome(true, shell.downloads, shell.cached + cached) }
     val shown = remember(rows, home) { OfflineHomeRows.apply(rows, home) }
     CompositionLocalProvider(LocalOfflineHome provides home) { content(shown) }
 }
