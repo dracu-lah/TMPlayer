@@ -114,8 +114,9 @@ object DownloadShelf {
             )
         }
         entries += joined
-        // Stable, so rows downloaded in the same moment keep the order they came in.
-        val newest = entries.sortedByDescending { it.newest }
+        // Rows downloaded in the same millisecond tie on time: the key settles them, so the order
+        // never depends on the order the rows were handed in (a map's, a warm JVM's).
+        val newest = entries.sortedWith(compareByDescending<Entry<T>> { it.newest }.thenBy { it.key })
         return when (sort) {
             Sort.Newest -> newest
             Sort.Name -> VideoSorting.byName(newest, { entry ->

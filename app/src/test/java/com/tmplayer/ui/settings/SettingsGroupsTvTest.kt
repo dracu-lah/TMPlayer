@@ -7,10 +7,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onLast
@@ -25,6 +27,7 @@ import androidx.compose.ui.test.requestFocus
 import com.tmplayer.data.FormFactor
 import com.tmplayer.ui.theme.TMPlayerTheme
 import com.tmplayer.ui.theme.Tone
+import kotlinx.coroutines.flow.first
 import org.junit.After
 import org.junit.Rule
 import org.junit.Test
@@ -176,5 +179,62 @@ class SettingsGroupsTvTest {
         rule.waitForIdle()
         rule.onNodeWithText("Nothing in Settings matches zzqx", substring = true).assertIsDisplayed()
         rule.onNodeWithText("Playback").assertDoesNotExist()
+    }
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w960dp-h540dp-land-television-night-xhdpi")
+    fun `a switch row on a television says On or Off to a screen reader`() {
+        show(SettingsPage.Storage)
+        val state = rule.onNode(hasText("Download the whole video first") and hasClickAction())
+            .fetchSemanticsNode().config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.StateDescription)
+        org.junit.Assert.assertTrue("the row says its state, got $state", state == "On" || state == "Off")
+    }
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w411dp-h891dp-port-night-xhdpi")
+    fun `Forget all in the remembered languages asks first and Cancel keeps them`() {
+        val store = com.tmplayer.data.SettingsStore(org.robolectric.RuntimeEnvironment.getApplication())
+        kotlinx.coroutines.runBlocking {
+            store.forgetAllLearntLanguages()
+            store.setTrackChoice("Harbour Notes", com.tmplayer.data.TrackChoice(audioLanguage = "fr", subtitlesOn = true))
+        }
+        show(page = SettingsPage.Subtitles, tv = false)
+        row("Remembered languages").performScrollTo().performClick()
+        rule.waitForIdle()
+        row("Forget all").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("Forget the languages of every series?").assertExists()
+        // Cancel leaves them.
+        rule.onNodeWithText("Cancel").performClick()
+        rule.waitForIdle()
+        org.junit.Assert.assertEquals(1, kotlinx.coroutines.runBlocking { store.learntLanguages.first().size })
+        row("Forget all").performClick()
+        rule.waitForIdle()
+        // The sheet's line and the dialog's button both read Forget all; the dialog is the last.
+        rule.onAllNodes(hasText("Forget all") and hasClickAction()).onLast().performClick()
+        rule.waitForIdle()
+        org.junit.Assert.assertEquals(0, kotlinx.coroutines.runBlocking { store.learntLanguages.first().size })
+    }
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w411dp-h891dp-port-night-xhdpi")
+    fun `the search's clear control empties the box and Back clears before it leaves`() {
+        show(page = null, tv = false)
+        rule.onNodeWithTag(SEARCH_TAG).performTextInput("audio lang")
+        rule.waitForIdle()
+        row("Preferred audio language").assertIsDisplayed()
+        // The shared round clear control, one press empties the box and the list comes back.
+        rule.onNode(hasContentDescription("Clear the search") and hasClickAction()).performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("Playback").assertIsDisplayed()
+
+        // Back clears first: with words in the box the list stays up and the box is empty after it.
+        rule.onNodeWithTag(SEARCH_TAG).performTextInput("zzqx")
+        rule.waitForIdle()
+        rule.onNodeWithText("Nothing in Settings matches zzqx", substring = true).assertIsDisplayed()
+        rule.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
+        rule.waitForIdle()
+        rule.onNodeWithText("Nothing in Settings matches zzqx", substring = true).assertDoesNotExist()
+        rule.onNodeWithText("Playback").assertIsDisplayed()
     }
 }
