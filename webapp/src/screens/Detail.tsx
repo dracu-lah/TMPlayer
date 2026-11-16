@@ -4,7 +4,7 @@ import { ArrowLeft02Icon, Cancel01Icon, ClapperboardIcon, Clock01Icon, FilterHor
 import { api, errorText } from '../tg/rpc'
 import { back } from '../session'
 import { t } from '../i18n'
-import { dropResume, getResume, laterIds, namedLists, progress as readProgress, setLater, setShowLater, setWatched, setWatchedMany, settings, showLaterId, watchedList, watchedTick } from '../store'
+import { dropResume, getResume, laterIds, namedLists, progress as readProgress, setLater, setShowLater, setSetting, setWatched, setWatchedMany, settings, showLaterId, watchedList, watchedTick } from '../store'
 import { openListPicker } from './Lists'
 import { chatGone, forgetGone } from '../goneVideos'
 import { showChoices, type MarkChoice } from './showMarks'
@@ -138,6 +138,8 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
     // queue: until it is in, the page shows the video's own frame, never a poster that a film's wide
     // picture then replaces. The wide picture comes light first (w300), then whole (w780).
     const [kind, setKind] = createSignal<'film' | 'show' | null | undefined>(undefined)
+    // The answer could not be had (no key, offline): not "nothing found", so no line says so.
+    const [failed, setFailed] = createSignal(false)
     const film = () => kind() === 'film'
     // An effect, not a mount: choosing another title ('Choose the right poster') asks again at once.
     let asked = false
@@ -149,6 +151,7 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
             live = false
             stop()
         })
+        setFailed(false)
         if (asked) {
             setKind(undefined)
             setPoster(null)
@@ -164,9 +167,15 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
                 if (k === 'film' && f.backdrop) stop = loadBackdropLightFirst(ask, (u) => live && setBackdrop(u))
                 else if (f.poster) loadPoster(ask, 'w342', { priority: true }).then((u) => live && u && setPoster(u), () => {})
             },
-            () => live && setKind(null),
+            () => live && (setFailed(true), setKind(null)),
         )
     })
+    // Why there is no poster, in one line with the one action that fixes it ("Why no poster?"): never for a match, while the answer is coming, or when it could not be had.
+    const why = (): 'off' | 'unread' | 'nothing' | null => {
+        if (!settings().posters) return 'off'
+        if (kind() === undefined || kind() !== null || failed()) return null
+        return askOf(item) ? 'nothing' : 'unread'
+    }
     const title = () => found()?.title || props.info?.title || item.title
     const ep = () => props.info?.episode ?? null
     const episodeName = () => extras()?.episode?.name || ep()?.name || ''
@@ -349,6 +358,19 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
                             <Round icon={ClapperboardIcon} label={t('detail.round_trailer')} href={`https://www.youtube.com/watch?v=${extras()!.trailer}`} />
                         </Show>
                     </div>
+                    <Show when={why()}>
+                        {(w) => (
+                            <p class="poster-why muted small">
+                                <span>{t(w() === 'off' ? 'poster.why_off' : w() === 'unread' ? 'poster.why_name_none' : 'poster.why_nothing')}</span>
+                                <Show
+                                    when={w() === 'off'}
+                                    fallback={<button type="button" class="link" onClick={() => openPosterPicker(item, props.info?.seasons.flatMap((s) => s.episodes.map((e) => e.item)) ?? [])}>{t('poster.why_fix')}</button>}
+                                >
+                                    <button type="button" class="link" onClick={() => setSetting('posters', true)}>{t('poster.why_off_action')}</button>
+                                </Show>
+                            </p>
+                        )}
+                    </Show>
                 </div>
                 <Show when={(props.info?.copies.length ?? 0) > 1}>
                     <Versions item={item} info={props.info!} />

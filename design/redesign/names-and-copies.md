@@ -115,3 +115,20 @@ Unit and garbage tests in core (names, shelf, link, subtitles, copies, diagnosis
 packs, a D-pad test of the pack row (TV and desktop through the shared page), form-factor screenshot tests of
 the pack row and the poster-less line (phone, TV, desktop), webapp tests for the web rules. Manual device
 checks are left for the user.
+
+## As built (decisions made by Claude)
+
+- A pack of a show sits under its first season; a season held only as a pack appears in the picker with that
+  one row and no gap rows. Packs never count as episodes. The pack row plays the file (the TV and desktop pages
+  open it the way they open an episode).
+- A link counts as backing for the match (`MatchBasis.Linked`), so a file named "clip_720p" with a link shows
+  its poster. A link is dropped when the file's own year differs by more than one, when a film's link sits on a
+  file that names an episode, or when TMDB does not know the id (the title guess runs instead).
+- Subtitle names: "Hindi.srt" alone is Hindi; a bracket after something that is no language stays in the name.
+- "Why no poster?" replaces the round "Show poster and overview" button on the phone sheet, the phone and TV
+  page and the desktop page; the web gets the same line. "Found but not backed" and "nothing found" are one
+  line on the web (the worker does not tell them apart). Offline or throttled says nothing.
+- Best copy: default only; no per-chat stored preference and no Settings row. The web has no default copy
+  picker, so it has no tag.
+- Shots in this folder come from the desktop compose tests (the shared panel at a phone width, a desktop width and
+  a doubled font). Robolectric phone and TV shots and the real devices are left for the user.

@@ -580,7 +580,6 @@ internal fun roundLabel(row: DetailRow, s: Messages): String = when (row.action)
 internal fun roundLabel(label: String, s: Messages): String = when (label) {
     s.metadataTrailer -> s.detailRoundTrailer
     s.detailStartOver -> s.detailRoundRestart
-    s.metadataTurnOn -> s.detailRoundShowInfo
     s.seriesDownloadSeason -> s.detailRoundSeason
     s.seriesDownloadUnwatched -> s.detailRoundUnseen
     else -> label

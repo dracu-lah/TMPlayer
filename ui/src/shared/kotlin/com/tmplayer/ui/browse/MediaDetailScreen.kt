@@ -568,9 +568,7 @@ private fun Actions(
     // item it was composed twice while the first paint's list handed over to the live one, and
     // two players opened one over the other (sound over a black screen, 2026-10-22).
     TrailerHost(trailers)
-    // Posters and overviews are off: one button to turn them on from here, as Settings can.
     val online = OnlineMetadata.current
-    val metadataOff = online != null && !online.settings.collectAsState().value.enabled
     val trailer = page.extras?.trailer
     val primary = page.rows.firstOrNull()
     val others = buildList {
@@ -584,9 +582,6 @@ private fun Actions(
         // The trailer's place is held while the extras are on their way, unseen; it fades in there.
         if (trailer != null || holds.trailer) {
             add(DetailRow(DetailAction.Play, s.metadataTrailer, TrailerIcon, onSelect = { trailer?.let(trailers::open) }, placeholder = trailer == null))
-        }
-        if (!headlineOnly && online != null && page.meta == null && metadataOff) {
-            add(DetailRow(DetailAction.Play, s.metadataTurnOn, TmIcons.Info, s.metadataTurnOnDetail, onSelect = { online.setEnabled(true) }))
         }
     }
     // The time left is on the line over the buttons (see ResumeLine), so the pill says only Resume.
@@ -618,6 +613,12 @@ private fun Actions(
             }
         }
         trailers.unopened?.let { TrailerQr(it, Modifier.padding(vertical = 8.dp)) }
+        // No poster: why, and the one thing that fixes it (one Down from the buttons for a remote). It also
+        // replaces the old "turn on posters" button.
+        val why = rememberPosterWhy(page.item, matched = page.meta != null, settled = page.metaState.settled)
+        if (why != null && page.meta == null) {
+            PosterWhyLine(why, onTurnOn = { online?.setEnabled(true) }, onFix = fixMatchOf(page.rows))
+        }
     }
 }
 
@@ -665,14 +666,7 @@ internal val HEADLINE_ACTIONS = setOf(
 @Composable
 private fun MoreActions(page: DetailPage) {
     val s = LocalStrings.current
-    val online = OnlineMetadata.current
-    val metadataOff = online != null && !online.settings.collectAsState().value.enabled
-    val rest = buildList {
-        addAll(page.rows.drop(1).filter { it.action !in HEADLINE_ACTIONS })
-        if (online != null && page.meta == null && metadataOff) {
-            add(DetailRow(DetailAction.Play, s.metadataTurnOn, TmIcons.Info, s.metadataTurnOnDetail, onSelect = { online.setEnabled(true) }))
-        }
-    }
+    val rest = page.rows.drop(1).filter { it.action !in HEADLINE_ACTIONS }
     if (rest.isEmpty()) return
     val tv = !isTouch()
     FlowRow(

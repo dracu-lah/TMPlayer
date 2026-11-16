@@ -785,6 +785,8 @@ a.detail-round { text-decoration: none; }
 .season-chip small:empty { display: none; }
 .gap-note { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; background: var(--surface); border: 1px solid var(--outline); border-radius: var(--r-m); padding: 8px 14px; margin: 8px 0; }
 .gap-note p { margin: 4px 0; }
+.poster-why { display: flex; flex-wrap: wrap; align-items: center; gap: 0 12px; margin: 8px 0; }
+.poster-why .link { min-height: 44px; padding: 0 4px; }
 .episode.gap { border: 1px solid var(--outline); opacity: 0.62; cursor: pointer; font: inherit; min-height: 56px; }
 .episode.gap:hover, .episode.gap:focus-visible { opacity: 1; }
 .episode.gap .episode-code { color: var(--muted); }

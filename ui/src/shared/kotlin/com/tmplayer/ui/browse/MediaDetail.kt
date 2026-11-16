@@ -216,7 +216,8 @@ fun MediaDetailPanel(
     // The screen's one collector when it has one, rather than a second of its own.
     val corrections by com.tmplayer.ui.components.rememberCorrections()
     val parsed = remember(item, corrections) { com.tmplayer.data.SeriesShelf.episodeOf(item, corrections) }
-    val matched = com.tmplayer.ui.online.rememberMatched(item)
+    val matchedState = com.tmplayer.ui.online.rememberMatchedState(item)
+    val matched = matchedState.value
     val meta = matched?.info
     // "small-shelf-part-1" reads as a title once its joiners are spaces; a name with spaces in it
     // already chose its own punctuation and keeps it. A match's own title wins, in the UI language.
@@ -247,6 +248,8 @@ fun MediaDetailPanel(
     // the poster or the overview came and went.
     val metaEnabled = online?.let { com.tmplayer.ui.components.rememberMetaSettings(it) }?.value?.enabled
     val metadataOff = online != null && poster == null && overview == null && metaEnabled != true
+    // Why there is no poster, in one line with the action that fixes it (TS): never where the platform brought its own picture.
+    val posterWhy = rememberPosterWhy(item, matched = meta != null || poster != null || overview != null, settled = matchedState.settled)
 
     Column(
         modifier
@@ -358,10 +361,6 @@ fun MediaDetailPanel(
         val others = buildList {
             addAll(rows.drop(1).filter { !actionsAtFoot || it.action in HEADLINE_ACTIONS })
             extras?.trailer?.let { trailer -> add(DetailRow(DetailAction.Play, s.metadataTrailer, TrailerIcon, onSelect = { trailers.open(trailer) })) }
-            // Posters and overviews are off: one button to turn them on from here, as Settings can.
-            if (metadataOff && !actionsAtFoot) {
-                add(DetailRow(DetailAction.Play, s.metadataTurnOn, TmIcons.Info, s.metadataTurnOnDetail, onSelect = { online?.setEnabled(true) }))
-            }
         }
         if (others.isNotEmpty()) {
             // Centred under Play on a phone, as on a video's page and a show's.
@@ -375,6 +374,10 @@ fun MediaDetailPanel(
             }
         }
         extras?.trailer?.let { trailer -> trailers.unopened?.takeIf { it == trailer }?.let { TrailerQr(it, Modifier.padding(vertical = 8.dp)) } }
+        // No poster: why, and the one thing that fixes it (this is also where "turn on posters" lives now).
+        if (poster == null && overview == null) {
+            posterWhy?.let { PosterWhyLine(it, onTurnOn = { online?.setEnabled(true) }, onFix = fixMatchOf(rows), modifier = Modifier.fillMaxWidth()) }
+        }
 
         // A film the chat posted several times over: every copy by quality and size, one click away.
         Versions(item, onPickCopy, chatTitle, copyStarted)
@@ -395,9 +398,6 @@ fun MediaDetailPanel(
             // Things done now and then, out of the way of Play.
             val rest = buildList {
                 addAll(rows.drop(1).filter { it.action !in HEADLINE_ACTIONS })
-                if (metadataOff) {
-                    add(DetailRow(DetailAction.Play, s.metadataTurnOn, TmIcons.Info, s.metadataTurnOnDetail, onSelect = { online?.setEnabled(true) }))
-                }
             }
             if (rest.isNotEmpty()) {
                 FlowRow(
