@@ -7,6 +7,7 @@ those steps use.
 | File | Used by |
 | --- | --- |
 | [winget/](winget/) and [winget.md](winget.md) | U13 first submission; the release job's `winget` step after that |
+| [store-text.md](store-text.md) | The one source for store text: short and full description, what's new, feature lines, support line, each store's limits |
 | [telegram-apps.md](telegram-apps.md) | U17 AlternativeTo, U18 Uptodown, U19 XDA (a fact list only) |
 | [flathub.md](flathub.md) | Why there is no Flathub package (PR #10513, closed) |
 | [aur.md](aur.md) | The AUR package `tmplayer-bin`: one-time setup, then published by the release job |

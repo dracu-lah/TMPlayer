@@ -243,7 +243,7 @@
   },
   {
     "path": "/android/",
-    "lastmod": "2026-10-29",
+    "lastmod": "2026-11-16",
     "changefreq": "monthly",
     "priority": "0.8",
     "images": [
@@ -295,13 +295,13 @@
   },
   {
     "path": "/faq/",
-    "lastmod": "2026-11-15",
+    "lastmod": "2026-11-16",
     "changefreq": "monthly",
     "priority": "0.7"
   },
   {
     "path": "/privacy/",
-    "lastmod": "2026-11-15",
+    "lastmod": "2026-11-16",
     "changefreq": "monthly",
     "priority": "0.5"
   },
@@ -325,25 +325,49 @@
   },
   {
     "path": "/troubleshooting/",
-    "lastmod": "2026-11-15",
+    "lastmod": "2026-11-16",
     "changefreq": "monthly",
     "priority": "0.6"
   },
   {
     "path": "/troubleshooting/video-will-not-start/",
-    "lastmod": "2026-11-15",
+    "lastmod": "2026-11-16",
     "changefreq": "monthly",
     "priority": "0.6"
   },
   {
     "path": "/troubleshooting/telegram-blocked-on-this-network/",
-    "lastmod": "2026-11-15",
+    "lastmod": "2026-11-16",
     "changefreq": "monthly",
     "priority": "0.6"
   },
   {
     "path": "/troubleshooting/phone-storage-full/",
-    "lastmod": "2026-11-15",
+    "lastmod": "2026-11-16",
+    "changefreq": "monthly",
+    "priority": "0.6"
+  },
+  {
+    "path": "/troubleshooting/video-stutters/",
+    "lastmod": "2026-11-16",
+    "changefreq": "monthly",
+    "priority": "0.6"
+  },
+  {
+    "path": "/troubleshooting/sound-without-picture/",
+    "lastmod": "2026-11-16",
+    "changefreq": "monthly",
+    "priority": "0.6"
+  },
+  {
+    "path": "/troubleshooting/nothing-in-home/",
+    "lastmod": "2026-11-16",
+    "changefreq": "monthly",
+    "priority": "0.6"
+  },
+  {
+    "path": "/troubleshooting/telegram-sign-in-problems/",
+    "lastmod": "2026-11-16",
     "changefreq": "monthly",
     "priority": "0.6"
   },
