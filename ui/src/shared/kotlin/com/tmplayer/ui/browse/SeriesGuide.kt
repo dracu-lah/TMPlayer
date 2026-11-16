@@ -80,8 +80,14 @@ internal object SeriesGuideRows {
     }
 
     /** The seasons the chats hold alone, as picker entries. */
-    fun held(series: Series): List<EpisodeGuide.Season> =
-        series.seasons.map { EpisodeGuide.Season(it.number, it.episodes.size, null, EpisodeGuide.State.InChat) }
+    fun held(series: Series): List<EpisodeGuide.Season> {
+        val episodes = series.seasons.map { EpisodeGuide.Season(it.number, it.episodes.size, null, EpisodeGuide.State.InChat) }
+        // A season the chats hold only as a whole-season file is a season of the page too (TS).
+        val packOnly = series.packs.map { it.season }.distinct()
+            .filter { n -> series.seasons.none { it.number == n } }
+            .map { EpisodeGuide.Season(it, 0, null, EpisodeGuide.State.InChat) }
+        return if (packOnly.isEmpty()) episodes else (episodes + packOnly).sortedBy { if (it.number == 0) Int.MAX_VALUE else it.number }
+    }
 
     /** Whether [full] lists anything the chats lack: a season, or episodes of a season held in part. */
     fun hasGaps(full: List<EpisodeGuide.Season>?): Boolean =
@@ -89,7 +95,7 @@ internal object SeriesGuideRows {
 
     /** The season to show: [wanted] when the picker lists it, else the first the chats hold. */
     fun shownNumber(wanted: Int, series: Series, stops: List<EpisodeGuide.Season>): Int =
-        if (stops.any { it.number == wanted }) wanted else series.seasons.first().number
+        if (stops.any { it.number == wanted }) wanted else series.seasons.firstOrNull()?.number ?: stops.first().number
 
     /** [number] of [series] as its own season, empty for one only the metadata knows. */
     fun seasonOf(series: Series, number: Int): SeriesSeason =
@@ -104,7 +110,11 @@ internal object SeriesGuideRows {
         extras: MetaExtras?,
         today: String,
     ): List<EpisodeGuide.Row> {
-        if (full == null) return shown.episodes.map { EpisodeGuide.Row.Have(it, null) }
+        if (full == null) {
+            val have = shown.episodes.map { EpisodeGuide.Row.Have(it, null) }
+            val packs = series.packs.filter { it.season == shown.number }
+            return if (packs.isEmpty()) have else have + packs.map { EpisodeGuide.Row.Pack(it, shown.episodes.lastOrNull()?.episode ?: 0) }
+        }
         val info = extras?.seasonList?.firstOrNull { it.number == shown.number }
         return EpisodeGuide.rows(shown.number, series, listed, today, info, extras?.nextEpisode)
     }
@@ -115,6 +125,7 @@ internal val EpisodeGuide.Row.number: Int
     get() = when (this) {
         is EpisodeGuide.Row.Have -> episode.episode
         is EpisodeGuide.Row.Gap -> episode.number
+        is EpisodeGuide.Row.Pack -> after
     }
 
 /** "Season 3", or "Specials" for season 0. */
@@ -190,6 +201,73 @@ internal fun GapRow(
         }
     }
 }
+
+/**
+ * A season, or several, posted as one file ([com.tmplayer.data.SeriesPack]): a card that plays the
+ * file from its first episode, after the season's episodes. It looks like an episode's card (it is
+ * a video the chats hold) but says what it is and never carries an episode's number.
+ */
+@Composable
+internal fun PackRow(
+    pack: com.tmplayer.data.SeriesPack,
+    large: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    focusRequester: FocusRequester? = null,
+) {
+    val s = LocalStrings.current
+    val tv = !isTouch()
+    val interactions = remember { MutableInteractionSource() }
+    val focused by interactions.collectIsFocusVisibleAsState()
+    val shape = RoundedCornerShape(Corner.Medium)
+    val title = packTitle(pack, s)
+    val facts = remember(pack.item.id) { com.tmplayer.data.EpisodeCopies.label(pack.item) }
+    val ink = if (focused) Tone.onFocusFill else Tone.text
+    Row(
+        modifier
+            .fillMaxWidth()
+            .heightIn(min = if (tv || large) 72.dp else 64.dp)
+            .clip(shape)
+            .background(if (focused) Tone.focusFill else Tone.surface)
+            .border(1.dp, if (focused) Color.Transparent else Tone.outline, shape)
+            .focusRing(focused, shape)
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .semantics(mergeDescendants = true) { role = Role.Button }
+            .clickable(
+                interactionSource = interactions,
+                indication = if (tv) null else androidx.compose.foundation.LocalIndication.current,
+                onClick = onClick,
+            )
+            .padding(horizontal = if (tv || large) 16.dp else 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(if (tv || large) 16.dp else 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(TmIcons.Play, contentDescription = null, tint = if (focused) ink else Tone.accent, modifier = Modifier.size(if (tv || large) 28.dp else 24.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                title,
+                style = if (tv || large) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleSmall,
+                color = ink,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (facts.isNotBlank()) {
+                Text(facts, style = MaterialTheme.typography.labelMedium, color = if (focused) ink else Tone.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            Text(
+                s.seriesPackNote,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (focused) ink else Tone.muted,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+/** "Whole season", or "Seasons 1 to 3, whole" for a pack of a span. */
+internal fun packTitle(pack: com.tmplayer.data.SeriesPack, s: Messages): String =
+    pack.seasonEnd?.takeIf { it > pack.season }?.let { s.seriesPackSpan(pack.season, it) } ?: s.seriesPackWhole
 
 /**
  * The picture of an episode no chat holds (T11): the provider's still once it is decoded, and

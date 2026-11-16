@@ -1076,6 +1076,15 @@ export async function watchInfo(tg: TelegramClient, chatId: number, messageId: n
             return it ? [{ code: e.code, name: e.video.id === id ? (steps.current?.name ?? null) : null, item: it }] : []
         }),
     }))
+    // A season, or a span, posted as one file; a season the chat holds only so is a season of the page too.
+    const packs = (steps.series?.packs ?? []).flatMap((p) => {
+        const it = s.items.get(p.video.id)
+        return it ? [{ season: p.season, seasonEnd: p.seasonEnd > p.season ? p.seasonEnd : null, item: it }] : []
+    })
+    for (const n of new Set(packs.map((p) => p.season))) {
+        if (!seasons.some((season) => season.number === n)) seasons.push({ number: n, covered: [], episodes: [] })
+    }
+    if (packs.length) seasons.sort((a, b) => a.number - b.number)
     let more: Tile[] = []
     if (!seasons.length) {
         more = arrange(s, { ...view, sort: 'Newest', query: '' })
@@ -1123,6 +1132,7 @@ export async function watchInfo(tg: TelegramClient, chatId: number, messageId: n
         next: item(steps.next) ?? around?.next ?? null,
         nextCode: steps.nextLabel?.code ?? null,
         seasons,
+        packs,
         more,
         fileName: current.fileName,
         width: current.width,

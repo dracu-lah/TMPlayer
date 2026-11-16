@@ -85,3 +85,13 @@ test('twenty seasons and a thousand episodes are cheap, from counts alone', () =
     assert.equal(long.filter((x) => x.kind === 'gap').length, 997)
     assert.ok(performance.now() - started < 500)
 })
+
+test('a season held only as a whole-season file is held, and lists no gap', () => {
+    const packOnly: HeldSeason = { number: 2, numbers: [], packed: true }
+    const list = seasons([held(1, [1, 2]), packOnly], [listed(1), listed(2), listed(3)], null, today)
+    assert.deepEqual(list.map((s) => [s.number, s.state]), [[1, 'have'], [2, 'have'], [3, 'missing']])
+    assert.equal(list[1].have, 0)
+    assert.deepEqual(rows(2, [held(1, [1, 2]), packOnly], listed(2), null, today), [])
+    // A season with episodes and a pack keeps its own gaps.
+    assert.deepEqual(states(rows(1, [{ number: 1, numbers: [1], packed: true }], listed(1, 3), null, today)), ['have', 'missing', 'missing'])
+})

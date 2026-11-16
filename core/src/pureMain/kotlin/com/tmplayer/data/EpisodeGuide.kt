@@ -64,6 +64,14 @@ object EpisodeGuide {
         data class Gap(val episode: Episode) : Row {
             override val key: String get() = "gap-${episode.season}-${episode.number}"
         }
+
+        /**
+         * A whole season (or several) posted as one file, after the season's episodes. [after] is
+         * the number of the episode it follows, for the list's ranges and its fast scroller.
+         */
+        data class Pack(val pack: SeriesPack, val after: Int = 0) : Row {
+            override val key: String get() = pack.key
+        }
     }
 
     /** More seasons than any show has; the rest of a garbage answer is dropped. */
@@ -111,15 +119,17 @@ object EpisodeGuide {
      */
     fun seasons(series: Series?, listed: List<MetaSeason>, next: MetaAiring?, today: String): List<Season> {
         val held = series?.seasons.orEmpty().associate { it.number to it.episodes.size }
+        // A season the chat holds only as a whole-season file is held too, though it has no episode.
+        val packed = series?.packs.orEmpty().mapTo(HashSet()) { it.season }
         val provider = providerSeasons(listed)
         val nextSeason = next?.season?.takeIf { it in 1..MAX_SEASONS }
-        val numbers = (held.keys.filter { it > 0 } + provider.keys + listOfNotNull(nextSeason)).sortedDistinct()
+        val numbers = (held.keys.filter { it > 0 } + packed.filter { it in 1..MAX_SEASONS } + provider.keys + listOfNotNull(nextSeason)).sortedDistinct()
         val seasons = numbers.map { n ->
             val listedSeason = provider[n]
             val have = held[n] ?: 0
             val airDate = listedSeason?.airDate ?: next?.takeIf { it.season == n && it.episode == 1 }?.airDate
             val state = when {
-                have > 0 -> State.InChat
+                have > 0 || n in packed -> State.InChat
                 airDate == null || airDate > today -> State.Upcoming
                 else -> State.Missing
             }
@@ -212,9 +222,19 @@ object EpisodeGuide {
         next: MetaAiring? = null,
     ): List<Row> {
         val heldRows = series?.seasons?.firstOrNull { it.number == season }?.episodes.orEmpty().groupBy { it.episode }
-        return episodes(season, series, listed, today, info, next).flatMap { e ->
+        val packs = series?.packs.orEmpty().filter { it.season == season }
+        // A season held only as a whole-season file lists that file, not a gap for each of its episodes.
+        if (packs.isNotEmpty() && heldRows.isEmpty()) return packs.map { Row.Pack(it) }
+        val rows = episodes(season, series, listed, today, info, next).flatMap { e ->
             if (e.inChat != null) heldRows[e.number].orEmpty().map { Row.Have(it, e.meta) } else listOf(Row.Gap(e))
         }
+        if (packs.isEmpty()) return rows
+        val after = when (val last = rows.lastOrNull()) {
+            is Row.Have -> last.episode.episode
+            is Row.Gap -> last.episode.number
+            else -> 0
+        }
+        return rows + packs.map { Row.Pack(it, after) }
     }
 
     /** The show [item] belongs to among [chatItems] (the chat's videos), or null when it stands alone. */

@@ -353,6 +353,8 @@ fun SeasonStopTabs(
                     )
                 }
                 val sub = when {
+                    // A season held only as a whole-season file has no episode to count.
+                    season.inChat == 0 && season.state == EpisodeGuide.State.InChat -> null
                     !guide -> s.seriesEpisodesCount(season.inChat)
                     season.state == EpisodeGuide.State.Missing -> s.seriesNotInChats
                     season.state == EpisodeGuide.State.Upcoming -> season.airDate?.let { s.detailAirsOn(day(it, s)) } ?: s.detailUpcoming
@@ -1356,6 +1358,19 @@ fun SeriesPanel(
                         art = meta?.let { it.backdropUrl ?: it.posterUrl },
                     )
                 }
+                is EpisodeGuide.Row.Pack -> androidx.compose.runtime.key(row.key) {
+                    val packFocus = remember { FocusRequester() }
+                    PackRow(
+                        row.pack,
+                        large = large,
+                        onClick = {
+                            val open = onOpenEpisode
+                            if (open != null) open(row.pack.item) { runCatching { packFocus.requestFocus() } } else onPlay(row.pack.item)
+                        },
+                        modifier = cardModifier,
+                        focusRequester = packFocus,
+                    )
+                }
             }
         }
         // A large window lays the episodes side by side where two (or three) cards fit at a
@@ -1469,6 +1484,7 @@ fun SeriesPanel(
                     row.key to when (row) {
                         is EpisodeGuide.Row.Have -> s.seriesEpisodeShort(row.episode.season, row.episode.episode) + row.episode.partLetter
                         is EpisodeGuide.Row.Gap -> s.seriesEpisodeShort(row.episode.season, row.episode.number)
+                        is EpisodeGuide.Row.Pack -> packTitle(row.pack, s)
                     }
                 }
             }

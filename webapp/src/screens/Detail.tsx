@@ -538,7 +538,7 @@ function Episodes(props: { info: WatchInfo; current: VideoItem; extras: Extras |
     const today = new Date().toISOString().slice(0, 10)
     const [onlyMine, setOnlyMine] = createSignal(readOnlyMine())
     const heldSeasons = createMemo((): HeldSeason[] =>
-        props.info.seasons.map((s) => ({ number: s.number, numbers: s.episodes.map((e) => numberOf(e.code)), covered: s.covered ?? [] })),
+        props.info.seasons.map((s) => ({ number: s.number, numbers: s.episodes.map((e) => numberOf(e.code)), covered: s.covered ?? [], packed: props.info.packs.some((p) => p.season === s.number) })),
     )
     const listed = () => props.extras?.seasonList ?? []
     const next = () => props.extras?.next ?? null
@@ -555,6 +555,9 @@ function Episodes(props: { info: WatchInfo; current: VideoItem; extras: Extras |
         return stops().some((s) => s.number === want) ? want : (props.info.seasons[0]?.number ?? 0)
     })
     const season = createMemo(() => props.info.seasons.find((s) => s.number === shown()))
+    // The whole-season files of the season shown, after its episodes (a pack of several seasons sits under its first).
+    const packsHere = () => props.info.packs.filter((p) => p.season === shown())
+    const packName = (p: { season: number; seasonEnd: number | null }) => (p.seasonEnd ? t('series.pack_span', { first: p.season, last: p.seasonEnd }) : t('series.pack_whole'))
     const lines = createMemo((): GuideRow[] => {
         const n = shown()
         if (!guide()) return (season()?.episodes ?? []).map((e) => ({ kind: 'have' as const, number: numberOf(e.code) }))
@@ -673,7 +676,7 @@ function Episodes(props: { info: WatchInfo; current: VideoItem; extras: Extras |
                     )}
                 </For>
             </div>
-            <Show when={guide() && !season()?.episodes.length}>
+            <Show when={guide() && !season()?.episodes.length && !packsHere().length}>
                 <div class="gap-note">
                     <p class="muted">{stops().find((s) => s.number === shown())?.state === 'upcoming' ? t('detail.airs_on', { date: day(stops().find((s) => s.number === shown())?.airDate ?? '') }) : t('series.season_gap_note', { season: seasonName(shown()) })}</p>
                     <Show when={stops().find((s) => s.number === shown())?.state === 'missing'}>
@@ -741,6 +744,16 @@ function Episodes(props: { info: WatchInfo; current: VideoItem; extras: Extras |
                                 }}
                             </For>
                         </Show>
+                    )}
+                </For>
+                <For each={packsHere()}>
+                    {(p) => (
+                        <li>
+                            <A class="episode pack" href={watchPath(p.item)} state={{ video: p.item }}>
+                                <span class="episode-code">{packName(p)}</span>
+                                <span class="episode-name">{t('series.pack_note')}</span>
+                            </A>
+                        </li>
                     )}
                 </For>
             </ol>

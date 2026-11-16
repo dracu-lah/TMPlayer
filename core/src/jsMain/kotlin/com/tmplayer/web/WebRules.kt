@@ -144,6 +144,16 @@ interface ShelfTile {
     val piecesPlayable: Int
     val extra: String?
     val seasons: Array<WebSeason>
+
+    /** The whole-season files of a show ("Season 2 Complete"), listed under their season; empty for a file. */
+    val packs: Array<WebPack>
+}
+
+/** A season, or a span of seasons, posted as one file ([com.tmplayer.data.SeriesPack]). [seasonEnd] is 0 for one season. */
+interface WebPack {
+    val season: Int
+    val seasonEnd: Int
+    val video: Video
 }
 
 interface WebSeason {
@@ -803,6 +813,7 @@ private fun tile(entry: ShelfEntry): ShelfTile = when (entry) {
             "piecesPlayable" to (report?.playable ?: 0),
             "extra" to item.extra?.name,
             "seasons" to emptyArray<WebSeason>(),
+            "packs" to emptyArray<WebPack>(),
         )
     }
 }
@@ -833,6 +844,9 @@ private fun show(key: String, series: Series): ShelfTile = plain(
             }.toTypedArray(),
             "covered" to EpisodeGuide.covered(season).toTypedArray(),
         )
+    }.toTypedArray(),
+    "packs" to series.packs.map { pack ->
+        plain<WebPack>("season" to pack.season, "seasonEnd" to (pack.seasonEnd ?: 0), "video" to toWeb(pack.item))
     }.toTypedArray(),
 )
 

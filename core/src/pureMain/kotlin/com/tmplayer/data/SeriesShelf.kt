@@ -46,12 +46,29 @@ data class SeriesEpisode(
 data class SeriesSeason(val number: Int, val episodes: List<SeriesEpisode>)
 
 /**
+ * A season, or several, posted as one file ("Harbour Notes Season 2 Complete 1080p"): not an
+ * episode, so it is never counted, never "up next" and never in the episode list's numbering.
+ * The show's page lists it under [season] as one row that plays the file.
+ *
+ * [seasonEnd] is the last season of a span pack ("S01-S03"), null for a pack of one season.
+ */
+data class SeriesPack(val item: MediaItem, val season: Int, val seasonEnd: Int? = null) {
+    val key: String get() = "pack-${item.id}"
+}
+
+/**
  * Every file in a chat that belongs to one show, grouped by season.
  *
  * [key] is what the files were grouped on and stays stable while pages load, so a list can key
  * the tile on it. [title] is the show's name as the first of its files wrote it.
  */
-data class Series(val key: String, val title: String, val seasons: List<SeriesSeason>) {
+data class Series(
+    val key: String,
+    val title: String,
+    val seasons: List<SeriesSeason>,
+    /** Whole-season files of the show ([SeriesPack]), by season then newest first; none for most shows. */
+    val packs: List<SeriesPack> = emptyList(),
+) {
     val episodes: List<SeriesEpisode> get() = seasons.flatMap { it.episodes }
     val episodeCount: Int get() = seasons.sumOf { it.episodes.size }
 
@@ -373,10 +390,13 @@ object SeriesShelf {
                 else -> joining(found, showKeys)?.let { key -> Found(found.item, alias.getValue(key), found.name, found.episode, emptyList()) }
             }
         }
+        // A whole-season file of an established show is part of the show, not a loose tile.
+        val packsOf = packsOf(items, names, trusted, corrections, showKeys, alias)
         val shows = placedUnder.filterNotNull()
             .groupBy { it.key }
-            .mapValues { (key, files) -> series(key, files, separate = { corrections[it.id]?.separate == true }, durationOf) }
+            .mapValues { (key, files) -> series(key, files, packsOf[key].orEmpty(), separate = { corrections[it.id]?.separate == true }, durationOf) }
         val showOf = Array(items.size) { placedUnder[it]?.key }
+        for ((key, packs) in packsOf) for (pack in packs) showOf[pack.index] = key
 
         // What is left over and names a film, or one episode of a show the chat has no more of:
         // copies of it (a 720p and a 1080p of Loki S02E05) fold into one tile, where the evidence
@@ -686,7 +706,47 @@ object SeriesShelf {
         ).map(::keyOf)
     }
 
-    private fun series(key: String, files: List<Found>, separate: (MediaItem) -> Boolean, durationOf: (MediaItem) -> Int): Series {
+    /** A whole-season file read off item number [index] of the listing, before it is put under its show. */
+    private class PackFound(val index: Int, val item: MediaItem, val name: ParsedName)
+
+    /**
+     * The whole-season files ("Season 2 Complete", "S01-S03") that belong to a show the chat has
+     * established, by the show's key: the file's own title, or one of its alternates, is the show's
+     * (the way [joining] finds a show for a loosely named episode). A pack of a title with no show
+     * is not here, so it stays the plain tile it was.
+     */
+    private fun packsOf(
+        items: List<MediaItem>,
+        names: List<ParsedName>,
+        trusted: List<Boolean>,
+        corrections: Map<String, VideoCorrection>,
+        showKeys: Set<String>,
+        alias: Map<String, String>,
+    ): Map<String, List<PackFound>> {
+        if (showKeys.isEmpty()) return emptyMap()
+        var out: HashMap<String, ArrayList<PackFound>>? = null
+        for (index in items.indices) {
+            val name = names[index]
+            if (!name.pack) continue
+            val item = items[index]
+            // A file the viewer set apart is its own video.
+            if (corrections[item.id]?.separate == true) continue
+            val key = name.titleKey.ifEmpty { continue }
+            val alternates = if (corrections[item.id]?.title != null || !trusted[index]) emptyList() else alternatesOf(item, key)
+            val show = (if (key in showKeys) key else joining(Found(item, key, name, 0, alternates), showKeys)) ?: continue
+            val into = out ?: HashMap<String, ArrayList<PackFound>>().also { out = it }
+            into.getOrPut(alias.getValue(show)) { ArrayList() } += PackFound(index, item, name)
+        }
+        return out ?: emptyMap()
+    }
+
+    private fun series(
+        key: String,
+        files: List<Found>,
+        packFiles: List<PackFound>,
+        separate: (MediaItem) -> Boolean,
+        durationOf: (MediaItem) -> Int,
+    ): Series {
         // A release with no season (the fansub form, a bare "Ep 04") is season one, unless every
         // file that does name a season names the same one.
         val named = files.mapNotNull { it.name.season }.distinct()
@@ -718,7 +778,10 @@ object SeriesShelf {
         val title = own.firstOrNull { it != it.lowercase() }
             ?: own.firstOrNull()
             ?: joined.first()
-        return Series(key = key, title = title, seasons = seasons)
+        val packs = packFiles
+            .mapNotNull { file -> file.name.packSeason?.let { SeriesPack(file.item, it, file.name.seasonEnd) } }
+            .sortedWith(compareBy<SeriesPack> { it.season }.thenByDescending { it.item.date }.thenBy { it.item.messageId })
+        return Series(key = key, title = title, seasons = seasons, packs = packs)
     }
 
 

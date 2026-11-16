@@ -13,6 +13,8 @@ export interface HeldSeason {
     number: number
     numbers: readonly number[]
     covered?: readonly number[]
+    /** The chat holds a whole-season file of it (a pack), so it is held though it lists no episode. */
+    packed?: boolean
 }
 
 /** One season as TMDB lists it (tmdb/extras.ts' SeasonStop). */
@@ -81,6 +83,7 @@ export function agrees(held: readonly HeldSeason[], listed: readonly ListedSeaso
 /** Every season either side knows, in order, the specials last (EpisodeGuide.seasons). Dates are `yyyy-MM-dd`, compared as text. */
 export function seasons(held: readonly HeldSeason[], listed: readonly ListedSeason[] | undefined, next: Next | null | undefined, today: string): SeasonStop[] {
     const have = new Map(held.map((s) => [s.number, new Set(s.numbers).size]))
+    const packed = new Set(held.filter((s) => s.packed && sane(s.number, MAX_SEASONS)).map((s) => s.number))
     const known = provider(listed)
     const nextSeason = next && sane(next.season, MAX_SEASONS) ? next.season : null
     const numbers = [...new Set([...have.keys()].filter((n) => n > 0).concat([...known.keys()], nextSeason === null ? [] : [nextSeason]))].sort((a, b) => a - b)
@@ -88,7 +91,7 @@ export function seasons(held: readonly HeldSeason[], listed: readonly ListedSeas
         const info = known.get(n)
         const mine = have.get(n) ?? 0
         const airDate = info?.airDate ?? (next && next.season === n && next.episode === 1 ? next.airDate : null)
-        const state: State = mine > 0 ? 'have' : airDate === null || airDate > today ? 'upcoming' : 'missing'
+        const state: State = mine > 0 || packed.has(n) ? 'have' : airDate === null || airDate > today ? 'upcoming' : 'missing'
         return { number: n, have: mine, total: info && info.episodes > 0 ? info.episodes : null, state, airDate, special: false }
     })
     const specials = have.get(0) ?? 0
@@ -104,6 +107,8 @@ export function seasons(held: readonly HeldSeason[], listed: readonly ListedSeas
 export function rows(season: number, held: readonly HeldSeason[], info: ListedSeason | undefined, next: Next | null | undefined, today: string): Row[] {
     const mine = held.find((s) => s.number === season)
     const numbers = new Set(mine?.numbers ?? [])
+    // A season held only as a whole-season file lists that file (the page adds it), not a gap for each episode.
+    if (mine?.packed && !numbers.size) return []
     const covered = new Set(mine?.covered ?? [])
     const count = info && sane(info.episodes, MAX_EPISODES) ? Math.trunc(info.episodes) : 0
     const differs = count > 0 && Math.max(0, ...numbers) > count
