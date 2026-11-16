@@ -2,6 +2,9 @@ package com.tmplayer.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import com.tmplayer.ui.theme.collectIsFocusVisibleAsState
+import com.tmplayer.ui.theme.Motion
+import com.tmplayer.ui.theme.focusRing
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.MaterialTheme
@@ -124,8 +127,9 @@ fun FloatingRoundButton(
     active: Boolean = false,
 ) {
     val interactions = remember { MutableInteractionSource() }
-    val fill by androidx.compose.animation.animateColorAsState(if (active) Tone.hero else FloatingTone.menu, label = "roundFill")
-    val tint by androidx.compose.animation.animateColorAsState(if (active) Tone.onHero else Tone.text, label = "roundTint")
+    val focused by interactions.collectIsFocusVisibleAsState()
+    val fill by androidx.compose.animation.animateColorAsState(if (active) Tone.hero else FloatingTone.menu, Motion.standard(Motion.Fast), label = "roundFill")
+    val tint by androidx.compose.animation.animateColorAsState(if (active) Tone.onHero else Tone.text, Motion.standard(Motion.Fast), label = "roundTint")
     // The modifier goes on a Box of its own: a tooltip box puts what it is given on the anchor
     // inside it, so an align() handed to it lined the anchor up within itself and the button
     // stayed at the top start (the detail page's Cast sat over Back that way).
@@ -139,6 +143,7 @@ fun FloatingRoundButton(
                     .clip(CircleShape)
                     .background(fill)
                     .border(floatingBorder(), CircleShape)
+                    .focusRing(focused, CircleShape)
                     .clickable(interactionSource = interactions, indication = ripple(), role = Role.Button, onClick = onClick)
                     .semantics {
                         contentDescription = label
@@ -319,12 +324,14 @@ private fun BarIconBody(
     glyph: (@Composable () -> Unit)?,
     interactions: MutableInteractionSource,
 ) {
+    val focused by interactions.collectIsFocusVisibleAsState()
     Box(
         modifier
             .then(if (caption == null) Modifier.size(FloatingChrome.Icon) else Modifier.height(FloatingChrome.LabelledIcon).widthIn(min = FloatingChrome.LabelledIcon))
             .pressScale(interactions)
             // A pill like the bar round it, so its ends follow the bar's at the same inset.
             .clip(CircleShape)
+            .focusRing(focused, CircleShape)
             .clickable(interactionSource = interactions, indication = ripple(), enabled = enabled, role = Role.Button, onClick = onClick)
             .semantics {
                 contentDescription = label

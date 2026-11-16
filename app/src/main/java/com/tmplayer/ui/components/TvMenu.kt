@@ -2,7 +2,8 @@ package com.tmplayer.ui.components
 
 import com.tmplayer.ui.theme.focusRingOnTv
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
+import androidx.compose.ui.semantics.Role
+import com.tmplayer.ui.theme.Motion
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -229,7 +230,7 @@ private fun MenuRow(action: MenuAction, touch: Boolean, modifier: Modifier = Mod
     if (touch) {
         val destructive = action.destructive
         ListItem(
-            modifier = modifier.clickable(onClick = action.onSelect),
+            modifier = modifier.clickable(role = Role.Button, onClick = action.onSelect),
             headlineContent = {
                 M3Text(action.label, maxLines = 2, overflow = TextOverflow.Ellipsis)
             },
@@ -261,7 +262,7 @@ private fun MenuRow(action: MenuAction, touch: Boolean, modifier: Modifier = Mod
             focused -> Tone.focusFill
             else -> Tone.surfaceHigh
         },
-        animationSpec = tween(140),
+        animationSpec = Motion.standard(Motion.Fast),
         label = "menuRow",
     )
     val foreground = when {
@@ -281,6 +282,7 @@ private fun MenuRow(action: MenuAction, touch: Boolean, modifier: Modifier = Mod
                 // Nothing on a TV reacts to a press with a ripple, and the focus colour is the
                 // whole feedback.
                 indication = null,
+                role = Role.Button,
                 onClick = action.onSelect,
             )
             .padding(horizontal = 18.dp, vertical = 14.dp),

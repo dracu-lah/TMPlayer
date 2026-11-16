@@ -1,7 +1,7 @@
 package com.tmplayer.ui.components
 
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
+import com.tmplayer.ui.theme.Motion
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -143,7 +143,8 @@ fun StorageOverview(
                 line,
                 style = MaterialTheme.typography.bodyMedium,
                 color = Tone.muted,
-                modifier = Modifier.fillMaxWidth(),
+                // What a run freed is heard when it lands, not only seen.
+                modifier = Modifier.fillMaxWidth().liveMessage(),
                 textAlign = TextAlign.Center,
             )
         }
@@ -505,7 +506,7 @@ private fun TickLine(
     val lit = tv && focused
     val shape = RoundedCornerShape(Corner.Medium)
     val tick = rememberToggleTick()
-    val fill by animateColorAsState(if (lit) Tone.focusFill else Color.Transparent, tween(140), label = "reviewLine")
+    val fill by animateColorAsState(if (lit) Tone.focusFill else Color.Transparent, Motion.standard(Motion.Fast), label = "reviewLine")
     Row(
         Modifier
             .fillMaxWidth()
@@ -596,7 +597,7 @@ internal fun ReviewButton(
         kind == ButtonKind.Primary -> Tone.accent
         else -> Tone.surfaceHigh
     }
-    val background by animateColorAsState(target, tween(140), label = "reviewButton")
+    val background by animateColorAsState(target, Motion.standard(Motion.Fast), label = "reviewButton")
     val foreground = when {
         focused && kind == ButtonKind.Danger -> Color.White
         focused && !isTouch() -> Tone.onFocusFill

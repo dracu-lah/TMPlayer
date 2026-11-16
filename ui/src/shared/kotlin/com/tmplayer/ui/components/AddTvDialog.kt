@@ -114,7 +114,7 @@ fun AddTvDialog(
                         Text(s.castAddWorking, fontSize = 14.sp)
                     }
                 }
-                error?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 14.sp, modifier = Modifier.testTag(ERROR_TAG)) }
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 14.sp, modifier = Modifier.liveMessage().testTag(ERROR_TAG)) }
                 if (saved.isNotEmpty()) {
                     Text(s.castAddSaved, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
                     saved.forEach { tv ->

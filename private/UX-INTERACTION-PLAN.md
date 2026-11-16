@@ -826,3 +826,11 @@ Next session: run `:app:testDebugUnitTest` and `:desktop:test` in full (per modu
   scale with the font, so FitText floors in dp.
 - Decisions: Pill, Stop casting and Cancel grow from 36 to 40 dp visual to 48 dp (target over look);
   FitText shrinks a word (to 10 dp) rather than cutting it at a large font.
+
+### Worker handoff: R7 review (desktop-ui-3 + components)
+- Done: 1b0c4d4 desktop Forget all confirm + toast; 7ba0eae window buttons role + ring; 82c9aa3 ChoicePopover/ChoiceRow (no Tab stops on dim/card, ring, wrap); e6611df FloatingChrome, AccentSwatches (Reduce motion, graphicsLayer), FreeUpSpace (Motion tokens, live result); b46fc75 TvChoiceRow selected/disabled semantics, TvMenu roles, status pills live, slider names, slow-answer row, trailer 48 dp, ViewingSummary ellipsis.
+- Reviews: private/ux-review/desktop-ui-3.md and components.md (the inventory for Support.kt is stale: dialog now in shared SupportCards.kt).
+- Test: desktop ControlReviewR7Test (Forget all confirm, popover click targets and 200% font wrap).
+- Next: other Tab-stop scrims (CastRemote, MetaExtrasUi, TouchNav, PlayerOverlay) could share one scrimDismiss/swallowClicks in ui; MiniPlayerBar ring.
+- Gotchas: collectIsFocusVisibleAsState is com.tmplayer.ui.theme's, not foundation's; a new worktree needs local.properties copied for :app.
+- Decision: kept Role.Button on the popover's chosen line (RadioButton would change reader wording and tests).

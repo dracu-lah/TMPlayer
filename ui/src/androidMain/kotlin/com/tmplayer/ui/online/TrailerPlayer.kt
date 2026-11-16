@@ -205,10 +205,10 @@ private fun OverlayButton(icon: ImageVector, label: String, onClick: () -> Unit,
     val focused by interactions.collectIsFocusedAsState()
     Row(
         modifier
-            .height(if (tv) 48.dp else 40.dp)
+            .height(48.dp)
             .clip(CircleShape)
             .background(if (focused) Tone.focusFill else Color.Black.copy(alpha = 0.6f))
-            .clickable(interactionSource = interactions, indication = if (tv) null else androidx.compose.foundation.LocalIndication.current, onClick = onClick)
+            .clickable(interactionSource = interactions, indication = if (tv) null else androidx.compose.foundation.LocalIndication.current, role = androidx.compose.ui.semantics.Role.Button, onClick = onClick)
             .padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
