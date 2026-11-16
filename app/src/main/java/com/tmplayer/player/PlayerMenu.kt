@@ -156,7 +156,7 @@ fun PhoneMenuEntry.label(
     PhoneMenuEntry.Stereo -> stereo?.let { L.commonWithDetail(L.playerStereo, it) } ?: L.playerStereo
     PhoneMenuEntry.Speed -> L.playerSpeed
     PhoneMenuEntry.VolumeBoost -> L.playerVolumeBoost
-    PhoneMenuEntry.NightMode -> L.playerNightMode
+    PhoneMenuEntry.NightMode -> L.playerQuietLoudScenes
     PhoneMenuEntry.EvenVolume -> L.playerEvenVolume
     PhoneMenuEntry.SleepTimer -> sleepDetail?.let { L.playerSleepTimerNow(it) } ?: L.playerSleepTimer
     PhoneMenuEntry.AbLoop -> PlayerMenu.loopLabel(loop)
