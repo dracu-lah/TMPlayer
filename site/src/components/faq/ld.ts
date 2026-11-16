@@ -110,6 +110,22 @@ export const faqLd = {
     },
     {
       "@type": "Question",
+      "name": "Where do the skip intro times come from, and what is sent?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "First from the chapters inside the video file, which TMPlayer reads on your device and sends nowhere. Then, while online lookups are on, from the community databases TheIntroDB, IntroDB, AniSkip and anime-skip.com, with arm.haglund.dev turning an AniList id into the other ids for anime. Only a title id, the season and episode, and sometimes the episode's length are sent, never the video, its file name, a chat name or anything from your Telegram account. Turn the lookups off in Settings, under Posters and details or Skip intro buttons. The full list is on tmplayer.org/privacy."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What does the sync file in my Saved Messages hold?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Only if you say yes to Keep my place on all my devices: where you stopped, what you watched, Watch later, your favourite chats and lists, and, in the file's version 3, your bookmarks and the titles you corrected, each by its chat and message number with a short title. No chat names, file names or settings. It is one small file in your own Saved Messages, edited in place, and there is no TMPlayer server in between. Turn it off in Settings, or delete the file there too. The full list is on tmplayer.org/privacy."
+      }
+    },
+    {
+      "@type": "Question",
       "name": "Is TMPlayer free? Is there a paid version?",
       "acceptedAnswer": {
         "@type": "Answer",
