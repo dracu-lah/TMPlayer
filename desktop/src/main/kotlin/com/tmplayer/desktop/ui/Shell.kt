@@ -333,7 +333,12 @@ private fun Browse(state: ShellState, player: PlayerContent) {
     val setupPending by state.settings.setupPending.collectAsState(initial = false)
     // The mandatory chat choice (ChatsGate), after the setup: while it is up (or briefly waits for
     // the chat list) it covers the window, and no notice, tour or support prompt shows with it.
-    val chatsGate = com.tmplayer.ui.browse.rememberChatsGate(chats, setupPending)
+    val setupReplay by state.settings.setupReplay.collectAsState(initial = false)
+    val gateMove = com.tmplayer.ui.browse.rememberChatsGate(chats, setupPending)
+    // While the setup is armed it is the one question (SetupFlow), shown through the same gate
+    // bookkeeping: the question is a shown gate, every wait a wait.
+    val setupFlow = com.tmplayer.ui.browse.rememberSetupFlow(chats, setupPending, setupReplay)
+    val chatsGate = if (setupPending) com.tmplayer.data.SetupFlow.toMove(setupFlow) else gateMove
     val gateUp = com.tmplayer.data.ChatsGate.up(chatsGate)
     // The Choose chats button and its key stand down while the setup or the gate (the chooser
     // itself) is up.
@@ -513,7 +518,7 @@ private fun Browse(state: ShellState, player: PlayerContent) {
             ShellNotices(state, Modifier.align(Alignment.BottomEnd).padding(start = 24.dp, top = 24.dp, end = 24.dp, bottom = foot))
         }
         if (setupPending) {
-            SetupOverlay(state)
+            SetupOverlay(state, chats, setupFlow, setupReplay)
         } else if (gateUp) {
             ChatsGateOverlay(state, chats, waiting = chatsGate == com.tmplayer.data.ChatsGate.Move.Wait)
         }
@@ -559,52 +564,39 @@ private fun Browse(state: ShellState, player: PlayerContent) {
 private const val HOUSEKEEPING_DELAY_MS = 20_000L
 
 /**
- * The setup after sign in (CP67) over the whole window. Browse is drawn under it, so the list is
- * coming in while the setup runs; the setup itself no longer waits for it (only the mandatory
- * chat choice after it does).
+ * The setup after sign in (R3) over the whole window: one question, "Which chats have your
+ * videos?", the chat picker in its required form (no Back, Esc does nothing, Done only with a chat
+ * ticked), then Home. While the list is on its way it shows the spinner with "Loading your chats"
+ * under it, or the offline card; nothing else is asked. Run again from Settings it is the
+ * ordinary picker and closes itself.
  */
 @Composable
-private fun SetupOverlay(state: ShellState) {
+private fun SetupOverlay(
+    state: ShellState,
+    chats: com.tmplayer.ui.browse.ChatListViewModel,
+    flow: com.tmplayer.data.SetupFlow.Next,
+    replay: Boolean,
+) {
     val scope = rememberCoroutineScope()
-    val finish: () -> Unit = { scope.launch { runCatching { state.settings.markSetupDone() } } }
     CoverWindowControls()
     Surface(Modifier.fillMaxSize().windowDrag(), color = Tone.background) {
-        // A disk short of room gets the Device step, offering Low storage mode (CP68).
-        val fit = com.tmplayer.ui.onboarding.rememberDeviceFit()
-        val light by state.settings.lightSettings.collectAsState(initial = null)
-        val now = light
-        if (now == null) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Tone.accent) }
-            return@Surface
+        com.tmplayer.ui.onboarding.SetupFlowEffects(state.settings, flow, replay)
+        when (flow) {
+            com.tmplayer.data.SetupFlow.Next.Choose -> {
+                val model = rememberViewModel(Unit) { com.tmplayer.ui.browse.newAddChatsViewModel(state.settings) }
+                com.tmplayer.ui.browse.AddChatsFed(
+                    settings = state.settings,
+                    chatsViewModel = chats,
+                    model = model,
+                    onClose = { scope.launch { runCatching { state.settings.markSetupDone() } } },
+                    required = com.tmplayer.data.SetupFlow.required(replay),
+                    sendLogs = { SendLogsActions() },
+                )
+            }
+            com.tmplayer.data.SetupFlow.Next.Offline -> com.tmplayer.ui.browse.SetupOffline()
+            com.tmplayer.data.SetupFlow.Next.Wait -> com.tmplayer.ui.browse.ChatsGateWaiting()
+            else -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Tone.accent) }
         }
-        val recommendations = remember {
-            com.tmplayer.data.DeviceFitRules.recommendations(fit, now, seekThumbnailsShown = false, pictures = false)
-        }
-        // The same steps Settings' Setup choices lists (Setup.stepsFor): the desktop is only ever
-        // offered Low storage mode there, so Performance stays.
-        val steps = remember {
-            Setup.stepsFor(
-                com.tmplayer.data.DeviceForm.Desktop,
-                posters = com.tmplayer.online.OnlineMetadata.current != null,
-                recommendations = recommendations,
-            )
-        }
-        // Appearance, then the choices; the quick tour is offered on its own once the shell is up.
-        com.tmplayer.ui.onboarding.SetupAndTour(
-            state.settings,
-            steps,
-            onDone = finish,
-            fit = fit,
-            recommendations = recommendations,
-            // The crash reports question (CP102f), in a build that has somewhere to send them.
-            crashReporting = remember {
-                com.tmplayer.ui.onboarding.CrashReporting(com.tmplayer.desktop.DesktopCrashReports.available) { on ->
-                    com.tmplayer.platform.Background.scope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                        if (on) com.tmplayer.desktop.DesktopCrashReports.start(true) else com.tmplayer.desktop.DesktopCrashReports.stop()
-                    }
-                }
-            },
-        )
     }
 }
 

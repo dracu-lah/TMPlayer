@@ -105,6 +105,14 @@ class SetupFlowTest {
     }
 
     @Test
+    fun `the picker's run bookkeeping sees the question as a shown gate and every wait as a wait`() {
+        assertEquals(ChatsGate.Move.Show, SetupFlow.toMove(Next.Choose))
+        for (wait in listOf(Next.Hold, Next.Wait, Next.Offline)) assertEquals(ChatsGate.Move.Wait, SetupFlow.toMove(wait))
+        assertEquals(ChatsGate.Move.None, SetupFlow.toMove(Next.Finish))
+        assertEquals(ChatsGate.Move.None, SetupFlow.toMove(Next.Idle))
+    }
+
+    @Test
     fun `every combination ends in a defined move and an armed setup is never idle`() {
         for (answer in listOf(false, true)) for (mode in AddedMode.entries) for (replay in listOf(false, true))
             for (kids in listOf(false, true)) for (waived in listOf(false, true)) for (loaded in listOf(false, true))

@@ -1843,11 +1843,14 @@
     "done_none": "Save with no chats",
     "empty": "No chats to show here yet.",
     "fold": "{count, plural, one {# chat with no videos} other {# chats with no videos}}",
+    "forward_hint": "No videos found yet? Forward a video to Saved Messages in Telegram. It shows up here, and Saved Messages can be ticked now.",
     "gate_body": "TMPlayer shows videos only from the chats you choose. The chats with the most videos are listed first, under Recommended. Tick the ones you want. Nothing changes in Telegram, and you can choose more anytime in Settings.",
     "gate_done_none": "Choose at least one chat",
     "gate_title": "Choose chats to watch",
     "gone_detail": "You left this chat, or it was deleted.",
     "leave_body": "The chats you ticked are not saved yet. You can choose them the next time you open TMPlayer.",
+    "leave_choosing_body": "Nothing is saved. TMPlayer closes, and you can choose your chats the next time you open it.",
+    "leave_choosing_title": "Leave without choosing?",
     "leave_title": "Leave TMPlayer?",
     "leave_yes": "Leave",
     "loading": "Loading your chats",
@@ -3151,6 +3154,8 @@
     "mobile_save_detail": "On mobile data, a video is fetched only a few minutes ahead, so stopping early wastes nothing",
     "mobile_title": "Mobile data",
     "next": "Next",
+    "offline_body": "TMPlayer needs the internet once to list your chats. It carries on by itself when you are back online.",
+    "offline_title": "You are offline",
     "performance_body": "On a slower device, lighter pictures and less motion keep the app quick. The difference shows on Home and while seeking.",
     "performance_full": "Full quality",
     "performance_full_detail": "Sharp posters, the blurred backdrop, animations and thumbnails while seeking",
@@ -3175,7 +3180,9 @@
     "storage_normal_detail": "Videos you play stay whole in Recently played, so going back is instant",
     "storage_title": "Storage",
     "stream_body": "Big videos take a lot of room. Save space streams them without keeping the whole file on this device.",
-    "use_recommended": "Use recommended settings"
+    "use_recommended": "Use recommended settings",
+    "which_body": "Tick the chats that hold videos. Nothing changes in Telegram, and you can change this anytime in Settings.",
+    "which_title": "Which chats have your videos?"
   },
   "share": {
     "chooser_title": "{count, plural, one {Share this video} other {Share # videos}}",
@@ -3420,6 +3427,12 @@
     "system_desktop_detail": "Match the computer",
     "system_detail": "Match the phone",
     "system_tv_detail": "The usual dark panel"
+  },
+  "tips": {
+    "body": "A short tour of where your videos come from, the player, downloads and Settings.",
+    "dismiss": "Not now",
+    "show": "Show me",
+    "title": "Tips"
   },
   "titles": {
     "agree": "Yes, send these two lines",

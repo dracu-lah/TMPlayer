@@ -94,6 +94,17 @@ object SetupFlow {
     fun up(next: Next): Boolean = next != Next.Idle
 
     /**
+     * [next] as the chat choice's own move, so the picker's run bookkeeping ([ChatsGate.advance]) and
+     * the shell's "something covers the app" checks treat the setup like the gate: the question is
+     * [ChatsGate.Move.Show], every wait [ChatsGate.Move.Wait], and Finish or Idle [ChatsGate.Move.None].
+     */
+    fun toMove(next: Next): ChatsGate.Move = when (next) {
+        Next.Choose -> ChatsGate.Move.Show
+        Next.Hold, Next.Wait, Next.Offline -> ChatsGate.Move.Wait
+        Next.Idle, Next.Finish -> ChatsGate.Move.None
+    }
+
+    /**
      * Whether the question is asked in the strict form (no Back button, Done only with a chat
      * ticked, Back leaves the app). A replay from Settings is the ordinary picker instead.
      */
