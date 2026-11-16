@@ -506,7 +506,7 @@ Store text, the site.
   `rememberSeasonEpisodes` kept the last season's list when the season changed (names of the new season never loaded).
   Episode ranges take (TS1 parser half): `~`, `to`, `+`, `&`, commas, en dash, `S01-S03` (`ParsedName.seasonEnd`).
   left: web TV (`webapp/tv`) series screen; no before/after screenshots (no emulator pass); the web has no per-episode
-  names for gaps (count only); `pack` flag and the season pack row (TS2) not done; phone/TV D-pad test of gap rows only
+  names for gaps (count only); `pack` flag and the season pack row (TS2) now done, see TS names-and-copies below; phone/TV D-pad test of gap rows only
   by the shared desktop focus test; "series sheet" read as the show page's action row (ShowMenu untouched).
   gotchas: `SeriesPanel` has no local slots left (HX1): new logic lives in `SeriesGuide.kt`; a symlinked
   `webapp/node_modules` is not git-ignored (remove it); canned TMDB for tests is in `SeriesGuideTest.kt`.
@@ -567,6 +567,32 @@ Store text, the site.
   card, Tips card, phone and TV), `TourOfferFrameTest` (Tips card focus).
   left: no phone or TV device pass; web edits are not run (no node_modules here); the `awaitingSync` skip in `SetupTest` stays
   (the Storage step lives on in Settings' Setup choices); SkipLookupTest (T10) fails in core on this branch, not touched by R3.
+- 2026-11-16 T8 done (branch worktree-agent-a5e82d7e6b5dea53d, local, not pushed): design note `design/redesign/format-badges.md` with the
+  after pictures. Core `FormatFacts` (size to 1080p/4K and so on, tolerant of crops, rotation and strips; probe to HDR10, HDR10+, HLG,
+  Dolby Vision, 10-bit, HEVC, AV1, 50+ fps, Atmos, DTS, DTS-HD, DTS:X, AAC, 7.1, 5.1, Stereo) and `FormatProbes` (256 entry LRU, filled
+  by the Media3 and mpv track lists only). UI: `FormatBadge`, `FormatBadgeRow`, `rememberFormatTags` (ui/shared/components/FormatBadge.kt),
+  not a focus stop. Shown: poster tile corner (720p and up, replaces the name chip), details row (replaces the one quality chip), Downloads
+  rows (one slot, phone and desktop), the player's audio track picker (pills under the name, phone and TV), the desktop's audio track
+  names. `FormatRoute.dolbyVisionProfile` now delegates to `FormatFacts.dolbyVisionProfile`. No new strings, no en.json change.
+  Tests: core `FormatFactsTest` (table, crops, rotated, garbage, cache bound), `GarbageInputTest.formatFactsNeverThrow`; app
+  `FormatBadgeRenderTest` (phone 1.0 and 2.0 font, TV: row, not a control, empty draws nothing, poster tile inside its picture at 2.0);
+  desktop `FormatBadgeRenderTest` (280 dp column at 1.0 and 2.0).
+  left: web poster tile (items carry no size, rules only in the worker; web details already has the outlined resolution badge);
+  probe for a file on disk without playing; no persisted probes; HDR10+ has no Android source; TrueHD Atmos not shown on Android
+  (Media3 does not say); no phone or TV device pass; the copy picker and Play's quality label still use `VideoCopies.qualityLabel`
+  (name first) so a file whose name contradicts its stated size can read two ways.
+
+### TS names and copies (worktree branch worktree-agent-a1b3fbc0ed5d93643; note `design/redesign/names-and-copies.md`)
+done (commits local, not pushed): (1) season packs: `ParsedName.pack/packSeason/seasonFrom`, `Series.packs` (`SeriesPack`),
+`EpisodeGuide.Row.Pack`, `PackRow` on the shared series page (phone, TV, desktop) and the web watch page; (2) IMDb/TMDB link in
+a name or caption (`MetaLinks`, `MetaQuery.imdbId/fromLink`, `MetaInfo.linked`, `MatchBasis.Linked`, TMDB `find` once per id,
+web worker `i=` param); (3) subtitle language from full names, native spellings and "(Latin America)" forms
+(`ChatSubtitles.tagsOf`); (4) "Why no poster?" (`PosterWhy`, `NameDiagnosis`, `PosterWhyLine`, replaces the round turn-on
+button on the three detail layouts and the web page); (5) best copy by default (`VideoCopies.bestForDevice`, phone capped at
+1080p, never a too-slow copy; `copyBest` tag "Best for this device"; no new setting).
+left: phone/TV Robolectric shots of the pack row and the poster line (desktop shots only, in the design folder); web has no
+default-copy picker, so no "Best for this device" tag there; the per-chat stored preferred copy and its Settings row (T6) were
+not built on purpose (gate rule 2); TV focus return after "Fix match" relies on the picker's own focus restore.
 
 ## Decisions made by Claude
 - T1: one shared `rememberVisitQuery` (not a patch per screen) so any later search box gets rule 3 by calling it; the phone keeps the query while a page is open (`keep = page != null`), the desktop while a category is open. No design note: small fix.
@@ -589,6 +615,10 @@ Store text, the site.
   old pages; the old pages' answers are the rows of Settings > Redo setup choices, unchanged.
 - R3: the setup asks about even one chat (Saved Messages alone gets the hint); the chat choice after an update still waits for four.
 - R3: the offline card shows after 3 s without a list and without network, so connecting after sign in does not flash it.
+- T8: 2K is labelled "1440p" (names elsewhere are "720p", "1080p"; "2K" also names the 1080p cinema format). A stated size beats the
+  name and a name only fills in when there is no size (drawn hollow, no new string); the tile pill drops "SD". The details page's outlined
+  quality chip is replaced by the format row, not kept beside it. The audio picker shows kind and layout as pills and drops the old
+  "Dolby" and channel words where a pill says them. No brand logo anywhere (licensed marks), only a generic speaker on sound pills.
 
 ## Sources
 - Search patterns: https://carbondesignsystem.com/patterns/search-pattern ,
@@ -620,3 +650,21 @@ Store text, the site.
   gated on the page); `main.connect_to_play` kept for grids and search; the web keeps its existing offline line.
 - Unrun: webapp type check and e2e (no node_modules in the worktree). Leftovers for the user on devices: real Wi-Fi off
   on the phone and the TV (first focus on the On this phone row, the banner over the bar), flaky link feel.
+
+### R2 Downloads tab + one storage page + Raju group C (worker, 2026-11-16, branch worktree-agent-a31824f7275463da6, local, not pushed)
+- Design note first: `design/redesign/downloads-tab.md` (phone, TV, desktop, web table, edge cases). Then: core `MobileData`
+  (Ask first / Never / Allow, read from `wifi_only_downloads` + `save_mobile_data` until chosen, the old Wi-Fi only key kept in
+  step, table test), Settings "Downloads and data" (Where to save, On mobile data, While streaming, Download first, Remove
+  after watching; the low space alert and Pause downloads while playing are always on, no switch), phone bar Home, Chats,
+  Search, Downloads (running count, 99+) with a gear at the top end of Home and of Downloads for your lists and Settings, the
+  TV top bar tab "Downloads" (count) after Chats, the desktop bar button with Ctrl+J, the web's Downloads page (Get the app card),
+  one list "On this phone" (auto-saved wear "Auto-saved" and Keep), Undo on cancel (`CancelWindow`, 5 s, touch only), Free up
+  space only when there is something to free, "Download paused" tile word, Raju C: lone rating letters, Watched and Watch later
+  drawn on, "Cancel" word, the live download line, size and room toast over 1 GB.
+- Decisions made by Claude: Download the whole video first stays (a behaviour, not a twin) under While streaming; the phone's
+  gear opens the old picture card without its Downloads row; the TV face menu and the desktop picture menu lose Downloads too;
+  Back from the TV Downloads page lands the remote on the page it returns to; "Ask first" only governs a streamed video (the
+  player's existing sheet), a download is the viewer's own press; cancel's Undo is touch only (a remote cannot reach a toast);
+  leaving Downloads inside the Undo window leaves the download paused, never deletes it; the desktop's auto-saved row has Watch
+  and Keep, its Delete stays in Free up space; TabSwitch now walks two or three answers.
+- Unrun: webapp e2e (no node_modules in the worktree; `tsc` on the new files was clean through a borrowed node_modules).
