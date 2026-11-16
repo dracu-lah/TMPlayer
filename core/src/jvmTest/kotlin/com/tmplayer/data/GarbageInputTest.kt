@@ -680,7 +680,17 @@ class GarbageInputTest {
             survive("OmdbApi", shown) { runBlocking { OmdbApi(http, limiter, "t").scores("k", "tt1") } }
             survive("WikidataApi", shown) { runBlocking { WikidataApi(http, limiter, "t").scores("tt1") } }
             val ani = AniListApi(http, limiter, "t")
-            survive("AniListApi", shown) { runBlocking { ani.search("q"); ani.extras("1") } }
+            survive("AniListApi", shown) { runBlocking { ani.search("q"); ani.extras("1"); ani.episodes("1") } }
+            // T11: the anime episode sources, each asked for its episodes with nonsense coming back.
+            survive("TmdbApi anime", shown) {
+                runBlocking {
+                    tmdb.showGuide("k", "1", "en")
+                    tmdb.episodeGroup("k", "g", "en")
+                    tmdb.seasons("k", "1", listOf(1, 2, 3), "en")
+                }
+            }
+            survive("KitsuApi", shown) { runBlocking { val kitsu = com.tmplayer.online.KitsuApi(http, limiter, "t"); kitsu.idFor("1"); kitsu.episodes("1", 0) } }
+            survive("JikanApi", shown) { runBlocking { com.tmplayer.online.JikanApi(http, limiter, "t").episodes("1", 1) } }
             val msone = MsoneApi(http, limiter, "t")
             survive("MsoneApi", shown) {
                 runBlocking {
