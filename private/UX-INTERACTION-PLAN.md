@@ -724,3 +724,20 @@ For each merge, in this order:
   4. A check failing twice: mark the task blocked here and leave that branch unmerged.
 - [ ] CP4 After all three: dash grep (AGENTS.md "Writing"), `git status`, `git log --oneline | head`.
 - [ ] CP5 Write the final summary for the user: what is merged, the device checklist (phone, TV, Tanix, Mi TV: Mongoose film in Save space and Keep video, Report stutter, sign out backup, TV Home card focus, offline Home), the needs-the-user list (anime-skip client id, langsync + dead keys, translations, push, beta release with the cadence guard), the LATER list (see "WRAP UP NOW"). Then STOP.
+
+### Progress / handoff: Saved Messages sync review fixes (branch worktree-agent-af29fab81473144b7, commit 6a9cda4, main merged in e99d4ea)
+- Done in 6a9cda4: all 7 findings. 1 backup confirms by updateMessageSendSucceeded/Failed by message id; 2 card moves focus up before hiding (TV focus test added, not yet run); 3 backup- upload folder deleted on any end and in forgetAccount (app and desktop); 4 SignOutSaving prompt with Sign out anyway on phone/TV; 5 scheduler job returns false for Outcome.Off, no pause started; 6 bookmark eviction leaves a removal; 7 restore clears bookmark and correction removals.
+- Run and green after the fixes: core Sync/Bookmark/Backup/Garbage/Catalog tests (SyncBookmarksCorrectionsTest 20/20); :app:compileDebugKotlin and :desktop:compileKotlin compile.
+- NOT run: full :app:testDebugUnitTest and :desktop:test (stopped), so the new KeepPlaceTest focus test and the changed ResumeSyncRowsTest/KeepPlaceTest after the fixes are unverified. No device checks.
+
+### Worker handoff: player controls (R5/G), RL10, RL11, RL12 (worktree branch worktree-agent-a98d5b6ea6412adb9)
+- RL11 + RL12 done, commit 2fd1dde (trace v2 facts/hops, TraceFacts, DecoderFacts, SessionFacts, StutterReport tags, LogReport blocks). Core and the targeted app tests passed.
+- RL10 + R5 labels/skip buttons/audio line/Back-paused test/chip reword: committed as "WIP:" (HEAD). Targeted tests passed earlier (RemedyRunnerTest, PlayerMenuTest, ControlLabelsTest, DecoderFactsTest); AudioButtonAnswerTest, BackStopsThePlayerTest and the full `com.tmplayer.player.*` run (job bzfrrij54) were NOT seen finishing.
+- Left: run that suite, catalog sorted-keys test, SeekChrome/PlayerExtras render tests, desktop unchanged (tooltips already existed). Not done: Timings/Source/Audio trace groups, dev.vendorApi dropped.
+- Decisions: skip buttons 10 s both ways (Skip.BUTTON_MS); viewer press never opens the sheet and acts once per video; UserStutter evidence added.
+
+### Test triage handoff (worktree-agent-a06f2029e76f5d0dc, 2026-11-16, local commits, not pushed)
+- Fixed: SettingsMapScreenTest (79a8136, four skip rows in SettingsMap); TvSearchTelevisionRtlRenderTest hang (dcc58a9: RTL first focus hit the clear control's tip Popup, whose frame loop never ends under the paused looper; now 8 s); NamedListsTest flake (0ed922c: best of 3 for the 1 s budget).
+- SeriesTvScrollTest: passes alone at HEAD; not seen failing, likely load or frame stall in a full run.
+- Still flaky: DownloadsSelectionKeysTest (desktop). Passes alone at HEAD and at 6ca92f2; failed 2 of 4 in the full :desktop:test run (Shift range never reached "5 selected"; focus handoff after delete). Suspect global state from another test class. Not fixed.
+- Runs done green: :core:jvmTest (3120 tests), :ui:jvmTest (296). :desktop:test: only that class failed (635 tests). Not run: full :app:testDebugUnitTest.
