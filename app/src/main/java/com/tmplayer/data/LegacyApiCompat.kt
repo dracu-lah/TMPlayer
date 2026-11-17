@@ -70,3 +70,17 @@ fun Context.hasPictureInPicture(): Boolean =
 fun videoFollowsTransforms(videoView: android.view.View?): Boolean =
     videoView is android.view.TextureView ||
         (videoView != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N)
+
+/**
+ * Whether the system has a WebView to show a page in. Some televisions ship without one, or with
+ * it disabled. Android 8 names the WebView package (`WebView.getCurrentWebViewPackage`); Android 6
+ * and 7 cannot, and the system feature is the nearest answer they give. Creating the WebView can
+ * still fail (an update in progress), so the caller catches that too.
+ */
+fun webViewInstalled(context: Context): Boolean = runCatching {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        android.webkit.WebView.getCurrentWebViewPackage() != null
+    } else {
+        context.packageManager.hasSystemFeature(PackageManager.FEATURE_WEBVIEW)
+    }
+}.getOrDefault(false)

@@ -3667,6 +3667,7 @@
     "close": "Close trailer",
     "loading": "Loading the trailer…",
     "play_pause": "Play or pause",
+    "remote_hint": "Once it plays: OK pauses or plays it, Left and Right move 10 seconds, Back closes.",
     "title": "Trailer",
     "unavailable_in_app": "This trailer cannot play here. Opening it in YouTube."
   },
