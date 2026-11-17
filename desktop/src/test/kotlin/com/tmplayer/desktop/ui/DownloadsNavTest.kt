@@ -130,6 +130,16 @@ class DownloadsNavTest {
 
     private fun button(label: String) = hasContentDescription(label) and hasClickAction()
 
+    /**
+     * The window, once its bar is up. The bar waits for Settings' "Icons only in the menu" to be
+     * read from the store, which runs off the UI thread and is not something waitForIdle knows
+     * about: on the slower macOS and Windows runners the first look found no bar yet.
+     */
+    private fun ComposeUiTest.window() {
+        setContent { Window() }
+        waitUntil(timeoutMillis = 10_000) { onAllNodes(button(L.browseTabHome)).fetchSemanticsNodes().isNotEmpty() }
+    }
+
     private fun ComposeUiTest.chord(key: Key) {
         val command = if (OsInfo.isMac) Key.MetaLeft else Key.CtrlLeft
         onNode(isFocused()).performKeyInput { withKeyDown(command) { pressKey(key) } }
@@ -139,7 +149,7 @@ class DownloadsNavTest {
     @Test
     fun `the bar has Downloads after Search, before the picture, and pressing it opens the page`() = runComposeUiTest {
         shell.go(Destination.Home)
-        setContent { Window() }
+        window()
         onNode(button(L.navDownloads)).assertExists()
         onNode(button(L.commonSearch)).assertExists()
         val search = onNode(button(L.commonSearch)).fetchSemanticsNode().boundsInRoot
@@ -164,7 +174,7 @@ class DownloadsNavTest {
         running(901)
         running(902)
         shell.go(Destination.Home)
-        setContent { Window() }
+        window()
         onNode(button("${L.navDownloads}, 2")).assertExists()
         onNode(hasTestTag(NAV_BADGE_TAG), useUnmergedTree = true).assertExists()
         onNodeWithText("2", useUnmergedTree = true).assertExists()
@@ -173,7 +183,7 @@ class DownloadsNavTest {
     @Test
     fun `no count at zero`() = runComposeUiTest {
         shell.go(Destination.Home)
-        setContent { Window() }
+        window()
         onNode(button(L.navDownloads)).assertExists()
         assertEquals(0, onAllNodes(hasTestTag(NAV_BADGE_TAG), useUnmergedTree = true).fetchSemanticsNodes().size)
     }
@@ -181,7 +191,7 @@ class DownloadsNavTest {
     @Test
     fun `Ctrl+J opens Downloads from anywhere and again closes it back to the page it came from`() = runComposeUiTest {
         shell.go(Destination.Home)
-        setContent { Window() }
+        window()
         // Something focused inside the window, as a key event needs.
         onNode(button(L.browseTabHome)).requestFocus()
         onNode(button(L.browseTabHome)).assertIsFocused()
@@ -198,7 +208,7 @@ class DownloadsNavTest {
     @Test
     fun `Ctrl+Shift+J is not Downloads`() = runComposeUiTest {
         shell.go(Destination.Home)
-        setContent { Window() }
+        window()
         onNode(button(L.browseTabHome)).requestFocus()
         val command = if (OsInfo.isMac) Key.MetaLeft else Key.CtrlLeft
         onNode(isFocused()).performKeyInput { withKeyDown(command) { withKeyDown(Key.ShiftLeft) { pressKey(Key.J) } } }
@@ -211,7 +221,7 @@ class DownloadsNavTest {
         BigScreen.layout = DesktopLayout.Desktop
         BigScreen.override = DesktopLayout.Tv
         shell.showChats(shell.chatSection)
-        setContent { Window() }
+        window()
         val chats = onNode(hasContentDescription(L.navChats) and hasClickAction())
         chats.requestFocus()
         chats.assertIsFocused()

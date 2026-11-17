@@ -208,6 +208,8 @@ tasks.withType<JavaCompile>().configureEach {
     sourceCompatibility = "17"
     targetCompatibility = "17"
 }
+// The machine's own "reduce motion" stays out of the tests (see :desktop's build).
+tasks.withType<Test>().configureEach { systemProperty("tmplayer.systemReducedMotion", "false") }
 
 // The :core models that are immutable in fact though the compiler cannot see it (the file says
 // which), so a shared screen skips over an equal copy as :app's do.

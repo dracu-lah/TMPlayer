@@ -118,6 +118,10 @@ kotlin.sourceSets.main { kotlin.srcDir(generateBuildInfo) }
 // The Android promo build's demo library (plain Kotlin over :core), for the desktop's promo shots.
 kotlin.sourceSets.test { kotlin.srcDir("../app/src/promo/shared") }
 
+// The tests ask for less motion themselves (Motion.reduced); the machine's own setting stays out
+// of them, since the macOS and Windows CI runners have animations off and Linux has none.
+tasks.withType<Test>().configureEach { systemProperty("tmplayer.systemReducedMotion", "false") }
+
 val hostOs: String = System.getProperty("os.name").lowercase()
 val hostArm: Boolean = System.getProperty("os.arch").let { it == "aarch64" || it == "arm64" }
 val hostMac: Boolean = hostOs.contains("mac")

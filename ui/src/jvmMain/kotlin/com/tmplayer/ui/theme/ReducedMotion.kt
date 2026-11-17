@@ -13,13 +13,29 @@ import java.util.concurrent.TimeUnit
 fun rememberReducedMotion(): Boolean = SystemMotion.reduced.value
 
 private object SystemMotion {
+    /**
+     * The JVM property ("true" or "false") that answers in place of the desktop. The tests set it
+     * to false, so a check that a knob slides gives one answer on every machine: the macOS and
+     * Windows CI runners have their animations off, and the knob snapped there (2026-11-17).
+     */
+    private const val OVERRIDE = "tmplayer.systemReducedMotion"
+
+    /**
+     * Read at once rather than on the thread: the first read is in a composition, and an answer
+     * that lands before that composition's snapshot is applied is lost (a thread that answered in
+     * no time left this false).
+     */
+    private val forced: Boolean? = System.getProperty(OVERRIDE)?.toBooleanStrictOrNull()
+
     /** False (moving) until the answer is in, then whatever the desktop said. */
-    val reduced = androidx.compose.runtime.mutableStateOf(false)
+    val reduced = androidx.compose.runtime.mutableStateOf(forced ?: false)
 
     init {
-        Thread({ reduced.value = runCatching { ask() }.getOrDefault(false) }, "system-motion")
-            .apply { isDaemon = true }
-            .start()
+        if (forced == null) {
+            Thread({ reduced.value = runCatching { ask() }.getOrDefault(false) }, "system-motion")
+                .apply { isDaemon = true }
+                .start()
+        }
     }
 
     private fun ask(): Boolean {
