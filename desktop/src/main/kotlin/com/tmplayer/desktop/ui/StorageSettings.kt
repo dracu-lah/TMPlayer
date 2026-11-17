@@ -144,6 +144,7 @@ internal fun StorageGroup(state: ShellState, jumps: Map<com.tmplayer.ui.onboardi
         when {
             moving != null -> s.storageMovingProgress(StorageRelocationPlan.size(moving!!.doneBytes), StorageRelocationPlan.size(moving!!.totalBytes))
             busy != null -> busy!!
+            root != null && DesktopPaths.unusableRoot?.path == root.path -> s.storageLocationUnavailable(StorageRelocationPlan.appFolder(root).path)
             root != null -> StorageRelocationPlan.appFolder(root).path
             else -> s.storageDefaultFolders(DesktopPaths.layout(null).downloadsDir.path)
         },

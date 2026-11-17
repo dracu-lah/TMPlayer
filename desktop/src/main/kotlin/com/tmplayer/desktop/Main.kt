@@ -125,6 +125,9 @@ fun main(args: Array<String>) {
         // database no longer waits behind. A failure in it is caught and shown at sign in, and
         // [DesktopCrashReports.watch] above already writes down anything uncaught.
         Td.start(DesktopPaths, desktopDeviceInfo(), desktopCredentials())
+        DesktopPaths.unusableRoot?.let {
+            com.tmplayer.platform.Logger.w("Main", "storage location ${it.path} cannot be used now; this run uses the default folders")
+        }
         // The crash reports switch next, so whatever fails from here on can be reported, and a
         // crash left from the last run is sent or asked about before anything else is built.
         DesktopCrashReports.launch(DesktopServices.settings)

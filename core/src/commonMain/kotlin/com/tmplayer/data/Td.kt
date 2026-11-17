@@ -388,22 +388,19 @@ object Td {
                 _connected.value = false
                 // A class whose static set up failed once answers every later use with a bare
                 // NoClassDefFoundError; the first failure is the one that says what went wrong.
-                val reason = startFailure.takeIf { e is NoClassDefFoundError } ?: describe(e)
+                // The sentence is chosen in one place, StartFailures: Windows blocking the DLL, a
+                // Linux older than the library, or the raw reason for anything not known yet.
+                val reason = startFailure.takeIf { e is NoClassDefFoundError } ?: StartFailures.describe(e)
                 if (startFailure == null) startFailure = reason
                 val retry = CompletableDeferred<Unit>()
                 clientRetry = retry
-                _auth.value = AuthState.Failed(L.errorsStartFailed(reason))
+                _auth.value = AuthState.Failed(reason)
                 retry.await()
                 clientRetry = null
                 _auth.value = AuthState.Connecting
             }
         }
     }
-
-    /** The first message in [error]'s chain of causes, or its class name when none has one. */
-    private fun describe(error: Throwable): String =
-        generateSequence(error) { it.cause }.firstNotNullOfOrNull { it.message?.takeIf(String::isNotBlank) }
-            ?: error::class.simpleName.orEmpty()
 
     /**
      * Closes the client and starts a new one over [newPaths], keeping the viewer signed in.
@@ -912,7 +909,8 @@ object Td {
             applicationVersion = device.appVersion,
         )
         if (result is TdlResult.Failure) {
-            _auth.value = AuthState.Failed(L.errorsStartRejected(result.message))
+            Logger.w(TAG, "TDLib refused its parameters: ${result.message}")
+            _auth.value = AuthState.Failed(StartFailures.describeRejected(result.message))
             return
         }
         // Both are answered from TDLib's own database, so they work with no line to Telegram:

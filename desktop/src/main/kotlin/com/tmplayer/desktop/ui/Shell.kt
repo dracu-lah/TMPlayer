@@ -394,6 +394,11 @@ private fun Browse(state: ShellState, player: PlayerContent) {
         ) { forgotten -> toast(com.tmplayer.data.GoneVideos.message(forgotten)) }
     }
     LaunchedEffect(Unit) { state.notices.collect { toast(it) } }
+    // The chosen storage location could not be used at launch, so this run is on the default
+    // folders (#35): said once per run, the first time the window is up.
+    LaunchedEffect(Unit) {
+        com.tmplayer.desktop.DesktopPaths.takeUnusableRootNotice()?.let { toast(s.storageUnreachableAtStart(it.path)) }
+    }
 
     // The offline card, and the refresh once both the network and Telegram are back.
     val browseScope = rememberCoroutineScope()

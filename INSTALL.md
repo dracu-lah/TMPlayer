@@ -209,11 +209,13 @@ The release page shows each file's SHA-256 beside it. Check a download with `sha
 it. It is not code signed yet, so SmartScreen says **Windows protected your PC**: click
 **More info**, then **Run anyway**. Then click through the installer.
 
-If a video then opens on **Windows blocked the video engine**, Smart App Control or an
-Application Control policy refused TMPlayer's unsigned video library. Open **Windows Security,
-App and browser control, Smart App Control** and set it to **Off** (Windows lets it be turned back
-on only by reinstalling), or ask whoever manages the computer to allow `%LOCALAPPDATA%\TMPlayer`.
-Then restart TMPlayer.
+If sign in stops on **Windows blocked TMPlayer's connection to Telegram**, or a video opens on
+**Windows blocked the video engine**, Smart App Control or an Application Control policy refused
+one of TMPlayer's unsigned libraries. Open **Windows Security, App and browser control, Smart App
+Control** and set it to **Off** (Windows lets it be turned back on only by reinstalling), or ask
+whoever manages the computer to allow TMPlayer's files (the video library is unpacked to
+`%LOCALAPPDATA%\TMPlayer`, the Telegram library to a `windows-x64` folder in `%TEMP%`). Then
+restart TMPlayer.
 
 Either way it installs for your user only, into your own profile, so it never asks for an
 administrator password. A newer version installs over it in place; your sign-in, history and
@@ -245,7 +247,10 @@ user Library and are kept. To remove TMPlayer, drag it from Applications to the 
 ## Linux
 
 64-bit x86 only for now, and a 2024 or newer system (glibc 2.38): Ubuntu 24.04, Debian 13, Linux
-Mint 22, Fedora 39, openSUSE Tumbleweed, RHEL 10, Arch, or anything newer.
+Mint 22, Fedora 39, openSUSE Tumbleweed, RHEL 10, Arch, or anything newer. On an older one
+(Ubuntu 22.04, Pop!_OS 22.04, Mint 21, Debian 12) sign in stops on **This Linux is older than
+TMPlayer needs**: the Telegram library and the video engine TMPlayer bundles were built against
+glibc 2.38, which an app cannot bring with it. Upgrade the system to one of the releases above.
 
 1. Download `TMPlayer-<version>-x86_64.AppImage`. One file, for any distribution.
 2. Make it executable and open it:
