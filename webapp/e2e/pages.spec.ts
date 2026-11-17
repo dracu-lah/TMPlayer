@@ -222,6 +222,13 @@ test.describe('sign in', () => {
             const alt = await page.getByRole('button', { name: 'Scan a QR code instead' }).boundingBox()
             expect(alt!.width).toBeGreaterThan(300)
         })
+
+        test('the country row shows the calling code as a chip once there is one', async ({ page }) => {
+            await page.goto('/signin')
+            await expect(page.locator('.country-row .dial-chip')).toHaveCount(0)
+            await page.getByLabel('Code', { exact: true }).fill('91')
+            await expect(page.locator('.country-row .dial-chip')).toHaveText('+91')
+        })
     })
 })
 

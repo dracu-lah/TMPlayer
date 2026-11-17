@@ -596,6 +596,9 @@ html[data-form=tv] .panel .set-block-title { font-size: calc(var(--dp) * 16); li
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-m); text-align: left;
 }
 .country-row.invalid { color: var(--error); }
+.country-trail { display: inline-flex; align-items: center; gap: 8px; flex: none; }
+.dial-chip { color: var(--muted); font-variant-numeric: tabular-nums; }
+.resend-none { margin: 0; text-align: center; }
 .phone-row { display: grid; grid-template-columns: 96px 1fr; gap: 8px; }
 .dial { position: relative; display: block; }
 .dial span { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); font-size: 16px; color: var(--muted); pointer-events: none; }

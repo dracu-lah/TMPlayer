@@ -155,3 +155,14 @@ export function regionOf(tags: readonly string[]): string {
     }
     return ''
 }
+
+/** The calling code as the sign in shows it beside the country ("+91"), SignInWords.dialChip; null while there is none. */
+export function dialChip(dial: string): string | null {
+    const d = digits(dial)
+    return d ? `+${d}` : null
+}
+
+/** Whether Telegram offers another way to send this code (AuthState.Code.canResend); an email code can always be asked again. */
+export function canResend(sent: { next: string; type: string }): boolean {
+    return sent.next !== 'none' || sent.type === 'email'
+}
