@@ -36,3 +36,11 @@ fun Modifier.dpadLeavesField(): Modifier {
         }
     }
 }
+
+/**
+ * [dpadLeavesField] on a television only: a phone or desktop keyboard's arrows move the cursor in
+ * the field, so there they must stay with the field.
+ */
+@Composable
+fun Modifier.dpadLeavesFieldOnTv(): Modifier =
+    if (isTouch()) this else dpadLeavesField()

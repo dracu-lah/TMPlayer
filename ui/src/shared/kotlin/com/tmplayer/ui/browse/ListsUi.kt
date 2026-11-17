@@ -31,6 +31,7 @@ import com.tmplayer.data.WatchLaterRecord
 import com.tmplayer.i18n.Messages
 import com.tmplayer.platform.Background
 import com.tmplayer.ui.components.TmAlertDialog
+import com.tmplayer.ui.components.dpadLeavesFieldOnTv
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.icons.TmIcons
 import kotlinx.coroutines.CancellationException
@@ -201,21 +202,28 @@ fun ListNameDialog(title: String, initial: String, confirm: String, onSave: (Str
         title = { Text(title, maxLines = 2) },
         text = {
             Column {
-                OutlinedTextField(
-                    value = text,
-                    // A paste of a whole page stops at the cap, rather than filling the field.
-                    onValueChange = { text = it.take(NamedListRules.NAME_MAX) },
-                    singleLine = true,
-                    label = { Text(s.listsName) },
-                    supportingText = { Text(s.listsNameHint, style = MaterialTheme.typography.bodySmall) },
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = { save() }),
-                    modifier = Modifier.fillMaxWidth().focusRequester(focus).testTag(LIST_NAME_TAG),
-                )
+                ListNameField(text, onChange = { text = it }, onDone = { save() }, modifier = Modifier.focusRequester(focus))
             }
         },
         confirmButton = { TextButton(onClick = { save() }, enabled = clean != null) { Text(confirm) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(s.commonCancel) } },
+    )
+}
+
+/** The name box of [ListNameDialog]; a television's remote leaves it with the arrows. */
+@Composable
+fun ListNameField(text: String, onChange: (String) -> Unit, onDone: () -> Unit, modifier: Modifier = Modifier) {
+    val s = LocalStrings.current
+    OutlinedTextField(
+        value = text,
+        // A paste of a whole page stops at the cap, rather than filling the field.
+        onValueChange = { onChange(it.take(NamedListRules.NAME_MAX)) },
+        singleLine = true,
+        label = { Text(s.listsName) },
+        supportingText = { Text(s.listsNameHint, style = MaterialTheme.typography.bodySmall) },
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+        keyboardActions = KeyboardActions(onDone = { onDone() }),
+        modifier = modifier.fillMaxWidth().dpadLeavesFieldOnTv().testTag(LIST_NAME_TAG),
     )
 }
 

@@ -44,6 +44,8 @@ import androidx.compose.ui.unit.dp
 import com.tmplayer.data.Country
 import com.tmplayer.data.PhoneCountries
 import com.tmplayer.data.from
+import androidx.compose.ui.platform.testTag
+import com.tmplayer.ui.components.dpadLeavesFieldOnTv
 import com.tmplayer.ui.components.isTouch
 import com.tmplayer.ui.theme.Tone
 
@@ -123,7 +125,9 @@ fun CountryPicker(
                 shape = MaterialTheme.shapes.medium,
                 modifier = column
                     .padding(horizontal = SIDE, vertical = 8.dp)
-                    .focusRequester(search),
+                    .focusRequester(search)
+                    .dpadLeavesFieldOnTv()
+                    .testTag(COUNTRY_SEARCH_TAG),
             )
 
             if (shown.isEmpty()) {
@@ -179,3 +183,6 @@ fun rememberSignInCountries(): List<Country> {
     }
     return countries
 }
+
+/** Test tag of the country picker's search box. */
+const val COUNTRY_SEARCH_TAG = "country-search"

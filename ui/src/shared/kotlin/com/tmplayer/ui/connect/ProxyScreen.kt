@@ -50,7 +50,9 @@ import com.tmplayer.data.ProxyLinks
 import com.tmplayer.data.ProxySpec
 import com.tmplayer.data.Td
 import com.tmplayer.i18n.Messages
+import androidx.compose.ui.platform.testTag
 import com.tmplayer.ui.components.deviceForm
+import com.tmplayer.ui.components.dpadLeavesFieldOnTv
 import com.tmplayer.ui.components.liveMessage
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.icons.TmIcons
@@ -167,17 +169,13 @@ fun ProxyScreen(onClose: () -> Unit, modifier: Modifier = Modifier) {
                 val spec = ProxyLinks.parse(link)
                 if (spec == null) linkError = s.proxyLinkInvalid else add(spec) { link = "" }
             }
-            OutlinedTextField(
-                value = link,
-                onValueChange = { link = it; linkError = null },
-                label = { Text(s.proxyLinkLabel) },
-                placeholder = { Text("https://t.me/proxy?server=…") }, // i18n-ok: a link, the same in every language
-                singleLine = true,
-                isError = linkError != null,
-                supportingText = linkError?.let { { Text(it) } },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = { submitLink() }),
-                modifier = Modifier.fillMaxWidth().focusRequester(linkFocus),
+            ProxyLinkField(
+                link = link,
+                onChange = { link = it; linkError = null },
+                error = linkError,
+                onSubmit = { submitLink() },
+                s = s,
+                modifier = Modifier.focusRequester(linkFocus),
             )
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                 SetupButton(if (busy) s.proxyPinging else s.proxyAdd, primary = true, onClick = submitLink)
@@ -245,9 +243,33 @@ private fun ProxyRow(
     }
 }
 
+/** The box a proxy link is pasted into; a television's remote leaves it with the arrows. */
+@Composable
+fun ProxyLinkField(
+    link: String,
+    onChange: (String) -> Unit,
+    error: String?,
+    onSubmit: () -> Unit,
+    s: Messages,
+    modifier: Modifier = Modifier,
+) {
+    OutlinedTextField(
+        value = link,
+        onValueChange = onChange,
+        label = { Text(s.proxyLinkLabel) },
+        placeholder = { Text("https://t.me/proxy?server=…") }, // i18n-ok: a link, the same in every language
+        singleLine = true,
+        isError = error != null,
+        supportingText = error?.let { { Text(it) } },
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Done),
+        keyboardActions = KeyboardActions(onDone = { onSubmit() }),
+        modifier = modifier.fillMaxWidth().dpadLeavesFieldOnTv().testTag(PROXY_LINK_TAG),
+    )
+}
+
 /** The fields of a proxy typed in by hand, with the kind picked first so only its fields show. */
 @Composable
-private fun ManualProxy(busy: Boolean, onAdd: (ProxySpec) -> Unit, s: Messages) {
+fun ManualProxy(busy: Boolean, onAdd: (ProxySpec) -> Unit, s: Messages) {
     var kind by remember { mutableStateOf(ProxyKind.Mtproto) }
     var server by remember { mutableStateOf("") }
     var port by remember { mutableStateOf("") }
@@ -270,7 +292,7 @@ private fun ManualProxy(busy: Boolean, onAdd: (ProxySpec) -> Unit, s: Messages) 
                 visualTransformation = if (masked) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
                 // Next between the fields and Done on the last; no autocorrect on an address or a secret.
                 keyboardOptions = KeyboardOptions(keyboardType = type, imeAction = ime, autoCorrectEnabled = false),
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().dpadLeavesFieldOnTv().testTag(PROXY_FIELD_TAG + label),
             )
         }
         field(s.proxyServer, server, KeyboardType.Uri, false, ImeAction.Next) { server = it.trim() }
@@ -308,3 +330,7 @@ object ProxyScreenState {
 fun ProxyScreenHost(modifier: Modifier = Modifier) {
     if (ProxyScreenState.open) ProxyScreen(onClose = { ProxyScreenState.open = false }, modifier = modifier)
 }
+
+/** Test tag of the proxy link box, and the prefix of each manual field's tag (plus its label). */
+const val PROXY_LINK_TAG = "proxy-link"
+const val PROXY_FIELD_TAG = "proxy-field:"
