@@ -245,6 +245,7 @@ in a release yet: keep this table in step with the code when it ships.
 | Stutter diagnostics | could-not-keep-up card with codec, decoder, dropped frames and whether the video streamed | the same card | none yet | none | none |
 | Logs and upload | Send logs shares a scrubbed file; crash reports go to Sentry only when the viewer agrees; nothing is uploaded on its own | saves the file to the Download folder (no share sheet on every TV) | saves the file | none | none |
 | Filters | Quiet loud scenes (night mode), Volume boost, audio delay | the same | the same, through mpv's filters | none | none |
+| Trailers | `TrailerOpener` (`ui/shared`, provided through `LocalTrailerOpener`) plays a trailer in YouTube's embed (youtube-nocookie.com) in a WebView player (`app/.../ui/trailer/`); iPhone and iPad: `docs/IOS.md` | the same, full screen, driven by the remote | `desktop/.../trailer/`: Chromium by JCEF, downloaded once with consent | `webapp/src/ui/TrailerSheet.tsx`, an iframe | none |
 | Archives and pieces | stored ZIPs and pieces play; other archives are listed greyed with the reason | the same | the same | the same, read in the browser | none |
 | Audio files | none: videos only, music, audio files and voice messages are never listed (`VideosOnlyTest`); a video's sound plays on with the screen off when that setting is on | none | none | none | none |
 

@@ -165,6 +165,12 @@ What the form says once crash reports are asked at first run (S1) and carry the 
 - **Deletion:** users can ask by email (hello@tmplayer.org), as the privacy page says.
 - If the opt-out default in [crash-consent.md](crash-consent.md) is ever turned on, "optional"
   still holds, but the form and the privacy page change together, in the same release.
+- **Trailers (2026-11-17):** a trailer plays in YouTube's own embedded player
+  (youtube-nocookie.com) in a WebView, loaded only after the viewer opens one; the developer
+  receives nothing from it. YouTube sees the device's IP address and the video id like any
+  embedded player, and sets its own cookies. The privacy page says so (Services TMPlayer
+  contacts, YouTube). Not checked against Play's wording for embedded third party content: read
+  the form's questions on third party data collection before the next submission.
 
 ## Developer verification (also for the GitHub APK)
 
