@@ -58,4 +58,26 @@ class WebVttTest {
     fun `stamps hours past ten`() {
         assertEquals("10:00:00.001", WebVtt.stamp(36_000_001))
     }
+
+    @Test
+    fun `a cue with a 25 digit number is skipped and the valid cues stay`() {
+        val big = "1".repeat(25)
+        val srt = "1\n00:00:01,000 --> 00:00:02,000\nOne\n\n" +
+            "2\n$big:00:01,000 --> 00:00:02,000\nBad hours\n\n" +
+            "3\n00:00:03,000 --> 00:00:04,000\nThree\n"
+        assertEquals(listOf("One", "Three"), WebVtt.parseSrt(srt).map { it.text })
+
+        val vtt = "WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nOne\n\n" +
+            "$big:00:01.000 --> 00:00:02.000\nBad hours\n\n" +
+            "00:00:03.000 --> $big:00:04.000\nBad end\n\n" +
+            "00:00:05.000 --> 00:00:06.000\nThree\n"
+        assertEquals(listOf("One", "Three"), WebVtt.parseVtt(vtt).map { it.text })
+    }
+
+    @Test
+    fun `non ascii digits in a time drop the cue and nothing throws`() {
+        val arabic = "٠١"
+        val vtt = "WEBVTT\n\n00:$arabic:01.000 --> 00:00:02.000\nBad\n\n00:00:03.000 --> 00:00:04.000\nGood\n"
+        assertEquals(listOf("Good"), WebVtt.parseVtt(vtt).map { it.text })
+    }
 }

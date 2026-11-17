@@ -76,4 +76,18 @@ class ExternalSubtitleTest {
         val srt = ExternalSubtitle.microDvdToSrt("{1}{1}50\n{50}{100}Hi\n", fps = 25.0)
         assertEquals("1\n00:00:01,000 --> 00:00:02,000\nHi\n\n", srt)
     }
+
+    @Test
+    fun `a cue with an absurdly long frame number is skipped and the rest stay`() {
+        val big = "9".repeat(25)
+        val text = "{25}{50}One\n{$big}{50}Bad start\n{75}{$big}Bad end\n{75}{100}Two\n"
+        val srt = ExternalSubtitle.microDvdToSrt(text, fps = 25.0)
+        assertEquals(
+            "1\n00:00:01,000 --> 00:00:02,000\nOne\n\n" +
+                "2\n00:00:03,000 --> 00:00:04,000\nTwo\n\n",
+            srt,
+        )
+        assertEquals("", ExternalSubtitle.microDvdToSrt("{$big}{$big}x", fps = 25.0))
+        assertTrue(ExternalSubtitle.isMicroDvd("{25}{50}One"))
+    }
 }
