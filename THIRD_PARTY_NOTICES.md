@@ -151,7 +151,12 @@ they need:
 | libva | not shipped | 2.20.0 | MIT |
 | libxcb (dri3), libXext, libXfixes, libXpresent, libXrandr, libXrender, libXss | not shipped | Ubuntu 24.04 versions | MIT |
 
-The Windows libraries are MSYS2 UCRT64 packages and the Linux ones Ubuntu 24.04 packages; mpv,
+The Windows libraries are MSYS2 UCRT64 packages and the Linux ones Ubuntu 24.04 packages, except
+that the Linux build runs on glibc 2.35 (Ubuntu 22.04 and newer) and so carries rebuilt TDLib and
+mpv libraries: TDLib, libmpv, libass, libcrypto, libglib-2.0, libharfbuzz, libplacebo, libva and
+mediamp's libmediampv, built from the same sources on Ubuntu 22.04. Their recipes are under
+`natives/` and in `scripts/build-tdlib-linux.sh` and `scripts/build-mpv-linux-2-35.sh`
+(`natives/mpv-linux/README.md` has the corresponding source statement). mpv,
 FFmpeg and dav1d are built from source by mediamp. The corresponding source of every row, with the
 exact package versions, MSYS2's and Ubuntu's patches and mediamp's build scripts, is one archive,
 `mediamp-corresponding-source-0.5.2.tar.gz`, linked as "mediamp source" from every TMPlayer release's

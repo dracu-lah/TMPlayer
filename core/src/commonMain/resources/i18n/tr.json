@@ -872,7 +872,7 @@
     "start_folder": "TMPlayer {folder} klasörünü oluşturamadı. Sürücü takılı olmayabilir, dolu olabilir ya da salt okunur olabilir. Sürücüyü bağla veya biraz yer aç, sonra Tekrar dene'ye bas.",
     "start_folder_unnamed": "TMPlayer klasörlerinden birini oluşturamadı. Sürücü takılı olmayabilir, dolu olabilir ya da salt okunur olabilir. Sürücüyü bağla veya biraz yer aç, sonra Tekrar dene'ye bas.",
     "start_rejected": "TMPlayer, Telegram bağlantısını kuramadı. Günlükleri gönder, biz bakalım. Ayrıntılar: {message}",
-    "start_system_too_old": "Bu Linux, TMPlayer'ın ihtiyaç duyduğundan eski. TMPlayer 2024 veya daha yeni sistemlerde çalışır (glibc 2.38): Ubuntu 24.04, Debian 13, Linux Mint 22, Fedora 39 veya daha yenisi. Sistemi güncelle, sonra TMPlayer'ı yeniden aç. Yardım: tmplayer.org/install",
+    "start_system_too_old": "Bu Linux, TMPlayer'ın ihtiyaç duyduğundan eski. TMPlayer 2022 veya daha yeni sistemlerde çalışır (glibc 2.35): Ubuntu 22.04, Debian 12, Linux Mint 21, Fedora 36 veya daha yenisi. Sistemi güncelle, sonra TMPlayer'ı yeniden aç. Yardım: tmplayer.org/install",
     "tdlib_parameters": "TDLib parametrelerini reddetti: {message}",
     "tdlib_unavailable": "TMPlayer'ın Telegram ile konuşan parçası TDLib bu cihazda başlatılamadı. Lütfen şu mesajla bildir: {message}",
     "unsupported_sign_in_step": "Bu hesap, TMPlayer'ın yapamadığı bir adım gerektiriyor. Önce Telegram uygulamasında oturum açmayı tamamla, sonra tekrar dene.",

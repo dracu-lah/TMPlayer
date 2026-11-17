@@ -872,7 +872,7 @@
     "start_folder": "TMPlayer 无法创建其文件夹 {folder}。驱动器可能已断开、已满或为只读。请连接驱动器或释放一些空间，然后点按“再试一次”。",
     "start_folder_unnamed": "TMPlayer 无法创建其某个文件夹。驱动器可能已断开、已满或为只读。请连接驱动器或释放一些空间，然后点按“再试一次”。",
     "start_rejected": "TMPlayer 无法建立与 Telegram 的连接。请发送日志，我们会来查看。详情：{message}",
-    "start_system_too_old": "这个 Linux 版本低于 TMPlayer 的要求。TMPlayer 可在 2024 年或更新的系统（glibc 2.38）上运行：Ubuntu 24.04、Debian 13、Linux Mint 22、Fedora 39 或更新版本。请更新系统，然后重新打开 TMPlayer。帮助：tmplayer.org/install",
+    "start_system_too_old": "这个 Linux 版本低于 TMPlayer 的要求。TMPlayer 可在 2022 年或更新的系统（glibc 2.35）上运行：Ubuntu 22.04、Debian 12、Linux Mint 21、Fedora 36 或更新版本。请更新系统，然后重新打开 TMPlayer。帮助：tmplayer.org/install",
     "tdlib_parameters": "TDLib 拒绝了其参数：{message}",
     "tdlib_unavailable": "TDLib（TMPlayer 中与 Telegram 通信的部分）无法在此设备上启动。请附上以下信息报告此问题：{message}",
     "unsupported_sign_in_step": "此账号需要 TMPlayer 无法完成的一个步骤。请先在 Telegram 应用中完成登录，然后再试。",

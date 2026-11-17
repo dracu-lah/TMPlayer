@@ -872,7 +872,7 @@
     "start_folder": "TMPlayer nie mógł utworzyć swojego folderu {folder}. Dysk może być odłączony, pełny albo tylko do odczytu. Podłącz dysk lub zwolnij miejsce, a potem naciśnij Spróbuj ponownie.",
     "start_folder_unnamed": "TMPlayer nie mógł utworzyć jednego ze swoich folderów. Dysk może być odłączony, pełny albo tylko do odczytu. Podłącz dysk lub zwolnij miejsce, a potem naciśnij Spróbuj ponownie.",
     "start_rejected": "TMPlayer nie mógł skonfigurować połączenia z Telegramem. Wyślij logi, a się tym zajmiemy. Szczegóły: {message}",
-    "start_system_too_old": "Ten Linux jest starszy, niż wymaga TMPlayer. TMPlayer działa na systemach z 2024 roku lub nowszych (glibc 2.38): Ubuntu 24.04, Debian 13, Linux Mint 22, Fedora 39 lub nowszych. Zaktualizuj system, a potem otwórz TMPlayer ponownie. Pomoc: tmplayer.org/install",
+    "start_system_too_old": "Ten Linux jest starszy, niż wymaga TMPlayer. TMPlayer działa na systemach z 2022 roku lub nowszych (glibc 2.35): Ubuntu 22.04, Debian 12, Linux Mint 21, Fedora 36 lub nowszych. Zaktualizuj system, a potem otwórz TMPlayer ponownie. Pomoc: tmplayer.org/install",
     "tdlib_parameters": "TDLib odrzucił parametry: {message}",
     "tdlib_unavailable": "TDLib, część TMPlayera, która rozmawia z Telegramem, nie mogła się uruchomić na tym urządzeniu. Zgłoś to, dołączając komunikat: {message}",
     "unsupported_sign_in_step": "To konto wymaga kroku, którego TMPlayer nie obsługuje. Najpierw dokończ logowanie w aplikacji Telegram, potem spróbuj ponownie.",

@@ -49,7 +49,7 @@ No messages, no server, no account except yours.
 - **Android 6.0 and up**, TV and phone from the same APK. It was built and tested on an 8 GB TV
   stick with a gigabyte of RAM, so a cheap device is the target.
 - **Windows 10 and 11**, 64-bit, as an MSI installer.
-- **Linux**, 64-bit x86 with glibc 2.38 or newer, as an AppImage, with an Arch PKGBUILD in
+- **Linux**, 64-bit x86 with glibc 2.35 or newer, as an AppImage, with an Arch PKGBUILD in
   [desktop/packaging/aur](desktop/packaging/aur).
 - **macOS 26 Tahoe or newer** on Apple Silicon (M1 and later), as a DMG. It is not notarized by
   Apple yet, and Intel Macs are not supported.

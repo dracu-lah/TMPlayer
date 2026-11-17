@@ -872,7 +872,7 @@
     "start_folder": "TMPlayer konnte seinen Ordner {folder} nicht anlegen. Das Laufwerk ist vielleicht nicht angeschlossen, voll oder schreibgeschützt. Schließe das Laufwerk an oder gib Speicherplatz frei und drücke dann Erneut versuchen.",
     "start_folder_unnamed": "TMPlayer konnte einen seiner Ordner nicht anlegen. Das Laufwerk ist vielleicht nicht angeschlossen, voll oder schreibgeschützt. Schließe das Laufwerk an oder gib Speicherplatz frei und drücke dann Erneut versuchen.",
     "start_rejected": "TMPlayer konnte seine Verbindung zu Telegram nicht einrichten. Sende Protokolle, dann sehen wir es uns an. Details: {message}",
-    "start_system_too_old": "Dieses Linux ist älter, als TMPlayer braucht. TMPlayer läuft auf Systemen von 2024 oder neuer (glibc 2.38): Ubuntu 24.04, Debian 13, Linux Mint 22, Fedora 39 oder neuer. Aktualisiere das System und öffne TMPlayer dann erneut. Hilfe: tmplayer.org/install",
+    "start_system_too_old": "Dieses Linux ist älter, als TMPlayer braucht. TMPlayer läuft auf Systemen von 2022 oder neuer (glibc 2.35): Ubuntu 22.04, Debian 12, Linux Mint 21, Fedora 36 oder neuer. Aktualisiere das System und öffne TMPlayer dann erneut. Hilfe: tmplayer.org/install",
     "tdlib_parameters": "TDLib hat seine Parameter abgelehnt: {message}",
     "tdlib_unavailable": "TDLib, der Teil von TMPlayer, der mit Telegram spricht, konnte auf diesem Gerät nicht starten. Bitte melde das mit dieser Meldung: {message}",
     "unsupported_sign_in_step": "Dieses Konto braucht einen Schritt, den TMPlayer nicht ausführen kann. Schließe die Anmeldung zuerst in der Telegram-App ab und versuche es dann erneut.",

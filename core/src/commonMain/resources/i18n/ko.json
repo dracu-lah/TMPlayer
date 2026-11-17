@@ -872,7 +872,7 @@
     "start_folder": "TMPlayer가 {folder} 폴더를 만들지 못했어요. 드라이브가 연결되어 있지 않거나, 가득 찼거나, 읽기 전용일 수 있어요. 드라이브를 연결하거나 공간을 확보한 다음 다시 시도를 누르세요.",
     "start_folder_unnamed": "TMPlayer가 폴더 중 하나를 만들지 못했어요. 드라이브가 연결되어 있지 않거나, 가득 찼거나, 읽기 전용일 수 있어요. 드라이브를 연결하거나 공간을 확보한 다음 다시 시도를 누르세요.",
     "start_rejected": "TMPlayer가 Telegram 연결을 설정하지 못했어요. 로그를 보내 주시면 살펴볼게요. 자세한 내용: {message}",
-    "start_system_too_old": "이 Linux는 TMPlayer가 필요로 하는 버전보다 오래됐어요. TMPlayer는 2024년 이후 시스템(glibc 2.38)에서 실행돼요: Ubuntu 24.04, Debian 13, Linux Mint 22, Fedora 39 이상. 시스템을 업데이트한 다음 TMPlayer를 다시 여세요. 도움말: tmplayer.org/install",
+    "start_system_too_old": "이 Linux는 TMPlayer가 필요로 하는 버전보다 오래됐어요. TMPlayer는 2022년 이후 시스템(glibc 2.35)에서 실행돼요: Ubuntu 22.04, Debian 12, Linux Mint 21, Fedora 36 이상. 시스템을 업데이트한 다음 TMPlayer를 다시 여세요. 도움말: tmplayer.org/install",
     "tdlib_parameters": "TDLib에서 매개변수를 거부했어요: {message}",
     "tdlib_unavailable": "Telegram과 통신하는 TMPlayer의 구성 요소 TDLib을 이 기기에서 시작하지 못했어요. 다음 메시지와 함께 알려 주세요: {message}",
     "unsupported_sign_in_step": "이 계정에는 TMPlayer가 처리할 수 없는 단계가 필요해요. 먼저 Telegram 앱에서 로그인을 마친 다음 다시 시도해 주세요.",

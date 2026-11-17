@@ -246,11 +246,11 @@ user Library and are kept. To remove TMPlayer, drag it from Applications to the 
 
 ## Linux
 
-64-bit x86 only for now, and a 2024 or newer system (glibc 2.38): Ubuntu 24.04, Debian 13, Linux
-Mint 22, Fedora 39, openSUSE Tumbleweed, RHEL 10, Arch, or anything newer. On an older one
-(Ubuntu 22.04, Pop!_OS 22.04, Mint 21, Debian 12) sign in stops on **This Linux is older than
-TMPlayer needs**: the Telegram library and the video engine TMPlayer bundles were built against
-glibc 2.38, which an app cannot bring with it. Upgrade the system to one of the releases above.
+64-bit x86 only for now, and a 2022 or newer system (glibc 2.35): Ubuntu 22.04, Debian 12,
+Linux Mint 21, Fedora 36, openSUSE Tumbleweed, RHEL 10, Arch, or anything newer. On an older one
+(Ubuntu 20.04, Pop!_OS 20.04, Mint 20, Debian 11) sign in stops on **This Linux is older
+than TMPlayer needs**: the Telegram library and the video engine TMPlayer bundles were built against
+glibc 2.35, which an app cannot bring with it. Upgrade the system to one of the releases above.
 
 1. Download `TMPlayer-<version>-x86_64.AppImage`. One file, for any distribution.
 2. Make it executable and open it:

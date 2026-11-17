@@ -872,7 +872,7 @@
     "start_folder": "TMPlayer अपना फ़ोल्डर {folder} नहीं बना सका। हो सकता है ड्राइव निकली हुई हो, भरी हो या सिर्फ़ पढ़ने के लिए हो। ड्राइव जोड़ें या कुछ जगह खाली करें, फिर फिर कोशिश करें दबाएँ।",
     "start_folder_unnamed": "TMPlayer अपना एक फ़ोल्डर नहीं बना सका। हो सकता है ड्राइव निकली हुई हो, भरी हो या सिर्फ़ पढ़ने के लिए हो। ड्राइव जोड़ें या कुछ जगह खाली करें, फिर फिर कोशिश करें दबाएँ।",
     "start_rejected": "TMPlayer Telegram से अपना कनेक्शन सेट नहीं कर सका। लॉग भेजें और हम देखेंगे। ब्योरा: {message}",
-    "start_system_too_old": "यह Linux TMPlayer की ज़रूरत से पुराना है। TMPlayer 2024 या उससे नए सिस्टम पर चलता है (glibc 2.38): Ubuntu 24.04, Debian 13, Linux Mint 22, Fedora 39 या उससे नया। सिस्टम अपडेट करें, फिर TMPlayer दोबारा खोलें। मदद: tmplayer.org/install",
+    "start_system_too_old": "यह Linux TMPlayer की ज़रूरत से पुराना है। TMPlayer 2022 या उससे नए सिस्टम पर चलता है (glibc 2.35): Ubuntu 22.04, Debian 12, Linux Mint 21, Fedora 36 या उससे नया। सिस्टम अपडेट करें, फिर TMPlayer दोबारा खोलें। मदद: tmplayer.org/install",
     "tdlib_parameters": "TDLib ने अपने पैरामीटर नहीं माने: {message}",
     "tdlib_unavailable": "TDLib, TMPlayer का वह हिस्सा जो Telegram से बात करता है, इस डिवाइस पर शुरू नहीं हो सका। कृपया यह संदेश लिखकर बताएँ: {message}",
     "unsupported_sign_in_step": "इस अकाउंट के लिए एक ऐसा चरण चाहिए जो TMPlayer नहीं कर सकता। पहले Telegram ऐप में साइन इन पूरा करें, फिर कोशिश करें।",

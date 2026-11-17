@@ -872,7 +872,7 @@
     "start_folder": "TMPlayer nemohl vytvořit svou složku {folder}. Disk může být odpojený, plný nebo jen pro čtení. Připojte disk nebo uvolněte místo a pak stiskněte Zkusit znovu.",
     "start_folder_unnamed": "TMPlayer nemohl vytvořit jednu ze svých složek. Disk může být odpojený, plný nebo jen pro čtení. Připojte disk nebo uvolněte místo a pak stiskněte Zkusit znovu.",
     "start_rejected": "TMPlayer nemohl navázat spojení s Telegramem. Pošlete protokoly a podíváme se na to. Podrobnosti: {message}",
-    "start_system_too_old": "Tento Linux je starší, než TMPlayer potřebuje. TMPlayer běží na systémech z roku 2024 nebo novějších (glibc 2.38): Ubuntu 24.04, Debian 13, Linux Mint 22, Fedora 39 nebo novější. Aktualizujte systém a pak TMPlayer otevřete znovu. Nápověda: tmplayer.org/install",
+    "start_system_too_old": "Tento Linux je starší, než TMPlayer potřebuje. TMPlayer běží na systémech z roku 2022 nebo novějších (glibc 2.35): Ubuntu 22.04, Debian 12, Linux Mint 21, Fedora 36 nebo novější. Aktualizujte systém a pak TMPlayer otevřete znovu. Nápověda: tmplayer.org/install",
     "tdlib_parameters": "TDLib odmítl své parametry: {message}",
     "tdlib_unavailable": "TDLib, část TMPlayeru, která komunikuje s Telegramem, se v tomto zařízení nepodařilo spustit. Nahlaste to prosím spolu se zprávou: {message}",
     "unsupported_sign_in_step": "Tento účet vyžaduje krok, který TMPlayer neumí. Nejdřív dokončete přihlášení v aplikaci Telegram a zkuste to znovu.",
