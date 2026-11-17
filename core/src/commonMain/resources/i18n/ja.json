@@ -867,8 +867,12 @@
     "screen_failed": "TMPlayerのこの部分で問題が発生したため、アプリが終了する前に停止しました。もう一度試すか、ログを保存して報告してください。",
     "screen_failed_title": "問題が発生しました",
     "signed_out": "Telegramからこの端末がログアウトされました。続けるには、もう一度ログインしてください。",
+    "start_blocked": "WindowsがTMPlayerのTelegramへの接続をブロックしました。Smart App ControlまたはApplication Controlポリシーが、TMPlayerのファイルを拒否しました。WindowsセキュリティでTMPlayerを許可するか、このパソコンの管理者に相談してから、TMPlayerを再起動してください。ヘルプ: tmplayer.org/install",
     "start_failed": "TMPlayerはこの端末でTelegramへの接続を開始できませんでした。ログを送信してください。こちらで調べます。詳細: {message}",
+    "start_folder": "TMPlayerがフォルダー{folder}を作成できませんでした。ドライブが接続されていない、空き容量がない、または読み取り専用の可能性があります。ドライブを接続するか空き容量を確保してから、「もう一度試す」を押してください。",
+    "start_folder_unnamed": "TMPlayerがフォルダーの1つを作成できませんでした。ドライブが接続されていない、空き容量がない、または読み取り専用の可能性があります。ドライブを接続するか空き容量を確保してから、「もう一度試す」を押してください。",
     "start_rejected": "TMPlayerはTelegramへの接続を設定できませんでした。ログを送信してください。こちらで調べます。詳細: {message}",
+    "start_system_too_old": "このLinuxはTMPlayerの必要条件より古いバージョンです。TMPlayerは2024年以降のシステム(glibc 2.38)で動作します: Ubuntu 24.04、Debian 13、Linux Mint 22、Fedora 39以降。システムを更新してから、もう一度TMPlayerを開いてください。ヘルプ: tmplayer.org/install",
     "tdlib_parameters": "TDLibがパラメータを拒否しました: {message}",
     "tdlib_unavailable": "Telegramと通信するTMPlayerの部品TDLibを、この端末で起動できませんでした。次のメッセージを添えて報告してください: {message}",
     "unsupported_sign_in_step": "このアカウントには、TMPlayerでは行えない手順が必要です。先にTelegramアプリでログインを完了してから、もう一度試してください。",
@@ -3407,6 +3411,7 @@
     "free_under_mb": "空きは1 MB未満",
     "freed": "{size}空きました",
     "location": "保存場所",
+    "location_unavailable": "{folder}にアクセスできないため、TMPlayerをドライブが接続された状態で再起動するまで、既定のフォルダーを使用しています",
     "measuring": "計算中…",
     "move": "移動",
     "move_adopted": "TMPlayerは以前このフォルダを使っていたため、中にあるダウンロードはそのまま残ります。",
@@ -3436,7 +3441,8 @@
     "scan_found": "{count, plural, other {TMPlayerのリストにないファイルが#件あります}}",
     "some_did_not_move": "移動できなかったダウンロードがあります",
     "the_default_folders": "標準フォルダ",
-    "title": "ストレージ"
+    "title": "ストレージ",
+    "unreachable_at_start": "保存先{folder}にアクセスできないため、今回はTMPlayerが既定のフォルダーを使用しています。何も削除されていません。ドライブを接続してTMPlayerを再起動するか、設定のストレージで別の場所を選んでください。"
   },
   "subtitles": {
     "box": "背景ボックス",

@@ -867,8 +867,12 @@
     "screen_failed": "Tato část TMPlayeru narazila na problém, proto byla zastavena dřív, než mohla zavřít aplikaci. Zkuste to znovu, nebo uložte protokoly a nahlaste to.",
     "screen_failed_title": "Něco se pokazilo",
     "signed_out": "Telegram toto zařízení odhlásil. Přihlaste se znovu a pokračujte.",
+    "start_blocked": "Windows zablokoval připojení TMPlayeru k Telegramu. Smart App Control nebo zásada Application Control odmítla jeden ze souborů TMPlayeru. Povolte TMPlayer v zabezpečení Windows nebo požádejte správce tohoto počítače a pak TMPlayer restartujte. Nápověda: tmplayer.org/install",
     "start_failed": "TMPlayer nemohl v tomto zařízení zahájit spojení s Telegramem. Pošlete protokoly a podíváme se na to. Podrobnosti: {message}",
+    "start_folder": "TMPlayer nemohl vytvořit svou složku {folder}. Disk může být odpojený, plný nebo jen pro čtení. Připojte disk nebo uvolněte místo a pak stiskněte Zkusit znovu.",
+    "start_folder_unnamed": "TMPlayer nemohl vytvořit jednu ze svých složek. Disk může být odpojený, plný nebo jen pro čtení. Připojte disk nebo uvolněte místo a pak stiskněte Zkusit znovu.",
     "start_rejected": "TMPlayer nemohl navázat spojení s Telegramem. Pošlete protokoly a podíváme se na to. Podrobnosti: {message}",
+    "start_system_too_old": "Tento Linux je starší, než TMPlayer potřebuje. TMPlayer běží na systémech z roku 2024 nebo novějších (glibc 2.38): Ubuntu 24.04, Debian 13, Linux Mint 22, Fedora 39 nebo novější. Aktualizujte systém a pak TMPlayer otevřete znovu. Nápověda: tmplayer.org/install",
     "tdlib_parameters": "TDLib odmítl své parametry: {message}",
     "tdlib_unavailable": "TDLib, část TMPlayeru, která komunikuje s Telegramem, se v tomto zařízení nepodařilo spustit. Nahlaste to prosím spolu se zprávou: {message}",
     "unsupported_sign_in_step": "Tento účet vyžaduje krok, který TMPlayer neumí. Nejdřív dokončete přihlášení v aplikaci Telegram a zkuste to znovu.",
@@ -3407,6 +3411,7 @@
     "free_under_mb": "Méně než 1 MB volných",
     "freed": "Uvolněno {size}",
     "location": "Umístění úložiště",
+    "location_unavailable": "Složka {folder} není dostupná, proto se používají výchozí složky, dokud se TMPlayer nerestartuje s připojeným diskem",
     "measuring": "Zjišťování…",
     "move": "Přesunout",
     "move_adopted": "TMPlayer tuto složku už dříve používal a stažená videa, která v ní jsou, se zachovají.",
@@ -3436,7 +3441,8 @@
     "scan_found": "{count, plural, one {# soubor není na seznamu TMPlayeru} few {# soubory nejsou na seznamu TMPlayeru} many {# souboru není na seznamu TMPlayeru} other {# souborů není na seznamu TMPlayeru}}",
     "some_did_not_move": "Některá stažená videa se nepřesunula",
     "the_default_folders": "výchozí složky",
-    "title": "Úložiště"
+    "title": "Úložiště",
+    "unreachable_at_start": "Vaše umístění úložiště {folder} není dostupné, proto TMPlayer tentokrát používá výchozí složky. Nic nebylo odstraněno. Připojte disk a restartujte TMPlayer, nebo vyberte jiné místo v Nastavení, Úložiště."
   },
   "subtitles": {
     "box": "Rámeček na pozadí",

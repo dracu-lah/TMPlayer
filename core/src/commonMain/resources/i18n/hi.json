@@ -867,8 +867,12 @@
     "screen_failed": "TMPlayer के इस हिस्से में समस्या आई, इसलिए ऐप बंद करने से पहले ही इसे रोक दिया गया। फिर से कोशिश करें, या रिपोर्ट करने के लिए लॉग सेव करें।",
     "screen_failed_title": "कुछ गड़बड़ हो गई",
     "signed_out": "Telegram ने इस डिवाइस को साइन आउट कर दिया। जारी रखने के लिए फिर साइन इन करें।",
+    "start_blocked": "Windows ने TMPlayer का Telegram से कनेक्शन रोक दिया। Smart App Control या Application Control नीति ने TMPlayer की एक फ़ाइल नकार दी। Windows सुरक्षा में TMPlayer को अनुमति दें, या इस कंप्यूटर के प्रबंधक से पूछें, फिर TMPlayer दोबारा शुरू करें। मदद: tmplayer.org/install",
     "start_failed": "TMPlayer इस डिवाइस पर Telegram से अपना कनेक्शन शुरू नहीं कर सका। लॉग भेजें और हम देखेंगे। ब्योरा: {message}",
+    "start_folder": "TMPlayer अपना फ़ोल्डर {folder} नहीं बना सका। हो सकता है ड्राइव निकली हुई हो, भरी हो या सिर्फ़ पढ़ने के लिए हो। ड्राइव जोड़ें या कुछ जगह खाली करें, फिर फिर कोशिश करें दबाएँ।",
+    "start_folder_unnamed": "TMPlayer अपना एक फ़ोल्डर नहीं बना सका। हो सकता है ड्राइव निकली हुई हो, भरी हो या सिर्फ़ पढ़ने के लिए हो। ड्राइव जोड़ें या कुछ जगह खाली करें, फिर फिर कोशिश करें दबाएँ।",
     "start_rejected": "TMPlayer Telegram से अपना कनेक्शन सेट नहीं कर सका। लॉग भेजें और हम देखेंगे। ब्योरा: {message}",
+    "start_system_too_old": "यह Linux TMPlayer की ज़रूरत से पुराना है। TMPlayer 2024 या उससे नए सिस्टम पर चलता है (glibc 2.38): Ubuntu 24.04, Debian 13, Linux Mint 22, Fedora 39 या उससे नया। सिस्टम अपडेट करें, फिर TMPlayer दोबारा खोलें। मदद: tmplayer.org/install",
     "tdlib_parameters": "TDLib ने अपने पैरामीटर नहीं माने: {message}",
     "tdlib_unavailable": "TDLib, TMPlayer का वह हिस्सा जो Telegram से बात करता है, इस डिवाइस पर शुरू नहीं हो सका। कृपया यह संदेश लिखकर बताएँ: {message}",
     "unsupported_sign_in_step": "इस अकाउंट के लिए एक ऐसा चरण चाहिए जो TMPlayer नहीं कर सकता। पहले Telegram ऐप में साइन इन पूरा करें, फिर कोशिश करें।",
@@ -3407,6 +3411,7 @@
     "free_under_mb": "1 MB से कम खाली",
     "freed": "{size} खाली हुआ",
     "location": "स्टोरेज की जगह",
+    "location_unavailable": "{folder} तक पहुँच नहीं हो पा रही, इसलिए उसके जुड़े होने पर TMPlayer के दोबारा शुरू होने तक डिफ़ॉल्ट फ़ोल्डर इस्तेमाल हो रहे हैं",
     "measuring": "हिसाब लगाया जा रहा है…",
     "move": "ले जाएँ",
     "move_adopted": "TMPlayer इस फ़ोल्डर को पहले इस्तेमाल कर चुका है, और इसमें पहले से मौजूद डाउनलोड रखे जाते हैं।",
@@ -3436,7 +3441,8 @@
     "scan_found": "{count, plural, one {# फ़ाइल TMPlayer की सूची में नहीं है} other {# फ़ाइलें TMPlayer की सूची में नहीं हैं}}",
     "some_did_not_move": "कुछ डाउनलोड नहीं ले जाए जा सके",
     "the_default_folders": "डिफ़ॉल्ट फ़ोल्डर",
-    "title": "स्टोरेज"
+    "title": "स्टोरेज",
+    "unreachable_at_start": "आपकी स्टोरेज लोकेशन {folder} तक पहुँच नहीं हो पा रही, इसलिए TMPlayer इस बार डिफ़ॉल्ट फ़ोल्डर इस्तेमाल कर रहा है। कुछ हटाया नहीं गया। ड्राइव जोड़कर TMPlayer दोबारा शुरू करें, या सेटिंग, स्टोरेज में कोई और जगह चुनें।"
   },
   "subtitles": {
     "box": "बैकग्राउंड बॉक्स",

@@ -867,8 +867,12 @@
     "screen_failed": "Phần này của TMPlayer gặp sự cố nên đã bị dừng trước khi đóng ứng dụng. Hãy thử lại, hoặc lưu nhật ký để báo cáo.",
     "screen_failed_title": "Đã xảy ra lỗi",
     "signed_out": "Telegram đã đăng xuất thiết bị này. Hãy đăng nhập lại để tiếp tục.",
+    "start_blocked": "Windows đã chặn kết nối của TMPlayer tới Telegram. Smart App Control hoặc chính sách Application Control đã từ chối một tệp của TMPlayer. Hãy cho phép TMPlayer trong Windows Security, hoặc hỏi người quản lý máy tính này, rồi khởi động lại TMPlayer. Trợ giúp: tmplayer.org/install",
     "start_failed": "TMPlayer không thể bắt đầu kết nối tới Telegram trên thiết bị này. Hãy gửi nhật ký để chúng tôi xem xét. Chi tiết: {message}",
+    "start_folder": "TMPlayer không thể tạo thư mục {folder} của mình. Ổ đĩa có thể đã bị rút ra, đã đầy hoặc chỉ cho phép đọc. Hãy kết nối ổ đĩa hoặc giải phóng bớt dung lượng, rồi nhấn Thử lại.",
+    "start_folder_unnamed": "TMPlayer không thể tạo một trong các thư mục của mình. Ổ đĩa có thể đã bị rút ra, đã đầy hoặc chỉ cho phép đọc. Hãy kết nối ổ đĩa hoặc giải phóng bớt dung lượng, rồi nhấn Thử lại.",
     "start_rejected": "TMPlayer không thể thiết lập kết nối tới Telegram. Hãy gửi nhật ký để chúng tôi xem xét. Chi tiết: {message}",
+    "start_system_too_old": "Linux này cũ hơn mức TMPlayer cần. TMPlayer chạy trên hệ thống từ năm 2024 trở lên (glibc 2.38): Ubuntu 24.04, Debian 13, Linux Mint 22, Fedora 39 hoặc mới hơn. Hãy cập nhật hệ thống, rồi mở lại TMPlayer. Trợ giúp: tmplayer.org/install",
     "tdlib_parameters": "TDLib từ chối các tham số: {message}",
     "tdlib_unavailable": "TDLib, phần của TMPlayer giao tiếp với Telegram, không khởi động được trên thiết bị này. Hãy báo lỗi kèm thông báo: {message}",
     "unsupported_sign_in_step": "Tài khoản này cần một bước mà TMPlayer không thực hiện được. Hãy hoàn tất đăng nhập trong ứng dụng Telegram trước, rồi thử lại.",
@@ -3407,6 +3411,7 @@
     "free_under_mb": "Trống dưới 1 MB",
     "freed": "Đã giải phóng {size}",
     "location": "Vị trí lưu trữ",
+    "location_unavailable": "Không truy cập được {folder}, nên các thư mục mặc định đang được dùng cho đến khi TMPlayer khởi động lại với ổ đĩa đã kết nối",
     "measuring": "Đang tính…",
     "move": "Chuyển",
     "move_adopted": "TMPlayer đã dùng thư mục này trước đây, và các video đã tải trong đó được giữ lại.",
@@ -3436,7 +3441,8 @@
     "scan_found": "{count, plural, other {# tệp không có trong danh sách của TMPlayer}}",
     "some_did_not_move": "Một số video tải xuống chưa được chuyển",
     "the_default_folders": "các thư mục mặc định",
-    "title": "Lưu trữ"
+    "title": "Lưu trữ",
+    "unreachable_at_start": "Không truy cập được vị trí lưu trữ {folder} của bạn, nên lần này TMPlayer dùng các thư mục mặc định. Không có gì bị xóa. Hãy kết nối ổ đĩa rồi khởi động lại TMPlayer, hoặc chọn nơi khác trong Cài đặt, Lưu trữ."
   },
   "subtitles": {
     "box": "Khung nền",

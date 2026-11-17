@@ -867,8 +867,12 @@
     "screen_failed": "TMPlayer'ın bu bölümü bir sorunla karşılaştı ve uygulamayı kapatmadan önce durduruldu. Tekrar deneyin ya da bildirmek için günlükleri kaydedin.",
     "screen_failed_title": "Bir şeyler ters gitti",
     "signed_out": "Telegram bu cihazın oturumunu kapattı. Devam etmek için yeniden oturum aç.",
+    "start_blocked": "Windows, TMPlayer'ın Telegram bağlantısını engelledi. Smart App Control veya bir Application Control ilkesi TMPlayer'ın bir dosyasını reddetti. Windows Güvenliği'nde TMPlayer'a izin ver ya da bu bilgisayarı yöneten kişiye sor, sonra TMPlayer'ı yeniden başlat. Yardım: tmplayer.org/install",
     "start_failed": "TMPlayer, Telegram bağlantısını bu cihazda başlatamadı. Günlükleri gönder, biz bakalım. Ayrıntılar: {message}",
+    "start_folder": "TMPlayer {folder} klasörünü oluşturamadı. Sürücü takılı olmayabilir, dolu olabilir ya da salt okunur olabilir. Sürücüyü bağla veya biraz yer aç, sonra Tekrar dene'ye bas.",
+    "start_folder_unnamed": "TMPlayer klasörlerinden birini oluşturamadı. Sürücü takılı olmayabilir, dolu olabilir ya da salt okunur olabilir. Sürücüyü bağla veya biraz yer aç, sonra Tekrar dene'ye bas.",
     "start_rejected": "TMPlayer, Telegram bağlantısını kuramadı. Günlükleri gönder, biz bakalım. Ayrıntılar: {message}",
+    "start_system_too_old": "Bu Linux, TMPlayer'ın ihtiyaç duyduğundan eski. TMPlayer 2024 veya daha yeni sistemlerde çalışır (glibc 2.38): Ubuntu 24.04, Debian 13, Linux Mint 22, Fedora 39 veya daha yenisi. Sistemi güncelle, sonra TMPlayer'ı yeniden aç. Yardım: tmplayer.org/install",
     "tdlib_parameters": "TDLib parametrelerini reddetti: {message}",
     "tdlib_unavailable": "TMPlayer'ın Telegram ile konuşan parçası TDLib bu cihazda başlatılamadı. Lütfen şu mesajla bildir: {message}",
     "unsupported_sign_in_step": "Bu hesap, TMPlayer'ın yapamadığı bir adım gerektiriyor. Önce Telegram uygulamasında oturum açmayı tamamla, sonra tekrar dene.",
@@ -3407,6 +3411,7 @@
     "free_under_mb": "1 MB'den az boş",
     "freed": "{size} yer açıldı",
     "location": "Depolama konumu",
+    "location_unavailable": "{folder} klasörüne ulaşılamıyor, bu yüzden TMPlayer o bağlıyken yeniden başlayana kadar varsayılan klasörler kullanılıyor",
     "measuring": "Hesaplanıyor…",
     "move": "Taşı",
     "move_adopted": "TMPlayer bu klasörü daha önce kullandı ve içindeki indirmeler korunur.",
@@ -3436,7 +3441,8 @@
     "scan_found": "{count, plural, one {# dosya TMPlayer'ın listesinde değil} other {# dosya TMPlayer'ın listesinde değil}}",
     "some_did_not_move": "Bazı indirmeler taşınamadı",
     "the_default_folders": "varsayılan klasörler",
-    "title": "Depolama"
+    "title": "Depolama",
+    "unreachable_at_start": "Depolama konumun {folder} klasörüne ulaşılamıyor, bu yüzden TMPlayer bu kez varsayılan klasörleri kullanıyor. Hiçbir şey silinmedi. Sürücüyü bağlayıp TMPlayer'ı yeniden başlat ya da Ayarlar, Depolama'dan başka bir yer seç."
   },
   "subtitles": {
     "box": "Arka plan kutusu",

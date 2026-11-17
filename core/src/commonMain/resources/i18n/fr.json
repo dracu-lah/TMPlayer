@@ -867,8 +867,12 @@
     "screen_failed": "Cette partie de TMPlayer a rencontré un problème et a été arrêtée avant de fermer l'app. Réessayez, ou enregistrez les journaux pour le signaler.",
     "screen_failed_title": "Un problème est survenu",
     "signed_out": "Telegram a déconnecté cet appareil. Reconnectez-vous pour continuer.",
+    "start_blocked": "Windows a bloqué la connexion de TMPlayer à Telegram. Smart App Control ou une stratégie Application Control a refusé un fichier de TMPlayer. Autorisez TMPlayer dans Sécurité Windows, ou demandez à la personne qui gère cet ordinateur, puis redémarrez TMPlayer. Aide : tmplayer.org/install",
     "start_failed": "TMPlayer n'a pas pu démarrer sa connexion à Telegram sur cet appareil. Envoyez les journaux et nous regarderons. Détails : {message}",
+    "start_folder": "TMPlayer n'a pas pu créer son dossier {folder}. Le disque est peut-être débranché, plein ou en lecture seule. Branchez le disque ou libérez de l'espace, puis appuyez sur Réessayer.",
+    "start_folder_unnamed": "TMPlayer n'a pas pu créer l'un de ses dossiers. Le disque est peut-être débranché, plein ou en lecture seule. Branchez le disque ou libérez de l'espace, puis appuyez sur Réessayer.",
     "start_rejected": "TMPlayer n'a pas pu configurer sa connexion à Telegram. Envoyez les journaux et nous regarderons. Détails : {message}",
+    "start_system_too_old": "Ce Linux est trop ancien pour TMPlayer. TMPlayer fonctionne sur les systèmes de 2024 ou plus récents (glibc 2.38) : Ubuntu 24.04, Debian 13, Linux Mint 22, Fedora 39 ou plus récent. Mettez le système à jour, puis rouvrez TMPlayer. Aide : tmplayer.org/install",
     "tdlib_parameters": "TDLib a rejeté ses paramètres : {message}",
     "tdlib_unavailable": "TDLib, la partie de TMPlayer qui communique avec Telegram, n'a pas pu démarrer sur cet appareil. Signalez-le avec ce message : {message}",
     "unsupported_sign_in_step": "Ce compte nécessite une étape que TMPlayer ne peut pas effectuer. Terminez d'abord la connexion dans l'application Telegram, puis réessayez.",
@@ -3407,6 +3411,7 @@
     "free_under_mb": "Moins de 1 Mo libre",
     "freed": "{size} libérés",
     "location": "Emplacement de stockage",
+    "location_unavailable": "{folder} est inaccessible, donc les dossiers par défaut sont utilisés jusqu'au redémarrage de TMPlayer avec le disque branché",
     "measuring": "Calcul en cours…",
     "move": "Déplacer",
     "move_adopted": "TMPlayer a déjà utilisé ce dossier, et les téléchargements qu'il contient sont conservés.",
@@ -3436,7 +3441,8 @@
     "scan_found": "{count, plural, one {# fichier n'est pas dans la liste de TMPlayer} many {# de fichiers ne sont pas dans la liste de TMPlayer} other {# fichiers ne sont pas dans la liste de TMPlayer}}",
     "some_did_not_move": "Certains téléchargements n'ont pas été déplacés",
     "the_default_folders": "les dossiers par défaut",
-    "title": "Stockage"
+    "title": "Stockage",
+    "unreachable_at_start": "Votre emplacement de stockage {folder} est inaccessible, donc TMPlayer utilise les dossiers par défaut cette fois. Rien n'a été supprimé. Branchez le disque et redémarrez TMPlayer, ou choisissez un autre emplacement dans Réglages, Stockage."
   },
   "subtitles": {
     "box": "Boîte d'arrière-plan",

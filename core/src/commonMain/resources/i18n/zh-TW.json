@@ -867,8 +867,12 @@
     "screen_failed": "TMPlayer 的這個部分發生問題，在關閉應用程式之前已被停止。請重試，或儲存記錄檔以便回報。",
     "screen_failed_title": "發生錯誤",
     "signed_out": "Telegram 已讓這台裝置登出。請重新登入以繼續。",
+    "start_blocked": "Windows 封鎖了 TMPlayer 與 Telegram 的連線。Smart App Control 或 Application Control 原則拒絕了 TMPlayer 的某個檔案。請在 Windows 安全性中允許 TMPlayer，或聯絡這台電腦的管理員，然後重新啟動 TMPlayer。說明：tmplayer.org/install",
     "start_failed": "TMPlayer 無法在這台裝置上啟動與 Telegram 的連線。請傳送記錄檔，我們會來查看。詳細資料：{message}",
+    "start_folder": "TMPlayer 無法建立其資料夾 {folder}。磁碟機可能已中斷連線、已滿或為唯讀。請連接磁碟機或釋出一些空間，然後按「再試一次」。",
+    "start_folder_unnamed": "TMPlayer 無法建立其中一個資料夾。磁碟機可能已中斷連線、已滿或為唯讀。請連接磁碟機或釋出一些空間，然後按「再試一次」。",
     "start_rejected": "TMPlayer 無法建立與 Telegram 的連線。請傳送記錄檔，我們會來查看。詳細資料：{message}",
+    "start_system_too_old": "這個 Linux 版本低於 TMPlayer 的需求。TMPlayer 可在 2024 年或更新的系統（glibc 2.38）上執行：Ubuntu 24.04、Debian 13、Linux Mint 22、Fedora 39 或更新版本。請更新系統，然後重新開啟 TMPlayer。說明：tmplayer.org/install",
     "tdlib_parameters": "TDLib 拒絕了它的參數：{message}",
     "tdlib_unavailable": "TDLib（TMPlayer 中與 Telegram 溝通的部分）無法在這台裝置上啟動。請附上以下訊息回報：{message}",
     "unsupported_sign_in_step": "這個帳號需要 TMPlayer 無法完成的步驟。請先在 Telegram 應用程式中完成登入，然後再試一次。",
@@ -3407,6 +3411,7 @@
     "free_under_mb": "可用空間不到 1 MB",
     "freed": "已釋出 {size}",
     "location": "儲存位置",
+    "location_unavailable": "無法存取 {folder}，因此在 TMPlayer 連接該磁碟機後重新啟動之前，會先使用預設資料夾",
     "measuring": "計算中…",
     "move": "移動",
     "move_adopted": "TMPlayer 以前用過這個資料夾，裡面已有的下載會保留。",
@@ -3436,7 +3441,8 @@
     "scan_found": "{count, plural, other {有 # 個檔案不在 TMPlayer 的清單中}}",
     "some_did_not_move": "部分下載未能移動",
     "the_default_folders": "預設資料夾",
-    "title": "儲存空間"
+    "title": "儲存空間",
+    "unreachable_at_start": "無法存取你的儲存位置 {folder}，因此這次 TMPlayer 使用預設資料夾。沒有任何內容被移除。請連接磁碟機並重新啟動 TMPlayer，或在「設定」「儲存空間」中選擇其他位置。"
   },
   "subtitles": {
     "box": "背景方塊",

@@ -867,8 +867,12 @@
     "screen_failed": "Ta część TMPlayera napotkała problem i została zatrzymana, zanim zamknęła aplikację. Spróbuj ponownie albo zapisz logi, żeby to zgłosić.",
     "screen_failed_title": "Coś poszło nie tak",
     "signed_out": "Telegram wylogował to urządzenie. Zaloguj się ponownie, aby kontynuować.",
+    "start_blocked": "Windows zablokował połączenie TMPlayer z Telegramem. Smart App Control lub zasada Application Control odrzuciła jeden z plików TMPlayer. Zezwól TMPlayer w Zabezpieczeniach Windows albo poproś osobę zarządzającą tym komputerem, a potem uruchom TMPlayer ponownie. Pomoc: tmplayer.org/install",
     "start_failed": "TMPlayer nie mógł uruchomić połączenia z Telegramem na tym urządzeniu. Wyślij logi, a się tym zajmiemy. Szczegóły: {message}",
+    "start_folder": "TMPlayer nie mógł utworzyć swojego folderu {folder}. Dysk może być odłączony, pełny albo tylko do odczytu. Podłącz dysk lub zwolnij miejsce, a potem naciśnij Spróbuj ponownie.",
+    "start_folder_unnamed": "TMPlayer nie mógł utworzyć jednego ze swoich folderów. Dysk może być odłączony, pełny albo tylko do odczytu. Podłącz dysk lub zwolnij miejsce, a potem naciśnij Spróbuj ponownie.",
     "start_rejected": "TMPlayer nie mógł skonfigurować połączenia z Telegramem. Wyślij logi, a się tym zajmiemy. Szczegóły: {message}",
+    "start_system_too_old": "Ten Linux jest starszy, niż wymaga TMPlayer. TMPlayer działa na systemach z 2024 roku lub nowszych (glibc 2.38): Ubuntu 24.04, Debian 13, Linux Mint 22, Fedora 39 lub nowszych. Zaktualizuj system, a potem otwórz TMPlayer ponownie. Pomoc: tmplayer.org/install",
     "tdlib_parameters": "TDLib odrzucił parametry: {message}",
     "tdlib_unavailable": "TDLib, część TMPlayera, która rozmawia z Telegramem, nie mogła się uruchomić na tym urządzeniu. Zgłoś to, dołączając komunikat: {message}",
     "unsupported_sign_in_step": "To konto wymaga kroku, którego TMPlayer nie obsługuje. Najpierw dokończ logowanie w aplikacji Telegram, potem spróbuj ponownie.",
@@ -3407,6 +3411,7 @@
     "free_under_mb": "Wolne: mniej niż 1 MB",
     "freed": "Zwolniono {size}",
     "location": "Lokalizacja pamięci",
+    "location_unavailable": "Folder {folder} jest niedostępny, więc używane są foldery domyślne, dopóki TMPlayer nie uruchomi się ponownie z podłączonym dyskiem",
     "measuring": "Obliczanie…",
     "move": "Przenieś",
     "move_adopted": "TMPlayer używał już tego folderu, a znajdujące się w nim pobrane pliki zostają zachowane.",
@@ -3436,7 +3441,8 @@
     "scan_found": "{count, plural, one {# pliku nie ma na liście TMPlayer} few {# plików nie ma na liście TMPlayer} many {# plików nie ma na liście TMPlayer} other {# pliku nie ma na liście TMPlayer}}",
     "some_did_not_move": "Nie przeniesiono części pobranych",
     "the_default_folders": "foldery domyślne",
-    "title": "Pamięć"
+    "title": "Pamięć",
+    "unreachable_at_start": "Twoja lokalizacja przechowywania {folder} jest niedostępna, więc tym razem TMPlayer używa folderów domyślnych. Nic nie zostało usunięte. Podłącz dysk i uruchom TMPlayer ponownie albo wybierz inne miejsce w Ustawieniach, Pamięć."
   },
   "subtitles": {
     "box": "Ramka w tle",

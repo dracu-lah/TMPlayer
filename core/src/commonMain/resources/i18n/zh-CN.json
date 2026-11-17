@@ -867,8 +867,12 @@
     "screen_failed": "TMPlayer 的这一部分遇到问题，在关闭应用之前已被停止。请重试，或保存日志以便反馈。",
     "screen_failed_title": "出了点问题",
     "signed_out": "Telegram 已让此设备退出登录。请重新登录以继续。",
+    "start_blocked": "Windows 阻止了 TMPlayer 与 Telegram 的连接。Smart App Control 或 Application Control 策略拒绝了 TMPlayer 的某个文件。请在 Windows 安全中心允许 TMPlayer，或联系这台电脑的管理员，然后重启 TMPlayer。帮助：tmplayer.org/install",
     "start_failed": "TMPlayer 无法在此设备上启动与 Telegram 的连接。请发送日志，我们会来查看。详情：{message}",
+    "start_folder": "TMPlayer 无法创建其文件夹 {folder}。驱动器可能已断开、已满或为只读。请连接驱动器或释放一些空间，然后点按“再试一次”。",
+    "start_folder_unnamed": "TMPlayer 无法创建其某个文件夹。驱动器可能已断开、已满或为只读。请连接驱动器或释放一些空间，然后点按“再试一次”。",
     "start_rejected": "TMPlayer 无法建立与 Telegram 的连接。请发送日志，我们会来查看。详情：{message}",
+    "start_system_too_old": "这个 Linux 版本低于 TMPlayer 的要求。TMPlayer 可在 2024 年或更新的系统（glibc 2.38）上运行：Ubuntu 24.04、Debian 13、Linux Mint 22、Fedora 39 或更新版本。请更新系统，然后重新打开 TMPlayer。帮助：tmplayer.org/install",
     "tdlib_parameters": "TDLib 拒绝了其参数：{message}",
     "tdlib_unavailable": "TDLib（TMPlayer 中与 Telegram 通信的部分）无法在此设备上启动。请附上以下信息报告此问题：{message}",
     "unsupported_sign_in_step": "此账号需要 TMPlayer 无法完成的一个步骤。请先在 Telegram 应用中完成登录，然后再试。",
@@ -3407,6 +3411,7 @@
     "free_under_mb": "可用空间不足 1 MB",
     "freed": "已释放 {size}",
     "location": "存储位置",
+    "location_unavailable": "无法访问 {folder}，因此在 TMPlayer 连接该驱动器后重启之前，会先使用默认文件夹",
     "measuring": "正在计算…",
     "move": "移动",
     "move_adopted": "TMPlayer 以前用过这个文件夹，里面已有的下载会保留。",
@@ -3436,7 +3441,8 @@
     "scan_found": "{count, plural, other {# 个文件不在 TMPlayer 的列表中}}",
     "some_did_not_move": "部分下载未能移动",
     "the_default_folders": "默认文件夹",
-    "title": "存储"
+    "title": "存储",
+    "unreachable_at_start": "无法访问你的存储位置 {folder}，因此这次 TMPlayer 使用默认文件夹。没有任何内容被删除。请连接驱动器并重启 TMPlayer，或在“设置”“存储”中选择其他位置。"
   },
   "subtitles": {
     "box": "背景框",

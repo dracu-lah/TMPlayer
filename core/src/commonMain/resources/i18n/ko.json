@@ -867,8 +867,12 @@
     "screen_failed": "TMPlayer의 이 부분에 문제가 생겨 앱이 닫히기 전에 중지됐어요. 다시 시도하거나 로그를 저장해 신고해 주세요.",
     "screen_failed_title": "문제가 발생했어요",
     "signed_out": "Telegram에서 이 기기를 로그아웃했어요. 계속하려면 다시 로그인해 주세요.",
+    "start_blocked": "Windows가 TMPlayer의 Telegram 연결을 차단했어요. Smart App Control이나 Application Control 정책이 TMPlayer의 파일을 거부했어요. Windows 보안에서 TMPlayer를 허용하거나 이 컴퓨터의 관리자에게 문의한 다음 TMPlayer를 다시 시작하세요. 도움말: tmplayer.org/install",
     "start_failed": "TMPlayer가 이 기기에서 Telegram 연결을 시작하지 못했어요. 로그를 보내 주시면 살펴볼게요. 자세한 내용: {message}",
+    "start_folder": "TMPlayer가 {folder} 폴더를 만들지 못했어요. 드라이브가 연결되어 있지 않거나, 가득 찼거나, 읽기 전용일 수 있어요. 드라이브를 연결하거나 공간을 확보한 다음 다시 시도를 누르세요.",
+    "start_folder_unnamed": "TMPlayer가 폴더 중 하나를 만들지 못했어요. 드라이브가 연결되어 있지 않거나, 가득 찼거나, 읽기 전용일 수 있어요. 드라이브를 연결하거나 공간을 확보한 다음 다시 시도를 누르세요.",
     "start_rejected": "TMPlayer가 Telegram 연결을 설정하지 못했어요. 로그를 보내 주시면 살펴볼게요. 자세한 내용: {message}",
+    "start_system_too_old": "이 Linux는 TMPlayer가 필요로 하는 버전보다 오래됐어요. TMPlayer는 2024년 이후 시스템(glibc 2.38)에서 실행돼요: Ubuntu 24.04, Debian 13, Linux Mint 22, Fedora 39 이상. 시스템을 업데이트한 다음 TMPlayer를 다시 여세요. 도움말: tmplayer.org/install",
     "tdlib_parameters": "TDLib에서 매개변수를 거부했어요: {message}",
     "tdlib_unavailable": "Telegram과 통신하는 TMPlayer의 구성 요소 TDLib을 이 기기에서 시작하지 못했어요. 다음 메시지와 함께 알려 주세요: {message}",
     "unsupported_sign_in_step": "이 계정에는 TMPlayer가 처리할 수 없는 단계가 필요해요. 먼저 Telegram 앱에서 로그인을 마친 다음 다시 시도해 주세요.",
@@ -3407,6 +3411,7 @@
     "free_under_mb": "남은 공간 1 MB 미만",
     "freed": "{size} 확보함",
     "location": "저장 위치",
+    "location_unavailable": "{folder}에 접근할 수 없어서, 드라이브를 연결한 채 TMPlayer를 다시 시작할 때까지 기본 폴더를 사용해요",
     "measuring": "계산하는 중…",
     "move": "이동",
     "move_adopted": "이전에 TMPlayer가 이 폴더를 사용했어요. 이미 있는 다운로드는 그대로 유지돼요.",
@@ -3436,7 +3441,8 @@
     "scan_found": "{count, plural, other {파일 #개가 TMPlayer 목록에 없어요}}",
     "some_did_not_move": "일부 다운로드를 옮기지 못했어요",
     "the_default_folders": "기본 폴더",
-    "title": "저장공간"
+    "title": "저장공간",
+    "unreachable_at_start": "저장 위치 {folder}에 접근할 수 없어서 이번에는 TMPlayer가 기본 폴더를 사용하고 있어요. 삭제된 것은 없어요. 드라이브를 연결하고 TMPlayer를 다시 시작하거나, 설정의 저장공간에서 다른 위치를 선택하세요."
   },
   "subtitles": {
     "box": "배경 상자",

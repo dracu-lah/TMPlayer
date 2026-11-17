@@ -867,8 +867,12 @@
     "screen_failed": "واجه هذا الجزء من TMPlayer مشكلة فتم إيقافه قبل أن يغلق التطبيق. حاول مرة أخرى أو احفظ السجلات للإبلاغ عنها.",
     "screen_failed_title": "حدث خطأ ما",
     "signed_out": "سجّل Telegram خروج هذا الجهاز. سجّل الدخول مجددًا للمتابعة.",
+    "start_blocked": "حظر Windows اتصال TMPlayer بـ Telegram. رفض Smart App Control أو سياسة Application Control أحد ملفات TMPlayer. اسمح لـ TMPlayer في أمن Windows أو اسأل مسؤول هذا الحاسوب، ثم أعد تشغيل TMPlayer. المساعدة: tmplayer.org/install",
     "start_failed": "تعذّر على TMPlayer بدء اتصاله بـ Telegram على هذا الجهاز. أرسل السجلات وسنفحص الأمر. التفاصيل: {message}",
+    "start_folder": "تعذّر على TMPlayer إنشاء مجلده {folder}. قد يكون القرص مفصولًا أو ممتلئًا أو للقراءة فقط. صِل القرص أو حرّر بعض المساحة، ثم اضغط حاول مجددًا.",
+    "start_folder_unnamed": "تعذّر على TMPlayer إنشاء أحد مجلداته. قد يكون القرص مفصولًا أو ممتلئًا أو للقراءة فقط. صِل القرص أو حرّر بعض المساحة، ثم اضغط حاول مجددًا.",
     "start_rejected": "تعذّر على TMPlayer إعداد اتصاله بـ Telegram. أرسل السجلات وسنفحص الأمر. التفاصيل: {message}",
+    "start_system_too_old": "إصدار Linux هذا أقدم مما يحتاجه TMPlayer. يعمل TMPlayer على أنظمة من عام 2024 أو أحدث (glibc 2.38): Ubuntu 24.04 وDebian 13 وLinux Mint 22 وFedora 39 أو أحدث. حدّث النظام ثم افتح TMPlayer مجددًا. المساعدة: tmplayer.org/install",
     "tdlib_parameters": "رفضت TDLib معاملاتها: {message}",
     "tdlib_unavailable": "تعذّر تشغيل TDLib، وهو جزء TMPlayer الذي يتواصل مع Telegram، على هذا الجهاز. يُرجى الإبلاغ عن ذلك مع هذه الرسالة: {message}",
     "unsupported_sign_in_step": "يحتاج هذا الحساب إلى خطوة لا يستطيع TMPlayer تنفيذها. أكمل تسجيل الدخول في تطبيق Telegram أولًا، ثم حاول مجددًا.",
@@ -3407,6 +3411,7 @@
     "free_under_mb": "أقل من 1 ميغابايت متاح",
     "freed": "تم تحرير {size}",
     "location": "موقع التخزين",
+    "location_unavailable": "تعذّر الوصول إلى {folder}، لذا تُستخدم المجلدات الافتراضية إلى أن يُعاد تشغيل TMPlayer والمجلد متصل",
     "measuring": "جارٍ الحساب…",
     "move": "نقل",
     "move_adopted": "استخدم TMPlayer هذا المجلد من قبل، وسيُحتفظ بالتنزيلات الموجودة فيه.",
@@ -3436,7 +3441,8 @@
     "scan_found": "{count, plural, zero {لا توجد ملفات خارج قائمة TMPlayer} one {ملف واحد ليس في قائمة TMPlayer} two {ملفان ليسا في قائمة TMPlayer} few {# ملفات ليست في قائمة TMPlayer} many {# ملفًا ليست في قائمة TMPlayer} other {# ملف ليست في قائمة TMPlayer}}",
     "some_did_not_move": "لم تُنقل بعض التنزيلات",
     "the_default_folders": "المجلدات الافتراضية",
-    "title": "التخزين"
+    "title": "التخزين",
+    "unreachable_at_start": "تعذّر الوصول إلى موقع التخزين {folder}، لذا يستخدم TMPlayer المجلدات الافتراضية هذه المرة. لم يُحذف أي شيء. صِل القرص وأعد تشغيل TMPlayer، أو اختر مكانًا آخر في الإعدادات، التخزين."
   },
   "subtitles": {
     "box": "مربع الخلفية",

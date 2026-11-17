@@ -867,8 +867,12 @@
     "screen_failed": "Esta parte do TMPlayer teve um problema e foi parada antes de fechar o app. Tente de novo ou salve os logs para relatar.",
     "screen_failed_title": "Algo deu errado",
     "signed_out": "O Telegram desconectou este dispositivo. Entre de novo para continuar.",
+    "start_blocked": "O Windows bloqueou a conexão do TMPlayer com o Telegram. O Smart App Control ou uma política de Application Control recusou um arquivo do TMPlayer. Permita o TMPlayer na Segurança do Windows ou fale com quem administra este computador e reinicie o TMPlayer. Ajuda: tmplayer.org/install",
     "start_failed": "O TMPlayer não conseguiu iniciar a conexão com o Telegram neste dispositivo. Envie os logs e vamos investigar. Detalhes: {message}",
+    "start_folder": "O TMPlayer não conseguiu criar a pasta {folder}. A unidade pode estar desconectada, cheia ou somente leitura. Conecte a unidade ou libere espaço e toque em Tentar de novo.",
+    "start_folder_unnamed": "O TMPlayer não conseguiu criar uma de suas pastas. A unidade pode estar desconectada, cheia ou somente leitura. Conecte a unidade ou libere espaço e toque em Tentar de novo.",
     "start_rejected": "O TMPlayer não conseguiu configurar a conexão com o Telegram. Envie os logs e vamos investigar. Detalhes: {message}",
+    "start_system_too_old": "Este Linux é mais antigo do que o TMPlayer exige. O TMPlayer funciona em sistemas de 2024 ou mais recentes (glibc 2.38): Ubuntu 24.04, Debian 13, Linux Mint 22, Fedora 39 ou mais novos. Atualize o sistema e abra o TMPlayer de novo. Ajuda: tmplayer.org/install",
     "tdlib_parameters": "O TDLib rejeitou os parâmetros: {message}",
     "tdlib_unavailable": "O TDLib, a parte do TMPlayer que conversa com o Telegram, não conseguiu iniciar neste dispositivo. Informe o problema com esta mensagem: {message}",
     "unsupported_sign_in_step": "Esta conta exige uma etapa que o TMPlayer não consegue fazer. Conclua primeiro o login no app do Telegram e tente de novo.",
@@ -3407,6 +3411,7 @@
     "free_under_mb": "Menos de 1 MB livre",
     "freed": "{size} liberados",
     "location": "Local de armazenamento",
+    "location_unavailable": "Não foi possível acessar {folder}, então as pastas padrão ficam em uso até o TMPlayer reiniciar com a unidade conectada",
     "measuring": "Calculando…",
     "move": "Mover",
     "move_adopted": "O TMPlayer já usou esta pasta antes, e os downloads que já estão nela são mantidos.",
@@ -3436,7 +3441,8 @@
     "scan_found": "{count, plural, one {# arquivo não consta na lista do TMPlayer} many {# de arquivos não constam na lista do TMPlayer} other {# arquivos não constam na lista do TMPlayer}}",
     "some_did_not_move": "Alguns downloads não foram movidos",
     "the_default_folders": "as pastas padrão",
-    "title": "Armazenamento"
+    "title": "Armazenamento",
+    "unreachable_at_start": "Não foi possível acessar seu local de armazenamento {folder}, então o TMPlayer está usando as pastas padrão desta vez. Nada foi removido. Conecte a unidade e reinicie o TMPlayer, ou escolha outro lugar em Configurações, Armazenamento."
   },
   "subtitles": {
     "box": "Caixa de fundo",

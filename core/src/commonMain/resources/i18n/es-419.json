@@ -867,8 +867,12 @@
     "screen_failed": "Esta parte de TMPlayer tuvo un problema y se detuvo antes de cerrar la app. Inténtalo de nuevo o guarda los registros para reportarlo.",
     "screen_failed_title": "Algo salió mal",
     "signed_out": "Telegram cerró la sesión en este dispositivo. Vuelve a iniciar sesión para continuar.",
+    "start_blocked": "Windows bloqueó la conexión de TMPlayer con Telegram. Smart App Control o una política de Application Control rechazó un archivo de TMPlayer. Permite TMPlayer en Seguridad de Windows o pregunta a quien administra este equipo, y luego reinicia TMPlayer. Ayuda: tmplayer.org/install",
     "start_failed": "TMPlayer no pudo iniciar su conexión con Telegram en este dispositivo. Envía los registros y lo revisaremos. Detalles: {message}",
+    "start_folder": "TMPlayer no pudo crear su carpeta {folder}. Puede que la unidad esté desconectada, llena o de solo lectura. Conecta la unidad o libera espacio, y luego presiona Intentar de nuevo.",
+    "start_folder_unnamed": "TMPlayer no pudo crear una de sus carpetas. Puede que la unidad esté desconectada, llena o de solo lectura. Conecta la unidad o libera espacio, y luego presiona Intentar de nuevo.",
     "start_rejected": "TMPlayer no pudo configurar su conexión con Telegram. Envía los registros y lo revisaremos. Detalles: {message}",
+    "start_system_too_old": "Este Linux es más antiguo de lo que TMPlayer necesita. TMPlayer funciona en sistemas de 2024 o más recientes (glibc 2.38): Ubuntu 24.04, Debian 13, Linux Mint 22, Fedora 39 o posteriores. Actualiza el sistema y vuelve a abrir TMPlayer. Ayuda: tmplayer.org/install",
     "tdlib_parameters": "TDLib rechazó sus parámetros: {message}",
     "tdlib_unavailable": "TDLib, la parte de TMPlayer que se comunica con Telegram, no pudo iniciarse en este dispositivo. Repórtalo con este mensaje: {message}",
     "unsupported_sign_in_step": "Esta cuenta necesita un paso que TMPlayer no puede hacer. Termina de iniciar sesión en la app de Telegram y vuelve a intentarlo.",
@@ -3407,6 +3411,7 @@
     "free_under_mb": "Menos de 1 MB libre",
     "freed": "Se liberaron {size}",
     "location": "Ubicación de almacenamiento",
+    "location_unavailable": "No se puede acceder a {folder}, así que se usan las carpetas predeterminadas hasta que TMPlayer se reinicie con la unidad conectada",
     "measuring": "Calculando…",
     "move": "Mover",
     "move_adopted": "TMPlayer ya usó esta carpeta antes, y las descargas que tiene se conservan.",
@@ -3436,7 +3441,8 @@
     "scan_found": "{count, plural, one {# archivo no está en la lista de TMPlayer} many {# archivos no están en la lista de TMPlayer} other {# archivos no están en la lista de TMPlayer}}",
     "some_did_not_move": "Algunas descargas no se movieron",
     "the_default_folders": "las carpetas predeterminadas",
-    "title": "Almacenamiento"
+    "title": "Almacenamiento",
+    "unreachable_at_start": "No se puede acceder a tu ubicación de almacenamiento {folder}, así que TMPlayer usa las carpetas predeterminadas esta vez. No se eliminó nada. Conecta la unidad y reinicia TMPlayer, o elige otro lugar en Configuración, Almacenamiento."
   },
   "subtitles": {
     "box": "Fondo",

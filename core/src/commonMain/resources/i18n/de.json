@@ -867,8 +867,12 @@
     "screen_failed": "Dieser Teil von TMPlayer hatte ein Problem und wurde angehalten, bevor er die App schließen konnte. Versuche es erneut oder speichere die Logs, um es zu melden.",
     "screen_failed_title": "Etwas ist schiefgelaufen",
     "signed_out": "Telegram hat dieses Gerät abgemeldet. Melde dich erneut an, um fortzufahren.",
+    "start_blocked": "Windows hat die Verbindung von TMPlayer zu Telegram blockiert. Smart App Control oder eine Application-Control-Richtlinie hat eine Datei von TMPlayer abgelehnt. Erlaube TMPlayer in der Windows-Sicherheit oder frage die Person, die diesen Computer verwaltet, und starte TMPlayer dann neu. Hilfe: tmplayer.org/install",
     "start_failed": "TMPlayer konnte seine Verbindung zu Telegram auf diesem Gerät nicht starten. Sende Protokolle, dann sehen wir es uns an. Details: {message}",
+    "start_folder": "TMPlayer konnte seinen Ordner {folder} nicht anlegen. Das Laufwerk ist vielleicht nicht angeschlossen, voll oder schreibgeschützt. Schließe das Laufwerk an oder gib Speicherplatz frei und drücke dann Erneut versuchen.",
+    "start_folder_unnamed": "TMPlayer konnte einen seiner Ordner nicht anlegen. Das Laufwerk ist vielleicht nicht angeschlossen, voll oder schreibgeschützt. Schließe das Laufwerk an oder gib Speicherplatz frei und drücke dann Erneut versuchen.",
     "start_rejected": "TMPlayer konnte seine Verbindung zu Telegram nicht einrichten. Sende Protokolle, dann sehen wir es uns an. Details: {message}",
+    "start_system_too_old": "Dieses Linux ist älter, als TMPlayer braucht. TMPlayer läuft auf Systemen von 2024 oder neuer (glibc 2.38): Ubuntu 24.04, Debian 13, Linux Mint 22, Fedora 39 oder neuer. Aktualisiere das System und öffne TMPlayer dann erneut. Hilfe: tmplayer.org/install",
     "tdlib_parameters": "TDLib hat seine Parameter abgelehnt: {message}",
     "tdlib_unavailable": "TDLib, der Teil von TMPlayer, der mit Telegram spricht, konnte auf diesem Gerät nicht starten. Bitte melde das mit dieser Meldung: {message}",
     "unsupported_sign_in_step": "Dieses Konto braucht einen Schritt, den TMPlayer nicht ausführen kann. Schließe die Anmeldung zuerst in der Telegram-App ab und versuche es dann erneut.",
@@ -3407,6 +3411,7 @@
     "free_under_mb": "Weniger als 1 MB frei",
     "freed": "{size} freigegeben",
     "location": "Speicherort",
+    "location_unavailable": "{folder} ist nicht erreichbar, daher werden die Standardordner verwendet, bis TMPlayer mit angeschlossenem Laufwerk neu startet",
     "measuring": "Wird berechnet…",
     "move": "Verschieben",
     "move_adopted": "TMPlayer hat diesen Ordner schon einmal genutzt, und die darin vorhandenen Downloads bleiben erhalten.",
@@ -3436,7 +3441,8 @@
     "scan_found": "{count, plural, one {# Datei steht nicht in der Liste von TMPlayer} other {# Dateien stehen nicht in der Liste von TMPlayer}}",
     "some_did_not_move": "Einige Downloads wurden nicht verschoben",
     "the_default_folders": "die Standardordner",
-    "title": "Speicher"
+    "title": "Speicher",
+    "unreachable_at_start": "Dein Speicherort {folder} ist nicht erreichbar, daher verwendet TMPlayer diesmal die Standardordner. Nichts wurde entfernt. Schließe das Laufwerk an und starte TMPlayer neu, oder wähle in den Einstellungen unter Speicher einen anderen Ort."
   },
   "subtitles": {
     "box": "Hintergrundbox",

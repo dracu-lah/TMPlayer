@@ -867,8 +867,12 @@
     "screen_failed": "Questa parte di TMPlayer ha avuto un problema ed è stata fermata prima di chiudere l'app. Riprova, oppure salva i log per segnalarlo.",
     "screen_failed_title": "Qualcosa è andato storto",
     "signed_out": "Telegram ha disconnesso questo dispositivo. Accedi di nuovo per continuare.",
+    "start_blocked": "Windows ha bloccato la connessione di TMPlayer a Telegram. Smart App Control o un criterio di Application Control ha rifiutato un file di TMPlayer. Consenti TMPlayer in Sicurezza di Windows, o chiedi a chi gestisce questo computer, poi riavvia TMPlayer. Aiuto: tmplayer.org/install",
     "start_failed": "TMPlayer non è riuscito ad avviare la sua connessione a Telegram su questo dispositivo. Invia i log e ce ne occuperemo. Dettagli: {message}",
+    "start_folder": "TMPlayer non è riuscito a creare la sua cartella {folder}. L'unità potrebbe essere scollegata, piena o di sola lettura. Collega l'unità o libera spazio, poi premi Riprova.",
+    "start_folder_unnamed": "TMPlayer non è riuscito a creare una delle sue cartelle. L'unità potrebbe essere scollegata, piena o di sola lettura. Collega l'unità o libera spazio, poi premi Riprova.",
     "start_rejected": "TMPlayer non è riuscito a configurare la sua connessione a Telegram. Invia i log e ce ne occuperemo. Dettagli: {message}",
+    "start_system_too_old": "Questo Linux è più vecchio di quanto serva a TMPlayer. TMPlayer funziona su sistemi del 2024 o più recenti (glibc 2.38): Ubuntu 24.04, Debian 13, Linux Mint 22, Fedora 39 o più recenti. Aggiorna il sistema, poi riapri TMPlayer. Aiuto: tmplayer.org/install",
     "tdlib_parameters": "TDLib ha rifiutato i suoi parametri: {message}",
     "tdlib_unavailable": "TDLib, la parte di TMPlayer che comunica con Telegram, non è riuscita ad avviarsi su questo dispositivo. Segnalalo con questo messaggio: {message}",
     "unsupported_sign_in_step": "Questo account richiede un passaggio che TMPlayer non può eseguire. Completa prima l'accesso nell'app Telegram, poi riprova.",
@@ -3407,6 +3411,7 @@
     "free_under_mb": "Meno di 1 MB libero",
     "freed": "{size} liberati",
     "location": "Posizione di archiviazione",
+    "location_unavailable": "{folder} non è raggiungibile, quindi vengono usate le cartelle predefinite finché TMPlayer non riparte con l'unità collegata",
     "measuring": "Calcolo in corso…",
     "move": "Sposta",
     "move_adopted": "TMPlayer ha già usato questa cartella, e i download che contiene vengono mantenuti.",
@@ -3436,7 +3441,8 @@
     "scan_found": "{count, plural, one {# file non è nell'elenco di TMPlayer} many {# di file non sono nell'elenco di TMPlayer} other {# file non sono nell'elenco di TMPlayer}}",
     "some_did_not_move": "Alcuni download non sono stati spostati",
     "the_default_folders": "le cartelle predefinite",
-    "title": "Archiviazione"
+    "title": "Archiviazione",
+    "unreachable_at_start": "La tua posizione di archiviazione {folder} non è raggiungibile, quindi stavolta TMPlayer usa le cartelle predefinite. Non è stato rimosso nulla. Collega l'unità e riavvia TMPlayer, oppure scegli un altro posto in Impostazioni, Archiviazione."
   },
   "subtitles": {
     "box": "Riquadro di sfondo",
