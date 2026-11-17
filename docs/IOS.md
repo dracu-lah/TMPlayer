@@ -59,6 +59,22 @@ makes four mechanical rewrites, listed in that task: `decorFitsSystemWindows` to
 `usePlatformInsets`, ViewModel factories to `KClass`, `Dialog` to one that closes on the back
 swipe, and the Home carousel's frame-per-vsync timer to a plain timer.
 
+### In app trailers on iOS
+
+Android's trailer player (`app/.../ui/trailer/TrailerPlayer.kt`, `TrailerWebPage.kt`) is a WebView
+and is left out of the copy; `TrailerControls.kt` (the state machine `TrailerSession` over core's
+`TrailerRules`, the remote's keys, the mobile data rule `trailerMayStream`) has no Android types
+and is copied as it is. `MainActivity` calls `TrailerPlayerRoot`, which `:ios` supplies in
+`ios/src/iosMain/.../ui/trailer/TrailerPlayerRoot.kt` (`IosTrailerOpener`, provided through
+`LocalTrailerOpener`). Kotlin builds the page (`TrailerEmbed.pageHtml`), runs the 12 s wait and the
+fallback to the YouTube app or Safari; `:ios:kit`'s `Trailers.install` (same shape as `Engines`)
+hands Swift's `TrailerSheetPresenter` to it, and `iosApp/TMPlayer/Player/TrailerSheet.swift` shows
+the sheet: a `WKWebView` with `https://www.youtube-nocookie.com` as base URL, the
+`TMPlayerTrailer` message handler, inline media with no gesture requirement (the tap was it), a
+navigation policy limited to YouTube's hosts, a non-persistent data store, paused when the app
+resigns active, torn down when the sheet goes. Setting off, offline, or "On mobile data: Never" on
+a metered connection never reach Swift.
+
 ### Android's phone player on iOS, unchanged
 
 `androidPlayerForIos` copies Android's player (`PlayerActivity` and the files it needs) over the
@@ -586,6 +602,29 @@ Skipped in the import (2026-11-17): none of this can be done or checked on Linux
   (see Known issues), the uncaught exception hook (the process must still end and SafeMode count the
   crash), read-ahead through `AheadFirstLoadControl`, the executors on dispatch queues, and the
   "Open in another app" message with no other player to offer.
+- **In app trailers (2026-11-17, UNVERIFIED: `TrailerSheet.swift` was never compiled; swift is not
+  installed on the Linux box, so not even `swiftc -parse` ran).** On a Mac: build, then
+  `xcodegen generate` (the file was added to `project.pbxproj` by hand with made up ids; a diff is
+  only a warning in CI). On an iPhone and an iPad, with Play trailers in TMPlayer on:
+  1. Open a video's page, check Network (or a proxy) shows nothing from youtube.com before the tap.
+     Tap Trailer: a sheet opens (iPad: a centred card; iPhone: a card, full screen on its side) with
+     Close and Watch on YouTube above a picture that plays by itself, inline, with sound even with
+     the silent switch on.
+  2. Tap YouTube's pause and play; seek. Rotate the iPad. Lock the phone or go Home: it stops, and
+     stays paused on return. Close (and Escape on an iPad keyboard, and the swipe down): the sheet
+     goes, nothing keeps playing or loading, music from another app can resume.
+  3. Watch on YouTube: the sheet closes and the YouTube app or Safari opens the trailer. Tap the
+     video title in the player: same, once.
+  4. A trailer YouTube refuses (errors 101, 150, 153; a video that is not embeddable) or Airplane
+     mode after opening: the plain notice for 1.5 s, then the YouTube app or Safari. Same after 12 s
+     with no `ready`.
+  5. Settings, Play trailers in TMPlayer off: Trailer goes straight outside. On mobile data with
+     "Never": same.
+  6. VoiceOver reads the sheet's name, Close and Watch on YouTube, and the notice; Larger Text at
+     the biggest accessibility size stacks the two buttons and keeps the picture.
+  7. If the picture stays black or the page says it is loading until the 12 s fallback, suspect the
+     navigation policy first (`decidePolicyFor` refuses subframes outside YouTube's hosts), then the
+     non-persistent data store.
 - Running `scripts/ios-setup.sh` on a Mac.
 - A real device pass on an iPhone and an iPad (sign in, play MP4 and MKV, downloads, rotation,
   Split View, large text, VoiceOver).
