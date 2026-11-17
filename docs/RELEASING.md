@@ -163,6 +163,12 @@ that mediamp version, after which `MAC_TAG` in `release.yml` names that release,
 does for the Linux and Windows archive. mediamp 0.5.2 is first carried by 1.27.0, and both archives
 are on that release, so `TAG` and `MAC_TAG` are `v1.27.0`.
 
+The Linux AppImage and tarball carry TDLib and libmpv libraries rebuilt for glibc 2.35
+(`.github/actions/linux-natives`, recipes in `natives/`, hashes in `natives/linux-2-35/PINS.txt`).
+Their corresponding source is a further archive, `scripts/build-mpv-linux-2-35.sh --source-archive`
+(`natives/mpv-linux/README.md`), which goes beside the mediamp one on the first release that ships
+them. A tdl-coroutines or mediamp bump means rebuilding, new pins, and a look at both recipes first.
+
 Nothing else is attached. GitHub adds the source archives of the tagged tree by itself and shows
 each file's SHA-256 beside it, so there is no checksum file. The release notes link to the
 licence, `THIRD_PARTY_NOTICES.md` and the nextlib corresponding source instead of carrying them.

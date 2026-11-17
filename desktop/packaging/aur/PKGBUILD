@@ -17,7 +17,7 @@ license=('GPL-3.0-or-later')
 provides=('tmplayer')
 conflicts=('tmplayer')
 # The bundled JVM, TDLib and libmpv need these from the system.
-depends=('glibc>=2.38' 'gcc-libs' 'openssl' 'zlib' 'alsa-lib' 'libpulse' 'libglvnd'
+depends=('glibc>=2.35' 'gcc-libs' 'openssl' 'zlib' 'alsa-lib' 'libpulse' 'libglvnd'
          'vulkan-icd-loader' 'libx11' 'libxext' 'libxrender' 'libxtst' 'libxi' 'fontconfig'
          'hicolor-icon-theme')
 # Prebuilt and already stripped; stripping would also break libskiko's checksum.

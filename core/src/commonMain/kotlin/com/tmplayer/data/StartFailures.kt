@@ -11,8 +11,8 @@ import com.tmplayer.i18n.L
  *  - [Kind.Blocked]: Windows Smart App Control or an Application Control policy refused one of
  *    TDLib's unsigned DLLs (#27), as it does libmpv's (HX36, `VideoEngineFailure`).
  *  - [Kind.SystemTooOld]: a Linux older than the glibc and libstdc++ the prebuilt TDLib was linked
- *    against, `version 'GLIBCXX_3.4.32' not found` (#30). The floor is glibc 2.38, see
- *    `desktop/packaging/linux/glibc-floor.sh`.
+ *    against, `version 'GLIBCXX_3.4.32' not found` (#30). The floor is glibc 2.35, see
+ *    `desktop/packaging/linux/glibc-floor.sh` and `natives/linux-2-35/PINS.txt`.
  *  - [Kind.FolderUnusable]: TDLib could not make its files or database directory, a drive that was
  *    unplugged or a folder that is read only (#35).
  *

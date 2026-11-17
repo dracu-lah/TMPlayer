@@ -25,10 +25,13 @@
 # CI installs it and checks the file is there. The app's own updater does not use it: it replaces
 # the whole file, which works the same whether or not the information is embedded.
 #
-# Every native the app loads (TDLib inside the tdl-coroutines jar, libmpv and FFmpeg inside the
-# mediamp runtime jar) was linked against glibc 2.38 and GCC 13's libstdc++, which is the floor
-# for both: Ubuntu 24.04, Debian 13, Fedora 39, Mint 22, openSUSE Tumbleweed or Leap 16, RHEL 10,
-# Arch, or newer.
+# The floor is glibc 2.35 and GCC 12's libstdc++ (GLIBCXX_3.4.30): Ubuntu 22.04, Pop!_OS 22.04,
+# Debian 12, Mint 21, Fedora 36, openSUSE Leap 15.5, RHEL 9 or Arch, or newer (issue #30). The
+# published TDLib and libmpv were linked on Ubuntu 24.04 against glibc 2.38, so a release builds the
+# app image with -PtmplayerLinuxNatives=<dir>: desktop/build.gradle.kts then swaps in the TDLib,
+# libmpv, libmediampv and their six Ubuntu libraries that scripts/build-tdlib-linux.sh and
+# scripts/build-mpv-linux-2-35.sh build on Ubuntu 22.04, each checked against
+# natives/linux-2-35/PINS.txt. glibc-floor.sh checks the result (MAX_GLIBC, MAX_GLIBCXX).
 set -euo pipefail
 
 version="${1:?usage: package.sh <version> [tar] [appimage]}"

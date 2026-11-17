@@ -7,8 +7,8 @@
 set -euo pipefail
 
 app="${1:?usage: glibc-floor.sh <app image dir>}"
-max_glibc="${MAX_GLIBC:-2.38}"
-max_glibcxx="${MAX_GLIBCXX:-3.4.32}"
+max_glibc="${MAX_GLIBC:-2.35}"
+max_glibcxx="${MAX_GLIBCXX:-3.4.30}"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
