@@ -1,0 +1,166 @@
+# The Xcode project for the iOS and iPadOS app, as XcodeGen reads it. TMPlayer.xcodeproj is
+# generated from this file and committed, so building needs Xcode alone; after changing this file,
+# run `xcodegen generate` in iosApp/. See docs/IOS.md.
+name: TMPlayer
+options:
+  # tdl-coroutines 15.0.0 ships TDLib built for iOS 26.4 and later; linking it into an app for an
+  # older iOS only trades the linker's warning for crashes on those devices. Lower this when the
+  # TDLib binaries are built for an older minimum (docs/IOS.md, open questions).
+  deploymentTarget:
+    iOS: "26.4"
+  createIntermediateGroups: true
+settings:
+  base:
+    # Upstream's version, the TMPlayer this app is built from; an iOS-only fix keeps it and raises
+    # the build. The release sets both from its tag (docs/IOS.md).
+    MARKETING_VERSION: "1.28.5"
+    CURRENT_PROJECT_VERSION: "1"
+packages:
+  # libmpv and FFmpeg for iOS, in their LGPL build: never the MPVKit-GPL product
+  # (docs/IOS.md, "Player: libmpv through MPVKit").
+  MPVKit:
+    url: https://github.com/mpvkit/MPVKit
+    exactVersion: 1.0.0
+targets:
+  TMPlayer:
+    type: application
+    platform: iOS
+    dependencies:
+      - package: MPVKit
+        product: MPVKit
+    sources:
+      - path: TMPlayer
+      # The UI text catalogs, copied as i18n/ into the app bundle, where :core reads them.
+      - path: ../core/src/commonMain/resources/i18n
+        type: folder
+        buildPhase: resources
+      # :app's vector drawables, copied as drawable/, where the screens' R.drawable ids are read
+      # (vectorResource and painterResource in ios/src/iosStandIns).
+      - path: ../app/src/main/res/drawable
+        type: folder
+        buildPhase: resources
+      # The setup and tour pictures, Android's phone shots, copied as drawable-nodpi/ (painterResource
+      # in ui/src/iosStandIns reads them by the names App.kt gives SetupImages).
+      - path: ../app/src/main/res/drawable-nodpi
+        type: folder
+        buildPhase: resources
+      # :app's layouts, values and colour lists, for Android's Views on iOS (ResourceFiles in
+      # ui/src/iosStandIns reads them as Android does; docs/IOS.md, layer 3).
+      - path: ../app/src/main/res/layout
+        type: folder
+        buildPhase: resources
+      - path: ../app/src/main/res/values
+        type: folder
+        buildPhase: resources
+      - path: ../app/src/main/res/color
+        type: folder
+        buildPhase: resources
+      # :app's assets (the bundled subtitle fonts), copied as assets/, where AssetManager reads them.
+      - path: ../app/src/main/assets
+        type: folder
+        buildPhase: resources
+    settings:
+      base:
+        # The app's identifier, which AltStore and SideStore update by: never change it once released.
+        PRODUCT_BUNDLE_IDENTIFIER: org.tmplayer.ios
+        PRODUCT_NAME: TMPlayer
+        # One universal app: iPhone (1) and iPad (2).
+        TARGETED_DEVICE_FAMILY: "1,2"
+        INFOPLIST_FILE: TMPlayer/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        SWIFT_VERSION: "5.0"
+        CODE_SIGN_STYLE: Automatic
+        # Android's launcher icon, made into the asset catalog's by make-app-icon.py.
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # The Kotlin framework, built by the script phase below.
+        FRAMEWORK_SEARCH_PATHS: "$(SRCROOT)/../ios/kit/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)"
+        # TMPlayerKit is static and carries TDLib, which needs the C++ runtime and zlib.
+        OTHER_LDFLAGS: ["-framework", "TMPlayerKit", "-lc++", "-lz"]
+        # The Gradle build reads and writes outside the sandbox Xcode gives script phases.
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+        # The Kotlin framework is built for Apple silicon simulators only (iosSimulatorArm64).
+        "EXCLUDED_ARCHS[sdk=iphonesimulator*]": x86_64
+    preBuildScripts:
+      - name: Build the Kotlin framework
+        basedOnDependencyAnalysis: false
+        script: |
+          set -e
+          cd "$SRCROOT/.."
+          # Gradle needs JDK 21 (docs/BUILDING.md); Xcode's environment rarely points at one.
+          if [ -z "$JAVA_HOME" ] || ! "$JAVA_HOME/bin/java" -version 2>&1 | grep -q 'version "21'; then
+            JAVA_HOME="$(/usr/libexec/java_home -F -v 21 2>/dev/null || true)"
+            if [ -z "$JAVA_HOME" ] && [ -d /opt/homebrew/opt/openjdk@21 ]; then
+              JAVA_HOME="/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home"
+            fi
+          fi
+          export JAVA_HOME
+          ./gradlew :ios:kit:embedAndSignAppleFrameworkForXcode
+    postBuildScripts:
+      # A promo build only (ORG_GRADLE_PROJECT_tmPromo=true, the README's screenshots): upstream's
+      # promo fixture's Unsplash pictures beside :app's in drawable-nodpi/ (PromoPictures). Only the
+      # promo_ ones, whose photos are credited (THIRD_PARTY_NOTICES.md), and not Big Buck Bunny's,
+      # a real film: the demo_ chat pictures have no credit, so those chats show the app's own.
+      - name: The promo fixture's pictures
+        basedOnDependencyAnalysis: false
+        script: |
+          set -e
+          if [ "${ORG_GRADLE_PROJECT_tmPromo:-}" = "true" ]; then
+            out="$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/drawable-nodpi"
+            mkdir -p "$out"
+            for picture in "$SRCROOT/../app/src/promo/res/drawable-nodpi/"promo_*.webp; do
+              case "$(basename "$picture")" in promo_bbb_*) continue ;; esac
+              cp "$picture" "$out/"
+            done
+          fi
+  # The checks every video engine passes (docs/IOS.md), run inside the app:
+  # xcodebuild test -scheme TMPlayer -destination 'platform=iOS Simulator,name=iPhone 17'
+  TMPlayerTests:
+    type: bundle.unit-test
+    platform: iOS
+    dependencies:
+      - target: TMPlayer
+    sources:
+      - path: TMPlayerTests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.tmplayer.ios.tests
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "5.0"
+        FRAMEWORK_SEARCH_PATHS: "$(SRCROOT)/../ios/kit/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)"
+        "EXCLUDED_ARCHS[sdk=iphonesimulator*]": x86_64
+  # Checks on a real iPhone or iPad that need a viewer's taps (PlayerOnDeviceTests.swift):
+  # xcodebuild test -scheme TMPlayerDeviceCheck -destination 'id=<device>'
+  TMPlayerUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    dependencies:
+      - target: TMPlayer
+    sources:
+      - path: TMPlayerUITests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.tmplayer.ios.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "5.0"
+        TEST_TARGET_NAME: TMPlayer
+schemes:
+  TMPlayerDeviceCheck:
+    build:
+      targets:
+        TMPlayer: all
+        TMPlayerUITests: [test]
+    test:
+      config: Debug
+      targets:
+        - TMPlayerUITests
+  TMPlayer:
+    build:
+      targets:
+        TMPlayer: all
+        TMPlayerTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - TMPlayerTests

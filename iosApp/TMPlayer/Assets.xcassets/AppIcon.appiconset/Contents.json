@@ -1,0 +1,26 @@
+{
+  "images": [
+    {
+      "idiom": "universal",
+      "platform": "ios",
+      "size": "1024x1024",
+      "filename": "AppIcon.png"
+    },
+    {
+      "idiom": "universal",
+      "platform": "ios",
+      "size": "1024x1024",
+      "filename": "AppIcon-tinted.png",
+      "appearances": [
+        {
+          "appearance": "luminosity",
+          "value": "tinted"
+        }
+      ]
+    }
+  ],
+  "info": {
+    "author": "xcode",
+    "version": 1
+  }
+}
