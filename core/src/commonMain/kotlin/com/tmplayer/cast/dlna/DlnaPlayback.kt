@@ -8,7 +8,9 @@ import java.util.Locale
 /** UPnP's time strings, which every renderer writes a little differently. */
 object UpnpTime {
 
-    private val TIME = Regex("""^([+-])?(\d{1,5}):(\d{1,2}):(\d{1,2})(?:\.(\d{1,9}))?(?:\.\d+)?(?:\s*[Ff]\d+/\d+)?$""")
+    // [0-9], not \d: on Android \d also matches digits of other scripts, some of which no number
+    // parser reads (a mathematical bold 0), so a renderer's odd answer would throw there only.
+    private val TIME = Regex("""^([+-])?([0-9]{1,5}):([0-9]{1,2}):([0-9]{1,2})(?:\.([0-9]{1,9}))?(?:\.[0-9]+)?(?:\s*[Ff][0-9]+/[0-9]+)?$""")
 
     /**
      * `0:00:30`, `00:00:05`, `0:00:01.016`, `+00:01:00.5` as milliseconds. Null for what carries
@@ -17,12 +19,12 @@ object UpnpTime {
     fun parseMs(text: String?): Long? {
         val m = TIME.matchEntire(text?.trim() ?: return null) ?: return null
         if (m.groupValues[1] == "-") return null
-        val h = m.groupValues[2].toLong()
-        val min = m.groupValues[3].toLong()
-        val s = m.groupValues[4].toLong()
+        val h = m.groupValues[2].toLongOrNull() ?: return null
+        val min = m.groupValues[3].toLongOrNull() ?: return null
+        val s = m.groupValues[4].toLongOrNull() ?: return null
         if (min >= 60 || s >= 60) return null
         val frac = m.groupValues[5]
-        val ms = if (frac.isEmpty()) 0L else (frac.take(3).padEnd(3, '0')).toLong()
+        val ms = if (frac.isEmpty()) 0L else (frac.take(3).padEnd(3, '0')).toLongOrNull() ?: return null
         return h * 3_600_000 + min * 60_000 + s * 1000 + ms
     }
 

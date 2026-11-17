@@ -12,7 +12,8 @@ object KeptLogLines {
 
     // "[ 2][t 3][1763241031.664125060][AuthManager.cpp:123][#1][!Td]\tLost authorization": the
     // level, the thread, the moment in seconds and the place, then any tags, then the message.
-    private val TDLIB = Regex("""^\[\s*(\d+)]\[t\s*(\d+)]\[(\d+)\.(\d+)]\[([^\]]*)]((?:\[[^\]]*])*)\s*(.*)$""")
+    // [0-9], not \d: on Android \d also matches digits of other scripts that number parsing refuses.
+    private val TDLIB = Regex("""^\[\s*([0-9]+)]\[t\s*([0-9]+)]\[([0-9]+)\.([0-9]+)]\[([^\]]*)]((?:\[[^\]]*])*)\s*(.*)$""")
 
     /**
      * TDLib's [raw] lines as kept lines, with [stamp] writing a moment in milliseconds since 1970.
@@ -30,7 +31,7 @@ object KeptLogLines {
                 continue
             }
             val (level, thread, seconds, fraction, place, _, message) = match.destructured
-            val millis = (seconds.toLongOrNull() ?: continue) * 1000 + fraction.padEnd(3, '0').take(3).toInt()
+            val millis = (seconds.toLongOrNull() ?: continue) * 1000 + (fraction.padEnd(3, '0').take(3).toIntOrNull() ?: continue)
             val head = "${stamp(millis)} tdlib t$thread"
             out += "$head ${letter(level)}/TDLib: [$place] $message"
             last = head

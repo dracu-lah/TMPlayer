@@ -43,7 +43,8 @@ object ManualAddress {
 
     private const val MAX_INPUT = 300
     private const val MAX_PATH = 200
-    private val IPV4 = Regex("""(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})""")
+    // [0-9], not \d: on Android \d also matches digits of other scripts that Int parsing refuses.
+    private val IPV4 = Regex("""([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})""")
     private val NAME = Regex("""[A-Za-z0-9._-]+""")
 
     /** Ports and paths tried when only an IP address was given and the TV did not answer the search. */
@@ -74,7 +75,7 @@ object ManualAddress {
             else -> portPart.toInt().takeIf { it in 1..65535 } ?: return Parsed.Refused(Problem.Port)
         }
         if (hostPart.isEmpty()) return Parsed.Refused(Problem.Garbage)
-        val octets = IPV4.matchEntire(hostPart)?.groupValues?.drop(1)?.map { it.toInt() }
+        val octets = IPV4.matchEntire(hostPart)?.groupValues?.drop(1)?.map { it.toIntOrNull() ?: return Parsed.Refused(Problem.Garbage) }
         if (octets == null) {
             return Parsed.Refused(if (NAME.matches(hostPart) && hostPart.any { it.isLetter() }) Problem.Hostname else Problem.Garbage)
         }
