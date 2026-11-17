@@ -22,7 +22,7 @@ done < <(find "$app" -name '*.jar' -print0)
 
 report="$tmp/report.txt"
 while IFS= read -r -d '' f; do
-  file -b "$f" | grep -q '^ELF' || continue
+  file -b "$f" | grep -q '^ELF.*x86-64' || continue   # other CPUs' natives (JNA's loongarch64, ...) never load here
   g="$(objdump -T "$f" 2>/dev/null | grep -oE 'GLIBC_[0-9.]+' | sed 's/GLIBC_//' | sort -uV | tail -1 || true)"
   x="$(objdump -T "$f" 2>/dev/null | grep -oE 'GLIBCXX_[0-9.]+' | sed 's/GLIBCXX_//' | sort -uV | tail -1 || true)"
   printf '%s\t%s\t%s\n' "${g:-none}" "${x:-none}" "${f#"$tmp"/}" >> "$report"
