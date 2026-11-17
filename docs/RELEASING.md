@@ -168,6 +168,11 @@ The Linux AppImage and tarball carry TDLib and libmpv libraries rebuilt for glib
 Their corresponding source is a further archive, `scripts/build-mpv-linux-2-35.sh --source-archive`
 (`natives/mpv-linux/README.md`), which goes beside the mediamp one on the first release that ships
 them. A tdl-coroutines or mediamp bump means rebuilding, new pins, and a look at both recipes first.
+The `desktop-linux` job then runs the AppImage and the tarball in a plain `ubuntu:22.04` container
+(`.github/actions/desktop-linux/plain-linux-check.sh`: the glibc floor check and `--self-test`) before the
+upload to the publish job, so a library that needs a newer glibc or libstdc++ stops the release;
+`desktop/packaging/linux/test-floor-gate.sh` (with `CONTAINER_ENGINE=podman` locally) proves the gate
+still fails on the jar's GCC 13 TDLib.
 
 Nothing else is attached. GitHub adds the source archives of the tagged tree by itself and shows
 each file's SHA-256 beside it, so there is no checksum file. The release notes link to the

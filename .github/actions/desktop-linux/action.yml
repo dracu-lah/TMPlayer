@@ -78,6 +78,22 @@ runs:
         # No FUSE on the runner: the AppImage unpacks itself and runs from there instead.
         APPIMAGE_EXTRACT_AND_RUN=1 "dist/TMPlayer-${{ inputs.version }}-x86_64.AppImage" --self-test
 
+    # The runner is Ubuntu 24.04, so the self-tests above would pass even if a library needed
+    # glibc 2.38 again. This runs the glibc floor check and the --self-test of the AppImage and
+    # of the tarball inside a plain Ubuntu 22.04 container (glibc 2.35, libstdc++ 3.4.30, only the
+    # desktop libraries a stock install has), where a native built too new does not load. In
+    # release.yml this step is before the upload that hands the AppImage to the publish job, so a
+    # failure stops the release before anything is published. Locally the same script runs with
+    # CONTAINER_ENGINE=podman; test-floor-gate.sh proves it fails on a GCC 13 library.
+    - name: Self-test on plain Ubuntu 22.04 (glibc 2.35)
+      shell: bash
+      env:
+        CONTAINER_ENGINE: docker
+      run: |
+        ${{ github.action_path }}/plain-linux-check.sh \
+          "dist/TMPlayer-${{ inputs.version }}-x86_64.AppImage" \
+          "dist/TMPlayer-${{ inputs.version }}-linux-x64.tar.xz"
+
     # appimagetool skips the .zsync without a word when zsyncmake is missing, and an AppImage that
     # names a .zsync the release does not carry leaves every updater that reads it with nothing.
     - name: Check the AppImage's delta update file
