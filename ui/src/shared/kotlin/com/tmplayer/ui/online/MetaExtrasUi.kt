@@ -73,6 +73,8 @@ import com.tmplayer.online.MetaScore
 import com.tmplayer.online.ScoreSource
 import com.tmplayer.online.MetaTrailer
 import com.tmplayer.online.OnlineMetadata
+import com.tmplayer.online.TrailerRoute
+import com.tmplayer.online.TrailerRules
 import com.tmplayer.ui.auth.QrCode
 import com.tmplayer.ui.components.MediaArt
 import com.tmplayer.ui.components.isTouch
@@ -337,18 +339,25 @@ private val SCORE_GAP: Dp = 14.dp
 // ---- the trailer ------------------------------------------------------------------------------
 
 /**
- * Opens trailers. On a television the YouTube app comes first where there is one ([appFirst]):
- * it is made for the remote and plays every trailer, where YouTube's embedded player in a WebView
- * is at its weakest on a TV (no remote keys, codecs the chip decodes badly, trailers not allowed
- * embedded). Otherwise, and on a phone, the app's own player where the platform has one
- * ([playing], drawn by [TrailerHost]), else the YouTube app or the browser. Remembers the one
- * nothing on this device could open, so its QR code can be shown in its place.
+ * Opens trailers, for every trailer button on every platform. With the viewer's
+ * `trailers_in_app` setting on ([inAppSetting]) and a platform player behind [LocalTrailerOpener]
+ * ([seam]), [TrailerRules.route] decides: in the app through [seam], whose fallback is
+ * [openElsewhere]; else outside.
+ *
+ * While a platform has no player of its own ([TrailerOpener.External]), the order from before the
+ * seam stands: on Android the YouTube app first where there is one ([appFirst]), since it is made
+ * for the remote and plays every trailer where a WebView is weakest; then the WebView player where
+ * the system has one ([inApp], [playing], drawn by [TrailerHost]), only with the setting on; else
+ * the YouTube app or the browser. Remembers the one nothing on this device could open, so its QR
+ * code can be shown in its place.
  */
 @Stable
 class TrailerLauncher internal constructor(
     private val opener: (MetaTrailer) -> Boolean,
     private val inApp: Boolean,
     private val appFirst: ((MetaTrailer) -> Boolean)? = null,
+    private val seam: TrailerOpener = TrailerOpener.External,
+    private val inAppSetting: () -> Boolean = { true },
 ) {
     var unopened by mutableStateOf<MetaTrailer?>(null)
         private set
@@ -359,8 +368,25 @@ class TrailerLauncher internal constructor(
 
     fun open(trailer: MetaTrailer) {
         unopened = null
+        val setting = inAppSetting()
+        if (seam !== TrailerOpener.External) {
+            when (TrailerRules.route(setting, trailer.key, seam.online, canEmbed = true)) {
+                TrailerRoute.InApp -> {
+                    // Once only, whatever the platform does: a second call opens nothing more.
+                    var fellBack = false
+                    seam.open(trailer) {
+                        if (!fellBack) {
+                            fellBack = true
+                            openElsewhere(trailer)
+                        }
+                    }
+                }
+                TrailerRoute.External -> openElsewhere(trailer)
+            }
+            return
+        }
         if (appFirst?.invoke(trailer) == true) return
-        if (inApp) {
+        if (TrailerRules.route(setting, trailer.key, online = true, canEmbed = inApp) == TrailerRoute.InApp) {
             playing = trailer
         } else {
             openElsewhere(trailer)
@@ -384,7 +410,11 @@ fun rememberTrailerLauncher(): TrailerLauncher {
     val opener = rememberTrailerOpener()
     val inApp = rememberInAppTrailers()
     val appFirst = rememberTrailerAppFirst()
-    return remember(opener, inApp, appFirst) { TrailerLauncher(opener, inApp, appFirst) }
+    val seam = LocalTrailerOpener.current
+    return remember(opener, inApp, appFirst, seam) {
+        // Read at the tap, so a change in Settings counts without the page recomposing.
+        TrailerLauncher(opener, inApp, appFirst, seam) { OnlineMetadata.current?.settings?.value?.trailersInApp != false }
+    }
 }
 
 /** The in-app trailer player, while [launcher] has one playing. Place it once beside the trailer button. */
