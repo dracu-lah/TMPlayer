@@ -872,7 +872,7 @@
     "start_folder": "TMPlayer could not make its folder {folder}. The drive may be unplugged, full or read only. Connect the drive or free some space, then press Try again.",
     "start_folder_unnamed": "TMPlayer could not make one of its folders. The drive may be unplugged, full or read only. Connect the drive or free some space, then press Try again.",
     "start_rejected": "TMPlayer could not set up its connection to Telegram. Send logs and we will look into it. Details: {message}",
-    "start_system_too_old": "This Linux is older than TMPlayer needs. TMPlayer runs on systems from 2024 or newer (glibc 2.38): Ubuntu 24.04, Debian 13, Linux Mint 22, Fedora 39 or newer. Update the system, then open TMPlayer again. Help: tmplayer.org/install",
+    "start_system_too_old": "This Linux is older than TMPlayer needs. TMPlayer runs on systems from 2022 or newer (glibc 2.35): Ubuntu 22.04, Debian 12, Linux Mint 21, Fedora 36 or newer. Update the system, then open TMPlayer again. Help: tmplayer.org/install",
     "tdlib_parameters": "TDLib rejected its parameters: {message}",
     "tdlib_unavailable": "TDLib, the part of TMPlayer that talks to Telegram, could not start on this device. Please report this with the message: {message}",
     "unsupported_sign_in_step": "This account needs a step TMPlayer can't do. Finish signing in in the Telegram app first, then try again.",

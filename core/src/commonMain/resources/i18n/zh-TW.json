@@ -872,7 +872,7 @@
     "start_folder": "TMPlayer 無法建立其資料夾 {folder}。磁碟機可能已中斷連線、已滿或為唯讀。請連接磁碟機或釋出一些空間，然後按「再試一次」。",
     "start_folder_unnamed": "TMPlayer 無法建立其中一個資料夾。磁碟機可能已中斷連線、已滿或為唯讀。請連接磁碟機或釋出一些空間，然後按「再試一次」。",
     "start_rejected": "TMPlayer 無法建立與 Telegram 的連線。請傳送記錄檔，我們會來查看。詳細資料：{message}",
-    "start_system_too_old": "這個 Linux 版本低於 TMPlayer 的需求。TMPlayer 可在 2024 年或更新的系統（glibc 2.38）上執行：Ubuntu 24.04、Debian 13、Linux Mint 22、Fedora 39 或更新版本。請更新系統，然後重新開啟 TMPlayer。說明：tmplayer.org/install",
+    "start_system_too_old": "這個 Linux 版本低於 TMPlayer 的需求。TMPlayer 可在 2022 年或更新的系統（glibc 2.35）上執行：Ubuntu 22.04、Debian 12、Linux Mint 21、Fedora 36 或更新版本。請更新系統，然後重新開啟 TMPlayer。說明：tmplayer.org/install",
     "tdlib_parameters": "TDLib 拒絕了它的參數：{message}",
     "tdlib_unavailable": "TDLib（TMPlayer 中與 Telegram 溝通的部分）無法在這台裝置上啟動。請附上以下訊息回報：{message}",
     "unsupported_sign_in_step": "這個帳號需要 TMPlayer 無法完成的步驟。請先在 Telegram 應用程式中完成登入，然後再試一次。",

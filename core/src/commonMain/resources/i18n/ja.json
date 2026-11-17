@@ -872,7 +872,7 @@
     "start_folder": "TMPlayerがフォルダー{folder}を作成できませんでした。ドライブが接続されていない、空き容量がない、または読み取り専用の可能性があります。ドライブを接続するか空き容量を確保してから、「もう一度試す」を押してください。",
     "start_folder_unnamed": "TMPlayerがフォルダーの1つを作成できませんでした。ドライブが接続されていない、空き容量がない、または読み取り専用の可能性があります。ドライブを接続するか空き容量を確保してから、「もう一度試す」を押してください。",
     "start_rejected": "TMPlayerはTelegramへの接続を設定できませんでした。ログを送信してください。こちらで調べます。詳細: {message}",
-    "start_system_too_old": "このLinuxはTMPlayerの必要条件より古いバージョンです。TMPlayerは2024年以降のシステム(glibc 2.38)で動作します: Ubuntu 24.04、Debian 13、Linux Mint 22、Fedora 39以降。システムを更新してから、もう一度TMPlayerを開いてください。ヘルプ: tmplayer.org/install",
+    "start_system_too_old": "このLinuxはTMPlayerの必要条件より古いバージョンです。TMPlayerは2022年以降のシステム(glibc 2.35)で動作します: Ubuntu 22.04、Debian 12、Linux Mint 21、Fedora 36以降。システムを更新してから、もう一度TMPlayerを開いてください。ヘルプ: tmplayer.org/install",
     "tdlib_parameters": "TDLibがパラメータを拒否しました: {message}",
     "tdlib_unavailable": "Telegramと通信するTMPlayerの部品TDLibを、この端末で起動できませんでした。次のメッセージを添えて報告してください: {message}",
     "unsupported_sign_in_step": "このアカウントには、TMPlayerでは行えない手順が必要です。先にTelegramアプリでログインを完了してから、もう一度試してください。",

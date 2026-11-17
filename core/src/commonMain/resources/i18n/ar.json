@@ -872,7 +872,7 @@
     "start_folder": "تعذّر على TMPlayer إنشاء مجلده {folder}. قد يكون القرص مفصولًا أو ممتلئًا أو للقراءة فقط. صِل القرص أو حرّر بعض المساحة، ثم اضغط حاول مجددًا.",
     "start_folder_unnamed": "تعذّر على TMPlayer إنشاء أحد مجلداته. قد يكون القرص مفصولًا أو ممتلئًا أو للقراءة فقط. صِل القرص أو حرّر بعض المساحة، ثم اضغط حاول مجددًا.",
     "start_rejected": "تعذّر على TMPlayer إعداد اتصاله بـ Telegram. أرسل السجلات وسنفحص الأمر. التفاصيل: {message}",
-    "start_system_too_old": "إصدار Linux هذا أقدم مما يحتاجه TMPlayer. يعمل TMPlayer على أنظمة من عام 2024 أو أحدث (glibc 2.38): Ubuntu 24.04 وDebian 13 وLinux Mint 22 وFedora 39 أو أحدث. حدّث النظام ثم افتح TMPlayer مجددًا. المساعدة: tmplayer.org/install",
+    "start_system_too_old": "إصدار Linux هذا أقدم مما يحتاجه TMPlayer. يعمل TMPlayer على أنظمة من عام 2022 أو أحدث (glibc 2.35): Ubuntu 22.04 وDebian 12 وLinux Mint 21 وFedora 36 أو أحدث. حدّث النظام ثم افتح TMPlayer مجددًا. المساعدة: tmplayer.org/install",
     "tdlib_parameters": "رفضت TDLib معاملاتها: {message}",
     "tdlib_unavailable": "تعذّر تشغيل TDLib، وهو جزء TMPlayer الذي يتواصل مع Telegram، على هذا الجهاز. يُرجى الإبلاغ عن ذلك مع هذه الرسالة: {message}",
     "unsupported_sign_in_step": "يحتاج هذا الحساب إلى خطوة لا يستطيع TMPlayer تنفيذها. أكمل تسجيل الدخول في تطبيق Telegram أولًا، ثم حاول مجددًا.",

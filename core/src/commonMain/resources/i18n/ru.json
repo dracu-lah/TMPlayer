@@ -872,7 +872,7 @@
     "start_folder": "TMPlayer не удалось создать свою папку {folder}. Возможно, диск отключён, заполнен или доступен только для чтения. Подключите диск или освободите место, затем нажмите Повторить.",
     "start_folder_unnamed": "TMPlayer не удалось создать одну из своих папок. Возможно, диск отключён, заполнен или доступен только для чтения. Подключите диск или освободите место, затем нажмите Повторить.",
     "start_rejected": "TMPlayer не смог настроить соединение с Telegram. Отправьте журналы, и мы разберёмся. Подробности: {message}",
-    "start_system_too_old": "Этот Linux старше, чем нужно TMPlayer. TMPlayer работает на системах 2024 года или новее (glibc 2.38): Ubuntu 24.04, Debian 13, Linux Mint 22, Fedora 39 или новее. Обновите систему и снова откройте TMPlayer. Справка: tmplayer.org/install",
+    "start_system_too_old": "Этот Linux старше, чем нужно TMPlayer. TMPlayer работает на системах 2022 года или новее (glibc 2.35): Ubuntu 22.04, Debian 12, Linux Mint 21, Fedora 36 или новее. Обновите систему и снова откройте TMPlayer. Справка: tmplayer.org/install",
     "tdlib_parameters": "TDLib отклонил параметры: {message}",
     "tdlib_unavailable": "TDLib, часть TMPlayer, которая общается с Telegram, не смогла запуститься на этом устройстве. Сообщите об этом, приложив текст: {message}",
     "unsupported_sign_in_step": "Для этого аккаунта нужен шаг, который TMPlayer выполнить не может. Сначала завершите вход в приложении Telegram, затем повторите.",

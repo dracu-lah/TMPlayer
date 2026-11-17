@@ -872,7 +872,7 @@
     "start_folder": "TMPlayer tidak bisa membuat foldernya {folder}. Drive mungkin dicabut, penuh, atau hanya baca. Sambungkan drive atau kosongkan ruang, lalu tekan Coba lagi.",
     "start_folder_unnamed": "TMPlayer tidak bisa membuat salah satu foldernya. Drive mungkin dicabut, penuh, atau hanya baca. Sambungkan drive atau kosongkan ruang, lalu tekan Coba lagi.",
     "start_rejected": "TMPlayer tidak bisa menyiapkan koneksinya ke Telegram. Kirim log dan kami akan memeriksanya. Detail: {message}",
-    "start_system_too_old": "Linux ini lebih lama dari yang dibutuhkan TMPlayer. TMPlayer berjalan di sistem tahun 2024 atau yang lebih baru (glibc 2.38): Ubuntu 24.04, Debian 13, Linux Mint 22, Fedora 39 atau yang lebih baru. Perbarui sistem, lalu buka TMPlayer lagi. Bantuan: tmplayer.org/install",
+    "start_system_too_old": "Linux ini lebih lama dari yang dibutuhkan TMPlayer. TMPlayer berjalan di sistem tahun 2022 atau yang lebih baru (glibc 2.35): Ubuntu 22.04, Debian 12, Linux Mint 21, Fedora 36 atau yang lebih baru. Perbarui sistem, lalu buka TMPlayer lagi. Bantuan: tmplayer.org/install",
     "tdlib_parameters": "TDLib menolak parameternya: {message}",
     "tdlib_unavailable": "TDLib, bagian TMPlayer yang berbicara dengan Telegram, tidak bisa dimulai di perangkat ini. Laporkan dengan pesan ini: {message}",
     "unsupported_sign_in_step": "Akun ini membutuhkan langkah yang tidak bisa dilakukan TMPlayer. Selesaikan dulu proses masuk di aplikasi Telegram, lalu coba lagi.",
