@@ -178,6 +178,20 @@ class GarbageInputTest {
         "http://169.254.1.1/d.xml", "http://100.64.1.1:8080/d.xml", "HTTP://10.0.0.5/D.XML",
     )
 
+    /** The sign in failure's sentence reads TDLib's and the native loader's error text (StartFailures). */
+    @Test
+    fun startFailuresNeverThrow() {
+        for (text in texts) {
+            survive("StartFailures", text) {
+                StartFailures.kind(text)
+                StartFailures.folder("Can't create directory \"$text\"")
+                check(StartFailures.describeRejected(text).isNotBlank())
+                check(StartFailures.describe(UnsatisfiedLinkError(text)).isNotBlank())
+            }
+        }
+        assertNoFailures()
+    }
+
     /** iOS's kept log reads TDLib's own log file back (KeptLog): cut short, or written by anything. */
     @Test
     fun keptLogLinesNeverThrow() {
