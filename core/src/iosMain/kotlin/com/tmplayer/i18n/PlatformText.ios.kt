@@ -59,6 +59,9 @@ actual class TmLocale(val tag: String) {
 
     fun toLanguageTag(): String = tag
 
+    /** The language's three letter code, as java.util.Locale.isO3Language; empty when it has none. */
+    val isO3Language: String get() = PlatformText.iso3Of(language).orEmpty()
+
     /** This language named in [inLocale], as java.util.Locale.getDisplayLanguage does. */
     fun getDisplayLanguage(inLocale: TmLocale): String = PlatformText.languageName(language, inLocale).ifEmpty { tag }
 
@@ -68,6 +71,10 @@ actual class TmLocale(val tag: String) {
         val US = TmLocale("en-US")
         val ENGLISH = TmLocale("en")
         fun forLanguageTag(tag: String): TmLocale = TmLocale(tag)
+
+        /** The two letter codes of the languages Foundation knows, as java.util.Locale.getISOLanguages. */
+        fun getISOLanguages(): Array<String> =
+            NSLocale.ISOLanguageCodes.filterIsInstance<String>().filter { it.length == 2 }.toTypedArray()
 
         /** The device's locale, as Locale.getDefault() is on Android. */
         fun getDefault(): TmLocale = TmLocale(deviceLocaleTag())

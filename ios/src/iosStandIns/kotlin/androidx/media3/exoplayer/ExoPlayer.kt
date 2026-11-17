@@ -173,9 +173,6 @@ fun interface RenderersFactory {
     fun createRenderers(): Array<Renderer>
 }
 
-/** Media3's buffering policy; the engine buffers by itself on iOS. */
-interface LoadControl
-
 /** An error of ExoPlayer's own, Media3's. */
 class ExoPlaybackException(
     message: String?,

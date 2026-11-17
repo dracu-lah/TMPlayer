@@ -1,4 +1,8 @@
+@file:OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
+
 package android.view
+
+import kotlinx.cinterop.useContents
 
 /**
  * The screen, Android's Display: what HDR it shows, from iOS. A screen with extended dynamic range
@@ -15,6 +19,16 @@ class Display internal constructor() {
     }
 
     val displayId: Int get() = DEFAULT_DISPLAY
+
+    /** A size and a rate the screen runs at, Android's. iOS tells the native pixels and the best rate, so there is the one mode. */
+    class Mode internal constructor(val modeId: Int, val physicalWidth: Int, val physicalHeight: Int, val refreshRate: Float)
+
+    val mode: Mode
+        get() = platform.UIKit.UIScreen.mainScreen.nativeBounds.useContents {
+            Mode(1, size.width.toInt(), size.height.toInt(), refreshRate)
+        }
+
+    val supportedModes: Array<Mode> get() = arrayOf(mode)
 
     val hdrCapabilities: HdrCapabilities?
         get() {

@@ -7,6 +7,13 @@ package androidx.media3.exoplayer.source
 interface MediaSource {
     /** Media3's factory of media sources. */
     interface Factory
+
+    /** Which period of a timeline a load or a playback is about, Media3's: the period's id and nothing else here. */
+    class MediaPeriodId(val periodUid: Any) {
+        override fun equals(other: Any?): Boolean = other is MediaPeriodId && other.periodUid == periodUid
+
+        override fun hashCode(): Int = periodUid.hashCode()
+    }
 }
 
 /** A renderer's track groups, Media3's. */

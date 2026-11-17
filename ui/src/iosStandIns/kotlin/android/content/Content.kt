@@ -103,6 +103,8 @@ abstract class Context {
 
     open fun getSystemService(name: String): Any? = when (name) {
         CLIPBOARD_SERVICE -> ClipboardManager.Shared
+        CONNECTIVITY_SERVICE -> android.net.ConnectivityManager.Shared
+        POWER_SERVICE -> android.os.PowerManager.Shared
         ACTIVITY_SERVICE -> android.app.ActivityManager.Shared
         AUDIO_SERVICE -> android.media.AudioManager.Shared
         DISPLAY_SERVICE -> android.hardware.display.DisplayManager.Shared
@@ -113,8 +115,15 @@ abstract class Context {
     open fun <T : Any> getSystemService(type: KClass<T>): T? = when (type) {
         android.hardware.display.DisplayManager::class -> android.hardware.display.DisplayManager.Shared as T
         android.media.AudioManager::class -> android.media.AudioManager.Shared as T
+        android.net.ConnectivityManager::class -> android.net.ConnectivityManager.Shared as T
+        android.os.PowerManager::class -> android.os.PowerManager.Shared as T
         else -> null
     }
+
+    /** Told of the system's memory levels and configuration changes; only an Application hears them on iOS. */
+    open fun registerComponentCallbacks(callback: ComponentCallbacks) = Unit
+
+    open fun unregisterComponentCallbacks(callback: ComponentCallbacks) = Unit
 
     /**
      * Opens what iOS can open for an intent: a web or app link through UIApplication. Anything
@@ -193,6 +202,28 @@ open class ContextWrapper(base: Context?) : Context() {
 
 class ComponentName(val packageName: String, val className: String)
 
+/** What an app is told when the system's configuration changes or memory runs short, Android's. */
+interface ComponentCallbacks {
+    fun onConfigurationChanged(newConfig: android.content.res.Configuration)
+
+    fun onLowMemory()
+}
+
+/** [ComponentCallbacks] with the memory levels: iOS's memory warnings arrive as the running levels. */
+interface ComponentCallbacks2 : ComponentCallbacks {
+    fun onTrimMemory(level: Int)
+
+    companion object {
+        const val TRIM_MEMORY_RUNNING_MODERATE = 5
+        const val TRIM_MEMORY_RUNNING_LOW = 10
+        const val TRIM_MEMORY_RUNNING_CRITICAL = 15
+        const val TRIM_MEMORY_UI_HIDDEN = 20
+        const val TRIM_MEMORY_BACKGROUND = 40
+        const val TRIM_MEMORY_MODERATE = 60
+        const val TRIM_MEMORY_COMPLETE = 80
+    }
+}
+
 /** android.content.Intent: an action, a target and extras, read back by whoever handles it. */
 open class Intent(var action: String? = null, var data: Uri? = null) {
     constructor(context: Context, target: KClass<*>) : this(null as String?) {
@@ -228,6 +259,7 @@ open class Intent(var action: String? = null, var data: Uri? = null) {
     fun putExtra(name: String, value: Boolean): Intent = apply { extras[name] = value }
     fun putExtra(name: String, value: Float): Intent = apply { extras[name] = value }
     fun putExtra(name: String, value: Array<String>?): Intent = apply { extras[name] = value }
+    fun putExtra(name: String, value: Array<Uri>?): Intent = apply { extras[name] = value }
     fun putExtra(name: String, value: IntArray?): Intent = apply { extras[name] = value }
     fun putExtra(name: String, value: LongArray?): Intent = apply { extras[name] = value }
     fun putExtra(name: String, value: Uri?): Intent = apply { extras[name] = value }

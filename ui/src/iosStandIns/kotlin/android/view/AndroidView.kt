@@ -68,6 +68,9 @@ open class View(context: Context?, attrs: AttributeSet?, @Suppress("UNUSED_PARAM
 
     var id: Int = NO_ID
     var tag: Any? = null
+
+    /** The listeners for this tree's layout, drawing and focus, Android's (see [ViewTreeObserver]). */
+    val viewTreeObserver: ViewTreeObserver = ViewTreeObserver()
     private val keyedTags = HashMap<Int, Any?>()
     var contentDescription: CharSequence? = null
 

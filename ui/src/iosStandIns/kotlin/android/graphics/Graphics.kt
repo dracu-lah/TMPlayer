@@ -64,6 +64,10 @@ class Rect(var left: Int = 0, var top: Int = 0, var right: Int = 0, var bottom: 
 
     fun centerY(): Int = (top + bottom) / 2
 
+    fun exactCenterX(): Float = (left + right) / 2.0f
+
+    fun exactCenterY(): Float = (top + bottom) / 2.0f
+
     fun isEmpty(): Boolean = left >= right || top >= bottom
 
     /** Java's isEmpty(), as Kotlin also reads it. */

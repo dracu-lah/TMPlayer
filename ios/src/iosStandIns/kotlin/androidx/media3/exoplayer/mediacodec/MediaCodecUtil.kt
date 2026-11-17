@@ -24,6 +24,8 @@ class MediaCodecInfo(
     val hardwareAccelerated: Boolean,
     val softwareOnly: Boolean,
     val vendor: Boolean,
+    /** Whether it takes tunnelled playback; VideoToolbox does not on iOS, so none of the above does. */
+    val tunneling: Boolean = false,
 ) {
     fun isFormatSupported(format: Format): Boolean = format.sampleMimeType == mimeType
 

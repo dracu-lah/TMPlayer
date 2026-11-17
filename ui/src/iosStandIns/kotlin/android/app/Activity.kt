@@ -119,8 +119,23 @@ open class Activity : ContextWrapper(null) {
 open class Application : ContextWrapper(null) {
     private val callbacks = ArrayList<ActivityLifecycleCallbacks>()
 
+    private val componentCallbacks = ArrayList<android.content.ComponentCallbacks>()
+
     open fun onCreate() = Unit
-    open fun onTrimMemory(level: Int) = Unit
+
+    /** Tells whoever registered a [android.content.ComponentCallbacks2], as Android's Application does. */
+    open fun onTrimMemory(level: Int) {
+        componentCallbacks.toList().forEach { (it as? android.content.ComponentCallbacks2)?.onTrimMemory(level) }
+    }
+
+    override fun registerComponentCallbacks(callback: android.content.ComponentCallbacks) {
+        componentCallbacks += callback
+    }
+
+    override fun unregisterComponentCallbacks(callback: android.content.ComponentCallbacks) {
+        componentCallbacks -= callback
+    }
+
     override val applicationContext: Context get() = this
 
     fun registerActivityLifecycleCallbacks(callback: ActivityLifecycleCallbacks) {
@@ -164,6 +179,26 @@ class ActivityManager internal constructor() {
     val memoryClass: Int get() = (platform.Foundation.NSProcessInfo.processInfo.physicalMemory / (16uL * 1024uL * 1024uL)).toInt().coerceIn(128, 512)
     val largeMemoryClass: Int get() = memoryClass * 2
     val isLowRamDevice: Boolean get() = platform.Foundation.NSProcessInfo.processInfo.physicalMemory < 3uL * 1024uL * 1024uL * 1024uL
+
+    /** What memory the device has, Android's: iOS tells the device's total. */
+    class MemoryInfo {
+        var availMem: Long = 0L
+        var totalMem: Long = 0L
+        var threshold: Long = 0L
+        var lowMemory: Boolean = false
+    }
+
+    fun getMemoryInfo(outInfo: MemoryInfo) {
+        outInfo.totalMem = platform.Foundation.NSProcessInfo.processInfo.physicalMemory.toLong()
+        // iOS tells an app no such number outside its own memory probe: not known reads as none.
+        outInfo.availMem = 0L
+        outInfo.threshold = 0L
+        outInfo.lowMemory = false
+    }
+
+    /** How earlier runs of the app ended, Android 11's: iOS keeps no such list for an app, so it is empty. */
+    @Suppress("UNUSED_PARAMETER")
+    fun getHistoricalProcessExitReasons(packageName: String?, pid: Int, maxNum: Int): List<ApplicationExitInfo> = emptyList()
 
     companion object {
         internal val Shared = ActivityManager()

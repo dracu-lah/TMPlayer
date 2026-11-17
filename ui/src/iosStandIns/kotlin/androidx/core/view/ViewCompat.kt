@@ -70,6 +70,14 @@ fun View.updatePadding(
     bottom: Int = paddingBottom,
 ) = setPadding(left, top, right, bottom)
 
+/** androidx's KTX: new padding on the sides named (start and end follow the layout direction), the rest as it is. */
+fun View.updatePaddingRelative(
+    start: Int = paddingStart,
+    top: Int = paddingTop,
+    end: Int = paddingEnd,
+    bottom: Int = paddingBottom,
+) = setPaddingRelative(start, top, end, bottom)
+
 /** androidx's KTX: changes the LayoutParams in place and sets them again. */
 inline fun <reified T : ViewGroup.LayoutParams> View.updateLayoutParams(block: T.() -> Unit) {
     val params = layoutParams as T

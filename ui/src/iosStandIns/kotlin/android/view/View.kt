@@ -91,6 +91,7 @@ class KeyEvent(
         const val KEYCODE_CHANNEL_UP = 166
         const val KEYCODE_CHANNEL_DOWN = 167
         const val KEYCODE_CAPTIONS = 175
+        const val KEYCODE_MEDIA_AUDIO_TRACK = 222
         const val KEYCODE_GUIDE = 172
         const val KEYCODE_HEADSETHOOK = 79
         const val KEYCODE_3D_MODE = 206

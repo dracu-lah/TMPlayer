@@ -34,4 +34,12 @@ interface AnalyticsListener {
     fun onBandwidthEstimate(eventTime: EventTime, totalLoadTimeMs: Int, totalBytesLoaded: Long, bitrateEstimate: Long) {}
 
     fun onPlayerError(eventTime: EventTime, error: PlaybackException) {}
+
+    fun onPlaybackStateChanged(eventTime: EventTime, state: Int) {}
+
+    fun onPlayWhenReadyChanged(eventTime: EventTime, playWhenReady: Boolean, reason: Int) {}
+
+    fun onVideoCodecError(eventTime: EventTime, videoCodecError: Exception) {}
+
+    fun onAudioCodecError(eventTime: EventTime, audioCodecError: Exception) {}
 }

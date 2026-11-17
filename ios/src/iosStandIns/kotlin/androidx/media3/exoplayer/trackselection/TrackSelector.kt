@@ -36,6 +36,10 @@ open class DefaultTrackSelector(@Suppress("UNUSED_PARAMETER") context: android.c
                 if (disabled) disabledRenderers.add(rendererIndex) else disabledRenderers.remove(rendererIndex)
             }
 
+            /** Tunnelled playback hands the video and sound to the device together; the engine decides that on iOS, so this is kept and not used. */
+            @Suppress("UNUSED_PARAMETER")
+            fun setTunnelingEnabled(enabled: Boolean): Builder = this
+
             override fun setTrackTypeDisabled(trackType: Int, disabled: Boolean): Builder = apply { super.setTrackTypeDisabled(trackType, disabled) }
 
             override fun setIgnoredTextSelectionFlags(flags: Int): Builder = apply { super.setIgnoredTextSelectionFlags(flags) }
@@ -76,3 +80,6 @@ open class DefaultTrackSelector(@Suppress("UNUSED_PARAMETER") context: android.c
 
     fun setParameters(builder: Parameters.Builder) = setParameters(builder.build())
 }
+
+/** A track selection of one renderer, Media3's; none is made on iOS (the engine selects), the type is for the load control's callback. */
+interface ExoTrackSelection

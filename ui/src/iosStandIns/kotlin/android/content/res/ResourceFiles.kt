@@ -251,6 +251,9 @@ class ColorStateList(private val states: Array<IntArray>, private val colors: In
 
     fun isStateful(): Boolean = states.size > 1 || states.any { it.isNotEmpty() }
 
+    /** Java's isStateful(), as Kotlin also reads it. */
+    val isStateful: Boolean get() = isStateful()
+
     fun getColorForState(stateSet: IntArray?, defaultColor: Int): Int =
         states.indices.firstOrNull { matches(states[it], stateSet ?: IntArray(0)) }?.let { colors[it] } ?: defaultColor
 

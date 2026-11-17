@@ -119,6 +119,20 @@ open class DefaultRenderersFactory(protected val context: Context) : RenderersFa
  * a stream alike.
  */
 class DefaultLoadControl private constructor(internal val plan: com.tmplayer.ios.media3.ReadAhead) : LoadControl {
+    // Media3's own answers by the plan's durations; nothing on iOS asks, the engine reads ahead by the plan itself.
+    override fun getAllocator(playerId: androidx.media3.exoplayer.analytics.PlayerId): androidx.media3.exoplayer.upstream.Allocator =
+        androidx.media3.exoplayer.upstream.Allocator.None
+
+    override fun getBackBufferDurationUs(playerId: androidx.media3.exoplayer.analytics.PlayerId): Long = plan.backBufferMs * 1000L
+
+    override fun shouldContinueLoading(parameters: LoadControl.Parameters): Boolean =
+        parameters.bufferedDurationUs < plan.maxBufferMs * 1000L
+
+    override fun shouldStartPlayback(parameters: LoadControl.Parameters): Boolean {
+        val needed = if (parameters.rebuffering) plan.bufferForPlaybackAfterRebufferMs else plan.bufferForPlaybackMs
+        return parameters.bufferedDurationUs >= needed * 1000L
+    }
+
     class Builder {
         private var minBufferMs = DEFAULT_MIN_BUFFER_MS
         private var maxBufferMs = DEFAULT_MAX_BUFFER_MS
@@ -170,10 +184,17 @@ class DecoderReuseEvaluation(val decoderName: String, val oldFormat: androidx.me
 /** A decoder's counts, Media3's: on iOS the engine's frames are not counted here. */
 class DecoderCounters {
     var decoderInitCount = 0
+    var decoderReleaseCount = 0
+    var queuedInputBufferCount = 0
+    var skippedInputBufferCount = 0
     var renderedOutputBufferCount = 0
     var droppedBufferCount = 0
+    var droppedInputBufferCount = 0
     var skippedOutputBufferCount = 0
     var maxConsecutiveDroppedBufferCount = 0
+    var droppedToKeyframeCount = 0
+    var totalVideoFrameProcessingOffsetUs = 0L
+    var videoFrameProcessingOffsetCount = 0
 
     fun ensureUpdated() = Unit
 }

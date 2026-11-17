@@ -267,6 +267,8 @@ val jvmSharedPiecesForIos = tasks.register<Sync>("jvmSharedPiecesForIos") {
             "com/tmplayer/data/JvmOverloads.kt",
             "com/tmplayer/data/DataStoreKeyValueStore.kt",
             "com/tmplayer/online/OnlineJvm.kt",
+            // The app log's files on the disk (AppLog), plain files as on Android.
+            "com/tmplayer/platform/PlainLogFiles.kt",
         )
     }
     into(layout.buildDirectory.dir("ios-jvm-shared-pieces/kotlin"))

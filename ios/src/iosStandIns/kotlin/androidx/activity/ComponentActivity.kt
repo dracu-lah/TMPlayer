@@ -95,6 +95,9 @@ open class ComponentActivity : android.app.Activity(), LifecycleOwner, ViewModel
         viewModelStore.clear()
     }
 
+    /** True once the activity has been destroyed, Android's. */
+    open val isDestroyed: Boolean get() = registry.currentState == Lifecycle.State.DESTROYED
+
     open fun onNewIntent(intent: Intent) = Unit
 
     /** Android's window focus: an iOS app's one window is not told, so this is never called. */

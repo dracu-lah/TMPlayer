@@ -115,7 +115,9 @@ class EngineExoPlayer internal constructor(
 
     /** Android's buffering policy from the builder, for the engine to read ahead by. */
     internal fun useLoadControl(control: androidx.media3.exoplayer.LoadControl) {
-        val plan = (control as? androidx.media3.exoplayer.DefaultLoadControl)?.plan ?: return
+        // The player's AheadFirstLoadControl wraps the default one; its budget is the default one's.
+        val inner = (control as? com.tmplayer.player.AheadFirstLoadControl)?.delegate ?: control
+        val plan = (inner as? androidx.media3.exoplayer.DefaultLoadControl)?.plan ?: return
         engine?.readAhead?.readAhead(plan)
     }
     private val scope = MainScope() + CoroutineExceptionHandler { _, e -> com.tmplayer.platform.Logger.w("media3", "a player job failed", e) }

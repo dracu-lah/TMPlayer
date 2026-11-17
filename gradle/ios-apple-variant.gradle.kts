@@ -114,6 +114,11 @@ val appleVariant: Map<String, Map<String, List<Replacement>>> = mapOf(
     // video hasn't started" (2026-11-16). One cut into pieces still asks Telegram for them, and a
     // stream still waits for the sign in.
     "iosPlayer" to mapOf(
+        // The engine reads ahead by the default load control's budget (EngineExoPlayer.useLoadControl): it
+        // looks through this wrapper to find it, so the wrapped control is visible inside the module.
+        "com/tmplayer/player/AheadFirstLoadControl.kt" to listOf(
+            "    private val delegate: LoadControl," becomes "    internal val delegate: LoadControl,",
+        ),
         // "follow the device", not "follow the phone", on an iPad as well (2026-11-15).
         "com/tmplayer/player/ScreenOrientation.kt" to listOf(
             "Follow -> L.playerRotationFollow" becomes "Follow -> L.playerRotationFollowDevice",

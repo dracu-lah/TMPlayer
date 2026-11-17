@@ -101,7 +101,10 @@ object C {
     const val COLOR_SPACE_BT601 = 2
     const val COLOR_SPACE_BT709 = 1
     const val COLOR_SPACE_BT2020 = 6
+    const val COLOR_TRANSFER_LINEAR = 1
+    const val COLOR_TRANSFER_SRGB = 2
     const val COLOR_TRANSFER_SDR = 3
+    const val COLOR_TRANSFER_GAMMA_2_2 = 10
     const val COLOR_TRANSFER_ST2084 = 6
     const val COLOR_TRANSFER_HLG = 7
     const val COLOR_RANGE_LIMITED = 2

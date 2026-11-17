@@ -20,11 +20,20 @@ object Build {
     val FINGERPRINT: String = "apple/ios"
     val DISPLAY: String get() = UIDevice.currentDevice.systemVersion
     val SUPPORTED_ABIS: Array<String> = arrayOf("arm64-v8a")
+    val SUPPORTED_64_BIT_ABIS: Array<String> = arrayOf("arm64-v8a")
+
+    /** The board and the chip: Apple names its chips by the device's model alone, so these say Apple and the model. */
+    val BOARD: String get() = UIDevice.currentDevice.model
+    val SOC_MANUFACTURER: String = "Apple"
+    val SOC_MODEL: String get() = UIDevice.currentDevice.model
 
     object VERSION {
         const val SDK_INT: Int = 36
         val RELEASE: String get() = UIDevice.currentDevice.systemVersion
         val INCREMENTAL: String get() = UIDevice.currentDevice.systemVersion
+
+        /** iOS has no security patch date: its version says it. */
+        val SECURITY_PATCH: String get() = UIDevice.currentDevice.systemVersion
     }
 
     object VERSION_CODES {
@@ -85,6 +94,14 @@ object Process {
     /** Every iPhone and iPad app is 64-bit. */
     fun is64Bit(): Boolean = true
     fun myUid(): Int = 0
+
+    /** The processor time this process has used, in milliseconds (clock() counts microseconds on Apple's systems). */
+    fun getElapsedCpuTime(): Long = platform.posix.clock().toLong() / 1000L
+
+    private val firstUsed = SystemClock.elapsedRealtime()
+
+    /** When this process started on the elapsedRealtime clock: the first time it was asked, which is close enough for a check made at start. */
+    fun getStartElapsedRealtime(): Long = firstUsed
     fun killProcess(pid: Int) = Unit
     fun sendSignal(pid: Int, signal: Int) = Unit
 }

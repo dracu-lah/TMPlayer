@@ -80,6 +80,9 @@ class ActivityInfo {
 
 /** The app as the system lists it, Android's; its label is the app's name from the bundle. */
 class ApplicationInfo internal constructor() {
+    /** Where an Android app's native libraries are unpacked; iOS keeps them in the app's frameworks, so there is no such folder. */
+    val nativeLibraryDir: String? get() = null
+
     fun loadLabel(pm: PackageManager): CharSequence =
         (platform.Foundation.NSBundle.mainBundle.objectForInfoDictionaryKey("CFBundleDisplayName") as? String)
             ?: (platform.Foundation.NSBundle.mainBundle.objectForInfoDictionaryKey("CFBundleName") as? String)

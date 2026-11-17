@@ -4,7 +4,18 @@ package androidx.media3.exoplayer.audio
 // tuning of it (PassthroughBufferCap) as written.
 
 /** Where decoded sound goes, Media3's; on iOS the engine's, so only its processors matter here. */
-interface AudioSink
+interface AudioSink {
+    /** An audio track that could not start, Media3's: the format it was for is kept. */
+    class InitializationException(
+        val audioTrackState: Int,
+        val sampleRate: Int,
+        val channelConfig: Int,
+        val bufferSize: Int,
+        val format: androidx.media3.common.Format,
+        val isRecoverable: Boolean,
+        cause: Exception?,
+    ) : Exception("AudioTrack init failed $audioTrackState Config($sampleRate, $channelConfig, $bufferSize)" + if (isRecoverable) " (recoverable)" else "", cause)
+}
 
 /** What an audio renderer reports, Media3's: every call has an empty default. */
 interface AudioRendererEventListener {

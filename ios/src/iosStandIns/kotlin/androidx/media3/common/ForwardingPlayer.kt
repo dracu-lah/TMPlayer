@@ -150,6 +150,10 @@ open class ForwardingPlayer(private val player: Player) : Player {
 
     override fun isCommandAvailable(command: Int): Boolean = getAvailableCommands().contains(command)
 
+    override fun setVideoSurfaceView(surfaceView: android.view.SurfaceView?) = player.setVideoSurfaceView(surfaceView)
+
+    override fun clearVideoSurface() = player.clearVideoSurface()
+
     /** A listener of the wrapped player that tells its own listener about this player; equal by that listener. */
     private class Forwarding(private val forwarding: Player, private val listener: Player.Listener) : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) = listener.onEvents(forwarding, events)

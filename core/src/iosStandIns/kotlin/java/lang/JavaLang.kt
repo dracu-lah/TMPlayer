@@ -149,10 +149,29 @@ open class Thread(private val target: Runnable? = null, var name: String = "Thre
 
     val isInterrupted: Boolean get() = false
 
+    /** What happens to an exception nothing caught, Java's. */
+    fun interface UncaughtExceptionHandler {
+        fun uncaughtException(thread: Thread, error: Throwable)
+    }
+
     companion object {
         const val MIN_PRIORITY: Int = 1
         const val NORM_PRIORITY: Int = 5
         const val MAX_PRIORITY: Int = 10
+
+        private var defaultHandler: UncaughtExceptionHandler? = null
+
+        fun getDefaultUncaughtExceptionHandler(): UncaughtExceptionHandler? = defaultHandler
+
+        /**
+         * Kotlin/Native runs one hook just before an exception nothing caught ends the process,
+         * which is what Java's handler is: told, and the process ends after it, as it does on the JVM.
+         */
+        fun setDefaultUncaughtExceptionHandler(handler: UncaughtExceptionHandler?) {
+            defaultHandler = handler
+            if (handler == null) return
+            kotlin.native.setUnhandledExceptionHook { error -> runCatching { handler.uncaughtException(currentThread(), error) } }
+        }
 
         fun sleep(millis: kotlin.Long) {
             var left = millis.coerceAtLeast(0)

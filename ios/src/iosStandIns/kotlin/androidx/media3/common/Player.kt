@@ -148,6 +148,14 @@ interface Player {
 
     fun isCommandAvailable(command: Int): Boolean
 
+    /**
+     * Media3 draws onto a surface; on iOS the app's video engine draws into its own view, so a
+     * player ignores these two unless it has a surface to give.
+     */
+    fun setVideoSurfaceView(surfaceView: android.view.SurfaceView?) {}
+
+    fun clearVideoSurface() {}
+
     /** What happens to a player, each callback a no-op until overridden, as in Media3. */
     interface Listener {
         fun onEvents(player: Player, events: Events) {}

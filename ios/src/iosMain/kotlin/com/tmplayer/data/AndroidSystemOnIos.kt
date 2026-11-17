@@ -79,6 +79,11 @@ object CrashReports {
     @Suppress("UNUSED_PARAMETER")
     fun reportStutter(facts: StutterReport.Facts): Boolean = false
 
+    /** What Send logs says of crashes: nothing is recorded on iOS, so only a safe mode run says anything. */
+    fun logLines(): List<String> = buildList {
+        if (SafeMode.active) add("Safe mode: on, the last two runs crashed soon after opening")
+    }
+
     enum class Question { Crash, NotResponding, NativeCrash }
 
     private val _pending = MutableStateFlow<Question?>(null)
@@ -233,7 +238,17 @@ object StutterReport {
         val sizeBucket: Int,
         val symptom: String = "",
         val fpsSource: String = "unknown",
+        val source: String = "unknown",
+        val bufferedAheadMs: Int = -1,
+        val verdict: String = UNKNOWN_VERDICT,
+        val remedies: String = "",
+        val hops: Int = 0,
     )
+
+    const val UNKNOWN_VERDICT = "unknown"
+
+    /** The word a stutter's cause is reported as, upstream's: the cause's name in lower case. */
+    fun verdictName(cause: com.tmplayer.player.StutterCause): String = cause.name.lowercase()
 }
 
 /** A store build has no updater (docs/agents/telegram-terms.md): nothing installs itself on iOS. */
@@ -267,6 +282,7 @@ object NetworkMonitor : Connectivity {
 
     fun start(context: Context) {
         if (!started.compareAndSet(false, true)) return
+        android.net.ConnectivityManager.meteredNow = { _metered.value }
         val created = platform.Network.nw_path_monitor_create()
         platform.Network.nw_path_monitor_set_update_handler(created) { path ->
             val online = platform.Network.nw_path_get_status(path) == platform.Network.nw_path_status_satisfied
