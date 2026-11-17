@@ -41,9 +41,24 @@ object PlayRandom {
         return pool[random.nextInt(pool.size)]
     }
 
-    /** What each list played last, by the list's own key (a chat and topic, Downloads), for this run only. */
-    private val lastPlayed = object : LinkedHashMap<String, String>(16, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?): Boolean = size > KEPT_LISTS
+    /**
+     * What each list played last, by the list's own key (a chat and topic, Downloads), for this run
+     * only, least recently used first. Kept in order by hand rather than by an access-ordered
+     * LinkedHashMap subclass, which Kotlin/Native (the iOS app) does not have.
+     */
+    private val lastPlayed = LinkedHashMap<String, String>()
+
+    /** [lastPlayed]'s entry for [scope], moved to the newest end. Called under its lock. */
+    private fun touch(scope: String): String? = lastPlayed.remove(scope)?.also { lastPlayed[scope] = it }
+
+    /** Records [id] for [scope] as the newest, dropping the oldest past [KEPT_LISTS]. Called under its lock. */
+    private fun remember(scope: String, id: String) {
+        lastPlayed.remove(scope)
+        lastPlayed[scope] = id
+        while (lastPlayed.size > KEPT_LISTS) {
+            val oldest = lastPlayed.keys.iterator().next()
+            lastPlayed.remove(oldest)
+        }
     }
 
     private const val KEPT_LISTS = 32
@@ -59,9 +74,9 @@ object PlayRandom {
         watched: (T) -> Boolean,
         random: Random = Random.Default,
     ): T? {
-        val last = synchronized(lastPlayed) { lastPlayed[scope] }
+        val last = synchronized(lastPlayed) { touch(scope) }
         val chosen = pick(items, id, watched, last, random) ?: return null
-        synchronized(lastPlayed) { lastPlayed[scope] = id(chosen) }
+        synchronized(lastPlayed) { remember(scope, id(chosen)) }
         return chosen
     }
 
