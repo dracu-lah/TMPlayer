@@ -1,6 +1,8 @@
 package com.tmplayer.ui.components
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
@@ -66,7 +68,21 @@ fun rememberToast(): (String) -> Unit {
 /** [rememberToast] for code outside composition: at the top while a host is showing, else the system's toast. */
 fun showMessage(context: Context, message: String) {
     if (TopMessages.hosts > 0 && TopMessages.flow.tryEmit(TopMessage(message))) return
-    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+    systemToast(context, message)
+}
+
+/**
+ * The system's toast, made on the main thread whatever thread asks. A coroutine that wrote to the
+ * disk can resume on the writer's thread, and Toast there throws (no Looper): Forget all in the
+ * remembered languages crashed so when the settings store answered from its own thread.
+ */
+private fun systemToast(context: Context, message: String) {
+    val main = Looper.getMainLooper()
+    if (Looper.myLooper() == main) {
+        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+    } else {
+        Handler(main).post { Toast.makeText(context, message, Toast.LENGTH_SHORT).show() }
+    }
 }
 
 /**
@@ -81,7 +97,7 @@ fun rememberActionToast(): (message: String, action: String, onAction: () -> Uni
     return remember(context) {
         { message: String, action: String, onAction: () -> Unit ->
             if (!(TopMessages.hosts > 0 && TopMessages.flow.tryEmit(TopMessage(message, action, onAction)))) {
-                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                systemToast(context, message)
             }
         }
     }
