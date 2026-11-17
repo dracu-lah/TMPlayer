@@ -221,12 +221,6 @@ internal fun PlaybackRows(state: ShellState, jumps: Map<SetupStep, JumpTarget>) 
     // Low storage mode and Download the whole video first are on Storage and downloads, with the
     // rest of what decides the room TMPlayer takes (user, 2026-10-22; U20); the sound and the
     // audio language are on Subtitles and audio.
-    Toggle(
-        s.settingsSoftwareDecoding,
-        if (DesktopSettings.defaultSoftwareDecoding()) s.settingsSoftwareDecodingLinux else s.settingsSoftwareDecodingDetail,
-        desktop.softwareDecoding,
-        icon = TmIcons.Frames,
-    ) { on -> state.extras.prefs.update { it.copy(softwareDecoding = on) } }
     run {
         val choices = TouchPrefs.TIMEOUT_CHOICES_MS
         Setting(
@@ -260,6 +254,17 @@ internal fun PlaybackRows(state: ShellState, jumps: Map<SetupStep, JumpTarget>) 
             onDismiss = { addingTv = false },
         )
     }
+    // The mouse where the phone has its gestures, then the decoder choice last, under Advanced:
+    // a first screen with "Force software decoding" on it read as jargon (Raju pass 2, 11.3).
+    Group(s.settingsPageMouse)
+    MouseRows(state)
+    Group(s.settingsAdvanced)
+    Toggle(
+        s.settingsSoftwareDecoding,
+        if (DesktopSettings.defaultSoftwareDecoding()) s.settingsSoftwareDecodingLinux else s.settingsSoftwareDecodingDetail,
+        desktop.softwareDecoding,
+        icon = TmIcons.Frames,
+    ) { on -> state.extras.prefs.update { it.copy(softwareDecoding = on) } }
 }
 
 /**

@@ -48,6 +48,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.selection.toggleable
@@ -196,25 +197,25 @@ import kotlinx.coroutines.withContext
 /**
  * The pages Settings is split into, each opened from a row of the category list. Named in code
  * rather than by index, so a caller can open one directly and get back to it after About or the
- * cached videos. [Gestures] is a phone's alone; a television never shows its row. [TvHome] is the
- * other way round, shown only where the Android TV home screen has Play next or channels. [SetupChoices]
+ * cached videos. [TvHome] is the other way round, shown only where the Android TV home screen has Play next or channels. [SetupChoices]
  * gathers the setup's answers (SetupChoicesList), each with a way to the page it also lives on.
  */
 /**
  * Settings' pages, in the order the category list shows them: grouped by what the viewer is
- * trying to do (U20, 2026-11-15), the same names and order as the shared [SettingsGroup], less the
- * desktop's Mouse. [Subtitles] is Subtitles and audio, [Storage] Storage and downloads, [Account]
+ * trying to do (U20, 2026-11-15), the same names and order as the shared [SettingsGroup]. The
+ * player gestures are rows of [Playback] and Home's rows are on [Library], the page called Home and
+ * library (Raju pass 2, 11.1). [Subtitles] is Subtitles and audio, [Storage] Storage and downloads, [Account]
  * Privacy and lock (the app lock, crash reports and the privacy page, the devices and Sign out),
  * [About] About and help; Setup choices is last, as Redo setup choices.
  */
 enum class SettingsPage {
-    Playback, Gestures, Subtitles, Storage, Notifications, Appearance, Account, Library, Home, TvHome, About, SetupChoices;
+    Playback, Subtitles, Storage, Notifications, Appearance, Account, Library, TvHome, About, SetupChoices;
 
     /** The shared group this page is. */
     val group: SettingsGroup get() = SettingsGroup.valueOf(name)
 
     companion object {
-        /** The page for [group]; null for the desktop's Mouse page. */
+        /** The page for [group]. */
         fun of(group: SettingsGroup): SettingsPage? = entries.firstOrNull { it.name == group.name }
     }
 }
@@ -547,9 +548,7 @@ fun SettingsScreen(
         SettingsPage.Appearance -> s.settingsPageAppearance
         SettingsPage.Playback -> s.settingsPlayback
         SettingsPage.Subtitles -> s.settingsPageSubtitlesAudio
-        SettingsPage.Gestures -> s.settingsPageGestures
-        SettingsPage.Library -> s.settingsLibrary
-        SettingsPage.Home -> s.settingsPageHome
+        SettingsPage.Library -> s.settingsPageHomeLibrary
         SettingsPage.TvHome -> s.settingsPageTvHome
         SettingsPage.Notifications -> s.settingsPageNotifications
         SettingsPage.Storage -> s.settingsPageDownloadsData
@@ -792,6 +791,162 @@ fun SettingsScreen(
         // Each page below holds what used to be one or more sections of a single long list. A
         // page that took in more than one keeps the old headings between them.
         // Each run of rows between two headings is drawn as one card on a phone (settingsGroups).
+        // Rows that two pages used to hold, drawn on one (Raju pass 2, 11.1): the player's gestures on Playback,
+        // Home's rows on Home and library.
+        val gestureRows: LazyListScope.() -> Unit = {
+                // Touch only: a remote has buttons for every one of these, and its key model is settled.
+                if (touch) {
+                    fun update(change: (TouchPrefs) -> TouchPrefs) {
+                        scope.launch { settings.updateTouchPrefs(change) }
+                    }
+                    // First on the page, ahead of the player's own gestures: it governs every
+                    // tick in the app, the switches, choices, PIN pad and sign in as well.
+                    item {
+                        ToggleRow(
+                            title = s.settingsHaptics,
+                            subtitle = s.settingsHapticsDetail,
+                            icon = TmIcons.Vibration,
+                            checked = touchPrefs.haptics,
+                            onToggle = { update { it.copy(haptics = !it.haptics) } },
+                        )
+                    }
+                    item {
+                        ToggleRow(
+                            title = s.settingsTapPlays,
+                            subtitle = if (touchPrefs.tapPlaysPauses) {
+                                s.settingsTapPlaysOn
+                            } else {
+                                s.settingsTapPlaysOff
+                            },
+                            icon = TmIcons.Pause,
+                            checked = touchPrefs.tapPlaysPauses,
+                            onToggle = { update { it.copy(tapPlaysPauses = !it.tapPlaysPauses) } },
+                        )
+                    }
+                    item {
+                        val choices = TouchPrefs.DOUBLE_TAP_CHOICES_MS
+                        StepperRow(
+                            title = s.settingsDoubleTap,
+                            subtitle = s.settingsDoubleTapDetail,
+                            value = s.settingsDoubleTapSeconds(touchPrefs.doubleTapMs / 1000),
+                            icon = ImageVector.vectorResource(R.drawable.ic_player_forward),
+                            canDecrease = touchPrefs.doubleTapMs != choices.first(),
+                            canIncrease = touchPrefs.doubleTapMs != choices.last(),
+                            onStep = { direction ->
+                                update { it.copy(doubleTapMs = TouchPrefs.step(choices, it.doubleTapMs, direction)) }
+                            },
+                        )
+                    }
+                    item {
+                        val choices = TouchPrefs.HOLD_CHOICES
+                        StepperRow(
+                            title = s.settingsHoldSpeed,
+                            subtitle = s.settingsHoldSpeedDetail,
+                            value = TouchPrefs.holdLabel(touchPrefs.holdSpeed),
+                            icon = ImageVector.vectorResource(R.drawable.ic_speed),
+                            canDecrease = touchPrefs.holdSpeed != choices.first(),
+                            canIncrease = touchPrefs.holdSpeed != choices.last(),
+                            onStep = { direction ->
+                                update { it.copy(holdSpeed = TouchPrefs.step(choices, it.holdSpeed, direction)) }
+                            },
+                        )
+                    }
+                    item {
+                        ToggleRow(
+                            title = s.settingsSeekGesture,
+                            subtitle = s.settingsSeekGestureDetail,
+                            icon = TmIcons.ChevronRight,
+                            checked = touchPrefs.seekGesture,
+                            onToggle = { update { it.copy(seekGesture = !it.seekGesture) } },
+                        )
+                    }
+                    item {
+                        ToggleRow(
+                            title = s.settingsBrightnessGesture,
+                            subtitle = s.settingsBrightnessGestureDetail,
+                            icon = ImageVector.vectorResource(R.drawable.ic_brightness),
+                            checked = touchPrefs.brightnessGesture,
+                            onToggle = { update { it.copy(brightnessGesture = !it.brightnessGesture) } },
+                        )
+                    }
+                    item {
+                        ToggleRow(
+                            title = s.settingsVolumeGesture,
+                            subtitle = s.settingsVolumeGestureDetail,
+                            icon = ImageVector.vectorResource(R.drawable.ic_volume),
+                            checked = touchPrefs.volumeGesture,
+                            onToggle = { update { it.copy(volumeGesture = !it.volumeGesture) } },
+                        )
+                    }
+                }
+        }
+        val homeRows: LazyListScope.() -> Unit = {
+            // Which rows Home shows, each on by default (users, 2026-10-27). Which chats Recently
+            // added and the carousel read is the added chats, so a note says so and points at Add
+            // chats rather than offering a second picker here (2026-11-01).
+                sectionTitle { s.settingsHomeRows }
+                item(key = "home_carousel") {
+                    ToggleRow(
+                        title = s.settingsHomeCarousel,
+                        modifier = Modifier.focusRequester(landing),
+                        subtitle = when {
+                            !homeLayout.carousel -> s.settingsHomeCarouselOff
+                            // Each page needs its online picture and overview: none while lookups are off.
+                            !metaOn -> s.settingsHomeCarouselNoOnline
+                            else -> s.settingsHomeCarouselOn
+                        },
+                        icon = TmIcons.Home,
+                        checked = homeLayout.carousel,
+                        onToggle = { scope.launch { settings.setHomeCarousel(!homeLayout.carousel) } },
+                    )
+                }
+                item(key = "home_continue") {
+                    ToggleRow(
+                        title = s.settingsHomeContinue,
+                        subtitle = if (homeLayout.continueWatching) s.settingsHomeContinueOn else s.settingsHomeContinueOff,
+                        icon = TmIcons.History,
+                        checked = homeLayout.continueWatching,
+                        onToggle = { scope.launch { settings.setHomeContinue(!homeLayout.continueWatching) } },
+                    )
+                }
+                item(key = "home_recent") {
+                    ToggleRow(
+                        title = s.settingsHomeRecent,
+                        subtitle = if (homeLayout.recentlyAdded) s.settingsHomeRecentOn else s.settingsHomeRecentOff,
+                        icon = TmIcons.Grid,
+                        checked = homeLayout.recentlyAdded,
+                        onToggle = { scope.launch { settings.setHomeRecent(!homeLayout.recentlyAdded) } },
+                    )
+                }
+                item(key = "home_starred_rows") {
+                    ToggleRow(
+                        title = s.settingsHomeStarredRows,
+                        subtitle = if (homeLayout.starredRows) s.settingsHomeStarredRowsOn else s.settingsHomeStarredRowsOff,
+                        icon = TmIcons.StarOutline,
+                        checked = homeLayout.starredRows,
+                        onToggle = { scope.launch { settings.setHomeStarredRows(!homeLayout.starredRows) } },
+                    )
+                }
+                settingsNote { SettingsNoteText(s.settingsHomeFollowsAddedChosen) }
+                // The order Home draws its rows in (EG-F7, EG-F23): Move up and down and a drag
+                // handle on a phone, a move mode on a television (OK picks up, Up and Down move,
+                // OK drops, Back cancels). One list: starred chats come and go with their stars.
+                sectionTitle { s.settingsHomeOrder }
+                settingsNote(key = "home_order") {
+                    val starredChats = remember(chats, favorites) { com.tmplayer.data.HomeRows.favouriteChats(chats, favorites) }
+                    val orderContext = androidx.compose.ui.platform.LocalContext.current
+                    val homeLists by remember(orderContext) { com.tmplayer.data.WatchedStore(orderContext).lists.visible }.collectAsStateWithLifecycle(initialValue = emptyList())
+                    val orderRows = rememberHomeOrderRows(homeLayout, starredChats, remember(homeLists) { homeListInfos(homeLists) })
+                    HomeOrderSection(
+                        rows = orderRows,
+                        hasOrder = homeLayout.order.isNotEmpty(),
+                        onOrder = { next -> scope.launch { settings.setHomeOrder(next) } },
+                        onReset = { scope.launch { settings.setHomeOrder(emptyList()) } },
+                        remote = !isTouch(),
+                        modifier = Modifier.padding(horizontal = 16.dp).seekable(s.settingsHomeOrder),
+                    )
+                }
+        }
         settingsGroups { when (page) {
             // The setup's answers in the setup's order, each with the page it also lives on.
             SettingsPage.SetupChoices -> {
@@ -1182,6 +1337,12 @@ fun SettingsScreen(
                         )
                     }
                 }
+                // The player's own gestures, on the same page as the rest of what plays (Raju pass 2, 11.1):
+                // touch only, a remote has a button for every one of them.
+                if (touch) {
+                    sectionTitle { s.settingsPageGestures }
+                    gestureRows()
+                }
             }
 
             SettingsPage.Subtitles -> {
@@ -1275,100 +1436,14 @@ fun SettingsScreen(
                 if (OnlineSubtitles.available) onlineSubtitlesSection(onDialog = { onlineDialog = it })
             }
 
-            SettingsPage.Gestures -> {
-                // Touch only: a remote has buttons for every one of these, and its key model is settled.
-                if (touch) {
-                    fun update(change: (TouchPrefs) -> TouchPrefs) {
-                        scope.launch { settings.updateTouchPrefs(change) }
-                    }
-                    // First on the page, ahead of the player's own gestures: it governs every
-                    // tick in the app, the switches, choices, PIN pad and sign in as well.
-                    item {
-                        ToggleRow(
-                            title = s.settingsHaptics,
-                            subtitle = s.settingsHapticsDetail,
-                            icon = TmIcons.Vibration,
-                            checked = touchPrefs.haptics,
-                            onToggle = { update { it.copy(haptics = !it.haptics) } },
-                        )
-                    }
-                    item {
-                        ToggleRow(
-                            title = s.settingsTapPlays,
-                            subtitle = if (touchPrefs.tapPlaysPauses) {
-                                s.settingsTapPlaysOn
-                            } else {
-                                s.settingsTapPlaysOff
-                            },
-                            icon = TmIcons.Pause,
-                            checked = touchPrefs.tapPlaysPauses,
-                            onToggle = { update { it.copy(tapPlaysPauses = !it.tapPlaysPauses) } },
-                        )
-                    }
-                    item {
-                        val choices = TouchPrefs.DOUBLE_TAP_CHOICES_MS
-                        StepperRow(
-                            title = s.settingsDoubleTap,
-                            subtitle = s.settingsDoubleTapDetail,
-                            value = s.settingsDoubleTapSeconds(touchPrefs.doubleTapMs / 1000),
-                            icon = ImageVector.vectorResource(R.drawable.ic_player_forward),
-                            canDecrease = touchPrefs.doubleTapMs != choices.first(),
-                            canIncrease = touchPrefs.doubleTapMs != choices.last(),
-                            onStep = { direction ->
-                                update { it.copy(doubleTapMs = TouchPrefs.step(choices, it.doubleTapMs, direction)) }
-                            },
-                        )
-                    }
-                    item {
-                        val choices = TouchPrefs.HOLD_CHOICES
-                        StepperRow(
-                            title = s.settingsHoldSpeed,
-                            subtitle = s.settingsHoldSpeedDetail,
-                            value = TouchPrefs.holdLabel(touchPrefs.holdSpeed),
-                            icon = ImageVector.vectorResource(R.drawable.ic_speed),
-                            canDecrease = touchPrefs.holdSpeed != choices.first(),
-                            canIncrease = touchPrefs.holdSpeed != choices.last(),
-                            onStep = { direction ->
-                                update { it.copy(holdSpeed = TouchPrefs.step(choices, it.holdSpeed, direction)) }
-                            },
-                        )
-                    }
-                    item {
-                        ToggleRow(
-                            title = s.settingsSeekGesture,
-                            subtitle = s.settingsSeekGestureDetail,
-                            icon = TmIcons.ChevronRight,
-                            checked = touchPrefs.seekGesture,
-                            onToggle = { update { it.copy(seekGesture = !it.seekGesture) } },
-                        )
-                    }
-                    item {
-                        ToggleRow(
-                            title = s.settingsBrightnessGesture,
-                            subtitle = s.settingsBrightnessGestureDetail,
-                            icon = ImageVector.vectorResource(R.drawable.ic_brightness),
-                            checked = touchPrefs.brightnessGesture,
-                            onToggle = { update { it.copy(brightnessGesture = !it.brightnessGesture) } },
-                        )
-                    }
-                    item {
-                        ToggleRow(
-                            title = s.settingsVolumeGesture,
-                            subtitle = s.settingsVolumeGestureDetail,
-                            icon = ImageVector.vectorResource(R.drawable.ic_volume),
-                            checked = touchPrefs.volumeGesture,
-                            onToggle = { update { it.copy(volumeGesture = !it.volumeGesture) } },
-                        )
-                    }
-                }
-            }
-
             SettingsPage.Library -> {
+                // Home first, then the library (Raju pass 2, 11.1: two pages for "which videos show" became one).
+                homeRows()
+                sectionTitle { s.settingsLibrary }
                 // What opens first, in the same card as which videos show: a heading of its own
                 // stood over a single row.
                 item {
                     ToggleRow(
-                        modifier = Modifier.focusRequester(landing),
                         title = s.settingsOpenLastChat,
                         subtitle = when {
                             lastChatTitle != null -> s.settingsOpenLastChatNamed(lastChatTitle)
@@ -1461,74 +1536,6 @@ fun SettingsScreen(
                     onEditOmdbKey = { editingOmdbKey = true },
                     toggleModifier = Modifier.jumpTarget(jumps.getValue(SetupStep.Posters)),
                 )
-            }
-
-            // Which rows Home shows, each on by default (users, 2026-10-27). Which chats Recently
-            // added and the carousel read is the added chats, so a note says so and points at Add
-            // chats rather than offering a second picker here (2026-11-01).
-            SettingsPage.Home -> {
-                sectionTitle { s.settingsHomeRows }
-                item(key = "home_carousel") {
-                    ToggleRow(
-                        title = s.settingsHomeCarousel,
-                        modifier = Modifier.focusRequester(landing),
-                        subtitle = when {
-                            !homeLayout.carousel -> s.settingsHomeCarouselOff
-                            // Each page needs its online picture and overview: none while lookups are off.
-                            !metaOn -> s.settingsHomeCarouselNoOnline
-                            else -> s.settingsHomeCarouselOn
-                        },
-                        icon = TmIcons.Home,
-                        checked = homeLayout.carousel,
-                        onToggle = { scope.launch { settings.setHomeCarousel(!homeLayout.carousel) } },
-                    )
-                }
-                item(key = "home_continue") {
-                    ToggleRow(
-                        title = s.settingsHomeContinue,
-                        subtitle = if (homeLayout.continueWatching) s.settingsHomeContinueOn else s.settingsHomeContinueOff,
-                        icon = TmIcons.History,
-                        checked = homeLayout.continueWatching,
-                        onToggle = { scope.launch { settings.setHomeContinue(!homeLayout.continueWatching) } },
-                    )
-                }
-                item(key = "home_recent") {
-                    ToggleRow(
-                        title = s.settingsHomeRecent,
-                        subtitle = if (homeLayout.recentlyAdded) s.settingsHomeRecentOn else s.settingsHomeRecentOff,
-                        icon = TmIcons.Grid,
-                        checked = homeLayout.recentlyAdded,
-                        onToggle = { scope.launch { settings.setHomeRecent(!homeLayout.recentlyAdded) } },
-                    )
-                }
-                item(key = "home_starred_rows") {
-                    ToggleRow(
-                        title = s.settingsHomeStarredRows,
-                        subtitle = if (homeLayout.starredRows) s.settingsHomeStarredRowsOn else s.settingsHomeStarredRowsOff,
-                        icon = TmIcons.StarOutline,
-                        checked = homeLayout.starredRows,
-                        onToggle = { scope.launch { settings.setHomeStarredRows(!homeLayout.starredRows) } },
-                    )
-                }
-                settingsNote { SettingsNoteText(s.settingsHomeFollowsAddedChosen) }
-                // The order Home draws its rows in (EG-F7, EG-F23): Move up and down and a drag
-                // handle on a phone, a move mode on a television (OK picks up, Up and Down move,
-                // OK drops, Back cancels). One list: starred chats come and go with their stars.
-                sectionTitle { s.settingsHomeOrder }
-                settingsNote(key = "home_order") {
-                    val starredChats = remember(chats, favorites) { com.tmplayer.data.HomeRows.favouriteChats(chats, favorites) }
-                    val orderContext = androidx.compose.ui.platform.LocalContext.current
-                    val homeLists by remember(orderContext) { com.tmplayer.data.WatchedStore(orderContext).lists.visible }.collectAsStateWithLifecycle(initialValue = emptyList())
-                    val orderRows = rememberHomeOrderRows(homeLayout, starredChats, remember(homeLists) { homeListInfos(homeLists) })
-                    HomeOrderSection(
-                        rows = orderRows,
-                        hasOrder = homeLayout.order.isNotEmpty(),
-                        onOrder = { next -> scope.launch { settings.setHomeOrder(next) } },
-                        onReset = { scope.launch { settings.setHomeOrder(emptyList()) } },
-                        remote = !isTouch(),
-                        modifier = Modifier.padding(horizontal = 16.dp).seekable(s.settingsHomeOrder),
-                    )
-                }
             }
 
             // What TMPlayer puts on the Android TV home screen, a page of its own rather than two rows
@@ -2193,23 +2200,11 @@ fun SettingsScreen(
                     item {
                         ActionRow(
                             title = titleOf(SettingsPage.Playback),
-                            subtitle = s.settingsGroupPlaybackSummary,
+                            subtitle = if (touch) s.settingsGroupPlaybackSummaryTouch else s.settingsGroupPlaybackSummary,
                             icon = TmIcons.Play,
                             modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Playback)),
                             onClick = { showPage(SettingsPage.Playback) },
                         )
-                    }
-                    // Touch only, like the rows inside it: a remote has a button for each of them.
-                    if (touch) {
-                        item {
-                            ActionRow(
-                                title = titleOf(SettingsPage.Gestures),
-                                subtitle = s.settingsPageGesturesSummary,
-                                icon = ImageVector.vectorResource(R.drawable.ic_player_forward),
-                                modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Gestures)),
-                                onClick = { showPage(SettingsPage.Gestures) },
-                            )
-                        }
                     }
                     item {
                         val style = subtitleStyle.summary()
@@ -2280,19 +2275,10 @@ fun SettingsScreen(
                     item {
                         ActionRow(
                             title = titleOf(SettingsPage.Library),
-                            subtitle = s.settingsPageLibrarySummary,
-                            icon = TmIcons.Grid,
+                            subtitle = s.settingsPageHomeLibrarySummary,
+                            icon = TmIcons.Home,
                             modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Library)),
                             onClick = { showPage(SettingsPage.Library) },
-                        )
-                    }
-                    item {
-                        ActionRow(
-                            title = titleOf(SettingsPage.Home),
-                            subtitle = s.settingsPageHomeRowsSummary,
-                            icon = TmIcons.Home,
-                            modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Home)),
-                            onClick = { showPage(SettingsPage.Home) },
                         )
                     }
                     // Android TV and Google TV only: a phone, a Fire TV and a Fire tablet have neither a

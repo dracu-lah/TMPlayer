@@ -166,7 +166,7 @@ fun HomePage(state: ShellState, chats: ChatListViewModel) {
     HomeRowsView(
         rowsReady = model.rowsSettled,
         layout = layout ?: HomeLayout(),
-        onOpenHomeSettings = { state.openSettings(SettingsCategory.Home) },
+        onOpenHomeSettings = { state.openSettings(SettingsCategory.Library) },
         state = state,
         rows = offlineRows,
         chats = list.ifEmpty { ownChats },

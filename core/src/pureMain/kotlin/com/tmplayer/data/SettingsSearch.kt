@@ -112,7 +112,7 @@ object SettingsSearch {
  */
 enum class SettingsLink(val from: String, val group: SettingsGroup, val row: String?, val forms: Set<DeviceForm>) {
     /** Home's "every row is off" card, Open settings (HomeOffCard). */
-    HomeOff("home.open_settings", SettingsGroup.Home, "home_carousel", setOf(DeviceForm.Phone, DeviceForm.Tv, DeviceForm.Desktop)),
+    HomeOff("home.open_settings", SettingsGroup.Library, "home_carousel", setOf(DeviceForm.Phone, DeviceForm.Tv, DeviceForm.Desktop)),
 
     /** Setup choices, Posters: Also in Library. */
     SetupPosters("setup.choices_body", SettingsGroup.Library, "posters", setOf(DeviceForm.Phone, DeviceForm.Tv, DeviceForm.Desktop)),

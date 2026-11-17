@@ -44,8 +44,6 @@ class SettingsMapTest {
         val ids = SettingsMap.rows.map { it.id }
         assertEquals(ids.groupBy { it }.filterValues { it.size > 1 }.keys, emptySet<String>())
         val onlyOn = mapOf(
-            SettingsGroup.Gestures to setOf(DeviceForm.Phone),
-            SettingsGroup.Mouse to setOf(DeviceForm.Desktop),
             SettingsGroup.TvHome to setOf(DeviceForm.Tv),
             // A television posts no notifications (CP76).
             SettingsGroup.Notifications to setOf(DeviceForm.Phone, DeviceForm.Desktop),
@@ -55,6 +53,23 @@ class SettingsMapTest {
             onlyOn[row.group]?.let { allowed -> assertTrue("$row is on a form its page is not", allowed.containsAll(row.forms)) }
             assertTrue("$row is on Setup choices, which lists the setup's answers", row.group != SettingsGroup.SetupChoices)
         }
+    }
+
+    @Test
+    fun `gestures and the mouse are rows of Playback and Home is on one page with the library (Raju 11 1, 11 3)`() {
+        // Player gestures, Mouse and Home were pages of their own; a viewer looking for "what plays"
+        // or "which videos show" met two pages for each.
+        assertEquals(emptyList<String>(), SettingsGroup.entries.map { it.name }.filter { it in setOf("Gestures", "Mouse", "Home") })
+        val phone = SettingsMap.on(DeviceForm.Phone, SettingsGroup.Playback).map { it.id }
+        assertTrue("the phone's gestures are on Playback: $phone", listOf("haptics", "tap_plays", "double_tap", "hold_speed", "seek_gesture", "brightness_gesture", "volume_gesture").all { it in phone })
+        assertEquals(emptyList<String>(), SettingsMap.on(DeviceForm.Tv, SettingsGroup.Playback).map { it.id }.filter { it in setOf("haptics", "hold_speed", "mouse_hold_speed") })
+        val desktop = SettingsMap.on(DeviceForm.Desktop, SettingsGroup.Playback).map { it.id }
+        assertTrue("the desktop's mouse rows are on Playback: $desktop", "mouse_hold_speed" in desktop && "wheel_seeks" in desktop)
+        // The decoder choice is jargon: last on the desktop's Playback page, under Advanced.
+        assertEquals("software_decoding", desktop.last())
+        val library = SettingsMap.on(DeviceForm.Phone, SettingsGroup.Library).map { it.id }
+        assertTrue("Home's rows and the library's are one page: $library", "home_carousel" in library && "open_last_chat" in library && "posters" in library)
+        assertEquals("Home and library", text(SettingsGroup.Library.title))
     }
 
     @Test

@@ -73,7 +73,7 @@ class SettingsMapScreenTest {
         }
         val needs = SettingsNeeds(vlc = false, pictureInPicture = false, logInbox = false, playNext = false, channels = false)
         val problems = mutableListOf<String>()
-        // The pages this form has: a television lists no Gestures or Notifications.
+        // The pages this form has: a television lists no Notifications.
         for (shown in SettingsPage.entries.filter { SettingsMap.on(form, it.group).isNotEmpty() }) {
             seen.clear()
             page = shown
@@ -101,6 +101,8 @@ class SettingsMapScreenTest {
         for (link in SettingsLink.entries.filter { form in it.forms }) {
             assertTrue("$link: ${link.group} is a page on $form", L.messages.text(link.group.title) in pages || link.group == SettingsGroup.TvHome)
         }
-        if (form == DeviceForm.Tv) assertTrue("a television has no Gestures page", L.messages.text(SettingsGroup.Gestures.title) !in pages)
+        // Gestures and Home are rows of Playback and of Home and library now (Raju 11.1), never pages.
+        assertTrue("no page named Player gestures or Home", listOf("Player gestures", "Home").none { it in pages })
+        assertTrue("Home and library is one page", L.messages.text(SettingsGroup.Library.title) in pages)
     }
 }

@@ -8,22 +8,22 @@ import com.tmplayer.data.DeviceForm.Tv
  * Settings' pages, grouped by what the viewer is trying to do (U20, 2026-11-15), in the order the
  * list shows them on every platform. The phone's `SettingsPage` and the desktop's
  * `SettingsCategory` carry the same names in the same order (SettingsMapTest), each leaving out
- * the pages it has not got: [Gestures] is a phone's, [Mouse] a desktop's, [TvHome] a television's.
+ * the pages it has not got: [TvHome] is a television's. The player gestures (a phone's) and the
+ * mouse (a desktop's) are rows of [Playback], and Home's rows are on [Library], whose page is
+ * called Home and library (Raju pass 2, 11.1): one page per job, not three for "what plays" and
+ * two for "what shows".
  *
  * [title] and [summary] are catalog keys: the page's name and its one line in the list when the
  * list has no live value to show there instead (the free space, the lock's state, an update).
  */
 enum class SettingsGroup(val title: String, val summary: String) {
     Playback("settings.playback", "settings.group_playback_summary"),
-    Gestures("settings.page_gestures", "settings.page_gestures_summary"),
-    Mouse("settings.page_mouse", "settings.page_mouse_summary"),
     Subtitles("settings.page_subtitles_audio", "settings.group_subtitles_audio_summary"),
     Storage("settings.page_downloads_data", "settings.group_storage_summary"),
     Notifications("settings.page_notifications", "settings.page_notifications_summary_short"),
     Appearance("settings.page_appearance", "settings.page_appearance_summary"),
     Account("settings.page_privacy_lock", "settings.group_privacy_lock_summary"),
-    Library("settings.library", "settings.page_library_summary"),
-    Home("settings.page_home", "settings.page_home_rows_summary"),
+    Library("settings.page_home_library", "settings.page_home_library_summary"),
     TvHome("settings.page_tv_home", "settings.page_tv_home_summary"),
     About("settings.page_about", "settings.group_about_summary"),
     SetupChoices("settings.redo_setup_choices", "setup.choices_summary"),
@@ -153,7 +153,6 @@ object SettingsMap {
         row("player_engine", g, "settings.engine", PT, listOf("settings.engine_automatic_detail", "settings.engine_vlc_detail"), SettingsNeed.Vlc)
         row("engine_switch", g, "settings.engine_switch", PT, onOff("settings.engine_switch"), SettingsNeed.Vlc)
         row("decoder", g, "settings.decoder", PT)
-        row("software_decoding", g, "settings.software_decoding", D, listOf("settings.software_decoding_detail"))
         row("detail_first", g, "settings.detail_first", PTD, onOff("settings.detail_first") + onOff("settings.detail_first_click"))
         row("background_audio", g, "settings.background_audio", P, onOff("settings.background_audio"))
         row("picture_in_picture", g, "settings.picture_in_picture_leave", P, onOff("settings.picture_in_picture_leave"), SettingsNeed.PictureInPicture)
@@ -166,7 +165,9 @@ object SettingsMap {
         row("tunneled", g, "settings.tunneled", T, listOf("settings.tunneled_detail"), SettingsNeed.Advanced)
         row("playback_stats", g, "settings.playback_stats", PT, onOff("settings.playback_stats"), SettingsNeed.Advanced)
 
-        val m = SettingsGroup.Gestures
+        // Touch only (a remote has a button for each), then the mouse where the phone has these: the player's
+        // own controls, after the rows about what plays. The decoder choice on a desktop comes last, under Advanced.
+        val m = g
         row("haptics", m, "settings.haptics", P, listOf("settings.haptics_detail"))
         row("tap_plays", m, "settings.tap_plays", P, onOff("settings.tap_plays"))
         row("double_tap", m, "settings.double_tap", P, listOf("settings.double_tap_detail"))
@@ -175,9 +176,10 @@ object SettingsMap {
         row("brightness_gesture", m, "settings.brightness_gesture", P, listOf("settings.brightness_gesture_detail"))
         row("volume_gesture", m, "settings.volume_gesture", P, listOf("settings.volume_gesture_detail"))
 
-        val mouse = SettingsGroup.Mouse
+        val mouse = g
         row("mouse_hold_speed", mouse, "settings.hold_speed", D, listOf("settings.hold_speed_detail_desktop"))
         row("wheel_seeks", mouse, "settings.wheel_seeks", D, onOff("settings.wheel_seeks"))
+        row("software_decoding", g, "settings.software_decoding", D, listOf("settings.software_decoding_detail"))
 
         val sub = SettingsGroup.Subtitles
         row("subtitle_style", sub, "settings.subtitle_style", PTD)
@@ -246,6 +248,13 @@ object SettingsMap {
         row("resume_sync", lock, "syncplace.switch", PTD, onOff("syncplace.switch"))
         row("sign_out", lock, "settings.sign_out", PTD, keywords = true)
 
+        val h = SettingsGroup.Library
+        row("home_carousel", h, "settings.home_carousel", PTD, onOff("settings.home_carousel"))
+        row("home_continue", h, "settings.home_continue", PTD, onOff("settings.home_continue"))
+        row("home_recent", h, "settings.home_recent", PTD, onOff("settings.home_recent"))
+        row("home_starred_rows", h, "settings.home_starred_rows", PTD, onOff("settings.home_starred_rows"))
+        row("home_order", h, "settings.home_order", PTD, listOf("settings.home_order_hint", "settings.home_order_hint_tv"))
+
         val lib = SettingsGroup.Library
         row("open_last_chat", lib, "settings.open_last_chat", PTD)
         row("forget_last_chat", lib, "settings.forget_last_chat", PTD, need = SettingsNeed.State)
@@ -264,13 +273,6 @@ object SettingsMap {
         row("tmdb_key", lib, "metadata.key", PTD, need = SettingsNeed.OnlineMetadata)
         row("omdb_key", lib, "metadata.omdb_key", PTD, need = SettingsNeed.OnlineMetadata)
         row("details_cache", lib, "metadata.clear_cache", PTD, need = SettingsNeed.OnlineMetadata)
-
-        val h = SettingsGroup.Home
-        row("home_carousel", h, "settings.home_carousel", PTD, onOff("settings.home_carousel"))
-        row("home_continue", h, "settings.home_continue", PTD, onOff("settings.home_continue"))
-        row("home_recent", h, "settings.home_recent", PTD, onOff("settings.home_recent"))
-        row("home_starred_rows", h, "settings.home_starred_rows", PTD, onOff("settings.home_starred_rows"))
-        row("home_order", h, "settings.home_order", PTD, listOf("settings.home_order_hint", "settings.home_order_hint_tv"))
 
         val tv = SettingsGroup.TvHome
         row("watch_next", tv, "settings.watch_next", T, onOff("settings.watch_next"), SettingsNeed.LauncherPlayNext)

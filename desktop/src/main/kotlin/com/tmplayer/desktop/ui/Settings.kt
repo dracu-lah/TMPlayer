@@ -107,18 +107,14 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * The pages Settings is split into, the phone's own (SettingsScreen's `SettingsPage`) in the
- * phone's order. [Mouse] stands where the phone has Player gestures: how the pointer drives the
- * player, which is what the phone's gestures are for a finger.
- */
-/**
  * Settings' pages, in the list's order: grouped by what the viewer is trying to do (U20,
- * 2026-11-15), the same names and order as the shared [SettingsGroup], less the phone's Gestures
- * and the television's launcher. [Subtitles] is Subtitles and audio, [Account] Privacy and lock;
+ * 2026-11-15), the same names and order as the shared [SettingsGroup], less the television's
+ * launcher. The mouse in the player (the phone's Player gestures, for a pointer) is a heading of
+ * [Playback], and Home's rows are on [Library], called Home and library (Raju pass 2, 11.1). [Subtitles] is Subtitles and audio, [Account] Privacy and lock;
  * Setup choices is last, as Redo setup choices, so the wide layout opens on Playback.
  */
 enum class SettingsCategory {
-    Playback, Mouse, Subtitles, Storage, Notifications, Appearance, Account, Library, Home, About, SetupChoices;
+    Playback, Subtitles, Storage, Notifications, Appearance, Account, Library, About, SetupChoices;
 
     /** The shared group this page is. */
     val group: SettingsGroup get() = SettingsGroup.valueOf(name)
@@ -129,9 +125,7 @@ enum class SettingsCategory {
             Appearance -> TmIcons.Palette
             Playback -> TmIcons.Play
             Subtitles -> TmIcons.Subtitles
-            Mouse -> SettingsGlyphs.Mouse
-            Library -> TmIcons.Grid
-            Home -> TmIcons.Home
+            Library -> TmIcons.Home
             Notifications -> TmIcons.Bell
             Storage -> TmIcons.Download
             Account -> TmIcons.Lock
@@ -146,7 +140,7 @@ enum class SettingsCategory {
         fun holding(step: SetupStep): SettingsCategory? =
             com.tmplayer.ui.settings.settingsLinkFor(step, DeviceForm.Desktop)?.let { of(it.group) }
 
-        /** The page for [group]; null for the phone's and the television's own pages. */
+        /** The page for [group]; null for the television's own page. */
         fun of(group: SettingsGroup): SettingsCategory? = entries.firstOrNull { it.name == group.name }
     }
 }
@@ -172,9 +166,7 @@ internal fun titleOf(category: SettingsCategory): String {
         SettingsCategory.Appearance -> s.settingsPageAppearance
         SettingsCategory.Playback -> s.settingsPlayback
         SettingsCategory.Subtitles -> s.settingsPageSubtitlesAudio
-        SettingsCategory.Mouse -> s.settingsPageMouse
-        SettingsCategory.Library -> s.settingsLibrary
-        SettingsCategory.Home -> s.settingsPageHome
+        SettingsCategory.Library -> s.settingsPageHomeLibrary
         SettingsCategory.Notifications -> s.settingsPageNotifications
         SettingsCategory.Storage -> s.settingsPageDownloadsData
         SettingsCategory.Account -> s.settingsPagePrivacyLock
@@ -573,7 +565,7 @@ private fun CategoryList(
                 SettingsCategory.SetupChoices -> s.setupChoicesSummary
                 // Plain facts, "Dark · English" (UX review, 2026-10-27).
                 SettingsCategory.Appearance -> s.settingsPageAppearanceSummary(theme = theme.label, language = com.tmplayer.ui.i18n.languageShortName(language))
-                SettingsCategory.Playback -> s.settingsGroupPlaybackSummaryDesktop
+                SettingsCategory.Playback -> s.settingsGroupPlaybackSummaryDesktopMouse
                 SettingsCategory.Subtitles -> {
                     val style = listOf(
                         subtitleStyle.size.label,
@@ -582,9 +574,7 @@ private fun CategoryList(
                     ).joinToString("  ·  ")
                     if (OnlineSubtitles.available) s.settingsGroupSubtitlesAudioSummaryOnline(style) else s.settingsGroupSubtitlesAudioSummary(style)
                 }
-                SettingsCategory.Mouse -> s.settingsPageMouseSummary
-                SettingsCategory.Library -> s.settingsPageLibrarySummary
-                SettingsCategory.Home -> s.settingsPageHomeRowsSummary
+                SettingsCategory.Library -> s.settingsPageHomeLibrarySummary
                 SettingsCategory.Notifications -> settingsSummaryOverride(category) ?: s.settingsPageNotificationsSummaryShort
                 SettingsCategory.Storage -> disk?.takeIf { it.totalBytes > 0 }?.let {
                     s.settingsStorageFree(StorageRelocationPlan.size(it.freeBytes), StorageRelocationPlan.size(it.totalBytes))
@@ -637,9 +627,12 @@ internal class SettingsPages(
                     SettingsCategory.Appearance -> AppearanceRows(state)
                     SettingsCategory.Playback -> PlaybackRows(state, jumps)
                     SettingsCategory.Subtitles -> SubtitlesRows(state)
-                    SettingsCategory.Mouse -> MouseRows(state)
-                    SettingsCategory.Library -> LibraryRows(state, chatList, jumps)
-                    SettingsCategory.Home -> HomeLayoutRows(state, chatList)
+                    SettingsCategory.Library -> {
+                        // Home's rows, then the library's (Raju pass 2, 11.1: two pages became one).
+                        HomeLayoutRows(state, chatList)
+                        Group(LocalStrings.current.settingsLibrary)
+                        LibraryRows(state, chatList, jumps)
+                    }
                     SettingsCategory.Notifications -> NotificationRows(state)
                     SettingsCategory.Storage -> StorageGroup(state, jumps)
                     SettingsCategory.Account -> AccountRows(state, onPin, onKidsChats)

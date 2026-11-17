@@ -106,6 +106,22 @@ class SettingsMapDesktopTest {
     }
 
     @Test
+    fun `Playback has the mouse rows and ends with the decoder choice under Advanced (Raju 11 1, 11 3)`() {
+        val rows = drawn(SettingsCategory.Playback) - pageTitles
+        val decoder = L.messages.text("settings.software_decoding")
+        assertEquals("the decoder choice is the last row", decoder, rows.last())
+        for (id in listOf("mouse_hold_speed", "wheel_seeks")) {
+            val title = L.messages.text(SettingsMap.row(id)!!.titleOn(DeviceForm.Desktop))
+            assertTrue("$title is on Playback: $rows", title in rows)
+            assertTrue("$title comes before the decoder: $rows", rows.indexOf(title) < rows.indexOf(decoder))
+        }
+        // No page of its own for the mouse, and Home's rows sit with the library's.
+        assertEquals(listOf("Playback", "Subtitles", "Storage", "Notifications", "Appearance", "Account", "Library", "About", "SetupChoices"), SettingsCategory.entries.map { it.name })
+        val library = drawn(SettingsCategory.Library) - pageTitles
+        assertTrue("Home's rows and the library's on one page: $library", L.messages.text("settings.home_carousel") in library && L.messages.text("settings.open_last_chat") in library)
+    }
+
+    @Test
     fun `the list follows the shared order and every link lands on a page it lists`() {
         val pages = drawn(null).filter { it in pageTitles }.distinct()
         val order = SettingsGroup.entries.map { L.messages.text(it.title) }.filter { it in pages }

@@ -2044,7 +2044,7 @@ private fun Root() {
                     homeLayout = homeLayout ?: com.tmplayer.data.HomeLayout(),
                     onOpenHomeSettings = {
                         openSettings()
-                        settingsPage = SettingsPage.Home
+                        settingsPage = SettingsPage.Library
                     },
                     homeArt = homeViewModel.art.collectAsStateWithLifecycle().value,
                     homeWatch = homeWatch,
