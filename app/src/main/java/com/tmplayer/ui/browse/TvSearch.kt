@@ -391,12 +391,14 @@ internal fun TvSearchScreen(
                                 Text(s.searchNoneDetail, style = MaterialTheme.typography.bodyLarge, color = Tone.muted)
                                 // Nothing in the chats the viewer chose: the way to choose more (HX62).
                                 if (state.addedOnly) Text(s.searchNoneAdded, style = MaterialTheme.typography.bodyLarge, color = Tone.muted)
+                                // One main way on, tinted, and the others plain text beside it (Raju pass 2, 4.7):
+                                // the order is unchanged, so the remote still walks them down in it.
                                 if (state.canSearchOthers) {
-                                    TvPill(s.searchOtherChats, TmIcons.Search, modifier = Modifier.testTag("search-other-chats"), onClick = onSearchOthers)
+                                    TvPill(s.searchOtherChats, TmIcons.Search, chosen = true, modifier = Modifier.testTag("search-other-chats"), onClick = onSearchOthers)
                                 }
-                                TvPill(s.pickerAddMore, TmIcons.PersonAdd, onClick = onAddChats)
+                                TvPill(s.pickerAddMore, TmIcons.PersonAdd, chosen = !state.canSearchOthers, plain = state.canSearchOthers, onClick = onAddChats)
                                 AllChatsSearch.fallbackQuery(state.query.server)?.let { word ->
-                                    TvPill(s.searchSearchFor(word), TmIcons.Search) { onText(word); onSubmit(word) }
+                                    TvPill(s.searchSearchFor(word), TmIcons.Search, plain = true) { onText(word); onSubmit(word) }
                                 }
                             }
                         }

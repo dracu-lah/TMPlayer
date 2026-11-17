@@ -105,6 +105,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import com.tmplayer.ui.components.PhoneSheet
 import com.tmplayer.ui.components.Spinner
 import com.tmplayer.ui.components.secondaryPress
+import com.tmplayer.ui.components.TmButton
 import com.tmplayer.ui.components.TmSecondaryButton
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.icons.TmIcons
@@ -640,13 +641,15 @@ private fun androidx.compose.foundation.lazy.LazyListScope.results(
                     if (state.addedOnly) {
                         Text(s.searchNoneAdded, style = MaterialTheme.typography.bodyMedium, color = Tone.muted, textAlign = TextAlign.Center)
                     }
-                    if (state.canSearchOthers) {
-                        TmSecondaryButton(onClick = onSearchOthers) { Text(s.searchOtherChats) }
-                    }
-                    TmSecondaryButton(onClick = onAddChats) { Text(s.pickerAddMore) }
-                    AllChatsSearch.fallbackQuery(state.query.server)?.let { word ->
-                        TmSecondaryButton(onClick = { onSearchWord(word) }) { Text(s.searchSearchFor(word)) }
-                    }
+                    // One main way on and the rest as text links (Raju pass 2, 4.7): two pills with
+                    // similar words side by side left the viewer weighing them.
+                    EmptySearchWays(
+                        canSearchOthers = state.canSearchOthers,
+                        word = AllChatsSearch.fallbackQuery(state.query.server),
+                        onSearchOthers = onSearchOthers,
+                        onAddChats = onAddChats,
+                        onSearchWord = onSearchWord,
+                    )
                 }
             }
         }
@@ -905,3 +908,30 @@ private const val PAGE_LEAD = 6
 private const val ANIMATED_RESULTS_MAX = 300
 
 private val SKELETONS = List(5) { it }
+
+/**
+ * What a search that found nothing offers: the other chats when only the added ones were searched,
+ * then Add chats, then the word it could try instead. The first is the page's one primary button, the others text links at least 48 dp tall.
+ */
+@Composable
+internal fun EmptySearchWays(
+    canSearchOthers: Boolean,
+    word: String?,
+    onSearchOthers: () -> Unit,
+    onAddChats: () -> Unit,
+    onSearchWord: (String) -> Unit,
+) {
+    val s = LocalStrings.current
+    val ways = buildList {
+        if (canSearchOthers) add(s.searchOtherChats to onSearchOthers)
+        add(s.pickerAddMore to onAddChats)
+        word?.let { add(s.searchSearchFor(it) to { onSearchWord(it) }) }
+    }
+    ways.forEachIndexed { index, (label, go) ->
+        if (index == 0) {
+            TmButton(onClick = go) { Text(label) }
+        } else {
+            TextButton(onClick = go, modifier = Modifier.heightIn(min = 48.dp)) { Text(label) }
+        }
+    }
+}
