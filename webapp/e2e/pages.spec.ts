@@ -238,7 +238,7 @@ test.describe('a video page', () => {
         await noSizeFloor(page)
     })
 
-    test("shows TMDB's overview, genres and age rating, score, cast and a trailer that opens YouTube, and has no Download", async ({ page }) => {
+    test("shows TMDB's overview, genres and age rating, score, cast and a trailer button, and has no Download", async ({ page }) => {
         await mockTmdb(page)
         await page.goto('/video/-1001/1')
         await expect(page.locator('.detail-title')).toHaveText('Big Buck Bunny')
@@ -247,9 +247,9 @@ test.describe('a video page', () => {
         await expect(page.locator('.detail-synopsis')).toContainText('A gentle giant of a rabbit')
         await expect(page.getByText('Directed by Sacha Goedegebure')).toBeVisible()
         await expect(page.locator('.cast-person')).toHaveCount(2)
-        const trailer = page.getByRole('link', { name: 'Trailer' })
-        await expect(trailer).toHaveAttribute('href', 'https://www.youtube.com/watch?v=aqz-KE-bpKQ')
-        await expect(trailer).toHaveAttribute('target', '_blank')
+        // With Play trailers in TMPlayer on (the default) it is a button that opens the player's sheet (trailer.spec.ts); the link to YouTube is its setting off.
+        await expect(page.getByRole('button', { name: 'Trailer', exact: true })).toBeVisible()
+        await expect(page.getByRole('link', { name: 'Trailer' })).toHaveCount(0)
         // Saving a file is not a thing a browser tab does for the apps: no Download.
         await expect(page.getByText('Download', { exact: true })).toHaveCount(0)
     })
@@ -261,7 +261,7 @@ test.describe('a video page', () => {
         await page.goto('/video/-1001/1')
         await expect(page.locator('.detail-title')).toHaveText('Native Clip')
         await expect(page.locator('.detail-synopsis')).toHaveCount(0)
-        await expect(page.getByRole('link', { name: 'Trailer' })).toHaveCount(0)
+        await expect(page.locator('.detail-round', { hasText: 'Trailer' })).toHaveCount(0)
         expect(asked).toEqual([])
     })
 
@@ -270,7 +270,7 @@ test.describe('a video page', () => {
         await page.goto('/video/-1001/1')
         await expect(page.locator('.detail-title')).toHaveText('Big Buck Bunny')
         await expect(page.locator('.detail-genres')).toHaveCount(0)
-        await expect(page.getByRole('link', { name: 'Trailer' })).toHaveCount(0)
+        await expect(page.locator('.detail-round', { hasText: 'Trailer' })).toHaveCount(0)
         await expect(page.getByRole('button', { name: 'Play' })).toBeVisible()
     })
 
