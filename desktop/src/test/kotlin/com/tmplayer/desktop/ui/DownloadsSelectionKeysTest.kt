@@ -12,8 +12,7 @@ import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.click
-import androidx.compose.ui.test.onRoot
-import androidx.compose.ui.test.performMouseInput
+import androidx.compose.ui.test.performMultiModalInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.test.runComposeUiTest
@@ -27,6 +26,7 @@ import com.tmplayer.data.UpdateScheduler
 import com.tmplayer.data.WatchedStore
 import com.tmplayer.desktop.DesktopPrefs
 import com.tmplayer.desktop.DesktopWatchCache
+import com.tmplayer.desktop.os.OsInfo
 import com.tmplayer.ui.nav.BackStack
 import com.tmplayer.ui.nav.LocalBackStack
 import com.tmplayer.ui.nav.backInput
@@ -104,10 +104,22 @@ class DownloadsSelectionKeysTest {
 
     private fun androidx.compose.ui.test.ComposeUiTest.row(title: String) = onNode(hasText(title, substring = true) and androidx.compose.ui.test.hasClickAction())
 
+    /**
+     * The key a click is held with to toggle a row: Cmd on a Mac, where Ctrl+click is the right
+     * click and opens the row's menu (the macOS runner did, and the test then found two roots).
+     */
+    private val toggleKey = if (OsInfo.isMac) Key.MetaLeft else Key.CtrlLeft
+
+    /**
+     * A click with [modifier] held, all sent to the row's own window rather than to onRoot(),
+     * which fails whenever a popup (a menu, a tooltip) is open as a second root.
+     */
     private fun androidx.compose.ui.test.ComposeUiTest.clickWith(modifier: Key, title: String) {
-        onRoot().performKeyInput { keyDown(modifier) }
-        row(title).performMouseInput { click() }
-        onRoot().performKeyInput { keyUp(modifier) }
+        row(title).performMultiModalInput {
+            key { keyDown(modifier) }
+            mouse { click() }
+            key { keyUp(modifier) }
+        }
     }
 
     @Test
@@ -124,7 +136,7 @@ class DownloadsSelectionKeysTest {
     @Test
     fun `Ctrl+click toggles one row and Shift+click takes the range to it`() = runComposeUiTest {
         page(folderWithFive())
-        clickWith(Key.CtrlLeft, names[0])
+        clickWith(toggleKey, names[0])
         picked(1)
         clickWith(Key.ShiftLeft, names.last())
         // The page lists newest first; whatever its order, a range takes every row between the two.
