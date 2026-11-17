@@ -1,0 +1,25 @@
+# The Linux x64 natives that replace the ones inside the tdl-coroutines and mediamp runtime jars, so
+# the AppImage and the tarball run on glibc 2.35 (Ubuntu 22.04 and newer; issue #30).
+#
+# The binaries are not in the repository: scripts/build-tdlib-linux.sh and
+# scripts/build-mpv-linux-2-35.sh build them in an Ubuntu 22.04 container, byte for byte the same on
+# every run. Point the build at the folder that holds tdlib/ and mpv/ and it checks every file
+# against the hash here before the file goes into a jar:
+#
+#   ./gradlew :desktop:createReleaseDistributable -PtmplayerLinuxNatives=$HOME/.cache/tmplayer-natives
+#   (or the environment variable TMPLAYER_LINUX_NATIVES)
+#
+# Columns: SHA-256, the file under that folder, the jar it goes into (its name up to the version)
+# and the entry it replaces there. A recipe change (natives/, the two scripts) or a tdl-coroutines
+# or mediamp bump means new hashes here. desktop/build.gradle.kts reads this file.
+ad3e1193935b9734d77e55055285fd0f75c41e9e41cd2587fbb17488dc3aa23b  tdlib/libtdjsonjava.so  tdl-coroutines-jvm  linux/x64/libtdjsonjava.so
+a27852b473e559b1061b45c71153a14820bbc08a55c3157ae981a715213b7ab6  mpv/libass.so.9  mediamp-mpv-runtime-linux-x64  libass.so.9
+e231c2b046e9e62418082cb2939869ac48b1966c18b1df1effb1f33fe39d5665  mpv/libcrypto.so.3  mediamp-mpv-runtime-linux-x64  libcrypto.so.3
+7ed9969b876885fbcce889be9b189da0d1bf1c5cdc7b282fb1c837bcd80cc52e  mpv/libglib-2.0.so.0  mediamp-mpv-runtime-linux-x64  libglib-2.0.so.0
+9c2bf0af169e22d87d2f0268f403391d33ffd95a93f497f461285fe486ec4ae9  mpv/libharfbuzz.so.0  mediamp-mpv-runtime-linux-x64  libharfbuzz.so.0
+3368ffddb84d130abd1fd082dffda90209f2ecf572590eb588d60fbb146e09fb  mpv/libmediampv.so  mediamp-mpv-runtime-linux-x64  libmediampv.so
+f4948158b74907e4855e39c553c86deef3d1f15855a0db49172d63d84821e30e  mpv/libmpv.so  mediamp-mpv-runtime-linux-x64  libmpv.so
+f4948158b74907e4855e39c553c86deef3d1f15855a0db49172d63d84821e30e  mpv/libmpv.so.2  mediamp-mpv-runtime-linux-x64  libmpv.so.2
+f4948158b74907e4855e39c553c86deef3d1f15855a0db49172d63d84821e30e  mpv/libmpv.so.2.6.0  mediamp-mpv-runtime-linux-x64  libmpv.so.2.6.0
+6500d096c9d058bb6c2531b10121aa5f737dd2a059c0c73534fabcdc132cd101  mpv/libplacebo.so.338  mediamp-mpv-runtime-linux-x64  libplacebo.so.338
+ed9fd72044003d090161f6f12eb58bd53f8cb28933f7202386914408db5316cf  mpv/libva.so.2  mediamp-mpv-runtime-linux-x64  libva.so.2

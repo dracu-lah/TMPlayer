@@ -90,6 +90,23 @@ packaged app's `--self-test` does the same on its bundled runtime. ProGuard writ
 stack map frames again, and in 1.28.1 it wrote some the JVM refused, which crashed the app on the
 first show it drew (HX1). Should the check fail, split the method it names, as `SeriesPanel` was.
 
+The Linux downloads run on glibc 2.35 (Ubuntu 22.04 and newer), but the TDLib and libmpv that
+tdl-coroutines and mediamp publish were built on Ubuntu 24.04 and need 2.38. So the release builds
+its own: `scripts/build-tdlib-linux.sh` and `scripts/build-mpv-linux-2-35.sh` (podman and an
+Ubuntu 22.04 image, about 20 minutes, the files land in `~/.cache/tmplayer-natives/{tdlib,mpv}`,
+recipes under `natives/`), and the Gradle build swaps them into the two jars:
+
+```bash
+./gradlew :desktop:createReleaseDistributable -PtmplayerLinuxNatives=$HOME/.cache/tmplayer-natives
+desktop/packaging/linux/glibc-floor.sh desktop/build/compose/binaries/main-release/app/TMPlayer
+```
+
+(`TMPLAYER_LINUX_NATIVES` does the same from the environment.) Every file must match its SHA-256 in
+`natives/linux-2-35/PINS.txt`, or the build stops saying which one; a recipe change means new
+hashes there. Without the property nothing is swapped: fine for `:desktop:run` and the tests on a
+Linux that has glibc 2.38 or newer, but the floor check then fails. Only a Linux x64 host uses it.
+CI builds the files once per recipe and caches them (`.github/actions/linux-natives`).
+
 Linux notes: on a tiling window manager set `_JAVA_AWT_WM_NONREPARENTING=1` or the window stays
 blank; hardware decoding may fail on Fedora, where the bundled libva looks in Debian's driver
 path, and software decoding takes over.

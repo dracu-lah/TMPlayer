@@ -3,6 +3,7 @@ import java.io.File
 import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import java.security.MessageDigest
 import java.util.Properties
 import java.util.zip.CRC32
 import java.util.zip.Deflater
@@ -144,6 +145,11 @@ val mpvRuntime = when {
 //    Homebrew (libjvm, libssl, libcrypto by absolute /opt/homebrew paths, upstream
 //    g000sha256/tdl-coroutines#163) rewritten to @rpath/<name> and is signed again ad hoc. The
 //    app carries the OpenSSL they then resolve to (macOpenSsl below, loaded by MacOpenSsl).
+//  - On a Linux x64 host given -PtmplayerLinuxNatives=<dir> (or TMPLAYER_LINUX_NATIVES), the TDLib
+//    and the libmpv libraries that need glibc 2.38 or GCC 13's libstdc++ are replaced by the ones
+//    scripts/build-tdlib-linux.sh and scripts/build-mpv-linux-2-35.sh build on Ubuntu 22.04, which
+//    run on glibc 2.35 (issue #30). Each file must match natives/linux-2-35/PINS.txt by SHA-256, or
+//    the build stops. Without the property nothing changes (jar contents as published).
 // A signed jar (META-INF/*.SF) is only ever stored, never changed, so its signature stays valid.
 // The transform runs per host OS, since the kept TDLib and the strip step both depend on it, and
 // the installers are built on the matching host. The self-test proves the TDLib that remains loads.
@@ -152,6 +158,37 @@ val tdlibKeep = when {
     hostMac -> if (hostArm) "macos/arm64/" else "macos/x64/"
     else -> if (hostArm) "linux/arm64/" else "linux/x64/"
 }
+
+// The rebuilt Linux x64 natives (natives/linux-2-35/PINS.txt): sha256, file under the folder, jar
+// name prefix, jar entry. Active on a Linux x64 host with the folder given; never committed.
+val linuxNativesDir: File? = providers.gradleProperty("tmplayerLinuxNatives")
+    .orElse(providers.environmentVariable("TMPLAYER_LINUX_NATIVES"))
+    .orNull?.takeIf { it.isNotBlank() }?.let { rootProject.file(it) }
+val linuxNativePins: List<String> =
+    if (linuxNativesDir == null) {
+        emptyList()
+    } else if (hostOs.contains("win") || hostMac || hostArm) {
+        logger.warn("tmplayerLinuxNatives is set, but only a Linux x64 build uses it; ignored on this host")
+        emptyList()
+    } else {
+        val pinsFile = rootProject.file("natives/linux-2-35/PINS.txt")
+        val pins = pinsFile.readLines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }.map { line ->
+            val f = line.split(Regex("\\s+"))
+            require(f.size == 4 && Regex("[0-9a-f]{64}").matches(f[0])) { "natives/linux-2-35/PINS.txt: bad line '$line'" }
+            f.joinToString("|")
+        }
+        require(pins.isNotEmpty()) { "natives/linux-2-35/PINS.txt lists no files" }
+        val missing = pins.map { it.split("|")[1] }.distinct().filter { !File(linuxNativesDir, it).isFile }
+        if (!linuxNativesDir.isDirectory || missing.isNotEmpty()) {
+            throw GradleException(
+                "tmplayerLinuxNatives=$linuxNativesDir is set, but " +
+                    (if (!linuxNativesDir.isDirectory) "it is not a folder" else "these pinned files are missing in it: $missing") +
+                    ". Build them with scripts/build-tdlib-linux.sh and scripts/build-mpv-linux-2-35.sh " +
+                    "(natives/linux-2-35/PINS.txt lists what the build expects), or leave the property out.",
+            )
+        }
+        pins
+    }
 // The name is the transform's cache identity: change it whenever the transform's output changes.
 val jarsStored: Attribute<Boolean> = Attribute.of("com.tmplayer.jarsStoredV3", Boolean::class.javaObjectType)
 
@@ -165,6 +202,18 @@ abstract class StoreRuntimeJars : TransformAction<StoreRuntimeJars.Params> {
 
         @get:Input
         val patchMachO: Property<Boolean>
+
+        /** "sha256|file|jar name prefix|jar entry" per rebuilt native (natives/linux-2-35/PINS.txt). */
+        @get:Input
+        val nativePins: ListProperty<String>
+
+        /** Where the pinned files are. Not an input itself: the files' bytes are (below), and they must match the pins. */
+        @get:Internal
+        val nativesDir: Property<String>
+
+        @get:InputFiles
+        @get:PathSensitive(PathSensitivity.NONE)
+        val nativeFiles: ConfigurableFileCollection
     }
 
     @get:InputArtifact
@@ -182,6 +231,9 @@ abstract class StoreRuntimeJars : TransformAction<StoreRuntimeJars.Params> {
         val native = Regex("^(linux|macos|windows)/")
         val strip = parameters.stripElf.get()
         val patchMac = parameters.patchMachO.get()
+        // The rebuilt natives for this jar, entry name to the file's verified bytes.
+        val pinned = parameters.nativePins.get().map { it.split("|") }.filter { jar.name.startsWith(it[2]) }
+        val replaced = HashSet<String>()
         val tmp = Files.createTempDirectory("tmplayer-jar").toFile()
         try {
             ZipFile(jar).use { zin ->
@@ -195,6 +247,11 @@ abstract class StoreRuntimeJars : TransformAction<StoreRuntimeJars.Params> {
                     for (entry in zin.entries()) {
                         if (tdlib && native.containsMatchIn(entry.name) && !entry.isDirectory && !entry.name.startsWith(keep)) continue
                         var bytes = if (entry.isDirectory) ByteArray(0) else zin.getInputStream(entry).use { it.readBytes() }
+                        val pin = if (entry.isDirectory) null else pinned.firstOrNull { it[3] == entry.name }
+                        if (pin != null) {
+                            bytes = pinnedNative(File(parameters.nativesDir.get(), pin[1]), pin[0])
+                            replaced += entry.name
+                        }
                         if (strip && !signed && !entry.isDirectory && bytes.size > 4 &&
                             bytes[0] == 0x7f.toByte() && bytes[1] == 'E'.code.toByte() &&
                             bytes[2] == 'L'.code.toByte() && bytes[3] == 'F'.code.toByte()
@@ -225,9 +282,23 @@ abstract class StoreRuntimeJars : TransformAction<StoreRuntimeJars.Params> {
                     }
                 }
             }
+            val absent = pinned.map { it[3] }.filter { it !in replaced }
+            check(absent.isEmpty()) { "${jar.name} has no entry $absent for natives/linux-2-35/PINS.txt to replace; the jar changed, so the pins need a new recipe" }
         } finally {
             tmp.deleteRecursively()
         }
+    }
+
+    /** The bytes of a rebuilt native, only if its SHA-256 is the pinned one: nothing unpinned goes into a package. */
+    private fun pinnedNative(file: File, sha256: String): ByteArray {
+        check(file.isFile) { "pinned native ${file.path} is missing; build it with scripts/build-tdlib-linux.sh or scripts/build-mpv-linux-2-35.sh" }
+        val bytes = file.readBytes()
+        val actual = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+        check(actual == sha256) {
+            "${file.path} has SHA-256 $actual, natives/linux-2-35/PINS.txt pins $sha256. " +
+                "Rebuild it with the scripts, or update the pin if the recipe changed on purpose."
+        }
+        return bytes
     }
 
     /**
@@ -281,6 +352,13 @@ dependencies {
         parameters.keep.set(tdlibKeep)
         parameters.stripElf.set(!hostOs.contains("win") && !hostMac)
         parameters.patchMachO.set(hostMac)
+        parameters.nativePins.set(linuxNativePins)
+        linuxNativesDir?.let { dir ->
+            if (linuxNativePins.isNotEmpty()) {
+                parameters.nativesDir.set(dir.path)
+                linuxNativePins.map { File(dir, it.split("|")[1]) }.distinct().forEach { parameters.nativeFiles.from(it) }
+            }
+        }
     }
 }
 configurations.named("runtimeClasspath") {
