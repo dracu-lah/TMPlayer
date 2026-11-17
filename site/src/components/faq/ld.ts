@@ -78,6 +78,14 @@ export const faqLd = {
     },
     {
       "@type": "Question",
+      "name": "Do trailers play inside TMPlayer? What does YouTube see?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes, in YouTube's own player, on the web app, Android phones, tablets and TVs, iPhone and iPad, and the desktop app. Nothing from Google loads until you open a trailer, and TMPlayer sends no ids of yours and no file names. YouTube sees what any embedded player sees: your IP address and the trailer's video id, and it sets its own cookies. Settings, Home and library, Play trailers in TMPlayer turns it off, and any failure opens YouTube instead. On Windows, macOS and Linux the desktop app first asks once to download a browser component (130 to 158 MB, 305 to 455 MB on disk)."
+      }
+    },
+    {
+      "@type": "Question",
       "name": "Do I need a phone to sign in?",
       "acceptedAnswer": {
         "@type": "Answer",
