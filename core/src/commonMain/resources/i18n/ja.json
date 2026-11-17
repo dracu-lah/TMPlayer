@@ -1660,6 +1660,8 @@
     "trailer_scan": "ここにはYouTubeを再生できるアプリがありません。スマートフォンで読み取って予告編を見てください",
     "trailer_scan_phone": "スマートフォンでスキャンすると、そちらで見られます。",
     "trailer_unavailable": "この予告編はアプリ内で再生できません",
+    "trailers_in_app": "TMPlayerで予告編を再生",
+    "trailers_in_app_detail": "YouTubeのプレーヤーは、予告編を選んだときだけ読み込まれます。オフにすると予告編はYouTubeで開きます",
     "turn_on": "ポスターとあらすじを表示",
     "turn_on_detail": "TMDB、TVmaze、AniListで動画名から検索します。設定で変更できます"
   },
@@ -3660,6 +3662,29 @@
     "subtitles_earlier": "字幕を早く表示",
     "subtitles_later": "字幕を遅く表示",
     "track_number": "トラック {number}"
+  },
+  "trailer": {
+    "close": "予告編を閉じる",
+    "engine_cancelled": "ダウンロードをキャンセルしました。何も保存されていません。予告編をYouTubeで開きます。",
+    "engine_download": "ダウンロード",
+    "engine_downloading": "予告編プレーヤーをダウンロード中",
+    "engine_failed": "予告編プレーヤーをダウンロードできませんでした。予告編をYouTubeで開きます。",
+    "engine_intro": "アプリ内で予告編を再生するには、TMPlayerにブラウザーコンポーネント(Chromium)が必要です。ダウンロードは1回だけで、使用前に検証されます。ない場合、予告編はYouTubeで開きます。",
+    "engine_no_room": "{folder}の空き容量が足りません。予告編プレーヤーには{needed}が必要ですが、空きは{free}です。空き容量を増やすか、この予告編をYouTubeで見てください。",
+    "engine_progress": "{done} / {total}",
+    "engine_size": "ダウンロード {download}、展開後はディスク上で{installed}、保存先は{folder}です。その空き容量: {free}。",
+    "engine_space_unknown": "{folder}の空き容量を確認できなかったため、TMPlayerはそこに予告編プレーヤーをダウンロードしません。代わりにこの予告編をYouTubeで見てください。",
+    "engine_start_failed": "予告編プレーヤーが起動しませんでした。予告編をYouTubeで開きます。TMPlayerを再起動すると直る場合があります。",
+    "engine_title": "予告編プレーヤーをダウンロードしますか?",
+    "engine_unpacking": "予告編プレーヤーを展開中",
+    "engine_unsupported": "このパソコンでは、TMPlayer内で予告編を再生できません。予告編をYouTubeで開きます。",
+    "keys_hint": "Spaceで再生/一時停止、←と→で10秒移動、Escで閉じる",
+    "loading": "予告編を読み込み中…",
+    "loads_from_youtube": "この予告編はYouTubeが再生し、開いた後にのみYouTubeから読み込まれます。",
+    "play_pause": "再生/一時停止",
+    "remote_hint": "再生中: OKで一時停止/再生、←と→で10秒移動、戻るで閉じます。",
+    "title": "予告編",
+    "unavailable_in_app": "この予告編はここでは再生できません。YouTubeで開きます。"
   },
   "tv": {
     "browse_hint": "OK でチャットを開くか動画を再生します。チャットで OK を長押しするとお気に入りに追加します。戻るで 1 つ上に戻ります。",

@@ -1660,6 +1660,8 @@
     "trailer_scan": "Žádná aplikace tady neumí přehrát YouTube. Naskenujte to telefonem a trailer si pusťte tam",
     "trailer_scan_phone": "Naskenujte to telefonem a pusťte si ho tam.",
     "trailer_unavailable": "Tento trailer nelze přehrát uvnitř aplikace",
+    "trailers_in_app": "Přehrávat trailery v TMPlayeru",
+    "trailers_in_app_detail": "Přehrávač YouTube se načte, až když trailer vyberete. Když je vypnuto, trailery se otevřou na YouTube",
     "turn_on": "Zobrazit plakát a popis",
     "turn_on_detail": "Vyhledá videa podle názvu na TMDB, TVmaze a AniList. Změníte to v Nastavení"
   },
@@ -3660,6 +3662,29 @@
     "subtitles_earlier": "Zobrazit titulky dříve",
     "subtitles_later": "Zobrazit titulky později",
     "track_number": "Stopa {number}"
+  },
+  "trailer": {
+    "close": "Zavřít trailer",
+    "engine_cancelled": "Stahování zrušeno a nic se neuložilo. Trailer se otevírá na YouTube.",
+    "engine_download": "Stáhnout",
+    "engine_downloading": "Stahuje se přehrávač trailerů",
+    "engine_failed": "Přehrávač trailerů se nepodařilo stáhnout. Trailer se otevírá na YouTube.",
+    "engine_intro": "Aby se trailery přehrávaly přímo v aplikaci, potřebuje TMPlayer komponentu prohlížeče (Chromium). Stáhne se jednou a před použitím se zkontroluje. Bez ní se trailery otevírají na YouTube.",
+    "engine_no_room": "Ve složce {folder} není dost místa: přehrávač trailerů potřebuje {needed}, volných je {free}. Uvolněte místo, nebo si trailer pusťte na YouTube.",
+    "engine_progress": "{done} z {total}",
+    "engine_size": "Stahuje se {download}, po rozbalení zabere na disku {installed}, ve složce {folder}. Volno tam: {free}.",
+    "engine_space_unknown": "TMPlayer nezjistil, kolik je volného místa ve složce {folder}, a proto tam přehrávač trailerů stahovat nebude. Pusťte si trailer na YouTube.",
+    "engine_start_failed": "Přehrávač trailerů se nespustil. Trailer se otevírá na YouTube. Může pomoci restart TMPlayeru.",
+    "engine_title": "Stáhnout přehrávač trailerů?",
+    "engine_unpacking": "Rozbaluje se přehrávač trailerů",
+    "engine_unsupported": "Na tomto počítači nelze trailery přehrávat přímo v TMPlayeru. Trailer se otevírá na YouTube.",
+    "keys_hint": "Space přehraje nebo pozastaví, Vlevo a Vpravo přetočí o 10 sekund, Esc zavře",
+    "loading": "Načítá se trailer…",
+    "loads_from_youtube": "Tento trailer přehrává YouTube a načte se z YouTube až po jeho otevření.",
+    "play_pause": "Přehrát nebo pozastavit",
+    "remote_hint": "Až se přehrává: OK ho pozastaví nebo spustí, Vlevo a Vpravo přetočí o 10 sekund, Zpět ho zavře.",
+    "title": "Trailer",
+    "unavailable_in_app": "Tento trailer se tady nedá přehrát. Otevírá se na YouTube."
   },
   "tv": {
     "browse_hint": "OK otevře chat nebo přehraje video. Podržením OK na chatu ho přidáte do oblíbených. Zpět vede o úroveň výš.",

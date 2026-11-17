@@ -1660,6 +1660,8 @@
     "trailer_scan": "Nessuna app qui può riprodurre YouTube. Inquadra questo codice con il telefono per guardare il trailer",
     "trailer_scan_phone": "Scansiona questo con il telefono per guardarlo lì.",
     "trailer_unavailable": "Questo trailer non si può riprodurre nell'app",
+    "trailers_in_app": "Riproduci i trailer in TMPlayer",
+    "trailers_in_app_detail": "Il player di YouTube si carica solo quando scegli un trailer. Se è disattivato, i trailer si aprono in YouTube",
     "turn_on": "Mostra locandina e trama",
     "turn_on_detail": "Cerca i video per nome su TMDB, TVmaze e AniList. Si cambia in Impostazioni"
   },
@@ -3660,6 +3662,29 @@
     "subtitles_earlier": "Anticipa i sottotitoli",
     "subtitles_later": "Ritarda i sottotitoli",
     "track_number": "Traccia {number}"
+  },
+  "trailer": {
+    "close": "Chiudi il trailer",
+    "engine_cancelled": "Download annullato, non è stato conservato nulla. Il trailer si apre in YouTube.",
+    "engine_download": "Scarica",
+    "engine_downloading": "Download del player dei trailer",
+    "engine_failed": "Non è stato possibile scaricare il player dei trailer. Il trailer si apre in YouTube.",
+    "engine_intro": "Per riprodurre i trailer nell'app, TMPlayer ha bisogno di un componente del browser (Chromium). Viene scaricato una sola volta e controllato prima dell'uso. Senza, i trailer si aprono in YouTube.",
+    "engine_no_room": "Spazio libero insufficiente in {folder}: il player dei trailer richiede {needed} e ne sono liberi {free}. Libera dello spazio, oppure guarda questo trailer su YouTube.",
+    "engine_progress": "{done} di {total}",
+    "engine_size": "Download di {download}, poi {installed} su disco una volta decompresso, in {folder}. Liberi lì: {free}.",
+    "engine_space_unknown": "TMPlayer non è riuscito a vedere quanto spazio è libero in {folder}, quindi non vi scaricherà il player dei trailer. Guarda invece questo trailer su YouTube.",
+    "engine_start_failed": "Il player dei trailer non si è avviato. Il trailer si apre in YouTube. Riavviare TMPlayer potrebbe aiutare.",
+    "engine_title": "Scaricare il player dei trailer?",
+    "engine_unpacking": "Decompressione del player dei trailer",
+    "engine_unsupported": "Su questo computer i trailer non si possono riprodurre in TMPlayer. Il trailer si apre in YouTube.",
+    "keys_hint": "Space riproduce o mette in pausa, Sinistra e Destra avanzano di 10 secondi, Esc chiude",
+    "loading": "Caricamento del trailer…",
+    "loads_from_youtube": "Questo trailer è riprodotto da YouTube e si carica da YouTube solo dopo che lo apri.",
+    "play_pause": "Riproduci o pausa",
+    "remote_hint": "Quando è in riproduzione: OK lo mette in pausa o lo riprende, Sinistra e Destra spostano di 10 secondi, Indietro lo chiude.",
+    "title": "Trailer",
+    "unavailable_in_app": "Questo trailer non si può riprodurre qui. Si apre in YouTube."
   },
   "tv": {
     "browse_hint": "OK apre una chat o riproduce un video. Tieni premuto OK su una chat per aggiungerla ai preferiti. Indietro sale di un livello.",

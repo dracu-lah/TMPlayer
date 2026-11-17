@@ -1660,6 +1660,8 @@
     "trailer_scan": "Tidak ada aplikasi di sini yang bisa memutar YouTube. Pindai ini dengan ponselmu untuk menonton trailer",
     "trailer_scan_phone": "Pindai ini dengan ponselmu untuk menontonnya di sana.",
     "trailer_unavailable": "Trailer ini tidak bisa diputar di dalam aplikasi",
+    "trailers_in_app": "Putar trailer di TMPlayer",
+    "trailers_in_app_detail": "Pemutar YouTube baru dimuat saat Anda memilih trailer. Jika dimatikan, trailer dibuka di YouTube",
     "turn_on": "Tampilkan poster dan sinopsis",
     "turn_on_detail": "Mencari video lewat nama di TMDB, TVmaze, dan AniList. Ubah di Pengaturan"
   },
@@ -3660,6 +3662,29 @@
     "subtitles_earlier": "Tampilkan subtitle lebih awal",
     "subtitles_later": "Tampilkan subtitle lebih lambat",
     "track_number": "Trek {number}"
+  },
+  "trailer": {
+    "close": "Tutup trailer",
+    "engine_cancelled": "Unduhan dibatalkan dan tidak ada yang disimpan. Trailer dibuka di YouTube.",
+    "engine_download": "Unduh",
+    "engine_downloading": "Mengunduh pemutar trailer",
+    "engine_failed": "Pemutar trailer tidak bisa diunduh. Trailer dibuka di YouTube.",
+    "engine_intro": "Untuk memutar trailer di dalam aplikasi, TMPlayer memerlukan komponen peramban (Chromium). Komponen ini diunduh sekali dan diperiksa sebelum dipakai. Tanpanya, trailer dibuka di YouTube.",
+    "engine_no_room": "Ruang kosong di {folder} tidak cukup: pemutar trailer memerlukan {needed}, sedangkan yang kosong {free}. Kosongkan ruang, atau tonton trailer ini di YouTube.",
+    "engine_progress": "{done} dari {total}",
+    "engine_size": "Unduhan {download}, lalu {installed} di disk setelah diekstrak, di {folder}. Ruang kosong di sana: {free}.",
+    "engine_space_unknown": "TMPlayer tidak bisa melihat berapa ruang kosong di {folder}, jadi pemutar trailer tidak akan diunduh ke sana. Tonton trailer ini di YouTube saja.",
+    "engine_start_failed": "Pemutar trailer tidak berjalan. Trailer dibuka di YouTube. Memulai ulang TMPlayer mungkin membantu.",
+    "engine_title": "Unduh pemutar trailer?",
+    "engine_unpacking": "Mengekstrak pemutar trailer",
+    "engine_unsupported": "Trailer tidak bisa diputar di dalam TMPlayer pada komputer ini. Trailer dibuka di YouTube.",
+    "keys_hint": "Space memutar atau menjeda, Left dan Right melompat 10 detik, Esc menutup",
+    "loading": "Memuat trailer…",
+    "loads_from_youtube": "Trailer ini diputar oleh YouTube dan baru dimuat dari YouTube setelah Anda membukanya.",
+    "play_pause": "Putar atau jeda",
+    "remote_hint": "Setelah diputar: OK menjeda atau memutarnya, Left dan Right bergeser 10 detik, Kembali menutupnya.",
+    "title": "Trailer",
+    "unavailable_in_app": "Trailer ini tidak bisa diputar di sini. Trailer dibuka di YouTube."
   },
   "tv": {
     "browse_hint": "OK membuka chat atau memutar video. Tahan OK pada chat untuk menambahkannya ke favorit. Kembali naik satu tingkat.",

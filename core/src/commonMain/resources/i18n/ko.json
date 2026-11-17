@@ -1660,6 +1660,8 @@
     "trailer_scan": "여기에는 YouTube를 재생할 수 있는 앱이 없어요. 휴대폰으로 스캔해서 예고편을 보세요",
     "trailer_scan_phone": "휴대폰으로 스캔해서 휴대폰에서 보세요.",
     "trailer_unavailable": "이 예고편은 앱 안에서 재생할 수 없어요",
+    "trailers_in_app": "TMPlayer에서 예고편 재생",
+    "trailers_in_app_detail": "YouTube 플레이어는 예고편을 선택할 때만 불러와요. 끄면 예고편이 YouTube에서 열려요",
     "turn_on": "포스터와 줄거리 표시",
     "turn_on_detail": "TMDB, TVmaze, AniList에서 이름으로 영상을 조회해요. 설정에서 바꿀 수 있어요"
   },
@@ -3660,6 +3662,29 @@
     "subtitles_earlier": "자막 앞당기기",
     "subtitles_later": "자막 늦추기",
     "track_number": "트랙 {number}"
+  },
+  "trailer": {
+    "close": "예고편 닫기",
+    "engine_cancelled": "다운로드를 취소했고, 저장된 것은 없어요. 예고편을 YouTube에서 열어요.",
+    "engine_download": "다운로드",
+    "engine_downloading": "예고편 플레이어 다운로드 중",
+    "engine_failed": "예고편 플레이어를 다운로드하지 못했어요. 예고편을 YouTube에서 열어요.",
+    "engine_intro": "앱 안에서 예고편을 재생하려면 TMPlayer에 브라우저 구성 요소(Chromium)가 필요해요. 한 번만 다운로드하고, 사용하기 전에 확인해요. 없으면 예고편이 YouTube에서 열려요.",
+    "engine_no_room": "{folder}에 여유 공간이 부족해요. 예고편 플레이어에는 {needed}가 필요한데 여유 공간은 {free}예요. 공간을 확보하거나 이 예고편을 YouTube에서 보세요.",
+    "engine_progress": "{total} 중 {done}",
+    "engine_size": "다운로드 {download}, 압축을 풀면 디스크에서 {installed}를 차지해요. 위치는 {folder}예요. 그곳의 여유 공간: {free}.",
+    "engine_space_unknown": "TMPlayer가 {folder}의 여유 공간을 확인하지 못해서 그곳에는 예고편 플레이어를 다운로드하지 않아요. 대신 이 예고편을 YouTube에서 보세요.",
+    "engine_start_failed": "예고편 플레이어가 시작되지 않았어요. 예고편을 YouTube에서 열어요. TMPlayer를 다시 시작하면 도움이 될 수 있어요.",
+    "engine_title": "예고편 플레이어를 다운로드할까요?",
+    "engine_unpacking": "예고편 플레이어 압축 푸는 중",
+    "engine_unsupported": "이 컴퓨터에서는 TMPlayer 안에서 예고편을 재생할 수 없어요. 예고편을 YouTube에서 열어요.",
+    "keys_hint": "Space는 재생 또는 일시정지, Left와 Right는 10초 이동, Esc는 닫기",
+    "loading": "예고편을 불러오는 중…",
+    "loads_from_youtube": "이 예고편은 YouTube가 재생하며, 열고 나서야 YouTube에서 불러와요.",
+    "play_pause": "재생 또는 일시정지",
+    "remote_hint": "재생되면: 확인은 일시정지 또는 재생, Left와 Right는 10초 이동, 뒤로는 닫기예요.",
+    "title": "예고편",
+    "unavailable_in_app": "이 예고편은 여기서 재생할 수 없어요. YouTube에서 열어요."
   },
   "tv": {
     "browse_hint": "OK는 채팅을 열거나 동영상을 재생합니다. 채팅에서 OK를 길게 누르면 즐겨찾기에 추가됩니다. 뒤로는 한 단계 위로 갑니다.",

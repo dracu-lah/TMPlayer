@@ -1660,6 +1660,8 @@
     "trailer_scan": "Burada hiçbir uygulama YouTube'u oynatamıyor. Fragmanı izlemek için bunu telefonunla tara",
     "trailer_scan_phone": "Telefonunda izlemek için bunu telefonunla tara.",
     "trailer_unavailable": "Bu fragman uygulamanın içinde oynatılamıyor",
+    "trailers_in_app": "Fragmanları TMPlayer'da oynat",
+    "trailers_in_app_detail": "YouTube'un oynatıcısı yalnızca bir fragman seçtiğinde yüklenir. Kapalıyken fragmanlar YouTube'da açılır",
     "turn_on": "Afişi ve özeti göster",
     "turn_on_detail": "Videoları ada göre TMDB, TVmaze ve AniList'te arar. Ayarlar'dan değiştirebilirsin"
   },
@@ -3660,6 +3662,29 @@
     "subtitles_earlier": "Altyazıyı daha erken göster",
     "subtitles_later": "Altyazıyı daha geç göster",
     "track_number": "İz {number}"
+  },
+  "trailer": {
+    "close": "Fragmanı kapat",
+    "engine_cancelled": "İndirme iptal edildi, hiçbir şey saklanmadı. Fragman YouTube'da açılıyor.",
+    "engine_download": "İndir",
+    "engine_downloading": "Fragman oynatıcısı indiriliyor",
+    "engine_failed": "Fragman oynatıcısı indirilemedi. Fragman YouTube'da açılıyor.",
+    "engine_intro": "Fragmanları uygulamanın içinde oynatmak için TMPlayer'ın bir tarayıcı bileşenine (Chromium) ihtiyacı var. Bir kez indirilir ve kullanılmadan önce doğrulanır. Olmadan fragmanlar YouTube'da açılır.",
+    "engine_no_room": "{folder} içinde yeterli boş alan yok: fragman oynatıcısı {needed} gerektiriyor, {free} boş. Biraz yer aç ya da bu fragmanı YouTube'da izle.",
+    "engine_progress": "{done} / {total}",
+    "engine_size": "İndirme {download}, açıldıktan sonra diskte {installed}, {folder} içinde. Orada boş: {free}.",
+    "engine_space_unknown": "TMPlayer {folder} içinde ne kadar boş alan olduğunu göremedi, bu yüzden fragman oynatıcısını oraya indirmeyecek. Bunun yerine bu fragmanı YouTube'da izle.",
+    "engine_start_failed": "Fragman oynatıcısı başlamadı. Fragman YouTube'da açılıyor. TMPlayer'ı yeniden başlatmak işe yarayabilir.",
+    "engine_title": "Fragman oynatıcısı indirilsin mi?",
+    "engine_unpacking": "Fragman oynatıcısı açılıyor",
+    "engine_unsupported": "Fragmanlar bu bilgisayarda TMPlayer'ın içinde oynatılamıyor. Fragman YouTube'da açılıyor.",
+    "keys_hint": "Space oynatır veya duraklatır, Left ve Right 10 saniye atlar, Esc kapatır",
+    "loading": "Fragman yükleniyor…",
+    "loads_from_youtube": "Bu fragmanı YouTube oynatır ve yalnızca sen açtıktan sonra YouTube'dan yüklenir.",
+    "play_pause": "Oynat veya duraklat",
+    "remote_hint": "Oynamaya başlayınca: OK duraklatır veya oynatır, Sol ve Sağ 10 saniye atlar, Geri kapatır.",
+    "title": "Fragman",
+    "unavailable_in_app": "Bu fragman burada oynatılamıyor. YouTube'da açılıyor."
   },
   "tv": {
     "browse_hint": "OK bir sohbeti açar ya da videoyu oynatır. Favorilere eklemek için bir sohbette OK'yi basılı tutun. Geri bir üst seviyeye çıkar.",

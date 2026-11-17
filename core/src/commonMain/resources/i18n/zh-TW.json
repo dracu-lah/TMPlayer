@@ -1660,6 +1660,8 @@
     "trailer_scan": "這裡沒有能播放 YouTube 的應用程式。請用手機掃描這個 QR 碼來觀看預告片",
     "trailer_scan_phone": "用手機掃描，在手機上觀看。",
     "trailer_unavailable": "這部預告片無法在應用程式內播放",
+    "trailers_in_app": "在 TMPlayer 中播放預告片",
+    "trailers_in_app_detail": "只有在你選擇預告片時才會載入 YouTube 播放器。關閉後，預告片會在 YouTube 中開啟",
     "turn_on": "顯示海報和簡介",
     "turn_on_detail": "依名稱到 TMDB、TVmaze 和 AniList 查詢影片。可在「設定」中變更"
   },
@@ -3660,6 +3662,29 @@
     "subtitles_earlier": "提早顯示字幕",
     "subtitles_later": "延後顯示字幕",
     "track_number": "軌道 {number}"
+  },
+  "trailer": {
+    "close": "關閉預告片",
+    "engine_cancelled": "下載已取消，未保留任何內容。正在 YouTube 中開啟預告片。",
+    "engine_download": "下載",
+    "engine_downloading": "正在下載預告片播放器",
+    "engine_failed": "無法下載預告片播放器。正在 YouTube 中開啟預告片。",
+    "engine_intro": "要在應用程式內播放預告片，TMPlayer 需要一個瀏覽器元件（Chromium）。它只會下載一次，並在使用前進行驗證。沒有它，預告片會在 YouTube 中開啟。",
+    "engine_no_room": "{folder} 中的可用空間不足：預告片播放器需要 {needed}，而可用空間只有 {free}。請釋出一些空間，或在 YouTube 上觀看這部預告片。",
+    "engine_progress": "{done} / {total}",
+    "engine_size": "下載 {download}，解壓縮後在磁碟上佔用 {installed}，位置為 {folder}。該處可用空間：{free}。",
+    "engine_space_unknown": "TMPlayer 無法查看 {folder} 中還有多少可用空間，因此不會把預告片播放器下載到那裡。請改在 YouTube 上觀看這部預告片。",
+    "engine_start_failed": "預告片播放器未能啟動。正在 YouTube 中開啟預告片。重新啟動 TMPlayer 可能有幫助。",
+    "engine_title": "下載預告片播放器？",
+    "engine_unpacking": "正在解壓縮預告片播放器",
+    "engine_unsupported": "在這台電腦上，TMPlayer 內無法播放預告片。正在 YouTube 中開啟預告片。",
+    "keys_hint": "Space 播放或暫停，Left 和 Right 跳轉 10 秒，Esc 關閉",
+    "loading": "正在載入預告片…",
+    "loads_from_youtube": "這部預告片由 YouTube 播放，只有在你開啟後才會從 YouTube 載入。",
+    "play_pause": "播放或暫停",
+    "remote_hint": "開始播放後：確定鍵暫停或播放，Left 和 Right 跳轉 10 秒，返回鍵關閉。",
+    "title": "預告片",
+    "unavailable_in_app": "這部預告片無法在這裡播放。正在 YouTube 中開啟。"
   },
   "tv": {
     "browse_hint": "按 OK 開啟聊天或播放影片。在聊天上長按 OK 可加入我的最愛。返回鍵回到上一層。",

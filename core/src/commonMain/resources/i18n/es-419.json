@@ -1660,6 +1660,8 @@
     "trailer_scan": "Aquí no hay ninguna app que reproduzca YouTube. Escanea esto con tu teléfono para ver el tráiler",
     "trailer_scan_phone": "Escanea esto con tu teléfono para verlo ahí.",
     "trailer_unavailable": "Este tráiler no se puede reproducir dentro de la app",
+    "trailers_in_app": "Reproducir tráilers en TMPlayer",
+    "trailers_in_app_detail": "El reproductor de YouTube se carga solo cuando eliges un tráiler. Si está desactivado, los tráilers se abren en YouTube",
     "turn_on": "Mostrar póster y sinopsis",
     "turn_on_detail": "Busca los videos por nombre en TMDB, TVmaze y AniList. Cámbialo en Configuración"
   },
@@ -3660,6 +3662,29 @@
     "subtitles_earlier": "Adelantar los subtítulos",
     "subtitles_later": "Retrasar los subtítulos",
     "track_number": "Pista {number}"
+  },
+  "trailer": {
+    "close": "Cerrar tráiler",
+    "engine_cancelled": "Descarga cancelada y no se guardó nada. Abriendo el tráiler en YouTube.",
+    "engine_download": "Descargar",
+    "engine_downloading": "Descargando el reproductor de tráilers",
+    "engine_failed": "No se pudo descargar el reproductor de tráilers. Abriendo el tráiler en YouTube.",
+    "engine_intro": "Para reproducir tráilers dentro de la app, TMPlayer necesita un componente de navegador (Chromium). Se descarga una sola vez y se verifica antes de usarlo. Sin él, los tráilers se abren en YouTube.",
+    "engine_no_room": "No hay suficiente espacio libre en {folder}: el reproductor de tráilers necesita {needed} y hay {free} libres. Libera espacio o mira este tráiler en YouTube.",
+    "engine_progress": "{done} de {total}",
+    "engine_size": "Descarga de {download}, luego {installed} en disco una vez descomprimido, en {folder}. Libre ahí: {free}.",
+    "engine_space_unknown": "TMPlayer no pudo ver cuánto espacio libre hay en {folder}, así que no descargará ahí el reproductor de tráilers. Mira este tráiler en YouTube.",
+    "engine_start_failed": "El reproductor de tráilers no se inició. Abriendo el tráiler en YouTube. Reiniciar TMPlayer puede ayudar.",
+    "engine_title": "¿Descargar el reproductor de tráilers?",
+    "engine_unpacking": "Descomprimiendo el reproductor de tráilers",
+    "engine_unsupported": "Los tráilers no se pueden reproducir dentro de TMPlayer en este equipo. Abriendo el tráiler en YouTube.",
+    "keys_hint": "Espacio reproduce o pausa, Izquierda y Derecha saltan 10 segundos, Esc cierra",
+    "loading": "Cargando el tráiler…",
+    "loads_from_youtube": "YouTube reproduce este tráiler y solo se carga desde YouTube después de que lo abras.",
+    "play_pause": "Reproducir o pausar",
+    "remote_hint": "Cuando se reproduce: OK lo pausa o reanuda, Izquierda y Derecha avanzan o retroceden 10 segundos, Atrás lo cierra.",
+    "title": "Tráiler",
+    "unavailable_in_app": "Este tráiler no se puede reproducir aquí. Abriéndolo en YouTube."
   },
   "tv": {
     "browse_hint": "OK abre un chat o reproduce un video. Mantén OK en un chat para agregarlo a tus favoritos. Atrás sube un nivel.",

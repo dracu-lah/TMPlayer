@@ -1660,6 +1660,8 @@
     "trailer_scan": "Aucune application ici ne peut lire YouTube. Scannez ceci avec votre téléphone pour voir la bande-annonce",
     "trailer_scan_phone": "Scannez ceci avec votre téléphone pour la regarder dessus.",
     "trailer_unavailable": "Cette bande-annonce ne peut pas être lue dans l'app",
+    "trailers_in_app": "Lire les bandes-annonces dans TMPlayer",
+    "trailers_in_app_detail": "Le lecteur de YouTube ne se charge que lorsque vous choisissez une bande-annonce. Désactivé, les bandes-annonces s'ouvrent dans YouTube",
     "turn_on": "Afficher l'affiche et le résumé",
     "turn_on_detail": "Recherche les vidéos par nom sur TMDB, TVmaze et AniList. Modifiable dans les Réglages"
   },
@@ -3660,6 +3662,29 @@
     "subtitles_earlier": "Afficher les sous-titres plus tôt",
     "subtitles_later": "Afficher les sous-titres plus tard",
     "track_number": "Piste {number}"
+  },
+  "trailer": {
+    "close": "Fermer la bande-annonce",
+    "engine_cancelled": "Téléchargement annulé, rien n'a été conservé. Ouverture de la bande-annonce dans YouTube.",
+    "engine_download": "Télécharger",
+    "engine_downloading": "Téléchargement du lecteur de bandes-annonces",
+    "engine_failed": "Le lecteur de bandes-annonces n'a pas pu être téléchargé. Ouverture de la bande-annonce dans YouTube.",
+    "engine_intro": "Pour lire les bandes-annonces dans l'app, TMPlayer a besoin d'un composant de navigateur (Chromium). Il est téléchargé une seule fois et vérifié avant d'être utilisé. Sans lui, les bandes-annonces s'ouvrent dans YouTube.",
+    "engine_no_room": "Pas assez d'espace libre dans {folder} : le lecteur de bandes-annonces a besoin de {needed} et {free} sont libres. Libérez de l'espace, ou regardez cette bande-annonce sur YouTube.",
+    "engine_progress": "{done} sur {total}",
+    "engine_size": "Téléchargement de {download}, puis {installed} sur le disque une fois décompressé, dans {folder}. Libre à cet endroit : {free}.",
+    "engine_space_unknown": "TMPlayer n'a pas pu voir combien d'espace est libre dans {folder}, il ne téléchargera donc pas le lecteur de bandes-annonces à cet endroit. Regardez plutôt cette bande-annonce sur YouTube.",
+    "engine_start_failed": "Le lecteur de bandes-annonces ne s'est pas lancé. Ouverture de la bande-annonce dans YouTube. Redémarrer TMPlayer peut aider.",
+    "engine_title": "Télécharger le lecteur de bandes-annonces ?",
+    "engine_unpacking": "Décompression du lecteur de bandes-annonces",
+    "engine_unsupported": "Les bandes-annonces ne peuvent pas être lues dans TMPlayer sur cet ordinateur. Ouverture de la bande-annonce dans YouTube.",
+    "keys_hint": "Espace lance ou met en pause, Gauche et Droite avancent ou reculent de 10 secondes, Esc ferme",
+    "loading": "Chargement de la bande-annonce…",
+    "loads_from_youtube": "Cette bande-annonce est lue par YouTube et ne se charge depuis YouTube qu'après son ouverture.",
+    "play_pause": "Lecture ou pause",
+    "remote_hint": "Une fois lancée : OK la met en pause ou la relance, Gauche et Droite se déplacent de 10 secondes, Retour la ferme.",
+    "title": "Bande-annonce",
+    "unavailable_in_app": "Cette bande-annonce ne peut pas être lue ici. Ouverture dans YouTube."
   },
   "tv": {
     "browse_hint": "OK ouvre une discussion ou lit une vidéo. Maintenez OK sur une discussion pour l'ajouter à vos favoris. Retour remonte d'un niveau.",

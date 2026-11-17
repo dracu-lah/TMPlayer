@@ -1660,6 +1660,8 @@
     "trailer_scan": "Không có ứng dụng nào ở đây phát được YouTube. Hãy quét mã này bằng điện thoại để xem trailer",
     "trailer_scan_phone": "Quét mã này bằng điện thoại để xem trên đó.",
     "trailer_unavailable": "Không phát được trailer này trong ứng dụng",
+    "trailers_in_app": "Phát trailer trong TMPlayer",
+    "trailers_in_app_detail": "Trình phát của YouTube chỉ tải khi bạn chọn một trailer. Khi tắt, trailer mở trên YouTube",
     "turn_on": "Hiện poster và tóm tắt",
     "turn_on_detail": "Tra cứu video theo tên trên TMDB, TVmaze và AniList. Đổi trong Cài đặt"
   },
@@ -3660,6 +3662,29 @@
     "subtitles_earlier": "Hiện phụ đề sớm hơn",
     "subtitles_later": "Hiện phụ đề muộn hơn",
     "track_number": "Luồng {number}"
+  },
+  "trailer": {
+    "close": "Đóng trailer",
+    "engine_cancelled": "Đã hủy tải xuống và không giữ lại gì. Đang mở trailer trên YouTube.",
+    "engine_download": "Tải xuống",
+    "engine_downloading": "Đang tải trình phát trailer",
+    "engine_failed": "Không tải được trình phát trailer. Đang mở trailer trên YouTube.",
+    "engine_intro": "Để phát trailer ngay trong ứng dụng, TMPlayer cần một thành phần trình duyệt (Chromium). Thành phần này chỉ tải một lần và được kiểm tra trước khi dùng. Nếu không có, trailer sẽ mở trên YouTube.",
+    "engine_no_room": "Không đủ chỗ trống trong {folder}: trình phát trailer cần {needed}, còn trống {free}. Hãy giải phóng bớt dung lượng, hoặc xem trailer này trên YouTube.",
+    "engine_progress": "{done} trên {total}",
+    "engine_size": "Tải xuống {download}, sau khi giải nén chiếm {installed} trên ổ đĩa, trong {folder}. Còn trống ở đó: {free}.",
+    "engine_space_unknown": "TMPlayer không xem được còn trống bao nhiêu dung lượng trong {folder}, nên sẽ không tải trình phát trailer vào đó. Hãy xem trailer này trên YouTube.",
+    "engine_start_failed": "Trình phát trailer không khởi động được. Đang mở trailer trên YouTube. Khởi động lại TMPlayer có thể giúp ích.",
+    "engine_title": "Tải trình phát trailer?",
+    "engine_unpacking": "Đang giải nén trình phát trailer",
+    "engine_unsupported": "Không phát được trailer trong TMPlayer trên máy tính này. Đang mở trailer trên YouTube.",
+    "keys_hint": "Space phát hoặc tạm dừng, Left và Right nhảy 10 giây, Esc đóng",
+    "loading": "Đang tải trailer…",
+    "loads_from_youtube": "Trailer này do YouTube phát và chỉ tải từ YouTube sau khi bạn mở nó.",
+    "play_pause": "Phát hoặc tạm dừng",
+    "remote_hint": "Khi đang phát: OK tạm dừng hoặc phát, Trái và Phải nhảy 10 giây, Quay lại để đóng.",
+    "title": "Trailer",
+    "unavailable_in_app": "Không phát được trailer này tại đây. Đang mở trên YouTube."
   },
   "tv": {
     "browse_hint": "OK mở cuộc trò chuyện hoặc phát video. Giữ OK trên một cuộc trò chuyện để thêm vào yêu thích. Quay lại lên một cấp.",

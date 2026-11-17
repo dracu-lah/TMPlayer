@@ -1660,6 +1660,8 @@
     "trailer_scan": "Keine App hier kann YouTube abspielen. Scanne den Code mit deinem Handy, um den Trailer zu sehen",
     "trailer_scan_phone": "Scanne das mit deinem Handy, um ihn dort anzusehen.",
     "trailer_unavailable": "Dieser Trailer lässt sich nicht in der App abspielen",
+    "trailers_in_app": "Trailer in TMPlayer abspielen",
+    "trailers_in_app_detail": "Der YouTube-Player wird erst geladen, wenn du einen Trailer auswählst. Ist die Option aus, öffnen sich Trailer in YouTube",
     "turn_on": "Poster und Handlung anzeigen",
     "turn_on_detail": "Schlägt Videos per Name bei TMDB, TVmaze und AniList nach. Änderbar in den Einstellungen"
   },
@@ -3660,6 +3662,29 @@
     "subtitles_earlier": "Untertitel früher anzeigen",
     "subtitles_later": "Untertitel später anzeigen",
     "track_number": "Spur {number}"
+  },
+  "trailer": {
+    "close": "Trailer schließen",
+    "engine_cancelled": "Download abgebrochen, nichts wurde behalten. Der Trailer wird in YouTube geöffnet.",
+    "engine_download": "Herunterladen",
+    "engine_downloading": "Der Trailer-Player wird heruntergeladen",
+    "engine_failed": "Der Trailer-Player konnte nicht heruntergeladen werden. Der Trailer wird in YouTube geöffnet.",
+    "engine_intro": "Um Trailer in der App abzuspielen, braucht TMPlayer eine Browser-Komponente (Chromium). Sie wird einmal heruntergeladen und vor der Nutzung geprüft. Ohne sie öffnen sich Trailer in YouTube.",
+    "engine_no_room": "Nicht genug freier Speicher in {folder}: Der Trailer-Player braucht {needed}, frei sind {free}. Gib Speicherplatz frei oder sieh dir diesen Trailer auf YouTube an.",
+    "engine_progress": "{done} von {total}",
+    "engine_size": "Download {download}, entpackt dann {installed} auf dem Laufwerk, in {folder}. Dort frei: {free}.",
+    "engine_space_unknown": "TMPlayer konnte nicht feststellen, wie viel Speicher in {folder} frei ist, und lädt den Trailer-Player deshalb dort nicht herunter. Sieh dir diesen Trailer stattdessen auf YouTube an.",
+    "engine_start_failed": "Der Trailer-Player wurde nicht gestartet. Der Trailer wird in YouTube geöffnet. Ein Neustart von TMPlayer kann helfen.",
+    "engine_title": "Trailer-Player herunterladen?",
+    "engine_unpacking": "Der Trailer-Player wird entpackt",
+    "engine_unsupported": "Auf diesem Computer lassen sich Trailer nicht in TMPlayer abspielen. Der Trailer wird in YouTube geöffnet.",
+    "keys_hint": "Space spielt ab oder pausiert, Left und Right springen 10 Sekunden, Esc schließt",
+    "loading": "Trailer wird geladen…",
+    "loads_from_youtube": "Dieser Trailer wird von YouTube abgespielt und erst nach dem Öffnen von YouTube geladen.",
+    "play_pause": "Abspielen oder pausieren",
+    "remote_hint": "Sobald er läuft: OK pausiert oder spielt ab, Left und Right springen 10 Sekunden, Zurück schließt.",
+    "title": "Trailer",
+    "unavailable_in_app": "Dieser Trailer lässt sich hier nicht abspielen. Er wird in YouTube geöffnet."
   },
   "tv": {
     "browse_hint": "OK öffnet einen Chat oder spielt ein Video ab. OK gedrückt halten auf einem Chat fügt ihn deinen Favoriten hinzu. Zurück geht eine Ebene höher.",

@@ -1660,6 +1660,8 @@
     "trailer_scan": "这里没有能播放 YouTube 的应用。请用手机扫描此码观看预告片",
     "trailer_scan_phone": "用手机扫描，在手机上观看。",
     "trailer_unavailable": "这个预告片无法在应用内播放",
+    "trailers_in_app": "在 TMPlayer 中播放预告片",
+    "trailers_in_app_detail": "只有在你选择预告片时才会加载 YouTube 播放器。关闭后，预告片会在 YouTube 中打开",
     "turn_on": "显示海报和简介",
     "turn_on_detail": "按名称在 TMDB、TVmaze 和 AniList 上查询视频。可在设置中更改"
   },
@@ -3660,6 +3662,29 @@
     "subtitles_earlier": "字幕提前显示",
     "subtitles_later": "字幕延后显示",
     "track_number": "轨道 {number}"
+  },
+  "trailer": {
+    "close": "关闭预告片",
+    "engine_cancelled": "下载已取消，未保留任何内容。正在 YouTube 中打开预告片。",
+    "engine_download": "下载",
+    "engine_downloading": "正在下载预告片播放器",
+    "engine_failed": "无法下载预告片播放器。正在 YouTube 中打开预告片。",
+    "engine_intro": "要在应用内播放预告片，TMPlayer 需要一个浏览器组件（Chromium）。它只下载一次，并在使用前进行校验。没有它，预告片会在 YouTube 中打开。",
+    "engine_no_room": "{folder} 中的可用空间不足：预告片播放器需要 {needed}，而可用空间只有 {free}。请腾出一些空间，或在 YouTube 上观看此预告片。",
+    "engine_progress": "{done} / {total}",
+    "engine_size": "下载 {download}，解压后在磁盘上占 {installed}，位置为 {folder}。该处可用空间：{free}。",
+    "engine_space_unknown": "TMPlayer 无法查看 {folder} 中还有多少可用空间，因此不会把预告片播放器下载到那里。请改在 YouTube 上观看此预告片。",
+    "engine_start_failed": "预告片播放器未能启动。正在 YouTube 中打开预告片。重新启动 TMPlayer 可能有帮助。",
+    "engine_title": "下载预告片播放器？",
+    "engine_unpacking": "正在解压预告片播放器",
+    "engine_unsupported": "在这台电脑上，TMPlayer 内无法播放预告片。正在 YouTube 中打开预告片。",
+    "keys_hint": "Space 播放或暂停，Left 和 Right 跳转 10 秒，Esc 关闭",
+    "loading": "正在加载预告片…",
+    "loads_from_youtube": "此预告片由 YouTube 播放，只有在你打开后才会从 YouTube 加载。",
+    "play_pause": "播放或暂停",
+    "remote_hint": "开始播放后：确定键暂停或播放，Left 和 Right 跳转 10 秒，返回键关闭。",
+    "title": "预告片",
+    "unavailable_in_app": "此预告片无法在这里播放。正在 YouTube 中打开。"
   },
   "tv": {
     "browse_hint": "按 OK 打开聊天或播放视频。在聊天上长按 OK 可加入收藏。返回键回到上一级。",

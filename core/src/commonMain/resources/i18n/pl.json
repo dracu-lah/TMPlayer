@@ -1660,6 +1660,8 @@
     "trailer_scan": "Żadna aplikacja tutaj nie odtworzy YouTube. Zeskanuj to telefonem, aby obejrzeć zwiastun",
     "trailer_scan_phone": "Zeskanuj to telefonem, aby obejrzeć na nim.",
     "trailer_unavailable": "Tego zwiastuna nie da się odtworzyć w aplikacji",
+    "trailers_in_app": "Odtwarzaj zwiastuny w TMPlayer",
+    "trailers_in_app_detail": "Odtwarzacz YouTube ładuje się dopiero po wybraniu zwiastuna. Gdy wyłączone, zwiastuny otwierają się w YouTube",
     "turn_on": "Pokaż plakat i opis",
     "turn_on_detail": "Wyszukuje filmy po nazwie w TMDB, TVmaze i AniList. Zmienisz to w Ustawieniach"
   },
@@ -3660,6 +3662,29 @@
     "subtitles_earlier": "Pokazuj napisy wcześniej",
     "subtitles_later": "Pokazuj napisy później",
     "track_number": "Ścieżka {number}"
+  },
+  "trailer": {
+    "close": "Zamknij zwiastun",
+    "engine_cancelled": "Pobieranie anulowano i nic nie zostało zachowane. Zwiastun otwiera się w YouTube.",
+    "engine_download": "Pobierz",
+    "engine_downloading": "Pobieranie odtwarzacza zwiastunów",
+    "engine_failed": "Nie udało się pobrać odtwarzacza zwiastunów. Zwiastun otwiera się w YouTube.",
+    "engine_intro": "Aby odtwarzać zwiastuny w aplikacji, TMPlayer potrzebuje składnika przeglądarki (Chromium). Jest pobierany jeden raz i sprawdzany przed użyciem. Bez niego zwiastuny otwierają się w YouTube.",
+    "engine_no_room": "Za mało miejsca w {folder}: odtwarzacz zwiastunów potrzebuje {needed}, a wolne jest {free}. Zwolnij miejsce albo obejrzyj ten zwiastun na YouTube.",
+    "engine_progress": "{done} z {total}",
+    "engine_size": "Pobieranie: {download}, po rozpakowaniu na dysku zajmie {installed}, w folderze {folder}. Wolne miejsce tam: {free}.",
+    "engine_space_unknown": "TMPlayer nie mógł sprawdzić, ile wolnego miejsca jest w {folder}, więc nie pobierze tam odtwarzacza zwiastunów. Obejrzyj ten zwiastun na YouTube.",
+    "engine_start_failed": "Odtwarzacz zwiastunów się nie uruchomił. Zwiastun otwiera się w YouTube. Może pomóc ponowne uruchomienie TMPlayera.",
+    "engine_title": "Pobrać odtwarzacz zwiastunów?",
+    "engine_unpacking": "Rozpakowywanie odtwarzacza zwiastunów",
+    "engine_unsupported": "Na tym komputerze zwiastuny nie mogą być odtwarzane w TMPlayer. Zwiastun otwiera się w YouTube.",
+    "keys_hint": "Space odtwarza lub wstrzymuje, Lewo i Prawo przewijają o 10 sekund, Esc zamyka",
+    "loading": "Ładowanie zwiastuna…",
+    "loads_from_youtube": "Ten zwiastun odtwarza YouTube i ładuje się z YouTube dopiero po jego otwarciu.",
+    "play_pause": "Odtwórz lub wstrzymaj",
+    "remote_hint": "Gdy zwiastun już gra: OK wstrzymuje lub wznawia, Lewo i Prawo przewijają o 10 sekund, Wstecz zamyka.",
+    "title": "Zwiastun",
+    "unavailable_in_app": "Ten zwiastun nie może być tu odtworzony. Otwiera się w YouTube."
   },
   "tv": {
     "browse_hint": "OK otwiera czat lub odtwarza film. Przytrzymaj OK na czacie, aby dodać go do ulubionych. Wstecz cofa o poziom.",

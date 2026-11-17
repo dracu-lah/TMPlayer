@@ -1660,6 +1660,8 @@
     "trailer_scan": "Nenhum app aqui reproduz o YouTube. Escaneie isto com o celular para ver o trailer",
     "trailer_scan_phone": "Escaneie com o celular para assistir nele.",
     "trailer_unavailable": "Este trailer não pode ser reproduzido dentro do app",
+    "trailers_in_app": "Reproduzir trailers no TMPlayer",
+    "trailers_in_app_detail": "O player do YouTube só é carregado quando você escolhe um trailer. Desativado, os trailers abrem no YouTube",
     "turn_on": "Mostrar pôster e sinopse",
     "turn_on_detail": "Busca os vídeos pelo nome no TMDB, TVmaze e AniList. Mude em Configurações"
   },
@@ -3660,6 +3662,29 @@
     "subtitles_earlier": "Mostrar as legendas antes",
     "subtitles_later": "Mostrar as legendas depois",
     "track_number": "Faixa {number}"
+  },
+  "trailer": {
+    "close": "Fechar trailer",
+    "engine_cancelled": "Download cancelado e nada foi mantido. Abrindo o trailer no YouTube.",
+    "engine_download": "Baixar",
+    "engine_downloading": "Baixando o player de trailers",
+    "engine_failed": "Não foi possível baixar o player de trailers. Abrindo o trailer no YouTube.",
+    "engine_intro": "Para reproduzir trailers dentro do app, o TMPlayer precisa de um componente de navegador (Chromium). Ele é baixado uma só vez e verificado antes de ser usado. Sem ele, os trailers abrem no YouTube.",
+    "engine_no_room": "Não há espaço livre suficiente em {folder}: o player de trailers precisa de {needed} e há {free} livres. Libere espaço ou assista a este trailer no YouTube.",
+    "engine_progress": "{done} de {total}",
+    "engine_size": "Download de {download}, depois {installed} em disco após descompactado, em {folder}. Livre lá: {free}.",
+    "engine_space_unknown": "O TMPlayer não conseguiu ver quanto espaço livre há em {folder}, então não vai baixar o player de trailers lá. Assista a este trailer no YouTube.",
+    "engine_start_failed": "O player de trailers não iniciou. Abrindo o trailer no YouTube. Reiniciar o TMPlayer pode ajudar.",
+    "engine_title": "Baixar o player de trailers?",
+    "engine_unpacking": "Descompactando o player de trailers",
+    "engine_unsupported": "Os trailers não podem ser reproduzidos dentro do TMPlayer neste computador. Abrindo o trailer no YouTube.",
+    "keys_hint": "Espaço reproduz ou pausa, Esquerda e Direita pulam 10 segundos, Esc fecha",
+    "loading": "Carregando o trailer…",
+    "loads_from_youtube": "Este trailer é reproduzido pelo YouTube e só é carregado do YouTube depois que você o abre.",
+    "play_pause": "Reproduzir ou pausar",
+    "remote_hint": "Durante a reprodução: OK pausa ou retoma, Esquerda e Direita movem 10 segundos, Voltar fecha.",
+    "title": "Trailer",
+    "unavailable_in_app": "Este trailer não pode ser reproduzido aqui. Abrindo no YouTube."
   },
   "tv": {
     "browse_hint": "OK abre uma conversa ou reproduz um vídeo. Segure OK em uma conversa para adicioná-la aos favoritos. Voltar sobe um nível.",
