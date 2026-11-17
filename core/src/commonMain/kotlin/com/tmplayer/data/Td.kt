@@ -3,6 +3,7 @@ package com.tmplayer.data
 import com.tmplayer.i18n.L
 import com.tmplayer.platform.Credentials
 import com.tmplayer.platform.DeviceInfo
+import com.tmplayer.platform.KeptLog
 import com.tmplayer.platform.Logger
 import com.tmplayer.platform.Paths
 import dev.g000sha256.tdl.TdlClient
@@ -11,6 +12,8 @@ import dev.g000sha256.tdl.dto.AuthorizationState
 import dev.g000sha256.tdl.dto.AuthorizationStateClosed
 import dev.g000sha256.tdl.dto.AuthorizationStateClosing
 import dev.g000sha256.tdl.dto.AuthorizationStateLoggingOut
+import dev.g000sha256.tdl.dto.AuthorizationStateWaitCode
+import dev.g000sha256.tdl.dto.LogStreamFile
 import dev.g000sha256.tdl.dto.AuthorizationStateReady
 import dev.g000sha256.tdl.dto.AuthorizationStateWaitPhoneNumber
 import dev.g000sha256.tdl.dto.CountryInfo
@@ -51,6 +54,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
@@ -130,6 +134,16 @@ object Td {
      */
     private val _sessionEnded = MutableStateFlow(false)
     val sessionEnded: StateFlow<Boolean> = _sessionEnded.asStateFlow()
+
+    /**
+     * Whether TDLib's database was on the disk when this run handed TDLib its folder, null before.
+     * An app that finds itself signed out logs it ([handleSessionEnd]), so the log tells a session
+     * Telegram ended (the database there, its key refused) from one whose files were gone (none),
+     * which the sign in screen cannot (an iPad, 2026-11-15).
+     */
+    @Volatile
+    var databaseAtStart: Boolean? = null
+        private set
 
     /**
      * Set by [logOut] and [restartSignIn], so the logout that follows is the viewer's own and not
@@ -513,7 +527,12 @@ object Td {
             // The first update may already have been emitted before we subscribed, so ask
             // once directly. Both paths go through the same mutex-guarded handler.
             val primer = launch {
-                runCatching { td.setLogVerbosityLevel(1) }
+                // TDLib's own log: logcat on Android, where it writes by itself; a file the app
+                // keeps on iOS ([KeptLog]), which has no log an app may read back.
+                KeptLog.tdlibLogPath?.let { path ->
+                    runCatching { td.setLogStream(LogStreamFile(path, KeptLog.tdlibMaxBytes, false)) }
+                }
+                runCatching { td.setLogVerbosityLevel(KeptLog.tdlibVerbosity) }
                 when (val now = td.getAuthorizationState()) {
                     is TdlResult.Success -> apply(td, now.result)
                     // Not fatal: the update flow still delivers the state. Logged because it is
@@ -556,8 +575,24 @@ object Td {
         if (state == lastHandled) return@withLock
         lastHandled = state
 
+        // A code still awaited when the app starts is the phone route's (AuthFlow.reduce): it is
+        // kept, so a wrong number or a cancel goes back to the number, not to the choice.
+        if (state is AuthorizationStateWaitCode && method == SignInMethod.Undecided) {
+            method = SignInMethod.Phone
+            Logger.i(TAG, "a code was still awaited when the app started: back on the code step")
+        }
         val step = AuthReducer.reduce(state, method)
         Logger.i(TAG, "auth: ${state::class.simpleName} -> ${step.state::class.simpleName}")
+        // Where Telegram says it sent a code, and to which number, masked to its country code and
+        // last digits: a code that never comes is either Telegram's or a wrong number, and the log
+        // could tell neither (an iPad, 2026-11-16).
+        (step.state as? AuthState.Code)?.let { code ->
+            Logger.i(
+                TAG,
+                "code: ${code.delivery}, ${code.length} digits, next ${code.next ?: "none"}, " +
+                    "wait ${code.timeout} s, to ${PhoneMask.mask(code.phoneNumber)}",
+            )
+        }
         val ending = state is AuthorizationStateLoggingOut || state is AuthorizationStateClosing || state is AuthorizationStateClosed
         if (state is AuthorizationStateLoggingOut && !_endingSession.value) scope.launch { watchLogOut(td) }
         _endingSession.value = ending
@@ -856,6 +891,10 @@ object Td {
             )
             return
         }
+        val binlog = File(paths.databaseDir, "td.binlog")
+        val onDisk = runCatching { binlog.isFile }.getOrDefault(false)
+        databaseAtStart = onDisk
+        Logger.i(TAG, if (onDisk) "TDLib's database is on the disk (${binlog.length() / 1024} KB)" else "TDLib's database is not on the disk")
         val result = td.setTdlibParameters(
             useTestDc = false,
             databaseDirectory = paths.databaseDir.absolutePath,
@@ -1044,11 +1083,26 @@ object Td {
      * an attempt rather than an account, since nobody is signed in yet.
      */
     /**
-     * A new QR code on request ("Get a new code"). TDLib takes requestQrCodeAuthentication only
-     * from its first question, not while a code is up, so the sign in starts over with the QR
-     * method kept, which asks for a fresh code at once.
+     * A new QR code on request ("Get a new code"), or the QR route from the code step ("Scan a QR
+     * code instead"). TDLib takes requestQrCodeAuthentication at its first question and, with no
+     * request pending, while it waits for a sign in code, but not while a QR code is up: there the
+     * sign in starts over with the QR method kept, which asks for a fresh code at once. From the
+     * code step the request goes straight in, since starting over is a logout, and with Telegram
+     * slow to answer that held a spinner for half a minute (an iPad, 2026-11-16).
      */
-    suspend fun refreshQrCode() = restartSignIn(SignInMethod.Qr)
+    suspend fun refreshQrCode() {
+        val td = current
+        if (td != null && _auth.value is AuthState.Code) {
+            method = SignInMethod.Qr
+            methodAfterRestart = SignInMethod.Qr
+            _auth.value = AuthState.Connecting
+            when (val result = td.requestQrCodeAuthentication(longArrayOf())) {
+                is TdlResult.Success -> return
+                is TdlResult.Failure -> Logger.w(TAG, "a QR code from the code step was refused (${result.message}); starting over")
+            }
+        }
+        restartSignIn(SignInMethod.Qr)
+    }
 
     suspend fun restartSignIn(next: SignInMethod = SignInMethod.Undecided) {
         method = next
@@ -1275,6 +1329,12 @@ object Td {
         val list = td.getProxies().valueOrNull?.proxies ?: return
         _proxyOn.value = list.any { it.isEnabled }
     }
+
+    /**
+     * The running client, signed in or not. The iOS player plays a downloaded video from its file
+     * without waiting for the sign in (iosPlayer in gradle/ios-apple-variant.gradle.kts).
+     */
+    suspend fun awaitAnySession(): TdSession = _session.filterNotNull().first()
 
     /** Waits for an authorized client and returns the generation it belongs to. */
     suspend fun awaitAuthorizedSession(): TdSession =

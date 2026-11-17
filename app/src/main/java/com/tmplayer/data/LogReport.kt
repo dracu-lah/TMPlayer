@@ -5,6 +5,7 @@ import android.content.Context
 import android.os.Build
 import android.os.Process
 import com.tmplayer.platform.FileLogSink
+import com.tmplayer.platform.KeptLog
 import com.tmplayer.platform.Logger
 import com.tmplayer.player.DecoderLister
 import com.tmplayer.player.LastVideoCodec
@@ -41,7 +42,9 @@ object LogReport {
             marks = guarded("marks") { PlaybackMarks(PlaybackMarks.fileIn(app)).reportLines() },
             playbackTest = guarded("playback test") { readLines(File(app.filesDir, DiagnosticFiles.PLAYBACK_TEST)) },
             appLog = guarded("app log") { AppLog.get(app).readLines() },
-            logcat = guarded("logcat") { ownLogcat() },
+            // iOS keeps its own lines and TDLib's ([KeptLog]): it has no logcat, and an export that
+            // asked for one held nothing but its header (an iPad, 2026-11-15). Android reads its logcat.
+            logcat = guarded("logcat") { KeptLog.lines(LogExport.MAX_LINES) ?: ownLogcat() },
         )
         return LogBundle.build(feedbackFacts(app), parts, known)
     }

@@ -521,6 +521,7 @@ class PlayerExtrasRenderTest {
         val controls = row(tv = false, name = "extras-row-phone-land.png")
         assertTrue("picture shape on the row", controls.shapeOnRow)
         assertTrue("the lock on the row", controls.lockOnRow)
+        assertTrue("the round buttons fit beside the pills", controls.rowFits)
     }
 
     @Test
@@ -535,6 +536,22 @@ class PlayerExtrasRenderTest {
         val controls = row(tv = false, name = "extras-row-phone-port.png")
         // Upright the row has no room: both stay in the overflow, which then offers picture shape.
         assertTrue(!controls.shapeOnRow && !controls.lockOnRow)
+        assertTrue("the round buttons fit beside the pills", controls.rowFits)
+    }
+
+    /** A small phone, or an iPhone with Display Zoom: the pills give up their words, then speed. */
+    @Test
+    @Config(sdk = [35], qualifiers = "w320dp-h693dp-port-night-xhdpi")
+    fun rowPhoneUprightNarrow() {
+        val controls = row(tv = false, name = "extras-row-phone-port-320.png")
+        assertTrue("the round buttons fit beside the pills", controls.rowFits)
+    }
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w360dp-h800dp-port-night-xhdpi")
+    fun rowPhoneUpright360() {
+        val controls = row(tv = false, name = "extras-row-phone-port-360.png")
+        assertTrue("the round buttons fit beside the pills", controls.rowFits)
     }
 
     @Test

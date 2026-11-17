@@ -58,7 +58,14 @@ suspend fun handleSessionEnd(auth: AuthState, settings: SettingsStore, forget: s
             val marked = runCatching { settings.wasSignedIn() }.getOrDefault(false)
             if (!SessionCheck.endedElsewhere(signInStep, marked) && !Td.sessionEnded.value) return@withLock
             if (!marked && cleared) return@withLock
-            Logger.i("SessionEnd", "the session ended elsewhere; clearing its cache, keeping the viewer's history")
+            // What TDLib found as this run began tells the two apart in a log: its database there
+            // means Telegram refused the session, none means the session's files were gone.
+            val found = when (Td.databaseAtStart) {
+                true -> "TDLib's database was on the disk at start"
+                false -> "TDLib's database was not on the disk at start"
+                null -> "TDLib's database not looked at yet"
+            }
+            Logger.i("SessionEnd", "the session ended elsewhere ($found, Telegram ended it while the app ran: ${Td.sessionEnded.value}); clearing its cache, keeping the viewer's history")
             Td.markSessionEnded()
             runCatching { forget() }.onFailure { Logger.w("SessionEnd", "clearing the ended session failed", it) }
             runCatching { settings.forgetSignedIn() }

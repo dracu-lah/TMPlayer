@@ -287,7 +287,9 @@ internal fun MediaDetailOpened(
             hint = if (renamingToReport) s.titlesTitleRenameHint else s.gridRenameHint,
             maxLength = com.tmplayer.data.VideoCorrections.TITLE_MAX,
         )
-        return
+        // A window over the page (or the hold menu), as the poster's is: the page stays under it
+        // rather than giving way to whatever the page was opened from, which showed through while
+        // the keyboard was up (iPad, 2026-11-14).
     }
 
     // The comments under a channel post (CP81).

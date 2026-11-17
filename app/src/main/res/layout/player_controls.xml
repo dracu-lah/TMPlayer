@@ -451,9 +451,10 @@
 
             <!--
               Scrolls only when it must. A television fits the whole row. A phone moves its
-              transport into the centre cluster and keeps four buttons here, which fit a 360dp
-              screen held upright with room to spare, and adds two more only when the row is
-              wide enough (PlayerControls.fitRow); the scroll is only a safety net.
+              transport into the centre cluster and keeps four buttons here, adds two more only
+              when the row is wide enough, and where the pills beside them leave too little room
+              shows the pills as icons, then leaves speed to More (PlayerControls.fitRow); the
+              scroll is only a safety net.
             -->
             <HorizontalScrollView
                 android:layout_width="0dp"

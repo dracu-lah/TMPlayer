@@ -54,6 +54,7 @@ import com.tmplayer.player.PlaybackTrace
 import com.tmplayer.player.PlaybackTraceRing
 import com.tmplayer.player.StutterVerdict
 import com.tmplayer.player.TimeEntry
+import com.tmplayer.platform.KeptLogLines
 import kotlinx.coroutines.runBlocking
 import java.io.File
 import kotlin.random.Random
@@ -176,6 +177,21 @@ class GarbageInputTest {
         "http://192.168.1.20:80/" + "a/".repeat(5_000), "http://" + "9".repeat(5_000), "192.168.1.20 ", "http://192.168.1.20\r\n.evil/x", "0.0.0.0", "224.0.0.251", "127.0.0.1",
         "http://169.254.1.1/d.xml", "http://100.64.1.1:8080/d.xml", "HTTP://10.0.0.5/D.XML",
     )
+
+    /** iOS's kept log reads TDLib's own log file back (KeptLog): cut short, or written by anything. */
+    @Test
+    fun keptLogLinesNeverThrow() {
+        val stamp: (Long) -> String = { it.toString() }
+        for (text in texts) {
+            survive("KeptLogLines.fromTdlib", text) {
+                KeptLogLines.fromTdlib(text.lines(), stamp)
+                KeptLogLines.fromTdlib(listOf("[ 1][t 1][$text][A.cpp:1] $text", "[ $text][t 1][1.5][A] m", "[ 1][t 1][1.$text][A] m"), stamp)
+                KeptLogLines.fromTdlib(listOf("[ 1][t 1][99999999999999999.999999999][A] $text"), stamp)
+            }
+            survive("KeptLogLines.merge", text) { KeptLogLines.merge(text.lines(), listOf(text), 5) }
+        }
+        assertNoFailures()
+    }
 
     /** The stored downloads location and a record's path (HX57): a path or a picked folder's content:// string. */
     @Test

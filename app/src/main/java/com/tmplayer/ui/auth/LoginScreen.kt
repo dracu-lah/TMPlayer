@@ -191,6 +191,7 @@ fun LoginScreen(
                     onResend = onResendCode,
                     onChangeNumber = { changingNumber = true },
                     onStartOver = onStartOver,
+                    onUseQr = onRefreshQr,
                 )
             }
         is AuthState.Password ->
@@ -581,12 +582,13 @@ private fun CodePane(
     onResend: () -> Unit,
     onChangeNumber: () -> Unit,
     onStartOver: () -> Unit,
+    onUseQr: () -> Unit,
 ) {
     val s = LocalStrings.current
     BackHandler(onBack = onStartOver)
 
     if (isTouch()) {
-        TouchCodePane(state, error, onSubmit, onResend, onChangeNumber, onStartOver)
+        TouchCodePane(state, error, onSubmit, onResend, onChangeNumber, onStartOver, onUseQr)
         return
     }
 
@@ -653,6 +655,7 @@ private fun CodePane(
                 // Never just gone: with no other route the row says what is left to do.
                 SignInWords.resendNone(state)?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = Tone.muted) }
             }
+            if (SignInWords.qrInstead(state)) TmSecondaryButton(onClick = onUseQr) { Text(s.loginUseQr) }
             TmSecondaryButton(onClick = onChangeNumber) { Text(s.loginWrongNumber) }
         },
     )
@@ -673,6 +676,7 @@ private fun TouchCodePane(
     onResend: () -> Unit,
     onChangeNumber: () -> Unit,
     onStartOver: () -> Unit,
+    onUseQr: () -> Unit,
 ) {
     val s = LocalStrings.current
     val boxed = SignInWords.isDigits(state.delivery)
@@ -772,6 +776,12 @@ private fun TouchCodePane(
         } else {
             // Never just gone: with no other route the row says what is left to do.
             SignInWords.resendNone(state)?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = Tone.muted) }
+        }
+
+        if (SignInWords.qrInstead(state)) {
+            TmSecondaryButton(onClick = onUseQr, modifier = Modifier.paneAction()) {
+                Text(s.loginUseQr)
+            }
         }
 
         TmSecondaryButton(onClick = onChangeNumber, modifier = Modifier.paneAction()) {

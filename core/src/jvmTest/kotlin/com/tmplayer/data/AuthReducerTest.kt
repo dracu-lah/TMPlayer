@@ -223,6 +223,19 @@ class AuthReducerTest {
     }
 
     @Test
+    fun `a code still awaited when the app starts again goes back to the code step`() {
+        // iOS closed the app while the viewer read the code in Telegram: no method is known any
+        // more, and TDLib still waits for that code. A dead end here sent them to start over.
+        val codeInfo = AuthenticationCodeInfo("+10000000000", AuthenticationCodeTypeTelegramMessage(5), null, 60)
+        val step = AuthReducer.reduce(AuthorizationStateWaitCode(codeInfo), SignInMethod.Undecided)
+        val code = step.state as? AuthState.Code
+        assertTrue("the code step, not ${step.state}", code != null)
+        assertEquals(CodeDelivery.TelegramApp, code!!.delivery)
+        assertEquals(5, code.length)
+        assertEquals(AuthAction.None, step.action)
+    }
+
+    @Test
     fun `a code demanded of the QR route is still a dead end`() {
         val codeInfo = AuthenticationCodeInfo("+10000000000", AuthenticationCodeTypeSms(5), null, 60)
         val step = AuthReducer.reduce(AuthorizationStateWaitCode(codeInfo), SignInMethod.Qr)

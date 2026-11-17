@@ -47,6 +47,15 @@ object SignInWords {
         else -> L.loginResendAgain
     }
 
+    /**
+     * True where the code step offers "Scan a QR code instead": the code went to Telegram on
+     * another device, so there is a signed in Telegram to scan with, and the QR sign in needs no
+     * code at all. Telegram can send a code only to its app, with no other route to resend by, and
+     * then not deliver it: an iPad waited with nothing arriving and no way on but Start over
+     * (2026-11-15), and the QR code signed it in at once.
+     */
+    fun qrInstead(state: AuthState.Code): Boolean = state.delivery == CodeDelivery.TelegramApp
+
     /** True where the code is digits of a known length, which a row of boxes can hold. */
     fun isDigits(delivery: CodeDelivery): Boolean = when (delivery) {
         CodeDelivery.SmsWord, CodeDelivery.SmsPhrase, CodeDelivery.FlashCall, CodeDelivery.MissedCall -> false

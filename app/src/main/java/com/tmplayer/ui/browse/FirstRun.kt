@@ -44,6 +44,7 @@ import androidx.tv.material3.Text
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.online.MetaNotice
 import com.tmplayer.online.OnlineMetadata
+import com.tmplayer.ui.components.LocalBottomChrome
 import com.tmplayer.ui.components.PhonePad
 import com.tmplayer.ui.components.TmSecondaryButton
 import com.tmplayer.ui.components.TvConfirm
@@ -69,12 +70,15 @@ internal fun FirstVideoEmpty(onOpen: (BrowseSection) -> Unit) {
     val s = LocalStrings.current
     val touch = isTouch()
     val focus = remember { FocusRequester() }
-    // Scrolls, because a phone on its side has less height than the words and the button need.
+    // Scrolls, because a phone on its side has less height than the words and the button need,
+    // and ends above the floating bar: large text had put the card's last line under the bar,
+    // where a page short enough not to scroll could never bring it out (iPhone 14, 2026-11-15).
+    val side = if (touch) PhonePad.Side else 72.dp
     Box(
         Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = if (touch) PhonePad.Side else 72.dp, vertical = 24.dp),
+            .padding(start = side, end = side, top = 24.dp, bottom = 24.dp + LocalBottomChrome.current),
         contentAlignment = Alignment.Center,
     ) {
         com.tmplayer.ui.browse.HomeEmptyCard(onOpenSaved = { onOpen(BrowseSection.of(BrowseTab.Saved)) }, focus = focus)

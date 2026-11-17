@@ -235,9 +235,14 @@ object AuthFlow {
 
         // Only the phone route asks for a code, and only it can answer one: nothing typed on a TV
         // remote reaches the phone that a QR-linked account would be sending the code to.
+        // Undecided is the phone route after the app was closed while the code was on its way: the
+        // choice is not kept across a start, and TDLib still waits for that code. iOS closes an app
+        // in the background while the viewer reads the code in Telegram, and the dead end shown
+        // then sent them to start over, which asked Telegram for another code and lost this one;
+        // a few of those and Telegram stopped sending codes (an iPad, 2026-11-16).
         is TdAuthorization.WaitCode -> when (method) {
-            SignInMethod.Phone -> AuthStep(codeState(state.info), AuthAction.None)
-            else -> AuthStep(AuthState.Failed(UNSUPPORTED_STEP), AuthAction.None)
+            SignInMethod.Phone, SignInMethod.Undecided -> AuthStep(codeState(state.info), AuthAction.None)
+            SignInMethod.Qr -> AuthStep(AuthState.Failed(UNSUPPORTED_STEP), AuthAction.None)
         }
 
         is TdAuthorization.WaitOtherDevice -> AuthStep(AuthState.Qr(state.link), AuthAction.None)

@@ -9,8 +9,11 @@ import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -119,10 +122,7 @@ fun BigLoader(
 ) {
     val muted = Tone.muted
     val touch = isTouch()
-    Box(
-        Modifier.fillMaxSize().padding(horizontal = if (touch) PhonePad.Side else 72.dp),
-        contentAlignment = Alignment.Center,
-    ) {
+    StatePage(touch) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(20.dp),
@@ -147,6 +147,29 @@ fun BigLoader(
             }
             if (slowKey != null) SlowAnswerNotice(key = slowKey, onRetry = onRetry)
         }
+    }
+}
+
+/**
+ * Where a loader, an empty page or a failure stands: centred in the page. On a phone, where the
+ * page has a height, it scrolls once large text makes it taller than the page, and keeps clear of
+ * the floating bar ([LocalBottomChrome]), so its last line and its button can always be reached
+ * (an iPhone 14 with large text, 2026-11-15). In a list row (Downloads), which gives no height to
+ * scroll in, it takes the height the row hands it, as before; a television keeps its own layout.
+ */
+@Composable
+private fun StatePage(touch: Boolean, content: @Composable () -> Unit) {
+    BoxWithConstraints(Modifier.fillMaxSize(), propagateMinConstraints = true) {
+        val page = touch && constraints.hasBoundedHeight
+        val scroll = if (page) {
+            Modifier.verticalScroll(rememberScrollState()).padding(bottom = LocalBottomChrome.current)
+        } else {
+            Modifier
+        }
+        Box(
+            Modifier.fillMaxSize().then(scroll).padding(horizontal = if (touch) PhonePad.Side else 72.dp),
+            contentAlignment = Alignment.Center,
+        ) { content() }
     }
 }
 
@@ -321,10 +344,7 @@ fun BigEmpty(
 ) {
     val touch = isTouch()
     val muted = Tone.muted
-    Box(
-        Modifier.fillMaxSize().padding(horizontal = if (touch) PhonePad.Side else 72.dp),
-        contentAlignment = Alignment.Center,
-    ) {
+    StatePage(touch) {
         // On a phone it rises in rather than appearing, so a list emptying or a load failing
         // reads as the page changing, not a flash.
         Column(
@@ -389,10 +409,7 @@ fun BigError(message: String, onRetry: (() -> Unit)?, sendLogs: Boolean = true, 
     val muted = Tone.muted
     // 72dp of margin either side is a tenth of a television and a third of a phone, which leaves
     // the sentence in a column too narrow to read.
-    Box(
-        Modifier.fillMaxSize().padding(horizontal = if (touch) PhonePad.Side else 72.dp),
-        contentAlignment = Alignment.Center,
-    ) {
+    StatePage(touch) {
         // On a phone it rises in rather than appearing, so a list emptying or a load failing
         // reads as the page changing, not a flash.
         Column(
