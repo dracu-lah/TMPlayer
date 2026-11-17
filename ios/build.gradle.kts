@@ -181,6 +181,11 @@ val androidScreensForIos = tasks.register<Sync>("androidScreensForIos") {
         include("com/tmplayer/ui/**", "com/tmplayer/data/**", "com/tmplayer/MainActivity.kt", "com/tmplayer/App.kt")
         include("com/tmplayer/player/PlayerBookmarkSheets.kt", "com/tmplayer/player/SmootherPick.kt")
         exclude("com/tmplayer/ui/browse/DebugFakeChats.kt")
+        // Android's trailer player is a WebView (android.webkit); iOS's is a WKWebView in the Swift
+        // shell (iosApp/TMPlayer/Player/TrailerSheet.swift), reached through src/iosMain/.../ui/trailer/TrailerPlayerRoot.kt,
+        // which keeps the name MainActivity calls. TrailerControls.kt (the state machine over core's
+        // TrailerRules, the remote's keys, the mobile data rule) has no Android types and is shared.
+        exclude("com/tmplayer/ui/trailer/TrailerPlayer.kt", "com/tmplayer/ui/trailer/TrailerWebPage.kt")
         // Android system integration (services, notifications, TV channels, the installer, crash
         // exits, storage access) has iOS versions in src/iosMain with the same names instead.
         listOf(
