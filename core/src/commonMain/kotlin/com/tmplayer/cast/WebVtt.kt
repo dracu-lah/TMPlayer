@@ -105,16 +105,24 @@ object WebVtt {
                 body.append(lines[i].trim())
                 i++
             }
-            cues += Cue(start, end, cleanSrt(body.toString()))
+            // A time that is not a number (too many digits, non ASCII digits) drops this cue only.
+            if (start != null && end != null) cues += Cue(start, end, cleanSrt(body.toString()))
         }
         return cues
     }
 
-    private fun ms(h: String, m: String, s: String, frac: String): Long {
-        val f = frac.padEnd(3, '0').take(3).toLong()
-        // The hours are as many digits as the file has: too many is a nonsense cue, read as 0 (HX10).
-        return (h.toLongOrNull()?.coerceAtMost(MAX_HOURS) ?: 0L) * 3_600_000 + m.toLong() * 60_000 + s.toLong() * 1000 + f
+    /** A timestamp's parts as milliseconds, or null when a part is not plain ASCII digits that fit (outside data). */
+    private fun ms(h: String, m: String, s: String, frac: String): Long? {
+        val f = asciiLong(frac.padEnd(3, '0').take(3)) ?: return null
+        val hours = asciiLong(h) ?: return null
+        val minutes = asciiLong(m) ?: return null
+        val seconds = asciiLong(s) ?: return null
+        return hours.coerceAtMost(MAX_HOURS) * 3_600_000 + minutes * 60_000 + seconds * 1000 + f
     }
+
+    /** Digits 0 to 9 only (the regex's backslash-d may match others on some platforms), null on overflow. */
+    private fun asciiLong(text: String): Long? =
+        if (text.isEmpty() || text.any { it !in '0'..'9' }) null else text.toLongOrNull()
 
     /** SubRip's tags WebVTT also has stay; font colours and the ASS-style braces in some files go. */
     private fun cleanSrt(text: String): String =
@@ -197,7 +205,7 @@ object WebVtt {
                 body.append(lines[i].trim())
                 i++
             }
-            cues += Cue(start, end, body.toString())
+            if (start != null && end != null) cues += Cue(start, end, body.toString())
         }
         return cues
     }

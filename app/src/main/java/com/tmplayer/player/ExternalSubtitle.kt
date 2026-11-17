@@ -94,8 +94,9 @@ object ExternalSubtitle {
         var number = 0
         cues.forEachIndexed { index, match ->
             val (startText, endText, body) = match.destructured
-            val start = startText.toLong()
-            val end = endText.toLong()
+            // A frame number too long for a Long (outside data) drops its cue, not the file.
+            val start = startText.toLongOrNull() ?: return@forEachIndexed
+            val end = endText.toLongOrNull() ?: return@forEachIndexed
             if (index == 0 && start == end && start <= 1) {
                 body.trim().toDoubleOrNull()?.takeIf { it > 0 }?.let {
                     rate = it
@@ -130,7 +131,7 @@ object ExternalSubtitle {
     const val MIME_SSA = "text/x-ssa"
     const val MIME_VTT = "text/vtt"
 
-    private val CUE = Regex("""^\{(\d+)\}\{(\d+)\}(.*)$""")
+    private val CUE = Regex("""^\{([0-9]+)\}\{([0-9]+)\}(.*)$""")
     private val STYLE = Regex("""\{[^}]*\}""")
 
     /** Two or three letters, with a region or script after a hyphen or underscore if any. */
