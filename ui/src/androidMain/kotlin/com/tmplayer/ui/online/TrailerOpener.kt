@@ -16,27 +16,33 @@ import com.tmplayer.online.MetaTrailer
 @Composable
 internal fun rememberTrailerOpener(): (MetaTrailer) -> Boolean {
     val context = LocalContext.current
-    return remember(context) {
-        { trailer: MetaTrailer ->
-            fun open(uri: String): Boolean = try {
-                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(uri)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                true
-            } catch (e: ActivityNotFoundException) {
-                false
-            } catch (e: SecurityException) {
-                false
-            }
-            openInYouTubeApp(context, trailer) || open(trailer.watchUrl)
-        }
+    return remember(context) { { trailer: MetaTrailer -> openTrailerOutside(context, trailer) } }
+}
+
+/**
+ * The external open behind [rememberTrailerOpener], for code outside composition: the app's own
+ * trailer player falls back to it when a trailer it restored after a rotation cannot play there.
+ * False when nothing on the device opens YouTube links.
+ */
+fun openTrailerOutside(context: android.content.Context, trailer: MetaTrailer): Boolean {
+    fun open(uri: String): Boolean = try {
+        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(uri)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        true
+    } catch (e: ActivityNotFoundException) {
+        false
+    } catch (e: SecurityException) {
+        false
     }
+    return openInYouTubeApp(context, trailer) || open(trailer.watchUrl)
 }
 
 /**
  * The YouTube app before anything else, on a television and on a phone: its own client plays
  * every trailer, which YouTube's embedded player in a WebView does not on many TVs (a press that
  * seemed to do nothing) nor on some phones (sound over a black screen on a POCO F5 with WebView
- * 157, 2026-10-22). Only the `vnd.youtube:` link, which only a YouTube app answers, so a device
- * without one goes on to the in-app player rather than to a browser.
+ * 157, 2026-10-22). Only the `vnd.youtube:` link, which only a YouTube app answers. Used only
+ * where no platform player is provided through [LocalTrailerOpener]; the Android app provides
+ * one (app/.../ui/trailer), which comes first with the setting on.
  */
 @Composable
 internal fun rememberTrailerAppFirst(): ((MetaTrailer) -> Boolean)? {

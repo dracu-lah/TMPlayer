@@ -386,7 +386,8 @@ class MainActivity : ComponentActivity() {
                         val holding by CrashReports.holdShell.collectAsStateWithLifecycle()
                         // On a remote, a list keeps still while the focused item is in full view.
                         com.tmplayer.ui.components.StillWhenVisible(enabled = !com.tmplayer.ui.components.isTouch()) {
-                            if (holding) StartupCrashQuestion() else com.tmplayer.ui.browse.OfflineDownloadsHost { Root() }
+                            // Trailers play in the app's own full screen player (TRAILERS-PLAN T3), from every detail page.
+                            if (holding) StartupCrashQuestion() else com.tmplayer.ui.trailer.TrailerPlayerRoot { com.tmplayer.ui.browse.OfflineDownloadsHost { Root() } }
                             // Once per safe start, over the shell, after any crash question is answered.
                             if (!holding) SafeModeNotice()
                         }
