@@ -3,6 +3,8 @@ import { isPick, withPick, type PickedAsk } from '../pick'
 import { touch } from '../cacheBounds'
 import type { PosterAsk } from '../rules'
 import { episodeFor, overlay, readAnswer, type Guide } from '../animeGuide'
+import { readSkips } from '../player/skipOnline'
+import type { SkipSegment } from '../player/chapters'
 
 // Posters, as the apps show them: TMDB's poster for a video's cleaned title (the question the app's
 // rules ask, tg/media.ts `poster`), looked up by the /tmdb worker (tmdb/handler.ts), which holds
@@ -402,6 +404,28 @@ export function followAnimeGuide(id: string, show: (guide: AnimeGuide) => void):
         live = false
         window.clearTimeout(timer)
     }
+}
+
+const skips = new Map<string, Promise<SkipSegment[]>>()
+
+/**
+ * The skip times AniSkip holds for episode `episode` of the AniList title `id`, for a file `length`
+ * seconds long (`/tmdb/skip`, the apps' SkipTimesApi.aniSkip). Empty when nobody timed it or the
+ * worker could not be reached: the player then offers only what the file's chapters name. Asked
+ * once per episode and length for this page's life; the worker keeps the answer a day.
+ */
+export function loadAnimeSkips(id: string, episode: number, length: number): Promise<SkipSegment[]> {
+    const q = new URLSearchParams({ id, e: String(episode), len: String(Math.max(0, Math.round(length))) })
+    const key = q.toString()
+    let p = skips.get(key)
+    if (!p) {
+        p = fetch(`/tmdb/skip?${key}`).then(
+            async (r) => (r.ok ? readSkips(await r.json().catch(() => null)) : (skips.delete(key), [])),
+            () => (skips.delete(key), []),
+        )
+        skips.set(key, p)
+    }
+    return p
 }
 
 /** An anime's guide as the page reads it (animeGuide.ts' Guide). */

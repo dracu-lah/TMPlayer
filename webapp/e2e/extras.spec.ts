@@ -48,6 +48,45 @@ test('the intro is offered to skip, and skipping lands on the next chapter', asy
     await expect(pill).toHaveCount(0)
 })
 
+test('an anime AniList matched gets AniSkip\'s recap beside the chapters, asked by episode and length, and skipping it lands at its end', async ({ page }) => {
+    const asks: string[] = []
+    await page.route('**/tmdb/**', (route) => {
+        const url = new URL(route.request().url())
+        if (url.pathname === '/tmdb/poster') return route.fulfill({ json: { match: true, id: '20', kind: 'show', title: 'Lighthouse', year: 2019, poster: null, backdrop: null, overview: '', source: 'anilist' } })
+        if (url.pathname === '/tmdb/skip') {
+            asks.push(url.search)
+            return route.fulfill({ json: { segments: [{ kind: 'recap', start: 8, end: 12 }, { kind: 'opening', start: 6, end: 9 }] } })
+        }
+        return route.fulfill({ json: { found: false } })
+    })
+    await lighthouse(page)
+    expect(asks).toEqual(['?id=20&e=1&len=20'])
+    // The database's second opening beside the file's own intro chapter is not offered; its recap is.
+    await seek(page, 7)
+    await expect(page.locator('.pc-corner.skip')).toHaveCount(0)
+    await seek(page, 9)
+    const pill = page.locator('.pc-corner.skip')
+    await expect(pill).toHaveText('Skip recap')
+    await pill.click()
+    expect(await time(page)).toBeGreaterThan(11.9)
+    // And the chapters' own intro is still offered first.
+    await seek(page, 1)
+    await expect(pill).toHaveText('Skip intro')
+})
+
+test('a title TMDB matched asks AniSkip nothing', async ({ page }) => {
+    const asks: string[] = []
+    await page.route('**/tmdb/**', (route) => {
+        const url = new URL(route.request().url())
+        if (url.pathname === '/tmdb/poster') return route.fulfill({ json: { match: true, id: '20', kind: 'show', title: 'Lighthouse', year: 2019, poster: null, backdrop: null, overview: '' } })
+        if (url.pathname === '/tmdb/skip') asks.push(url.search)
+        return route.fulfill({ json: { found: false } })
+    })
+    await lighthouse(page)
+    await page.waitForTimeout(500)
+    expect(asks).toEqual([])
+})
+
 test('A-B repeat plays the stretch again and a third press ends it', async ({ page }) => {
     await lighthouse(page)
     await seek(page, 6)

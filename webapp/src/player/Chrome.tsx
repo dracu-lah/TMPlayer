@@ -59,6 +59,9 @@ import { applyDelay, look, setLook, setSubDelay, subDelay } from './cues'
 import { BookmarksSheet, delayText, ShortcutsSheet, SIZES, TimingSheet } from './extra-sheets'
 import { MsoneSheet, type MsoneTarget } from './msone-sheet'
 import { episodeOf } from './msone'
+import { mergeSkips } from './skipOnline'
+import { answer, askOf, loadAnimeSkips } from '../screens/posters'
+import { settings } from '../store'
 import { msoneOn } from '../msoneFlag'
 import { AUTOPLAY_LIMIT, fineRate, IDLE_LIMIT, noteInput, pressLoop, repeats, repeatState, SeekUndo, SLEEP_CHOICES, sleepState, watching, wrapLoop, type Loop } from './extras'
 import {
@@ -668,7 +671,25 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
     }
 
     // ---- skip offers from the file's own chapters -----------------------------------------------
-    const segments = createMemo(() => (c.info()?.episode ? skipSegments(chapters(), duration()) : []))
+    // An anime AniList matched adds what AniSkip holds (the worker's /tmdb/skip, by the file's episode number and length);
+    // the file's own chapters stay first, and a database's second opening beside them is not wanted (SkipMerge).
+    const [onlineSkips, setOnlineSkips] = createSignal<SkipSegment[]>([])
+    createEffect(() => {
+        const code = c.info()?.episode?.code
+        const ask = askOf(c.item)
+        const number = code ? /^S\d+E(\d+)/i.exec(code)?.[1] : undefined
+        if (!ask || !number || !settings().posters) return
+        let live = true
+        onCleanup(() => (live = false))
+        answer(ask).then(
+            (found) => {
+                if (!live || !found.match || found.source !== 'anilist' || found.kind !== 'show' || !found.id) return
+                loadAnimeSkips(found.id, Number(number), c.item.duration || 0).then((list) => live && setOnlineSkips(list), () => {})
+            },
+            () => {},
+        )
+    })
+    const segments = createMemo(() => (c.info()?.episode ? mergeSkips(skipSegments(chapters(), duration()), onlineSkips(), duration()) : []))
     const [skipNow, setSkipNow] = createSignal<SkipSegment | null>(null)
     listen('timeupdate', () => {
         const list = segments()

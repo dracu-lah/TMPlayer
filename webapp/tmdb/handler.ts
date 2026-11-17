@@ -31,6 +31,10 @@
 //        ANIME_CALLS of them and a few seconds' worth; what came is kept at the edge per source and the
 //        answer says `complete: false` (and is not kept itself) until every source has been read: the
 //        page asks again and the next request carries on from there.
+//   GET /tmdb/skip?id=<anilist id>&e=<episode>&len=<seconds>
+//        An anime episode's skip times (SkipTimesApi.aniSkip): the opening, ending and recap AniSkip holds for the
+//        MyAnimeList id of the AniList title, matched to the file's length. { segments: [{ kind, start, end }] }
+//        in seconds, empty when nobody timed it; 503 as above when a source was throttled or down. Kept a day.
 //   GET /tmdb/img/<w185|w300|w342|w500|w780>/<file>.jpg   (and .../al/<cover|banner|character>/... for AniList's)
 //        a picture's bytes from TMDB's image host, same origin so the page can keep them in the
 //        Cache API as it keeps thumbnails.
@@ -48,6 +52,7 @@ import { mergeChoices } from './choices.ts'
 import { best, accepts, normalise, trusted, type Ask, type Candidate } from './match.ts'
 import * as guide from '../src/animeGuide.ts'
 import * as src from './anime-sources.ts'
+import * as skipSrc from './skiptimes.ts'
 import { BASE as ANILIST, DEFAULT_WAIT_MS as ANILIST_WAIT, EXTRAS_QUERY, SEARCH_QUERY, candidates as aniCandidates, extrasOf as aniExtras, imageAddress } from './anilist.ts'
 
 export interface Env {
@@ -82,8 +87,8 @@ const ANILIST_BACKOFF = 30_000
 export const ANIME_CALLS = 36
 export const ANIME_TIME_MS = 15_000
 /** KitsuApi.GAP_MS, JikanApi.GAP_MS and their DEFAULT_WAIT_MS: the spacing of calls and the pause after a throttle. */
-const KITSU_GAP = 400
-const JIKAN_GAP = 1_100
+const GAPS = { kitsu: 400, jikan: 1_100, aniskip: 500, idmap: 700 } as const
+type Plain = keyof typeof GAPS
 const PLAIN_WAIT = 30_000
 /** OnlineMetadata.MISSING_TITLES_OK and TMDB_NAMES. */
 const MISSING_TITLES_OK = 2
@@ -515,14 +520,14 @@ export function createHandler(deps: Deps) {
 
     // ---- an anime's episode guide (src/animeGuide.ts), kept per source so a long show carries on ----
 
-    const plainPaused: Record<'kitsu' | 'jikan', number> = { kitsu: 0, jikan: 0 }
-    const plainLast: Record<'kitsu' | 'jikan', number> = { kitsu: 0, jikan: 0 }
+    const plainPaused: Record<Plain, number> = { kitsu: 0, jikan: 0, aniskip: 0, idmap: 0 }
+    const plainLast: Record<Plain, number> = { kitsu: 0, jikan: 0, aniskip: 0, idmap: 0 }
 
-    /** A GET to Kitsu or Jikan (no key): spaced by their gap, paused on its own after a throttle, one more try after a dropped call. */
-    async function plain(provider: 'kitsu' | 'jikan', url: string, accept: string): Promise<Reply> {
+    /** A GET to Kitsu, Jikan, AniSkip or the id map (no key): spaced by their gap, paused on its own after a throttle, one more try after a dropped call. */
+    async function plain(provider: Plain, url: string, accept: string): Promise<Reply> {
         if (now() < plainPaused[provider]) return { kind: 'throttled', waitMs: plainPaused[provider] - now() }
         const once = async (): Promise<Reply> => {
-            const wait = plainLast[provider] + (provider === 'kitsu' ? KITSU_GAP : JIKAN_GAP) - now()
+            const wait = plainLast[provider] + GAPS[provider] - now()
             if (wait > 0) await sleep(wait)
             plainLast[provider] = now()
             let response: Response
@@ -572,6 +577,75 @@ export function createHandler(deps: Deps) {
         done: boolean
     }
 
+    /** AniList's facts for the run `id` (its length, next episode, MyAnimeList id, streaming list), kept a day; an error answer when AniList cannot be asked. */
+    async function animeRun(origin: string, id: number): Promise<src.Run | { none: true } | Response> {
+        const kept = await readPart<src.Run | { none: true }>(origin, 'run', String(id))
+        if (kept && typeof kept === 'object') return kept
+        if (now() < aniPausedUntil) return unavailable('throttled', (aniPausedUntil - now()) / 1000)
+        const reply = await aniRetrying(src.EPISODES_QUERY, { id })
+        if (reply.kind === 'throttled') return unavailable('throttled', reply.waitMs / 1000)
+        if (reply.kind === 'failed' || reply.kind === 'refused') return unavailable('unavailable')
+        const run = (reply.kind === 'ok' ? src.runOf(reply.json) : null) ?? { none: true as const }
+        await savePart(origin, 'run', String(id), run)
+        return run
+    }
+
+    /**
+     * An anime episode's skip times (SkipTimesApi.aniSkip by MyAnimeList id, OnlineMetadata.animeSkips): the
+     * title's MyAnimeList id from AniList, else the id map's (arm.haglund.dev), then AniSkip's opening, ending
+     * and recap for the episode, matched to the file's length `len` (0 takes any). anime-skip.com is not read
+     * (it wants a client id). The answer, an empty one too, is kept a day; a source that was throttled or down
+     * makes it a 503 that is not kept, so "nobody timed this" is never remembered by mistake.
+     */
+    async function skip(url: URL): Promise<Response> {
+        const p = url.searchParams
+        const num = (name: string, lo: number, hi: number) => {
+            const raw = p.get(name)
+            return raw !== null && /^\d{1,9}$/.test(raw) && Number(raw) >= lo && Number(raw) <= hi ? Number(raw) : NaN
+        }
+        const id = num('id', 1, 999_999_999)
+        const episode = num('e', 1, guide.MAX_NUMBER)
+        const len = p.get('len') === null ? 0 : num('len', 0, 86_400)
+        if (Number.isNaN(id) || Number.isNaN(episode) || Number.isNaN(len)) return json({ error: 'bad request' }, 400)
+        const cacheKey = new Request(`${url.origin}/tmdb/skip?${new URLSearchParams({ v: '1', id: String(id), e: String(episode), len: String(len) })}`)
+        const hit = await deps.cache?.match(cacheKey).catch(() => undefined)
+        if (hit) {
+            const headers = new Headers(hit.headers)
+            headers.set('X-Poster-Cache', 'hit')
+            return new Response(hit.body, { status: hit.status, headers })
+        }
+        const run = await animeRun(url.origin, id)
+        if (run instanceof Response) return run
+        let complete = true
+        let mal = 'none' in run ? null : run.malId
+        if (!mal && !('none' in run)) {
+            const ids = await readPart<{ mal: string | null }>(url.origin, 'idmap', String(id))
+            if (ids) {
+                mal = typeof ids.mal === 'string' ? ids.mal : null
+            } else {
+                const reply = await plain('idmap', `${skipSrc.IDMAP}/ids?source=anilist&id=${id}`, 'application/json')
+                if (reply.kind === 'ok') mal = skipSrc.malOfIdMap(reply.json)
+                if (reply.kind === 'ok' || reply.kind === 'missing') await savePart(url.origin, 'idmap', String(id), { mal })
+                else complete = false
+            }
+        }
+        let segments: skipSrc.Segment[] = []
+        if (mal && /^\d{1,9}$/.test(mal)) {
+            const types = ['op', 'ed', 'mixed-op', 'mixed-ed', 'recap'].map((t) => `&types=${t}`).join('')
+            const reply = await plain('aniskip', `${skipSrc.ANISKIP}/skip-times/${mal}/${episode}?episodeLength=${len}${types}`, 'application/json')
+            if (reply.kind === 'ok') segments = skipSrc.aniSkipOf(reply.json)
+            else if (reply.kind !== 'missing') complete = false
+        }
+        if (!complete && !segments.length) return unavailable('unavailable')
+        // A source that failed beside one that answered: shown, not kept, so the rest is asked again.
+        const response = json({ segments }, 200, complete ? { 'Cache-Control': `public, max-age=3600, s-maxage=${DAY}`, 'X-Poster-Cache': 'miss' } : { 'Cache-Control': 'no-store', 'X-Poster-Cache': 'miss' })
+        if (deps.cache && complete) {
+            const put = deps.cache.put(cacheKey, response.clone()).catch(() => {})
+            deps.later?.(put)
+        }
+        return response
+    }
+
     /** One show's guide, as the apps' OnlineMetadata.buildGuide builds it, within this request's calls. */
     async function anime(url: URL, env: Env): Promise<Response> {
         const raw = url.searchParams.get('id')
@@ -596,16 +670,9 @@ export function createHandler(deps: Deps) {
         const sid = String(id)
 
         // AniList's own facts: the run's length, the next to air, the MyAnimeList id, the streaming list.
-        let run = await readPart<src.Run | { none: true }>(origin, 'run', sid)
-        if (!run) {
-            if (now() < aniPausedUntil) return unavailable('throttled', (aniPausedUntil - now()) / 1000)
-            spend()
-            const reply = await aniRetrying(src.EPISODES_QUERY, { id })
-            if (reply.kind === 'throttled') return unavailable('throttled', reply.waitMs / 1000)
-            if (reply.kind === 'failed' || reply.kind === 'refused') return unavailable('unavailable')
-            run = (reply.kind === 'ok' ? src.runOf(reply.json) : null) ?? { none: true }
-            await savePart(origin, 'run', sid, run)
-        }
+        spend()
+        const run = await animeRun(origin, id)
+        if (run instanceof Response) return run
         if ('none' in run) {
             const response = json({ found: false }, 200, { 'Cache-Control': `public, max-age=3600, s-maxage=${DAY}`, 'X-Poster-Cache': 'miss' })
             if (deps.cache) {
@@ -860,6 +927,7 @@ export function createHandler(deps: Deps) {
         if (url.pathname === '/tmdb/search') return search(url, env)
         if (url.pathname === '/tmdb/extras') return details(url, env)
         if (url.pathname === '/tmdb/anime') return anime(url, env)
+        if (url.pathname === '/tmdb/skip') return skip(url)
         if (url.pathname.startsWith('/tmdb/img/')) return image(url)
         return new Response('Not found', { status: 404 })
     }
