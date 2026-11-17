@@ -4,6 +4,7 @@ import com.tmplayer.data.FormatFacts
 import com.tmplayer.data.FormatProbes
 import com.tmplayer.data.ResumeState
 import com.tmplayer.desktop.DesktopPaths
+import com.tmplayer.desktop.os.NativeRefresh
 import com.tmplayer.i18n.L
 import com.tmplayer.platform.Logger
 import com.tmplayer.player.AssMargins
@@ -48,6 +49,8 @@ object MpvNatives {
     fun prepare() {
         if (!prepared.compareAndSet(false, true)) return
         SubtitleFonts.prepare()
+        // Before mediamp unpacks anything: it never overwrites, so an older runtime has to go first.
+        NativeRefresh.prepare()
         runCatching { MpvMediampPlayer.prepareLibraries(DesktopPaths.nativeDir.absolutePath) }
             .onFailure { Logger.w("MpvNatives", "Falling back to mediamp's temp folder", it) }
     }

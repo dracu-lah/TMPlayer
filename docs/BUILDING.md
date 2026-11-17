@@ -107,6 +107,14 @@ hashes there. Without the property nothing is swapped: fine for `:desktop:run` a
 Linux that has glibc 2.38 or newer, but the floor check then fails. Only a Linux x64 host uses it.
 CI builds the files once per recipe and caches them (`.github/actions/linux-natives`).
 
+An app that ran before has the old libraries in `~/.local/share/TMPlayer/natives`, and mediamp never
+overwrites a file there. So the same property also puts `BuildInfo.NATIVES_ID` (a SHA-256 of the
+pinned lines, changing exactly when a shipped library does) into the build, and `os/NativeRefresh`
+compares it with `tmplayer-natives.id` in that folder before mediamp unpacks: a different or missing
+id removes the files in the runtime's own manifest (`mpv-natives-linux-x64.txt`), nothing else, then
+writes the id. A build without the property has a blank id and leaves the folder alone. A read only
+or full folder is logged (`NativeRefresh` in the Send logs file) and skipped.
+
 Linux notes: on a tiling window manager set `_JAVA_AWT_WM_NONREPARENTING=1` or the window stays
 blank; hardware decoding may fail on Fedora, where the bundled libva looks in Debian's driver
 path, and software decoding takes over.

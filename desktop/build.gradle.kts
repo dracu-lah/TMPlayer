@@ -58,6 +58,12 @@ val localProps = Properties().apply {
     if (f.exists()) f.inputStream().use { load(it) }
 }
 
+// Which runtime this build ships in ~/.local/share/TMPlayer/natives (os/NativeRefresh): the SHA-256 of
+// the pinned natives' lines in natives/linux-2-35/PINS.txt, so it changes exactly when a shipped
+// library does, not with the app version. Blank for a build that swaps none in (nothing is refreshed).
+// Set below, where the pins are read; the build info task reads it lazily.
+var linuxNativesId = ""
+
 // Credentials and version reach the app as a generated object, the desktop's BuildConfig.
 val generateBuildInfo = tasks.register("generateBuildInfo") {
     val out = layout.buildDirectory.dir("generated/buildinfo")
@@ -91,6 +97,7 @@ val generateBuildInfo = tasks.register("generateBuildInfo") {
     inputs.property("logUploadUrl", logUploadUrl)
     inputs.property("version", desktopVersion)
     inputs.property("installerVersion", installerVersion)
+    inputs.property("nativesId", providers.provider { linuxNativesId })
     outputs.dir(out)
     doLast {
         val dir = out.get().asFile.resolve("com/tmplayer/desktop").apply { mkdirs() }
@@ -109,6 +116,7 @@ val generateBuildInfo = tasks.register("generateBuildInfo") {
             |    const val OMDB_API_KEY = "$omdbKey"
             |    const val SENTRY_DSN = "$sentryDsn"
             |    const val LOG_UPLOAD_URL = "$logUploadUrl"
+            |    const val NATIVES_ID = "$linuxNativesId"
             |}
             |""".trimMargin(),
         )
@@ -189,6 +197,12 @@ val linuxNativePins: List<String> =
         }
         pins
     }
+linuxNativesId = if (linuxNativePins.isEmpty()) {
+    ""
+} else {
+    MessageDigest.getInstance("SHA-256").digest(linuxNativePins.joinToString("\n").toByteArray())
+        .joinToString("") { "%02x".format(it) }
+}
 // The name is the transform's cache identity: change it whenever the transform's output changes.
 val jarsStored: Attribute<Boolean> = Attribute.of("com.tmplayer.jarsStoredV3", Boolean::class.javaObjectType)
 
