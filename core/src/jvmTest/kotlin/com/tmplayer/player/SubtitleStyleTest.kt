@@ -24,6 +24,28 @@ class SubtitleStyleTest {
         assertEquals(46, SubtitleSize.Medium.mpvFontSize)
     }
 
+    /**
+     * Issues 32 and 36: an ASS track brings its own size, which `sub-font-size` (mpv) and the view's
+     * text size (Media3) never reach. The size is a scale both players put on a track's own size,
+     * and a plain line still lands on the size it had.
+     */
+    @Test
+    fun `the size reaches a track that brings its own, as a scale against medium`() {
+        fun props(size: SubtitleSize) = SubtitleStyle(size).mpvProperties("sans-serif").toMap()
+        for (size in SubtitleSize.entries) {
+            // The font size stays Medium's, so mpv's sub-scale is all that moves a line.
+            assertEquals("46", props(size)["sub-font-size"])
+            val scale = props(size)["sub-scale"]?.toDouble() ?: error("no sub-scale for $size")
+            assertEquals(size.mpvFontSize.toDouble(), 46 * scale, 0.05)
+        }
+        assertEquals("0.826", SubtitleSize.Small.mpvScale)
+        assertEquals("1.000", SubtitleSize.Medium.mpvScale)
+        assertEquals("1.435", SubtitleSize.ExtraLarge.mpvScale)
+        assertEquals(1f, SubtitleSize.Medium.cueScale, 0f)
+        assertEquals(0.8f, SubtitleSize.Small.cueScale, 0.001f)
+        assertTrue(SubtitleSize.entries.zipWithNext().all { (a, b) -> a.cueScale < b.cueScale })
+    }
+
     @Test
     fun `size and position wrap`() {
         val style = SubtitleStyle(SubtitleSize.ExtraLarge, position = SubtitlePosition.High)

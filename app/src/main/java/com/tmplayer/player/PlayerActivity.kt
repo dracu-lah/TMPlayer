@@ -370,6 +370,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     /** The lines on screen, for a [subtitleTwin] that comes up while one is showing. */
     private var shownCues: List<Cue> = emptyList()
 
+    /** The lines on screen as the track gave them, fitted again when the look changes. */
+    private var trackCues: List<Cue> = emptyList()
+
     /** A bundled font the subtitles needed because the system has none for their script. */
     private var subtitleScriptFace: android.graphics.Typeface? = null
 
@@ -5594,6 +5597,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         feedback?.zoomGone()
         // The listener is gone before the release, so the player's own "no cues" never arrives:
         // the line on screen would stay frozen over the next video's opening.
+        trackCues = emptyList()
         showCues(emptyList())
     }
 
@@ -6579,6 +6583,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     override fun changeSubtitleStyle(style: SubtitleStyle) {
         subtitleStyle = style
         applySubtitleStyle()
+        // A line on screen from a track with its own size is fitted again, so the change shows now.
+        showCues(scaledForPicture(trackCues))
         lifecycleScope.launch { runCatching { settings.setSubtitleStyle(style) } }
     }
 
@@ -6616,20 +6622,14 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     }
 
     /**
-     * The same floor for a cue that brings its own size, as an SSA line does: scaled with the
-     * rest, or it alone would stay too small to read. Picture cues are left at the shape the film
-     * gave them.
+     * The same floor for a cue that brings its own size, as an SSA line does, and the viewer's
+     * Size and Position on it ([SubtitleCueFit], issue 32): scaled with the rest, or it alone
+     * would stay too small to read and deaf to the setting. Picture cues are left at the shape
+     * the film gave them.
      */
     private fun scaledForPicture(cues: List<Cue>): List<Cue> {
-        val scale = subtitleTextScale()
-        if (scale == 1f) return cues
-        return cues.map { cue ->
-            if (cue.bitmap != null || cue.textSizeType == Cue.TYPE_UNSET || cue.textSize == Cue.DIMEN_UNSET) {
-                cue
-            } else {
-                cue.buildUpon().setTextSize(cue.textSize * scale, cue.textSizeType).build()
-            }
-        }
+        trackCues = cues
+        return SubtitleCueFit.fit(cues, subtitleStyle, subtitleTextScale())
     }
 
     /**
