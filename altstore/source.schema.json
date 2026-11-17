@@ -1,0 +1,103 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://tmplayer.org/schemas/altstore-source.schema.json",
+  "title": "AltStore source v2, as TMPlayer's altstore/source.json uses it",
+  "description": "The part of AltStore's source format (https://faq.altstore.io/developers/make-a-source) that this repository's source holds, written from the documentation: a structural check in CI, not AltStore's own. SideStore reads the same file. iosApp/release/altstore_source.py check holds the rules a schema cannot (order, files in the repository).",
+  "type": "object",
+  "required": ["name", "identifier", "apps"],
+  "properties": {
+    "name": { "type": "string", "minLength": 1 },
+    "identifier": { "type": "string", "pattern": "^[A-Za-z0-9._-]+$" },
+    "subtitle": { "type": "string" },
+    "description": { "type": "string" },
+    "tintColor": { "$ref": "#/definitions/colour" },
+    "iconURL": { "$ref": "#/definitions/https" },
+    "headerURL": { "$ref": "#/definitions/https" },
+    "website": { "$ref": "#/definitions/https" },
+    "sourceURL": { "$ref": "#/definitions/https" },
+    "featuredApps": { "type": "array", "items": { "type": "string" } },
+    "apps": { "type": "array", "minItems": 1, "items": { "$ref": "#/definitions/app" } },
+    "news": { "type": "array", "items": { "$ref": "#/definitions/post" } }
+  },
+  "definitions": {
+    "https": { "type": "string", "pattern": "^https://[^\\s/]+(/\\S*)?$" },
+    "colour": { "type": "string", "pattern": "^#?[0-9A-Fa-f]{6}$" },
+    "screenshot": {
+      "type": "object",
+      "required": ["url"],
+      "properties": {
+        "url": { "$ref": "#/definitions/https" },
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "version": {
+      "type": "object",
+      "required": ["version", "buildVersion", "date", "downloadURL", "size"],
+      "properties": {
+        "version": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+){1,2}" },
+        "buildVersion": { "type": "string", "pattern": "^[0-9]+$" },
+        "date": { "type": "string", "format": "date-time", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T" },
+        "localizedDescription": { "type": "string" },
+        "downloadURL": { "$ref": "#/definitions/https" },
+        "size": { "type": "integer", "minimum": 1 },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "minOSVersion": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+){0,2}$" },
+        "maxOSVersion": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+){0,2}$" }
+      }
+    },
+    "app": {
+      "type": "object",
+      "required": ["name", "bundleIdentifier", "localizedDescription", "versions", "appPermissions"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "bundleIdentifier": { "type": "string", "pattern": "^[A-Za-z0-9.-]+$" },
+        "developerName": { "type": "string" },
+        "subtitle": { "type": "string" },
+        "localizedDescription": { "type": "string" },
+        "iconURL": { "$ref": "#/definitions/https" },
+        "tintColor": { "$ref": "#/definitions/colour" },
+        "category": {
+          "enum": ["developer", "entertainment", "games", "lifestyle", "other", "photo-video", "social", "utilities"]
+        },
+        "screenshots": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "iphone": { "type": "array", "items": { "$ref": "#/definitions/screenshot" } },
+            "ipad": { "type": "array", "items": { "$ref": "#/definitions/screenshot" } }
+          }
+        },
+        "versions": { "type": "array", "items": { "$ref": "#/definitions/version" } },
+        "appPermissions": {
+          "type": "object",
+          "required": ["entitlements", "privacy"],
+          "properties": {
+            "entitlements": { "type": "array", "items": { "type": "string" } },
+            "privacy": { "type": "object", "additionalProperties": { "type": "string" } }
+          }
+        },
+        "version": { "type": "string" },
+        "versionDate": { "type": "string" },
+        "versionDescription": { "type": "string" },
+        "downloadURL": { "$ref": "#/definitions/https" },
+        "size": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "post": {
+      "type": "object",
+      "required": ["identifier", "title", "date"],
+      "properties": {
+        "identifier": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "caption": { "type": "string" },
+        "date": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}" },
+        "tintColor": { "$ref": "#/definitions/colour" },
+        "imageURL": { "$ref": "#/definitions/https" },
+        "url": { "$ref": "#/definitions/https" },
+        "appID": { "type": "string" },
+        "notify": { "type": "boolean" }
+      }
+    }
+  }
+}

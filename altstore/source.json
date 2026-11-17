@@ -16,7 +16,10 @@
       "developerName": "TMPlayer",
       "tintColor": "#2AABEE",
       "category": "entertainment",
-      "screenshots": [],
+      "screenshots": {
+        "iphone": [],
+        "ipad": []
+      },
       "versions": [],
       "appPermissions": {
         "entitlements": [],

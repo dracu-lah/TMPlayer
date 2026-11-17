@@ -4,12 +4,14 @@
 """
 
 import contextlib
+import hashlib
 import io
 import json
 import os
 import plistlib
 import re
 import shutil
+import struct
 import tempfile
 import unittest
 import zipfile
@@ -18,6 +20,7 @@ import altstore_source
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 BUNDLE = "org.example.player"
+RELEASE = "https://github.com/owner/TMPlayer/releases/download/apple-v1.0.0/"
 
 
 def make_ipa(folder, version="1.0.0", build="1", bundle=BUNDLE, extra=None, name="Player.ipa"):
@@ -56,6 +59,13 @@ def make_source(folder):
     return path
 
 
+def make_png(path, width, height):
+    """A file with a PNG's signature and IHDR, which is all the script reads."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "wb") as file:
+        file.write(b"\x89PNG\r\n\x1a\n" + struct.pack(">I", 13) + b"IHDR" + struct.pack(">II", width, height) + b"\x08\x06\0\0\0")
+
+
 def run(*argv):
     out = io.StringIO()
     with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
@@ -70,7 +80,7 @@ class AddTest(unittest.TestCase):
         self.source = make_source(self.folder)
 
     def add(self, ipa, *more):
-        run("add", "--source", self.source, "--ipa", ipa, "--download-url", "https://example.org/" + os.path.basename(ipa),
+        run("add", "--source", self.source, "--ipa", ipa, "--download-url", RELEASE + os.path.basename(ipa),
             "--date", "2026-12-01T10:00:00Z", *more)
         with open(self.source, encoding="utf-8") as file:
             return json.load(file)
@@ -98,12 +108,94 @@ class AddTest(unittest.TestCase):
         self.assertEqual("owner", app["developerName"])
         self.assertEqual(f"{BUNDLE}.source", source["identifier"])
 
-    def test_the_same_version_made_again_replaces_its_entry(self):
-        self.add(make_ipa(self.folder, "1.0.0", "1"))
-        source = self.add(make_ipa(self.folder, "1.0.0", "7"))
+    def test_the_same_version_and_build_made_again_replaces_its_entry(self):
+        self.add(make_ipa(self.folder, "1.0.0", "7"))
+        source = self.add(make_ipa(self.folder, "1.0.0", "7", extra={"CFBundleName": "again"}))
         versions = source["apps"][0]["versions"]
         self.assertEqual(1, len(versions))
         self.assertEqual("7", versions[0]["buildVersion"])
+
+    def test_another_build_of_a_version_is_an_entry_of_its_own_and_old_ones_stay(self):
+        self.add(make_ipa(self.folder, "1.0.0", "1"))
+        self.add(make_ipa(self.folder, "1.0.0", "2", name="b2.ipa"))
+        source = self.add(make_ipa(self.folder, "1.1.0", "1", name="next.ipa"))
+        shown = [(v["version"], v["buildVersion"]) for v in source["apps"][0]["versions"]]
+        self.assertEqual([("1.1.0", "1"), ("1.0.0", "2"), ("1.0.0", "1")], shown)
+
+    def test_an_older_version_added_late_does_not_go_on_top(self):
+        self.add(make_ipa(self.folder, "1.10.0", "1"))
+        source = self.add(make_ipa(self.folder, "1.9.0", "1", name="old.ipa"))
+        app = source["apps"][0]
+        self.assertEqual(["1.10.0", "1.9.0"], [v["version"] for v in app["versions"]], "10 is newer than 9")
+        self.assertEqual("1.10.0", app["version"], "the app's own fields follow the newest")
+        self.assertIn("in order", run("check", "--source", self.source))
+
+    def test_the_same_ipa_again_changes_nothing(self):
+        ipa = make_ipa(self.folder, "1.0.0", "1")
+        first = self.add(ipa)
+        with open(self.source, "rb") as file:
+            before = file.read()
+        run("add", "--source", self.source, "--ipa", ipa, "--download-url", RELEASE + "Player.ipa")
+        with open(self.source, "rb") as file:
+            self.assertEqual(before, file.read(), "the entry keeps its date: not a new commit for the same release")
+        self.assertEqual(first, self.add(ipa))
+
+    def test_the_entry_carries_the_ipas_sha256_size_and_minimum_ios(self):
+        ipa = make_ipa(self.folder, "1.0.0", "1")
+        with open(ipa, "rb") as file:
+            expected = hashlib.sha256(file.read()).hexdigest()
+        entry = self.add(ipa)["apps"][0]["versions"][0]
+        self.assertEqual(expected, entry["sha256"])
+        self.assertEqual("26.4", entry["minOSVersion"])
+        self.assertEqual(os.path.getsize(ipa), entry["size"])
+
+    def test_news_with_a_release_when_asked(self):
+        notes = os.path.join(self.folder, "notes.md")
+        with open(notes, "w", encoding="utf-8") as file:
+            file.write("- Faster starts.\n- More.\n")
+        source = self.add(make_ipa(self.folder, "1.0.0", "1"), "--notes-file", notes, "--news",
+                          "--release-url", RELEASE)
+        post = source["news"][0]
+        self.assertEqual("release-1-0-0-1", post["identifier"])
+        self.assertEqual("Faster starts.", post["caption"])
+        self.assertEqual(BUNDLE, post["appID"])
+        self.assertTrue(post["notify"])
+        again = self.add(make_ipa(self.folder, "1.0.0", "1"), "--notes-file", notes, "--news")
+        self.assertEqual(1, len(again["news"]), "the same release posts once")
+
+    def test_screenshots_listed_with_raw_addresses_and_sizes(self):
+        make_png(os.path.join(self.folder, "shots", "iphone", "2-player.png"), 1290, 2796)
+        make_png(os.path.join(self.folder, "shots", "iphone", "1-home.png"), 1290, 2796)
+        make_png(os.path.join(self.folder, "shots", "ipad", "1 home.png"), 2064, 2752)
+        with open(os.path.join(self.folder, "shots", "iphone", "notes.txt"), "w") as file:
+            file.write("not a picture")
+        # The script reads iosApp/screenshots under --root.
+        root = os.path.join(self.folder, "root")
+        os.makedirs(os.path.join(root, "iosApp"))
+        os.rename(os.path.join(self.folder, "shots"), os.path.join(root, "iosApp", "screenshots"))
+        # The icon and the source the published check also finds in the checkout.
+        for name in (altstore_source.ICON_PATH, altstore_source.SOURCE_PATH):
+            os.makedirs(os.path.dirname(os.path.join(root, name)), exist_ok=True)
+            with open(os.path.join(root, name), "w") as file:
+                file.write("x")
+        run("screenshots", "--source", self.source, "--root", root, "--repo", "owner/TMPlayer")
+        with open(self.source, encoding="utf-8") as file:
+            shots = json.load(file)["apps"][0]["screenshots"]
+        base = "https://raw.githubusercontent.com/owner/TMPlayer/main/iosApp/screenshots"
+        self.assertEqual([f"{base}/iphone/1-home.png", f"{base}/iphone/2-player.png"], [s["url"] for s in shots["iphone"]])
+        self.assertEqual({"url": f"{base}/ipad/1%20home.png", "width": 2064, "height": 2752}, shots["ipad"][0])
+        self.assertEqual((1290, 2796), (shots["iphone"][0]["width"], shots["iphone"][0]["height"]))
+        # A published check finds each file in the checkout, and refuses one that is gone.
+        self.add(make_ipa(self.folder), "--repo", "owner/TMPlayer", "--developer", "owner", "--root", root)
+        run("check", "--source", self.source, "--published", "--root", root)
+        os.unlink(os.path.join(root, "iosApp", "screenshots", "iphone", "1-home.png"))
+        with self.assertRaises(SystemExit) as refused:
+            run("check", "--source", self.source, "--published", "--root", root)
+        self.assertIn("1-home.png", str(refused.exception))
+
+    def test_screenshots_without_pictures_say_so(self):
+        with self.assertRaises(SystemExit):
+            run("screenshots", "--source", self.source, "--root", self.folder, "--repo", "owner/TMPlayer")
 
     def test_an_ipa_of_another_app_is_refused(self):
         with self.assertRaises(SystemExit) as refused:
@@ -158,6 +250,152 @@ class NotesTest(unittest.TestCase):
         for version in ("2.0.0", "9.9.9"):
             with self.assertRaises(SystemExit):
                 self.notes(version)
+
+
+class NewsTest(unittest.TestCase):
+    def setUp(self):
+        self.folder = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.folder)
+        self.source = make_source(self.folder)
+
+    def post(self, title, *more, date="2026-12-01T10:00:00Z"):
+        run("news", "--source", self.source, "--title", title, "--date", date, *more)
+        with open(self.source, encoding="utf-8") as file:
+            return json.load(file)["news"]
+
+    def test_a_post_has_what_altstore_reads(self):
+        posts = self.post("Hello iPad", "--caption", "Now on iPad.", "--url", "https://tmplayer.org/", "--app", BUNDLE,
+                          "--image-url", "https://tmplayer.org/a.png", "--notify")
+        self.assertEqual({
+            "identifier": "hello-ipad-2026-12-01", "title": "Hello iPad", "caption": "Now on iPad.",
+            "date": "2026-12-01T10:00:00Z", "tintColor": "#2AABEE", "notify": True, "url": "https://tmplayer.org/",
+            "imageURL": "https://tmplayer.org/a.png", "appID": BUNDLE,
+        }, posts[0])
+
+    def test_newest_first_the_same_identifier_replaced_and_the_oldest_dropped(self):
+        self.post("One", "--identifier", "one", date="2026-12-01T00:00:00Z")
+        self.post("Three", "--identifier", "three", date="2026-12-03T00:00:00Z")
+        posts = self.post("Two", "--identifier", "two", date="2026-12-02T00:00:00Z")
+        self.assertEqual(["three", "two", "one"], [p["identifier"] for p in posts])
+        posts = self.post("Two again", "--identifier", "two", date="2026-12-02T00:00:00Z")
+        self.assertEqual(["three", "two", "one"], [p["identifier"] for p in posts], "not listed twice")
+        self.assertEqual("Two again", posts[1]["title"])
+        posts = self.post("Four", "--identifier", "four", "--keep", "2", date="2026-12-04T00:00:00Z")
+        self.assertEqual(["four", "three"], [p["identifier"] for p in posts])
+
+    def test_a_post_about_an_unknown_app_or_with_a_plain_http_link_is_refused(self):
+        with self.assertRaises(SystemExit) as refused:
+            self.post("Bad", "--app", "org.example.other")
+        self.assertIn("org.example.other", str(refused.exception))
+        with self.assertRaises(SystemExit):
+            self.post("Bad", "--url", "http://tmplayer.org/")
+        with open(self.source, encoding="utf-8") as file:
+            self.assertEqual([], json.load(file)["news"], "a refused post leaves the file as it was")
+
+
+class LinksTest(unittest.TestCase):
+    def test_the_address_and_the_deep_links(self):
+        lines = run("links", "--repo", "owner/TMPlayer").splitlines()
+        url = "https://raw.githubusercontent.com/owner/TMPlayer/main/altstore/source.json"
+        self.assertEqual([f"source:    {url}", f"altstore:  altstore://source?url={url}",
+                          f"sidestore: sidestore://source?url={url}"], lines)
+
+
+class CheckTest(unittest.TestCase):
+    """The rules of `check`, each broken on its own."""
+
+    def setUp(self):
+        self.folder = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.folder)
+        self.source = make_source(self.folder)
+        run("add", "--source", self.source, "--ipa", make_ipa(self.folder), "--download-url", RELEASE + "Player.ipa",
+            "--repo", "owner/TMPlayer", "--developer", "owner", "--date", "2026-12-01T10:00:00Z")
+
+    def broken(self, change, *flags):
+        with open(self.source, encoding="utf-8") as file:
+            source = json.load(file)
+        change(source)
+        path = os.path.join(self.folder, "broken.json")
+        with open(path, "w", encoding="utf-8") as file:
+            json.dump(source, file)
+        with self.assertRaises(SystemExit) as refused:
+            run("check", "--source", path, *flags)
+        return str(refused.exception)
+
+    def test_the_added_source_passes_both_checks(self):
+        self.assertIn("in order", run("check", "--source", self.source))
+        self.assertIn("in order", run("check", "--source", self.source, "--published"))
+
+    def test_a_colour_that_is_not_hex(self):
+        self.assertIn("tintColor", self.broken(lambda s: s["apps"][0].update(tintColor="blue")))
+
+    def test_an_address_that_is_not_https(self):
+        self.assertIn("https", self.broken(lambda s: s.update(website="http://tmplayer.org")))
+        self.assertIn("https", self.broken(lambda s: s["apps"][0]["versions"][0].update(downloadURL="ftp://x/y.ipa")))
+
+    def test_versions_out_of_order(self):
+        def swap(source):
+            first = dict(source["apps"][0]["versions"][0])
+            older = dict(first, version="0.9.0", date="2020-01-01T00:00:00Z")
+            source["apps"][0]["versions"] = [older, first]
+        self.assertIn("newest first", self.broken(swap))
+
+    def test_a_bad_checksum(self):
+        self.assertIn("sha256", self.broken(lambda s: s["apps"][0]["versions"][0].update(sha256="abc")))
+
+    def test_a_published_source_needs_the_checksum_and_a_release_download(self):
+        self.assertIn("no sha256", self.broken(lambda s: s["apps"][0]["versions"][0].pop("sha256"), "--published"))
+        self.assertIn("releases/download", self.broken(
+            lambda s: s["apps"][0]["versions"][0].update(downloadURL="https://example.org/Player.ipa"), "--published"))
+
+    def test_the_apps_own_fields_must_follow_the_newest_version(self):
+        self.assertIn("newest", self.broken(lambda s: s["apps"][0].update(version="0.1.0"), "--published"))
+
+    def test_a_screenshot_list_that_is_not_iphone_or_ipad(self):
+        self.assertIn("watch", self.broken(lambda s: s["apps"][0].update(screenshots={"watch": []})))
+
+    def test_a_build_listed_twice(self):
+        def twice(source):
+            source["apps"][0]["versions"].append(dict(source["apps"][0]["versions"][0]))
+        self.assertIn("listed twice", self.broken(twice))
+
+
+try:
+    import jsonschema
+except ImportError:
+    jsonschema = None
+
+
+@unittest.skipIf(jsonschema is None, "pip install jsonschema (CI does)")
+class SchemaTest(unittest.TestCase):
+    """altstore/source.schema.json accepts what the script writes and the repository's source."""
+
+    def validate(self, source):
+        with open(os.path.join(ROOT, "altstore", "source.schema.json"), encoding="utf-8") as file:
+            jsonschema.Draft7Validator(json.load(file)).validate(source)
+
+    def test_the_repositorys_source(self):
+        with open(os.path.join(ROOT, "altstore", "source.json"), encoding="utf-8") as file:
+            self.validate(json.load(file))
+
+    def test_a_source_the_script_wrote_with_a_version_screenshots_and_news(self):
+        folder = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, folder)
+        source = make_source(folder)
+        make_png(os.path.join(folder, "iosApp", "screenshots", "iphone", "1.png"), 1290, 2796)
+        run("add", "--source", source, "--ipa", make_ipa(folder), "--download-url", RELEASE + "Player.ipa",
+            "--repo", "owner/TMPlayer", "--developer", "owner", "--root", folder, "--news")
+        with open(source, encoding="utf-8") as file:
+            written = json.load(file)
+        self.assertEqual(1, len(written["apps"][0]["screenshots"]["iphone"]))
+        self.validate(written)
+
+    def test_a_source_without_a_bundle_identifier_is_refused(self):
+        with open(os.path.join(ROOT, "altstore", "source.json"), encoding="utf-8") as file:
+            source = json.load(file)
+        del source["apps"][0]["bundleIdentifier"]
+        with self.assertRaises(jsonschema.ValidationError):
+            self.validate(source)
 
 
 # The one identity the iOS app has (docs/IOS.md, "Identifiers"): AltStore and SideStore update an
