@@ -296,7 +296,7 @@ val androidPlayerForIos = tasks.register<Sync>("androidPlayerForIos") {
             "LastVideoCodec", "LatestWriter", "LinkAtTime", "Media3Probe", "PinchTracker",
             "PlaybackMarks", "PlaybackRecorder", "PlaybackStatsOverlay", "PlaybackStatsText", "PlaybackTestRunner",
             "PlaybackTestSession", "RemedyFacts", "RemedyRunner", "SessionFacts", "SpeedLabelDrawable", "StalledSheet",
-            "SubtitleOfferChip", "TdReadCounters", "TraceFile", "TraceSampler", "TrackKeys", "TunnelingSupport",
+            "SubtitleCueFit", "SubtitleOfferChip", "TdReadCounters", "TraceFile", "TraceSampler", "TrackKeys", "TunnelingSupport",
             "VlcBackend", "VlcOptions",
         )
             .forEach { include("com/tmplayer/player/$it.kt") }
