@@ -24,6 +24,29 @@ IzzyOnDroid was decided against (see PLAN); Obtainium installs straight from the
 - `fastlane/metadata/android/en-US/`: title, short and full description, the icon and
   `changelogs/<versionCode>.txt`, one per release. F-Droid style clients read this.
 
+## iPhone and iPad
+
+TMPlayer for iPhone and iPad is a player for the videos already in your own Telegram chats, like
+the Android app, and it is unofficial: not affiliated with Telegram. It reaches people by
+sideloading, from a GitHub release tagged `apple-v...` (how it is built and released:
+[docs/IOS.md](../IOS.md)). Channels:
+
+| Channel | State | Notes |
+| --- | --- | --- |
+| AltStore | Offered | Add the source `https://raw.githubusercontent.com/dracu-lah/TMPlayer/main/altstore/source.json`; each release adds its version and the app offers the update |
+| SideStore | Offered | The same source file |
+| Sideloadly | Offered | The IPA from the release, signed with the user's own Apple ID; no automatic updates |
+| LiveContainer | Offered | The same IPA, installed into LiveContainer; no automatic updates; not yet tested |
+| TrollStore | Not offered | It works only on a few older iOS versions, none that this app runs on |
+| AltStore PAL (EU), TestFlight, App Store | Later | They need an Apple Developer account and a signed, notarized build; the support links in the app would also have to go from an App Store build |
+
+Copy for any of these follows [telegram-terms.md](../agents/telegram-terms.md) and the rule for
+public text: "video", never "film" or "movie"; no real titles; never "uploader", "movie channel" or
+"watch any movie"; "unofficial, not affiliated with Telegram" in every description; and posts link
+tmplayer.org/legal. The source's own `description` and `localizedDescription` already say so
+(`altstore/source.json`); a change to them is checked against the same rules. The app's name has
+no "Telegram" in it and the icon is TMPlayer's own, as on Android.
+
 ## Points that cut across channels
 
 - **Telegram's terms.** The rules every listing follows (no "Telegram" in a title, "unofficial" in

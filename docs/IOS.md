@@ -9,7 +9,7 @@ copyright and licence header it carries is kept. Here the app is TMPlayer itself
 icon, links, support page and contact.
 
 One universal app for iPhone and iPad, iOS and iPadOS 26.4 or later, installed by sideloading
-(AltStore, SideStore or Sideloadly). It is not in the App Store.
+(AltStore, SideStore, Sideloadly or LiveContainer). It is not in the App Store.
 
 ## Contents
 
@@ -20,7 +20,10 @@ One universal app for iPhone and iPad, iOS and iPadOS 26.4 or later, installed b
 - [Tests](#tests)
 - [What Linux can check](#what-linux-can-check)
 - [Installing on a device](#installing-on-a-device)
+- [Continuous integration](#continuous-integration)
 - [Releasing](#releasing)
+- [The AltStore source](#the-altstore-source)
+- [Lowering the minimum iOS](#lowering-the-minimum-ios)
 - [Changelog of the port](#changelog-of-the-port)
 - [Known issues](#known-issues)
 - [Needs a Mac or an Apple account (later)](#needs-a-mac-or-an-apple-account-later)
@@ -163,7 +166,8 @@ them off for an Android or desktop build there.
 | The Media3 stand-ins and iOS pieces | `./gradlew :ios:iosSimulatorArm64Test` | Mac |
 | Every video engine against the same rules (`EngineConformanceTests`, `Media3BridgeTests`) | `xcodebuild test -project iosApp/TMPlayer.xcodeproj -scheme TMPlayer -destination 'platform=iOS Simulator,name=iPhone 17'` | Mac |
 | On a real device, with a viewer's taps (`PlayerOnDeviceTests`, `AboutOnDeviceTests`, `ResourcesOnDeviceTests`) | `xcodebuild test -project iosApp/TMPlayer.xcodeproj -scheme TMPlayerDeviceCheck -destination 'id=<device>'` | Mac and device |
-| Release scripts, identifiers, versions, no committed secrets | `python3 -I -m unittest discover -s iosApp/release` | any |
+| Release scripts, the AltStore source (fields, order, checksums, news, screenshots, schema with `pip install jsonschema`), identifiers, versions, the Apple workflows' guards, no committed secrets | `python3 -I -m unittest discover -s iosApp/release` | any |
+| The same, the Kotlin compile for iOS and (when `APPLE_MAC_CI` is `true`) the Xcode build and Swift tests | `.github/workflows/apple-ci.yml` | GitHub, see "Continuous integration" |
 | The iOS copies of shared and Android sources (variant replacements still apply) | see below | any |
 | Shared fixes the port brought (sign in, logs, player row, large text) | `./gradlew :core:jvmTest :app:testDebugUnitTest` | any |
 
@@ -171,8 +175,13 @@ them off for an Android or desktop build there.
 
 No Xcode, no simulator, no link. What runs on Linux:
 
+`.github/workflows/apple-ci.yml` runs all of this on every pull request ("Continuous integration").
+
 ```sh
 python3 -I -m unittest discover -s iosApp/release
+python3 -I iosApp/release/altstore_source.py check --project iosApp/project.yml
+# The source against its JSON schema (pip install jsonschema):
+python3 -I iosApp/release/validate_schema.py altstore/source.json altstore/source.schema.json
 # The iOS copies of shared and Android sources (the variant's replacements still apply):
 ./gradlew -Ptmplayer.ios=true :core:appleSourcesForIos :ui:appleSourcesForIos \
   :ios:androidScreensForIos :ios:androidPlayerForIos --max-workers=3
@@ -190,15 +199,90 @@ same time as before.
 
 ## Installing on a device
 
-The IPA is unsigned; the installer signs it with your own Apple ID.
+The IPA is unsigned; the installer signs it with your own Apple ID. TMPlayer is an unofficial player
+for the videos already in your own Telegram chats and is not affiliated with Telegram.
 
-- **AltStore or SideStore:** add the source
-  `https://raw.githubusercontent.com/dracu-lah/TMPlayer/main/altstore/source.json`, install TMPlayer,
-  and the app offers each update from there. A free Apple ID's signature lasts 7 days; AltStore and
-  SideStore refresh it.
-- **Sideloadly:** download the IPA from a release tagged `apple-v...`, drag it in, sign with your
-  Apple ID. No automatic updates.
-- **AltStore PAL** (EU): needs a notarized build, so not yet (see the last section).
+| Channel | What you do | Updates |
+| --- | --- | --- |
+| **AltStore** | Add TMPlayer's source (below), install TMPlayer from it | Offered in AltStore, installed from there |
+| **SideStore** | The same source, the same steps | Offered in SideStore |
+| **Sideloadly** | Download the IPA from a release tagged `apple-v...` and sign it with your Apple ID | None: download the next one |
+| **LiveContainer** | Install the IPA from the release into LiveContainer | None: download the next one |
+| AltStore PAL (EU) | Needs a notarized build: not offered yet | |
+| TrollStore | Not offered: it works only on a few older iOS versions, none of them iOS 26.4 or later | |
+| TestFlight, App Store | Not offered yet: they need an Apple Developer account (last section) | |
+
+A free Apple ID's signature lasts 7 days, and a free account may have three sideloaded apps at once
+(AltStore and SideStore count as one); AltStore and SideStore refresh the signature in the
+background while the phone and the computer or VPN they need are reachable.
+
+### The source to add
+
+```text
+https://raw.githubusercontent.com/dracu-lah/TMPlayer/main/altstore/source.json
+```
+
+In AltStore or SideStore: Sources, plus, paste the address. The two apps also open it from a link, which
+adds the source to the app that handles the link:
+
+```text
+altstore://source?url=https://raw.githubusercontent.com/dracu-lah/TMPlayer/main/altstore/source.json
+sidestore://source?url=https://raw.githubusercontent.com/dracu-lah/TMPlayer/main/altstore/source.json
+```
+
+`python3 -I iosApp/release/altstore_source.py links --repo dracu-lah/TMPlayer` prints the three lines
+(use `--branch` for another branch). GitHub's Markdown, in a README or a release's text, drops links
+that are not http or https, so these two work as an `<a href>` on a web page (tmplayer.org, whose
+install page is the place for them, later), in a message, or typed in Safari. The buttons for such a
+page:
+
+```html
+<a href="altstore://source?url=https://raw.githubusercontent.com/dracu-lah/TMPlayer/main/altstore/source.json"><img alt="Add to AltStore" src="https://img.shields.io/badge/Add%20to-AltStore-2AABEE"></a>
+<a href="sidestore://source?url=https://raw.githubusercontent.com/dracu-lah/TMPlayer/main/altstore/source.json"><img alt="Add to SideStore" src="https://img.shields.io/badge/Add%20to-SideStore-2AABEE"></a>
+```
+
+(shields.io badges stand in until TMPlayer's own button pictures exist.) SideStore reads AltStore's
+source format as it is, so one file serves both; the release's text lists the same source and links.
+
+### Sideloadly, and installing the IPA yourself
+
+Download `TMPlayer-ios-<version>.ipa` from the latest release whose tag starts `apple-v`, and check it
+against `SHA256SUMS.txt` on the same page before installing it:
+
+```sh
+shasum -a 256 -c SHA256SUMS.txt     # macOS (sha256sum -c on Linux; certutil -hashfile <file> SHA256 on Windows)
+```
+
+(The file also lists the dSYMs zip; the check reports it missing if you did not download it, which is
+fine.) In Sideloadly drag the IPA in, choose the device, sign in with your Apple ID and Start. The app
+is not updated by itself: a newer IPA installed over it keeps its data, since the bundle identifier is
+the same.
+
+### LiveContainer
+
+LiveContainer runs an IPA inside itself, so TMPlayer is installed there by opening the same IPA from the
+release (Apps, plus, pick the file). It is the same file as for Sideloadly, with the same checksum, and
+it is not updated by itself. Unverified here: whether the player's sound with the screen locked and the
+Telegram sign in's storage work as they do in an installed copy (see the last section).
+
+## Continuous integration
+
+`.github/workflows/apple-ci.yml` runs on every pull request and push to `main` that touches `ios/`,
+`iosApp/`, `altstore/`, `gradle/`, the sources of `core`, `ui` and `app` (the phone screens and player
+are compiled for iOS from copies, so a change there can break only the iOS build), and by hand. It
+never sees a secret: Telegram's api id and hash are dummies made at run time.
+
+| Job | Runs | Does |
+| --- | --- | --- |
+| `linux` | always, on `ubuntu-latest` | `python3 -I -m unittest discover -s iosApp/release`; `altstore_source.py check --project iosApp/project.yml`; the source against `altstore/source.schema.json` (`validate_schema.py`, `jsonschema` in a virtual environment); the dash rule on the iOS files; `bash -n` and `sh -n` on the scripts; then the iOS copies and the three klibs, `./gradlew -Ptmplayer.ios=true :core:compileKotlinIosArm64 :ui:compileKotlinIosArm64 :ios:compileKotlinIosArm64` (`~/.konan`, about 800 MB, cached, and Gradle's cache by `setup-gradle`) |
+| `macos` | only when the repository variable `APPLE_MAC_CI` is `true` | `xcodegen generate` (a difference from the committed project is a warning), the newest iPhone simulator by its identifier, `xcodebuild build` for it and `xcodebuild test -only-testing:TMPlayerTests`, with `~/.konan`, Gradle and the Swift packages (`~/spm`, keyed on `Package.resolved`) cached; the `.xcresult` is uploaded |
+
+Variables: `APPLE_MAC_CI` (`true` turns the macOS job on; unset, a fork without macOS minutes is not
+charged), `APPLE_CI_RUNNER` (a runner label, `macos-26` when unset), `APPLE_CI_KOTLIN_HEAP` (the Kotlin
+compiler's heap for the Debug framework, `3g` when unset). Every action is at a major version the other
+workflows already use (a test in `test_altstore_source.py` keeps it so). The Linux job's Kotlin compile
+is what T9 ran by hand (`docs/IOS.md`, "What Linux can check"); the macOS job has not run yet (last
+section).
 
 ## Releasing
 
@@ -206,20 +290,161 @@ The user tags and approves; nothing here is done by an agent (AGENTS.md, publish
 
 1. Write the version's notes in `iosApp/CHANGELOG.md` as `## <version>` (first build of a version)
    or `## <version> build <n>` (an iOS-only fix). The release stops if the section is missing.
-2. Repository secrets: `TG_API_ID`, `TG_API_HASH` (required), `TMDB_API_KEY`, `OMDB_API_KEY`,
+2. Put iPhone and iPad pictures, if there are new ones, in `iosApp/screenshots/iphone/` and `/ipad/`
+   as PNG or JPEG (the promo build makes them, see "Building and running"); the release lists them in
+   the source by name order.
+3. Repository secrets: `TG_API_ID`, `TG_API_HASH` (required), `TMDB_API_KEY`, `OMDB_API_KEY`,
    `OPENSUBTITLES_API_KEY` (optional). Variables, all optional: `APPLE_RELEASE_RUNNER` (a runner
    label, `macos-26` when unset), `APPLE_RELEASE_KOTLIN_HEAP` (`6000m` when unset),
-   `APPLE_DEVELOPER_NAME` (the developer name AltStore shows, `TMPlayer` when unset).
-3. Tag `apple-v<version>` or `apple-v<version>-<build>` and push the tag. The version is x.y or
+   `APPLE_DEVELOPER_NAME` (the developer name AltStore shows, `TMPlayer` when unset),
+   `APPLE_SOURCE_PUSH` (see step 5), `APPLE_RELEASE_REPO` (the `owner/name` the workflow runs in,
+   `dracu-lah/TMPlayer` when unset).
+4. Tag `apple-v<version>` or `apple-v<version>-<build>` and push the tag. The version is x.y or
    x.y.z: a beta (`1.28.6-beta.1`) has no iOS release.
-4. `.github/workflows/apple-release.yml` (only in the `TMPlayer` repository, a fork skips it) checks
-   the source against the project, builds the unsigned IPA and dSYMs with `build-ipa.sh`, creates the
-   GitHub release with the notes and the corresponding source links (this repository at the tag,
+5. `.github/workflows/apple-release.yml` (only in `dracu-lah/TMPlayer`, a fork skips it), one at a time
+   (`concurrency`), runs the release scripts' tests and `check`, builds the unsigned IPA and dSYMs with
+   `build-ipa.sh`, writes `SHA256SUMS.txt` for both and verifies it, creates the GitHub release with the
+   notes, how to install, the checksums and the corresponding source links (this repository at the tag,
    MPVKit at its version), then adds the version to `altstore/source.json` with
-   `iosApp/release/altstore_source.py add` and pushes that commit to the default branch.
+   `iosApp/release/altstore_source.py add` (SHA-256, size, minimum iOS from the IPA, a news post) and
+   checks it with `--published`. The source change reaches the default branch by one of two ways:
+   - `APPLE_SOURCE_PUSH` is `true`: pushed straight to it; if the branch rules refuse the push
+     (pull requests required), the next way is used.
+   - otherwise: pushed to a branch `altstore-source-<tag>-<run id>` and opened as a pull request with
+     `gh pr create` (the repository setting Settings, Actions, General, "Allow GitHub Actions to
+     create and approve pull requests" must be on; if it is not, the job fails after the release with
+     the branch name, and a pull request is opened by hand). AltStore and SideStore see the version
+     once the pull request is merged.
+
+A run started again for the same tag replaces the release's files and keeps its text; the source
+entry for the same version and build is replaced, and keeps its date when the IPA is the same.
+
+### Dry run, and a lower-iOS trial
+
+Actions, Apple release, Run workflow, from a branch:
+
+- `dry_run` (on by default): builds the IPA from that branch and uploads the IPA, the dSYMs and
+  `SHA256SUMS.txt` as the workflow's artifact (14 days). It makes no release, no source change and no
+  pull request, but does make the source's entry on a copy and checks it with `--published`, so the
+  whole path is exercised. The version and build are the inputs `version` and `build`, or
+  `project.yml`'s. A missing section in `CHANGELOG.md` is a warning, not a stop. A run with `dry_run`
+  off must start from an `apple-v` tag, so a release never comes from a branch.
+- `min_ios` (empty is the project's): a manual lower-iOS test. It builds with
+  `IPHONEOS_DEPLOYMENT_TARGET=<min_ios>` (`TM_MIN_IOS` in `build-ipa.sh`, which can be used on a Mac
+  too) to see whether a lower floor builds, and is always a dry run, so such an IPA is never released.
+  See "Lowering the minimum iOS" for what to read from it.
+
+## The AltStore source
+
+`altstore/source.json`, AltStore's source format v2
+(<https://faq.altstore.io/developers/make-a-source>), which SideStore reads as it is.
+`altstore/source.schema.json` is its JSON schema, written from that documentation (a structural check
+in CI, not AltStore's own), and `iosApp/release/altstore_source.py` makes and checks it with the
+standard library alone:
+
+| Command | Does |
+| --- | --- |
+| `add --ipa --download-url [--version --build --notes-file --repo --branch --developer --news --release-url]` | Puts the IPA's version in `apps[0].versions`, newest first (version numbers, then build), with `buildVersion`, `date`, `localizedDescription` (the notes), `downloadURL`, `size`, `sha256` and `minOSVersion` (read from the IPA's `MinimumOSVersion`). Older versions stay. The same version and build again replaces its entry (and keeps its date for the same IPA, so a second run changes nothing); another build of the same version is its own entry. Also sets the app's `version`, `versionDate`, `versionDescription`, `downloadURL` and `size` to the newest (older AltStore and SideStore read them there), `appPermissions` (`entitlements` empty for an unsigned IPA, `privacy` the IPA's usage descriptions), the icon, `sourceURL` and, with `--repo`, the screenshots found. `--news` posts the release |
+| `screenshots --repo` | Lists `iosApp/screenshots/iphone/*` and `/ipad/*` (PNG or JPEG, by name) as `apps[0].screenshots.iphone` and `.ipad` with raw GitHub addresses and each picture's width and height read from its header |
+| `news --title [--caption --url --image-url --tint-color --app --notify --identifier --date --keep]` | Adds a post to `news` (newest first, 20 kept); the same `identifier` replaces it |
+| `links --repo` | Prints the source's address and the `altstore://` and `sidestore://` links |
+| `notes --version --build` | Prints a version's notes from `iosApp/CHANGELOG.md` |
+| `check [--project] [--published] [--root]` | Checks the fields, the shape of every address (https; nothing is fetched), tint colours, the checksums, that versions are newest first and none is listed twice, news posts, and the app identifier against `project.yml`. `--published` also needs a version, the developer name, a `sha256` and a release `.ipa` address on every version, the app's own `version` fields to be the newest's, and every raw GitHub address in this repository to name a file that exists in it |
+
+The source's own fields: `name`, `identifier` (`org.tmplayer.ios.source`), `subtitle`, `description`,
+`tintColor` (`#2AABEE`), `iconURL`, `website`, `sourceURL`, `featuredApps`, `apps`, `news`. The app's:
+`name`, `bundleIdentifier`, `developerName`, `subtitle`, `localizedDescription`, `iconURL`, `tintColor`,
+`category`, `screenshots`, `versions`, `appPermissions`. Not set: `headerURL`.
+
+AltStore reads `news` and shows it above the apps. The release adds one post by itself; a post by hand
+(an announcement, a known problem) is
+`altstore_source.py news --title "..." --caption "..." --url https://tmplayer.org/ --notify` and a
+commit. `check --published` on a copy of the file is the last step before a hand edit is pushed.
 
 `altstore/source.json` lists no version until the first release; until then
 `altstore_source.py check --published` refuses it, by design.
+
+## Lowering the minimum iOS
+
+Audit of 2026-11-17, made on Linux by reading the sources; the floor itself is unchanged (iOS 26.4,
+`iosApp/project.yml`). Recommendation: **iOS 17.0**, once TDLib allows it (the one blocker, below).
+
+### What was searched
+
+`@available`, `#available`, `#unavailable`, `glassEffect`, `Glass`, `Liquid`, `UIDesignRequiresCompatibility`,
+`iOS 2x` in `iosApp/` (the 8 Swift files, 3,515 lines, `Info.plist`, `project.yml`), every
+`platform.*` import in `ios/`, `core/src/iosMain` and `ui/src/iosMain`, and the Swift APIs by name.
+
+### Findings
+
+- **No iOS 26 only API in the Swift sources.** There is no `@available` or `#available` anywhere, no
+  `glassEffect`, no Liquid Glass call, and no other symbol that exists only from iOS 18 or 26. The
+  Swift is a SwiftUI shell (`@main App`, `WindowGroup`, a `UIViewControllerRepresentable` that hosts
+  Kotlin's view controller, `.ignoresSafeArea()`), UIKit view controllers, AVFoundation and mpv.
+- **Liquid Glass comes by itself, not by a call.** Built with the iOS 26 SDK, system pieces UIKit
+  draws (the share sheet, the document picker, alerts) take iOS 26's look on iOS 26 and the old one
+  on older systems, with no code. Compose draws the rest. `UIDesignRequiresCompatibility` is not
+  set, and does not need to be for a lower floor.
+- **The newest APIs the Swift does call** (from Apple's documentation, as remembered; the compiler
+  states any miss when the target is lowered, see the steps):
+
+  | API | Where | Needs |
+  | --- | --- | --- |
+  | `UIWindowScene.requestGeometryUpdate(.iOS(interfaceOrientations:))`, `setNeedsUpdateOfSupportedInterfaceOrientations()` | `Player/ActivityViewController.swift` (lines 162, 164, 261) | iOS 16 |
+  | `AVAsset.load(_:)` and `AVAssetTrack.load(.isDecodable)`, `loadMediaSelectionGroup`, `loadChapterMetadataGroups`, `loadAssociatedTracks`, `AVMetadataItem.load(.stringValue)` | `Player/Engines/AppleEngine.swift` (lines 116 to 579) | iOS 15 |
+  | `UTType` (`UniformTypeIdentifiers`) | `Player/Engines/ChoosingEngine.swift` (289, 291) | iOS 14 |
+  | `App`, `WindowGroup`, `.ignoresSafeArea()` | `TMPlayerApp.swift` | iOS 14 |
+  | `AVAudioSession.setCategory(_:mode:policy:options:)` | `Player/PlaybackAudio.swift` | iOS 11 |
+  | `Task { @MainActor }`, `async`/`await` | `AppleEngine.swift` | iOS 13 (back-deployed by the Swift runtime) |
+
+  So the Swift compiles unchanged down to **iOS 16**, with no gating. Below 16 it would need:
+  `requestGeometryUpdate` behind `#available(iOS 16, *)` with
+  `UIViewController.attemptRotationToDeviceOrientation()` as the fallback (the orientation lock
+  would turn less cleanly), and below 15 the completion-handler `loadValuesAsynchronously` instead
+  of `asset.load`. Not proposed: each step below 16 adds gating work and reaches fewer people.
+- **Kotlin side.** The `platform.*` APIs imported on iOS (`UIApplication`, `UIViewController`,
+  `UIDocumentPickerViewController`, `UTType`, feedback generators, `NSProcessInfo` thermal state,
+  `VTIsHardwareDecodeSupported`, ...) are all iOS 14 or older, and `os_proc_available_memory` is not
+  used. Kotlin/Native's own minimum for the compiled klibs is lower than every floor considered here.
+  Compose Multiplatform's own minimum for iOS and MPVKit's (its `Package.swift`, resolved only on a
+  Mac) are **unverified here**: check both when the trial below runs.
+- **The blocker is TDLib, not Swift.** tdl-coroutines 15.0.0 (`gradle/libs.versions.toml`, `tdl`)
+  ships TDLib built for iOS 26.4. `project.yml` says why the floor sits there: linking it into an app
+  for an older iOS only trades the linker's warning for crashes on those devices. A lower floor needs
+  a TDLib built for it: an older tdl-coroutines release (find the newest built for a lower minimum
+  with `vtool -show-build` on its framework, `minos`), or TDLib built from its sources for
+  `-miphoneos-version-min=17.0` (TDLib's `example/ios` build scripts, on a Mac), then published or
+  vendored the way tdl-coroutines is used.
+
+### Why 17.0
+
+It is the lowest floor with no Swift gating worth keeping (16 also has none, and is the real code
+minimum), it covers iPhone XS and XR and later and every iPad that runs iPadOS 17, and iOS 17 is the
+oldest system a TDLib build of recent years is likely to be made for. Choose 16.0 if the TDLib binary
+found allows it and devices on 16 matter to the people who sideload.
+
+### Steps, in order
+
+1. **Trial build (any Mac or the macOS runner):** Actions, Apple release, Run workflow, `min_ios` =
+   `17.0` (or `TM_MIN_IOS=17.0 iosApp/release/build-ipa.sh ...`). It builds the Release IPA with that
+   deployment target and uploads it as an artifact; a Swift API newer than 17 is a compile error with
+   its name, which is the exact list of files to gate (expected: none). Read the log for the linker's
+   "was built for newer 'iOS' version" warnings: they name the TDLib objects built for 26.4.
+2. **TDLib for the lower floor:** get or build it (above). Check with `vtool -show-build` that its
+   `minos` is the floor. Point `libs.versions.toml` at it, then run `:ios:kit:linkReleaseFrameworkIosArm64`.
+3. **Run it on an iOS 17 simulator runtime and a device on 17** (Xcode, Settings, Components): sign in,
+   play an MP4 (AVPlayer) and an MKV (mpv), rotate, lock the screen with sound on, download. TDLib at
+   a wrong minimum fails at launch or at the first call, so this is the real test, not the build.
+4. **Change the floor** in one place and regenerate: `options.deploymentTarget.iOS` in
+   `iosApp/project.yml`, `xcodegen generate` in `iosApp/` (updates both `IPHONEOS_DEPLOYMENT_TARGET`
+   lines in `project.pbxproj`; `test_the_minimum_ios_agrees` fails if they differ), and the text that
+   says 26.4: `docs/IOS.md` (the introduction, "Setting up a Mac", Known issues), `CONTRIBUTING.md`,
+   `scripts/ios-setup.sh` (it checks the SDK, which stays 26.x if Xcode 26 builds it), `iosApp/CHANGELOG.md`'s
+   release text, the store and site text that names the minimum. `minOSVersion` in the AltStore source
+   follows by itself, read from each IPA.
+5. **Keep it honest in CI:** add an iOS 17 runtime to the `macos` job (a second destination for
+   `TMPlayerTests`), so a later change that calls a newer API fails there.
+6. If the floor goes below 16: gate `requestGeometryUpdate` as above and re-run steps 1 to 3.
 
 ## Changelog of the port
 
@@ -271,13 +496,14 @@ Found while bringing the port over; fixed ones are listed under the next heading
 
 - **iOS 26.4 or later only.** tdl-coroutines 15.0.0 ships TDLib built for iOS 26.4; lower the
   deployment target only with TDLib binaries built for an older iOS.
-- **The iOS build is not in CI on every change.** A change to `app/` or `core/` that uses an API no
-  stand-in has breaks only the iOS build. The Linux compile check above catches it without a Mac;
-  a CI job running it on pull requests (Linux runner, about 800 MB of toolchain cached) would
-  catch it before merge, and a Mac build is still needed before a release.
-- **The release pushes to the default branch.** The workflow commits `altstore/source.json` straight
-  to `main`; with a branch protection rule that requires pull requests, that step fails and needs a
-  pull request instead (or a bypass for the workflow).
+- **CI covers the Kotlin compile, not the link.** A change to `app/` or `core/` that uses an API no
+  stand-in has fails `apple-ci.yml`'s Linux job before merge. Linking the framework, the Xcode
+  build and the Swift tests run only when the repository variable `APPLE_MAC_CI` is `true`, and a Mac
+  build is still needed before a release.
+- **The source change after a release is a push or a pull request.** With `APPLE_SOURCE_PUSH` not
+  `true`, or a push the branch rules refuse, the workflow opens a pull request (`gh pr create`),
+  which needs the setting "Allow GitHub Actions to create and approve pull requests"; the source is
+  not updated until it is merged.
 - **Theme, "Match the phone" on an iPad.** The theme line comes from `core/src/pureMain` (`Appearance`),
   which is the same compilation for every platform, so the variant cannot change it; a platform word
   in the catalog would.
@@ -341,4 +567,28 @@ Skipped in the import (2026-11-17): none of this can be done or checked on Linux
   Split View, large text, VoiceOver).
 - The release: the macOS runner, the `apple-v*` tag, the GitHub release and the AltStore source's
   first version.
+- **Written on 2026-11-17 and never run (unverified), all of it needing a Mac, a macOS runner or an
+  Apple account:**
+  - `apple-ci.yml`'s `macos` job: `brew install xcodegen` and `xcodegen generate` matching the
+    committed project, the simulator pick by `simctl list -j`, `xcodebuild build` and
+    `xcodebuild test -only-testing:TMPlayerTests` with `-clonedSourcePackagesDirPath`, the Gradle
+    heap through `GRADLE_OPTS` in Xcode's script phase, and the three caches. Its Linux job's last
+    step (the klib compile) also has not run on GitHub yet: the same tasks were run by hand.
+  - `apple-release.yml` since this change: the `dry_run` and `min_ios` inputs, the guard
+    `github.repository == (vars.APPLE_RELEASE_REPO || 'dracu-lah/TMPlayer')`, the artifact upload,
+    `SHA256SUMS.txt` over the IPA and the dSYMs, the release's install text, the source change by
+    push or by `gh pr create` (and whether the repository allows Actions to open pull requests), and
+    `TM_MIN_IOS` in `build-ipa.sh`.
+  - The AltStore source against AltStore and SideStore themselves: `altstore/source.schema.json` was
+    written from the documentation and AltStore's own parser was never run on this file. Check that
+    both apps accept the source (the `screenshots` object with `iphone` and `ipad`, `sha256`,
+    `news`, `tintColor` with the `#`), show the news post and the screenshots, and read the app's
+    `appPermissions` as the IPA's.
+  - `altstore://source?url=` and `sidestore://source?url=` opening the right app from a web page.
+  - iPhone and iPad pictures in `iosApp/screenshots/iphone` and `/ipad` (none exist: the source
+    lists none until the promo build makes them) and their raw addresses once on `main`.
+  - Installing the IPA with Sideloadly and LiveContainer (the app's sound with the screen locked and
+    TDLib's storage under LiveContainer).
+  - The lower-iOS trial (`min_ios`) and everything in "Lowering the minimum iOS", which needs a TDLib
+    built for the lower floor first.
 - Signing with an Apple Developer account, notarization, AltStore PAL, TestFlight, the App Store.
