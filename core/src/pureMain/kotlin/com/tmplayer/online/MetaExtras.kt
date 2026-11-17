@@ -14,7 +14,10 @@ data class MetaPerson(
     val photoUrl: String? = null,
 )
 
-/** A trailer on YouTube, the only site it is opened from. [key] is YouTube's video id. */
+/**
+ * A trailer on YouTube, the only site it is opened from. [key] is YouTube's video id, checked
+ * with [TrailerEmbed.isValidKey] wherever one is read (TMDB, AniList, the cache).
+ */
 data class MetaTrailer(val key: String) {
     /** Opens in the YouTube app where one is installed. */
     val appUri: String get() = "vnd.youtube:$key"
@@ -146,7 +149,7 @@ data class MetaExtras(
                 directors = strings("directors"),
                 creators = strings("creators"),
                 cast = objects("cast").map { MetaPerson(it.optString("name"), it.optString("role"), it.optString("photo").ifBlank { null }) },
-                trailer = json.optString("trailer").ifBlank { null }?.let { MetaTrailer(it) },
+                trailer = json.optString("trailer").takeIf(TrailerEmbed::isValidKey)?.let { MetaTrailer(it) },
                 similar = objects("similar").mapNotNull {
                     runCatching {
                         MetaRef(MetaProvider.valueOf(it.getString("provider")), MetaKind.valueOf(it.getString("kind")), it.getString("id"), it.optString("title"))
@@ -236,7 +239,8 @@ object MetaRules {
 
     /**
      * The trailer to offer: YouTube only; a trailer before a teaser; an official one first; then
-     * one in the UI language, then English, then any; the newest of what is left.
+     * one in the UI language, then English, then any; the newest of what is left. A key that is
+     * not a YouTube id is outside data gone wrong and never offered.
      */
     fun trailer(videos: List<MetaVideo>, uiLanguage: String): MetaTrailer? {
         val ui = uiLanguage.substringBefore('-').lowercase()
@@ -249,7 +253,7 @@ object MetaRules {
             }
         }
         return videos
-            .filter { it.site.equals("YouTube", ignoreCase = true) && it.key.isNotBlank() }
+            .filter { it.site.equals("YouTube", ignoreCase = true) && TrailerEmbed.isValidKey(it.key) }
             .filter { it.type.equals("Trailer", ignoreCase = true) || it.type.equals("Teaser", ignoreCase = true) }
             .sortedWith(
                 compareBy<MetaVideo>({ if (it.type.equals("Trailer", ignoreCase = true)) 0 else 1 }, { if (it.official) 0 else 1 }, { languageRank(it) })

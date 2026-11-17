@@ -794,6 +794,39 @@ class GarbageInputTest {
         assertNoFailures()
     }
 
+    /**
+     * A trailer's key is TMDB's, AniList's or the cache's, and the trailer page's messages come
+     * back through a web view: truncated, wrong typed, huge, random, other scripts' digits and
+     * letters. Nothing throws, nothing but an eleven character ASCII id is a key, and nothing but
+     * the page's three shapes is a message.
+     */
+    @Test
+    fun trailerKeysAndPageMessagesNeverThrow() {
+        val labels = com.tmplayer.online.TrailerPageLabels("Trailer", "Loading")
+        val keys = texts + listOf(
+            "YE7VzlLtp-", "YE7VzlLtp-4x", "YE7VzlLtp-4".repeat(10_000), "١٢٣٤٥٦٧٨٩٠١", "०१२३४५६७८९०", "ＡＢＣＤＥＦＧＨＩＪＫ",
+            "ÀÉÎÕÜàéîõüñ", "YE7VzlLtp\u00004", "YE7Vz\"><x>4", "YE7Vz'+x+'4", "😀😀😀😀😀1", "\uD800\uD800\uD800\uD800\uD800\uD800\uD800\uD800\uD800\uD800\uD800",
+            "state:١", "state:１", "error:٢", "error:-", "state:--1", "error:99999999999", "ready".repeat(100),
+        )
+        for (key in keys) {
+            survive("TrailerEmbed", key) {
+                val valid = com.tmplayer.online.TrailerEmbed.isValidKey(key)
+                if (valid != (key.length == 11 && key.all { it in 'A'..'Z' || it in 'a'..'z' || it in '0'..'9' || it == '_' || it == '-' })) {
+                    error("isValidKey said $valid")
+                }
+                if ((com.tmplayer.online.TrailerEmbed.embedUrl(key) != null) != valid) error("embedUrl disagreed with isValidKey")
+                if ((com.tmplayer.online.TrailerEmbed.pageHtml(key, com.tmplayer.online.TrailerPageLabels(key, key)) != null) != valid) error("pageHtml disagreed")
+                com.tmplayer.online.TrailerEmbed.embedUrl("YE7VzlLtp-4", key)
+                com.tmplayer.online.TrailerEmbed.pageHtml("YE7VzlLtp-4", labels, key)
+                val message = com.tmplayer.online.TrailerEmbed.parseMessage(key)
+                com.tmplayer.online.TrailerRules.next(com.tmplayer.online.TrailerState(), message)
+                com.tmplayer.online.TrailerRules.route(true, key, true, true)
+                MetaExtras.fromJson(JSONObject().put("trailer", key))?.trailer?.let { if (!com.tmplayer.online.TrailerEmbed.isValidKey(it.key)) error("a bad key came back from the cache") }
+            }
+        }
+        assertNoFailures()
+    }
+
     /** Chapter titles are free text, the modes line and the marks file are read from the disk: none may throw. */
     @Test
     fun skipTitlesModesAndMarksNeverThrow() {

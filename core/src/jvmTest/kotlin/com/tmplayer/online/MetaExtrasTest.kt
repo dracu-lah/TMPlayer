@@ -56,10 +56,10 @@ class MetaExtrasTest {
         "credits":{"cast":[{"name":"Second","character":"B","profile_path":"/b.jpg","order":1},{"name":"First","character":"A","profile_path":"/a.jpg","order":0},{"name":"Nobody","character":"","profile_path":null,"order":2}],
           "crew":[{"name":"Sacha Goedegebure","job":"Director"},{"name":"Someone","job":"Writer"}]},
         "videos":{"results":[
-          {"site":"YouTube","key":"clip","type":"Clip","official":true,"iso_639_1":"en","published_at":"2020-01-01"},
-          {"site":"Vimeo","key":"vimeo","type":"Trailer","official":true,"iso_639_1":"en","published_at":"2020-01-01"},
-          {"site":"YouTube","key":"fan","type":"Trailer","official":false,"iso_639_1":"en","published_at":"2021-01-01"},
-          {"site":"YouTube","key":"official","type":"Trailer","official":true,"iso_639_1":"en","published_at":"2009-01-01"}]},
+          {"site":"YouTube","key":"clipClip001","type":"Clip","official":true,"iso_639_1":"en","published_at":"2020-01-01"},
+          {"site":"Vimeo","key":"vimeoVimeo1","type":"Trailer","official":true,"iso_639_1":"en","published_at":"2020-01-01"},
+          {"site":"YouTube","key":"fanFanFan01","type":"Trailer","official":false,"iso_639_1":"en","published_at":"2021-01-01"},
+          {"site":"YouTube","key":"officialOK1","type":"Trailer","official":true,"iso_639_1":"en","published_at":"2009-01-01"}]},
         "release_dates":{"results":[
           {"iso_3166_1":"US","release_dates":[{"certification":"PG","type":3}]},
           {"iso_3166_1":"GB","release_dates":[{"certification":"","type":1},{"certification":"12A","type":4},{"certification":"U","type":3}]}]},
@@ -75,7 +75,7 @@ class MetaExtrasTest {
           {"name":"Aaron Paul","total_episode_count":62,"profile_path":"/ap.jpg","roles":[{"character":"Jesse Pinkman","episode_count":62}]},
           {"name":"Bryan Cranston","total_episode_count":63,"profile_path":"/bc.jpg","roles":[{"character":"Cameo","episode_count":1},{"character":"Walter White","episode_count":62}]}]},
         "content_ratings":{"results":[{"iso_3166_1":"DE","rating":"16"},{"iso_3166_1":"US","rating":"TV-MA"}]},
-        "videos":{"results":[{"site":"YouTube","key":"bb","type":"Trailer","official":false,"iso_639_1":"en","published_at":"2024-09-17"}]},
+        "videos":{"results":[{"site":"YouTube","key":"bbTrailer01","type":"Trailer","official":false,"iso_639_1":"en","published_at":"2024-09-17"}]},
         "recommendations":{"results":[]},
         "similar":{"results":[{"id":60059,"name":"Better Call Saul"}]}}"""
 
@@ -153,9 +153,9 @@ class MetaExtrasTest {
         assertEquals("https://image.tmdb.org/t/p/w185/a.jpg", extras.cast[0].photoUrl)
         assertEquals("A", extras.cast[0].role)
         assertNull(extras.cast[2].photoUrl)
-        assertEquals("official", extras.trailer?.key)
-        assertEquals("vnd.youtube:official", extras.trailer?.appUri)
-        assertEquals("https://www.youtube.com/watch?v=official", extras.trailer?.watchUrl)
+        assertEquals("officialOK1", extras.trailer?.key)
+        assertEquals("vnd.youtube:officialOK1", extras.trailer?.appUri)
+        assertEquals("https://www.youtube.com/watch?v=officialOK1", extras.trailer?.watchUrl)
         assertEquals(listOf("1", "2"), extras.similar.map { it.id })
     }
 
@@ -174,7 +174,7 @@ class MetaExtrasTest {
         assertEquals(listOf("Bryan Cranston", "Aaron Paul"), extras.cast.map { it.name })
         assertEquals("Walter White", extras.cast[0].role)
         assertEquals(listOf(MetaRef(MetaProvider.Tmdb, MetaKind.Show, "60059", "Better Call Saul")), extras.similar)
-        assertEquals("bb", extras.trailer?.key)
+        assertEquals("bbTrailer01", extras.trailer?.key)
     }
 
     @Test
@@ -239,7 +239,8 @@ class MetaExtrasTest {
     @Test
     fun theTrailerIsOfficialFirstThenTheUiLanguageThenEnglish() {
         fun v(key: String, official: Boolean, lang: String, type: String = "Trailer", site: String = "YouTube", at: String = "2020") =
-            MetaVideo(site, key, type, official, lang, at)
+            MetaVideo(site, key.padEnd(11, '_'), type, official, lang, at)
+        fun pick(list: List<MetaVideo>, ui: String) = MetaRules.trailer(list, ui)?.key?.trimEnd('_')
         val videos = listOf(
             v("teaser-es", true, "es", type = "Teaser"),
             v("fan-es", false, "es"),
@@ -248,12 +249,15 @@ class MetaExtrasTest {
             v("official-es", true, "es"),
             v("vimeo-es", true, "es", site = "Vimeo"),
         )
-        assertEquals("official-es", MetaRules.trailer(videos, "es-ES")?.key)
-        assertEquals("official-en", MetaRules.trailer(videos, "de-DE")?.key)
-        assertEquals("unofficial only: the UI language", "fan-es", MetaRules.trailer(listOf(v("fan-en", false, "en"), v("fan-es", false, "es")), "es")?.key)
-        assertEquals("the newest of equals", "new", MetaRules.trailer(listOf(v("old", true, "en", at = "2010"), v("new", true, "en", at = "2024")), "en")?.key)
-        assertEquals("a teaser when there is no trailer", "teaser-es", MetaRules.trailer(listOf(videos[0], videos[5]), "es")?.key)
+        assertEquals("official-es", pick(videos, "es-ES"))
+        assertEquals("official-en", pick(videos, "de-DE"))
+        assertEquals("unofficial only: the UI language", "fan-es", pick(listOf(v("fan-en", false, "en"), v("fan-es", false, "es")), "es"))
+        assertEquals("the newest of equals", "new", pick(listOf(v("old", true, "en", at = "2010"), v("new", true, "en", at = "2024")), "en"))
+        assertEquals("a teaser when there is no trailer", "teaser-es", pick(listOf(videos[0], videos[5]), "es"))
         assertNull(MetaRules.trailer(listOf(v("clip", true, "en", type = "Clip"), videos[5]), "en"))
+        val bad = listOf("x\"><b>bad</b>", "short", "toolongkey123", "ab cd efghi", "١٢٣٤٥٦٧٨٩٠١").map { MetaVideo("YouTube", it, "Trailer", true, "es") }
+        assertEquals("a key that is no YouTube id is passed over", "fan-es", pick(bad + v("fan-es", false, "es"), "es"))
+        assertNull(MetaRules.trailer(bad, "es"))
     }
 
     @Test
@@ -347,7 +351,7 @@ class MetaExtrasTest {
         val extras = MetaExtras(
             genres = listOf("Drama"), runtimeMin = 50, seasons = 2, rating = 8.1, certification = "15",
             directors = listOf("A"), creators = listOf("B"), cast = listOf(MetaPerson("C", "D", "https://image.tmdb.org/t/p/w185/c.jpg"), MetaPerson("E")),
-            trailer = MetaTrailer("k"), similar = listOf(MetaRef(MetaProvider.AniList, MetaKind.Film, "3", "F")),
+            trailer = MetaTrailer("kkkkkkkkkkk"), similar = listOf(MetaRef(MetaProvider.AniList, MetaKind.Film, "3", "F")),
         )
         assertEquals(extras, MetaExtras.fromJson(extras.toJson()))
         assertEquals(MetaExtras(), MetaExtras.fromJson(MetaExtras().toJson()))

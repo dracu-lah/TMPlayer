@@ -117,7 +117,7 @@ internal object MetaFixture {
           {"name":"Ines Varga","total_episode_count":8,"profile_path":null,"roles":[{"character":"Net mender","episode_count":8}]},
           {"name":"Ole Strand","total_episode_count":6,"profile_path":null,"roles":[{"character":"Lighthouse keeper","episode_count":6}]}]},
         "content_ratings":{"results":[{"iso_3166_1":"US","rating":"TV-PG"}]},
-        "videos":{"results":[{"site":"YouTube","key":"promoharbour","type":"Trailer","official":true,"iso_639_1":"en","published_at":"2024-02-01"}]},
+        "videos":{"results":[{"site":"YouTube","key":"promoHarbr1","type":"Trailer","official":true,"iso_639_1":"en","published_at":"2024-02-01"}]},
         "recommendations":{"results":[]},"similar":{"results":[]}}"""
 
     private const val BUNNY = """{"id":10378,"title":"Big Buck Bunny","original_title":"Big Buck Bunny","release_date":"2008-04-10",
