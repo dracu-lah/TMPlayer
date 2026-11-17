@@ -58,6 +58,20 @@ seek matrix with the loopback stream; VLC and MX handover (intent extras are mar
 focus on TV; tunneled playback; the stats overlay; the Tanix TX6 itself; libVLC (a build with `-PtmVlc=true`).
 - Order that was used: pure core first, then player wiring, then settings and logs, then search and filters.
 
+Remedy ladder wiring (2026-11-16, research RL4, RL5, RL6, RL8, RL9; local commits, not pushed):
+- RL4 `13223e0`, RL5 `dc931f6`, RL6 + RL8 `ce86660` (merged in `e42f689`). Review fixes `674503a`: the tick stops
+  once the path played 60 s clean (a seek watches 15 s again, background audio posts nothing, the picture coming
+  back restarts it); a re-open without a session ends in the sheet instead of a lost hop; the memory is written
+  through one conflated writer (`LatestWriter`).
+- RL9 `22f745d` (HX79): the index start learned from the head (`StreamWarmup` via `StreamIndex.locate`, or the
+  stream's own first far read via `TdByteWindow.learnIndex`) makes a read anywhere in it an index read, held beside
+  the window (`LowStorageWindow.counted`, up to `MAX_INDEX_BYTES` 32 MB). `LowStorageIndexTest` (12 MB moov after a
+  head played before) failed first, passes now. Not done in RL9: `setContinueLoadingCheckIntervalBytes` (needs the
+  1 GB stick measurement first) and the head-to-tail window restart count. HX79 itself is still a hypothesis: confirm
+  on the film with the "Low storage: deleting file" logcat line.
+- Not done: A2 passthrough off; the real-ExoPlayer fake adapter test (7.7, needs media3-test-utils); idle CPU on the
+  stick; a real frozen decoder (RK356x, Amlogic, TX6). New strings: `player.remedy_*` (6, en.json only).
+
 ## Findings (sources in chat 2026-11-15, all anecdotal, not benchmarks)
 - Android uses Media3 ExoPlayer 1.11.1, video on the hardware decoder, NextLib FFmpeg for audio only
   (`docs/ARCHITECTURE.md:19`). Desktop already uses mpv (mediamp). Web uses the browser.
