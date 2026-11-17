@@ -16,6 +16,8 @@ export const PAGE_STRINGS = [
     // Resume on your other devices (the apps' ResumeSync): Home's question, shown once, and the switch under Settings.
     'syncplace',
     'theme',
+    // The in-app trailer's sheet on a video's page (ui/TrailerSheet.tsx).
+    'trailer',
     'about.licence_line',
     'support.any_amount',
     'support.buy_coffee',
@@ -245,6 +247,8 @@ export const PAGE_STRINGS = [
     'metadata.seasons',
     'metadata.toggle_off',
     'metadata.trailer',
+    'metadata.trailer_on_youtube',
+    'metadata.trailer_unavailable',
     'metadata.trailers_in_app',
     'metadata.trailers_in_app_detail',
     'nav.chats',

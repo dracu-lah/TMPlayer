@@ -3666,6 +3666,7 @@
   "trailer": {
     "close": "Close trailer",
     "loading": "Loading the trailer…",
+    "loads_from_youtube": "This trailer is played by YouTube and loads from YouTube only after you open it.",
     "play_pause": "Play or pause",
     "title": "Trailer",
     "unavailable_in_app": "This trailer cannot play here. Opening it in YouTube."
