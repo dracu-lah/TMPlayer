@@ -22,7 +22,7 @@
 //        The answer then also says `source: "anilist"` when AniList matched; its pictures are "/al/<tail>",
 //        and /tmdb/extras?...&a=1 asks AniList by that id. Each provider is paused on its own after a throttle.
 //   GET /tmdb/anime?id=<anilist id>
-//        An anime's episode guide (AnimeEpisodes, anime-guide.ts): the run's episodes numbered straight
+//        An anime's episode guide (AnimeEpisodes, src/animeGuide.ts): the run's episodes numbered straight
 //        through ("Show - 123"), each with a title, words, a TMDB still and a date where a source has
 //        them, TMDB's seasons for the layout and the next episode to air. Sources in order: TMDB's
 //        "Absolute order" group or its seasons, Kitsu, Jikan, AniList's streaming list; a later one only
@@ -46,7 +46,7 @@
 import { extras, type Extras, type SeasonStop } from './extras.ts'
 import { mergeChoices } from './choices.ts'
 import { best, accepts, normalise, trusted, type Ask, type Candidate } from './match.ts'
-import * as guide from './anime-guide.ts'
+import * as guide from '../src/animeGuide.ts'
 import * as src from './anime-sources.ts'
 import { BASE as ANILIST, DEFAULT_WAIT_MS as ANILIST_WAIT, EXTRAS_QUERY, SEARCH_QUERY, candidates as aniCandidates, extrasOf as aniExtras, imageAddress } from './anilist.ts'
 
@@ -513,7 +513,7 @@ export function createHandler(deps: Deps) {
         return response
     }
 
-    // ---- an anime's episode guide (anime-guide.ts), kept per source so a long show carries on ----
+    // ---- an anime's episode guide (src/animeGuide.ts), kept per source so a long show carries on ----
 
     const plainPaused: Record<'kitsu' | 'jikan', number> = { kitsu: 0, jikan: 0 }
     const plainLast: Record<'kitsu' | 'jikan', number> = { kitsu: 0, jikan: 0 }

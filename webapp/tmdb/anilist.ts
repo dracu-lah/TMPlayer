@@ -11,6 +11,7 @@
 import type { Candidate } from './match.ts'
 import type { Extras, Person } from './extras.ts'
 import { rating } from './extras.ts'
+import { plain } from '../src/plain.ts'
 
 export const BASE = 'https://graphql.anilist.co'
 /** AniListApi.DEFAULT_WAIT_MS: how long asking stops after a throttle that names no time. */
@@ -41,24 +42,7 @@ const object = (v: unknown): Json | null => (v && typeof v === 'object' && !Arra
 const objects = (v: unknown): Json[] => (Array.isArray(v) ? v.map(object).filter((o): o is Json => o !== null) : [])
 const text = (v: unknown, max = NAME_MAX): string => (typeof v === 'string' && v !== 'null' ? v.trim().slice(0, max) : '')
 
-/** metaPlain: AniList's description as plain text (line breaks kept, tags and entities gone). */
-export function plain(html: string): string {
-    return html
-        .replace(/<br\s*\/?>/gi, '\n')
-        .replace(/<[^>]*>/g, '')
-        .replaceAll('&amp;', '&')
-        .replaceAll('&quot;', '"')
-        .replaceAll('&#39;', "'")
-        .replaceAll('&lt;', '<')
-        .replaceAll('&gt;', '>')
-        .replaceAll('&nbsp;', ' ')
-        .replace(/[ \t]+/g, ' ')
-        .split('\n')
-        .map((l) => l.trim())
-        .join('\n')
-        .replace(/\n{3,}/g, '\n\n')
-        .trim()
-}
+export { plain }
 
 /** The tail of an AniList picture's address the worker serves ("cover/large/bx1-abc.jpg"), or null for any other address. */
 export function imageTail(url: unknown): string | null {

@@ -4,7 +4,7 @@
 // ported for the poster worker (it runs on Cloudflare and cannot load the Kotlin module) and for
 // the page, which rebuilds the guide from the worker's answer. Pure: the providers' answers go in
 // as source lists, one guide comes out (`merge`). A change to the Kotlin rules is a change here;
-// anime-guide.test.ts holds the cases of the apps' AnimeEpisodesTest.
+// tmdb/animeRules.test.ts holds the cases of the apps' AnimeEpisodesTest.
 //
 // The sources, in the order they are asked and the order a title is taken in: TMDB's episode group
 // of type "Absolute order", TMDB's seasons counted in order, Kitsu's episodes (by the MyAnimeList
@@ -15,8 +15,8 @@
 // One difference from the apps, on purpose: a picture counts only when it is a TMDB still ("/abc.jpg"),
 // the one kind of picture the worker serves (`/tmdb/img/...`); a Kitsu or AniList picture is never
 // drawn by the page, so it is never taken as "the picture" in place of a later source's own.
-import type { SeasonStop } from './extras.ts'
-import { plain } from './anilist.ts'
+import type { SeasonStop } from '../tmdb/extras.ts'
+import { plain } from './plain.ts'
 
 export type Source = 'group' | 'seasons' | 'kitsu' | 'jikan' | 'anilist'
 
