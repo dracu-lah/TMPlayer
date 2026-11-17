@@ -150,36 +150,25 @@ fun SignInScreen(auth: AuthState) {
             // one, rather than only once the line is known to be down, and Save logs, for a sign
             // in stuck with no error state to Try again from (HX request, 2026-10-31: the window
             // had no way to get logs out until a pane actually failed). One icon rather than two
-            // text buttons under the form, since both are rare, diagnostic actions.
-            var moreOpen by remember { mutableStateOf(false) }
+            // text buttons under the form, since both are rare, diagnostic actions. Words rather than a
+            // three dot icon (Raju pass 2, 2.4): "Can't connect? Get help" opens both.
             val scope = rememberCoroutineScope()
             val toast = com.tmplayer.ui.components.rememberToast()
-            Box {
-                IconButton(onClick = { moreOpen = true }) {
-                    Icon(TmIcons.MoreVert, contentDescription = s.commonMoreOptions, tint = Tone.muted)
-                }
-                com.tmplayer.ui.components.TmDropdownMenu(expanded = moreOpen, onDismissRequest = { moreOpen = false }) {
-                    androidx.compose.material3.DropdownMenuItem(
-                        text = { Text(s.loginProxySettings) },
-                        onClick = { moreOpen = false; com.tmplayer.ui.connect.ProxyScreenState.open = true },
-                    )
-                    androidx.compose.material3.DropdownMenuItem(
-                        text = { Text(s.logsSave) },
-                        onClick = {
-                            moreOpen = false
-                            scope.launch {
-                                val file = SendLogs.save()
-                                if (file == null) {
-                                    toast(L.logsFailed)
-                                } else {
-                                    toast(L.logsSavedTo(file.absolutePath))
-                                    com.tmplayer.desktop.os.OpenExternal.reveal(file)
-                                }
-                            }
-                        },
-                    )
-                }
-            }
+            com.tmplayer.ui.connect.SignInHelpLink(
+                onProxy = { com.tmplayer.ui.connect.ProxyScreenState.open = true },
+                onSendLogs = {
+                    scope.launch {
+                        val file = SendLogs.save()
+                        if (file == null) {
+                            toast(L.logsFailed)
+                        } else {
+                            toast(L.logsSavedTo(file.absolutePath))
+                            com.tmplayer.desktop.os.OpenExternal.reveal(file)
+                        }
+                    }
+                },
+                sendLogsLabel = s.logsSave,
+            )
             Text(
                 LocalStrings.current.authUnofficial,
                 style = MaterialTheme.typography.labelSmall,

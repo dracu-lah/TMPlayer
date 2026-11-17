@@ -1636,29 +1636,14 @@ private fun Root() {
                                 }
                             }
                         } else {
-                            // A single icon on a phone, where "Proxy settings" and "Send logs" are
-                            // both rare, diagnostic actions: one button under the form reads calmer
-                            // than two competing with it, and the sheet is a tap away either way.
-                            var moreOpen by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
-                            Box {
-                                androidx.compose.material3.IconButton(onClick = { moreOpen = true }) {
-                                    androidx.compose.material3.Icon(
-                                        com.tmplayer.ui.icons.TmIcons.MoreVert,
-                                        contentDescription = loginFooterStrings.commonMoreOptions,
-                                        tint = Tone.muted,
-                                    )
-                                }
-                                com.tmplayer.ui.components.TmDropdownMenu(expanded = moreOpen, onDismissRequest = { moreOpen = false }) {
-                                    androidx.compose.material3.DropdownMenuItem(
-                                        text = { androidx.compose.material3.Text(loginFooterStrings.loginProxySettings) },
-                                        onClick = { moreOpen = false; openProxies() },
-                                    )
-                                    androidx.compose.material3.DropdownMenuItem(
-                                        text = { androidx.compose.material3.Text(loginFooterStrings.logsSend) },
-                                        onClick = { moreOpen = false; sendLogs() },
-                                    )
-                                }
-                            }
+                            // Words on a phone, not an icon (Raju pass 2, 2.4): "Can't connect? Get help" opens the
+                            // proxy settings and Send logs, rare and diagnostic, so one link rather than two buttons
+                            // competing with the form.
+                            com.tmplayer.ui.connect.SignInHelpLink(
+                                onProxy = openProxies,
+                                onSendLogs = sendLogs,
+                                sendLogsLabel = loginFooterStrings.logsSend,
+                            )
                         }
                         androidx.compose.material3.Text(
                             L.authUnofficial,

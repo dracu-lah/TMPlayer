@@ -424,6 +424,7 @@
   },
   "connect": {
     "banner": "Can't reach Telegram right now",
+    "get_help": "Can't connect? Get help",
     "help": "Connection help",
     "hint_blocked": "Telegram may be blocked on this network. A proxy can get you through.",
     "hint_blocked_plain": "Telegram may be blocked on this network. Open More help for a way around it.",
