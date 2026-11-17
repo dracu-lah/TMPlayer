@@ -21,6 +21,16 @@
 //        first for a show and TMDB first for a film, as OnlineMetadata.resolve does; AniList needs no key.
 //        The answer then also says `source: "anilist"` when AniList matched; its pictures are "/al/<tail>",
 //        and /tmdb/extras?...&a=1 asks AniList by that id. Each provider is paused on its own after a throttle.
+//   GET /tmdb/anime?id=<anilist id>
+//        An anime's episode guide (AnimeEpisodes, anime-guide.ts): the run's episodes numbered straight
+//        through ("Show - 123"), each with a title, words, a TMDB still and a date where a source has
+//        them, TMDB's seasons for the layout and the next episode to air. Sources in order: TMDB's
+//        "Absolute order" group or its seasons, Kitsu, Jikan, AniList's streaming list; a later one only
+//        while the earlier left titles missing. { found: true, complete, total, entries, ... } or
+//        { found: false }; 503 as above. A long show is many calls, so one request makes at most
+//        ANIME_CALLS of them and a few seconds' worth; what came is kept at the edge per source and the
+//        answer says `complete: false` (and is not kept itself) until every source has been read: the
+//        page asks again and the next request carries on from there.
 //   GET /tmdb/img/<w185|w300|w342|w500|w780>/<file>.jpg   (and .../al/<cover|banner|character>/... for AniList's)
 //        a picture's bytes from TMDB's image host, same origin so the page can keep them in the
 //        Cache API as it keeps thumbnails.
@@ -33,9 +43,11 @@
 // refused key is not asked with again for a day, a dropped call or a server error is tried once
 // more after a second, and none of these failures is ever cached. The title is the only thing
 // that leaves for TMDB: no chat, file or account.
-import { extras, type Extras } from './extras.ts'
+import { extras, type Extras, type SeasonStop } from './extras.ts'
 import { mergeChoices } from './choices.ts'
 import { best, accepts, normalise, trusted, type Ask, type Candidate } from './match.ts'
+import * as guide from './anime-guide.ts'
+import * as src from './anime-sources.ts'
 import { BASE as ANILIST, DEFAULT_WAIT_MS as ANILIST_WAIT, EXTRAS_QUERY, SEARCH_QUERY, candidates as aniCandidates, extrasOf as aniExtras, imageAddress } from './anilist.ts'
 
 export interface Env {
@@ -66,6 +78,16 @@ const DEFAULT_WAIT = 10_000
 const RETRY = 1_000
 /** How long AniList is left alone after a server error (a 429 names its own time, up to 600 s). */
 const ANILIST_BACKOFF = 30_000
+/** One /tmdb/anime request makes at most this many calls (Pages allows 50 subrequests), over at most this long. */
+export const ANIME_CALLS = 36
+export const ANIME_TIME_MS = 15_000
+/** KitsuApi.GAP_MS, JikanApi.GAP_MS and their DEFAULT_WAIT_MS: the spacing of calls and the pause after a throttle. */
+const KITSU_GAP = 400
+const JIKAN_GAP = 1_100
+const PLAIN_WAIT = 30_000
+/** OnlineMetadata.MISSING_TITLES_OK and TMDB_NAMES. */
+const MISSING_TITLES_OK = 2
+const TMDB_NAMES = 4
 const SIZES = new Set(['w185', 'w300', 'w342', 'w500', 'w780'])
 const FILE = /^\/[A-Za-z0-9_-]{8,64}\.(jpg|png|webp)$/
 
@@ -491,6 +513,320 @@ export function createHandler(deps: Deps) {
         return response
     }
 
+    // ---- an anime's episode guide (anime-guide.ts), kept per source so a long show carries on ----
+
+    const plainPaused: Record<'kitsu' | 'jikan', number> = { kitsu: 0, jikan: 0 }
+    const plainLast: Record<'kitsu' | 'jikan', number> = { kitsu: 0, jikan: 0 }
+
+    /** A GET to Kitsu or Jikan (no key): spaced by their gap, paused on its own after a throttle, one more try after a dropped call. */
+    async function plain(provider: 'kitsu' | 'jikan', url: string, accept: string): Promise<Reply> {
+        if (now() < plainPaused[provider]) return { kind: 'throttled', waitMs: plainPaused[provider] - now() }
+        const once = async (): Promise<Reply> => {
+            const wait = plainLast[provider] + (provider === 'kitsu' ? KITSU_GAP : JIKAN_GAP) - now()
+            if (wait > 0) await sleep(wait)
+            plainLast[provider] = now()
+            let response: Response
+            try {
+                response = await deps.fetch(new Request(url, { headers: { Accept: accept, 'User-Agent': 'TMPlayer-web-posters' } }))
+            } catch {
+                return { kind: 'failed' }
+            }
+            if (response.status === 429) {
+                const seconds = Number(response.headers.get('retry-after'))
+                const waitMs = seconds > 0 ? Math.min(600, Math.max(1, seconds)) * 1000 : PLAIN_WAIT
+                plainPaused[provider] = now() + waitMs
+                return { kind: 'throttled', waitMs }
+            }
+            if (response.status === 404) return { kind: 'missing' }
+            if (!response.ok) return { kind: 'failed' }
+            try {
+                return { kind: 'ok', json: await response.json() }
+            } catch {
+                return { kind: 'failed' }
+            }
+        }
+        const first = await once()
+        if (first.kind !== 'failed') return first
+        await sleep(RETRY)
+        return once()
+    }
+
+    /** What the cache files one source's progress under: kept a day, so a guide cut short resumes where it stopped. */
+    const partRequest = (origin: string, part: string, id: string) => new Request(`${origin}/tmdb/anime-part?${new URLSearchParams({ v: '1', part, id })}`)
+
+    async function readPart<T>(origin: string, part: string, id: string): Promise<T | null> {
+        const hit = await deps.cache?.match(partRequest(origin, part, id)).catch(() => undefined)
+        if (!hit) return null
+        return ((await hit.json().catch(() => null)) as T | null) ?? null
+    }
+
+    async function savePart(origin: string, part: string, id: string, value: unknown): Promise<void> {
+        if (!deps.cache) return
+        await deps.cache.put(partRequest(origin, part, id), json(value, 200, { 'Cache-Control': `public, s-maxage=${DAY}` })).catch(() => {})
+    }
+
+    /** A source read page by page, kept as far as it got (a long show is dozens of calls, more than one request makes). */
+    interface Progress {
+        items: guide.ListedEpisode[]
+        next: number
+        done: boolean
+    }
+
+    /** One show's guide, as the apps' OnlineMetadata.buildGuide builds it, within this request's calls. */
+    async function anime(url: URL, env: Env): Promise<Response> {
+        const raw = url.searchParams.get('id')
+        const id = raw !== null && /^\d{1,9}$/.test(raw) ? Number(raw) : NaN
+        if (!Number.isInteger(id) || id < 1) return json({ error: 'bad request' }, 400)
+        const finalKey = new Request(`${url.origin}/tmdb/anime?${new URLSearchParams({ v: '1', id: String(id) })}`)
+        const kept = await deps.cache?.match(finalKey).catch(() => undefined)
+        if (kept) {
+            const headers = new Headers(kept.headers)
+            headers.set('X-Poster-Cache', 'hit')
+            return new Response(kept.body, { status: kept.status, headers })
+        }
+        const budget = { calls: 0, until: now() + ANIME_TIME_MS }
+        /** Whether one more call may be made now: false once this request has made its share, and the guide is cut short. */
+        const spend = () => {
+            if (budget.calls >= ANIME_CALLS || now() > budget.until) return false
+            budget.calls++
+            return true
+        }
+        let complete = true
+        const origin = url.origin
+        const sid = String(id)
+
+        // AniList's own facts: the run's length, the next to air, the MyAnimeList id, the streaming list.
+        let run = await readPart<src.Run | { none: true }>(origin, 'run', sid)
+        if (!run) {
+            if (now() < aniPausedUntil) return unavailable('throttled', (aniPausedUntil - now()) / 1000)
+            spend()
+            const reply = await aniRetrying(src.EPISODES_QUERY, { id })
+            if (reply.kind === 'throttled') return unavailable('throttled', reply.waitMs / 1000)
+            if (reply.kind === 'failed' || reply.kind === 'refused') return unavailable('unavailable')
+            run = (reply.kind === 'ok' ? src.runOf(reply.json) : null) ?? { none: true }
+            await savePart(origin, 'run', sid, run)
+        }
+        if ('none' in run) {
+            const response = json({ found: false }, 200, { 'Cache-Control': `public, max-age=3600, s-maxage=${DAY}`, 'X-Poster-Cache': 'miss' })
+            if (deps.cache) {
+                const put = deps.cache.put(finalKey, response.clone()).catch(() => {})
+                deps.later?.(put)
+            }
+            return response
+        }
+        const facts = run
+        const expected = facts.episodes ?? (facts.next && facts.next.episode > 1 ? facts.next.episode - 1 : null)
+        const lists: guide.SourceList[] = []
+        let counts: SeasonStop[] = []
+
+        // TMDB: the show found by the provider's names, its seasons with their counts, then its "Absolute order" group or its seasons' episodes.
+        const key = env.TMDB_API_KEY?.trim() || null
+        const tmdbBlocked = !key || now() < pausedUntil || (refusedAt !== 0 && now() - refusedAt < REFUSED_RETRY)
+        if (key && tmdbBlocked) complete = false
+        if (key && !tmdbBlocked) {
+            const part = await tmdbSide(origin, sid, key, facts.names, expected, spend)
+            complete = complete && part.complete
+            lists.push(...part.lists)
+            counts = part.counts
+        }
+
+        const missingTitles = () => {
+            const sofar = guide.merge(lists, counts, facts.next)
+            const total = expected ?? sofar.total
+            if (total <= 0) return true
+            const named = sofar.entries.filter((e) => e.absolute <= total && e.name.trim()).length
+            return total - named > Math.max(MISSING_TITLES_OK, Math.floor(total / 50))
+        }
+
+        if (facts.malId && missingTitles()) {
+            const part = await kitsuSide(origin, facts.malId, expected, spend)
+            complete = complete && part.complete
+            if (part.list) lists.push(part.list)
+        }
+        if (facts.malId && missingTitles()) {
+            const part = await jikanSide(origin, facts.malId, expected, spend)
+            complete = complete && part.complete
+            if (part.list) lists.push(part.list)
+        }
+        if (facts.streaming.length) lists.push({ source: 'anilist', pieces: facts.streaming })
+
+        const built = guide.merge(lists, counts, facts.next, facts.episodes ?? 0)
+        const answer = built.isEmpty ? { found: false } : guide.toAnswer(built, complete)
+        // A guide cut short is shown but not kept, so a later request carries on; a whole one is kept a day (the apps' GUIDE_TTL).
+        const response = json(answer, 200, complete ? { 'Cache-Control': `public, max-age=300, s-maxage=${DAY}`, 'X-Poster-Cache': 'miss' } : { 'Cache-Control': 'no-store', 'X-Poster-Cache': 'miss' })
+        if (deps.cache && complete) {
+            const put = deps.cache.put(finalKey, response.clone()).catch(() => {})
+            deps.later?.(put)
+        }
+        return response
+    }
+
+    type TmdbPart = { lists: guide.SourceList[]; counts: SeasonStop[]; complete: boolean }
+
+    /** OnlineMetadata.tmdbAnime: TMDB's lists and season counts for the show, within the calls left. */
+    async function tmdbSide(origin: string, sid: string, key: string, names: string[], expected: number | null, spend: () => boolean): Promise<TmdbPart> {
+        const none: TmdbPart = { lists: [], counts: [], complete: true }
+        const cut: TmdbPart = { lists: [], counts: [], complete: false }
+        let stored = await readPart<{ id: string | null }>(origin, 'tmdbid', sid)
+        if (!stored) {
+            let found: string | null = null
+            for (const name of names.filter(Boolean).slice(0, TMDB_NAMES)) {
+                if (!spend()) return cut
+                const reply = await retrying(key, 'search/tv', `query=${encodeURIComponent(name)}&include_adult=false&language=en-US`)
+                if (reply.kind === 'missing') continue
+                if (reply.kind !== 'ok') {
+                    stopped(reply)
+                    return cut
+                }
+                const results: unknown[] = Array.isArray(reply.json?.results) ? reply.json.results.slice(0, 40) : []
+                const list = results.filter((o) => o && typeof o === 'object').map((o) => candidate(false, o))
+                const pick = best({ title: name, year: null, kind: 'show', tmdbId: null, series: true, languages: [] }, list, true)
+                if (pick) {
+                    found = pick.id
+                    break
+                }
+            }
+            stored = { id: found }
+            await savePart(origin, 'tmdbid', sid, stored)
+        }
+        const tmdbId = stored.id
+        if (!tmdbId || !/^\d{1,9}$/.test(tmdbId)) return none
+
+        let show = await readPart<src.ShowGuide>(origin, 'tmdbshow', tmdbId)
+        if (!show) {
+            if (!spend()) return cut
+            const reply = await retrying(key, `tv/${tmdbId}`, 'language=en-US&append_to_response=episode_groups')
+            if (reply.kind === 'missing') return none
+            if (reply.kind !== 'ok') {
+                stopped(reply)
+                return cut
+            }
+            show = src.showGuideOf(reply.json)
+            await savePart(origin, 'tmdbshow', tmdbId, show)
+        }
+        const layout = guide.layout(show.seasons)
+        const total = layout.reduce((n, s) => n + s.episodes, 0)
+        const wrong = !guide.plausible(expected, { source: 'seasons', pieces: [{ absolute: Math.max(total, 1) }] })
+        if (!layout.length || wrong) return none
+
+        // The absolute order group, the one with the most episodes where TMDB has several.
+        const group = show.groups.filter((g) => g.type === 2).reduce<(typeof show.groups)[number] | null>((a, g) => (!a || g.episodes > a.episodes ? g : a), null)
+        if (group) {
+            let episodes = await readPart<guide.GroupEpisode[]>(origin, 'tmdbgroup', group.id)
+            if (!episodes) {
+                if (!spend()) return { lists: [], counts: layout, complete: false }
+                const reply = await retrying(key, `tv/episode_group/${encodeURIComponent(group.id)}`, 'language=en-US')
+                if (reply.kind === 'ok') {
+                    episodes = src.groupOf(reply.json)
+                    await savePart(origin, 'tmdbgroup', group.id, episodes)
+                } else if (reply.kind !== 'missing') {
+                    stopped(reply)
+                    return { lists: [], counts: layout, complete: false }
+                }
+            }
+            const list = episodes ? guide.fromGroup(episodes) : null
+            if (list && guide.plausible(expected, list)) return { lists: [list], counts: layout, complete: true }
+        }
+
+        // The seasons counted in order: one call for each twenty not yet kept.
+        const kept = await readPart<{ seasons: Record<string, guide.ListedEpisode[]> }>(origin, 'tmdbseasons', tmdbId)
+        const bySeason = new Map<number, guide.ListedEpisode[]>(Object.entries(kept?.seasons ?? {}).map(([n, list]) => [Number(n), list]))
+        const needed = layout.map((s) => s.number).filter((n) => !bySeason.has(n))
+        let complete = true
+        for (let i = 0; i < needed.length; i += src.APPEND_LIMIT) {
+            const chunk = needed.slice(i, i + src.APPEND_LIMIT)
+            if (!spend()) {
+                complete = false
+                break
+            }
+            const reply = await retrying(key, `tv/${tmdbId}`, `language=en-US&append_to_response=${chunk.map((n) => `season/${n}`).join(',')}`)
+            if (reply.kind === 'ok') {
+                for (const [n, list] of src.seasonsOf(reply.json, chunk)) bySeason.set(n, list)
+            } else if (reply.kind !== 'missing') {
+                stopped(reply)
+                complete = false
+                break
+            }
+        }
+        // What came is kept, a chunk at a time, so a show of many seasons carries on where it stopped.
+        if (needed.length) await savePart(origin, 'tmdbseasons', tmdbId, { seasons: Object.fromEntries(bySeason) })
+        return { lists: [guide.fromSeasons(bySeason, layout)], counts: layout, complete }
+    }
+
+    type Listing = { list: guide.SourceList | null; complete: boolean }
+
+    /** KitsuApi: the anime by its MyAnimeList id, then its episodes twenty a page, kept as far as they got. */
+    async function kitsuSide(origin: string, mal: string, expected: number | null, spend: () => boolean): Promise<Listing> {
+        let stored = await readPart<{ id: string | null }>(origin, 'kitsuid', mal)
+        if (!stored) {
+            if (!spend()) return { list: null, complete: false }
+            const reply = await plain('kitsu', `${src.KITSU}/mappings?filter%5BexternalSite%5D=myanimelist%2Fanime&filter%5BexternalId%5D=${encodeURIComponent(mal)}&include=item`, 'application/vnd.api+json')
+            if (reply.kind === 'ok') stored = { id: src.kitsuIdOf(reply.json) }
+            else if (reply.kind === 'missing') stored = { id: null }
+            else return { list: null, complete: false }
+            await savePart(origin, 'kitsuid', mal, stored)
+        }
+        const kitsuId = stored.id
+        if (!kitsuId || !/^\d{1,12}$/.test(kitsuId)) return { list: null, complete: true }
+        return paged('kitsu', origin, kitsuId, expected, spend, (offset) => `${src.KITSU}/anime/${kitsuId}/episodes?page%5Blimit%5D=${src.KITSU_PAGE}&page%5Boffset%5D=${offset}&sort=number`, 'application/vnd.api+json', src.kitsuPageOf, src.KITSU_PAGE, src.KITSU_MAX_PAGES, 0)
+    }
+
+    /** JikanApi: the episodes of the MyAnimeList id, a hundred a page, kept as far as they got. */
+    function jikanSide(origin: string, mal: string, expected: number | null, spend: () => boolean): Promise<Listing> {
+        return paged('jikan', origin, mal, expected, spend, (page) => `${src.JIKAN}/anime/${encodeURIComponent(mal)}/episodes?page=${page}`, 'application/json', src.jikanPageOf, 1, src.JIKAN_MAX_PAGES, 1)
+    }
+
+    /** A list read a page at a time from `start` (a page number or an offset), `step` further each page, carrying on from what an earlier request kept. */
+    async function paged(
+        provider: 'kitsu' | 'jikan',
+        origin: string,
+        id: string,
+        expected: number | null,
+        spend: () => boolean,
+        address: (cursor: number) => string,
+        accept: string,
+        read: (json: unknown) => src.Page,
+        step: number,
+        maxPages: number,
+        start: number,
+    ): Promise<Listing> {
+        const kept = await readPart<Progress>(origin, provider, id)
+        const sound = kept && Array.isArray(kept.items) && Number.isInteger(kept.next) && kept.next >= start && kept.next < 1_000_000
+        const progress: Progress = sound ? { items: kept.items.slice(0, guide.MAX_EPISODES), next: kept.next, done: kept.done === true } : { items: [], next: start, done: false }
+        const wasDone = progress.done
+        let pages = 0
+        let first = progress.items.length === 0
+        let finished = progress.done
+        let cut = false
+        while (!finished && pages < maxPages) {
+            if (!spend()) {
+                cut = true
+                break
+            }
+            const reply = await plain(provider, address(progress.next), accept)
+            if (reply.kind === 'ok') {
+                const page = read(reply.json)
+                progress.items.push(...page.list)
+                progress.next += step
+                pages++
+                if (!page.more || progress.items.length >= guide.MAX_EPISODES) finished = true
+            } else if (reply.kind === 'missing' && first) {
+                finished = true
+            } else {
+                cut = true
+                break
+            }
+            first = false
+        }
+        // A list read to its end is kept whole; a cut one is kept as far as it got, to carry on from.
+        progress.done = finished
+        if (pages > 0 || finished !== wasDone) await savePart(origin, provider, id, progress)
+        const list = progress.items.length ? guide.fromNumbered(provider, progress.items) : null
+        // A whole list must fit the run (a wrong show of a similar name is left out); a cut one is used as it is, for now.
+        const usable = list && (!finished || guide.plausible(expected, list)) ? list : null
+        return { list: usable, complete: finished && !cut }
+    }
+
     async function image(url: URL): Promise<Response> {
         const [, , , size, ...rest] = url.pathname.split('/')
         const file = '/' + rest.join('/')
@@ -523,6 +859,7 @@ export function createHandler(deps: Deps) {
         if (url.pathname === '/tmdb/poster') return poster(request, url, env)
         if (url.pathname === '/tmdb/search') return search(url, env)
         if (url.pathname === '/tmdb/extras') return details(url, env)
+        if (url.pathname === '/tmdb/anime') return anime(url, env)
         if (url.pathname.startsWith('/tmdb/img/')) return image(url)
         return new Response('Not found', { status: 404 })
     }
