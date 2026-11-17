@@ -230,7 +230,7 @@ export function fromNumbered(source: Source, episodes: readonly ListedEpisode[])
     }
 }
 
-const STREAM_TITLE = /^\s*(?:episode|ep\.?|e|folge|épisode|episodio|ep)\s*(\d{1,4})\s*[-:–—.]\s*(.+)$/i
+const STREAM_TITLE = /^\s*(?:episode|ep\.?|e|folge|épisode|episodio|ep)\s*(\d{1,4})\s*[-:\u2013\u2014.]\s*(.+)$/i
 
 /**
  * An AniList streaming episode ("Episode 12 - The Title", a picture): the number is in the
