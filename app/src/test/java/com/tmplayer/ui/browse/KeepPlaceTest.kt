@@ -88,7 +88,10 @@ class KeepPlaceTest {
     @get:Rule
     val rule = createAndroidComposeRule<ComponentActivity>()
 
-    private val settings get() = SettingsStore(RuntimeEnvironment.getApplication())
+    // One store for the whole test, as Home keeps one: rememberKeepPlaceCardState remembers its
+    // state by the store, so a new store on every read made a new state (keep = false) whenever
+    // the stored flag recomposed the caller, and the card "vanished" depending on timing.
+    private val settings by lazy { SettingsStore(RuntimeEnvironment.getApplication()) }
 
     @Before
     fun noWaitingForALine() {

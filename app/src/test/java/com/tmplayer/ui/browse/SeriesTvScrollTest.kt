@@ -25,6 +25,7 @@ import com.tmplayer.data.MediaItem
 import com.tmplayer.data.Series
 import com.tmplayer.data.SeriesShelf
 import com.tmplayer.data.ShelfEntry
+import com.tmplayer.online.OnlineMetadata
 import com.tmplayer.ui.theme.TmMaterialTheme
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -42,9 +43,12 @@ import org.robolectric.annotation.GraphicsMode
 @Config(sdk = [28], qualifiers = "w960dp-h540dp-land-television-night-xhdpi")
 class SeriesTvScrollTest {
 
+    private var metadata: OnlineMetadata? = null
+
     @After
     fun tearDown() {
         FormFactor.override(false)
+        OnlineMetadata.current = metadata
     }
 
     private var nextId = 1L
@@ -85,9 +89,9 @@ class SeriesTvScrollTest {
         val activity = open(bergretter())
         focusPlay(activity)
         press(activity, KeyEvent.KEYCODE_DPAD_DOWN)
-        assertTrue("Down from Play lands on the up-next episode", here(activity).contains("S1 E1"))
+        here(activity).let { assertTrue("Down from Play lands on the up-next episode: $it", it.contains("S1 E1")) }
         press(activity, KeyEvent.KEYCODE_DPAD_UP)
-        assertTrue("Up from the episodes lands on the season shown", here(activity).startsWith("Season 1/"))
+        here(activity).let { assertTrue("Up from the episodes lands on the season shown: $it", it.startsWith("Season 1/")) }
         repeat(17) { press(activity, KeyEvent.KEYCODE_DPAD_RIGHT) }
         assertTrue("Right x17 reaches Season 18", here(activity).startsWith("Season 18/"))
         press(activity, KeyEvent.KEYCODE_DPAD_RIGHT)
@@ -108,9 +112,11 @@ class SeriesTvScrollTest {
             val bottom = Regex("@y(-?\\d+)-(\\d+)").find(stop)?.groupValues?.get(2)?.toInt() ?: Int.MAX_VALUE
             assertTrue("each focused card is on the 1080 px screen: $stop", bottom in 1..1080)
         }
-        // One more Down leaves the list's last card for what is under it (the cast), not out of the page.
+        // One more Down at the last card keeps the remote in the page: on what is under the list
+        // when there is something (a show's cast, with online metadata), else on the last card,
+        // never on nothing. ("@y" is only written for a focused node.)
         press(activity, KeyEvent.KEYCODE_DPAD_DOWN)
-        assertTrue("past the last episode the remote goes on", !here(activity).contains("S18 E30") && here(activity).isNotBlank())
+        here(activity).let { assertTrue("past the last episode the focus stays in the page: $it", it.contains("@y")) }
         var ups = 0
         while (!here(activity).startsWith("Season") && ups++ < 80) press(activity, KeyEvent.KEYCODE_DPAD_UP)
         assertTrue("Up walks back to the season tabs: ${here(activity)}", here(activity).startsWith("Season 18/"))
@@ -136,6 +142,12 @@ class SeriesTvScrollTest {
 
     private fun open(series: Series): ComponentActivity {
         FormFactor.override(true)
+        // The page as the chats alone draw it. The test application turns online metadata on with
+        // the build's TMDB key, so a build with one fetched the show's real seasons over the
+        // network: the tabs gained the guide's dot and lost their episode count, and what the
+        // remote found depended on TMDB's answer.
+        metadata = OnlineMetadata.current
+        OnlineMetadata.current = null
         androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().setInTouchMode(false)
         val activity = Robolectric.buildActivity(ComponentActivity::class.java).setup().get()
         activity.window.decorView.dispatchWindowFocusChanged(true)
