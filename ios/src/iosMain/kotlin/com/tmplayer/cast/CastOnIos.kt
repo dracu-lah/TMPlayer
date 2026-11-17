@@ -88,3 +88,10 @@ class LoopbackStream private constructor() : Closeable {
         ): LoopbackStream = throw IOException("No loopback server on iOS")
     }
 }
+
+/** Settings' "Add a TV by its address" row: casting is not on iOS, so the row is hidden and there is no entry to open. */
+const val ADD_TV_ENTRY_AVAILABLE: Boolean = false
+
+/** The row's press: never reached on iOS, where [ADD_TV_ENTRY_AVAILABLE] hides the row. */
+@Composable
+fun rememberAddTvEntry(): () -> Unit = {}

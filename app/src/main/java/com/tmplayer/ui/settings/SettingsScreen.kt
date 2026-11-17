@@ -1326,8 +1326,8 @@ fun SettingsScreen(
                         },
                     )
                 }
-                // A TV that discovery never finds: a phone casts (a television does not), so only here.
-                if (touch) {
+                // A TV that discovery never finds: a phone casts (a television does not), so only here (and not on iOS, which does not cast).
+                if (touch && com.tmplayer.cast.ADD_TV_ENTRY_AVAILABLE) {
                     item {
                         ActionRow(
                             title = s.castAddEntry,

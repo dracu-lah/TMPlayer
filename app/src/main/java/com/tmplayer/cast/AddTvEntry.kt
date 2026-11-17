@@ -13,6 +13,9 @@ import com.tmplayer.ui.components.AddTvDialog
 import com.tmplayer.ui.components.showMessage
 import com.tmplayer.ui.i18n.LocalStrings
 
+/** Whether Settings shows the "Add a TV by its address" row: Android casts, iOS has no casting (CastOnIos.kt says false). */
+const val ADD_TV_ENTRY_AVAILABLE: Boolean = true
+
 /**
  * "Add a TV by its address" outside the Cast picker (Settings, Playback): the same [AddTvDialog]
  * the picker's last line opens, for a TV that discovery never finds, so a person does not have to
