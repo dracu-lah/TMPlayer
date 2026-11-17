@@ -260,7 +260,8 @@ jobs:
   # every push. Ubuntu 24.04, pinned so the image does not move under a release. The bundled TDLib
   # and libmpv are the glibc 2.35 builds (.github/actions/linux-natives, built in an Ubuntu 22.04
   # container, cached by recipe, hashes in natives/linux-2-35/PINS.txt), which is the floor the
-  # downloads promise; glibc-floor.sh fails the job if any native needs more.
+  # downloads promise; glibc-floor.sh fails the job if any native needs more, and the action then runs
+  # both packages in a plain Ubuntu 22.04 container, before the upload below hands them to the publish job.
   desktop-linux:
     name: Desktop (Linux)
     needs: version
