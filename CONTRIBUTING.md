@@ -19,6 +19,25 @@ In short: JDK 21, your own Telegram credentials in `local.properties`, then
 
 Never commit credentials.
 
+### iPhone and iPad
+
+The iOS and iPadOS app (`iosApp/`, `:ios`, the `ios*` source sets of `:core` and `:ui`) builds on a
+Mac with Apple silicon, Xcode with the iOS 26.4 SDK and JDK 21; everything else, including the
+Telegram credentials in `local.properties`, is as above. [docs/IOS.md](docs/IOS.md) has the setup,
+the tests and how a release is made. `scripts/ios-setup.sh` checks a Mac and prints what is missing.
+
+```bash
+scripts/ios-setup.sh                         # what this Mac still needs
+open iosApp/TMPlayer.xcodeproj               # then run the TMPlayer scheme on a simulator
+python3 -I -m unittest discover -s iosApp/release   # the release scripts, on any machine
+```
+
+On Linux and Windows the iOS targets are off, so nothing about them slows an Android or desktop
+build; `-Ptmplayer.ios=true` turns them on to check the iOS copies of shared code. A change to
+`app/` or `core/` is compiled for iOS too, over stand-ins for the Android and JDK APIs: if it uses
+something new there, say so in the pull request so it gets a Mac build. iOS bugs use the
+"Bug report (iPhone and iPad)" template.
+
 ## Ground rules
 
 - **Existing libraries first.** Before writing a component, check if TDLib, Media3, or an established GPL-compatible library already does it. Custom code needs a reason.

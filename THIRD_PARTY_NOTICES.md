@@ -6,8 +6,9 @@ later version (GPL-3.0-or-later), with the additional permission for OpenSSL in
 components below. Their copyrights remain with their respective authors, and their licence terms
 continue to apply.
 
-The Android app (phone and TV) and the desktop app (Windows, Linux and macOS) ship different components,
-so each has its own section. Libraries both use are listed once, under "Shared".
+The Android app (phone and TV), the desktop app (Windows, Linux and macOS) and the iPhone and iPad
+app ship different components, so each has its own section. Libraries they share are listed once,
+under "Shared".
 
 ## Android
 
@@ -264,6 +265,61 @@ or MPL-2.0 (Mediabunny and its coders, whose source ships in each npm package), 
   every deploy serves the exact sources at `/libav/sources/` (`webapp/libav/sources.sh`).
 - Kotlin standard library: Apache-2.0, inside the app's rules compiled from `:core`.
 
+## iOS and iPadOS
+
+The iOS and iPadOS port started from TMPlayer for Apple by Pietro Giuseppe D'Amico
+(github.com/Killua99x/TMPlayer-for-apple, GPL-3.0). Its code in `iosApp/`, `ios/`, the `ios*` source
+sets of `core/` and `ui/` and `gradle/ios-*.gradle.kts`, and its changes to the shared code, are
+used under the GPL-3.0 and keep their notices (docs/IOS.md).
+
+The iPhone and iPad app, built from `iosApp/` and `:ios`, is distributed as an unsigned IPA from
+this repository's releases tagged `apple-v*`. Each release page links the source of that version and
+of MPVKit. The components below were read from the resolved packages and the built app
+(2026-11-13, by TMPlayer for Apple).
+
+- MPVKit 1.0.0 (<https://github.com/mpvkit/MPVKit/tree/1.0.0>), its `MPVKit` product only, never
+  `MPVKit-GPL`. It bundles libmpv and FFmpeg built without their GPL parts, and the libraries they
+  need:
+
+| Component | Version | Licence |
+|---|---|---|
+| mpv (libmpv) | 0.41.0 | LGPL-2.1-or-later (mpv's LGPL build) |
+| FFmpeg (libavcodec, libavformat, libavfilter, libavutil, libavdevice, libswresample, libswscale) | libavcodec 62.28.102 | LGPL-3.0-or-later (as built) |
+| libplacebo | 7.360.1 | LGPL-2.1-or-later |
+| GnuTLS | 3.8.11 | LGPL-2.1-or-later |
+| Nettle and Hogweed | as built by MPVKit 1.0.0 | LGPL-3.0-or-later or GPL-2.0-or-later |
+| GMP | as built by MPVKit 1.0.0 | LGPL-3.0-or-later or GPL-2.0-or-later |
+| OpenSSL (libssl, libcrypto) | 3.3.5 | Apache-2.0 |
+| libbluray | as built by MPVKit 1.0.0 | LGPL-2.1-or-later |
+| uchardet | as built by MPVKit 1.0.0 | MPL-1.1, GPL-2.0-or-later or LGPL-2.1-or-later |
+| FriBidi | as built by MPVKit 1.0.0 | LGPL-2.1-or-later |
+| libass | as built by MPVKit 1.0.0 | ISC |
+| FreeType | as built by MPVKit 1.0.0 | FTL or GPL-2.0-or-later, used under the FTL |
+| HarfBuzz | as built by MPVKit 1.0.0 | MIT |
+| libunibreak | as built by MPVKit 1.0.0 | Zlib |
+| Little CMS (lcms2) | as built by MPVKit 1.0.0 | MIT |
+| dav1d | as built by MPVKit 1.0.0 | BSD-2-Clause |
+| uavs3d | as built by MPVKit 1.0.0 | BSD-3-Clause |
+| libdovi (dovi_tool) | as built by MPVKit 1.0.0 | MIT |
+| LuaJIT | 2.1 | MIT |
+| shaderc | as built by MPVKit 1.0.0 | Apache-2.0 |
+| MoltenVK | as built by MPVKit 1.0.0 | Apache-2.0 |
+
+uavs3d: Copyright (c) 2018-2022 Peking University Shenzhen Graduate School, Peng Cheng
+Laboratory, and Guangdong Bohua UHD Innovation Corporation. All rights reserved. Its licence
+terms are at <https://github.com/uavs3/uavs3d/blob/master/LICENSE>.
+
+The LGPL libraries are dynamic frameworks inside the app bundle (its Frameworks folder), so each
+can be replaced by a build of one's own. The source of each is linked from MPVKit's page above, and
+the app's own source, with what it takes to build and sign it, is this repository (docs/IOS.md).
+
+- TDLib on iOS, built into the app through tdl-coroutines (see "Shared"), links OpenSSL 3.1.5
+  (Apache-2.0) and zlib 1.3.0.1 (Zlib).
+- Compose Multiplatform 1.12.2 for iOS, with Skiko and the Skia library it bundles: Apache License
+  2.0 (Compose and Skiko) and BSD-3-Clause (Skia): <https://github.com/JetBrains/compose-multiplatform>
+  and <https://github.com/JetBrains/skiko>.
+- The app icon is TMPlayer's own, made from the Android launcher icon by `iosApp/make-app-icon.py`.
+
 ## Shared
 
 ### tdl-coroutines 15.0.0 and TDLib 1.8.67
@@ -353,6 +409,7 @@ and credited in About.
   <https://opensource.org/license/bsd-3-clause>
 - ISC: <https://opensource.org/license/isc-license-txt>
 - Zlib: <https://opensource.org/license/zlib>
+- MPL-1.1: <https://www.mozilla.org/en-US/MPL/1.1/>
 - FreeType Project License: <https://gitlab.freedesktop.org/freetype/freetype/-/blob/master/docs/FTL.TXT>
 - libpng: <http://www.libpng.org/pub/png/src/libpng-LICENSE.txt>
 - OpenSSL 1.1.1 (OpenSSL and SSLeay): <https://www.openssl.org/source/license-openssl-ssleay.txt>
