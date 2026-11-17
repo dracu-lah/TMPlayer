@@ -248,6 +248,18 @@ internal fun PlaybackRows(state: ShellState, jumps: Map<SetupStep, JumpTarget>) 
             scope.launch { settings.setResumeRewindMs(it) }
         }
     }
+    // A TV that discovery never finds: the same dialog as the player's Cast menu, reached without starting a cast.
+    var addingTv by remember { mutableStateOf(false) }
+    Action(s.castAddEntry, s.settingsAddTvDetail, TmIcons.Tv) { addingTv = true }
+    if (addingTv) {
+        val saved by com.tmplayer.desktop.cast.DesktopCast.discovery.saved.collectAsState()
+        com.tmplayer.ui.components.AddTvDialog(
+            saved = saved,
+            onAdd = com.tmplayer.desktop.cast.DesktopCast.discovery::add,
+            onRemove = com.tmplayer.desktop.cast.DesktopCast.discovery::remove,
+            onDismiss = { addingTv = false },
+        )
+    }
 }
 
 /**

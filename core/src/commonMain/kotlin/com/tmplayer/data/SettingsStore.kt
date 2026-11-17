@@ -2409,9 +2409,9 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
         }
     }
 
-    /** Puts back a list Clear all took, for its Undo. */
+    /** Puts back a list Clear all took, for its Undo, under any search made since. */
     suspend fun restoreRecentSearches(searches: List<String>) {
-        prefs.edit { it[RECENT_SEARCHES] = RecentSearches.encode(searches.take(RecentSearches.LIMIT)) }
+        prefs.edit { it[RECENT_SEARCHES] = RecentSearches.encode(RecentSearches.restore(searches, RecentSearches.decode(it[RECENT_SEARCHES]))) }
     }
 
     suspend fun clearRecentSearches() {

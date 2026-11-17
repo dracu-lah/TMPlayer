@@ -428,6 +428,8 @@ fun SettingsScreen(
     var pickingLanguage by remember { mutableStateOf(false) }
     var pickingLayout by remember { mutableStateOf(false) }
     var stylingSubtitles by remember { mutableStateOf(false) }
+    // "Add a TV by its address" (Playback, phone only): the Cast picker's own dialog, reachable without starting a cast.
+    val addTv = com.tmplayer.cast.rememberAddTvEntry()
     var showingLearnt by remember { mutableStateOf(false) }
     var askForgetAllLearnt by remember { mutableStateOf(false) }
     var trackPicker by remember { mutableStateOf<TrackLanguagePicker?>(null) }
@@ -1168,6 +1170,17 @@ fun SettingsScreen(
                             }
                         },
                     )
+                }
+                // A TV that discovery never finds: a phone casts (a television does not), so only here.
+                if (touch) {
+                    item {
+                        ActionRow(
+                            title = s.castAddEntry,
+                            subtitle = s.settingsAddTvDetail,
+                            icon = TmIcons.Tv,
+                            onClick = addTv,
+                        )
+                    }
                 }
             }
 

@@ -174,6 +174,11 @@ internal fun MediaDetailOpened(
         val pick = runCatching { settings.copyToPlay(item) }.getOrNull() ?: return@LaunchedEffect
         if (pick.id != item.id) onTurnTo(pick)
     }
+    // Cancel on a download that is coming down asks first (the hold menu stays up until it is answered).
+    val stopDownload = com.tmplayer.ui.components.rememberStopDownload(onKeep = { if (asMenu) onDismiss() }) { row ->
+        OfflineDownloads.cancel(context, row.fileId)
+        if (asMenu) onDismiss()
+    }
     var confirmingRemove by remember { mutableStateOf(false) }
     // The prompt stays up until the file has gone, and a second press on Remove meanwhile deleted
     // nothing more but said "could not be removed" after "Removed".
@@ -418,8 +423,13 @@ internal fun MediaDetailOpened(
             DetailAction.RemoveDownload -> { { confirmingRemove = true } }
             // The file on the queue, which is another copy's when that is the one coming down.
             DetailAction.CancelDownload -> { {
-                OfflineDownloads.cancel(context, downloading?.fileId ?: item.fileId)
-                if (asMenu) onDismiss()
+                val coming = downloading
+                if (coming != null) {
+                    stopDownload(coming)
+                } else {
+                    OfflineDownloads.cancel(context, item.fileId)
+                    if (asMenu) onDismiss()
+                }
             } }
             DetailAction.SelectVideos -> { { onDismiss(); onSelectVideos?.invoke() } }
             // Back from the other app, or after the copy, the page is still there.

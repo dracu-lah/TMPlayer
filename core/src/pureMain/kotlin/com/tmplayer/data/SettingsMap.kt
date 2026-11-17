@@ -159,6 +159,8 @@ object SettingsMap {
         row("picture_in_picture", g, "settings.picture_in_picture_leave", P, onOff("settings.picture_in_picture_leave"), SettingsNeed.PictureInPicture)
         row("controls_timeout", g, "settings.controls_timeout", PTD, listOf("settings.controls_timeout_detail"), desktopTitle = "settings.hide_controls")
         row("resume_rewind", g, "settings.resume_rewind", PTD, listOf("settings.resume_rewind_detail"))
+        // For a TV that discovery never finds: opens the same address dialog as the Cast picker's last line. A television has no casting.
+        row("add_tv", g, "cast.add_entry", PD, listOf("settings.add_tv_detail"))
         row("advanced", g, "settings.advanced", PT, listOf("settings.advanced_detail"))
         row("frame_rate_matching", g, "settings.frame_rate_matching", T, onOff("settings.frame_rate_matching"), SettingsNeed.Advanced)
         row("tunneled", g, "settings.tunneled", T, listOf("settings.tunneled_detail"), SettingsNeed.Advanced)

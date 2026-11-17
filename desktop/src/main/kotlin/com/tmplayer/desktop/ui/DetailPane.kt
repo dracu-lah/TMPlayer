@@ -261,6 +261,9 @@ private fun DetailPane(state: ShellState, request: DetailRequest) {
     // The comments' videos open over the pane, which stays until they close.
     var commentsOpen by remember(item.id) { mutableStateOf(false) }
 
+    // Cancel on a download that is coming down asks first, over the pane, which stays open.
+    val stopDownload = rememberStopDownload { OfflineDownloads.cancel(state.downloads, it.fileId) }
+
     fun run(action: DetailAction) {
         if (action == DetailAction.RemoveDownload) {
             confirmingRemove = record != null
@@ -299,7 +302,8 @@ private fun DetailPane(state: ShellState, request: DetailRequest) {
                 return
             }
             DetailAction.CancelDownload -> {
-                OfflineDownloads.cancel(state.downloads, coming?.fileId ?: item.fileId)
+                val live = coming
+                if (live != null) stopDownload(live) else OfflineDownloads.cancel(state.downloads, item.fileId)
                 return
             }
             // The player puts the pane away and brings it back when it closes (see

@@ -37,6 +37,16 @@ object RecentSearches {
         return (listOf(clean) + rest).take(limit)
     }
 
+    /**
+     * The list Clear all took ([before]) put back for its Undo, under whatever was searched since
+     * ([current], newest first): a search made in the seconds before Undo is not lost, and one that
+     * is in both lists is kept once.
+     */
+    fun restore(before: List<String>, current: List<String>, limit: Int = LIMIT): List<String> {
+        val kept = current.map { it.lowercase() }.toSet()
+        return (current + before.filter { it.lowercase() !in kept }).take(limit)
+    }
+
     /** [current] without [query], matched as [add] matches: any case, any spacing. */
     fun remove(current: List<String>, query: String): List<String> {
         val key = normalise(query).lowercase()
