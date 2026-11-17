@@ -1,0 +1,34 @@
+{
+  "name": "TMPlayer",
+  "identifier": "org.tmplayer.ios.source",
+  "subtitle": "Your Telegram videos on iPhone and iPad.",
+  "description": "A player for the videos already in your own Telegram chats, on iPhone and iPad. Install it with AltStore or SideStore from this source, which also offers every update. Unofficial: not affiliated with Telegram.",
+  "tintColor": "#2AABEE",
+  "featuredApps": [
+    "org.tmplayer.ios"
+  ],
+  "apps": [
+    {
+      "name": "TMPlayer",
+      "bundleIdentifier": "org.tmplayer.ios",
+      "subtitle": "Your Telegram videos, playing before the download finishes.",
+      "localizedDescription": "TMPlayer plays the videos in your own Telegram chats and channels on iPhone and iPad. It starts within seconds while the file is still downloading, and seeking moves the download to the new spot.\n\nSign in with your Telegram account, pick a chat, and only its playable videos appear: no messages, no server, no account except yours. Subtitles and audio tracks, episodes recognised from file names, Continue watching, Favourites and downloads, as TMPlayer has them on Android.\n\nUnofficial, not affiliated with Telegram. Free and open source under the GPL 3.0. The iOS and iPadOS port started from TMPlayer for Apple by Pietro Giuseppe D'Amico.",
+      "developerName": "TMPlayer",
+      "tintColor": "#2AABEE",
+      "category": "entertainment",
+      "screenshots": [],
+      "versions": [],
+      "appPermissions": {
+        "entitlements": [],
+        "privacy": {
+          "NSPhotoLibraryAddUsageDescription": "TMPlayer saves the videos and frames you choose to Photos."
+        }
+      },
+      "iconURL": "https://raw.githubusercontent.com/dracu-lah/TMPlayer/main/iosApp/TMPlayer/Assets.xcassets/AppIcon.appiconset/AppIcon.png"
+    }
+  ],
+  "news": [],
+  "iconURL": "https://raw.githubusercontent.com/dracu-lah/TMPlayer/main/iosApp/TMPlayer/Assets.xcassets/AppIcon.appiconset/AppIcon.png",
+  "website": "https://tmplayer.org",
+  "sourceURL": "https://raw.githubusercontent.com/dracu-lah/TMPlayer/main/altstore/source.json"
+}

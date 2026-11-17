@@ -1,0 +1,154 @@
+name: Apple release
+
+# The iOS and iPadOS release, for a tag apple-v<version>[-<build>] (apple-v1.28.5 releases 1.28.5,
+# build 1; apple-v1.28.5-2 its build 2, an iOS-only fix). Started from TMPlayer for Apple by
+# Pietro Giuseppe D'Amico (github.com/Killua99x/TMPlayer-for-apple, GPL-3.0):
+# the IPA built unsigned (AltStore, SideStore or Sideloadly sign it with the user's own Apple ID),
+# a GitHub release with the IPA, its SHA-256 and the version's notes from iosApp/CHANGELOG.md, and
+# the version added to the AltStore source (altstore/source.json) on the default branch, from
+# which AltStore and SideStore install the app and offer every update.
+#
+# The tags are apple-v*, not v*: the Android, TV and desktop release (release.yml) starts on v*.
+# It runs only in the TMPlayer repository; a fork skips it.
+# docs/IOS.md, "Releasing": the secrets, the variables, the runner, and how a release is made.
+# Variables (Settings, Variables): APPLE_RELEASE_RUNNER, APPLE_RELEASE_KOTLIN_HEAP and
+# APPLE_DEVELOPER_NAME, the name AltStore shows as the developer ("TMPlayer" when unset).
+
+on:
+  push:
+    tags: ["apple-v*"]
+
+permissions:
+  contents: write
+
+concurrency:
+  # One release at a time: each adds its version to the same source file.
+  group: apple-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.event.repository.name == 'TMPlayer'
+    # The Kotlin half's Release link needs about 6 GB of heap; iosApp/release/build-ipa.sh runs it
+    # alone, which an 8 GB Mac manages. APPLE_RELEASE_RUNNER names another runner if this one
+    # cannot (docs/IOS.md).
+    runs-on: ${{ vars.APPLE_RELEASE_RUNNER || 'macos-26' }}
+    timeout-minutes: 150
+    env:
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Version and build from the tag
+        run: |
+          # The version is TMPlayer's (TMPlayer 1.28.5 is built as 1.28.5); an iOS-only fix keeps
+          # it and raises the build, which AltStore compares to offer the update.
+          if ! [[ "${TAG#apple-v}" =~ ^([0-9]+\.[0-9]+(\.[0-9]+)?)(-([1-9][0-9]*))?$ ]]; then
+            echo "::error::The tag must be apple-v<major>.<minor>[.<patch>][-<build>], not $TAG"
+            exit 1
+          fi
+          version="${BASH_REMATCH[1]}"
+          build="${BASH_REMATCH[4]:-1}"
+          name="$version"
+          if [ "$build" != 1 ]; then name="$version-$build"; fi
+          {
+            echo "VERSION=$version"
+            echo "BUILD=$build"
+            echo "IPA=TMPlayer-ios-$name.ipa"
+            echo "DSYMS=TMPlayer-ios-$name-dSYMs.zip"
+            if [ "$build" = 1 ]; then echo "TITLE=$version"; else echo "TITLE=$version (build $build)"; fi
+          } >> "$GITHUB_ENV"
+
+      - name: Notes from iosApp/CHANGELOG.md
+        run: python3 -I iosApp/release/altstore_source.py notes --version "$VERSION" --build "$BUILD" > "$RUNNER_TEMP/notes.md"
+
+      - name: The source and the project agree
+        run: python3 -I iosApp/release/altstore_source.py check --project iosApp/project.yml
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Credentials
+        env:
+          TG_API_ID: ${{ secrets.TG_API_ID }}
+          TG_API_HASH: ${{ secrets.TG_API_HASH }}
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          OMDB_API_KEY: ${{ secrets.OMDB_API_KEY }}
+          OPENSUBTITLES_API_KEY: ${{ secrets.OPENSUBTITLES_API_KEY }}
+        run: |
+          if [ -z "$TG_API_ID" ] || [ -z "$TG_API_HASH" ]; then
+            echo "::error::Set the TG_API_ID and TG_API_HASH secrets: without them the app cannot sign in to Telegram"
+            exit 1
+          fi
+          # The Gradle build also holds TMPlayer's Android app, which needs the SDK's path.
+          {
+            echo "sdk.dir=${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+            echo "TG_API_ID=$TG_API_ID"
+            echo "TG_API_HASH=$TG_API_HASH"
+            for key in TMDB_API_KEY OMDB_API_KEY OPENSUBTITLES_API_KEY; do
+              if [ -n "${!key}" ]; then echo "$key=${!key}"; fi
+            done
+          } > local.properties
+
+      - name: IPA, dSYMs and checksum
+        env:
+          # The Kotlin/Native compiler's heap for the Release link, 6000m when unset.
+          TM_KOTLIN_HEAP: ${{ vars.APPLE_RELEASE_KOTLIN_HEAP }}
+          TMPDIR: ${{ runner.temp }}
+        run: |
+          iosApp/release/build-ipa.sh "$VERSION" "$BUILD" "$GITHUB_WORKSPACE"
+          test -f "$IPA" && test -f "$DSYMS"
+
+      - name: GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # The release page also says where this version's source is, and MPVKit's, whose mpv
+          # and FFmpeg the IPA carries under the LGPL (About's "Corresponding source" opens it).
+          mpvkit=$(awk '/^  MPVKit:/ { found = 1 } found && /exactVersion:/ { print $2; exit }' iosApp/project.yml)
+          repo="https://github.com/${{ github.repository }}"
+          {
+            cat "$RUNNER_TEMP/notes.md"
+            echo
+            echo "[Source of this version]($repo/tree/$TAG) · [MPVKit $mpvkit source, with mpv and FFmpeg](https://github.com/mpvkit/MPVKit/tree/$mpvkit) · [GPL-3.0]($repo/blob/$TAG/LICENSE) · [Third-party notices]($repo/blob/$TAG/THIRD_PARTY_NOTICES.md) · [Privacy](https://tmplayer.org/privacy/)"
+          } > "$RUNNER_TEMP/release.md"
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            # A run started again for the same tag: the files are replaced, the text kept.
+            gh release upload "$TAG" "$IPA" "$DSYMS" SHA256SUMS.txt --clobber
+          else
+            gh release create "$TAG" "$IPA" "$DSYMS" SHA256SUMS.txt --verify-tag \
+              --title "TMPlayer for iPhone and iPad $TITLE" --notes-file "$RUNNER_TEMP/release.md"
+          fi
+
+      - name: AltStore source
+        env:
+          BRANCH: ${{ github.event.repository.default_branch }}
+          DEVELOPER: ${{ vars.APPLE_DEVELOPER_NAME || 'TMPlayer' }}
+        run: |
+          # The release exists before the source names it, so its download address already works.
+          git fetch origin "$BRANCH"
+          git switch --create source-update "origin/$BRANCH"
+          python3 -I iosApp/release/altstore_source.py add \
+            --ipa "$IPA" --version "$VERSION" --build "$BUILD" --notes-file "$RUNNER_TEMP/notes.md" \
+            --download-url "https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/$IPA" \
+            --repo "$GITHUB_REPOSITORY" --branch "$BRANCH" --developer "$DEVELOPER"
+          python3 -I iosApp/release/altstore_source.py check --published --project iosApp/project.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add altstore/source.json
+          git commit --message "AltStore source: TMPlayer for iPhone and iPad $TITLE"
+          git push origin "HEAD:$BRANCH"
+          {
+            echo "### TMPlayer for iPhone and iPad $TITLE"
+            echo
+            echo "- Release: https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG"
+            echo "- AltStore source: https://raw.githubusercontent.com/$GITHUB_REPOSITORY/$BRANCH/altstore/source.json"
+          } >> "$GITHUB_STEP_SUMMARY"

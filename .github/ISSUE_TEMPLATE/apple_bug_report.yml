@@ -1,0 +1,59 @@
+# The iPhone and iPad bug report, adapted from TMPlayer for Apple's (github.com/Killua99x/TMPlayer-for-apple,
+# GPL-3.0). The iOS app's Report a problem fills in platform, version and device by these ids
+# (Feedback.issueUrl, with the iOS TEMPLATE in gradle/ios-apple-variant.gradle.kts), and the
+# platform by the option's exact words.
+name: Bug report (iPhone and iPad)
+description: Something in TMPlayer on an iPhone or iPad does not work as it should
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        Thanks for reporting! Please check that the problem still happens on the latest version
+        first. Issues are public: never put your phone number, a sign in code or other personal data
+        in one.
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - iPhone or iPad
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      description: Shown in Settings, under About, with its build.
+      placeholder: "1.28.5 (build 1)"
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Device
+      description: For example "iPhone 13, iOS 27.2" or "iPad (10th generation), iPadOS 27.0".
+    validations:
+      required: true
+  - type: input
+    id: install
+    attributes:
+      label: Installed with
+      description: AltStore, SideStore, Sideloadly, or built yourself with Xcode.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: media
+    attributes:
+      label: The video, if it is a playback problem
+      description: Container and codecs from VLC's or mpv's media info, and the file size.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Settings, Save logs (or Send logs), then attach the file. It is scrubbed of names, ids and phone numbers, but read it before posting.
