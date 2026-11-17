@@ -2,6 +2,9 @@ import { pickOf, POSTERS } from '../store'
 import { isPick, withPick, type PickedAsk } from '../pick'
 import { touch } from '../cacheBounds'
 import type { PosterAsk } from '../rules'
+import { episodeFor, overlay, readAnswer, type Guide } from '../animeGuide'
+import { readSkips } from '../player/skipOnline'
+import type { SkipSegment } from '../player/chapters'
 
 // Posters, as the apps show them: TMDB's poster for a video's cleaned title (the question the app's
 // rules ask, tg/media.ts `poster`), looked up by the /tmdb worker (tmdb/handler.ts), which holds
@@ -363,6 +366,79 @@ export function loadLogo(extras: Extras): Promise<string | null> {
     const path = extras.logo
     if (!path) return Promise.resolve(null)
     return once(`logo${path}`, logos, async () => URL.createObjectURL(await picture(path, 'w500')), true)
+}
+
+/** How often and how long after an incomplete anime guide the page asks again (the worker makes only a share of a long show's calls a request). */
+const GUIDE_RETRIES = 6
+const GUIDE_RETRY_MS = 6_000
+
+/**
+ * An anime's episode guide (/tmdb/anime, the apps' AnimeEpisodes), for the title AniList matched.
+ * `show` is called with each answer, the first as soon as it is in; a guide the worker could only
+ * read part of is asked for again a few times, a few seconds apart, until it is whole. Nothing is
+ * kept in the Cache API: the worker keeps the whole answer a day, and a half one must not be kept.
+ * A failure of any kind leaves the page without the guide. Returns a stop for a page that is left.
+ */
+export function followAnimeGuide(id: string, show: (guide: AnimeGuide) => void): () => void {
+    let live = true
+    let timer = 0
+    const next = async (attempt: number): Promise<void> => {
+        if (!live) return
+        let again = false
+        try {
+            const response = await fetch(`/tmdb/anime?id=${encodeURIComponent(id)}`)
+            if (response.ok) {
+                const read = readAnswer(await response.json())
+                if (read && live) {
+                    show(read.guide)
+                    again = !read.complete
+                }
+            }
+        } catch {
+            // No guide this time: the page lists what the chats hold, as before.
+        }
+        if (again && live && attempt < GUIDE_RETRIES) timer = window.setTimeout(() => void next(attempt + 1), GUIDE_RETRY_MS)
+    }
+    void next(1)
+    return () => {
+        live = false
+        window.clearTimeout(timer)
+    }
+}
+
+const skips = new Map<string, Promise<SkipSegment[]>>()
+
+/**
+ * The skip times AniSkip holds for episode `episode` of the AniList title `id`, for a file `length`
+ * seconds long (`/tmdb/skip`, the apps' SkipTimesApi.aniSkip). Empty when nobody timed it or the
+ * worker could not be reached: the player then offers only what the file's chapters name. Asked
+ * once per episode and length for this page's life; the worker keeps the answer a day.
+ */
+export function loadAnimeSkips(id: string, episode: number, length: number): Promise<SkipSegment[]> {
+    const q = new URLSearchParams({ id, e: String(episode), len: String(Math.max(0, Math.round(length))) })
+    const key = q.toString()
+    let p = skips.get(key)
+    if (!p) {
+        p = fetch(`/tmdb/skip?${key}`).then(
+            async (r) => (r.ok ? readSkips(await r.json().catch(() => null)) : (skips.delete(key), [])),
+            () => (skips.delete(key), []),
+        )
+        skips.set(key, p)
+    }
+    return p
+}
+
+/** An anime's guide as the page reads it (animeGuide.ts' Guide). */
+export type AnimeGuide = Guide
+
+/** `extras` with the anime's run in them (its one season and next episode) and, for the episode the page is about, the guide's own title and words. */
+export function withAnimeGuide(extras: Extras | null, guide: AnimeGuide | null, episode: { season: number; episode: number } | null): Extras | null {
+    if (!guide) return extras
+    const base: Extras = extras ?? { found: true }
+    const laid = overlay(base, guide)
+    if (laid.episode || !episode) return laid
+    const own = episodeFor(guide, episode.season, episode.episode)
+    return own ? { ...laid, episode: own } : laid
 }
 
 /** The viewer's region for the age rating: the browser's, else the US (MetaRules.region). */

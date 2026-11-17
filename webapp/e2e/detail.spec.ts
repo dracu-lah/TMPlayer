@@ -87,6 +87,40 @@ test('a show: Mark episodes names its count and ticks the season, and the whole 
     await expect(page.locator('.card-name', { hasText: 'Harbour Notes' })).toBeVisible()
 })
 
+// The anime episode guide (T4 follow-up): a show AniList matched lists no seasons, so the worker's guide supplies the run.
+test('an anime show lists the episodes its chat lacks from the guide, names the episode, and asks again while the guide is cut short', async ({ page }) => {
+    const guideAsks: string[] = []
+    const entry = (n: number) => ({ absolute: n, season: null, episode: null, name: n === 1 ? 'The Rescue Mission' : '', overview: n === 1 ? 'A rescue goes wrong.' : '', still: null, airDate: '2026-01-01', runtime: null, source: n === 1 ? 'kitsu' : null, stillSource: null })
+    await page.route('**/tmdb/**', (route) => {
+        const url = new URL(route.request().url())
+        if (url.pathname === '/tmdb/poster') return route.fulfill({ json: { match: true, id: '20', kind: 'show', title: 'Harbour Notes', year: 2019, poster: null, backdrop: null, overview: '', source: 'anilist' } })
+        if (url.pathname === '/tmdb/extras') return route.fulfill({ json: { found: true, genres: ['Adventure'], runtime: 24, seasons: null, rating: null, certification: null, directors: [], creators: [], cast: [], trailer: null, ended: false, seasonList: [], next: null, imdb: null, logo: null } })
+        if (url.pathname === '/tmdb/anime') {
+            guideAsks.push(url.searchParams.get('id') ?? '')
+            // The first answer is cut short (6 episodes known), the next is whole (12, the tenth to air).
+            const whole = guideAsks.length > 1
+            const total = whole ? 12 : 6
+            return route.fulfill({ json: { found: true, complete: whole, total, declared: whole ? 12 : 0, layout: [], next: whole ? { season: 1, episode: 10, airDate: '2099-01-01' } : null, entries: Array.from({ length: total }, (_, i) => entry(i + 1)) } })
+        }
+        return route.fulfill({ status: 404, body: '' })
+    })
+    await page.goto('/chat/-1002')
+    await page.locator('.card', { hasText: 'Harbour Notes' }).first().click()
+    await expect(page).toHaveURL(/\/video\//)
+    // The chat holds three: the guide's other three show as missing at once.
+    await expect(page.locator('.episode')).toHaveCount(6)
+    await expect(page.locator('.episode.gap')).toHaveCount(3)
+    expect(guideAsks).toEqual(['20'])
+    // The page is about the first episode: the guide's title and words stand in for the ones AniList does not have.
+    await expect(page.locator('.detail-code')).toContainText('The Rescue Mission')
+    await expect(page.locator('.detail-synopsis')).toContainText('A rescue goes wrong.')
+    // Cut short, it is asked again (6 s later); the whole guide adds the rest, the tenth on as upcoming.
+    await expect(page.locator('.episode')).toHaveCount(12, { timeout: 15_000 })
+    await expect(page.locator('.episode.gap')).toHaveCount(9)
+    expect(guideAsks).toEqual(['20', '20'])
+    await expect(page.locator('.season-chip')).toHaveCount(1)
+})
+
 test('a wide desktop page is one centred column with equal gutters: the words and About stand side by side, the episodes under both', async ({ page }) => {
     await mockTmdb(page)
     await page.setViewportSize({ width: 1920, height: 1000 })

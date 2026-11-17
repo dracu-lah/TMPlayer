@@ -9,6 +9,7 @@ import { clock, t } from '../i18n'
 import { failure } from '../errors'
 import { Icon } from '../ui/Icon'
 import * as phoneRules from './phone'
+import { canResend, dialChip } from './phone'
 import type { Country, Me, QrEvent, SentCode } from '../tg/types'
 
 type Step =
@@ -530,7 +531,10 @@ export function SignIn() {
                     <form onSubmit={sendCode}>
                         <button type="button" class="country-row" classList={{ invalid: !knownCode() && !!dial() }} onClick={() => pickerDialog?.showModal()}>
                             <span>{countryLine()}</span>
-                            <Icon icon={ArrowDown01Icon} size={20} />
+                            <span class="country-trail">
+                                <Show when={dialChip(dial())}>{(chip) => <span class="dial-chip">{chip()}</span>}</Show>
+                                <Icon icon={ArrowDown01Icon} size={20} />
+                            </span>
                         </button>
                         <div class="phone-row">
                             <label class="dial">
@@ -595,7 +599,10 @@ export function SignIn() {
                                 <button class="primary" disabled={busy() || !codeText().trim() || !!waitLeft()}>{sendWords(t('login.sign_in'), t('login.signing_in'))}</button>
                             </form>
                             <Problem />
-                            <Show when={sent().next !== 'none' || sent().type === 'email'}>
+                            <Show
+                                when={canResend(sent())}
+                                fallback={<p class="muted small resend-none" role="status">{t('login.resend_none')}</p>}
+                            >
                                 <button class="link" disabled={busy() || !!resendLeft()} onClick={resend}>
                                     {resendLeft() ? t('login.resend_in', { time: clock(resendLeft()) }) : resendLabel(sent())}
                                 </button>

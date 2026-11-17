@@ -19,7 +19,7 @@ import { openPosterPicker } from '../ui/PosterPicker'
 import { initialOf } from '../ui/initial'
 import { StarButton } from './Chats'
 import { loadThumb } from './thumbs'
-import { answer, askOf, loadBackdropLightFirst, loadExtras, loadFile, loadPoster, type Answer, type Extras } from './posters'
+import { answer, askOf, followAnimeGuide, loadBackdropLightFirst, loadExtras, loadFile, loadPoster, withAnimeGuide, type Answer, type AnimeGuide, type Extras } from './posters'
 import { coverBackground } from './cover'
 import { Card, clock, detailPath, shortLength, size, tileCard, useProgress, watchPath } from './VideoList'
 import { warmFile } from '../stream/reader'
@@ -135,7 +135,20 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
         },
     )
     const found = () => meta.latest?.found ?? null
-    const extras = () => meta.latest?.extras ?? null
+    // An anime AniList matched lists no seasons or episodes: the worker's guide (the apps' AnimeEpisodes: TMDB, Kitsu, Jikan,
+    // AniList) supplies the run, the next episode to air and this episode's own title and words. Asked again while it is cut short.
+    const [animeGuide, setAnimeGuide] = createSignal<AnimeGuide | null>(null)
+    createEffect(() => {
+        const f = found()
+        setAnimeGuide(null)
+        if (f?.source !== 'anilist' || f.kind !== 'show' || !f.id) return
+        onCleanup(followAnimeGuide(f.id, setAnimeGuide))
+    })
+    const episodeAt = () => {
+        const m = props.info?.episode?.code ? /^S(\d+)E(\d+)/i.exec(props.info.episode.code) : null
+        return m ? { season: Number(m[1]), episode: Number(m[2]) } : null
+    }
+    const extras = createMemo(() => withAnimeGuide(meta.latest?.extras ?? null, animeGuide(), episodeAt()))
     // The poster stands behind a show's page, the title's wide picture behind a film's, as the apps
     // draw them. Which one is known from the poster answer alone, asked at once and past the cards'
     // queue: until it is in, the page shows the video's own frame, never a poster that a film's wide
