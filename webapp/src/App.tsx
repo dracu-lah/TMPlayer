@@ -12,6 +12,7 @@ import { Toaster } from './ui/Toast'
 import { CardMenu } from './ui/CardMenu'
 import { ListPicker, ListsPage } from './screens/Lists'
 import { PosterPicker } from './ui/PosterPicker'
+import { TrailerSheet } from './ui/TrailerSheet'
 import { applyUpdate, updateReady } from './install'
 import { scheduleTrim } from './cacheBounds'
 import { t } from './i18n'
@@ -170,6 +171,7 @@ function Shell(props: ParentProps) {
             <CardMenu />
             <ListPicker />
             <PosterPicker />
+            <TrailerSheet />
             <Show when={sessionHere() === 'elsewhere'}>
                 <OtherTab />
             </Show>

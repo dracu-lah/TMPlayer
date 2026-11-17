@@ -15,6 +15,8 @@ import { arrowKeys } from '../ui/arrows'
 import { form } from '../form'
 import { TmdbMark } from '../ui/TmdbMark'
 import { TitleLogo } from '../ui/TitleLogo'
+import { openTrailer } from '../ui/TrailerSheet'
+import { inApp, isValidKey, watchUrl } from '../ui/trailer'
 import { openPosterPicker } from '../ui/PosterPicker'
 import { initialOf } from '../ui/initial'
 import { StarButton } from './Chats'
@@ -372,9 +374,16 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
                         <Show when={settings().posters}>
                             <Round icon={Search01Icon} label={t('poster.round')} onClick={() => openPosterPicker(item, props.info?.seasons.flatMap((s) => s.episodes.map((e) => e.item)) ?? [])} />
                         </Show>
-                        {/* The trailer plays on YouTube, in another tab: the page keeps no key and embeds nothing. */}
-                        <Show when={extras()?.trailer}>
-                            <Round icon={ClapperboardIcon} label={t('detail.round_trailer')} href={`https://www.youtube.com/watch?v=${extras()!.trailer}`} />
+                        {/* A trailer plays in YouTube's own player in a sheet, which loads only after this press (ui/TrailerSheet.tsx); with Play trailers in TMPlayer off it is a link to YouTube in another tab. A key that is not a YouTube id is never offered. */}
+                        <Show when={isValidKey(extras()?.trailer) ? extras()!.trailer! : undefined} keyed>
+                            {(key) => (
+                                <Show
+                                    when={inApp(settings().trailersInApp, key)}
+                                    fallback={<Round icon={ClapperboardIcon} label={t('detail.round_trailer')} href={watchUrl(key)!} />}
+                                >
+                                    <Round icon={ClapperboardIcon} label={t('detail.round_trailer')} popup onClick={(e) => openTrailer(key, e.currentTarget)} />
+                                </Show>
+                            )}
                         </Show>
                     </div>
                     <Show when={why()}>
@@ -426,7 +435,7 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
 }
 
 /** One of the everyday actions: a round outlined button with its name under it; a switch fills when on. A link opens elsewhere. */
-function Round(props: { icon: IconData; label: string; on?: boolean; onClick?: () => void; href?: string }): JSX.Element {
+function Round(props: { icon: IconData; label: string; on?: boolean; onClick?: (e: MouseEvent & { currentTarget: HTMLButtonElement }) => void; href?: string; popup?: boolean }): JSX.Element {
     const inner = () => (
         <>
             <span class="detail-round-disc">
@@ -439,7 +448,7 @@ function Round(props: { icon: IconData; label: string; on?: boolean; onClick?: (
         <Show
             when={props.href}
             fallback={
-                <button type="button" class="detail-round" aria-pressed={props.on === undefined ? undefined : props.on} onClick={props.onClick}>
+                <button type="button" class="detail-round" aria-pressed={props.on === undefined ? undefined : props.on} aria-haspopup={props.popup ? 'dialog' : undefined} onClick={props.onClick}>
                     {inner()}
                 </button>
             }
