@@ -60,10 +60,28 @@ object DesktopPaths : Paths {
     /** `<OS Downloads>/TMPlayer`, asked of the OS once. */
     private val defaultDownloadsDir: File by lazy { File(UserDirs.downloads(), APP) }
 
-    /** The folder the viewer chose, or null for the default folders. */
+    /** The storage location saved in Settings, whether or not it can be used this run. */
+    private val chosenRoot: File? = runCatching { DesktopPrefs.read(prefsFile).storageRoot }.getOrNull()
+        ?.takeIf { it.isNotBlank() }?.let(::File)
+
+    /**
+     * The folder in use, or null for the default folders. A chosen location that cannot be used
+     * at launch (a drive unplugged or gone, a folder removed or read only, #35) is left out for this
+     * run, so TDLib starts over the defaults instead of failing to sign in with the drive's error
+     * every time. The saved choice is kept and nothing is deleted: with the drive back, the next
+     * launch uses it again. [unusableRoot] says which one was skipped.
+     */
     @Volatile
-    var storageRoot: File? = DesktopPrefs.read(prefsFile).storageRoot.takeIf { it.isNotBlank() }?.let(::File)
+    var storageRoot: File? = chosenRoot?.takeIf { StorageRootCheck.usable(it) }
         private set
+
+    /** The chosen location skipped at launch because it could not be used, or null. See [storageRoot]. */
+    val unusableRoot: File? = chosenRoot?.takeIf { storageRoot == null }
+
+    private val unusableRootTold = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /** [unusableRoot] the first time it is asked for in this run, then null, so the window says so once. */
+    fun takeUnusableRootNotice(): File? = unusableRoot?.takeIf { unusableRootTold.compareAndSet(false, true) }
 
     /**
      * Points every getter here at [root] (or back at the defaults with null). Only the in memory
@@ -109,3 +127,22 @@ fun desktopDeviceInfo(): DeviceInfo = DeviceInfo(
 )
 
 fun desktopCredentials(): Credentials = Credentials(BuildInfo.TG_API_ID, BuildInfo.TG_API_HASH)
+
+/**
+ * Whether a chosen storage location can hold TMPlayer's folders now (#35): the folder itself is
+ * there, `<root>/TMPlayer` is there or can be made, and a file can be written in it.
+ *
+ * The chosen folder itself is never created: a missing one means a drive that is not plugged in or
+ * not mounted, and making it would put the cache on whatever disk holds the empty mount point.
+ * The probe file is removed straight away. Never throws.
+ */
+object StorageRootCheck {
+    fun usable(root: File): Boolean = runCatching {
+        if (!root.isDirectory) return false
+        val base = com.tmplayer.data.StorageRelocationPlan.appFolder(root)
+        if (!base.isDirectory && !base.mkdirs()) return false
+        val probe = File.createTempFile(".tmplayer-probe", null, base)
+        probe.delete()
+        true
+    }.getOrDefault(false)
+}

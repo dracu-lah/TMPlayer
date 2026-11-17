@@ -3411,6 +3411,7 @@
     "free_under_mb": "Less than 1 MB free",
     "freed": "{size} freed",
     "location": "Storage location",
+    "location_unavailable": "{folder} can't be reached, so the default folders are in use until TMPlayer restarts with it connected",
     "measuring": "Working it out…",
     "move": "Move",
     "move_adopted": "TMPlayer has used this folder before, and the downloads already in it are kept.",
@@ -3440,7 +3441,8 @@
     "scan_found": "{count, plural, one {# file is not in TMPlayer's list} other {# files are not in TMPlayer's list}}",
     "some_did_not_move": "Some downloads did not move",
     "the_default_folders": "the default folders",
-    "title": "Storage"
+    "title": "Storage",
+    "unreachable_at_start": "Your storage location {folder} can't be reached, so TMPlayer is using the default folders this time. Nothing was removed. Connect the drive and restart TMPlayer, or pick another place in Settings, Storage."
   },
   "subtitles": {
     "box": "Background box",
