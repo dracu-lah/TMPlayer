@@ -3,7 +3,9 @@
 # header there for the why.
 #
 # Two targets:
-#   build  the toolchain (GCC 11, CMake 3.22, gperf, PHP, OpenSSL 3.0 and zlib headers, JDK 21)
+#   build  the toolchain (GCC 11, CMake 3.22, gperf, PHP, OpenSSL 3.0 and zlib headers, JDK 21;
+#          the full JDK, not the headless one, because CMake 3.22's FindJNI insists on libjawt
+#          even when only the JVM is asked for)
 #   smoke  a plain Ubuntu 22.04 with only a JDK 21 and the runtime libraries the .so needs,
 #          used by smoke-test.sh to prove the library loads and answers there
 #
@@ -28,7 +30,7 @@ RUN apt-get update \
 FROM base AS build
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-      g++ make cmake gperf php-cli zlib1g-dev libssl-dev openjdk-21-jdk-headless binutils \
+      g++ make cmake gperf php-cli zlib1g-dev libssl-dev openjdk-21-jdk binutils \
  && rm -rf /var/lib/apt/lists/*
 COPY build-in-container.sh /usr/local/bin/build-in-container.sh
 WORKDIR /build
