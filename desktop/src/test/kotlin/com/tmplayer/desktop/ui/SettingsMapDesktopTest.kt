@@ -147,4 +147,21 @@ class SettingsMapDesktopTest {
         waitForIdle()
         assertTrue(onAllNodesWithText("Nothing in Settings matches", substring = true).fetchSemanticsNodes().isNotEmpty())
     }
+
+    @Test
+    fun `Playback has a line that opens the add a TV dialog`() = runComposeUiTest {
+        setContent {
+            TmMaterialTheme(dark = true) {
+                Surface(Modifier.fillMaxSize(), color = Tone.background) { SettingsPage(shell, "2.0.0") }
+            }
+        }
+        waitForIdle()
+        val line = hasText("Add a TV by its address") and hasClickAction()
+        onNode(line).performClick()
+        waitForIdle()
+        // The dialog's title carries the same words as the line under it.
+        assertEquals(2, onAllNodesWithText("Add a TV by its address").fetchSemanticsNodes().size)
+        assertTrue(onAllNodesWithText("Add TV").fetchSemanticsNodes().isNotEmpty())
+        assertTrue(onAllNodesWithText("IP address or description link").fetchSemanticsNodes().isNotEmpty())
+    }
 }

@@ -2651,6 +2651,7 @@
     "advanced_detail": "Frame-rate matching, tunneled playback and the stats overlay",
     "alert_downloads": "Finished downloads",
     "alert_downloads_detail": "One notification when a video, a whole season or every part of a video is downloaded, or did not finish, with Play or Try again",
+    "add_tv_detail": "For a TV that never shows up in the Cast list. Type its IP address",
     "alert_episodes": "New episodes of shows you watch",
     "alert_episodes_detail": "When a show you are watching posts its next episode, in a chat you can see, checked every few hours while the device is online",
     "alert_episodes_detail_desktop": "When a show you are watching posts its next episode, in a chat you can see, checked about every 45 minutes while TMPlayer is open",
