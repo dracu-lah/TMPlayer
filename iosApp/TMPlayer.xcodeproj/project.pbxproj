@@ -18,6 +18,7 @@
 		419B2CFD4B999F484CDB1094 /* MediaSourceProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = CDCFE360E6A6BA5A6B142918 /* MediaSourceProtocol.swift */; };
 		44EF5F11057E083621FD2B66 /* AppleEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79C4D3DB71F2C6689E87DD3A /* AppleEngine.swift */; };
 		6D23E1103005010CCD99B143 /* PlaybackAudio.swift in Sources */ = {isa = PBXBuildFile; fileRef = F216E6C5332DB607A54368B7 /* PlaybackAudio.swift */; };
+		A7C3E1D95B2F4068B1D3C5E7 /* TrailerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E1B9D3F7A2C4680D2B4F6A8 /* TrailerSheet.swift */; };
 		6D96EBE363CD180170E4ECFA /* assets in Resources */ = {isa = PBXBuildFile; fileRef = 5BF2DB339B48520DD3B84579 /* assets */; };
 		73720DC545FA9F405ACEA728 /* engine-sample.mkv in Resources */ = {isa = PBXBuildFile; fileRef = 34F0F5718AF47B32A8BDCF51 /* engine-sample.mkv */; };
 		783D0BBAEE0CB0D0305EC354 /* PlayerOnDeviceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B3615DAF78CD98EBD658B4B /* PlayerOnDeviceTests.swift */; };
@@ -65,6 +66,7 @@
 		5BF2DB339B48520DD3B84579 /* assets */ = {isa = PBXFileReference; lastKnownFileType = folder; name = assets; path = ../app/src/main/assets; sourceTree = SOURCE_ROOT; };
 		71286ADD6D884DF7F1C56C3F /* values */ = {isa = PBXFileReference; lastKnownFileType = folder; name = values; path = ../app/src/main/res/values; sourceTree = SOURCE_ROOT; };
 		71FCE62B19C0D68D4156AFBC /* AppleStreamLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleStreamLoader.swift; sourceTree = "<group>"; };
+		5E1B9D3F7A2C4680D2B4F6A8 /* TrailerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrailerSheet.swift; sourceTree = "<group>"; };
 		758BC6DC6AAFCE2DE5A84447 /* ActivityViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityViewController.swift; sourceTree = "<group>"; };
 		7897442E2D440D104157D3C8 /* Media3BridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Media3BridgeTests.swift; sourceTree = "<group>"; };
 		79C4D3DB71F2C6689E87DD3A /* AppleEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleEngine.swift; sourceTree = "<group>"; };
@@ -187,6 +189,7 @@
 			children = (
 				758BC6DC6AAFCE2DE5A84447 /* ActivityViewController.swift */,
 				F216E6C5332DB607A54368B7 /* PlaybackAudio.swift */,
+				5E1B9D3F7A2C4680D2B4F6A8 /* TrailerSheet.swift */,
 				E4D7B81C996750AFDDFBBA94 /* Engines */,
 			);
 			path = Player;
@@ -453,6 +456,7 @@
 				6D23E1103005010CCD99B143 /* PlaybackAudio.swift in Sources */,
 				DFA7A5362F785282903F2363 /* TMPlayerApp.swift in Sources */,
 				F19A70495856544E12E788D3 /* TdStreamProtocol.swift in Sources */,
+				A7C3E1D95B2F4068B1D3C5E7 /* TrailerSheet.swift in Sources */,
 				7CED43734241D32DFE6D7B4F /* VideoEngines.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

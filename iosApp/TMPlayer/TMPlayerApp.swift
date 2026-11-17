@@ -9,6 +9,8 @@ struct TMPlayerApp: App {
     init() {
         // The engine every ExoPlayer of Android's player plays on (docs/IOS.md).
         Engines.shared.install { VideoEngines.make() }
+        // The sheet an in app trailer plays in (Player/TrailerSheet.swift); nothing loads until one is tapped.
+        Trailers.shared.install(presenter: TrailerSheetPresenterImpl())
         // `-memoryWarningAfter <s>` (a developer's check): iOS's memory warning that many seconds
         // in, as UIKit posts it, to see what the app does with one.
         let after = UserDefaults.standard.integer(forKey: "memoryWarningAfter")
