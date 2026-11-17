@@ -257,7 +257,9 @@ jobs:
             # A run started again for the same tag: the files are replaced, the text kept.
             gh release upload "$TAG" "$IPA" "$DSYMS" SHA256SUMS.txt --clobber
           else
-            gh release create "$TAG" "$IPA" "$DSYMS" SHA256SUMS.txt --verify-tag \
+            # --latest=false: GitHub's "Latest" stays the Android, TV and desktop release (v*), whose
+            # links (releases/latest/download/...) must never point at an iOS release.
+            gh release create "$TAG" "$IPA" "$DSYMS" SHA256SUMS.txt --verify-tag --latest=false \
               --title "TMPlayer for iPhone and iPad $TITLE" --notes-file "$RUNNER_TEMP/release.md"
           fi
 

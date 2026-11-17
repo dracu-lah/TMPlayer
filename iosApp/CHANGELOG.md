@@ -17,6 +17,21 @@ The version and build are the ones the tag names: apple-v1.28.5 releases 1.28.5,
 apple-v1.28.5-2 its build 2. docs/IOS.md, "Releasing", has the rest.
 -->
 
+## 1.28.6
+
+- Skip intro, recap, credits and preview from one Skip button, from the file's chapters, online lists and your own marks, and you can mark an intro yourself
+- Quiet loud scenes: a switch in the player that holds loud parts back and makes dialogue clearer
+- While streaming: choose Keep video or Save space, and TMPlayer offers Save space when a video does not fit
+- On mobile data: one answer (Ask first, Never or Allow) replaces the Wi-Fi only and Save mobile data switches
+- Keep my place on all my devices: one small file in your own Saved Messages carries where you stopped, bookmarks, lists and corrections
+- Offline: Home shows what is already on this device, with a Needs internet cover on the rest
+- Series: Specials, whole seasons in one file, a note for episodes not in your chats yet, Find in other chats and Only mine
+- Subtitles: Size and Position now apply to styled (ASS) tracks
+- When a picture looks wrong, the player tries another way to show it and keeps the last minute for Send logs
+- Choose chats asks Which chats have your videos? and no longer counts videos
+- Hide small clips under a size you choose
+- Buttons, switches and menu rows are named and at least 48 pt, and large text no longer cuts words
+
 ## History: TMPlayer for Apple
 
 The port started from TMPlayer for Apple by Pietro Giuseppe D'Amico
