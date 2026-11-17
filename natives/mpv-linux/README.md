@@ -35,14 +35,15 @@ are the shipped ones, so the files drop into the runtime folder unchanged.
 ## Building
 
 ```sh
-scripts/build-mpv-linux-2-35.sh            # about 15 minutes with 6 jobs; podman, no root
+scripts/build-mpv-linux-2-35.sh            # 7 to 12 minutes with 6 jobs; podman, no root
 natives/mpv-linux/check-floor.sh ~/.cache/tmplayer-natives/mpv
 natives/mpv-linux/smoke-test.sh            # swapped runtime in a plain ubuntu:22.04, then here
 ```
 
 The libraries, `SHA256SUMS` and `BUILDINFO` (compiler, glibc and every package of the build image)
 go to `~/.cache/tmplayer-natives/mpv/`; downloads stay in `~/.cache/tmplayer-natives/mpv-downloads/`.
-No binary is committed. `JOBS` caps the parallel jobs (default 6).
+No binary is committed. `JOBS` caps the parallel jobs (default 6). Two runs give byte identical
+libraries (checked 2026-11-18).
 
 - `Containerfile`: the build image, `ubuntu:22.04` pinned by digest, packages from one Ubuntu
   snapshot day. Build tools and headers only.
