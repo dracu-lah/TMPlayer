@@ -155,7 +155,8 @@ them off for an Android or desktop build there.
   its dSYMs and `SHA256SUMS.txt`.
 - **Screenshots build:** `-PtmPromo=true` (or `ORG_GRADLE_PROJECT_tmPromo=true` for Xcode) compiles
   the promo fixture in; launch with `-promo`. `iosApp/screenshots/make-videos.sh` makes the video the
-  player screenshot plays.
+  player screenshot plays. This is the way to take real simulator pictures, which should replace the
+  ones in "Pictures for the source" below once a Mac is at hand.
 
 ## Tests
 
@@ -291,7 +292,7 @@ The user tags and approves; nothing here is done by an agent (AGENTS.md, publish
 1. Write the version's notes in `iosApp/CHANGELOG.md` as `## <version>` (first build of a version)
    or `## <version> build <n>` (an iOS-only fix). The release stops if the section is missing.
 2. Put iPhone and iPad pictures, if there are new ones, in `iosApp/screenshots/iphone/` and `/ipad/`
-   as PNG or JPEG (the promo build makes them, see "Building and running"); the release lists them in
+   as PNG or JPEG (see "Pictures for the source" in "The AltStore source"); the release lists them in
    the source by name order.
 3. Repository secrets: `TG_API_ID`, `TG_API_HASH` (required), `TMDB_API_KEY`, `OMDB_API_KEY`,
    `OPENSUBTITLES_API_KEY` (optional). Variables, all optional: `APPLE_RELEASE_RUNNER` (a runner
@@ -360,6 +361,29 @@ AltStore reads `news` and shows it above the apps. The release adds one post by 
 (an announcement, a known problem) is
 `altstore_source.py news --title "..." --caption "..." --url https://tmplayer.org/ --notify` and a
 commit. `check --published` on a copy of the file is the last step before a hand edit is pushed.
+
+### Pictures for the source
+
+`iosApp/screenshots/iphone/` (1320x2868, the 6.9 inch iPhone) and `iosApp/screenshots/ipad/`
+(2064x2752, the 13 inch iPad) hold six pictures each, `01-home.png` to `06-settings.png`: Home, a
+chat's video grid, a video's page, the player, Downloads and Settings, dark. **They are Compose
+renders at iOS sizes, not simulator captures.** TMPlayer's screens are shared Compose, so
+`scripts/ios-store-pictures.py` draws the real ones from the Android promo build (`app/src/promo`,
+the demo library only: invented videos, no account) on an emulator whose display is set to the
+iPhone's or iPad's size and density, with the system bars hidden. Fonts, the keyboard and the iOS
+chrome are Android's, so a Mac capture (`-promo`, "Building and running") should replace them when one
+is available. They are PNG, never recompressed (AltStore reads PNG and JPEG only;
+[docs/agents/screenshots.md](agents/screenshots.md)). To redo them:
+
+```sh
+./gradlew :app:assemblePromo -PpromoShots
+emulator -avd tmplayer_promo -port 5558 -no-window -no-audio -gpu host -no-snapshot-load  # in the background
+python3 -I scripts/ios-store-pictures.py --serial emulator-5558 --apk app/build/outputs/apk/promo/app-promo.apk
+python3 -I iosApp/release/altstore_source.py screenshots --repo dracu-lah/TMPlayer
+```
+
+The promo build is its own package (`com.tmplayer.promo`) and never ships in a release. The source
+(`altstore/source.json`) lists the pictures by their raw GitHub address, so they work once on `main`.
 
 `altstore/source.json` lists no version until the first release; until then
 `altstore_source.py check --published` refuses it, by design.
@@ -512,8 +536,8 @@ Found while bringing the port over; fixed ones are listed under the next heading
   locally once the fork's ref is no longer needed.
 - **`TMPlayer.xcodeproj` edited by hand** for the identifiers and build number above. Regenerate it
   with `xcodegen generate` on a Mac and commit any difference.
-- **Screenshots not imported.** The fork's screenshots show its own name and icon; make TMPlayer's
-  with the promo build.
+- **Screenshots not imported.** The fork's screenshots show its own name and icon; TMPlayer's own are
+  in `iosApp/screenshots` ("Pictures for the source").
 - **iOS answers that are guesses until a Mac run.** The player files written after the port's base
   compile for iOS over new stand-ins whose answers are best guesses: the thermal state's mapping,
   `Process.getStartElapsedRealtime` (the first use), `ActivityManager` free memory (0), view tree
@@ -585,8 +609,9 @@ Skipped in the import (2026-11-17): none of this can be done or checked on Linux
     `news`, `tintColor` with the `#`), show the news post and the screenshots, and read the app's
     `appPermissions` as the IPA's.
   - `altstore://source?url=` and `sidestore://source?url=` opening the right app from a web page.
-  - iPhone and iPad pictures in `iosApp/screenshots/iphone` and `/ipad` (none exist: the source
-    lists none until the promo build makes them) and their raw addresses once on `main`.
+  - iPhone and iPad pictures in `iosApp/screenshots/iphone` and `/ipad`: they are Compose renders at
+    iOS sizes, not seen on an iPhone or iPad. Check that AltStore and SideStore load them from their
+    raw addresses once on `main` (the sizes in the source), and replace them with simulator captures.
   - Installing the IPA with Sideloadly and LiveContainer (the app's sound with the screen locked and
     TDLib's storage under LiveContainer).
   - The lower-iOS trial (`min_ios`) and everything in "Lowering the minimum iOS", which needs a TDLib
