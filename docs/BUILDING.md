@@ -94,6 +94,56 @@ Linux notes: on a tiling window manager set `_JAVA_AWT_WM_NONREPARENTING=1` or t
 blank; hardware decoding may fail on Fedora, where the bundled libva looks in Debian's driver
 path, and software decoding takes over.
 
+### In-app trailers (the Chromium download)
+
+Trailers play inside the desktop app through JCEF, the Java Chromium Embedded Framework, by way of
+[jcefmaven](https://github.com/jcefmaven/jcefmaven) (`desktop/src/main/kotlin/.../trailer/`).
+KCEF and compose-webview-multiplatform were looked at first: KCEF was archived by its author in
+October 2025 ("not recommended"), and compose-webview-multiplatform's desktop side is KCEF.
+Only JCEF's Java side is a build dependency (jcef-api, jcefmaven, commons-compress with its three
+commons jars, Gson: about 3 MB of jars, 1.7 MB after ProGuard; JOGL is excluded, since only the
+off-screen mode needs it). So the installer, the AppImage and the DMG barely change, and an
+offline Gradle build (a Flatpak sources list, see `distribution/flathub.md`) gains only those
+jars, never Chromium.
+
+Chromium itself is downloaded on the viewer's first trailer, after a dialog that says what it is,
+its size and the free space (Download or Watch on YouTube), from Maven Central (jcefmaven's GitHub
+release as the second source), checked against the size and SHA-256 pinned in `CefNatives.kt`,
+and unpacked under the app's data folder (`<data>/browser`, or `<storage location>/TMPlayer/browser`).
+JCEF 146.0.10, Chromium 146.0.7680.179:
+
+| System | Download | On disk | Supported |
+| --- | --- | --- | --- |
+| Linux x64 | 141 MB | 356 MB | yes, the AppImage's system; checked end to end on Fedora 43 (sway) |
+| Linux arm64 | 158 MB | 455 MB | pinned; TMPlayer ships no arm64 Linux build yet |
+| Windows x64 | 155 MB | 352 MB | yes, the MSI's system |
+| Windows arm64 | 153 MB | 358 MB | pinned; the x64 MSI runs emulated there and takes the x64 Chromium |
+| macOS arm64 | 130 MB | 305 MB | yes, the DMG's system |
+| macOS x64 | 138 MB | 315 MB | pinned; Intel Macs are not offered a DMG |
+
+The dialog asks for the download and the unpacked folder side by side plus 100 MB (535 to 715 MB
+free, by system), because both exist for a moment. 32 bit systems and anything else open trailers
+in YouTube.
+
+JCEF starts Chromium on AWT's event thread, and where that never returns the window would freeze.
+jcefmaven 152.0.6 did exactly that on Fedora 43 under sway (2026-11-17; 141 and 146 start there),
+so the first start is tried in a child TMPlayer process (`--trailer-probe`, `trailer/CefProbe.kt`)
+with a 20 s limit, and only a child that started lets the app start it itself. The answer is kept
+beside the install (`probe.ok`, or `probe.failed` for a week).
+
+To check it on a real machine without signing in:
+
+```bash
+./gradlew :desktop:runTrailerSmoke --args="--dir /tmp/tm-browser"            # downloads, installs, plays, exits 0 once it plays
+./gradlew :desktop:runTrailerSmoke --args="--dir /tmp/tm-browser --compose"  # the same through the app's sheet, keys and bridge
+./gradlew :desktop:runTrailerSmoke -PcefLog=/tmp/cef.log --args="--dir /tmp/tm-browser"   # with Chromium's own log
+```
+
+A jcefmaven bump in `gradle/libs.versions.toml` needs new pins: for each platform, download
+`me/friwi/jcef-natives-<platform>/<tag>/jcef-natives-<platform>-<tag>.jar` from Maven Central,
+check it against the `.sha1` beside it, and take its size, `sha256sum` and the sum of the file
+sizes in its `.tar.gz` (`unzip -p <jar> '*.tar.gz' | tar -tzvf - | awk '{s+=$3} END {print s}'`).
+
 ## Test devices
 
 Cheap, low-spec Android TV is the target: a Mi TV Stick with 1 GB RAM, 8 GB storage and Android 9.
