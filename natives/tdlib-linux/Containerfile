@@ -1,0 +1,42 @@
+# TDLib's JNI library (libtdjsonjava.so) for the desktop Linux build, on an Ubuntu 22.04 base so
+# that it needs no glibc above 2.35 (issue #30). scripts/build-tdlib-linux.sh drives it; read the
+# header there for the why.
+#
+# Two targets:
+#   build  the toolchain (GCC 11, CMake 3.22, gperf, PHP, OpenSSL 3.0 and zlib headers, JDK 21;
+#          the full JDK, not the headless one, because CMake 3.22's FindJNI insists on libjawt
+#          even when only the JVM is asked for)
+#   smoke  a plain Ubuntu 22.04 with only a JDK 21 and the runtime libraries the .so needs,
+#          used by smoke-test.sh to prove the library loads and answers there
+#
+# The base image is pinned by digest and every package comes from the Ubuntu snapshot of the day
+# below, so a rebuild gets the same compiler and headers. ca-certificates is fetched first from the
+# image's own archive because the snapshot service only answers over HTTPS.
+
+ARG BASE=docker.io/library/ubuntu:22.04@sha256:45e9ddc6895604674618a409ca9f73d301da8fdb75fe330e8e9a27b3b219e4ad
+
+FROM ${BASE} AS base
+ARG SNAPSHOT=20261117T000000Z
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates \
+ && printf '%s\n' \
+      "deb https://snapshot.ubuntu.com/ubuntu/${SNAPSHOT} jammy main universe" \
+      "deb https://snapshot.ubuntu.com/ubuntu/${SNAPSHOT} jammy-updates main universe" \
+      "deb https://snapshot.ubuntu.com/ubuntu/${SNAPSHOT} jammy-security main universe" \
+      > /etc/apt/sources.list \
+ && rm -rf /etc/apt/sources.list.d/* /var/lib/apt/lists/*
+
+FROM base AS build
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      g++ make cmake gperf php-cli zlib1g-dev libssl-dev openjdk-21-jdk binutils \
+ && rm -rf /var/lib/apt/lists/*
+COPY build-in-container.sh /usr/local/bin/build-in-container.sh
+WORKDIR /build
+
+FROM base AS smoke
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends openjdk-21-jdk-headless libssl3 zlib1g \
+ && rm -rf /var/lib/apt/lists/*
+WORKDIR /smoke
