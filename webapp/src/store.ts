@@ -25,6 +25,8 @@ export interface Settings {
     sort: Sort
     /** Posters from TMDB on the cards (the apps' MetadataStore `enabled`, on by default); off, nothing is looked up online. */
     posters: boolean
+    /** A detail page's trailer in YouTube's embedded player on the page (the apps' MetadataStore `trailers_in_app`), on by default; off, it opens on YouTube. */
+    trailersInApp: boolean
     /** Taken off a saved position when a video resumes, in milliseconds; null for the app's default. */
     rewindMs: number | null
     /** The carousel at the top of Home (the apps' "Carousel on Home"), on by default. */
@@ -58,6 +60,7 @@ const DEFAULTS: Settings = {
     ...SIZE_DEFAULTS,
     sort: 'Newest',
     posters: true,
+    trailersInApp: true,
     rewindMs: null,
     carousel: true,
     homeContinue: true,
@@ -250,6 +253,7 @@ export async function loadSettings() {
     // Keys of settings since removed (`rows`, the As rows layout) are dropped, so the next write leaves them behind.
     const known = Object.fromEntries(Object.entries(saved ?? {}).filter(([k]) => k in DEFAULTS)) as Partial<Settings>
     if (known.sizeMin === OLD_DEFAULT_MIN) delete known.sizeMin
+    if (typeof known.trailersInApp !== 'boolean') delete known.trailersInApp
     setSettings({ ...DEFAULTS, ...cleanHome(known) })
     setAddedIdsSignal(new Set(added.map((a) => a.chatId)))
     setAddedModeSignal(readMode(mode))

@@ -289,7 +289,7 @@ object Backups {
         createdAt = createdAt,
         appVersion = appVersion,
         settings = settings.filter { (name, value) -> SETTINGS[name]?.let { fits(value, it) } == true },
-        metadata = mapOf("enabled" to metadata.enabled, "skip_times" to metadata.skipTimes),
+        metadata = mapOf("enabled" to metadata.enabled, "skip_times" to metadata.skipTimes, "trailers_in_app" to metadata.trailersInApp),
         favourites = favouritesOf(settings),
         recentSearches = RecentSearches.decode(settings[RECENT_SEARCHES] as? String),
         memory = settings.filter { (name, value) -> memoryKind(name)?.let { fits(value, it) } == true },
@@ -439,7 +439,7 @@ object Backups {
         val settings = valuesOf(root.optJSONObject("settings")) { name -> SETTINGS[name] }
         val metaJson = root.optJSONObject("metadata")
         val metadata = buildMap {
-            for (name in listOf("enabled", "skip_times")) {
+            for (name in listOf("enabled", "skip_times", "trailers_in_app")) {
                 (metaJson?.opt(name) as? Boolean)?.let { put(name, it) }
             }
         }
@@ -563,6 +563,7 @@ object Backups {
         val metaChanged = listOf(
             backup.metadata["enabled"]?.let { it != metadata.enabled },
             backup.metadata["skip_times"]?.let { it != metadata.skipTimes },
+            backup.metadata["trailers_in_app"]?.let { it != metadata.trailersInApp },
         ).count { it == true }
         return RestorePlan(
             backup = backup,
@@ -675,6 +676,7 @@ object Backups {
     fun metadataAfter(current: MetaSettings, backup: Backup): MetaSettings = current.copy(
         enabled = backup.metadata["enabled"] ?: current.enabled,
         skipTimes = backup.metadata["skip_times"] ?: current.skipTimes,
+        trailersInApp = backup.metadata["trailers_in_app"] ?: current.trailersInApp,
         // Off in a backup was chosen on the device that wrote it, so a restore does not ask again.
         offByChoice = current.offByChoice || backup.metadata["enabled"] == false,
     )

@@ -264,6 +264,8 @@ object SettingsMap {
         row("clear_favourites", lib, "settings.clear_favourites", PTD, need = SettingsNeed.State)
         row("clear_history", lib, "browse.clear_history", PTD, listOf("browse.clear_history_detail"), SettingsNeed.State)
         row("posters", lib, "metadata.toggle", PTD, onOff("metadata.toggle"), SettingsNeed.OnlineMetadata)
+        // A detail page's trailer in YouTube's embedded player here, or in the YouTube app and the browser.
+        row("trailers_in_app", lib, "metadata.trailers_in_app", PTD, listOf("metadata.trailers_in_app_detail"), SettingsNeed.OnlineMetadata)
         row("skip_times", lib, "metadata.skip_times", PTD, listOf("metadata.skip_times_privacy"), SettingsNeed.OnlineMetadata)
         // One line per kind of skip, drawn only while the switch above is on (T10).
         row("skip_mode_recap", lib, "settings.skip_recap", PTD, listOf("settings.skip_mode_note"), SettingsNeed.State)

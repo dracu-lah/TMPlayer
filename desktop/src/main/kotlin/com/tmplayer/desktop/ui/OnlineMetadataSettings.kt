@@ -69,6 +69,10 @@ internal fun OnlineMetadataGroup(toggleModifier: Modifier = Modifier) {
         toggleModifier,
         icon = TmIcons.Image,
     ) { online.setEnabled(it) }
+    // A detail page's trailer in YouTube's embedded player here, or in the browser.
+    Toggle(s.metadataTrailersInApp, s.metadataTrailersInAppDetail, settings.trailersInApp, icon = TmIcons.Trailer) {
+        online.setTrailersInApp(it)
+    }
     // The player's skip buttons: the online lists ride on lookups, but a file's chapters and the
     // viewer's own marks do not, so the switch is there with lookups off too. One line under it
     // says what is sent; one row per kind of skip under that, while the switch is on.

@@ -37,6 +37,7 @@ class MetadataStore(private val file: File) : MetaSettingsStore {
             omdbKey = p.getProperty("omdb_key").orEmpty(),
             omdbRefusedKey = p.getProperty("omdb_refused_key").orEmpty(),
             skipTimes = p.getProperty("skip_times") != "false",
+            trailersInApp = p.getProperty("trailers_in_app") != "false",
             skipModes = SkipModes.decode(p.getProperty("skip_modes")),
             offByChoice = onAgain && p.getProperty("off_by_choice") == "true",
         )
@@ -51,6 +52,7 @@ class MetadataStore(private val file: File) : MetaSettingsStore {
         p["omdb_key"] = s.omdbKey
         p["omdb_refused_key"] = s.omdbRefusedKey
         p["skip_times"] = s.skipTimes.toString()
+        p["trailers_in_app"] = s.trailersInApp.toString()
         p["skip_modes"] = s.skipModes.encode()
         p["off_by_choice"] = s.offByChoice.toString()
         p[ON_AGAIN] = "true"

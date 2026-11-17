@@ -245,6 +245,8 @@ export const PAGE_STRINGS = [
     'metadata.seasons',
     'metadata.toggle_off',
     'metadata.trailer',
+    'metadata.trailers_in_app',
+    'metadata.trailers_in_app_detail',
     'nav.chats',
     'nav.downloads',
     'nav.settings',

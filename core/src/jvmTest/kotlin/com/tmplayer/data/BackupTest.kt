@@ -72,7 +72,7 @@ class BackupTest {
         old.settings.rememberTopic(-1003L, 42)
         old.settings.saveResumePosition(-100L, 5L, 600_000L, 3_600_000L, resumeLine(updatedAt = 500))
         old.watched.markWatched(watchedRecord(1, at = 10, manual = true))
-        old.metadata.update { it.copy(enabled = true, ownKey = "secret-tmdb-key") }
+        old.metadata.update { it.copy(enabled = true, ownKey = "secret-tmdb-key", trailersInApp = false) }
 
         val text = old.service().export()
         assertFalse("no API key in the file", text.contains("secret-tmdb-key"))
@@ -107,7 +107,7 @@ class BackupTest {
         assertEquals(1.25f, resumed.state?.speed)
         assertNull(resumed.localPath)
         assertTrue(fresh.watched.history.first().single().manual)
-        assertEquals(MetaSettings(enabled = true), fresh.metadata.now)
+        assertEquals(MetaSettings(enabled = true, trailersInApp = false), fresh.metadata.now)
     }
 
     @Test
@@ -161,7 +161,7 @@ class BackupTest {
             ),
             watched = listOf(watchedRecord(1, at = 10, manual = true)),
             searches = listOf("severance", "the bear"),
-        ).copy(watchLater = listOf(laterRecord(8, at = 30)), metadata = mapOf("enabled" to true, "skip_times" to false))
+        ).copy(watchLater = listOf(laterRecord(8, at = 30)), metadata = mapOf("enabled" to true, "skip_times" to false, "trailers_in_app" to false))
         val read = Backups.decode(Backups.encode(original)) as BackupRead.Ok
         assertEquals(original.copy(resume = original.resume.map { it.copy(title = "Film   one") }), read.backup)
     }

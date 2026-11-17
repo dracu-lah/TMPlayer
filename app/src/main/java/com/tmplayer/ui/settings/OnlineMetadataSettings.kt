@@ -44,6 +44,7 @@ internal fun LazyListScope.onlineMetadataSection(
     if (OnlineMetadata.current == null) return
     sectionTitle { LocalStrings.current.metadataTitle }
     item { MetadataToggleRow(toggleModifier) }
+    item { TrailersInAppToggleRow() }
     item { SkipTimesToggleRow() }
     // One line per kind of skip, under the switch they belong to.
     for (group in com.tmplayer.online.SkipGroup.entries) item { SkipModeRow(group) }
@@ -64,6 +65,25 @@ private fun MetadataToggleRow(modifier: Modifier) {
         icon = TmIcons.Image,
         checked = settings.enabled,
         onToggle = { online.setEnabled(!settings.enabled) },
+    )
+}
+
+/**
+ * Trailers in TMPlayer's own player (YouTube's embed, loaded only once a trailer is chosen), or
+ * in the YouTube app and the browser. A trailer needs lookups on, but the switch stays there with
+ * them off, as the skip buttons' does, so the choice is not lost while lookups are off.
+ */
+@Composable
+private fun TrailersInAppToggleRow() {
+    val s = LocalStrings.current
+    val online = OnlineMetadata.current ?: return
+    val settings by online.settings.collectAsState()
+    ToggleRow(
+        title = s.metadataTrailersInApp,
+        subtitle = s.metadataTrailersInAppDetail,
+        icon = TmIcons.Trailer,
+        checked = settings.trailersInApp,
+        onToggle = { online.setTrailersInApp(!settings.trailersInApp) },
     )
 }
 

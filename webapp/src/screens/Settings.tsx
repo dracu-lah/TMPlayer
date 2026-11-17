@@ -6,6 +6,7 @@ import {
     ArrowLeft02Icon,
     ArrowRight01Icon,
     ArrowUp01Icon,
+    ClapperboardIcon,
     CloudSyncIcon,
     LockKeyholeIcon,
     Delete02Icon,
@@ -536,6 +537,13 @@ function Library() {
                     on={settings().posters}
                     onChange={(on) => setSetting('posters', on)}
                 />
+                <ToggleRow
+                    icon={ClapperboardIcon}
+                    title={t('metadata.trailers_in_app')}
+                    subtitle={t('metadata.trailers_in_app_detail')}
+                    on={settings().trailersInApp}
+                    onChange={(on) => setSetting('trailersInApp', on)}
+                />
                 <div class="set-block set-credit">
                     <a class="tmdb-credit" href="https://www.themoviedb.org/" target="_blank" rel="noopener" aria-label="TMDB">
                         <TmdbMark height={14} />
@@ -962,6 +970,19 @@ function TvSettings() {
                     <TmdbMark height={14} />
                 </a>
                 <p class="muted small">{t('metadata.about_notice')}</p>
+            </TvPanel>
+            <TvPanel title={t('metadata.trailers_in_app')} id="trailers-label">
+                <p class="muted small">{t('metadata.trailers_in_app_detail')}</p>
+                <Choices
+                    label="trailers-label"
+                    name="trailers"
+                    options={[
+                        { value: 'on', label: t('common.on') },
+                        { value: 'off', label: t('common.off') },
+                    ]}
+                    value={settings().trailersInApp ? 'on' : 'off'}
+                    onPick={(v) => setSetting('trailersInApp', v === 'on')}
+                />
             </TvPanel>
             <Install />
             <div class="panel">

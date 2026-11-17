@@ -104,6 +104,9 @@ class OnlineMetadata(
 
     fun setSkipTimes(value: Boolean) = store.update { it.copy(skipTimes = value) }
 
+    /** Trailers in TMPlayer's own player ([MetaSettings.trailersInApp]), or in the YouTube app and the browser. */
+    fun setTrailersInApp(value: Boolean) = store.update { it.copy(trailersInApp = value) }
+
     /** What the player does at [group]'s stretches: ask, skip by itself, or leave them alone. */
     fun setSkipMode(group: SkipGroup, mode: SkipMode) = store.update { it.copy(skipModes = it.skipModes.with(group, mode)) }
 

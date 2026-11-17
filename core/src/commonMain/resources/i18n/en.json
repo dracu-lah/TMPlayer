@@ -1660,6 +1660,8 @@
     "trailer_scan": "No app here can play YouTube. Scan this with your phone to watch the trailer",
     "trailer_scan_phone": "Scan this with your phone to watch it there.",
     "trailer_unavailable": "This trailer can't play inside the app",
+    "trailers_in_app": "Play trailers in TMPlayer",
+    "trailers_in_app_detail": "YouTube's player loads only when you choose a trailer. Off opens trailers in YouTube",
     "turn_on": "Show poster and overview",
     "turn_on_detail": "Looks videos up by name on TMDB, TVmaze and AniList. Change it in Settings"
   },
@@ -3660,6 +3662,13 @@
     "subtitles_earlier": "Show subtitles earlier",
     "subtitles_later": "Show subtitles later",
     "track_number": "Track {number}"
+  },
+  "trailer": {
+    "close": "Close trailer",
+    "loading": "Loading the trailer…",
+    "play_pause": "Play or pause",
+    "title": "Trailer",
+    "unavailable_in_app": "This trailer cannot play here. Opening it in YouTube."
   },
   "tv": {
     "browse_hint": "OK opens a chat or plays a video. Hold OK on a chat to add it to your favourites. Back goes up a level.",

@@ -53,6 +53,12 @@ data class MetaSettings(
     val omdbRefusedKey: String = "",
     /** Skip intro, recap and credits buttons in the player, from TheIntroDB and AniSkip. */
     val skipTimes: Boolean = true,
+    /**
+     * A detail page's trailer plays in TMPlayer, in YouTube's embedded player (TrailerEmbed),
+     * rather than in the YouTube app or the browser. On by default; off, or whenever it cannot
+     * play here (TrailerRules), the trailer opens outside as before.
+     */
+    val trailersInApp: Boolean = true,
     /** What each kind of skip does when the playhead reaches it: Ask (the default), Skip by itself, or Off. Local, not in a backup. */
     val skipModes: SkipModes = SkipModes(),
     /**
