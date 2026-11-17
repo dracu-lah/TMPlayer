@@ -260,6 +260,7 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
         val sortAnchor = com.tmplayer.ui.components.rememberPopoverAnchor()
         val recent by state.settings.recentSearches.collectAsState(initial = emptyList())
         val scope = rememberCoroutineScope()
+        val recentUndoToast = com.tmplayer.ui.components.rememberActionToast()
         val chatBar: @Composable () -> Unit = {
             ChatBar(
                 state = state,
@@ -275,7 +276,7 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
                 },
                 onSearchDown = { gridNav?.focus(0) },
                 recent = recent,
-                onClearRecent = { scope.launch { state.settings.clearRecentSearches() } },
+                onClearRecent = { clearRecentWithUndo(state.settings, recentUndoToast, s.searchRecentCleared, s.searchUndo) },
                 onRemoveRecent = { entry -> scope.launch { state.settings.removeRecentSearch(entry) } },
                 favourite = favourite,
                 // The star says it, filled or not; a message about it would only repeat that.
@@ -1336,8 +1337,8 @@ internal fun TileMenu(
 
     // Held here rather than in the menu, which is gone by the time the prompt is answered.
     var confirmingRemove by remember { mutableStateOf<ResumeRecord?>(null) }
-    confirmingRemove?.let { doomed ->
     val stopDownload = rememberStopDownload { OfflineDownloads.cancel(state.downloads, it.fileId) }
+    confirmingRemove?.let { doomed ->
         ConfirmDialog(
             title = s.gridRemoveDownloadTitle,
             message = s.gridRemoveDownloadMessage(item.title),

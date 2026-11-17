@@ -18,6 +18,15 @@ class RecentSearchesTest {
     }
 
     @Test
+    fun `Undo after Clear all puts the list back under searches made since`() {
+        val before = listOf("dark", "severance", "lost")
+        assertEquals(before, RecentSearches.restore(before, emptyList()))
+        // Searched "andor" in the seconds before Undo, and "Dark" again: nothing lost, nothing twice.
+        assertEquals(listOf("andor", "Dark", "severance", "lost"), RecentSearches.restore(before, listOf("andor", "Dark")))
+        assertEquals(listOf("a", "b"), RecentSearches.restore(listOf("c", "d"), listOf("a", "b"), limit = 2))
+    }
+
+    @Test
     fun `the same search again moves to the front instead of repeating`() {
         val list = RecentSearches.add(listOf("dark", "severance", "lost"), "  Severance ")
         assertEquals(listOf("Severance", "dark", "lost"), list)
@@ -79,6 +88,10 @@ class RecentSearchesTest {
         assertEquals(listOf("two", "eleven", "nine", "eight", "seven", "six", "five", "four", "three"), settings.recentSearches.first())
         settings.clearRecentSearches()
         assertTrue(settings.recentSearches.first().isEmpty())
+        // Undo of the Clear all: the list comes back under a search made in between.
+        settings.addRecentSearch("fresh")
+        settings.restoreRecentSearches(listOf("two", "eleven"))
+        assertEquals(listOf("fresh", "two", "eleven"), settings.recentSearches.first())
     }
 
     @Test
