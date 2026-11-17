@@ -17,8 +17,70 @@
       "tintColor": "#2AABEE",
       "category": "entertainment",
       "screenshots": {
-        "iphone": [],
-        "ipad": []
+        "iphone": [
+          {
+            "url": "https://raw.githubusercontent.com/dracu-lah/TMPlayer/main/iosApp/screenshots/iphone/01-home.png",
+            "width": 1320,
+            "height": 2868
+          },
+          {
+            "url": "https://raw.githubusercontent.com/dracu-lah/TMPlayer/main/iosApp/screenshots/iphone/02-chat.png",
+            "width": 1320,
+            "height": 2868
+          },
+          {
+            "url": "https://raw.githubusercontent.com/dracu-lah/TMPlayer/main/iosApp/screenshots/iphone/03-video.png",
+            "width": 1320,
+            "height": 2868
+          },
+          {
+            "url": "https://raw.githubusercontent.com/dracu-lah/TMPlayer/main/iosApp/screenshots/iphone/04-player.png",
+            "width": 1320,
+            "height": 2868
+          },
+          {
+            "url": "https://raw.githubusercontent.com/dracu-lah/TMPlayer/main/iosApp/screenshots/iphone/05-downloads.png",
+            "width": 1320,
+            "height": 2868
+          },
+          {
+            "url": "https://raw.githubusercontent.com/dracu-lah/TMPlayer/main/iosApp/screenshots/iphone/06-settings.png",
+            "width": 1320,
+            "height": 2868
+          }
+        ],
+        "ipad": [
+          {
+            "url": "https://raw.githubusercontent.com/dracu-lah/TMPlayer/main/iosApp/screenshots/ipad/01-home.png",
+            "width": 2064,
+            "height": 2752
+          },
+          {
+            "url": "https://raw.githubusercontent.com/dracu-lah/TMPlayer/main/iosApp/screenshots/ipad/02-chat.png",
+            "width": 2064,
+            "height": 2752
+          },
+          {
+            "url": "https://raw.githubusercontent.com/dracu-lah/TMPlayer/main/iosApp/screenshots/ipad/03-video.png",
+            "width": 2064,
+            "height": 2752
+          },
+          {
+            "url": "https://raw.githubusercontent.com/dracu-lah/TMPlayer/main/iosApp/screenshots/ipad/04-player.png",
+            "width": 2064,
+            "height": 2752
+          },
+          {
+            "url": "https://raw.githubusercontent.com/dracu-lah/TMPlayer/main/iosApp/screenshots/ipad/05-downloads.png",
+            "width": 2064,
+            "height": 2752
+          },
+          {
+            "url": "https://raw.githubusercontent.com/dracu-lah/TMPlayer/main/iosApp/screenshots/ipad/06-settings.png",
+            "width": 2064,
+            "height": 2752
+          }
+        ]
       },
       "versions": [],
       "appPermissions": {
