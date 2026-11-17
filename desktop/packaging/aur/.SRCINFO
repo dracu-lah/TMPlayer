@@ -5,7 +5,7 @@ pkgbase = tmplayer-bin
 	url = https://tmplayer.org
 	arch = x86_64
 	license = GPL-3.0-or-later
-	depends = glibc>=2.38
+	depends = glibc>=2.35
 	depends = gcc-libs
 	depends = openssl
 	depends = zlib

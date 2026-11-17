@@ -2,7 +2,8 @@ name: Desktop Linux packages
 description: >
   Tests the desktop app, builds the Linux tarball and AppImage into dist/, and runs the packaged
   app's --self-test from each of them, so that no package whose natives fail to load can leave CI. Shared by ci.yml and release.yml; the caller checks out,
-  sets up JDK 21 and Gradle, and writes local.properties if the build should carry credentials.
+  sets up JDK 21 and Gradle, runs the linux-natives action (it sets TMPLAYER_LINUX_NATIVES, which
+  the Gradle build reads), and writes local.properties if the build should carry credentials.
 
 inputs:
   version:
@@ -12,6 +13,13 @@ inputs:
 runs:
   using: composite
   steps:
+    # Without the rebuilt natives the jars' own TDLib and libmpv would be packaged, which need
+    # glibc 2.38: fail here, before the tests, not at the floor check an hour later.
+    - name: Require the glibc 2.35 natives
+      shell: bash
+      run: |
+        [ -n "${TMPLAYER_LINUX_NATIVES:-}" ] || { echo "::error::TMPLAYER_LINUX_NATIVES is not set: call .github/actions/linux-natives before this action"; exit 1; }
+
     # The libraries the bundled TDLib, libmpv and JVM load from the system (the same list the
     # PKGBUILD declares), plus the tools for validating the desktop entry and AppStream metadata,
     # and zsync, whose zsyncmake appimagetool calls to write the AppImage's delta update file.
@@ -36,7 +44,7 @@ runs:
       run: desktop/build/compose/binaries/main-release/app/TMPlayer/bin/TMPlayer --self-test
 
     # Raises the alarm if a dependency bump ships a native that needs a newer glibc than the
-    # downloads promise (2.38, from the TDLib and libmpv builds).
+    # downloads promise (glibc 2.35 and libstdc++ 3.4.30, Ubuntu 22.04).
     - name: Check the glibc floor
       shell: bash
       run: desktop/packaging/linux/glibc-floor.sh desktop/build/compose/binaries/main-release/app/TMPlayer

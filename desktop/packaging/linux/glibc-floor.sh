@@ -7,8 +7,8 @@
 set -euo pipefail
 
 app="${1:?usage: glibc-floor.sh <app image dir>}"
-max_glibc="${MAX_GLIBC:-2.38}"
-max_glibcxx="${MAX_GLIBCXX:-3.4.32}"
+max_glibc="${MAX_GLIBC:-2.35}"
+max_glibcxx="${MAX_GLIBCXX:-3.4.30}"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
@@ -22,7 +22,7 @@ done < <(find "$app" -name '*.jar' -print0)
 
 report="$tmp/report.txt"
 while IFS= read -r -d '' f; do
-  file -b "$f" | grep -q '^ELF' || continue
+  file -b "$f" | grep -q '^ELF.*x86-64' || continue   # other CPUs' natives (JNA's loongarch64, ...) never load here
   g="$(objdump -T "$f" 2>/dev/null | grep -oE 'GLIBC_[0-9.]+' | sed 's/GLIBC_//' | sort -uV | tail -1 || true)"
   x="$(objdump -T "$f" 2>/dev/null | grep -oE 'GLIBCXX_[0-9.]+' | sed 's/GLIBCXX_//' | sort -uV | tail -1 || true)"
   printf '%s\t%s\t%s\n' "${g:-none}" "${x:-none}" "${f#"$tmp"/}" >> "$report"

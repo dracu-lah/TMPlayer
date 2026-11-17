@@ -257,8 +257,10 @@ jobs:
           if-no-files-found: error
 
   # The AppImage and the tarball, built and self-tested by the same composite action CI runs on
-  # every push. Ubuntu 24.04, pinned: the bundled TDLib and libmpv need glibc 2.38 to run the
-  # self-test, and the image should not move under a release.
+  # every push. Ubuntu 24.04, pinned so the image does not move under a release. The bundled TDLib
+  # and libmpv are the glibc 2.35 builds (.github/actions/linux-natives, built in an Ubuntu 22.04
+  # container, cached by recipe, hashes in natives/linux-2-35/PINS.txt), which is the floor the
+  # downloads promise; glibc-floor.sh fails the job if any native needs more.
   desktop-linux:
     name: Desktop (Linux)
     needs: version
@@ -311,6 +313,9 @@ jobs:
           SENTRY_DSN_DESKTOP=$SENTRY_DSN_DESKTOP
           SENTRY_DSN=$SENTRY_DSN
           EOF
+
+      - name: Build or restore the glibc 2.35 natives
+        uses: ./.github/actions/linux-natives
 
       - name: Package and self-test
         uses: ./.github/actions/desktop-linux
@@ -684,7 +689,7 @@ jobs:
             | Android TV, sticks and phones | `TMPlayer-${{ needs.version.outputs.name }}-universal.apk` |
             | Windows 10 and 11, 64-bit | `TMPlayer-${{ needs.version.outputs.name }}-windows-x64.msi` |
             | macOS 26 or newer, Apple Silicon (preview, [first launch](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/INSTALL.md#macos)) | `TMPlayer-${{ needs.version.outputs.name }}-macos-arm64.dmg` |
-            | Linux, glibc 2.38 or newer | `TMPlayer-${{ needs.version.outputs.name }}-x86_64.AppImage` |
+            | Linux, glibc 2.35 or newer | `TMPlayer-${{ needs.version.outputs.name }}-x86_64.AppImage` |
             | Arch Linux | [the PKGBUILD](https://github.com/${{ github.repository }}/tree/${{ github.ref_name }}/desktop/packaging/aur), from `TMPlayer-${{ needs.version.outputs.name }}-linux-x64.tar.xz` |
             | LG TVs, webOS 5 and newer ([Developer Mode](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/webapp/tv/README.md#2-lg-webos)) | `TMPlayer-${{ needs.version.outputs.name }}-lg-webos.ipk` |
             | Samsung TVs, Tizen 2020 and newer ([Developer Mode](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/webapp/tv/README.md#3-samsung-tizen)) | `TMPlayer-${{ needs.version.outputs.name }}-samsung-tizen.wgt` |
