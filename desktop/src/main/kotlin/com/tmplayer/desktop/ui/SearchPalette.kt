@@ -83,8 +83,8 @@ import com.tmplayer.data.SearchSort
 import com.tmplayer.data.SeriesShelf
 import com.tmplayer.data.ShelfEntry
 import com.tmplayer.desktop.os.OsInfo
-import com.tmplayer.desktop.player.scrimDismiss
-import com.tmplayer.desktop.player.swallowClicks
+import com.tmplayer.ui.components.scrimDismiss
+import com.tmplayer.ui.components.swallowClicks
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.semantics.Role
 import com.tmplayer.ui.browse.BrowseSection

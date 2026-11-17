@@ -39,8 +39,8 @@ import com.tmplayer.data.UpdateScheduler
 import com.tmplayer.data.WatchedStore
 import com.tmplayer.desktop.DesktopPrefs
 import com.tmplayer.desktop.DesktopWatchCache
-import com.tmplayer.desktop.player.scrimDismiss
-import com.tmplayer.desktop.player.swallowClicks
+import com.tmplayer.ui.components.scrimDismiss
+import com.tmplayer.ui.components.swallowClicks
 import com.tmplayer.i18n.L
 import com.tmplayer.ui.theme.FocusVisibility
 import com.tmplayer.ui.theme.TmMaterialTheme

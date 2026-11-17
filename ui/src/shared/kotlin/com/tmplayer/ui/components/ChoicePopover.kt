@@ -162,10 +162,8 @@ private fun PopoverCard(
             Modifier
                 .fillMaxSize()
                 .background(FloatingTone.scrim)
-                // Pointer only: a screen sized, markless Tab stop that Enter would close the card
-                // from is no help (Esc and Back are the keyboard's way).
-                .focusProperties { canFocus = false }
-                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss),
+                // Pointer only (see [scrimDismiss]): Esc and Back are the keyboard's way.
+                .scrimDismiss(onDismiss),
         )
     }
     var here by remember { mutableStateOf<LayoutCoordinates?>(null) }

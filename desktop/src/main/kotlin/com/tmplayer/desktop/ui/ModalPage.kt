@@ -30,7 +30,7 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.tmplayer.desktop.player.scrimDismiss
+import com.tmplayer.ui.components.scrimDismiss
 import com.tmplayer.ui.components.LocalBottomChrome
 import com.tmplayer.ui.components.rememberLessMotion
 import com.tmplayer.ui.theme.FloatingTone

@@ -100,6 +100,8 @@ import com.tmplayer.ui.components.FloatingChrome
 import com.tmplayer.ui.components.LocalBottomChrome
 import androidx.compose.ui.platform.testTag
 import com.tmplayer.ui.components.captionStyle
+import com.tmplayer.ui.components.scrimDismiss
+import com.tmplayer.ui.components.swallowClicks
 import com.tmplayer.ui.components.pressScale
 import androidx.compose.material3.ripple
 import androidx.compose.ui.unit.IntOffset
@@ -970,7 +972,7 @@ private fun YouPopover(
             Modifier
                 .fillMaxSize()
                 .background(FloatingTone.scrim)
-                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss),
+                .scrimDismiss(onDismiss),
         )
     }
     val ltr = LocalLayoutDirection.current == LayoutDirection.Ltr
@@ -1005,7 +1007,7 @@ private fun YouPopover(
                     .background(FloatingTone.dialog)
                     .border(floatingBorder(), POPOVER_SHAPE)
                     // Taps inside the card stay inside it rather than reaching the scrim.
-                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}
+                    .swallowClicks()
                     .verticalScroll(rememberScrollState())
                     // The rows' own 6 dp at the sides, so the last row's fill keeps it below too.
                     .padding(vertical = 6.dp),

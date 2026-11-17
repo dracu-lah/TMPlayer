@@ -84,7 +84,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tmplayer.data.Account
 import com.tmplayer.desktop.os.OsInfo
-import com.tmplayer.desktop.player.scrimDismiss
+import com.tmplayer.ui.components.scrimDismiss
 import com.tmplayer.ui.browse.BrowseSection
 import com.tmplayer.ui.browse.BrowseTab
 import com.tmplayer.ui.browse.HistoryTab

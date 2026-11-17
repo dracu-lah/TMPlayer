@@ -39,7 +39,7 @@ import androidx.compose.ui.unit.dp
 import com.tmplayer.data.Bookmark
 import com.tmplayer.desktop.player.BookmarkLine
 import com.tmplayer.desktop.player.OverlayButton
-import com.tmplayer.desktop.player.scrimDismiss
+import com.tmplayer.ui.components.scrimDismiss
 import com.tmplayer.i18n.L
 import com.tmplayer.ui.icons.TmIcons
 import com.tmplayer.ui.theme.FocusVisibility

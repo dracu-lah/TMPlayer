@@ -6,6 +6,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import com.tmplayer.ui.components.scrimDismiss
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -573,7 +574,7 @@ private fun PersonEnlarged(person: MetaPerson, onClose: () -> Unit) {
             Modifier
                 .fillMaxSize()
                 .background(Color.Black.copy(alpha = 0.88f))
-                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClose),
+                .scrimDismiss(onClose),
             contentAlignment = Alignment.Center,
         ) {
             val photoHeight = (maxHeight * 0.7f).coerceAtMost(maxWidth * 1.2f)

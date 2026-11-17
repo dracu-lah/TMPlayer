@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -17,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,6 +34,7 @@ import com.tmplayer.player.MiniPlayerState
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.icons.TmIcons
 import com.tmplayer.ui.theme.Tone
+import com.tmplayer.ui.theme.focusRing
 
 /**
  * The mini player (U8): the video that was left with Back, docked above the bottom navigation.
@@ -83,12 +86,16 @@ fun MiniPlayerBar(
             Modifier.fillMaxWidth().heightIn(min = 56.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            val expandInteractions = remember { MutableInteractionSource() }
+            val expandFocused by expandInteractions.collectIsFocusedAsState()
             Box(
                 Modifier
                     .weight(1f)
                     .heightIn(min = 56.dp)
+                    // A keyboard or remote on the title shows where it is (the bar's border is no mark).
+                    .focusRing(expandFocused, RoundedCornerShape(12.dp))
                     .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
+                        interactionSource = expandInteractions,
                         indication = androidx.compose.foundation.LocalIndication.current,
                         role = Role.Button,
                         onClickLabel = expandLabel,
@@ -120,10 +127,12 @@ fun MiniPlayerBar(
 @Composable
 private fun BarButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
     val interactions = remember { MutableInteractionSource() }
+    val focused by interactions.collectIsFocusedAsState()
     Box(
         Modifier
             .size(48.dp)
             .clip(CircleShape)
+            .focusRing(focused, CircleShape)
             .pressScale(interactions)
             .clickable(interactionSource = interactions, indication = androidx.compose.foundation.LocalIndication.current, role = Role.Button, onClickLabel = label, onClick = onClick),
         contentAlignment = Alignment.Center,

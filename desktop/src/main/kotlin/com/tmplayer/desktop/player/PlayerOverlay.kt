@@ -71,6 +71,8 @@ import com.tmplayer.ui.theme.Motion
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.floatingBorder
 import com.tmplayer.ui.components.TmDropdownMenu
+import com.tmplayer.ui.components.scrimDismiss
+import com.tmplayer.ui.components.swallowClicks
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -1692,7 +1694,7 @@ internal fun BoxScope.EpisodesSheet(
                 .heightIn(max = maxHeight - 32.dp)
                 .padding(16.dp)
                 // A click inside the panel is the panel's, not the dim's.
-                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}
+                .swallowClicks()
                 .onPreviewKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                     val direction = when (event.key) {
@@ -1781,7 +1783,7 @@ internal fun BoxScope.StatusSheet(
 ) {
     val s = LocalStrings.current
     if (phase == Phase.Playing || phase is Phase.Loading) return
-    Box(Modifier.matchParentSize().background(Color(0xCC000000)).clickable(enabled = false) {}, contentAlignment = Alignment.Center) {
+    Box(Modifier.matchParentSize().background(Color(0xCC000000)).swallowClicks(), contentAlignment = Alignment.Center) {
         Column(Modifier.widthIn(max = 520.dp).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(title, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis)
             if (subtitle.isNotBlank()) Text(subtitle, color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp)
