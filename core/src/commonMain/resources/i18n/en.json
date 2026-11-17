@@ -714,6 +714,7 @@
     "on_this_phone": "On this phone",
     "on_this_phone_count": "On this phone ({count})",
     "open_folder": "Open folder",
+    "open_folder_failed": "No app on this phone could open that folder. Look for it in your files app.",
     "overview_nothing": "Nothing to free up right now",
     "overview_using": "TMPlayer uses {size}",
     "part_cached": "Partly loaded",

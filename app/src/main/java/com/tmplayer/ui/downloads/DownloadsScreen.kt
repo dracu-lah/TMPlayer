@@ -110,6 +110,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.tmplayer.data.AndroidStorage
 import com.tmplayer.data.ContentProtection
 import com.tmplayer.data.DiskInfo
 import com.tmplayer.data.DiskSpace
@@ -407,6 +408,17 @@ fun DownloadsScreen(
     // Save to gallery: Movies/TMPlayer through MediaStore, Android 10 and later, on a phone or
     // tablet (a television has no gallery anyone looks at).
     val canSaveToGallery = touch && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q
+    // Open folder (Raju pass 2, 7.5), as the desktop has it: only where the downloads are in a folder
+    // the viewer picked, the one place a file manager may browse. In the app's own storage there is
+    // nothing to open, and Keep's Save to folder and gallery are the way out of it.
+    val downloadsFolder = remember(touch, AndroidStorage.currentRoot) {
+        if (touch) com.tmplayer.data.OpenDownloadsFolder.target(context) else null
+    }
+    val openDownloadsFolder: (() -> Unit)? = downloadsFolder?.let { tree ->
+        {
+            if (!com.tmplayer.data.OpenDownloadsFolder.open(context, tree)) toast(L.downloadsOpenFolderFailed)
+        }
+    }
     var explainingNoFolder by remember { mutableStateOf(false) }
     val folderPicker = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.OpenDocumentTree(),
@@ -1136,6 +1148,8 @@ fun DownloadsScreen(
                         onAction = onBrowse,
                         secondLabel = onDownloadSeason?.let { L.downloadsEmptySeason },
                         onSecondAction = onDownloadSeason,
+                        linkLabel = openDownloadsFolder?.let { L.downloadsOpenFolder },
+                        onLink = openDownloadsFolder,
                     )
                 }
             }
@@ -1172,7 +1186,10 @@ fun DownloadsScreen(
             }
         }
         item(key = "h-done") {
-            SectionHeading(if (everything.isEmpty()) L.downloadsOnThisPhone else L.downloadsOnThisPhoneCount(count = everything.size))
+            SectionHeading(
+                if (everything.isEmpty()) L.downloadsOnThisPhone else L.downloadsOnThisPhoneCount(count = everything.size),
+                action = openDownloadsFolder?.let { L.downloadsOpenFolder to it },
+            )
         }
         if (everything.size > 1) {
             item(key = "sort") { sortChips() }
@@ -1207,6 +1224,8 @@ fun DownloadsScreen(
                         onAction = onBrowse,
                         secondLabel = onDownloadSeason?.let { L.downloadsEmptySeason },
                         onSecondAction = onDownloadSeason,
+                        linkLabel = openDownloadsFolder?.let { L.downloadsOpenFolder },
+                        onLink = openDownloadsFolder,
                     )
                 }
             }
@@ -1627,15 +1646,29 @@ private fun DownloadsSortChips(
 
 /** A section's name on the one page: Downloaded, over the downloads. */
 @Composable
-private fun SectionHeading(title: String) {
-    Text(
-        title,
-        style = MaterialTheme.typography.titleSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-        modifier = Modifier.padding(start = TEXT_EDGE, end = TEXT_EDGE, top = 16.dp, bottom = 4.dp),
-    )
+private fun SectionHeading(title: String, action: Pair<String, () -> Unit>? = null) {
+    val heading: @Composable (Modifier) -> Unit = { modifier ->
+        Text(
+            title,
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = modifier,
+        )
+    }
+    if (action == null) {
+        heading(Modifier.padding(start = TEXT_EDGE, end = TEXT_EDGE, top = 16.dp, bottom = 4.dp))
+        return
+    }
+    // The heading's own line, with Open folder at its end as a text link at least 48 dp tall.
+    Row(
+        Modifier.fillMaxWidth().padding(start = TEXT_EDGE, end = 8.dp, top = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        heading(Modifier.weight(1f))
+        androidx.compose.material3.TextButton(onClick = action.second, modifier = Modifier.heightIn(min = 48.dp)) { Text(action.first) }
+    }
 }
 
 /** A show's name over its downloaded episodes, with how many there are and what they take. */

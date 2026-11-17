@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -341,6 +342,9 @@ fun BigEmpty(
     /** A second way on beside [actionLabel] (Downloads: Go to Chats, and Download a season). */
     secondLabel: String? = null,
     onSecondAction: (() -> Unit)? = null,
+    /** A text link under the buttons, for a way that is useful but never the page's main one (Downloads: Open folder). */
+    linkLabel: String? = null,
+    onLink: (() -> Unit)? = null,
 ) {
     val touch = isTouch()
     val muted = Tone.muted
@@ -391,6 +395,9 @@ fun BigEmpty(
                 if (!touch && takeFocus) {
                     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
                 }
+            }
+            if (linkLabel != null && onLink != null) {
+                androidx.compose.material3.TextButton(onClick = onLink, modifier = Modifier.heightIn(min = 48.dp)) { Text(linkLabel) }
             }
         }
     }
