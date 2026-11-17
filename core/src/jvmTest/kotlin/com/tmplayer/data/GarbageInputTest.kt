@@ -359,6 +359,10 @@ class GarbageInputTest {
                 val entry = com.tmplayer.json.JSONObject(mapOf("id" to text, "chipsets" to listOf(text, "abc"), "async" to text, "excludeDecoders" to listOf(text), "startRung" to text, "note" to text))
                 KnownDevices.parse("[$entry]")
             }
+            survive("AssMargins.bottomOverrides", text) {
+                com.tmplayer.player.AssMargins.bottomOverrides(text)
+                com.tmplayer.player.AssMargins.bottomOverrides("[Script Info]\nPlayResY: $text\n[V4+ Styles]\nFormat: Name, Alignment, MarginV\nStyle: $text\nStyle: A,2,$text")
+            }
             survive("EngineChoice.from", text) { com.tmplayer.player.EngineChoice.from(text) }
             survive("PlayerChoice.parse", text) { com.tmplayer.player.PlayerChoice.parse(text) }
             survive("TunneledMode.from", text) { com.tmplayer.player.TunneledMode.from(text) }

@@ -6,8 +6,12 @@ import com.tmplayer.i18n.L
  * How big subtitles are drawn, with the figure each player needs for it.
  *
  * [fraction] is the share of the picture's height Media3's `SubtitleView` gives a line; [mpvFontSize]
- * is mpv's `sub-font-size`, which is in pixels of a 720 line high frame. Medium is what both players
- * used before the setting existed, so nobody's subtitles change size on the upgrade.
+ * is the size in pixels of a 720 line high frame mpv draws a plain line at. Medium is what both
+ * players used before the setting existed, so nobody's subtitles change size on the upgrade.
+ *
+ * A styled track (ASS or SSA) brings its own size, which neither player's own text size reaches:
+ * [cueScale] and [mpvScale] are this size against Medium, which both players multiply the track's
+ * own size by, so the setting moves every text track (issues 32 and 36).
  */
 enum class SubtitleSize(private val labelText: () -> String, val fraction: Float, val mpvFontSize: Int) {
     Small({ L.subtitlesSizeSmall }, 0.052f, 38),
@@ -17,6 +21,21 @@ enum class SubtitleSize(private val labelText: () -> String, val fraction: Float
     ;
 
     val label: String get() = labelText()
+
+    /** How much a cue that carries its own size is scaled on the phone and the television: 1 at Medium. */
+    val cueScale: Float get() = fraction / Medium.fraction
+
+    /**
+     * mpv's `sub-scale`, "0.826" for Small: this size over Medium's to three places. mpv applies it
+     * to plain lines (drawn at Medium's `sub-font-size`, so they land on [mpvFontSize]) and to an
+     * ASS track's own sizes alike.
+     */
+    val mpvScale: String
+        get() {
+            val medium = Medium.mpvFontSize
+            val thousandths = (mpvFontSize * 1000 + medium / 2) / medium
+            return "${thousandths / 1000}.${(thousandths % 1000).toString().padStart(3, '0')}"
+        }
 }
 
 /**
@@ -111,8 +130,11 @@ enum class SubtitleBox(val percent: Int) {
 /**
  * The look of subtitles, shared by the phone, the television and the desktop.
  *
- * A file's own styled subtitles (ASS) keep their styling; this applies to plain text tracks, which
- * is what most videos carry.
+ * A file's own styled subtitles (ASS) keep their colours, fonts and placed signs; the size and the
+ * height of the bottom lines follow this look on them too ([SubtitleSize.cueScale],
+ * [SubtitleSize.mpvScale], [AssMargins]), since a track converted to ASS is what many videos carry
+ * and a setting that skipped it read as broken (issues 32 and 36). The rest applies to plain text
+ * tracks.
  */
 data class SubtitleStyle(
     val size: SubtitleSize = SubtitleSize.Medium,
@@ -170,7 +192,10 @@ data class SubtitleStyle(
      * mpv's colours are #AARRGGBB.
      */
     fun mpvProperties(font: String): List<Pair<String, String>> = buildList {
-        add("sub-font-size" to this@SubtitleStyle.size.mpvFontSize.toString())
+        // The size is the scale, not the font size: `sub-font-size` never reaches an ASS track
+        // (mpv's `sub-ass-override` stays at `scale`), `sub-scale` reaches both.
+        add("sub-font-size" to SubtitleSize.Medium.mpvFontSize.toString())
+        add("sub-scale" to this@SubtitleStyle.size.mpvScale)
         add("sub-pos" to position.mpvSubPos.toString())
         add("sub-color" to colour.hex)
         add("sub-font" to font)
