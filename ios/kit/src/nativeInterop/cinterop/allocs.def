@@ -1,0 +1,188 @@
+package = com.tmplayer.ios.allocs
+---
+#include <execinfo.h>
+#include <os/lock.h>
+#include <stdatomic.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+
+// AllocProfile's look at the heap (-perfAllocs), on a device as well as a simulator. libmalloc
+// tells malloc_logger, when it is set, of every allocation and every free; it is how macOS's own
+// malloc_history follows the heap, and iOS exports it. Each time the bytes allocated since the
+// start pass another multiple of the interval, the allocation that passed it is noted with the
+// return addresses on its stack, standing for an interval's worth of bytes; a noted allocation
+// freed is forgotten. What is left at any moment is a sample of the live heap by the code that
+// made it. Kotlin's objects come from malloc only in a build with -Xallocator=std
+// (-PtmSystemAllocator=true); otherwise the samples are the runtime's own pages and C's blocks.
+//
+// Everything here runs inside malloc and free, so it allocates nothing: the table is made before
+// the hook is set, backtrace() only walks the stack, and the lock is os_unfair_lock.
+
+typedef void (tm_malloc_logger_t)(uint32_t type, uintptr_t arg1, uintptr_t arg2, uintptr_t arg3,
+                                  uintptr_t result, uint32_t skip);
+extern tm_malloc_logger_t *malloc_logger;
+
+#define TM_ALLOCS_ALLOCATE 2
+#define TM_ALLOCS_DEALLOCATE 4
+#define TM_ALLOCS_HAS_ZONE 8
+#define TM_ALLOCS_VM 16
+#define TM_ALLOCS_SLOTS 32768
+#define TM_ALLOCS_PROBE 16
+#define TM_ALLOCS_FRAMES 40
+
+typedef struct {
+    uintptr_t ptr;
+    uint64_t weight;
+    int depth;
+    void *frames[TM_ALLOCS_FRAMES];
+} tm_allocs_sample;
+
+static tm_allocs_sample *tm_allocs_table;
+static os_unfair_lock tm_allocs_lock = OS_UNFAIR_LOCK_INIT;
+
+// Every sample in the order taken, freed or not, for what allocates the most (the churn): the
+// first TM_ALLOCS_HISTORY of them, 2 GB at 128 KB a sample. A slot is filled before it is marked
+// ready, so a reader never takes one half written.
+#define TM_ALLOCS_HISTORY 16384
+typedef struct {
+    _Atomic int ready;
+    uint64_t weight;
+    int depth;
+    void *frames[TM_ALLOCS_FRAMES];
+} tm_allocs_event;
+static tm_allocs_event *tm_allocs_history;
+static _Atomic uint32_t tm_allocs_history_next;
+static _Atomic uint64_t tm_allocs_running;
+static _Atomic uint64_t tm_allocs_made;
+static _Atomic uint64_t tm_allocs_lost;
+static uint64_t tm_allocs_interval;
+static tm_malloc_logger_t *tm_allocs_previous;
+
+static inline uint32_t tm_allocs_slot(uintptr_t ptr) {
+    uint64_t h = (uint64_t)ptr >> 4;
+    h ^= h >> 17;
+    h *= 0xed5ad4bbULL;
+    h ^= h >> 11;
+    return (uint32_t)(h & (TM_ALLOCS_SLOTS - 1));
+}
+
+static void tm_allocs_forget(uintptr_t ptr) {
+    uint32_t at = tm_allocs_slot(ptr);
+    os_unfair_lock_lock(&tm_allocs_lock);
+    for (int i = 0; i < TM_ALLOCS_PROBE; i++) {
+        tm_allocs_sample *sample = &tm_allocs_table[(at + i) & (TM_ALLOCS_SLOTS - 1)];
+        if (sample->ptr == ptr) {
+            sample->ptr = 0;
+            break;
+        }
+    }
+    os_unfair_lock_unlock(&tm_allocs_lock);
+}
+
+static void tm_allocs_note(uintptr_t ptr, uint64_t weight) {
+    void *frames[TM_ALLOCS_FRAMES];
+    int depth = backtrace(frames, TM_ALLOCS_FRAMES);
+    uint32_t next = atomic_fetch_add_explicit(&tm_allocs_history_next, 1, memory_order_relaxed);
+    if (next < TM_ALLOCS_HISTORY) {
+        tm_allocs_event *event = &tm_allocs_history[next];
+        event->weight = weight;
+        event->depth = depth;
+        memcpy(event->frames, frames, (size_t)depth * sizeof(void *));
+        atomic_store_explicit(&event->ready, 1, memory_order_release);
+    }
+    uint32_t at = tm_allocs_slot(ptr);
+    int noted = 0;
+    os_unfair_lock_lock(&tm_allocs_lock);
+    for (int i = 0; i < TM_ALLOCS_PROBE && !noted; i++) {
+        tm_allocs_sample *sample = &tm_allocs_table[(at + i) & (TM_ALLOCS_SLOTS - 1)];
+        if (sample->ptr == 0 || sample->ptr == ptr) {
+            sample->ptr = ptr;
+            sample->weight = weight;
+            sample->depth = depth;
+            memcpy(sample->frames, frames, (size_t)depth * sizeof(void *));
+            noted = 1;
+        }
+    }
+    os_unfair_lock_unlock(&tm_allocs_lock);
+    if (!noted) atomic_fetch_add_explicit(&tm_allocs_lost, weight, memory_order_relaxed);
+}
+
+static void tm_allocs_logger(uint32_t type, uintptr_t arg1, uintptr_t arg2, uintptr_t arg3,
+                             uintptr_t result, uint32_t skip) {
+    if (tm_allocs_previous) tm_allocs_previous(type, arg1, arg2, arg3, result, skip);
+    if (type & TM_ALLOCS_VM) return;
+    int zone = (type & TM_ALLOCS_HAS_ZONE) != 0;
+    uintptr_t gone = 0, made = 0;
+    uint64_t size = 0;
+    if ((type & TM_ALLOCS_ALLOCATE) && (type & TM_ALLOCS_DEALLOCATE)) {
+        // realloc: the old block, the new size, the new block.
+        gone = arg2;
+        size = arg3;
+        made = result;
+    } else if (type & TM_ALLOCS_ALLOCATE) {
+        size = zone ? arg2 : arg1;
+        made = result;
+    } else if (type & TM_ALLOCS_DEALLOCATE) {
+        gone = zone ? arg2 : arg1;
+    }
+    if (gone) tm_allocs_forget(gone);
+    if (made && size) {
+        atomic_fetch_add_explicit(&tm_allocs_made, size, memory_order_relaxed);
+        uint64_t before = atomic_fetch_add_explicit(&tm_allocs_running, size, memory_order_relaxed);
+        uint64_t passed = (before + size) / tm_allocs_interval - before / tm_allocs_interval;
+        if (passed) tm_allocs_note(made, passed * tm_allocs_interval);
+    }
+}
+
+// Starts following the heap, a sample every interval bytes. 1 when it started, 0 otherwise.
+static int tm_allocs_start(uint64_t interval) {
+    if (tm_allocs_table || interval == 0) return 0;
+    tm_allocs_table = calloc(TM_ALLOCS_SLOTS, sizeof(tm_allocs_sample));
+    tm_allocs_history = calloc(TM_ALLOCS_HISTORY, sizeof(tm_allocs_event));
+    if (!tm_allocs_table || !tm_allocs_history) return 0;
+    tm_allocs_interval = interval;
+    tm_allocs_previous = malloc_logger;
+    malloc_logger = tm_allocs_logger;
+    return 1;
+}
+
+static int tm_allocs_slots(void) { return TM_ALLOCS_SLOTS; }
+
+// Bytes allocated since the start, and the samples' bytes that found no free slot.
+static uint64_t tm_allocs_allocated(void) { return atomic_load(&tm_allocs_made); }
+static uint64_t tm_allocs_dropped(void) { return atomic_load(&tm_allocs_lost); }
+
+// How many samples the history holds so far.
+static int tm_allocs_history_size(void) {
+    uint32_t next = atomic_load(&tm_allocs_history_next);
+    return (int)(next < TM_ALLOCS_HISTORY ? next : TM_ALLOCS_HISTORY);
+}
+
+// The history's sample i: its weight and its return addresses (at most max); 0 if not ready.
+static int tm_allocs_history_read(int i, uint64_t *weight, uint64_t *out, int max) {
+    if (!tm_allocs_history || i < 0 || i >= TM_ALLOCS_HISTORY) return 0;
+    tm_allocs_event *event = &tm_allocs_history[i];
+    if (!atomic_load_explicit(&event->ready, memory_order_acquire)) return 0;
+    *weight = event->weight;
+    int depth = event->depth < max ? event->depth : max;
+    for (int k = 0; k < depth; k++) out[k] = (uint64_t)(uintptr_t)event->frames[k];
+    return depth;
+}
+
+// Slot i, copied under the lock: its weight in bytes and its return addresses (at most max).
+// Returns how many addresses were copied; 0 for an empty slot.
+static int tm_allocs_read(int i, uint64_t *weight, uint64_t *out, int max) {
+    int depth = 0;
+    os_unfair_lock_lock(&tm_allocs_lock);
+    if (tm_allocs_table) {
+        tm_allocs_sample *sample = &tm_allocs_table[i & (TM_ALLOCS_SLOTS - 1)];
+        if (sample->ptr) {
+            *weight = sample->weight;
+            depth = sample->depth < max ? sample->depth : max;
+            for (int k = 0; k < depth; k++) out[k] = (uint64_t)(uintptr_t)sample->frames[k];
+        }
+    }
+    os_unfair_lock_unlock(&tm_allocs_lock);
+    return depth;
+}

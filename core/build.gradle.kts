@@ -391,6 +391,7 @@ kotlin {
                 val castKept = setOf("com/tmplayer/cast/CastSource.kt", "com/tmplayer/cast/JvmDefaults.kt")
                 kotlin.exclude { it.path.startsWith("com/tmplayer/cast/") && it.path !in castKept }
                 kotlin.exclude(
+                    "com/tmplayer/data/CrashContext.kt",
                     "com/tmplayer/data/CrashRecord.kt",
                     "com/tmplayer/data/CrashReportScrubber.kt",
                     "com/tmplayer/data/CrashLimits.kt",

@@ -1,0 +1,31 @@
+package = com.tmplayer.ios.sampler
+---
+#include <mach/mach.h>
+#include <stdint.h>
+
+// PerfSampler's one look at another thread: held, its program counter, link register and the
+// return addresses along its frame chain copied into out (at most max), let go. All of it in C,
+// so the Kotlin runtime sees the caller in native code and never waits for it while the other
+// thread is held: a collection that started then would otherwise wait on a thread nobody lets go,
+// and iOS ends a frozen app. Returns how many addresses were copied, 0 when none could be.
+static int tm_sample_thread(mach_port_t thread, uint64_t *out, int max) {
+    if (max < 2 || thread_suspend(thread) != KERN_SUCCESS) return 0;
+    int depth = 0;
+    arm_thread_state64_t state;
+    mach_msg_type_number_t count = ARM_THREAD_STATE64_COUNT;
+    if (thread_get_state(thread, ARM_THREAD_STATE64, (thread_state_t)&state, &count) == KERN_SUCCESS) {
+        out[depth++] = (uint64_t)arm_thread_state64_get_pc(state);
+        out[depth++] = (uint64_t)arm_thread_state64_get_lr(state);
+        uint64_t fp = (uint64_t)arm_thread_state64_get_fp(state);
+        while (fp != 0 && fp % 8 == 0 && depth < max) {
+            uint64_t next = ((uint64_t *)fp)[0];
+            uint64_t ret = ((uint64_t *)fp)[1];
+            if (ret == 0) break;
+            out[depth++] = ret;
+            if (next <= fp || next - fp > 1048576) break;
+            fp = next;
+        }
+    }
+    thread_resume(thread);
+    return depth;
+}

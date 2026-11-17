@@ -145,7 +145,11 @@ kotlin {
                 kotlin.srcDir(appleSourcesForIos)
                 kotlin.exclude(appleForIos)
                 // Casting is not on iOS yet (core's cast/ is left out there too).
-                kotlin.exclude("com/tmplayer/ui/player/CastRemote.kt")
+                kotlin.exclude(
+                    "com/tmplayer/ui/player/CastRemote.kt",
+                    "com/tmplayer/ui/player/CastConverting.kt",
+                    "com/tmplayer/ui/components/AddTvDialog.kt",
+                )
                 dependencies {
                     api(libs.cmp.runtime)
                     api(libs.cmp.ui)
