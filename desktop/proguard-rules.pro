@@ -59,6 +59,13 @@
 # looked up by class name, and its JSON serialisers are reached through tables, not calls.
 -keep class io.sentry.** { *; }
 
+# In-app trailers (trailer/CefTrailerEngine): Chromium's native side calls JCEF's handlers, adapters
+# and callbacks back by name, and jcefmaven reads build_meta.json through Gson's reflection.
+# JOGL is left out on purpose (off-screen mode only); -dontwarn below covers its mentions.
+-keep class org.cef.** { *; }
+-keep class me.friwi.jcefmaven.** { *; }
+-keep class com.google.gson.** { *; }
+
 # Native methods keep their names whatever class they are in.
 -keepclasseswithmembernames,includedescriptorclasses class * { native <methods>; }
 

@@ -218,6 +218,26 @@ source at <https://github.com/adoptium/jdk21u>.
 - Sentry Java SDK 8.61.0 (crash reports, off until turned on, see the privacy page): MIT:
   <https://github.com/getsentry/sentry-java>
 
+### In-app trailers on the desktop: JCEF and Chromium
+
+Bundled (the Java side only):
+
+- jcefmaven 146.0.10 (JCEF's loader and installer): Apache License 2.0:
+  <https://github.com/jcefmaven/jcefmaven>
+- JCEF, the Java Chromium Embedded Framework (jcef-api, commit d3de827): BSD-3-Clause:
+  <https://bitbucket.org/chromiumembedded/java-cef>
+- Apache Commons Compress 1.28.0, Commons IO 2.20.0, Commons Codec 1.19.0 and Commons Lang 3.18.0:
+  Apache License 2.0: <https://commons.apache.org/>
+- Gson 2.11.0 and Error Prone annotations 2.27.0: Apache License 2.0: <https://github.com/google/gson>
+
+Downloaded only when the viewer agrees, on their first trailer, from Maven Central
+(`me.friwi:jcef-natives-<system>`, built by <https://github.com/jcefmaven/jcefbuild>) and never
+shipped in an installer: the Chromium Embedded Framework 146.0.10 (BSD-3-Clause,
+<https://bitbucket.org/chromiumembedded/cef>) and Chromium 146.0.7680.179 (BSD-3-Clause, with the
+third-party licences listed in the `LICENSE.txt` and `README.txt` inside the download and at
+<https://source.chromium.org/chromium/chromium/src/+/main:LICENSE>). The trailer itself is
+YouTube's embedded player, loaded from youtube-nocookie.com only after the viewer presses a trailer.
+
 ### Fonts on the desktop
 
 The desktop app bundles subsets of Noto Sans SC, Noto Sans TC, Noto Sans JP, Noto Sans KR, Noto Sans

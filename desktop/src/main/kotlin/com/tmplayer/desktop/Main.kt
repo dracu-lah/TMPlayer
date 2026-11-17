@@ -72,6 +72,8 @@ private const val FULLSCREEN_SETTLE_MS = 250L
 fun main(args: Array<String>) {
     // Loads every native library, reports, exits: no window, no second instance check.
     args.firstOrNull(SelfTest::matches)?.let { exitProcess(SelfTest.run(it)) }
+    // The trailer player's start, tried in a child process first (trailer/CefProbe): no window.
+    if (args.firstOrNull() == com.tmplayer.desktop.trailer.CefProbe.ARG) exitProcess(com.tmplayer.desktop.trailer.CefProbe.child(args))
     com.tmplayer.data.PerfLog.processStart
     // Before the first window: sway and its kind never reparent, which AWT has to be told.
     NonReparentingWm.applyIfNeeded()
@@ -235,6 +237,17 @@ fun main(args: Array<String>) {
                 ShellState(settings, DesktopServices.downloads, DesktopServices.watched, bookmarks = DesktopServices.bookmarks).also {
                     if (openOnChats) it.go(com.tmplayer.desktop.ui.Destination.Chats)
                 }
+            }
+            // In-app trailers (private/TRAILERS-PLAN.md, T4): nothing is looked at, downloaded or
+            // started until a trailer is pressed; the fallback lines show as the window's notices.
+            val trailerScope = androidx.compose.runtime.rememberCoroutineScope()
+            val trailers = remember {
+                com.tmplayer.desktop.trailer.DesktopTrailers(
+                    engine = com.tmplayer.desktop.trailer.CefTrailerEngine(places = DesktopPaths::browserPlaces),
+                    scope = trailerScope,
+                    notify = { shell.notices.tryEmit(it) },
+                    isOnline = { DesktopConnectivity.status.value != com.tmplayer.data.NetworkStatus.Offline },
+                )
             }
             // A card under the pointer or a key on it warms its stream (PlaybackWarmup, StreamWarmup).
             androidx.compose.runtime.DisposableEffect(shell) {
@@ -430,6 +443,7 @@ fun main(args: Array<String>) {
                                     shell.go(com.tmplayer.desktop.ui.Destination.Settings)
                                 },
                             ) {
+                                CompositionLocalProvider(com.tmplayer.ui.online.LocalTrailerOpener provides trailers) {
                                 DesktopShell(shell) { request, close ->
                                     PlayerHost(
                                         request = request,
@@ -450,7 +464,10 @@ fun main(args: Array<String>) {
                                         },
                                     )
                                 }
+                                }
                             }
+                            // The trailer's consent, download and sheet, over the detail page.
+                            com.tmplayer.desktop.trailer.DesktopTrailerHost(trailers, window)
                             // "Wrong title?" and the question after a rename (N1): over the page, so it outlives the pane whose rename asked it.
                             com.tmplayer.ui.components.TitleReportHost()
                             // Nothing on screen with a page header (sign in, the PIN pad): the

@@ -66,6 +66,14 @@ jna = "5.19.1"
 # The native folder picker for Settings > Storage location: IFileOpenDialog on Windows, the
 # FileChooser portal on Linux (so it works inside the Flatpak), NSOpenPanel on macOS.
 filekit = "0.16.0"
+# In-app trailers on the desktop (private/TRAILERS-PLAN.md, T4): the Java Chromium Embedded
+# Framework's API and its loader. Only the Java side ships (about 3 MB of jars with commons-compress
+# and Gson, before ProGuard); Chromium itself (140 to 170 MB per OS) is downloaded on the viewer's first
+# trailer, once they agree, and checked against the SHA-256 pinned in CefNatives.kt. A new version
+# here needs new pins there: the natives must be the build this API was made with. 152.0.6 never
+# finished starting Chromium on Fedora 43 under sway (2026-11-17); 146.0.10 starts there.
+# docs/BUILDING.md, "In-app trailers", says how to check a newer one.
+jcefmaven = "146.0.10"
 # dbus-java logs through SLF4J; with no provider every start prints a warning. Nothing to log to.
 slf4j = "2.0.20"
 # Casting to a Chromecast or Google TV from the phone (CP73): Google's Cast framework and the
@@ -151,6 +159,7 @@ dbus-java-transport-native-unixsocket = { group = "com.github.hypfvieh", name = 
 jna = { group = "net.java.dev.jna", name = "jna", version.ref = "jna" }
 jna-platform = { group = "net.java.dev.jna", name = "jna-platform", version.ref = "jna" }
 filekit-dialogs-compose = { group = "io.github.vinceglb", name = "filekit-dialogs-compose", version.ref = "filekit" }
+jcefmaven = { group = "me.friwi", name = "jcefmaven", version.ref = "jcefmaven" }
 slf4j-nop = { group = "org.slf4j", name = "slf4j-nop", version.ref = "slf4j" }
 play-services-cast-framework = { group = "com.google.android.gms", name = "play-services-cast-framework", version.ref = "playServicesCast" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
