@@ -1,0 +1,45 @@
+# Build image for the glibc 2.35 copies of the mpv runtime libraries (see README.md).
+#
+# Ubuntu 22.04 (glibc 2.35, GCC 11, libstdc++ GLIBCXX_3.4.30) pinned by digest, and every package
+# taken from the Ubuntu snapshot of one day, so a rebuild months later installs the same bytes.
+# Only build tools and the headers of libraries that are NOT rebuilt live here: the libraries the
+# runtime ships from Ubuntu 24.04 (FreeType, FriBidi, HarfBuzz's graphite2, lcms2, ...) are newer
+# than these headers and keep their ABI, so linking against the 22.04 headers is safe. The seven
+# rebuilt libraries and their pinned inputs come from the sources the build script mounts.
+#
+# The full JDK (not -headless) because mediamp's JNI wrapper includes jawt.h; it looks JAWT up with
+# dlsym, so nothing links against it. Built by scripts/build-mpv-linux-2-35.sh; nothing here
+# downloads source code.
+FROM docker.io/library/ubuntu:22.04@sha256:45e9ddc6895604674618a409ca9f73d301da8fdb75fe330e8e9a27b3b219e4ad
+
+ARG SNAPSHOT=20261116T000000Z
+ENV DEBIAN_FRONTEND=noninteractive LANG=C.UTF-8 LC_ALL=C.UTF-8
+
+# The base image has no CA certificates and the snapshot service is HTTPS only, so the first
+# install comes from the image's own archive, then every other package from the snapshot.
+RUN apt-get update -qq \
+ && apt-get install -y --no-install-recommends ca-certificates \
+ && printf '%s\n' \
+    "deb https://snapshot.ubuntu.com/ubuntu/${SNAPSHOT} jammy main universe" \
+    "deb https://snapshot.ubuntu.com/ubuntu/${SNAPSHOT} jammy-updates main universe" \
+    "deb https://snapshot.ubuntu.com/ubuntu/${SNAPSHOT} jammy-security main universe" \
+    > /etc/apt/sources.list \
+ && rm -rf /var/lib/apt/lists/* \
+ && apt-get update -qq \
+ && apt-get install -y --no-install-recommends \
+    build-essential pkg-config nasm cmake ninja-build patchelf unzip xz-utils bzip2 file \
+    autoconf automake libtool \
+    dpkg-dev perl python3 python3-jinja2 python3-markupsafe python3-packaging python3-setuptools \
+    gettext \
+    libffi-dev zlib1g-dev libmount-dev libselinux1-dev libelf-dev libpcre2-dev \
+    libfreetype-dev libgraphite2-dev \
+    libfribidi-dev libfontconfig-dev \
+    libdrm-dev libx11-dev libx11-xcb-dev libxcb1-dev libxcb-dri3-dev libxext-dev libxfixes-dev \
+    libgl-dev libegl-dev \
+    liblcms2-dev libvulkan-dev \
+    libasound2-dev libpulse-dev libxpresent-dev libxrandr-dev libxss-dev libxinerama-dev \
+    openjdk-21-jdk \
+ && rm -rf /var/lib/apt/lists/* \
+ && dpkg-query -W -f '${Package} ${Version}\n' > /usr/share/build-packages.txt
+
+COPY build-in-container.sh /usr/local/bin/build-in-container.sh
