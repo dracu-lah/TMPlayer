@@ -6,9 +6,12 @@ import android.view.View
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.media3.common.Player
 import com.tmplayer.R
 import com.tmplayer.i18n.L
+import com.tmplayer.online.SkipController
 import com.tmplayer.online.SkipKind
+import com.tmplayer.online.SkipOffer
 import com.tmplayer.online.SkipSegment
 import com.tmplayer.online.SkipSource
 
@@ -147,5 +150,39 @@ class SkipPill(
     fun hide() {
         isCounting = false
         view.visibility = View.GONE
+    }
+
+    /**
+     * One tick of the pill for [engine]'s place: asks [skip] what to offer and shows it, or hides
+     * the pill. [engine] is whichever player is on screen, ExoPlayer's or VLC's: the loop once read
+     * ExoPlayer alone, so a video on VLC never had a Skip button. [blocked] is what keeps the pill
+     * away (the lock, picture in picture, the failure sheet, the next-up card); [holdCount] stops a
+     * countdown while a television's remote is on the row and could not cancel it.
+     *
+     * Returns the offer, so the caller knows what OK skips; a [SkipOffer.Fire] is the caller's to
+     * carry out (it seeks), and the pill is left as it was for it.
+     */
+    fun follow(
+        skip: SkipController,
+        engine: Player,
+        blocked: Boolean,
+        holdCount: Boolean,
+        nowMs: Long,
+        skipped: Set<Long>,
+        cardCoversTheEnd: Boolean,
+    ): SkipOffer? {
+        val duration = engine.duration
+        val offer = if (duration <= 0 || blocked) {
+            null
+        } else {
+            skip.offer(engine.currentPosition, duration, engine.isPlaying && !holdCount, nowMs, skipped, cardCoversTheEnd)
+        }
+        when (offer) {
+            null -> hide()
+            is SkipOffer.Ask -> show(offer.segment)
+            is SkipOffer.Counting -> show(offer.segment, offer.secondsLeft)
+            is SkipOffer.Fire -> Unit
+        }
+        return offer
     }
 }

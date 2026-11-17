@@ -8667,7 +8667,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 autoplayNext = runCatching { settings.autoplayNextNow() }.getOrDefault(true)
                 while (true) {
                     if (playing?.isPlaying == true) delay(500) else endWatchWake.receive()
-                    val exo = player ?: continue
+                    // Whichever engine is on screen: with VLC playing, ExoPlayer is gone, and
+                    // reading it alone left a video on VLC with no Skip button and no next-up card.
+                    val exo = playing ?: continue
                     // The live copy each tick: the Episodes panel's switch changes it mid-video.
                     val autoplay = autoplayNext
                     updateSkipPill(exo, autoplay)
@@ -8764,25 +8766,23 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * when autoplay is going to offer that card. Without a successor a credits pill skips to the
      * end, which is the finished screen.
      */
-    private fun updateSkipPill(exo: ExoPlayer, autoplay: Boolean) {
+    private fun updateSkipPill(engine: Player, autoplay: Boolean) {
         val pill = skipPill ?: return
-        val duration = exo.duration
         val cardCoversTheEnd = autoplay && !nextUpDismissed && !repeatsAtTheEnd() && _episodes.value.next != null
-        val offer = if (duration <= 0 || locked || inPictureInPicture || statusOverlay.visibility == View.VISIBLE || nextUpCard?.isShown == true) {
-            null
-        } else {
-            // The count holds while a television's remote is busy with the row (it could not cancel).
-            val counting = exo.isPlaying && !(FormFactor.isTv(this) && controlsUp)
-            skipCtl.offer(exo.currentPosition, duration, counting, android.os.SystemClock.elapsedRealtime(), skippedSegments, cardCoversTheEnd)
-        }
-        offeredSkip = offer?.segment
+        val blocked = locked || inPictureInPicture || statusOverlay.visibility == View.VISIBLE || nextUpCard?.isShown == true
         val wasShown = pill.isShown
-        when (offer) {
-            null -> pill.hide()
-            is SkipOffer.Ask -> pill.show(offer.segment)
-            is SkipOffer.Counting -> pill.show(offer.segment, offer.secondsLeft)
-            is SkipOffer.Fire -> skipOffered()
-        }
+        val offer = pill.follow(
+            skip = skipCtl,
+            engine = engine,
+            blocked = blocked,
+            // The count holds while a television's remote is busy with the row (it could not cancel).
+            holdCount = FormFactor.isTv(this) && controlsUp,
+            nowMs = android.os.SystemClock.elapsedRealtime(),
+            skipped = skippedSegments,
+            cardCoversTheEnd = cardCoversTheEnd,
+        )
+        offeredSkip = offer?.segment
+        if (offer is SkipOffer.Fire) skipOffered()
         if (!wasShown && pill.isShown) liftCornerOffers()
     }
 
@@ -8790,7 +8790,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     private fun cancelAutoSkip() {
         val segment = offeredSkip ?: return
         skipCtl.cancel(segment)
-        player?.let { updateSkipPill(it, autoplayNext) }
+        playing?.let { updateSkipPill(it, autoplayNext) }
     }
 
     /** One tap of "Mark this as the intro": the start the first time, the end and a saved mark the second. */
