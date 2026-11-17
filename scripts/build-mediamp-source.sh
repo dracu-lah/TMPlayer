@@ -44,6 +44,16 @@
 # mpv's own build options and FFmpeg's configure line are embedded in libmpv.2.dylib and
 # libavutil.60.dylib; they show -Dgpl=false, no --enable-gpl, mpv v0.41.0 and FFmpeg 8.0.1.
 #
+# glibc 2.35 rebuilds (issue #30): scripts/build-mpv-linux-2-35.sh rebuilds eight files of the
+# Linux runtime on Ubuntu 22.04 (libmpv, libass, libcrypto, libglib-2.0, libharfbuzz, libplacebo,
+# libva and libmediampv) from the sources pinned here, at the same versions. A release that ships
+# those copies also needs that script's own archive (--source-archive): libplacebo statically
+# contains glslang 14.0.0, SPIRV-Tools 2023.6~rc1 and SPIRV-Headers, as Ubuntu's libplacebo338 does
+# (so the shipped libplacebo.so.338 carries them too and this archive's Linux part lacks them; that
+# script's archive has them), and the build uses the Vulkan headers, xxhash, glad, nv-codec-headers and meson pinned there,
+# plus the recipe in natives/mpv-linux. Both archives together are the corresponding source of
+# that runtime (natives/mpv-linux/README.md).
+#
 # Usage: scripts/build-mediamp-source.sh [--macos] [output dir]   (default: build/mediamp-source)
 # Downloads are kept in <output dir>/downloads, so a second run fetches nothing.
 set -euo pipefail
