@@ -186,6 +186,101 @@ val coreJsTests = tasks.register<Sync>("coreJsTests") {
     into(layout.buildDirectory.dir("core-js-test/kotlin"))
 }
 
+// iOS and iPadOS (docs/IOS.md): configured on a Mac, or on any host with -Ptmplayer.ios=true (the
+// klibs then cross-compile, nothing links). Off elsewhere by default, so an Android, desktop or web
+// build on Linux or Windows neither configures nor downloads anything for it.
+val iosBuild = providers.gradleProperty("tmplayer.ios").orNull?.toBooleanStrictOrNull()
+    ?: org.jetbrains.kotlin.konan.target.HostManager.hostIsMac
+
+// The same tests run on iOS too (iosSimulatorArm64Test): Foundation's collation, calendar and
+// Unicode tables are not the JDK's either. Kotlin/Native refuses some characters in a name that the
+// JVM and JS accept, such as the comma in a test called `a, b`, so the copy drops them from the
+// names of test functions and changes nothing else.
+val coreIosTests = tasks.register<Sync>("coreIosTests") {
+    val list = layout.projectDirectory.file("js-test-sources.txt")
+    inputs.file(list)
+    val names = list.asFile.readLines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }
+    from(layout.projectDirectory.dir("src/jvmTest/kotlin")) { include(names) }
+    into(layout.buildDirectory.dir("core-ios-test/kotlin"))
+    val testName = Regex("(?<=fun )`[^`]+`")
+    filter { line -> testName.replace(line) { name -> name.value.filterNot { it in ",()[]<>.:;/\\" } } }
+}
+
+// The JVM half's own helpers that need nothing the iOS stand ins lack (TDLib's country list, the
+// DataStore adapter, the zone and collator overloads), compiled for iOS straight from jvmSharedMain.
+// Upstream's files that use @Synchronized, which locks nothing on Kotlin/Native: iOS compiles
+// copies with real locks instead (gradle/ios-real-locks.gradle.kts), named *.ios.kt so the
+// originals can be left out by path.
+apply(from = rootProject.file("gradle/ios-real-locks.gradle.kts"))
+@Suppress("UNCHECKED_CAST")
+val withRealLocks = extra["withRealLocks"] as (String) -> String
+val commonSources = layout.projectDirectory.dir("src/commonMain/kotlin").asFile
+val iosLeftOut = listOf("com/tmplayer/cast/", "com/tmplayer/data/CrashLimits.kt", "com/tmplayer/data/StutterReport.kt")
+val lockedForIos = if (!iosBuild) emptyList() else commonSources.walkTopDown()
+    .filter { it.isFile && it.extension == "kt" }
+    .map { it.relativeTo(commonSources).invariantSeparatorsPath }
+    .filter { path -> iosLeftOut.none { path.startsWith(it) } }
+    .filter { path -> commonSources.resolve(path).readText().contains("@Synchronized") }
+    .sorted()
+    .toList()
+val lockedSourcesForIos = tasks.register("lockedSourcesForIos") {
+    val out = layout.buildDirectory.dir("ios-locked/kotlin")
+    inputs.files(lockedForIos.map { commonSources.resolve(it) })
+    inputs.file(rootProject.file("gradle/ios-real-locks.gradle.kts"))
+    outputs.dir(out)
+    doLast {
+        val root = out.get().asFile.apply { deleteRecursively() }
+        lockedForIos.forEach { path ->
+            root.resolve(path.removeSuffix(".kt") + ".ios.kt").apply { parentFile.mkdirs() }
+                .writeText(withRealLocks(commonSources.resolve(path).readText()))
+        }
+    }
+}
+
+// The Apple variant's own links in upstream's Feedback and WhatsNew
+// (gradle/ios-apple-variant.gradle.kts): iOS compiles copies with them, named *.ios.kt like the
+// copies above, and leaves the originals out.
+apply(from = rootProject.file("gradle/ios-apple-variant.gradle.kts"))
+@Suppress("UNCHECKED_CAST")
+val forApple = extra["forApple"] as (String, String, String) -> String
+@Suppress("UNCHECKED_CAST")
+val appleForIos = (extra["appleVariant"] as Map<String, List<String>>)["core"].orEmpty()
+    .onEach { require(it !in lockedForIos) { "$it needs real locks and the Apple variant at once" } }
+val appleSourcesForIos = tasks.register("appleSourcesForIos") {
+    val out = layout.buildDirectory.dir("ios-apple/kotlin")
+    inputs.files(appleForIos.map { commonSources.resolve(it) })
+    inputs.file(rootProject.file("gradle/ios-apple-variant.gradle.kts"))
+    outputs.dir(out)
+    doLast {
+        val root = out.get().asFile.apply { deleteRecursively() }
+        appleForIos.forEach { path ->
+            root.resolve(path.removeSuffix(".kt") + ".ios.kt").apply { parentFile.mkdirs() }
+                .writeText(forApple("core", path, commonSources.resolve(path).readText()))
+        }
+    }
+}
+
+val jvmSharedPiecesForIos = tasks.register<Sync>("jvmSharedPiecesForIos") {
+    from(layout.projectDirectory.dir("src/jvmSharedMain/kotlin")) {
+        include(
+            "com/tmplayer/data/PhoneCountriesJvm.kt",
+            "com/tmplayer/data/JvmOverloads.kt",
+            "com/tmplayer/data/DataStoreKeyValueStore.kt",
+            "com/tmplayer/online/OnlineJvm.kt",
+        )
+    }
+    into(layout.buildDirectory.dir("ios-jvm-shared-pieces/kotlin"))
+}
+
+// The jsTest stand in for org.junit. Not its JDK names (System, String.format, MediaMapper): on
+// iOS the real ones are compiled (core/src/iosStandIns), nor its runBlocking, which Kotlin/Native has.
+val coreIosTestStandIns = tasks.register<Sync>("coreIosTestStandIns") {
+    from(layout.projectDirectory.dir("src/jsTest/kotlin")) {
+        include("org/junit/Junit.kt")
+    }
+    into(layout.buildDirectory.dir("core-ios-test-stand-ins/kotlin"))
+}
+
 // The English catalog for the JS tests: in the browser the worker provides it (WebRules.provideCatalog),
 // and there is no classpath to read it from.
 val jsTestCatalog = tasks.register("jsTestCatalog") {
@@ -227,6 +322,12 @@ kotlin {
         minSdk = 23
     }
     jvm()
+    // iOS and iPadOS, one universal app (docs/IOS_PORT_PLAN.md). The pure half for now, with its
+    // platform pieces from Foundation in src/iosMain; the TDLib half follows as files leave the JDK.
+    if (iosBuild) {
+        iosArm64()
+        iosSimulatorArm64()
+    }
     // The web player's rules (webapp/, CP104): the pure half as one small ES module, run in the
     // page's Telegram worker, so a chat groups, sorts and filters there exactly as in the apps.
     // Only what WebRules exports is kept; the module goes to webapp/src/rules by :core:webRules.
@@ -275,6 +376,41 @@ kotlin {
             kotlin.srcDir(coreJsTests)
             kotlin.srcDir(jsTestCatalog)
         }
+        if (iosBuild) {
+            iosMain {
+                // The TDLib half too, compiled as upstream wrote it against stand ins for the JDK and
+                // org.json (docs/IOS_PORT_PLAN.md, "Chosen instead, for now").
+                kotlin.srcDir("src/commonMain/kotlin")
+                kotlin.srcDir("src/iosStandIns/kotlin")
+                kotlin.srcDir(jvmSharedPiecesForIos)
+                kotlin.srcDir(lockedSourcesForIos)
+                // Not on iOS yet: casting, and crash reports through Sentry's JVM SDK. The updater compiles
+                // (WhatsNew reads its feed) but an iOS build never schedules it.
+                // CastSource.kt is plain Kotlin, and Android's player names it; the rest waits on the
+                // maintainer's decision about DLNA casting on iOS (docs/IOS_PORT_PLAN.md, layer 4).
+                val castKept = setOf("com/tmplayer/cast/CastSource.kt", "com/tmplayer/cast/JvmDefaults.kt")
+                kotlin.exclude { it.path.startsWith("com/tmplayer/cast/") && it.path !in castKept }
+                kotlin.exclude(
+                    "com/tmplayer/data/CrashRecord.kt",
+                    "com/tmplayer/data/CrashReportScrubber.kt",
+                    "com/tmplayer/data/CrashLimits.kt",
+                    "com/tmplayer/data/StutterReport.kt",
+                )
+                // The originals of the copies with real locks, and of the Apple variant's.
+                kotlin.exclude(lockedForIos)
+                kotlin.srcDir(appleSourcesForIos)
+                kotlin.exclude(appleForIos)
+                dependencies {
+                    api(libs.tdl.coroutines)
+                    api(libs.androidx.datastore.preferences.core)
+                    implementation(libs.cmp.runtime)
+                }
+            }
+            iosTest {
+                kotlin.srcDir(coreIosTests)
+                kotlin.srcDir(coreIosTestStandIns)
+            }
+        }
         jvmMain.dependencies {
             // Android ships org.json in the platform, and bundling it there would shadow the
             // framework's copy; a plain JVM has none, so only this target carries it.
@@ -289,6 +425,17 @@ kotlin {
     }
 }
 
+// On iOS the catalogs are files in the app bundle (bundledCatalog in src/iosMain). A test binary is
+// not a bundle: Foundation's main bundle is the folder it sits in, so the catalogs go next to it.
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinNativeLink>()
+    .matching { it.binary.outputKind == org.jetbrains.kotlin.gradle.plugin.mpp.NativeOutputKind.TEST }
+    .configureEach {
+        val catalogs = file("src/commonMain/resources/i18n")
+        val binary = outputFile
+        inputs.dir(catalogs)
+        doLast { catalogs.copyRecursively(binary.get().parentFile.resolve("i18n"), overwrite = true) }
+    }
+
 // The Compose compiler only records stability for :app's and :ui's screens, which are JVM; the
 // js target compiles the pure half without it.
 composeCompiler {
@@ -296,6 +443,8 @@ composeCompiler {
         setOf(
             org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType.jvm,
             org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType.androidJvm,
+            // iOS too, so :ui's screens there see core's models as stable, as on Android.
+            org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType.native,
         ),
     )
 }

@@ -42,6 +42,81 @@ val generateNotices = tasks.register("generateNotices") {
     }
 }
 
+// iOS and iPadOS (docs/IOS.md): on a Mac, or with -Ptmplayer.ios=true; off elsewhere by default.
+val iosBuild = providers.gradleProperty("tmplayer.ios").orNull?.toBooleanStrictOrNull()
+    ?: org.jetbrains.kotlin.konan.target.HostManager.hostIsMac
+
+// Android's own pieces that suit a touch screen as they are: the top message pill and its toasts,
+// over the Android stand ins in src/iosStandIns. Compiled straight from androidMain.
+val androidPiecesForIos = tasks.register<Sync>("androidPiecesForIos") {
+    from(layout.projectDirectory.dir("src/androidMain/kotlin")) {
+        include("com/tmplayer/ui/components/Toast.kt")
+        // The setup and tour pictures: Android's phone shots, from the drawables App.kt names.
+        include("com/tmplayer/ui/onboarding/SetupImageAndroid.kt")
+    }
+    into(layout.buildDirectory.dir("ios-android-pieces/kotlin"))
+}
+
+// The shared files that use @Synchronized, which locks nothing on Kotlin/Native: iOS compiles
+// copies with real locks instead (gradle/ios-real-locks.gradle.kts), named *.ios.kt.
+apply(from = rootProject.file("gradle/ios-real-locks.gradle.kts"))
+@Suppress("UNCHECKED_CAST")
+val withRealLocks = extra["withRealLocks"] as (String) -> String
+val sharedSources = layout.projectDirectory.dir("src/shared/kotlin").asFile
+val lockedForIos = if (!iosBuild) emptyList() else sharedSources.walkTopDown()
+    .filter { it.isFile && it.extension == "kt" && it.readText().contains("@Synchronized") }
+    .map { it.relativeTo(sharedSources).invariantSeparatorsPath }
+    .sorted()
+    .toList()
+val lockedSourcesForIos = tasks.register("lockedSourcesForIos") {
+    val out = layout.buildDirectory.dir("ios-locked/kotlin")
+    inputs.files(lockedForIos.map { sharedSources.resolve(it) })
+    inputs.file(rootProject.file("gradle/ios-real-locks.gradle.kts"))
+    outputs.dir(out)
+    doLast {
+        val root = out.get().asFile.apply { deleteRecursively() }
+        lockedForIos.forEach { path ->
+            root.resolve(path.removeSuffix(".kt") + ".ios.kt").apply { parentFile.mkdirs() }
+                .writeText(withRealLocks(sharedSources.resolve(path).readText()))
+        }
+    }
+}
+
+// The Apple variant's own links in upstream's About (gradle/ios-apple-variant.gradle.kts): iOS
+// compiles a copy with them, named *.ios.kt like the copies above, and leaves the original out.
+apply(from = rootProject.file("gradle/ios-apple-variant.gradle.kts"))
+@Suppress("UNCHECKED_CAST")
+val forApple = extra["forApple"] as (String, String, String) -> String
+@Suppress("UNCHECKED_CAST")
+val appleForIos = (extra["appleVariant"] as Map<String, List<String>>)["ui"].orEmpty()
+    .onEach { require(it !in lockedForIos) { "$it needs real locks and the Apple variant at once" } }
+val appleSourcesForIos = tasks.register("appleSourcesForIos") {
+    val out = layout.buildDirectory.dir("ios-apple/kotlin")
+    inputs.files(appleForIos.map { sharedSources.resolve(it) })
+    inputs.file(rootProject.file("gradle/ios-apple-variant.gradle.kts"))
+    outputs.dir(out)
+    doLast {
+        val root = out.get().asFile.apply { deleteRecursively() }
+        appleForIos.forEach { path ->
+            root.resolve(path.removeSuffix(".kt") + ".ios.kt").apply { parentFile.mkdirs() }
+                .writeText(forApple("ui", path, sharedSources.resolve(path).readText()))
+        }
+    }
+}
+
+// The desktop's platform pieces that suit iOS as they are (the back stack, snackbar notices, no in-app
+// trailers, the region from the locale), compiled for iOS straight from jvmMain so the two never drift.
+val desktopPiecesForIos = tasks.register<Sync>("desktopPiecesForIos") {
+    from(layout.projectDirectory.dir("src/jvmMain/kotlin")) {
+        include(
+            "com/tmplayer/ui/nav/BackHandler.kt",
+            "com/tmplayer/ui/online/TrailerPlayer.kt",
+            "com/tmplayer/ui/auth/PlatformRegion.kt",
+        )
+    }
+    into(layout.buildDirectory.dir("ios-desktop-pieces/kotlin"))
+}
+
 kotlin {
     android {
         namespace = "com.tmplayer.ui"
@@ -50,9 +125,39 @@ kotlin {
         minSdk = 23
     }
     jvm()
+    // iOS and iPadOS (docs/IOS_PORT_PLAN.md): the same shared screens, over :core's iOS build.
+    if (iosBuild) {
+        iosArm64()
+        iosSimulatorArm64()
+    }
     sourceSets {
         commonMain {
             kotlin.srcDir(generateNotices)
+        }
+        if (iosBuild) {
+            iosMain {
+                kotlin.srcDir("src/shared/kotlin")
+                kotlin.srcDir("src/iosStandIns/kotlin")
+                kotlin.srcDir(desktopPiecesForIos)
+                kotlin.srcDir(androidPiecesForIos)
+                kotlin.srcDir(lockedSourcesForIos)
+                kotlin.exclude(lockedForIos)
+                kotlin.srcDir(appleSourcesForIos)
+                kotlin.exclude(appleForIos)
+                // Casting is not on iOS yet (core's cast/ is left out there too).
+                kotlin.exclude("com/tmplayer/ui/player/CastRemote.kt")
+                dependencies {
+                    api(libs.cmp.runtime)
+                    api(libs.cmp.ui)
+                    api(libs.cmp.foundation)
+                    api(libs.cmp.material3)
+                }
+            }
+            // The View toolkit's stand-ins (src/iosStandIns) against Android's documented behaviour,
+            // on the iOS simulator: ./gradlew :ui:iosSimulatorArm64Test
+            iosTest.dependencies {
+                implementation(kotlin("test"))
+            }
         }
         commonMain.dependencies {
             api(project(":core"))
