@@ -3442,7 +3442,7 @@
     "some_did_not_move": "Algunas descargas no se movieron",
     "the_default_folders": "las carpetas predeterminadas",
     "title": "Almacenamiento",
-    "unreachable_at_start": "No se puede acceder a tu ubicación de almacenamiento {folder}, así que TMPlayer usa las carpetas predeterminadas esta vez. No se eliminó nada. Conecta la unidad y reinicia TMPlayer, o elige otro lugar en Configuración, Almacenamiento."
+    "unreachable_at_start": "No se puede acceder a tu ubicación de almacenamiento {folder}, así que TMPlayer usa las carpetas predeterminadas esta vez. No se eliminó nada. Conecta la unidad y reinicia TMPlayer, o elige otro lugar en Configuración, Descargas y datos."
   },
   "subtitles": {
     "box": "Fondo",

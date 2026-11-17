@@ -3442,7 +3442,7 @@
     "some_did_not_move": "Some downloads did not move",
     "the_default_folders": "the default folders",
     "title": "Storage",
-    "unreachable_at_start": "Your storage location {folder} can't be reached, so TMPlayer is using the default folders this time. Nothing was removed. Connect the drive and restart TMPlayer, or pick another place in Settings, Storage."
+    "unreachable_at_start": "Your storage location {folder} can't be reached, so TMPlayer is using the default folders this time. Nothing was removed. Connect the drive and restart TMPlayer, or pick another place in Settings, Downloads and data."
   },
   "subtitles": {
     "box": "Background box",

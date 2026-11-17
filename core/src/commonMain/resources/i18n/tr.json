@@ -3442,7 +3442,7 @@
     "some_did_not_move": "Bazı indirmeler taşınamadı",
     "the_default_folders": "varsayılan klasörler",
     "title": "Depolama",
-    "unreachable_at_start": "Depolama konumun {folder} klasörüne ulaşılamıyor, bu yüzden TMPlayer bu kez varsayılan klasörleri kullanıyor. Hiçbir şey silinmedi. Sürücüyü bağlayıp TMPlayer'ı yeniden başlat ya da Ayarlar, Depolama'dan başka bir yer seç."
+    "unreachable_at_start": "Depolama konumun {folder} klasörüne ulaşılamıyor, bu yüzden TMPlayer bu kez varsayılan klasörleri kullanıyor. Hiçbir şey silinmedi. Sürücüyü bağlayıp TMPlayer'ı yeniden başlat ya da Ayarlar, İndirilenler ve veri sayfasından başka bir yer seç."
   },
   "subtitles": {
     "box": "Arka plan kutusu",

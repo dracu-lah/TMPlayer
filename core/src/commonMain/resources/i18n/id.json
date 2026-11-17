@@ -3442,7 +3442,7 @@
     "some_did_not_move": "Sebagian unduhan gagal dipindah",
     "the_default_folders": "folder default",
     "title": "Penyimpanan",
-    "unreachable_at_start": "Lokasi penyimpanan {folder} tidak bisa dijangkau, jadi kali ini TMPlayer memakai folder default. Tidak ada yang dihapus. Sambungkan drive dan mulai ulang TMPlayer, atau pilih tempat lain di Pengaturan, Penyimpanan."
+    "unreachable_at_start": "Lokasi penyimpanan {folder} tidak bisa dijangkau, jadi kali ini TMPlayer memakai folder default. Tidak ada yang dihapus. Sambungkan drive dan mulai ulang TMPlayer, atau pilih tempat lain di Pengaturan, Unduhan dan data."
   },
   "subtitles": {
     "box": "Kotak latar",

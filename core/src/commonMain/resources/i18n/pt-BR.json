@@ -3442,7 +3442,7 @@
     "some_did_not_move": "Alguns downloads não foram movidos",
     "the_default_folders": "as pastas padrão",
     "title": "Armazenamento",
-    "unreachable_at_start": "Não foi possível acessar seu local de armazenamento {folder}, então o TMPlayer está usando as pastas padrão desta vez. Nada foi removido. Conecte a unidade e reinicie o TMPlayer, ou escolha outro lugar em Configurações, Armazenamento."
+    "unreachable_at_start": "Não foi possível acessar seu local de armazenamento {folder}, então o TMPlayer está usando as pastas padrão desta vez. Nada foi removido. Conecte a unidade e reinicie o TMPlayer, ou escolha outro lugar em Configurações, Downloads e dados."
   },
   "subtitles": {
     "box": "Caixa de fundo",

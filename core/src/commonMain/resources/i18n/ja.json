@@ -3442,7 +3442,7 @@
     "some_did_not_move": "移動できなかったダウンロードがあります",
     "the_default_folders": "標準フォルダ",
     "title": "ストレージ",
-    "unreachable_at_start": "保存先{folder}にアクセスできないため、今回はTMPlayerが既定のフォルダーを使用しています。何も削除されていません。ドライブを接続してTMPlayerを再起動するか、設定のストレージで別の場所を選んでください。"
+    "unreachable_at_start": "保存先{folder}にアクセスできないため、今回はTMPlayerが既定のフォルダーを使用しています。何も削除されていません。ドライブを接続してTMPlayerを再起動するか、設定のダウンロードとデータで別の場所を選んでください。"
   },
   "subtitles": {
     "box": "背景ボックス",

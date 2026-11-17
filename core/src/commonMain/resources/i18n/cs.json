@@ -3442,7 +3442,7 @@
     "some_did_not_move": "Některá stažená videa se nepřesunula",
     "the_default_folders": "výchozí složky",
     "title": "Úložiště",
-    "unreachable_at_start": "Vaše umístění úložiště {folder} není dostupné, proto TMPlayer tentokrát používá výchozí složky. Nic nebylo odstraněno. Připojte disk a restartujte TMPlayer, nebo vyberte jiné místo v Nastavení, Úložiště."
+    "unreachable_at_start": "Vaše umístění úložiště {folder} není dostupné, proto TMPlayer tentokrát používá výchozí složky. Nic nebylo odstraněno. Připojte disk a restartujte TMPlayer, nebo vyberte jiné místo v Nastavení, Stažené a data."
   },
   "subtitles": {
     "box": "Rámeček na pozadí",

@@ -3442,7 +3442,7 @@
     "some_did_not_move": "部分下載未能移動",
     "the_default_folders": "預設資料夾",
     "title": "儲存空間",
-    "unreachable_at_start": "無法存取你的儲存位置 {folder}，因此這次 TMPlayer 使用預設資料夾。沒有任何內容被移除。請連接磁碟機並重新啟動 TMPlayer，或在「設定」「儲存空間」中選擇其他位置。"
+    "unreachable_at_start": "無法存取你的儲存位置 {folder}，因此這次 TMPlayer 使用預設資料夾。沒有任何內容被移除。請連接磁碟機並重新啟動 TMPlayer，或在「設定」「下載與數據」中選擇其他位置。"
   },
   "subtitles": {
     "box": "背景方塊",

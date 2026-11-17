@@ -3442,7 +3442,7 @@
     "some_did_not_move": "일부 다운로드를 옮기지 못했어요",
     "the_default_folders": "기본 폴더",
     "title": "저장공간",
-    "unreachable_at_start": "저장 위치 {folder}에 접근할 수 없어서 이번에는 TMPlayer가 기본 폴더를 사용하고 있어요. 삭제된 것은 없어요. 드라이브를 연결하고 TMPlayer를 다시 시작하거나, 설정의 저장공간에서 다른 위치를 선택하세요."
+    "unreachable_at_start": "저장 위치 {folder}에 접근할 수 없어서 이번에는 TMPlayer가 기본 폴더를 사용하고 있어요. 삭제된 것은 없어요. 드라이브를 연결하고 TMPlayer를 다시 시작하거나, 설정의 다운로드 및 데이터에서 다른 위치를 선택하세요."
   },
   "subtitles": {
     "box": "배경 상자",

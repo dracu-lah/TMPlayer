@@ -3442,7 +3442,7 @@
     "some_did_not_move": "Certains téléchargements n'ont pas été déplacés",
     "the_default_folders": "les dossiers par défaut",
     "title": "Stockage",
-    "unreachable_at_start": "Votre emplacement de stockage {folder} est inaccessible, donc TMPlayer utilise les dossiers par défaut cette fois. Rien n'a été supprimé. Branchez le disque et redémarrez TMPlayer, ou choisissez un autre emplacement dans Réglages, Stockage."
+    "unreachable_at_start": "Votre emplacement de stockage {folder} est inaccessible, donc TMPlayer utilise les dossiers par défaut cette fois. Rien n'a été supprimé. Branchez le disque et redémarrez TMPlayer, ou choisissez un autre emplacement dans Réglages, Téléchargements et données."
   },
   "subtitles": {
     "box": "Boîte d'arrière-plan",

@@ -3442,7 +3442,7 @@
     "some_did_not_move": "Nie przeniesiono części pobranych",
     "the_default_folders": "foldery domyślne",
     "title": "Pamięć",
-    "unreachable_at_start": "Twoja lokalizacja przechowywania {folder} jest niedostępna, więc tym razem TMPlayer używa folderów domyślnych. Nic nie zostało usunięte. Podłącz dysk i uruchom TMPlayer ponownie albo wybierz inne miejsce w Ustawieniach, Pamięć."
+    "unreachable_at_start": "Twoja lokalizacja przechowywania {folder} jest niedostępna, więc tym razem TMPlayer używa folderów domyślnych. Nic nie zostało usunięte. Podłącz dysk i uruchom TMPlayer ponownie albo wybierz inne miejsce w Ustawieniach, Pobrane i dane."
   },
   "subtitles": {
     "box": "Ramka w tle",

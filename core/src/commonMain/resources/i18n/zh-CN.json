@@ -3442,7 +3442,7 @@
     "some_did_not_move": "部分下载未能移动",
     "the_default_folders": "默认文件夹",
     "title": "存储",
-    "unreachable_at_start": "无法访问你的存储位置 {folder}，因此这次 TMPlayer 使用默认文件夹。没有任何内容被删除。请连接驱动器并重启 TMPlayer，或在“设置”“存储”中选择其他位置。"
+    "unreachable_at_start": "无法访问你的存储位置 {folder}，因此这次 TMPlayer 使用默认文件夹。没有任何内容被删除。请连接驱动器并重启 TMPlayer，或在“设置”“下载和数据”中选择其他位置。"
   },
   "subtitles": {
     "box": "背景框",

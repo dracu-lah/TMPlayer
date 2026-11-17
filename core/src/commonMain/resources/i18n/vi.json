@@ -3442,7 +3442,7 @@
     "some_did_not_move": "Một số video tải xuống chưa được chuyển",
     "the_default_folders": "các thư mục mặc định",
     "title": "Lưu trữ",
-    "unreachable_at_start": "Không truy cập được vị trí lưu trữ {folder} của bạn, nên lần này TMPlayer dùng các thư mục mặc định. Không có gì bị xóa. Hãy kết nối ổ đĩa rồi khởi động lại TMPlayer, hoặc chọn nơi khác trong Cài đặt, Lưu trữ."
+    "unreachable_at_start": "Không truy cập được vị trí lưu trữ {folder} của bạn, nên lần này TMPlayer dùng các thư mục mặc định. Không có gì bị xóa. Hãy kết nối ổ đĩa rồi khởi động lại TMPlayer, hoặc chọn nơi khác trong Cài đặt, Tải xuống và dữ liệu."
   },
   "subtitles": {
     "box": "Khung nền",

@@ -3442,7 +3442,7 @@
     "some_did_not_move": "Alcuni download non sono stati spostati",
     "the_default_folders": "le cartelle predefinite",
     "title": "Archiviazione",
-    "unreachable_at_start": "La tua posizione di archiviazione {folder} non è raggiungibile, quindi stavolta TMPlayer usa le cartelle predefinite. Non è stato rimosso nulla. Collega l'unità e riavvia TMPlayer, oppure scegli un altro posto in Impostazioni, Archiviazione."
+    "unreachable_at_start": "La tua posizione di archiviazione {folder} non è raggiungibile, quindi stavolta TMPlayer usa le cartelle predefinite. Non è stato rimosso nulla. Collega l'unità e riavvia TMPlayer, oppure scegli un altro posto in Impostazioni, Download e dati."
   },
   "subtitles": {
     "box": "Riquadro di sfondo",

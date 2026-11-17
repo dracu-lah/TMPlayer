@@ -3442,7 +3442,7 @@
     "some_did_not_move": "Einige Downloads wurden nicht verschoben",
     "the_default_folders": "die Standardordner",
     "title": "Speicher",
-    "unreachable_at_start": "Dein Speicherort {folder} ist nicht erreichbar, daher verwendet TMPlayer diesmal die Standardordner. Nichts wurde entfernt. Schließe das Laufwerk an und starte TMPlayer neu, oder wähle in den Einstellungen unter Speicher einen anderen Ort."
+    "unreachable_at_start": "Dein Speicherort {folder} ist nicht erreichbar, daher verwendet TMPlayer diesmal die Standardordner. Nichts wurde entfernt. Schließe das Laufwerk an und starte TMPlayer neu, oder wähle in den Einstellungen unter Downloads und Daten einen anderen Ort."
   },
   "subtitles": {
     "box": "Hintergrundbox",
