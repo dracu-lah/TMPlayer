@@ -1528,7 +1528,9 @@ private fun Root() {
             modifier = Modifier.zIndex(1f),
         ) {
             // What it is doing now, and past the long wait, why it may be stuck with Retry, a
-            // proxy and the logs: the desktop's help, on the phone and the TV too.
+            // proxy and the logs: the desktop's help, on the phone and the TV too. On a first open the
+            // one line of what comes next sits above it (Raju pass 2, 1.1).
+            com.tmplayer.ui.connect.FirstOpenPromise(settings)
             com.tmplayer.ui.connect.ConnectingHelp(
                 onOpenProxies = { com.tmplayer.ui.connect.ProxyScreenState.open = true },
                 sendLogs = { com.tmplayer.ui.settings.SendLogsButton(Modifier.padding(top = 8.dp)) },

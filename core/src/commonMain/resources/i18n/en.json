@@ -3346,6 +3346,7 @@
     "connecting_short": "Connecting…",
     "connecting_still_trying": "Still trying. Check that this device is online",
     "failed": "That didn't work",
+    "first_open_promise": "Your Telegram videos, in one place.",
     "offline": "Offline. Your downloads still play.",
     "reconnecting": "Back online. Reconnecting to Telegram…"
   },

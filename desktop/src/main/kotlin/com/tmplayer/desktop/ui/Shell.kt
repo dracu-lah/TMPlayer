@@ -259,6 +259,7 @@ fun DesktopShell(
                 ) {
                     // Composed only while the loader is up: over Home's header, held under it.
                     CoverWindowControls()
+                    com.tmplayer.ui.connect.FirstOpenPromise(state.settings)
                     com.tmplayer.ui.connect.ConnectingHelp(
                         onOpenProxies = { com.tmplayer.ui.connect.ProxyScreenState.open = true },
                         sendLogs = { SendLogsActions(Modifier.padding(top = 8.dp)) },
