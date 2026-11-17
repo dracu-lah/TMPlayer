@@ -132,6 +132,17 @@ ninja -C build-main install >>"$CUR" 2>&1
 cp "$(readlink -f build-main/src/libharfbuzz.so.0)" $STAGE/libharfbuzz.so.0
 
 # --- libass: libass.so.9 -------------------------------------------------------------------------
+# libass links the runtime's libunibreak.so.5 (24.04's 5.1); 22.04 only has libunibreak.so.1
+# (4.x), so 5.1 is built here to link against. It is not copied out: the jar's copy stays.
+log "libunibreak 5.1-2build1 (to link libass against, not shipped)"
+unpack libunibreak_5.1-2build1.dsc $B/libunibreak
+cd $B/libunibreak
+debflags ""
+autoreconf -fi >>"$CUR" 2>&1 # the tarball is a git export without configure, as for Debian
+./configure --prefix=/usr --libdir=/usr/lib/$MULTIARCH --disable-static >>"$CUR" 2>&1
+make -s -j"$JOBS" >>"$CUR" 2>&1
+make -s install >>"$CUR" 2>&1
+
 log "libass 0.17.1-2build1"
 unpack libass_0.17.1-2build1.dsc $B/libass
 cd $B/libass
@@ -306,7 +317,7 @@ cp -a ./* "$OUT/"
 {
   echo "built $(date -u +%Y-%m-%dT%H:%M:%SZ) in $(($(date +%s) - start)) s, SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH"
   echo "compiler: $(gcc --version | head -1)"
-  echo "glibc: $(ldd --version | head -1)"
+  echo "glibc: $(getconf GNU_LIBC_VERSION)"
   echo "packages of the build image:"
   cat /usr/share/build-packages.txt
 } > "$OUT/BUILDINFO"

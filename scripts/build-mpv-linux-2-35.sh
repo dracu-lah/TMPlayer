@@ -74,6 +74,9 @@ manifest() {
 d653be97198a0543c69111122173c41a99e0b91426f9e17f06a858982c2fb03d libass_0.17.1.orig.tar.gz $ubuntu/pool/universe/liba/libass/libass_0.17.1.orig.tar.gz
 699d1ba876d7bac95dbac56bac0f00126473e8588759a4ec13cdf52ae03d8483 libass_0.17.1.orig.tar.gz.asc $ubuntu/pool/universe/liba/libass/libass_0.17.1.orig.tar.gz.asc
 605dadc3d805d2d7bd197a7b21e6a7b8533eb9372f47e8690788ba96905556f4 libass_0.17.1-2build1.debian.tar.xz $ubuntu/pool/universe/liba/libass/libass_0.17.1-2build1.debian.tar.xz
+bb228cdb497d198cef494256d0069a43734ca70ec1137ccebeafba568a501465 libunibreak_5.1-2build1.dsc $ubuntu/pool/universe/libu/libunibreak/libunibreak_5.1-2build1.dsc
+d59878d82c84a60b592940a8e1a264f0a9714f0a9a8868b099846f780d9dc167 libunibreak_5.1.orig.tar.gz $ubuntu/pool/universe/libu/libunibreak/libunibreak_5.1.orig.tar.gz
+20e1bc390e2464ff3df2dbcdc73c7359346239599ec3ce734b7d49c6da4cdfd2 libunibreak_5.1-2build1.debian.tar.xz $ubuntu/pool/universe/libu/libunibreak/libunibreak_5.1-2build1.debian.tar.xz
 88525753f79d3bec27d2fa7c66aa0b92b3aa9498dafd93d7cfa4b3780cdae313 openssl_3.0.13.orig.tar.gz $ubuntu/pool/main/o/openssl/openssl_3.0.13.orig.tar.gz
 77893129922c917792dd187c2853fb36ce1c98597c442b42d8190252959b7f6c openssl_3.0.13-0ubuntu3.16.debian.tar.xz $ubuntu2/pool/main/o/openssl/openssl_3.0.13-0ubuntu3.16.debian.tar.xz
 7d1e552a6f519836c352407e521bafdda7552ec6d1ba242968c35fc0e17f47b6 openssl_3.0.13-0ubuntu3.16.dsc $ubuntu2/pool/main/o/openssl/openssl_3.0.13-0ubuntu3.16.dsc
