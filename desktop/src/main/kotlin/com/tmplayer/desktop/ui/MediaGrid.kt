@@ -1337,6 +1337,7 @@ internal fun TileMenu(
     // Held here rather than in the menu, which is gone by the time the prompt is answered.
     var confirmingRemove by remember { mutableStateOf<ResumeRecord?>(null) }
     confirmingRemove?.let { doomed ->
+    val stopDownload = rememberStopDownload { OfflineDownloads.cancel(state.downloads, it.fileId) }
         ConfirmDialog(
             title = s.gridRemoveDownloadTitle,
             message = s.gridRemoveDownloadMessage(item.title),
@@ -1405,7 +1406,7 @@ internal fun TileMenu(
                 DropdownMenuItem(text = { Text(s.downloadsDownloadingEllipsis) }, onClick = { onDismiss(); state.go(Destination.Downloads) })
                 DropdownMenuItem(text = { Text(s.downloadsCancel) }, onClick = {
                     onDismiss()
-                    OfflineDownloads.cancel(state.downloads, item.fileId)
+                    stopDownload(row)
                 })
             }
             // A chat with "restrict saving content" lets its videos be watched and nothing more,

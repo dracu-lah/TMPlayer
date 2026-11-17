@@ -935,8 +935,20 @@ fun DownloadsScreen(
     // second Cancel never finish one another's window. The window outlives the page: rotating or
     // leaving inside it still ends with the part file deleted, as the card promised.
     val undoToast = rememberActionToast()
-    // A remote cannot reach a toast, so there Cancel stays what it was: the row goes with the
-    // remote on it, on to the next one down.
+    // A remote cannot reach a toast, so there Cancel asks first when the download is running (a
+    // running one has bytes to lose); on Yes the row goes with the remote on it, on to the next one down.
+    val stopRow: (OfflineDownloads.Progress) -> Unit = { progress ->
+        val before = activeOrder
+        scope.launch {
+            dropUnfinished(progress.fileId)
+            // The download service takes it off the queue a moment after it is asked to.
+            kotlinx.coroutines.withTimeoutOrNull(ROW_GONE_WAIT_MS) {
+                OfflineDownloads.active.first { queue -> queue.values.none { it.fileId == progress.fileId } }
+            }
+            landAfterRemoving(before, "active_${progress.fileId}", activeNow())
+        }
+    }
+    val askStop = com.tmplayer.ui.components.rememberStopDownload(stop = stopRow)
     val cancelRow: (OfflineDownloads.Progress) -> Unit = { progress ->
         // A failed card's word is Dismiss: nothing is running, so there is nothing to bring back.
         if (touch && progress.stage != OfflineDownloads.Stage.Failed) {
@@ -951,15 +963,7 @@ fun DownloadsScreen(
             // either way with the part file gone.
             cancelling.schedule(com.tmplayer.platform.Background.scope, CANCEL_UNDO_MS, id, token, ::dropUnfinished)
         } else {
-            val before = activeOrder
-            scope.launch {
-                dropUnfinished(progress.fileId)
-                // The download service takes it off the queue a moment after it is asked to.
-                kotlinx.coroutines.withTimeoutOrNull(ROW_GONE_WAIT_MS) {
-                    OfflineDownloads.active.first { queue -> queue.values.none { it.fileId == progress.fileId } }
-                }
-                landAfterRemoving(before, "active_${progress.fileId}", activeNow())
-            }
+            askStop(progress)
         }
     }
     // Newest, Name and Largest over the downloads, once there are two to put in order.

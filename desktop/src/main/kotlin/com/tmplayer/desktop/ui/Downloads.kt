@@ -1114,7 +1114,8 @@ private fun ActiveRow(state: ShellState, row: OfflineDownloads.Progress, onFreeU
     val resume = { OfflineDownloads.resume(state.downloads, row.fileId) }
     val scope = rememberCoroutineScope()
     // Cancel deletes what it had fetched too: a part file left behind is space nothing names.
-    val cancel: () -> Unit = { scope.launch { dropUnfinished(state, row.fileId) } }
+    val stopDownload = rememberStopDownload { scope.launch { dropUnfinished(state, it.fileId) } }
+    val cancel: () -> Unit = { stopDownload(row) }
     // Refused for room: Free up space first, since Try again finds the same full drive. Refused
     // because the chat forbids keeping a copy: no Try again at all, as on the phone.
     val noSpace = failed && onFreeUp != null && com.tmplayer.data.isNoSpaceFailure(row.failure)
