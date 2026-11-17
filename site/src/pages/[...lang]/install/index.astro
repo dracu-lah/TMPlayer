@@ -187,6 +187,11 @@ adb install <span data-name="android-universal">TMPlayer-&lt;version&gt;-univers
     <Panel id="windows-installer" title={t('install.win_msi_h')} wide>
       <p><T k="install.win_msi"><code data-name="windows-x64-msi" slot="code1">TMPlayer-&lt;version&gt;-windows-x64.msi</code><a href={l('/download/#windows')} slot="a1">{t('install.win_msi__a1')}</a><em slot="em1">{t('install.win_msi__em1')}</em><em slot="em2">{t('install.win_msi__em2')}</em><em slot="em3">{t('install.win_msi__em3')}</em></T></p>
     </Panel>
+    <Panel id="windows-blocked" title={t('install.win_blocked_h')} wide>
+      <p><T k="install.win_blocked"><em slot="em1">{t('install.win_blocked__em1')}</em><em slot="em2">{t('install.win_blocked__em2')}</em></T></p>
+      <p><T k="install.win_blocked_fix"><em slot="em1">{t('install.win_blocked_fix__em1')}</em><em slot="em2">{t('install.win_blocked_fix__em2')}</em></T></p>
+      <p><T k="install.win_blocked_managed"><code slot="code1">%LOCALAPPDATA%\TMPlayer</code><code slot="code2">windows-x64</code><code slot="code3">%TEMP%</code></T></p>
+    </Panel>
     <p class="muted small section-note">{t('install.win_zip_note')}</p>
   </Band>
 
@@ -224,6 +229,11 @@ chmod +x <span data-name="linux-x64-appimage">TMPlayer-&lt;version&gt;-x86_64.Ap
       </Step>
       <SignIn id="linux-3" />
     </Steps>
+
+    <Panel id="linux-too-old" title={t('install.linux_old_h')} wide>
+      <p><T k="install.linux_old"><code slot="code1">ldd --version</code></T></p>
+      <p><T k="install.linux_old2"><em slot="em1">{t('install.linux_old2__em1')}</em></T></p>
+    </Panel>
 
     <h3 class="alt-head">{t('install.other_ways')}</h3>
     <div class="formats">
