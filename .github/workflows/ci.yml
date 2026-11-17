@@ -90,9 +90,10 @@ jobs:
   # natives without them. This is where Windows is compiled, tested and packaged at
   # all, since the developer has only a Linux machine.
   #
-  # Ubuntu 24.04 rather than ubuntu-latest: the bundled TDLib and libmpv need glibc 2.38, so the
-  # runner must have at least that to run the self-test, and a pinned image keeps the result the
-  # same when "latest" moves.
+  # Ubuntu 24.04 rather than ubuntu-latest: a pinned image keeps the result the same when "latest"
+  # moves. The bundled TDLib and libmpv are the glibc 2.35 builds (.github/actions/linux-natives,
+  # built in an Ubuntu 22.04 container and cached by recipe), swapped into the jars by the Gradle
+  # build, and glibc-floor.sh fails the job if any native needs more than 2.35.
   desktop-linux:
     name: Desktop (Linux)
     runs-on: ubuntu-24.04
@@ -107,6 +108,9 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
+
+      - name: Build or restore the glibc 2.35 natives
+        uses: ./.github/actions/linux-natives
 
       - name: Package and self-test
         uses: ./.github/actions/desktop-linux

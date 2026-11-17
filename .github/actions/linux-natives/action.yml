@@ -1,0 +1,75 @@
+name: Linux natives for glibc 2.35
+description: >
+  Builds the TDLib and libmpv libraries that let the desktop AppImage and tarball run on glibc 2.35
+  (Ubuntu 22.04 and newer, issue #30), or restores them from the cache, checks every file against
+  natives/linux-2-35/PINS.txt and sets TMPLAYER_LINUX_NATIVES for the steps after it, which is what
+  desktop/build.gradle.kts reads. Call it before the desktop-linux action (ci.yml and release.yml).
+  The build runs scripts/build-tdlib-linux.sh and scripts/build-mpv-linux-2-35.sh, which use podman
+  and an Ubuntu 22.04 image pinned by digest. The cache is keyed by the recipe (natives/ and the
+  two scripts), so a cold build (about 20 minutes on a 4 core runner) happens only when that changes.
+
+inputs:
+  jobs:
+    description: Parallel compile jobs. Each TDLib job can take 2 to 3 GB of memory.
+    required: false
+    default: "4"
+
+outputs:
+  dir:
+    description: The folder that holds tdlib/ and mpv/
+    value: ${{ steps.where.outputs.dir }}
+
+runs:
+  using: composite
+  steps:
+    - name: Where the natives go
+      id: where
+      shell: bash
+      run: echo "dir=$HOME/.cache/tmplayer-natives" >> "$GITHUB_OUTPUT"
+
+    # PINS.txt is left out of the key on purpose: a hash edited without a recipe change must fail
+    # the check below, not rebuild.
+    - name: Restore the natives
+      id: cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/tmplayer-natives/tdlib/libtdjsonjava.so
+          ~/.cache/tmplayer-natives/mpv/lib*
+        key: linux-natives-2-35-${{ runner.os }}-${{ hashFiles('natives/**', '!natives/linux-2-35/**', 'scripts/build-tdlib-linux.sh', 'scripts/build-mpv-linux-2-35.sh') }}
+
+    - name: Make sure podman is there
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        # GitHub's ubuntu-24.04 image carries it; the install is for a runner image that does not.
+        command -v podman >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq podman; }
+        podman --version
+
+    - name: Build TDLib for glibc 2.35
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        JOBS: ${{ inputs.jobs }}
+      run: scripts/build-tdlib-linux.sh --no-smoke
+
+    - name: Build libmpv and its libraries for glibc 2.35
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        JOBS: ${{ inputs.jobs }}
+      run: scripts/build-mpv-linux-2-35.sh
+
+    # The same check Gradle makes when it swaps the files into the jars, here first so a stale pin
+    # fails in a step that names it. After a rebuild it also proves the build is byte for byte the
+    # one the pins describe.
+    - name: Check the files against the pins
+      shell: bash
+      run: |
+        dir="${{ steps.where.outputs.dir }}"
+        awk '!/^#/ && NF { print $1 "  " $2 }' natives/linux-2-35/PINS.txt | sort -u > "$RUNNER_TEMP/linux-natives.sha256"
+        if ! (cd "$dir" && sha256sum -c "$RUNNER_TEMP/linux-natives.sha256"); then
+          echo "::error::The Linux natives do not match natives/linux-2-35/PINS.txt. If the recipe under natives/ or the build scripts changed on purpose, build them (scripts/build-tdlib-linux.sh, scripts/build-mpv-linux-2-35.sh) and copy the new hashes into the pins file."
+          exit 1
+        fi
+        echo "TMPLAYER_LINUX_NATIVES=$dir" >> "$GITHUB_ENV"
