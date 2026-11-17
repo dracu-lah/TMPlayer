@@ -3,23 +3,53 @@ name: Apple release
 # The iOS and iPadOS release, for a tag apple-v<version>[-<build>] (apple-v1.28.5 releases 1.28.5,
 # build 1; apple-v1.28.5-2 its build 2, an iOS-only fix). Started from TMPlayer for Apple by
 # Pietro Giuseppe D'Amico (github.com/Killua99x/TMPlayer-for-apple, GPL-3.0):
-# the IPA built unsigned (AltStore, SideStore or Sideloadly sign it with the user's own Apple ID),
-# a GitHub release with the IPA, its SHA-256 and the version's notes from iosApp/CHANGELOG.md, and
-# the version added to the AltStore source (altstore/source.json) on the default branch, from
-# which AltStore and SideStore install the app and offer every update.
+# the IPA built unsigned (AltStore, SideStore, Sideloadly or LiveContainer sign or run it with the
+# user's own Apple ID), a GitHub release with the IPA, the dSYMs, SHA256SUMS.txt and the version's
+# notes from iosApp/CHANGELOG.md, and the version added to the AltStore source
+# (altstore/source.json), from which AltStore and SideStore install the app and offer every update.
 #
 # The tags are apple-v*, not v*: the Android, TV and desktop release (release.yml) starts on v*.
-# It runs only in the TMPlayer repository; a fork skips it.
+# It runs only in dracu-lah/TMPlayer (the repository variable APPLE_RELEASE_REPO names another
+# owner/name); a fork skips it.
 # docs/IOS.md, "Releasing": the secrets, the variables, the runner, and how a release is made.
-# Variables (Settings, Variables): APPLE_RELEASE_RUNNER, APPLE_RELEASE_KOTLIN_HEAP and
-# APPLE_DEVELOPER_NAME, the name AltStore shows as the developer ("TMPlayer" when unset).
+#
+# Started by hand (Actions, Run workflow) it is a dry run unless its ref is an apple-v tag and
+# dry_run is turned off: it builds the IPA and uploads it as a workflow artifact, and makes no
+# release, no source change and no pull request. A manual lower-iOS test (min_ios) is always a dry run.
+#
+# Variables (Settings, Variables), all optional:
+#   APPLE_RELEASE_RUNNER       a runner label, macos-26 when unset
+#   APPLE_RELEASE_KOTLIN_HEAP  the Kotlin/Native link's heap, 6000m when unset
+#   APPLE_DEVELOPER_NAME       the developer name AltStore shows, TMPlayer when unset
+#   APPLE_SOURCE_PUSH          'true' pushes the source change straight to the default branch;
+#                              anything else (and a push the branch rules refuse) opens a pull request
+#   APPLE_RELEASE_REPO         owner/name this workflow runs in, dracu-lah/TMPlayer when unset
 
 on:
   push:
     tags: ["apple-v*"]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Build and upload the IPA as an artifact only: no release, no source change"
+        type: boolean
+        default: true
+      version:
+        description: "Version for a dry run from a branch (x.y or x.y.z); empty is project.yml's"
+        type: string
+        default: ""
+      build:
+        description: "Build number for a dry run from a branch; empty is project.yml's"
+        type: string
+        default: ""
+      min_ios:
+        description: "Manual lower-iOS test: build with this deployment target (for example 17.0) instead of the project's; empty is the project's. Always a dry run"
+        type: string
+        default: ""
 
 permissions:
   contents: write
+  pull-requests: write
 
 concurrency:
   # One release at a time: each adds its version to the same source file.
@@ -28,44 +58,103 @@ concurrency:
 
 jobs:
   release:
-    if: github.event.repository.name == 'TMPlayer'
+    if: github.repository == (vars.APPLE_RELEASE_REPO || 'dracu-lah/TMPlayer')
     # The Kotlin half's Release link needs about 6 GB of heap; iosApp/release/build-ipa.sh runs it
     # alone, which an 8 GB Mac manages. APPLE_RELEASE_RUNNER names another runner if this one
     # cannot (docs/IOS.md).
     runs-on: ${{ vars.APPLE_RELEASE_RUNNER || 'macos-26' }}
     timeout-minutes: 150
-    env:
-      TAG: ${{ github.ref_name }}
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - name: Version and build from the tag
+      - name: Mode, version and build
+        env:
+          IS_TAG: ${{ github.ref_type == 'tag' }}
+          EVENT: ${{ github.event_name }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_BUILD: ${{ inputs.build }}
+          INPUT_MIN_IOS: ${{ inputs.min_ios }}
         run: |
-          # The version is TMPlayer's (TMPlayer 1.28.5 is built as 1.28.5); an iOS-only fix keeps
-          # it and raises the build, which AltStore compares to offer the update.
-          if ! [[ "${TAG#apple-v}" =~ ^([0-9]+\.[0-9]+(\.[0-9]+)?)(-([1-9][0-9]*))?$ ]]; then
-            echo "::error::The tag must be apple-v<major>.<minor>[.<patch>][-<build>], not $TAG"
-            exit 1
+          # A tag decides the version and build (TMPlayer 1.28.5 is built as 1.28.5; an iOS-only fix
+          # keeps the version and raises the build, which AltStore compares to offer the update).
+          # A dry run from a branch takes them from the inputs, then from project.yml.
+          dry=false
+          if [ "$EVENT" = workflow_dispatch ] && [ "$INPUT_DRY_RUN" != false ]; then dry=true; fi
+          if [ -n "$INPUT_MIN_IOS" ]; then
+            if ! [[ "$INPUT_MIN_IOS" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]]; then
+              echo "::error::min_ios must look like 17 or 17.0, not $INPUT_MIN_IOS"
+              exit 1
+            fi
+            if [ "$EVENT" != workflow_dispatch ]; then
+              echo "::error::A lower iOS minimum is a manual test, never a tag's release"
+              exit 1
+            fi
+            dry=true
           fi
-          version="${BASH_REMATCH[1]}"
-          build="${BASH_REMATCH[4]:-1}"
+          if [ "$IS_TAG" = true ]; then
+            tag="$GITHUB_REF_NAME"
+            spec="${tag#apple-v}"
+            if [ "$spec" = "$tag" ] || ! [[ "$spec" =~ ^([0-9]+\.[0-9]+(\.[0-9]+)?)(-([1-9][0-9]*))?$ ]]; then
+              echo "::error::The tag must be apple-v<major>.<minor>[.<patch>][-<build>], not $tag"
+              exit 1
+            fi
+            version="${BASH_REMATCH[1]}"
+            build="${BASH_REMATCH[4]:-1}"
+          else
+            if [ "$dry" != true ]; then
+              echo "::error::A release runs from an apple-v tag (see docs/IOS.md, Releasing); from a branch, only a dry run"
+              exit 1
+            fi
+            version="$INPUT_VERSION"
+            build="$INPUT_BUILD"
+            if [ -z "$version" ]; then
+              version=$(sed -n 's/^    MARKETING_VERSION: "\(.*\)"$/\1/p' iosApp/project.yml)
+            fi
+            if [ -z "$build" ]; then
+              build=$(sed -n 's/^    CURRENT_PROJECT_VERSION: "\(.*\)"$/\1/p' iosApp/project.yml)
+            fi
+            if ! [[ "$version" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]] || ! [[ "$build" =~ ^[1-9][0-9]*$ ]]; then
+              echo "::error::Version '$version' and build '$build' must look like 1.28.5 and 1"
+              exit 1
+            fi
+            tag="apple-v$version"
+            if [ "$build" != 1 ]; then tag="$tag-$build"; fi
+          fi
           name="$version"
           if [ "$build" != 1 ]; then name="$version-$build"; fi
+          label="$name"
+          if [ -n "$INPUT_MIN_IOS" ]; then label="$name-min-ios-$INPUT_MIN_IOS"; fi
           {
+            echo "DRY_RUN=$dry"
+            echo "TAG=$tag"
             echo "VERSION=$version"
             echo "BUILD=$build"
+            echo "MIN_IOS=$INPUT_MIN_IOS"
+            echo "LABEL=$label"
             echo "IPA=TMPlayer-ios-$name.ipa"
             echo "DSYMS=TMPlayer-ios-$name-dSYMs.zip"
             if [ "$build" = 1 ]; then echo "TITLE=$version"; else echo "TITLE=$version (build $build)"; fi
           } >> "$GITHUB_ENV"
+          if [ "$dry" = true ]; then
+            echo "::notice::Dry run of $tag${INPUT_MIN_IOS:+ with iOS $INPUT_MIN_IOS as the minimum}: the IPA is uploaded as an artifact, nothing is released"
+          fi
 
       - name: Notes from iosApp/CHANGELOG.md
-        run: python3 -I iosApp/release/altstore_source.py notes --version "$VERSION" --build "$BUILD" > "$RUNNER_TEMP/notes.md"
+        run: |
+          if ! python3 -I iosApp/release/altstore_source.py notes --version "$VERSION" --build "$BUILD" > "$RUNNER_TEMP/notes.md"; then
+            # A real release stops here, so the notes are written first; a dry run goes on.
+            if [ "$DRY_RUN" != true ]; then exit 1; fi
+            echo "::warning::iosApp/CHANGELOG.md has no notes for $TITLE yet (a release would stop)"
+            echo "Notes for $TITLE are not written yet." > "$RUNNER_TEMP/notes.md"
+          fi
 
-      - name: The source and the project agree
-        run: python3 -I iosApp/release/altstore_source.py check --project iosApp/project.yml
+      - name: The scripts, the source and the project agree
+        run: |
+          python3 -I -m unittest discover -s iosApp/release
+          python3 -I iosApp/release/altstore_source.py check --project iosApp/project.yml
 
       - uses: actions/setup-java@v5
         with:
@@ -89,6 +178,7 @@ jobs:
             exit 1
           fi
           # The Gradle build also holds TMPlayer's Android app, which needs the SDK's path.
+          # Nothing here is echoed: the file stays on the runner and is removed again below.
           {
             echo "sdk.dir=${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
             echo "TG_API_ID=$TG_API_ID"
@@ -98,27 +188,70 @@ jobs:
             done
           } > local.properties
 
-      - name: IPA, dSYMs and checksum
+      - name: IPA, dSYMs and checksums
         env:
           # The Kotlin/Native compiler's heap for the Release link, 6000m when unset.
           TM_KOTLIN_HEAP: ${{ vars.APPLE_RELEASE_KOTLIN_HEAP }}
+          # A lower-iOS trial's deployment target; empty is project.yml's.
+          TM_MIN_IOS: ${{ inputs.min_ios }}
           TMPDIR: ${{ runner.temp }}
         run: |
           iosApp/release/build-ipa.sh "$VERSION" "$BUILD" "$GITHUB_WORKSPACE"
           test -f "$IPA" && test -f "$DSYMS"
+          # One checksum file for everything the release attaches (build-ipa.sh wrote the IPA's).
+          shasum -a 256 "$IPA" "$DSYMS" > SHA256SUMS.txt
+          shasum -a 256 -c SHA256SUMS.txt
+          rm -f local.properties
+
+      - name: What the IPA says
+        run: |
+          # The source's entry for this IPA, made on a copy: the minimum iOS and the permissions
+          # come from the IPA itself. A dry run checks the whole path to the source without changing it.
+          cp altstore/source.json "$RUNNER_TEMP/dry-source.json"
+          python3 -I iosApp/release/altstore_source.py add --source "$RUNNER_TEMP/dry-source.json" \
+            --ipa "$IPA" --version "$VERSION" --build "$BUILD" --notes-file "$RUNNER_TEMP/notes.md" \
+            --download-url "https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/$IPA" \
+            --repo "$GITHUB_REPOSITORY" --branch "${{ github.event.repository.default_branch }}" --developer "TMPlayer"
+          python3 -I iosApp/release/altstore_source.py check --published --source "$RUNNER_TEMP/dry-source.json" --project iosApp/project.yml
+          python3 -I -c 'import json,sys; v=json.load(open(sys.argv[1]))["apps"][0]["versions"][0]; print("minOSVersion", v.get("minOSVersion"), "size", v["size"], "sha256", v["sha256"])' "$RUNNER_TEMP/dry-source.json"
+
+      - name: Upload the IPA (dry run)
+        if: env.DRY_RUN == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: apple-dry-run-${{ env.LABEL }}
+          path: |
+            ${{ env.IPA }}
+            ${{ env.DSYMS }}
+            SHA256SUMS.txt
+          retention-days: 14
+          if-no-files-found: error
 
       - name: GitHub release
+        if: env.DRY_RUN != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           # The release page also says where this version's source is, and MPVKit's, whose mpv
           # and FFmpeg the IPA carries under the LGPL (About's "Corresponding source" opens it).
           mpvkit=$(awk '/^  MPVKit:/ { found = 1 } found && /exactVersion:/ { print $2; exit }' iosApp/project.yml)
-          repo="https://github.com/${{ github.repository }}"
+          repo="https://github.com/$GITHUB_REPOSITORY"
+          branch="${{ github.event.repository.default_branch }}"
+          source_url="https://raw.githubusercontent.com/$GITHUB_REPOSITORY/$branch/altstore/source.json"
           {
             cat "$RUNNER_TEMP/notes.md"
             echo
-            echo "[Source of this version]($repo/tree/$TAG) · [MPVKit $mpvkit source, with mpv and FFmpeg](https://github.com/mpvkit/MPVKit/tree/$mpvkit) · [GPL-3.0]($repo/blob/$TAG/LICENSE) · [Third-party notices]($repo/blob/$TAG/THIRD_PARTY_NOTICES.md) · [Privacy](https://tmplayer.org/privacy/)"
+            echo "### Install"
+            echo
+            echo "- **AltStore or SideStore:** add the source \`$source_url\` (on the iPhone, opening \`altstore://source?url=$source_url\` or \`sidestore://source?url=$source_url\` adds it), then install TMPlayer. Updates come from there."
+            echo "- **Sideloadly, LiveContainer or any other signer:** download \`$IPA\` below and install it as it describes. No automatic updates."
+            echo "- Check the file first: its SHA-256 is below and in \`SHA256SUMS.txt\`."
+            echo
+            echo '```'
+            cat SHA256SUMS.txt
+            echo '```'
+            echo
+            echo "Unofficial: not affiliated with Telegram. [Source of this version]($repo/tree/$TAG) · [MPVKit $mpvkit source, with mpv and FFmpeg](https://github.com/mpvkit/MPVKit/tree/$mpvkit) · [GPL-3.0]($repo/blob/$TAG/LICENSE) · [Third-party notices]($repo/blob/$TAG/THIRD_PARTY_NOTICES.md) · [Privacy](https://tmplayer.org/privacy/)"
           } > "$RUNNER_TEMP/release.md"
           if gh release view "$TAG" > /dev/null 2>&1; then
             # A run started again for the same tag: the files are replaced, the text kept.
@@ -129,26 +262,54 @@ jobs:
           fi
 
       - name: AltStore source
+        if: env.DRY_RUN != 'true'
         env:
           BRANCH: ${{ github.event.repository.default_branch }}
           DEVELOPER: ${{ vars.APPLE_DEVELOPER_NAME || 'TMPlayer' }}
+          PUSH_TO_DEFAULT: ${{ vars.APPLE_SOURCE_PUSH }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           # The release exists before the source names it, so its download address already works.
           git fetch origin "$BRANCH"
-          git switch --create source-update "origin/$BRANCH"
+          update="altstore-source-$TAG-$GITHUB_RUN_ID"
+          git switch --create "$update" "origin/$BRANCH"
           python3 -I iosApp/release/altstore_source.py add \
             --ipa "$IPA" --version "$VERSION" --build "$BUILD" --notes-file "$RUNNER_TEMP/notes.md" \
             --download-url "https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/$IPA" \
-            --repo "$GITHUB_REPOSITORY" --branch "$BRANCH" --developer "$DEVELOPER"
+            --repo "$GITHUB_REPOSITORY" --branch "$BRANCH" --developer "$DEVELOPER" \
+            --news --release-url "https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG"
           python3 -I iosApp/release/altstore_source.py check --published --project iosApp/project.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add altstore/source.json
           git commit --message "AltStore source: TMPlayer for iPhone and iPad $TITLE"
-          git push origin "HEAD:$BRANCH"
+          pushed=false
+          if [ "$PUSH_TO_DEFAULT" = true ]; then
+            # The branch rules may refuse a workflow's push (pull requests required): then a pull
+            # request below does it.
+            if git push origin "HEAD:$BRANCH"; then
+              pushed=true
+            else
+              echo "::warning::The push to $BRANCH was refused: opening a pull request instead"
+            fi
+          fi
           {
             echo "### TMPlayer for iPhone and iPad $TITLE"
             echo
             echo "- Release: https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG"
             echo "- AltStore source: https://raw.githubusercontent.com/$GITHUB_REPOSITORY/$BRANCH/altstore/source.json"
           } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$pushed" = true ]; then
+            echo "- Source change: pushed to \`$BRANCH\`" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git push origin "HEAD:refs/heads/$update"
+          if url=$(gh pr create --base "$BRANCH" --head "$update" \
+              --title "AltStore source: TMPlayer for iPhone and iPad $TITLE" \
+              --body "Adds $TITLE to altstore/source.json after its release ($TAG). AltStore and SideStore see the new version once this is merged."); then
+            echo "- Source change: pull request $url, merge it so AltStore and SideStore offer the update" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::error::The release is out but the source change is not: branch $update is pushed, open a pull request from it (Settings, Actions, General, 'Allow GitHub Actions to create and approve pull requests' lets this step do it)"
+            echo "- Source change: branch \`$update\` pushed, **no pull request**: open one into \`$BRANCH\`" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi

@@ -485,6 +485,35 @@ class RepositoryTest(unittest.TestCase):
             text = read(*parts)
             self.assertIsNone(re.search(r"\b[0-9a-f]{32}\b", text), "/".join(parts))
             self.assertIsNone(re.search(r"TG_API_ID\s*=\s*[0-9]+", text), "/".join(parts))
+        # The CI workflow uses dummies, made at run time: no 32 digit hex literal that could be a hash.
+        self.assertIsNone(re.search(r"\b[0-9a-f]{32}\b", read(".github", "workflows", "apple-ci.yml")))
+
+    def test_the_apple_workflows_use_only_actions_the_others_already_pin(self):
+        def pins(name):
+            return set(re.findall(r"uses:\s*([\w./-]+@[\w.]+)", read(".github", "workflows", name)))
+
+        # Every action at a major version some other workflow already uses (setup-xcode is the one
+        # only the Apple workflows need, and the release's own pin since the import).
+        others = {"maxim-lobanov/setup-xcode@v1"}
+        for name in os.listdir(os.path.join(ROOT, ".github", "workflows")):
+            if name.endswith(".yml") and not name.startswith("apple-"):
+                others |= pins(name)
+        for name in ("apple-ci.yml", "apple-release.yml"):
+            self.assertEqual(set(), pins(name) - others, name)
+
+    def test_the_apple_workflows_are_guarded_and_name_no_fork(self):
+        release = read(".github", "workflows", "apple-release.yml")
+        self.assertIn("github.repository == (vars.APPLE_RELEASE_REPO || 'dracu-lah/TMPlayer')", release)
+        for name in ("apple-ci.yml", "apple-release.yml"):
+            text = read(".github", "workflows", name)
+            self.assertNotIn("killua99x/tmplayer-for-apple", text.lower().replace("github.com/killua99x/tmplayer-for-apple", ""),
+                             "the fork is credited by its address in a comment only")
+            self.assertIn("workflow_dispatch", text)
+        self.assertIn("dry_run", release)
+        self.assertIn("min_ios", release)
+        self.assertIn("APPLE_SOURCE_PUSH", release)
+        self.assertIn("gh pr create", release)
+        self.assertIn("vars.APPLE_MAC_CI == 'true'", read(".github", "workflows", "apple-ci.yml"))
 
 
 if __name__ == "__main__":

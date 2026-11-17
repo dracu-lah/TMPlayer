@@ -11,6 +11,7 @@
 # keeps it to the old generation, and the link ran out of memory at 5.5 GB). Measured 2026-11-13
 # on an 8 GB Mac with other apps open: 18 minutes, the system swapping up to 9 GB.
 # TM_KOTLIN_HEAP sets that heap (6000m when unset); a Mac with 16 GB can give more.
+# TM_MIN_IOS (empty when unset) replaces project.yml's deployment target for a lower-floor trial.
 set -euo pipefail
 
 if [ $# -ne 3 ]; then
@@ -21,6 +22,13 @@ version=$1
 build=$2
 out=$3
 heap=${TM_KOTLIN_HEAP:-6000m}
+# A test of a lower minimum iOS (docs/IOS.md, "Lowering the minimum iOS"): TM_MIN_IOS=17.0 builds
+# with that deployment target instead of project.yml's. Such an IPA is a trial, never released.
+min_ios=${TM_MIN_IOS:-}
+if [ -n "$min_ios" ] && ! [[ "$min_ios" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]]; then
+  echo "TM_MIN_IOS must look like 17 or 17.0, not $min_ios" >&2
+  exit 2
+fi
 root=$(cd "$(dirname "$0")/../.." && pwd)
 work=${TMPDIR:-/tmp}/tmplayer-release
 mkdir -p "$out" "$work"
@@ -71,6 +79,7 @@ GRADLE_OPTS="$lean" xcodebuild archive -project iosApp/TMPlayer.xcodeproj -schem
   -configuration Release -destination 'generic/platform=iOS' -archivePath "$archive" \
   -derivedDataPath "$work/derived" \
   MARKETING_VERSION="$version" CURRENT_PROJECT_VERSION="$build" \
+  ${min_ios:+IPHONEOS_DEPLOYMENT_TARGET="$min_ios"} \
   CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
 stop_daemons
 
