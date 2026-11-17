@@ -117,6 +117,16 @@ object DesktopPaths : Paths {
 
     val updatesDir: File get() = layout().updatesDir
 
+    /**
+     * Where the trailer player (Chromium, about 350 to 470 MB unpacked) may live, preferred first:
+     * `<root>/TMPlayer/browser` for a chosen storage location that is usable this run, then
+     * `<data>/browser` beside the session. Not created here: nothing is written before the viewer
+     * agrees to the download (trailer/EngineInstaller). A chosen location that is unplugged at
+     * launch ([unusableRoot]) is not offered, and an install found in either place is used.
+     */
+    fun browserPlaces(): List<File> =
+        listOfNotNull(storageRoot?.let { File(File(it, APP), "browser") }, File(dataDir, "browser"))
+
     override fun disk(): DiskInfo = DiskInfo.of(filesDir)
 }
 

@@ -324,6 +324,13 @@ dependencies {
     implementation(libs.jna)
     implementation(libs.jna.platform)
     implementation(libs.filekit.dialogs.compose)
+    // In-app trailers (ui/TrailerEngine.kt): JCEF's Java API and loader only. Chromium is
+    // downloaded on the first trailer, with consent. JOGL and GlueGen serve JCEF's off-screen
+    // mode, which TMPlayer does not use (its browser is a windowed one), so they stay out: 5.5 MB.
+    implementation(libs.jcefmaven) {
+        exclude(group = "me.friwi", module = "jogl-all")
+        exclude(group = "me.friwi", module = "gluegen-rt")
+    }
     // The Cast protocol's messages are JSON (CP73). Already on the runtime classpath through
     // :core's jvm target; named here so the cast client compiles against it.
     implementation(libs.json)
@@ -347,6 +354,19 @@ tasks.register<JavaExec>("runPlayerDev") {
     classpath = project.extensions.getByType<JavaPluginExtension>().sourceSets["main"].runtimeClasspath
     javaLauncher.set(javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(21)) })
     jvmArgs("-Dsun.java2d.uiScale.enabled=true")
+}
+
+// The trailer player on its own (trailer/DevTrailerMain.kt), for a real Windows, Linux or Mac:
+// ./gradlew :desktop:runTrailerSmoke --args="--dir /tmp/tm-browser [--natives <jar>] [--key <id>]"
+tasks.register<JavaExec>("runTrailerSmoke") {
+    group = "application"
+    description = "Installs the trailer player into --dir, plays a trailer and ends 0 once it plays."
+    mainClass.set("com.tmplayer.desktop.trailer.DevTrailerMainKt")
+    classpath = project.extensions.getByType<JavaPluginExtension>().sourceSets["main"].runtimeClasspath
+    javaLauncher.set(javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(21)) })
+    jvmArgs("--add-opens=java.desktop/sun.awt=ALL-UNNAMED", "--add-opens=java.desktop/java.awt.peer=ALL-UNNAMED")
+    providers.gradleProperty("cefLog").orNull?.let { jvmArgs("-Dtmplayer.cefLog=$it") }
+    if (hostMac) jvmArgs("--add-opens=java.desktop/sun.lwawt=ALL-UNNAMED", "--add-opens=java.desktop/sun.lwawt.macosx=ALL-UNNAMED")
 }
 
 // ProGuard writes every jar it produces deflated again, which would undo StoreRuntimeJars for the
@@ -463,6 +483,12 @@ compose.desktop {
         // apple.awt.application.appearance lets the macOS title bar follow the system's light or dark
         // look; other systems ignore it.
         jvmArgs += listOf("-Dsun.java2d.uiScale.enabled=true", "-Dapple.awt.application.appearance=system")
+        // The trailer player (JCEF, trailer/CefTrailerEngine) reaches AWT's peers for its native
+        // window, and on a Mac the LWAWT ones; without these the JDK refuses it at the first trailer.
+        jvmArgs += listOf("--add-opens=java.desktop/sun.awt=ALL-UNNAMED", "--add-opens=java.desktop/java.awt.peer=ALL-UNNAMED")
+        if (hostMac) {
+            jvmArgs += listOf("--add-opens=java.desktop/sun.lwawt=ALL-UNNAMED", "--add-opens=java.desktop/sun.lwawt.macosx=ALL-UNNAMED")
+        }
         // The release image (createReleaseDistributable, packageReleaseMsi) runs ProGuard over the
         // classpath to drop code nothing reaches: Compose, Material, coroutines and the big
         // libraries are mostly unused. Names are kept and optimisation is off, because the risk is in
