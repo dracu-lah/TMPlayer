@@ -6,6 +6,7 @@ import com.tmplayer.data.ResumeState
 import com.tmplayer.desktop.DesktopPaths
 import com.tmplayer.i18n.L
 import com.tmplayer.platform.Logger
+import com.tmplayer.player.AssMargins
 import com.tmplayer.player.Stereo3d
 import com.tmplayer.player.SubtitlePick
 import com.tmplayer.player.SubtitlePlan
@@ -111,6 +112,14 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
 
     @Volatile
     private var tracksDirty = true
+
+    /** The subtitle track [applyAssMargins] last settled, or [ASS_UNSETTLED] after a new file. */
+    @Volatile
+    private var assMarginsTrack = ASS_UNSETTLED
+
+    /** What `sub-ass-style-overrides` was last set to. */
+    @Volatile
+    private var assOverrides = ""
 
     @Volatile
     private var closed = false
@@ -259,6 +268,7 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
             tracksDirty = false
             _tracks.value = readTracks(h)
             recordProbe(h, _tracks.value)
+            applyAssMargins(h, _tracks.value)
             val chapters = readChapters(h)
             if (chapters != _state.value.chapters) _state.update { it.copy(chapters = chapters) }
         }
@@ -387,6 +397,8 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
             stereo = stereo,
         )
         _tracks.value = emptyList()
+        // Track ids start again with each file, so the last file's ASS margins are settled again.
+        assMarginsTrack = ASS_UNSETTLED
         val h = handle
         runCatching {
             // mpv compares these as written, so every spelling a file might use: `ja,jpn`.
@@ -817,9 +829,11 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
      * The bundled libmpv is 0.41, where `background-box` draws one box behind the whole subtitle in
      * `sub-back-color` (mpv's colours are #AARRGGBB). `opaque-box`, the older style, boxes each line
      * in the outline colour instead and draws no outline, which is the fallback for a libmpv that
-     * predates `background-box` (0.39). `sub-ass-override` stays at mpv's default, `scale`: these
-     * options reach plain text tracks, and an ASS track keeps the look its author gave it. PGS and
-     * VobSub tracks are pictures and libass leaves them as they are.
+     * predates `background-box` (0.39). `sub-ass-override` stays at mpv's default, `scale`: the
+     * colour, font and edge reach plain text tracks, and an ASS track keeps the look its author
+     * gave it except for its size (`sub-scale`), its height (`sub-pos`) and its bottom margin
+     * ([applyAssMargins]), checked with mpv 0.40 on a 288 line script (issue 36). PGS and VobSub
+     * tracks are pictures and libass leaves them as they are.
      */
     private fun applySubtitleStyle(style: SubtitleStyle) {
         val h = handle
@@ -837,6 +851,30 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
                 }
             }
         }
+    }
+
+    /**
+     * An ASS track's bottom lines brought down to where plain lines sit ([AssMargins]), once per
+     * chosen track: its header is read when mpv has it, so a track whose decoder is not up yet is
+     * tried again on the next track poll. A plain track clears an earlier track's overrides (mpv
+     * would not apply them to it anyway). `sub-pos` then lifts both alike for Raised and High.
+     */
+    private fun applyAssMargins(h: MPVHandle, tracks: List<MediaTrack>) {
+        val sub = tracks.firstOrNull { it.type == TrackType.Subtitle && it.selected }
+        val id = sub?.id ?: ASS_NO_TRACK
+        if (id == assMarginsTrack) return
+        val styled = sub?.codec?.lowercase().let { it == "ass" || it == "ssa" }
+        val wanted = if (styled) {
+            AssMargins.bottomOverrides(h.string("sub-ass-extradata") ?: return)
+        } else {
+            ""
+        }
+        if (wanted != assOverrides) {
+            val set = runCatching { h.setPropertyString("sub-ass-style-overrides", wanted) }.getOrDefault(false)
+            if (!set) Logger.i(TAG, "This libmpv takes no sub-ass-style-overrides; ASS lines keep their margins")
+            assOverrides = wanted
+        }
+        assMarginsTrack = id
     }
 
     /**
@@ -1010,6 +1048,13 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
         const val TAG = "MpvPlaybackEngine"
         const val POLL_MS = 250L
         const val TRACK_POLL_EVERY = 8
+
+        /** [assMarginsTrack] before the tracks of a new file are settled. */
+        const val ASS_UNSETTLED = Int.MIN_VALUE
+
+        /** [assMarginsTrack] with no subtitle track chosen. */
+        const val ASS_NO_TRACK = -1
+
         private const val MAX_PROBED_TRACKS = 64
         private const val MAX_PROBED_AUDIO = 16
 
