@@ -634,6 +634,8 @@ private fun DetailScreen(
         onDismissRequest = back,
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
     ) {
+        // Only the screenshot fixture sets this (ScreenshotBarsOverride); the app never does.
+        if (ScreenshotBarsOverride.hidden) HideDialogBars()
         motion.Frame {
         androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
         // Keyed by the video, so one opened from "More like this" starts at its top, and the one

@@ -253,7 +253,7 @@ object ScreenshotBarsOverride {
 }
 
 @Composable
-private fun HideDialogBars() {
+internal fun HideDialogBars() {
     val view = androidx.compose.ui.platform.LocalView.current
     androidx.compose.runtime.LaunchedEffect(view) {
         val window = (view.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window ?: return@LaunchedEffect
