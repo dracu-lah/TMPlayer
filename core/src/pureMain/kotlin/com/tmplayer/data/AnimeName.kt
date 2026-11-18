@@ -33,7 +33,10 @@ internal object AnimeName {
         RegexOption.IGNORE_CASE,
     )
 
-    private val ONE_DIGIT = Regex("""\s-\s(\d)(?:v\d)?(?=\s|$|\[|\()""")
+    // Not a size: "HDRip - 1.4GB" reads as "- 1 4GB" once the dot is a space.
+    private val ONE_DIGIT = Regex("""\s-\s(\d)(?:v\d)?(?=\s|$|\[|\()(?!\s?\d)""")
+
+    private val QUALITY = Regex("""\b(?:hdrip|webrip|web-dl|bluray|brrip|dvdrip|hdtv|hq|hdcam|camrip|hevc|x26[45]|h26[45])\b""", RegexOption.IGNORE_CASE)
 
     private val VERSIONED = Regex("""\s0*(\d{1,4})v\d(?=\s|$|\[|\()""", RegexOption.IGNORE_CASE)
 
@@ -43,10 +46,13 @@ internal object AnimeName {
      * after a dash count as an episode.
      */
     fun find(text: String, fansub: Boolean): Found? {
-        DASHED_SPECIAL.find(text)?.let { return special(it) }
+        // A bare "- SP" is a scene group's tag at the end of a release ("...AV1.-.SP"), a special only
+        // behind a fansub's own bracket or with a number ("- SP01").
+        DASHED_SPECIAL.find(text)?.takeUnless { m -> m.groupValues[1].isEmpty() && !fansub && m.value.contains("sp", ignoreCase = true) && !m.value.contains("special", ignoreCase = true) }?.let { return special(it) }
         BARE_SPECIAL.find(text)?.let { return special(it) }
         if (fansub) {
-            ONE_DIGIT.find(text)?.let { m ->
+            // Not after a release's quality tags: "HQ HDRip - 1" is a size cut short, not episode one.
+            ONE_DIGIT.find(text)?.takeUnless { QUALITY.containsMatchIn(text.substring(0, it.range.first)) }?.let { m ->
                 val n = m.groupValues[1].toIntOrNull()?.takeIf { it >= 1 } ?: return@let
                 return Found(null, n, m.range.first, m.range.last + 1)
             }

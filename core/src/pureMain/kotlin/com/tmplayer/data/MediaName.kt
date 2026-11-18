@@ -1046,7 +1046,8 @@ object MediaName {
         // "S01E01-06" as well, the range a season split in two files writes (not "S01E05-720p").
         // A letter right after the number is the half of a split episode ("S08 E06b").
         Regex("""\bs(\d{1,2})[\s.-]?e(\d{1,3})(?:-?e(\d{1,3})|-(\d{1,3})(?![\dpPiI]))?([a-d])?\b""", RegexOption.IGNORE_CASE),
-        Regex("""\b(\d{1,2})x(\d{1,3})\b""", RegexOption.IGNORE_CASE),
+        // Not "DDP5.1x265": an audio layout glued to the codec (x264, x265) is no season and episode.
+        Regex("""\b(\d{1,2})x(?!26[45]\b)(\d{1,3})\b""", RegexOption.IGNORE_CASE),
         Regex("""\bseason\s?(\d{1,2})\s?episode\s?(\d{1,3})\b""", RegexOption.IGNORE_CASE),
     )
 
