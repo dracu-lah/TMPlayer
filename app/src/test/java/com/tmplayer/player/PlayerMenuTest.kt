@@ -126,6 +126,8 @@ class PlayerMenuTest {
             repeatVideo = true,
             markIntro = true,
             removeIntroMark = true,
+            rotatePicture = true,
+            playerVolume = true,
         )
         assertFalse(PlayerMenuEntry.PictureInPicture in entries)
         assertEquals(PlayerMenuEntry.entries.size - 1, entries.size)
@@ -150,8 +152,25 @@ class PlayerMenuTest {
                 repeatVideo = true,
                 markIntro = true,
                 removeIntroMark = true,
+                rotatePicture = true,
+                playerVolume = true,
             ).toSet(),
         )
+    }
+
+    @Test
+    fun `rotate picture follows the shapes and player volume sits above the boost, neither on a cast`() {
+        val tv = PlayerMenu.tvEntries(pictureInPicture = true, pictureShape = true, stereo = true, rotatePicture = true, playerVolume = true)
+        assertEquals(tv.indexOf(PlayerMenuEntry.PictureShape) + 1, tv.indexOf(PlayerMenuEntry.RotatePicture))
+        assertEquals(tv.indexOf(PlayerMenuEntry.RotatePicture) + 1, tv.indexOf(PlayerMenuEntry.Stereo))
+        assertEquals(tv.indexOf(PlayerMenuEntry.VolumeBoost) - 1, tv.indexOf(PlayerMenuEntry.PlayerVolume))
+        val phone = PlayerMenu.phoneEntries(true, true, true, true, pictureShape = true, rotatePicture = true, playerVolume = true)
+        assertEquals(phone.indexOf(PhoneMenuEntry.VolumeBoost) - 1, phone.indexOf(PhoneMenuEntry.PlayerVolume))
+        assertTrue(phone.indexOf(PhoneMenuEntry.RotatePicture) > phone.indexOf(PhoneMenuEntry.PictureShape))
+        // A cast: the activity passes false for both.
+        val cast = PlayerMenu.tvEntries(pictureInPicture = true)
+        assertFalse(PlayerMenuEntry.RotatePicture in cast)
+        assertFalse(PlayerMenuEntry.PlayerVolume in cast)
     }
 
     @Test
@@ -207,7 +226,7 @@ class PlayerMenuTest {
                 copyLinkAtTime = true,
             ),
         )
-        assertEquals(PhoneMenuEntry.entries.toSet(), PlayerMenu.phoneEntries(true, true, true, true, paused = true, bookmarks = true, chapters = true, saveFrame = true, pictureShape = true, stereo = true, zoomed = true, reportStutter = true, copyLinkAtTime = true, otherEngine = true, repeatVideo = true, markIntro = true, removeIntroMark = true).toSet())
+        assertEquals(PhoneMenuEntry.entries.toSet(), PlayerMenu.phoneEntries(true, true, true, true, paused = true, bookmarks = true, chapters = true, saveFrame = true, pictureShape = true, stereo = true, zoomed = true, reportStutter = true, copyLinkAtTime = true, otherEngine = true, repeatVideo = true, markIntro = true, removeIntroMark = true, rotatePicture = true, playerVolume = true).toSet())
     }
 
     @Test

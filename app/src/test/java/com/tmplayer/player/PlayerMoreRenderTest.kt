@@ -46,7 +46,7 @@ class PlayerMoreRenderTest {
         }
     }
 
-    private fun panel(tv: Boolean, shapes: Boolean, name: String, sideways: Boolean = true): FakeHost {
+    private fun panel(tv: Boolean, shapes: Boolean, name: String, sideways: Boolean = true, page: ((PlayerMorePanel) -> Unit)? = null): FakeHost {
         FormFactor.override(tv)
         val activity = Robolectric.buildActivity(FragmentActivity::class.java).setup().get()
         activity.setTheme(R.style.Theme_TMPlayer_Player)
@@ -59,7 +59,11 @@ class PlayerMoreRenderTest {
         root.findViewById<View>(R.id.status_overlay).visibility = View.GONE
         val host = FakeHost(tv, sideways)
         val panel = PlayerMorePanel(activity, root, host)
-        if (shapes) panel.openOnShapes() else panel.open()
+        when {
+            page != null -> page(panel)
+            shapes -> panel.openOnShapes()
+            else -> panel.open()
+        }
         activity.setContentView(root)
         idle(1000)
         assertTrue(panel.isOpen)
@@ -124,9 +128,22 @@ class PlayerMoreRenderTest {
                 panel(tv = true, shapes = shapes, name = "more-tv$page-${theme.second}.png")
             }
         }
+        // Rotate picture (#34) and Player volume (#33), dark only: the same frame as the shapes'.
+        val pages = listOf<Pair<String, (PlayerMorePanel) -> Unit>>(
+            "rotate" to { it.openOnRotation() },
+            "volume" to { it.openOnVolume() },
+        )
+        for ((page, open) in pages) {
+            RuntimeEnvironment.setQualifiers("$phoneSideways-night-xhdpi")
+            panel(tv = false, shapes = false, name = "more-phone-land-$page-dark.png", page = open)
+            RuntimeEnvironment.setQualifiers("$phoneUpright-night-xhdpi")
+            panel(tv = false, shapes = false, name = "more-phone-port-$page-dark.png", sideways = false, page = open)
+            RuntimeEnvironment.setQualifiers("$television-night-xhdpi")
+            panel(tv = true, shapes = false, name = "more-tv-$page-dark.png", page = open)
+        }
     }
 
-    /** A paused video from a message, a sleep timer running, Volume boost on and the picture zoomed. */
+    /** A paused video from a message, a sleep timer running, Volume boost on, the picture zoomed and turned, Player volume at 35%. */
     class FakeHost(override val tv: Boolean, private val sideways: Boolean) : PlayerMoreHost {
         var closings = 0
         override fun title() = "Night Train S01E04"
@@ -143,6 +160,8 @@ class PlayerMoreRenderTest {
             zoomed = true,
             reportStutter = true,
             copyLinkAtTime = true,
+            rotatePicture = true,
+            playerVolume = true,
         )
         override fun zoomDetail() = "135%"
         override fun tvEntries() = PlayerMenu.tvEntries(
@@ -153,6 +172,8 @@ class PlayerMoreRenderTest {
             pictureShape = true,
             reportStutter = true,
             copyLinkAtTime = true,
+            rotatePicture = true,
+            playerVolume = true,
         )
         override fun shape() = VideoScale.entries.getOrElse(3) { VideoScale.Fit }
         override fun speed() = 1.25f
@@ -163,6 +184,8 @@ class PlayerMoreRenderTest {
         override fun volumeBoost() = true
         override fun nightMode() = false
         override fun evenVolume() = true
+        override fun playerVolume() = 35
+        override fun pictureRotation() = 90
         override fun sleepDetail() = "23 minutes left"
         override fun sleepChoice() = 30
         override fun loop(): AbLoop? = null

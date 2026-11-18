@@ -25,7 +25,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -617,6 +621,159 @@ internal fun ShapeSheet(current: VideoScale, onPick: (VideoScale) -> Unit, onDis
             }
         }
         FocusOnOpen(focus)
+    }
+}
+
+/** A turn's name on its line: "Not rotated", "A quarter turn clockwise", "Upside down"... */
+@Composable
+internal fun rotationLabel(degrees: Int): String {
+    val s = LocalStrings.current
+    return when (PictureRotation.normalise(degrees)) {
+        90 -> s.playerRotatePictureRight
+        180 -> s.playerRotatePictureHalf
+        270 -> s.playerRotatePictureLeft
+        else -> s.playerRotatePictureNone
+    }
+}
+
+/** The More panel line's detail: "90°" for a turn, Off for none. */
+@Composable
+internal fun rotationDetail(degrees: Int): String {
+    val s = LocalStrings.current
+    val turn = PictureRotation.normalise(degrees)
+    return if (turn == PictureRotation.NONE) s.commonOff else s.playerRotatePictureDegrees(Translator.messages.formatter.number(turn))
+}
+
+/**
+ * Rotate picture's page (#34): the four turns, the one in force ticked, as the shapes' page draws
+ * its choices. A turn takes effect at once and the page stays, beside the picture it turns, so
+ * the remote can try the next one. [refused] is why the last turn could not be made (an HDR video,
+ * the app's own decoder, the VLC engine), said where the note was.
+ *
+ * Named and noted as the picture's turn, not the screen's: the phone row's Rotate button turns
+ * the screen, and this page never touches it.
+ */
+@Composable
+internal fun RotationSheet(
+    current: Int,
+    refused: String?,
+    onPick: (Int) -> Unit,
+    onDismiss: () -> Unit,
+    onClose: () -> Unit,
+) {
+    val s = LocalStrings.current
+    val touch = isTouch()
+    val focus = remember { FocusRequester() }
+    val turn = PictureRotation.normalise(current)
+    ChoiceSheet(title = s.playerRotatePicture, note = refused ?: s.playerRotatePictureNote, onDismiss = onDismiss, onClose = onClose, ignoreRelease = !touch, fullScreen = true) {
+        ChoiceList {
+            PictureRotation.CHOICES.forEach { degrees ->
+                ChoiceLine(
+                    title = rotationLabel(degrees),
+                    detail = s.playerRotatePictureDegrees(Translator.messages.formatter.number(degrees)),
+                    selected = degrees == turn,
+                    modifier = if (degrees == turn) Modifier.focusRequester(focus) else Modifier,
+                ) { onPick(degrees) }
+            }
+        }
+        FocusOnOpen(focus)
+    }
+}
+
+/**
+ * Left and Right as one step of Player volume each, down and up, held to repeat (the remote's
+ * own key repeat). Right to left the arrows swap, as a slider's do. Both the press and the
+ * release are taken, so neither moves the focus or reaches the player behind.
+ */
+internal fun Modifier.volumeStepKeys(onStep: (up: Boolean) -> Unit): Modifier = composed {
+    val rtl = androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl
+    onPreviewKeyEvent { event ->
+        val left = event.key == androidx.compose.ui.input.key.Key.DirectionLeft
+        val right = event.key == androidx.compose.ui.input.key.Key.DirectionRight
+        if (!left && !right) return@onPreviewKeyEvent false
+        if (event.type == androidx.compose.ui.input.key.KeyEventType.KeyDown) onStep(right != rtl)
+        true
+    }
+}
+
+/** The figure Player volume is at, large, as the fine speed's is drawn. */
+@Composable
+private fun VolumeFigure(percent: Int, modifier: Modifier = Modifier) {
+    androidx.compose.foundation.layout.Box(modifier, contentAlignment = Alignment.Center) {
+        FitText(Translator.messages.formatter.scalePercent(percent), MaterialTheme.typography.headlineSmall, color = Tone.text)
+    }
+}
+
+/**
+ * Player volume's page (#33): the figure, then Quieter and Louder a per cent a press, and Back
+ * to 100%. On a phone Quieter and Louder are minus and plus either side of the figure; on a
+ * television they are lines OK presses as often as it likes, and Left and Right step from any
+ * line of the page, held to repeat. Each step plays at once through [onChange] and the page
+ * stays. The remote lands on Quieter: the page is mostly opened to go below the device's
+ * quietest step.
+ */
+@Composable
+internal fun VolumeSheet(
+    current: Int,
+    onChange: (Int) -> Unit,
+    onDismiss: () -> Unit,
+    onClose: () -> Unit,
+) {
+    val s = LocalStrings.current
+    val touch = isTouch()
+    val tick = com.tmplayer.ui.components.rememberStepTick()
+    val focus = remember { FocusRequester() }
+    val percent = current.coerceIn(PlayerVolume.MIN, PlayerVolume.FULL)
+    val format = Translator.messages.formatter::scalePercent
+    val step = { up: Boolean ->
+        if (PlayerVolume.canStep(percent, up)) {
+            tick()
+            onChange(PlayerVolume.step(percent, up))
+        }
+    }
+    val detail = s.playerSpeedFineDetail(step = format(PlayerVolume.STEP), min = format(PlayerVolume.MIN), max = format(PlayerVolume.FULL))
+    ChoiceSheet(title = s.playerVolumeLevel, note = s.playerVolumeLevelNote, onDismiss = onDismiss, onClose = onClose, ignoreRelease = !touch, fullScreen = true) {
+        ChoiceList {
+            if (touch) {
+                Text(detail, style = MaterialTheme.typography.bodySmall, color = Tone.muted, modifier = Modifier.padding(horizontal = 24.dp))
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                ) {
+                    FineButton(TmIcons.Remove, s.playerVolumeLevelQuieter, enabled = PlayerVolume.canStep(percent, up = false)) { step(false) }
+                    VolumeFigure(percent, Modifier.width(128.dp))
+                    FineButton(TmIcons.Add, s.playerVolumeLevelLouder, enabled = PlayerVolume.canStep(percent, up = true)) { step(true) }
+                }
+            } else {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(detail, style = MaterialTheme.typography.bodyMedium, color = Tone.muted, modifier = Modifier.weight(1f))
+                    VolumeFigure(percent)
+                }
+                val now = s.playerSpeedFineNow(format(percent))
+                val keys = Modifier.volumeStepKeys { up -> step(up) }
+                ChoiceLine(
+                    title = s.playerVolumeLevelQuieter,
+                    detail = now,
+                    icon = TmIcons.Remove,
+                    enabled = PlayerVolume.canStep(percent, up = false),
+                    modifier = keys.focusRequester(focus),
+                ) { step(false) }
+                ChoiceLine(
+                    title = s.playerVolumeLevelLouder,
+                    detail = now,
+                    icon = TmIcons.Add,
+                    enabled = PlayerVolume.canStep(percent, up = true),
+                    modifier = keys,
+                ) { step(true) }
+            }
+            ChoiceLine(
+                title = s.playerVolumeLevelFull(format(PlayerVolume.FULL)),
+                selected = percent == PlayerVolume.FULL,
+                modifier = if (touch) Modifier else Modifier.volumeStepKeys { up -> step(up) },
+            ) { if (percent != PlayerVolume.FULL) onChange(PlayerVolume.FULL) }
+        }
+        if (!touch) FocusOnOpen(focus)
     }
 }
 
