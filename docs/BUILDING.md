@@ -179,8 +179,10 @@ If it is smooth there, it is smooth everywhere. An Android TV emulator (API 28 o
 
 How the videos in your chats are really named, and how the shelf groups them, in one command
 instead of scrolling. Only the `debug` and `preview` builds have it (`app/src/dev`, declared in
-`app/src/debug` and `app/src/preview`); a release compiles none of it. Sign in on the build first
-and keep it open (Android may freeze an app left in the background); the screen may go off.
+`app/src/debug` and `app/src/preview`); a release compiles none of it. Sign in on the build first.
+The dump runs in a foreground service (a "Dumping video names" notification), so the app may be
+out of sight and the screen off; if logcat says the service was refused, open the app and keep it
+open, since Android freezes a background app.
 
 ```sh
 adb -s d3f7da23 shell am broadcast -n com.tmplayer.test/com.tmplayer.dev.NameDumpReceiver -a com.tmplayer.DUMP_NAMES
