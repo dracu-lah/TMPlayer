@@ -1067,14 +1067,14 @@ object MediaName {
      * The word has to be there. A bare "E04" is too easy to find inside a title, and guessing
      * wrong turns a standalone video into episode four of a series that does not exist.
      */
-    private val EPISODE_ONLY = Regex("""\bep(?:isode)?[\s-]?(\d{1,3})\b""", RegexOption.IGNORE_CASE)
+    private val EPISODE_ONLY = Regex("""\bep(?:isode|i|s)?[\s-]?(\d{1,3})\b""", RegexOption.IGNORE_CASE)
 
     /**
      * A combined range of episodes in one file, "EP(29-32)", "Ep 29-32": the first and the last
      * ([ParsedName.lastEpisode]), the parenthesised form the "COMBINED" releases that post several
      * episodes together tend to write.
      */
-    private val EPISODE_RANGE = Regex("""\bep(?:isode)?[\s-]?\(?\s*(\d{1,3})\s*-\s*(\d{1,3})\s*\)?""", RegexOption.IGNORE_CASE)
+    private val EPISODE_RANGE = Regex("""\bep(?:isode|i|s)?[\s-]?\(?\s*(\d{1,3})\s*-\s*(\d{1,3})\s*\)?""", RegexOption.IGNORE_CASE)
 
     /** "E05" with no word in front, which only [looseEpisode] reads. */
     private val BARE_EPISODE = Regex("""\be(\d{1,3})\b""", RegexOption.IGNORE_CASE)

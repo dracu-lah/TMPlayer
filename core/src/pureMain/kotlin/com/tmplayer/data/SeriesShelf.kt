@@ -338,8 +338,12 @@ object SeriesShelf {
         // post is, so a file whose caption opens with one is read by its name alone.
         val repeated = MediaText.repeatedCaptionLines(items)
         val trusted = items.map { item -> repeated.isEmpty() || firstLine(item)?.lowercase()?.let { it !in repeated } != false }
-        val names = items.mapIndexed { index, item -> episodeOf(item, corrections, trusted[index]) }
         val separate = items.map { corrections[it.id]?.separate == true }
+        val parsed = items.mapIndexed { index, item -> episodeOf(item, corrections, trusted[index]) }
+        // A listing no rule knows ("Show 06", "Show #07", "E08 Show"): files of one chat that differ by one number.
+        val names = SiblingEpisodes.apply(items, parsed) { index ->
+            corrections[items[index].id]?.title == null && trusted[index] && !separate[index]
+        }
         val written = items.indices.map { index ->
             val item = items[index]
             val name = names[index]
