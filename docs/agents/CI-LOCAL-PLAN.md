@@ -102,3 +102,26 @@ Written 2026-11-18. Status: plan, nothing built yet.
   site workflows still run on push (under a minute each). `release.yml` still finds a passing CI run
   on an ancestor through the nightly or a manual dispatch; without one it runs the unit tests itself.
   Web deploys were already manual.
+- 2026-11-18 P3 built: `scripts/linux-local.sh` (`--dry-run`, `--natives-only`, `--no-tests`,
+  `--adopt`, `--version`) and the opt-in `scripts/ci-local.sh linux` group (not in the changed-paths
+  list or `--all`). Natives are cached in `~/.cache/tmplayer/linux-natives/<recipe hash>`, the hash
+  over the same files as the action's cache key; a miss runs the two podman build scripts, then the
+  PINS.txt check. Packaging runs on the host with a JDK 21 found in `~/.jdks`, output in `dist/`
+  (now ignored).
+  - Proven: `bash -n`, shellcheck, dry runs; a real `--natives-only --adopt` run took the pinned
+    files from `~/.cache/tmplayer-natives` into the cache and a second run restored them.
+  - Not proven: a cold native build through the script (the scripts themselves built fine on
+    2026-11-18) and the packaging half: this host lacks `zsyncmake` (`sudo dnf install zsync`, the
+    user's step), so no real package or plain Ubuntu 22.04 run yet. Next: install zsync, run
+    `scripts/linux-local.sh`, compare its wall time with CI's 77 min.
+- 2026-11-18 P6 spike built, not booted: `scripts/windows-vm/` (`up.sh`, `build-msi.sh`, `down.sh`,
+  `README.md`, `oem/` first-boot setup and a job runner over the shared folder, `build-msi.ps1` with
+  the desktop-windows steps plus an uninstall check). dockur/windows 6.06, Windows Server 2025
+  evaluation, 8 GB, 4 cores.
+  - Proven: `bash -n`, shellcheck, the PowerShell files parse (pwsh 7.4), dry runs of all three.
+  - Not proven: nothing has booted. `up.sh` gates on 12 GB available memory (5 to 8 GB were free)
+    and 60 GB disk, so no ISO was downloaded. Open until the first run: dockur under rootless podman
+    here, `\\host.lan\Data` as the scheduled task's account sees it, Gradle fetching the Android SDK
+    in the VM, WiX 3 on .NET 3.5, and whether the MSI matches GitHub's. Next: with 12 GB free, run
+    `up.sh`, then `build-msi.sh`; spike done when that passes.
+  - macOS and iOS: nothing added (Apple's licence), as decided above.
