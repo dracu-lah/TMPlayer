@@ -1399,6 +1399,12 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 watchPicture = DeviceDecode.pictureOf(format)
                 watchFormat = format
                 watchSoftware = DecoderSwitch.softwareVideoChosen(exo)
+                // A play started, the stutter rate's denominator (counted only with reporting on, [PlayCounts]).
+                val decoder = watchDecoder
+                val abi = android.os.Build.SUPPORTED_ABIS.firstOrNull().orEmpty()
+                if (com.tmplayer.data.CrashReports.available) {
+                    Thread { runCatching { com.tmplayer.data.CrashReports.notePlayStarted(abi, decoder) } }.start()
+                }
             }
         }
         val playing = exo.isPlaying && !castUp()

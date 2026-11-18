@@ -98,6 +98,13 @@ object StutterReport {
         val processBits: Int = 0,
         /** The hardware decoders the device lists for the picture's type, as [hwDecodersOf] writes them, or empty. */
         val hwDecoders: String = "",
+        /**
+         * Plays started on this device in the last 7 days with this ABI, decoder and engine
+         * ([playsSame]) and in all ([playsAll]), from [PlayCounts]; -1 when not known. Sent only
+         * as a bucket ([bucketOf]), never as the number. Filled by [StutterReporter].
+         */
+        val playsSame: Int = -1,
+        val playsAll: Int = -1,
     ) {
         /** What the daily limit counts: codec, bit depth and size bucket. */
         val kind: String get() = "${clean(codec)}:${if (bitDepth > 8) 10 else 8}:$sizeBucket"
@@ -109,8 +116,23 @@ object StutterReport {
         "decoder", "decoder_type", "prediction", "speed_percent", "dropped_frames", "frames", "underruns",
         "manufacturer", "model", "android", "cores", "abi", "app_version", "symptom", "fps_source",
         "source", "buffered_ahead_ms", "verdict", "remedies", "hops",
-        "policy", "prefer_software", "software_by", "process_bits", "hw_decoders",
+        "policy", "prefer_software", "software_by", "process_bits", "hw_decoders", "plays_7d_same", "plays_7d_all",
     )
+
+    /** A count as a coarse bucket, never the number itself: `0`, `1`, `2-4`, `5-9`, `10-19`, `20-49`, `50+`, or `unknown`. */
+    fun bucketOf(count: Int): String = when {
+        count < 0 -> UNKNOWN
+        count == 0 -> "0"
+        count == 1 -> "1"
+        count < 5 -> "2-4"
+        count < 10 -> "5-9"
+        count < 20 -> "10-19"
+        count < 50 -> "20-49"
+        else -> "50+"
+    }
+
+    /** Every value [bucketOf] gives. */
+    val BUCKETS = setOf("0", "1", "2-4", "5-9", "10-19", "20-49", "50+", "unknown")
 
     const val UNKNOWN = "unknown"
 
@@ -218,6 +240,8 @@ object StutterReport {
         "software_by" to (facts.softwareBy.takeIf { it in SOFTWARE_BY } ?: UNKNOWN),
         "process_bits" to (facts.processBits.takeIf { it == 32 || it == 64 }?.toString() ?: UNKNOWN),
         "hw_decoders" to clean(facts.hwDecoders).ifEmpty { UNKNOWN },
+        "plays_7d_same" to bucketOf(facts.playsSame),
+        "plays_7d_all" to bucketOf(facts.playsAll),
     )
 
     /**
@@ -332,15 +356,38 @@ class StutterReporter(
     private val enabled: () -> Boolean,
     private val limits: StutterLimits,
     private val send: (SentryEvent) -> Unit = { Sentry.captureEvent(it) },
+    /** The plays started, the stutter rate's denominator; null keeps none. */
+    private val plays: PlayCounts? = null,
 ) {
 
-    /** True when the event was handed on. */
-    fun report(facts: StutterReport.Facts): Boolean {
+    /**
+     * A play started with [decoder] in [engine] on a device of [abi]: counted only while
+     * reporting is on, so nothing is kept for a viewer who never agreed. Writes a small file, so
+     * off the main thread.
+     */
+    fun played(abi: String, decoder: String, engine: String) {
+        if (!enabled()) return
+        plays?.note(PlayCounts.keyOf(abi, decoder, engine))
+    }
+
+    /** Reporting was turned off: the counts go too. */
+    fun forgetPlays() {
+        plays?.clear()
+    }
+
+    /** True when the event was handed on. [engine] is the one that played, for the plays counted beside it. */
+    fun report(facts: StutterReport.Facts, engine: String = ENGINE): Boolean {
         if (!enabled()) return false
         // Before the daily limit: a false alarm must not use up the day's one report of its kind.
         if (!StutterReport.worthSending(facts)) return false
         if (!limits.admit(facts.kind)) return false
-        send(StutterReport.build(facts))
+        val counted = plays?.week(PlayCounts.keyOf(facts.abi, facts.decoder, engine))
+        send(StutterReport.build(if (counted == null) facts else facts.copy(playsSame = counted.first, playsAll = counted.second)))
         return true
+    }
+
+    companion object {
+        /** The engine the stutter watch runs in. */
+        const val ENGINE = "media3"
     }
 }
