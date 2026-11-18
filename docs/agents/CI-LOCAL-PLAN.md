@@ -125,3 +125,15 @@ Written 2026-11-18. Status: plan, nothing built yet.
     in the VM, WiX 3 on .NET 3.5, and whether the MSI matches GitHub's. Next: with 12 GB free, run
     `up.sh`, then `build-msi.sh`; spike done when that passes.
   - macOS and iOS: nothing added (Apple's licence), as decided above.
+- 2026-11-18 P4 done (merged, commits 9672cd5..b11a2c5): `scripts/release-local.sh <tag>` builds and
+  signs the APK, the R8 mapping and (with `--linux`, needs `zsyncmake`) the Linux packages into
+  `dist/local-release/<tag>/`, and prints the user-only `gh` commands that put them in a draft release
+  `prebuilt-<tag>`. `release.yml` android and desktop-linux look for that draft
+  (`scripts/release-prebuilt.sh`): checksums, this commit, this version, and the signing certificate
+  pinned in `.github/release-signing-cert.sha256` (`scripts/verify-apk-signer.sh`); no draft means
+  today's build, a bad draft stops the release. Not run end to end yet (no full build here).
+  Gotcha: files built locally carry no GitHub attestation, but the site's security page says every
+  file is attested: reword it or attest in the workflow before the first local release.
+- Open: e2e `chats.spec.ts:42` (webkit, "Select all over a thousand chats asks first") failed in the
+  first local run; the e2e run also rewrites tracked `design/web-sync/*.png` (restore with
+  `git checkout -- design/web-sync`).
