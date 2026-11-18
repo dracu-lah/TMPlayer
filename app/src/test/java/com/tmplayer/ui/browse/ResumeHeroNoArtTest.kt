@@ -137,6 +137,17 @@ class ResumeHeroNoArtTest {
         rule.waitForIdle()
     }
 
+    /**
+     * The hero's name and time left are in the tree a moment after its first frame: wait for them
+     * (up to 5 s) instead of asserting at once, which failed once on a slow CI runner (the release
+     * run of 2026-11-18) and passes everywhere else.
+     */
+    private fun awaitText(text: String) {
+        rule.waitUntil(timeoutMillis = 5_000) {
+            rule.onAllNodes(hasText(text, substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        }
+    }
+
     private fun press(key: Key) {
         rule.onNode(androidx.compose.ui.test.isRoot()).performKeyInput { pressKey(key) }
         rule.waitForIdle()
@@ -153,9 +164,9 @@ class ResumeHeroNoArtTest {
         showTv()
         rule.onNodeWithText("Resume").assertExists()
         rule.onNodeWithText("Details").assertExists()
-        rule.onNode(hasText("Kuruthi", substring = true), useUnmergedTree = true).assertExists()
+        awaitText("Kuruthi")
         // The time left stands in the facts line, in place of the length.
-        rule.onNode(hasText("1h 56m left", substring = true), useUnmergedTree = true).assertExists()
+        awaitText("1h 56m left")
         assertTrue(rule.onAllNodes(hasText("Play")).fetchSemanticsNodes().isEmpty())
     }
 
@@ -212,8 +223,8 @@ class ResumeHeroNoArtTest {
     fun `on a phone upright the lead page shows its name, the time left and Resume`() {
         showPhone()
         rule.onNodeWithText("Resume").assertExists()
-        rule.onNode(hasText("Kuruthi", substring = true), useUnmergedTree = true).assertExists()
-        rule.onNode(hasText("1h 56m left", substring = true), useUnmergedTree = true).assertExists()
+        awaitText("Kuruthi")
+        awaitText("1h 56m left")
         rule.onNodeWithText("Resume").performClick()
         rule.waitForIdle()
         assertEquals(kuruthi.id, played?.id)
@@ -224,8 +235,8 @@ class ResumeHeroNoArtTest {
     fun `on a phone on its side the lead page shows its name, the time left and Resume`() {
         showPhone()
         rule.onNodeWithText("Resume").assertExists()
-        rule.onNode(hasText("Kuruthi", substring = true), useUnmergedTree = true).assertExists()
-        rule.onNode(hasText("1h 56m left", substring = true), useUnmergedTree = true).assertExists()
+        awaitText("Kuruthi")
+        awaitText("1h 56m left")
     }
 
     private fun record(item: MediaItem, positionMs: Long = 360_000, durationMs: Long = 7_320_000) = ResumeRecord(
