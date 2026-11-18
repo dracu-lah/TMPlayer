@@ -18,6 +18,8 @@ keystore.properties
 
 # Misc
 captures/
+# Packages from scripts/linux-local.sh and scripts/windows-vm (CI writes the same folder)
+/dist/
 .DS_Store
 
 # Python bytecode from the scripts in scripts/

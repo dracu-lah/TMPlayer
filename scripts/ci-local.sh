@@ -28,7 +28,7 @@ for a in "$@"; do
   case "$a" in
     --all) mode=all ;;
     --list) mode=list ;;
-    style|kotlin|ios|web|site) want+=("$a"); mode=named ;;
+    style|kotlin|ios|web|site|linux) want+=("$a"); mode=named ;;
     *) echo "ci-local: unknown argument $a" >&2; exit 2 ;;
   esac
 done
@@ -103,6 +103,12 @@ g_web() {
 g_site() {
   pnpm -C site install --frozen-lockfile && pnpm -C site check && pnpm -C site build \
     && python3 scripts/site-i18n-check.py && python3 scripts/site-links.py
+}
+
+# Opt-in only (scripts/ci-local.sh linux), never in the changed-paths list: CI's Desktop (Linux)
+# job, natives from the recipe cache, then the packages and self-tests into dist/ (P3).
+g_linux() {
+  scripts/linux-local.sh
 }
 
 for g in "${want[@]}"; do run "$g" "g_$g"; done
