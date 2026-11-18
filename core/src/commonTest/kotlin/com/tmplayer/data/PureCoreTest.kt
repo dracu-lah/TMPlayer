@@ -88,6 +88,11 @@ class PureCoreTest {
         assertTrue(compareDigitRuns("002", "10") < 0)
         assertEquals(0, compareDigitRuns("007", "7"))
         assertEquals("Pokemon", stripCombiningMarks("Pokémon"))
+        assertEquals("Amelie", stripCombiningMarks("Amélie"))
+        assertEquals("Plain Title 2", stripCombiningMarks("Plain Title 2"))
+        assertEquals("", stripCombiningMarks(""))
+        assertEquals("amelie", com.tmplayer.online.MetaMatch.normalise("Amélie"))
+        assertEquals("tom and jerry", com.tmplayer.online.MetaMatch.normalise("The Tom & Jerry"))
         val be = byteArrayOf(0, 'H'.code.toByte(), 0, 'i'.code.toByte())
         assertEquals("Hi", utf16(be, 0, 4, bigEndian = true))
     }

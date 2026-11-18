@@ -35,6 +35,9 @@ actual fun <K : Any, V : Any> concurrentMap(): MutableMap<K, V> = ConcurrentHash
 actual val ioDispatcher: CoroutineDispatcher get() = Dispatchers.IO
 
 actual fun stripCombiningMarks(text: String): String {
+    // Plain ASCII has no marks, and the first Normalizer call loads ICU data, which on a weak phone
+    // is long enough to hold a frame (Sentry ANR 161355951), so most titles never reach it.
+    if (text.all { it.code < 0x80 }) return text
     val decomposed = Normalizer.normalize(text, Normalizer.Form.NFD)
     val builder = StringBuilder(decomposed.length)
     for (character in decomposed) {

@@ -253,7 +253,9 @@ object MetaMatch {
 
     /** Lower case, accents and punctuation gone, "&" as "and", a leading article dropped. */
     fun normalise(title: String): String {
-        val plain = stripCombiningMarks(title.lowercase()).replace(MARKS, "")
+        val lower = title.lowercase()
+        // Plain ASCII has no marks to strip: skips the platform normaliser and the regex pass.
+        val plain = if (lower.all { it.code < 0x80 }) lower else stripCombiningMarks(lower).replace(MARKS, "")
         return plain.replace("&", " and ").replace(NOT_WORD, " ").trim().replace(ARTICLE, "")
     }
 
