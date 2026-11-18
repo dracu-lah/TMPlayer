@@ -76,6 +76,15 @@ const testServer: Plugin = {
             if (!m) return createReadStream(file).pipe(res)
             const start = +m[1]
             const end = Math.min(m[2] ? +m[2] : size - 1, size - 1)
+            // A range that starts past the end (a probe reading beyond a short file) is answered as a
+            // server does, 416. It used to throw out of createReadStream: Vite then logged an
+            // "Internal server error" and sent its error overlay to every open page, which sits over
+            // the page and swallows the next test's click (the Web player failures of 2026-11-17).
+            if (start >= size) {
+                res.statusCode = 416
+                res.setHeader('Content-Range', `bytes */${size}`)
+                return res.end()
+            }
             res.statusCode = 206
             res.setHeader('Content-Range', `bytes ${start}-${end}/${size}`)
             res.setHeader('Content-Length', end - start + 1)
@@ -89,6 +98,7 @@ export default defineConfig((env) =>
         root: fileURLToPath(new URL('..', import.meta.url)),
         plugins: [testServer],
         resolve: { alias: { '@mtcute/web': fileURLToPath(new URL('./fake/mtcute.ts', import.meta.url)) } },
-        server: { port: Number(process.env.E2E_PORT) || 8097, strictPort: true, host: '127.0.0.1' },
+        // No error overlay: a page of a test is never covered by Vite's, whatever the server logs.
+        server: { port: Number(process.env.E2E_PORT) || 8097, strictPort: true, host: '127.0.0.1', hmr: { overlay: false } },
     }),
 )
