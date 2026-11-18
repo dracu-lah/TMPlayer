@@ -39,6 +39,15 @@ class ChatVideoCountTest {
     }
 
     @Test
+    fun `memory short forgets the expired counts and keeps the fresh ones`() = runTest {
+        ChatVideoCount.of(Calls(listOf(CountAnswer.Counted(42))), 1, now = { 0L })
+        ChatVideoCount.of(Calls(listOf(CountAnswer.Counted(50))), 2, now = { ChatVideoCount.TTL_MS })
+        ChatVideoCount.forgetExpired(now = ChatVideoCount.TTL_MS + 1)
+        assertEquals(null, ChatVideoCount.cached(1, 0L))
+        assertEquals(ChatCount.Known(50), ChatVideoCount.cached(2, ChatVideoCount.TTL_MS + 1))
+    }
+
+    @Test
     fun `minus one is the database saying it does not know, so the server is asked`() = runTest {
         val calls = Calls(listOf(CountAnswer.Counted(-1), CountAnswer.Counted(300)))
         assertEquals(ChatCount.Known(300), ChatVideoCount.of(calls, 1, now = { currentTime }))

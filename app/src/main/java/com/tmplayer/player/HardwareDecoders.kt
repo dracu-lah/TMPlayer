@@ -38,4 +38,20 @@ object HardwareDecoders {
             .build()
         return has(context, format)
     }
+
+    /**
+     * The hardware decoders listed for [mime], each with its highest profile and that profile's
+     * highest level, for the stutter report ([com.tmplayer.data.StutterReport.hwDecodersOf]).
+     * Media3's cached codec list, so cheap after the player asked; empty when it cannot be read.
+     */
+    fun listed(mime: String?): String = runCatching {
+        if (mime.isNullOrBlank()) return ""
+        val hardware = MediaCodecUtil.getDecoderInfos(mime, false, false).filter { it.hardwareAccelerated && !it.softwareOnly }
+        com.tmplayer.data.StutterReport.hwDecodersOf(
+            hardware.map { info ->
+                val top = info.profileLevels.maxWithOrNull(compareBy({ it.profile }, { it.level }))
+                info.name to top?.let { it.profile to it.level }
+            },
+        )
+    }.getOrDefault("")
 }

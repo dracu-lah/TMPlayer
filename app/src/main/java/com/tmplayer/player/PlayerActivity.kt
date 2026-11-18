@@ -602,10 +602,26 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             // What the playback trace of this session says (L2): decoder, line, render path, heat or memory.
             verdict = runCatching { com.tmplayer.data.StutterReport.verdictName(traceRecorder.verdict()) }.getOrDefault(com.tmplayer.data.StutterReport.UNKNOWN_VERDICT),
             // Whether the picture that stuttered was already on a changed path (RL11).
-            remedies = remedies.current?.taken?.joinToString(",") { it.code }.orEmpty(),
+            // "+", not ",": the report keeps only letters, digits and a few signs, and a comma is not one.
+            remedies = remedies.current?.taken?.joinToString("+") { it.code }.orEmpty(),
             hops = remedies.current?.hops?.size ?: 0,
+            // Why this decoder (Sentry triage, 2026-11-18): the path built, the setting, what moved it to software.
+            policy = builtPolicy?.shortClass().orEmpty(),
+            preferSoftware = videoDecoder == com.tmplayer.data.VideoDecoder.Software,
+            softwareBy = com.tmplayer.data.StutterReport.softwareByOf(
+                software = watchSoftware,
+                switched = videoSwitchedToSoftware,
+                ladderHop = remedies.current?.hops?.any { it.remedy == Remedy.Software } == true,
+                plan = remedies.current?.taken?.contains(Remedy.Software) == true,
+                setting = videoDecoder == com.tmplayer.data.VideoDecoder.Software,
+            ),
+            processBits = if (android.os.Process.is64Bit()) 64 else 32,
         )
-        Thread { runCatching { com.tmplayer.data.CrashReports.reportStutter(facts) } }.start()
+        val mime = format?.sampleMimeType
+        // The codec list is read on the report's own thread: Media3's cache, but never the main thread's job.
+        Thread {
+            runCatching { com.tmplayer.data.CrashReports.reportStutter(facts.copy(hwDecoders = HardwareDecoders.listed(mime))) }
+        }.start()
     }
 
     // ---- the watchdog over the first seconds of play (HX2, [PlaybackWatch]) --------------------
@@ -1404,6 +1420,12 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 watchPicture = DeviceDecode.pictureOf(format)
                 watchFormat = format
                 watchSoftware = DecoderSwitch.softwareVideoChosen(exo)
+                // A play started, the stutter rate's denominator (counted only with reporting on, [PlayCounts]).
+                val decoder = watchDecoder
+                val abi = android.os.Build.SUPPORTED_ABIS.firstOrNull().orEmpty()
+                if (com.tmplayer.data.CrashReports.available) {
+                    Thread { runCatching { com.tmplayer.data.CrashReports.notePlayStarted(abi, decoder) } }.start()
+                }
             }
         }
         val playing = exo.isPlaying && !castUp()
@@ -4290,6 +4312,17 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     /** The path the next player is built on ([DecoderPolicy]): the remedy ladder's, else the known device list's. */
     private fun decoderPolicyForBuild(): DecoderPolicy = remedies.policyForBuild()
 
+    /** The policy the player now playing was built on, for the stutter report's "why this decoder". */
+    private var builtPolicy: DecoderPolicy? = null
+
+    /**
+     * Whether this player moved the picture to the FFmpeg decoder after the device's decoder
+     * failed ([tryOtherDecoder], by itself or at the viewer's press): the remedy ladder does not
+     * count that step, so without this a report said HARDWARE predicted, software played, and no
+     * remedy taken.
+     */
+    private var videoSwitchedToSoftware = false
+
     private fun buildPlayer(client: TdlClient): ExoPlayer {
         failurePinned = false
         stereoPipeline = false
@@ -4302,8 +4335,18 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         // constructor gets round to it.
         val maskHdr10Plus = HevcHdr10PlusMasker.affectedDevice(android.os.Build.MANUFACTURER, android.os.Build.MODEL)
         val fireTv = DeviceQuirks.isFireTv(this@PlayerActivity)
+        // Null on a normal device: NextLib's one thread per core, as before.
+        val ffmpegVideoThreads = com.tmplayer.data.LowEndDevice.softwareVideoThreads(
+            Runtime.getRuntime().availableProcessors(),
+            com.tmplayer.data.LowEndProbe.isLowEnd(this@PlayerActivity),
+        )
+        if (ffmpegVideoThreads != null) Log.i(START_TAG, "Low-end device: FFmpeg video decodes on $ffmpegVideoThreads threads")
         // The remedy ladder's path for this build: decoder names left out, queueing, software first ([DecoderPolicy]).
-        val policy = decoderPolicyForBuild().also { Log.i(START_TAG, "${it.describe()} (file $fileId)") }
+        val policy = decoderPolicyForBuild().also {
+            builtPolicy = it
+            Log.i(START_TAG, "${it.describe()} (file $fileId)")
+        }
+        videoSwitchedToSoftware = false
         val renderers = object : NextRenderersFactory(this@PlayerActivity) {
             /**
              * The stock codec adapters, except on the Fire TV sticks with the MediaTek MT8696
@@ -4458,7 +4501,17 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                     eventHandler, eventListener, allowedVideoJoiningTimeMs, built,
                 )
                 built.mapTo(out) {
-                    if (it is androidx.media3.exoplayer.video.MediaCodecVideoRenderer) LevelLenientVideoRenderer(it) else it
+                    when {
+                        it is androidx.media3.exoplayer.video.MediaCodecVideoRenderer -> LevelLenientVideoRenderer(it)
+                        // On a low-end device FFmpeg gets fewer threads than cores, so the screen
+                        // keeps one ([LowEndDevice.softwareVideoThreads]); elsewhere NextLib's own.
+                        it is io.github.anilbeesetti.nextlib.media3ext.ffdecoder.FfmpegVideoRenderer && ffmpegVideoThreads != null ->
+                            io.github.anilbeesetti.nextlib.media3ext.ffdecoder.FfmpegVideoRenderer(
+                                allowedVideoJoiningTimeMs, eventHandler, eventListener, FFMPEG_MAX_DROPPED_TO_NOTIFY,
+                                ffmpegVideoThreads, FFMPEG_VIDEO_BUFFERS, FFMPEG_VIDEO_BUFFERS,
+                            )
+                        else -> it
+                    }
                 }
             }
 
@@ -9818,6 +9871,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         val exo = player ?: return
         decoderPlan = null
         hideFailureActions()
+        if (plan.trackType == C.TRACK_TYPE_VIDEO) videoSwitchedToSoftware = plan.toFfmpeg
         DecoderSwitch.apply(exo, plan)
         failurePinned = false
         showStatus(if (plan.toFfmpeg) L.playerDecoderSoftwareNow else L.playerDecoderDeviceNow)
@@ -10720,6 +10774,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
         /** The back buffer under [LOW_RAM_BUFFER_BYTES]: see [buildPlayer]. */
         private const val LOW_RAM_BACK_BUFFER_MS = 3_000
+
+        /** NextLib's own figures for its FFmpeg video renderer, kept when only the thread count changes. */
+        private const val FFMPEG_MAX_DROPPED_TO_NOTIFY = 50
+        private const val FFMPEG_VIDEO_BUFFERS = 4
         private const val END_GUARD_MS = 1_000L
         /** What a held finger runs the picture at, the same figure every player uses for it. */
         /** The phone's top bar height, which the corner chips sit under. */

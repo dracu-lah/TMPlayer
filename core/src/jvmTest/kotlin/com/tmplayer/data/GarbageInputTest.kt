@@ -207,6 +207,24 @@ class GarbageInputTest {
         assertNoFailures()
     }
 
+    /** The plays counted for stutter rates (PlayCounts): a private file, cut short or written by anything. */
+    @Test
+    fun playCountsNeverThrow() {
+        val dir = java.nio.file.Files.createTempDirectory("plays-garbage").toFile()
+        for (text in texts) {
+            survive("PlayCounts", text) {
+                val file = dir.resolve("plays.json")
+                file.writeText(text)
+                val counts = PlayCounts(file) { 3L * 24 * 60 * 60 * 1000 }
+                counts.week(text)
+                counts.note(PlayCounts.keyOf(text, text, text))
+                file.writeText("{\"days\":[{\"day\":3,\"counts\":{\"${text.take(20).replace("\"", "")}\":$text}}]}")
+                counts.week("k")
+            }
+        }
+        assertNoFailures()
+    }
+
     /** The stored downloads location and a record's path (HX57): a path or a picked folder's content:// string. */
     @Test
     fun storedLocationNeverThrows() {

@@ -69,6 +69,11 @@ object ChatVideoCount {
     /** Forgets every count. Sign out, and a test between its cases. */
     fun forget() = cache.clear()
 
+    /** Forgets the counts past [TTL_MS], which [cached] would not hand out anyway: memory short ([MemoryTrim]). */
+    fun forgetExpired(now: Long = nowMs()) {
+        cache.entries.removeIf { now - it.value.first >= TTL_MS }
+    }
+
     /**
      * [chatId]'s videos: the fresh answer in hand, or one asked of TDLib's database and then, if
      * it will not say, of the server. Cancellation is passed on untouched, so a row scrolled off

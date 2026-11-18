@@ -237,7 +237,11 @@ object CrashReports {
         this.file = file
         answers = ExitAnswers(File(context.filesDir, "crash/exits.properties"))
         limits = CrashLimits(File(context.filesDir, "crash/limits.json"))
-        stutterReporter = StutterReporter({ enabledNow && started }, StutterLimits(File(context.filesDir, "crash/stutter.json")))
+        stutterReporter = StutterReporter(
+            { enabledNow && started },
+            StutterLimits(File(context.filesDir, "crash/stutter.json")),
+            plays = PlayCounts(File(context.filesDir, "crash/plays.json")),
+        )
         if (file.isFile) {
             val waiting = CrashRecord.read(file)
             _holdShell.value = waiting?.startupLoop == true &&
@@ -290,7 +294,17 @@ object CrashReports {
         if (!available) return false
         // Kept in memory for a crash that follows (S2); sent only on one, with the switch on.
         CrashContext.stuttered(facts, ENGINE)
-        return stutterReporter?.report(facts) == true
+        return stutterReporter?.report(facts, ENGINE) == true
+    }
+
+    /**
+     * A play started with [decoder] (the stutter rate's denominator, [PlayCounts]): counted only
+     * while the switch is on, sent only as a bucket on a stutter report. Writes a small file, so
+     * off the main thread.
+     */
+    fun notePlayStarted(abi: String, decoder: String) {
+        if (!available) return
+        stutterReporter?.played(abi, decoder, ENGINE)
     }
 
     /** What the viewer has said about ANRs and native crashes. Set by [watch]. */
@@ -479,6 +493,8 @@ object CrashReports {
     @Synchronized
     fun stop() {
         enabledNow = false
+        // The plays counted for stutter rates were kept for reporting alone.
+        runCatching { stutterReporter?.forgetPlays() }
         if (!started) return
         runCatching { Sentry.close() }
         started = false
