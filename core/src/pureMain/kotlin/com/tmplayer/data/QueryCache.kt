@@ -175,6 +175,22 @@ class QueryCache(
         edit { map -> map.filterKeys { !which(it) } }
     }
 
+    /**
+     * Forgets every answer nobody asked for in the last [idleMs], except one still being
+     * fetched: the system is short of memory ([MemoryTrim]). What a screen shows now was asked for
+     * moments ago and stays; the rest is asked again when it is next needed. How many went.
+     */
+    fun dropIdle(idleMs: Long): Int {
+        val cutoff = clock() - idleMs.coerceAtLeast(0)
+        var dropped = 0
+        edit { map ->
+            val kept = map.filter { (key, entry) -> entry.usedAt >= cutoff || running.value.containsKey(key) }
+            dropped = map.size - kept.size
+            if (dropped == 0) map else kept
+        }
+        return dropped
+    }
+
     /** Forgets everything: for sign out, when every answer is the last account's. */
     fun clear() {
         table.value = emptyMap()

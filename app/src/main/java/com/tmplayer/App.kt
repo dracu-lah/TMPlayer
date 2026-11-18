@@ -330,9 +330,18 @@ class App : Application() {
 
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
-        // The bitmap cache is the only thing in this process holding memory it can give back
-        // without losing anything; everything else is either TDLib's or on screen.
-        Thumbnails.trim(level)
+        // The bitmap cache gives back without losing anything. On a low-end device (2 GB phone,
+        // 1 GB stick) all of it from RUNNING_LOW up, with the answers kept for Home's shelves and
+        // the chat grids that nobody asked for in the last minute ([com.tmplayer.data.MemoryTrim]);
+        // what is on screen stays, and the rest is asked again when next needed.
+        val lowEnd = com.tmplayer.data.LowEndProbe.isLowEnd(this)
+        Thumbnails.trim(level, lowEnd)
+        if (com.tmplayer.data.MemoryTrim.of(level, lowEnd).dropIdleQueries) {
+            runCatching {
+                com.tmplayer.data.PageQueries.cache.dropIdle(com.tmplayer.data.MemoryTrim.IDLE_QUERY_MS)
+                com.tmplayer.data.ChatVideoCount.forgetExpired()
+            }
+        }
         // The system running short while the app is in front is the struggle the one-time hint
         // is for (CP68); the shell decides whether there is anything to offer.
         if (level == TRIM_MEMORY_RUNNING_LOW || level == TRIM_MEMORY_RUNNING_CRITICAL) {

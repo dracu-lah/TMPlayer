@@ -1,6 +1,5 @@
 package com.tmplayer.data
 
-import android.content.ComponentCallbacks2
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.compose.ui.graphics.ImageBitmap
@@ -46,11 +45,11 @@ internal fun ImageBitmap.byteCount(): Int = asAndroidBitmap().byteCount
  * critical, in front (the player playing over Home on a 1 GB stick) or behind (about to be
  * killed), half of them otherwise. Only TRIM_MEMORY_COMPLETE emptied the cache before, so a
  * stick playing a video kept Home's whole poster cache while the system was already
- * killing other apps to feed the player.
+ * killing other apps to feed the player. On a low-end device all of them from
+ * TRIM_MEMORY_RUNNING_LOW up ([MemoryTrim]).
  */
-fun Thumbnails.trim(level: Int) = trim(
-    everything = level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL ||
-        level >= ComponentCallbacks2.TRIM_MEMORY_MODERATE,
+fun Thumbnails.trim(level: Int, lowEnd: Boolean = false) = trim(
+    everything = MemoryTrim.of(level, lowEnd).pictures == MemoryTrim.Pictures.All,
 )
 
 /** Android samples a picture down to the width asked for, so the cache keys it by that width. */
