@@ -1,0 +1,6 @@
+# SHA-256 of the certificate that signs every released TMPlayer APK (CN=TMPlayer, OU=dev,
+# O=dracu-lah), as `apksigner verify --print-certs` prints it. Public, not a secret: anyone can read
+# it from a released APK. scripts/verify-apk-signer.sh checks an APK built outside the release
+# workflow against it before that workflow publishes it. Read from v1.28.5 and v1.28.6-beta.3 on
+# 2026-11-18. A key rotation changes it, on purpose and in a commit of its own.
+00fbf6e8bcf6080060e2653bbd44004655e65d25dd46e6d3d2bcc881c2842652
