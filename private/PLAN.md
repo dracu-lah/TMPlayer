@@ -382,6 +382,40 @@ goes into this table at its place by severity and is taken before any feature wo
   starting, hold for 2x, auto subtitles, filters, resume on any device, mini player, topic name search; PR4 is the
   default external player with its chooser). Take PR0 (evidence from the reporters) first,
   after any open crash row below.
+- [x] HX80 (reported 2026-11-17 from Sentry, issue 161177059, tmplayer-android, app 1.28.5, CRASH, fatal, fixed
+  2026-11-18, committed locally, not released) `SecurityException: Permission Denial: CLOSE_SYSTEM_DIALOGS broadcast
+  from com.tmplayer requires BROADCAST_CLOSE_SYSTEM_DIALOGS`, Hisilicon MB300 "SmartTV", Android 14. The stack is
+  all framework: the remote's Search key that nothing took runs `PhoneWindow.launchDefaultSearch`, whose close of the
+  system dialogs the device refuses, thrown on the main thread where we cannot catch it. Fix: `SearchKeyGuard`
+  (app) takes KEYCODE_SEARCH in `MainActivity` and `PlayerActivity` `onKeyDown`/`onKeyUp` after the screens had it
+  (TV Home search still handles it first), test `SearchKeyGuardTest`. Not done: a device with this firmware to
+  confirm; the Assist and Voice Assist keys take another framework path (`launchAssistAction`) and are untouched.
+- [ ] HX81 (reported 2026-11-16 from Sentry, issue 161627449, tmplayer-android, app 1.28.4, ANR, URGENT, noted only,
+  not researched yet) `ApplicationNotResponding: ANR`, culprit `androidx.compose.runtime.Updater` reconcile-impl,
+  onn. 4K Streaming Box (Android 14), mechanism AppExitInfo. The main thread was recomposing `Root` in
+  MainActivity.kt (line 3120 of that build) when the system gave up: an expensive or looping composition on a weak
+  TV box. The `home-rows` thread was idle and ExoPlayer was loading in the background. Check first: what Root reads
+  that changes often (a state read in a frame loop, an unstable parameter, a list rebuilt per recompose; see the
+  `compose-performance` skill and its stability report), and measure idle CPU on a 1 GB stick (AGENTS.md).
+- [ ] HX82 (reported 2026-11-18 from Sentry, issue 161970443, tmplayer-android, app 1.28.3, ANR, URGENT, noted only,
+  not researched yet) `ApplicationNotResponding: ANR`, culprit `androidx.compose.ui.text.platform.DefaultImpl` (an
+  obfuscated `V`), Chromecast with Google TV (HD), Android 14. The main thread was inside
+  `Fragment.performStart` while a FragmentManager transaction ran: the compose text layer was busy on the main
+  thread as a fragment started (the player's track picker or overlay fragments, or Home). An ExoPlayer
+  `SimpleDecoder` was alive. Same weak-TV family as HX70 and HX81: look for a first composition of a large text
+  heavy screen (fonts, `Text` with many spans) on the main thread, and a warm-up that can wait a frame.
+- [x] HX83 (Sentry 161355951, vivo 1904 Android 11, app 1.28.5, ANR, fixed 2026-11-18, cda7e8d, not released) main thread
+  in `MetaMatch.normalise` -> `stripCombiningMarks` -> `Normalizer` (first call loads ICU). ASCII fast path in
+  `PureKit.jvm.kt` and in `normalise` (also no double strip). Not done: warming `MediaItem.metaQuery` off the main
+  thread for Home and search (MediaGridScreen.kt ~645 only does it in the shelf builder).
+- [x] HX84 (Sentry 161258214 OOM, 161276404 DeadSystemException, 161227673 ClassFormatError, fixed 2026-11-18, 4092038,
+  not released) `heap_mb` and `heap_used` class tags on every crash, ANR and native report (privacy page updated);
+  `DeadSystemException` and the `sun.awt` ClassFormatError dropped in the gate.
+- [ ] HX85 (Sentry stutter triage 2026-11-18, workers running in worktrees, see Progress) why-this-decoder tags and a
+  denominator for `tmplayer.stutter`, low-end FFmpeg limits, onTrimMemory. Also: SIGABRT 161284630 (realme RMX3241,
+  libtdjsonjava.so, maybe an fd double close next to `FileChannelImpl.close`): upload TDLib debug symbols to Sentry and
+  check whether 1.28.5 still shows it, nothing done. ANR 158675266 (QueuedWork.waitToFinish on a Pixel 9) ignored
+  until it repeats on 1.28.5. GitHub #33 (fine volume), #34 (video rotation), #31 (seasons past 1): workers running.
 - [ ] HX69 (reported 2026-11-02, Android phone, vivo V2050 on Android 13, app 1.28.3, CRASH, URGENT, first in the
   table, not researched yet, no work yet) Crash when downloading videos and series, the reporter thinks for files
   of 500 MB and more ("fix the crashes when downloading files"). No stack trace or log yet. Ask the reporter (or

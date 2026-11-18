@@ -686,3 +686,22 @@ Keep what moved, revert what did not.
 - [Bing Webmaster Tools, IndexNow and the AI Performance report](https://geotoolbox.ai/blog/bing-webmaster-tools), [What 20,000 Copilot citations taught us](https://www.searchinfluence.com/blog/bing-ai-performance-report-copilot-citations/)
 - [GEO best practices: what is actually proven in 2026](https://crowdo.net/blog/?p=2755)
 - [Search Engine Journal on intrusive mobile pop-ups](https://www.searchenginejournal.com/google-devalue-pages-intrusive-pop-ups-mobile-search/171534/), [Guide to intrusive interstitials](https://seosly.com/blog/intrusive-interstitials/)
+
+## Search Console review, export 2026-11-17 (28 days, 2026-10-19 to 2026-11-15) vs 2026-11-11 (2026-10-13 to 2026-11-09)
+Files: `seo-data/tmplayer.org-Performance-on-Search-2026-11-17.zip` and `...-11-11.zip` (git-ignored).
+- Totals: clicks 5,743 (was 5,051, +14%), impressions 32,048 (27,397, +17%), CTR 17.9% (18.4%), average position 5.71 (5.67).
+  Mobile 84% of clicks. India 3,637 clicks (63%), then UAE 445, Saudi Arabia 148, Germany 106 (pos 6.5).
+- Brand ("tmplayer", "tm player", "tmp player"): 3,915 of the 4,470 query clicks, position 1.0 to 1.2. Non-brand 555 clicks.
+- Non-brand head, all steady: "telegram video player" 276 clicks (pos 2.1), "telegram player" 43 (4.4), "telegram media player" 19 (2.1),
+  "telegram player for pc" 13 (2.3). The TV set ("telegram tv", "telegram android tv", "telegram for tv", "telegram tv app", "tv telegram",
+  about 700 impressions together) sits at pos 6.5 to 7.5 with 3 to 4% CTR: the guides answer it, no new page.
+- Pages: `/web/` clicks 44 to 72 (the web app), `/guides/telegram-on-samsung-or-lg-tv/` 10 to 19, `/download/` 276 to 314, `/desktop/` 65 to 84.
+  `/features/` (2,044 impressions, 3 clicks, pos 1.6), `/android/`, `/install/`, `/android-tv/`: sitelink-style impressions under the brand result,
+  no click problem to fix.
+- New queries are all 1 to 7 impressions (AirPlay, "telegram en smart tv", Portuguese and Spanish TV how-tos): the cast guide, FAQ and
+  llms.txt already say "No AirPlay"; the localised guides already cover the TV questions.
+- "tmp app" (59 impressions, 0 clicks, pos 7.2), "tmp apk" (38, 7 clicks), "tmp download": the known short-name collision (see the
+  ambiguity notes above). No page of ours should chase another product's name.
+- Decision (Claude, 2026-11-17): no site change this round. Nothing in the export is a gap the site does not answer already, and padding
+  pages would break "look before adding". Re-check after the next 28 days; watch: `/web/` growth, Spanish, Italian and Portuguese guide
+  positions (6 to 9), "telegram videos" (pos 12.5).

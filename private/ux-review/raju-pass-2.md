@@ -54,13 +54,13 @@ No change needed: 2.7, 5.3, 9.5, 10.4. Not exercised on a device: 8.3.
 
 Open, small, each needs a call from you rather than a minimal fix:
 
-- **1.1** First open still shows only "Getting ready": the one line promise (`state.first_open_promise`) was never added. Polish.
-- **2.4** The phone sign in still hides Proxy settings and Send logs behind a three dot icon in the footer (MainActivity, not testable as a unit). The help link appears with the connect banner (tested), not before it.
-- **4.7** An empty search over the added chats still ends in two secondary buttons ("Search my other chats", "Add chats"), not one primary and one link. Polish.
+- **1.1** (done in W3, 2026-11-17) First open still shows only "Getting ready": the one line promise (`state.first_open_promise`) was never added. Polish.
+- **2.4** (done in W3, 2026-11-17) The phone sign in still hides Proxy settings and Send logs behind a three dot icon in the footer (MainActivity, not testable as a unit). The help link appears with the connect banner (tested), not before it.
+- **4.7** (done in W3, 2026-11-17) An empty search over the added chats still ends in two secondary buttons ("Search my other chats", "Add chats"), not one primary and one link. Polish.
 - **6.1** The "Getting the next part" toast on a single file video: not verified without a device.
-- **7.5** The phone's empty Downloads page does not offer "Open folder" (the desktop does). Needs a storage access intent.
-- **11.1** Settings still has Gestures, Library and Home as their own groups; the review wanted them merged into Playback and "Home and library".
-- **11.3** Desktop Playback page still leads with "Force software decoding"; it was meant to move under an Advanced block.
+- **7.5** (done in W3, 2026-11-17) The phone's empty Downloads page does not offer "Open folder" (the desktop does). Needs a storage access intent.
+- **11.1** (done in W3, 2026-11-17) Settings still has Gestures, Library and Home as their own groups; the review wanted them merged into Playback and "Home and library".
+- **11.3** (done in W3, 2026-11-17) Desktop Playback page still leads with "Force software decoding"; it was meant to move under an Advanced block.
 - **Webapp rows (R9's files):** 2.6 wording of the Premium sign in error against the button, 4.10 two bars at 390 wide, 10.3 quiet Sign out with a confirm. Not touched here.
 - **TV text fields elsewhere** have the same trap the sign in had unless they handle arrows themselves: Proxy page (two fields), the new list name (`ListsUi`), Add a TV address (`AddTvDialog`), the country picker search, MediaGrid search. `FieldDpad.kt` is in `app`; those files are in the shared `ui` module, so the modifier would first move there. Check each on the Mi TV remote before deciding.
 - On a device: steps 1 to 3 on a clean install (the real country guess, SMS consent), the remote on the real TV code page after Back closes the keyboard (the fix above), offline on the real TV, and the 200% font on the POCO. Render tests cannot show the on-screen keyboard.
