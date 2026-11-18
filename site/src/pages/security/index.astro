@@ -88,7 +88,7 @@ Astro.locals.lang = ENGLISH;
         </Panel>
         <Panel title="Any file, where it was built (optional)" wide>
           <Command before="gh attestation verify " asset="windows-x64-msi" file="TMPlayer-<version>-windows-x64.msi" after=" --repo dracu-lah/TMPlayer" />
-          <p>Releases after 1.22.0 carry a build attestation for every file: a statement, signed through GitHub and Sigstore, that the file came out of the release workflow at that version's tag. The <a href="https://cli.github.com/" rel="noopener">GitHub CLI</a> checks it, and the command works the same for the APK, the DMG, the AppImage and the tarball.</p>
+          <p>Releases after 1.22.0 carry a build attestation for every file: a statement, signed through GitHub and Sigstore, that the file came out of the release workflow at that version's tag. The <a href="https://cli.github.com/" rel="noopener">GitHub CLI</a> checks it, and the command works the same for the APK, the DMG, the AppImage and the tarball. A release whose APK or Linux packages were built on the maintainer's own machine carries no attestation for those files; the APK is still signed with the release key, which the release workflow checks against the pinned certificate before it publishes.</p>
         </Panel>
       </div>
     </Band>

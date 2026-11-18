@@ -276,6 +276,14 @@ SKIP_TESTS=1 scripts/release-local.sh --linux v1.28.7
 - **A new signing key** means a new `.github/release-signing-cert.sha256` (`apksigner verify
   --print-certs` on an APK signed with it), in a commit of its own.
 
+Trust: the APK is bound to the release key (the run checks its signature against the certificate
+pinned in `.github/release-signing-cert.sha256`). The Linux packages are only checked against the
+draft's own `SHA256SUMS` and `BUILD-INFO`, so whoever can write to the repo can put files in a draft.
+That person could edit the workflows too, so it is not a new right, but it means the tarball and
+AppImage rest on repository write access, not on a key. Re-running `release-local.sh` for a tag
+that has a draft means deleting the draft and creating a fresh one (the script prints both
+commands), so files of two different builds never sit in one draft.
+
 ## After the release job
 
 `<v>` is the new version, `v<v>` its tag. For a test version only steps 1 and 2 apply, and

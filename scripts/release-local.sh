@@ -107,7 +107,7 @@ else
   done
   [ ${#missing[@]} -eq 0 ] || note "not set, so this build lacks what they enable (as the release job would): ${missing[*]}"
   if [ -n "$(prop local.properties LOG_UPLOAD_URL)" ] || [ -n "${LOG_UPLOAD_URL:-}" ]; then
-    note "LOG_UPLOAD_URL is set, which the release job's build does not carry"
+    problem "LOG_UPLOAD_URL is set: it is baked into the APK and Linux packages, and the release job's build never carries it. Unset it in local.properties and the environment"
   fi
 fi
 if [ -z "${SENTRY_AUTH_TOKEN:-}" ] && [ -f local.properties ] && [ -n "$(prop local.properties SENTRY_AUTH_TOKEN)" ]; then
@@ -200,7 +200,11 @@ fi
 # --- Build ---
 gradle_flags=()
 [ -n "${GRADLE_WORKERS:-}" ] && gradle_flags+=("--max-workers=$GRADLE_WORKERS")
-rm -rf "$out"
+# The earlier output of this tag stays until this build is whole: a failed rerun puts it back.
+[ -n "$out" ] || exit 2
+if [ -d "$out" ]; then rm -rf "$out.prev"; mv "$out" "$out.prev"; fi
+restore_previous() { if [ "$?" -ne 0 ] && [ -d "$out.prev" ]; then rm -rf "$out"; mv "$out.prev" "$out"; fi; }
+trap restore_previous EXIT
 mkdir -p "$out"
 
 tests=skipped
@@ -268,9 +272,13 @@ built=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 EOF
 (cd "$out" && find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%f\n' | sort | xargs sha256sum > SHA256SUMS)
 ls -la "$out"
+rm -rf "$out.prev"
 
 if [ "$draft_exists" = 1 ]; then
-  upload="gh release upload $draft --clobber $root/$out/*"
+  # Not a clobber onto the old draft: files of the other platform from another commit would stay
+  # beside the new SHA256SUMS and BUILD-INFO and fail the release's checks. A fresh draft has only
+  # this build.
+  upload="gh release delete $draft --yes && gh release create $draft --draft --target $commit --title \"Prebuilt $tag (never publish)\" --notes \"Built on the maintainer's machine for $tag at $commit. release.yml takes the files from here. Never publish this draft.\" $root/$out/*"
 else
   upload="gh release create $draft --draft --target $commit --title \"Prebuilt $tag (never publish)\" --notes \"Built on the maintainer's machine for $tag at $commit. release.yml takes the files from here. Never publish this draft.\" $root/$out/*"
 fi

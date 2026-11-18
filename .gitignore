@@ -42,3 +42,4 @@ private/
 !.dev.vars.example
 .env*
 !.env.example
+.pnpm-store/

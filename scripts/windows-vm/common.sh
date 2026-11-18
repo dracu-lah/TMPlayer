@@ -18,7 +18,7 @@ disk="${DISK_SIZE:-64G}"
 viewer_port="${VIEWER_PORT:-8006}"
 
 dry=false
-x() { printf '+ %s\n' "$*"; $dry || "$@"; }
+x() { printf '+ %s\n' "$*" | sed -E 's/(PASSWORD=)[^ ]+/\1****/'; $dry || "$@"; }
 say() { echo "== windows-vm: $*"; }
 die() { echo "windows-vm: $*" >&2; exit 1; }
 

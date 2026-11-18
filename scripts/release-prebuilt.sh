@@ -49,7 +49,18 @@ case "$platform" in
 esac
 
 draft_tag="prebuilt-$tag"
-ids="$(gh api --paginate "repos/$repo/releases?per_page=100" \
+# A read that fails (a 5xx, a rate limit) is tried three times; when it keeps failing nothing was
+# verified, so nothing is trusted and the job builds as usual (exit 3), saying why.
+gh_read() {
+  local try
+  for try in 1 2 3; do
+    gh api --paginate "$@" && return 0
+    sleep $((try * 5))
+  done
+  echo "::warning::GitHub did not answer for the draft $draft_tag after 3 tries: $platform builds here as usual." >&2
+  exit 3
+}
+ids="$(gh_read "repos/$repo/releases?per_page=100" \
   --jq ".[] | select(.draft and .tag_name == \"$draft_tag\") | .id")"
 if [ -z "$ids" ]; then
   echo "No draft release $draft_tag: $platform builds here as usual."
@@ -60,7 +71,7 @@ if [ "$(wc -l <<<"$ids")" != "1" ]; then
   exit 1
 fi
 
-assets="$(gh api --paginate "repos/$repo/releases/$ids/assets?per_page=100" --jq '.[] | "\(.id) \(.name)"')"
+assets="$(gh_read "repos/$repo/releases/$ids/assets?per_page=100" --jq '.[] | "\(.id) \(.name)"')"
 asset_id() { awk -v n="$1" '$2 == n { print $1 }' <<<"$assets"; }
 
 present=0
