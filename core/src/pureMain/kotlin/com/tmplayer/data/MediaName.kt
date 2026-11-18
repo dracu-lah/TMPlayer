@@ -306,6 +306,28 @@ object MediaName {
         // A daily show or a match is numbered by the day it aired, "Show 2024.10.14 720p".
         val date = findAirDate(normalised)
         val episode = if (date == null) findEpisode(normalised, fansub = GROUP_TAG.containsMatchIn(text)) else null
+        // "Ep-06 S2 Blue Box [Multi]", "Episode 6 - Blue Box", "S02E06 Blue Box": the code comes
+        // first and the title after it. Nothing stands before the code, so the cut below would leave
+        // an empty title and every episode would stand alone. Read what follows the leading codes as
+        // the name and keep the codes as the season and episode.
+        if (episode != null && episode.at == 0 && episode.number != null) {
+            val after = leadingCodesEnd(normalised)
+            val rest = if (after > 0) clean(normalised.substring(after)) else ""
+            if (rest.isNotEmpty()) {
+                val inner = read(rest, maxYear)
+                if (inner.parsed.title.isNotBlank() && !inner.parsed.isEpisode && inner.parsed.extra == null) {
+                    return Read(
+                        inner.parsed.copy(
+                            season = episode.season,
+                            episode = episode.number,
+                            lastEpisode = episode.last,
+                            episodePart = episode.part,
+                        ),
+                        whole = clean(normalised),
+                    )
+                }
+            }
+        }
         val year = if (date != null) Year(date.year, date.at) else findYear(normalised, maxYear)
 
         // The title ends at whichever marker comes first: the year, the episode code, the air date,
@@ -341,6 +363,28 @@ object MediaName {
             whole = clean(normalised),
         )
     }
+
+    /**
+     * Where the episode and season codes that open [text] end ("Ep-06 S2 " in "Ep-06 S2 Blue Box"),
+     * or 0 when it does not open with one. Up to three codes, in any order, with the separators
+     * between them; the title is what follows.
+     */
+    private fun leadingCodesEnd(text: String): Int {
+        val forms = listOf(EPISODE_RANGE) + PAIRED_EPISODE + listOf(EPISODE_ONLY, SEASON_ONLY)
+        var pos = 0
+        var found = 0
+        for (round in 0 until 3) {
+            while (pos < text.length && (text[pos].isWhitespace() || text[pos] in LEADING_JOINERS)) pos++
+            val hit = forms.firstNotNullOfOrNull { form -> form.find(text, pos)?.takeIf { it.range.first == pos } } ?: break
+            pos = hit.range.last + 1
+            found++
+        }
+        if (found == 0) return 0
+        while (pos < text.length && (text[pos].isWhitespace() || text[pos] in LEADING_JOINERS)) pos++
+        return pos
+    }
+
+    private const val LEADING_JOINERS = "-:|._,"
 
     /**
      * [title] without the short audio language channels write after it ("Night Train Mal",

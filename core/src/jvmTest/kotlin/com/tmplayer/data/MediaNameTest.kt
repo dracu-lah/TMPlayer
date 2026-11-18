@@ -546,4 +546,31 @@ class MediaNameTest {
         }
         assertTrue("took ${(System.nanoTime() - started) / 1_000_000} ms", System.nanoTime() - started < 3_000_000_000L)
     }
+
+    @Test
+    fun `an episode code in front of the title still names the show`() {
+        // The code can lead in any order, with or without a season, and the title is what follows.
+        val cases = listOf(
+            "Ep-06 S2 Harbour Notes [Multi] [HDRip 1080p].mkv" to Triple("Harbour Notes", 2, 6),
+            "Ep 6 - Harbour Notes 720p.mkv" to Triple("Harbour Notes", null, 6),
+            "S2 Ep-06 Harbour Notes [HDRip].mkv" to Triple("Harbour Notes", 2, 6),
+            "Episode 6 Harbour Notes.mkv" to Triple("Harbour Notes", null, 6),
+            "S02E06 Harbour Notes 1080p.mkv" to Triple("Harbour Notes", 2, 6),
+            "EP06.Harbour.Notes.S02.WEB-DL.mkv" to Triple("Harbour Notes", 2, 6),
+            "Ep.06 - S02 - Harbour Notes - 720p.mkv" to Triple("Harbour Notes", 2, 6),
+        )
+        for ((name, want) in cases) {
+            val parsed = parse(name)
+            assertEquals(name, want.first, parsed.title)
+            assertEquals(name, want.second, parsed.season)
+            assertEquals(name, want.third, parsed.episode)
+        }
+    }
+
+    @Test
+    fun `a name that is only an episode code is still that episode`() {
+        assertEquals(1, parse("Episode 1.mkv").episode)
+        assertEquals(6, parse("Ep-06 S2 1080p.mkv").episode)
+        assertEquals(1, parse("S01E01 1080p.mkv").episode)
+    }
 }

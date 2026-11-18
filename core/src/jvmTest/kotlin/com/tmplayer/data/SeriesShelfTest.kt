@@ -56,6 +56,14 @@ class SeriesShelfTest {
     }
 
     @Test
+    fun `episodes numbered in front of the title group into one show`() {
+        val names = (1..6).map { "Ep-0$it S2 Harbour Notes [Multi] [HDRip 1080p].mkv" }
+        val show = shows(SeriesShelf.arrange(names.reversed().map { video(it) })).single()
+        assertEquals(listOf(1, 2, 3, 4, 5, 6), show.episodes.map { it.episode })
+        assertTrue(files(SeriesShelf.arrange(names.map { video(it) })).isEmpty())
+    }
+
+    @Test
     fun `every way of writing one show lands on the same key`() {
         val key = SeriesShelf.keyOf("Harbour Notes")
         assertEquals("harbour notes", key)
