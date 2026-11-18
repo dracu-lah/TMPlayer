@@ -25,12 +25,22 @@ enum class PlayerMenuEntry {
      */
     PictureShape,
     /**
+     * Rotate picture (#34): the picture turned a quarter at a time as it is drawn, a page of the
+     * four turns ([PictureRotation]). Not the screen orientation. Only for a picture, not a cast.
+     */
+    RotatePicture,
+    /**
      * 3D video: a page of how the file keeps its two pictures and which glasses are on
      * ([Stereo3d]). Not while the video plays on a cast.
      */
     Stereo,
     /** The speeds as a page, the one playing on the line; the row's button opens the same page. */
     Speed,
+    /**
+     * Player volume (#33): the player's own gain under the device's, 1 per cent a step
+     * ([PlayerVolume]). Left and Right step it on the line itself; OK opens its page. Not on a cast.
+     */
+    PlayerVolume,
     /** Louder: quiet dialogue lifted, the peaks kept from clipping. On or off, and the panel stays. */
     VolumeBoost,
     /** Night mode: the range squeezed, so loud scenes are quieter and dialogue clearer. */
@@ -106,10 +116,14 @@ enum class PhoneMenuEntry {
      * without a gesture (the zoom chip's tap does the same), so TalkBack reaches it too.
      */
     ResetZoom,
+    /** Rotate picture (#34), as on the television: a page of the four turns. */
+    RotatePicture,
     /** 3D video, as on the television: a page of the layout, the glasses and the eye swap. */
     Stereo,
     /** The speeds as a page, the one playing on the line, as the row's button opens them. */
     Speed,
+    /** Player volume (#33), as on the television: a page with Quieter and Louder. */
+    PlayerVolume,
     VolumeBoost,
     NightMode,
     EvenVolume,
@@ -171,6 +185,8 @@ fun PhoneMenuEntry.label(
     PhoneMenuEntry.ResetZoom -> L.playerResetZoom
     PhoneMenuEntry.Stereo -> stereo?.let { L.commonWithDetail(L.playerStereo, it) } ?: L.playerStereo
     PhoneMenuEntry.Speed -> L.playerSpeed
+    PhoneMenuEntry.RotatePicture -> L.playerRotatePicture
+    PhoneMenuEntry.PlayerVolume -> L.playerVolumeLevel
     PhoneMenuEntry.VolumeBoost -> L.playerVolumeBoost
     PhoneMenuEntry.NightMode -> L.playerQuietLoudScenes
     PhoneMenuEntry.EvenVolume -> L.playerEvenVolume
@@ -241,6 +257,9 @@ object PlayerMenu {
      *
      * [markIntro] is whether the video is an episode of a show, which has a season to share a
      * mark with; [removeIntroMark] whether this episode has a mark of its own to take off.
+     *
+     * [rotatePicture] adds Rotate picture under the shapes (a picture, not a cast), and
+     * [playerVolume] adds Player volume above Volume boost (the sound plays here, not on a cast).
      */
     fun tvEntries(
         pictureInPicture: Boolean,
@@ -258,13 +277,17 @@ object PlayerMenu {
         repeatVideo: Boolean = false,
         markIntro: Boolean = false,
         removeIntroMark: Boolean = false,
+        rotatePicture: Boolean = false,
+        playerVolume: Boolean = false,
     ): List<PlayerMenuEntry> = buildList {
         add(PlayerMenuEntry.LockScreen)
         add(PlayerMenuEntry.PlaybackDetails)
         add(PlayerMenuEntry.StartOver)
         if (pictureShape) add(PlayerMenuEntry.PictureShape)
+        if (rotatePicture) add(PlayerMenuEntry.RotatePicture)
         if (stereo) add(PlayerMenuEntry.Stereo)
         add(PlayerMenuEntry.Speed)
+        if (playerVolume) add(PlayerMenuEntry.PlayerVolume)
         add(PlayerMenuEntry.VolumeBoost)
         add(PlayerMenuEntry.NightMode)
         add(PlayerMenuEntry.EvenVolume)
@@ -331,13 +354,17 @@ object PlayerMenu {
         repeatVideo: Boolean = false,
         markIntro: Boolean = false,
         removeIntroMark: Boolean = false,
+        rotatePicture: Boolean = false,
+        playerVolume: Boolean = false,
     ): List<PhoneMenuEntry> = buildList {
         add(PhoneMenuEntry.LockScreen)
         if (pictureInPicture) add(PhoneMenuEntry.PictureInPicture)
         if (pictureShape) add(PhoneMenuEntry.PictureShape)
         if (pictureShape && zoomed) add(PhoneMenuEntry.ResetZoom)
+        if (rotatePicture) add(PhoneMenuEntry.RotatePicture)
         if (stereo) add(PhoneMenuEntry.Stereo)
         add(PhoneMenuEntry.Speed)
+        if (playerVolume) add(PhoneMenuEntry.PlayerVolume)
         add(PhoneMenuEntry.VolumeBoost)
         add(PhoneMenuEntry.NightMode)
         add(PhoneMenuEntry.EvenVolume)

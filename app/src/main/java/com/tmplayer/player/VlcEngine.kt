@@ -182,7 +182,9 @@ class VlcEngine(
         get() = if (released) 1f else (runCatching { backend.volumePercent }.getOrDefault(100) / 100f).coerceIn(0f, 1f)
         set(value) {
             if (released) return
-            runCatching { backend.volumePercent = (value.coerceIn(0f, 1f) * 100).toInt() }
+            // libVLC takes whole per cents: a quiet Player volume rounds, and never down to silence.
+            val percent = kotlin.math.round(value.coerceIn(0f, 1f) * 100).toInt()
+            runCatching { backend.volumePercent = if (value > 0f) percent.coerceAtLeast(1) else 0 }
             changed()
         }
 

@@ -177,6 +177,9 @@ internal sealed interface MenuAction {
     data class Track(val type: TrackType, val track: MediaTrack?) : MenuAction
     data class Speed(val speed: Float) : MenuAction
     data class Shape(val scale: VideoScale) : MenuAction
+
+    /** Rotate picture's next quarter turn clockwise (#34); the menu stays open for the next. */
+    data object RotatePicture : MenuAction
     data object ToggleDownmix : MenuAction
     data object ToggleVolumeBoost : MenuAction
     data object ToggleNightMode : MenuAction
@@ -1107,6 +1110,12 @@ internal fun PlayerMenu(
                 Entry(s.playerPlaybackOptions) { page(MenuPage.Options) }
                 // On the first page, as the phone's pinch is one move away: W cycles it too.
                 Entry(s.playerPictureShape, trailing = status.scale.label) { page(MenuPage.Shape) }
+                // Each press turns a quarter more, the menu left up beside the turned picture.
+                Entry(
+                    s.playerRotatePicture,
+                    trailing = if (status.pictureRotation == 0) s.commonOff
+                    else s.playerRotatePictureDegrees(s.messages.formatter.number(status.pictureRotation)),
+                ) { onAction(MenuAction.RotatePicture) }
                 Entry(s.playerStereo, trailing = stereoSummary(status.stereo)) { page(MenuPage.Stereo) }
                 Entry(s.playerSubtitleStyleAndTiming) { page(MenuPage.SubtitleStyle) }
                 if (fromTelegram || watchedLabel != null) HorizontalDivider()

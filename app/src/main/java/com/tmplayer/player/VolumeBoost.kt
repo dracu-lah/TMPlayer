@@ -38,6 +38,10 @@ import kotlin.math.pow
  * fixed when the player is built. Off, it copies the sound straight through. Switching ramps the
  * gain over [RAMP_SECONDS] rather than jumping, which would click.
  *
+ * Quieter than the file is not here: Player volume ([PlayerVolume]) is the engine's own gain,
+ * applied after this chain by the audio output, so the boost, Night mode and the leveller hear
+ * and shape the same sound whatever it is set to, and a figure under 100 per cent costs nothing.
+ *
  * Handles 16 bit and float PCM, which is what the decoders here hand over. Anything else, and a
  * Dolby or DTS track sent to the receiver untouched, passes it by.
  */

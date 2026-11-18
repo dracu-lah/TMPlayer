@@ -420,6 +420,8 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
             h.setPropertyBoolean("mute", prefs.muted)
             h.setPropertyString("audio-channels", if (prefs.downmix) "stereo" else "auto-safe")
             h.setPropertyString("hwdec", prefs.hwdec)
+            // A turn is about one file: each opens upright.
+            h.setPropertyString("video-rotate", "0")
         }
         applyVolumeBoost(prefs.volumeBoost, prefs.volume)
         // Before the file loads, so the decoder and the downmix start with it.
@@ -663,6 +665,13 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
      * part of the picture to mpv and zoom with it. Each property on its own, so one this libmpv
      * does not know leaves the rest applied.
      */
+    /** mpv's `video-rotate`, which the renderer applies to the next frame: no reload, no pause. */
+    override fun setPictureRotation(degrees: Int) {
+        val turn = com.tmplayer.player.PictureRotation.normalise(degrees)
+        runCatching { handle.setPropertyString("video-rotate", turn.toString()) }
+            .onSuccess { _state.update { it.copy(pictureRotation = turn) } }
+    }
+
     override fun setZoom(zoom: Double, panX: Double, panY: Double) {
         val safe = { v: Double -> if (v.isFinite()) v else 0.0 }
         val h = handle

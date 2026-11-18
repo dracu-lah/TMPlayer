@@ -448,6 +448,26 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     /** The 3D layout the file's name declares, for the hint and the page's focus. */
     private var stereoTagged: Stereo3d.Layout? = null
 
+    /**
+     * Rotate picture (#34), clockwise degrees ([PictureRotation]): drawn by the effects pipeline,
+     * built for it the first time a turn is chosen as 3D's is. Kept while the same video plays
+     * (a decoder or a player rebuilt for it), back to none when another opens ([readItem]).
+     */
+    private var pictureRotation = PictureRotation.NONE
+
+    /**
+     * Player volume (#33), 0 to 100 per cent ([PlayerVolume]), read before the player is built
+     * and kept for every video. The engine's own volume ([Engine.volume]) plays it, under the
+     * device's volume and the boost's lift alike.
+     */
+    private var playerVolumePercent = PlayerVolume.FULL
+
+    /** Whether this video has said that Player volume is turned down ([hintPlayerVolume]). */
+    private var playerVolumeHinted = false
+
+    /** The pending write of [playerVolumePercent], so a held key writes the setting once. */
+    private var playerVolumeSave: kotlinx.coroutines.Job? = null
+
     /** Whether the hint that the file looks 3D has been shown for this video. */
     private var stereoHinted = false
 
@@ -830,7 +850,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 knownDevice = com.tmplayer.data.KnownDevices.tunnelingFor(com.tmplayer.data.KnownDevices.builtIn, EngineDevice.facts(), mime),
                 // A tunneled decoder never hands frames to the app: 3D, a forced shape and the app's own
                 // software decoder all work on frames, so nothing is drawn onto a picture the app cannot reach.
-                drawsOnPicture = stereo.on || videoScale != VideoScale.Fit || videoDecoder == com.tmplayer.data.VideoDecoder.Software,
+                drawsOnPicture = stereo.on || pictureRotation != PictureRotation.NONE || videoScale != VideoScale.Fit ||
+                    videoDecoder == com.tmplayer.data.VideoDecoder.Software,
                 codecCanTunnel = TunnelingSupport.canTunnel(mime),
                 failedBefore = tunnelingFailed,
             ),
@@ -2254,6 +2275,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     /** The video's own fields, from the intent that opened it or the one [continueUnseen] set. */
     private fun readItem(from: Intent) {
         fileId = from.getIntExtra(EXTRA_FILE_ID, 0)
+        // A turn is about one file: the next video starts upright.
+        pictureRotation = PictureRotation.NONE
+        playerVolumeHinted = false
         pressedAt = from.getLongExtra(EXTRA_PRESSED_AT, 0L)
         openedAt = SystemClock.elapsedRealtime()
         startStages.set(0)
@@ -2436,6 +2460,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             val boostRead = async { runCatching { settings.volumeBoostNow() }.getOrDefault(false) }
             val nightRead = async { runCatching { settings.nightModeNow() }.getOrDefault(false) }
             val evenRead = async { runCatching { settings.evenVolumeNow() }.getOrDefault(true) }
+            val playerVolumeRead = async { runCatching { settings.playerVolumeNow() }.getOrDefault(PlayerVolume.FULL) }
             val silenceRead = async { runCatching { settings.skipSilenceNow() }.getOrDefault(false) }
             val decoderRead = async { runCatching { settings.videoDecoderNow() }.getOrDefault(com.tmplayer.data.VideoDecoder.Automatic) }
             val tunnelRead = async { runCatching { settings.tunneledModeNow() }.getOrDefault(com.tmplayer.player.TunneledMode.Auto) }
@@ -2535,6 +2560,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             volumeBoostOn = boostRead.await()
             nightModeOn = nightRead.await()
             evenVolumeOn = evenRead.await()
+            playerVolumePercent = playerVolumeRead.await()
             skipSilence = silenceRead.await()
             videoDecoder = decoderRead.await()
             tunneledMode = tunnelRead.await()
@@ -2703,7 +2729,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     /** The menu's Try the other engine: offered only when there is another engine to try. */
     private fun otherEngineOffered(): Boolean {
         val input = engineInput ?: return false
-        if (!vlcCanTake() || stereo != Stereo3d.OFF) return false
+        // A turned picture is drawn by Media3's pipeline, which VLC does not have.
+        if (!vlcCanTake() || stereo != Stereo3d.OFF || pictureRotation != PictureRotation.NONE) return false
         val running = if (vlcEngine != null) com.tmplayer.data.PlayerEngine.Vlc else com.tmplayer.data.PlayerEngine.ExoPlayer
         return EngineSelector.toOffer(input, running) != null
     }
@@ -2741,6 +2768,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             vlc.prepare(source, carry?.positionMs ?: resumeMs.coerceAtLeast(0L))
             for (file in subtitleFiles.files) vlc.addSubtitleFile(file.uri.toString())
             vlc.speed = carry?.speed ?: playbackSpeed
+            vlc.volume = carry?.volume ?: PlayerVolume.gain(playerVolumePercent)
             vlc.setDelays(syncDelays.audioMs, syncDelays.subtitleMs)
             crashNote.began("libvlc")
             startStats()
@@ -2983,6 +3011,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             }
         }
         player = exo
+        exo.volume = PlayerVolume.gain(playerVolumePercent)
         crashNote.began("media3")
         startStats()
         traceRecorder.attach(exo)
@@ -4049,7 +4078,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         var height = format.height
         if (format.rotationDegrees == 90 || format.rotationDegrees == 270) width = height.also { height = width }
         if (stereo.on) Stereo3d.outputSize(width, height, stereo.layout).let { (w, h) -> width = w; height = h }
-        return width.toDouble() / height
+        return PictureRotation.turnedAspect(width.toDouble() / height, pictureRotation)
     }
 
     /** The view's size in pixels, the box the pipeline shapes the picture for; the screen's before the first layout. */
@@ -4073,6 +4102,13 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         val effects = mutableListOf<androidx.media3.common.Effect>()
         val vr = stereo.on && stereo.view == Stereo3d.View.Vr
         if (stereo.on) effects += Stereo3dEffect(stereo, videoScale, width, height)
+        // Rotate picture: a matrix the last stage folds into the pass it already makes, before
+        // the shape, so the turned picture is what is fitted, filled or stretched.
+        if (pictureRotation != PictureRotation.NONE) {
+            effects += androidx.media3.effect.ScaleAndRotateTransformation.Builder()
+                .setRotationDegrees(PictureRotation.counterClockwise(pictureRotation).toFloat())
+                .build()
+        }
         if (vr || width <= 0 || height <= 0) return effects
         // Kept within a 4K pair's width, as the 3D shader keeps its output.
         val (boxWidth, boxHeight) = Stereo3d.boxedSize(width, height)
@@ -4095,13 +4131,15 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
     /** What the pipeline was last handed, so a layout pass that changes nothing sends nothing. */
     private var sentPipelineKey: String? = null
+
+    private fun pipelineKey(box: Pair<Int, Int>): String = "$stereo/$pictureRotation/$videoScale/${box.first}x${box.second}"
     private var sentShapeBox: Pair<Int, Int>? = null
 
     /** Hands the pipeline [pipelineEffects] when they differ from what it already draws. */
     private fun sendPipelineEffects(force: Boolean = false) {
         val exo = player ?: return
         val box = shapeBox()
-        val key = "$stereo/$videoScale/${box.first}x${box.second}"
+        val key = pipelineKey(box)
         if (!force && key == sentPipelineKey) return
         sentPipelineKey = key
         sentShapeBox = box
@@ -5100,6 +5138,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 loopHandler.removeCallbacks(suggestStart)
                 loopHandler.postDelayed(suggestStart, SUGGEST_DELAY_MS)
             }
+            hintPlayerVolume()
             hintStereo()
             // The decoder is known by now: FFmpeg's frames skip the pipeline, so the shape moves.
             renderShape()
@@ -7542,6 +7581,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             repeatVideo = true,
             markIntro = skipCtl.canMark,
             removeIntroMark = skipCtl.canMark && skipCtl.hasOwnMark,
+            rotatePicture = stereoOffered(),
+            playerVolume = !castUp(),
         )
         override fun zoomDetail(): String? =
             zoom.takeIf { it.zoomed }?.let { L.messages.formatter.scalePercent(it.percent) }
@@ -7561,6 +7602,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             repeatVideo = true,
             markIntro = skipCtl.canMark,
             removeIntroMark = skipCtl.canMark && skipCtl.hasOwnMark,
+            rotatePicture = stereoOffered(),
+            playerVolume = !castUp(),
         )
         override fun shape() = videoScale
         override fun speed() = playbackSpeed
@@ -7571,6 +7614,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         override fun volumeBoost() = volumeBoostOn
         override fun nightMode() = nightModeOn
         override fun evenVolume() = evenVolumeOn
+        override fun playerVolume() = playerVolumePercent
+        override fun setPlayerVolume(percent: Int) = this@PlayerActivity.setPlayerVolume(percent)
+        override fun pictureRotation() = this@PlayerActivity.pictureRotation
+        override fun setPictureRotation(degrees: Int) = applyRotation(degrees) to this@PlayerActivity.pictureRotation
         override fun sleepDetail() = sleepTimerDetail()
         override fun sleepChoice() = this@PlayerActivity.sleepChoice()
         override fun loop() = abLoop
@@ -7629,6 +7676,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             PhoneMenuEntry.RemoveIntroMark -> removeIntroMark()
             // Pages of the panel itself, opened there.
             PhoneMenuEntry.PictureShape, PhoneMenuEntry.Stereo, PhoneMenuEntry.Speed, PhoneMenuEntry.SleepTimer,
+            PhoneMenuEntry.RotatePicture, PhoneMenuEntry.PlayerVolume,
             PhoneMenuEntry.AddBookmark, PhoneMenuEntry.Bookmarks, PhoneMenuEntry.PlaybackDetails,
             -> Unit
         }
@@ -7663,7 +7711,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             PlayerMenuEntry.MarkIntro -> markIntroTap()
             PlayerMenuEntry.RemoveIntroMark -> removeIntroMark()
             // Pages of the panel itself, opened there.
-            PlayerMenuEntry.SleepTimer, PlayerMenuEntry.RemoteKeys, PlayerMenuEntry.Speed, PlayerMenuEntry.PictureShape -> Unit
+            PlayerMenuEntry.SleepTimer, PlayerMenuEntry.RemoteKeys, PlayerMenuEntry.Speed, PlayerMenuEntry.PictureShape,
+            PlayerMenuEntry.RotatePicture, PlayerMenuEntry.PlayerVolume,
+            -> Unit
         }
     }
 
@@ -8041,11 +8091,12 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         stereoTagged = Stereo3d.detect(listOf(mediaFileName, mediaCaption, mediaTitle).joinToString(" "))
         stereoHinted = false
         if (stereoPipeline) return
-        if (stereo.on || stereoTagged != null) {
+        // A turned picture too: the same video's player built again (a decoder change) keeps it.
+        if (stereo.on || stereoTagged != null || pictureRotation != PictureRotation.NONE) {
             stereoPipeline = true
             // Before the player is attached, so read here rather than through [player].
             val box = shapeBox()
-            sentPipelineKey = "$stereo/$videoScale/${box.first}x${box.second}"
+            sentPipelineKey = pipelineKey(box)
             sentShapeBox = box
             exo.setVideoEffects(pipelineEffects())
         }
@@ -8107,14 +8158,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         if (stereoPipeline) {
             sendPipelineEffects()
         } else if (next.on) {
-            stereoPipeline = true
-            val at = exo.currentPosition
-            val play = exo.playWhenReady
-            exo.stop()
-            sendPipelineEffects(force = true)
-            exo.seekTo(at)
-            exo.prepare()
-            exo.playWhenReady = play
+            buildPipelineNow(exo)
         }
         stereoHinted = true
         // The shape moves into the pipeline with 3D (and stays there once it is built), and a
@@ -8122,6 +8166,96 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         renderShape()
         showGestureFeedback(if (next.on) L.playerStereoOnNow(next.view.label()) else L.playerStereoOffNow)
         return null
+    }
+
+    /**
+     * Builds the effects pipeline in a player that plays without it: it can only be handed over
+     * before the player prepares, so the player stops and prepares again where it stood, playing
+     * or paused as it was. A tunneled decoder never hands its frames over, so tunneling goes off
+     * for this player first.
+     */
+    private fun buildPipelineNow(exo: ExoPlayer) {
+        stereoPipeline = true
+        val at = exo.currentPosition
+        val play = exo.playWhenReady
+        exo.stop()
+        if (tunnelingActive) {
+            tunnelingActive = false
+            (exo.trackSelector as? DefaultTrackSelector)?.let { it.parameters = it.buildUponParameters().setTunnelingEnabled(false).build() }
+        }
+        sendPipelineEffects(force = true)
+        exo.seekTo(at)
+        exo.prepare()
+        exo.playWhenReady = play
+    }
+
+    /**
+     * Why the picture cannot be turned in the video playing, or null when it can: the VLC engine
+     * (whose frames do not pass through Media3), an HDR picture, whose colours the pipeline is not
+     * trusted with, and a video on the app's own (FFmpeg) decoder.
+     */
+    private fun rotationBlocked(): String? {
+        if (vlcEngine != null) return L.playerRotatePictureNotVlc
+        val exo = player ?: return L.playerRotatePictureNotVlc
+        val color = exo.videoFormat?.colorInfo
+        if (color != null && androidx.media3.common.ColorInfo.isTransferHdr(color)) return L.playerRotatePictureNotHdr
+        return if (videoOnFfmpeg(exo)) L.playerRotatePictureNotSoftware else null
+    }
+
+    /**
+     * Rotate picture (#34): the picture turned [degrees] clockwise as it is drawn, at once and
+     * where it plays. The first turn in a player builds the effects pipeline, a moment's reload
+     * at the same place ([buildPipelineNow]); every turn after that is only a new matrix. The
+     * turned picture is fitted inside the screen with its shape kept, and the zoom starts over.
+     * Answers with why it could not turn (the turn then stays as it was), or null.
+     */
+    private fun applyRotation(degrees: Int): String? {
+        val turn = PictureRotation.normalise(degrees)
+        if (turn == pictureRotation) return null
+        if (turn != PictureRotation.NONE) rotationBlocked()?.let { return it }
+        val exo = player ?: return null
+        pictureRotation = turn
+        resetZoom(say = false)
+        if (stereoPipeline) {
+            sendPipelineEffects()
+        } else if (turn != PictureRotation.NONE) {
+            buildPipelineNow(exo)
+        }
+        renderShape()
+        showGestureFeedback(
+            if (turn == PictureRotation.NONE) L.playerRotatePictureOff
+            else L.playerRotatePictureNow(L.messages.formatter.number(turn)),
+        )
+        return null
+    }
+
+    /**
+     * Once a video, on its first picture: Player volume turned down is said over the picture, so
+     * a quiet start (or a silent one at 0%) has its reason on screen rather than seeming broken.
+     */
+    private fun hintPlayerVolume() {
+        if (playerVolumeHinted || playerVolumePercent >= PlayerVolume.FULL) return
+        playerVolumeHinted = true
+        showGestureFeedback(L.playerVolumeLevelNow(L.messages.formatter.scalePercent(playerVolumePercent)))
+    }
+
+    /**
+     * Player volume (#33): the engine's own gain set at once, under the device's volume, and the
+     * figure said over the picture. Written down a moment after the last step, so a held key
+     * writes the setting once rather than twenty times a second.
+     */
+    private fun setPlayerVolume(percent: Int) {
+        val next = percent.coerceIn(PlayerVolume.MIN, PlayerVolume.FULL)
+        playerVolumePercent = next
+        val gain = PlayerVolume.gain(next)
+        player?.volume = gain
+        vlcEngine?.volume = gain
+        showGestureFeedback(L.playerVolumeLevelNow(L.messages.formatter.scalePercent(next)))
+        playerVolumeSave?.cancel()
+        playerVolumeSave = lifecycleScope.launch {
+            kotlinx.coroutines.delay(VOLUME_SAVE_DELAY_MS)
+            runCatching { settings.setPlayerVolume(next) }
+        }
     }
 
     /**
@@ -10529,6 +10663,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
         /** How long the word that a file cannot be sought in stays up. */
         private const val SEEK_NOTICE_MS = 6_000L
+
+        /** How long after the last Player volume step the setting is written. */
+        private const val VOLUME_SAVE_DELAY_MS = 600L
         private const val EXTRA_PIECE_MESSAGES = "piece_messages"
         private const val EXTRA_PIECE_FILES = "piece_files"
         private const val EXTRA_PIECE_SIZES = "piece_sizes"

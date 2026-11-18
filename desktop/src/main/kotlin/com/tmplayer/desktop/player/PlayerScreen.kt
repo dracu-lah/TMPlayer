@@ -1107,6 +1107,16 @@ fun PlayerScreen(
         )
     }
 
+    /** The menu's Rotate picture (#34): a quarter turn more, said over the picture; this file only. */
+    fun rotatePicture() {
+        val next = com.tmplayer.player.PictureRotation.next(status.pictureRotation)
+        engine.setPictureRotation(next)
+        showFlash(
+            Flash.Kind.Text,
+            if (next == 0) L.playerRotatePictureOff else L.playerRotatePictureNow(L.messages.formatter.number(next)),
+        )
+    }
+
     /** The menu's Volume boost: switched on the sound already playing, and kept for every video. */
     fun toggleVolumeBoost() {
         val on = !status.volumeBoost
@@ -2025,6 +2035,7 @@ fun PlayerScreen(
                         is MenuAction.Track -> selectTrack(action.type, action.track)
                         is MenuAction.Speed -> setSpeed(action.speed)
                         is MenuAction.Shape -> setScale(action.scale)
+                        MenuAction.RotatePicture -> rotatePicture()
                         MenuAction.ToggleDownmix -> {
                             val on = !status.downmix
                             engine.setDownmix(on)

@@ -129,6 +129,16 @@ interface PlayerMoreHost {
     fun stereoDetail(): String?
     fun volumeBoost(): Boolean
     fun nightMode(): Boolean
+
+    /** Player volume (#33), [PlayerVolume.MIN] to [PlayerVolume.FULL] per cent. */
+    fun playerVolume(): Int = PlayerVolume.FULL
+    fun setPlayerVolume(percent: Int) = Unit
+
+    /** Rotate picture (#34), in clockwise degrees ([PictureRotation]). */
+    fun pictureRotation(): Int = PictureRotation.NONE
+
+    /** Answers with why the turn could not be made (or null) and the turn in force. */
+    fun setPictureRotation(degrees: Int): Pair<String?, Int> = null to degrees
     fun evenVolume(): Boolean
     fun sleepDetail(): String?
     fun sleepChoice(): Int?
@@ -194,6 +204,8 @@ class PlayerMorePanel(
         data object Stereo : Page
         data object Sleep : Page
         data object Keys : Page
+        data object Rotation : Page
+        data object Volume : Page
         class Details(val title: String, val lines: List<String>) : Page
         class Bookmarks(val actions: BookmarkSheetActions) : Page
         class BookmarkActions(val mark: Bookmark, val actions: BookmarkSheetActions) : Page
@@ -246,6 +258,20 @@ class PlayerMorePanel(
         open()
         openedFrom = Kind.PictureShape
         page = Page.Shape
+    }
+
+    /** Opens it straight on Rotate picture's page, for the render tests. */
+    internal fun openOnRotation() {
+        open()
+        openedFrom = Kind.RotatePicture
+        page = Page.Rotation
+    }
+
+    /** Opens it straight on Player volume's page, for the render tests. */
+    internal fun openOnVolume() {
+        open()
+        openedFrom = Kind.PlayerVolume
+        page = Page.Volume
     }
 
     /** Closes it, sliding out; the player hears of it at once, not after the slide. */
@@ -390,8 +416,8 @@ class PlayerMorePanel(
 
     /** Every line the panel can carry: the phone's and the television's entries share these names. */
     private enum class Kind {
-        LockScreen, PictureInPicture, PlaybackDetails, StartOver, PictureShape, ResetZoom, Stereo, Speed,
-        VolumeBoost, NightMode, EvenVolume, SleepTimer, AbLoop, RepeatVideo, NextChapter, PreviousChapter,
+        LockScreen, PictureInPicture, PlaybackDetails, StartOver, PictureShape, ResetZoom, RotatePicture, Stereo, Speed,
+        PlayerVolume, VolumeBoost, NightMode, EvenVolume, SleepTimer, AbLoop, RepeatVideo, NextChapter, PreviousChapter,
         NextFrame, PreviousFrame, SaveFrame, AddBookmark, Bookmarks, MarkIntro, RemoveIntroMark, OtherEngine, OpenInAnotherApp,
         CopyLinkAtTime, LoadSubtitleFile, SaveToDownloads, MarkWatched, ReportStutter, ReportWrongPicture, RemoteKeys,
     }
@@ -414,11 +440,18 @@ class PlayerMorePanel(
             ChoiceList {
                 lines.forEachIndexed { index, line ->
                     val requester = requesters.getOrPut(line.kind) { FocusRequester() }
+                    // Player volume steps on its own line with Left and Right, held to repeat,
+                    // so the remote need not open its page for a few per cent.
+                    val keys = if (line.kind == Kind.PlayerVolume && !touch) {
+                        Modifier.volumeStepKeys { up -> stepVolume(up) }
+                    } else {
+                        Modifier
+                    }
                     ChoiceLine(
                         title = line.label,
                         detail = line.detail,
                         icon = line.icon,
-                        modifier = Modifier.focusRequester(requester),
+                        modifier = keys.focusRequester(requester),
                     ) { choose(line.kind) }
                     // Lock the screen heads the list in a group of its own.
                     if (index == 0 && line.kind == Kind.LockScreen && lines.size > 1) {
@@ -447,6 +480,11 @@ class PlayerMorePanel(
             Kind.ResetZoom -> Line(kind, s.playerResetZoom, TmIcons.Refresh, host.zoomDetail())
             Kind.Stereo -> Line(kind, s.playerStereo, TmIcons.Visibility, host.stereoDetail() ?: s.commonOff)
             Kind.Speed -> Line(kind, s.playerSpeed, ImageVector.vectorResource(R.drawable.ic_speed), PlaybackSpeed.label(host.speed()))
+            Kind.RotatePicture -> Line(kind, s.playerRotatePicture, TmIcons.Refresh, rotationDetail(host.pictureRotation()))
+            Kind.PlayerVolume -> {
+                val percent = Translator.messages.formatter.scalePercent(host.playerVolume())
+                Line(kind, s.playerVolumeLevel, TmIcons.VolumeUp, if (host.tv) s.playerVolumeLevelTvDetail(percent) else percent)
+            }
             Kind.VolumeBoost -> Line(kind, s.playerVolumeBoost, volume, if (host.volumeBoost()) s.playerVolumeBoostOnDetail else s.commonOff)
             Kind.NightMode -> Line(kind, s.playerQuietLoudScenes, TmIcons.VolumeDown, if (host.nightMode()) s.playerQuietLoudScenesOnDetail else s.commonOff)
             Kind.EvenVolume -> Line(kind, s.playerEvenVolume, volume, if (host.evenVolume()) s.playerEvenVolumeOnDetail else s.commonOff)
@@ -503,6 +541,8 @@ class PlayerMorePanel(
             Kind.Stereo -> Page.Stereo
             Kind.SleepTimer -> Page.Sleep
             Kind.RemoteKeys -> Page.Keys
+            Kind.RotatePicture -> Page.Rotation
+            Kind.PlayerVolume -> Page.Volume
             Kind.Bookmarks -> host.bookmarks()?.let { Page.Bookmarks(it) }
             Kind.PlaybackDetails -> host.playbackDetails()?.let { (title, lines) -> Page.Details(title, lines) }
             // The phone asks for a note first, at the moment the line was chosen; the television
@@ -523,6 +563,14 @@ class PlayerMorePanel(
             runCatching { PhoneMenuEntry.valueOf(kind.name) }.getOrNull()?.let(host::onPhoneEntry)
         }
         if (staysOpen) refresh()
+    }
+
+    /** One step of Player volume from the main page's line, which stays where it is. */
+    private fun stepVolume(up: Boolean) {
+        val now = host.playerVolume()
+        if (!PlayerVolume.canStep(now, up)) return
+        host.setPlayerVolume(PlayerVolume.step(now, up))
+        refresh()
     }
 
     // ---- the pages ----------------------------------------------------------------------------
@@ -577,6 +625,34 @@ class PlayerMorePanel(
                 onClose = ::close,
             )
             Page.Keys -> RemoteKeysPage(onBack = ::back)
+            // A turn and a volume step act at once and the page stays, beside what they change.
+            Page.Rotation -> {
+                var rotation by remember { mutableStateOf(host.pictureRotation()) }
+                var refused by remember { mutableStateOf<String?>(null) }
+                RotationSheet(
+                    current = rotation,
+                    refused = refused,
+                    onPick = {
+                        val (why, now) = host.setPictureRotation(it)
+                        refused = why
+                        rotation = now
+                    },
+                    onDismiss = ::back,
+                    onClose = ::close,
+                )
+            }
+            Page.Volume -> {
+                var volume by remember { mutableStateOf(host.playerVolume()) }
+                VolumeSheet(
+                    current = volume,
+                    onChange = { next ->
+                        volume = next
+                        host.setPlayerVolume(next)
+                    },
+                    onDismiss = ::back,
+                    onClose = ::close,
+                )
+            }
             is Page.Details -> PlaybackDetailsSheet(current.title, current.lines, onClose = ::back)
             is Page.Bookmarks -> {
                 val actions = current.actions
