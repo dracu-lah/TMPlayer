@@ -4297,6 +4297,12 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         // constructor gets round to it.
         val maskHdr10Plus = HevcHdr10PlusMasker.affectedDevice(android.os.Build.MANUFACTURER, android.os.Build.MODEL)
         val fireTv = DeviceQuirks.isFireTv(this@PlayerActivity)
+        // Null on a normal device: NextLib's one thread per core, as before.
+        val ffmpegVideoThreads = com.tmplayer.data.LowEndDevice.softwareVideoThreads(
+            Runtime.getRuntime().availableProcessors(),
+            com.tmplayer.data.LowEndProbe.isLowEnd(this@PlayerActivity),
+        )
+        if (ffmpegVideoThreads != null) Log.i(START_TAG, "Low-end device: FFmpeg video decodes on $ffmpegVideoThreads threads")
         // The remedy ladder's path for this build: decoder names left out, queueing, software first ([DecoderPolicy]).
         val policy = decoderPolicyForBuild().also {
             builtPolicy = it
@@ -4457,7 +4463,17 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                     eventHandler, eventListener, allowedVideoJoiningTimeMs, built,
                 )
                 built.mapTo(out) {
-                    if (it is androidx.media3.exoplayer.video.MediaCodecVideoRenderer) LevelLenientVideoRenderer(it) else it
+                    when {
+                        it is androidx.media3.exoplayer.video.MediaCodecVideoRenderer -> LevelLenientVideoRenderer(it)
+                        // On a low-end device FFmpeg gets fewer threads than cores, so the screen
+                        // keeps one ([LowEndDevice.softwareVideoThreads]); elsewhere NextLib's own.
+                        it is io.github.anilbeesetti.nextlib.media3ext.ffdecoder.FfmpegVideoRenderer && ffmpegVideoThreads != null ->
+                            io.github.anilbeesetti.nextlib.media3ext.ffdecoder.FfmpegVideoRenderer(
+                                allowedVideoJoiningTimeMs, eventHandler, eventListener, FFMPEG_MAX_DROPPED_TO_NOTIFY,
+                                ffmpegVideoThreads, FFMPEG_VIDEO_BUFFERS, FFMPEG_VIDEO_BUFFERS,
+                            )
+                        else -> it
+                    }
                 }
             }
 
@@ -10614,6 +10630,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
         /** The back buffer under [LOW_RAM_BUFFER_BYTES]: see [buildPlayer]. */
         private const val LOW_RAM_BACK_BUFFER_MS = 3_000
+
+        /** NextLib's own figures for its FFmpeg video renderer, kept when only the thread count changes. */
+        private const val FFMPEG_MAX_DROPPED_TO_NOTIFY = 50
+        private const val FFMPEG_VIDEO_BUFFERS = 4
         private const val END_GUARD_MS = 1_000L
         /** What a held finger runs the picture at, the same figure every player uses for it. */
         /** The phone's top bar height, which the corner chips sit under. */
