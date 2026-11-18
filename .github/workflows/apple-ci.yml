@@ -17,20 +17,6 @@ name: Apple CI
 # and the shared code are compiled for iOS from copies (docs/IOS.md, "How the port is built"), so a
 # change in app/src/main/java or in core and ui can break only the iOS build.
 on:
-  push:
-    branches: [main]
-    paths:
-      - "ios/**"
-      - "iosApp/**"
-      - "altstore/**"
-      - "gradle/**"
-      - "core/src/**"
-      - "ui/src/**"
-      - "app/src/main/java/**"
-      - "app/src/main/res/**"
-      - "scripts/ios-setup.sh"
-      - "settings.gradle.kts"
-      - ".github/workflows/apple-ci.yml"
   pull_request:
     branches: [main]
     paths:

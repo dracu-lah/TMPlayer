@@ -5,16 +5,6 @@ name: Web player
 # Run workflow) with "deploy" set to preview or production, and it is the user's call. Cloudflare
 # Pages keeps every earlier deployment, so the earlier build stays one Rollback away.
 on:
-  push:
-    branches: [main, webapp-solid]
-    paths:
-      - "webapp/**"
-      - "core/**"
-      - "gradle/**"
-      - "build.gradle.kts"
-      - "settings.gradle.kts"
-      - "gradle.properties"
-      - ".github/workflows/webapp.yml"
   pull_request:
     branches: [main]
     paths:

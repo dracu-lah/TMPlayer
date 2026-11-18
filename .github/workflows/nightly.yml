@@ -1,0 +1,44 @@
+name: Nightly
+
+# Pushes to main run no CI (the pre-push hook runs the Linux checks locally, scripts/ci-local.sh).
+# This is the check from a clean machine: when main has new commits in the last 26 hours it starts
+# CI, Web player and Apple CI by hand-dispatch on main, so Windows, macOS and a cold Linux build
+# are covered once a day instead of once per push. Run it by hand before a release.
+on:
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    name: Start the checks on main
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 50
+
+      - name: New commits since yesterday?
+        id: recent
+        run: |
+          if [ "${{ github.event_name }}" = workflow_dispatch ] || [ -n "$(git log --since='26 hours ago' --format=%H -1)" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No commits on main in the last 26 hours, nothing to check."
+          fi
+
+      - name: Dispatch
+        if: steps.recent.outputs.run == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for wf in ci.yml webapp.yml apple-ci.yml; do
+            gh workflow run "$wf" --ref main
+          done

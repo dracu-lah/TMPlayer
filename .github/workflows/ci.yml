@@ -1,6 +1,8 @@
 name: CI
 
-# Every push and every pull request that touches the build. This job never touches signing keys
+# Every pull request that touches the build, a manual run, and the nightly run (nightly.yml) when
+# main has new commits. Pushes to main run nothing here: scripts/ci-local.sh (the pre-push hook)
+# runs the Linux half on the maintainer's machine first (docs/agents/CI-LOCAL-PLAN.md). This job never touches signing keys
 # or Telegram credentials, so it is safe to run on contributions from people you do not know.
 #
 # A change confined to the site, the docs, Markdown, the store listing text under fastlane/ or
@@ -8,14 +10,6 @@ name: CI
 # "site: the update feed names x.y.z" commit and ordinary doc edits. A push that also touches
 # anything else still runs everything, and workflow_dispatch runs it by hand whatever changed.
 on:
-  push:
-    branches: [main]
-    paths-ignore:
-      - "site/**"
-      - "docs/**"
-      - "**/*.md"
-      - "fastlane/**"
-      - "desktop/packaging/aur/**"
   pull_request:
     branches: [main]
     paths-ignore:
@@ -138,6 +132,8 @@ jobs:
   # macOS 26, so an older runner could not load it in the self-test.
   desktop-macos:
     name: Desktop (macOS)
+    # Not on pull requests: Apple Silicon DMGs are checked nightly and by hand (CI-LOCAL-PLAN.md).
+    if: github.event_name != 'pull_request'
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v7

@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Runs the checks CI used to run on every push (scripts/ci-local.sh). Install once with
+# `git config core.hooksPath .githooks`. Skip with SKIP_LOCAL_CI=1 set before the push.
+# A push of tags, or one that deletes a branch, has nothing to test here.
+while read -r local_ref local_sha remote_ref remote_sha; do
+  case "$local_ref" in refs/tags/*|"(delete)") exit 0 ;; esac
+done
+exec "$(git rev-parse --show-toplevel)/scripts/ci-local.sh"
