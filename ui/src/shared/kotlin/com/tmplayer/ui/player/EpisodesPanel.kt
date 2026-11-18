@@ -157,9 +157,16 @@ fun EpisodesPanel(
     val progress = watch.progress(series)
     val next = progress.next
     // The episodes' names, as the series page shows them, once lookups have them.
+    val coverMeta = com.tmplayer.ui.online.rememberMeta(series.cover, showOnly = true)
+    // The show's page, which the viewer came from, has the season sizes in memory; the player asks for nothing more.
+    val seasonSizes = remember(coverMeta) {
+        coverMeta?.let { info -> com.tmplayer.online.OnlineMetadata.current?.peekExtras(info)?.seasonList }.orEmpty()
+    }
     val names = com.tmplayer.ui.online.rememberSeasonEpisodes(
-        com.tmplayer.ui.online.rememberMeta(series.cover, showOnly = true),
+        coverMeta,
         shown.number,
+        remember(shown) { shown.episodes.mapTo(HashSet()) { it.episode } },
+        seasonSizes,
     )
 
     BoxWithConstraints(modifier) {
