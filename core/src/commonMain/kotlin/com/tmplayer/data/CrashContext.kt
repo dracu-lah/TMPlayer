@@ -20,7 +20,7 @@ import io.sentry.SentryEvent
 object CrashContext {
 
     /** Every tag key a crash report may carry, in order. A new one is added here and on the privacy page. */
-    val ALLOWED_TAGS: List<String> = listOf(ENGINE, CHIPSET, DECODER, CODEC, SIZE_CLASS, STUTTER)
+    val ALLOWED_TAGS: List<String> = listOf(ENGINE, CHIPSET, DECODER, CODEC, SIZE_CLASS, STUTTER, HEAP, HEAP_USED)
 
     /** The engines a report may name. ExoPlayer is Media3's; the others are for PR1 and the desktop. */
     val ENGINES: Set<String> = setOf("media3", "libvlc", "mpv", "external")
@@ -30,6 +30,38 @@ object CrashContext {
 
     /** The stutter verdicts: what [PlaybackWatch.symptomOf] answers. */
     val STUTTERS: Set<String> = setOf(PlaybackWatch.SLOW, PlaybackWatch.DROPPED, PlaybackWatch.UNDERRUNS, PlaybackWatch.LATE)
+
+    /** The app's heap ceiling in MB, rounded down to a class, so a repeat out of memory says how small the device's heap was. */
+    val HEAPS: Set<String> = setOf("64", "128", "256", "512", "1024+")
+
+    /** How much of that ceiling was in use when the report was made. */
+    val HEAP_USES: Set<String> = setOf("0-49", "50-74", "75-89", "90+")
+
+    /**
+     * The two memory tags from the heap's [maxBytes] ceiling and the [usedBytes] in use. Classes
+     * only, never the exact figures, and nothing about what is on screen or what was open (Sentry
+     * 161258214, an out of memory on a BRAVIA with no way to tell how small its heap was).
+     */
+    fun heapTags(maxBytes: Long, usedBytes: Long): Map<String, String> {
+        if (maxBytes <= 0 || usedBytes < 0) return emptyMap()
+        val mb = maxBytes / (1024 * 1024)
+        val percent = (usedBytes * 100 / maxBytes).coerceIn(0, 100)
+        return mapOf(
+            HEAP to when {
+                mb < 128 -> "64"
+                mb < 256 -> "128"
+                mb < 512 -> "256"
+                mb < 1024 -> "512"
+                else -> "1024+"
+            },
+            HEAP_USED to when {
+                percent < 50 -> "0-49"
+                percent < 75 -> "50-74"
+                percent < 90 -> "75-89"
+                else -> "90+"
+            },
+        )
+    }
 
     /** What was playing, as the player last said. */
     data class Playback(
@@ -94,8 +126,9 @@ object CrashContext {
      * The tags, each checked against its own pattern or list and left out when it does not fit.
      * [chipset] is the device's (empty on a computer); [playback] null when nothing was playing.
      */
-    fun tagsOf(chipset: String, playback: Playback?): Map<String, String> = buildMap {
+    fun tagsOf(chipset: String, playback: Playback?, memory: Map<String, String> = emptyMap()): Map<String, String> = buildMap {
         chipset.trim().takeIf { CHIPSET_TEXT.matches(it) && safe(it) }?.let { put(CHIPSET, it) }
+        memory.filter { (key, value) -> (key == HEAP && value in HEAPS) || (key == HEAP_USED && value in HEAP_USES) }.let(::putAll)
         playback ?: return@buildMap
         playback.engine.takeIf { it in ENGINES }?.let { put(ENGINE, it) }
         playback.decoder.trim().takeIf { DECODER_TEXT.matches(it) && safe(it) }?.let { put(DECODER, it) }
@@ -134,6 +167,8 @@ object CrashContext {
         CODEC -> CODEC_TEXT.matches(value) && safe(value)
         SIZE_CLASS -> value in SIZE_CLASSES
         STUTTER -> value in STUTTERS
+        HEAP -> value in HEAPS
+        HEAP_USED -> value in HEAP_USES
         else -> false
     }
 
@@ -146,6 +181,8 @@ object CrashContext {
     const val CODEC = "codec"
     const val SIZE_CLASS = "size_class"
     const val STUTTER = "stutter"
+    const val HEAP = "heap_mb"
+    const val HEAP_USED = "heap_used"
 
     /** `Qualcomm SM8550`, `Mediatek MT6765`, `mt8695`: letters, digits, spaces and `. _ -`. */
     private val CHIPSET_TEXT = Regex("""[A-Za-z0-9][A-Za-z0-9 ._-]{0,47}""")

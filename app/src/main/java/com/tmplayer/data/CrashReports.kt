@@ -151,7 +151,28 @@ object CrashReports {
     }
 
     private fun gateCrash(event: SentryEvent, hint: Hint?): SentryEvent? =
-        pass(event, hint)?.takeIf { kept -> limits?.admit(kept) != false }
+        if (isNotOurs(event)) null else pass(event, hint)?.takeIf { kept -> limits?.admit(kept) != false }
+
+    /** The heap's ceiling and use as classes (see [CrashContext.heapTags]), made when the report is. */
+    private fun heapNow(): Map<String, String> = runCatching {
+        val runtime = Runtime.getRuntime()
+        CrashContext.heapTags(runtime.maxMemory(), runtime.totalMemory() - runtime.freeMemory())
+    }.getOrDefault(emptyMap())
+
+    /**
+     * Failures that are the system's or one machine's, not ours: the system server died under a
+     * background thread (`DeadSystemException`, Sentry 161276404), or one desktop's JDK has a corrupt
+     * `sun.awt` class (`ClassFormatError`, 161227673). Matched by the exact class on the chain.
+     */
+    internal fun isNotOurs(event: SentryEvent): Boolean = runCatching {
+        event.exceptions.orEmpty().any { e ->
+            val module = e.module.orEmpty()
+            val type = e.type.orEmpty()
+            val name = if (module.isEmpty()) type else "$module.$type"
+            name == "android.os.DeadSystemException" ||
+                (name == "java.lang.ClassFormatError" && e.value.orEmpty().contains("sun/awt/"))
+        }
+    }.getOrDefault(false)
 
     private fun pass(event: SentryEvent, hint: Hint?): SentryEvent? {
         val record = sendingRecord
@@ -159,7 +180,7 @@ object CrashReports {
         // out passes as the viewer's answer.
         if (record != null && event.eventId == record.second) {
             return CrashReportScrubber.scrub(event.apply { threads = null }).also { record.first.stampBuild(it) }
-                .let { CrashContext.tag(it, CrashContext.tagsOf(chipset, playback = null)) }
+                .let { CrashContext.tag(it, CrashContext.tagsOf(chipset, playback = null, memory = heapNow())) }
         }
         val exitTime = CrashExits.exitTime(hint)
         if (exitTime != null) {
@@ -169,12 +190,12 @@ object CrashReports {
             // The threads stay: an ANR's report is the main thread's stack among the others, and
             // a tombstone's is every thread's, with names and frames only (see the scrubber).
             return CrashReportScrubber.scrub(event)
-                .let { CrashContext.tag(it, CrashContext.tagsOf(chipset, playback = null)) }
+                .let { CrashContext.tag(it, CrashContext.tagsOf(chipset, playback = null, memory = heapNow())) }
                 .also { if (exitTime == accepted) exitSent?.countDown() }
         }
         if (!enabledNow) return null
         // A crash or a handled error of this run: what was playing, if anything (S2).
-        return CrashContext.tag(CrashReportScrubber.scrub(event), CrashContext.tagsOf(chipset, CrashContext.playbackNow()))
+        return CrashContext.tag(CrashReportScrubber.scrub(event), CrashContext.tagsOf(chipset, CrashContext.playbackNow(), heapNow()))
     }
 
     /**

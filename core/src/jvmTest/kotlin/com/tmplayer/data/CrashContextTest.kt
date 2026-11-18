@@ -23,6 +23,21 @@ class CrashContextTest {
     ) = CrashContext.Playback(engine, decoder, codec, width, height, stutter, atMillis = 0)
 
     @Test
+    fun `heap classes, never the exact figures, and nothing for a bad reading`() {
+        val mb = 1024L * 1024
+        assertEquals(mapOf("heap_mb" to "128", "heap_used" to "90+"), CrashContext.heapTags(192 * mb, 180 * mb))
+        assertEquals(mapOf("heap_mb" to "64", "heap_used" to "0-49"), CrashContext.heapTags(64 * mb, 10 * mb))
+        assertEquals(mapOf("heap_mb" to "1024+", "heap_used" to "75-89"), CrashContext.heapTags(2048 * mb, 1700 * mb))
+        assertEquals(emptyMap<String, String>(), CrashContext.heapTags(0, 5))
+        assertEquals(emptyMap<String, String>(), CrashContext.heapTags(100, -1))
+        // Only the two classes pass, from any caller, with or without anything playing.
+        val tags = CrashContext.tagsOf("", null, mapOf("heap_mb" to "256", "heap_used" to "99 percent", "title" to "Secret"))
+        assertEquals(mapOf("heap_mb" to "256"), tags)
+        val event = CrashContext.tag(SentryEvent(), mapOf("heap_mb" to "7"))
+        assertNull(event.tags)
+    }
+
+    @Test
     fun `nothing playing leaves only the chipset, and no chipset no tags at all`() {
         assertEquals(mapOf("chipset" to "amlogic"), CrashContext.tagsOf("amlogic", null))
         val event = CrashContext.tag(SentryEvent(), CrashContext.tagsOf("", null))

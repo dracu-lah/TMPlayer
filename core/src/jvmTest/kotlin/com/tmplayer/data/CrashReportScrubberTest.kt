@@ -163,7 +163,7 @@ class CrashReportScrubberTest {
         CrashContext.tag(event, CrashContext.tagsOf("Mediatek MT8695", playback) + mapOf("title" to "Secret Show", "chat" to "x"))
 
         assertEquals(
-            listOf("engine", "chipset", "decoder", "codec", "size_class", "stutter"),
+            listOf("engine", "chipset", "decoder", "codec", "size_class", "stutter", "heap_mb", "heap_used"),
             CrashContext.ALLOWED_TAGS,
         )
         assertEquals(
