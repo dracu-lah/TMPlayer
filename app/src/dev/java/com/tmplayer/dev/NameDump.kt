@@ -115,12 +115,14 @@ object NameDump {
     fun leftovers(chat: String, items: List<MediaItem>, placed: Map<String, Placement>): List<String> =
         items.filter { placed[it.id]?.isFile == true }
             .map(::nameOf)
-            .filter(::mayBeEpisode)
+            // A name with a year is a film: its stray numbers are audio layouts and sizes.
+            .filter { !YEAR.containsMatchIn(it) && mayBeEpisode(it) }
             .map { "$chat\t$it" }
 
     const val CAPTION_MAX = 200
 
     private val TOKEN = Regex("[^a-z0-9]+")
+    private val YEAR = Regex("(?<!\\d)(?:19|20)\\d{2}(?!\\d)")
 
     /** Taken out before the numbers are read: resolutions, codecs, bit depths, audio channels, sizes. */
     private val NOISE = listOf(
