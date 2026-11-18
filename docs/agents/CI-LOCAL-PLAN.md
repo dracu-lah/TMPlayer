@@ -144,3 +144,11 @@ Written 2026-11-18. Status: plan, nothing built yet.
   Decisions taken by default: sibling fallback needs 3 files, nightly stays 02:17 UTC, Windows VM
   parked, the next beta is the first to use `release-local.sh`. Open: push (the user), the nightly's
   first real run on GitHub, one real `release-local.sh` run, the WebKit `chats.spec.ts:42` flake.
+- 2026-11-18 paused. Pushed up to e674f78; six later local commits: the names dump (debug and
+  preview builds only, `docs/BUILDING.md` "Names dump"), three parser fixes found in 6,028 real names
+  (audio layout glued to x265 read as S1E265, a bare `-SP` read as a special, a size cut short after a
+  dash read as episode one), and the leftovers filter. Open: run the dump with `--ez all true` (58
+  chats, it stalled on "page failed (wda)" retries after chat 1), the test build `com.tmplayer.test`
+  is still installed and signed in on the POCO, the full `:core:jvmTest :ui:jvmTest` run after the
+  last parser fixes, the unfolded film copies without a year (same film, different quality, no year in
+  the name), and the push (user).
