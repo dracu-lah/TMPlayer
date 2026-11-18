@@ -197,6 +197,7 @@ object Backups {
         "preferred_subtitle_language" to Kind.TEXT,
         "player_haptics" to Kind.BOOL,
         "player_tap_plays_pauses" to Kind.BOOL,
+        "player_volume" to Kind.LONG,
         "pure_black" to Kind.BOOL,
         "quality_habit" to Kind.TEXT,
         "reduce_motion" to Kind.BOOL,

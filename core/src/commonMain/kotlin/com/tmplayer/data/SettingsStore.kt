@@ -44,6 +44,7 @@ private val DOWNMIX_STEREO = booleanPreferencesKey("downmix_stereo")
 private val VOLUME_BOOST = booleanPreferencesKey("volume_boost")
 private val NIGHT_MODE = booleanPreferencesKey("night_mode")
 private val EVEN_VOLUME = booleanPreferencesKey("even_volume")
+private val PLAYER_VOLUME = longPreferencesKey("player_volume")
 
 /** Defaults the platform sets at start, where one device differs from another. */
 object SettingsDefaults {
@@ -1035,6 +1036,18 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
 
     /** Read before the player is built, like [volumeBoostNow]. */
     suspend fun evenVolumeNow(): Boolean = prefs.data.first()[EVEN_VOLUME] ?: SettingsDefaults.evenVolume
+
+    /**
+     * Player volume ([com.tmplayer.player.PlayerVolume]), 0 to 100 per cent of the file's own
+     * level, under the device's volume. Full until turned down, then kept for every video. A
+     * stored value out of range reads as full, never as silence.
+     */
+    suspend fun playerVolumeNow(): Int = com.tmplayer.player.PlayerVolume.sanitise(prefs.data.first()[PLAYER_VOLUME])
+
+    suspend fun setPlayerVolume(percent: Int) {
+        val value = percent.coerceIn(com.tmplayer.player.PlayerVolume.MIN, com.tmplayer.player.PlayerVolume.FULL)
+        prefs.edit { it[PLAYER_VOLUME] = value.toLong() }
+    }
 
     /**
      * Resume across devices ([ResumeSync]): Continue watching kept in a message in the viewer's
