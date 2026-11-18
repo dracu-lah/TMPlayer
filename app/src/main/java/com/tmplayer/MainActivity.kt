@@ -507,6 +507,7 @@ class MainActivity : ComponentActivity() {
      * television, whose remote has a Back of its own.
      */
     override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent): Boolean {
+        if (SearchKeyGuard.swallows(keyCode)) return true
         if (keyCode == android.view.KeyEvent.KEYCODE_ESCAPE && !FormFactor.isTv(this)) {
             event.startTracking()
             return true
@@ -515,6 +516,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onKeyUp(keyCode: Int, event: android.view.KeyEvent): Boolean {
+        if (SearchKeyGuard.swallows(keyCode)) return true
         if (keyCode == android.view.KeyEvent.KEYCODE_ESCAPE && !FormFactor.isTv(this)) {
             if (event.isTracking && !event.isCanceled) onBackPressedDispatcher.onBackPressed()
             return true

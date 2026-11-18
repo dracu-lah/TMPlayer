@@ -6704,6 +6704,13 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         TrackPickerFragment.show(supportFragmentManager, R.id.overlay_container, trackType)
     }
 
+    // The Search key nothing took: the window's own default crashes some Android 14 TV boxes.
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean =
+        com.tmplayer.SearchKeyGuard.swallows(keyCode) || super.onKeyDown(keyCode, event)
+
+    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean =
+        com.tmplayer.SearchKeyGuard.swallows(keyCode) || super.onKeyUp(keyCode, event)
+
     /**
      * MEDIA keys always act, and so do the digits, which jump to that tenth of the video. D-pad
      * keys act on the bare picture and walk the row once it is up: the focused views own them
