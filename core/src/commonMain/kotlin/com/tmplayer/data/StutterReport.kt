@@ -298,9 +298,9 @@ object StutterReport {
     }
 
     /** Letters, digits and `. - _ + :` and spaces, at most 64 characters: no path survives a cut like this. */
-    fun clean(text: String): String = text.filter { it.isLetterOrDigit() || it in ".-_+: " }.trim().take(MAX_TEXT)
+    fun clean(text: String): String = PlayCounts.clean(text)
 
-    private const val MAX_TEXT = 64
+    private const val MAX_TEXT = PlayCounts.MAX_TEXT
 
     /** A bound on a profile or level number: Android's are bit flags well under this. */
     private const val MAX_CODE = 1 shl 26

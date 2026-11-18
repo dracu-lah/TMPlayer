@@ -16,6 +16,9 @@ import platform.VideoToolbox.VTIsHardwareDecodeSupported
 // for the rest. Android's player reads this to tell hardware from software (HardwareDecoders),
 // which picks between Telegram's copies of a video, so the answer is the device's own.
 
+/** Android's `MediaCodecInfo.CodecProfileLevel`: a profile and the highest level it decodes. */
+class CodecProfileLevel(val profile: Int, val level: Int)
+
 /** One decoder, Media3's. */
 class MediaCodecInfo(
     val name: String,
@@ -26,6 +29,8 @@ class MediaCodecInfo(
     val vendor: Boolean,
     /** Whether it takes tunnelled playback; VideoToolbox does not on iOS, so none of the above does. */
     val tunneling: Boolean = false,
+    /** The profiles and levels the decoder lists; VideoToolbox's are not read, so none. */
+    val profileLevels: Array<CodecProfileLevel> = emptyArray(),
 ) {
     fun isFormatSupported(format: Format): Boolean = format.sampleMimeType == mimeType
 

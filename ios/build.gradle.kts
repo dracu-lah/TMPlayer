@@ -179,6 +179,8 @@ val androidScreensForIos = tasks.register<Sync>("androidScreensForIos") {
     inputs.file(rootProject.file("gradle/ios-apple-variant.gradle.kts"))
     from(rootProject.layout.projectDirectory.dir("app/src/main/java")) {
         include("com/tmplayer/ui/**", "com/tmplayer/data/**", "com/tmplayer/MainActivity.kt", "com/tmplayer/App.kt")
+        // The Search key the activities take when nothing on screen did (plain Kotlin over KeyEvent).
+        include("com/tmplayer/SearchKeyGuard.kt")
         include("com/tmplayer/player/PlayerBookmarkSheets.kt", "com/tmplayer/player/SmootherPick.kt")
         exclude("com/tmplayer/ui/browse/DebugFakeChats.kt")
         // Android's trailer player is a WebView (android.webkit); iOS's is a WKWebView in the Swift

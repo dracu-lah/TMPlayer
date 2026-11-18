@@ -17,6 +17,21 @@ object FfmpegLibrary {
 
 abstract class FfmpegVideoRenderer : Renderer
 
+/**
+ * NextLib's constructor with the number of decoder threads. The player builds one only where a
+ * renderer of this class is already in its list, which on iOS none is ([FfmpegLibrary.isAvailable]).
+ */
+@Suppress("UNUSED_PARAMETER", "FunctionName")
+fun FfmpegVideoRenderer(
+    allowedJoiningTimeMs: Long,
+    eventHandler: android.os.Handler?,
+    eventListener: androidx.media3.exoplayer.video.VideoRendererEventListener?,
+    maxDroppedFramesToNotify: Int,
+    threads: Int,
+    numInputBuffers: Int,
+    numOutputBuffers: Int,
+): FfmpegVideoRenderer = error("FFmpeg's video renderer is never built on iOS")
+
 abstract class FfmpegAudioRenderer : Renderer
 
 /** NextLib's renderers factory, Media3's default with FFmpeg's renderers added on Android. */

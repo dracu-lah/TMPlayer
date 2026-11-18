@@ -79,6 +79,10 @@ object CrashReports {
     @Suppress("UNUSED_PARAMETER")
     fun reportStutter(facts: StutterReport.Facts): Boolean = false
 
+    /** Android counts plays by ABI, decoder and engine for the stutter report; nothing is reported from iOS. */
+    @Suppress("UNUSED_PARAMETER")
+    fun notePlayStarted(abi: String, decoder: String) = Unit
+
     /** What Send logs says of crashes: nothing is recorded on iOS, so only a safe mode run says anything. */
     fun logLines(): List<String> = buildList {
         if (SafeMode.active) add("Safe mode: on, the last two runs crashed soon after opening")
@@ -243,9 +247,31 @@ object StutterReport {
         val verdict: String = UNKNOWN_VERDICT,
         val remedies: String = "",
         val hops: Int = 0,
+        /** Why this decoder (upstream's Sentry triage): the policy class, the setting, what moved it to software. */
+        val policy: String = "",
+        val preferSoftware: Boolean = false,
+        val softwareBy: String = "none",
+        val processBits: Int = 0,
+        val hwDecoders: String = "",
+        val playsSame: Int = -1,
+        val playsAll: Int = -1,
     )
 
     const val UNKNOWN_VERDICT = "unknown"
+
+    /** Upstream's wording of what put a video on a software decoder; nothing is reported from iOS. */
+    fun softwareByOf(software: Boolean, switched: Boolean, ladderHop: Boolean, plan: Boolean, setting: Boolean): String = when {
+        !software -> "none"
+        switched -> "switch"
+        ladderHop -> "ladder_r2"
+        plan -> "plan_r2"
+        setting -> "setting"
+        else -> "selector"
+    }
+
+    /** The decoders listed for a picture's type as one short text (upstream's), `none` when there are none. */
+    fun hwDecodersOf(decoders: List<Pair<String, Pair<Int, Int>?>>): String =
+        decoders.map { PlayCounts.clean(it.first) }.filter { it.isNotEmpty() }.joinToString("+").ifEmpty { "none" }.take(PlayCounts.MAX_TEXT)
 
     /** The word a stutter's cause is reported as, upstream's: the cause's name in lower case. */
     fun verdictName(cause: com.tmplayer.player.StutterCause): String = cause.name.lowercase()

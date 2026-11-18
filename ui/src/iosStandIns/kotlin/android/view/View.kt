@@ -34,6 +34,7 @@ class KeyEvent(
         const val KEYCODE_DPAD_CENTER = 23
         const val KEYCODE_ENTER = 66
         const val KEYCODE_BACK = 4
+        const val KEYCODE_SEARCH = 84
         const val KEYCODE_MENU = 82
         const val KEYCODE_MEDIA_PLAY_PAUSE = 85
         const val KEYCODE_ESCAPE = 111

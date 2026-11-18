@@ -90,14 +90,23 @@ class PlayCounts(
 
     companion object {
         const val DAYS = 7
+        /** The longest text a report carries. */
+        const val MAX_TEXT = 64
         const val MAX_KEYS = 24
         const val MAX_COUNT = 10_000
-        private const val MAX_KEY_LENGTH = 3 * 64 + 2
+        private const val MAX_KEY_LENGTH = 3 * MAX_TEXT + 2
         private const val MAX_FILE_BYTES = 64 * 1024L
         private const val DAY_MILLIS = 24L * 60 * 60 * 1000
 
         /** One key: the ABI, the decoder's name and the engine, each cut as a report's text is. */
         fun keyOf(abi: String, decoder: String, engine: String): String =
-            listOf(abi, decoder, engine).joinToString("|") { StutterReport.clean(it).ifEmpty { "unknown" } }
+            listOf(abi, decoder, engine).joinToString("|") { clean(it).ifEmpty { "unknown" } }
+
+        /**
+         * Letters, digits and `. - _ + :` and spaces, at most [MAX_TEXT] characters: no path survives a
+         * cut like this. Here, not in StutterReport, which Sentry and org.json keep off iOS, where this
+         * class is compiled; [StutterReport.clean] is this.
+         */
+        fun clean(text: String): String = text.filter { it.isLetterOrDigit() || it in ".-_+: " }.trim().take(MAX_TEXT)
     }
 }

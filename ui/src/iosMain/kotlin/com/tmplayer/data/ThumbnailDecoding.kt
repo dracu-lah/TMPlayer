@@ -348,11 +348,13 @@ internal suspend fun decodeTdImage(fileId: Int, path: String, maxWidth: Int): Im
 
 /**
  * Hands the pictures back when the system needs the memory, as on Android: all of them when it is
- * critical or the app is behind, half otherwise. The shell turns iOS's memory warning into a
+ * critical or the app is behind, half otherwise; on a low-end device all of them from RUNNING_LOW up
+ * ([MemoryTrim]), as on Android. The shell turns iOS's memory warning into a
  * critical level when TMPlayer is the one short of memory, and hands every picture back itself
  * when the warning is the device's.
  */
-fun Thumbnails.trim(level: Int) = trim(
+fun Thumbnails.trim(level: Int, lowEnd: Boolean = false) = trim(
     everything = level == android.app.Application.TRIM_MEMORY_RUNNING_CRITICAL ||
-        level >= android.app.Application.TRIM_MEMORY_UI_HIDDEN,
+        level >= android.app.Application.TRIM_MEMORY_UI_HIDDEN ||
+        (lowEnd && level >= MemoryTrim.RUNNING_LOW),
 )

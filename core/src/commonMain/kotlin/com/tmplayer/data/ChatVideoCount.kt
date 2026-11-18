@@ -71,7 +71,10 @@ object ChatVideoCount {
 
     /** Forgets the counts past [TTL_MS], which [cached] would not hand out anyway: memory short ([MemoryTrim]). */
     fun forgetExpired(now: Long = nowMs()) {
-        cache.entries.removeIf { now - it.value.first >= TTL_MS }
+        // Not removeIf: that is the JVM's, and this file is compiled for iOS too.
+        for ((chatId, entry) in cache.entries.toList()) {
+            if (now - entry.first >= TTL_MS) cache.remove(chatId, entry)
+        }
     }
 
     /**

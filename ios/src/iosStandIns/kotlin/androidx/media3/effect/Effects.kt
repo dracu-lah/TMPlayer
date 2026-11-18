@@ -32,6 +32,17 @@ abstract class BaseGlShaderProgram(
     override fun release() = Unit
 }
 
+/** Media3's turn of the picture, which the engine draws on iOS: only the angle is kept. */
+class ScaleAndRotateTransformation private constructor(val rotationDegrees: Float) : Effect {
+    class Builder {
+        private var degrees = 0f
+
+        fun setRotationDegrees(rotationDegrees: Float): Builder = apply { degrees = rotationDegrees }
+
+        fun build(): ScaleAndRotateTransformation = ScaleAndRotateTransformation(degrees)
+    }
+}
+
 /** Media3's shape for the frames: a size and how the picture fits it. */
 class Presentation private constructor(val width: Int, val height: Int, val aspectRatio: Float, val layout: Int) : Effect {
     companion object {
