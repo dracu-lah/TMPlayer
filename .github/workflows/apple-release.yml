@@ -94,15 +94,22 @@ jobs:
             fi
             dry=true
           fi
+          # A test version, apple-v1.28.6-beta.2, is the same app as the release 1.28.6 (same bundle id),
+          # built as version 1.28.6 with the build number 0.2: below the release's build 1, so the
+          # release installs over it as an update, and above an earlier test version's 0.1. It is a
+          # GitHub pre-release with the IPA for Sideloadly, LiveContainer or any signer, and never
+          # touches the AltStore source (docs/IOS.md, "Test versions").
+          beta=""
           if [ "$IS_TAG" = true ]; then
             tag="$GITHUB_REF_NAME"
             spec="${tag#apple-v}"
-            if [ "$spec" = "$tag" ] || ! [[ "$spec" =~ ^([0-9]+\.[0-9]+(\.[0-9]+)?)(-([1-9][0-9]*))?$ ]]; then
-              echo "::error::The tag must be apple-v<major>.<minor>[.<patch>][-<build>], not $tag"
+            if [ "$spec" = "$tag" ] || ! [[ "$spec" =~ ^([0-9]+\.[0-9]+(\.[0-9]+)?)(-beta\.([1-9][0-9]*)|-([1-9][0-9]*))?$ ]]; then
+              echo "::error::The tag must be apple-v<major>.<minor>[.<patch>][-<build>] or apple-v<major>.<minor>[.<patch>]-beta.<n>, not $tag"
               exit 1
             fi
             version="${BASH_REMATCH[1]}"
-            build="${BASH_REMATCH[4]:-1}"
+            beta="${BASH_REMATCH[4]}"
+            build="${BASH_REMATCH[5]:-1}"
           else
             if [ "$dry" != true ]; then
               echo "::error::A release runs from an apple-v tag (see docs/IOS.md, Releasing); from a branch, only a dry run"
@@ -110,6 +117,12 @@ jobs:
             fi
             version="$INPUT_VERSION"
             build="$INPUT_BUILD"
+            # A dry run of a test version: the input version is 1.28.6-beta.2.
+            if [[ "$version" =~ ^([0-9]+\.[0-9]+(\.[0-9]+)?)-beta\.([1-9][0-9]*)$ ]]; then
+              version="${BASH_REMATCH[1]}"
+              beta="${BASH_REMATCH[3]}"
+              build=1
+            fi
             if [ -z "$version" ]; then
               version=$(sed -n 's/^    MARKETING_VERSION: "\(.*\)"$/\1/p' iosApp/project.yml)
             fi
@@ -121,10 +134,23 @@ jobs:
               exit 1
             fi
             tag="apple-v$version"
-            if [ "$build" != 1 ]; then tag="$tag-$build"; fi
+            if [ -n "$beta" ]; then tag="$tag-beta.$beta"; elif [ "$build" != 1 ]; then tag="$tag-$build"; fi
           fi
-          name="$version"
-          if [ "$build" != 1 ]; then name="$version-$build"; fi
+          # The notes are the CHANGELOG section "## 1.28.6-beta.2" for a test version.
+          if [ -n "$beta" ]; then
+            build="0.$beta"
+            name="$version-beta.$beta"
+            title="$version beta $beta"
+            notes_version="$name"
+            notes_build=1
+          else
+            name="$version"
+            if [ "$build" != 1 ]; then name="$version-$build"; fi
+            title="$version"
+            if [ "$build" != 1 ]; then title="$version (build $build)"; fi
+            notes_version="$version"
+            notes_build="$build"
+          fi
           label="$name"
           if [ -n "$INPUT_MIN_IOS" ]; then label="$name-min-ios-$INPUT_MIN_IOS"; fi
           {
@@ -136,7 +162,10 @@ jobs:
             echo "LABEL=$label"
             echo "IPA=TMPlayer-ios-$name.ipa"
             echo "DSYMS=TMPlayer-ios-$name-dSYMs.zip"
-            if [ "$build" = 1 ]; then echo "TITLE=$version"; else echo "TITLE=$version (build $build)"; fi
+            echo "TITLE=$title"
+            echo "BETA=$beta"
+            echo "NOTES_VERSION=$notes_version"
+            echo "NOTES_BUILD=$notes_build"
           } >> "$GITHUB_ENV"
           if [ "$dry" = true ]; then
             echo "::notice::Dry run of $tag${INPUT_MIN_IOS:+ with iOS $INPUT_MIN_IOS as the minimum}: the IPA is uploaded as an artifact, nothing is released"
@@ -144,7 +173,7 @@ jobs:
 
       - name: Notes from iosApp/CHANGELOG.md
         run: |
-          if ! python3 -I iosApp/release/altstore_source.py notes --version "$VERSION" --build "$BUILD" > "$RUNNER_TEMP/notes.md"; then
+          if ! python3 -I iosApp/release/altstore_source.py notes --version "$NOTES_VERSION" --build "$NOTES_BUILD" > "$RUNNER_TEMP/notes.md"; then
             # A real release stops here, so the notes are written first; a dry run goes on.
             if [ "$DRY_RUN" != true ]; then exit 1; fi
             echo "::warning::iosApp/CHANGELOG.md has no notes for $TITLE yet (a release would stop)"
@@ -204,6 +233,9 @@ jobs:
           rm -f local.properties
 
       - name: What the IPA says
+        # A test version never enters the source, so there is no entry to make (build-ipa.sh has
+        # already checked that the app says its version and build).
+        if: env.BETA == ''
         run: |
           # The source's entry for this IPA, made on a copy: the minimum iOS and the permissions
           # come from the IPA itself. A dry run checks the whole path to the source without changing it.
@@ -243,8 +275,14 @@ jobs:
             echo
             echo "### Install"
             echo
-            echo "- **AltStore or SideStore:** add the source \`$source_url\` (on the iPhone, opening \`altstore://source?url=$source_url\` or \`sidestore://source?url=$source_url\` adds it), then install TMPlayer. Updates come from there."
-            echo "- **Sideloadly, LiveContainer or any other signer:** download \`$IPA\` below and install it as it describes. No automatic updates."
+            if [ -n "$BETA" ]; then
+              echo "> **Test version.** For people trying TMPlayer before the release. It is the same app as the release (same bundle id), so it installs over it and the release $VERSION later installs over this. AltStore and SideStore do not offer it: install the IPA yourself."
+              echo
+              echo "- **Sideloadly, LiveContainer or any other signer:** download \`$IPA\` below and install it as it describes. No automatic updates: a new test version is a new download."
+            else
+              echo "- **AltStore or SideStore:** add the source \`$source_url\` (on the iPhone, opening \`altstore://source?url=$source_url\` or \`sidestore://source?url=$source_url\` adds it), then install TMPlayer. Updates come from there."
+              echo "- **Sideloadly, LiveContainer or any other signer:** download \`$IPA\` below and install it as it describes. No automatic updates."
+            fi
             echo "- Check the file first: its SHA-256 is below and in \`SHA256SUMS.txt\`."
             echo
             echo '```'
@@ -259,12 +297,15 @@ jobs:
           else
             # --latest=false: GitHub's "Latest" stays the Android, TV and desktop release (v*), whose
             # links (releases/latest/download/...) must never point at an iOS release.
+            # A test version is a pre-release, so it is never offered as a release anywhere.
             gh release create "$TAG" "$IPA" "$DSYMS" SHA256SUMS.txt --verify-tag --latest=false \
+              ${BETA:+--prerelease} \
               --title "TMPlayer for iPhone and iPad $TITLE" --notes-file "$RUNNER_TEMP/release.md"
           fi
 
       - name: AltStore source
-        if: env.DRY_RUN != 'true'
+        # Not for a test version: the source lists releases only, so no one is offered a test build.
+        if: env.DRY_RUN != 'true' && env.BETA == ''
         env:
           BRANCH: ${{ github.event.repository.default_branch }}
           DEVELOPER: ${{ vars.APPLE_DEVELOPER_NAME || 'TMPlayer' }}

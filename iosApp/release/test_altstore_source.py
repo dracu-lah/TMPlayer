@@ -12,6 +12,7 @@ import plistlib
 import re
 import shutil
 import struct
+import subprocess
 import tempfile
 import unittest
 import zipfile
@@ -231,7 +232,8 @@ class NotesTest(unittest.TestCase):
         self.changelog = os.path.join(self.folder, "CHANGELOG.md")
         with open(self.changelog, "w", encoding="utf-8") as file:
             file.write("# Changes\n\n<!--\n## 9.9.9\n- not this\n-->\n\n## 1.1.0 (2026-12-02)\n\n- Two.\n- Three.\n\n"
-                       "## 1.0.0 build 2 (2026-12-01)\n\n- Fix.\n\n## 1.0.0\n\n- One.\n\n## 1.0.0.5\n\n- Not one.\n")
+                       "## 1.0.0 build 2 (2026-12-01)\n\n- Fix.\n\n## 1.0.0-beta.2\n\n- Test two.\n\n"
+                       "## 1.0.0-beta.1\n\n- Test one.\n\n## 1.0.0\n\n- One.\n\n## 1.0.0.5\n\n- Not one.\n")
 
     def notes(self, version, build="1"):
         return run("notes", "--changelog", self.changelog, "--version", version, "--build", build).strip()
@@ -245,6 +247,13 @@ class NotesTest(unittest.TestCase):
         for build in ("3", "0", "two"):
             with self.assertRaises(SystemExit):
                 self.notes("1.0.0", build)
+
+    def test_a_test_version_has_its_own_section_and_the_release_never_takes_it(self):
+        self.assertEqual("- Test two.", self.notes("1.0.0-beta.2"))
+        self.assertEqual("- Test one.", self.notes("1.0.0-beta.1"))
+        self.assertEqual("- One.", self.notes("1.0.0"))
+        with self.assertRaises(SystemExit):
+            self.notes("1.0.0-beta.3")
 
     def test_a_missing_or_commented_section_stops_the_release(self):
         for version in ("2.0.0", "9.9.9"):
@@ -514,6 +523,55 @@ class RepositoryTest(unittest.TestCase):
         self.assertIn("APPLE_SOURCE_PUSH", release)
         self.assertIn("gh pr create", release)
         self.assertIn("vars.APPLE_MAC_CI == 'true'", read(".github", "workflows", "apple-ci.yml"))
+
+    def test_a_test_version_is_a_pre_release_that_never_reaches_the_source(self):
+        workflow = read(".github", "workflows", "apple-release.yml")
+        self.assertIn("${BETA:+--prerelease}", workflow)
+        self.assertIn("if: env.DRY_RUN != 'true' && env.BETA == ''", workflow)  # the AltStore source step
+        self.assertIn("if: env.BETA == ''", workflow)  # the source entry made for the IPA
+        self.assertIn('notes --version "$NOTES_VERSION" --build "$NOTES_BUILD"', workflow)
+        # A beta's build is 0.<n>, below the release's build 1, and the script names the file from it.
+        script = read("iosApp", "release", "build-ipa.sh")
+        self.assertIn("^0\\.([1-9][0-9]*)$", script)
+        self.assertIn('name="$name-beta.${BASH_REMATCH[1]}"', script)
+
+    def test_the_tags_are_read_as_the_docs_say(self):
+        bash = shutil.which("bash")
+        if not bash:
+            self.skipTest("no bash")
+        workflow = read(".github", "workflows", "apple-release.yml")
+        step = re.search(r"- name: Mode, version and build\n.*?run: \|\n(.*?)\n\n      - name: Notes", workflow, re.S)
+        script = "\n".join(line[10:] for line in step.group(1).split("\n"))
+
+        def mode(**env):
+            folder = tempfile.mkdtemp()
+            self.addCleanup(shutil.rmtree, folder)
+            out = os.path.join(folder, "env")
+            open(out, "w").close()
+            base = {"PATH": os.environ["PATH"], "GITHUB_ENV": out, "IS_TAG": "true", "EVENT": "push"}
+            done = subprocess.run([bash, "-c", script], cwd=ROOT, env={**base, **env},
+                                  capture_output=True, text=True)
+            with open(out, encoding="utf-8") as file:
+                values = dict(line.rstrip("\n").split("=", 1) for line in file if "=" in line)
+            return done.returncode, values
+
+        code, got = mode(GITHUB_REF_NAME="apple-v1.28.6-beta.4")
+        self.assertEqual(0, code)
+        self.assertEqual(("1.28.6", "0.4", "4", "apple-v1.28.6-beta.4", "TMPlayer-ios-1.28.6-beta.4.ipa",
+                          "1.28.6-beta.4", "1"),
+                         tuple(got[k] for k in ("VERSION", "BUILD", "BETA", "TAG", "IPA", "NOTES_VERSION", "NOTES_BUILD")))
+        code, got = mode(GITHUB_REF_NAME="apple-v1.28.6")
+        self.assertEqual((0, "1", "", "1.28.6"), (code, got["BUILD"], got["BETA"], got["NOTES_VERSION"]))
+        code, got = mode(GITHUB_REF_NAME="apple-v1.28.5-2")
+        self.assertEqual((0, "2", "", "1.28.5", "2"),
+                         (code, got["BUILD"], got["BETA"], got["NOTES_VERSION"], got["NOTES_BUILD"]))
+        for bad in ("apple-v1.28.6-beta.0", "apple-v1.28.6-beta", "apple-v1.28.6-rc.1", "apple-v1.28.6-beta.1-2", "v1.28.6"):
+            self.assertNotEqual(0, mode(GITHUB_REF_NAME=bad)[0], bad)
+        code, got = mode(IS_TAG="false", EVENT="workflow_dispatch", INPUT_DRY_RUN="true", INPUT_VERSION="1.28.6-beta.2")
+        self.assertEqual((0, "true", "0.2", "apple-v1.28.6-beta.2"), (code, got["DRY_RUN"], got["BUILD"], got["TAG"]))
+        # A release never starts from a branch, a test version included.
+        code, _ = mode(IS_TAG="false", EVENT="workflow_dispatch", INPUT_DRY_RUN="false", INPUT_VERSION="1.28.6-beta.2")
+        self.assertNotEqual(0, code)
 
 
 if __name__ == "__main__":

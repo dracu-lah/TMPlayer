@@ -36,7 +36,12 @@ out=$(cd "$out" && pwd)
 cd "$root"
 
 name="TMPlayer-ios-$version"
-if [ "$build" != 1 ]; then name="$name-$build"; fi
+# A test version's build is 0.<n> (below the release's build 1): its file is 1.28.6-beta.<n>.
+if [[ "$build" =~ ^0\.([1-9][0-9]*)$ ]]; then
+  name="$name-beta.${BASH_REMATCH[1]}"
+elif [ "$build" != 1 ]; then
+  name="$name-$build"
+fi
 
 stop_daemons() {
   ./gradlew --stop > /dev/null 2>&1 || true

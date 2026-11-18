@@ -317,7 +317,7 @@ The user tags and approves; nothing here is done by an agent (AGENTS.md, publish
    `APPLE_SOURCE_PUSH` (see step 5), `APPLE_RELEASE_REPO` (the `owner/name` the workflow runs in,
    `dracu-lah/TMPlayer` when unset).
 4. Tag `apple-v<version>` or `apple-v<version>-<build>` and push the tag. The version is x.y or
-   x.y.z: a beta (`1.28.6-beta.1`) has no iOS release.
+   x.y.z. A test version is `apple-v<version>-beta.<n>` (see "Test versions" below).
 5. `.github/workflows/apple-release.yml` (only in `dracu-lah/TMPlayer`, a fork skips it), one at a time
    (`concurrency`), runs the release scripts' tests and `check`, builds the unsigned IPA and dSYMs with
    `build-ipa.sh`, writes `SHA256SUMS.txt` for both and verifies it, creates the GitHub release with the
@@ -335,6 +335,27 @@ The user tags and approves; nothing here is done by an agent (AGENTS.md, publish
 
 A run started again for the same tag replaces the release's files and keeps its text; the source
 entry for the same version and build is replaced, and keeps its date when the IPA is the same.
+
+### Test versions
+
+Decision (user, 2026-11-18): `apple-v1.28.6-beta.2` builds a test version of the iPhone and iPad app,
+as the Android, TV and desktop `v1.28.6-beta.2` does. Same app (bundle id `org.tmplayer.ios`), so it
+installs over the release and the release installs over it. Testers get it from the release page
+only: no source, so AltStore and SideStore never offer it.
+
+| | `apple-v1.28.6` | `apple-v1.28.6-beta.2` |
+| --- | --- | --- |
+| Version, build in the IPA | 1.28.6, build 1 | 1.28.6, build `0.2` (below the release's 1, above `0.1`) |
+| Files | `TMPlayer-ios-1.28.6.ipa` | `TMPlayer-ios-1.28.6-beta.2.ipa`, dSYMs, `SHA256SUMS.txt` |
+| Notes | `## 1.28.6` in `iosApp/CHANGELOG.md` | `## 1.28.6-beta.2` (the release stops if it is missing) |
+| GitHub release | a release, never "Latest" | a pre-release, never "Latest" |
+| `altstore/source.json`, news post, pull request | yes | none |
+
+- A dry run of one: Run workflow with `dry_run` on and `version` = `1.28.6-beta.2`.
+- Not checked: that an installer accepts a build number that starts with 0 over an installed
+  release. The first test version is the check; if one refuses, decide the numbering again then.
+- Like Android's, a test version is no release: it neither counts for nor waits on the release
+  cadence guard.
 
 ### Dry run, and a lower-iOS trial
 
