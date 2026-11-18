@@ -97,6 +97,9 @@ internal object SeriesGuideRows {
     fun shownNumber(wanted: Int, series: Series, stops: List<EpisodeGuide.Season>): Int =
         if (stops.any { it.number == wanted }) wanted else series.seasons.firstOrNull()?.number ?: stops.first().number
 
+    /** The episode numbers [season] holds, for placing them in the provider's seasons ([com.tmplayer.online.EpisodeNumbering]). */
+    fun numbers(season: SeriesSeason): Set<Int> = season.episodes.mapTo(HashSet()) { it.episode }
+
     /** [number] of [series] as its own season, empty for one only the metadata knows. */
     fun seasonOf(series: Series, number: Int): SeriesSeason =
         series.seasons.firstOrNull { it.number == number } ?: SeriesSeason(number, emptyList())

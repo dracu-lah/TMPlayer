@@ -124,13 +124,21 @@ object WebVtt {
     private fun asciiLong(text: String): Long? =
         if (text.isEmpty() || text.any { it !in '0'..'9' }) null else text.toLongOrNull()
 
+    private val SRT_BRACE_TAG = Regex("""\{\\[^}]*\}""")
+    private val FONT_TAG = Regex("""</?font[^>]*>""", RegexOption.IGNORE_CASE)
+    private val BIU_TAG = Regex("""<(/?)([biu])>""", RegexOption.IGNORE_CASE)
+    private val OTHER_TAG = Regex("""<(?!/?[biu]>)[^>]*>""")
+    private val BARE_AMPERSAND = Regex("""&(?![A-Za-z]+;|#[0-9]+;)""")
+    private val ASS_DRAWING = Regex("""\\p[1-9]""")
+    private val ASS_OVERRIDE = Regex("""\{[^}]*\}""")
+
     /** SubRip's tags WebVTT also has stay; font colours and the ASS-style braces in some files go. */
     private fun cleanSrt(text: String): String =
-        text.replace(Regex("""\{\\[^}]*\}"""), "")
-            .replace(Regex("""</?font[^>]*>""", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("""<(/?)([biu])>""", RegexOption.IGNORE_CASE)) { "<${it.groupValues[1]}${it.groupValues[2].lowercase()}>" }
-            .replace(Regex("""<(?!/?[biu]>)[^>]*>"""), "")
-            .replace(Regex("""&(?![A-Za-z]+;|#[0-9]+;)"""), "&amp;")
+        text.replace(SRT_BRACE_TAG, "")
+            .replace(FONT_TAG, "")
+            .replace(BIU_TAG) { "<${it.groupValues[1]}${it.groupValues[2].lowercase()}>" }
+            .replace(OTHER_TAG, "")
+            .replace(BARE_AMPERSAND, "&amp;")
 
     fun parseAss(text: String): List<Cue> {
         val lines = text.replace("\r\n", "\n").replace('\r', '\n').split('\n')
@@ -155,9 +163,9 @@ object WebVtt {
                     val textAt = format.indexOf("text").takeIf { it >= 0 } ?: (format.size - 1)
                     val body = fields[textAt]
                     // A drawing (\p1 and on) is a shape, not words.
-                    if (Regex("""\\p[1-9]""").containsMatchIn(body)) continue
+                    if (ASS_DRAWING.containsMatchIn(body)) continue
                     val plain = body
-                        .replace(Regex("""\{[^}]*\}"""), "")
+                        .replace(ASS_OVERRIDE, "")
                         .replace("\\N", "\n").replace("\\n", "\n").replace("\\h", " ")
                         .replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
                         .trim()
@@ -221,8 +229,8 @@ object WebVtt {
             Codecs.ASS, Codecs.SSA -> {
                 // ReadOrder, Layer, Style, Name, MarginL, MarginR, MarginV, Effect, Text.
                 val body = raw.split(',', limit = 9).let { if (it.size == 9) it[8] else raw }
-                if (Regex("""\\p[1-9]""").containsMatchIn(body)) return null
-                body.replace(Regex("""\{[^}]*\}"""), "")
+                if (ASS_DRAWING.containsMatchIn(body)) return null
+                body.replace(ASS_OVERRIDE, "")
                     .replace("\\N", "\n").replace("\\n", "\n").replace("\\h", " ")
                     .replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
                     .trim()

@@ -917,7 +917,8 @@ fun SeriesPanel(
     val buttons = rememberSeasonButtons(downloads, watch, series, shown, downloadedIds)
     val bothDownloads = downloads && SeasonDownload.unwatchedDiffers(shown, watch.finished)
 
-    val names = rememberSeasonEpisodes(meta, shown.number)
+    // The provider's names under the chat's numbers, where the chat counts straight through (issue 31).
+    val names = rememberSeasonEpisodes(meta, shown.number, remember(shown) { SeriesGuideRows.numbers(shown) }, extras?.seasonList.orEmpty())
     val rows = remember(series, shown, guide, names, extras, today) { SeriesGuideRows.rows(series, shown, guide, names, extras, today) }
     val gapPrompt = remember(series.key) { GapPrompt() }
     // The first frame waits a moment for what the caches hold, so a show seen before is drawn

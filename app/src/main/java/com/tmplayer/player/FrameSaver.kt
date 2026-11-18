@@ -85,11 +85,14 @@ object FrameSaver {
         uri
     }
 
+    private val VIDEO_EXTENSION = Regex("(?i)\\.(mkv|mp4|m4v|mov|webm|avi|ts|wmv|flv)$")
+    private val WHITESPACE = Regex("\\s+")
+
     /** "Night Train 01-02-03.png": the video's name without its extension, and the moment. */
     fun fileName(title: String, positionMs: Long): String {
-        val name = title.replace(Regex("(?i)\\.(mkv|mp4|m4v|mov|webm|avi|ts|wmv|flv)$"), "")
+        val name = title.replace(VIDEO_EXTENSION, "")
             .map { c -> if (c < ' ' || c in "\\/:*?\"<>|") ' ' else c }.joinToString("")
-            .replace(Regex("\\s+"), " ").take(80).trim().trimEnd('.', ' ')
+            .replace(WHITESPACE, " ").take(80).trim().trimEnd('.', ' ')
             .ifBlank { "TMPlayer" }
         val total = (positionMs / 1000).coerceAtLeast(0)
         val h = total / 3600

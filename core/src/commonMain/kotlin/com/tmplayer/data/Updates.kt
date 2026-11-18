@@ -252,6 +252,9 @@ object Updates {
                         target.outputStream().use { output ->
                             val buffer = ByteArray(64 * 1024)
                             var done = 0L
+                            // The state is drawn by the shell, so it moves a whole percent at a time: a 64 KB chunk
+                            // is a thousand changes to one APK, each a new value for every screen showing it.
+                            var shownPercent = -1
                             while (true) {
                                 val read = input.read(buffer)
                                 if (read < 0) break
@@ -259,7 +262,11 @@ object Updates {
                                 digest.update(buffer, 0, read)
                                 done += read
                                 if (total > 0) {
-                                    _state.value = UpdateState.Downloading(release, done.toFloat() / total)
+                                    val percent = (done * 100 / total).toInt()
+                                    if (percent != shownPercent) {
+                                        shownPercent = percent
+                                        _state.value = UpdateState.Downloading(release, done.toFloat() / total)
+                                    }
                                 }
                             }
                         }

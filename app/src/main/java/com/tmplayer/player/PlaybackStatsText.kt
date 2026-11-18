@@ -45,10 +45,12 @@ object PlaybackStatsText {
         return if (s < 100) String.format(Locale.ROOT, "%.1f", s) else s.toInt().toString()
     }
 
+    private val SPEED_TRAILING_ZERO = Regex("(\\.\\d)0x$")
+
     /** `1.0x`; a speed that is not a number or not above zero reads as 1.0x. */
     fun speed(value: Float): String {
         val v = if (value.isNaN() || value.isInfinite() || value <= 0f) 1f else value.coerceAtMost(MAX_SPEED)
-        return String.format(Locale.ROOT, "%.2fx", v).replace(Regex("(\\.\\d)0x$"), "$1x")
+        return String.format(Locale.ROOT, "%.2fx", v).replace(SPEED_TRAILING_ZERO, "$1x")
     }
 
     /**

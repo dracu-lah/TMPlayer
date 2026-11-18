@@ -8,6 +8,8 @@ package com.tmplayer.data
  */
 object CodeInput {
 
+    private val DIGIT_RUN = Regex("""\d+""")
+
     /**
      * The code in [raw]. For a code of digits a paste is often the whole message ("Telegram code
      * 12345. Do not give this code to anyone"), so a run of exactly [length] digits is taken when
@@ -17,7 +19,8 @@ object CodeInput {
     fun clean(raw: String, digits: Boolean, length: Int): String {
         if (!digits) return raw
         if (length > 0) {
-            Regex("""(?<!\d)\d{$length}(?!\d)""").find(raw)?.let { return it.value }
+            // A run of exactly [length] digits: the same as (?<!\d)\d{n}(?!\d), without building a pattern per call.
+            DIGIT_RUN.findAll(raw).firstOrNull { it.value.length == length }?.let { return it.value }
         }
         val kept = raw.filter(Char::isDigit)
         return if (length > 0) kept.take(length) else kept

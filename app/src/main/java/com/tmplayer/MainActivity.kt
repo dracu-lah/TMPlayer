@@ -739,7 +739,7 @@ private fun Root() {
     // The update check, on every launch and before sign in too: ten seconds after the first
     // frame, then every six hours (see UpdateScheduler). Nothing is said unless there is genuinely
     // a newer release; the drawer and the rail are where it turns up.
-    val updateState by Updates.state.collectAsStateWithLifecycle()
+    val updateState = Updates.state.collectAsStateWithLifecycle()
     var showUpdate by remember { mutableStateOf(false) }
     val updates = remember { updateScheduler(context) }
     LaunchedEffect(Unit) {
@@ -750,8 +750,15 @@ private fun Root() {
     }
     // Whatever stage the update is at, the item stays and reopens the popup. A skipped version
     // that Settings re-offered stays out of the drawer and the rail.
-    val offeredUpdate = updateState.release?.version
-        ?.takeUnless { (updateState as? UpdateState.Available)?.skipped == true }
+    // Read through a derived value: the download's progress moves this state a whole percent at a
+    // time, and read here in the body it recomposed the whole shell on every step (an ANR in
+    // Root on a TV box during an update). The version only changes when the offer does.
+    val offeredUpdate by remember {
+        derivedStateOf {
+            val now = updateState.value
+            now.release?.version?.takeUnless { (now as? UpdateState.Available)?.skipped == true }
+        }
+    }
     // Given the settings store so the chat list can paint from the last sync's snapshot before
     // TDLib has finished opening its database. Held by the process rather than the activity, as is
     // Home below: the system destroys this activity behind the player whenever it is short of
