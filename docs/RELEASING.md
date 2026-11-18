@@ -229,6 +229,53 @@ site, Markdown, the store listing text or the PKGBUILD. Tagging code CI has not 
 it just runs the tests itself, which adds about 20 minutes. The desktop jobs always run their
 own tests, because they also check the installers.
 
+## Building the release on your machine
+
+The Android APK, its R8 mapping and the Linux packages can be built and signed here instead of on
+GitHub, which saves the release run most of its time; the MSI, the DMG and the TV packages still
+build on GitHub. Nothing about the publish job changes.
+
+```sh
+scripts/release-local.sh --dry-run --linux v1.28.7   # the plan and every check, builds nothing
+SKIP_TESTS=1 scripts/release-local.sh --linux v1.28.7
+```
+
+- **What it builds.** HEAD, which must be clean and is the commit you then tag, with the release
+  job's steps: unit tests (`SKIP_TESTS=1` skips them, as the job does when CI passed), the FFmpeg
+  extension (`JOBS`), `:app:assembleRelease` with the same `-P` flags, `check-16kb.sh` and
+  `verify-apk-signer.sh`. `--linux` adds the `desktop-linux` action's steps: desktop tests, the app
+  image, the glibc floor, `package.sh`, every self-test and the plain Ubuntu 22.04 check in podman.
+  Leave `--linux` out to have GitHub build the Linux packages as before.
+- **What it reads.** `keystore.properties` and `local.properties` in the checkout, through Gradle as
+  any local build does; the script only checks their entries are set and never prints them.
+  `SENTRY_AUTH_TOKEN` (environment, else `local.properties`) uploads the mapping to Sentry. JDK 21
+  from `JAVA_HOME` or `~/.jdks`. `--linux` needs the pinned natives in `~/.cache/tmplayer-natives`
+  (`TMPLAYER_LINUX_NATIVES`), `zsyncmake` (Fedora: `zsync`), podman and about 8 GB of disk.
+- **What it writes.** `dist/local-release/<tag>/`: the APK, `mapping-<v>.txt`, with `--linux` the
+  AppImage, its `.zsync` and the tarball, plus `BUILD-INFO.txt` (tag, version, versionCode, commit,
+  whether tests ran) and `SHA256SUMS`. Then it prints the commands, and runs none of them:
+  `gh release create prebuilt-<tag> --draft ...` with the files (`gh release upload --clobber` when
+  the draft exists), then the tag and its push as above.
+- **What the release run does with them.** The `android` and `desktop-linux` jobs look for the
+  draft release `prebuilt-<tag>` (`scripts/release-prebuilt.sh`). With their files in it, they
+  check each against `SHA256SUMS`, check `BUILD-INFO.txt` names this tag, version and the tagged
+  commit, check the APK is signed by the one certificate in `.github/release-signing-cert.sha256`
+  and is `com.tmplayer` at this versionCode, run the 16 KB check, and for Linux the plain Ubuntu
+  22.04 self-test; then they skip their build and hand the files on as `release-android`,
+  `mapping-<v>` and `release-linux`. A draft without a platform's files leaves that platform to
+  build as before; a draft whose files fail a check stops the release. The jobs still wait for the
+  `release` environment's approval.
+- **The draft.** Its tag `prebuilt-<tag>` is never created, because a draft makes no tag, and the
+  publish job makes the release `<tag>` fresh, so the mapping and `SHA256SUMS` never go public.
+  Never publish the draft. It stays as a private copy of the mapping, with no 90 day limit;
+  `gh release delete prebuilt-<tag>` removes it when it is no longer wanted.
+- **Provenance.** A file built here gets no build attestation (the publish job attests only what
+  the run built), so `gh attestation verify` in step 2 below fails for the APK and the Linux
+  packages of such a release. The APK's signature, checked against the pinned certificate, is what
+  vouches for it.
+- **A new signing key** means a new `.github/release-signing-cert.sha256` (`apksigner verify
+  --print-certs` on an APK signed with it), in a commit of its own.
+
 ## After the release job
 
 `<v>` is the new version, `v<v>` its tag. For a test version only steps 1 and 2 apply, and
@@ -240,7 +287,8 @@ of them to see the in-app offer.
    `gh run watch <run-id>` and `gh release view v<v>`: every file is attached and the notes link
    the nextlib and mediamp sources. A warning about a missing source archive means the archive
    still has to be attached (see the source archives above).
-2. **Provenance.** Check that the APK carries the build's attestation:
+2. **Provenance.** Check that the APK carries the build's attestation (not for an APK built on
+   your machine, see above; check the MSI instead):
 
    ```sh
    cd "$(mktemp -d)"
