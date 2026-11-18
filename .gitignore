@@ -10,6 +10,8 @@ local.properties
 *.keystore
 *.jks
 keystore.properties
+# Release files built and signed here (scripts/release-local.sh)
+/dist/local-release/
 
 # IDE
 .idea/
