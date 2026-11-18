@@ -43,12 +43,14 @@ sealed interface Reply<out T> {
 internal object ProviderLog {
     const val TAG = "TMPlayer"
 
+    private val WHITESPACE = Regex("\\s+")
+
     fun failed(provider: String, method: String, url: String, why: String, error: Throwable? = null) {
         Logger.w(TAG, "$provider $method ${where(url)} failed: $why", error)
     }
 
     fun status(provider: String, method: String, url: String, response: HttpResponse) {
-        val said = response.text.take(200).replace(Regex("\\s+"), " ").trim()
+        val said = response.text.take(200).replace(WHITESPACE, " ").trim()
         failed(provider, method, url, "HTTP ${response.code}" + if (said.isEmpty()) "" else ": $said")
     }
 

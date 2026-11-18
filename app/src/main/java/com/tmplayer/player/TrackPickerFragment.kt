@@ -200,13 +200,21 @@ class TrackPickerFragment : Fragment() {
                 val title = if (trackType == C.TRACK_TYPE_AUDIO) L.tracksAudioLanguage else L.tracksSubtitles
                 ChoiceSheet(title = title, onDismiss = ::close, onClose = ::close, closeFocus = closeFocus, ignoreRelease = !touch, fullScreen = true) {
                     @Suppress("UNUSED_EXPRESSION") tick
-                    val lines = trackLines(
-                        onChat = { page = Page.Chat },
-                        onOnline = { page = Page.Online },
-                        onMsone = { page = Page.Msone },
-                        onInPlace = { tick++ },
-                        lookIcon = ImageVector.vectorResource(R.drawable.ic_subtitles),
-                    )
+                    val lookIcon = ImageVector.vectorResource(R.drawable.ic_subtitles)
+                    // Worked out once per change, not on every recomposition: building the lines reads
+                    // every track's format, names and tags it, and a file with fifty subtitle tracks did
+                    // all of that again each time the sheet recomposed (a TV stick's main thread, 1.28.3).
+                    // What it reads that is not state (the player's tracks, the sync figures) only moves
+                    // with [tick], which every in-place line bumps, and the chat's files with [chatHits].
+                    val lines = remember(tick, chatHits) {
+                        trackLines(
+                            onChat = { page = Page.Chat },
+                            onOnline = { page = Page.Online },
+                            onMsone = { page = Page.Msone },
+                            onInPlace = { tick++ },
+                            lookIcon = lookIcon,
+                        )
+                    }
                     Lines(
                         lines,
                         firstFocus,

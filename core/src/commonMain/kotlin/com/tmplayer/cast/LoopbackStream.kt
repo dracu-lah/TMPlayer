@@ -119,6 +119,7 @@ class LoopbackStream private constructor(
 
     companion object {
         private const val TAG = "LoopbackStream"
+        private val UNSAFE_NAME_CHARS = Regex("[^A-Za-z0-9._-]")
         const val SESSION_IDLE_MS = 2L * 60 * 60 * 1000
         const val SWEEP_MS = 5_000L
 
@@ -160,7 +161,7 @@ class LoopbackStream private constructor(
                 },
                 onFailure = config.onFailure,
             )
-            val clean = name.replace(Regex("[^A-Za-z0-9._-]"), "_").ifBlank { "video" }
+            val clean = name.replace(UNSAFE_NAME_CHARS, "_").ifBlank { "video" }
             server.publish(clean, CastResource.Ranged(source, mime))
             val stream = LoopbackStream(server, arbiter, config, clean)
             holder[0] = stream
