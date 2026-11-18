@@ -36,7 +36,8 @@ import java.util.concurrent.atomic.AtomicBoolean
  * [--es chats "Title A,Title B"] [--ez all true] [--ei cap 3000]`, then pull
  * `/sdcard/Android/data/com.tmplayer.test/files/dump/`. See docs/BUILDING.md.
  *
- * Read only: it pages each chat the way the chat screen does ([ChatRepository.mediaPage]) and
+ * The work runs under [NameDumpService], in the foreground, so it is not frozen with the app out
+ * of sight. Read only: it pages each chat the way the chat screen does ([ChatRepository.mediaPage]) and
  * writes files under the app's own external folder, nothing else. Guarded by the DUMP permission
  * in the manifest, which the adb shell holds and no ordinary app does.
  */
@@ -44,35 +45,16 @@ class NameDumpReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != ACTION) return
-        val request = Request(
-            names = intent.getStringExtra("chats")?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.takeIf { it.isNotEmpty() },
-            all = intent.getBooleanExtra("all", false),
-            cap = intent.getIntExtra("cap", DEFAULT_CAP).coerceIn(1, MAX_CAP),
-        )
-        if (!running.compareAndSet(false, true)) {
-            Log.w(TAG, "a dump is already running; ignored")
-            return
-        }
         val app = context.applicationContext
-        // An app-wide job rather than goAsync, whose ten seconds are far short of a big chat; the
-        // wake lock keeps it going with the screen off.
-        Background.scope.launch {
-            val lock = runCatching {
-                (app.getSystemService(Context.POWER_SERVICE) as? PowerManager)
-                    ?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "tmplayer:namedump")
-                    ?.apply { acquire(WAKE_MS) }
-            }.getOrNull()
-            try {
-                Dump(app, request).run()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                JobFailures.handle("NameDump", e)
-                runCatching { outDir(app).let { writeAtomically(File(it, "done"), "failed: ${e.javaClass.simpleName}\n") } }
-            } finally {
-                runCatching { if (lock?.isHeld == true) lock.release() }
-                running.set(false)
-            }
+        // A foreground service keeps the process from being frozen while it reads, screen off or
+        // app out of sight; goAsync's few seconds are far short of a big chat. Where Android
+        // refuses the service, the dump runs in the process anyway and needs the app kept open.
+        val started = runCatching {
+            androidx.core.content.ContextCompat.startForegroundService(app, Intent(app, NameDumpService::class.java).putExtras(intent))
+        }
+        started.exceptionOrNull()?.let { refused ->
+            Log.w(TAG, "foreground service refused (${refused.javaClass.simpleName}); running in the app, keep it open")
+            start(app, intent) {}
         }
     }
 
@@ -203,7 +185,7 @@ class NameDumpReceiver : BroadcastReceiver() {
 
     companion object {
         const val ACTION = "com.tmplayer.DUMP_NAMES"
-        private const val TAG = "TMDump"
+        internal const val TAG = "TMDump"
         private const val DEFAULT_CAP = 3000
         private const val MAX_CAP = 100_000
         private const val MAX_CHATS = 60
@@ -215,6 +197,43 @@ class NameDumpReceiver : BroadcastReceiver() {
         private const val WAKE_MS = 60 * 60 * 1000L
 
         private val running = AtomicBoolean(false)
+
+        /**
+         * Starts a dump of what [intent]'s extras ask for on the app-wide scope, unless one is
+         * running already: then it does nothing and answers false. [finished] is called once it is over.
+         */
+        fun start(app: Context, intent: Intent?, finished: () -> Unit): Boolean {
+            val request = Request(
+                names = intent?.getStringExtra("chats")?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.takeIf { it.isNotEmpty() },
+                all = intent?.getBooleanExtra("all", false) ?: false,
+                cap = (intent?.getIntExtra("cap", DEFAULT_CAP) ?: DEFAULT_CAP).coerceIn(1, MAX_CAP),
+            )
+            if (!running.compareAndSet(false, true)) {
+                Log.w(TAG, "a dump is already running; ignored")
+                return false
+            }
+            Background.scope.launch {
+                // The wake lock keeps the CPU on with the screen off.
+                val lock = runCatching {
+                    (app.getSystemService(Context.POWER_SERVICE) as? PowerManager)
+                        ?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "tmplayer:namedump")
+                        ?.apply { acquire(WAKE_MS) }
+                }.getOrNull()
+                try {
+                    Dump(app, request).run()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    JobFailures.handle("NameDump", e)
+                    runCatching { writeAtomically(File(outDir(app), "done"), "failed: ${e.javaClass.simpleName}\n") }
+                } finally {
+                    runCatching { if (lock?.isHeld == true) lock.release() }
+                    running.set(false)
+                    runCatching { finished() }
+                }
+            }
+            return true
+        }
 
         private fun outDir(context: Context): File =
             File(context.getExternalFilesDir(null) ?: context.filesDir, "dump").apply { mkdirs() }

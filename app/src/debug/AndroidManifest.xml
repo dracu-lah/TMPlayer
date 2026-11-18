@@ -15,5 +15,10 @@
                 <action android:name="com.tmplayer.DUMP_NAMES" />
             </intent-filter>
         </receiver>
+        <!-- Holds the dump in the foreground so the process is not frozen; only the receiver starts it. -->
+        <service
+            android:name="com.tmplayer.dev.NameDumpService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
     </application>
 </manifest>
