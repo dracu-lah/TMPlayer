@@ -65,6 +65,14 @@ interface PlaybackEngine {
      * engine with no picture of its own (a cast) ignores it.
      */
     fun setZoom(zoom: Double, panX: Double, panY: Double) {}
+
+    /**
+     * Rotate picture (#34): the picture turned clockwise by [degrees] (one of
+     * [com.tmplayer.player.PictureRotation.CHOICES]) as mpv draws it, on top of the file's own
+     * rotation, fitted with its shape kept. Back to none for each file opened. An engine with no
+     * picture of its own (a cast) ignores it.
+     */
+    fun setPictureRotation(degrees: Int) {}
     fun setDownmix(stereo: Boolean)
 
     /**
@@ -181,6 +189,8 @@ data class PlaybackStatus(
     val chapters: List<Chapter> = emptyList(),
     /** 3D video as chosen, kept across the files this player opens ([PlaybackEngine.setStereo3d]). */
     val stereo: Stereo3d = Stereo3d.OFF,
+    /** Rotate picture, clockwise degrees ([PlaybackEngine.setPictureRotation]); 0 for each file opened. */
+    val pictureRotation: Int = 0,
 ) {
     val delays: SyncDelays get() = SyncDelays(subtitleDelayMs, audioDelayMs)
 }
