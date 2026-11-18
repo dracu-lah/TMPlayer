@@ -202,8 +202,10 @@ class StutterGateTest {
         underruns: Int = 0,
         symptom: String = "",
         model: String = "AI PONT",
+        fps: Float = 0f,
+        profile: String = "hvc1.1.6.L120.B0",
     ) = StutterReport.Facts(
-        codec = "hevc", profile = "hvc1.1.6.L120.B0", bitDepth = 8, width = 1920, height = 1080, fps = 0f,
+        codec = "hevc", profile = profile, bitDepth = 8, width = 1920, height = 1080, fps = fps,
         bitrateKbps = 0, container = "video/x-matroska", decoder = "OMX.MS.HEVC.Decoder", hardware = true,
         prediction = "HARDWARE", speedPercent = speed, dropped = dropped, frames = frames, underruns = underruns,
         manufacturer = "Changhong", model = model, androidVersion = "11", cores = 4, abi = "armeabi-v7a",
@@ -222,7 +224,7 @@ class StutterGateTest {
         assertFalse(reporter.report(facts(speed = 95, dropped = 3, underruns = 2)))
         assertTrue(sent.isEmpty())
         // The same kind, now with a real symptom, still goes: the false alarms took nothing from the limit.
-        assertTrue(reporter.report(facts(speed = 80, dropped = 50, frames = 295, underruns = 1)))
+        assertTrue(reporter.report(facts(speed = 80, dropped = 50, frames = 295, underruns = 1, fps = 25f)))
         assertEquals(1, sent.size)
         assertEquals("80", sent.single().tags!!["speed_percent"])
     }
@@ -305,5 +307,109 @@ class StutterGateTest {
             assertEquals("0.0", tags["fps"], "fps $fps")
         }
         assertEquals("23.9", StutterReport.tagsOf(facts().copy(fps = 23.976f))["fps"])
+    }
+
+    // ---- why this decoder (Sentry triage, 2026-11-18) -----------------------------------------
+
+    @Test
+    fun `a stutter with no known frame rate or no profile is not sent and does not use up the day`() {
+        val file = Files.createTempDirectory("gate").toFile().resolve("stutter.json")
+        val sent = mutableListOf<SentryEvent>()
+        val reporter = StutterReporter({ true }, StutterLimits(file) { 5L }, sent::add)
+        val real = facts(speed = 60, frames = 300, symptom = PlaybackWatch.SLOW)
+        // The triage's false positives: fps 0.0. Then a profile nobody can group by.
+        for (fps in listOf(0f, Float.NaN, -3f, 1e9f)) assertFalse(reporter.report(real.copy(fps = fps)), "fps $fps")
+        assertFalse(reporter.report(real.copy(fps = 25f, profile = "")))
+        assertFalse(reporter.report(real.copy(fps = 25f, profile = "/// ")), "a profile that cleans to nothing is none")
+        assertTrue(sent.isEmpty())
+        assertTrue(reporter.report(real.copy(fps = 25f)))
+        assertEquals(1, sent.size)
+    }
+
+    @Test
+    fun `the why this decoder tags ride as allowlisted classes`() {
+        val tags = StutterReport.tagsOf(
+            facts(speed = 70, symptom = PlaybackWatch.SLOW).copy(
+                hardware = false,
+                policy = "async_default+pic_hw+snd_hw+tun_auto+out_0",
+                preferSoftware = false,
+                softwareBy = "switch",
+                processBits = 32,
+                hwDecoders = StutterReport.hwDecodersOf(listOf("OMX.MS.HEVC.Decoder" to (2 to 4096))),
+            ),
+        )
+        assertEquals(StutterReport.ALLOWED_TAGS, tags.keys)
+        assertEquals("async_default+pic_hw+snd_hw+tun_auto+out_0", tags["policy"])
+        assertEquals("off", tags["prefer_software"])
+        assertEquals("switch", tags["software_by"])
+        assertEquals("32", tags["process_bits"])
+        assertEquals("OMX.MS.HEVC.Decoder:2.4096", tags["hw_decoders"])
+        // Nothing known: every new tag says so instead of being left out.
+        val none = StutterReport.tagsOf(facts())
+        assertEquals(StutterReport.ALLOWED_TAGS, none.keys)
+        for (key in listOf("policy", "prefer_software", "software_by", "process_bits", "hw_decoders")) {
+            assertEquals("unknown", none[key], key)
+        }
+    }
+
+    @Test
+    fun `a policy, a cause or a bit count outside its words is unknown`() {
+        for (dirty in listOf("Decoder policy: fallback on", "/sdcard/Secret.mkv", "x".repeat(65), "a b", "\u0000", "ASYNC_ON")) {
+            assertEquals("unknown", StutterReport.tagsOf(facts().copy(policy = dirty))["policy"], dirty)
+        }
+        for (dirty in listOf("Secret Show", "", "SWITCH", "ladder")) {
+            assertEquals("unknown", StutterReport.tagsOf(facts().copy(softwareBy = dirty))["software_by"], dirty)
+        }
+        for (bits in listOf(-1, 0, 16, 128, Int.MAX_VALUE)) {
+            assertEquals("unknown", StutterReport.tagsOf(facts().copy(processBits = bits))["process_bits"], "$bits")
+        }
+        assertEquals("on", StutterReport.tagsOf(facts().copy(preferSoftware = true))["prefer_software"])
+    }
+
+    @Test
+    fun `what put the picture in software, latest cause first`() {
+        fun by(software: Boolean = true, switched: Boolean = false, ladder: Boolean = false, plan: Boolean = false, setting: Boolean = false) =
+            StutterReport.softwareByOf(software, switched, ladder, plan, setting)
+        assertEquals("none", by(software = false, switched = true, ladder = true, plan = true, setting = true))
+        assertEquals("switch", by(switched = true, ladder = true, setting = true))
+        assertEquals("ladder_r2", by(ladder = true, plan = true, setting = true))
+        assertEquals("plan_r2", by(plan = true, setting = true))
+        assertEquals("setting", by(setting = true))
+        // HARDWARE predicted, nothing asked for software: the device's decoder did not take it.
+        assertEquals("selector", by())
+        for (value in listOf(by(), by(false), by(switched = true), by(ladder = true), by(plan = true), by(setting = true))) {
+            assertTrue(value in StutterReport.SOFTWARE_BY)
+        }
+    }
+
+    @Test
+    fun `the hardware decoder list keeps whole entries in one tag and nothing but names and numbers`() {
+        assertEquals("none", StutterReport.hwDecodersOf(emptyList()))
+        assertEquals("none", StutterReport.hwDecodersOf(listOf("///" to null)))
+        val two = StutterReport.hwDecodersOf(listOf("OMX.realtek.avc.decoder" to (8 to 2048), "OMX.MTK.VIDEO.DECODER.AVC" to (8 to 8192)))
+        assertEquals("OMX.realtek.avc.decoder:8.2048+OMX.MTK.VIDEO.DECODER.AVC:8.8192", two)
+        assertTrue(two.length <= 64)
+        // A third that does not fit is left out whole, never cut in half.
+        val three = StutterReport.hwDecodersOf(
+            listOf("OMX.realtek.avc.decoder" to (8 to 2048), "OMX.MTK.VIDEO.DECODER.AVC" to (8 to 8192), "c2.mtk.avc.decoder" to (8 to 1)),
+        )
+        assertEquals(two, three)
+        // A name with a path in it, or absurd numbers, cannot carry more than letters and digits.
+        val dirty = StutterReport.hwDecodersOf(listOf("/data/Secret Show+x:y" to (-5 to Int.MAX_VALUE), "y".repeat(500) to null))
+        assertFalse(dirty.contains('/'))
+        assertFalse(dirty.contains(' '))
+        assertTrue(dirty.length <= 64)
+        assertEquals(dirty, StutterReport.tagsOf(facts().copy(hwDecoders = dirty))["hw_decoders"])
+        assertEquals("OMX.MS.HEVC.Decoder", StutterReport.hwDecodersOf(listOf("OMX.MS.HEVC.Decoder" to null)))
+    }
+
+    @Test
+    fun `the new tags survive the gate's scrub`() {
+        val event = StutterReport.build(facts().copy(policy = "async_on+pic_sw+snd_hw+tun_off+out_1", softwareBy = "ladder_r2", processBits = 64))
+        val scrubbed = StutterReport.scrub(event)
+        assertEquals(StutterReport.ALLOWED_TAGS, scrubbed.tags!!.keys)
+        assertEquals("async_on+pic_sw+snd_hw+tun_off+out_1", scrubbed.tags!!["policy"])
+        assertEquals("ladder_r2", scrubbed.tags!!["software_by"])
+        assertEquals("64", scrubbed.tags!!["process_bits"])
     }
 }

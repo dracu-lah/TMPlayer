@@ -66,6 +66,18 @@ data class DecoderPolicy(
         if (excluded.isNotEmpty()) append(", left out ").append(excluded.sorted().joinToString(","))
     }
 
+    /**
+     * [describe] as a short class for the stutter report (`async_default+pic_hw+snd_hw+tun_auto+out_0`):
+     * the same facts in fixed words, the left out decoders as a count only.
+     */
+    fun shortClass(): String = buildString {
+        append("async_").append(async.name.lowercase())
+        append("+pic_").append(if (softwareVideo) "sw" else "hw")
+        append("+snd_").append(if (softwareAudio) "sw" else "hw")
+        append("+tun_").append(if (tunnelingOff) "off" else "auto")
+        append("+out_").append(excluded.size.coerceAtMost(9))
+    }
+
     companion object {
         val Default = DecoderPolicy()
 

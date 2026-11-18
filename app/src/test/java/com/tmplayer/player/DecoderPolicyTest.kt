@@ -103,6 +103,26 @@ class DecoderPolicyTest {
         assertTrue(line, line.contains("fallback on") && line.contains("left out c2.mtk.hevc.decoder") && line.contains("tunneling off"))
     }
 
+    /** The stutter report's "why this decoder" class: fixed words, no decoder name, kept whole by the report's check. */
+    @Test
+    fun theShortClassSaysThePathInFixedWords() {
+        assertEquals("async_default+pic_hw+snd_hw+tun_auto+out_0", DecoderPolicy.Default.shortClass())
+        val changed = DecoderPolicy(
+            excluded = setOf("c2.mtk.hevc.decoder", "OMX.MS.HEVC.Decoder"),
+            async = DecoderPolicy.Async.On,
+            softwareVideo = true,
+            tunnelingOff = true,
+        )
+        assertEquals("async_on+pic_sw+snd_hw+tun_off+out_2", changed.shortClass())
+        assertFalse(changed.shortClass().contains("mtk"))
+        for (async in DecoderPolicy.Async.entries) {
+            for (sw in listOf(true, false)) {
+                val text = DecoderPolicy(async = async, softwareVideo = sw, softwareAudio = !sw, excluded = (1..20).map { "d$it" }.toSet()).shortClass()
+                assertEquals(text, com.tmplayer.data.StutterReport.policyOf(text))
+            }
+        }
+    }
+
     @Test
     fun theFactoryTakesThePolicyAndKeepsFallbackOn() {
         // Every policy builds; the renderers then ask the policy's codec list, not the stock one.

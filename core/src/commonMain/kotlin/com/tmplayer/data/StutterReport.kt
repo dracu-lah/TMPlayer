@@ -84,6 +84,20 @@ object StutterReport {
         val remedies: String = "",
         /** Ladder hops taken in this video so far. */
         val hops: Int = 0,
+        /**
+         * Why this decoder (Sentry triage, 2026-11-18): the decoder path the player was built on,
+         * as `DecoderPolicy.shortClass()` writes it (`async_default+pic_hw+snd_hw+tun_auto+out_0`),
+         * or empty. Only `a` to `z`, digits, `_` and `+` survive ([policyOf]).
+         */
+        val policy: String = "",
+        /** The viewer's "Prefer software video" setting: on, off, or null when not known. */
+        val preferSoftware: Boolean? = null,
+        /** What put the picture in software ([softwareByOf]), one of [SOFTWARE_BY]. */
+        val softwareBy: String = UNKNOWN,
+        /** Whether the app's process runs 32 or 64 bit, 0 when not known: a 64-bit TV can run the app as 32-bit. */
+        val processBits: Int = 0,
+        /** The hardware decoders the device lists for the picture's type, as [hwDecodersOf] writes them, or empty. */
+        val hwDecoders: String = "",
     ) {
         /** What the daily limit counts: codec, bit depth and size bucket. */
         val kind: String get() = "${clean(codec)}:${if (bitDepth > 8) 10 else 8}:$sizeBucket"
@@ -95,7 +109,60 @@ object StutterReport {
         "decoder", "decoder_type", "prediction", "speed_percent", "dropped_frames", "frames", "underruns",
         "manufacturer", "model", "android", "cores", "abi", "app_version", "symptom", "fps_source",
         "source", "buffered_ahead_ms", "verdict", "remedies", "hops",
+        "policy", "prefer_software", "software_by", "process_bits", "hw_decoders",
     )
+
+    const val UNKNOWN = "unknown"
+
+    /**
+     * The words "what put the picture in software" may be: `none` (the device's decoder plays
+     * it), `setting` (Prefer software video), `ladder_r2` (a remedy ladder hop, rung R2),
+     * `plan_r2` (the class's start plan: what worked before, or the known device list), `switch`
+     * (the player's own "try the other decoder" after the device's decoder failed, or the
+     * viewer's press of it), `selector` (the device's decoder did not take the format, or the
+     * one that would was left out, so Media3 gave it to FFmpeg) and `unknown`.
+     */
+    val SOFTWARE_BY = setOf("none", "setting", "ladder_r2", "plan_r2", "switch", "selector", UNKNOWN)
+
+    /**
+     * What put the picture in software, the latest cause first: a decoder switch after a
+     * failure, a ladder hop, the start plan, the setting, else the track selector. A picture the
+     * device's decoder plays is `none`. The prediction ([Facts.prediction]) is the device's
+     * verdict alone and says HARDWARE through all of these, which is why they are told apart here.
+     */
+    fun softwareByOf(software: Boolean, switched: Boolean, ladderHop: Boolean, plan: Boolean, setting: Boolean): String = when {
+        !software -> "none"
+        switched -> "switch"
+        ladderHop -> "ladder_r2"
+        plan -> "plan_r2"
+        setting -> "setting"
+        else -> "selector"
+    }
+
+    private val POLICY = Regex("[a-z0-9_+]{1,64}")
+
+    /** [text] when it is a policy class as `DecoderPolicy.shortClass()` writes it, else `unknown`. */
+    fun policyOf(text: String): String = text.takeIf { POLICY.matches(it) } ?: UNKNOWN
+
+    /**
+     * The hardware decoders listed for a type, each `name:profile.level` with its highest
+     * profile and that profile's highest level as the system numbers them (for HEVC, profile 2 is
+     * Main 10), joined by `+`, as many whole entries as fit in one tag; `none` when there is none.
+     * A decoder name is the chip's, the same on every device of the model, never the viewer's.
+     */
+    fun hwDecodersOf(decoders: List<Pair<String, Pair<Int, Int>?>>): String {
+        val entries = decoders.mapNotNull { (name, top) ->
+            val n = clean(name).filter { it != '+' && it != ' ' && it != ':' }.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+            if (top == null) n else "$n:${top.first.coerceIn(0, MAX_CODE)}.${top.second.coerceIn(0, MAX_CODE)}"
+        }
+        if (entries.isEmpty()) return "none"
+        var out = entries.first().take(MAX_TEXT)
+        for (entry in entries.drop(1)) {
+            if (out.length + 1 + entry.length > MAX_TEXT) break
+            out += "+$entry"
+        }
+        return out
+    }
 
     /** The words a verdict may be reported as: the causes of [StutterCause], lower case. */
     val VERDICTS: Set<String> = StutterCause.entries.map { verdictName(it) }.toSet()
@@ -146,6 +213,11 @@ object StutterReport {
         "verdict" to verdictOf(facts.verdict),
         "remedies" to clean(facts.remedies),
         "hops" to facts.hops.coerceIn(0, 10).toString(),
+        "policy" to policyOf(facts.policy),
+        "prefer_software" to when (facts.preferSoftware) { true -> "on"; false -> "off"; null -> UNKNOWN },
+        "software_by" to (facts.softwareBy.takeIf { it in SOFTWARE_BY } ?: UNKNOWN),
+        "process_bits" to (facts.processBits.takeIf { it == 32 || it == 64 }?.toString() ?: UNKNOWN),
+        "hw_decoders" to clean(facts.hwDecoders).ifEmpty { UNKNOWN },
     )
 
     /**
@@ -160,6 +232,15 @@ object StutterReport {
         underruns = facts.underruns,
         late = facts.symptom == PlaybackWatch.LATE,
     ) != null
+
+    /**
+     * Whether the report is worth sending (Sentry triage, 2026-11-18): a real stutter ([isReal])
+     * of a picture whose frame rate and codecs string are known. The rows with a frame rate of
+     * 0.0 were the false alarms, and one without a profile cannot be told from another of its
+     * codec, so neither is sent.
+     */
+    fun worthSending(facts: Facts): Boolean =
+        isReal(facts) && FrameRates.plausible(facts.fps) > 0f && clean(facts.profile).isNotEmpty()
 
     fun isStutter(event: SentryEvent): Boolean = event.logger == LOGGER
 
@@ -196,6 +277,9 @@ object StutterReport {
     fun clean(text: String): String = text.filter { it.isLetterOrDigit() || it in ".-_+: " }.trim().take(MAX_TEXT)
 
     private const val MAX_TEXT = 64
+
+    /** A bound on a profile or level number: Android's are bit flags well under this. */
+    private const val MAX_CODE = 1 shl 26
 }
 
 /**
@@ -254,7 +338,7 @@ class StutterReporter(
     fun report(facts: StutterReport.Facts): Boolean {
         if (!enabled()) return false
         // Before the daily limit: a false alarm must not use up the day's one report of its kind.
-        if (!StutterReport.isReal(facts)) return false
+        if (!StutterReport.worthSending(facts)) return false
         if (!limits.admit(facts.kind)) return false
         send(StutterReport.build(facts))
         return true
