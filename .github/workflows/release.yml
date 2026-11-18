@@ -62,6 +62,9 @@ jobs:
     runs-on: ubuntu-latest
     # Attach required reviewers to this environment in repo settings to gate access to the key.
     environment: release
+    outputs:
+      # "true" when the APK came from the maintainer's machine (the prebuilt step below).
+      prebuilt: ${{ steps.prebuilt.outputs.found }}
 
     steps:
       - uses: actions/checkout@v7
@@ -75,10 +78,35 @@ jobs:
           distribution: temurin
           java-version: "21"
 
+      # A release can be built and signed on the maintainer's machine (scripts/release-local.sh,
+      # docs/RELEASING.md "Building the release on your machine") and left in the private draft
+      # release prebuilt-<tag>. When that draft holds this job's files, scripts/release-prebuilt.sh
+      # checks them (SHA256SUMS, built from this very commit at this version, signed by the release
+      # key in .github/release-signing-cert.sha256 and by no other, 16 KB alignment), puts them where
+      # the build below would have, and every build step is skipped. A draft that is there but
+      # fails a check stops the release. Without a draft, everything below runs as it always has.
+      - name: Look for a prebuilt APK
+        id: prebuilt
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          scripts/release-prebuilt.sh "$GITHUB_REF_NAME" android "$PWD"
+          rc=$?
+          set -e
+          case "$rc" in
+            0) echo "found=true" >> "$GITHUB_OUTPUT"
+               echo "::notice::Using the APK and R8 mapping built on the maintainer's machine (draft release prebuilt-$GITHUB_REF_NAME); nothing is built here." ;;
+            3) echo "found=false" >> "$GITHUB_OUTPUT" ;;
+            *) echo "::error::The draft release prebuilt-$GITHUB_REF_NAME is there but its Android files did not pass the checks above"; exit 1 ;;
+          esac
+
       - name: Set up Gradle
+        if: steps.prebuilt.outputs.found != 'true'
         uses: gradle/actions/setup-gradle@v6
 
       - name: Restore signing key
+        if: steps.prebuilt.outputs.found != 'true'
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -98,6 +126,7 @@ jobs:
           EOF
 
       - name: Write Telegram credentials
+        if: steps.prebuilt.outputs.found != 'true'
         env:
           TG_API_ID: ${{ secrets.TG_API_ID }}
           TG_API_HASH: ${{ secrets.TG_API_HASH }}
@@ -142,6 +171,7 @@ jobs:
       # run touches more than the paths CI itself skips (plus the store listing text).
       - name: Check whether CI already tested this code
         id: tested
+        if: steps.prebuilt.outputs.found != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -160,7 +190,7 @@ jobs:
       # Debug only: the promo and release variants run the same test sources, and since AGP 9
       # only the tested build type (debug) gets a unit test task at all.
       - name: Run unit tests
-        if: steps.tested.outputs.skip != 'true'
+        if: steps.prebuilt.outputs.found != 'true' && steps.tested.outputs.skip != 'true'
         run: ./gradlew :core:jvmTest :ui:jvmTest :app:testDebugUnitTest
 
       # The FFmpeg extension with TMPlayer's extra video decoders and light video mode, built from
@@ -168,6 +198,7 @@ jobs:
       # was built from (not the host bench beside the patch), so only a release that changes
       # either pays the hour it takes.
       - name: Restore the FFmpeg extension
+        if: steps.prebuilt.outputs.found != 'true'
         uses: actions/cache@v4
         with:
           path: |
@@ -176,6 +207,7 @@ jobs:
           key: media3ext-${{ hashFiles('scripts/build-media3ext.sh', 'scripts/media3ext/*.patch', 'gradle/libs.versions.toml') }}
 
       - name: Build the FFmpeg extension
+        if: steps.prebuilt.outputs.found != 'true'
         run: |
           sudo apt-get update -q
           sudo apt-get install -y -q nasm meson ninja-build
@@ -183,6 +215,7 @@ jobs:
           JOBS=4 scripts/build-media3ext.sh
 
       - name: Build the signed APK
+        if: steps.prebuilt.outputs.found != 'true'
         env:
           # Optional. With it, the R8 mapping is uploaded to Sentry under the UUID the build writes
           # into the APK, so crash reports from this release read as the source does. Without it
@@ -201,6 +234,7 @@ jobs:
             -PtmVersionCode=${{ needs.version.outputs.code }}
 
       - name: Name the APK after the version
+        if: steps.prebuilt.outputs.found != 'true'
         run: |
           mkdir -p dist mapping
           VERSION="${{ needs.version.outputs.name }}"
@@ -227,8 +261,10 @@ jobs:
 
       # Google Play (apps targeting Android 15 or later) and 16 KB page-size devices need every
       # 64-bit native library aligned to 16 KB, in the zip and in its ELF segments. This only
-      # reads the APK and fails the job before anything is handed on or published (RL13).
+      # reads the APK and fails the job before anything is handed on or published (RL13). A
+      # prebuilt APK went through the same script in the prebuilt step.
       - name: Check 16 KB page alignment
+        if: steps.prebuilt.outputs.found != 'true'
         run: scripts/check-16kb.sh app/build/outputs/apk/release/app-universal-release.apk
 
       # Anything holding the signing key is deleted before the job can reach a step that
@@ -268,20 +304,58 @@ jobs:
     runs-on: ubuntu-24.04
     # The Telegram credentials are secrets of this environment.
     environment: release
+    outputs:
+      # "true" when the packages came from the maintainer's machine (the prebuilt step below).
+      prebuilt: ${{ steps.prebuilt.outputs.found }}
 
     steps:
       - uses: actions/checkout@v7
 
+      # As in the android job: packages built on the maintainer's machine and left in the draft
+      # release prebuilt-<tag> are checked (SHA256SUMS, this commit, this version) and used instead
+      # of building, and the plain Ubuntu 22.04 self-test below still runs on them before the
+      # upload. Without them in the draft, the job builds as it always has.
+      - name: Look for prebuilt Linux packages
+        id: prebuilt
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          scripts/release-prebuilt.sh "$GITHUB_REF_NAME" linux "$PWD"
+          rc=$?
+          set -e
+          case "$rc" in
+            0) echo "found=true" >> "$GITHUB_OUTPUT"
+               echo "::notice::Using the AppImage, its .zsync and the tarball built on the maintainer's machine (draft release prebuilt-$GITHUB_REF_NAME)." ;;
+            3) echo "found=false" >> "$GITHUB_OUTPUT" ;;
+            *) echo "::error::The draft release prebuilt-$GITHUB_REF_NAME is there but its Linux files did not pass the checks above"; exit 1 ;;
+          esac
+
+      - name: Self-test the prebuilt packages on plain Ubuntu 22.04 (glibc 2.35)
+        if: steps.prebuilt.outputs.found == 'true'
+        env:
+          CONTAINER_ENGINE: docker
+          VERSION: ${{ needs.version.outputs.name }}
+        run: |
+          .github/actions/desktop-linux/plain-linux-check.sh \
+            "dist/TMPlayer-$VERSION-x86_64.AppImage" \
+            "dist/TMPlayer-$VERSION-linux-x64.tar.xz"
+          grep -q "^Filename: TMPlayer-$VERSION-x86_64.AppImage$" "dist/TMPlayer-$VERSION-x86_64.AppImage.zsync" \
+            || { echo "::error::the .zsync does not name the AppImage"; exit 1; }
+
       - name: Set up JDK 21
+        if: steps.prebuilt.outputs.found != 'true'
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "21"
 
       - name: Set up Gradle
+        if: steps.prebuilt.outputs.found != 'true'
         uses: gradle/actions/setup-gradle@v6
 
       - name: Write Telegram credentials
+        if: steps.prebuilt.outputs.found != 'true'
         env:
           TG_API_ID: ${{ secrets.TG_API_ID }}
           TG_API_HASH: ${{ secrets.TG_API_HASH }}
@@ -316,9 +390,11 @@ jobs:
           EOF
 
       - name: Build or restore the glibc 2.35 natives
+        if: steps.prebuilt.outputs.found != 'true'
         uses: ./.github/actions/linux-natives
 
       - name: Package and self-test
+        if: steps.prebuilt.outputs.found != 'true'
         uses: ./.github/actions/desktop-linux
         with:
           version: ${{ needs.version.outputs.name }}
@@ -557,11 +633,32 @@ jobs:
       # run at this tag. It costs nothing, adds no file to the release, and anyone can check a
       # download with `gh attestation verify <file> --repo dracu-lah/TMPlayer`. It does not
       # replace the APK's own signature or a Windows code signing certificate; it says where the
-      # bytes were built, not who vouches for them to the operating system.
+      # bytes were built, not who vouches for them to the operating system. A file built on the
+      # maintainer's machine (the android or desktop-linux job's prebuilt step) did not come out of
+      # this run, so it gets no attestation rather than a false one: the APK's own signature, checked
+      # against the release key before it got here, is what vouches for it.
+      - name: Choose the files built in this run
+        id: attest
+        run: |
+          VERSION="${{ needs.version.outputs.name }}"
+          {
+            echo "paths<<TMPLAYER_PATHS_END"
+            for path in dist/*; do
+              case "${path#dist/}" in
+                "TMPlayer-$VERSION-universal.apk")
+                  [ "${{ needs.android.outputs.prebuilt }}" = "true" ] && continue ;;
+                "TMPlayer-$VERSION-x86_64.AppImage" | "TMPlayer-$VERSION-x86_64.AppImage.zsync" | "TMPlayer-$VERSION-linux-x64.tar.xz")
+                  [ "${{ needs.desktop-linux.outputs.prebuilt }}" = "true" ] && continue ;;
+              esac
+              echo "$path"
+            done
+            echo "TMPLAYER_PATHS_END"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Attest where every file was built
         uses: actions/attest-build-provenance@v4
         with:
-          subject-path: dist/*
+          subject-path: ${{ steps.attest.outputs.paths }}
 
       # The TMPlayer source is the tag's tree and the archives GitHub attaches. The corresponding
       # source of the bundled GPL media extension does not change while its version does not, so
