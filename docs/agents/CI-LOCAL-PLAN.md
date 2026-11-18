@@ -137,3 +137,10 @@ Written 2026-11-18. Status: plan, nothing built yet.
 - Open: e2e `chats.spec.ts:42` (webkit, "Select all over a thousand chats asks first") failed in the
   first local run; the e2e run also rewrites tracked `design/web-sync/*.png` (restore with
   `git checkout -- design/web-sync`).
+- 2026-11-18 later: review fixes merged (12 findings); hook now tests only the module that changed
+  (`core/` runs `:core:jvmTest`, `ui/` `:ui:jvmTest`, `app/` `:app:testDebugUnitTest`, a build file change
+  runs all three; the full Kotlin set took 20 minutes); WebKit and the debug APK need `--all`. Measured:
+  `kotlin` 20 min cold, `ios` 10 s, `web` 16 min with WebKit (Chromium only is about half).
+  Decisions taken by default: sibling fallback needs 3 files, nightly stays 02:17 UTC, Windows VM
+  parked, the next beta is the first to use `release-local.sh`. Open: push (the user), the nightly's
+  first real run on GitHub, one real `release-local.sh` run, the WebKit `chats.spec.ts:42` flake.

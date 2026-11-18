@@ -29,6 +29,7 @@ WORKERS="${CI_LOCAL_WORKERS:-$(( $(nproc) > 8 ? 4 : 2 ))}"
 GRADLE=(./gradlew --max-workers="$WORKERS")
 
 want=()
+KTESTS=()
 mode=changed
 FULL=${CI_LOCAL_FULL:-0}   # 1: also WebKit e2e and the debug APK (the pre-push hook leaves both to the nightly run)
 for a in "$@"; do
@@ -53,6 +54,18 @@ if [ "$mode" != named ]; then
   has() { [ "$files" = ALL ] || grep -qE "$1" <<<"$files"; }
   want+=(style)
   has '^(core|ui|app|desktop|ios|gradle|kotlin-js-store)/|^(build|settings)\.gradle\.kts$|^gradle\.properties$|^gradlew$' && want+=(kotlin)
+  # The hook tests the module that changed, not all three (the whole set took 20 minutes); the
+  # nightly run and --all cover the rest. A change to the build itself tests everything.
+  if [ "$FULL" != 1 ]; then
+    KTESTS=()
+    if has '^gradle/|^(build|settings)\.gradle\.kts$|^gradle\.properties$|^gradlew$'; then
+      KTESTS=(:core:jvmTest :ui:jvmTest :app:testDebugUnitTest)
+    else
+      has '^core/' && KTESTS+=(:core:jvmTest)
+      has '^ui/' && KTESTS+=(:ui:jvmTest)
+      has '^app/' && KTESTS+=(:app:testDebugUnitTest)
+    fi
+  fi
   has '^(ios|iosApp|altstore)/|^(core|ui)/src/|^app/src/main/(java|res)/|^scripts/ios-setup\.sh$|^gradle/|^(build|settings)\.gradle\.kts$|^gradle\.properties$' && want+=(ios)
   has '^(webapp|core)/|^gradle/|^(build|settings)\.gradle\.kts$|^gradle\.properties$' && want+=(web)
   has '^site/|^scripts/site-' && want+=(site)
@@ -81,7 +94,10 @@ g_style() {
 }
 
 g_kotlin() {
-  "${GRADLE[@]}" :core:jvmTest :ui:jvmTest :app:testDebugUnitTest || return 1
+  local tests=(:core:jvmTest :ui:jvmTest :app:testDebugUnitTest)
+  [ "$mode" = changed ] && [ "$FULL" != 1 ] && tests=("${KTESTS[@]}")
+  if [ ${#tests[@]} -eq 0 ]; then echo "ci-local: no module with unit tests changed (desktop and iOS only), left to the nightly run"; return 0; fi
+  "${GRADLE[@]}" "${tests[@]}" || return 1
   [ "$FULL" = 1 ] && { "${GRADLE[@]}" :app:assembleDebug || return 1; }
   return 0
 }
