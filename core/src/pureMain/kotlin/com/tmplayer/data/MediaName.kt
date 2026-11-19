@@ -675,15 +675,40 @@ object MediaName {
     private fun titleEnd(text: String, dated: Int?): Int? {
         val hard = HARD_TAGS.findAll(text).map { it.range.first }.firstOrNull { it > 0 }
         val bound = listOfNotNull(dated, hard).minOrNull() ?: text.length
-        val soft = TAGS.findAll(text).firstOrNull { match ->
-            val at = match.range.first
-            at in 1 until bound &&
-                text.substring(at, bound).replace(TAGS, " ").all { it.isWhitespace() || it in TRIM_CHARS } &&
+        val candidates = TAGS.findAll(text).map { it.range.first }.takeWhile { it < bound }.filter { it > 0 }.toList()
+        if (candidates.isEmpty()) return hard
+        // Whether only tags follow a candidate up to the bound, for all of them in one pass over the
+        // tail from the first: the scan from a later candidate is the same scan's end, so a
+        // candidate past the last word that is not a tag has only tags after it. Scanned once per
+        // candidate, as it was, a name with many soft tags read its tail again for each (HX73).
+        val lastWord = lastUntagged(text, candidates.first(), bound)
+        val soft = candidates.firstOrNull { at ->
+            at > lastWord &&
                 clean(text.substring(0, at)).lowercase() !in ARTICLES &&
                 // "Into the Web", "Tales of Tamil": a word straight after "the" or "of" is the title's.
                 text.substring(0, at).trim().substringAfterLast(' ').lowercase() !in JOINING_WORDS
-        }?.range?.first
+        }
         return listOfNotNull(hard, soft).minOrNull()
+    }
+
+    /**
+     * The index in [text] of the last character from [from] to [bound] that is neither in one of
+     * the [TAGS] nor a separator, or -1 when there is none: what is left of that stretch once its
+     * tags are taken out.
+     */
+    private fun lastUntagged(text: String, from: Int, bound: Int): Int {
+        val tail = text.substring(from, bound)
+        var last = -1
+        var at = 0
+        fun look(until: Int) {
+            for (i in at until until) if (!tail[i].isWhitespace() && tail[i] !in TRIM_CHARS) last = from + i
+        }
+        for (match in TAGS.findAll(tail)) {
+            look(match.range.first)
+            at = match.range.last + 1
+        }
+        look(tail.length)
+        return last
     }
 
     /** A date and where it starts. */
