@@ -2238,8 +2238,12 @@ private fun Root() {
         val tourOffer = SettingsStore.tipsDue(tourState) && inShell &&
             screen is Screen.Chats && !showUpdate && noticeLanguage == null && !pickingLanguage &&
             !whatsNew.showing && supportRung == 0 && !crashPending
+        // On the phone and the tablet the card stands in the floating bar's banner slot, just
+        // above the bar, rather than in a row under it; the connection notice goes first and the
+        // card comes when it is gone. The television keeps its slim row at the foot.
+        val tipAboveBar = tourOffer && !FormFactor.isTv(context)
         com.tmplayer.ui.settings.TourOfferFrame(
-            offer = tourOffer,
+            offer = tourOffer && !tipAboveBar,
             hintUp = tvHintUp && FormFactor.isTv(context) && inShell && screen is Screen.Chats,
             card = { cardModifier ->
                 TipsCard(
@@ -2294,9 +2298,16 @@ private fun Root() {
                     pageKey = TouchScreens.key(screen),
                     // The connection notice stands above the bar, never over it, and the pages make
                     // room for it (R4, 9.1): Offline is a card with Try again and Downloads.
-                    bannerShown = connectionNotice != ConnectionNotice.Hidden && auth is AuthState.Ready,
+                    bannerShown = (connectionNotice != ConnectionNotice.Hidden && auth is AuthState.Ready) || tipAboveBar,
                     banner = {
-                        if (connectionNotice == ConnectionNotice.Offline) {
+                        if (connectionNotice == ConnectionNotice.Hidden || auth !is AuthState.Ready) {
+                            TipsCard(
+                                onShow = { scope.launch { runCatching { settings.openTour() } } },
+                                // One tap, one answer: the card does not come back (the tour stays in Settings).
+                                onDismiss = { scope.launch { runCatching { settings.markTourDone() } } },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        } else if (connectionNotice == ConnectionNotice.Offline) {
                             com.tmplayer.ui.connect.OfflineBanner(
                                 onOpenDownloads = openDownloads.takeIf { screen !is Screen.Downloads },
                             )
