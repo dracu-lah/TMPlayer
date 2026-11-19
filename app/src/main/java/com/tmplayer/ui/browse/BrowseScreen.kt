@@ -292,6 +292,9 @@ internal fun BrowseScreen(
     onRetryFolders: () -> Unit = {},
     /** A row came on screen without its videos: fetch them. */
     onHomeRowShown: (HomeRow) -> Unit = {},
+    /** A row came on screen while scrolling (after a short stay) and left again (HX54). */
+    onHomeRowSeen: (HomeRow) -> Unit = onHomeRowShown,
+    onHomeRowLeft: (HomeRow) -> Unit = {},
     onHomeArtWanted: (ResumeRecord) -> Unit = {},
     /** Recently added reads on through Home's chats as it is scrolled to its end. */
     homeFeedOf: (HomeRow) -> com.tmplayer.ui.browse.RowFeed? = { null },
@@ -702,6 +705,8 @@ internal fun BrowseScreen(
                                 end = insets.end + if (touch) 0.dp else Tv.SafeH,
                                 bottom = insets.bottom,
                                 onRowShown = onHomeRowShown,
+                                onRowSeen = onHomeRowSeen,
+                                onRowLeft = onHomeRowLeft,
                                 onArtWanted = onHomeArtWanted,
                                 feedOf = homeFeedOf,
                                 onResume = openResume,

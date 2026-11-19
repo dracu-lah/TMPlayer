@@ -272,6 +272,25 @@ object Thumbnails {
         )
     }
 
+    /**
+     * Runs [block] holding one of [gate]'s places. [onCancelled] runs only if the caller is
+     * cancelled once [block] has started, never while it still waits for a place: a card that
+     * left the screen before its download was asked for has nothing to withdraw, and withdrawing
+     * the file would stop another card's live download of the same picture.
+     */
+    internal suspend fun <T> inSlot(gate: Semaphore, onCancelled: () -> Unit, block: suspend () -> T): T {
+        var started = false
+        try {
+            return gate.withPermit {
+                started = true
+                block()
+            }
+        } catch (cancellation: CancellationException) {
+            if (started) onCancelled()
+            throw cancellation
+        }
+    }
+
     private val downloads by lazy {
         Semaphore(if (com.tmplayer.ui.theme.Motion.television) DOWNLOADS_AT_ONCE_TV else DOWNLOADS_AT_ONCE)
     }
@@ -299,7 +318,7 @@ object Thumbnails {
             // are asked of TDLib at once (HX54), the rest wait here and are dropped, unasked,
             // when their card has gone, instead of queueing behind Home's own reads. The wait is
             // not part of the timeout below.
-            downloads.withPermit {
+            inSlot(downloads, onCancelled = { Td.cancelDownloadInBackground(fileId) }) {
             withTimeoutOrNull(DOWNLOAD_TIMEOUT_MS) {
                 coroutineScope {
                     val completion = async(start = CoroutineStart.UNDISPATCHED) {
@@ -332,7 +351,6 @@ object Thumbnails {
             }
             }
         } catch (cancellation: CancellationException) {
-            Td.cancelDownloadInBackground(fileId)
             throw cancellation
         }
         if (failed) return null
