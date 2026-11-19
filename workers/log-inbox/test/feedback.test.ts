@@ -265,3 +265,36 @@ test('codes are eight letters from the whole id, worked out here, and differ for
   for (let i = 0; i < 2000; i++) seen.add(await feedbackCode(i.toString(16).padStart(32, '0')))
   assert.equal(seen.size, 2000)
 })
+
+test('the web app can read the answer of a feedback post, and no other page can', async () => {
+  const worker = (await import('../src/index.ts')).default
+  const e = env()
+  const web = 'https://web.tmplayer.org'
+  const fromWeb = await worker.fetch(new Request(`https://inbox.example${FEEDBACK_PATH}`, { method: 'POST', body: body(), headers: { 'Content-Type': 'text/plain; charset=utf-8', Origin: web } }), e)
+  assert.equal(fromWeb.status, 201)
+  assert.equal(fromWeb.headers.get('Access-Control-Allow-Origin'), web)
+  assert.equal(fromWeb.headers.get('Access-Control-Expose-Headers'), 'Retry-After')
+  assert.equal(fromWeb.headers.get('Vary'), 'Origin')
+  assert.match(((await fromWeb.json()) as { code: string }).code, FEEDBACK_CODE)
+  // An answer that is an error is readable too: the page says why.
+  const refused = await worker.fetch(new Request(`https://inbox.example${FEEDBACK_PATH}`, { method: 'POST', body: '{', headers: { 'Content-Type': 'text/plain', Origin: web } }), e)
+  assert.equal(refused.status, 400)
+  assert.equal(refused.headers.get('Access-Control-Allow-Origin'), web)
+  const elsewhere = await worker.fetch(new Request(`https://inbox.example${FEEDBACK_PATH}`, { method: 'POST', body: body({ id: 'f'.repeat(32) }), headers: { 'Content-Type': 'text/plain; charset=utf-8', Origin: 'https://evil.example' } }), e)
+  assert.equal(elsewhere.headers.get('Access-Control-Allow-Origin'), null)
+  const app = await worker.fetch(post(body({ id: 'e'.repeat(32) })), e)
+  assert.equal(app.headers.get('Access-Control-Allow-Origin'), null, 'the apps send no Origin and need nothing')
+  // Log reports and title reports are not the web app's.
+  const logs = await worker.fetch(new Request('https://inbox.example/v1/report', { method: 'POST', body: 'x', headers: { 'Content-Type': 'text/plain', Origin: web } }), e)
+  assert.equal(logs.headers.get('Access-Control-Allow-Origin'), null)
+})
+
+test('a preflight from the web app is answered, from another page refused', async () => {
+  const worker = (await import('../src/index.ts')).default
+  const ask = (origin: string) => worker.fetch(new Request(`https://inbox.example${FEEDBACK_PATH}`, { method: 'OPTIONS', headers: { Origin: origin, 'Access-Control-Request-Method': 'POST' } }), env())
+  const ok = await ask('https://web.tmplayer.org')
+  assert.equal(ok.status, 204)
+  assert.equal(ok.headers.get('Access-Control-Allow-Origin'), 'https://web.tmplayer.org')
+  assert.equal(ok.headers.get('Access-Control-Allow-Methods'), 'POST')
+  assert.equal((await ask('https://evil.example')).status, 403)
+})
