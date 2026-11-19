@@ -7,7 +7,7 @@ import { createEffect, createRoot, createSignal } from 'solid-js'
 import { api } from './tg/rpc'
 import { form } from './form'
 import { apartIds, chooseCopy, chosenCopies, copyHabit, setApart, setCopyHabit } from './store'
-import { slowKinds, type CopyContext, type CopyDevice, type PictureKind } from './tg/copyFit'
+import { deviceMoved, slowKinds, type CopyContext, type CopyDevice, type PictureKind } from './tg/copyFit'
 import type { VideoItem } from './tg/types'
 
 /** Bumped once the worker holds a change the viewer made: the lists of cards read again. */
@@ -42,10 +42,16 @@ let sent: Promise<void> = Promise.resolve()
 
 // Sent at once (before the first list is asked for), and again on every change: a rotation into
 // the phone form, the store's corrections loaded or changed.
+// A change of the device kind (a window narrowed into the phone form, a rotation) arranges the
+// cards again once the worker has it, as a correction does: a phone's card no longer leads with 4K.
+let device: CopyDevice | null = null
 createRoot(() =>
     createEffect(() => {
         const ctx = copyContextNow()
         sent = api.copyContext(ctx).catch((e) => console.warn('[copies]', e))
+        const moved = deviceMoved(device, ctx.device)
+        device = ctx.device
+        if (moved) refreshed()
     }),
 )
 

@@ -5,9 +5,9 @@
 // Pure and outside data safe: names and types come from Telegram, the kinds from the page.
 
 /** A kind of picture the name can name that some browsers cannot decode themselves. */
-export type PictureKind = 'hevc' | 'hevc10' | 'av1' | 'vp9' | 'legacy'
+export type PictureKind = 'hevc' | 'hevc10' | 'avc10' | 'av1' | 'vp9' | 'legacy'
 
-export const PICTURE_KINDS: readonly PictureKind[] = ['hevc', 'hevc10', 'av1', 'vp9', 'legacy']
+export const PICTURE_KINDS: readonly PictureKind[] = ['hevc', 'hevc10', 'avc10', 'av1', 'vp9', 'legacy']
 
 /** The device word the rules recommend copies for (VideoCopies.deviceWord). */
 export type CopyDevice = 'phone' | 'tv' | 'computer'
@@ -48,7 +48,10 @@ const LEGACY_EXT = /\.(avi|divx|wmv|asf|flv|rm|rmvb|vob|mpe?g|3gp|ogm)$/i
 const LEGACY_MIME = /^video\/(x-msvideo|avi|msvideo|x-ms-wmv|x-ms-asf|x-flv|vnd\.rn-realvideo|mpeg|3gpp|x-ms-vob)$/i
 const LEGACY_WORD = /(^|[^a-z0-9])(xvid|divx|mpeg-?4 ?part ?2|wmv|realvideo)([^a-z0-9]|$)/i
 const HEVC_WORD = /(^|[^a-z0-9])(x265|h\.?265|hevc)([^a-z0-9]|$)/i
-const TEN_BIT = /(^|[^a-z0-9])(10 ?bits?|hi10p?|main ?10)([^a-z0-9]|$)/i
+const TEN_BIT = /(^|[^a-z0-9])(10[ -]?bits?|hi10p?|main ?10)([^a-z0-9]|$)/i
+const AVC_WORD = /(^|[^a-z0-9])(x264|h\.?264|avc)([^a-z0-9]|$)/i
+/** Hi10P names H.264's High 10 profile whatever else the name says. */
+const HI10P = /(^|[^a-z0-9])hi10p?([^a-z0-9]|$)/i
 const AV1_WORD = /(^|[^a-z0-9])av1([^a-z0-9]|$)/i
 const VP9_WORD = /(^|[^a-z0-9])vp9([^a-z0-9]|$)/i
 
@@ -61,10 +64,16 @@ export function pictureKind(fileName: unknown, mimeType: unknown): PictureKind |
     const mime = typeof mimeType === 'string' ? mimeType.slice(0, 200).trim() : ''
     if (LEGACY_EXT.test(name) || LEGACY_MIME.test(mime) || LEGACY_WORD.test(name)) return 'legacy'
     if (HEVC_WORD.test(name)) return TEN_BIT.test(name) ? 'hevc10' : 'hevc'
+    // 10 bit H.264 (High 10, "x264 Hi10P", anime fansubs): most browsers decode only 8 bit H.264
+    // (DecodeJudge.pictureOfName reads the depth for every codec, not HEVC alone).
+    if (HI10P.test(name) || (AVC_WORD.test(name) && TEN_BIT.test(name))) return 'avc10'
     if (AV1_WORD.test(name)) return 'av1'
     if (VP9_WORD.test(name)) return 'vp9'
     return null
 }
+
+/** Whether the device kind moved (a rotation into the phone form, Settings' Layout): the cards are arranged again then; the first context is no move. */
+export const deviceMoved = (before: CopyDevice | null, now: CopyDevice): boolean => before !== null && before !== now
 
 /** Whether a copy of this name and type is one `slow` says the browser cannot play natively. */
 export function slowHere(fileName: unknown, mimeType: unknown, slow: readonly PictureKind[]): boolean {
@@ -102,6 +111,8 @@ export function slowKinds(supported: (mime: string) => boolean, hevcAnyway = fal
     const hevc = hevcAnyway || ask('video/mp4; codecs="hvc1.1.6.L93.B0"', 'video/mp4; codecs="hev1.1.6.L93.B0"')
     if (!hevc) out.push('hevc')
     if (!hevc || !(hevcAnyway || ask('video/mp4; codecs="hvc1.2.4.L93.B0"', 'video/mp4; codecs="hev1.2.4.L93.B0"'))) out.push('hevc10')
+    // H.264 High 10 (profile 110), level 4.0.
+    if (!ask('video/mp4; codecs="avc1.6E0028"')) out.push('avc10')
     if (!ask('video/mp4; codecs="av01.0.08M.08"')) out.push('av1')
     if (!ask('video/mp4; codecs="vp09.00.10.08"', 'video/webm; codecs="vp9"')) out.push('vp9')
     out.push('legacy')

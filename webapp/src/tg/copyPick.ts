@@ -45,13 +45,17 @@ const ranks = new WeakMap<CopyContext, Map<string, number>>()
 /**
  * The copy a card of `copies` plays and wears the badge of (VideoCopies.pick): the viewer's own
  * choice, else the one they started, else the quality they usually play, else the best this device
- * suits among the copies it plays natively. Null for no copies.
+ * suits among the copies it plays natively. A cam is passed over only when nothing the viewer did
+ * settles it, so a started cam copy resumes in its own file, as the apps' pick keeps it. Null for
+ * no copies. `started` is the view's set of started ids (one per list, not read again per card).
  */
-export function playCopy(r: CopyRules, copies: readonly Video[], ctx: CopyContext, started: readonly string[]): string | null {
+export function playCopy(r: CopyRules, copies: readonly Video[], ctx: CopyContext, started: ReadonlySet<string>): string | null {
     if (!copies.length) return null
     if (copies.length === 1) return copies[0].id
-    const ids = new Set(copies.map((v) => v.id))
-    return r.pickCopy([...copies], chosenAmong(copies, ctx), started.filter((id) => ids.has(id)), ctx.habit, null, passOver(r, copies, ctx)) ?? copies[0].id
+    const going = copies.flatMap((v) => (started.has(v.id) ? [v.id] : []))
+    const chosen = chosenAmong(copies, ctx)
+    const skip = chosen || going.length ? slowIds(copies, ctx) : passOver(r, copies, ctx)
+    return r.pickCopy([...copies], chosen, going, ctx.habit, null, skip) ?? copies[0].id
 }
 
 /** One row of a copies list, as the worker hands it to the page. */
@@ -71,7 +75,7 @@ export interface CopyRow {
  * natively, the picture the device suits, the newest), each with what its row says. Its length is
  * the "N versions" count, so the count and the list never differ; fewer than two files is no list.
  */
-export function copyRows(r: CopyRules, copies: readonly Video[], current: string, ctx: CopyContext, started: readonly string[]): CopyRow[] {
+export function copyRows(r: CopyRules, copies: readonly Video[], current: string, ctx: CopyContext, started: Iterable<string>): CopyRow[] {
     if (copies.length < 2) return []
     const slow = slowIds(copies, ctx)
     const byId = new Map(copies.map((v) => [v.id, v]))

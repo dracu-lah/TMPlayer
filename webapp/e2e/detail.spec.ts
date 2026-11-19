@@ -2,7 +2,7 @@
 // projects' own), and its Watch later and Watched marks, which are written in the background.
 import { readFileSync } from 'node:fs'
 import { expect, test, type Page } from '@playwright/test'
-import { noSizeFloor, playsPast } from './helpers'
+import { fakeCase, noSizeFloor, playsPast } from './helpers'
 
 const PICTURE = readFileSync(new URL('./media/thumb.jpg', import.meta.url))
 
@@ -280,4 +280,33 @@ test.describe('on the TV', () => {
         await expect(page).toHaveURL(/\/video\/-1005\/27$/)
         await expect(page.locator('.detail-copy-summary')).toBeFocused()
     })
+})
+
+test('a card that folds copies from two chats (Search) says the count its page lists, one row per file from both chats', async ({ page, context }) => {
+    await fakeCase(context, 'crosscopies')
+    await mockTmdb(page)
+    await page.goto('/search')
+    const field = page.getByRole('searchbox')
+    await expect(field).toBeVisible()
+    await field.fill('Bunny')
+    await field.press('Enter')
+    const card = page.locator('.card').filter({ hasText: 'Big Buck Bunny' }).filter({ hasText: 'versions' }).first()
+    await expect(card).toContainText('4 versions')
+    await card.click()
+    await expect(page).toHaveURL(/\/video\//)
+    await expect(page.locator('.detail-copy-summary')).toContainText('4 versions')
+    await page.locator('.detail-copy-summary').click()
+    await expect(page.getByRole('option')).toHaveCount(4)
+    await expect(page.getByRole('option').filter({ hasText: 'DVD' })).toHaveCount(1)
+})
+
+test('choosing the copy already shown pins it over the recommendation for its cards', async ({ page }) => {
+    await mockTmdb(page)
+    await page.goto('/video/-1005/27')
+    await page.locator('.detail-copy-summary').click()
+    await page.getByRole('option', { selected: true }).click()
+    await expect(page).toHaveURL(/\/video\/-1005\/27$/)
+    await expect(page.locator('.detail-copy-summary')).toBeFocused()
+    await page.goto('/chat/-1005')
+    await expect(page.locator('.card').filter({ hasText: 'Big Buck Bunny' }).first()).toHaveAttribute('href', /\/video\/-1005\/27$/)
 })

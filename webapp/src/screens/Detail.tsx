@@ -507,8 +507,9 @@ function Versions(props: { item: VideoItem; info: WatchInfo }) {
             .join(dot)
     const pick = (c: CopyRef) => {
         setOpen(false)
-        if (isHere(c)) return void summaryButton?.focus()
+        // Chosen even when it is the copy shown: the viewer pins it over the recommendation for its cards.
         chooseCopyOf(c.item, props.info.copies.map((x) => x.item))
+        if (isHere(c)) return void summaryButton?.focus()
         navigate(detailPath(c.item), { replace: true, state: { video: c.item, versions: true } })
     }
     const more = () => {

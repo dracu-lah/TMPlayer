@@ -50,6 +50,8 @@ export async function setCopyContext(raw: unknown): Promise<void> {
     r.setCorrections(next.apart, next.apart.map(() => 'separate'))
     copyEpoch++
     watchKept.clear()
+    // A file kept apart or grouped again: the cards remember their groups afresh.
+    groups.clear()
 }
 
 interface Feed {
@@ -114,6 +116,7 @@ export function forgetAll() {
     homeStates.clear()
     searches.clear()
     watchKept.clear()
+    groups.clear()
     // The files kept apart and the copies chosen were the account's: the next one starts with none (the device stays).
     if (copyCtx.apart.length || copyCtx.chosen.length || copyCtx.habit) {
         copyCtx = { ...copyCtx, apart: [], chosen: [], habit: null }
@@ -392,7 +395,7 @@ export function tilesOf(
         if (!lead) continue
         // A video posted more than once plays, and wears the badge of, the copy its page recommends
         // (HX38): the viewer's choice, the one started, else the best this browser plays natively.
-        const played = t.kind === 'file' && t.copies.length > 1 && copies ? pickedItem(t, items, view.started, copies.r, copies.videoOf) : null
+        const played = t.kind === 'file' && t.copies.length > 1 && copies ? pickedItem(t, items, started, copies.r, copies.videoOf) : null
         const item = t.kind === 'show' ? lead : (played ?? joinedItem(t, lead, items))
         tiles.push({
             key: t.key,
@@ -424,10 +427,34 @@ export function lookup(videos: Iterable<Video>): (id: string) => Video | undefin
 }
 
 /** The item of the copy `t` plays when it is not its lead; null to play the lead as it is. */
-function pickedItem(t: ShelfTile, items: Map<string, VideoItem>, started: readonly string[], r: Rules, videoOf: (id: string) => Video | undefined): VideoItem | null {
+function pickedItem(t: ShelfTile, items: Map<string, VideoItem>, started: ReadonlySet<string>, r: Rules, videoOf: (id: string) => Video | undefined): VideoItem | null {
     const copies = t.copies.flatMap((id) => videoOf(id) ?? [])
+    rememberGroup(copies, items)
     const id = playCopy(r, copies, copyCtx, started)
     return id && id !== t.video?.id ? (items.get(id) ?? null) : null
+}
+
+/**
+ * The copies a card counted, by each copy's id, so its page lists the very same group (HX38): a
+ * card in Search or Home's Recently added folds copies from several chats, which the page's own
+ * chat cannot regroup. Bounded: the oldest groups go first.
+ */
+const groups = new Map<string, { videos: Video[]; items: Map<string, VideoItem> }>()
+const GROUPS_MAX = 4_000
+
+function rememberGroup(videos: Video[], items: Map<string, VideoItem>) {
+    if (videos.length < 2 || !videos.some((v, i) => i > 0 && v.chatId !== videos[0].chatId)) return
+    const group = { videos, items: new Map(videos.flatMap((v) => (items.has(v.id) ? [[v.id, items.get(v.id)!] as const] : []))) }
+    for (const v of videos) {
+        groups.delete(v.id)
+        groups.set(v.id, group)
+    }
+    while (groups.size > GROUPS_MAX) groups.delete(groups.keys().next().value!)
+}
+
+/** The group of copies across chats a card counted for `id`, if one did; for tests too. */
+export function groupOf(id: string): { videos: Video[]; items: Map<string, VideoItem> } | undefined {
+    return groups.get(id)
 }
 
 function arrange(s: ChatState, view: ChatView): ChatPage {
@@ -1122,7 +1149,8 @@ export async function watchInfo(tg: TelegramClient, chatId: number, messageId: n
     const id = `${chatId}:${messageId}`
     const current = s.videos.get(id) ?? (await addMessage(tg, s, messageId))
     if (!current) return null
-    const viewKey = `${copyEpoch}|${JSON.stringify(view)}`
+    // The group a card across chats counted is part of the answer: a card that counts another one asks again.
+    const viewKey = `${copyEpoch}|${groupOf(id)?.videos.map((v) => v.id).join(',') ?? ''}|${JSON.stringify(view)}`
     const kept = watchKept.get(id)
     if (kept && kept.version === s.version && kept.view === viewKey) return kept.info
     const steps = r.steps(current, [...s.videos.values()])
@@ -1161,9 +1189,13 @@ export async function watchInfo(tg: TelegramClient, chatId: number, messageId: n
         } else if (t.video?.id === id || t.copies.includes(id)) t.copies.forEach((c) => copyIds.add(c))
     }
     // In the order the list shows them, recommended first, the same file posted twice once (copyPick.ts): its length is the count.
-    const copies: CopyRef[] = copyRows(r, [...copyIds].flatMap((cid) => s.videos.get(cid) ?? []), id, copyCtx, view.started).flatMap((row) => {
-        const it = s.items.get(row.video.id)
-        return it ? [{ item: it, facts: r.copyFacts(row.video), fileName: row.video.fileName, date: row.video.date, chat: s.title, best: row.best, fit: row.fit, started: row.started, mismatch: row.mismatch }] : []
+    // A card that folded copies from several chats (Search, Recently added) handed its group on: the page lists the same one, so the count and the list agree.
+    const across = groupOf(id)
+    const copyVideos = across ? across.videos : [...copyIds].flatMap((cid) => s.videos.get(cid) ?? [])
+    const copies: CopyRef[] = copyRows(r, copyVideos, id, copyCtx, view.started).flatMap((row) => {
+        const it = s.items.get(row.video.id) ?? across?.items.get(row.video.id)
+        const chat = row.video.chatId === s.id ? s.title : (it?.chat ?? '')
+        return it ? [{ item: it, facts: r.copyFacts(row.video), fileName: row.video.fileName, date: row.video.date, chat, best: row.best, fit: row.fit, started: row.started, mismatch: row.mismatch }] : []
     })
     // After a video that is not an episode (the apps' ChatOrder): the chat's own list goes on, in the grid's sort.
     const around = view.chatOrder && !steps.next && !steps.previous && !seasons.length ? await chatOrderAround(tg, s, view, id) : null

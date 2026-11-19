@@ -6,7 +6,7 @@ import { test } from 'node:test'
 import * as core from '../rules/core/tmplayer-rules.mjs'
 import type { Rules, Video } from '../rules'
 import { chosenAmong, copyRows, playCopy, slowIds } from './copyPick.ts'
-import { cleanContext, copyFit, NO_COPY_CONTEXT, pictureKind, slowHere, slowKinds, type CopyContext } from './copyFit.ts'
+import { cleanContext, copyFit, deviceMoved, NO_COPY_CONTEXT, pictureKind, slowHere, slowKinds, type CopyContext } from './copyFit.ts'
 
 core.provideCatalog('en', readFileSync(new URL('../../../core/src/commonMain/resources/i18n/en.json', import.meta.url), 'utf8'))
 const r = core as unknown as Rules
@@ -23,7 +23,7 @@ function video(messageId: number, fileName: string, o: { width?: number; height?
     return v
 }
 const ctx = (o: Partial<CopyContext>): CopyContext => ({ ...NO_COPY_CONTEXT, ...o })
-const CHROMIUM = slowKinds((m) => /avc1|vp09|vp9|av01/.test(m))
+const CHROMIUM = slowKinds((m) => /avc1\.(42|4D|64)|vp09|vp9|av01/.test(m))
 
 const film = () => [
     video(25, 'Big.Buck.Bunny.2008.2160p.HDR.HEVC.mkv'),
@@ -46,15 +46,15 @@ test('the name and type say the picture kind; H.264 and nothing said play everyw
 })
 
 test('a browser without HEVC finds both HEVC kinds slow; a TV that decodes HEVC finds neither', () => {
-    assert.deepEqual(CHROMIUM, ['hevc', 'hevc10', 'legacy'])
+    assert.deepEqual(CHROMIUM, ['hevc', 'hevc10', 'avc10', 'legacy'])
     assert.equal(slowHere('Film.HEVC.10bit.mkv', null, ['hevc']), true)
     assert.equal(slowHere('Film.x264.mkv', null, CHROMIUM), false)
     const tv = slowKinds(() => false, true)
-    assert.deepEqual(tv, ['av1', 'vp9', 'legacy'])
+    assert.deepEqual(tv, ['avc10', 'av1', 'vp9', 'legacy'])
     const thrower = slowKinds(() => {
         throw new Error('old engine')
     })
-    assert.deepEqual(thrower, ['hevc', 'hevc10', 'av1', 'vp9', 'legacy'])
+    assert.deepEqual(thrower, ['hevc', 'hevc10', 'avc10', 'av1', 'vp9', 'legacy'])
 })
 
 test('Smooth is said only beside a copy that may stutter', () => {
@@ -78,12 +78,12 @@ test('a computer whose browser plays HEVC leads with 4K; one without HEVC leads 
     r.setCopyDevice('computer')
     const copies = film()
     assert.deepEqual(copyRows(r, copies, '-1005:26', ctx({ device: 'computer' }), []).map((x) => x.video.messageId), [25, 26, 27])
-    assert.equal(playCopy(r, copies, ctx({ device: 'computer' }), []), '-1005:25')
+    assert.equal(playCopy(r, copies, ctx({ device: 'computer' }), new Set()), '-1005:25')
     const rows = copyRows(r, copies, '-1005:26', ctx({ device: 'computer', slow: CHROMIUM }), [])
     assert.deepEqual(rows.map((x) => x.video.messageId), [26, 27, 25])
     assert.deepEqual(rows.map((x) => x.best), [true, false, false])
     assert.deepEqual(rows.map((x) => x.fit), ['smooth', 'smooth', 'stutter'])
-    assert.equal(playCopy(r, copies, ctx({ device: 'computer', slow: CHROMIUM }), []), '-1005:26')
+    assert.equal(playCopy(r, copies, ctx({ device: 'computer', slow: CHROMIUM }), new Set()), '-1005:26')
     assert.deepEqual(slowIds(copies, ctx({ slow: CHROMIUM })), ['-1005:25'])
 })
 
@@ -94,7 +94,7 @@ test('a phone is capped at 1080p: 4K stays in the list, never first, even where 
     assert.deepEqual(rows.map((x) => x.video.messageId), [26, 27, 25])
     assert.equal(rows[0].best, true)
     assert.deepEqual(rows.map((x) => x.fit), [null, null, null], 'nothing may stutter: nothing is said')
-    assert.equal(playCopy(r, copies, ctx({ device: 'phone' }), []), '-1005:26')
+    assert.equal(playCopy(r, copies, ctx({ device: 'phone' }), new Set()), '-1005:26')
     r.setCopyDevice('computer')
 })
 
@@ -103,9 +103,9 @@ test("the viewer's own choice and the copy they started win over the recommendat
     const copies = film()
     const c = ctx({ device: 'computer', slow: CHROMIUM, chosen: ['-1005:25', '-1005:27'] })
     assert.equal(chosenAmong(copies, c), '-1005:25', 'the newest choice first')
-    assert.equal(playCopy(r, copies, c, []), '-1005:25', 'chosen, even a copy that may stutter')
-    assert.equal(playCopy(r, copies, ctx({ device: 'computer', slow: CHROMIUM }), ['-1005:27']), '-1005:27')
-    assert.equal(playCopy(r, copies, ctx({ device: 'computer', slow: CHROMIUM, habit: '720:9' }), []), '-1005:27', 'the quality usually played')
+    assert.equal(playCopy(r, copies, c, new Set()), '-1005:25', 'chosen, even a copy that may stutter')
+    assert.equal(playCopy(r, copies, ctx({ device: 'computer', slow: CHROMIUM }), new Set(['-1005:27'])), '-1005:27')
+    assert.equal(playCopy(r, copies, ctx({ device: 'computer', slow: CHROMIUM, habit: '720:9' }), new Set()), '-1005:27', 'the quality usually played')
     const rows = copyRows(r, copies, '-1005:26', ctx({ device: 'computer', slow: CHROMIUM }), ['-1005:27'])
     assert.deepEqual(rows.map((x) => x.started), [false, true, false])
 })
@@ -138,7 +138,7 @@ test('a cam is never recommended where a better copy exists', () => {
     r.setCopyDevice('computer')
     const copies = [video(50, 'Fresh.2024.2160p.CAMRip.mkv'), video(51, 'Fresh.2024.720p.WEB-DL.mkv')]
     assert.equal(copyRows(r, copies, '-1005:50', NO_COPY_CONTEXT, [])[0].video.messageId, 51)
-    assert.equal(playCopy(r, copies, NO_COPY_CONTEXT, []), '-1005:51')
+    assert.equal(playCopy(r, copies, NO_COPY_CONTEXT, new Set()), '-1005:51')
 })
 
 test('600 copies: one pass, the count is the list, the recommended first', () => {
@@ -164,4 +164,50 @@ test('"Not the same video" splits the file out of its group, and Group again put
     r.setCorrections([], [])
     const together = r.shelf(copies, 'Newest', 0, r.sizeLimits().ceiling, [], [])
     assert.deepEqual(together.tiles.map((t) => t.versions), [3])
+})
+
+test('review fix: a started cam copy resumes in its own file; with nothing started the cam is still passed over', () => {
+    r.setCopyDevice('computer')
+    const copies = [video(60, 'Early.2024.2160p.CAMRip.mkv'), video(61, 'Early.2024.720p.WEB-DL.mkv')]
+    assert.equal(playCopy(r, copies, NO_COPY_CONTEXT, new Set(['-1005:60'])), '-1005:60')
+    assert.equal(playCopy(r, copies, NO_COPY_CONTEXT, new Set()), '-1005:61')
+    const rows = copyRows(r, copies, '-1005:60', NO_COPY_CONTEXT, ['-1005:60'])
+    assert.equal(rows[0].video.messageId, 61, 'the list still puts the cam last')
+    assert.equal(rows.find((x) => x.best)?.video.messageId, 61)
+})
+
+test('review fix: 10 bit H.264 (Hi10P) is a kind of its own, slow where High 10 is not decoded, never leading there', () => {
+    assert.equal(pictureKind('[Group] Show - 01 (1080p x264 Hi10P).mkv', null), 'avc10')
+    assert.equal(pictureKind('Film.2019.1080p.10bit.x264.mkv', null), 'avc10')
+    assert.equal(pictureKind('Film.2019.1080p.H.264.10-bit.mkv', null), 'avc10')
+    assert.equal(pictureKind('Film.2019.1080p.x264.mkv', null), null)
+    assert.equal(slowHere('Show (1080p x264 Hi10P).mkv', null, CHROMIUM), true)
+    r.setCopyDevice('computer')
+    const copies = [video(70, 'Anime.2019.1080p.x264.Hi10P.mkv'), video(71, 'Anime.2019.720p.x264.mkv')]
+    const c = ctx({ device: 'computer', slow: CHROMIUM })
+    assert.equal(copyRows(r, copies, '-1005:70', c, [])[0].video.messageId, 71)
+    assert.equal(playCopy(r, copies, c, new Set()), '-1005:71')
+    assert.equal(copyRows(r, copies, '-1005:70', c, [])[1].fit, 'stutter')
+})
+
+test('review fix: copies of one video in two chats: the card counts them and the page lists the same group, one row a file', () => {
+    r.setCopyDevice('computer')
+    const raw = (chatId: number, messageId: number, fileName: string) =>
+        r.video({ chatId, messageId, kind: 'document', fileName, mimeType: 'video/x-matroska', caption: null, size: 1_000_000 + messageId, duration: 5_400, width: 0, height: 0, date: date++, topicId: 0, albumId: null, canBeSaved: true, selfDestructs: false, withheld: false })!
+    const both = [raw(-1005, 80, 'Twin.Town.2018.1080p.x264.mkv'), raw(-1005, 81, 'Twin.Town.2018.720p.x264.mkv'), raw(-1004, 82, 'Twin.Town.2018.480p.x264.mkv')]
+    const tiles = r.shelf(both, 'Newest', 0, r.sizeLimits().ceiling, [], []).tiles
+    assert.equal(tiles.length, 1)
+    const byId = new Map(both.map((v) => [v.id, v]))
+    const group = tiles[0].copies.map((id) => byId.get(id)!)
+    const rows = copyRows(r, group, '-1004:82', NO_COPY_CONTEXT, [])
+    assert.equal(tiles[0].versions, 3)
+    assert.equal(rows.length, tiles[0].versions, 'the page lists what the card counted')
+    assert.ok(rows.some((x) => x.video.chatId === -1004) && rows.some((x) => x.video.chatId === -1005))
+})
+
+test('review fix: a change of device kind is a reason to arrange the cards again, the first context is not', () => {
+    assert.equal(deviceMoved(null, 'computer'), false)
+    assert.equal(deviceMoved('computer', 'computer'), false)
+    assert.equal(deviceMoved('computer', 'phone'), true)
+    assert.equal(deviceMoved('phone', 'tv'), true)
 })
