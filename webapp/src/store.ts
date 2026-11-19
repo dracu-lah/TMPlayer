@@ -8,6 +8,7 @@ import type { Sort, VideoItem } from './tg/types'
 import { clearIndex, POSTERS as POSTER_CACHE, THUMBS, touch } from './cacheBounds'
 import { cleanHome } from './ui/homeSettings'
 import { decodePick, encodePick, type Pick } from './pick'
+import { admit, cleanTitle } from './rename'
 import * as Lists from './ui/lists'
 import { cleanPref, isDefault, type ChatPref } from './ui/filterPref'
 import { resolveSpeed, sanitiseBoost, speedTarget, speedToKeep, type SpeedScopes } from './player/extras'
@@ -151,14 +152,16 @@ async function read<T>(key: string): Promise<T | undefined> {
 
 /**
  * Resume across devices (sync/): what is taken off Watched, Watch later and the picks is noted with
- * the time (`xw:`, `xl:`, `xfix:`, named by the apps' `<chat>_<message>` with the message's id as
- * TDLib has it), so the sync file can say it was taken off and another device does not bring it
- * back. Written for the viewer's own removals only: `quiet` is for what a sync itself applies.
+ * the time (`xw:`, `xl:`, `xfix:`, and `xtitle:` for a rename reset, named by the apps' `<chat>_<message>`
+ * with the message's id as TDLib has it), so the sync file can say it was taken off and another
+ * device does not bring it back. Written for the viewer's own removals only: `quiet` is for what a
+ * sync itself applies.
  */
-const TOMB = /^(watched|later|fix):(-?\d+):(\d+)$/
+const TOMBS = { watched: 'xw', later: 'xl', fix: 'xfix', title: 'xtitle' } as const
+const TOMB = /^(watched|later|fix|title):(-?\d+):(\d+)$/
 function tombOf(key: string): string | null {
     const m = TOMB.exec(key)
-    return m ? `${m[1] === 'watched' ? 'xw' : m[1] === 'later' ? 'xl' : 'xfix'}:${m[2]}_${tdlibMessageId(Number(m[3]))}` : null
+    return m ? `${TOMBS[m[1] as keyof typeof TOMBS]}:${m[2]}_${tdlibMessageId(Number(m[3]))}` : null
 }
 
 /** Called when a list the sync file holds changed (a place, a mark, Watch later, a star, a pick); sync/index.ts pushes soon after. */
@@ -166,7 +169,7 @@ let listsChanged: (() => void) | null = null
 export function onListsChanged(fn: () => void) {
     listsChanged = fn
 }
-const SYNCED = /^(resume|watched|later|star|fix):/
+const SYNCED = /^(resume|watched|later|star|fix|title):/
 
 function write(key: string, value: unknown) {
     // A line put (back) is newer than any removal of it: an Undo must not be taken off again by a sync.
@@ -294,6 +297,7 @@ export async function loadSettings() {
     setLaterIds(new Set(later.map(laterId)))
     await loadLists()
     await loadPicks()
+    await loadTitles()
     await loadCopies()
     applyTheme(settings().theme)
 }
@@ -774,6 +778,72 @@ async function loadPicks() {
     setPicks(found)
 }
 
+// "Rename": the title a viewer gave a video (the apps' VideoCorrection.title), one stored line per
+// file (`title:<chat>:<message>` = the cleaned title, `titleat:<chat>:<message>` = when). The sync
+// file carries it as the `title=` line of that video's correction. What is stored is outside data:
+// read back through `cleanTitle`, the keys checked, the count bounded.
+
+const [titles, setTitles] = createSignal<ReadonlyMap<string, string>>(new Map())
+export { titles }
+
+/** The most renames kept (a viewer renames a handful; anything past this is not theirs). */
+export const TITLES_MAX = 5_000
+
+/** The title the viewer gave a video, or undefined for none. Reactive: a rename redraws what read it. */
+export const titleOf = (chatId: number, messageId: number): string | undefined => titles().get(id(chatId, messageId))
+
+/**
+ * Gives each of `videos` (the video and its copies) the title `title`, or takes the rename off with
+ * null (or a title with nothing in it): the file name reads again. The same title again changes
+ * nothing, not even the time the sync file sees.
+ */
+export function setTitle(videos: readonly { chatId: number; messageId: number }[], title: string | null) {
+    const clean = cleanTitle(title)
+    let next: ReadonlyMap<string, string> = titles()
+    const now = Date.now()
+    let changed = false
+    for (const v of videos) {
+        const key = id(v.chatId, v.messageId)
+        if (clean) {
+            if (next.get(key) === clean) continue
+            const put = admit(next, key, clean, TITLES_MAX)
+            next = put.next
+            // Full: the oldest rename goes, here only (the sync file keeps its own newest 1,000).
+            if (put.evicted) forgetTitle(put.evicted)
+            write(`title:${key}`, clean)
+            write(`titleat:${key}`, now)
+        } else if (next.has(key)) {
+            const left = new Map(next)
+            left.delete(key)
+            next = left
+            remove(`titleat:${key}`, true)
+            remove(`title:${key}`)
+        } else continue
+        changed = true
+    }
+    if (changed) setTitles(next)
+}
+
+/** A rename dropped to make room: no removal is noted, it is not the viewer's act. */
+function forgetTitle(key: string) {
+    remove(`title:${key}`, true)
+    remove(`titleat:${key}`, true)
+}
+
+async function loadTitles() {
+    const [stored, times] = await Promise.all([allEntries<unknown>('title:'), allEntries<number>('titleat:')])
+    const found: [string, string, number][] = []
+    for (const [k, v] of stored) {
+        const key = k.slice('title:'.length)
+        const title = cleanTitle(v)
+        const at = times.get(`titleat:${key}`)
+        if (title && VIDEO_KEY.test(key)) found.push([key, title, typeof at === 'number' && Number.isFinite(at) ? at : 0])
+    }
+    // Oldest first, so a full store drops the oldest; a stored pile past the cap keeps the newest.
+    found.sort((x, y) => x[2] - y[2])
+    setTitles(new Map(found.slice(-TITLES_MAX).map(([key, title]) => [key, title])))
+}
+
 // The copies of a video (HX38), on this device only: the files kept apart from the copies they were
 // grouped with ("Not the same video", `apart:<chat>:<message>`), the copy the viewer chose for a
 // video in its list of copies (`chose:<chat>:<message>`, the time), and the quality they usually
@@ -967,6 +1037,52 @@ export async function syncPicks(): Promise<{ chatId: number; messageId: number; 
     return out
 }
 
+/** The renames as stored with when each was last changed (1 for one stored with no time): the sync file's `title=` lines. */
+export async function syncTitles(): Promise<{ chatId: number; messageId: number; title: string; at: number }[]> {
+    const [stored, times] = await Promise.all([allEntries<unknown>('title:'), allEntries<number>('titleat:')])
+    const out: { chatId: number; messageId: number; title: string; at: number }[] = []
+    for (const [k, value] of stored) {
+        const key = k.slice('title:'.length)
+        const title = cleanTitle(value)
+        if (!title || !VIDEO_KEY.test(key) || out.length >= TITLES_MAX) continue
+        const [chatId, messageId] = key.split(':').map(Number)
+        const at = times.get(`titleat:${key}`)
+        out.push({ chatId, messageId, title, at: typeof at === 'number' && at > 0 ? at : 1 })
+    }
+    return out
+}
+
+/** The renames the viewer reset, by the apps' key, newer than `since` (older ones are swept). */
+export async function syncTitleTombs(since: number): Promise<{ key: string; at: number }[]> {
+    const out: { key: string; at: number }[] = []
+    for (const [k, at] of await allEntries<number>('xtitle:')) {
+        if (typeof at !== 'number' || at < since) removeRaw(k)
+        else out.push({ key: k.slice('xtitle:'.length), at })
+    }
+    return out
+}
+
+/** A rename from the file (null: none), with the time the file gave it. Quiet: no removal is noted for what the file took off. */
+export function syncPutTitle(chatId: number, messageId: number, title: string | null, at: number) {
+    const key = id(chatId, messageId)
+    const clean = cleanTitle(title)
+    let next: ReadonlyMap<string, string> = titles()
+    if (clean) {
+        const put = admit(next, key, clean, TITLES_MAX)
+        next = put.next
+        if (put.evicted) forgetTitle(put.evicted)
+        write(`title:${key}`, clean)
+        write(`titleat:${key}`, at)
+    } else if (next.has(key)) {
+        const left = new Map(next)
+        left.delete(key)
+        next = left
+        remove(`title:${key}`, true)
+        remove(`titleat:${key}`, true)
+    } else return
+    setTitles(next)
+}
+
 /** The starred chats with when each was starred. */
 export async function syncStars(): Promise<{ chatId: number; time: number }[]> {
     return (await all<{ chatId: number; time: number }>('star:')).filter((s) => Number.isSafeInteger(s?.chatId))
@@ -1059,6 +1175,7 @@ export async function clearAll() {
     setLaterIds(new Set<string>())
     setListsDoc(Lists.emptyLists())
     setPicks(new Map())
+    setTitles(new Map())
     setApartIds(new Set<string>())
     setChosenCopies([])
     setCopyHabitSignal(null)

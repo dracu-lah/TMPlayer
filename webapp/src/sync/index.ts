@@ -26,10 +26,13 @@ import {
     syncPicks,
     syncPutLater,
     syncPutPick,
+    syncPutTitle,
     syncPutResume,
     syncPutStar,
     syncPutWatched,
     syncStars,
+    syncTitles,
+    syncTitleTombs,
     syncTombs,
     syncWrote,
     watchedList,
@@ -116,7 +119,8 @@ function note(s: Status | null) {
 // ---- the stores, as the sync reads and writes them ---------------------------------------------
 
 async function lists(): Promise<Lists> {
-    const [left, done, later, stars, picks, tombs] = await Promise.all([resumes(), watchedList(), laterList(), syncStars(), syncPicks(), syncTombs(Date.now() - REMOVAL_DAYS * 24 * 60 * 60 * 1000)])
+    const since = Date.now() - REMOVAL_DAYS * 24 * 60 * 60 * 1000
+    const [left, done, later, stars, picks, titles, tombs, titleTombs] = await Promise.all([resumes(), watchedList(), laterList(), syncStars(), syncPicks(), syncTitles(), syncTombs(since), syncTitleTombs(since)])
     return {
         resumes: left.map((r) => ({ chatId: r.chatId, messageId: r.messageId, position: r.position, length: r.length, time: r.time })),
         watched: done.map((w) => ({ chatId: w.chatId, messageId: w.messageId, time: w.time })),
@@ -124,7 +128,9 @@ async function lists(): Promise<Lists> {
         later: later.filter((l) => !l.show).map((l) => ({ chatId: l.item.chatId, messageId: l.item.messageId, time: l.time, title: l.item.title, size: l.item.size, duration: l.item.duration })),
         stars: stars.map((s) => ({ chatId: s.chatId, time: s.time })),
         picks: picks.map((p) => ({ chatId: p.chatId, messageId: p.messageId, text: p.text, at: p.at })),
+        titles,
         tombs,
+        titleTombs,
     }
 }
 
@@ -139,6 +145,7 @@ const writer: Writer = {
     putStar: (c, at) => syncPutStar(c, at),
     dropStar: (c) => syncDropStar(c),
     putPick: (c, m, pick, at) => syncPutPick(c, m, pick, at),
+    putTitle: (c, m, title, at) => syncPutTitle(c, m, title, at),
 }
 
 function deps(): Deps {

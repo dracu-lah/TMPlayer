@@ -5,12 +5,15 @@
 // right click menu is turned off page wide (blockBrowserMenu) so a right click feels like the app's.
 import { createEffect, createSignal, Show } from 'solid-js'
 import { useNavigate } from '@solidjs/router'
-import { Clock01Icon, Delete02Icon, InformationCircleIcon, LeftToRightListBulletIcon, Link04Icon, PlayIcon, Search01Icon, Tick02Icon, Unlink04Icon } from '@hugeicons/core-free-icons'
+import { Clock01Icon, Delete02Icon, Edit02Icon, InformationCircleIcon, LeftToRightListBulletIcon, Link04Icon, PlayIcon, Search01Icon, Tick02Icon, Unlink04Icon } from '@hugeicons/core-free-icons'
 import { t } from '../i18n'
 import { historyId, removeWithUndo } from '../historyEdits'
-import { laterIds, setLater, setWatched, watchedIds, watchedTick } from '../store'
+import { laterIds, settings, setLater, setWatched, watchedIds, watchedTick } from '../store'
 import { Icon } from './Icon'
 import { openPosterPicker } from './PosterPicker'
+import { canReportTitle, openRename, reportTitle } from './renameTarget'
+import { RenameSheet } from './RenameSheet'
+import { api } from '../tg/rpc'
 import { openListPicker } from '../screens/Lists'
 import { isApart, keepApart } from '../copies'
 import type { VideoItem } from '../tg/types'
@@ -21,6 +24,8 @@ interface Target {
     history: boolean
     /** How many versions the card stands for: from two, Not the same video is offered. */
     versions: number
+    /** The title the card shows, where Rename starts from; null for a card with no Rename (a show's). */
+    shown: string | null
 }
 
 const [target, setTarget] = createSignal<Target | null>(null)
@@ -32,13 +37,13 @@ const SLOP = 10
  * Handlers for a card's link. A long press with a finger or a right click opens the menu; the click
  * that follows a long press is swallowed so the card does not also open.
  */
-export function cardMenu(item: VideoItem, history = false, versions = 1) {
+export function cardMenu(item: VideoItem, history = false, versions = 1, shown: string | null = item.name) {
     let timer = 0
     let x = 0
     let y = 0
     let held = false
     const stop = () => clearTimeout(timer)
-    const open = () => setTarget({ item, history, versions })
+    const open = () => setTarget({ item, history, versions, shown })
     return {
         'on:contextmenu': (e: MouseEvent) => {
             e.preventDefault()
@@ -127,6 +132,21 @@ export function CardMenu() {
         close()
         if (now) openPosterPicker(now.item)
     }
+    // A card stands for every copy of its video; Rename is written to all of them (the apps' filesOf), found out when the sheet opens.
+    const copiesOf = (now: Target) => async () => {
+        const info = await api.watch(now.item.chatId, now.item.messageId, { sort: settings().sort, minBytes: settings().sizeMin, maxBytes: settings().sizeMax, watched: [], started: [], query: '' })
+        return info?.group.length ? info.group : (info?.copies.map((c) => c.item) ?? [])
+    }
+    const rename = () => {
+        const now = target()
+        close()
+        if (now?.shown != null) openRename(now.item, now.shown, copiesOf(now))
+    }
+    const wrongTitle = () => {
+        const now = target()
+        close()
+        if (now?.shown != null) reportTitle(now.item, now.shown, copiesOf(now))
+    }
     const apart = (on: boolean) => {
         const now = target()
         close()
@@ -138,6 +158,7 @@ export function CardMenu() {
         if (now) void removeWithUndo([historyId(now.item)])
     }
     return (
+        <>
         <dialog class="confirm card-menu" ref={dialog} aria-label={t('detail.open_details')} onClose={close} onClick={(e) => e.target === dialog && close()}>
             <Show when={target()}>
                 {(now) => (
@@ -189,6 +210,25 @@ export function CardMenu() {
                                 </span>
                             </button>
                         </Show>
+                        <Show when={now().shown !== null}>
+                        <button class="menu-row" type="button" onClick={rename}>
+                            <Icon icon={Edit02Icon} size={22} />
+                            <span>
+                                {t('grid.rename')}
+                                <small>{t('grid.rename_detail')}</small>
+                            </span>
+                        </button>
+                        {/* Hidden until the title inbox exists (WB28 registers it). */}
+                        <Show when={canReportTitle()}>
+                            <button class="menu-row" type="button" onClick={wrongTitle}>
+                                <Icon icon={InformationCircleIcon} size={22} />
+                                <span>
+                                    {t('titles.menu')}
+                                    <small>{t('titles.menu_detail')}</small>
+                                </span>
+                            </button>
+                        </Show>
+                        </Show>
                         <Show when={now().history}>
                             <button class="menu-row" type="button" onClick={remove}>
                                 <Icon icon={Delete02Icon} size={22} />
@@ -205,5 +245,7 @@ export function CardMenu() {
                 )}
             </Show>
         </dialog>
+        <RenameSheet />
+        </>
     )
 }

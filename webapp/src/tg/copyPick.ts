@@ -70,6 +70,12 @@ export interface CopyRow {
 }
 
 /**
+ * Every file of a group of copies, the same file posted twice included: the list above shows such a
+ * pair once, but a rename (or any correction) belongs to all of them so no hidden post keeps the old title.
+ */
+export const groupRefs = (copies: readonly Video[]): { chatId: number; messageId: number }[] => copies.map((v) => ({ chatId: v.chatId, messageId: v.messageId }))
+
+/**
  * `copies` as a list of copies shows them: the same file posted twice once (the post `current` is
  * about standing for it), recommended first (GlobalSearch.copyOrder: not a cam, one the browser plays
  * natively, the picture the device suits, the newest), each with what its row says. Its length is

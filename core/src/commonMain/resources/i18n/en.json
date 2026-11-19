@@ -1099,6 +1099,7 @@
     "remove_favourite_short": "Remove favourite",
     "removed_download": "Removed from Downloads",
     "rename": "Rename",
+    "rename_copies_failed": "The other copies of this video could not be found. Try again, or save to rename only this one.",
     "rename_detail": "Give this video the title you want to see",
     "rename_hint": "Title, and the year if it has one",
     "rename_reset": "Use the file name",

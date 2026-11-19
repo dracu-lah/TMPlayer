@@ -456,6 +456,8 @@ export interface WatchInfo {
      * them, in the order the list shows them: recommended first (HX38). Its length is "N versions".
      */
     copies: CopyRef[]
+    /** Every file of that group, the same file posted twice included (`copies` shows such a pair once): what a rename is written to. */
+    group: { chatId: number; messageId: number }[]
     /** The caption as an overview, its file facts and lines repeating the name taken off (MediaText.overviewOf); null when nothing is left. */
     overview: string | null
 }
