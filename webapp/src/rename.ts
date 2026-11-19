@@ -54,5 +54,13 @@ export function typed(raw: string): string {
     return atMost(raw.slice(0, RENAME_MAX * 8).replace(CONTROL, ' ').replace(DIRECTION, ''), RENAME_MAX)
 }
 
-/** Whether Save changes anything: the cleaned field differs from what is shown now. */
-export const changed = (field: string, shown: string): boolean => (cleanTitle(field) ?? '') !== (cleanTitle(shown) ?? '')
+/**
+ * What Save does with the field: `save` a new title, `reset` (the field emptied on a video that is
+ * renamed: the file name reads again), or null when nothing would change (so Save is not offered).
+ * `shown` is the title on show now, `renamed` the viewer's own when there is one.
+ */
+export function saveOf(field: string, shown: string, renamed: string | undefined): 'save' | 'reset' | null {
+    const next = cleanTitle(field)
+    if (renamed) return next === null ? 'reset' : next === cleanTitle(renamed) ? null : 'save'
+    return next === null || next === cleanTitle(shown) ? null : 'save'
+}

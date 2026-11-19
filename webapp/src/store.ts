@@ -792,30 +792,6 @@ export const TITLES_MAX = 5_000
 /** The title the viewer gave a video, or undefined for none. Reactive: a rename redraws what read it. */
 export const titleOf = (chatId: number, messageId: number): string | undefined => titles().get(id(chatId, messageId))
 
-/** Other tabs of this site, told of a rename as it is made so they do not keep the old title (a tab reads storage only at start). */
-let titleChannel: BroadcastChannel | null | undefined
-function titleTabs(): BroadcastChannel | null {
-    if (titleChannel !== undefined) return titleChannel
-    try {
-        titleChannel = typeof BroadcastChannel === 'function' ? new BroadcastChannel('tmplayer-titles') : null
-        if (titleChannel)
-            titleChannel.onmessage = (e: MessageEvent) => {
-                const d = e.data as { key?: unknown; title?: unknown } | null
-                if (typeof d?.key !== 'string' || !VIDEO_KEY.test(d.key)) return
-                const title = cleanTitle(d.title)
-                const next = new Map(titles())
-                if (title) {
-                    if (next.get(d.key) === title || (next.size >= TITLES_MAX && !next.has(d.key))) return
-                    next.set(d.key, title)
-                } else if (!next.delete(d.key)) return
-                setTitles(next)
-            }
-    } catch {
-        titleChannel = null
-    }
-    return titleChannel
-}
-
 /**
  * Gives each of `videos` (the video and its copies) the title `title`, or takes the rename off with
  * null (or a title with nothing in it): the file name reads again. The same title again changes
@@ -838,15 +814,11 @@ export function setTitle(videos: readonly { chatId: number; messageId: number }[
             remove(`title:${key}`)
         } else continue
         changed = true
-        try {
-            titleTabs()?.postMessage({ key, title: clean })
-        } catch {}
     }
     if (changed) setTitles(next)
 }
 
 async function loadTitles() {
-    titleTabs()
     const stored = await allEntries<unknown>('title:')
     const found = new Map<string, string>()
     for (const [k, v] of stored) {
@@ -1090,9 +1062,6 @@ export function syncPutTitle(chatId: number, messageId: number, title: string | 
         remove(`titleat:${key}`, true)
     } else return
     setTitles(next)
-    try {
-        titleTabs()?.postMessage({ key, title: clean })
-    } catch {}
 }
 
 /** The starred chats with when each was starred. */

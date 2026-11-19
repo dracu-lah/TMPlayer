@@ -2,7 +2,7 @@
 // read from and written to a correction's lines, and what the sheet's Save does with the field.
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { changed, cleanTitle, RENAME_MAX, titleLine, titleOf, typed } from '../rename.ts'
+import { cleanTitle, RENAME_MAX, titleLine, titleOf, saveOf, typed } from '../rename.ts'
 
 test('a title is trimmed to one line; nothing left, or not a string, is no rename', () => {
     assert.equal(cleanTitle('  Night Train (2019)  '), 'Night Train (2019)')
@@ -50,9 +50,15 @@ test('the field keeps typing natural: cut at the limit, breaks as spaces, the en
     assert.equal(typed('a\nb'), 'a b')
     assert.equal(typed('a'.repeat(300)).length, 120)
     assert.equal(typed(`${'a'.repeat(119)}😀`), 'a'.repeat(119))
-    assert.equal(changed('Night Train', 'Night Train'), false)
-    assert.equal(changed('  Night Train ', 'Night Train'), false)
-    assert.equal(changed('Night Train 2', 'Night Train'), true)
-    assert.equal(changed('', 'Night Train'), true, 'an empty field is "use the file name"')
-    assert.equal(changed('   ', ''), false)
+    // Not renamed yet: the shown title is the start, so the same again or nothing is no save.
+    assert.equal(saveOf('Night Train', 'Night Train', undefined), null)
+    assert.equal(saveOf('  Night Train ', 'Night Train', undefined), null)
+    assert.equal(saveOf('Night Train 2', 'Night Train', undefined), 'save')
+    assert.equal(saveOf('', 'Night Train', undefined), null, 'nothing to take off')
+    assert.equal(saveOf('   ', '', undefined), null)
+    // Renamed: a new title saves, the same one does not, an emptied field is "use the file name".
+    assert.equal(saveOf('Mine', 'Night Train', 'Mine'), null)
+    assert.equal(saveOf('Night Train', 'Night Train', 'Mine'), 'save', 'the file name typed is a rename to it')
+    assert.equal(saveOf('Mine 2', 'Night Train', 'Mine'), 'save')
+    assert.equal(saveOf('  ', 'Night Train', 'Mine'), 'reset')
 })

@@ -757,6 +757,9 @@ export const PAGE_STRINGS = [
     'grid.rename_reset',
     'grid.rename_save',
     'grid.rename_title',
+    // WB28 reads these when the title report has its inbox: the hook is ready and hidden (ui/RenameSheet.tsx).
+    'titles.menu',
+    'titles.menu_detail',
     // WB15 Volume boost and Rotate picture (GitHub #33, #34).
     'player.label_rotate',
     'player.rotate_picture',
