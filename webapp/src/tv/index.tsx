@@ -13,12 +13,15 @@ import { nameArt } from '../ui/colour'
 import { me, back } from '../session'
 import { t } from '../i18n'
 import { loadThumb } from '../screens/thumbs'
-import { askOf, loadBackdropLightFirst } from '../screens/posters'
+import { answer, askOf, loadBackdropLightFirst, loadExtras, loadLogo, type Answer, type Extras } from '../screens/posters'
 import { coverBackground } from '../screens/cover'
+import { featuredFactsLine } from '../screens/featuredFacts'
 import { settings } from '../store'
-import { detailPath, tileCard, useProgress, watchPath } from '../screens/VideoList'
+import { detailPath, shortLength, tileCard, useProgress, watchPath } from '../screens/VideoList'
+import { TitleLogo } from '../ui/TitleLogo'
+import { TmdbMark } from '../ui/TmdbMark'
 import { createFocusMap, resting } from './focus'
-import type { HomeRow } from '../tg/types'
+import type { HomeRow, Tile } from '../tg/types'
 import './tv.css'
 
 /** The four places the bar holds: their addresses, and which pages each stands for. */
@@ -180,6 +183,8 @@ const [heroPage, setHeroPage] = createSignal<string | null>(null)
 
 /** How long a page of the carousel is up before it moves on. */
 const ADVANCE_MS = 7_000
+/** How long a page is up before the next one's answers and logo are asked for, so a turn finds them kept. */
+const AHEAD_MS = 1_500
 
 /**
  * Home's carousel on a TV (TvHomeCarousel): the newest five in Recently added, one picture at a
@@ -189,7 +194,8 @@ const ADVANCE_MS = 7_000
  * to the focus fill, nothing more (no scale, no ring), so the mark holds with reduced motion and
  * in the dark theme alike (HX42). It moves on by itself only while the remote is elsewhere, the tab
  * is in sight, motion is allowed and a key was pressed in the last minute, so a TV left on Home is
- * not drawing a new picture every few seconds for hours. It has its size from the first frame.
+ * not drawing a new picture every few seconds for hours, nor while it is scrolled out of sight
+ * under the rows. It has its size from the first frame.
  */
 export function TvHero(props: { rows: HomeRow[] | undefined }) {
     /** null while Recently added is still asked for; empty when there is nothing to show. */
@@ -212,9 +218,29 @@ export function TvHero(props: { rows: HomeRow[] | undefined }) {
     document.addEventListener('visibilitychange', onVisible)
     onCleanup(() => document.removeEventListener('visibilitychange', onVisible))
     const still = matchMedia('(prefers-reduced-motion: reduce)').matches
+    // In sight: the rows scroll the carousel away under the bar, and a page nobody sees neither
+    // turns nor pulses its logo's placeholder. A TV engine with no IntersectionObserver keeps the
+    // pages turning as before and draws the placeholder still.
+    const watched = typeof IntersectionObserver === 'function'
+    const [inSight, setInSight] = createSignal(true)
+    const observe = (el: HTMLElement) => {
+        if (!watched) return
+        // The strip under the fixed bar is not in sight: the bar's own height is taken off the top
+        // (its 87 dp where it is not drawn yet).
+        const bar = document.querySelector('.tv-bar')?.getBoundingClientRect().height || 87 * Math.min(innerWidth / 960, innerHeight / 540)
+        const io = new IntersectionObserver(
+            (seen) => {
+                const last = seen[seen.length - 1]
+                if (last) setInSight(last.isIntersecting)
+            },
+            { rootMargin: `-${Math.round(bar)}px 0px 0px 0px` },
+        )
+        io.observe(el)
+        onCleanup(() => io.disconnect())
+    }
     createEffect(() => {
         const n = picks()?.length ?? 0
-        if (n < 2 || still || resting() || focusedIn() || !seen()) return
+        if (n < 2 || still || resting() || focusedIn() || !seen() || !inSight()) return
         index()
         const timer = window.setTimeout(() => go(index() + 1), ADVANCE_MS)
         onCleanup(() => clearTimeout(timer))
@@ -247,6 +273,22 @@ export function TvHero(props: { rows: HomeRow[] | undefined }) {
     })
     const src = () => wide() ?? frame()
 
+    // The next page's answers and logo are asked for ahead (PrefetchTitleLogos), only while this
+    // one is up and in sight, so a turn finds them in the cache and draws the logo at once.
+    createEffect(() => {
+        const list = picks()
+        const next = list && list.length > 1 ? list[(index() + 1) % list.length] : null
+        const ask = next && settings().posters && inSight() ? askOf(next.item) : null
+        if (!ask) return
+        const timer = window.setTimeout(() => {
+            answer(ask)
+                .then((found) => (found.match && found.id && found.kind ? loadExtras(found, null) : null))
+                .then((x) => (x?.found ? loadLogo(x) : null))
+                .catch(() => {})
+        }, AHEAD_MS)
+        onCleanup(() => clearTimeout(timer))
+    })
+
     const progressOf = useProgress()
     const card = () => {
         const p = pick()
@@ -268,18 +310,37 @@ export function TvHero(props: { rows: HomeRow[] | undefined }) {
 
     return (
         <Show when={picks()?.length !== 0}>
-            <section class="tv-hero" data-tv-top aria-roledescription="carousel" aria-label={t('home.row_recent')}>
-                <Show when={pick()} fallback={<div class="tv-hero-wait" aria-hidden="true"><span /><span /><span /></div>}>
+            <section
+                ref={observe}
+                class="tv-hero"
+                classList={{ 'in-sight': watched && inSight() }}
+                data-tv-top
+                aria-roledescription="carousel"
+                aria-label={t('home.row_recent')}
+            >
+                <Show
+                    when={pick()}
+                    fallback={
+                        <div class="tv-hero-wait" aria-hidden="true">
+                            <i class="tv-hero-wait-logo" />
+                            <i class="tv-hero-wait-facts" />
+                            <span class="tv-hero-wait-pills">
+                                <i />
+                                <i />
+                            </span>
+                        </div>
+                    }
+                >
                     <div class="tv-hero-art" classList={{ cover: !src() }} aria-hidden="true" style={src() ? undefined : { background: coverBackground(card()!.title) }}>
                         <Show when={src()}>
                             {/* Keyed by address: a new page's picture comes in on its own. */}
                             <For each={[src()!]}>{(url) => <img src={url} alt="" decoding="async" />}</For>
                         </Show>
                     </div>
-                    <div class="tv-hero-text">
-                        <h2 class="tv-hero-title">{card()!.title}</h2>
-                        <p class="tv-hero-facts">{card()!.facts}</p>
-                    </div>
+                    {/* Keyed by the page, so each page's logo waits for its own answer (the ceiling counts from its turn). */}
+                    <Show when={pick()?.key} keyed>
+                        {(_key) => <TvHeroWords tile={pick()!} title={card()!.title} />}
+                    </Show>
                     <div
                         class="tv-hero-actions"
                         onFocusIn={() => {
@@ -319,5 +380,88 @@ export function TvHero(props: { rows: HomeRow[] | undefined }) {
                 </Show>
             </section>
         </Show>
+    )
+}
+
+/** A score the worker gave, only where it is a number out of ten. */
+const scoreOf = (x: Extras | null): number | null => {
+    const r = x?.rating
+    return typeof r === 'number' && Number.isFinite(r) && r > 0 && r <= 10 ? r : null
+}
+const countOf = (n: unknown): number | null => (typeof n === 'number' && Number.isFinite(n) && n > 0 ? n : null)
+
+/**
+ * One page's words over Play and Details (TvHomeCarousel's column): the title's logo where TMDB has
+ * one, in a 340 by 56 dp box (TV_LOGO_MAX_*), the name in type until it is clear there is none;
+ * the facts line as the apps write it (kind, year, two genres, a film's length or a show's
+ * seasons); and the score with its site's mark. Lookups off or no question to ask: the name at
+ * once, no placeholder. What the worker answers is checked before it is drawn.
+ */
+function TvHeroWords(props: { tile: Tile; title: string }) {
+    const [found, setFound] = createSignal<Answer | null>(null)
+    const [extras, setExtras] = createSignal<Extras | null>(null)
+    const [pending, setPending] = createSignal(false)
+    createEffect(() => {
+        const ask = askOf(props.tile.item)
+        const on = !!ask && settings().posters
+        setFound(null)
+        setExtras(null)
+        setPending(on)
+        if (!on) return
+        let live = true
+        answer(ask!)
+            .then((a) => {
+                const usable = !!a && a.match === true && typeof a.id === 'string' && (a.kind === 'film' || a.kind === 'show')
+                if (live && usable) setFound(a)
+                return usable ? loadExtras(a, null) : null
+            })
+            .then((x) => live && setExtras(x && x.found === true ? x : null), () => {})
+            .finally(() => live && setPending(false))
+        onCleanup(() => (live = false))
+    })
+    const facts = () => {
+        const f = found()
+        const x = extras()
+        const genres = Array.isArray(x?.genres) ? x!.genres!.filter((g): g is string => typeof g === 'string') : null
+        return featuredFactsLine(
+            {
+                isShow: (f?.kind ?? props.tile.kind) === 'show',
+                year: countOf(f?.year),
+                genres,
+                runtimeMin: countOf(x?.runtime),
+                durationSec: props.tile.item.duration,
+                seasons: countOf(x?.seasons),
+                chatSeasons: props.tile.seasons,
+            },
+            { film: t('home.featured_film'), series: t('home.featured_series'), length: shortLength, seasons: (count) => t('metadata.seasons', { count }) },
+        )
+    }
+    // The anime provider answers for a fansub name; its score says so, with its name for a mark.
+    const site = () => (found()?.source === 'anilist' ? 'AniList' : 'TMDB')
+    const score = () => scoreOf(extras())
+    return (
+        <div class="tv-hero-text">
+            <TitleLogo level={2} class="tv-hero-title" name={props.title} extras={extras()} pending={pending()} />
+            <p class="tv-hero-facts">{facts()}</p>
+            {/* The score's line is always there, empty until the extras come, so the logo and facts above it never jump. */}
+            <p
+                class="tv-hero-score"
+                classList={{ empty: !score() }}
+                role={score() ? 'img' : undefined}
+                aria-hidden={score() ? undefined : 'true'}
+                aria-label={score() ? t('metadata.score_out_of_ten', { site: site(), score: score()! }) : undefined}
+            >
+                <Show when={score()}>
+                    {(value) => (
+                        <>
+                            <Show when={site() === 'TMDB'} fallback={<span class="tv-hero-site">{site()}</span>}>
+                                <TmdbMark height={14} />
+                            </Show>
+                            <span>{value().toFixed(1)}</span>
+                        </>
+                    )}
+                </Show>
+            </p>
+        </div>
     )
 }
