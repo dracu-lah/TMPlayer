@@ -3961,6 +3961,8 @@
     "keep_storage_off": "Off: when the device runs low on space, the browser may clear TMPlayer's data, which signs you out. Press to ask it to keep it",
     "keep_storage_on": "On: the browser keeps your sign in, settings and places even when the device runs low on space",
     "keep_storage_refused": "The browser did not agree. Installing TMPlayer to the home screen usually lets it keep the data",
+    "language_failed": "{language} did not load. Check the connection and try again",
+    "language_loading": "Loading {language}",
     "loading_player": "Loading the player",
     "low_storage_always": "Always on in a browser: a video is streamed and only the part being played is kept, in memory, never on the disk",
     "more_from_chat": "More from {chat}",

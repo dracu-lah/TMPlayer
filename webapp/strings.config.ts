@@ -716,6 +716,8 @@ export const PAGE_STRINGS = [
     'settings.language',
     'settings.language_automatic',
     'settings.language_detail_system',
+    'web.language_failed',
+    'web.language_loading',
     // WB13 The Sort menu: orders, the Show filters and the filters by what a video is (U6), Play random (U16).
     'grid.filter_added_label',
     'grid.filter_added_month',

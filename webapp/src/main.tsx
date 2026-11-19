@@ -8,7 +8,10 @@ import { watchForm } from './form'
 import { watchCrashes } from './crash'
 import { takeMsoneParam } from './msoneFlag'
 import { blockBrowserMenu } from './ui/CardMenu'
+import { languageFailedToast, startLanguage } from './i18n'
 import './styles.css'
+
+const START_WAIT_MS = 1200
 
 // Before anything else runs, so a failure in what follows still gets its card (HX10).
 watchCrashes()
@@ -32,6 +35,18 @@ if (!document.documentElement.dataset.old) {
     // A report that was confirmed while the line was down is tried once, a minute after start, and never on its own again (WB11).
     setTimeout(() => void import('./ui/feedback').then((m) => m.flushSoon()).catch(() => {}), 60_000)
     const root = document.getElementById('app')!
-    root.textContent = ''
-    render(() => <App />, root)
+    const start = () => {
+        if (root.dataset.started) return
+        root.dataset.started = '1'
+        root.textContent = ''
+        render(() => <App />, root)
+    }
+    // The viewer's language first (WB12), so the page does not paint in English and then change: from
+    // the service worker's copy that takes a moment. A slow line gets the page in English after
+    // START_WAIT_MS, and the words change in place once the language comes in.
+    void startLanguage().then((ok) => {
+        start()
+        if (!ok) languageFailedToast()
+    })
+    setTimeout(start, START_WAIT_MS)
 }
