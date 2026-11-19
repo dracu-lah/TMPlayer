@@ -45,11 +45,12 @@ import {
 } from '@hugeicons/core-free-icons'
 import './player.css'
 import './subfonts.css'
+import './rotate.css'
 import { Icon, type IconData } from '../ui/Icon'
 import { t } from '../i18n'
 import { Choice, Entry, Panel, PhoneSheet, Picker, ShortcutsSheet, TimePrompt, variant, walk } from './sheets'
-import { nextShape, objectFit, pictureSize, ratioBox, ratioPath, shapeRatio, SHAPES, type Shape } from './shape'
-import { clampedTo, NONE as NO_ZOOM, panBy, percent, pinch as pinchZoom, settled, stepped, transformOf, wheelSteps, zoomed, type Frame, type Zoom } from './zoom'
+import { nextShape, objectFit, ratioBox, ratioPath, shapeRatio, SHAPES, type Shape } from './shape'
+import { clampedTo, NONE as NO_ZOOM, panBy, percent, pinch as pinchZoom, settled, stepped, wheelSteps, zoomed, type Frame, type Zoom } from './zoom'
 import { actionFor, FRAME, playerHearsKeys } from './playerKeys'
 import { confirmOpen } from '../ui/Confirm'
 import { cueOverlay, type CueOverlay } from './cueoverlay'
@@ -67,9 +68,10 @@ import { episodeOf } from './msone'
 import * as subpick from './subpick-use'
 import { mergeSkips } from './skipOnline'
 import { answer, askOf, loadAnimeSkips } from '../screens/posters'
-import { settings } from '../store'
+import { openingSpeed, readBoost, rememberSpeed, settings, writeBoost } from '../store'
 import { msoneOn } from '../msoneFlag'
-import { AUTOPLAY_LIMIT, fineRate, IDLE_LIMIT, noteInput, pressLoop, repeats, repeatState, SeekUndo, SLEEP_CHOICES, sleepState, watching, wrapLoop, type Loop } from './extras'
+import { AUTOPLAY_LIMIT, BOOSTS, fineRate, IDLE_LIMIT, nextTurn, noteInput, pressLoop, repeats, repeatState, SeekUndo, sidewaysTurn, pictureTransform, SLEEP_CHOICES, sleepState, speedScopes, TURNS, turnedPictureSize, turnFrame, watching, wrapLoop, type Loop } from './extras'
+import { applyBoost, boostIsIos, boostSupported, releaseBoost } from './boost'
 import {
     addBookmark, deleteBookmark, loadBookmarks, readAutoplay, readChatOrder, readKeepRepeat, renameBookmark, writeAutoplay, writeChatOrder, writeKeepRepeat, writeLook,
     type Bookmark, type SubtitleLook,
@@ -188,7 +190,7 @@ export interface Ctl {
     markWatched: (on: boolean) => void
 }
 
-type Sheet = 'subtitles' | 'audio' | 'speed' | 'copies' | 'episodes' | 'more' | 'shape' | 'details' | 'options' | 'sleep' | 'bookmarks' | 'timing' | 'shortcuts' | 'still' | 'msone' | 'chatsubs' | 'goto' | null
+type Sheet = 'subtitles' | 'audio' | 'speed' | 'copies' | 'episodes' | 'more' | 'shape' | 'details' | 'options' | 'sleep' | 'bookmarks' | 'timing' | 'shortcuts' | 'still' | 'msone' | 'chatsubs' | 'goto' | 'rotate' | 'boost' | null
 
 /** A file name the three systems all take: no path or reserved characters, not too long. */
 function shotName(title: string, at: number): string {
@@ -419,9 +421,33 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         noteSeek(from, to)
     }
     const seekBy = (s: number) => seekTo(v.currentTime + s)
+    // The speed a video opens at: the one kept for its show (known once the show is read), else for its chat.
+    let speedPicked = false
+    {
+        let last = ''
+        createEffect(() => {
+            const scopes = speedScopes(c.item.chatId, c.info()?.episode?.show ?? null)
+            const key = `${scopes.series}|${scopes.chat}`
+            if (key === last) return
+            last = key
+            let alive = true
+            onCleanup(() => (alive = false))
+            openingSpeed(scopes).then(
+                (r) => {
+                    if (!alive || speedPicked || Math.abs(v.playbackRate - r) < 0.001) return
+                    v.defaultPlaybackRate = r
+                    v.playbackRate = r
+                },
+                () => {},
+            )
+        })
+    }
     const setSpeed = (r: number) => {
         const next = Math.round(Math.min(SPEED_MAX, Math.max(SPEED_MIN, r)) * 100) / 100
         v.playbackRate = next
+        // Remembered for this show, or this chat (SpeedMemory); 1x forgets it, so the next one opens at 1x too.
+        speedPicked = true
+        rememberSpeed(speedScopes(c.item.chatId, c.info()?.episode?.show ?? null), next)
         flash(speedLabel(next))
     }
     const stepSpeed = (up: boolean) => {
@@ -504,11 +530,25 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
             onCleanup(() => watch.disconnect())
         }
     }
+    // Rotate picture (PictureRotation): the picture turned a quarter at a time as it is drawn, the box resized so a
+    // sideways picture still fits the stage; for this video only (a new player starts upright).
+    const [turn, setTurn] = createSignal(0)
     createEffect(() => {
         const s = shape()
+        const deg = turn()
+        const sw = stage().width || v.parentElement?.clientWidth || 0
+        const sh = stage().height || v.parentElement?.clientHeight || 0
         v.style.objectFit = objectFit(s)
+        // The canvas engines' pictures follow this (movi.ts by custom properties, libavcanvas.ts by mirroring the style).
+        c.root.style.setProperty('--stage-w', `${sw}px`)
+        c.root.style.setProperty('--stage-h', `${sh}px`)
+        c.root.style.setProperty('--turn', `${deg}deg`)
+        if (deg) c.root.setAttribute('data-turn', String(deg))
+        else c.root.removeAttribute('data-turn')
         const ratio = shapeRatio(s)
-        const at = ratio === null ? null : ratioBox(stage().width || v.parentElement?.clientWidth || 0, stage().height || v.parentElement?.clientHeight || 0, ratio)
+        const frame = turnFrame(sw, sh, deg)
+        const inner = ratio === null ? null : ratioBox(frame.width, frame.height, ratio)
+        const at = inner ? { left: frame.left + inner.left, top: frame.top + inner.top, width: inner.width, height: inner.height } : sidewaysTurn(deg) && sw > 0 && sh > 0 ? frame : null
         if (!at) {
             for (const p of ['position', 'left', 'top', 'width', 'height'] as const) v.style.removeProperty(p)
             return
@@ -517,7 +557,61 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
     })
     onCleanup(() => {
         for (const p of ['position', 'left', 'top', 'width', 'height', 'object-fit'] as const) v.style.removeProperty(p)
+        for (const p of ['--stage-w', '--stage-h', '--turn']) c.root.style.removeProperty(p)
+        c.root.removeAttribute('data-turn')
     })
+    const pickTurn = (deg: number) => {
+        // The turn changes the picture the zoom enlarges, as another shape does: the zoom starts again from 100 per cent.
+        resetZoom(true)
+        setTurn(deg)
+        zoomFrameKept = null
+        flash(deg ? t('player.rotate_picture_now', { degrees: deg }) : t('player.rotate_picture_off'))
+    }
+
+    // Volume boost (boost.ts): the sound above the file's own level, kept for every video until turned off. Not on an
+    // iPhone or iPad, where the page cannot carry it, so the entry is left out there.
+    const boostOk = boostSupported()
+    const boostIos = boostIsIos()
+    const [boost, setBoost] = createSignal(1)
+    let boostPicked = false
+    let startBoost: (level: number) => void = () => {}
+    {
+        // A level that could not start yet (no tap has allowed audio) starts on the next one.
+        let retry: (() => void) | null = null
+        const start = (level: number) => {
+            void applyBoost(v, level).then((ok) => {
+                if (ok || retry) return
+                retry = () => {
+                    document.removeEventListener('pointerdown', retry!, true)
+                    document.removeEventListener('keydown', retry!, true)
+                    retry = null
+                    if (boost() === level) start(level)
+                }
+                document.addEventListener('pointerdown', retry, true)
+                document.addEventListener('keydown', retry, true)
+            })
+        }
+        startBoost = start
+        if (boostOk)
+            void readBoost().then((level) => {
+                if (boostPicked || level <= 1) return
+                setBoost(level)
+                start(level)
+            })
+        // A new source or engine (a quality pick, the fallback chain) starts without the graph: say the level again.
+        listen('playing', () => boost() > 1 && !retry && start(boost()))
+        onCleanup(() => {
+            if (retry) (document.removeEventListener('pointerdown', retry, true), document.removeEventListener('keydown', retry, true))
+            releaseBoost(v)
+        })
+    }
+    const pickBoost = (level: number) => {
+        boostPicked = true
+        setBoost(level)
+        writeBoost(level)
+        startBoost(level)
+        flash(level > 1 ? t('player.volume_boost_now', { percent: Math.round(level * 100) }) : t('player.volume_boost_off'))
+    }
     const pickShape = (next: Shape) => {
         // Another shape starts the zoom again from 100 per cent (PictureZoom: the shape sizes the picture
         // it enlarges), quietly: the shape's own note says what happened.
@@ -552,7 +646,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         const w = c.root.clientWidth
         const h = c.root.clientHeight
         const cv = engineCanvas()
-        const pic = pictureSize(w, h, v.videoWidth || cv?.width || w, v.videoHeight || cv?.height || h, shape())
+        const pic = turnedPictureSize(w, h, v.videoWidth || cv?.width || w, v.videoHeight || cv?.height || h, shape(), turn())
         const frame = { viewWidth: w, viewHeight: h, pictureWidth: pic?.width ?? w, pictureHeight: pic?.height ?? h }
         // A stage not laid out yet is measured again next time.
         if (w > 0 && h > 0) zoomFrameKept = frame
@@ -578,14 +672,15 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         showZoomChip(false)
     }
     /** The transform on every picture there is now: the <video>, and an engine's canvas, however late it came. */
+    // The turn (Rotate picture) and the zoom share the one transform, composed in extras.ts pictureTransform.
     const applyZoom = (z: Zoom) => {
-        const tf = transformOf(z)
+        const tf = pictureTransform(untrack(turn), z)
         for (const el of [v, engineCanvas()]) {
             if (!el) continue
             if (el.style.transform !== tf) el.style.transform = tf
             el.style.transformOrigin = tf ? 'center center' : ''
         }
-        c.root.classList.toggle('pc-zoomed', !!tf)
+        c.root.classList.toggle('pc-zoomed', zoomed(z))
     }
     // The cues while zoomed: a layer of our own over the native picture, unless an engine draws its
     // own (movi.ts, libavcanvas.ts), which wins whenever it comes, so the words are never drawn twice.
@@ -593,7 +688,8 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
     let zoomCuesEl: Element | null = null
     const engineCues = () => Array.from(c.root.querySelectorAll('.movi-cues')).some((el) => el !== zoomCuesEl)
     const placeCues = (z: Zoom) => {
-        const want = zoomed(z) && !engineCues()
+        // One layer for both: the zoomed picture and the turned one each take the element's own cue box with them.
+        const want = (zoomed(z) || untrack(turn) !== 0) && !engineCues()
         if (want && !zoomCues) {
             const before = new Set(c.root.querySelectorAll('.movi-cues'))
             zoomCues = cueOverlay(v, () => v.currentTime)
@@ -607,6 +703,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
     }
     createEffect(() => {
         const z = zoom()
+        turn()
         applyZoom(z)
         placeCues(z)
     })
@@ -661,8 +758,21 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
             g.drawImage(onCanvas ? cv! : v, 0, 0, w, h)
             // A cleared WebGL buffer reads as see-through black; a real frame is opaque.
             if (g.getImageData(w >> 1, h >> 1, 1, 1).data[3] === 0) throw new Error('empty frame')
-            if (withSubtitles) drawCuesOn(g, w, h, at)
-            const blob = await new Promise<Blob | null>((done) => out.toBlob(done, 'image/png'))
+            // A turned picture is saved as it is shown (Rotate picture): the frame turned, the subtitles upright over it.
+            let shot = out
+            if (turn() !== 0) {
+                const side = sidewaysTurn(turn())
+                shot = document.createElement('canvas')
+                shot.width = side ? h : w
+                shot.height = side ? w : h
+                const r = shot.getContext('2d')
+                if (!r) throw new Error('no 2d')
+                r.translate(shot.width / 2, shot.height / 2)
+                r.rotate((turn() * Math.PI) / 180)
+                r.drawImage(out, -w / 2, -h / 2)
+            }
+            if (withSubtitles) drawCuesOn(shot.getContext('2d')!, shot.width, shot.height, at)
+            const blob = await new Promise<Blob | null>((done) => shot.toBlob(done, 'image/png'))
             if (!blob) throw new Error('no image')
             const file = shotName(info()?.title ?? c.item.title, at)
             const url = URL.createObjectURL(blob)
@@ -894,6 +1004,8 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         (!!document.pictureInPictureEnabled && !v.disablePictureInPicture && !!v.requestPictureInPicture) ||
         (typeof wv.webkitSetPresentationMode === 'function' && !!wv.webkitSupportsPresentationMode?.('picture-in-picture'))
     const togglePip = async () => {
+        // The small window shows the frame as it is, unturned: a turned picture goes back upright as it opens (the note says so).
+        if (turn() !== 0 && !document.pictureInPictureElement) pickTurn(0)
         try {
             if (document.pictureInPictureElement) await document.exitPictureInPicture()
             else if (document.pictureInPictureEnabled && v.requestPictureInPicture) await v.requestPictureInPicture()
@@ -1298,6 +1410,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
             case 'fullscreen': void toggleFullscreen(); break
             case 'exitFullscreen': document.exitFullscreen().catch(() => {}); break
             case 'shape': cycleShape(); break
+            case 'rotate': pickTurn(nextTurn(turn())); break
             case 'zoom': zoomBy(a.steps); raise = false; break
             case 'zoomReset': resetZoom(); raise = false; break
             case 'screenshot': void screenshot(a.subtitles); raise = false; break
@@ -2014,6 +2127,11 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                         </Show>
                         <Entry text={t('player.playback_options')} trailing={sleepAt() !== null || sleepEnd() ? sleepSummary() : undefined} onClick={() => setSheet('options')} />
                         <Entry text={t('player.picture_shape')} trailing={shapeName(shape())} onClick={() => setSheet('shape')} />
+                        <Entry text={t('player.rotate_picture')} trailing={turn() ? t('player.rotate_picture_degrees', { degrees: turn() }) : undefined} onClick={() => setSheet('rotate')} />
+                        {/* On an iPhone the entry stays and says why it does nothing there. */}
+                        <Show when={boostOk || boostIos}>
+                            <Entry text={t('player.volume_boost')} trailing={boost() > 1 ? t('player.volume_boost_level', { percent: Math.round(boost() * 100) }) : undefined} onClick={() => setSheet('boost')} />
+                        </Show>
                         {/* PhoneMenuEntry.ResetZoom: the pinch's undo without a gesture, so a screen reader reaches it too. */}
                         <Show when={zoomed(zoom())}>
                             <Entry text={t('player.reset_zoom')} trailing={`${percent(zoom())}%`} onClick={() => (setSheet(null), resetZoom())} />
@@ -2113,6 +2231,36 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                             </div>
                         </div>
                     </div>
+                </Match>
+                <Match when={sheet() === 'rotate'}>
+                    {/* The picture beside it is the answer, as for the shapes: the panel stays open. */}
+                    <Picker title={t('player.rotate_picture')} note={t('player.rotate_picture_note')} phone={phone()} panel anchor={anchor()} root={c.root} onClose={() => setSheet(null)} onBack={() => setSheet('more')}>
+                        <For each={TURNS}>
+                            {(deg) => (
+                                <Choice
+                                    text={deg === 0 ? t('player.rotate_picture_none') : deg === 90 ? t('player.rotate_picture_right') : deg === 180 ? t('player.rotate_picture_half') : t('player.rotate_picture_left')}
+                                    detail={deg ? t('player.rotate_picture_degrees', { degrees: deg }) : undefined}
+                                    on={turn() === deg}
+                                    phone={phone()}
+                                    onClick={() => (pickTurn(deg), phone() && setSheet(null))}
+                                />
+                            )}
+                        </For>
+                    </Picker>
+                </Match>
+                <Match when={sheet() === 'boost'}>
+                    <Picker title={t('player.volume_boost')} note={boostOk ? t('player.volume_boost_note') : t('web.volume_boost_not_here')} phone={phone()} panel anchor={anchor()} root={c.root} onClose={() => setSheet(null)} onBack={() => setSheet('more')}>
+                        <For each={boostOk ? BOOSTS : []}>
+                            {(level) => (
+                                <Choice
+                                    text={level === 1 ? t('player.volume_boost_off') : t('player.volume_boost_level', { percent: Math.round(level * 100) })}
+                                    on={Math.abs(boost() - level) < 0.001}
+                                    phone={phone()}
+                                    onClick={() => (pickBoost(level), phone() && setSheet(null))}
+                                />
+                            )}
+                        </For>
+                    </Picker>
                 </Match>
                 <Match when={sheet() === 'shape'}>
                     {/* In the panel a pick leaves it open: the picture beside it is the answer. */}

@@ -60,9 +60,6 @@ const timing =
           }
         : () => {}
 
-/** The speed last chosen in this tab: the next episode (or any video opened after) plays at it too. */
-let chosenRate = 1
-
 /** Only one tab plays at a time: a tab that starts playing tells the others, which pause. */
 const tabs = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('tmplayer-player') : null
 
@@ -736,7 +733,6 @@ export function Player(props: {
         savedMs = left > 0 ? left * 1000 : null
         const at = left > 0 ? (await api.resumeStart(left * 1000, rewindMs()).catch(() => left * 1000)) / 1000 : 0
         if (closed) return
-        video.playbackRate = chosenRate
         if (at > 0) setResumedAt(at)
         load(source(), at, true)
         startTicks()
@@ -884,7 +880,6 @@ export function Player(props: {
                     }}
                     onTimeUpdate={onTime}
                     // A held finger plays at double speed for a moment: that is not a speed chosen.
-                    onRateChange={() => video.playbackRate !== 2 && (chosenRate = video.playbackRate)}
                     onSeeking={() => framed && (seekStarted = performance.now())}
                     onSeeked={() => {
                         if (seekStarted) timing('seek, until the frame', seekStarted)
