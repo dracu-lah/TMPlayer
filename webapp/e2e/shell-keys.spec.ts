@@ -118,7 +118,8 @@ test.describe('window keys', () => {
     })
 
     test('Ctrl+F is left to the browser where a page has no search box', async ({ page }) => {
-        await page.goto('/settings')
+        // Settings has one since WB20 (settings-find.spec.ts); Downloads, the Get the app card, has none.
+        await page.goto('/downloads')
         await expect(page.locator('main').first()).toBeVisible()
         const seen = await page.evaluate(
             () =>

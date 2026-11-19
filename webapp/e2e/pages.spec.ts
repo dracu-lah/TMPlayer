@@ -59,8 +59,8 @@ test.describe('Settings as pages', () => {
             await page.goto('/settings')
             await expect(page).toHaveURL(/\/settings\/appearance$/)
             const list = page.getByRole('navigation', { name: 'Settings' })
-            // Appearance, Home, Playback, Library, Privacy and lock, Storage and About.
-            await expect(list.getByRole('link')).toHaveCount(7)
+            // Appearance, Home and library, Playback, Privacy and lock, Storage and About.
+            await expect(list.getByRole('link')).toHaveCount(6)
             await expect(page.getByRole('radio', { name: 'Dark' })).toBeVisible()
             await expect(list.getByRole('link', { name: /^Appearance/ })).toHaveAttribute('aria-current', 'page')
             await list.getByRole('link', { name: /^Home/ }).click()
