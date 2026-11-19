@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createResource, createSignal, For, Match, on, onMount, Show, Switch, type JSX } from 'solid-js'
-import { A, useNavigate, useParams } from '@solidjs/router'
+import { A, useLocation, useNavigate, useParams } from '@solidjs/router'
 import { renderSVG } from 'uqr'
 import {
     ArrowDown01Icon,
@@ -15,7 +15,6 @@ import {
     LockKeyholeIcon,
     Delete02Icon,
     Download04Icon,
-    GridViewIcon,
     HardDriveIcon,
     File01Icon,
     Home03Icon,
@@ -32,6 +31,8 @@ import {
     VideoReplayIcon,
     FavouriteIcon,
 } from '@hugeicons/core-free-icons'
+import { OLD_PAGES, pageFor, type PageId, type RowContext } from '../ui/settingsMap'
+import { rowDomId, SettingsSearch, showingResults, useRowTarget, WhatsNewRow } from './SettingsFind'
 import { addedIds, addedMode, homeChatRows, namedLists, settings, setSetting, starredIds, storageWorks, type Theme } from '../store'
 import { editorRows, encodeOrder, moveKey, parseOrder, type OrderEntry } from '../ui/homeOrder'
 import { back, me, signOut } from '../session'
@@ -60,12 +61,12 @@ const LAYOUTS: Layout[] = ['desktop', 'tv']
 /** The build's own notices: the TV build's (under /tv/) also name core-js. */
 const LICENCES = `${import.meta.env.BASE_URL}licenses.txt`
 // The same UPI details the apps and the site carry (ui About.kt, site/src/lib/support.ts).
+/** Where the full changelog is (core's WhatsNew.CHANGELOG, as the apps' Changelog row opens it). */
+const CHANGELOG = 'https://tmplayer.org/changelog/'
 const UPI_ID = 'nevilnicks4321@okaxis'
 const UPI_LINK = `upi://pay?pa=${UPI_ID}&pn=TMPlayer&cu=INR&tn=${encodeURIComponent('TMPlayer support')}`
 
-type PageId = 'appearance' | 'home' | 'playback' | 'library' | 'privacy' | 'storage' | 'about'
-
-/** The app's pages (SettingsPage) that the web has something to put in, in its order. */
+/** The app's pages (SettingsPage) that the web has something to put in, in its order. Home and library are one page, as in the apps (11.1). */
 const PAGES: { id: PageId; icon: IconData; title: () => string; summary: () => string }[] = [
     {
         id: 'appearance',
@@ -73,14 +74,27 @@ const PAGES: { id: PageId; icon: IconData; title: () => string; summary: () => s
         title: () => t('settings.appearance'),
         summary: () => [t(`theme.${settings().theme}`), form() === 'phone' || layoutFixed() ? '' : t(`settings.layout_${layout()}`), languageName(language())].filter(Boolean).join(dot),
     },
-    { id: 'home', icon: Home03Icon, title: () => t('settings.page_home'), summary: () => t('settings.page_home_rows_summary') },
+    { id: 'home', icon: Home03Icon, title: () => t('settings.page_home_library'), summary: () => t('settings.page_home_library_summary') },
     { id: 'playback', icon: PlayIcon, title: () => t('settings.playback'), summary: () => t('settings.resume_rewind') },
-    { id: 'library', icon: GridViewIcon, title: () => t('settings.library'), summary: () => t('settings.page_library_summary') },
     { id: 'privacy', icon: LockKeyholeIcon, title: () => t('settings.page_privacy_lock'), summary: () => (syncOn() ? t('syncplace.switch_on') : t('syncplace.switch_off')) },
     { id: 'storage', icon: HardDriveIcon, title: () => t('web.settings_storage'), summary: () => t('web.settings_storage_summary') },
     { id: 'about', icon: InformationCircleIcon, title: () => t('settings.page_about'), summary: () => t('about.licence_line') },
 ]
 const dot = '  ·  '
+const PAGE_ICONS = Object.fromEntries(PAGES.map((p) => [p.id, p.icon])) as Record<PageId, IconData>
+
+/** What decides which rows this page draws, for the search over them. */
+function rowContext(): RowContext {
+    return {
+        form: form(),
+        layoutFixed: layoutFixed(),
+        msone: msoneOn(),
+        sync: syncOn(),
+        syncFile: syncHasFile(),
+        installable: !installed() && !!(installPrompt() || iosBrowser),
+        storageEstimate: typeof navigator !== 'undefined' && typeof navigator.storage?.estimate === 'function',
+    }
+}
 
 /**
  * Settings, as the app lays it out: a list of pages (Appearance, Playback, Library, Storage, About)
@@ -91,19 +105,26 @@ const dot = '  ·  '
 export function Settings() {
     const params = useParams<{ page?: string }>()
     const navigate = useNavigate()
+    const location = useLocation()
+    useRowTarget()
     // The desktop shows a page beside the list: its address says which, so a change of layout keeps the viewer on it.
     // The TV has one page and no sub pages: it drops the address and remembers the page for the way back out of it.
+    // An address from before Home and library were one page (/settings/library) lands on the page that took its place; an anchor stays.
     createEffect(() => {
         const f = form()
-        if (f === 'tv') {
+        const page = pageFor(params.page)
+        const hash = location.hash
+        if (params.page && page && params.page !== page && Object.hasOwn(OLD_PAGES, params.page)) {
+            navigate(`/settings/${page}${hash}`, { replace: true })
+        } else if (f === 'tv') {
             if (params.page) {
-                leftFor = PAGES.find((p) => p.id === params.page)?.id ?? null
-                navigate('/settings', { replace: true })
+                leftFor = page
+                navigate(`/settings${hash}`, { replace: true })
             }
-        } else if (!PAGES.some((p) => p.id === params.page)) {
+        } else if (!page) {
             const back = leftFor
             leftFor = null
-            if (f === 'desktop' || back) navigate(`/settings/${back ?? PAGES[0].id}`, { replace: true })
+            if (f === 'desktop' || back) navigate(`/settings/${back ?? PAGES[0].id}${hash}`, { replace: true })
         }
     })
     return (
@@ -177,18 +198,21 @@ function PageList(props: { selected: PageId | null }) {
     return (
         <nav class="set-list" aria-label={t('nav.settings')}>
             <AccountHeader />
-            <div class="set-card">
-                <For each={PAGES}>
-                    {(p) => (
-                        <A class="set-row" href={`/settings/${p.id}`} aria-current={props.selected === p.id ? 'page' : undefined}>
-                            <RowBody icon={p.icon} title={p.title()} subtitle={p.summary()} />
-                            <Show when={props.selected === null}>
-                                <Icon icon={ArrowRight01Icon} size={20} class="set-chevron" />
-                            </Show>
-                        </A>
-                    )}
-                </For>
-            </div>
+            <SettingsSearch context={rowContext} icons={PAGE_ICONS} />
+            <Show when={!showingResults()}>
+                <div class="set-card">
+                    <For each={PAGES}>
+                        {(p) => (
+                            <A class="set-row" href={`/settings/${p.id}`} aria-current={props.selected === p.id ? 'page' : undefined}>
+                                <RowBody icon={p.icon} title={p.title()} subtitle={p.summary()} />
+                                <Show when={props.selected === null}>
+                                    <Icon icon={ArrowRight01Icon} size={20} class="set-chevron" />
+                                </Show>
+                            </A>
+                        )}
+                    </For>
+                </div>
+            </Show>
             <SignOut />
             <p class="muted small set-foot">{t('auth.unofficial')}</p>
         </nav>
@@ -220,12 +244,10 @@ function PageBody(props: { id: PageId }) {
             </Match>
             <Match when={props.id === 'home'}>
                 <HomePage />
+                <Library />
             </Match>
             <Match when={props.id === 'playback'}>
                 <Playback />
-            </Match>
-            <Match when={props.id === 'library'}>
-                <Library />
             </Match>
             <Match when={props.id === 'privacy'}>
                 <Privacy />
@@ -263,9 +285,9 @@ function RowBody(props: { icon: IconData; title: string; subtitle?: string; note
 }
 
 /** An on or off row: the title, what it does, and the app's switch at the end. */
-function ToggleRow(props: { icon: IconData; title: string; subtitle: string; on: boolean; onChange: (on: boolean) => void }) {
+function ToggleRow(props: { id?: string; icon: IconData; title: string; subtitle: string; on: boolean; onChange: (on: boolean) => void }) {
     return (
-        <button type="button" role="switch" class="set-row" aria-checked={props.on} onClick={() => props.onChange(!props.on)}>
+        <button type="button" role="switch" class="set-row" id={props.id && rowDomId(props.id)} aria-checked={props.on} onClick={() => props.onChange(!props.on)}>
             <RowBody icon={props.icon} title={props.title} subtitle={props.subtitle} />
             <span class="switch" aria-hidden="true" />
         </button>
@@ -278,7 +300,7 @@ function Appearance() {
     return (
         <>
             <div class="set-card set-blocks">
-                <div class="set-block">
+                <div class="set-block" id={rowDomId('theme')}>
                     <h3 class="set-block-title" id="theme-label">{t('settings.theme')}</h3>
                     <Choices
                         label="theme-label"
@@ -289,7 +311,7 @@ function Appearance() {
                     />
                 </div>
                 <Show when={form() !== 'phone' && !layoutFixed()}>
-                <div class="set-block">
+                <div class="set-block" id={rowDomId('layout')}>
                     <h3 class="set-block-title" id="layout-label">{t('settings.layout')}</h3>
                     <Choices
                         label="layout-label"
@@ -318,7 +340,7 @@ function Appearance() {
 function LanguageBlock() {
     const detail = () => (languageChoice() ? languageName(language()) : t('settings.language_detail_system', { language: languageName(browserLanguage()) }))
     return (
-        <div class="set-block">
+        <div class="set-block" id={rowDomId('language')}>
             <h3 class="set-block-title" id="language-label">{t('settings.language')}</h3>
             <p class="muted small">{detail()}</p>
             <div class="lang-list" role="group" aria-labelledby="language-label">
@@ -388,7 +410,7 @@ function useMsoneHealth() {
 function MsoneRow() {
     const m = useMsoneHealth()
     return (
-        <button type="button" class="set-row" aria-busy={m.checking()} onClick={() => void m.check(true)}>
+        <button type="button" class="set-row" id={rowDomId('msone')} aria-busy={m.checking()} onClick={() => void m.check(true)}>
             <RowBody icon={TranslateIcon} title={t('msone.title')} subtitle={m.checking() ? t('msone.checking') : stateLine(m.state().state)} note={m.checking() ? undefined : m.state().message ?? undefined} />
         </button>
     )
@@ -397,7 +419,7 @@ function MsoneRow() {
 function TvMsone() {
     const m = useMsoneHealth()
     return (
-        <TvPanel title={t('msone.title')} id="msone-label">
+        <TvPanel title={t('msone.title')} id="msone-label" anchor={rowDomId('msone')}>
             <p class="muted small" role="status">{m.checking() ? t('msone.checking') : stateLine(m.state().state)}</p>
             <Show when={!m.checking() && m.state().message}>
                 <p class="muted small">{m.state().message}</p>
@@ -420,6 +442,7 @@ function HomePage() {
             <div class="set-card">
                 <h3 class="set-block-title set-card-title">{t('settings.home_rows')}</h3>
                 <ToggleRow
+                    id="home_carousel"
                     icon={Home03Icon}
                     title={t('settings.home_carousel')}
                     subtitle={settings().carousel ? t('settings.home_carousel_on') : t('settings.home_carousel_off')}
@@ -427,6 +450,7 @@ function HomePage() {
                     onChange={(on) => setSetting('carousel', on)}
                 />
                 <ToggleRow
+                    id="home_continue"
                     icon={VideoReplayIcon}
                     title={t('settings.home_continue')}
                     subtitle={settings().homeContinue ? t('settings.home_continue_on') : t('settings.home_continue_off')}
@@ -434,6 +458,7 @@ function HomePage() {
                     onChange={(on) => setSetting('homeContinue', on)}
                 />
                 <ToggleRow
+                    id="home_recent"
                     icon={Clock01Icon}
                     title={t('settings.home_recent')}
                     subtitle={settings().homeRecent ? t('settings.home_recent_on') : t('settings.home_recent_off')}
@@ -441,6 +466,7 @@ function HomePage() {
                     onChange={(on) => setSetting('homeRecent', on)}
                 />
                 <ToggleRow
+                    id="home_starred_rows"
                     icon={StarIcon}
                     title={t('settings.home_starred_rows')}
                     subtitle={settings().homeStarred ? t('settings.home_starred_rows_on') : t('settings.home_starred_rows_off')}
@@ -511,7 +537,7 @@ function HomeOrder() {
         put(moveKey(keys, from, keys.indexOf(onto) - keys.indexOf(from)))
     }
     return (
-        <div class="set-card">
+        <div class="set-card" id={rowDomId('home_order')}>
             <h3 class="set-block-title set-card-title">{t('settings.home_order')}</h3>
             <ol class="order-list" ref={list}>
                 <For each={rows()}>
@@ -556,9 +582,9 @@ function HomeOrder() {
 }
 
 /** One of Settings > Home's switches on a TV: its words and an On or Off choice made with OK. */
-function TvSwitch(props: { id: string; title: string; on: boolean; onText: string; offText: string; onPick: (on: boolean) => void }) {
+function TvSwitch(props: { id: string; row: string; title: string; on: boolean; onText: string; offText: string; onPick: (on: boolean) => void }) {
     return (
-        <TvPanel title={props.title} id={`${props.id}-label`}>
+        <TvPanel title={props.title} id={`${props.id}-label`} anchor={rowDomId(props.row)}>
             <p class="muted small">{props.on ? props.onText : props.offText}</p>
             <Choices
                 label={`${props.id}-label`}
@@ -581,11 +607,12 @@ function Library() {
     return (
         <>
             <div class="set-card">
-                <A class="set-row" href="/added-chats">
+                <A class="set-row" id={rowDomId('chosen_chats')} href="/added-chats">
                     <RowBody icon={Message01Icon} title={t('picker.row_title')} subtitle={chosenDetail()} />
                     <Icon icon={ArrowRight01Icon} size={20} class="set-chevron" />
                 </A>
                 <ToggleRow
+                    id="posters"
                     icon={Image01Icon}
                     title={t('web.posters_title')}
                     subtitle={settings().posters ? t('web.posters_on_detail') : t('metadata.toggle_off')}
@@ -593,6 +620,7 @@ function Library() {
                     onChange={(on) => setSetting('posters', on)}
                 />
                 <ToggleRow
+                    id="trailers_in_app"
                     icon={ClapperboardIcon}
                     title={t('metadata.trailers_in_app')}
                     subtitle={t('metadata.trailers_in_app_detail')}
@@ -608,7 +636,7 @@ function Library() {
             </div>
             <div class="set-card">
                 {/* One row for Continue watching and Watched together; Watch later is kept. Done at once, with Undo. */}
-                <button type="button" class="set-row" onClick={() => void clearHistoryWithUndo()}>
+                <button type="button" class="set-row" id={rowDomId('clear_history')} onClick={() => void clearHistoryWithUndo()}>
                     <RowBody icon={Delete02Icon} title={t('browse.clear_history')} subtitle={t('browse.clear_history_detail')} />
                 </button>
             </div>
@@ -654,7 +682,7 @@ function Privacy() {
     return (
         <>
             <div class="set-card">
-                <ToggleRow icon={CloudSyncIcon} title={t('settings.resume_sync')} subtitle={syncOn() ? t('settings.resume_sync_on') : t('settings.resume_sync_off')} on={syncOn()} onChange={change} />
+                <ToggleRow id="resume_sync" icon={CloudSyncIcon} title={t('settings.resume_sync')} subtitle={syncOn() ? t('settings.resume_sync_on') : t('settings.resume_sync_off')} on={syncOn()} onChange={change} />
                 <Show when={syncOn()}>
                     <div class="set-block sync-status">
                         <p class="small" role="status" aria-live="polite" aria-busy={syncRunning()}>{statusLine()}</p>
@@ -669,7 +697,7 @@ function Privacy() {
                     </div>
                 </Show>
                 <Show when={syncOn() || syncHasFile()}>
-                    <button type="button" class="set-row" onClick={() => void erased()}>
+                    <button type="button" class="set-row" id={rowDomId('resume_sync_delete')} onClick={() => void erased()}>
                         <RowBody icon={Delete02Icon} title={t('settings.resume_sync_delete')} subtitle={t('settings.resume_sync_delete_detail')} />
                     </button>
                 </Show>
@@ -724,22 +752,22 @@ function Feedback() {
                 when={form_()}
                 fallback={
                     <>
-                        <a class="set-row" href={issueUrl(facts())} target="_blank" rel="noopener">
+                        <a class="set-row" id={rowDomId('report_problem')} href={issueUrl(facts())} target="_blank" rel="noopener">
                             <RowBody icon={Bug01Icon} title={t('settings.report_problem')} subtitle={t('settings.report_problem_detail')} />
                             <Icon icon={ArrowRight01Icon} size={20} class="set-chevron" />
                         </a>
-                        <a class="set-row" href={featureUrl()} target="_blank" rel="noopener">
+                        <a class="set-row" id={rowDomId('request_feature')} href={featureUrl()} target="_blank" rel="noopener">
                             <RowBody icon={Idea01Icon} title={t('web.request_feature')} subtitle={t('web.request_feature_detail')} />
                             <Icon icon={ArrowRight01Icon} size={20} class="set-chevron" />
                         </a>
                     </>
                 }
             >
-                <button type="button" class="set-row" onClick={(e) => openFeedback('problem', e.currentTarget)}>
+                <button type="button" class="set-row" id={rowDomId('report_problem')} onClick={(e) => openFeedback('problem', e.currentTarget)}>
                     <RowBody icon={Bug01Icon} title={t('settings.report_problem')} subtitle={t('settings.report_problem_detail_inbox')} />
                     <Icon icon={ArrowRight01Icon} size={20} class="set-chevron" />
                 </button>
-                <button type="button" class="set-row" onClick={(e) => openFeedback('feature', e.currentTarget)}>
+                <button type="button" class="set-row" id={rowDomId('request_feature')} onClick={(e) => openFeedback('feature', e.currentTarget)}>
                     <RowBody icon={Idea01Icon} title={t('web.request_feature')} subtitle={t('settings.request_feature_detail')} />
                     <Icon icon={ArrowRight01Icon} size={20} class="set-chevron" />
                 </button>
@@ -760,13 +788,20 @@ function Feedback() {
 function About() {
     return (
         <>
+        <div class="set-card">
+            <WhatsNewRow variant="row" rowIcon={StarIcon} />
+            <a class="set-row" id={rowDomId('changelog')} href={CHANGELOG} target="_blank" rel="noopener">
+                <RowBody icon={Clock01Icon} title={t('settings.changelog')} subtitle={t('settings.changelog_detail')} />
+                <Icon icon={ArrowRight01Icon} size={20} class="set-chevron" />
+            </a>
+        </div>
         <Feedback />
         <div class="set-card">
-            <a class="set-row" href={LICENCES} target="_blank" rel="noopener">
+            <a class="set-row" id={rowDomId('notices')} href={LICENCES} target="_blank" rel="noopener">
                 <RowBody icon={File01Icon} title={t('about.notices_title')} subtitle={t('about.notices_detail')} />
                 <Icon icon={ArrowRight01Icon} size={20} class="set-chevron" />
             </a>
-            <a class="set-row" href="https://tmplayer.org/legal" target="_blank" rel="noopener">
+            <a class="set-row" id={rowDomId('legal')} href="https://tmplayer.org/legal" target="_blank" rel="noopener">
                 <RowBody icon={LegalDocument01Icon} title={t('login.legal')} subtitle={t('auth.unofficial')} />
                 <Icon icon={ArrowRight01Icon} size={20} class="set-chevron" />
             </a>
@@ -812,7 +847,7 @@ function Chip() {
     return (
         <>
         <div class="set-card">
-            <a class="set-row" href="https://buymeacoffee.com/nevil.dev" target="_blank" rel="noopener">
+            <a class="set-row" id={rowDomId('chip_in')} href="https://buymeacoffee.com/nevil.dev" target="_blank" rel="noopener">
                 <RowBody icon={FavouriteIcon} title={t('support.buy_coffee')} />
                 <Icon icon={ArrowRight01Icon} size={20} class="set-chevron" />
             </a>
@@ -872,7 +907,7 @@ function Rewind() {
     const [choices] = createResource(() => api.rewindChoices())
     const current = () => settings().rewindMs ?? choices()?.fallback ?? 0
     return (
-        <div class="set-block">
+        <div class="set-block" id={rowDomId('resume_rewind')}>
             <h3 class="set-block-title" id="rewind-label">{t('settings.resume_rewind')}</h3>
             <p class="muted small">{t('settings.resume_rewind_detail')}</p>
             <Show when={choices()}>
@@ -893,7 +928,7 @@ function Install() {
     return (
         <Show when={!installed() && (installPrompt() || iosBrowser)}>
             <div class="set-card set-blocks">
-                <div class="set-block">
+                <div class="set-block" id={rowDomId('install')}>
                     <Show
                         when={installPrompt()}
                         fallback={
@@ -946,7 +981,7 @@ function StorageBlock() {
         setVersion((v) => v + 1)
     }
     return (
-        <div class="set-block">
+        <div class="set-block" id={rowDomId('storage')}>
             <h3 class="set-block-title">{t('web.storage_title')}</h3>
             <p class="muted small">{t('web.storage_body_stream')}</p>
             <Show when={!storageWorks()}>
@@ -963,14 +998,14 @@ function StorageBlock() {
                             <p class="muted small">
                                 {t('web.storage_breakdown', { thumbs: small(sz().thumbs), posters: small(sz().posters), app: small(app()) })}
                             </p>
-                            <button class="link" style={{ 'align-self': 'start' }} type="button" disabled={clearing()} onClick={clear}>{t('web.storage_clear_cache')}</button>
+                            <button class="link" id={rowDomId('clear_cache')} style={{ 'align-self': 'start' }} type="button" disabled={clearing()} onClick={clear}>{t('web.storage_clear_cache')}</button>
                             <p class="muted small">{t('web.storage_clear_cache_detail')}</p>
                         </>
                     )
                 }}
             </Show>
             <Show when={kept() !== null}>
-                <p class="muted small">{kept() ? t('web.keep_storage_on') : refused() ? t('web.keep_storage_refused') : t('web.keep_storage_off')}</p>
+                <p class="muted small" id={rowDomId('keep_storage')}>{kept() ? t('web.keep_storage_on') : refused() ? t('web.keep_storage_refused') : t('web.keep_storage_off')}</p>
                 <Show when={!kept()}>
                     <button class="link" style={{ 'align-self': 'start' }} type="button" onClick={keepData}>{t('web.keep_storage')}</button>
                 </Show>
@@ -991,7 +1026,7 @@ function SignOut() {
         })
     return (
         <>
-            <button class="danger-button set-signout" type="button" onClick={ask}>
+            <button class="danger-button set-signout" id={rowDomId('sign_out')} type="button" onClick={ask}>
                 <Icon icon={Logout05Icon} size={20} />
                 {t('settings.sign_out')}
             </button>
@@ -1005,11 +1040,11 @@ function TvSettings() {
     return (
         <section class="settings">
             <h1 class="page-title">{t('nav.settings')}</h1>
-            <TvPanel title={t('picker.row_title')} id="add-chats-label">
+            <TvPanel title={t('picker.row_title')} id="add-chats-label" anchor={rowDomId('chosen_chats')}>
                 <p class="muted small">{chosenDetail()}</p>
                 <A class="outline-button" style={{ 'align-self': 'start' }} href="/added-chats">{t('picker.choose_chats')}</A>
             </TvPanel>
-            <TvPanel title={t('settings.theme')} id="theme-label">
+            <TvPanel title={t('settings.theme')} id="theme-label" anchor={rowDomId('theme')}>
                 <Choices
                     label="theme-label"
                     name="theme"
@@ -1019,7 +1054,7 @@ function TvSettings() {
                 />
             </TvPanel>
             <Show when={!layoutFixed()}>
-                <TvPanel title={t('settings.layout')} id="layout-label">
+                <TvPanel title={t('settings.layout')} id="layout-label" anchor={rowDomId('layout')}>
                     <Choices
                         label="layout-label"
                         name="layout"
@@ -1033,19 +1068,19 @@ function TvSettings() {
             <div class="panel">
                 <LanguageBlock />
             </div>
-            <TvSwitch id="carousel" title={t('settings.home_carousel')} on={settings().carousel} onText={t('settings.home_carousel_on')} offText={t('settings.home_carousel_off')} onPick={(on) => setSetting('carousel', on)} />
-            <TvSwitch id="home-continue" title={t('settings.home_continue')} on={settings().homeContinue} onText={t('settings.home_continue_on')} offText={t('settings.home_continue_off')} onPick={(on) => setSetting('homeContinue', on)} />
-            <TvSwitch id="home-recent" title={t('settings.home_recent')} on={settings().homeRecent} onText={t('settings.home_recent_on')} offText={t('settings.home_recent_off')} onPick={(on) => setSetting('homeRecent', on)} />
-            <TvSwitch id="home-starred" title={t('settings.home_starred_rows')} on={settings().homeStarred} onText={t('settings.home_starred_rows_on')} offText={t('settings.home_starred_rows_off')} onPick={(on) => setSetting('homeStarred', on)} />
+            <TvSwitch id="carousel" row="home_carousel" title={t('settings.home_carousel')} on={settings().carousel} onText={t('settings.home_carousel_on')} offText={t('settings.home_carousel_off')} onPick={(on) => setSetting('carousel', on)} />
+            <TvSwitch id="home-continue" row="home_continue" title={t('settings.home_continue')} on={settings().homeContinue} onText={t('settings.home_continue_on')} offText={t('settings.home_continue_off')} onPick={(on) => setSetting('homeContinue', on)} />
+            <TvSwitch id="home-recent" row="home_recent" title={t('settings.home_recent')} on={settings().homeRecent} onText={t('settings.home_recent_on')} offText={t('settings.home_recent_off')} onPick={(on) => setSetting('homeRecent', on)} />
+            <TvSwitch id="home-starred" row="home_starred_rows" title={t('settings.home_starred_rows')} on={settings().homeStarred} onText={t('settings.home_starred_rows_on')} offText={t('settings.home_starred_rows_off')} onPick={(on) => setSetting('homeStarred', on)} />
             <p class="muted small">{t('settings.home_follows_added')}</p>
             <HomeOrder />
-            <TvSwitch id="sync" title={t('settings.resume_sync')} on={syncOn()} onText={t('settings.resume_sync_on')} offText={t('settings.resume_sync_off')} onPick={(on) => void setSyncOn(on)} />
+            <TvSwitch id="sync" row="resume_sync" title={t('settings.resume_sync')} on={syncOn()} onText={t('settings.resume_sync_on')} offText={t('settings.resume_sync_off')} onPick={(on) => void setSyncOn(on)} />
             <p class="muted small">{t('syncplace.privacy')}</p>
             <Show when={syncOn()}>
                 <p class="muted small" role="status">{statusLine()}</p>
                 <button class="outline-button" style={{ 'align-self': 'start' }} type="button" disabled={syncRunning()} onClick={() => void syncNow()}>{t('settings.resume_sync_now')}</button>
             </Show>
-            <TvPanel title={t('browse.clear_history')} id="history-label">
+            <TvPanel title={t('browse.clear_history')} id="history-label" anchor={rowDomId('clear_history')}>
                 <p class="muted small">{t('browse.clear_history_detail')}</p>
                 <button class="outline-button" style={{ 'align-self': 'start' }} type="button" aria-labelledby="history-label" onClick={() => void clearHistoryWithUndo()}>
                     {t('browse.clear_history')}
@@ -1057,7 +1092,7 @@ function TvSettings() {
             <Show when={msoneOn()}>
                 <TvMsone />
             </Show>
-            <TvPanel title={t('web.posters_title')} id="posters-label">
+            <TvPanel title={t('web.posters_title')} id="posters-label" anchor={rowDomId('posters')}>
                 <p class="muted small">{settings().posters ? t('web.posters_on_detail') : t('metadata.toggle_off')}</p>
                 <Choices
                     label="posters-label"
@@ -1074,7 +1109,7 @@ function TvSettings() {
                 </a>
                 <p class="muted small">{t('metadata.about_notice')}</p>
             </TvPanel>
-            <TvPanel title={t('metadata.trailers_in_app')} id="trailers-label">
+            <TvPanel title={t('metadata.trailers_in_app')} id="trailers-label" anchor={rowDomId('trailers_in_app')}>
                 <p class="muted small">{t('metadata.trailers_in_app_detail')}</p>
                 <Choices
                     label="trailers-label"
@@ -1100,12 +1135,12 @@ function TvSettings() {
                 <a class="link" href="https://tmplayer.org/legal" target="_blank" rel="noopener">{t('login.legal')}</a>
                 <SignOut />
             </div>
-            <TvPanel title={t('feedback.title')} id="feedback-label">
+            <TvPanel title={t('feedback.title')} id="feedback-label" anchor={rowDomId('report_problem')}>
                 <p class="muted small">{t('feedback.tv_phone_hint')}</p>
                 <button class="outline-button" style={{ 'align-self': 'start' }} type="button" onClick={(e) => openFeedback('problem', e.currentTarget)}>
                     {t('settings.report_problem')}
                 </button>
-                <button class="outline-button" style={{ 'align-self': 'start' }} type="button" onClick={(e) => openFeedback('feature', e.currentTarget)}>
+                <button class="outline-button" id={rowDomId('request_feature')} style={{ 'align-self': 'start' }} type="button" onClick={(e) => openFeedback('feature', e.currentTarget)}>
                     {t('web.request_feature')}
                 </button>
             </TvPanel>
@@ -1113,7 +1148,9 @@ function TvSettings() {
                 <h2 class="panel-title">{t('about.notices_title')}</h2>
                 <p class="muted small">{t('about.licence_line')}</p>
                 <p class="muted small">{t('about.notices_detail')}</p>
-                <a class="link" href={LICENCES} target="_blank" rel="noopener">{t('about.read')}</a>
+                <a class="link" id={rowDomId('notices')} href={LICENCES} target="_blank" rel="noopener">{t('about.read')}</a>
+                <WhatsNewRow variant="tv" rowIcon={StarIcon} />
+                <a class="link" id={rowDomId('changelog')} href={CHANGELOG} target="_blank" rel="noopener">{t('settings.changelog')}</a>
             </div>
         </section>
     )
