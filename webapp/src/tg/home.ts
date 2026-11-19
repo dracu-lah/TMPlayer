@@ -5,6 +5,7 @@
 // a moment after they stop arriving, as the app builds it (ROWS_SETTLE_MS).
 import type { Message, TelegramClient } from '@mtcute/web'
 import { rules, type Video, type WebResume } from '../rules'
+import { addCapped } from '../ui/cappedSet'
 import { across, chatItem, chatList, knownChats, lookup, newestOf, rememberHomeChats, tilesOf } from './library'
 import { chatProtects, itemOf, rawOf } from './media'
 import type { ChatItem, HomePage, HomeRow, HomeView, Tile, VideoItem } from './types'
@@ -27,7 +28,7 @@ const CHOSEN_WAIT = 8
  * the first screens. The others are read once their row has stayed on screen (HX54, `rowShown`).
  */
 const EAGER_ROWS = 8
-/** Rows the page may say are on screen at once: a screen shows a handful, so more is garbage and is not kept. */
+/** Rows kept as on screen at once: a screen shows a handful, so more is garbage; past it the oldest is let go. */
 const SHOWN_MAX = 120
 /** Every row on: Home as it was before Settings > Home. */
 const ALL_ON: HomeView['layout'] = { carousel: true, continueWatching: true, recentlyAdded: true, starredRows: true, order: '' }
@@ -48,8 +49,8 @@ let running: { wake(): void; unask(chatId: number): void } | null = null
 export function rowShown(chatId: unknown, on: unknown) {
     if (typeof chatId !== 'number' || !Number.isSafeInteger(chatId) || typeof on !== 'boolean') return
     if (on) {
-        if (shown.size >= SHOWN_MAX && !shown.has(chatId)) return
-        shown.add(chatId)
+        // Past the cap the oldest goes: the newest rows are the ones on screen, and none is refused.
+        addCapped(shown, chatId, SHOWN_MAX)
         running?.wake()
     } else {
         shown.delete(chatId)

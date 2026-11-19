@@ -22,13 +22,13 @@ function clock() {
         }
         now = end
     }
-    return { timers, tick, pending: () => pending.size }
+    return { timers, tick, now: () => now, pending: () => pending.size }
 }
 
 function rig() {
     const c = clock()
     const log: string[] = []
-    const d = createDwell({ ms: 250, grace: 600, confirm: (k) => log.push(`ask ${k}`), release: (k) => log.push(`drop ${k}`), timers: c.timers })
+    const d = createDwell({ ms: 250, grace: 600, confirm: (k) => log.push(`ask ${k}`), release: (k) => log.push(`drop ${k}`), timers: c.timers, now: c.now })
     return { c, log, d }
 }
 
@@ -102,4 +102,49 @@ test('leaving twice, or a row never entered, does nothing', () => {
     d.leave('a')
     c.tick(5000)
     assert.deepEqual(log, ['ask a', 'drop a'])
+})
+
+test('a row drawn again keeps the time it had stayed: it asks 250 ms after it first came, not after the redraw', () => {
+    const { c, log, d } = rig()
+    const told: string[] = []
+    d.enter('a', () => told.push('old'))
+    c.tick(150)
+    // The page draws the row anew: gone and back at once.
+    d.leave('a')
+    d.enter('a', () => told.push('new'))
+    c.tick(99)
+    assert.deepEqual(log, [])
+    c.tick(1)
+    assert.deepEqual(log, ['ask a'])
+    assert.deepEqual(told, ['new'])
+})
+
+test('time stayed is kept only for the grace: a row away longer starts over', () => {
+    const { c, log, d } = rig()
+    d.enter('a', () => {})
+    c.tick(150)
+    d.leave('a')
+    c.tick(700)
+    d.enter('a', () => {})
+    c.tick(249)
+    assert.deepEqual(log, [])
+    c.tick(1)
+    assert.deepEqual(log, ['ask a'])
+})
+
+test('after a reset (the worker restarted) a confirmed row on screen is asked again, one that left is not', () => {
+    const { c, log, d } = rig()
+    let told = 0
+    d.enter('a', () => told++)
+    d.enter('b', () => {})
+    c.tick(250)
+    d.leave('b')
+    assert.deepEqual(log, ['ask a', 'ask b'])
+    d.reset()
+    assert.equal(d.confirmed('a'), false)
+    c.tick(250)
+    assert.deepEqual(log, ['ask a', 'ask b', 'ask a'])
+    assert.equal(told, 2)
+    c.tick(5000)
+    assert.deepEqual(log, ['ask a', 'ask b', 'ask a'])
 })

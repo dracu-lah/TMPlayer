@@ -57,9 +57,18 @@ function start() {
         if (restarts.length >= MAX_RESTARTS) return void showCrashCard()
         restarts.push(now)
         start()
+        // What the old worker knew (the rows a page said were on screen) is gone: screens say it again.
+        for (const fn of [...restartListeners]) fn()
     }
     worker = w
     started(w)
+}
+
+const restartListeners = new Set<() => void>()
+/** Called after a crashed Telegram worker is replaced; returns the way to stop listening. */
+export function onWorkerRestart(fn: () => void): () => void {
+    restartListeners.add(fn)
+    return () => void restartListeners.delete(fn)
 }
 
 let restarts: number[] = []
