@@ -5,13 +5,16 @@ import type { Api, Ctx } from './worker'
 import type { RpcError } from './types'
 import { failure } from '../errors'
 import { showCrashCard } from '../crash'
+import { createFloodClock, floodSeconds } from './flood'
 
 type Out =
     | { id: number; value: unknown }
     | { id: number; error: RpcError }
     | { id: number; event: unknown; ask?: number }
+    | { link: string }
 
 interface Pending {
+    method: string
     resolve: (v: unknown) => void
     reject: (e: unknown) => void
     onEvent?: (data: unknown) => unknown
@@ -28,6 +31,8 @@ function start() {
     const w = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module', name: 'telegram' })
     w.onmessage = async (ev: MessageEvent<Out>) => {
         const msg = ev.data
+        // The line to Telegram as mtcute reports it: offline, connecting, updating or connected.
+        if ('link' in msg) return void (worker === w && typeof msg.link === 'string' && setLink(msg.link.slice(0, 16)))
         const call = pending.get(msg.id)
         if (!call) return
         if ('event' in msg) {
@@ -38,6 +43,8 @@ function start() {
         pending.delete(msg.id)
         if ('error' in msg) {
             if (msg.error.code === 401) onUnauthorized?.()
+            // A read Telegram asked to hold back: the player says for how long (the read waits it out itself, stream/reader.ts).
+            if (call.method === 'chunk') noteFlood(floodSeconds(msg.error))
             call.reject(Object.assign(new Error(msg.error.message), msg.error))
         } else call.resolve(msg.value)
     }
@@ -50,6 +57,7 @@ function start() {
         if (worker !== w) return
         w.terminate()
         worker = null
+        setLink(null)
         for (const [, p] of pending) p.reject(Object.assign(new Error('Telegram worker restarted'), { code: -1 }))
         pending.clear()
         const now = Date.now()
@@ -70,6 +78,20 @@ export function onWorkerRestart(fn: () => void): () => void {
     restartListeners.add(fn)
     return () => void restartListeners.delete(fn)
 }
+
+/**
+ * The worker's line to Telegram ('offline', 'connecting', 'updating', 'connected'), null while the
+ * worker has not said: the banner (net.ts) and the player's "why" (player/openStall.ts) read it.
+ */
+const [link, setLink] = createSignal<string | null>(null)
+export { link }
+
+const flood = createFloodClock()
+const noteFlood = flood.note
+/** Seconds left of the flood wait Telegram asked a file read for; 0 when there is none. */
+export const floodLeft = flood.left
+/** A new video opens: a wait that belonged to the last one is not told for it. */
+export const clearFlood = flood.clear
 
 let restarts: number[] = []
 const MAX_RESTARTS = 3
@@ -115,6 +137,7 @@ function claim() {
             // "Use it here" in another tab took the session: this one stops at once.
             worker?.terminate()
             worker = null
+            setLink(null)
             for (const [, p] of pending) p.reject(new DOMException('session moved to another tab', 'AbortError'))
             pending.clear()
             document.querySelectorAll('video').forEach((v) => v.pause())
@@ -152,7 +175,7 @@ export function call<M extends keyof Api>(method: M, args: Args<Api[M]>, opts: C
     if (signal?.aborted) return Promise.reject(new DOMException('aborted', 'AbortError'))
     const id = ++nextId
     return new Promise((resolve, reject) => {
-        pending.set(id, { resolve: resolve as (v: unknown) => void, reject, onEvent })
+        pending.set(id, { method, resolve: resolve as (v: unknown) => void, reject, onEvent })
         signal?.addEventListener(
             'abort',
             () => {

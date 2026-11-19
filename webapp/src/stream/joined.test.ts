@@ -48,6 +48,7 @@ class FakePiece implements MediaFile {
     received = 0
     loaded = 0
     waiting = false
+    pending = 0
     closed = false
     warmed = false
     reads: [number, number][] = []

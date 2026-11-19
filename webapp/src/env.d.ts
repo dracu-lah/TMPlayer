@@ -2,6 +2,8 @@ declare const __TG_API_ID__: number
 declare const __TG_API_HASH__: string
 /** The key for TMPlayer's subtitle gateway; empty and MSone is not offered. */
 declare const __MSONE_GATEWAY_KEY__: string
+/** The log inbox's address (LOG_UPLOAD_URL, the one the apps carry); empty and the feedback form is not offered, only GitHub and e-mail. */
+declare const __LOG_UPLOAD_URL__: string
 
 interface Window {
     ManagedMediaSource?: typeof MediaSource

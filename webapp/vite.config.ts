@@ -256,6 +256,7 @@ export default defineConfig(({ mode }) => {
             __TG_API_ID__: JSON.stringify(Number(secret('TG_API_ID')) || 0),
             __TG_API_HASH__: JSON.stringify(secret('TG_API_HASH')),
             __MSONE_GATEWAY_KEY__: JSON.stringify(secret('MSONE_GATEWAY_KEY')),
+            __LOG_UPLOAD_URL__: JSON.stringify(secret('LOG_UPLOAD_URL')),
         },
         css: tv ? { postcss: { plugins: [legacyCss()] } } : {},
         worker: { format: tv ? 'iife' : 'es', plugins: () => (tv ? [tvLegacy(true), ...licences.worker()] : licences.worker()) },

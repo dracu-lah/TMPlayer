@@ -131,6 +131,12 @@ export class JoinedFile implements MediaFile {
         return Math.min(1, got / this.total)
     }
 
+    get pending(): number {
+        let n = 0
+        for (const s of this.slots.values()) n += s.file.pending
+        return n
+    }
+
     get waiting(): boolean {
         for (const s of this.slots.values()) if (s.file.waiting) return true
         return false

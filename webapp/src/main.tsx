@@ -29,6 +29,8 @@ if (!document.documentElement.dataset.old) {
     // the other build: a TV gets a worker that only streams files to its own player.
     if (import.meta.env.MODE !== 'tv') registerWorker()
     else registerStreamWorker()
+    // A report that was confirmed while the line was down is tried once, a minute after start, and never on its own again (WB11).
+    setTimeout(() => void import('./ui/feedback').then((m) => m.flushSoon()).catch(() => {}), 60_000)
     const root = document.getElementById('app')!
     root.textContent = ''
     render(() => <App />, root)
