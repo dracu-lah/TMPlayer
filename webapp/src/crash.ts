@@ -78,7 +78,8 @@ export function showCrashCard() {
         }
     }
     row.append(reload)
-    if (typeof navigator !== 'undefined' && typeof navigator.clipboard?.writeText === 'function') row.append(copy)
+    // Not on the TV: a remote cannot paste it anywhere (Report a problem there is a QR code).
+    if (document.documentElement.dataset.form !== 'tv' && typeof navigator !== 'undefined' && typeof navigator.clipboard?.writeText === 'function') row.append(copy)
     row.append(close)
     box.append(text, row)
     cardKeys = (ev: KeyboardEvent) => {
