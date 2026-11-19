@@ -5,6 +5,7 @@ import { call, errorText } from '../tg/rpc'
 import { online, onBackOnline } from '../net'
 import { t } from '../i18n'
 import { addedIds, addedMode, addedView, namedLists, progress, rememberHomeChats, resumes, settings, starredIds, watchedTick } from '../store'
+import { copiesTick } from '../copies'
 import { arrangeOrder, parseOrder } from '../ui/homeOrder'
 import { forgetGone } from '../goneVideos'
 import { scrollBehavior } from '../ui/motion'
@@ -57,7 +58,7 @@ export function Home() {
         }
     }
     // Asked again when the size limits, the stars, the added chats or Settings > Home change, as every list is.
-    createEffect(on(() => [settings().sizeMin, settings().sizeMax, [...starredIds()].join(), watchedTick(), addedMode(), [...(addedIds() ?? [])].join(), JSON.stringify(homeLayout())], load))
+    createEffect(on(() => [settings().sizeMin, settings().sizeMax, [...starredIds()].join(), watchedTick(), copiesTick(), addedMode(), [...(addedIds() ?? [])].join(), JSON.stringify(homeLayout())], load))
     // Lost on the way: asked again once the connection is back.
     onBackOnline(() => (error() || !last()?.settled) && load())
 

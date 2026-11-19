@@ -218,6 +218,10 @@ if (flags.has('oldformats')) {
     ])
 }
 
+// `crosscopies`: a fourth copy of the film in Test Copies, posted in Quiet Room, so a search across chats folds copies
+// from two chats into one card (HX38: the page lists the same group the card counts). Made last so no other id moves.
+if (flags.has('crosscopies')) messages.get(quiet.id)!.push(msg(quiet, 'Big.Buck.Bunny.2008.480p.DVDRip.x264.mkv', { file: 'h264-aac.mkv' }))
+
 const dialogs: Peer[] = [me, clips, shows, locked, quiet, copies]
 if (!flags.has('huge')) for (let i = 0; i < 1500; i++) dialogs.push(peer(-5000 - i, `Group ${i}`, 'chat'))
 dialogs.push(lighthouse)

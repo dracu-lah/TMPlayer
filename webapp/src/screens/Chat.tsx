@@ -5,6 +5,7 @@ import { api, call, errorText } from '../tg/rpc'
 import { onBackOnline } from '../net'
 import { t } from '../i18n'
 import { progress as readProgress, settings, setSetting, setStarred, starredIds } from '../store'
+import { copiesTick } from '../copies'
 import { form } from '../form'
 import { arrowKeys } from '../ui/arrows'
 import { Icon } from '../ui/Icon'
@@ -99,8 +100,8 @@ export function Chat() {
         if (error() && !page()) run('open')
         else if (moreFailed()) run('more')
     })
-    // Another order, size limits or words: the same videos arranged again, in the worker.
-    createEffect(on(() => JSON.stringify(view()), () => page() && run('view'), { defer: true }))
+    // Another order, size limits or words, or a file kept apart or a copy chosen (HX38): the same videos arranged again, in the worker.
+    createEffect(on(() => [JSON.stringify(view()), copiesTick()], () => page() && run('view'), { defer: true }))
 
     // Scrolling to the foot always asks for the next page (infinite scroll, no More button).
     const atEnd = (auto = false) => {

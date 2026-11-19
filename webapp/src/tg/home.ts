@@ -5,7 +5,7 @@
 // a moment after they stop arriving, as the app builds it (ROWS_SETTLE_MS).
 import type { Message, TelegramClient } from '@mtcute/web'
 import { rules, type Video, type WebResume } from '../rules'
-import { across, chatItem, chatList, knownChats, newestOf, rememberHomeChats, tilesOf } from './library'
+import { across, chatItem, chatList, knownChats, lookup, newestOf, rememberHomeChats, tilesOf } from './library'
 import { chatProtects, itemOf, rawOf } from './media'
 import type { ChatItem, HomePage, HomeRow, HomeView, Tile, VideoItem } from './types'
 
@@ -112,6 +112,11 @@ export async function homePage(tg: TelegramClient, view: HomeView, signal: Abort
         // An id the rules picked that the chats here do not carry is left out, never passed on as undefined.
         const pickedChats = picked.flatMap((id) => byId.get(id) ?? [])
         const built = r.home(resumes ?? [], pickedChats, view.starred, [...loaded.values()], recent, plan.autoPick && !listEnough(), layout, plan.recentFrom ?? null, plan.noneChosen)
+        // The copies a row's cards choose among (HX38), looked up only when a card has more than one.
+        const videoOf = lookup((function* () {
+            for (const l of loaded.values()) yield* l.videos
+            if (recent) yield* recent
+        })())
         const rows: HomeRow[] = built.map((row) => ({
             key: row.key,
             kind: row.kind as HomeRow['kind'],
@@ -127,9 +132,9 @@ export async function homePage(tg: TelegramClient, view: HomeView, signal: Abort
                     ? row.resumes.flatMap((id): Tile[] => {
                           const found = items.get(id)
                           const item = found && { ...found, title: resumeTitles.get(id) ?? found.title }
-                          return item ? [{ key: item.key, kind: 'file', title: item.title, item, seasons: 0, episodes: 0, copies: 0, parts: 0, pieces: 0, extra: null }] : []
+                          return item ? [{ key: item.key, kind: 'file', title: item.title, item, seasons: 0, episodes: 0, copies: 0, versions: 1, parts: 0, pieces: 0, extra: null }] : []
                       })
-                    : tilesOf(row, items, view),
+                    : tilesOf(row, items, view, { r, videoOf }),
         }))
         // Recently added's See all reads on through the same chats, and says "in starred chats" as the row does.
         if (listEnough() && recent !== null) rememberHomeChats(plan.recentFrom ?? pickedChats.map((c) => c.id), rows.find((row) => row.kind === 'recent')?.starredOnly ?? false)
