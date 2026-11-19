@@ -1207,6 +1207,8 @@
     "favourites_star": "Star a chat to get a row of its videos here.",
     "featured_film": "Film",
     "featured_page": "Page {index} of {count}",
+    "featured_pause": "Pause the carousel",
+    "featured_resume": "Play the carousel",
     "featured_series": "Series",
     "first_body": "Forward any video to Saved Messages in Telegram, then open Saved Messages here to play it.",
     "first_more": "Star a chat to give it a row here. Videos you start wait at the top.",
