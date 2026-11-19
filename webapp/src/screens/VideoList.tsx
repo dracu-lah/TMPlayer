@@ -9,7 +9,7 @@ import { isPromoCover, useObservedCovers } from './promo'
 import { askOf, keptRating, loadBackdrop, loadPoster, posterSizeFor } from './posters'
 import { TmdbMark } from '../ui/TmdbMark'
 import { warmDataCentres, warmFile } from '../stream/reader'
-import { t } from '../i18n'
+import { formatNumber, t } from '../i18n'
 import { form } from '../form'
 import { cardLayout, VirtualGrid } from '../ui/VirtualGrid'
 import { stableCards } from './stableCards'
@@ -20,8 +20,8 @@ import type { SponsoredItem, Tile, VideoItem } from '../tg/types'
 import type { PosterAsk } from '../rules'
 
 export function size(bytes: number): string {
-    if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(1)} GB`
-    return `${Math.max(1, Math.round(bytes / 1e6))} MB`
+    if (bytes >= 1e9) return t('format.size_gb', { size: formatNumber(bytes / 1e9, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) })
+    return t('format.size_mb', { size: formatNumber(Math.max(1, Math.round(bytes / 1e6))) })
 }
 
 export function length(s: number): string {
