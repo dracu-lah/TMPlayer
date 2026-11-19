@@ -1,8 +1,8 @@
-import { createEffect, createSignal, ErrorBoundary, lazy, Match, on, onMount, Show, Switch, type ParentProps } from 'solid-js'
+import { createEffect, createSignal, ErrorBoundary, lazy, Match, on, onCleanup, onMount, Show, Switch, type ParentProps } from 'solid-js'
 import { A, Route, Router, useLocation, useNavigate } from '@solidjs/router'
 import { api, errorText, sessionHere, useHere } from './tg/rpc'
 import { online } from './net'
-import { entryState, me, sessionEndedElsewhere, setMe } from './session'
+import { back, entryState, me, sessionEndedElsewhere, setMe } from './session'
 import { chatsGated as gated, loadSettings, setChatsGateWaived } from './store'
 import { openSync, stopSync } from './sync'
 import { form, holdForm } from './form'
@@ -10,6 +10,7 @@ import { Home } from './screens/Home'
 import { Nav } from './ui/Nav'
 import { Toaster } from './ui/Toast'
 import { CardMenu } from './ui/CardMenu'
+import { installShellKeys } from './ui/shellKeys'
 import { ListPicker, ListsPage } from './screens/Lists'
 import { PosterPicker } from './ui/PosterPicker'
 import { TrailerSheet } from './ui/TrailerSheet'
@@ -127,6 +128,18 @@ function Shell(props: ParentProps) {
     const detail = () => location.pathname.startsWith('/video/')
     // The gate stands alone, as the apps' setup does: no bar to wander off through.
     const setup = () => location.pathname.startsWith('/setup/') || (location.pathname === '/added-chats' && new URLSearchParams(location.search).has('setup'))
+    // The desktop app's window keys (HX17): search, find, choose chats, Downloads, Home, Chats, a card's menu.
+    // Not on the TV skin (its remote walk is tv/focus.ts), in the player (its own keys) or on the chats gate.
+    onMount(() => {
+        const off = installShellKeys({
+            enabled: () => !!me() && form() !== 'tv' && !playing() && !setup() && location.pathname !== '/signin',
+            path: () => location.pathname,
+            go: (path) => navigate(path),
+            back: () => back(navigate),
+            searchLabel: () => t('browse.search_chat'),
+        })
+        onCleanup(off)
+    })
     // A resize in Auto layout waits while a video plays.
     createEffect(() => holdForm(playing()))
 
