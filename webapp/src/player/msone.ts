@@ -608,8 +608,20 @@ export async function keptHits(ask: Ask, where: { season: number | null; episode
     return hits.filter((h) => ix.files[fileKey(h, where)])
 }
 
+const forgottenListeners: Array<() => void> = []
+
+/** Runs `fn` whenever everything kept of MSone is deleted (the picks' own copies go with it: subpicks.ts). */
+export function onForgotten(fn: () => void) {
+    forgottenListeners.push(fn)
+}
+
 /** Deletes every kept MSone file and search (MSone stopped). */
 export function forgetKept(): Promise<void> {
+    for (const fn of forgottenListeners) {
+        try {
+            fn()
+        } catch {}
+    }
     return write(async () => {
         index = { files: {}, searches: {} }
         const all = await store.keys()
