@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { gridTarget, isMac, isTextField, rowOf, shellAction, type KeyLike, type Row } from './shellKeys.ts'
+import { gridOwns, gridTarget, installShellKeys, isMac, isTextField, rowOf, shellAction, type KeyLike, type Row } from './shellKeys.ts'
 
 const press = (key: string, extra: Partial<KeyLike> = {}): KeyLike => ({ key, ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, ...extra })
 const idle = { mac: false, typing: false }
@@ -17,10 +17,6 @@ test('the window chords: Ctrl on a PC, Command on a Mac, never both', () => {
         [press('j', { ctrlKey: true }), false, 'downloads'],
         [press('A', { ctrlKey: true, shiftKey: true }), false, 'chooseChats'],
         [press('a', { ctrlKey: true }), false, null],
-        [press('1', { ctrlKey: true, code: 'Digit1' }), false, 'home'],
-        [press('2', { ctrlKey: true, code: 'Digit2' }), false, 'chats'],
-        [press('!', { ctrlKey: true, code: 'Digit1' }), false, 'home'],
-        [press('3', { ctrlKey: true, code: 'Digit3' }), false, null],
         [press('k', { ctrlKey: true, altKey: true }), false, null],
         [press('/'), false, 'findInPage'],
         [press('?', { shiftKey: true }), false, null],
@@ -29,6 +25,74 @@ test('the window chords: Ctrl on a PC, Command on a Mac, never both', () => {
         [press('F10'), false, null],
     ]
     for (const [e, mac, want] of table) assert.equal(shellAction(e, { mac, typing: false }), want, `${JSON.stringify(e)} mac=${mac}`)
+})
+
+test('Command or Ctrl and a digit are the browser tabs\' in a tab, Home and Chats only in an installed app', () => {
+    const tab = { mac: false, typing: false }
+    const app = { mac: false, typing: false, standalone: true }
+    assert.equal(shellAction(press('1', { ctrlKey: true, code: 'Digit1' }), tab), null)
+    assert.equal(shellAction(press('2', { ctrlKey: true, code: 'Digit2' }), tab), null)
+    assert.equal(shellAction(press('1', { ctrlKey: true, code: 'Digit1' }), { ...tab, standalone: false }), null)
+    assert.equal(shellAction(press('1', { ctrlKey: true, code: 'Digit1' }), app), 'home')
+    assert.equal(shellAction(press('2', { ctrlKey: true, code: 'Digit2' }), app), 'chats')
+    assert.equal(shellAction(press('!', { ctrlKey: true, code: 'Digit1' }), app), 'home')
+    assert.equal(shellAction(press('3', { ctrlKey: true, code: 'Digit3' }), app), null)
+})
+
+test('letter chords follow the key place on a layout without Latin letters, and the letter on one with', () => {
+    assert.equal(shellAction(press('\u043b', { ctrlKey: true, code: 'KeyK' }), idle), 'search')
+    assert.equal(shellAction(press('\u03ba', { ctrlKey: true, code: 'KeyK' }), idle), 'search')
+    assert.equal(shellAction(press('\u043e', { ctrlKey: true, code: 'KeyJ' }), idle), 'downloads')
+    assert.equal(shellAction(press('\u0430', { ctrlKey: true, code: 'KeyF' }), idle), 'findInPage')
+    assert.equal(shellAction(press('\u0444', { ctrlKey: true, shiftKey: true, code: 'KeyA' }), idle), 'chooseChats')
+    // A Dvorak keyboard's K is on another key: the letter wins where it is Latin.
+    assert.equal(shellAction(press('k', { ctrlKey: true, code: 'KeyV' }), idle), 'search')
+    assert.equal(shellAction(press('\u043b', { ctrlKey: true, code: 'KeyW' }), idle), null)
+})
+
+test('/ is found where it needs Shift, and still not typed over in a field', () => {
+    assert.equal(shellAction(press('/', { shiftKey: true, code: 'Digit7' }), idle), 'findInPage')
+    assert.equal(shellAction(press('/', { code: 'Slash' }), idle), 'findInPage')
+    assert.equal(shellAction(press('?', { shiftKey: true, code: 'Slash' }), idle), null)
+    assert.equal(shellAction(press('/', { shiftKey: true, code: 'Digit7' }), { mac: false, typing: true }), null)
+})
+
+test('Home, End and the Page keys are the grid\'s even at an edge; arrows are not', () => {
+    for (const key of ['Home', 'End', 'PageUp', 'PageDown']) assert.equal(gridOwns(key, {}), true, key)
+    assert.equal(gridOwns('Home', { ctrl: true }), true)
+    assert.equal(gridOwns('End', { ctrl: true }), true)
+    assert.equal(gridOwns('PageDown', { ctrl: true }), false)
+    for (const key of ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter']) assert.equal(gridOwns(key, {}), false, key)
+    assert.equal(gridOwns('Home', { shift: true }), false)
+    assert.equal(gridOwns('End', { alt: true }), false)
+    // The edge itself: nowhere to go, so the target is null while the key is still owned.
+    assert.equal(gridTarget('Home', { ctrl: true }, 0, [[0, 3], [3, 6]], 1), null)
+    assert.equal(gridOwns('Home', { ctrl: true }), true)
+})
+
+test('a held chord acts once: the repeats are spent without a second page change', () => {
+    const listeners: ((e: unknown) => void)[] = []
+    const g = globalThis as Record<string, unknown>
+    const saved = { window: g.window, document: g.document }
+    g.window = { addEventListener: (_: string, fn: (e: unknown) => void) => listeners.push(fn), removeEventListener: () => {}, matchMedia: () => ({ matches: false }) }
+    g.document = { querySelector: () => null, activeElement: null }
+    const gone: string[] = []
+    let path = '/chats'
+    const off = installShellKeys({ enabled: () => true, path: () => path, go: (p) => gone.push(`go ${(path = p)}`), back: () => gone.push(`back ${(path = '/chats')}`), searchLabel: () => 'Search', mac: false })
+    const fire = (repeat: boolean) => {
+        let prevented = false
+        listeners[0]({ ...press('k', { ctrlKey: true, code: 'KeyK' }), repeat, defaultPrevented: false, target: { tagName: 'BODY' }, preventDefault: () => (prevented = true) })
+        return prevented
+    }
+    try {
+        assert.equal(fire(false), true)
+        assert.equal(fire(true), true)
+        assert.equal(fire(true), true)
+        assert.deepEqual(gone, ['go /search'])
+    } finally {
+        off()
+        Object.assign(g, saved)
+    }
 })
 
 test('the keys the browser keeps are never taken', () => {

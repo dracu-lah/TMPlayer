@@ -23,6 +23,8 @@ export interface KeyContext {
     mac: boolean
     /** A text field has the keyboard: plain keys stay its. */
     typing: boolean
+    /** The page is an installed app (no browser tabs): only there Command or Ctrl and a digit are the page's, in a tab they switch tabs. */
+    standalone?: boolean
 }
 
 /** Whether this is Apple's keyboard layout, where Command takes Ctrl's place. */
@@ -50,24 +52,37 @@ export function shellAction(e: KeyLike, ctx: KeyContext): ShellAction | null {
     if (e.isComposing || e.key === 'Process') return null
     const mod = ctx.mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey
     const key = e.key.length === 1 ? e.key.toLowerCase() : e.key
+    // A letter chord is the letter on the keycap when it is a Latin one, else the key's place (KeyK): a Cyrillic or Greek layout keeps Ctrl+K.
+    const letter = /^[a-z]$/.test(key) ? key : /^Key[A-Z]$/.test(e.code ?? '') ? e.code!.slice(3).toLowerCase() : key
     // The digit row's own code, so Shift or a layout's symbols on it do not matter.
     const digit = e.code === 'Digit1' || e.code === 'Numpad1' ? '1' : e.code === 'Digit2' || e.code === 'Numpad2' ? '2' : key
     if (mod && !e.altKey) {
         if (!e.shiftKey) {
-            if (key === 'k') return 'search'
-            if (key === 'f') return 'findInPage'
-            if (key === 'j') return 'downloads'
-            if (digit === '1') return 'home'
-            if (digit === '2') return 'chats'
-        } else if (key === 'a') return 'chooseChats'
+            if (letter === 'k') return 'search'
+            if (letter === 'f') return 'findInPage'
+            if (letter === 'j') return 'downloads'
+            // In a browser tab these two are the browser's (they switch tabs): only an installed app has them free.
+            if (ctx.standalone && digit === '1') return 'home'
+            if (ctx.standalone && digit === '2') return 'chats'
+        } else if (letter === 'a') return 'chooseChats'
         return null
     }
     if (e.ctrlKey || e.metaKey || e.altKey) return null
     if (ctx.typing) return null
-    if (key === '/' && !e.shiftKey) return 'findInPage'
+    // `/` is the key's own character: on a layout where it needs Shift (German, Nordic) that is Shift+7 and still counts.
+    if (key === '/') return 'findInPage'
     if (key === 'ContextMenu' && !e.shiftKey) return 'cardMenu'
     if (key === 'F10' && e.shiftKey) return 'cardMenu'
     return null
+}
+
+/** Whether the window is an installed app (a PWA, Safari's Home Screen app): no tab strip, so Command or Ctrl and a digit are free. */
+export function isStandalone(): boolean {
+    try {
+        return window.matchMedia('(display-mode: standalone)').matches || (navigator as { standalone?: boolean }).standalone === true
+    } catch {
+        return false
+    }
 }
 
 /** One row of a grid: its first item and the one after its last, as VirtualGrid lays them out. */
@@ -85,6 +100,17 @@ export function rowOf(rows: readonly Row[], at: number): number {
         else return mid
     }
     return -1
+}
+
+/**
+ * Whether the grid takes this key whatever happens: Home, End and the Page keys always do, even at an edge where
+ * they have nowhere to go, because the page's own answer (scrolling the window) would leave the keyboard on a card
+ * that is off screen. The arrows at an edge keep the page's small scroll.
+ */
+export function gridOwns(key: string, mods: { ctrl?: boolean; alt?: boolean; meta?: boolean; shift?: boolean }): boolean {
+    if (mods.alt || mods.meta || mods.shift) return false
+    if (key === 'Home' || key === 'End') return true
+    return !mods.ctrl && (key === 'PageUp' || key === 'PageDown')
 }
 
 /**
@@ -147,7 +173,7 @@ export interface ShellDeps {
     /** The current path. */
     path: () => string
     go: (path: string) => void
-    /** One step back in the history, or Home where there is none. */
+    /** One step back inside the app, or Home where the page was the first one opened. */
     back: () => void
     /** The words of the search button a chat page keeps, when its search field is closed. */
     searchLabel: () => string
@@ -194,8 +220,10 @@ export function installShellKeys(deps: ShellDeps): () => void {
         if (e.defaultPrevented || !deps.enabled()) return
         // A dialog (the shared confirm, a card's menu, a sheet) is its own layer: nothing under it hears the keys.
         if (document.querySelector('dialog[open]')) return
-        const action = shellAction(e, { mac, typing: isTextField(e.target as HTMLElement | null) })
+        const action = shellAction(e, { mac, typing: isTextField(e.target as HTMLElement | null), standalone: isStandalone() })
         if (!action) return
+        // A held chord must not flip pages (Ctrl+K again is "back"): the first press acts, the repeats are spent.
+        if (e.repeat) return void e.preventDefault()
         let took = true
         switch (action) {
             case 'search':

@@ -34,11 +34,11 @@ Command is Ctrl, or Cmd on a Mac. Read in `ShellState.onPreviewKey` (works insid
 | Key | Does | Notes |
 | --- | --- | --- |
 | Command+K | Open or close search across every chat | |
-| Command+F, `/` | Focus the page's search box | `/` is not taken inside a text field |
+| Command+F, `/` | Focus the page's search box | `/` is not taken inside a text field, and counts where it needs Shift (German, Nordic) |
 | Command+Shift+A | Choose chats | Ctrl+A alone is the picker's Select all |
 | Command+, | Settings | |
 | Command+J | Downloads, again to close it | the floating bar's Downloads button; Ctrl+Shift+J is not taken |
-| Command+1, Command+2 | Home, Chats | the floating bar's first two places |
+| Command+1, Command+2 | Home, Chats | only in the installed app (`display-mode: standalone`, Safari's Home Screen app): in a browser tab these two switch tabs and are left to the browser |
 | Command+R, F5 | Refresh the page | only where the page can refresh |
 | F11, Ctrl+Cmd+F (Mac) | Full screen | |
 | Command+Q | Quit | Linux tiling window managers have no close button |
@@ -113,7 +113,7 @@ mini bar is gone; the phone follows with T12).
 
 ## Web app (web.tmplayer.org): the window
 
-Owned by `webapp/src/ui/shellKeys.ts` (the chord table, tested in `shellKeys.test.ts`, walked by
+Letter chords follow the letter on the keycap, or the key's place (K, J, F, A) on a layout without Latin letters (Cyrillic, Greek). Owned by `webapp/src/ui/shellKeys.ts` (the chord table, tested in `shellKeys.test.ts`, walked by
 `e2e/shell-keys.spec.ts`) and the arrows by `webapp/src/ui/VirtualGrid.tsx`. Command is Ctrl, or Cmd on
 a Mac, iPhone and iPad (a phone or tablet with a keyboard gets the same keys). The TV skin
 (`data-form="tv"`) and the player keep their own keys and ignore these. A dialog (the confirm, a
@@ -121,13 +121,13 @@ card's menu, a sheet) is its own layer: nothing here answers while one is open.
 
 | Key | Does | Notes |
 | --- | --- | --- |
-| Command+K | Search across every chat; again goes back | works inside a text field |
-| Command+F, `/` | Focus the page's search box (a chat's opens first) | on a page with no search box the browser keeps Find; `/` is not taken inside a text field |
-| Command+Shift+A | Choose chats | |
-| Command+J | Downloads (the Get the app card); again goes back | |
+| Command+K | Search across every chat; again goes back | works inside a text field; overrides the browser's own (the address bar's search); a held key acts once; back from a page opened by a link goes Home, never off the app |
+| Command+F, `/` | Focus the page's search box (a chat's opens first) | on a page with no search box the browser keeps Find; `/` is not taken inside a text field, and counts where it needs Shift (German, Nordic) |
+| Command+Shift+A | Choose chats | overrides the browser's own (tab search) |
+| Command+J | Downloads (the Get the app card); again goes back | overrides the browser's own (its downloads list) |
 | Command+1, Command+2 | Home, Chats | a browser window keeps Cmd or Ctrl and a digit for its tabs; the keys work in the installed app (PWA) and where the browser lets the page have them |
 | Command+, | Settings | |
-| Arrows, Home, End, PageUp, PageDown | Move through a grid or list of cards or chats | no wrap; Left and Right go on to the next row, Up and Down keep the column, Home and End go to the row's ends, Ctrl+Home and Ctrl+End to the first and last; a 3,000 chat list scrolls to the item and takes the keyboard when it is drawn |
+| Arrows, Home, End, PageUp, PageDown | Move through a grid or list of cards or chats | no wrap; Left and Right go on to the next row, Up and Down keep the column, Home and End go to the row's ends, Ctrl+Home and Ctrl+End to the first and last (Home, End and the Page keys are spent even at an edge, so the window never scrolls away from the focused card); a 3,000 chat list scrolls to the item and takes the keyboard when it is drawn |
 | Menu key, Shift+F10 | The focused card's menu | |
 | Enter | Open the card | |
 | Ctrl+A, Shift+click, Ctrl+click | Select all, a range, toggle | History's select mode and Choose chats only: no other grid has an action to run on a selection (the web keeps no downloads) |
@@ -141,7 +141,7 @@ working in every browser.
 
 1. A dialog (the shared confirm, a card's menu, a sheet), which closes alone.
 2. A menu over the page (the You menu, a sort menu), which gives the keyboard back to its button.
-3. A search box with words: clears them; empty, it leaves the page (Search, a chat's search).
+3. A search box with words: clears them; empty, it leaves the page (Search, a chat's search), one step back inside the app or Home when the page was the first one opened.
 4. History's select mode (clears the ticks and leaves it). A video's page has no Esc: its Close button and the browser's Back go up a level (left to the video page's owner, WB3).
 
 ## Big screen on a computer (remote, `--tv` or Layout: TV)

@@ -2,7 +2,7 @@ import { createEffect, createSignal, ErrorBoundary, lazy, Match, on, onCleanup, 
 import { A, Route, Router, useLocation, useNavigate } from '@solidjs/router'
 import { api, errorText, sessionHere, useHere } from './tg/rpc'
 import { online } from './net'
-import { entryState, me, sessionEndedElsewhere, setMe } from './session'
+import { back, entryState, me, sessionEndedElsewhere, setMe } from './session'
 import { chatsGated as gated, loadSettings, setChatsGateWaived } from './store'
 import { openSync, stopSync } from './sync'
 import { form, holdForm } from './form'
@@ -135,7 +135,7 @@ function Shell(props: ParentProps) {
             enabled: () => !!me() && form() !== 'tv' && !playing() && !setup() && location.pathname !== '/signin',
             path: () => location.pathname,
             go: (path) => navigate(path),
-            back: () => (window.history.length > 1 ? navigate(-1) : navigate('/')),
+            back: () => back(navigate),
             searchLabel: () => t('browse.search_chat'),
         })
         onCleanup(off)

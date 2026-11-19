@@ -39,17 +39,63 @@ test.describe('window keys', () => {
         await expect(page).toHaveURL(/\/chats$/)
     })
 
-    test('Command+J is Downloads and toggles; Command+1 and 2 are Home and Chats; Command+Shift+A chooses chats', async ({ page }) => {
+    test('Command+J is Downloads and toggles; Command+Shift+A chooses chats', async ({ page }) => {
         await chord(page, 'j')
         await expect(page).toHaveURL(/\/downloads$/)
         await chord(page, 'j')
         await expect(page).toHaveURL(/\/chats$/)
+        await chord(page, 'A', true)
+        await expect(page).toHaveURL(/\/added-chats/)
+    })
+
+    test('Command+1 and 2 stay the browser tabs\' in a tab, and are Home and Chats in an installed app', async ({ page }) => {
+        await chord(page, '1')
+        await expect(page).toHaveURL(/\/chats$/)
+        await page.addInitScript(() => {
+            const real = window.matchMedia.bind(window)
+            window.matchMedia = (q: string) => (q.includes('display-mode: standalone') ? ({ ...real('all'), matches: true, media: q } as MediaQueryList) : real(q))
+        })
+        await page.reload()
+        await expect(page.locator('a[href^="/chat/"]').first()).toBeVisible()
         await chord(page, '1')
         await expect(page).toHaveURL(/127\.0\.0\.1:\d+\/$/)
         await chord(page, '2')
         await expect(page).toHaveURL(/\/chats$/)
-        await chord(page, 'A', true)
-        await expect(page).toHaveURL(/\/added-chats/)
+    })
+
+    test('a held chord acts once, and Back from a deep link goes Home, never off the app', async ({ page }) => {
+        await page.goto('/search')
+        await expect(page.getByRole('searchbox')).toBeFocused()
+        const mod = await command(page)
+        // Down, repeat, repeat, up: the repeats are spent, so the first press's page stays.
+        await page.keyboard.down(`${mod}`)
+        await page.keyboard.down('KeyK')
+        await page.keyboard.down('KeyK')
+        await page.keyboard.down('KeyK')
+        await page.keyboard.up('KeyK')
+        await page.keyboard.up(`${mod}`)
+        await expect(page).toHaveURL(/127\.0\.0\.1:\d+\/$/)
+    })
+
+    test('Escape in Search from a deep link goes Home', async ({ page }) => {
+        await page.goto('/search')
+        await expect(page.getByRole('searchbox')).toBeFocused()
+        await page.keyboard.press('Escape')
+        await expect(page).toHaveURL(/127\.0\.0\.1:\d+\/$/)
+    })
+
+    test('a letter chord follows the key place on a layout without Latin letters', async ({ page }) => {
+        await page.evaluate(() => {
+            const mac = /Mac|iPhone|iPad/.test(navigator.platform)
+            document.body.dispatchEvent(new KeyboardEvent('keydown', { key: '\u043b', code: 'KeyK', ctrlKey: !mac, metaKey: mac, bubbles: true, cancelable: true }))
+        })
+        await expect(page).toHaveURL(/\/search/)
+    })
+
+    test('/ counts where it needs Shift (a German layout sends Shift+7)', async ({ page }) => {
+        await page.locator('body').click({ position: { x: 5, y: 5 } })
+        await page.evaluate(() => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: '/', code: 'Digit7', shiftKey: true, bubbles: true, cancelable: true })))
+        await expect(page.getByRole('searchbox')).toBeFocused()
     })
 
     test('the bar says its chords on a desktop', async ({ page }) => {
@@ -160,6 +206,22 @@ test.describe('a grid by keyboard', () => {
         expect(await focusedIndex(page)).toBe(last)
         await page.keyboard.press('Control+Home')
         await expect.poll(() => focusedIndex(page)).toBe(0)
+        // At an edge Home, End and Ctrl+Home are spent: the window does not scroll away from the card.
+        await page.waitForTimeout(600)
+        const scrollY = await page.evaluate(() => window.scrollY)
+        await page.keyboard.press('Control+Home')
+        await page.keyboard.press('Home')
+        await page.keyboard.press('PageUp')
+        expect(await page.evaluate(() => window.scrollY)).toBe(scrollY)
+        await page.keyboard.press('Control+End')
+        await expect.poll(() => focusedIndex(page)).toBeGreaterThan(0)
+        await page.waitForTimeout(600)
+        const bottom = await page.evaluate(() => window.scrollY)
+        await page.keyboard.press('Control+End')
+        await page.keyboard.press('End')
+        await page.keyboard.press('PageDown')
+        expect(await page.evaluate(() => window.scrollY)).toBe(bottom)
+        expect(await focusedIndex(page)).toBeGreaterThan(0)
     })
 
     test('Enter opens the focused card, and Shift+F10 opens its menu', async ({ page }) => {
@@ -179,6 +241,14 @@ test('a huge account: Ctrl+End reaches the last chat and the page draws only a f
     await noSizeFloor(page)
     await page.goto('/chats')
     await expect(page.locator('li[data-item="0"] a')).toBeVisible({ timeout: 20_000 })
+    // The list arrives in batches: End goes to the last chat there is when it is pressed, so let it settle first.
+    let height = -1
+    await expect.poll(async () => {
+        const now = await page.locator('.vgrid').evaluate((el) => el.getBoundingClientRect().height)
+        const same = now === height
+        height = now
+        return same
+    }, { timeout: 20_000, intervals: [1000] }).toBe(true)
     await page.locator('li[data-item="0"] a').focus()
     await page.keyboard.press('Control+End')
     await expect.poll(() => focusedIndex(page), { timeout: 15_000 }).toBeGreaterThan(1000)

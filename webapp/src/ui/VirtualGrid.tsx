@@ -4,7 +4,7 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, type JSX } from 'solid-js'
 import { createWindowVirtualizer } from '@tanstack/solid-virtual'
 import { form } from '../form'
-import { FIRST_CONTROL, gridTarget, isTextField, rowOf } from './shellKeys'
+import { FIRST_CONTROL, gridOwns, gridTarget, isTextField, rowOf } from './shellKeys'
 
 /** One of the TV app's dp at this window's size, as tv.css's --dp: 960 x 540 dp fill the screen. */
 export const tvDp = () => Math.min(window.innerWidth / 960, window.innerHeight / 540)
@@ -117,7 +117,7 @@ export function VirtualGrid<T>(props: {
         v.scrollToIndex(row, { align: 'auto' })
         let tries = 0
         const wait = () => {
-            if (!take() && ++tries < 30) frame = requestAnimationFrame(wait)
+            if (!take() && ++tries < 120) frame = requestAnimationFrame(wait)
         }
         frame = requestAnimationFrame(wait)
     }
@@ -128,10 +128,12 @@ export function VirtualGrid<T>(props: {
         const li = from?.closest('li[data-item]') ?? null
         if (!li || !el.contains(li) || isTextField(from as HTMLElement) || from !== primary(li)) return
         const at = Number((li as HTMLElement).dataset.item)
-        const to = gridTarget(e.key, { ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey, shift: e.shiftKey }, at, ranges(), Math.floor(window.innerHeight / layout().estimate))
-        if (to === null) return
+        const mods = { ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey, shift: e.shiftKey }
+        const to = gridTarget(e.key, mods, at, ranges(), Math.floor(window.innerHeight / layout().estimate))
+        // Home, End and the Page keys are spent even at an edge: the window's scroll would leave the keyboard on an off screen card.
+        if (to === null && !gridOwns(e.key, mods)) return
         e.preventDefault()
-        focusItem(to)
+        if (to !== null) focusItem(to)
     }
     return (
         <div ref={el} class="vgrid" role="list" aria-label={props.label} style={{ height: `${v.getTotalSize()}px` }} onKeyDown={onKeys}>
