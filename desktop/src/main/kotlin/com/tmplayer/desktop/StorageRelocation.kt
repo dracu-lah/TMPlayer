@@ -1,5 +1,6 @@
 package com.tmplayer.desktop
 
+import com.tmplayer.data.DiskInfo
 import com.tmplayer.data.DownloadFiles
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.StorageRelocationPlan
@@ -7,7 +8,9 @@ import com.tmplayer.i18n.L
 import com.tmplayer.platform.Logger
 import com.tmplayer.platform.NoTransferNotifier
 import com.tmplayer.platform.TransferNotifier
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -17,6 +20,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
+import java.nio.file.Files
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -25,6 +29,9 @@ import java.util.Locale
  * Moving TMPlayer's files to a storage location the viewer chose, or back to the default folders
  * (B2.3). The decisions are [StorageRelocationPlan]'s; this is the work, in this order:
  *
+ * 0. Before anything is touched: the new folder is there and can be written to, and the downloads
+ *    to carry across fit (needed plus a gigabyte spare against what is free there now, since the
+ *    confirm may be minutes old). A refusal changes nothing.
  * 1. Everything that reads TDLib's files stops: the queue, the player, the watch cache sweep.
  * 2. TDLib's cache is emptied through TDLib, so its database agrees it is empty. Copying the cache
  *    would be useless: TDLib does not know files copied into a new directory, and the stray sweep
@@ -32,14 +39,21 @@ import java.util.Locale
  * 3. The new root is written down, with a pending note of what is still to do, before anything
  *    moves; then the folders and the `.tmplayer` marker are made, TDLib is restarted over the new
  *    cache folder, and the old cache folder is deleted.
- * 4. Every download moves into the new Downloads folder, the index updated as each one lands, so
- *    a crash part way leaves an index that is right about every file. The pending note is cleared
- *    only when the last one is in, and [resumePending] finishes the job on the next launch if it
- *    never was. A file another program has locked is reported and tried again then, not fatal.
+ * 4. When the viewer ticked it, every download moves into the new Downloads folder, the index
+ *    updated as each one lands, so a crash part way leaves an index that is right about every
+ *    file. It stops at the first full disk or vanished drive (every later file would fail the same
+ *    slow way), between files when the viewer cancels, and never leaves a half copy: the copy goes
+ *    to a `.part` file that is removed on any failure. A file another program has locked is
+ *    reported and tried again next launch, not fatal. Downloads left behind keep playing where
+ *    they are; [moveRemaining] carries them later.
  * 5. The old Downloads folder goes if it is empty; nothing else is ever removed.
  *
  * @param layout the folders for a root, or for the default folders with null.
  * @param host the parts that touch the running app, so this can be tested over fakes.
+ * @param freeSpace free bytes on the drive a folder is on, or would be on.
+ * @param usable whether a chosen root can hold TMPlayer's folders now.
+ * @param sameDrive whether two paths are on one drive, so a move between them is a rename, not a copy.
+ * @param mover moves one file into the Downloads folder, with no partial file left on failure.
  */
 class StorageRelocation(
     private val settings: SettingsStore,
@@ -48,6 +62,11 @@ class StorageRelocation(
     private val layout: (File?) -> StorageLayout = { DesktopPaths.layout(it) },
     private val notifier: () -> TransferNotifier = { NoTransferNotifier },
     private val _moving: MutableStateFlow<Moving?> = MutableStateFlow(null),
+    private val freeSpace: (File) -> Long = { DiskInfo.of(it).freeBytes },
+    private val usable: (File) -> Boolean = StorageRootCheck::usable,
+    private val sameDrive: (File, File) -> Boolean = DownloadFiles::sameStore,
+    private val mover: suspend (File, File, String, (Long, Long) -> Unit) -> File =
+        { src, dir, name, progress -> DownloadFiles.moveIntoDownloads(src, dir, name, progress) },
 ) {
     /** The running app, as a move needs it. */
     interface Host {
@@ -64,19 +83,76 @@ class StorageRelocation(
         suspend fun resume()
     }
 
-    /** How a move went, for the toast at the end. */
+    /** Why a move ended before it tried every file. */
+    sealed interface Stop {
+        /** The new drive filled up; [neededBytes] is about how much more the rest would take. */
+        data class NoSpace(val neededBytes: Long) : Stop
+
+        /** The drive, either end of the move, went away. */
+        data object VolumeGone : Stop
+
+        /** The viewer pressed Cancel. */
+        data object Cancelled : Stop
+    }
+
+    /** Why one file did not move, in the words a person would use. */
+    enum class Reason { InUse, TooLong, Other }
+
+    /**
+     * How a move went, for the toast at the end and, when something was left, the report.
+     *
+     * @param failed the names that did not move (locked, or the copy failed), [reasons] saying why;
+     *   tried again at the next launch.
+     * @param total the downloads the move set out to carry (links not counted).
+     * @param skippedLinks files that are links to somewhere else, left where they are.
+     * @param missing records whose file is no longer on the disk at all.
+     */
     data class Outcome(
         val downloadsDir: File,
         val moved: Int,
-        /** Files that could not be moved this time (locked, or the copy failed); tried again next launch. */
         val failed: List<String>,
+        val stop: Stop? = null,
+        val total: Int = moved + failed.size,
+        val reasons: Map<String, Reason> = emptyMap(),
+        val skippedLinks: List<String> = emptyList(),
+        val missing: Int = 0,
     ) {
+        private val folder: String get() = (downloadsDir.parentFile ?: downloadsDir).toString()
+
         val message: String
             get() = when {
-                failed.isEmpty() -> L.storageMovedTo((downloadsDir.parentFile ?: downloadsDir).toString())
+                stop is Stop.Cancelled -> L.storageMoveCancelled(moved, total)
+                stop is Stop.NoSpace -> L.storageMoveDriveFull(folder, StorageRelocationPlan.size(stop.neededBytes), moved, total)
+                stop is Stop.VolumeGone -> L.storageMoveDriveGone(folder, moved, total)
+                failed.isEmpty() -> L.storageMovedTo(folder)
                 failed.size == 1 -> L.storageMovedButOne(failed.first())
                 else -> L.storageMovedButSome(failed.size)
             }
+
+        /** Downloads that did not go and stay where they were. */
+        val left: Int get() = (total - moved).coerceAtLeast(0)
+
+        /** Whether the toast is too little: the drive stopped it, or something failed or was skipped. */
+        val needsReport: Boolean
+            get() = (stop != null && stop !is Stop.Cancelled) || failed.isNotEmpty() || skippedLinks.isNotEmpty()
+
+        /** What worked, what was skipped and why, one sentence a line. */
+        fun report(): List<String> = buildList {
+            if (stop != null) add(message)
+            add(L.storageReportMoved(moved))
+            failed.take(REPORT_NAMES).forEach { name ->
+                val why = when (reasons[name]) {
+                    Reason.InUse -> L.storageReasonInUse
+                    Reason.TooLong -> L.storageReasonTooLong
+                    else -> L.storageReasonOther
+                }
+                add(L.storageReportFailed(name, why))
+            }
+            if (failed.size > REPORT_NAMES) add(L.storageReportMore(failed.size - REPORT_NAMES))
+            skippedLinks.take(REPORT_NAMES).forEach { add(L.storageReportLink(it)) }
+            if (missing > 0) add(L.storageReportMissing(missing))
+            if (left > 0 && stop == null) add(L.storageReportLeft(left))
+        }
     }
 
     /** A move in progress: bytes of downloads in place so far, of all there are. */
@@ -87,50 +163,140 @@ class StorageRelocation(
 
     private val lock = Mutex()
 
+    @Volatile
+    private var cancelled = false
+
+    @Volatile
+    private var copying: Job? = null
+
     /** The storage location in use, or null for the default folders. */
     fun currentRoot(): File? = prefs.now.storageRoot.takeIf { it.isNotBlank() }?.let(::File)
 
     /**
-     * Moves everything to [root] (null for the default folders). The viewer has confirmed by now,
-     * and [StorageRelocationPlan.validate] has allowed it.
+     * Stops the downloads' move after the file in hand: its copy is cut, its half file removed,
+     * and what already moved stays moved. Nothing happens when no downloads are moving.
      */
-    suspend fun move(root: File?): Outcome = lock.withLock {
-        val from = layout(currentRoot())
-        val to = layout(root)
-        host.pause()
+    fun cancel() {
+        if (_moving.value == null) return
+        cancelled = true
+        copying?.cancel()
+    }
+
+    /** The move written down and waiting, for the Settings row; null when none. */
+    fun pending(): StorageRelocationPlan.Pending? = StorageRelocationPlan.Pending.decode(prefs.now.storageRootPending)
+
+    /** Stops waiting for a move that cannot finish (its drive is not there): downloads stay where they are. */
+    fun forgetPending() {
+        prefs.update { it.copy(storageRootPending = "") }
+    }
+
+    /**
+     * Moves everything to [root] (null for the default folders). The viewer has confirmed by now,
+     * and [StorageRelocationPlan.validate] has allowed it. [moveDownloads] is their tick: off
+     * leaves the downloads where they are, playing from there.
+     *
+     * @throws IOException before anything was touched: another move is running, the folder
+     *   cannot be used, or the downloads no longer fit.
+     */
+    suspend fun move(root: File?, moveDownloads: Boolean = true): Outcome {
+        if (!lock.tryLock()) throw IOException(L.storageMoveBusy)
         try {
-            withContext(NonCancellable) {
-                host.clearCache()
-                val pending = StorageRelocationPlan.Pending(
-                    root = root?.path.orEmpty(),
-                    oldCache = from.cacheDir.path,
-                    oldDownloads = from.downloadsDir.path,
-                )
-                prefs.update { it.copy(storageRoot = root?.path.orEmpty(), storageRootPending = pending.encode()) }
-                prepare(root, to)
-                host.restart(root)
-                deleteOldCache(from.cacheDir, to)
-                finish(pending, to)
+            val from = layout(currentRoot())
+            val to = layout(root)
+            preflight(root, to, moveDownloads)
+            host.pause()
+            try {
+                return withContext(NonCancellable) {
+                    host.clearCache()
+                    val pending = StorageRelocationPlan.Pending(
+                        root = root?.path.orEmpty(),
+                        oldCache = from.cacheDir.path,
+                        oldDownloads = from.downloadsDir.path,
+                        moveDownloads = moveDownloads,
+                    )
+                    prefs.update { it.copy(storageRoot = root?.path.orEmpty(), storageRootPending = pending.encode()) }
+                    prepare(root, to)
+                    host.restart(root)
+                    deleteOldCache(from.cacheDir, to)
+                    finish(pending, root, to)
+                }
+            } finally {
+                withContext(NonCancellable) { host.resume() }
             }
         } finally {
-            withContext(NonCancellable) { host.resume() }
+            lock.unlock()
         }
+    }
+
+    /**
+     * Carries the downloads still outside the Downloads folder in (after a stop, a cancel, or a
+     * move made without them), the same way [move] does and with the same checks.
+     */
+    suspend fun moveRemaining(): Outcome {
+        if (!lock.tryLock()) throw IOException(L.storageMoveBusy)
+        try {
+            val root = currentRoot()
+            val to = layout(root)
+            preflight(root, to, moveDownloads = true)
+            host.pause()
+            try {
+                return withContext(NonCancellable) { finish(null, root, to) }
+            } finally {
+                withContext(NonCancellable) { host.resume() }
+            }
+        } finally {
+            lock.unlock()
+        }
+    }
+
+    /** How many downloads are outside the Downloads folder now, and what they take. */
+    suspend fun outside(): Pair<Int, Long> = withContext(Dispatchers.IO) {
+        val records = runCatching { settings.downloadsNow() }.getOrDefault(emptyList())
+        val away = StorageRelocationPlan.toMove(records, layout(currentRoot()).downloadsDir)
+        away.size to away.sumOf { File(it.localPath.orEmpty()).length() }
     }
 
     /**
      * Finishes a move an earlier run began and did not complete. Called once at launch; needs the
      * settings store and nothing of TDLib's, so it can run while TDLib is still starting.
      *
-     * @return null when nothing was pending.
+     * Waits (returns null, the note kept) while the new location cannot be used, such as a drive
+     * not plugged in: making its folders then would put them on whatever disk holds the empty
+     * mount point.
+     *
+     * @return null when nothing was pending, or it is waiting for its drive.
      */
     suspend fun resumePending(): Outcome? = lock.withLock {
         val pending = StorageRelocationPlan.Pending.decode(prefs.now.storageRootPending) ?: return null
         val root = pending.root.takeIf { it.isNotBlank() }?.let(::File)
+        if (root != null && !usable(root)) return null
         val to = layout(root)
         withContext(NonCancellable) {
             prepare(root, to)
             deleteOldCache(File(pending.oldCache), to)
-            finish(pending, to)
+            finish(pending, root, to)
+        }
+    }
+
+    /** The checks before a move touches anything. */
+    private suspend fun preflight(root: File?, to: StorageLayout, moveDownloads: Boolean) = withContext(Dispatchers.IO) {
+        if (root != null && !usable(root)) throw IOException(L.storageCannotWrite)
+        if (!moveDownloads) return@withContext
+        val records = runCatching { settings.downloadsNow() }.getOrDefault(emptyList())
+        val stores = HashMap<File?, Boolean>()
+        val crossing = StorageRelocationPlan.toMove(records, to.downloadsDir).sumOf { record ->
+            val src = File(record.localPath.orEmpty())
+            val same = stores.getOrPut(src.absoluteFile.parentFile) { sameDrive(src, to.downloadsDir) }
+            if (same || isLink(src)) 0L else src.length()
+        }
+        val free = freeSpace(to.downloadsDir)
+        if (!StorageRelocationPlan.fits(crossing, free)) {
+            throw IOException(
+                L.storageDriveTooSmall(
+                    StorageRelocationPlan.size(free),
+                    StorageRelocationPlan.size(crossing + StorageRelocationPlan.SPARE_BYTES),
+                ),
+            )
         }
     }
 
@@ -159,48 +325,121 @@ class StorageRelocation(
         if (!old.deleteRecursively()) Logger.w(TAG, "Some of the old cache at ${old.path} could not be deleted")
     }
 
-    private suspend fun finish(pending: StorageRelocationPlan.Pending, to: StorageLayout): Outcome {
+    /**
+     * Whether the new location is still there. For a chosen root that is its TMPlayer folder,
+     * which a drive pulled mid move takes with it (a mount point left behind is an empty folder).
+     */
+    private fun reachable(root: File?, to: StorageLayout): Boolean =
+        if (root == null) to.downloadsDir.parentFile?.isDirectory != false else StorageRelocationPlan.appFolder(root).isDirectory
+
+    private fun isLink(file: File): Boolean = runCatching { Files.isSymbolicLink(file.toPath()) }.getOrDefault(false)
+
+    private fun reasonOf(e: IOException, target: File): Reason {
+        val text = generateSequence<Throwable>(e) { it.cause }.mapNotNull { it.message }.joinToString(" ")
+        return when {
+            text.contains("used by another", ignoreCase = true) || text.contains("access is denied", ignoreCase = true) ||
+                text.contains("being used", ignoreCase = true) -> Reason.InUse
+            text.contains("too long", ignoreCase = true) || (IS_WINDOWS && target.path.length > WINDOWS_PATH_LIMIT) -> Reason.TooLong
+            else -> Reason.Other
+        }
+    }
+
+    private suspend fun finish(pending: StorageRelocationPlan.Pending?, root: File?, to: StorageLayout): Outcome {
         val records = runCatching { settings.downloadsNow() }.getOrDefault(emptyList())
-        val moving = StorageRelocationPlan.toMove(records, to.downloadsDir)
-        val total = moving.sumOf { File(it.localPath!!).length() }
+        val wanted = pending?.moveDownloads ?: true
+        val candidates = if (wanted) StorageRelocationPlan.toMove(records, to.downloadsDir) else emptyList()
+        val links = candidates.filter { isLink(File(it.localPath.orEmpty())) }
+        val moving = candidates - links.toSet()
+        val total = moving.sumOf { File(it.localPath.orEmpty()).length() }
         val id = NOTIFY_ID
         val note = notifier()
+        cancelled = false
         var done = 0L
         var moved = 0
+        var gone = StorageRelocationPlan.missing(records).size
+        var stop: Stop? = null
         val failed = mutableListOf<String>()
+        val reasons = mutableMapOf<String, Reason>()
         if (moving.isNotEmpty()) {
             note.begin(id, TransferNotifier.Kind.Relocate, L.storageMovingDownloads)
             _moving.value = Moving(0, total)
         }
-        for (record in moving) {
-            val src = File(record.localPath!!)
-            val before = done
-            try {
-                val target = DownloadFiles.moveIntoDownloads(src, to.downloadsDir, src.name) { landed, _ ->
-                    _moving.value = Moving(before + landed, total)
-                    note.progress(id, before + landed, total, null)
+        try {
+            for (record in moving) {
+                val src = File(record.localPath.orEmpty())
+                if (cancelled) {
+                    stop = Stop.Cancelled
+                    break
                 }
-                settings.setDownloadPath(record.chatId, record.messageId, target.absolutePath)
-                moved++
-            } catch (e: IOException) {
-                // Typically Windows: "The process cannot access the file" while a player elsewhere
-                // has it. The record still points at the old place, which still plays.
-                Logger.w(TAG, "Could not move ${src.name}", e)
-                failed += src.name
+                if (!reachable(root, to)) {
+                    stop = Stop.VolumeGone
+                    break
+                }
+                val before = done
+                val size = src.length().coerceAtLeast(0)
+                val job = Job()
+                copying = job
+                try {
+                    val target = withContext(job) {
+                        mover(src, to.downloadsDir, src.name) { landed, _ ->
+                            _moving.value = Moving(before + landed, total)
+                            note.progress(id, before + landed, total, null)
+                        }
+                    }
+                    settings.setDownloadPath(record.chatId, record.messageId, target.absolutePath)
+                    moved++
+                } catch (e: CancellationException) {
+                    if (!cancelled) throw e
+                    stop = Stop.Cancelled
+                } catch (e: IOException) {
+                    // Typically Windows: "The process cannot access the file" while a player elsewhere
+                    // has it. The record still points at the old place, which still plays.
+                    Logger.w(TAG, "Could not move ${src.name}", e)
+                    when {
+                        // A full disk fails every later file the same slow way: stop and say how much more.
+                        StorageRelocationPlan.isNoSpace(e) -> {
+                            val remaining = total - before
+                            stop = Stop.NoSpace((remaining - freeSpace(to.downloadsDir)).coerceAtLeast(size))
+                        }
+                        !reachable(root, to) || (!src.exists() && src.absoluteFile.parentFile?.isDirectory != true) ->
+                            stop = Stop.VolumeGone
+                        // Gone since the list was read (removed meanwhile): not a failure of the move.
+                        !src.exists() -> gone++
+                        else -> {
+                            failed += src.name
+                            reasons[src.name] = reasonOf(e, File(to.downloadsDir, src.name))
+                        }
+                    }
+                } finally {
+                    copying = null
+                }
+                if (stop != null) break
+                done = before + size
             }
-            done = before + src.length().coerceAtLeast(0)
+        } finally {
+            _moving.value = null
         }
-        _moving.value = null
-        if (failed.isEmpty()) {
+        // Held until the next launch only for a file that would not go. A stop is the viewer's or the
+        // drive's, and the rest is offered from Settings, not moved behind their back.
+        if (stop != null || failed.isEmpty()) {
             prefs.update { it.copy(storageRootPending = "") }
-            removeIfEmpty(File(pending.oldDownloads), to)
+            if (stop == null && wanted && pending != null) removeIfEmpty(File(pending.oldDownloads), to)
         }
-        val outcome = Outcome(to.downloadsDir, moved, failed)
+        val outcome = Outcome(
+            downloadsDir = to.downloadsDir,
+            moved = moved,
+            failed = failed,
+            stop = stop,
+            total = moving.size,
+            reasons = reasons,
+            skippedLinks = links.map { File(it.localPath.orEmpty()).name },
+            missing = gone,
+        )
         if (moving.isNotEmpty()) {
-            if (failed.isEmpty()) {
-                note.complete(id, L.downloadsMoved, outcome.message, TransferNotifier.OpenTarget.Folder(to.downloadsDir.path))
-            } else {
-                note.fail(id, L.storageSomeDidNotMove, outcome.message, retryable = true)
+            when {
+                stop is Stop.Cancelled -> note.cancel(id)
+                stop != null || failed.isNotEmpty() -> note.fail(id, L.storageSomeDidNotMove, outcome.message, retryable = true)
+                else -> note.complete(id, L.downloadsMoved, outcome.message, TransferNotifier.OpenTarget.Folder(to.downloadsDir.path))
             }
         }
         return outcome
@@ -220,5 +459,8 @@ class StorageRelocation(
     private companion object {
         const val TAG = "StorageRelocation"
         const val NOTIFY_ID = (1L shl 34) + 2
+        const val REPORT_NAMES = 6
+        const val WINDOWS_PATH_LIMIT = 259
+        val IS_WINDOWS = System.getProperty("os.name").orEmpty().startsWith("Windows", ignoreCase = true)
     }
 }

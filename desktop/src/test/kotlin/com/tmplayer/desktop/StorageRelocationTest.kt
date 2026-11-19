@@ -23,7 +23,7 @@ class StorageRelocationTest {
     private val settings = SettingsStore(SettingsStore.openDataStore(File(tmp, "store/" + SettingsStore.FILE_NAME)))
     private val prefs = DesktopPrefs(File(tmp, "desktop.properties"))
     private val defaults = StorageLayout(File(tmp, "home/cache"), File(tmp, "home/Downloads/TMPlayer"), File(tmp, "home/updates"))
-    private val newRoot = File(tmp, "big")
+    private val newRoot = File(tmp, "big").apply { mkdirs() }
 
     private fun layout(root: File?): StorageLayout = if (root == null) defaults else {
         val base = File(root, "TMPlayer")

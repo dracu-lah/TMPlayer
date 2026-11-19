@@ -114,10 +114,7 @@ object DownloadRelocation {
     private fun sizeText(bytes: Long): String = StorageRelocationPlan.size(bytes)
 
     /** Whether [e] is the file system saying the disk is full, in the words the JDK and Android use. */
-    internal fun isNoSpace(e: Throwable): Boolean {
-        val text = generateSequence<Throwable>(e) { it.cause }.mapNotNull { it.message }.joinToString(" ")
-        return text.contains("No space left", ignoreCase = true) || text.contains("ENOSPC") || text.contains("disk full", ignoreCase = true)
-    }
+    internal fun isNoSpace(e: Throwable): Boolean = StorageRelocationPlan.isNoSpace(e)
 
     /**
      * The label of the volume a move is waiting for, or null when none is pending or it is
