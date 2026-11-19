@@ -45,6 +45,7 @@ import {
 } from '@hugeicons/core-free-icons'
 import './player.css'
 import './subfonts.css'
+import './rotate.css'
 import { Icon, type IconData } from '../ui/Icon'
 import { t } from '../i18n'
 import { Choice, Entry, Panel, PhoneSheet, Picker, variant, walk } from './sheets'
@@ -61,9 +62,11 @@ import { MsoneSheet, type MsoneTarget } from './msone-sheet'
 import { episodeOf } from './msone'
 import { mergeSkips } from './skipOnline'
 import { answer, askOf, loadAnimeSkips } from '../screens/posters'
-import { settings } from '../store'
+import { openingSpeed, readBoost, rememberSpeed, settings, writeBoost } from '../store'
 import { msoneOn } from '../msoneFlag'
-import { AUTOPLAY_LIMIT, fineRate, IDLE_LIMIT, noteInput, pressLoop, repeats, repeatState, SeekUndo, SLEEP_CHOICES, sleepState, watching, wrapLoop, type Loop } from './extras'
+import { AUTOPLAY_LIMIT, BOOSTS, fineRate, IDLE_LIMIT, noteInput, pressLoop, repeats, repeatState, SeekUndo, sidewaysTurn, SLEEP_CHOICES, sleepState, speedScopes, TURNS, turnFrame, watching, wrapLoop, type Loop } from './extras'
+import { applyBoost, boostSupported, releaseBoost } from './boost'
+import { cueOverlay, type CueOverlay } from './cueoverlay'
 import {
     addBookmark, deleteBookmark, loadBookmarks, readAutoplay, readChatOrder, readKeepRepeat, renameBookmark, writeAutoplay, writeChatOrder, writeKeepRepeat, writeLook,
     type Bookmark, type SubtitleLook,
@@ -178,7 +181,7 @@ export interface Ctl {
     markWatched: (on: boolean) => void
 }
 
-type Sheet = 'subtitles' | 'audio' | 'speed' | 'copies' | 'episodes' | 'more' | 'shape' | 'details' | 'options' | 'sleep' | 'bookmarks' | 'timing' | 'shortcuts' | 'still' | 'msone' | 'chatsubs' | null
+type Sheet = 'subtitles' | 'audio' | 'speed' | 'copies' | 'episodes' | 'more' | 'shape' | 'details' | 'options' | 'sleep' | 'bookmarks' | 'timing' | 'shortcuts' | 'still' | 'msone' | 'chatsubs' | 'rotate' | 'boost' | null
 
 export { variant }
 
@@ -402,9 +405,33 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         noteSeek(from, to)
     }
     const seekBy = (s: number) => seekTo(v.currentTime + s)
+    // The speed a video opens at: the one kept for its show (known once the show is read), else for its chat.
+    let speedPicked = false
+    {
+        let last = ''
+        createEffect(() => {
+            const scopes = speedScopes(c.item.chatId, c.info()?.episode?.show ?? null)
+            const key = `${scopes.series}|${scopes.chat}`
+            if (key === last) return
+            last = key
+            let alive = true
+            onCleanup(() => (alive = false))
+            openingSpeed(scopes).then(
+                (r) => {
+                    if (!alive || speedPicked || Math.abs(v.playbackRate - r) < 0.001) return
+                    v.defaultPlaybackRate = r
+                    v.playbackRate = r
+                },
+                () => {},
+            )
+        })
+    }
     const setSpeed = (r: number) => {
         const next = Math.round(Math.min(SPEED_MAX, Math.max(SPEED_MIN, r)) * 100) / 100
         v.playbackRate = next
+        // Remembered for this show, or this chat (SpeedMemory); 1x forgets it, so the next one opens at 1x too.
+        speedPicked = true
+        rememberSpeed(speedScopes(c.item.chatId, c.info()?.episode?.show ?? null), next)
         flash(speedLabel(next))
     }
     const stepSpeed = (up: boolean) => {
@@ -450,11 +477,27 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
             onCleanup(() => watch.disconnect())
         }
     }
+    // Rotate picture (PictureRotation): the picture turned a quarter at a time as it is drawn, the box resized so a
+    // sideways picture still fits the stage; for this video only (a new player starts upright).
+    const [turn, setTurn] = createSignal(0)
     createEffect(() => {
         const s = shape()
+        const deg = turn()
+        const sw = stage().width || v.parentElement?.clientWidth || 0
+        const sh = stage().height || v.parentElement?.clientHeight || 0
         v.style.objectFit = objectFit(s)
+        if (deg) v.style.transform = `rotate(${deg}deg)`
+        else v.style.removeProperty('transform')
+        // The canvas engines' pictures follow this (movi.ts by custom properties, libavcanvas.ts by mirroring the style).
+        c.root.style.setProperty('--stage-w', `${sw}px`)
+        c.root.style.setProperty('--stage-h', `${sh}px`)
+        c.root.style.setProperty('--turn', `${deg}deg`)
+        if (deg) c.root.setAttribute('data-turn', String(deg))
+        else c.root.removeAttribute('data-turn')
         const ratio = shapeRatio(s)
-        const at = ratio === null ? null : ratioBox(stage().width || v.parentElement?.clientWidth || 0, stage().height || v.parentElement?.clientHeight || 0, ratio)
+        const frame = turnFrame(sw, sh, deg)
+        const inner = ratio === null ? null : ratioBox(frame.width, frame.height, ratio)
+        const at = inner ? { left: frame.left + inner.left, top: frame.top + inner.top, width: inner.width, height: inner.height } : sidewaysTurn(deg) && sw > 0 && sh > 0 ? frame : null
         if (!at) {
             for (const p of ['position', 'left', 'top', 'width', 'height'] as const) v.style.removeProperty(p)
             return
@@ -462,8 +505,68 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         Object.assign(v.style, { position: 'absolute', left: `${at.left}px`, top: `${at.top}px`, width: `${at.width}px`, height: `${at.height}px` })
     })
     onCleanup(() => {
-        for (const p of ['position', 'left', 'top', 'width', 'height', 'object-fit'] as const) v.style.removeProperty(p)
+        for (const p of ['position', 'left', 'top', 'width', 'height', 'object-fit', 'transform'] as const) v.style.removeProperty(p)
+        for (const p of ['--stage-w', '--stage-h', '--turn']) c.root.style.removeProperty(p)
+        c.root.removeAttribute('data-turn')
     })
+    // A turned video's own cue box turns with it, so while it is turned the cues are drawn upright in a layer over the stage.
+    let turnCues: CueOverlay | null = null
+    const drawTurnCues = () => {
+        const native = !v.classList.contains('sw-active') && !v.classList.contains('movi-active')
+        if (turn() !== 0 && native) (turnCues ??= cueOverlay(v, () => v.currentTime)).draw()
+        else if (turnCues) (turnCues.remove(), (turnCues = null))
+    }
+    createEffect(on(turn, drawTurnCues))
+    listen('timeupdate', drawTurnCues)
+    onCleanup(() => turnCues?.remove())
+    const pickTurn = (deg: number) => {
+        setTurn(deg)
+        flash(deg ? t('player.rotate_picture_now', { degrees: deg }) : t('player.rotate_picture_off'))
+    }
+
+    // Volume boost (boost.ts): the sound above the file's own level, kept for every video until turned off. Not on an
+    // iPhone or iPad, where the page cannot carry it, so the entry is left out there.
+    const boostOk = boostSupported()
+    const [boost, setBoost] = createSignal(1)
+    let boostPicked = false
+    let startBoost: (level: number) => void = () => {}
+    {
+        // A level that could not start yet (no tap has allowed audio) starts on the next one.
+        let retry: (() => void) | null = null
+        const start = (level: number) => {
+            void applyBoost(v, level).then((ok) => {
+                if (ok || retry) return
+                retry = () => {
+                    document.removeEventListener('pointerdown', retry!, true)
+                    document.removeEventListener('keydown', retry!, true)
+                    retry = null
+                    if (boost() === level) start(level)
+                }
+                document.addEventListener('pointerdown', retry, true)
+                document.addEventListener('keydown', retry, true)
+            })
+        }
+        startBoost = start
+        if (boostOk)
+            void readBoost().then((level) => {
+                if (boostPicked || level <= 1) return
+                setBoost(level)
+                start(level)
+            })
+        // A new source or engine (a quality pick, the fallback chain) starts without the graph: say the level again.
+        listen('playing', () => boost() > 1 && start(boost()))
+        onCleanup(() => {
+            if (retry) (document.removeEventListener('pointerdown', retry, true), document.removeEventListener('keydown', retry, true))
+            releaseBoost(v)
+        })
+    }
+    const pickBoost = (level: number) => {
+        boostPicked = true
+        setBoost(level)
+        writeBoost(level)
+        startBoost(level)
+        flash(level > 1 ? t('player.volume_boost_now', { percent: Math.round(level * 100) }) : t('player.volume_boost_off'))
+    }
     const pickShape = (next: Shape) => {
         setShape(next)
         flash(t('player.picture_shape_now', { shape: shapeName(next) }))
@@ -1681,6 +1784,10 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                         </Show>
                         <Entry text={t('player.playback_options')} trailing={sleepAt() !== null || sleepEnd() ? sleepSummary() : undefined} onClick={() => setSheet('options')} />
                         <Entry text={t('player.picture_shape')} trailing={shapeName(shape())} onClick={() => setSheet('shape')} />
+                        <Entry text={t('player.rotate_picture')} trailing={turn() ? t('player.rotate_picture_degrees', { degrees: turn() }) : undefined} onClick={() => setSheet('rotate')} />
+                        <Show when={boostOk}>
+                            <Entry text={t('player.volume_boost')} trailing={boost() > 1 ? t('player.volume_boost_level', { percent: Math.round(boost() * 100) }) : undefined} onClick={() => setSheet('boost')} />
+                        </Show>
                         <Entry text={t('player.subtitle_style_and_timing')} onClick={() => setSheet('timing')} />
                         <Entry text={t('player.load_subtitle_file')} onClick={() => (setSheet(null), c.loadSubtitleFile())} />
                         <hr />
@@ -1755,6 +1862,36 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                             </div>
                         </div>
                     </div>
+                </Match>
+                <Match when={sheet() === 'rotate'}>
+                    {/* The picture beside it is the answer, as for the shapes: the panel stays open. */}
+                    <Picker title={t('player.rotate_picture')} note={t('player.rotate_picture_note')} phone={phone()} panel anchor={anchor()} root={c.root} onClose={() => setSheet(null)} onBack={() => setSheet('more')}>
+                        <For each={TURNS}>
+                            {(deg) => (
+                                <Choice
+                                    text={deg === 0 ? t('player.rotate_picture_none') : deg === 90 ? t('player.rotate_picture_right') : deg === 180 ? t('player.rotate_picture_half') : t('player.rotate_picture_left')}
+                                    detail={deg ? t('player.rotate_picture_degrees', { degrees: deg }) : undefined}
+                                    on={turn() === deg}
+                                    phone={phone()}
+                                    onClick={() => (pickTurn(deg), phone() && setSheet(null))}
+                                />
+                            )}
+                        </For>
+                    </Picker>
+                </Match>
+                <Match when={sheet() === 'boost'}>
+                    <Picker title={t('player.volume_boost')} note={t('player.volume_boost_note')} phone={phone()} panel anchor={anchor()} root={c.root} onClose={() => setSheet(null)} onBack={() => setSheet('more')}>
+                        <For each={BOOSTS}>
+                            {(level) => (
+                                <Choice
+                                    text={level === 1 ? t('player.volume_boost_off') : t('player.volume_boost_level', { percent: Math.round(level * 100) })}
+                                    on={Math.abs(boost() - level) < 0.001}
+                                    phone={phone()}
+                                    onClick={() => (pickBoost(level), phone() && setSheet(null))}
+                                />
+                            )}
+                        </For>
+                    </Picker>
                 </Match>
                 <Match when={sheet() === 'shape'}>
                     {/* In the panel a pick leaves it open: the picture beside it is the answer. */}
