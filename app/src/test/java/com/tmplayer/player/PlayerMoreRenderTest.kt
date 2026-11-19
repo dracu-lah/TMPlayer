@@ -8,6 +8,9 @@ import android.widget.FrameLayout
 import androidx.fragment.app.FragmentActivity
 import com.tmplayer.R
 import com.tmplayer.data.FormFactor
+import com.tmplayer.data.WatchLaterRecord
+import com.tmplayer.data.WatchedStore
+import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -21,6 +24,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.File
+import java.nio.file.Files
 import java.time.Duration
 
 /**
@@ -35,6 +39,22 @@ class PlayerMoreRenderTest {
     @After
     fun tearDown() {
         FormFactor.override(false)
+    }
+
+    /** "Add to a list" for the page's shots: two lists, the video already in the first. */
+    private val listTarget: PlayerListTarget by lazy {
+        val dir = Files.createTempDirectory("tm-more-lists").toFile().also { it.deleteOnExit() }
+        val lists = WatchedStore(WatchedStore.openDataStore(dir.resolve(WatchedStore.FILE_NAME))).lists
+        val record = WatchLaterRecord(
+            chatId = -100, messageId = 4, fileId = 7, title = "Night Train S01E04", fileName = "Night.Train.S01E04.mp4", chatTitle = "Chat",
+            sizeBytes = 1_000, durationSec = 60, mimeType = "video/mp4", addedAt = 0,
+        )
+        runBlocking {
+            val weekend = lists.create("Weekend")
+            lists.create("Tutorials")
+            if (weekend != null) lists.add(weekend.id, record)
+        }
+        PlayerListTarget(record, lists) {}
     }
 
     private fun idle(ms: Long = 1000) {
@@ -57,7 +77,7 @@ class PlayerMoreRenderTest {
         // A stand-in for the picture, so the panel's shade and edge show against something.
         root.setBackgroundColor(0xFF2F4F6F.toInt())
         root.findViewById<View>(R.id.status_overlay).visibility = View.GONE
-        val host = FakeHost(tv, sideways)
+        val host = FakeHost(tv, sideways, listTarget)
         val panel = PlayerMorePanel(activity, root, host)
         when {
             page != null -> page(panel)
@@ -132,6 +152,7 @@ class PlayerMoreRenderTest {
         val pages = listOf<Pair<String, (PlayerMorePanel) -> Unit>>(
             "rotate" to { it.openOnRotation() },
             "volume" to { it.openOnVolume() },
+            "lists" to { it.openOnLists() },
         )
         for ((page, open) in pages) {
             RuntimeEnvironment.setQualifiers("$phoneSideways-night-xhdpi")
@@ -144,8 +165,9 @@ class PlayerMoreRenderTest {
     }
 
     /** A paused video from a message, a sleep timer running, Volume boost on, the picture zoomed and turned, Player volume at 35%. */
-    class FakeHost(override val tv: Boolean, private val sideways: Boolean) : PlayerMoreHost {
+    class FakeHost(override val tv: Boolean, private val sideways: Boolean, private val target: PlayerListTarget? = null) : PlayerMoreHost {
         var closings = 0
+        override fun addToList() = target
         override fun title() = "Night Train S01E04"
         override fun sideways() = sideways
         override fun phoneEntries() = PlayerMenu.phoneEntries(
@@ -162,6 +184,7 @@ class PlayerMoreRenderTest {
             copyLinkAtTime = true,
             rotatePicture = true,
             playerVolume = true,
+            addToList = target != null,
         )
         override fun zoomDetail() = "135%"
         override fun tvEntries() = PlayerMenu.tvEntries(
@@ -174,6 +197,7 @@ class PlayerMoreRenderTest {
             copyLinkAtTime = true,
             rotatePicture = true,
             playerVolume = true,
+            addToList = target != null,
         )
         override fun shape() = VideoScale.entries.getOrElse(3) { VideoScale.Fit }
         override fun speed() = 1.25f

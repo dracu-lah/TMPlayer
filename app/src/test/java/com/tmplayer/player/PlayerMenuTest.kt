@@ -128,6 +128,7 @@ class PlayerMenuTest {
             removeIntroMark = true,
             rotatePicture = true,
             playerVolume = true,
+            addToList = true,
         )
         assertFalse(PlayerMenuEntry.PictureInPicture in entries)
         assertEquals(PlayerMenuEntry.entries.size - 1, entries.size)
@@ -154,6 +155,7 @@ class PlayerMenuTest {
                 removeIntroMark = true,
                 rotatePicture = true,
                 playerVolume = true,
+                addToList = true,
             ).toSet(),
         )
     }
@@ -209,6 +211,7 @@ class PlayerMenuTest {
                 PhoneMenuEntry.LoadSubtitleFile,
                 PhoneMenuEntry.SaveToDownloads,
                 PhoneMenuEntry.MarkWatched,
+                PhoneMenuEntry.AddToList,
                 PhoneMenuEntry.ReportStutter,
                 PhoneMenuEntry.ReportWrongPicture,
                 PhoneMenuEntry.PlaybackDetails,
@@ -224,9 +227,10 @@ class PlayerMenuTest {
                 saveFrame = true,
                 reportStutter = true,
                 copyLinkAtTime = true,
+                addToList = true,
             ),
         )
-        assertEquals(PhoneMenuEntry.entries.toSet(), PlayerMenu.phoneEntries(true, true, true, true, paused = true, bookmarks = true, chapters = true, saveFrame = true, pictureShape = true, stereo = true, zoomed = true, reportStutter = true, copyLinkAtTime = true, otherEngine = true, repeatVideo = true, markIntro = true, removeIntroMark = true, rotatePicture = true, playerVolume = true).toSet())
+        assertEquals(PhoneMenuEntry.entries.toSet(), PlayerMenu.phoneEntries(true, true, true, true, paused = true, bookmarks = true, chapters = true, saveFrame = true, pictureShape = true, stereo = true, zoomed = true, reportStutter = true, copyLinkAtTime = true, otherEngine = true, repeatVideo = true, markIntro = true, removeIntroMark = true, rotatePicture = true, playerVolume = true, addToList = true).toSet())
     }
 
     @Test
@@ -373,5 +377,21 @@ class PlayerMenuTest {
         assertEquals("Quiet loud scenes off", com.tmplayer.i18n.L.playerQuietLoudScenesOff)
         assertTrue(com.tmplayer.i18n.L.playerQuietLoudScenesOn.startsWith("Quiet loud scenes on"))
         assertFalse(com.tmplayer.i18n.L.playerDetailsQuietLoudScenes.contains("Night", ignoreCase = true))
+    }
+
+    @Test
+    fun `add to a list is offered for a video from a message, on the phone and the television, under Mark as watched`() {
+        // A list keeps a name, never a copy: a chat that restricts saving (openInAnotherApp false) may be in one.
+        val phone = PlayerMenu.phoneEntries(pictureInPicture = true, openInAnotherApp = false, saveToDownloads = true, markWatched = true, addToList = true)
+        assertEquals(phone.indexOf(PhoneMenuEntry.MarkWatched) + 1, phone.indexOf(PhoneMenuEntry.AddToList))
+        val tv = PlayerMenu.tvEntries(pictureInPicture = true, openInAnotherApp = false, saveToDownloads = true, markWatched = true, addToList = true)
+        assertEquals(tv.indexOf(PlayerMenuEntry.MarkWatched) + 1, tv.indexOf(PlayerMenuEntry.AddToList))
+        assertEquals("Add to a list", PhoneMenuEntry.AddToList.label())
+    }
+
+    @Test
+    fun `add to a list is left off a file with no message`() {
+        assertFalse(PhoneMenuEntry.AddToList in PlayerMenu.phoneEntries(true, true, true, true))
+        assertFalse(PlayerMenuEntry.AddToList in PlayerMenu.tvEntries(pictureInPicture = true, markWatched = true))
     }
 }
