@@ -12,6 +12,7 @@ import { cleanContext, correctionLines, NO_COPY_CONTEXT, type CopyContext } from
 import { copyRows, groupRefs, playCopy } from './copyPick'
 import { touchesFor } from './touchCache'
 import { forgetTopics, type ForumChat } from './topics'
+import { createVideoCounter } from './counts'
 import type { ChatItem, CopyRef, ChatPage, ChatView, Found, ListView, RecentPage, SponsoredItem, Tile, VideoItem, WatchInfo } from './types'
 
 const PAGE = 100
@@ -136,7 +137,7 @@ export function forgetAll() {
     }
     recentState = null
     homeChatsKnown = null
-    videoCountCache.clear()
+    videoCounter.forget()
     forgetSponsored()
     forgetChatTitles()
 }
@@ -977,13 +978,10 @@ export async function searchAll(tg: TelegramClient, query: string, view: ListVie
 }
 
 // The chats the viewer added (HX27): a rough video count, without reading or screening any of
-// them, three chats at a time so the picker never floods Telegram; kept for a while and never for
-// a failure, as the apps' ChatVideoCount does.
-const VIDEO_COUNT_BATCH = 3
-const VIDEO_COUNT_CACHE_MS = 10 * 60_000
-const videoCountCache = new Map<number, { count: number; time: number }>()
+// them, three chats at a time so the picker never floods Telegram (tg/counts.ts holds the budget: kept for a
+// while, never for a failure, a flood wait waited out once and then refused), as the apps' ChatVideoCount does.
 
-/** A chat's rough video count: the two filters' totals Telegram's search already carries, summed; -1 when it could not be read, never cached. */
+/** A chat's rough video count: the two filters' totals Telegram's search already carries, summed. */
 async function oneVideoCount(tg: TelegramClient, chatId: number): Promise<number> {
     const [videos, docs] = await Promise.all([
         tg.searchMessages({ chatId, filter: VIDEO_FILTER, limit: 1 }),
@@ -992,31 +990,13 @@ async function oneVideoCount(tg: TelegramClient, chatId: number): Promise<number
     return videos.total + docs.total
 }
 
-/** `chatIds`' rough video counts, by id; -1 for one Telegram could not answer. */
-export async function videoCounts(tg: TelegramClient, chatIds: readonly number[]): Promise<Record<number, number>> {
-    const now = Date.now()
-    const out: Record<number, number> = {}
-    const need: number[] = []
-    for (const id of chatIds) {
-        const hit = videoCountCache.get(id)
-        if (hit && now - hit.time < VIDEO_COUNT_CACHE_MS) out[id] = hit.count
-        else need.push(id)
-    }
-    for (let i = 0; i < need.length; i += VIDEO_COUNT_BATCH) {
-        const batch = need.slice(i, i + VIDEO_COUNT_BATCH)
-        await Promise.all(
-            batch.map(async (chatId) => {
-                try {
-                    const count = await oneVideoCount(tg, chatId)
-                    videoCountCache.set(chatId, { count, time: now })
-                    out[chatId] = count
-                } catch {
-                    out[chatId] = -1
-                }
-            }),
-        )
-    }
-    return out
+let counterClient: TelegramClient | null = null
+const videoCounter = createVideoCounter((id) => oneVideoCount(counterClient!, id))
+
+/** `chatIds`' rough video counts, by id; -1 for one Telegram could not answer, -2 once it refused (a flood wait). */
+export function videoCounts(tg: TelegramClient, chatIds: readonly number[]): Promise<Record<number, number>> {
+    counterClient = tg
+    return videoCounter.counts(chatIds)
 }
 
 // Recently added's See all

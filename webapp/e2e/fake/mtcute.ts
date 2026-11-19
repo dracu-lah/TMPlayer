@@ -10,7 +10,7 @@
 // Read live, so a test can change them while the page runs (the cookie is read again): `stall` (a
 // file read answers nothing until the flag goes), `late` (it answers after 6 s), `flood:N` (file reads are told to wait N seconds, from the first one), `linkdown` (the line to
 // Telegram reports `connecting`, and nothing is answered), `topicflood` (the first ask for Language Club's topics is told to wait 2 s),
-// `topicsrefuse` (every ask for topics is refused), `topicslow` (an ask for topics answers after 1.5 s).
+// `countflood` (the Add chats picker's counts are told to wait 15 minutes after twenty), `topicsrefuse` (every ask for topics is refused), `topicslow` (an ask for topics answers after 1.5 s).
 
 // Read synchronously (a worker may): a top-level await would hold back the worker's message
 // handler, and the page's first call would be lost.
@@ -297,6 +297,8 @@ if (flags.has('forums')) {
 }
 /** Telegram's own matching of a topic's name: lower case, no accents, the words inside it. */
 const fold = (text: string) => text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+/** The picker's counts asked so far (the `countflood` case refuses after twenty). */
+let countsAsked = 0
 /** Group ids whose topics were asked once already (the `topicflood` case answers a flood wait the first time only). */
 const floodedOnce = new Set<number>()
 // Telegram's archive: two chats of its own, listed only when the archive is asked for.
@@ -475,6 +477,8 @@ export class TelegramClient {
         calls.push(`searchMessages ${p.chatId} ${p.filter?._ ?? ''} ${p.offset ?? 0}`)
         if (p.threadId) calls.push(`thread ${p.chatId} ${p.threadId}`)
         await delay(flags.has('slow') ? 3000 : 50)
+        // `countflood`: after twenty single-message counts (the Add chats picker's) Telegram asks it to wait a quarter of an hour.
+        if (flags.has('countflood') && p.limit === 1 && p.chatId !== 'self' && ++countsAsked > 20) throw Object.assign(rpcError('FLOOD_WAIT_900', 420), { seconds: 900 })
         // Saved Messages: the sync file, found by its caption.
         if (p.chatId === 'self') return (await cloud.all(me)).filter((m) => m.text.includes(p.query ?? '')).slice(0, p.limit)
         if (!p.filter) throw rpcError('FILTER_MISSING')
