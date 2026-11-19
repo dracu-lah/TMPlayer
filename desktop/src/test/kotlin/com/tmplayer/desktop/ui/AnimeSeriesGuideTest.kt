@@ -119,10 +119,10 @@ class AnimeSeriesGuideTest {
         install()
         panel(show(3, 5, 6))
         // The episodes the chat lacks come by number with the streaming list's titles.
-        untilText("Not in your chats yet")
+        untilText("Not in this chat")
         onNode(hasScrollToIndexAction()).performScrollToIndex(3)
         untilText("S1 E4")
-        assertTrue("episode 4 is a quiet gap, not a video", onAllNodesWithText("Not in your chats yet").fetchSemanticsNodes().isNotEmpty())
+        assertTrue("episode 4 is a quiet gap, not a video", onAllNodesWithText("Not in this chat").fetchSemanticsNodes().isNotEmpty())
         // Nothing is asked per row: a search, the run's facts and its extras.
         val calls = asked.count { "graphql.anilist.co" in it }
         assertTrue("requests: $asked", calls <= 3)
@@ -132,14 +132,13 @@ class AnimeSeriesGuideTest {
     fun `an episode nobody named reads Episode 40 over the shows own picture with its number`() = runComposeUiTest {
         install()
         panel(show(3, 5, 6))
-        untilText("Not in your chats yet")
+        untilText("Not in this chat")
         onNode(hasScrollToIndexAction()).performScrollToIndex(39)
         untilText("S1 E40")
         onNodeWithText("Episode 40").assertExists()
         // The number stands in the picture's place, in a box that holds its size.
         assertEquals(1, onAllNodesWithText("40").fetchSemanticsNodes().size)
-        onNodeWithText("Episode 40").performClick()
-        untilText("S01E40 is not in your chats yet.")
+        onNode(androidx.compose.ui.test.hasContentDescription("Episode 40, not in this chat")).assertExists()
     }
 
     @Test
@@ -147,7 +146,7 @@ class AnimeSeriesGuideTest {
         run = 500
         install()
         panel(show(3, 5, 6, 480))
-        untilText("Not in your chats yet")
+        untilText("Not in this chat")
         onNode(hasScrollToIndexAction()).performScrollToIndex(70)
         untilText("S1 E70")
         onNodeWithText("Episode 500").assertDoesNotExist()
