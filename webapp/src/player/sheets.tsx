@@ -1,11 +1,19 @@
 // The pieces every player menu and sheet is made of: the desktop's dropdown (Menu, Entry), the
 // side panel More options opens on the desktop and the TV (Panel), the phone's full-screen sheet
-// (PhoneSheet, ChoiceRow) and Picker, which is one or the other by skin.
-import { Show, createEffect, on, onCleanup, onMount, type JSX } from 'solid-js'
+// (PhoneSheet, ChoiceRow) and Picker, which is one or the other by skin; the "?" sheet of keys
+// (ShortcutsSheet) and the Go to a time prompt (TimePrompt).
+import { For, Show, createEffect, createSignal, on, onCleanup, onMount, type JSX } from 'solid-js'
 import { ArrowLeft02Icon, Cancel01Icon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { Icon, type IconData } from '../ui/Icon'
 import { t } from '../i18n'
 import { form } from '../form'
+import { sheetGroups, type SheetRow } from './playerKeys'
+import { MAX_TIME_TEXT, parseTime } from './timeEntry'
+import './keys.css'
+
+type Key = Parameters<typeof t>[0]
+/** A catalog key held as a plain string (the key table is pure and names them so). */
+const say = (key: string, params?: Record<string, string>) => t(key as Key, params)
 
 /** The skin in use: the phone's, the desktop's or the TV's. */
 export const variant = () => (form() === 'phone' ? 'phone' : form() === 'tv' ? 'tv' : 'desktop')
@@ -218,5 +226,119 @@ export function Choice(props: { text: string; detail?: string; on?: boolean; ico
                 </Show>
             </button>
         </Show>
+    )
+}
+
+/** A line's keys as the sheet prints them: the catalog's words, or the keys spelt out after Cmd or Ctrl. */
+function keysOf(row: SheetRow): string {
+    if (row.keys) {
+        const params = Object.fromEntries(Object.entries(row.keys.params ?? {}).map(([name, key]) => [name, say(key)]))
+        return say(row.keys.key, params)
+    }
+    return row.mod ? `${say(row.mod)}+${row.text ?? ''}` : (row.text ?? '')
+}
+
+/**
+ * The "?" sheet (PlayerKeys.sheetGroups): every key the web player answers, in the desktop app's
+ * four groups, read from the same table the keys are (playerKeys.ts), so it cannot promise a key
+ * the player lacks. The Close button takes the keyboard; Escape or a click outside closes it.
+ */
+export function ShortcutsSheet(props: { mac: boolean; onClose: () => void }) {
+    const groups = sheetGroups(props.mac)
+    return (
+        <div class="pc-sheet-scrim shortcuts" onClick={(e) => e.target === e.currentTarget && props.onClose()}>
+            <div
+                class="pc-sheet pc-shortcuts"
+                role="dialog"
+                aria-label={t('player.shortcuts')}
+                ref={(el) => queueMicrotask(() => el.querySelector<HTMLElement>('.pc-sheet-close')?.focus({ preventScroll: true }))}
+            >
+                <div class="pc-sheet-head">
+                    <div><h2>{t('player.shortcuts')}</h2></div>
+                    <button type="button" class="pc-sheet-close" aria-label={t('common.close')} onClick={props.onClose}>
+                        <Icon icon={Cancel01Icon} size={24} />
+                    </button>
+                </div>
+                <div class="pc-shortcuts-body">
+                    <For each={groups}>
+                        {(g) => (
+                            <section>
+                                <h3>{say(g.group)}</h3>
+                                <For each={g.rows}>
+                                    {(row) => (
+                                        <div class="pc-key-row">
+                                            <span>{say(row.what)}</span>
+                                            <kbd>{keysOf(row)}</kbd>
+                                        </div>
+                                    )}
+                                </For>
+                                <Show when={g.note}>{(note) => <p class="pc-key-note">{say(note())}</p>}</Show>
+                            </section>
+                        )}
+                    </For>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+/**
+ * Go to a time (Cmd or Ctrl+G, and Playback options): a time typed the way it is said, read by
+ * timeEntry.ts. Enter goes; text that is no place in this video says so under the field and the
+ * prompt stays, so the viewer can mend it rather than start again. Escape or Cancel closes it.
+ * The field's label is where the video is and how long it is, as the desktop's is.
+ */
+export function TimePrompt(props: { position: number; duration: number; clock: (s: number) => string; onGo: (seconds: number) => void; onClose: () => void }) {
+    const [text, setText] = createSignal('')
+    const [refused, setRefused] = createSignal(false)
+    let field!: HTMLInputElement
+    const length = () => (Number.isFinite(props.duration) && props.duration > 0 ? props.duration : 0)
+    const go = () => {
+        const at = parseTime(text(), Math.round(length() * 1000), Math.round(props.position * 1000))
+        if (at === null) {
+            setRefused(true)
+            field.focus({ preventScroll: true })
+            return
+        }
+        props.onGo(at / 1000)
+    }
+    onMount(() => queueMicrotask(() => field.focus({ preventScroll: true })))
+    const where = () => (length() ? `${props.clock(props.position)} / ${props.clock(length())}` : props.clock(props.position))
+    return (
+        <div class="pc-sheet-scrim still" onClick={(e) => e.target === e.currentTarget && props.onClose()}>
+            <form
+                class="pc-still pc-time-prompt"
+                role="dialog"
+                aria-label={t('player.go_to_time')}
+                onSubmit={(e) => (e.preventDefault(), go())}
+                on:keydown={(e: KeyboardEvent) => {
+                    // The prompt has the keyboard while it is up: no key reaches the player behind it
+                    // (a listener on the form itself, so it runs before the player's on the document).
+                    e.stopPropagation()
+                    if (e.key === 'Escape') (e.preventDefault(), props.onClose())
+                }}
+            >
+                <h2>{t('player.go_to_time')}</h2>
+                <label class="pc-time-field" classList={{ refused: refused() }}>
+                    <span>{where()}</span>
+                    <input
+                        ref={field}
+                        type="text"
+                        autocomplete="off"
+                        enterkeyhint="go"
+                        spellcheck={false}
+                        maxLength={MAX_TIME_TEXT}
+                        aria-invalid={refused()}
+                        value={text()}
+                        onInput={(e) => (setText(e.currentTarget.value), setRefused(false))}
+                    />
+                    <small role={refused() ? 'alert' : undefined}>{refused() ? t('player.go_to_time_invalid') : t('player.go_to_time_hint')}</small>
+                </label>
+                <div class="pc-still-actions">
+                    <button type="button" class="pc-sheet-button" onClick={props.onClose}>{t('common.cancel')}</button>
+                    <button type="submit" class="pc-sheet-button primary">{t('common.ok')}</button>
+                </div>
+            </form>
+        </div>
     )
 }
