@@ -10,6 +10,7 @@ import { forgetSponsored, loadSponsored } from './sponsored'
 import { tally } from '../ui/searchTally'
 import { cleanContext, NO_COPY_CONTEXT, type CopyContext } from './copyFit'
 import { copyRows, playCopy } from './copyPick'
+import { touchesFor } from './touchCache'
 import type { ChatItem, CopyRef, ChatPage, ChatView, Found, ListView, RecentPage, SponsoredItem, Tile, VideoItem, WatchInfo } from './types'
 
 const PAGE = 100
@@ -462,6 +463,8 @@ function arrange(s: ChatState, view: ChatView): ChatPage {
     if (s.kept && s.kept.version === s.version && s.kept.view === key) return s.kept.page
     const r = rulesNow!
     const query = view.query.trim()
+    // The Last played order's times, by the version the view names (held once, not posted with every view).
+    const lastPlayed = touchesFor(view.touches)
     // Under words, what Telegram's search found beyond the loaded pages is listed with them.
     const videos = [...s.videos.values()]
     if (query) for (const [id, v] of s.hits) if (!s.videos.has(id)) videos.push(v)
@@ -475,8 +478,8 @@ function arrange(s: ChatState, view: ChatView): ChatPage {
         view.maxBytes,
         view.watched,
         view.started,
-        view.touched?.slice(0, 20_000) ?? [],
-        view.touchedAt?.slice(0, 20_000) ?? [],
+        lastPlayed.ids,
+        lastPlayed.times,
         Math.floor(Date.now() / 1000),
     )
     let tiles = tilesOf(shelf, s.items, view, { r, videoOf: (id) => s.videos.get(id) ?? s.hits.get(id) })

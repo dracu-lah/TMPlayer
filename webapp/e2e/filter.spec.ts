@@ -108,6 +108,32 @@ test('a sort that works on what is loaded says so, and Last played is among the 
     await expect(page.getByRole('menuitemradio', { name: 'Last played' })).toHaveAttribute('aria-checked', 'true')
 })
 
+test('Last played lists the video watched last first, drawn once in that order, and the times are posted once, not with every view', async ({ page }) => {
+    await page.goto('/chat/-1001')
+    await openDetail(page, 'Matroska Clip')
+    await page.locator('.detail-round', { hasText: 'Watched' }).click()
+    await expect(page.locator('.detail-watched')).toBeVisible()
+    await page.goto('/chat/-1001')
+    await openMenu(page)
+    await page.getByRole('menuitemradio', { name: 'Last played' }).click()
+    await expect(page.locator('.card').first()).toContainText('Matroska Clip')
+    // A fresh visit draws the first card once: the first card is never another video, not even for a moment.
+    await page.addInitScript(() => {
+        const seen: string[] = []
+        ;(window as unknown as { firsts: string[] }).firsts = seen
+        new MutationObserver(() => {
+            const first = document.querySelector('.card')?.textContent ?? ''
+            if (first && seen[seen.length - 1] !== first) seen.push(first)
+        }).observe(document, { childList: true, subtree: true })
+    })
+    await page.reload()
+    await expect(page.locator('.card').first()).toContainText('Matroska Clip')
+    await page.waitForTimeout(800)
+    const firsts = await page.evaluate(() => (window as unknown as { firsts: string[] }).firsts)
+    expect(firsts.length).toBeGreaterThan(0)
+    for (const f of firsts) expect(f).toContain('Matroska Clip')
+})
+
 test('Play random opens one of the loaded videos and never the same one twice in a row', async ({ page }) => {
     await page.goto('/chat/-1001')
     await expect(page.locator('.card').first()).toBeVisible()

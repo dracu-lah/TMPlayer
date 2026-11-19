@@ -4,18 +4,19 @@ import { Cancel01Icon, InformationCircleIcon, RefreshIcon, Search01Icon, StarIco
 import { api, call, errorText } from '../tg/rpc'
 import { onBackOnline } from '../net'
 import { t } from '../i18n'
-import { chatPref, progress as readProgress, setChatPref, settings, setSetting, setStarred, starredIds, touches } from '../store'
+import { chatPref, progress as readProgress, setChatPref, settings, setSetting, setStarred, starredIds } from '../store'
 import { copiesTick } from '../copies'
 import { form } from '../form'
 import { Icon } from '../ui/Icon'
 import { PageBar } from '../ui/PageBar'
 import { notePool } from '../ui/PosterPicker'
 import { showToast } from '../ui/Toast'
-import { AUTO_PAGES, cleanFacets, filterLabel, filterState, filtersOn, NO_FACETS, NO_PREF, randomScope, wantsMore, type ChatFilter, type ChatPref, type Facets } from '../ui/videoFilter'
+import { AUTO_PAGES, AUTO_TOTAL, cleanFacets, filterLabel, filterState, filtersOn, NO_FACETS, NO_PREF, randomScope, wantsMore, type ChatFilter, type ChatPref, type Facets } from '../ui/videoFilter'
 import { ChatPicture } from './ChatPicture'
 import { chatName, StarButton } from './Chats'
 import { sizeLimits } from './sizes'
 import { playRandomOf } from './randomPlay'
+import { ensureTouches } from './touches'
 import { SortMenu } from './SortMenu'
 import { stableCards, tileCard, VideoList, type CardData } from './VideoList'
 import type { ChatPage, ChatView, RpcError, Tile } from '../tg/types'
@@ -50,7 +51,14 @@ export function Chat() {
     const [autoPages, setAutoPages] = createSignal(0)
     const [facets] = createResource(() => pref().facets, (line) => (line ? api.facets(line) : Promise.resolve(NO_FACETS)))
     const facetsNow = (): Facets => (pref().facets ? (facets.latest ?? NO_FACETS) : NO_FACETS)
-    const [touched] = createResource(() => settings().sort === 'LastPlayed' || false, () => touches())
+    // Pages asked for by itself in this whole visit, however the filters change: a total budget (AUTO_TOTAL), then only Keep looking reads on.
+    const [autoTotal, setAutoTotal] = createSignal(0)
+    // The Last played order's times: 0 while they are being sent to the worker, -1 where that failed (the order then has none), else their version.
+    const lastPlayedSort = () => settings().sort === 'LastPlayed'
+    const [touchVer, setTouchVer] = createSignal(0)
+    const sendTouches = () => ensureTouches().then(setTouchVer, () => setTouchVer(-1))
+    // Choosing the order sends the times once; until they are there the grid keeps the order it had (no flash of the wrong one).
+    createEffect(on(lastPlayedSort, (now) => now && (setTouchVer(0), void sendTouches())))
     const view = (): ChatView => ({
         sort: settings().sort,
         minBytes: showAll() ? 0 : settings().sizeMin,
@@ -60,7 +68,7 @@ export function Chat() {
         query: search.q?.trim() ?? '',
         filter: filterPaused() ? 'All' : pref().filter,
         facets: filterPaused() ? '' : pref().facets,
-        ...(settings().sort === 'LastPlayed' && touched() ? { touched: touched()!.ids, touchedAt: touched()!.times } : {}),
+        ...(lastPlayedSort() && touchVer() > 0 ? { touches: touchVer() } : {}),
     })
 
     let seq = 0
@@ -96,15 +104,19 @@ export function Chat() {
             setShowAll(false)
             setFilterPaused(false)
             setAutoPages(0)
+            setAutoTotal(0)
             setIdlePages(0)
             setMoreFailed(false)
             // The chat's own filters are read first, so its first page is already screened (no flash of every video).
             setPref(NO_PREF)
             void chatPref(id)
                 .catch(() => NO_PREF)
-                .then((p) => {
+                .then(async (p) => {
                     if (id !== chatId()) return
                     setPref(p)
+                    // Last played: the first page waits for the times, so it is drawn once, in its order.
+                    if (lastPlayedSort()) await sendTouches()
+                    if (id !== chatId()) return
                     run('open')
                 })
         }),
@@ -116,7 +128,8 @@ export function Chat() {
         else if (moreFailed()) run('more')
     })
     // Another order, size limits or words, or a file kept apart or a copy chosen (HX38): the same videos arranged again, in the worker.
-    createEffect(on(() => [JSON.stringify(view()), copiesTick()], () => page() && run('view'), { defer: true }))
+    // Not while the Last played times are on their way: the grid keeps its order until they are there.
+    createEffect(on(() => [JSON.stringify(view()), copiesTick()], () => page() && !(lastPlayedSort() && touchVer() === 0) && run('view'), { defer: true }))
 
     // Scrolling to the foot always asks for the next page (infinite scroll, no More button).
     const atEnd = (auto = false) => {
@@ -160,12 +173,19 @@ export function Chat() {
     createEffect(() => {
         const p = page()
         if (!p) return
-        if (wantsMore({ state: state(), shown: p.tiles.length, done: p.done, busy: !!busy(), failed: moreFailed(), auto: autoPages() })) {
+        if (wantsMore({ state: state(), shown: p.tiles.length, done: p.done, busy: !!busy(), failed: moreFailed(), auto: autoPages(), total: autoTotal() })) {
             setAutoPages(autoPages() + 1)
+            setAutoTotal(autoTotal() + 1)
             run('more')
         }
     })
-    const keepLookingFilter = () => (state() === 'hides-all' || state() === 'hides-some') && !!page() && !page()!.done && !busy() && !moreFailed() && autoPages() >= AUTO_PAGES
+    const keepLookingFilter = () => (state() === 'hides-all' || state() === 'hides-some') && !!page() && !page()!.done && !busy() && !moreFailed() && (autoPages() >= AUTO_PAGES || autoTotal() >= AUTO_TOTAL)
+    // The visit's budget of pages read by itself is spent: said, with Keep looking as the way on (one page a press).
+    const budgetSpent = () => keepLookingFilter() && autoTotal() >= AUTO_TOTAL
+    const keepLooking = () => {
+        setIdlePages(0)
+        run('more')
+    }
     const why = () =>
         filterLabel(pref(), facetsNow(), (key) => t(key as Parameters<typeof t>[0])) ?? ''
     // Play random (U16): one of the videos on screen, unwatched first, never the one this chat played last. Nothing more is loaded for it.
@@ -419,7 +439,7 @@ export function Chat() {
                         <button class="outline-button" type="button" onClick={() => setFilterPaused(true)}>{t('grid.filter_show_them')}</button>
                     </Show>
                     <Show when={keepLookingFilter()}>
-                        <button class="outline-button" type="button" onClick={() => setAutoPages(0)}>{t('common.keep_looking')}</button>
+                        <button class="outline-button" type="button" onClick={keepLooking}>{t('common.keep_looking')}</button>
                     </Show>
                     <button class="outline-button" type="button" onClick={clearFilter}>{t('grid.filter_clear')}</button>
                 </div>
@@ -429,9 +449,12 @@ export function Chat() {
                     <p class="muted">{t('grid.filter_hides_all', { count: page()!.total, filter: why() })}</p>
                     <button class="primary" type="button" onClick={clearFilter} data-tv-first>{t('grid.filter_clear')}</button>
                     <Show when={keepLookingFilter()}>
-                        <button class="outline-button" type="button" onClick={() => setAutoPages(0)}>{t('common.keep_looking')}</button>
+                        <button class="outline-button" type="button" onClick={keepLooking}>{t('common.keep_looking')}</button>
                     </Show>
                 </div>
+            </Show>
+            <Show when={budgetSpent()}>
+                <p class="muted small">{t('grid.filter_budget', { count: page()!.loaded })}</p>
             </Show>
             {/* Every order but Newest sorts what has loaded so far, while older pages remain: said once (the apps' note). */}
             <Show when={settings().sort !== 'Newest' && !view().query && page() && !page()!.done && page()!.loaded > 0}>

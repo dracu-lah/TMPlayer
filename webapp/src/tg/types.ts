@@ -158,9 +158,8 @@ export interface ChatView {
      */
     filter?: string
     facets?: string
-    /** For the Last played order: when each video was last watched, ids with their times (milliseconds). */
-    touched?: string[]
-    touchedAt?: number[]
+    /** For the Last played order: the version of the times the worker holds (sent once with `setTouches`); absent or unknown, the order has no times. */
+    touches?: number
     /**
      * After a video that is not an episode, the chat's own next one in this order (the app's
      * ChatOrder): the watch page's Next and autoplay follow the grid's sort. Off or absent: it stops.

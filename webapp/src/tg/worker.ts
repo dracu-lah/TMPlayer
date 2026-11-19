@@ -3,6 +3,7 @@
 // mtcute itself.
 import { BaseTelegramClient, SentCode as MtSentCode, TelegramClient, User, type Message, type tl } from '@mtcute/web'
 import { rules, type Video } from '../rules'
+import { holdTouches } from './touchCache'
 import { cryptoProvider } from './crypto'
 import { findChatSubtitles, forgetChatSubtitles } from './chatsubs'
 import { homePage, rowShown } from './home'
@@ -315,6 +316,11 @@ export const api = {
     /** "You'll see videos from 50 MB upwards." */
     async sizeRange(_: Ctx, minBytes: number, maxBytes: number): Promise<string> {
         return (await rules()).sizeRange(minBytes, maxBytes)
+    },
+
+    /** The Last played order's times (ids and milliseconds), held under `version`; a chat view or the watch page names the version instead of posting them. */
+    async setTouches(_: Ctx, version: number, ids: string[], times: number[]): Promise<boolean> {
+        return holdTouches(version, ids, times)
     },
 
     /** A chat's stored filter line as the Sort menu's chips read it (U6): each part the rules cannot read is that filter off. */

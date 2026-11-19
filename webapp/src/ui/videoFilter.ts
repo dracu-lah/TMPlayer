@@ -45,16 +45,19 @@ export function filterState(o: { on: number; query: boolean; showAll: boolean; s
  * Whether the grid should read another page by itself: filters are on, more of the chat is there,
  * and the cards on screen are too few to scroll. It stops after `AUTO_PAGES` pages asked for that
  * way, so a filter that matches nothing in a 20,000 video chat reads a few pages and then offers
- * Keep looking, never the whole chat.
+ * Keep looking, never the whole chat. Changing a filter starts the three again but never past `AUTO_TOTAL` for the visit.
  */
-export function wantsMore(o: { state: FilterState; shown: number; done: boolean; busy: boolean; failed: boolean; auto: number }): boolean {
+export function wantsMore(o: { state: FilterState; shown: number; done: boolean; busy: boolean; failed: boolean; auto: number; total: number }): boolean {
     if (o.state !== 'hides-all' && o.state !== 'hides-some' && o.state !== 'on') return false
-    if (o.done || o.busy || o.failed || o.auto >= AUTO_PAGES) return false
+    if (o.done || o.busy || o.failed || o.auto >= AUTO_PAGES || o.total >= AUTO_TOTAL) return false
     return o.shown < ENOUGH
 }
 
 /** VideoFaceting.AUTO_PAGES: pages a short filtered grid asks for by itself. */
 export const AUTO_PAGES = 3
+
+/** Pages a chat visit reads by itself for its filters in all, however often they change: past it only Keep looking reads on. */
+export const AUTO_TOTAL = 12
 
 /** Cards that fill a page and its scroll: below this a filter asks for more by itself. */
 export const ENOUGH = 24

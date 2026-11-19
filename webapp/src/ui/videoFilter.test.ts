@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { AUTO_PAGES, cleanFacets, cleanFilter, cleanPref, ENOUGH, filterLabel, filterState, filtersOn, forgetPlayed, isDefault, languageName, lastOf, NO_FACETS, NO_PREF, randomScope, rememberPlayed, wantsMore } from './videoFilter.ts'
+import { AUTO_PAGES, AUTO_TOTAL, cleanFacets, cleanFilter, cleanPref, ENOUGH, filterLabel, filterState, filtersOn, forgetPlayed, isDefault, languageName, lastOf, NO_FACETS, NO_PREF, randomScope, rememberPlayed, wantsMore } from './videoFilter.ts'
 
 const words = (key: string) => key.replace('grid.filter_', '')
 
@@ -46,8 +46,15 @@ test('the grid knows whether a filter hides some, hides all, is off for a visit 
 })
 
 test('a short filtered grid reads a few pages by itself, then stops; a full one never does', () => {
-    const base = { state: 'hides-all' as const, shown: 0, done: false, busy: false, failed: false, auto: 0 }
+    const base = { state: 'hides-all' as const, shown: 0, done: false, busy: false, failed: false, auto: 0, total: 0 }
     assert.ok(wantsMore(base))
+    // Each chip press starts the three again, but a visit has a total: 12 pages by itself, then only Keep looking.
+    assert.ok(wantsMore({ ...base, total: AUTO_TOTAL - 1 }))
+    assert.ok(!wantsMore({ ...base, total: AUTO_TOTAL }), 'the visit budget is spent however fresh the filter')
+    let pages = 0
+    for (let presses = 0; presses < 50; presses++)
+        for (let auto = 0; wantsMore({ ...base, auto, total: pages }); auto++) pages++
+    assert.equal(pages, AUTO_TOTAL, 'fifty chip presses on a chat that matches little read twelve pages, not a hundred and fifty')
     assert.ok(wantsMore({ ...base, state: 'hides-some', shown: ENOUGH - 1 }))
     assert.ok(!wantsMore({ ...base, shown: ENOUGH }), 'a screenful scrolls by itself')
     assert.ok(!wantsMore({ ...base, auto: AUTO_PAGES }), 'a filter matching nothing in 20,000 videos reads three pages, not the chat')

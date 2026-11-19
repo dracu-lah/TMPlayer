@@ -1027,6 +1027,7 @@
     "filter_again": "Filter again",
     "filter_all": "All videos",
     "filter_any": "Any",
+    "filter_budget": "{count, plural, one {Stopped looking after the # video loaded so far. Keep looking reads more.} other {Stopped looking after the # videos loaded so far. Keep looking reads more.}}",
     "filter_clear": "Clear filter",
     "filter_hd": "1080p and up",
     "filter_hdr": "HDR",

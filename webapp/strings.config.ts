@@ -720,6 +720,7 @@ export const PAGE_STRINGS = [
     'grid.filter_again',
     'grid.filter_all',
     'grid.filter_any',
+    'grid.filter_budget',
     'grid.filter_clear',
     'grid.filter_hd',
     'grid.filter_hdr',
