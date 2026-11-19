@@ -800,6 +800,8 @@ export const PAGE_STRINGS = [
     // WB18 Report stutter.
     'player.report_stutter',
     'player.stutter_marked_already',
+    'web.copy_failed',
+    'web.copy_refused',
     'web.report_stutter_detail',
     'web.stutter_marked',
     // WB19 Series page: gap rows, episode rows, missing episodes.

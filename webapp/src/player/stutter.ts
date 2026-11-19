@@ -26,6 +26,10 @@ const MAX_UNDERRUNS = 3
 
 /** How often the player reads the video while it plays. */
 export const SAMPLE_MS = 2_000
+/** Once the watch has answered the readings go on (a mark needs the last minute) at a third of the wakeups. */
+export const SAMPLE_SLOW_MS = 6_000
+/** A gap between two readings longer than this has no pace (the page was away). */
+const MAX_READING_GAP_MS = 8_000
 /** The marks keep at most this long a window of readings, this many readings, and this many marks. */
 export const MARK_WINDOW_MS = 60_000
 export const MAX_READINGS = 40
@@ -392,7 +396,7 @@ export class StutterMonitor {
         let frames = -1
         if (prev) {
             const wall = i.now - prev.at
-            if (wall > 0 && wall <= MAX_GAP_MS && i.rate > 0) pace = Math.round(((positionMs - prev.position) / (wall * i.rate)) * 100)
+            if (wall > 0 && wall <= MAX_READING_GAP_MS && i.rate > 0) pace = Math.round(((positionMs - prev.position) / (wall * i.rate)) * 100)
             if (q) {
                 // A decoder made again starts its counters from nought: carry on from there.
                 dropped = q.dropped >= prev.dropped ? q.dropped - prev.dropped : q.dropped

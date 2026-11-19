@@ -4,7 +4,7 @@
 // (and Close, since a stray failure in the background need not end what is on screen). Plain DOM,
 // so it shows even when the app's own rendering is what failed.
 import { t } from './i18n'
-import { buildBundle, hookConsole, noteCrash, suppliedParts } from './logs'
+import { buildBundle, hookConsole, noteCrash, suppliedParts, type BundleFacts } from './logs'
 
 /** Failures that are not the app breaking: a cancelled call, autoplay refused, the browser's own noise. */
 function harmless(reason: unknown, message: string): boolean {
@@ -64,25 +64,63 @@ export function showCrashCard() {
     close.className = 'link'
     close.textContent = label('common.close', 'Close')
     const row = document.createElement('div')
-    // Copy details (WB18): the scrubbed logs on the clipboard, only when pressed; nothing is sent anywhere.
+    // Copy details (WB18): the scrubbed logs on the clipboard, only when pressed; nothing is sent anywhere. The copy is
+    // written in the press itself (iPhone Safari refuses one that follows an await), and a browser that refuses it
+    // shows the text selected in a box to copy by hand.
     const copy = document.createElement('button')
     copy.className = 'link'
     copy.textContent = label('player.copy_details', 'Copy details')
-    copy.onclick = async () => {
+    const lang = document.documentElement.lang || navigator.language || 'en'
+    let facts: BundleFacts = { version: 'web', platform: 'Web', device: 'a browser', language: lang }
+    void import('./ui/feedback').then(({ webFacts }) => void (facts = webFacts(navigator.userAgent, lang)), () => {})
+    const note = document.createElement('p')
+    note.setAttribute('role', 'status')
+    let area: HTMLTextAreaElement | null = null
+    const select = (text: string) => {
+        note.textContent = label('web.copy_failed', 'This browser would not copy it. The text is selected below: copy it yourself.')
+        if (!area) {
+            area = document.createElement('textarea')
+            area.readOnly = true
+            area.rows = 5
+            area.setAttribute('aria-label', label('player.copy_details', 'Copy details'))
+            area.style.cssText = 'width:100%;box-sizing:border-box;font:12px/16px ui-monospace,monospace;border-radius:8px;padding:8px'
+            box.append(note, area)
+        }
+        area.value = text
+        area.focus()
+        area.select()
+    }
+    copy.onclick = () => {
+        let out: string
         try {
-            const { webFacts } = await import('./ui/feedback')
-            await navigator.clipboard.writeText(buildBundle(webFacts(navigator.userAgent, document.documentElement.lang || navigator.language || 'en'), suppliedParts()).text)
-            copy.textContent = label('player.details_copied', 'Details copied')
+            out = buildBundle(facts, suppliedParts()).text
         } catch {
-            // No clipboard, or the page is too broken to build it: the button stays what it was.
+            return
+        }
+        try {
+            if (typeof navigator.clipboard?.writeText !== 'function') return select(out)
+            navigator.clipboard.writeText(out).then(
+                () => void (copy.textContent = label('player.details_copied', 'Details copied')),
+                () => select(out),
+            )
+        } catch {
+            select(out)
         }
     }
     row.append(reload)
     // Not on the TV: a remote cannot paste it anywhere (Report a problem there is a QR code).
-    if (document.documentElement.dataset.form !== 'tv' && typeof navigator !== 'undefined' && typeof navigator.clipboard?.writeText === 'function') row.append(copy)
+    if (document.documentElement.dataset.form !== 'tv') row.append(copy)
     row.append(close)
     box.append(text, row)
     cardKeys = (ev: KeyboardEvent) => {
+        // In the box with the text to copy, the keys are the box's (select, copy, move), but Escape still puts the card away.
+        if (area && document.activeElement === area) {
+            if (ev.key !== 'Escape') return
+            dismiss()
+            ev.preventDefault()
+            ev.stopImmediatePropagation()
+            return
+        }
         const buttons = [...row.querySelectorAll('button')]
         const at = buttons.indexOf(document.activeElement as HTMLButtonElement)
         const typing = /^(INPUT|TEXTAREA)$/.test((document.activeElement as HTMLElement | null)?.tagName ?? '')

@@ -13,6 +13,7 @@ import * as Lists from './ui/lists'
 import { cleanPref, isDefault, type ChatPref } from './ui/filterPref'
 import { resolveSpeed, sanitiseBoost, speedTarget, speedToKeep, type SpeedScopes } from './player/extras'
 import { tdlibMessageId } from './sync/format'
+import { clearLogs } from './logs'
 
 export type Theme = 'system' | 'dark' | 'light' | 'black'
 
@@ -1162,6 +1163,8 @@ export function syncPutPick(chatId: number, messageId: number, pick: Pick | null
 export async function clearAll() {
     memory.clear()
     seqs.clear()
+    // The page's log, the names it remembered to take out of it and the crash note are the account's too (WB18).
+    clearLogs()
     try {
         localStorage.removeItem(JOURNAL)
         localStorage.removeItem(LAST_KEY)

@@ -412,7 +412,8 @@ function Ways(props: { facts: Facts; kind: Kind; message: string; tv: boolean })
             await navigator.clipboard.writeText(copyText(props.facts, props.kind === 'problem'))
             showToast({ text: t('player.details_copied') })
         } catch {
-            // No clipboard: the facts are in the e-mail and the issue anyway.
+            // No clipboard, or the browser refused it: it says so, and the facts are in the e-mail and the issue anyway.
+            showToast({ text: t('web.copy_refused') })
         }
     }
     return (

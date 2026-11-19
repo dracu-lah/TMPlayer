@@ -417,6 +417,7 @@
 .pc-details-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .pc-details .pc-details-hint { color: var(--muted); font-size: 12px; line-height: 16px; }
 .pc-details .pc-details-note:empty { display: none; }
+.pc-details-copy { width: calc(100% - 8px); margin: 8px 8px 0 0; padding: 8px; border: 1px solid rgba(255,255,255,.28); border-radius: 12px; background: rgba(0,0,0,.35); color: #fff; font: 12px/16px ui-monospace, monospace; resize: none; }
 
 /* The lock: everything ignored but the pill, which a tap brings up at the foot. */
 .pc-shield { position: absolute; inset: 0; z-index: 5; }

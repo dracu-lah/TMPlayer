@@ -1,76 +1,241 @@
 // The web's log bundle (WB18, reliability plan L4 and L5): a small ring of what the page says about
-// itself, scrubbed the way core's LogScrubber does it, and the one text file Copy details and Report a
-// problem hand over. The twin of core's LogScrubber, LogExport and LogBundle.
+// itself, scrubbed the way core's LogScrubber does it (and further: the web sees URLs), and the one
+// text file Copy details and Report a problem hand over. The twin of core's LogScrubber, LogExport
+// and LogBundle.
 //
-// Privacy, in three rules. Nothing here is sent: the ring lives in memory, goes with the tab, and
+// Privacy, in four rules. Nothing here is sent: the ring lives in memory, goes with the tab, and
 // leaves the device only when the viewer presses Copy details (or, once the inbox takes web uploads,
-// a Send that lists what goes: [uploadLogs] is the hook, no screen calls it yet). Names the page
-// has seen (a chat's or a video's title) are taken out word for word at export, and then names, file
-// names, e-mail addresses, phone numbers, @usernames and long numbers by pattern. What a viewer
-// plays never reaches a line: the callers write fixed words and bucketed counts.
+// a Send that lists what goes: [uploadLogs] is the hook, no screen calls it yet). Names the page has
+// seen (chats, videos, the viewer's own) are taken out at export in every form a log line writes
+// them (as typed, accented either way, URL encoded, dotted or underscored). Then URLs lose their
+// query and fragment, file names, e-mail addresses, phone numbers, @usernames, long numbers and any
+// long run of token characters go by pattern. What cannot be scrubbed reliably is not logged at all:
+// the crash note holds an error's class and code, never its message, and callers write fixed words
+// and bucketed counts.
 //
 // No imports and no DOM beyond try/catch'd `localStorage`, so node can test it and the page's first
-// load pays for a few hundred bytes of ring. No look-behind in a pattern: Safari before 16.4 throws
-// on one when the module loads.
+// load pays for a few hundred bytes of ring. No look-behind in a pattern (Safari before 16.4 throws
+// on one when the module loads), and every scan is linear in the line: a 2,000 character line with
+// no space costs the same per character as any other.
 
 /** The ring keeps this many lines; the oldest go first. */
 export const MAX_LINES = 500
-/** A line is never worth more than this: the rest is dropped before it is scrubbed (the patterns below are not linear on a long unbroken run). */
+/** A line is never worth more than this: the rest is dropped before it is scrubbed. */
 export const MAX_LINE = 2000
 /** Under the inbox's 2 MB cap (workers/log-inbox) with room for its envelope; core's LogBundle.MAX_BYTES. */
 export const MAX_BYTES = 1_500_000
-/** A known name shorter than this is not taken out ("TV" taken out everywhere would leave nothing to read). */
+/** A known name shorter than this is taken out only as a whole word ("Up" inside "Update" stays). */
 export const MIN_KNOWN = 4
-/** The most names kept to take out; the newest win. */
-export const MAX_KNOWN = 200
-/** The earlier run's crash is kept this short. */
-export const MAX_CRASH = 600
+/** The shortest name that is taken out at all. */
+export const MIN_NAME = 2
+/** The most names kept to take out; the newest win. A large account's chats fit (3,000), and finding them costs one look-up per character, not one scan per name. */
+export const MAX_KNOWN = 4000
 export const CRASH_KEY = 'tmplayer-last-crash'
+/** The longest a file name with spaces in it is taken out as one, counted back from its extension. */
+export const FILE_REACH = 160
+/** A console line is kept this long. */
+export const MAX_CONSOLE = 300
 
 const EXTENSIONS =
     'mkv|mp4|m4v|avi|webm|mov|wmv|flv|ts|m2ts|mpg|mpeg|3gp|mp3|m4a|aac|flac|ogg|opus|wav|srt|ass|ssa|vtt|sub|idx|sup|zip|rar|7z|pdf|jpg|jpeg|png|webp|gif|epub|apk'
-const EMAIL = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/gu
-const PATH_FILE = new RegExp(String.raw`([/\\])[^/\\\r\n]+?\.(?:${EXTENSIONS})\b`, 'giu')
-const BARE_FILE = new RegExp(String.raw`[^\s/\\:'"()\[\]]+\.(?:${EXTENSIONS})\b`, 'giu')
-const PHONE = /\+\d[\d \-()]{5,}\d/gu
+/** An extension, then no more letters or digits: `.mkv` in `Show.mkv `, not in `.mkvtoolnix`. */
+const EXTENSION = new RegExp(String.raw`\.(?:${EXTENSIONS})(?![\p{L}\p{N}_])`, 'giu')
+/** Where a file name cannot start: a quote, an angle bracket, a pipe, an equals sign, a colon and a space (square brackets and parentheses are in release names). */
+const NAME_STOPS = new Set(['"', "'", '<', '>', '|', '=', '\n'])
+/** A web address up to its query or fragment, then the query or fragment: only the address stays. */
+const URL_TAIL = /(https?:\/\/[^\s"'<>]*?)[?#][^\s"'<>]*/giu
+/** A query string anywhere (a relative address, a request line): `?key=value&...`. */
+const QUERY = /\?[\w%.~-]*=[^\s"'<>]*/gu
+/** Any run this long of what tokens, keys and hashes are written in. */
+const TOKEN = /[A-Za-z0-9_-]{16,}/gu
+const DIGITS = /\d{6,}/gu
+/** A phone number written with spaces, dashes or brackets between its digits, with or without a plus: seven digits or more. */
+const PHONE = /[+(]?\d(?:[ ()-]{0,2}\d){6,}/gu
 /** A Telegram username: an @ not glued to a word (so `Object@1a2b3c` stays), then five or more of what a username may hold. */
 const USERNAME = /(^|[^\w.@])@[A-Za-z][A-Za-z0-9_]{4,}/gu
-const DIGITS = /\d{6,}/gu
 // eslint-disable-next-line no-control-regex
 const CONTROL = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u2028\u2029]/gu
+const EMAIL_CHAR = /[\p{L}\p{N}._%+-]/u
+const DOMAIN_CHAR = /[\p{L}\p{N}-]/u
+const WORD_CHAR = /[\p{L}\p{N}_]/u
 
-const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
+/**
+ * Names to take out, as [knownPatterns] builds them: every form of each in lower case, found by look-up at each
+ * character (the first four letters of the long ones, the whole of the two- and three-letter ones, which count only as whole words).
+ */
+export interface Known {
+    long: Map<string, string[]>
+    three: Set<string>
+    two: Set<string>
+}
+const NOBODY: Known = { long: new Map(), three: new Set(), two: new Set() }
+const isEmpty = (k: Known) => k.long.size === 0 && k.three.size === 0 && k.two.size === 0
 
-/** Takes what is personal out of one log line, keeping the tag, the words and the numbers a bug needs. [known] are names to take out as written. */
-export function scrubLine(line: unknown, known: readonly RegExp[] = []): string {
-    let out = typeof line === 'string' ? line : String(line ?? '')
-    if (out.length > MAX_LINE) out = `${out.slice(0, MAX_LINE)} [cut]`
-    out = out.replace(CONTROL, ' ')
-    for (const name of known) out = out.replace(name, '[name]')
-    out = out.replace(EMAIL, '[email]')
-    out = out.replace(PATH_FILE, (_m, slash: string) => `${slash}[file]`)
-    out = out.replace(BARE_FILE, '[file]')
-    out = out.replace(PHONE, '[phone]')
-    out = out.replace(USERNAME, '$1@[user]')
-    out = out.replace(DIGITS, '[number]')
-    return out
+/** The forms a name is written in inside a log line: as typed, accented either way, dotted, underscored, dashed, plus-joined and URL encoded. */
+function variantsOf(name: string): string[] {
+    const forms = new Set<string>()
+    for (const base of new Set([name, name.normalize('NFC'), name.normalize('NFD')])) {
+        forms.add(base)
+        for (const joint of ['.', '_', '-', '+']) forms.add(base.replace(/\s+/gu, joint))
+        try {
+            const encoded = encodeURIComponent(base)
+            forms.add(encoded)
+            forms.add(encoded.replace(/%20/gu, '+'))
+        } catch {
+            // A lone surrogate does not encode: the other forms stand.
+        }
+    }
+    return [...forms].map((f) => f.toLowerCase()).filter((f) => f.length >= MIN_NAME)
 }
 
-/** The patterns for [list]: whole names of [MIN_KNOWN] characters or more, longest first so one that holds another goes whole. Anything else is skipped. */
-export function knownPatterns(list: Iterable<unknown>): RegExp[] {
-    const seen = new Set<string>()
+function addLong(known: Known, v: string) {
+    const key = v.slice(0, 4)
+    const bucket = known.long.get(key)
+    if (bucket) bucket.push(v)
+    else known.long.set(key, [v])
+}
+
+/** The names in [list] as something [scrubLine] takes out: whole names of [MIN_NAME] characters or more. Anything else is skipped. */
+export function knownPatterns(list: Iterable<unknown>): Known {
+    const known: Known = { long: new Map(), three: new Set(), two: new Set() }
     for (const n of list) {
         if (typeof n !== 'string') continue
         const t = n.trim().slice(0, 300)
-        if (t.length >= MIN_KNOWN) seen.add(t)
+        if (t.length < MIN_NAME) continue
+        for (const v of variantsOf(t)) {
+            // A name is short by what the viewer sees (its length), whatever form it is looked up in: short ones count as whole words only.
+            if (t.length < MIN_KNOWN) {
+                if (v.length === 2) known.two.add(v)
+                else if (v.length === 3) known.three.add(v)
+                else addLong(known, v)
+            } else addLong(known, v)
+        }
     }
-    return [...seen].sort((a, b) => b.length - a.length).map((n) => new RegExp(escapeRegex(n), 'giu'))
+    return known
+}
+
+type Span = [number, number]
+
+function mergeSpans(spans: Span[]): Span[] {
+    spans.sort((a, b) => a[0] - b[0] || b[1] - a[1])
+    const out: Span[] = []
+    for (const s of spans) {
+        const last = out[out.length - 1]
+        if (last && s[0] <= last[1]) last[1] = Math.max(last[1], s[1])
+        else out.push([s[0], s[1]])
+    }
+    return out
+}
+
+function replaceSpans(s: string, spans: Span[], placeholder: string): string {
+    if (spans.length === 0) return s
+    let out = ''
+    let at = 0
+    for (const [a, b] of mergeSpans(spans)) {
+        out += s.slice(at, a) + placeholder
+        at = b
+    }
+    return out + s.slice(at)
+}
+
+/** Takes the known names out: every form of each, case ignored, the short ones only as whole words. One look-up per character. */
+function takeOutNames(s: string, known: Known): string {
+    if (isEmpty(known)) return s
+    const lower = s.toLowerCase()
+    // A letter whose lower case is longer or shorter (a dotted capital I) would move every offset: this line is matched as written.
+    const hay = lower.length === s.length ? lower : s
+    const n = hay.length
+    const spans: Span[] = []
+    const whole = (i: number, len: number) => !(i > 0 && WORD_CHAR.test(hay[i - 1])) && !(i + len < n && WORD_CHAR.test(hay[i + len]))
+    for (let i = 0; i < n; i++) {
+        if (known.long.size) {
+            const candidates = known.long.get(hay.substr(i, 4))
+            if (candidates) for (const v of candidates) if (hay.startsWith(v, i)) spans.push([i, i + v.length])
+        }
+        if (known.three.size && known.three.has(hay.substr(i, 3)) && whole(i, 3)) spans.push([i, i + 3])
+        if (known.two.size && known.two.has(hay.substr(i, 2)) && whole(i, 2)) spans.push([i, i + 2])
+    }
+    return replaceSpans(s, spans, '[name]')
+}
+
+/**
+ * Takes out file names, spaces and all: from a media, subtitle or document extension back to where
+ * a name cannot start (a quote, a bracket, `: `, the line's start) or [FILE_REACH] characters. A path
+ * goes whole, but the words before it stay. Linear: one pass for the extensions, a bounded walk back from each.
+ */
+function takeOutFiles(s: string): string {
+    const spans: Span[] = []
+    let reach = 0
+    EXTENSION.lastIndex = 0
+    for (let m = EXTENSION.exec(s); m; m = EXTENSION.exec(s)) {
+        const end = m.index + m[0].length
+        let start = m.index
+        const floor = Math.max(reach, m.index - FILE_REACH)
+        while (start > floor && !NAME_STOPS.has(s[start - 1]) && !(s[start - 1] === ' ' && s[start - 2] === ':')) start--
+        // A path starts where its first separator's word starts, so "read /a/b/Show.mkv" keeps "read".
+        let sep = -1
+        for (let i = start; i < m.index; i++) {
+            if (s[i] === '/' || s[i] === '\\') {
+                sep = i
+                break
+            }
+        }
+        if (sep >= 0) {
+            const space = s.lastIndexOf(' ', sep)
+            if (space >= start) start = space + 1
+        }
+        while (start < m.index && s[start] === ' ') start++
+        spans.push([start, end])
+        reach = end
+    }
+    return replaceSpans(s, spans, '[file]')
+}
+
+/** Takes out e-mail addresses, letters of any alphabet included: from each @ out over what an address is written in. */
+function takeOutEmails(s: string): string {
+    if (!s.includes('@')) return s
+    const spans: Span[] = []
+    for (let at = s.indexOf('@'); at >= 0; at = s.indexOf('@', at + 1)) {
+        let a = at
+        while (a > 0 && EMAIL_CHAR.test(s[a - 1])) a--
+        let b = at + 1
+        let dot = false
+        while (b < s.length && (DOMAIN_CHAR.test(s[b]) || (s[b] === '.' && b + 1 < s.length && DOMAIN_CHAR.test(s[b + 1])))) {
+            if (s[b] === '.') dot = true
+            b++
+        }
+        if (a < at && b > at + 1 && dot) spans.push([a, b])
+    }
+    return replaceSpans(s, spans, '[email]')
+}
+
+/**
+ * Takes what is personal out of one log line, keeping the tag, the words and the short numbers a bug
+ * needs. [known] are the names the page has seen. In this order: names, a URL's query and fragment,
+ * e-mail addresses, file names, tokens, long numbers, phone numbers, @usernames.
+ */
+export function scrubLine(line: unknown, known: Known = NOBODY): string {
+    let out = typeof line === 'string' ? line : String(line ?? '')
+    if (out.length > MAX_LINE) out = `${out.slice(0, MAX_LINE)} [cut]`
+    out = out.replace(CONTROL, ' ')
+    out = takeOutNames(out, known)
+    out = out.replace(URL_TAIL, '$1[query]').replace(QUERY, '?[query]')
+    out = takeOutEmails(out)
+    out = takeOutFiles(out)
+    out = out.replace(TOKEN, '[token]')
+    // Seven digits or more with a plus, a bracket, a space or a dash among them is a phone number; a bare run is an id.
+    out = out.replace(PHONE, (m) => (/^\d+$/u.test(m) ? '[number]' : '[phone]'))
+    out = out.replace(DIGITS, '[number]')
+    out = out.replace(USERNAME, '$1@[user]')
+    return out
 }
 
 // ---- The ring ------------------------------------------------------------------------------------------
 
 let ring: string[] = []
-const names: string[] = []
+/** Bumped with every line and every name, so what was scrubbed for one version is not scrubbed again for the same. */
+let version = 0
+const names = new Set<string>()
 
 const stamp = (at = new Date()) => at.toISOString().slice(11, 19)
 
@@ -80,6 +245,7 @@ export function log(level: 'I' | 'W' | 'E', tag: string, text: unknown): void {
         const body = typeof text === 'string' ? text : text instanceof Error ? `${text.name}: ${text.message}` : String(text ?? '')
         ring.push(`${stamp()} ${level} ${String(tag).slice(0, 24)}: ${body.slice(0, MAX_LINE)}`)
         if (ring.length > MAX_LINES) ring = ring.slice(ring.length - MAX_LINES)
+        version++
     } catch {
         // A log line is never worth a failure.
     }
@@ -88,16 +254,58 @@ export function log(level: 'I' | 'W' | 'E', tag: string, text: unknown): void {
 /** The ring's lines, oldest first, not scrubbed yet. */
 export const ringLines = (): string[] => ring.slice()
 
-/** Names the page has seen (a chat's or a video's title) so the export can take them out as written. Bounded; the newest win. */
+/** Names the page has seen (a chat's or a video's title, the viewer's own) so the export can take them out. Bounded; the newest win. */
 export function rememberNames(list: Iterable<unknown>): void {
+    let added = false
     for (const n of list) {
-        if (typeof n !== 'string' || n.trim().length < MIN_KNOWN) continue
+        if (typeof n !== 'string') continue
         const t = n.trim().slice(0, 300)
-        const at = names.indexOf(t)
-        if (at >= 0) names.splice(at, 1)
-        names.push(t)
+        if (t.length < MIN_NAME) continue
+        if (names.has(t)) names.delete(t)
+        else added = true
+        names.add(t)
     }
-    if (names.length > MAX_KNOWN) names.splice(0, names.length - MAX_KNOWN)
+    if (names.size > MAX_KNOWN) {
+        for (const old of [...names].slice(0, names.size - MAX_KNOWN)) names.delete(old)
+        added = true
+    }
+    if (added) version++
+}
+
+const TITLE_KEYS = new Set(['title', 'name', 'chat', 'chatTitle', 'fileName', 'caption', 'show', 'topic', 'firstName', 'lastName', 'username'])
+/** The most values one answer is read for names: a screen's page of videos, not the account. */
+const NOTE_NODES = 3000
+
+/**
+ * Remembers the names in an answer the page got from Telegram (the one place every screen's chats, videos,
+ * topics and the viewer's own name come through): the values of the title-like keys, a few levels down.
+ * Bounded and never throws, so a huge or odd answer costs a little and no more.
+ */
+export function noteNames(value: unknown): void {
+    try {
+        const found: string[] = []
+        let seen = 0
+        const walk = (v: unknown, depth: number) => {
+            if (seen++ > NOTE_NODES || typeof v !== 'object' || v === null) return
+            if (Array.isArray(v)) {
+                for (const item of v) walk(item, depth)
+                return
+            }
+            // Only plain data: a file's bytes (a typed array of half a megabyte), a Blob or a Map has no names in it to read.
+            const proto = Object.getPrototypeOf(v)
+            if (depth > 4 || (proto !== Object.prototype && proto !== null)) return
+            for (const key of Object.keys(v)) {
+                const x = (v as Record<string, unknown>)[key]
+                if (typeof x === 'string') {
+                    if (TITLE_KEYS.has(key)) found.push(x)
+                } else walk(x, depth + 1)
+            }
+        }
+        walk(value, 0)
+        if (found.length) rememberNames(found)
+    } catch {
+        // A name missed is a name the patterns still catch by shape.
+    }
 }
 
 const clearers: (() => void)[] = []
@@ -109,7 +317,8 @@ export function onClear(fn: () => void): void {
 /** Forgets the ring, the names and the earlier run's crash (sign out, Delete your data). */
 export function clearLogs(): void {
     ring = []
-    names.length = 0
+    names.clear()
+    version++
     for (const fn of clearers) {
         try {
             fn()
@@ -129,6 +338,7 @@ const asText = (args: unknown[]) =>
     args
         .map((a) => (a instanceof Error ? `${a.name}: ${a.message}` : typeof a === 'string' ? a : typeof a === 'object' && a !== null ? Object.prototype.toString.call(a) : String(a)))
         .join(' ')
+        .slice(0, MAX_CONSOLE)
 
 /** Copies console.warn and console.error into the ring (the page's own tags such as `[player]` come with them); the console still prints. Once. */
 export function hookConsole(c: Pick<Console, 'warn' | 'error'> = console): void {
@@ -145,30 +355,55 @@ export function hookConsole(c: Pick<Console, 'warn' | 'error'> = console): void 
 
 // ---- The earlier run's crash -----------------------------------------------------------------------------
 
-/** What the crash card keeps for the next run's bundle: the error's kind and message, scrubbed and cut. Never throws. */
+/** The error classes a crash note may name: the language's and the browser's own, never a word the page or a viewer chose. */
+const ERROR_CLASSES = new Set([
+    'Error', 'TypeError', 'RangeError', 'ReferenceError', 'SyntaxError', 'EvalError', 'URIError', 'AggregateError', 'DOMException',
+    'AbortError', 'NotAllowedError', 'NotSupportedError', 'NotFoundError', 'NetworkError', 'SecurityError', 'InvalidStateError',
+    'QuotaExceededError', 'DataError', 'EncodingError', 'OperationError', 'TimeoutError', 'UnknownError', 'InvalidAccessError',
+    'DataCloneError', 'ConstraintError', 'VersionError', 'TransactionInactiveError', 'ReadOnlyError', 'MediaError',
+])
+/** A code as a number (Telegram's) or as capital words (`FLOOD_WAIT`). */
+const CODE = /^[A-Z][A-Z0-9_]{2,30}$/u
+
+/** The class and code a crash note keeps: nothing the error's message said. Exported for the tests. */
+export function crashFacts(reason: unknown): { kind: string; code: string } {
+    const name = (reason as { name?: unknown } | null)?.name
+    const code = (reason as { code?: unknown } | null)?.code
+    return {
+        kind: typeof name === 'string' && ERROR_CLASSES.has(name) ? name : 'Error',
+        code: typeof code === 'number' && Number.isFinite(code) && Math.abs(code) < 100000 ? String(Math.trunc(code)) : typeof code === 'string' && CODE.test(code) ? code : '',
+    }
+}
+
+const crashWords = (kind: string, code: string) => `${kind}${code ? `, code ${code}` : ''}`
+
+/**
+ * What the crash card keeps for the next run's bundle: the error's class and code in fixed words,
+ * never its message (a message can hold a title this page cannot recognise), scrubbed anyway with
+ * the names known now. Never throws.
+ */
 export function noteCrash(reason: unknown, at = new Date()): void {
     try {
-        const name = (reason as { name?: unknown } | null)?.name
-        const message = (reason as { message?: unknown } | null)?.message ?? reason
-        const text = scrubLine(`${typeof name === 'string' ? name : 'Error'}: ${typeof message === 'string' ? message : Object.prototype.toString.call(message)}`).slice(0, MAX_CRASH)
-        log('E', 'crash', text)
-        localStorage.setItem(CRASH_KEY, JSON.stringify({ at: at.toISOString().slice(0, 16).replace('T', ' '), text }))
+        const { kind, code } = crashFacts(reason)
+        log('E', 'crash', scrubLine(crashWords(kind, code), knownPatterns(names)))
+        localStorage.setItem(CRASH_KEY, JSON.stringify({ at: at.toISOString().slice(0, 16).replace('T', ' '), kind, code }))
     } catch {
         // Storage refused: the ring still has it.
     }
 }
 
-/** The crash kept by an earlier run as plain lines, or none. Trusts nothing in the stored value. */
-export function earlierCrash(storage: Pick<Storage, 'getItem'> | null = safeStorage()): string[] {
+/** The crash kept by an earlier run as plain lines, or none. Trusts nothing in the stored value, and scrubs it again with the names known now. */
+export function earlierCrash(storage: Pick<Storage, 'getItem'> | null = safeStorage(), known: Known = knownPatterns(names)): string[] {
     try {
         const raw = storage?.getItem(CRASH_KEY)
-        if (typeof raw !== 'string' || raw.length > MAX_CRASH * 3) return []
+        if (typeof raw !== 'string' || raw.length > 500) return []
         const o: unknown = JSON.parse(raw)
         if (typeof o !== 'object' || o === null || Array.isArray(o)) return []
-        const { at, text } = o as Record<string, unknown>
-        if (typeof text !== 'string' || text === '') return []
+        const { at, kind, code } = o as Record<string, unknown>
+        if (typeof kind !== 'string') return []
+        const facts = crashFacts({ name: kind, code: typeof code === 'string' && /^-?\d{1,5}$/u.test(code) ? Number(code) : code })
         const when = typeof at === 'string' && /^\d{4}-\d\d-\d\d \d\d:\d\d$/u.test(at) ? at : 'an earlier time'
-        return [`The page stopped on ${when}: ${text.slice(0, MAX_CRASH)}`]
+        return [`The page stopped on ${when}: ${scrubLine(crashWords(facts.kind, facts.code), known)}`]
     } catch {
         return []
     }
@@ -229,18 +464,34 @@ export interface Bundle {
     droppedLines: number
 }
 
+let knownCache: { version: number; known: Known } | null = null
+/** The names remembered, as patterns; built once for a version of the ring and the names. */
+function currentKnown(): Known {
+    if (knownCache?.version !== version) knownCache = { version, known: knownPatterns(names) }
+    return knownCache.known
+}
+
+let ringCache: { version: number; lines: string[] } | null = null
+/** The ring scrubbed, kept for the version it was scrubbed at: opening a sheet again, or Copy after the size line, scans nothing. */
+function scrubbedRing(known: Known): string[] {
+    if (ringCache?.version !== version) ringCache = { version, lines: ring.map((l) => scrubLine(l, known)) }
+    return ringCache.lines
+}
+
 /**
  * The one text file: a header, the earlier run's crash, the device's facts, the moments marked as
  * stuttering and the log, every line scrubbed the same way and the whole under [MAX_BYTES]; when it
  * is over, the oldest log lines go first (what is newest is what a report is about).
  */
 export function buildBundle(facts: BundleFacts, parts: BundleParts = {}, extraNames: Iterable<unknown> = [], saved = new Date(), maxBytes = MAX_BYTES): Bundle {
-    const known = knownPatterns([...names, ...extraNames])
+    const extra = [...extraNames]
+    const known = extra.length ? knownPatterns([...names, ...extra]) : currentKnown()
     const clean = (lines: readonly string[] | undefined) => (lines ?? []).filter((l) => typeof l === 'string').map((l) => scrubLine(l, known))
-    const crash = clean(parts.crash ?? earlierCrash())
+    // The earlier run's crash comes scrubbed already (its date would read as a phone number a second time).
+    const crash = parts.crash ? clean(parts.crash) : earlierCrash(undefined, known)
     const device = clean(parts.device)
     const marks = clean(parts.marks)
-    let lines = ring.slice(-MAX_LINES).map((l) => scrubLine(l, known))
+    let lines = extra.length ? ring.map((l) => scrubLine(l, known)) : scrubbedRing(known)
     const header = [
         'TMPlayer logs',
         `App version: ${scrubLine(facts.version)}`,

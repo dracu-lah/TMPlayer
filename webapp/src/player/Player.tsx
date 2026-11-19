@@ -25,7 +25,7 @@ import { online } from '../net'
 import { StallWatch, stallWhy } from './openStall'
 import { t, waitPhrase } from '../i18n'
 import { routeCrashes } from '../crash'
-import { buildBundle, log, rememberNames, sizeText, suppliedParts, supply, type Bundle } from '../logs'
+import { buildBundle, log, rememberNames, sizeText, suppliedParts, supply, type Bundle, type BundleFacts } from '../logs'
 import { deviceLines } from './stutter'
 import { watchStutter, type StutterWatch } from './stutter-watch'
 import { form } from '../form'
@@ -256,13 +256,22 @@ export function Player(props: {
         return j
     }
 
-    // Report stutter and the playback watch (WB18): read every 2 s while the video plays and never otherwise.
+    // Report stutter and the playback watch (WB18): read every 2 s while the video plays and never otherwise. Not on a TV:
+    // nothing there can receive a mark (no clipboard to paste from, and the upload is not on yet), so it does not spend its small CPU on one.
     let stutterWatch: StutterWatch | null = null
-    onMount(() => (stutterWatch = watchStutter(video, () => engine, () => stall() !== null)))
+    onMount(() => {
+        if (form() !== 'tv') stutterWatch = watchStutter(video, () => engine, () => stall() !== null)
+    })
     onCleanup(() => stutterWatch?.stop())
     const stutter = { supported: () => stutterWatch?.supported() ?? false, press: () => stutterWatch?.press() ?? 'kept', restart: () => stutterWatch?.restart() }
+    // A stall that clears with no media event of its own (the bytes came, the clock moves): the watch follows it.
+    createEffect(() => {
+        stall()
+        stutterWatch?.refresh()
+    })
     // What the log may take out as written, and what it says of this video: the engine and the format in plain words, never a name.
     rememberNames([item.title, item.name, item.chat, item.fileName])
+    createEffect(() => rememberNames([props.info?.title, props.info?.episode?.show, props.info?.episode?.name]))
     createEffect(() => {
         const line = formatLine(facts())
         if (line) log('I', 'player', `format ${line}`)
@@ -274,20 +283,33 @@ export function Player(props: {
     createEffect(() => {
         if (error() || needsApp()) log('E', 'player', `blocked: ${needsApp() ? `needs the app, ${needsApp()!.kind}` : 'could not play'}`)
     })
-    /** The logs this device holds, scrubbed, for Copy details: the facts, the marks and the page's own log. Nothing leaves until the viewer presses it. */
-    const logBundle = async (): Promise<Bundle> => {
-        const [{ webFacts }, { installed }] = await Promise.all([import('../ui/feedback'), import('../install')])
+    /**
+     * The logs this device holds, scrubbed, for Copy details: the facts, the marks and the page's own log. Built in one go
+     * with no wait, so a press can copy it inside the click (iPhone Safari refuses a copy that follows an await). Nothing leaves until the viewer presses it.
+     */
+    let factsHere: BundleFacts | null = null
+    let factsAsked = false
+    const logBundle = (): Bundle => {
+        // The browser's line comes from the feedback form's code, loaded once when the sheet first asks; until then a plain one.
+        if (!factsAsked) {
+            factsAsked = true
+            void Promise.all([import('../ui/feedback'), import('../install')]).then(
+                ([{ webFacts }, { installed }]) => void (factsHere = webFacts(navigator.userAgent, document.documentElement.lang || navigator.language || 'en', installed())),
+                () => {},
+            )
+        }
         const line = formatLine(facts())
         supply('device', () => [...deviceLines({ video }), ...(line ? [`Format: ${line}`] : []), ...(item.dc ? [`Datacenter: DC ${item.dc}`] : [])])
-        return buildBundle(webFacts(navigator.userAgent, document.documentElement.lang || navigator.language || 'en', installed()), suppliedParts(), [item.title, item.name, item.chat, item.fileName])
+        return buildBundle(factsHere ?? { version: 'web', platform: 'Web', device: 'a browser', language: document.documentElement.lang || 'en' }, suppliedParts())
     }
-    const logsSize = async () => sizeText((await logBundle()).bytes)
-    const copyLogs = async () => {
+    const logsSize = () => sizeText(logBundle().bytes)
+    const logsText = () => logBundle().text
+    /** The text goes to the clipboard in the click itself; false when the browser refuses (the sheet then shows it selected). */
+    const copyLogs = (): Promise<boolean> => {
         try {
-            await navigator.clipboard.writeText((await logBundle()).text)
-            return true
+            return navigator.clipboard.writeText(logsText()).then(() => true, () => false)
         } catch {
-            return false
+            return Promise.resolve(false)
         }
     }
 
@@ -997,6 +1019,7 @@ export function Player(props: {
                             details,
                             stutter: () => (stutter.supported() ? { press: stutter.press as () => 'kept' | 'already' } : null),
                             logsSize,
+                            logsText,
                             copyLogs,
                             loadSubtitleFile: () => subtitleInput.click(),
                             addSubtitle,

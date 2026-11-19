@@ -6,6 +6,7 @@ import type { RpcError } from './types'
 import { failure } from '../errors'
 import { showCrashCard } from '../crash'
 import { createFloodClock, floodSeconds } from './flood'
+import { noteNames } from '../logs'
 
 type Out =
     | { id: number; value: unknown }
@@ -36,6 +37,8 @@ function start() {
         const call = pending.get(msg.id)
         if (!call) return
         if ('event' in msg) {
+            // Partial lists come as events (the chats a page at a time): their titles are learned the same way as an answer's.
+            noteNames(msg.event)
             const answer = await call.onEvent?.(msg.event)
             if (msg.ask != null) w.postMessage({ reply: msg.id, ask: msg.ask, value: answer })
             return
@@ -46,7 +49,11 @@ function start() {
             // A read Telegram asked to hold back: the player says for how long (the read waits it out itself, stream/reader.ts).
             if (call.method === 'chunk') noteFlood(floodSeconds(msg.error))
             call.reject(Object.assign(new Error(msg.error.message), msg.error))
-        } else call.resolve(msg.value)
+        } else {
+            // Every chat, video and topic title the page shows comes through here: the log's scrubber learns them (WB18).
+            noteNames(msg.value)
+            call.resolve(msg.value)
+        }
     }
     // The worker failed to load or died of an error it did not catch (HX10): the calls in flight
     // fail with "no answer" (their screens offer Try again) and a new worker takes over, from the

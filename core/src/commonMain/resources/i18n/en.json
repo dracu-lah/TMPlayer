@@ -3942,6 +3942,8 @@
     "coffee_setting_detail": "A small button in the bottom corner that opens Buy Me a Coffee. Its x hides it until you next open TMPlayer; turn this off to hide it for good",
     "coffee_sponsor_github": "Or sponsor on GitHub",
     "converting": "Converting this video's picture for this browser. It can take up to a minute to start.",
+    "copy_failed": "This browser would not copy it. The text is selected below: copy it yourself.",
+    "copy_refused": "This browser would not copy it. The details are in the GitHub and e-mail links too.",
     "downloads_body": "A browser cannot keep videos on your device. The app can, so you can watch without a connection.",
     "downloads_title": "Downloads are in the app",
     "gone_from_chat": "This video is gone from the chat.",
