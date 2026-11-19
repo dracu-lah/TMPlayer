@@ -12,6 +12,7 @@ import { nameArt } from './colour'
 import { me } from '../session'
 import { t } from '../i18n'
 import { form } from '../form'
+import { isMac } from './shellKeys'
 import { resumes, starredIds, watchedList } from '../store'
 
 interface Place {
@@ -19,14 +20,16 @@ interface Place {
     label: () => string
     icon: IconData
     on: (path: string) => boolean
+    /** The letter or digit of its desktop shortcut (ui/shellKeys.ts), said in the title. */
+    key: string
 }
 
 const PLACES: Place[] = [
-    { href: '/', label: () => t('browse.tab_home'), icon: Home03Icon, on: (p) => p === '/' || p === '/recent' },
-    { href: '/chats', label: () => t('nav.chats'), icon: Message01Icon, on: (p) => p === '/chats' || p.startsWith('/chat/') },
-    { href: '/search', label: () => t('common.search'), icon: Search01Icon, on: (p) => p === '/search' },
+    { href: '/', label: () => t('browse.tab_home'), icon: Home03Icon, on: (p) => p === '/' || p === '/recent', key: '1' },
+    { href: '/chats', label: () => t('nav.chats'), icon: Message01Icon, on: (p) => p === '/chats' || p.startsWith('/chat/'), key: '2' },
+    { href: '/search', label: () => t('common.search'), icon: Search01Icon, on: (p) => p === '/search', key: 'K' },
     // Downloads is a place on every platform (R2); the browser cannot keep videos, so its page is the app's card.
-    { href: '/downloads', label: () => t('nav.downloads'), icon: Download04Icon, on: (p) => p === '/downloads' },
+    { href: '/downloads', label: () => t('nav.downloads'), icon: Download04Icon, on: (p) => p === '/downloads', key: 'J' },
 ]
 
 /** The card's width (POPOVER_WIDTH). */
@@ -34,6 +37,9 @@ const WIDTH = 232
 
 /** The pages the "You" menu leads to: the picture is lit on them. */
 const YOURS = /^\/(settings|favourites|history)(\/|$)/
+
+/** "Search (Ctrl+K)" where a keyboard is the way in (a desktop), the bare name on a phone. */
+const shortcutTitle = (label: string, key: string) => (form() === 'desktop' ? `${label} (${isMac() ? '⌘' : 'Ctrl+'}${key})` : label)
 
 export function Nav() {
     const location = useLocation()
@@ -59,7 +65,7 @@ export function Nav() {
                 <span class="nav-highlight" classList={{ shown: chosen() >= 0 }} aria-hidden="true" />
                 <For each={PLACES}>
                     {(p, i) => (
-                        <A class="nav-cell" href={p.href} aria-current={chosen() === i() ? 'page' : undefined} title={p.label()}>
+                        <A class="nav-cell" href={p.href} aria-current={chosen() === i() ? 'page' : undefined} title={shortcutTitle(p.label(), p.key)}>
                             <span class="nav-glyph">
                                 <Icon icon={p.icon} size={22} selected={chosen() === i()} />
                             </span>
@@ -151,7 +157,7 @@ function YouMenu(props: { anchor: HTMLElement; onClose: () => void }) {
     })
     onCleanup(() => removeEventListener('resize', measure))
     onCleanup(() => document.removeEventListener('pointerdown', outside, true))
-    const command = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+'
+    const command = isMac() ? '⌘' : 'Ctrl+'
     return (
         <div ref={card} class="you-menu" role="menu" aria-label={t('nav.you')} style={place()} onKeyDown={onKey}>
             <div class="you-summary">
