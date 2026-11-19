@@ -2300,19 +2300,23 @@ private fun Root() {
                     // room for it (R4, 9.1): Offline is a card with Try again and Downloads.
                     bannerShown = (connectionNotice != ConnectionNotice.Hidden && auth is AuthState.Ready) || tipAboveBar,
                     banner = {
-                        if (connectionNotice == ConnectionNotice.Hidden || auth !is AuthState.Ready) {
+                        // The notice first; the card only while it is really due, so the banner's fade-out
+                        // after a notice clears never draws the card (or hands the remote to it).
+                        if (auth is AuthState.Ready && connectionNotice != ConnectionNotice.Hidden) {
+                            if (connectionNotice == ConnectionNotice.Offline) {
+                                com.tmplayer.ui.connect.OfflineBanner(
+                                    onOpenDownloads = openDownloads.takeIf { screen !is Screen.Downloads },
+                                )
+                            } else {
+                                ConnectionStatus(notice = connectionNotice)
+                            }
+                        } else if (tipAboveBar) {
                             TipsCard(
                                 onShow = { scope.launch { runCatching { settings.openTour() } } },
                                 // One tap, one answer: the card does not come back (the tour stays in Settings).
                                 onDismiss = { scope.launch { runCatching { settings.markTourDone() } } },
                                 modifier = Modifier.fillMaxWidth(),
                             )
-                        } else if (connectionNotice == ConnectionNotice.Offline) {
-                            com.tmplayer.ui.connect.OfflineBanner(
-                                onOpenDownloads = openDownloads.takeIf { screen !is Screen.Downloads },
-                            )
-                        } else {
-                            ConnectionStatus(notice = connectionNotice)
                         }
                     },
                 ) {

@@ -697,6 +697,8 @@ object SeriesShelf {
         var compared = 0
         var conflicts = 0
         for (file in a) {
+            // Only a file whose number the other side holds is worth the name read.
+            if ((file.name.season ?: 1) to file.episode !in namesB) continue
             val mine = episodeNameKey(file) ?: continue
             val theirs = namesB[(file.name.season ?: 1) to file.episode] ?: continue
             compared++
