@@ -14,6 +14,7 @@ import { form } from '../form'
 import { clearHistoryWithUndo } from '../clearHistory'
 import { historyId, removeLaterWithUndo, removeWithUndo } from '../historyEdits'
 import { prune, range, toggleAll } from '../ui/selection'
+import { askConfirm, confirmOpen } from '../ui/Confirm'
 import { chatGone, forgetGone } from '../goneVideos'
 import type { VideoItem } from '../tg/types'
 
@@ -114,7 +115,6 @@ export function HistoryPage() {
     const [selecting, setSelecting] = createSignal(false)
     const [picked, setPicked] = createSignal<ReadonlySet<string>>(new Set())
     let anchor: string | null = null
-    let confirmDialog!: HTMLDialogElement
     const order = createMemo(() => (entries.latest ?? []).map((e) => e.key))
     const tv = () => form() === 'tv'
     const desktop = () => form() === 'desktop'
@@ -151,12 +151,37 @@ export function HistoryPage() {
         tick(id, shift)
     }
     // A TV remote cannot reach the toast's Undo, so it is asked first; the phone and the desktop remove at once.
-    const remove = () => (tv() ? confirmDialog.showModal() : void doRemove())
+    const remove = () => (tv() ? void askRemove() : void doRemove())
+    const askRemove = async () => {
+        const count = picked().size
+        const yes = await askConfirm({
+            title: t('browse.remove_selected_title', { count }),
+            message: later() ? t('browse.remove_selected_later_message', { count }) : t('browse.remove_selected_message', { count }),
+            detail: t('browse.remove_selected_detail'),
+            confirm: t('browse.remove_count', { count }),
+            // Nothing ticked any more (the cards went, the tab changed): the question has no subject.
+            closeWhen: () => picked().size === 0,
+        })
+        if (yes) void doRemove()
+    }
+    // Clear Watch later takes the whole list, so it asks first (HX59); Undo still follows.
+    const clearLater = async () => {
+        const count = laterIds().size
+        if (!count) return
+        const yes = await askConfirm({
+            title: t('browse.clear_watch_later_title'),
+            message: t('browse.clear_watch_later_message', { count }),
+            detail: t('browse.clear_watch_later_detail'),
+            confirm: t('browse.clear_watch_later'),
+            closeWhen: () => laterIds().size === 0,
+        })
+        if (yes) void removeLaterWithUndo(null)
+    }
     onMount(() => {
         const keys = (e: KeyboardEvent) => {
             if (form() !== 'desktop') return
             const inField = e.target instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) && (e.target as HTMLInputElement).type !== 'checkbox'
-            if (inField || confirmDialog.open) return
+            if (inField || confirmOpen()) return
             // Ctrl+A ticks every card, starting select mode when it is not on yet; the rest only act in it.
             if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
                 if (!order().length) return
@@ -177,7 +202,7 @@ export function HistoryPage() {
     return (
         <>
             <PageHead title={t('browse.tab_history_heading')} blurb={meta().blurb()} />
-            {/* One click, no question, and the toast offers Undo for 8 s: Clear history takes Continue watching and Watched and keeps Watch later; on Watch later, Clear Watch later takes that list alone. */}
+            {/* A question first (HX59), then the toast offers Undo for 8 s: Clear history takes Continue watching and Watched and keeps Watch later; on Watch later, Clear Watch later takes that list alone. */}
             <Show when={days().length}>
                 <div class="history-actions">
                     <button class="link" type="button" onClick={() => (selecting() ? leave() : setSelecting(true))}>
@@ -192,7 +217,7 @@ export function HistoryPage() {
                                 </button>
                             }
                         >
-                            <button class="link" type="button" onClick={() => void removeLaterWithUndo(null)}>
+                            <button class="link" type="button" onClick={() => void clearLater()}>
                                 {t('browse.clear_watch_later')}
                             </button>
                         </Show>
@@ -292,24 +317,6 @@ export function HistoryPage() {
                     </button>
                 </div>
             </Show>
-            <dialog class="confirm" ref={confirmDialog} aria-labelledby="remove-title">
-                <h2 id="remove-title">{t('browse.remove_selected_title', { count: picked().size })}</h2>
-                <p>{later() ? t('browse.remove_selected_later_message', { count: picked().size }) : t('browse.remove_selected_message', { count: picked().size })}</p>
-                <p class="muted">{t('browse.remove_selected_detail')}</p>
-                <div class="confirm-buttons">
-                    <button class="link" type="button" onClick={() => confirmDialog.close()}>{t('common.cancel')}</button>
-                    <button
-                        class="primary danger"
-                        type="button"
-                        onClick={() => {
-                            confirmDialog.close()
-                            void doRemove()
-                        }}
-                    >
-                        {t('browse.remove_count', { count: picked().size })}
-                    </button>
-                </div>
-            </dialog>
         </>
     )
 }
