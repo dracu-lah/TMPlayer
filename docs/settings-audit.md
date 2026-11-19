@@ -428,10 +428,11 @@ a line of help text naming "Settings, <place>").
 
 ## Not done in U20, and why
 
-- The web app's Settings keeps its six pages and their order (appearance, home, playback,
-  library, storage, about): it has none of the moved rows, its pages need a signed in session to
-  screenshot, and its own TV layout is one long page. Its Playback line in the list is its only
-  row's title, a near repeat; left.
+- The web app's Settings follows the map since WB20 (2026-11-20): Home and library are one page
+  (`/settings/library` still lands on it), a search box over the rows (phone and desktop; the TV keeps
+  its one long page) answers with the apps' `SettingsSearch` through WebRules, `/settings/<page>#<row id>`
+  opens a row by its map id, and About shows What's new. The web has no player gestures, decoder or
+  notification rows, so those never appear in its results (`webapp/src/ui/settingsMap.ts` lists what it draws).
 - The tour's Settings picture (`tour-*-settings*`) still shows the old list order and names:
   retaking it needs the promo build and `scripts/annotate-shot.py` then `scripts/tour-badges.py`.
   The tour's four lines are rewritten for the new pages and keep their badges' order.

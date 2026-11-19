@@ -172,6 +172,9 @@ export function languageFailedToast() {
     showToast({ text: t('web.language_failed', { language: languageName(tag) }), action: { label: t('common.try_again'), run: () => void retryLanguage().then((ok) => !ok && languageFailedToast()) } })
 }
 
+/** The hashed file of [tag]'s page strings (English has none: it is in the first load), for the worker's rules to read in the same words. */
+export const catalogUrl = (tag: string): string | null => (tag === ENGLISH ? null : ((catalogs as Record<string, string | undefined>)[tag] ?? null))
+
 /** A language's own name ("Deutsch"), the same in every language. */
 export const languageName = (tag: string) => findLanguage(tag)?.name ?? tag
 

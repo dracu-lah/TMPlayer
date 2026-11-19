@@ -1,5 +1,6 @@
 package com.tmplayer.web
 
+import com.tmplayer.data.ReleaseHighlights
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -802,6 +803,16 @@ class WebRulesTest {
         assertEquals(0, settingsSearch("zzzzqqq", "desktop", null).size)
         assertTrue(settingsSearch("wallpapr colours bigg ".repeat(5000), "desktop", null).isEmpty())
         assertTrue(settingsSearch("Subtitles", "weird form", null).isNotEmpty())
+    }
+
+    @Test
+    fun `what's new is the apps' sheet, version, address and lines`() {
+        val n = whatsNew()
+        assertEquals(ReleaseHighlights.VERSION, n.version)
+        assertTrue(n.changelog.startsWith("https://"))
+        assertEquals(ReleaseHighlights.highlights.size, n.highlights.size)
+        assertTrue(n.highlights.isNotEmpty() && n.highlights.all { it.isNotBlank() })
+        isPlain(n)
     }
 
     @Test
