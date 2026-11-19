@@ -283,9 +283,10 @@ test.describe('a video page', () => {
         await summary.click()
         const options = page.getByRole('option')
         await expect(options).toHaveCount(3)
-        // Best first: 4K, then 1080p, then 720p.
-        await expect(options.nth(0)).toContainText('4K')
-        await expect(options.nth(1)).toHaveAttribute('aria-selected', 'true')
+        // Recommended first (HX38): this Chromium has no HEVC, so the 1080p it plays leads and the HEVC 4K goes last.
+        await expect(options.nth(0)).toContainText('1080p')
+        await expect(options.nth(0)).toHaveAttribute('aria-selected', 'true')
+        await expect(options.nth(2)).toContainText('4K')
         // R9: the list is a list box, so the arrows walk it (a TV has its remote's own walk).
         if (!(await page.evaluate(() => document.documentElement.dataset.form === 'tv'))) {
             await options.nth(0).focus()
@@ -294,7 +295,7 @@ test.describe('a video page', () => {
             await page.keyboard.press('End')
             await expect(options.nth(2)).toBeFocused()
         }
-        await options.nth(2).click()
+        await options.nth(1).click()
         await expect(page).toHaveURL(/\/video\/-1005\/27$/)
         await expect(page.locator('.detail-copy-summary')).toContainText('720p')
     })

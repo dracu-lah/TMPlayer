@@ -17,3 +17,6 @@
 }
 .detail-copy-repair-button:hover { background: var(--surface); }
 html[data-form=tv] .detail-copy-repair { max-width: calc(var(--dp) * 720); }
+/* The TV scales by its density (tv.css --dp): the copy's heading and tag in step with the lines under them. */
+html[data-form=tv] .detail-copy-line { font-size: calc(var(--dp) * 16); line-height: calc(var(--dp) * 22); }
+html[data-form=tv] .detail-copy-best { font-size: calc(var(--dp) * 12); line-height: calc(var(--dp) * 16); padding: calc(var(--dp) * 2) calc(var(--dp) * 8); }

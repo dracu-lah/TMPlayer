@@ -144,3 +144,140 @@ test('a wide desktop page is one centred column with equal gutters: the words an
     const value = await box('.detail-about dd')
     expect(value.width).toBeGreaterThan(200)
 })
+
+// HX38 on the web (WB3): Big.Buck.Bunny posted three times in Test Copies (fake/mtcute.ts), as a
+// 2160p HEVC, a 1080p x264 and a 720p x264. The card's badge, its count and the copy Play opens are
+// one answer, the copies list puts that copy first with "Best for this device", and a phone or a
+// browser without HEVC never leads with the 4K HEVC (decision D5).
+
+/** The copy this browser and form recommend: a phone is capped at 1080p, a browser without HEVC passes the HEVC copy over. */
+async function recommended(page: Page): Promise<{ height: '4K' | '1080p'; message: number; hevc: boolean; device: string }> {
+    const { hevc, form } = await page.evaluate(() => {
+        const ms = (globalThis as { ManagedMediaSource?: typeof MediaSource }).ManagedMediaSource ?? globalThis.MediaSource
+        const ask = (m: string) => !!ms?.isTypeSupported?.(m) || document.createElement('video').canPlayType(m) !== ''
+        return { hevc: ask('video/mp4; codecs="hvc1.1.6.L93.B0"') || ask('video/mp4; codecs="hev1.1.6.L93.B0"'), form: document.documentElement.dataset.form }
+    })
+    const device = form === 'tv' ? 'TV' : form === 'phone' ? 'phone' : 'computer'
+    return form !== 'phone' && hevc ? { height: '4K', message: 25, hevc, device } : { height: '1080p', message: 26, hevc, device }
+}
+
+const shotsDir = new URL('../../design/web-gaps/WB3/', import.meta.url)
+
+test('a video posted three times: the card badges and opens the recommended copy, its page lists it first, the count is the list', async ({ page }, info) => {
+    await mockTmdb(page)
+    await page.goto('/chat/-1005')
+    const card = page.locator('.card').filter({ hasText: 'Big Buck Bunny' }).first()
+    await expect(card).toBeVisible()
+    const best = await recommended(page)
+    await expect(card).toContainText('3 versions')
+    await expect(card.locator('.card-format')).toHaveText(best.height)
+    await expect(card).toHaveAttribute('href', new RegExp(`/video/-1005/${best.message}$`))
+    await card.click()
+    await expect(page).toHaveURL(new RegExp(`/video/-1005/${best.message}$`))
+    const summary = page.locator('.detail-copy-summary')
+    await expect(summary).toContainText(best.height)
+    await expect(summary).toContainText('3 versions')
+    await summary.click()
+    const options = page.getByRole('option')
+    await expect(options).toHaveCount(3)
+    await expect(options.nth(0)).toContainText(best.height)
+    await expect(options.nth(0)).toHaveAttribute('aria-selected', 'true')
+    await expect(options.nth(0).locator('.detail-copy-best')).toHaveText('Best for this device')
+    await expect(page.locator('.detail-copy-best')).toHaveCount(1)
+    const hevcRow = options.filter({ hasText: '4K' })
+    if (!best.hevc) {
+        await expect(options.nth(2)).toContainText('4K')
+        await expect(hevcRow).toContainText(`May stutter on this ${best.device}`)
+        await expect(options.nth(0)).toContainText(`Smooth on this ${best.device}`)
+    } else {
+        await expect(page.getByText(/May stutter/)).toHaveCount(0)
+    }
+    if (process.env.WB_SHOTS) {
+        await options.nth(0).scrollIntoViewIfNeeded()
+        await page.screenshot({ path: new URL(`${info.project.name}.png`, shotsDir).pathname })
+    }
+    // Play opens the copy the card badged.
+    await page.locator('.detail-play').click()
+    await expect(page).toHaveURL(new RegExp(`/watch/-1005/${best.message}$`))
+})
+
+test("the viewer's own pick persists over the recommendation: the card plays it, after a reload too", async ({ page }) => {
+    await mockTmdb(page)
+    await page.goto('/video/-1005/26')
+    await page.locator('.detail-copy-summary').click()
+    await page.getByRole('option').filter({ hasText: '720p' }).click()
+    await expect(page).toHaveURL(/\/video\/-1005\/27$/)
+    // The page turned to the copy chosen, and the focus is back on the copies line (the keyboard and the remote go on from it).
+    await expect(page.locator('.detail-copy-summary')).toContainText('720p')
+    await expect(page.locator('.detail-copy-summary')).toBeFocused()
+    await page.goto('/chat/-1005')
+    const card = page.locator('.card').filter({ hasText: 'Big Buck Bunny' }).first()
+    await expect(card).toHaveAttribute('href', /\/video\/-1005\/27$/)
+    await expect(card.locator('.card-format')).toHaveText('720p')
+    await page.reload()
+    await expect(page.locator('.card').filter({ hasText: 'Big Buck Bunny' }).first()).toHaveAttribute('href', /\/video\/-1005\/27$/)
+})
+
+test('Not the same video splits the file from its copies, and Group with its copies again puts it back', async ({ page }) => {
+    await mockTmdb(page)
+    await page.goto('/video/-1005/27')
+    await expect(page.locator('.detail-copy-summary')).toContainText('3 versions')
+    await page.getByRole('button', { name: /Not the same video/ }).click()
+    await expect(page.locator('.detail-versions')).toHaveCount(0)
+    const again = page.getByRole('button', { name: 'Group with its copies again' })
+    await expect(again).toBeFocused()
+    await page.goto('/chat/-1005')
+    const cards = page.locator('.card').filter({ hasText: 'Big Buck Bunny' })
+    await expect(cards).toHaveCount(2)
+    await expect(cards.filter({ hasText: '2 versions' })).toHaveCount(1)
+    // Kept apart after a reload, then grouped again from its page.
+    await page.goto('/video/-1005/27')
+    await page.getByRole('button', { name: 'Group with its copies again' }).click()
+    await expect(page.locator('.detail-copy-summary')).toContainText('3 versions')
+    await expect(page.getByRole('button', { name: /Not the same video/ })).toBeFocused()
+    await page.goto('/chat/-1005')
+    await expect(page.locator('.card').filter({ hasText: 'Big Buck Bunny' })).toHaveCount(1)
+})
+
+test('a card menu splits a grouped video and offers Group again on the file kept apart', async ({ page }) => {
+    const touch = await page.evaluate(() => matchMedia('(pointer: coarse)').matches)
+    test.skip(touch, 'the right click opens the menu here; a long press on a phone is the same menu (CardMenu.tsx)')
+    await mockTmdb(page)
+    await page.goto('/chat/-1005')
+    const card = page.locator('.card').filter({ hasText: 'Big Buck Bunny' }).first()
+    await card.click({ button: 'right' })
+    await page.getByRole('button', { name: /Not the same video/ }).click()
+    await expect(page.locator('.card').filter({ hasText: 'Big Buck Bunny' })).toHaveCount(2)
+    const alone = page.locator('.card').filter({ hasText: 'Big Buck Bunny' }).filter({ hasNotText: 'versions' })
+    await alone.click({ button: 'right' })
+    await expect(page.getByRole('button', { name: /Not the same video/ })).toHaveCount(0)
+    await page.getByRole('button', { name: 'Group with its copies again' }).click()
+    await expect(page.locator('.card').filter({ hasText: 'Big Buck Bunny' })).toHaveCount(1)
+})
+
+test.describe('on the TV', () => {
+    test.use({ viewport: { width: 1920, height: 1080 } })
+    test('the copies line is reached with the remote, and the focus comes back to it after a pick', async ({ page }, info) => {
+        test.skip(info.project.name !== 'chromium', 'the TV layout is one form: run once')
+        await page.addInitScript(() => localStorage.setItem('tmplayer-layout', 'tv'))
+        await mockTmdb(page)
+        await page.goto('/video/-1005/26')
+        await expect(page.locator('html')).toHaveAttribute('data-form', 'tv')
+        const summary = page.locator('.detail-copy-summary')
+        await expect(summary).toBeVisible()
+        await page.keyboard.press('ArrowDown')
+        for (let i = 0; i < 8 && !(await summary.evaluate((el) => el === document.activeElement)); i++) await page.keyboard.press('ArrowDown')
+        await expect(summary).toBeFocused()
+        await page.keyboard.press('Enter')
+        const options = page.getByRole('option')
+        await expect(options).toHaveCount(3)
+        await expect(options.nth(0).locator('.detail-copy-best')).toHaveText('Best for this device')
+        await expect(options.nth(2)).toContainText('May stutter on this TV')
+        if (process.env.WB_SHOTS) await page.screenshot({ path: new URL('tv-1920.png', shotsDir).pathname })
+        for (let i = 0; i < 4 && !(await options.nth(1).evaluate((el) => el === document.activeElement)); i++) await page.keyboard.press('ArrowDown')
+        await expect(options.nth(1)).toBeFocused()
+        await page.keyboard.press('Enter')
+        await expect(page).toHaveURL(/\/video\/-1005\/27$/)
+        await expect(page.locator('.detail-copy-summary')).toBeFocused()
+    })
+})
