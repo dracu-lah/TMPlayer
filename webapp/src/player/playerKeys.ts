@@ -48,6 +48,7 @@ export type Action =
     | { do: 'fullscreen' }
     | { do: 'exitFullscreen' }
     | { do: 'shape' }
+    | { do: 'rotate' }
     | { do: 'zoom'; steps: 1 | -1 }
     | { do: 'zoomReset' }
     | { do: 'screenshot'; subtitles: boolean }
@@ -196,8 +197,9 @@ export function actionFor(p: Press, ctx: KeyContext): Action | null {
             return { do: 'subtitlesToggle' }
         case 'a':
             return { do: 'audio', back: shift }
+        // R is A-B repeat; Shift+R turns the picture a quarter (Rotate picture), PiP and a screenshot following the turn.
         case 'r':
-            return shift ? null : { do: 'repeat' }
+            return shift ? { do: 'rotate' } : { do: 'repeat' }
         case 'b':
             return shift ? null : { do: 'bookmark' }
         case 'w':
@@ -266,6 +268,7 @@ export function sheetGroups(mac: boolean): { group: string; rows: SheetRow[]; no
             rows: [
                 { what: 'keys.row_fullscreen', keys: { key: 'keys.fullscreen_keys' }, presses: [{ key: 'f' }] },
                 { what: 'player.picture_shape', text: 'W', presses: [{ key: 'w' }] },
+                { what: 'player.rotate_picture', keys: { key: 'keys.shift_r' }, presses: [{ key: 'R', shift: true }] },
                 {
                     what: 'keys.row_zoom',
                     keys: { key: 'keys.zoom_keys', params: { alt: altWord } },

@@ -5,7 +5,7 @@ import { BaseTelegramClient, SentCode as MtSentCode, TelegramClient, User, type 
 import { rules } from '../rules'
 import { cryptoProvider } from './crypto'
 import { findChatSubtitles, forgetChatSubtitles } from './chatsubs'
-import { homePage } from './home'
+import { homePage, rowShown } from './home'
 import { archivedList, chatList, chatPage, forgetAll, joinedFor, listTiles, rankChats, recentPage, searchAll, setCopyContext, videoCounts, watchInfo } from './library'
 import { clickSponsored, reportSponsored, viewSponsored } from './sponsored'
 import { deleteEverything, deleteMessages, readFiles, writeFile, type FoundFile } from './syncfile'
@@ -283,6 +283,11 @@ export const api = {
     /** Home's rows as the app builds them; Home so far arrives as `HomePage` events while the chats answer. */
     async home(ctx: Ctx, view: HomeView): Promise<HomePage> {
         return homePage(tg, view, ctx.signal, (page) => ctx.emit(page))
+    },
+
+    /** A Home row stayed on screen or left it (HX54): the open Home reads it, or drops its read that has not started. */
+    async homeRow(_: Ctx, chatId: number, on: boolean): Promise<void> {
+        rowShown(chatId, on)
     },
 
     /** A sponsored message was on screen: Telegram counts it once. */

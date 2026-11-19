@@ -16,7 +16,13 @@
 //   GET /tmdb/extras?k=film|show&id=<tmdb id>[&s=1&e=3][&r=GB]
 //        the detail page's second helping (MetaExtras): genres, length, rating, age rating, directors
 //        or creators, cast, a trailer's YouTube id, and for a show's episode its own name and words.
-//        { found: true, ... } or { found: false }; 503 as above. extras.ts holds the rules.
+//        { found: true, ... } or { found: false }; 503 as above. extras.ts holds the rules. A show TMDB lists
+//        as one season that one of its episode groups splits (SeasonSplit) answers the split's seasons, with
+//        TMDB's own beside (`seasonGroup`, `listedSeasons`, `listedNext`); a group that could not be read
+//        answers TMDB's own seasons and is not kept.
+//   GET /tmdb/season?id=<tmdb id>&s=<season>[&g=<episode group id>]
+//        One season's episodes, each with its name, words, still, day and length: TMDB's own season, or
+//        season s of the split the group g makes. { found: true, episodes } or { found: false }; 503 as above.
 //   Anime (anilist.ts): a question with a=1 (the name reads like fansub anime, MetaQuery.anime) asks AniList
 //        first for a show and TMDB first for a film, as OnlineMetadata.resolve does; AniList needs no key.
 //        The answer then also says `source: "anilist"` when AniList matched; its pictures are "/al/<tail>",
@@ -47,7 +53,7 @@
 // refused key is not asked with again for a day, a dropped call or a server error is tried once
 // more after a second, and none of these failures is ever cached. The title is the only thing
 // that leaves for TMDB: no chat, file or account.
-import { extras, type Extras, type SeasonStop } from './extras.ts'
+import { GROUP_ID, applySplit, buildSplit, chooseGroup, episodeGroups, extras, splitEpisode, type Extras, type SeasonStop } from './extras.ts'
 import { mergeChoices } from './choices.ts'
 import { best, accepts, normalise, parseHints, trusted, type Ask, type Candidate } from './match.ts'
 import * as guide from '../src/animeGuide.ts'
@@ -429,8 +435,8 @@ export function createHandler(deps: Deps) {
 
     /** What the cache files an extras answer under. */
     function extrasRequest(origin: string, q: { film: boolean; id: number; season: number | null; episode: number | null; region: string }): Request {
-        // v2: with the title logo; answers kept before it are asked again rather than shown without.
-        const p = new URLSearchParams({ v: '2', k: q.film ? 'film' : 'show', id: String(q.id), s: String(q.season ?? ''), e: String(q.episode ?? ''), r: q.region })
+        // v3: with the season split (v2: the title logo); answers kept before it are asked again rather than shown without.
+        const p = new URLSearchParams({ v: '3', k: q.film ? 'film' : 'show', id: String(q.id), s: String(q.season ?? ''), e: String(q.episode ?? ''), r: q.region })
         return new Request(`${origin}/tmdb/extras?${p}`)
     }
 
@@ -454,6 +460,98 @@ export function createHandler(deps: Deps) {
         const found = reply.kind === 'ok' ? aniExtras(reply.json) : null
         const response = json(found ?? { found: false }, 200, { 'Cache-Control': `public, max-age=3600, s-maxage=${found ? FOUND_TTL : MISS_TTL}`, 'X-Poster-Cache': 'miss' })
         if (deps.cache) deps.later?.(deps.cache.put(cacheKey, response.clone()).catch(() => {}))
+        return response
+    }
+
+    /** One episode group's episodes, kept a day with the anime guide's (part "tmdbgroup"); "stopped" for a throttle, a refusal or a dropped call. */
+    async function groupEpisodes(key: string, origin: string, id: string, rememberMissing = false): Promise<{ kind: 'ok'; episodes: guide.GroupEpisode[] } | { kind: 'missing' } | { kind: 'stopped' }> {
+        const kept = await readPart<guide.GroupEpisode[]>(origin, 'tmdbgroup', id)
+        if (Array.isArray(kept)) return { kind: 'ok', episodes: kept }
+        const reply = await retrying(key, `tv/episode_group/${encodeURIComponent(id)}`, 'language=en-US')
+        if (reply.kind === 'ok') {
+            const episodes = src.groupOf(reply.json)
+            await savePart(origin, 'tmdbgroup', id, episodes)
+            return { kind: 'ok', episodes }
+        }
+        if (reply.kind === 'missing') {
+            // A group TMDB lacks is kept as an empty one (for the season endpoint), so another season of it asks nothing.
+            if (rememberMissing) await savePart(origin, 'tmdbgroup', id, [])
+            return { kind: 'missing' }
+        }
+        return { kind: 'stopped' }
+    }
+
+    /** One season's episodes (TMDB's own, or season `s` of the split group `g` makes), as the series page lists them. */
+    /** Uncached /tmdb/season asks that reach TMDB, per minute: one visitor's, and all together (this isolate's). */
+    const SEASON_PER_IP = 30
+    const SEASON_ALL = 120
+    const seasonAsks = { all: [] as number[], byIp: new Map<string, number[]>() }
+
+    /** Counts one uncached ask; the wait in seconds when the visitor or everyone is over the minute's budget, else 0. */
+    function seasonBudget(ip: string): number {
+        const t = now()
+        const recent = (list: number[]) => list.filter((x) => t - x < 60_000)
+        seasonAsks.all = recent(seasonAsks.all)
+        if (seasonAsks.byIp.size > 2000) seasonAsks.byIp.clear()
+        const mine = recent(seasonAsks.byIp.get(ip) ?? [])
+        if (mine.length >= SEASON_PER_IP || seasonAsks.all.length >= SEASON_ALL) {
+            seasonAsks.byIp.set(ip, mine)
+            return Math.max(1, Math.ceil((60_000 - (t - ((mine.length >= SEASON_PER_IP ? mine : seasonAsks.all)[0] ?? t))) / 1000))
+        }
+        mine.push(t)
+        seasonAsks.byIp.set(ip, mine)
+        seasonAsks.all.push(t)
+        return 0
+    }
+
+    async function seasonAnswer(request: Request, url: URL, env: Env): Promise<Response> {
+        const p = url.searchParams
+        const num = (name: string, lo: number, hi: number) => {
+            const n = Number(p.get(name))
+            return p.get(name) !== null && p.get(name) !== '' && Number.isInteger(n) && n >= lo && n <= hi ? n : NaN
+        }
+        const id = num('id', 1, 999_999_999)
+        const g = p.get('g')
+        // A group's seasons are as many as it holds; TMDB's own seasons of a show stay within 60.
+        const s = num('s', 0, g !== null ? guide.MAX_SEASONS : 60)
+        if (Number.isNaN(id) || Number.isNaN(s) || (g !== null && !GROUP_ID.test(g))) return json({ error: 'bad request' }, 400)
+        const key = env.TMDB_API_KEY?.trim()
+        if (!key) return unavailable('no key', 300)
+        // A group's season does not depend on the show: its key leaves the id out, so a made up id adds nothing.
+        const cacheKey = new Request(`${url.origin}/tmdb/season?${new URLSearchParams(g !== null ? { v: '2', s: String(s), g } : { v: '2', id: String(id), s: String(s) })}`)
+        const kept = await deps.cache?.match(cacheKey).catch(() => undefined)
+        if (kept) {
+            const headers = new Headers(kept.headers)
+            headers.set('X-Poster-Cache', 'hit')
+            return new Response(kept.body, { status: kept.status, headers })
+        }
+        if (now() < pausedUntil) return unavailable('throttled', (pausedUntil - now()) / 1000)
+        if (refusedAt && now() - refusedAt < REFUSED_RETRY) return unavailable('refused', (REFUSED_RETRY - (now() - refusedAt)) / 1000)
+        // What is not kept reaches TMDB: a visitor and everyone together have a budget, so varying the question cannot spend the key.
+        const wait = seasonBudget(request.headers.get('cf-connecting-ip') ?? request.headers.get('x-forwarded-for') ?? '')
+        if (wait > 0) return json({ error: 'throttled' }, 429, { 'Cache-Control': 'no-store', 'Retry-After': String(wait) })
+        const stop = (r: Reply) => {
+            const out = stopped(r)
+            return unavailable(out.kind === 'blocked' ? out.reason : 'unavailable', out.kind === 'blocked' ? out.waitS : 30)
+        }
+        let episodes: guide.ListedEpisode[] | null = null
+        if (g !== null) {
+            const read = await groupEpisodes(key, url.origin, g, true)
+            if (read.kind === 'stopped') return unavailable('unavailable')
+            // The split of this group alone: the page's extras answer already judged it against the show's own count.
+            episodes = read.kind === 'ok' ? (buildSplit(g, read.episodes, [])?.episodes.get(s) ?? null) : null
+        } else {
+            const reply = await retrying(key, `tv/${id}/season/${s}`, 'language=en-US')
+            if (reply.kind === 'ok') episodes = src.seasonOf(reply.json)
+            else if (reply.kind !== 'missing') return stop(reply)
+        }
+        refusedAt = 0
+        // A season airs on: its names and days come in, so it is kept a day, not the weeks of a title's page. "Not found" for an hour.
+        const response = json(episodes ? { found: true, episodes } : { found: false }, 200, { 'Cache-Control': `public, max-age=3600, s-maxage=${episodes ? DAY : 3600}`, 'X-Poster-Cache': 'miss' })
+        if (deps.cache) {
+            const put = deps.cache.put(cacheKey, response.clone()).catch(() => {})
+            deps.later?.(put)
+        }
         return response
     }
 
@@ -487,7 +585,7 @@ export function createHandler(deps: Deps) {
         if (refusedAt && now() - refusedAt < REFUSED_RETRY) return unavailable('refused', (REFUSED_RETRY - (now() - refusedAt)) / 1000)
         // MetaApis.extras: the title's own page with its credits, videos and age ratings appended; videos in English and with no language.
         // The logos come with them (MetaApis.logos), English or wordless, so the page needs no second call.
-        const append = film ? 'credits,videos,release_dates,images' : 'aggregate_credits,videos,content_ratings,external_ids,images'
+        const append = film ? 'credits,videos,release_dates,images' : 'aggregate_credits,videos,content_ratings,external_ids,images,episode_groups'
         const reply = await retrying(key, `${film ? 'movie' : 'tv'}/${id}`, `language=en-US&include_video_language=en,null&include_image_language=en,null&append_to_response=${append}`)
         const blocked = (r: Reply) => {
             const out = stopped(r)
@@ -496,16 +594,35 @@ export function createHandler(deps: Deps) {
         let body: { found: false } | Extras = { found: false }
         let ttl = MISS_TTL
         if (reply.kind === 'ok') {
-            const found = extras(reply.json, film, region)
+            let found = extras(reply.json, film, region)
             body = found
             ttl = FOUND_TTL
+            // A show TMDB lists as one season that an episode group splits (SeasonSplit): one more call, its answer kept a day.
+            let split: ReturnType<typeof buildSplit> = null
+            let cut = false
+            const chosen = film ? null : chooseGroup(found.seasonList, episodeGroups(reply.json))
+            if (chosen) {
+                const read = await groupEpisodes(key, url.origin, chosen.id)
+                if (read.kind === 'ok') split = buildSplit(chosen.id, read.episodes, found.seasonList)
+                else if (read.kind === 'stopped') cut = true
+            }
+            if (split) found = body = applySplit(found, split)
             if (!film && season !== null && episode !== null) {
-                // The episode's own name and words (MetaApis.episodes), only for the one the page is about.
-                const one = await retrying(key, `tv/${id}/season/${season}/episode/${episode}`, 'language=en-US')
-                if (one.kind === 'ok') {
+                // The episode's own name and words (MetaApis.episodes), only for the one the page is about; the split has its own.
+                const own = split ? splitEpisode(split, season, episode) : undefined
+                const one = own ? null : await retrying(key, `tv/${id}/season/${season}/episode/${episode}`, 'language=en-US')
+                if (own) found.episode = own
+                else if (one?.kind === 'ok') {
                     const still = typeof one.json.still_path === 'string' && FILE.test(one.json.still_path) ? one.json.still_path : null
                     found.episode = { name: String(one.json.name ?? '').trim(), overview: String(one.json.overview ?? '').trim(), still }
-                } else if (one.kind !== 'missing') return blocked(one)
+                } else if (one && one.kind !== 'missing') return blocked(one)
+            }
+            // The group could not be read (throttled, dropped): TMDB's own seasons stand for now, and nothing is kept.
+            if (cut) {
+                refusedAt = 0
+                // Without `groupsRead`: this answer did not know the groups, so a page that kept it would ask again (and never keep it, no-store).
+                const { groupsRead: _unread, ...unsettled } = body as Extras
+                return json(unsettled, 200, { 'Cache-Control': 'no-store', 'X-Poster-Cache': 'miss' })
             }
         } else if (reply.kind !== 'missing') {
             return blocked(reply)
@@ -927,6 +1044,7 @@ export function createHandler(deps: Deps) {
         if (url.pathname === '/tmdb/poster') return poster(request, url, env)
         if (url.pathname === '/tmdb/search') return search(url, env)
         if (url.pathname === '/tmdb/extras') return details(url, env)
+        if (url.pathname === '/tmdb/season') return seasonAnswer(request, url, env)
         if (url.pathname === '/tmdb/anime') return anime(url, env)
         if (url.pathname === '/tmdb/skip') return skip(url)
         if (url.pathname.startsWith('/tmdb/img/')) return image(url)

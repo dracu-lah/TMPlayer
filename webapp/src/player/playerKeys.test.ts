@@ -143,6 +143,7 @@ for (const isMac of [false, true]) {
             'keys.row_seek_5min': [isMac ? { do: 'seek', by: -300 } : { do: 'seek', by: 300 }],
             'keys.row_chapter': [{ do: 'chapter', forward: false }, { do: 'chapter', forward: true }],
             'keys.row_frame_step': [{ do: 'frame', forward: false }, { do: 'frame', forward: true }],
+            'player.rotate_picture': [{ do: 'rotate' }],
             'keys.row_ab_repeat': [{ do: 'repeat' }],
             'keys.row_bookmark': [{ do: 'bookmark' }],
             'keys.row_wheel_seek': [],

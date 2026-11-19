@@ -3,6 +3,10 @@
 // or creators), the cast and a trailer. core's MetaApis.tmdbExtras and MetaRules, ported for the
 // worker (it runs on Cloudflare and cannot load the Kotlin module); extras.test.ts holds the cases of
 // the apps' MetaExtrasTest. A change to the Kotlin rules is a change here. Only fields MetaExtras has.
+// Also SeasonSplit (a show TMDB lists as one season that an episode group splits, Blue Box: 37 as
+// 25 + 12), the part of the apps' season guide the worker has to do: extras.test.ts holds the cases of
+// the apps' SeasonSplitTest and the garbage of GarbageInputTest.
+import { MAX_EPISODES, MAX_NUMBER, MAX_SEASONS, placeholder, type GroupEpisode, type ListedEpisode } from '../src/animeGuide.ts'
 
 /** MetaRules.MIN_VOTES, CAST_LIMIT. */
 const MIN_VOTES = 25
@@ -48,6 +52,13 @@ export interface Extras {
     logo: string | null
     /** The episode's own name, words and picture, when asked for (a show's episode). */
     episode?: { name: string; overview: string; still: string | null }
+    /** The TMDB episode group whose split `seasonList` and `next` follow (SeasonSplit); null for every other title. */
+    seasonGroup?: string | null
+    /** TMDB's own seasons and next episode, kept beside a split for a chat numbered TMDB's way. */
+    listedSeasons?: SeasonStop[]
+    listedNext?: { season: number; episode: number; airDate: string } | null
+    /** The answer was made knowing the show's episode groups: absent in one kept before (the page asks again). */
+    groupsRead?: true
 }
 
 type Json = Record<string, any>
@@ -182,5 +193,170 @@ export function extras(json: Json, film: boolean, region: string): Extras {
         next: film ? null : nextEpisode(json.next_episode_to_air),
         imdb: /^tt\d+$/.test(imdb) ? imdb : null,
         logo: logo(objects(json.images?.logos)),
+        seasonGroup: null,
+        listedSeasons: [],
+        listedNext: null,
+        groupsRead: true,
     }
+}
+
+// ---- the season split (SeasonSplit) ----------------------------------------------------------------
+
+/** TmdbApi.MAX_GROUPS and MAX_GROUP_NAME: more groups than any show has, and the longest name kept. */
+const MAX_GROUPS = 100
+const MAX_GROUP_NAME = 200
+/** A group's id as TMDB writes it (24 hex), and as the worker may pass it on. */
+export const GROUP_ID = /^[A-Za-z0-9_-]{4,64}$/
+/** The share of a show's episodes (tenths) a group must hold to stand for the whole show. */
+const SHARE_TENTHS = 9
+
+/** One TMDB episode group: its id, its type (2 is "Absolute order"), how many episodes it holds, its name and how many groups (seasons, cours, discs) it splits them into. */
+export interface EpisodeGroup {
+    id: string
+    type: number
+    episodes: number
+    name: string
+    groups: number
+}
+
+const whole = (v: unknown, lo: number, hi: number): number | null => {
+    const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() ? Number(v) : NaN
+    return Number.isFinite(n) && Math.trunc(n) >= lo && Math.trunc(n) <= hi ? Math.trunc(n) : null
+}
+
+/** TmdbApi.episodeGroups: the `episode_groups.results` of a show's page, the ones with a sane id; garbage skipped, the rest capped. */
+export function episodeGroups(json: Json): EpisodeGroup[] {
+    const results = json?.episode_groups && typeof json.episode_groups === 'object' ? json.episode_groups.results : null
+    return objects(results)
+        .slice(0, MAX_GROUPS * 2)
+        .flatMap((g): EpisodeGroup[] => {
+            const id = typeof g.id === 'string' ? g.id.trim() : ''
+            if (!GROUP_ID.test(id)) return []
+            return [
+                {
+                    id,
+                    type: whole(g.type, 0, 100) ?? 0,
+                    episodes: whole(g.episode_count, 0, 1e7) ?? 0,
+                    name: typeof g.name === 'string' ? g.name.trim().slice(0, MAX_GROUP_NAME) : '',
+                    groups: whole(g.group_count, 0, 1e7) ?? 0,
+                },
+            ]
+        })
+        .slice(0, MAX_GROUPS)
+}
+
+/**
+ * SeasonSplit.choose: the group that splits `seasons` (the show's page) into seasons, or null. Only for a
+ * show TMDB lists as exactly one numbered season; a group stands for it when it holds at least 90% of that
+ * season's episodes (and not more than twice as many) in more groups than one. "Absolute order" groups
+ * are left out. The fewest groups wins, then a name starting with "Season", then the most episodes.
+ */
+export function chooseGroup(seasons: readonly SeasonStop[], groups: readonly EpisodeGroup[]): EpisodeGroup | null {
+    const numbered = [...new Map(seasons.filter((s) => s.number > 0).map((s) => [s.number, s])).values()]
+    if (numbered.length !== 1) return null
+    const total = numbered.reduce((n, s) => n + Math.min(Math.max(s.episodes, 0), MAX_EPISODES), 0)
+    if (total < 2) return null
+    const least = Math.ceil((total * SHARE_TENTHS) / 10)
+    const seasonFirst = (g: EpisodeGroup) => (g.name.trim().toLowerCase().startsWith('season') ? 0 : 1)
+    return (
+        groups
+            .slice(0, MAX_GROUPS)
+            .filter((g) => g.type !== 2 && g.id && g.episodes >= least && g.episodes <= total * 2 && g.groups >= numbered.length + 1 && g.groups <= MAX_SEASONS)
+            .sort((a, b) => a.groups - b.groups || seasonFirst(a) - seasonFirst(b) || b.episodes - a.episodes || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))[0] ?? null
+    )
+}
+
+/** A show's seasons as buildSplit makes them from one TMDB episode group. */
+export interface Split {
+    group: string
+    seasons: SeasonStop[]
+    /** Each season's episodes, numbered from one. */
+    episodes: Map<number, ListedEpisode[]>
+    /** Where each of TMDB's own episodes ("season:episode") landed: the split's season and number. */
+    places: Map<string, [number, number]>
+}
+
+const placeKey = (season: number, episode: number) => `${season}:${episode}`
+
+/**
+ * SeasonSplit.build: the group's seasons, each with its episodes numbered from one in the group's order.
+ * Specials (TMDB's season 0) are dropped, an episode the group files twice is taken once, and an
+ * untitled one TMDB calls "Episode 32" is no name in season 2 where it is episode 7. Null when fewer
+ * than two seasons come out, or when the group holds less than 90% of the `listed` episodes.
+ */
+export function buildSplit(group: string, episodes: readonly GroupEpisode[], listed: readonly SeasonStop[]): Split | null {
+    const total = listed.filter((s) => s.number > 0).reduce((n, s) => n + Math.min(Math.max(s.episodes, 0), MAX_EPISODES), 0)
+    const sorted = episodes
+        .slice(0, MAX_EPISODES * 2)
+        .filter((e) => e && e.piece && e.season > 0 && e.episode >= 1 && e.episode <= MAX_NUMBER)
+        .sort((a, b) => a.groupOrder - b.groupOrder || a.order - b.order)
+    const seen = new Set<string>()
+    const byGroup = new Map<number, GroupEpisode[]>()
+    for (const e of sorted) {
+        if (seen.has(placeKey(e.season, e.episode))) continue
+        seen.add(placeKey(e.season, e.episode))
+        const list = byGroup.get(e.groupOrder)
+        if (list) list.push(e)
+        else byGroup.set(e.groupOrder, [e])
+    }
+    const groups = [...byGroup.values()].map((l) => l.slice(0, MAX_EPISODES)).filter((l) => l.length).slice(0, MAX_SEASONS)
+    if (groups.length < 2) return null
+    if (groups.reduce((n, l) => n + l.length, 0) * 10 < total * SHARE_TENTHS) return null
+    const places = new Map<string, [number, number]>()
+    const bySeason = new Map<number, ListedEpisode[]>()
+    const seasons = groups.map((list, gi): SeasonStop => {
+        const season = gi + 1
+        bySeason.set(
+            season,
+            list.map((e, i) => {
+                places.set(placeKey(e.season, e.episode), [season, i + 1])
+                const name = (e.piece.name ?? '').trim()
+                return {
+                    number: i + 1,
+                    // TMDB's "Episode 32" for an untitled one numbers it in the show's own count, not the season's.
+                    name: placeholder(name, e.episode) ? '' : name,
+                    overview: e.piece.overview ?? '',
+                    still: e.piece.still ?? null,
+                    airDate: e.piece.airDate ?? null,
+                    runtime: e.piece.runtime ?? null,
+                }
+            }),
+        )
+        const first = list.map((e) => e.piece.airDate).filter((d): d is string => !!d).sort()[0] ?? null
+        return { number: season, episodes: list.length, airDate: first }
+    })
+    return { group, seasons, episodes: bySeason, places }
+}
+
+/**
+ * Split.next: TMDB's next episode (numbered its way) in the split's numbering. One the group has not
+ * filed yet but that follows the last episode it has is counted on in the last season; any other the
+ * split cannot place is null rather than labelled wrong.
+ */
+export function splitNext(split: Split, airing: Extras['next']): Extras['next'] {
+    if (!airing) return null
+    const at = split.places.get(placeKey(airing.season, airing.episode))
+    if (at) return { season: at[0], episode: at[1], airDate: airing.airDate }
+    const last = split.seasons[split.seasons.length - 1]
+    if (!last) return null
+    let lastListed = 0
+    for (const key of split.places.keys()) {
+        const [s, e] = key.split(':').map(Number)
+        if (s === airing.season && e > lastListed) lastListed = e
+    }
+    const home = split.places.get(placeKey(airing.season, lastListed))
+    if (!lastListed || airing.episode <= lastListed || home?.[0] !== last.number) return null
+    const number = last.episodes + (airing.episode - lastListed)
+    return number >= 1 && number <= MAX_NUMBER ? { season: last.number, episode: number, airDate: airing.airDate } : null
+}
+
+/** Split.applyTo: `found` (TMDB's, of the show this split is of) with the split's seasons, TMDB's own kept beside. */
+export function applySplit(found: Extras, split: Split): Extras {
+    return { ...found, seasons: split.seasons.length, seasonList: split.seasons, next: splitNext(split, found.next), seasonGroup: split.group, listedSeasons: found.seasonList, listedNext: found.next }
+}
+
+/** A split season's episode `number`, as the page about it asks (the episode's own name, words and picture). */
+export function splitEpisode(split: Split, season: number, number: number): Extras['episode'] | undefined {
+    const e = split.episodes.get(season)?.find((x) => x.number === number)
+    return e ? { name: e.name, overview: e.overview, still: e.still } : undefined
 }
