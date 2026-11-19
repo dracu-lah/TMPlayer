@@ -4,6 +4,7 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, type JSX } from 'solid-js'
 import { createWindowVirtualizer } from '@tanstack/solid-virtual'
 import { form } from '../form'
+import { FIRST_CONTROL, gridTarget, isTextField, rowOf } from './shellKeys'
 
 /** One of the TV app's dp at this window's size, as tv.css's --dp: 960 x 540 dp fill the screen. */
 export const tvDp = () => Math.min(window.innerWidth / 960, window.innerHeight / 540)
@@ -89,8 +90,51 @@ export function VirtualGrid<T>(props: {
         [] as number[],
         { equals: (a, b) => a.length === b.length && a.every((n, i) => n === b[i]) },
     )
+    // Space under the floating bar that a focused item must clear, and above the top edge.
+    const CLEAR_BOTTOM = 96
+    const CLEAR_TOP = 12
+    const primary = (li: Element | null) => li?.querySelector<HTMLElement>(FIRST_CONTROL) ?? null
+    const settle = (target: HTMLElement) => {
+        const r = target.getBoundingClientRect()
+        if (r.bottom > window.innerHeight - CLEAR_BOTTOM) window.scrollBy(0, r.bottom - (window.innerHeight - CLEAR_BOTTOM))
+        else if (r.top < CLEAR_TOP) window.scrollBy(0, r.top - CLEAR_TOP)
+    }
+    let frame = 0
+    onCleanup(() => cancelAnimationFrame(frame))
+    // Takes the keyboard to item `to`: drawn already, or scrolled to first (only a few rows are in the page) and taken a frame later.
+    const focusItem = (to: number) => {
+        cancelAnimationFrame(frame)
+        const take = () => {
+            const target = primary(el.querySelector(`li[data-item="${to}"]`))
+            if (!target) return false
+            target.focus({ preventScroll: true })
+            settle(target)
+            return true
+        }
+        if (take()) return
+        const row = rowOf(ranges(), to)
+        if (row < 0) return
+        v.scrollToIndex(row, { align: 'auto' })
+        let tries = 0
+        const wait = () => {
+            if (!take() && ++tries < 30) frame = requestAnimationFrame(wait)
+        }
+        frame = requestAnimationFrame(wait)
+    }
+    // The arrows, Home, End, Page keys walk the items, not the page (HX17); the TV's remote has its own walk (tv/focus.ts).
+    const onKeys = (e: KeyboardEvent) => {
+        if (e.defaultPrevented || form() === 'tv') return
+        const from = e.target instanceof Element ? e.target : null
+        const li = from?.closest('li[data-item]') ?? null
+        if (!li || !el.contains(li) || isTextField(from as HTMLElement) || from !== primary(li)) return
+        const at = Number((li as HTMLElement).dataset.item)
+        const to = gridTarget(e.key, { ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey, shift: e.shiftKey }, at, ranges(), Math.floor(window.innerHeight / layout().estimate))
+        if (to === null) return
+        e.preventDefault()
+        focusItem(to)
+    }
     return (
-        <div ref={el} class="vgrid" role="list" aria-label={props.label} style={{ height: `${v.getTotalSize()}px` }}>
+        <div ref={el} class="vgrid" role="list" aria-label={props.label} style={{ height: `${v.getTotalSize()}px` }} onKeyDown={onKeys}>
             {/* Keyed by the row's number: the virtualizer hands out new row objects at every scroll or
                 measure, and a row kept by its object was built again (and every card in it drawn again). */}
             <For each={rowNumbers()}>
@@ -109,7 +153,7 @@ export function VirtualGrid<T>(props: {
                             ref={(r) => queueMicrotask(() => r.isConnected && v.measureElement(r))}
                             style={{ transform: `translateY(${(row()?.start ?? 0) - top()}px)`, '--cols': layout().cols }}
                         >
-                            <For each={cells()}>{(item, i) => <li role="listitem" classList={{ wide: !!props.wide?.(item) }}>{props.children(item, first() + i())}</li>}</For>
+                            <For each={cells()}>{(item, i) => <li role="listitem" data-item={first() + i()} classList={{ wide: !!props.wide?.(item) }}>{props.children(item, first() + i())}</li>}</For>
                         </ul>
                     )
                 }}
