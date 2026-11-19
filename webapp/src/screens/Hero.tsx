@@ -3,6 +3,7 @@ import { A, useNavigate } from '@solidjs/router'
 import { ArrowLeft01Icon, ArrowRight01Icon, InformationCircleIcon, PlayIcon } from '@hugeicons/core-free-icons'
 import { t } from '../i18n'
 import { Icon } from '../ui/Icon'
+import { form } from '../form'
 import { answer, askOf, loadBackdropLightFirst, loadExtras, loadLogo, type Answer, type Extras } from './posters'
 import { settings } from '../store'
 import { TitleLogo } from '../ui/TitleLogo'
@@ -31,12 +32,13 @@ let lastKey: string | null = null
 /**
  * Home's carousel on a phone and a desktop (FeaturedCarousel): the newest five in Recently added,
  * one picture across the top of Home with the name (its logo where TMDB has one), a line of facts,
- * the overview, Play (or Resume) as the bright pill with Details beside it, and the page dots with
- * an arrow either side. One picture cross-fades under the pages and the words cross-fade in place.
- * The arrows show while the pointer is over the carousel, the keyboard is in it, and for a while
- * after a touch; Tab reaches the carousel (a ring round it), Left and Right turn the page, Enter
- * opens its details and Space plays it. A drag, a swipe and a touchpad's sideways scroll turn one
- * page a gesture. It moves on by itself only while the tab is in sight, the pointer and the
+ * the overview, Play (or Resume) as the bright pill with Details beside it, and the page dots. One
+ * picture cross-fades under the pages and the words cross-fade in place. On a phone the dots have
+ * an arrow either side, shown while the keyboard is in the carousel and for a while after a touch.
+ * The desktop has no arrows (HX65, decision D1, as the desktop app): its pages turn by the clickable
+ * dots, Left and Right, a drag, a swipe and a touchpad's sideways scroll. Tab reaches the carousel
+ * (a ring round it), Left and Right turn the page, Enter opens its details and Space plays it. A
+ * drag, a swipe and a touchpad's sideways scroll turn one page a gesture. It moves on by itself only while the tab is in sight, the pointer and the
  * keyboard are elsewhere, nothing is held or touched, motion is allowed and the page was touched
  * in the last minute, so a Home left open stops drawing. Its height is held from the first frame
  * (the skeleton is as tall), so the rows under it never move when it fills.
@@ -86,6 +88,8 @@ export function Hero(props: { rows: HomeRow[] | undefined }) {
         for (const e of ['pointerdown', 'keydown', 'wheel', 'touchstart'] as const) removeEventListener(e, touched)
     })
     const still = matchMedia('(prefers-reduced-motion: reduce)').matches
+    // The desktop turns pages by its dots, keys, drag and swipe, with no arrow buttons (D1); the phone keeps them.
+    const arrows = () => form() !== 'desktop'
     const paused = () => over() || within() || held() || touchShown()
     createEffect(() => {
         const n = picks()?.length ?? 0
@@ -100,6 +104,7 @@ export function Hero(props: { rows: HomeRow[] | undefined }) {
     // A touch shows the arrows for a while.
     let touchTimer = 0
     const touchArrows = () => {
+        if (!arrows()) return
         setTouchShown(true)
         clearTimeout(touchTimer)
         touchTimer = window.setTimeout(() => setTouchShown(false), TOUCH_ARROWS_MS)
@@ -211,7 +216,7 @@ export function Hero(props: { rows: HomeRow[] | undefined }) {
                 tabindex="0"
                 aria-roledescription="carousel"
                 aria-label={t('home.row_recent')}
-                data-arrows={(over() || within() || touchShown()) && (picks()?.length ?? 0) > 1 ? '' : undefined}
+                data-arrows={arrows() && (over() || within() || touchShown()) && (picks()?.length ?? 0) > 1 ? '' : undefined}
                 onPointerEnter={(e) => e.pointerType === 'mouse' && setOver(true)}
                 onPointerLeave={(e) => {
                     setOver(false)
@@ -245,11 +250,13 @@ export function Hero(props: { rows: HomeRow[] | undefined }) {
                     </For>
                     <Show when={(picks()?.length ?? 0) > 1}>
                         <div class="hero-nav">
-                            <span class="hero-arrow-slot">
-                                <button type="button" class="round-button hero-arrow" tabindex="-1" aria-label={t('home.row_scroll_back')} title={t('home.row_scroll_back')} onClick={() => go(index() - 1)}>
-                                    <Icon icon={ArrowLeft01Icon} size={22} />
-                                </button>
-                            </span>
+                            <Show when={arrows()}>
+                                <span class="hero-arrow-slot">
+                                    <button type="button" class="round-button hero-arrow" tabindex="-1" aria-label={t('home.row_scroll_back')} title={t('home.row_scroll_back')} onClick={() => go(index() - 1)}>
+                                        <Icon icon={ArrowLeft01Icon} size={22} />
+                                    </button>
+                                </span>
+                            </Show>
                             <div class="hero-dots" role="tablist" aria-label={t('home.featured_page', { index: index() + 1, count: picks()!.length })}>
                                 <For each={picks()!}>
                                     {(_, i) => (
@@ -264,11 +271,13 @@ export function Hero(props: { rows: HomeRow[] | undefined }) {
                                     )}
                                 </For>
                             </div>
-                            <span class="hero-arrow-slot">
-                                <button type="button" class="round-button hero-arrow" tabindex="-1" aria-label={t('home.row_scroll_on')} title={t('home.row_scroll_on')} onClick={() => go(index() + 1)}>
-                                    <Icon icon={ArrowRight01Icon} size={22} />
-                                </button>
-                            </span>
+                            <Show when={arrows()}>
+                                <span class="hero-arrow-slot">
+                                    <button type="button" class="round-button hero-arrow" tabindex="-1" aria-label={t('home.row_scroll_on')} title={t('home.row_scroll_on')} onClick={() => go(index() + 1)}>
+                                        <Icon icon={ArrowRight01Icon} size={22} />
+                                    </button>
+                                </span>
+                            </Show>
                         </div>
                     </Show>
                 </Show>
