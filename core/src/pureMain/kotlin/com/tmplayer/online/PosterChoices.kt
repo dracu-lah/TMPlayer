@@ -15,7 +15,12 @@ data class PosterChoice(
     val originalLanguage: String,
     val overview: String,
     val posterUrl: String?,
+    /** The title in the language it was made in, when TMDB gives one other than [title]; blank otherwise. */
+    val originalTitle: String = "",
 ) {
+    /** "tmdb:film:123" or "tmdb:show:456", as [com.tmplayer.data.SameTitle.onlineKey] names a match. */
+    val onlineKey: String get() = "tmdb:${if (show) "show" else "film"}:$tmdbId"
+
     val pick: PosterPick get() = PosterPick(tmdbId, show)
 
     /** Whether this is the title [info] stands for: the one a tile is showing now. */
@@ -47,6 +52,9 @@ object PosterChoiceRules {
     /** The longest overview line kept per title. */
     const val OVERVIEW_MAX = 140
 
+    /** The longest title kept: longer than any real one, so a runaway answer cannot fill a row. */
+    const val TITLE_MAX = 200
+
     /**
      * [lists] (each the answer of one search, films or shows, with the year or without it) merged
      * into one list: a title once however many searches found it, the closest to [query] first
@@ -73,16 +81,18 @@ object PosterChoiceRules {
                     .thenBy { it.order },
             )
             .take(LIMIT)
-            .map { entry ->
+            .mapNotNull { entry ->
                 val c = entry.candidate
+                val title = c.names.firstOrNull { it.isNotBlank() }?.trim()?.take(TITLE_MAX) ?: return@mapNotNull null
                 PosterChoice(
-                    tmdbId = c.id.toInt(),
+                    tmdbId = c.id.toIntOrNull() ?: 0,
                     show = entry.show,
-                    title = c.names.first { it.isNotBlank() },
+                    title = title,
                     year = c.year,
                     originalLanguage = c.originalLanguage.lowercase().take(3),
                     overview = c.overview.trim().replace(Regex("""\s+"""), " ").take(OVERVIEW_MAX),
                     posterUrl = c.posterUrl,
+                    originalTitle = c.names.drop(1).firstOrNull { it.isNotBlank() && it.trim() != title }?.trim()?.take(TITLE_MAX).orEmpty(),
                 )
             }
     }
