@@ -4,12 +4,9 @@ import com.tmplayer.ui.theme.collectIsFocusVisibleAsState
 import com.tmplayer.ui.theme.focusDrawn
 import com.tmplayer.ui.theme.focusRingColor
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -138,8 +135,8 @@ import kotlinx.coroutines.withContext
  *   however long its momentum runs on ([SwipeSteps]); the plain wheel is left to the page, which
  *   scrolls on under the carousel as anywhere else;
  * - a drag with the mouse or a finger, which snaps to the nearer page;
- * - the arrows at the sides, shown while the pointer is over the carousel, while the keyboard is in
- *   it, and for a while after a touch, so a touch screen without hover has them too;
+ * - the dots at the foot, each a button for its page (no arrow buttons at the sides: a hero picture
+ *   with buttons floating over it was clutter, HX65; the rows below keep their arrows);
  * - Left and Right once the carousel has the keyboard (Tab reaches it, with a ring round it), with
  *   Enter for the page's details and Space to play it, as on Home's cards.
  *
@@ -189,17 +186,17 @@ internal fun FeaturedCarousel(
         val dragged by pager.interactionSource.collectIsDraggedAsState()
         var focusedWithin by remember { mutableStateOf(false) }
         var focusedSelf by remember { mutableStateOf(false) }
-        // A touch shows the arrows for a while: a touch screen has no hover to show them with.
+        // A touch holds the pages still for a while: a touch screen has no hover to hold them with.
         var touchedAt by remember { mutableStateOf(0L) }
-        var touchShown by remember { mutableStateOf(false) }
+        var touchHeld by remember { mutableStateOf(false) }
         LaunchedEffect(touchedAt) {
             if (touchedAt == 0L) return@LaunchedEffect
-            touchShown = true
-            delay(TOUCH_ARROWS_MS)
-            touchShown = false
+            touchHeld = true
+            delay(TOUCH_HOLD_MS)
+            touchHeld = false
         }
         val auto = count > 1 && !still
-        val paused = hovered || focusedWithin || dragged || touchShown
+        val paused = hovered || focusedWithin || dragged || touchHeld
         val progress = remember { Animatable(0f) }
         var progressPage by remember { mutableIntStateOf(-1) }
         val settled = pager.settledPage
@@ -359,22 +356,16 @@ internal fun FeaturedCarousel(
                 )
             }
             // Which page is up, at the foot of the end, level with Play; a click goes to that page.
-            // The arrows stand either side of it: beside the picture's middle they covered a tall
-            // title logo, and in a narrow window the words themselves.
-            Row(
-                Modifier
+            // The pages also turn by the arrow keys, a drag, a sideways swipe and the auto advance.
+            CarouselDots(
+                count = count,
+                current = pager.currentPage,
+                onPick = { page -> go(page) },
+                modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(end = side, bottom = PAGE_FOOT + (com.tmplayer.ui.browse.HERO_PILL_HEIGHT - ARROW_SIZE) / 2),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                // Pointer and touch only: the keyboard turns the pages with the arrow keys. Each
-                // keeps its place while hidden, so the dots never move when they come and go.
-                val arrows = count > 1 && (hovered || focusedWithin || touchShown)
-                if (count > 1) ArrowSlot(arrows) { ArrowButton(TmIcons.ArrowBack, s.homeRowScrollBack) { go(target - 1) } }
-                CarouselDots(count = count, current = pager.currentPage, onPick = { page -> go(page) })
-                if (count > 1) ArrowSlot(arrows) { ArrowButton(TmIcons.ArrowForward, s.homeRowScrollOn) { go(target + 1) } }
-            }
+                    .padding(end = side, bottom = PAGE_FOOT + (com.tmplayer.ui.browse.HERO_PILL_HEIGHT - DOTS_ROW) / 2)
+                    .height(DOTS_ROW),
+            )
         }
     }
 }
@@ -502,20 +493,7 @@ private fun FeaturedPage(
     }
 }
 
-@Composable
-private fun ArrowButton(icon: ImageVector, label: String, onClick: () -> Unit) {
-    RoundButton(icon, label, size = ARROW_SIZE, onClick = onClick)
-}
-
-/** An arrow's place beside the dots, held while the arrow is hidden. */
-@Composable
-private fun ArrowSlot(shown: Boolean, arrow: @Composable () -> Unit) {
-    Box(Modifier.size(ARROW_SIZE)) {
-        AnimatedVisibility(shown, enter = fadeIn(), exit = fadeOut()) { arrow() }
-    }
-}
-
-/** A round button over the picture in the floating look: Details, the arrows. */
+/** A round button over the picture in the floating look: Details. */
 @Composable
 private fun RoundButton(icon: ImageVector, label: String, size: Dp, onClick: () -> Unit) {
     val press = remember { MutableInteractionSource() }
@@ -635,8 +613,8 @@ private const val ADVANCE_MS = 6_000
 /** How far into the next page a mouse drag has to carry the picture to turn to it. */
 private const val DRAG_TURN = 0.2f
 
-/** How long the arrows stay up after a touch. */
-private const val TOUCH_ARROWS_MS = 4_000L
+/** How long the pages hold still after a touch. */
+private const val TOUCH_HOLD_MS = 4_000L
 
 /** Wheel steps a sideways gesture has to move before it turns the page: half a notch. */
 private const val SWIPE_THRESHOLD = 0.5f
@@ -654,8 +632,8 @@ private val TOP_FADE = 48.dp
 /** The facts and the overview: a comfortable measure for three lines. */
 private val INFO_WIDTH = 560.dp
 
-/** The arrows that turn the pages, beside the dots. */
-private val ARROW_SIZE = 44.dp
+/** The dots' row: a 44 dp target round the small marks. */
+private val DOTS_ROW = 44.dp
 private val WORDS_WIDTH = 640.dp
 
 /**

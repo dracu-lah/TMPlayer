@@ -237,6 +237,55 @@ class HomeScaleTest {
         assertTrue(!model.stalled.value)
     }
 
+    /**
+     * A hard scroll down Home (HX54): rows come on screen and leave again a few tens of
+     * milliseconds later, a hundred of them in three seconds, then one stays. Home must not say
+     * "Telegram is slow to answer" at any point (it sits just below the carousel), must not spend
+     * Telegram's search budget on rows nobody saw, and must draw the row the scroll rests on in time.
+     * Set TMPLAYER_HX54_OLD=1 to scroll as Home did before: every row asked the moment it appears.
+     */
+    @Test
+    fun `a hard scroll down home asks for nothing it flew past and never says telegram is slow`() = runTest(dispatcher, timeout = 5.minutes) {
+        val old = System.getenv("TMPLAYER_HX54_OLD") == "1"
+        val account = SyntheticAccount(backgroundScope, { testScheduler.currentTime })
+        val model = HomeViewModel(account.homeSource, work = dispatcher, disk = dispatcher, connected = MutableStateFlow(true), clock = { testScheduler.currentTime })
+        drive(account, model, MutableStateFlow(account.mainList()))
+        while (at() < 60_000L) advanceTimeBy(1_000)
+        val before = (account.calls["searchChatMessages"] ?: 0)
+        val floodsBefore = account.floodHits
+        var stalls = 0
+        var wasStalled = false
+        fun watch() {
+            if (model.stalled.value && !wasStalled) stalls++
+            wasStalled = model.stalled.value
+        }
+        // The rows far down Home: a chat whose row has not been read yet.
+        val rows = (41L..300L).filter { it !in model.loaded.value }.take(100)
+        assertEquals(100, rows.size)
+        val scrollAt = at()
+        for (id in rows) {
+            if (old) model.request(id) else model.rowShown(id)
+            repeat(2) { advanceTimeBy(15); watch() }
+            if (!old) model.rowGone(id)
+        }
+        val flick = (account.calls["searchChatMessages"] ?: 0) - before
+        val rest = 300L
+        val restAt = at()
+        if (old) model.request(rest) else model.rowShown(rest)
+        var restLoadedAt = -1L
+        while (at() < restAt + 30_000L) {
+            advanceTimeBy(100)
+            watch()
+            if (restLoadedAt < 0 && rest in model.loaded.value) restLoadedAt = at() - restAt
+        }
+        val searches = (account.calls["searchChatMessages"] ?: 0) - before
+        report("hard scroll (${if (old) "old" else "dwell"}): 100 rows in ${(restAt - scrollAt) / 1000.0} s, searches during the flick $flick, in all $searches, flood waits ${account.floodHits - floodsBefore}, stalls shown $stalls, resting row drawn after $restLoadedAt ms")
+        assertEquals("Telegram is slow to answer was shown", 0, stalls)
+        assertTrue("$flick searches for rows flown past", flick <= 12)
+        assertEquals("flood waits", 0, account.floodHits - floodsBefore)
+        assertTrue("the row the scroll rests on, drawn after $restLoadedAt ms", restLoadedAt in 0..2_000)
+    }
+
     /** Every chat a row draws a video from, including the folded shows and the videos behind "See all". */
     private fun chatsIn(rows: List<HomeRow>): Set<Long> {
         val out = HashSet<Long>()

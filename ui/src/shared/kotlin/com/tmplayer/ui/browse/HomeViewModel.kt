@@ -616,6 +616,36 @@ class HomeViewModel(
         fetchRow(chatId, fresh)
     }
 
+    /** Rows that came on screen and are waiting out [ROW_DWELL_MS] before they are asked for. */
+    private val dwelling = HashMap<Long, Job>()
+
+    /**
+     * A starred chat's row came on screen while scrolling (HX54). It is asked for once it has stayed
+     * [ROW_DWELL_MS], not at once: a hard scroll flies past dozens of rows, and each asked at the
+     * moment it appeared was three searches on Telegram's flood bucket, so a screenful of
+     * unanswered rows queued behind chats nobody was looking at and "Telegram is slow to answer"
+     * came up below the carousel. A row that leaves first is never asked ([rowGone]).
+     */
+    fun rowShown(chatId: Long) {
+        if (dwelling[chatId]?.isActive == true) return
+        dwelling[chatId] = viewModelScope.launch {
+            delay(ROW_DWELL_MS)
+            dwelling.remove(chatId)
+            request(chatId)
+        }
+    }
+
+    /**
+     * The row left the screen: its wait is dropped, and a fetch still queued (not running, not
+     * answered) is taken back, so the budget goes to the rows in view. Chats Home asks for up front
+     * ([EAGER_CHATS], which feed the carousel) are kept.
+     */
+    fun rowGone(chatId: Long) {
+        dwelling.remove(chatId)?.cancel()
+        if (order.take(EAGER_CHATS).contains(chatId)) return
+        fetches.withdraw("chat:$chatId")
+    }
+
     private fun fetchRow(chatId: Long, fresh: Boolean, minGapMs: Long = 0) {
         fetches.ask("chat:$chatId", fresh = fresh, minGapMs = minGapMs, before = if (fresh) ::untilIdle else null) {
             fetchChat(chatId)
@@ -929,6 +959,9 @@ class HomeViewModel(
          * The rest wait until their rows come on screen, however many chats are starred (HX8).
          */
         const val EAGER_CHATS = 8
+
+        /** How long a row stays on screen before it is asked for: a row scrolled past in a flick is not (HX54). */
+        const val ROW_DWELL_MS = 250L
 
         /** Rows a refresh asks again at once, from the top; the others when they next come on screen. */
         const val REFRESH_CHATS = 8

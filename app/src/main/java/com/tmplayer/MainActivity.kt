@@ -2052,6 +2052,14 @@ private fun Root() {
                             is HomeRow.Continue, is HomeRow.WatchLater, is HomeRow.Listed, is HomeRow.NewEpisodes -> Unit
                         }
                     },
+                    onHomeRowSeen = { row ->
+                        when (row) {
+                            is HomeRow.Chat -> homeViewModel.rowShown(row.chatId)
+                            is HomeRow.Recent -> homeViewModel.requestRecent()
+                            is HomeRow.Continue, is HomeRow.WatchLater, is HomeRow.Listed, is HomeRow.NewEpisodes -> Unit
+                        }
+                    },
+                    onHomeRowLeft = { row -> if (row is HomeRow.Chat) homeViewModel.rowGone(row.chatId) },
                     onHomeArtWanted = homeViewModel::requestArt,
                     homeFeedOf = homeViewModel::seeAll,
                     chatPaging = chatsViewModel.paging.collectAsStateWithLifecycle().value,
