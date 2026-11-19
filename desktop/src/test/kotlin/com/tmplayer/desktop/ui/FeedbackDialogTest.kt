@@ -50,7 +50,7 @@ class FeedbackDialogTest {
     private val sent = mutableListOf<String>()
     private val scope = CoroutineScope(Dispatchers.Unconfined)
 
-    private fun sender(answer: TitleUpload.Outcome = TitleUpload.Outcome.Sent("FB-7K3Q")) = FeedbackSender(
+    private fun sender(answer: TitleUpload.Outcome = TitleUpload.Outcome.Sent("FB-7K3Q-M4XP")) = FeedbackSender(
         MemoryFeedbackDraft(),
         upload = { text -> sent += text; answer },
         uploadLogs = { LogUpload.Outcome.Sent("TMP-7K3Q") },
@@ -119,7 +119,7 @@ class FeedbackDialogTest {
         waitForIdle()
         assertEquals(1, sent.size)
         onNodeWithTag(FeedbackTags.CODE).assertExists()
-        onNodeWithText("FB-7K3Q").assertExists()
+        onNodeWithText("FB-7K3Q-M4XP").assertExists()
         save("desktop-sent.png")
     }
 

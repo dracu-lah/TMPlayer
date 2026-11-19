@@ -69,7 +69,7 @@ class FeedbackTvContentTest {
 
     private fun sender() = FeedbackSender(
         MemoryFeedbackDraft(),
-        upload = { text -> sent += text; TitleUpload.Outcome.Sent("FB-7K3Q") },
+        upload = { text -> sent += text; TitleUpload.Outcome.Sent("FB-7K3Q-M4XP") },
         uploadLogs = { LogUpload.Outcome.Sent("TMP-7K3Q") },
     ).also { it.buildLogs = { "TMPlayer logs\nline" } }
 
@@ -154,7 +154,7 @@ class FeedbackTvContentTest {
         button(L.feedbackSend).assertIsFocused()
         press(Key.DirectionCenter)
         assertEquals(1, sent.size)
-        rule.onNodeWithText("FB-7K3Q").assertExists()
+        rule.onNodeWithText("FB-7K3Q-M4XP").assertExists()
         button(L.commonClose).assertIsFocused()
         shot("tv-sent.png")
     }

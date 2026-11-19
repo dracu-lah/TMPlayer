@@ -21,7 +21,7 @@ class FeedbackSenderTest {
     private val facts = Feedback.Facts("1.40.0", Feedback.Platform.Phone, "POCO X5, Android 14", "en")
     private val sent = mutableListOf<String>()
     private val logsSent = mutableListOf<String>()
-    private var answer: TitleUpload.Outcome = TitleUpload.Outcome.Sent("FB-7K3Q")
+    private var answer: TitleUpload.Outcome = TitleUpload.Outcome.Sent("FB-7K3Q-M4XP")
     private var logsAnswer: LogUpload.Outcome = LogUpload.Outcome.Sent("TMP-7K3Q")
     private var gate: CompletableDeferred<Unit>? = null
 
@@ -56,7 +56,7 @@ class FeedbackSenderTest {
         assertTrue(sent.isEmpty())
         s.send(this)
         advanceUntilIdle()
-        assertEquals("FB-7K3Q", assertIs<State.Sent>(s.state.value).code)
+        assertEquals("FB-7K3Q-M4XP", assertIs<State.Sent>(s.state.value).code)
         // What went is exactly what the review showed.
         assertEquals(listOf(review.report.toJson()), sent)
     }
@@ -105,7 +105,7 @@ class FeedbackSenderTest {
         advanceUntilIdle()
         val queued = assertIs<State.Queued>(s.state.value)
         assertNotNull(store.draft?.pending)
-        answer = TitleUpload.Outcome.Sent("FB-7K3Q")
+        answer = TitleUpload.Outcome.Sent("FB-7K3Q-M4XP")
         s.send(this)
         advanceUntilIdle()
         assertIs<State.Sent>(s.state.value)
@@ -249,7 +249,7 @@ class FeedbackSenderTest {
         s.send(this)
         advanceUntilIdle()
         assertIs<State.Queued>(s.state.value)
-        answer = TitleUpload.Outcome.Sent("FB-7K3Q")
+        answer = TitleUpload.Outcome.Sent("FB-7K3Q-M4XP")
         s.send(this)
         advanceUntilIdle()
         assertEquals(1, logsSent.size)
@@ -303,10 +303,94 @@ class FeedbackSenderTest {
         s.close(this)
         advanceUntilIdle()
         assertIs<State.Idle>(s.state.value)
-        assertNotNull(store.draft)
+        assertNotNull(store.draft?.pending)
+        // It opens again on Kept for later, the report it was sending still waiting.
+        s.open(this, FeedbackReport.Kind.Problem, facts)
+        advanceUntilIdle()
+        assertIs<State.Queued>(s.state.value)
         s.discard(this)
         advanceUntilIdle()
         assertNull(store.draft)
+    }
+
+    @Test
+    fun `unticked logs take their code with them, so the report says no logs and carries none`() = runTest {
+        val s = sender()
+        answer = TitleUpload.Outcome.NoConnection
+        write(s)
+        s.edit { it.copy(includeLogs = true) }
+        s.review(this)
+        advanceUntilIdle()
+        s.send(this)
+        advanceUntilIdle()
+        assertEquals("TMP-7K3Q", assertIs<State.Queued>(s.state.value).draft.logsCode)
+        s.back()
+        s.edit { it.copy(includeLogs = false) }
+        assertNull(assertIs<State.Editing>(s.state.value).draft.logsCode)
+        s.review(this)
+        advanceUntilIdle()
+        assertNull(assertIs<State.Review>(s.state.value).report.logs)
+        answer = TitleUpload.Outcome.Sent("FB-7K3Q-M4XP")
+        s.send(this)
+        advanceUntilIdle()
+        assertFalse(JSONObject(sent.last()).has("logs"))
+        // And the report itself never takes a code while unticked.
+        assertNull(FeedbackDraft(includeLogs = false, logsCode = "TMP-7K3Q").logsToSend)
+    }
+
+    @Test
+    fun `typing is kept on the device after a short rest, with nothing left running`() = runTest {
+        val store = MemoryFeedbackDraft()
+        val s = sender(store)
+        s.open(this, FeedbackReport.Kind.Problem, facts)
+        advanceUntilIdle()
+        s.edit { it.copy(message = "Half") }
+        s.edit { it.copy(message = "Half a thought") }
+        testScheduler.advanceTimeBy(FeedbackSender.SAVE_DELAY_MS / 2)
+        testScheduler.runCurrent()
+        assertNull(store.draft)
+        testScheduler.advanceTimeBy(FeedbackSender.SAVE_DELAY_MS)
+        testScheduler.runCurrent()
+        // Killed now, the words are there for the next start.
+        assertEquals("Half a thought", store.draft?.message)
+        assertEquals("Half a thought", assertIs<State.Editing>(sender(store).also { it.open(this, FeedbackReport.Kind.Problem, facts); advanceUntilIdle() }.state.value).draft.message)
+    }
+
+    @Test
+    fun `logs sent before a cancel keep their code, and Try again does not send them twice`() = runTest {
+        val store = MemoryFeedbackDraft()
+        val s = sender(store)
+        val held = CompletableDeferred<Unit>()
+        gate = held
+        write(s)
+        s.edit { it.copy(includeLogs = true) }
+        s.review(this)
+        advanceUntilIdle()
+        s.send(this)
+        advanceUntilIdle()
+        s.close(this)
+        advanceUntilIdle()
+        assertEquals("TMP-7K3Q", store.draft?.logsCode)
+        gate = null
+        s.open(this, FeedbackReport.Kind.Problem, facts)
+        advanceUntilIdle()
+        s.send(this)
+        advanceUntilIdle()
+        assertEquals(1, logsSent.size)
+        assertIs<State.Sent>(s.state.value)
+        held.complete(Unit)
+    }
+
+    @Test
+    fun `no status at all (a redirect, a captive portal) is kept for later, not refused`() = runTest {
+        val s = sender()
+        answer = TitleUpload.Outcome.Failed(0)
+        write(s)
+        s.review(this)
+        advanceUntilIdle()
+        s.send(this)
+        advanceUntilIdle()
+        assertIs<State.Queued>(s.state.value)
     }
 
     @Test

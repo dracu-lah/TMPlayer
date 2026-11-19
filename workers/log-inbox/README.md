@@ -60,15 +60,16 @@ the app's JSON for one message, which the viewer saw word for word before pressi
 - Control characters go, one line fields stay one line (so a field cannot forge a line of the
   file), every field is capped, unknown fields are dropped. The message is kept as written: one
   over the cap is refused (400 `message_too_long`), never cut.
-- Stored as `feedback/FB-XXXX-<id>.txt`, a short header (kind, version, platform, device, language,
-  logs code, reply contact) and then the message. The code comes from the id, so the same draft
+- Stored as `feedback/FB-XXXX-XXXX-<id>.txt`, a short header (kind, version, platform, device, language,
+  logs code, reply contact) and then the message. The code is worked out here from a SHA-256 of
+  the whole id (eight letters, so the sender cannot choose it or collide with another), so the same draft
   sent twice (a double press, a retry after a lost connection, the app killed part way) is one
   file: the second answers `200` with `duplicate:true`.
-- Answers `201 {"code":"FB-7K3Q","duplicate":false,"keepDays":30}`.
+- Answers `201 {"code":"FB-7K3Q-M4XP","duplicate":false,"keepDays":30}`.
 - Nothing else is kept: no address, user agent or header. 30 days, by the daily cron (`sweep`
   covers `feedback/` too) and by a third lifecycle rule (step 2 below).
 - To read them: `npx wrangler r2 object get tmplayer-log-inbox/feedback/<key> --remote`, or the
-  bucket's page in the dashboard (a prefix of `feedback/FB-7K3Q` finds the one a viewer quotes).
+  bucket's page in the dashboard (a prefix of `feedback/FB-7K3Q-M4XP` finds the one a viewer quotes).
 
 ## Deploying (the maintainer, once)
 

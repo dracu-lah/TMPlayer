@@ -102,8 +102,8 @@ class FeedbackReportTest {
 
     @Test
     fun `the inbox's answer is read for its code, its limit and its refusals`() {
-        assertEquals(TitleUpload.Outcome.Sent("FB-7K3Q"), FeedbackUpload.outcome(201, """{"code":"FB-7K3Q","duplicate":false}"""))
-        assertEquals(TitleUpload.Outcome.Sent("FB-7K3Q", duplicate = true), FeedbackUpload.outcome(200, """{"code":"FB-7K3Q","duplicate":true}"""))
+        assertEquals(TitleUpload.Outcome.Sent("FB-7K3Q-M4XP"), FeedbackUpload.outcome(201, """{"code":"FB-7K3Q-M4XP","duplicate":false}"""))
+        assertEquals(TitleUpload.Outcome.Sent("FB-7K3Q-M4XP", duplicate = true), FeedbackUpload.outcome(200, """{"code":"FB-7K3Q-M4XP","duplicate":true}"""))
         assertEquals(TitleUpload.Outcome.SlowDown(60), FeedbackUpload.outcome(429, null, "nonsense"))
         assertEquals(TitleUpload.Outcome.SlowDown(30), FeedbackUpload.outcome(429, null, "30"))
         assertIs<TitleUpload.Outcome.Failed>(FeedbackUpload.outcome(201, """{"code":"TMP-7K3Q"}"""))

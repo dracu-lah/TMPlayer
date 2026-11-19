@@ -33,7 +33,7 @@ export const KINDS = ['problem', 'feature'] as const
 export type Kind = (typeof KINDS)[number]
 
 const ALPHABET = '23456789ABCDEFGHJKMNPQRSTUVWXYZ'
-export const FEEDBACK_CODE = /^FB-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$/
+export const FEEDBACK_CODE = /^FB-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$/
 const ID = /^[0-9a-f]{32}$/
 const LOG_CODE = /^TMP-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$/
 
@@ -114,15 +114,21 @@ export function parseFeedback(text: string): Parsed {
   return { ok: true, feedback: { id: o.id, kind: o.kind as Kind, message, contact, logs, facts } }
 }
 
-/** FB-7K3Q from the draft's id: the same draft has the same code on every try. */
-export function feedbackCode(id: string): string {
-  let value = BigInt('0x' + id.slice(0, 16))
+/**
+ * FB-7K3Q-M4XP from the draft's id: worked out here, from a SHA-256 of the whole id, so the sender
+ * cannot pick it, and eight letters of 31 (about 850 billion), so two drafts never share one in
+ * practice. The same draft has the same code on every try.
+ */
+export async function feedbackCode(id: string): Promise<string> {
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(id)))
+  let value = 0n
+  for (const byte of digest.slice(0, 8)) value = (value << 8n) | BigInt(byte)
   let out = ''
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 8; i++) {
     out = ALPHABET[Number(value % 31n)] + out
     value /= 31n
   }
-  return `FB-${out}`
+  return `FB-${out.slice(0, 4)}-${out.slice(4)}`
 }
 
 /** The file the developer reads: the facts first, then the message as the viewer wrote it. */
@@ -152,7 +158,7 @@ export async function storeFeedback(bucket: Bucket, text: string): Promise<Feedb
   const parsed = parseFeedback(text)
   if (!parsed.ok) return { status: 400, error: parsed.error }
   const f = parsed.feedback
-  const code = feedbackCode(f.id)
+  const code = await feedbackCode(f.id)
   try {
     const stored = await bucket.put(`${FEEDBACK_PREFIX}${code}-${f.id}.txt`, new TextEncoder().encode(render(f, code)), {
       onlyIf: { etagDoesNotMatch: '*' },

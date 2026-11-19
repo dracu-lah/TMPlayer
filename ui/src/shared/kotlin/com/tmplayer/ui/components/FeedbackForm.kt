@@ -215,15 +215,15 @@ fun FeedbackBody(state: State, logsAvailable: Boolean, actions: FeedbackActions)
         }
         is State.Sending -> Busy(s.feedbackSending)
         is State.Sent -> {
-            // Large, in a monospace face, so it can be read out from across the room.
+            // Large, in a monospace face, so it can be read out from across the room; FB-7K3Q-M4XP fits a phone.
             Text(
                 state.code,
                 modifier = Modifier.fillMaxWidth().testTag(FeedbackTags.CODE),
                 style = MaterialTheme.typography.displaySmall.copy(
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 44.sp,
-                    letterSpacing = 3.sp,
+                    fontSize = 34.sp,
+                    letterSpacing = 2.sp,
                     textAlign = TextAlign.Center,
                 ),
                 color = Tone.accent,

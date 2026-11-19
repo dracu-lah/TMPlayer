@@ -166,6 +166,9 @@ data class FeedbackDraft(
     val pending: String? = null,
 ) {
 
+    /** The log report's code that goes with the words: only while "Add my logs" is ticked. */
+    val logsToSend: String? get() = logsCode.takeIf { includeLogs }
+
     /** Nothing worth keeping. */
     val isBlank: Boolean get() = message.isBlank() && contact.isBlank() && pending == null
 
@@ -209,7 +212,7 @@ data class FeedbackDraft(
 }
 
 /**
- * How the inbox's answer to feedback is read: `{"code":"FB-7K3Q","duplicate":false}`. The same
+ * How the inbox's answer to feedback is read: `{"code":"FB-7K3Q-M4XP","duplicate":false}`. The same
  * outcomes as a title report's ([TitleUpload.Outcome]). Reads text from outside, so it never throws.
  */
 object FeedbackUpload {
@@ -221,7 +224,7 @@ object FeedbackUpload {
 
     private const val MAX_REPLY_CHARS = 4_096
 
-    private val CODE_FIELD = Regex(""""code"\s*:\s*"(FB-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4})"""")
+    private val CODE_FIELD = Regex(""""code"\s*:\s*"(FB-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4})"""")
     private val DUPLICATE = Regex(""""duplicate"\s*:\s*true""")
 
     fun outcome(status: Int, body: String?, retryAfter: String? = null): TitleUpload.Outcome {

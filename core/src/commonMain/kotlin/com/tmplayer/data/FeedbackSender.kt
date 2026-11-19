@@ -33,8 +33,9 @@ class LogsPreview(val text: String) {
  * The steps behind "Report a problem" and "Request a feature" (HX64), apart from the screen so a
  * test can walk them. Nothing goes until the viewer has seen the confirm step and pressed Send.
  *
- *  - [State.Editing]: the form. What is typed is kept ([save] on leaving), so a closed window or a
- *    killed app loses nothing.
+ *  - [State.Editing]: the form. What is typed is kept on this device a moment after each change
+ *    (one short wait, nothing left running when idle) and again on leaving, so a closed window
+ *    or a killed app loses nothing.
  *  - [State.Review]: exactly what would be sent ([State.Review.report]) and, when "Add my logs" is
  *    ticked, the log report's size. Back returns to the form; Send sends.
  *  - [State.Sending], then [State.Sent] with the code, [State.Queued] when there is no connection,
@@ -85,6 +86,12 @@ class FeedbackSender(
 
     private var job: Job? = null
 
+    /** The one short wait before typing is kept; replaced by each change, done once it has written. */
+    private var saveJob: Job? = null
+
+    /** The scope the window was opened in, for keeping what is typed. */
+    private var saveScope: CoroutineScope? = null
+
     /**
      * Opens the form for [kind], over the stored draft when there is one (its kind is changed to
      * [kind] only while nothing is typed in it). A draft waiting to go opens on its queued step.
@@ -92,6 +99,7 @@ class FeedbackSender(
     fun open(scope: CoroutineScope, kind: FeedbackReport.Kind, facts: Feedback.Facts) {
         if (_state.value !is State.Idle) return
         _state.value = State.Opening
+        saveScope = scope
         job = scope.launch {
             val stored = runCatching { store.read() }.getOrNull()
             val draft = when {
@@ -104,13 +112,36 @@ class FeedbackSender(
         }
     }
 
-    /** The form changed. A changed draft that was tried before is a new one, with a new id. */
+    /**
+     * The form changed. A changed draft that was tried before is a new one, with a new id. Logs
+     * unticked take their code with them, so nothing of them goes. Kept on this device after
+     * [SAVE_DELAY_MS] of quiet.
+     */
     fun edit(change: (FeedbackDraft) -> FeedbackDraft) {
         val now = _state.value as? State.Editing ?: return
-        val next = change(now.draft).let { if (!logsAvailable) it.copy(includeLogs = false) else it }
-        val words = next.kind != now.draft.kind || next.message != now.draft.message || next.contact != now.draft.contact
-        val fresh = if (words && now.draft.pending != null) next.copy(id = FeedbackReport.newId(), pending = null) else next
+        val next = change(now.draft)
+            .let { if (!logsAvailable) it.copy(includeLogs = false) else it }
+            .let { if (!it.includeLogs) it.copy(logsCode = null) else it }
+        val changed = next.kind != now.draft.kind || next.message != now.draft.message ||
+            next.contact != now.draft.contact || next.includeLogs != now.draft.includeLogs
+        val fresh = if (changed && now.draft.pending != null) next.copy(id = FeedbackReport.newId(), pending = null) else next
         _state.value = now.copy(draft = fresh, problem = now.problem?.let { FeedbackReport.problem(fresh.message, fresh.contact) })
+        if (fresh != now.draft) saveSoon()
+    }
+
+    private fun saveSoon() {
+        val scope = saveScope ?: return
+        saveJob?.cancel()
+        saveJob = scope.launch {
+            delay(SAVE_DELAY_MS)
+            val editing = _state.value as? State.Editing ?: return@launch
+            runCatching { store.write(if (editing.draft.isBlank) null else editing.draft) }
+        }
+    }
+
+    private fun stopSaving() {
+        saveJob?.cancel()
+        saveJob = null
     }
 
     /** From the form to the confirm step; the form says what is wrong when it cannot go. */
@@ -121,6 +152,7 @@ class FeedbackSender(
             _state.value = now.copy(problem = problem)
             return
         }
+        stopSaving()
         persist(scope, now.draft)
         val logs = if (uploadLogs != null) buildLogs else null
         if (!now.draft.includeLogs || now.draft.logsCode != null || logs == null) {
@@ -147,7 +179,7 @@ class FeedbackSender(
     var buildLogs: (suspend () -> String?)? = null
 
     private fun toReview(draft: FeedbackDraft, facts: Feedback.Facts, logs: LogsPreview?) {
-        val report = FeedbackReport.of(draft.id, draft.kind, draft.message, draft.contact, draft.logsCode, facts)
+        val report = FeedbackReport.of(draft.id, draft.kind, draft.message, draft.contact, draft.logsToSend, facts)
         _state.value = if (report == null) {
             State.Editing(draft, facts, FeedbackReport.problem(draft.message, draft.contact) ?: FeedbackReport.Problem.Empty)
         } else {
@@ -192,7 +224,12 @@ class FeedbackSender(
         val sendLogs = uploadLogs
         if (draft.includeLogs && draft.logsCode == null && logs != null && sendLogs != null) {
             when (val got = sendLogs(logs.text)) {
-                is LogUpload.Outcome.Sent -> draft = draft.copy(logsCode = got.code)
+                is LogUpload.Outcome.Sent -> {
+                    // Kept the moment it exists: a cancel or a kill from here never sends the logs twice.
+                    draft = draft.copy(logsCode = got.code)
+                    runCatching { store.write(draft) }
+                    if (_state.value is State.Sending) _state.value = State.Sending(draft, facts)
+                }
                 is LogUpload.Outcome.SlowDown -> return queue(draft, facts, logs, got.retryAfterSeconds)
                 LogUpload.Outcome.NoConnection -> return queue(draft, facts, logs, 0)
                 // The inbox will not take this log: the words still go, and the result says the logs did not.
@@ -201,7 +238,7 @@ class FeedbackSender(
         } else if (draft.includeLogs && draft.logsCode == null) {
             logsMissed = true
         }
-        val report = FeedbackReport.of(draft.id, draft.kind, draft.message, draft.contact, draft.logsCode, facts)
+        val report = FeedbackReport.of(draft.id, draft.kind, draft.message, draft.contact, draft.logsToSend, facts)
         if (report == null) {
             _state.value = State.Editing(draft, facts, FeedbackReport.problem(draft.message, draft.contact) ?: FeedbackReport.Problem.Empty)
             return
@@ -209,13 +246,16 @@ class FeedbackSender(
         // Kept before it goes: the app killed while sending sends it at the next start, under the same id.
         draft = draft.copy(pending = report.toJson())
         runCatching { store.write(draft) }
+        // The window's step holds it too, so a Cancel now keeps it queued rather than writing it back without.
+        if (_state.value is State.Sending) _state.value = State.Sending(draft, facts)
         val outcome = upload(report.toJson())
         when {
             outcome is TitleUpload.Outcome.Sent -> {
                 runCatching { store.write(null) }
-                _state.value = State.Sent(outcome.code, draft.logsCode, logsMissed)
+                _state.value = State.Sent(outcome.code, draft.logsToSend, logsMissed)
             }
-            TitleUpload.worthRetrying(outcome) -> queue(draft, facts, logs, (outcome as? TitleUpload.Outcome.SlowDown)?.retryAfterSeconds ?: 0)
+            // No status at all (a redirect not followed, a captive portal): the line, not the report.
+            TitleUpload.worthRetrying(outcome) || (outcome as? TitleUpload.Outcome.Failed)?.status == 0 -> queue(draft, facts, logs, (outcome as? TitleUpload.Outcome.SlowDown)?.retryAfterSeconds ?: 0)
             else -> {
                 val status = (outcome as? TitleUpload.Outcome.Failed)?.status ?: 0
                 val kept = draft.copy(pending = null)
@@ -227,7 +267,7 @@ class FeedbackSender(
 
     private suspend fun queue(draft: FeedbackDraft, facts: Feedback.Facts, logs: LogsPreview?, wait: Int) {
         val kept = if (draft.pending == null) {
-            draft.copy(pending = FeedbackReport.of(draft.id, draft.kind, draft.message, draft.contact, draft.logsCode, facts)?.toJson())
+            draft.copy(pending = FeedbackReport.of(draft.id, draft.kind, draft.message, draft.contact, draft.logsToSend, facts)?.toJson())
         } else {
             draft
         }
@@ -236,13 +276,15 @@ class FeedbackSender(
     }
 
     /**
-     * Closes the window. What is typed stays on this device (a send in flight is cancelled and
-     * stays queued); a sent report leaves nothing behind.
+     * Closes the window. What is typed stays on this device. A send in flight is cancelled: once
+     * its report was put together it stays queued (it opens on Kept for later, and goes at the
+     * next start), and a log report already sent keeps its code. A sent report leaves nothing.
      */
     fun close(scope: CoroutineScope) {
         val now = _state.value
         job?.cancel()
         job = null
+        stopSaving()
         _state.value = State.Idle
         val keep = when (now) {
             is State.Editing -> now.draft
@@ -260,6 +302,7 @@ class FeedbackSender(
     fun discard(scope: CoroutineScope) {
         job?.cancel()
         job = null
+        stopSaving()
         _state.value = State.Idle
         scope.launch { runCatching { store.write(null) } }
     }
@@ -282,8 +325,11 @@ class FeedbackSender(
         if (outcome is TitleUpload.Outcome.Sent && _state.value is State.Idle) runCatching { store.write(null) }
     }
 
-    private companion object {
-        const val TAG = "FeedbackSender"
+    companion object {
+        private const val TAG = "FeedbackSender"
+
+        /** How long typing rests before it is kept on the device. */
+        const val SAVE_DELAY_MS = 1_500L
     }
 }
 

@@ -65,7 +65,7 @@ test('a report is filed under a code made from its id, and the code comes back',
   assert.equal(res.status, 201)
   const answer = (await res.json()) as { code: string; duplicate: boolean; keepDays: number }
   assert.match(answer.code, FEEDBACK_CODE)
-  assert.equal(answer.code, feedbackCode(ID))
+  assert.equal(answer.code, await feedbackCode(ID))
   assert.equal(answer.duplicate, false)
   assert.equal(answer.keepDays, KEEP_DAYS)
   assert.ok(e.bucket.objects.has(`${FEEDBACK_PREFIX}${answer.code}-${ID}.txt`))
@@ -256,7 +256,12 @@ test('the sweep clears feedback older than 30 days with the rest', async () => {
   assert.ok(bucket.objects.has(`${FEEDBACK_PREFIX}FB-3333-new.txt`))
 })
 
-test('codes only use letters and digits that are not mistaken for each other', () => {
-  assert.match(feedbackCode('00000000000000000000000000000000'), FEEDBACK_CODE)
-  assert.match(feedbackCode('ffffffffffffffffffffffffffffffff'), FEEDBACK_CODE)
+test('codes are eight letters from the whole id, worked out here, and differ for ids that share a head', async () => {
+  assert.match(await feedbackCode('00000000000000000000000000000000'), FEEDBACK_CODE)
+  assert.match(await feedbackCode('ffffffffffffffffffffffffffffffff'), FEEDBACK_CODE)
+  // Same first 16 hex digits, different tail: the old head-only code would have matched.
+  assert.notEqual(await feedbackCode('0123456789abcdef0000000000000000'), await feedbackCode('0123456789abcdef1111111111111111'))
+  const seen = new Set<string>()
+  for (let i = 0; i < 2000; i++) seen.add(await feedbackCode(i.toString(16).padStart(32, '0')))
+  assert.equal(seen.size, 2000)
 })
