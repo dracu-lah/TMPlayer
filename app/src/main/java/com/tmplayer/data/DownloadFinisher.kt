@@ -20,7 +20,9 @@ import java.io.IOException
  * The order is the point. The file moves first; the record is written with its new path only once
  * it is there; the cache record goes after that; TDLib is told last. A crash at any step leaves a
  * state the next attempt finishes from: before the move the file is still whole in the cache, and
- * after it the record already points at the Downloads folder.
+ * after it the record already points at the Downloads folder. A record that cannot be written once
+ * the file is in place is logged and the download counts as done: the file is the user's, and a
+ * Try again would only find the cache empty (or make a second copy in a picked folder).
  *
  * @param downloadsDir where downloads go, asked each time in case the storage location moved.
  * @param completePath where TDLib has a file, only once all of it is there.
@@ -42,6 +44,8 @@ class DownloadFinisher(
     },
     private val pollMs: Long = POLL_MS,
     private val tree: () -> TreeTarget? = { null },
+    private val noteDownload: suspend (MediaItem, chatTitle: String, path: String) -> Unit =
+        { item, chat, path -> settings.noteDownload(item, chat, path) },
 ) {
     /** A picked folder as the finisher writes to it; [DownloadService] wires the real one. */
     interface TreeTarget {
@@ -134,15 +138,25 @@ class DownloadFinisher(
         return Outcome.Moved(target)
     }
 
-    /** Writes the download's record, once more if the store fails the first time. */
+    /**
+     * Writes the download's record, once more if the store fails the first time. A second failure
+     * is logged and swallowed, since the file is already in place and reporting the download as
+     * failed would point Try again at a cache that no longer holds it.
+     */
     private suspend fun record(item: MediaItem, request: DownloadRequest, path: String) {
         try {
-            settings.noteDownload(item, request.chatTitle, path)
+            noteDownload(item, request.chatTitle, path)
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (first: Exception) {
             delay(pollMs)
-            settings.noteDownload(item, request.chatTitle, path)
+            try {
+                noteDownload(item, request.chatTitle, path)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (second: Exception) {
+                JobFailures.handle("DownloadFinisher.record", second)
+            }
         }
     }
 
@@ -151,23 +165,30 @@ class DownloadFinisher(
      * its own part file away ([DownloadFiles.moveIntoDownloads], [DownloadTree.put]), so what is
      * left is the whole file in the cache and a card that offers Try again.
      *
-     * @param sizeBytes the size the picked folder was asked to take, 0 when not a folder copy.
-     * @param label the picked folder's name, for the full-drive sentence.
+     * @param inTree whether the failed copy was into a picked folder.
+     * @param sizeBytes the size the picked folder was asked to take.
+     * @param label the picked folder's name for the full-drive sentence, null when it is unknown.
      */
-    private fun failed(request: DownloadRequest, failure: Throwable, sizeBytes: Long = 0L, label: String? = null): Outcome.Failed {
+    private fun failed(
+        request: DownloadRequest,
+        failure: Throwable,
+        inTree: Boolean = false,
+        sizeBytes: Long = 0L,
+        label: String? = null,
+    ): Outcome.Failed {
         val chain = generateSequence(failure) { it.cause }.take(8).toList()
         val reason = when {
             failure is OutOfMemoryError -> MOVE_FAILED_MEMORY
             chain.any { it is SecurityException } -> MOVE_FAILED_PERMISSION
             chain.any { it is IOException && DownloadRelocation.isNoSpace(it) } ->
-                if (label != null) L.storageAndroidNoSpace(label, StorageRelocationPlan.size(sizeBytes)) else L.errorsNoSpace
-            failure is FileNotFoundException && label == null -> NOT_FOUND
+                if (!label.isNullOrBlank()) L.storageAndroidNoSpace(label, StorageRelocationPlan.size(sizeBytes)) else L.errorsNoSpace
+            failure is FileNotFoundException && !inTree -> NOT_FOUND
             failure is IOException -> MOVE_FAILED
             else -> MOVE_FAILED_UNEXPECTED
         }
-        if (failure !is IOException) {
-            // Not a disk or folder refusing, so a bug or a device quirk: kept for Send logs and,
-            // when the viewer allows it, reported. Nothing here ends the process.
+        if (reason == MOVE_FAILED_UNEXPECTED) {
+            // Not a disk, a folder or the memory refusing, so a bug or a device quirk: kept for
+            // Send logs and, when the viewer allows it, reported. Nothing here ends the process.
             JobFailures.handle("DownloadFinisher", failure)
         } else {
             runCatching { Logger.w(TAG, "Could not finish ${request.fileId}: ${failure.message}", failure) }
@@ -178,8 +199,9 @@ class DownloadFinisher(
     /**
      * [finish]'s second half when downloads go to a picked folder: the copy is written and checked
      * before anything else changes, the record then holds the document, and only then are the
-     * cache's file and TDLib's copy let go. Any failure leaves the file whole in the cache for Try
-     * again, and the folder without a partial copy.
+     * cache's file and TDLib's copy let go. A failure of the copy leaves the file whole in the cache
+     * for Try again, and the folder without a partial copy; a record that cannot be written after
+     * the copy is logged and the copy counts as done (see [record]).
      */
     private suspend fun finishIntoTree(
         request: DownloadRequest,
@@ -204,7 +226,7 @@ class DownloadFinisher(
         } catch (failure: Throwable) {
             // A source that vanished mid copy is the file missing, not the folder.
             if (failure is FileNotFoundException && !source.exists()) return Outcome.Failed(NOT_FOUND)
-            return failed(request, failure, sizeBytes = size, label = runCatching { picked.label }.getOrDefault(""))
+            return failed(request, failure, inTree = true, sizeBytes = size, label = runCatching { picked.label }.getOrNull())
         }
         record(request.item().copy(sizeBytes = size), request, uri)
         runCatching { SupportReminder.downloadFinished() }

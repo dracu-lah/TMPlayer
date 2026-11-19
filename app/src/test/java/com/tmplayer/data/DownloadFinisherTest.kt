@@ -293,4 +293,60 @@ class DownloadFinisherTest {
         assertEquals(DownloadFinisher.Outcome.Failed(DownloadFinisher.NOT_FOUND), outcome)
         assertFalse(downloads.exists() && downloads.list().orEmpty().isNotEmpty())
     }
+
+    @Test
+    fun `a revoked folder or a full heap are expected conditions and are not reported as bugs`() {
+        val before = com.tmplayer.platform.JobFailures.count
+        finishInto(22, folderThatFails({ SecurityException("grant revoked") }))
+        finishInto(23, folderThatFails({ OutOfMemoryError("Map failed") }))
+        assertEquals(before, com.tmplayer.platform.JobFailures.count)
+    }
+
+    @Test
+    fun `a folder with no readable name and a full drive gives the plain full-storage sentence`() {
+        val folder = object : DownloadFinisher.TreeTarget {
+            override val label: String get() = throw IllegalStateException("no label")
+            override fun freeBytes(): Long? = null
+            override suspend fun put(source: File, name: String, onProgress: (Long, Long) -> Unit): String =
+                throw IOException("write failed: ENOSPC (No space left on device)")
+        }
+        val (outcome, _) = finishInto(24, folder)
+        assertEquals(DownloadFinisher.Outcome.Failed(com.tmplayer.i18n.L.errorsNoSpace), outcome)
+    }
+
+    private val brokenRecord: suspend (MediaItem, String, String) -> Unit = { _, _, _ -> throw IOException("disk full") }
+
+    @Test
+    fun `a record that cannot be written after the move still counts the download as done`() = runBlocking {
+        val source = cached(25)
+        val td = FakeTdFiles(paths = mutableMapOf(25 to source.path))
+        val before = com.tmplayer.platform.JobFailures.count
+        val outcome = DownloadFinisher(settings, { downloads }, td, { td.paths[it] }, { false }, pollMs = 1, noteDownload = brokenRecord)
+            .finish(request(25))
+
+        val moved = (outcome as DownloadFinisher.Outcome.Moved).file
+        assertTrue(moved.isFile)
+        assertFalse(source.exists())
+        assertEquals(listOf(25), td.deleted)
+        assertEquals(before + 1, com.tmplayer.platform.JobFailures.count)
+    }
+
+    @Test
+    fun `in a picked folder a record that cannot be written does not make a second copy`() = runBlocking {
+        val source = cached(26)
+        val td = FakeTdFiles(paths = mutableMapOf(26 to source.path))
+        var puts = 0
+        val folder = object : DownloadFinisher.TreeTarget {
+            override val label = "Movies"
+            override fun freeBytes(): Long? = null
+            override suspend fun put(source: File, name: String, onProgress: (Long, Long) -> Unit): String =
+                "content://movies/${++puts}"
+        }
+        val outcome = DownloadFinisher(settings, { downloads }, td, { td.paths[it] }, { false }, pollMs = 1, tree = { folder }, noteDownload = brokenRecord)
+            .finish(request(26))
+
+        assertEquals(DownloadFinisher.Outcome.MovedToTree("content://movies/1"), outcome)
+        assertEquals(1, puts)
+        assertFalse(source.exists())
+    }
 }
