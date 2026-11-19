@@ -11,6 +11,7 @@ import { tally } from '../ui/searchTally'
 import { cleanContext, NO_COPY_CONTEXT, type CopyContext } from './copyFit'
 import { copyRows, playCopy } from './copyPick'
 import { touchesFor } from './touchCache'
+import { forgetTopics, type ForumChat } from './topics'
 import type { ChatItem, CopyRef, ChatPage, ChatView, Found, ListView, RecentPage, SponsoredItem, Tile, VideoItem, WatchInfo } from './types'
 
 const PAGE = 100
@@ -92,6 +93,8 @@ interface ChatState {
     /** The first photo message of each album met so far (by album id), drawn as its videos' picture; bounded. */
     albumPhotos: Map<string, Message>
     selfDestructing: number
+    /** A forum chat read through one of its topics (`ChatView.topic`): its pages are the topic's own, by thread. */
+    topic: { id: number; name: string } | null
     /** Bumped each time videos come in, so a kept arrangement knows it is stale. */
     version: number
     loading: Promise<void> | null
@@ -103,9 +106,14 @@ interface ChatState {
 }
 
 const chats = new Map<number, ChatState>()
+/** Forum chats held to one topic, by "chat:topic": a few at a time, apart from the chat's own state. */
+const topicChats = new Map<string, ChatState>()
+const KEEP_TOPIC_CHATS = 3
 
 export function forgetAll() {
     chats.clear()
+    topicChats.clear()
+    forgetTopics()
     dialogs = null
     dialogsLoading = null
     dialogsSoFar = []
@@ -131,7 +139,18 @@ export function forgetAll() {
     forgetChatTitles()
 }
 
-async function openState(tg: TelegramClient, chatId: number): Promise<ChatState> {
+/** A topic's name, or '' when it cannot be read (the grid still lists its videos). */
+async function topicName(tg: TelegramClient, chatId: number, topic: number): Promise<string> {
+    try {
+        const found = await tg.getForumTopicsById(chatId, [topic])
+        const t = found[0]
+        return t && !t.titleMissing ? String(t.title ?? '').slice(0, 200) : ''
+    } catch {
+        return ''
+    }
+}
+
+async function openState(tg: TelegramClient, chatId: number, topic = 0): Promise<ChatState> {
     const peer = await tg.getPeer(chatId)
     const small = peer.photo?.small ?? null
     if (small) thumbnails.set(small.uniqueFileId, small)
@@ -150,6 +169,7 @@ async function openState(tg: TelegramClient, chatId: number): Promise<ChatState>
         archives: new Map(),
         albumPhotos: new Map(),
         selfDestructing: 0,
+        topic: topic ? { id: topic, name: await topicName(tg, chatId, topic) } : null,
         version: 0,
         loading: null,
         kept: null,
@@ -160,6 +180,9 @@ async function openState(tg: TelegramClient, chatId: number): Promise<ChatState>
     }
 }
 
+/** A topic's reads go through its thread: only its messages come. */
+const threadOf = (s: ChatState) => (s.topic ? { threadId: s.topic.id } : {})
+
 /** The next hundred of each kind (videos, files) the chat has not sent yet, through the rules. */
 async function loadPage(tg: TelegramClient, s: ChatState): Promise<void> {
     const r = await rules()
@@ -167,7 +190,7 @@ async function loadPage(tg: TelegramClient, s: ChatState): Promise<void> {
         s.feeds
             .filter((f) => !f.done)
             .map(async (f) => {
-                const res = await tg.searchMessages({ chatId: s.id, filter: f.filter, limit: PAGE, offset: f.next })
+                const res = await tg.searchMessages({ chatId: s.id, filter: f.filter, limit: PAGE, offset: f.next, ...threadOf(s) })
                 f.next = res.next
                 f.done = res.next === undefined || res.length === 0
                 return res as Message[]
@@ -295,7 +318,7 @@ async function searchChat(tg: TelegramClient, s: ChatState, query: string): Prom
                 feeds
                     .filter((f) => !f.done)
                     .map(async (f) => {
-                        const res = await tg.searchMessages({ chatId: s.id, query: spelling, filter: f.filter, limit: SEARCH_PAGE, offset: f.next })
+                        const res = await tg.searchMessages({ chatId: s.id, query: spelling, filter: f.filter, limit: SEARCH_PAGE, offset: f.next, ...threadOf(s) })
                         f.next = res.next
                         f.done = res.next === undefined || res.length === 0
                         return res as Message[]
@@ -306,7 +329,7 @@ async function searchChat(tg: TelegramClient, s: ChatState, query: string): Prom
             // others (its first page only, a failure leaves the rest standing), then one read of
             // each hit's album.
             const photoHits = await tg
-                .searchMessages({ chatId: s.id, query: spelling, filter: PHOTO_FILTER, limit: ALBUM_READS * 2 })
+                .searchMessages({ chatId: s.id, query: spelling, filter: PHOTO_FILTER, limit: ALBUM_READS * 2, ...threadOf(s) })
                 .then((res) => res as Message[])
                 .catch(() => [] as Message[])
             const neighbours = await albumNeighbours(tg, photoHits, hits)
@@ -509,27 +532,29 @@ function arrange(s: ChatState, view: ChatView): ChatPage {
         protected: s.protected,
         sponsored: s.sponsored,
         sponsoredBetween: s.sponsoredBetween,
+        ...(s.topic ? { topic: s.topic } : {}),
     }
     s.kept = { version: s.version, view: key, page }
     return page
 }
 
-const opening = new Map<number, Promise<ChatState>>()
+const opening = new Map<number | string, Promise<ChatState>>()
 
 /** A chat read again from its newest message; a second open or Refresh while one runs waits for it. */
-function fresh(tg: TelegramClient, chatId: number): Promise<ChatState> {
-    let p = opening.get(chatId)
+function fresh(tg: TelegramClient, chatId: number, topic = 0): Promise<ChatState> {
+    const key = topic ? `${chatId}:${topic}` : chatId
+    let p = opening.get(key)
     if (!p) {
         p = (async () => {
-            const s = await openState(tg, chatId)
-            const [, ads] = await Promise.all([loadPage(tg, s), s.channel ? loadSponsored(tg, chatId) : null])
+            const s = await openState(tg, chatId, topic)
+            const [, ads] = await Promise.all([loadPage(tg, s), s.channel && !topic ? loadSponsored(tg, chatId) : null])
             if (ads) {
                 s.sponsored = ads.items
                 s.sponsoredBetween = ads.between
             }
             return s
-        })().finally(() => opening.delete(chatId))
-        opening.set(chatId, p)
+        })().finally(() => opening.delete(key))
+        opening.set(key, p)
     }
     return p
 }
@@ -542,9 +567,12 @@ let rulesNow: Awaited<ReturnType<typeof rules>> | null = null
  */
 export async function chatPage(tg: TelegramClient, chatId: number, view: ChatView, mode: 'open' | 'more' | 'refresh' | 'view'): Promise<ChatPage> {
     rulesNow = await rules()
-    let s = mode === 'refresh' ? undefined : chats.get(chatId)
+    // A topic of a forum chat (the apps' topic tab): its own state, read through the topic's thread.
+    const topic = Number.isSafeInteger(view.topic) && view.topic! > 0 ? view.topic! : 0
+    const topicKey = `${chatId}:${topic}`
+    let s = mode === 'refresh' ? undefined : topic ? topicChats.get(topicKey) : chats.get(chatId)
     const opened = !s
-    if (!s) s = await fresh(tg, chatId)
+    if (!s) s = await fresh(tg, chatId, topic)
     const query = view.query.trim()
     const st = s
     if (query && mode !== 'more') {
@@ -557,9 +585,15 @@ export async function chatPage(tg: TelegramClient, chatId: number, view: ChatVie
         await load(st, () => loadPage(tg, st))
     } else if (st.loading) await st.loading
     // Most recently used last, so the oldest is the one let go.
-    chats.delete(chatId)
-    chats.set(chatId, s)
-    while (chats.size > KEEP_CHATS) chats.delete(chats.keys().next().value!)
+    if (topic) {
+        topicChats.delete(topicKey)
+        topicChats.set(topicKey, s)
+        while (topicChats.size > KEEP_TOPIC_CHATS) topicChats.delete(topicChats.keys().next().value!)
+    } else {
+        chats.delete(chatId)
+        chats.set(chatId, s)
+        while (chats.size > KEEP_CHATS) chats.delete(chats.keys().next().value!)
+    }
     return arrange(s, view)
 }
 
@@ -719,6 +753,46 @@ export async function archivedList(tg: TelegramClient, onBatch: (chats: ChatItem
 /** The chat list: whole once it has loaded (`done`), else as far as it has come. */
 export function knownChats(): { chats: ChatItem[]; done: boolean } {
     return dialogs ? { chats: dialogs, done: true } : { chats: dialogsSoFar, done: false }
+}
+
+/** A search by topic name waits this long for the chat list when it must read it whole (every chat is searched). */
+const TOPIC_LIST_WAIT_MS = 3_000
+/** Added chats the list has not reached whose peer is looked up (from the stored peers, no call) per search. */
+const TOPIC_PEER_CHECKS = 150
+
+/**
+ * The groups with topics a search by topic name may ask (U14), and the chat list's order for ties.
+ * Telling a group with topics from one without is a read of what the chat list already holds (the
+ * forum flag of the dialog), never a call: the added chats the list has not reached are looked up
+ * among the stored peers, at most TOPIC_PEER_CHECKS. With every chat searched and the list not yet
+ * read, it is read now (kept for the session) and waited for a few seconds, then the part that has
+ * come is used.
+ */
+export async function topicSources(tg: TelegramClient, added: readonly number[] | null): Promise<{ forums: ForumChat[]; order: number[] }> {
+    if (!added && !dialogs) {
+        const loading = chatList(tg, false, () => {}).catch(() => [] as ChatItem[])
+        await Promise.race([loading, new Promise((resolve) => setTimeout(resolve, TOPIC_LIST_WAIT_MS))])
+    }
+    const known: ChatItem[] = [...(dialogs ?? dialogsSoFar), ...(archived ?? [])]
+    const byId = new Map<number, ChatItem>()
+    for (const c of known) if (!byId.has(c.id)) byId.set(c.id, c)
+    if (added) {
+        const missing = added.filter((id) => !byId.has(id)).slice(0, TOPIC_PEER_CHECKS)
+        for (let i = 0; i < missing.length; i += 6) {
+            await Promise.all(
+                missing.slice(i, i + 6).map(async (id) => {
+                    try {
+                        byId.set(id, chatItem(await tg.getPeer(id), false))
+                    } catch {
+                        // Not a peer this device knows (left, never seen): not asked.
+                    }
+                }),
+            )
+        }
+    }
+    const forums: ForumChat[] = []
+    for (const c of byId.values()) if (c.forum && c.kind === 'group') forums.push({ id: c.id, title: c.title, archived: !!c.archived })
+    return { forums, order: known.map((c) => c.id) }
 }
 
 /** Ids of the listed chats whose names answer `query`, best first, by the app's fuzzy search. */

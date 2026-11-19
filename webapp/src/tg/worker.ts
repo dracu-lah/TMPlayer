@@ -7,11 +7,12 @@ import { holdTouches } from './touchCache'
 import { cryptoProvider } from './crypto'
 import { findChatSubtitles, forgetChatSubtitles } from './chatsubs'
 import { homePage, rowShown } from './home'
-import { archivedList, chatList, chatPage, forgetAll, joinedFor, listTiles, rankChats, recentPage, searchAll, setCopyContext, videoCounts, watchInfo } from './library'
+import { archivedList, chatList, chatPage, forgetAll, joinedFor, listTiles, rankChats, recentPage, searchAll, setCopyContext, topicSources, videoCounts, watchInfo } from './library'
+import { findTopics, keepTopics, keptTopics, telegramTopics, topicWords } from './topics'
 import { clickSponsored, reportSponsored, viewSponsored } from './sponsored'
 import { deleteEverything, deleteMessages, readFiles, writeFile, type FoundFile } from './syncfile'
 import { chatProtects, files, itemOf, rawOf, thumbnails, toItem } from './media'
-import type { ChatInfo, ChatItem, ChatPage, ChatSubtitle, ChatsEvent, ChatView, Country, Found, HomePage, HomeView, ListView, Me, RecentPage, QrEvent, RpcError, SentCode, SponsoredReport, Tile, VideoItem, WatchInfo } from './types'
+import type { ChatInfo, ChatItem, ChatPage, ChatSubtitle, ChatsEvent, ChatView, Country, Found, HomePage, HomeView, ListView, Me, RecentPage, QrEvent, RpcError, SentCode, SponsoredReport, Tile, TopicsFound, VideoItem, WatchInfo } from './types'
 
 // `VITE_TG_TEST=1 pnpm dev` signs in on Telegram's test servers (numbers 99966XYYYY, the code
 // is X five times), with its own storage, to try the sign in steps without a real account.
@@ -276,6 +277,24 @@ export const api = {
     /** Videos across every chat within the size limits, grouped as a chat's are, newest first. */
     async search(_: Ctx, query: string, view: ListView, everyChat = false): Promise<Found> {
         return searchAll(tg, query, view, everyChat)
+    },
+
+    /**
+     * Topics whose names answer `query` ("Chat > Topic", U14), among the forum chats of `added` (null: every chat),
+     * inside the apps' budget (topics.ts). Groups answer one by one as `TopicsFound` events; aborting the call
+     * (a new letter, leaving the page) stops the asking. Answers are kept two minutes.
+     */
+    async topics(ctx: Ctx, query: string, added: number[] | null): Promise<TopicsFound> {
+        const words = topicWords(query)
+        if (!words) return { hits: [], asked: 0, refused: 0, partial: false, searching: false }
+        const chats = Array.isArray(added) ? added.filter((id) => Number.isSafeInteger(id)).slice(0, 20_000) : null
+        const key = `${chats ? [...chats].sort((a, b) => a - b).join() : '*'}\n${words.toLowerCase()}`
+        const kept = keptTopics(key)
+        if (kept) return kept
+        const [r, sources] = await Promise.all([rules(), topicSources(tg, chats)])
+        const found = await findTopics({ rules: r, ask: telegramTopics(tg), ...sources, added: chats, includeArchived: true, query: words, signal: ctx.signal, onPartial: (f) => ctx.emit(f) })
+        keepTopics(key, found)
+        return found
     },
 
     /** Recently added's See all, read on a page at a time (see library.ts recentPage for the modes). */
