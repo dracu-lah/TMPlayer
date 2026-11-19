@@ -198,6 +198,34 @@ for (const form of FORMS) {
             await expect(more).toBeVisible()
         })
 
+        test('three chats that always fail to count are asked twice at most and do not hold the picker to its budget', async ({ context, page }) => {
+            await fakeCase(context, 'huge', 'countfail')
+            await page.goto('/added-chats')
+            await expect(page.locator('.chat-tick').first()).toBeVisible({ timeout: 20_000 })
+            await page.waitForTimeout(6000)
+            const more = page.getByRole('button', { name: 'Look in more chats' })
+            // The budget is spent by scrolling through the rows, then more is asked for, so the scan reaches the failing channels.
+            for (let i = 0; i < 12; i++) {
+                await page.evaluate(() => window.scrollBy(0, innerHeight * 2))
+                await page.waitForTimeout(400)
+            }
+            await page.evaluate(() => window.scrollTo(0, 0))
+            await expect(more).toBeVisible({ timeout: 20_000 })
+            await more.click()
+            await page.waitForTimeout(12_000)
+            const calls = await workerCalls(page)
+            const failing = [66, 69, 72].map((slot) => calls.filter((c) => c.startsWith(`searchMessages -${2_000_000 + slot} `)).length)
+            note({ type: 'asks of the three failing chats', description: failing.join(', ') })
+            // Two filters per ask, one ask and one retry at most.
+            for (const n of failing) expect(n).toBeLessThanOrEqual(4)
+            expect(failing.reduce((a, b) => a + b, 0)).toBeGreaterThan(0)
+            expect(countCalls(calls, 'searchMessages')).toBeLessThanOrEqual(2 * (150 + 100) + 20)
+            // And it stops by itself: nothing more is asked once the step is spent.
+            const settled = countCalls(await workerCalls(page), 'searchMessages')
+            await page.waitForTimeout(6000)
+            expect(countCalls(await workerCalls(page), 'searchMessages')).toBe(settled)
+        })
+
         test('the picker stops counting for the visit when Telegram refuses, and says so', async ({ context, page }) => {
             await fakeCase(context, 'huge', 'countflood')
             await page.goto('/added-chats')

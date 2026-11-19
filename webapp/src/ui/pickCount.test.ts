@@ -71,7 +71,7 @@ test('a refusal, or closing the picker, stops everything', () => {
     }
 })
 
-test('a failed chat is asked again only when the viewer asks for more, and a lost call gives its chats back', () => {
+test('a failed chat is asked once more only when the viewer asks for more', () => {
     const plan = createCountPlan()
     plan.setScanOrder(ids(400))
     plan.reserve(ids(150))
@@ -79,9 +79,61 @@ test('a failed chat is asked again only when the viewer asks for more, and a los
     assert.deepEqual(plan.take(), [])
     plan.more()
     assert.equal(plan.take()[0], 3)
-    plan.offer(200)
-    const [one] = plan.take()
-    plan.giveBack([one])
-    plan.offer(one)
-    assert.ok(plan.take().includes(one))
+})
+
+test('chats that fail every time are asked twice at most, and taking until nothing is left ends within the budget', () => {
+    const plan = createCountPlan()
+    const bad = new Set([5, 6, 7, 160, 161])
+    plan.setScanOrder(ids(400))
+    plan.reserve(ids(60))
+    for (const id of ids(100, 60)) plan.offer(id)
+    plan.more()
+    const asks = new Map<number, number>()
+    let rounds = 0
+    // The screen's pump: ask what is handed out, report the failures, until nothing is handed out.
+    for (let ask = plan.take(); ask.length; ask = plan.take()) {
+        assert.ok(++rounds < 500, 'the pump never ends')
+        for (const id of ask) asks.set(id, (asks.get(id) ?? 0) + 1)
+        plan.retryLater(ask.filter((id) => bad.has(id)))
+    }
+    assert.ok(rounds < 100)
+    for (const id of bad) assert.ok((asks.get(id) ?? 0) <= 2, `chat ${id} asked ${asks.get(id)} times`)
+    assert.ok([...asks.values()].reduce((a, b) => a + b, 0) <= VISIT_BUDGET + MORE_STEP + bad.size)
+    // A row stayed on again does not ask a failed chat once more.
+    plan.offer(160)
+    assert.deepEqual(plan.take(), [])
+})
+
+test('three chats that always fail do not hold the scan back', () => {
+    const plan = createCountPlan()
+    const bad = new Set([200, 201, 202])
+    plan.setScanOrder(ids(1000))
+    plan.reserve(ids(150))
+    plan.more()
+    const done = new Set<number>()
+    let rounds = 0
+    for (let ask = plan.take(); ask.length; ask = plan.take()) {
+        assert.ok(++rounds < 500, 'the pump never ends')
+        plan.retryLater(ask.filter((id) => bad.has(id)))
+        for (const id of ask) if (!bad.has(id)) done.add(id)
+    }
+    // The whole step was spent on chats, three of which only failed.
+    assert.ok(done.size >= MORE_STEP - bad.size * 2)
+    assert.equal(plan.take().length, 0)
+})
+
+test('offers made while the budget was spent are dropped, and offers waiting when more is asked for do not jump the scan order', () => {
+    const plan = createCountPlan()
+    plan.setScanOrder(ids(3000))
+    plan.reserve(ids(150))
+    plan.offer(2000)
+    assert.deepEqual(plan.take(), [])
+    plan.more()
+    assert.deepEqual(plan.take(), [150, 151, 152])
+    const roomy = createCountPlan()
+    roomy.setScanOrder(ids(3000))
+    roomy.reserve(ids(60))
+    roomy.offer(2500)
+    roomy.more()
+    assert.ok(!roomy.take().includes(2500))
 })

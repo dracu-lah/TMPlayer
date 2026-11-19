@@ -29,9 +29,7 @@ export interface CountPlan {
     close(): void
     /** The next chats to count, at most `n`, and each is spent. Empty when there is nothing to ask for, or the budget is spent. */
     take(n?: number): number[]
-    /** A call failed before it was made (the page lost the worker): the chats may be asked again. */
-    giveBack(ids: readonly number[]): void
-    /** A chat that could not be read is wanted again by the next ask for more. */
+    /** A chat that could not be read is asked once more when the viewer asks for more; a second failure is final. */
     retryLater(ids: readonly number[]): void
     readonly spent: number
     readonly allowance: number
@@ -48,6 +46,8 @@ export function createCountPlan(budget = VISIT_BUDGET, step = MORE_STEP): CountP
     let scanAt = 0
     let scanning = false
     let retry: number[] = []
+    /** Chats that failed once: asked once more at most, whatever happens, so a chat that always fails cannot loop. */
+    const failedOnce = new Set<number>()
     let allowance = budget
     let refused = false
     let closed = false
@@ -62,7 +62,8 @@ export function createCountPlan(budget = VISIT_BUDGET, step = MORE_STEP): CountP
             for (const id of ids) asked.add(id)
         },
         offer(id) {
-            if (!live() || asked.has(id) || queuedSet.has(id)) return
+            // A spent budget drops the offer: the row may be far off screen by the time more is asked for, and the scan reaches it.
+            if (!live() || asked.has(id) || queuedSet.has(id) || failedOnce.has(id) || asked.size >= allowance) return
             queuedSet.add(id)
             queued.push(id)
         },
@@ -70,6 +71,9 @@ export function createCountPlan(budget = VISIT_BUDGET, step = MORE_STEP): CountP
             if (!live()) return
             allowance = Math.max(allowance, asked.size) + step
             scanning = true
+            // Offers made before are for rows that may be gone from the screen: the scan order serves what is next.
+            queued.length = 0
+            queuedSet.clear()
         },
         refuse() {
             refused = true
@@ -88,7 +92,7 @@ export function createCountPlan(budget = VISIT_BUDGET, step = MORE_STEP): CountP
             while (room() && queued.length) {
                 const id = queued.shift()!
                 queuedSet.delete(id)
-                if (asked.has(id)) continue
+                if (asked.has(id) || failedOnce.has(id)) continue
                 asked.add(id)
                 out.push(id)
             }
@@ -108,12 +112,12 @@ export function createCountPlan(budget = VISIT_BUDGET, step = MORE_STEP): CountP
             }
             return out
         },
-        giveBack(ids) {
-            for (const id of ids) asked.delete(id)
-        },
         retryLater(ids) {
-            retry = [...new Set([...retry, ...ids])].slice(0, 100)
-            for (const id of ids) asked.delete(id)
+            // One more try per chat per visit; a second failure leaves it counted as asked, for good.
+            const again = ids.filter((id) => !failedOnce.has(id))
+            for (const id of again) failedOnce.add(id)
+            retry = [...new Set([...retry, ...again])].slice(0, 100)
+            for (const id of again) asked.delete(id)
         },
         get spent() {
             return asked.size

@@ -994,9 +994,9 @@ let counterClient: TelegramClient | null = null
 const videoCounter = createVideoCounter((id) => oneVideoCount(counterClient!, id))
 
 /** `chatIds`' rough video counts, by id; -1 for one Telegram could not answer, -2 once it refused (a flood wait). */
-export function videoCounts(tg: TelegramClient, chatIds: readonly number[]): Promise<Record<number, number>> {
+export function videoCounts(tg: TelegramClient, chatIds: readonly number[], signal?: AbortSignal): Promise<Record<number, number>> {
     counterClient = tg
-    return videoCounter.counts(chatIds)
+    return videoCounter.counts(chatIds, signal)
 }
 
 // Recently added's See all

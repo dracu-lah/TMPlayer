@@ -10,7 +10,7 @@
 // Read live, so a test can change them while the page runs (the cookie is read again): `stall` (a
 // file read answers nothing until the flag goes), `late` (it answers after 6 s), `flood:N` (file reads are told to wait N seconds, from the first one), `linkdown` (the line to
 // Telegram reports `connecting`, and nothing is answered), `topicflood` (the first ask for Language Club's topics is told to wait 2 s),
-// `countflood` (the Add chats picker's counts are told to wait 15 minutes after twenty), `topicsrefuse` (every ask for topics is refused), `topicslow` (an ask for topics answers after 1.5 s).
+// `countflood` (the Add chats picker's counts are told to wait 15 minutes after twenty), `countfail` (three channels of the huge account always refuse a count),`topicsrefuse` (every ask for topics is refused), `topicslow` (an ask for topics answers after 1.5 s).
 
 // Read synchronously (a worker may): a top-level await would hold back the worker's message
 // handler, and the page's first call would be lost.
@@ -479,6 +479,8 @@ export class TelegramClient {
         await delay(flags.has('slow') ? 3000 : 50)
         // `countflood`: after twenty single-message counts (the Add chats picker's) Telegram asks it to wait a quarter of an hour.
         if (flags.has('countflood') && p.limit === 1 && p.chatId !== 'self' && ++countsAsked > 20) throw Object.assign(rpcError('FLOOD_WAIT_900', 420), { seconds: 900 })
+        // `countfail`: three channels of the huge account (slots 66, 69, 72) always refuse a count with a plain error (a private channel).
+        if (flags.has('countfail') && p.limit === 1 && [66, 69, 72].some((slot) => p.chatId === hugeId(slot))) throw rpcError('CHANNEL_PRIVATE')
         // Saved Messages: the sync file, found by its caption.
         if (p.chatId === 'self') return (await cloud.all(me)).filter((m) => m.text.includes(p.query ?? '')).slice(0, p.limit)
         if (!p.filter) throw rpcError('FILTER_MISSING')

@@ -12,7 +12,7 @@
 import { createEffect, createMemo, createResource, createSignal, For, onCleanup, onMount, Show, untrack } from 'solid-js'
 import { useBeforeLeave, useNavigate, useSearchParams } from '@solidjs/router'
 import { Search01Icon, StarIcon } from '@hugeicons/core-free-icons'
-import { api, call } from '../tg/rpc'
+import { call } from '../tg/rpc'
 import { t } from '../i18n'
 import { addedChats, setAddedChats, setStarred, starredIds, type AddedChat } from '../store'
 import { back } from '../session'
@@ -165,7 +165,7 @@ export function AddChats() {
     }
     async function resolveCounts(ids: number[]) {
         try {
-            const counts = await api.videoCounts(ids)
+            const counts = await call('videoCounts', [ids], { signal: stop.signal })
             if (closed) return
             const failed: number[] = []
             const next = new Map(known())
@@ -183,7 +183,8 @@ export function AddChats() {
             }
             plan.retryLater(failed)
         } catch {
-            plan.giveBack(ids)
+            // The call itself failed (the worker restarted): these chats get the one more try every failed chat gets, no more.
+            if (!closed) plan.retryLater(ids)
         }
         sync()
     }
@@ -192,8 +193,11 @@ export function AddChats() {
     let touched = false
     let closed = false
     let recommendBy = 0
+    // Closing the picker aborts the call in flight: the worker asks nothing more for it, not even after a flood wait.
+    const stop = new AbortController()
     onCleanup(() => {
         closed = true
+        stop.abort()
         plan.close()
         clearTimeout(recommendBy)
     })

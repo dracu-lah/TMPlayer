@@ -90,6 +90,46 @@ test('a flood wait past thirty seconds is a refusal: the rest is not asked and n
     assert.deepEqual(await t.counter.counts([8]), { 8: 1 })
 })
 
+test('a picker that closed during a flood wait does not ask again after it', async () => {
+    const stop = new AbortController()
+    let time = 1_000
+    const asked: number[] = []
+    const counter = createVideoCounter(
+        async (id) => {
+            asked.push(id)
+            throw flood(20)
+        },
+        {
+            now: () => time,
+            sleep: async (ms) => {
+                time += ms
+                stop.abort()
+            },
+        },
+    )
+    assert.equal((await counter.counts([1, 2, 3, 4], stop.signal))[1], UNKNOWN)
+    // The three asked together made their one ask each; none made a second, and the fourth was never asked.
+    assert.deepEqual(asked, [1, 2, 3])
+})
+
+test('a closed picker asks nothing at all', async () => {
+    const t = setup(() => 1)
+    const stop = new AbortController()
+    stop.abort()
+    assert.deepEqual(await t.counter.counts([1, 2, 3], stop.signal), {})
+    assert.equal(t.asked.size, 0)
+})
+
+test('an answer in flight when the account is forgotten is not kept, and answers after it are', async () => {
+    const t = setup((id) => id)
+    const pending = t.counter.counts([1, 2])
+    t.counter.forget()
+    await pending
+    assert.equal(t.counter.size(), 0)
+    await t.counter.counts([3])
+    assert.equal(t.counter.size(), 1)
+})
+
 test('two flood waits in a row on one chat refuse it', async () => {
     const t = setup((id) => (id === 1 ? flood(2) : 1))
     assert.equal((await t.counter.counts([1]))[1], REFUSED)
