@@ -1189,11 +1189,6 @@ private fun Root() {
     // The phone's one floating bar, shared by every page it is on.
     val touchChrome = remember { TouchChrome() }
 
-    // The account's Telegram folders, which become destinations of their own. Collected here
-    // rather than inside the chat list's own state because they arrive on TDLib's schedule, not
-    // with the chat list, and the rail has to be able to draw before either has turned up.
-    val folders by Td.folders.collectAsStateWithLifecycle()
-
     // Whether a video is currently being got ready to play. Not saveable: a process death in the
     // middle of it means nothing is being prepared any more, and restoring true would leave every
     // video on the screen refusing to open.
@@ -2035,7 +2030,6 @@ private fun Root() {
                         if (section == savedSection) openSavedMessages { pickedTabKey = BrowseSection.encode(section) }
                         else pickedTabKey = BrowseSection.encode(section)
                     },
-                    folders = folders,
                     homeRows = homeRows,
                     homeRowsReady = homeViewModel.rowsSettled,
                     homeLayout = homeLayout ?: com.tmplayer.data.HomeLayout(),
@@ -2056,7 +2050,6 @@ private fun Root() {
                     homeFeedOf = homeViewModel::seeAll,
                     chatPaging = chatsViewModel.paging.collectAsStateWithLifecycle().value,
                     onMoreChats = chatsViewModel::loadMoreChats,
-                    onRetryFolders = chatsViewModel::retryFolders,
                     onHomeLaterArtWanted = homeViewModel::requestArt,
                     onPlayMedia = { item, chatTitle -> play(item, chatTitle = chatTitle) },
                     homeRefreshing = homeViewModel.refreshing.collectAsStateWithLifecycle().value,

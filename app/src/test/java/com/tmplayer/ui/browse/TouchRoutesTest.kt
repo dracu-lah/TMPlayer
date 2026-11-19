@@ -51,27 +51,22 @@ class TouchRoutesTest {
     fun `Home and Chats are the two pages of the swipe, and nothing else is`() {
         val home = BrowseSection.of(BrowseTab.Home)
         val chats = BrowseSection.of(BrowseTab.Chats)
-        val folder = BrowseSection.Folder(7, "Films")
         assertEquals(0, swipePage(home))
         assertEquals(1, swipePage(chats))
-        assertEquals(1, swipePage(folder))
         assertNull(swipePage(BrowseSection.of(BrowseTab.Favorites)))
         assertNull(swipePage(BrowseSection.of(BrowseTab.History)))
-        assertEquals(home, swipeSection(0, folder))
-        // The Chats page comes back on the chip it was left on.
-        assertEquals(folder, swipeSection(1, folder))
+        assertEquals(home, swipeSection(0, chats))
+        assertEquals(chats, swipeSection(1, chats))
     }
 
     @Test
-    fun `the Chats page comes back on its last chip while that folder is still there`() {
-        val folder = BrowseSection.Folder(7, "Films")
+    fun `the Chats page comes back as Chats, even from a folder page an older build saved`() {
         val chats = BrowseSection.of(BrowseTab.Chats)
-        val sections = listOf(BrowseSection.of(BrowseTab.Home), chats, folder)
-        assertEquals(folder, chatsPageOf(BrowseSection.encode(folder), sections))
-        assertEquals(chats, chatsPageOf(BrowseSection.encode(BrowseSection.Folder(9, "Gone")), sections))
-        assertEquals(chats, chatsPageOf("", sections))
+        assertEquals(chats, chatsPageOf(BrowseSection.encode(chats)))
+        assertEquals(chats, chatsPageOf("folder:9:Gone"))
+        assertEquals(chats, chatsPageOf(""))
         // Never a page that is not on the Chats page.
-        assertEquals(chats, chatsPageOf(BrowseSection.encode(BrowseSection.of(BrowseTab.History)), sections))
+        assertEquals(chats, chatsPageOf(BrowseSection.encode(BrowseSection.of(BrowseTab.History))))
     }
 
     @Test

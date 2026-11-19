@@ -6,6 +6,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import com.tmplayer.ui.theme.collectIsFocusVisibleAsState
@@ -115,6 +116,7 @@ import com.tmplayer.data.AddedChats
 import com.tmplayer.data.ChatBrief
 import com.tmplayer.data.ChatCount
 import com.tmplayer.data.ChatCountCalls
+import com.tmplayer.data.ChatFolderSummary
 import com.tmplayer.data.ChatGate
 import com.tmplayer.data.ChatKind
 import com.tmplayer.data.ChatPicking
@@ -173,6 +175,10 @@ import androidx.compose.ui.semantics.role
  * @param loadingMore the next chats are being read, so [onLoadMore] waits for them.
  * @param onLoadMore asks the chat list for its next chats as the end of this list nears; nothing
  *   pages by itself, so an idle screen costs nothing.
+ * @param folders the account's Telegram folders (HX29), offered as filters beside the scopes. Their
+ *   members are read only once this screen is open ([folderStatus] says how that went), never
+ *   ahead of it, since reading them on a large account asks Telegram for every chat.
+ * @param onRetryFolders reads the folders' members again, from a folder that could not be read.
  * @param sendLogs the platform's Send logs button, drawn beside Try again when the list is short.
  * @param searchField the television's own search box, which only the app has, with what its
  *   keyboard's Search does (the remote goes to the first answer); the touch and
@@ -202,6 +208,9 @@ fun AddChatsScreen(
     loadingMore: Boolean = false,
     onRetry: () -> Unit = {},
     onLoadMore: () -> Unit = {},
+    folders: List<ChatFolderSummary> = emptyList(),
+    folderStatus: FolderStatus = FolderStatus(),
+    onRetryFolders: () -> Unit = {},
     sendLogs: (@Composable () -> Unit)? = null,
     searchField: (@Composable (value: String, onValueChange: (String) -> Unit, placeholder: String, modifier: Modifier, onSubmit: () -> Unit) -> Unit)? = null,
     required: Boolean = false,
@@ -226,7 +235,13 @@ fun AddChatsScreen(
     // chat that is there does not rebuild the rows.
     val everyId = remember(chats) { chats.mapTo(HashSet()) { it.id } }
     val strays by remember(everyId) { derivedStateOf { state.ticked.filterTo(LinkedHashSet()) { it !in everyId } } }
-    val rows = remember(chats, state.query, state.scope, state.recommended, state.added, starred, listComplete, strays, choice.chats) {
+    // The folders offered as filters (HX29). One that vanished while it was chosen (deleted in
+    // Telegram, or the list read again without it) is not chosen any more: the list falls back to
+    // every chat rather than sit on a filter with no chip.
+    val pickable = remember(folders) { ChatPicking.pickable(folders) }
+    val folderId = state.folder?.takeIf { id -> pickable.any { it.id == id } }
+    val folderRead = folderId?.let { folderStatus.read(it) } ?: FolderRead.Loaded
+    val rows = remember(chats, state.query, state.scope, folderId, state.recommended, state.added, starred, listComplete, strays, choice.chats) {
         ChatPicking.rows(
             chats = chats,
             added = strays,
@@ -235,6 +250,7 @@ fun AddChatsScreen(
             recommended = state.recommended,
             query = state.query,
             scope = state.scope,
+            folder = folderId,
             listComplete = listComplete,
             alreadyAdded = state.added,
         )
@@ -244,7 +260,7 @@ fun AddChatsScreen(
     // The television folds the chats counted at no videos into one row per band (HX76), unless a
     // search asks a question about every chat. A derived list, so a count that changes nothing
     // visible does not rebuild the rows.
-    var foldOpen by remember(state.scope) { mutableStateOf<Set<ChatPicking.Band>>(emptySet()) }
+    var foldOpen by remember(state.scope, folderId) { mutableStateOf<Set<ChatPicking.Band>>(emptySet()) }
     val folding = tv && state.query.isBlank()
     // onRow is read untracked (HX76): a focus move alone never re-runs fold over every row (it ran
     // once per held-Down jump, 11 ms each plus a GC spike, even through a narrower derived value,
@@ -268,7 +284,7 @@ fun AddChatsScreen(
     // The Recommended band is worked out in the first seconds and lands above every other band,
     // which moved the row under a click or a finger down a whole band. Until it is taken its place
     // is held by placeholders, and the bands under it wait with it.
-    val holding = state.recommending && state.query.isBlank() && state.scope == ChatPicking.Scope.All
+    val holding = state.recommending && state.query.isBlank() && state.scope == ChatPicking.Scope.All && folderId == null
     val bands = remember(items) { items.groupBy { it.band } }
     // The rows as drawn, top to bottom, which is what the remote's jumps count in (HX76). A fold
     // row stands in as a row of its own, so the remote lands on it like any other.
@@ -288,12 +304,18 @@ fun AddChatsScreen(
     val chipFocus = remember { FocusRequester() }
     // The television's rail (HX76): one stop per scope, and the Search entry.
     val railFocus = remember { ChatPicking.Scope.entries.associateWith { FocusRequester() } }
+    // And one stop per folder under them (HX29), made as folders come.
+    val folderFocus = remember { HashMap<Int, FocusRequester>() }
+    // A folder that could not be read has no rows, so the remote lands on its Try again instead.
+    val retryFocus = remember { FocusRequester() }
+    val nowFolderRead by rememberUpdatedState(folderRead)
+    val railNow = { folderId?.let { folderFocus.getOrPut(it) { FocusRequester() } } ?: railFocus.getValue(state.scope) }
     val railSearchFocus = remember { FocusRequester() }
     var inSearch by remember { mutableStateOf(false) }
     var searching by rememberSaveable { mutableStateOf(state.query.isNotBlank()) }
     // The row the remote last stood on, overall and per scope, for Left from the panel and Right from the rail.
     var lastRow by remember { mutableStateOf<Long?>(null) }
-    val lastIn = remember { HashMap<ChatPicking.Scope, Long>() }
+    val lastIn = remember { HashMap<Any, Long>() }
     var foldFocus by remember { mutableStateOf<Long?>(null) }
     // The rows on screen and where each sits in the lazy list, written as the list is laid out.
     val rowFocus = remember { HashMap<Long, FocusRequester>() }
@@ -346,21 +368,36 @@ fun AddChatsScreen(
         scope.launch {
             listState.scrollToItem(0)
             withFrameNanos { }
-            runCatching { (if (tv) railFocus.getValue(state.scope) else chipFocus).requestFocus() }
+            runCatching { (if (tv) railNow() else chipFocus).requestFocus() }
         }
     }
-    // Right or Select on a rail entry: the scope is chosen, and the remote goes to its list, on the
-    // row it last stood on there or else the first (HX76). An empty scope keeps the remote on the rail.
-    fun intoList(chosen: ChatPicking.Scope) {
-        model.scope(chosen)
+    // Right or Select on a rail entry: the scope (or folder) is chosen, and the remote goes to its
+    // list, on the row it last stood on there or else the first (HX76). An empty one, or a folder
+    // not read yet, keeps the remote on the rail.
+    fun landIn(key: Any) {
         scope.launch {
             withFrameNanos { }
             withFrameNanos { }
             val list = nowShown
-            if (list.isEmpty()) return@launch
-            val back = lastIn[chosen]?.let { nowPlace[it] }
+            if (list.isEmpty()) {
+                // The button is composed with the list's next frame; ask until it is there.
+                if (nowFolderRead == FolderRead.NotLoaded) repeat(5) {
+                    if (runCatching { retryFocus.requestFocus() }.getOrDefault(false)) return@launch
+                    withFrameNanos { }
+                }
+                return@launch
+            }
+            val back = lastIn[key]?.let { nowPlace[it] }
             focusRow(back ?: 0)
         }
+    }
+    fun intoList(chosen: ChatPicking.Scope) {
+        model.scope(chosen)
+        landIn(chosen)
+    }
+    fun intoFolder(id: Int) {
+        model.folder(id)
+        landIn(id)
     }
     fun intoSearch() {
         searching = true
@@ -432,7 +469,7 @@ fun AddChatsScreen(
             if (it.hasFocus) {
                 onRow = id
                 lastRow = id
-                lastIn[state.scope] = id
+                lastIn[folderId ?: state.scope] = id
             } else if (onRow == id) {
                 onRow = null
             }
@@ -465,7 +502,7 @@ fun AddChatsScreen(
         if (startOnDone && runCatching { doneFocus.requestFocus() }.isSuccess) return@LaunchedEffect
         val first = firstId?.let { rowFocus[it] }
         if (first == null || runCatching { first.requestFocus() }.isFailure) {
-            runCatching { railFocus.getValue(state.scope).requestFocus() }
+            runCatching { railNow().requestFocus() }
         }
     }
     // Pressing a fold opens it, and the remote stands on its first chat.
@@ -633,12 +670,22 @@ fun AddChatsScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 for (scope in ChatPicking.Scope.entries) {
+                                    val here = folderId == null && state.scope == scope
                                     CopyChip(
                                         label = scopeLabel(scope, s),
-                                        chosen = state.scope == scope,
+                                        chosen = here,
                                         onClick = { model.scope(scope) },
-                                        modifier = if (state.scope == scope) Modifier.focusRequester(chipFocus) else Modifier,
+                                        modifier = if (here) Modifier.focusRequester(chipFocus) else Modifier,
                                     )
+                                    // Telegram's folders come right after All, as they do in its own tab bar (HX29).
+                                    if (scope == ChatPicking.Scope.All) for (folder in pickable) {
+                                        CopyChip(
+                                            label = folderLabel(folder, s),
+                                            chosen = folderId == folder.id,
+                                            onClick = { model.folder(folder.id) },
+                                            modifier = if (folderId == folder.id) Modifier.focusRequester(chipFocus) else Modifier,
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -673,11 +720,73 @@ fun AddChatsScreen(
                     }
                     if (rows.isEmpty()) {
                         item(key = "empty") {
-                            val words = if (state.query.isNotBlank()) s.chatsNoMatch(state.query.trim()) else s.pickerEmpty
-                            // While the list is still arriving an empty screen is not an answer yet.
-                            if (listComplete || partial) {
-                                Text(words, style = MaterialTheme.typography.bodyMedium, color = Tone.muted, modifier = Modifier.padding(vertical = 16.dp))
+                            val words = when {
+                                state.query.isNotBlank() -> s.chatsNoMatch(state.query.trim())
+                                // A folder whose members are not read yet is not empty, and one that
+                                // could not be read is not empty either (HX32): it says so.
+                                folderId != null && folderRead == FolderRead.Loading -> s.browseFolderLoading
+                                folderId != null && folderRead == FolderRead.NotLoaded -> s.browseFolderNotLoaded
+                                folderId != null -> s.pickerFolderEmpty
+                                else -> s.pickerEmpty
                             }
+                            // While the list is still arriving an empty screen is not an answer yet.
+                            if (listComplete || partial || folderId != null) {
+                                Column(Modifier.padding(vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text(words, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
+                                    if (folderRead == FolderRead.NotLoaded) {
+                                        SetupButton(
+                                            s.commonTryAgain,
+                                            primary = true,
+                                            modifier = Modifier
+                                                .focusRequester(retryFocus)
+                                                .onFocusChanged { onBandButton = it.hasFocus },
+                                            onClick = onRetryFolders,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    // A folder still being read shows its rows from the last snapshot with a line over them.
+                    if (rows.isNotEmpty() && folderId != null && folderRead != FolderRead.Loaded) {
+                        item(key = "folder-reading") {
+                            Text(
+                                if (folderRead == FolderRead.Loading) s.browseFolderLoading else s.browseFolderNotLoaded,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Tone.muted,
+                                modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 8.dp),
+                            )
+                        }
+                    }
+                    // A folder is a set the viewer made in Telegram, so it can be taken whole with one press (HX29):
+                    // the chats listed here and no others, a large folder after a question. Not Select all over the account.
+                    if (folderId != null && folderRead == FolderRead.Loaded && visible.size >= 2) {
+                        item(key = "folder-all") {
+                            val every = visible.all { it in state.ticked }
+                            val words = if (every) s.pickerRemoveThese(visible.size) else s.pickerAddThese(visible.size)
+                            SetupButton(
+                                words,
+                                modifier = Modifier
+                                    .padding(start = ROW_INSET, end = ROW_INSET, bottom = 10.dp)
+                                    .onFocusChanged { onBandButton = it.hasFocus }
+                                    .onPreviewKeyEvent { event ->
+                                        val end = if (rtl) Key.DirectionLeft else Key.DirectionRight
+                                        val start = if (rtl) Key.DirectionRight else Key.DirectionLeft
+                                        when {
+                                            event.type != KeyEventType.KeyDown -> false
+                                            event.key == end -> toFoot()
+                                            event.key == start && tv -> { toTop(); true }
+                                            else -> false
+                                        }
+                                    },
+                                onClick = {
+                                    when {
+                                        every -> { tick(false); model.clear(visible) }
+                                        ChatPicking.needsConfirm(model.adding(visible)) -> asking = Ask.AddMany(visible)
+                                        else -> { tick(true); model.selectAll(visible) }
+                                    }
+                                },
+                            )
                         }
                     }
                     val divider = 16.dp + (if (tv) 52.dp else 44.dp) + 12.dp
@@ -806,6 +915,16 @@ fun AddChatsScreen(
                         },
                         onNo = { asking = null },
                     )
+                    is Ask.AddMany -> Confirm(
+                        title = s.pickerConfirmTitle(model.adding(question.ids)),
+                        body = s.pickerConfirmBody,
+                        action = s.pickerConfirmYes,
+                        onYes = {
+                            asking = null
+                            model.selectAll(question.ids)
+                        },
+                        onNo = { asking = null },
+                    )
                     Ask.Leave -> Confirm(
                         title = s.pickerLeaveChoosingTitle,
                         body = s.pickerLeaveChoosingBody,
@@ -918,6 +1037,13 @@ fun AddChatsScreen(
             val scopeCounts = remember(chats) {
                 ChatPicking.Scope.entries.associateWith { sc -> chats.count { ChatPicking.inScope(it, sc) } }
             }
+            // Each folder's chats, counted once for the rail; a folder not read yet shows no number.
+            val folderCounts = remember(chats, pickable) {
+                val wanted = pickable.mapTo(HashSet()) { it.id }
+                HashMap<Int, Int>().also { counts ->
+                    for (chat in chats) for (id in chat.folderIds) if (id in wanted) counts[id] = (counts[id] ?: 0) + 1
+                }
+            }
             val title = if (required) s.setupWhichTitle else s.pickerChooseChats
             Column(Modifier.fillMaxSize()) {
                 Text(
@@ -930,14 +1056,18 @@ fun AddChatsScreen(
                     Modifier.weight(1f).fillMaxWidth().padding(top = 12.dp),
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
-                    Column(Modifier.width(RAIL_WIDTH).fillMaxHeight().focusGroup(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    // Scrolls, since the folders stack under the scopes and an account may have a dozen.
+                    Column(
+                        Modifier.width(RAIL_WIDTH).fillMaxHeight().verticalScroll(rememberScrollState()).focusGroup(),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
                         for (sc in TV_RAIL) {
                             val n = scopeCounts.getValue(sc)
                             RailEntry(
                                 label = scopeLabel(sc, s),
                                 icon = railIcon(sc),
                                 detail = if (n > 0) s.formatter.number(n) else null,
-                                chosen = state.scope == sc,
+                                chosen = folderId == null && state.scope == sc,
                                 dim = n == 0,
                                 onClick = { intoList(sc) },
                                 modifier = Modifier
@@ -945,6 +1075,36 @@ fun AddChatsScreen(
                                     .onPreviewKeyEvent { event ->
                                         if (event.type == KeyEventType.KeyDown && event.key == end) {
                                             intoList(sc)
+                                            true
+                                        } else {
+                                            false
+                                        }
+                                    },
+                            )
+                        }
+                        if (pickable.isNotEmpty()) {
+                            Text(
+                                s.pickerFolders,
+                                style = MaterialTheme.typography.labelLarge,
+                                color = Tone.muted,
+                                modifier = Modifier.padding(start = 14.dp, top = 10.dp, bottom = 2.dp).semantics { heading() },
+                            )
+                        }
+                        for (folder in pickable) {
+                            val read = folderStatus.read(folder.id)
+                            val n = folderCounts[folder.id] ?: 0
+                            RailEntry(
+                                label = folderLabel(folder, s),
+                                icon = folderIcon(folder.icon),
+                                detail = if (read == FolderRead.Loaded && n > 0) s.formatter.number(n) else null,
+                                chosen = folderId == folder.id,
+                                dim = read == FolderRead.Loaded && n == 0,
+                                onClick = { intoFolder(folder.id) },
+                                modifier = Modifier
+                                    .focusRequester(folderFocus.getOrPut(folder.id) { FocusRequester() })
+                                    .onPreviewKeyEvent { event ->
+                                        if (event.type == KeyEventType.KeyDown && event.key == end) {
+                                            intoFolder(folder.id)
                                             true
                                         } else {
                                             false
@@ -1158,6 +1318,8 @@ private val ARROWS = setOf(FocusDirection.Up, FocusDirection.Down, FocusDirectio
 private sealed interface Ask {
     data object Discard : Ask
     data object Leave : Ask
+    /** Taking a large folder whole (HX29): the chats it would add, asked about before they are ticked. */
+    data class AddMany(val ids: Set<Long>) : Ask
 }
 
 /**
@@ -1391,6 +1553,10 @@ private fun scopeLabel(scope: ChatPicking.Scope, s: com.tmplayer.i18n.Messages):
     ChatPicking.Scope.People -> s.browseFilterPeople
 }
 
+/** A folder's chip or rail words: its title, or "Folder 3" when Telegram gave it none. */
+private fun folderLabel(folder: ChatFolderSummary, s: com.tmplayer.i18n.Messages): String =
+    folder.title.trim().ifBlank { s.browseFolderFallback(folder.id.toString()) }
+
 /** A row's words and box sit this far in from its card's edges, as a settings row's do. */
 private val ROW_INSET = 16.dp
 
@@ -1484,6 +1650,11 @@ fun AddChatsFed(
     val kids by ChatGate.allowed.collectAsState()
     val starred by remember(settings) { settings.favorites }.collectAsState(initial = emptySet())
     val chats = remember(everything, kids) { KidsLock.chats(everything, kids) }
+    val folders by Td.folders.collectAsState()
+    val folderStatus by chatsViewModel.folderStatus.collectAsState()
+    // The folders' members are read now, with the picker open, and not before (HX29); folders that
+    // arrive after it opened are read when they do.
+    LaunchedEffect(folders.isNotEmpty()) { if (folders.isNotEmpty()) chatsViewModel.wantFolders() }
     AddChatsScreen(
         chats = chats,
         listComplete = listComplete(everything, connected, refreshing, paging),
@@ -1496,6 +1667,9 @@ fun AddChatsFed(
         // A short list's Try again reads it all again; the end of the list reads the next chats.
         onRetry = chatsViewModel::loadMoreChats,
         onLoadMore = chatsViewModel::loadMoreChats,
+        folders = folders,
+        folderStatus = folderStatus,
+        onRetryFolders = chatsViewModel::retryFolders,
         sendLogs = sendLogs,
         searchField = searchField,
         required = required,

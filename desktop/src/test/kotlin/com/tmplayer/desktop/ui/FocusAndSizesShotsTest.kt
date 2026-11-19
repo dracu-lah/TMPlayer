@@ -1,5 +1,6 @@
 package com.tmplayer.desktop.ui
 
+import com.tmplayer.ui.browse.chipLabel
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -137,13 +138,13 @@ class FocusAndSizesShotsTest {
             chat(6, "Old lectures", ChatKind.Channel, 0, 0xFF0090FF.toInt()),
             chat(8, "Documentaries in 4K", ChatKind.Channel, 0, 0xFF46A758.toInt()),
         )
-        val chips = com.tmplayer.ui.browse.chatPageChips(emptyList())
+        val chips = com.tmplayer.ui.browse.ChatFilter.entries
         val items = (0 until 14).map { video(100L + it, "Video number ${it + 1}", jpeg(COLOURS[it % COLOURS.size])) }
         val pages: List<Pair<String, @Composable () -> Unit>> = listOf(
             "chats" to {
                 Column(Modifier.fillMaxSize()) {
                     PageHeader(BrowseTab.Chats.heading)
-                    ChoiceChips(chips.map { chip -> Choice(chip.label, chip.label, chip.icon, selected = chip == chips.first()) {} })
+                    ChoiceChips(chips.map { chip -> Choice(chip.name, chip.chipLabel, chip.icon, selected = chip == chips.first()) {} })
                     val nav = rememberKeyboardNav(ListSurface(rememberLazyListState()))
                     ChatList(chats, setOf(2L), rememberLazyListState(), nav, onOpen = {}, onStar = {})
                 }

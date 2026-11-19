@@ -56,21 +56,23 @@ import kotlinx.coroutines.launch
 data class BrowseData(
     val chats: List<ChatSummary>,
     val account: Account? = null,
-    /** True while the folders' members are still being read: a folder page is not empty yet, only unknown. */
-    val foldersPending: Boolean = false,
-    /** The folders whose members could not be read (HX32): their pages say so, with Try again, never "nothing in this folder". */
-    val foldersFailed: Set<Int> = emptySet(),
-) {
+)
+
+/** Whether a folder's members are known: an empty folder may only say "nothing here" when [Loaded]. */
+enum class FolderRead { Loading, NotLoaded, Loaded }
+
+/**
+ * How reading the folders' members went (HX29): [pending] while they are on their way, [failed]
+ * the folders that could not be read (HX32), which are not empty folders.
+ */
+data class FolderStatus(val pending: Boolean = false, val failed: Set<Int> = emptySet()) {
     /** How reading [folderId]'s members went. */
-    fun folderRead(folderId: Int): FolderRead = when {
-        folderId in foldersFailed -> FolderRead.NotLoaded
-        foldersPending -> FolderRead.Loading
+    fun read(folderId: Int): FolderRead = when {
+        folderId in failed -> FolderRead.NotLoaded
+        pending -> FolderRead.Loading
         else -> FolderRead.Loaded
     }
 }
-
-/** Whether a folder's members are known: an empty folder page may only say "nothing here" when [Loaded]. */
-enum class FolderRead { Loading, NotLoaded, Loaded }
 
 /**
  * @param settings where the cold-start snapshot lives. Null in the contexts that have no
@@ -497,10 +499,28 @@ class ChatListViewModel(
     private var membership: com.tmplayer.data.FolderMembership? = null
     private var foldersJob: Job? = null
 
-    /** True when the folders could not be read at all (no connection, a failed read): their pages offer Try again. */
+    /** True when the folders could not be read at all (no connection, a failed read): the picker offers Try again. */
     private var foldersGaveUp = false
 
-    /** Reads the folders' members again, from a folder page's Try again (HX32). */
+    /**
+     * True once the picker has asked for the folders (HX29). Their members are read for the picker
+     * alone: on a database TDLib has not filled yet that asks Telegram for every chat of the
+     * account, so nothing reads them ahead of it, and a list read later keeps them current only
+     * once they have been asked for.
+     */
+    private var foldersWanted = false
+    private val _folderStatus = MutableStateFlow(FolderStatus())
+
+    /** How reading the folders' members is going, for the picker's folder filters. */
+    val folderStatus: StateFlow<FolderStatus> = _folderStatus.asStateFlow()
+
+    /** The picker is open: reads the folders' members, once, unless they are already read. */
+    fun wantFolders() {
+        foldersWanted = true
+        if (membership == null && Td.folders.value.isNotEmpty()) retryFolders()
+    }
+
+    /** Reads the folders' members again, from the picker's Try again (HX32). */
     fun retryFolders() {
         if (foldersJob?.isActive == true) return
         foldersGaveUp = false
@@ -651,7 +671,7 @@ class ChatListViewModel(
                     failure = L.chatsSomeNotLoaded.takeIf { sync.partial },
                     partial = sync.partial,
                 )
-                if (session.isCurrent()) fillFolders(repository, session)
+                if (session.isCurrent() && foldersWanted) fillFolders(repository, session)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Throwable) {
@@ -681,6 +701,8 @@ class ChatListViewModel(
         foldersJob?.cancel()
         membership = null
         foldersGaveUp = false
+        foldersWanted = false
+        _folderStatus.value = FolderStatus()
         pendingNewChats.clear()
         account = null
         chats = null
@@ -721,7 +743,7 @@ class ChatListViewModel(
         val LOADING_CHATS: String get() = L.browseLoadingChats
     }
 
-    /** Whether the folders' members are still on their way: a folder's page may not call itself empty yet. */
+    /** Whether the folders' members are still on their way: a folder may not call itself empty yet. */
     private fun foldersPending(): Boolean = membership == null && !foldersGaveUp && Td.folders.value.isNotEmpty()
 
     /** The folders that could not be read: the failed ones of the last read, or all of them when it never happened. */
@@ -729,6 +751,7 @@ class ChatListViewModel(
         ?: if (foldersGaveUp) Td.folders.value.mapTo(HashSet()) { it.id } else emptySet()
 
     private fun publish() {
+        _folderStatus.value = FolderStatus(foldersPending(), foldersFailed())
         val everything = chats ?: return
         // Kept whole, before the kids lock and the added chats, which are applied below on each
         // read. The picker reads this list, so it must stay whole: a chat
@@ -738,7 +761,7 @@ class ChatListViewModel(
         val allowed = ChatGate.browsing.value
         val loaded = KidsLock.chats(everything, allowed)
         _state.value = when {
-            loaded.isNotEmpty() -> UiState.Content(BrowseData(loaded, account, foldersPending(), foldersFailed()))
+            loaded.isNotEmpty() -> UiState.Content(BrowseData(loaded, account))
             // Nothing added yet (HX27), which is a choice to make rather than a fault: a first run
             // that skipped the picker, or every added chat since left. Asked before the kids lock,
             // since a locked app with nothing added should still say what to do about it.

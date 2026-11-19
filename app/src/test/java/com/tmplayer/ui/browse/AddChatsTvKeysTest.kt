@@ -351,10 +351,118 @@ class AddChatsTvKeysTest {
         ChatVideoCount.forget()
     }
 
+    // ---- Telegram folders in the rail (HX29) ------------------------------------------------
+
+    @Test
+    fun `the rail lists the folders under the scopes, the remote walks to one and into its chats`() {
+        val model = AddChatsViewModel(counts = null, write = {})
+        val activity = open(model, chats = FOLDERED, folders = FOLDERS, required = false)
+        assertTrue("the Folders heading is on screen", nodes(activity).any { words(it).contains("Folders") })
+        press(activity, KeyEvent.KEYCODE_DPAD_LEFT)
+        assertTrue(focusedWords(activity).contains("All"))
+        // All, Channels, Groups, People, Archived, then the folders.
+        repeat(5) { press(activity, KeyEvent.KEYCODE_DPAD_DOWN) }
+        assertTrue("the first folder: ${focusedWords(activity)}", focusedWords(activity).contains("Films"))
+        press(activity, KeyEvent.KEYCODE_DPAD_RIGHT)
+        assertEquals(7, model.state.value.folder)
+        assertEquals("Right goes into the folder's first chat", listOf("Loud 1"), focusedTitle(activity))
+        save("add-chats-tv-folder.png", draw(activity))
+        // Back climbs to the rail, on the folder.
+        activity.onBackPressedDispatcher.onBackPressed()
+        idle()
+        assertTrue("Back from a row goes to the rail: ${focusedWords(activity)}", focusedWords(activity).contains("Films"))
+        press(activity, KeyEvent.KEYCODE_DPAD_DOWN)
+        assertTrue(focusedWords(activity).contains("Family"))
+        press(activity, KeyEvent.KEYCODE_DPAD_UP)
+        press(activity, KeyEvent.KEYCODE_DPAD_UP)
+        assertTrue("Up from the first folder is Archived", focusedWords(activity).contains("Archived"))
+        model.stop()
+    }
+
+    @Test
+    fun `a folder is taken whole with one press, its chats only, and a second press takes them out`() {
+        val model = AddChatsViewModel(counts = null, write = {})
+        val activity = open(model, chats = FOLDERED, folders = FOLDERS, required = false)
+        press(activity, KeyEvent.KEYCODE_DPAD_LEFT)
+        repeat(6) { press(activity, KeyEvent.KEYCODE_DPAD_DOWN) }
+        assertTrue(focusedWords(activity).contains("Family"))
+        press(activity, KeyEvent.KEYCODE_DPAD_RIGHT)
+        assertEquals(8, model.state.value.folder)
+        // Up from the first row is the folder's one button.
+        settle(activity)
+        press(activity, KeyEvent.KEYCODE_DPAD_UP)
+        assertEquals(listOf("Add these 5 chats"), focusedWords(activity))
+        press(activity, KeyEvent.KEYCODE_DPAD_CENTER)
+        assertEquals(setOf(2_003L, 2_004L, 2_005L, 3_001L, 3_002L), model.state.value.ticked)
+        assertEquals(listOf("Remove these 5 chats"), focusedWords(activity))
+        // The button hands Back to the rail like a row does.
+        activity.onBackPressedDispatcher.onBackPressed()
+        idle()
+        assertTrue(focusedWords(activity).contains("Family"))
+        press(activity, KeyEvent.KEYCODE_DPAD_RIGHT)
+        press(activity, KeyEvent.KEYCODE_DPAD_UP)
+        press(activity, KeyEvent.KEYCODE_DPAD_CENTER)
+        assertTrue("the second press takes them out again", model.state.value.ticked.isEmpty())
+        model.stop()
+    }
+
+    @Test
+    fun `a folder still being read says so, and one that could not be read offers Try again to the remote`() {
+        val model = AddChatsViewModel(counts = null, write = {})
+        val reading = open(model, chats = SMALL, folders = FOLDERS, folderStatus = FolderStatus(pending = true), required = false)
+        press(reading, KeyEvent.KEYCODE_DPAD_LEFT)
+        repeat(5) { press(reading, KeyEvent.KEYCODE_DPAD_DOWN) }
+        press(reading, KeyEvent.KEYCODE_DPAD_RIGHT)
+        settle(reading)
+        assertTrue(nodes(reading).any { words(it).contains("Reading this folder from Telegram\u2026") })
+        assertTrue("nothing to stand on yet, so the remote stays on the rail", focusedWords(reading).contains("Films"))
+        model.stop()
+    }
+
+    @Test
+    fun `a folder that could not be read is not called empty, and Try again is one press from its entry`() {
+        val model = AddChatsViewModel(counts = null, write = {})
+        var retried = 0
+        val activity = open(
+            model, chats = SMALL, folders = FOLDERS, folderStatus = FolderStatus(failed = setOf(7)),
+            onRetryFolders = { retried++ }, required = false,
+        )
+        press(activity, KeyEvent.KEYCODE_DPAD_LEFT)
+        repeat(5) { press(activity, KeyEvent.KEYCODE_DPAD_DOWN) }
+        press(activity, KeyEvent.KEYCODE_DPAD_RIGHT)
+        // A Robolectric window lays the list out only when it draws, so the button exists after the
+        // draw and the press is made once more; on a television the first press already lands on it.
+        settle(activity)
+        assertTrue(nodes(activity).any { words(it).contains("This folder could not be read from Telegram. It is not empty.") })
+        press(activity, KeyEvent.KEYCODE_DPAD_RIGHT)
+        assertEquals(listOf("Try again"), focusedWords(activity))
+        press(activity, KeyEvent.KEYCODE_DPAD_CENTER)
+        assertEquals(1, retried)
+        // Back from the button goes to the rail and does not close the picker.
+        activity.onBackPressedDispatcher.onBackPressed()
+        idle()
+        assertTrue(focusedWords(activity).contains("Films"))
+        model.stop()
+    }
+
+    @Test
+    fun `a folder that vanished while chosen falls back to every chat`() {
+        val model = AddChatsViewModel(counts = null, write = {})
+        val activity = open(model, chats = FOLDERED, folders = FOLDERS, required = false)
+        model.folder(99)
+        idle()
+        // Loud 1 is in Films only: it is listed because the vanished folder is no filter any more.
+        assertTrue(nodes(activity).any { words(it).contains("Loud 1") })
+        model.stop()
+    }
+
     private fun open(
         model: AddChatsViewModel,
         chats: List<ChatSummary>,
         search: Boolean = false,
+        folders: List<com.tmplayer.data.ChatFolderSummary> = emptyList(),
+        folderStatus: FolderStatus = FolderStatus(),
+        onRetryFolders: () -> Unit = {},
         required: Boolean = true,
         onLeave: () -> Unit = {},
         confirmLeave: Boolean = false,
@@ -374,6 +482,9 @@ class AddChatsTvKeysTest {
                     starred = emptySet(),
                     model = model,
                     onClose = {},
+                    folders = folders,
+                    folderStatus = folderStatus,
+                    onRetryFolders = onRetryFolders,
                     required = required,
                     onLeave = onLeave,
                     confirmLeave = confirmLeave,
@@ -387,6 +498,12 @@ class AddChatsTvKeysTest {
         }
         idle()
         return activity
+    }
+
+    /** A frame drawn and the clock run on: a Robolectric window lays a changed list out when it draws, not before. */
+    private fun settle(activity: ComponentActivity) {
+        draw(activity)
+        idle()
     }
 
     private fun idle() = repeat(10) { shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(100)) }
@@ -484,6 +601,20 @@ class AddChatsTvKeysTest {
         val SmallCounts = object : ChatCountCalls {
             override suspend fun videoCount(chatId: Long, localOnly: Boolean): CountAnswer =
                 CountAnswer.Counted(if (chatId in 2_001L..2_005L) 3 else 0)
+        }
+
+        val FOLDERS = listOf(
+            com.tmplayer.data.ChatFolderSummary(7, "Films", icon = "Custom"),
+            com.tmplayer.data.ChatFolderSummary(8, "Family", icon = "Custom"),
+        )
+
+        /** SMALL with the loud chats in Films, and three of them and two quiet ones in Family. */
+        val FOLDERED: List<ChatSummary> = SMALL.map { chat ->
+            val folders = buildList {
+                if (chat.id in 2_001L..2_005L) add(7)
+                if (chat.id in 2_003L..2_005L || chat.id in 3_001L..3_002L) add(8)
+            }
+            chat.copy(folderIds = folders)
         }
     }
 }

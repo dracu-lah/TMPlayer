@@ -16,6 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
@@ -513,6 +514,52 @@ class ChatPickerScaleTest {
             assertEquals("a chat already counted was asked again", requests, account.countRequests)
             assertEquals(calls, account.total())
 
+        }
+    }
+
+    /**
+     * Folders as a filter of the picker (HX29), on the account with folders and an archive. The
+     * folders' members are read once, behind the picker, never by opening it; each folder then
+     * lists in one pass over the account, and taking one folder ticks that folder's chats only.
+     */
+    @Test
+    fun `the folder filter reads the members once, lists a folder in one pass and ticks that folder only`() = runTest(dispatcher, timeout = 10.minutes) {
+        val account = SyntheticAccount(backgroundScope, { testScheduler.currentTime }, warm = true)
+        val chats = account.mainList() + account.archivedList()
+        picker(account) { model ->
+            model.start(chats)
+            val before = account.total()
+            // Opening the picker and listing every chat reads no folder: the members come only on request.
+            val everyChat = ChatPicking.rows(chats, emptySet(), listComplete = true)
+            assertEquals(chats.size, everyChat.size)
+            assertEquals("listing the chats asked Telegram for something", before, account.total())
+
+            var membership: com.tmplayer.data.FolderMembership? = null
+            backgroundScope.launch { membership = com.tmplayer.data.ChatListLoad.membership(account.listCalls, com.tmplayer.data.ChatRepository.FOLDER_LIMIT) }
+            val took = until(6 * 3_600_000L) { membership != null }
+            val foldered = com.tmplayer.data.ChatListLoad.withFolders(chats, membership!!)
+            val folders = account.folders.keys
+            val started = System.nanoTime()
+            val perFolder = folders.associateWith { id -> ChatPicking.rows(foldered, emptySet(), folder = id) }
+            val ms = (System.nanoTime() - started) / 1_000_000
+            report("folders: members read at ${took / 1000.0} s (virtual), ${folders.size} folders listed in $ms ms of real time over ${chats.size} chats; calls ${account.calls}")
+            // Each folder holds exactly what Telegram's own list for it holds, archived chats included.
+            for ((id, rows) in perFolder) {
+                val expected = chats.filter { account.folders.getValue(id)(it.id) }.map { it.id }.toSet()
+                assertEquals("folder $id", expected, rows.map { it.id }.toSet())
+            }
+            assertTrue("the archived chat of folder 4 is listed", perFolder.getValue(4).any { it.chat?.isArchived == true })
+
+            // One folder taken whole ticks its chats and no other chat.
+            val channels = ChatPicking.visible(perFolder.getValue(1))
+            model.folder(1)
+            model.selectAll(channels)
+            assertEquals(channels, model.state.value.ticked)
+            assertEquals(1, model.state.value.folder)
+            // Choosing a scope leaves the folder, and the ticks stay.
+            model.scope(ChatPicking.Scope.Groups)
+            assertEquals(null, model.state.value.folder)
+            assertEquals(channels, model.state.value.ticked)
         }
     }
 }

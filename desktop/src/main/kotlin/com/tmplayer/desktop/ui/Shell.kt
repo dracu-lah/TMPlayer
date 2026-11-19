@@ -310,15 +310,9 @@ private fun Browse(state: ShellState, player: PlayerContent) {
     LaunchedEffect(state) { state.settings.detailFirst.collect { state.detailFirst = it } }
     // New videos in the starred chats and the sponsor reminder, for as long as the app runs.
     DesktopChecks(state)
-    // "Only my folders" is retired: somebody who had it on finds their first folder's chip picked
-    // on the Chats page, once, and nothing hidden.
-    val shellFolders by Td.folders.collectAsState()
-    LaunchedEffect(shellFolders.isNotEmpty()) {
-        val first = shellFolders.firstOrNull() ?: return@LaunchedEffect
-        if (runCatching { state.settings.takeOnlyFolders() }.getOrDefault(false)) {
-            state.pickChatSection(BrowseSection.Folder(first.id, first.title))
-        }
-    }
+    // "Only my folders" is retired, and the folders themselves moved into Add chats (HX29): the
+    // old switch is read once and dropped, and nothing is hidden because of it.
+    LaunchedEffect(Unit) { runCatching { state.settings.takeOnlyFolders() } }
     // The chips over Chats and History: the saved choice first, then every change written back.
     LaunchedEffect(state) {
         runCatching {

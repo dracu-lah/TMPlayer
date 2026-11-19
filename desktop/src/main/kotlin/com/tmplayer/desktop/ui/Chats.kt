@@ -84,14 +84,10 @@ import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.tmplayer.data.ChatSummary
-import com.tmplayer.data.Td
 import com.tmplayer.ui.browse.BrowseSection
 import com.tmplayer.ui.browse.BrowseTab
 import com.tmplayer.ui.browse.ChatListViewModel
-import com.tmplayer.ui.browse.browseSections
-import com.tmplayer.ui.browse.ChatPageChip
-import com.tmplayer.ui.browse.chatPageChips
-import com.tmplayer.ui.browse.isSelected
+import com.tmplayer.ui.browse.chipLabel
 import com.tmplayer.ui.browse.filterChats
 import com.tmplayer.ui.components.rememberToast
 import com.tmplayer.ui.components.pressScale
@@ -115,7 +111,6 @@ fun ChatsPage(
     val s = LocalStrings.current
     val ui by model.state.collectAsState()
     val favourites by state.settings.favorites.collectAsState(initial = emptySet())
-    val folders by Td.folders.collectAsState()
     var query by rememberSaveable(favouritesOnly) { mutableStateOf("") }
     val toast = rememberToast()
     val undoToast = com.tmplayer.ui.components.rememberActionToast()
@@ -128,11 +123,6 @@ fun ChatsPage(
     var refocus by remember { mutableStateOf(state.takeChatToRefocus()) }
 
     // Home, History and Favourites have pages of their own.
-    // Telegram's own folder tab bar (All chats where Telegram puts it, then each folder in
-    // Telegram's order), then the filters no folder already is: one row the Chats page and every
-    // folder page share.
-    val mainListPosition by Td.mainListPosition.collectAsState()
-    val chips = remember(folders, mainListPosition) { chatPageChips(folders, mainListPosition) }
     val section = if (favouritesOnly) {
         BrowseSection.of(BrowseTab.Favorites)
     } else {
@@ -182,18 +172,12 @@ fun ChatsPage(
                             },
                         )
                     }
-                    chips.forEach { chip ->
-                        val selected = chip.isSelected(section, state.chatFilter)
+                    // TMPlayer's own filters; Telegram's folders filter Add chats instead (HX29).
+                    ChatFilter.entries.forEach { filter ->
                         add(
-                            when (chip) {
-                                // A filter is a filter of the Chats list, so from a folder it goes back there.
-                                is ChatPageChip.Filter -> Choice(chip.filter.name, chip.label, chip.icon, selected) {
-                                    state.chatFilter = chip.filter
-                                    state.showChats(BrowseSection.of(BrowseTab.Chats))
-                                }
-                                is ChatPageChip.Folder -> Choice(BrowseSection.encode(chip.folder), chip.label, chip.icon, selected) {
-                                    state.showChats(chip.folder)
-                                }
+                            Choice(filter.name, filter.chipLabel, filter.icon, section.isChats && filter == state.chatFilter) {
+                                state.chatFilter = filter
+                                state.showChats(BrowseSection.of(BrowseTab.Chats))
                             },
                         )
                     }
@@ -208,9 +192,7 @@ fun ChatsPage(
                 filterChats(data.chats, section, favourites, query, filter, sort)
             }
             if (visible.isEmpty()) {
-                // A folder whose members are not known is not an empty one (HX32).
-                val folderRead = (section as? BrowseSection.Folder)?.let { data.folderRead(it.id) } ?: com.tmplayer.ui.browse.FolderRead.Loaded
-                val next = com.tmplayer.ui.browse.emptyTabNext(section, query, filter, folderRead = folderRead)
+                val next = com.tmplayer.ui.browse.emptyTabNext(section, query, filter)
                 EmptyNote(
                     icon = when {
                         favouritesOnly && query.isBlank() -> TmIcons.StarOutline
@@ -218,24 +200,19 @@ fun ChatsPage(
                     },
                     text = when {
                         query.isNotBlank() -> s.chatsNoMatch(query)
-                        folderRead == com.tmplayer.ui.browse.FolderRead.Loading -> s.browseFolderLoading
-                        folderRead == com.tmplayer.ui.browse.FolderRead.NotLoaded -> s.browseFolderNotLoaded
                         favouritesOnly -> s.chatsFavouritesEmpty
                         section.isChats && filter != ChatFilter.All -> s.chatsSectionEmpty(filter.label)
                         else -> s.chatsSectionEmpty(section.label)
                     },
-                    // One decision for the three platforms: Search all chats for a search, Try again
-                    // for a folder that could not be read, Go to Chats for Favourites, Unread,
-                    // Archived and Saved (emptyTabNext).
+                    // One decision for the three platforms: Search all chats for a search, Go to
+                    // Chats for Favourites, Unread, Archived and Saved (emptyTabNext).
                     actionLabel = when (next) {
                         com.tmplayer.ui.browse.EmptyTabNext.SearchAllChats -> s.searchAllChats
-                        com.tmplayer.ui.browse.EmptyTabNext.ReadFoldersAgain -> s.commonTryAgain
                         com.tmplayer.ui.browse.EmptyTabNext.GoToChats -> s.browseGoToChats
                         com.tmplayer.ui.browse.EmptyTabNext.None -> null
                     },
                     onAction = {
                         when (next) {
-                            com.tmplayer.ui.browse.EmptyTabNext.ReadFoldersAgain -> model.retryFolders()
                             com.tmplayer.ui.browse.EmptyTabNext.SearchAllChats -> state.searchEverywhere(query)
                             else -> {
                                 state.chatFilter = ChatFilter.All

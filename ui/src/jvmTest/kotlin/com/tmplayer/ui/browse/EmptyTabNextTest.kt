@@ -36,14 +36,6 @@ class EmptyTabNextTest {
     }
 
     @Test
-    fun `a folder offers Try again only when it could not be read`() {
-        val folder = BrowseSection.Folder(5, "Films")
-        assertEquals(EmptyTabNext.None, emptyTabNext(folder, "", folderRead = FolderRead.Loaded))
-        assertEquals(EmptyTabNext.None, emptyTabNext(folder, "", folderRead = FolderRead.Loading))
-        assertEquals(EmptyTabNext.ReadFoldersAgain, emptyTabNext(folder, "", folderRead = FolderRead.NotLoaded))
-    }
-
-    @Test
     fun `a blank query is not a search`() {
         assertEquals(EmptyTabNext.GoToChats, emptyTabNext(tab(BrowseTab.Favorites), "   "))
     }
