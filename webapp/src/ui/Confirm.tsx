@@ -7,6 +7,7 @@
 import { createEffect, createSignal, onMount, Show } from 'solid-js'
 import { render } from 'solid-js/web'
 import { t } from '../i18n'
+import { closeModal, holdClose, isOpen, onlyOne, openModal } from './confirmCore'
 import './confirm.css'
 
 export interface ConfirmOptions {
@@ -42,17 +43,18 @@ export const confirmOpen = () => pending() !== null
 
 /** Asks; resolves true when the viewer confirmed (and `run` has ended), false for anything else. */
 export function askConfirm(options: ConfirmOptions): Promise<boolean> {
-    const open = pending()
-    if (open) return open.answer
-    if (!drawn) {
-        drawn = true
-        render(() => <ConfirmDialog />, document.body)
-    }
-    let settle!: (yes: boolean) => void
-    const answer = new Promise<boolean>((resolve) => (settle = resolve))
-    setWorking(false)
-    setPending({ options, answer, settle })
-    return answer
+    // One question at a time: a second ask is a "no" (it must never run on the first one's yes).
+    return onlyOne(pending() !== null, () => {
+        if (!drawn) {
+            drawn = true
+            render(() => <ConfirmDialog />, document.body)
+        }
+        let settle!: (yes: boolean) => void
+        const answer = new Promise<boolean>((resolve) => (settle = resolve))
+        setWorking(false)
+        setPending({ options, answer, settle })
+        return answer
+    })
 }
 
 function ConfirmDialog() {
@@ -64,13 +66,20 @@ function Question(props: { p: Pending }) {
     let dialog!: HTMLDialogElement
     let cancel!: HTMLButtonElement
     let yes = false
+    // Where the browser has no modal dialog (iOS before 15.4) the question is shown in place and Tab is kept inside by hand.
+    const [native, setNative] = createSignal(true)
     onMount(() => {
-        dialog.showModal()
+        holdClose(dialog, working)
+        setNative(openModal(dialog))
         // Cancel first, on every form: a key press or the remote's OK on the open dialog keeps everything.
-        cancel.focus()
+        try {
+            cancel.focus()
+        } catch {}
+        // Whatever happened, the question is either open or answered, never stuck.
+        if (!isOpen(dialog)) finish()
     })
     createEffect(() => {
-        if (o.closeWhen?.() && dialog.open) dialog.close()
+        if (o.closeWhen?.() && isOpen(dialog)) dialog.close()
     })
     const confirm = async () => {
         if (working()) return
@@ -81,7 +90,9 @@ function Question(props: { p: Pending }) {
             } catch {}
         }
         yes = true
-        if (dialog.open) dialog.close()
+        // The work is over: the held close lets go.
+        setWorking(false)
+        if (isOpen(dialog)) closeModal(dialog)
         else finish()
     }
     let done = false
@@ -93,14 +104,25 @@ function Question(props: { p: Pending }) {
     }
     return (
         <dialog
-            class="confirm confirm-ask"
+            classList={{ 'confirm confirm-ask': true, 'confirm-fallback': !native() }}
             ref={dialog}
             aria-labelledby="confirm-title"
             aria-describedby="confirm-message"
             // Escape while the work runs is held, so the question cannot close on it half way.
             onCancel={(e) => working() && e.preventDefault()}
             onClose={finish}
-            onClick={(e) => e.target === dialog && !working() && dialog.close()}
+            onClick={(e) => e.target === dialog && dialog.close()}
+            onKeyDown={(e) => {
+                if (native()) return
+                if (e.key === 'Escape') return void dialog.close()
+                if (e.key !== 'Tab') return
+                const buttons = [...dialog.querySelectorAll('button')].filter((b) => !b.disabled)
+                if (!buttons.length) return
+                const at = buttons.indexOf(document.activeElement as HTMLButtonElement)
+                const next = buttons[(at + (e.shiftKey ? buttons.length - 1 : 1)) % buttons.length]
+                e.preventDefault()
+                next.focus()
+            }}
         >
             <h2 id="confirm-title">{o.title}</h2>
             <p id="confirm-message">{o.message}</p>

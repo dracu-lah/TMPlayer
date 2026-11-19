@@ -18,14 +18,15 @@ export async function clearHistoryWithUndo() {
     if (busy) return
     busy = true
     try {
-        const count = await historyCount().catch(() => 0)
+        // A failed read is not "nothing to lose": it asks, without a count.
+        const count = await historyCount().catch(() => null)
         // Nothing to lose: no question, the same short answer as before.
         const yes =
             count === 0 ||
             (await askConfirm({
                 title: t('browse.clear_history_title'),
-                message: t('browse.clear_history_message', { count }),
-                detail: t('browse.clear_history_detail'),
+                message: count === null ? t('browse.clear_history_detail') : t('browse.clear_history_message', { count }),
+                detail: count === null ? undefined : t('browse.clear_history_detail'),
                 confirm: t('browse.clear_history'),
             }))
         if (!yes) return
