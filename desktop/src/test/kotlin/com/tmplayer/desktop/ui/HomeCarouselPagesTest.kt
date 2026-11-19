@@ -12,7 +12,9 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.ScrollWheel
 import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.test.runComposeUiTest
@@ -114,5 +116,27 @@ class HomeCarouselPagesTest {
         onAllNodes(hasContentDescription("Page 3 of 3") and hasClickAction())[0].performClick()
         waitForIdle()
         assertEquals(1, onAllNodes(hasContentDescription("Page 3 of 3") and !hasClickAction()).fetchSemanticsNodes().size)
+    }
+
+    /** HX63: a touchpad's two finger sideways swipe (a sideways scroll) turns one page, however long it runs on. */
+    @Test
+    fun `a sideways swipe turns one page and its momentum does not turn more`() = runComposeUiTest {
+        show(mutableListOf())
+        waitForIdle()
+        onAllNodes(hasContentDescription("Page 1 of 3") and !hasClickAction())[0].performMouseInput {
+            // A swipe: a burst of small sideways steps, 20 ms apart, as momentum delivers them.
+            repeat(12) {
+                scroll(1f, ScrollWheel.Horizontal)
+                advanceEventTime(20)
+            }
+        }
+        waitForIdle()
+        assertEquals(1, onAllNodes(hasContentDescription("Page 2 of 3") and !hasClickAction()).fetchSemanticsNodes().size)
+        // The plain wheel is the page's: it turns nothing.
+        onAllNodes(hasContentDescription("Page 2 of 3") and !hasClickAction())[0].performMouseInput {
+            scroll(3f, ScrollWheel.Vertical)
+        }
+        waitForIdle()
+        assertEquals(1, onAllNodes(hasContentDescription("Page 2 of 3") and !hasClickAction()).fetchSemanticsNodes().size)
     }
 }
