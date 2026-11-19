@@ -164,8 +164,9 @@ test('a split show lists TMDB\'s seasons with names, days and lengths: a missing
     await missing.click()
     await expect(page.locator('dialog[open]')).toContainText('S01E04 is not in your chats yet.')
     await page.locator('dialog[open] .menu-row', { hasText: 'Find in other chats' }).click()
-    // (Search drops a ?q= on the first visit of a page load as "stale", so the box is not asserted: Search.tsx is WB21's.)
+    // Search opens with the words of the missing episode (WB21: the first visit of a load no longer drops them).
     await expect(page).toHaveURL(/\/search/)
+    await expect(page.locator('.search-field input')).not.toHaveValue('')
     await page.goBack()
     // Season 2 comes from the split too: its seventh, untitled at TMDB ("Episode 32"), is "Episode 7".
     await page.locator('.season-chip').nth(1).click()

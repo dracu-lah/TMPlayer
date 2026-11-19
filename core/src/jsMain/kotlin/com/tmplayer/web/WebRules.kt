@@ -39,11 +39,14 @@ import com.tmplayer.data.SettingsGroup
 import com.tmplayer.data.SettingsMap
 import com.tmplayer.data.SettingsSearch
 import com.tmplayer.data.copyQuality
+import com.tmplayer.data.ForumTopicSummary
 import com.tmplayer.data.ShelfEntry
 import com.tmplayer.data.SizeFilter
 import com.tmplayer.data.SplitPieces
 import com.tmplayer.data.StoredKeys
 import com.tmplayer.data.TgLink
+import com.tmplayer.data.TopicHit
+import com.tmplayer.data.TopicSearch
 import com.tmplayer.data.VideoCopies
 import com.tmplayer.data.VideoCorrection
 import com.tmplayer.data.VideoCorrections
@@ -1377,6 +1380,107 @@ fun settingsSearch(query: String, form: String, only: Array<String>?): Array<Str
 }
 
 private const val SETTINGS_QUERY_MAX = 80
+
+// ---- Search by topic name (U14) ---------------------------------------------------------------------
+
+/** What one search by topic name may ask of Telegram ([TopicSearch]'s budget), so the worker holds to the apps' numbers. */
+interface WebTopicBudget {
+    /** Groups with topics asked per search, at most. */
+    val chats: Double
+    /** Of those, asked at the same time. */
+    val atOnce: Double
+    /** Topics read per group. */
+    val topicsPerChat: Double
+    /** Hits listed at most. */
+    val maxHits: Double
+}
+
+fun topicBudget(): WebTopicBudget = plain(
+    "chats" to TopicSearch.CHATS_PER_SEARCH.toDouble(),
+    "atOnce" to TopicSearch.AT_ONCE.toDouble(),
+    "topicsPerChat" to TopicSearch.TOPICS_PER_CHAT.toDouble(),
+    "maxHits" to TopicSearch.MAX_HITS.toDouble(),
+)
+
+/** A group with topics turned on, as the chat list knows it. */
+interface WebTopicChat {
+    val id: Double
+    val title: String
+    val archived: Boolean
+}
+
+/**
+ * The groups worth asking for [query] ([TopicSearch.candidates]), best first, at most the budget's:
+ * only [chats] (the page passes the groups with topics), only the [added] ones (null: every chat),
+ * those whose own title answers the words first. Archived ones only with [includeArchived].
+ */
+fun topicCandidates(chats: Array<WebTopicChat>, query: String, added: Array<Double>?, includeArchived: Boolean): Array<Double> {
+    val allowed = added?.map { it.toLong() }?.toHashSet()
+    val summaries = chats.map {
+        ChatSummary(id = it.id.toLong(), title = it.title, miniThumbnail = null, photoFileId = 0, kind = ChatKind.Group, isArchived = it.archived)
+    }
+    return TopicSearch.candidates(summaries, query, { allowed == null || it in allowed }, { true }, includeArchived)
+        .take(TopicSearch.CHATS_PER_SEARCH).map { it.id.toDouble() }.toTypedArray()
+}
+
+/** One topic of a group, as Telegram listed it. */
+interface WebTopic {
+    val id: Double
+    val name: String
+    val pinned: Boolean
+    val closed: Boolean
+    val hasVideos: Boolean
+}
+
+/** A topic that answers the words, listed as "Chat > Topic". */
+interface WebTopicHit {
+    val chatId: Double
+    val chatTitle: String
+    val topicId: Double
+    val name: String
+    val pinned: Boolean
+    val closed: Boolean
+    val hasVideos: Boolean
+    val score: Double
+}
+
+private fun hitOf(h: TopicHit): WebTopicHit = plain(
+    "chatId" to h.chatId.toDouble(),
+    "chatTitle" to h.chatTitle,
+    "topicId" to h.topic.id.toDouble(),
+    "name" to h.topic.name,
+    "pinned" to h.topic.isPinned,
+    "closed" to h.topic.isClosed,
+    "hasVideos" to h.topic.hasVideos,
+    "score" to h.score.toDouble(),
+)
+
+private fun hitFrom(h: WebTopicHit) = TopicHit(
+    chatId = h.chatId.toLong(),
+    chatTitle = h.chatTitle,
+    topic = ForumTopicSummary(id = h.topicId.toInt(), name = h.name, isPinned = h.pinned, isClosed = h.closed, hasVideos = h.hasVideos),
+    score = h.score.toInt(),
+)
+
+/** How well a topic [name] answers [query] (every word must land, a typo forgiven), or 0. */
+fun topicScore(name: String, query: String): Double = TopicSearch.score(name, query).toDouble()
+
+/** The [topics] of one group that answer [query] ([TopicSearch.hits]); [fromTelegram] keeps one our folding misses at the lowest score. */
+fun topicHits(chatId: Double, chatTitle: String, topics: Array<WebTopic>, query: String, fromTelegram: Boolean): Array<WebTopicHit> =
+    TopicSearch.hits(
+        chatId.toLong(),
+        chatTitle,
+        topics.filter { it.id.isFinite() }.map { ForumTopicSummary(id = it.id.toInt(), name = it.name, isPinned = it.pinned, isClosed = it.closed, hasVideos = it.hasVideos) },
+        query,
+        fromTelegram,
+    ).map(::hitOf).toTypedArray()
+
+/** [hits] best first, one per chat and topic, at most the budget's ([TopicSearch.rank]); [chatOrder] is the chat list's order, by id. */
+fun topicRank(hits: Array<WebTopicHit>, chatOrder: Array<Double>): Array<WebTopicHit> {
+    val order = HashMap<Long, Int>()
+    chatOrder.forEachIndexed { i, id -> order.getOrPut(id.toLong()) { i } }
+    return TopicSearch.rank(hits.map(::hitFrom), order).map(::hitOf).toTypedArray()
+}
 
 // ---- Telegram links (U9) -----------------------------------------------------------------------------
 

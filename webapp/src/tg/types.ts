@@ -165,6 +165,8 @@ export interface ChatView {
      * ChatOrder): the watch page's Next and autoplay follow the grid's sort. Off or absent: it stops.
      */
     chatOrder?: boolean
+    /** A forum chat held to one topic (the `?topic=` of a "Chat > Topic" row in Search): only its videos are listed, read through the topic itself. */
+    topic?: number
 }
 
 /**
@@ -215,6 +217,34 @@ export interface ChatPage {
     /** Telegram's sponsored messages for a channel, placed among the cards every `sponsoredBetween` (0: one after them all). */
     sponsored: SponsoredItem[]
     sponsoredBetween: number
+    /** The topic the grid is held to (`ChatView.topic`) with its name, when it was found. */
+    topic?: { id: number; name: string }
+}
+
+/** A topic found by its name (U14), listed as "Chat > Topic"; a tap opens the chat on that topic. */
+export interface TopicHit {
+    chatId: number
+    chatTitle: string
+    topicId: number
+    /** The topic's name; empty for one with no title (the page says "Untitled topic"). */
+    name: string
+    pinned: boolean
+    closed: boolean
+    /** False when the topic holds no video or file: listed dimmed. */
+    hasVideos: boolean
+    score: number
+}
+
+/** The answer of a search by topic name, whole or so far. */
+export interface TopicsFound {
+    hits: TopicHit[]
+    /** Groups with topics asked, and how many of those Telegram refused. */
+    asked: number
+    refused: number
+    /** More groups could have topics than one search asks: the heading says so. */
+    partial: boolean
+    /** The search is still asking (an event before the last answer). */
+    searching: boolean
 }
 
 /** A sponsored message Telegram shows in a channel, as the apps' SponsoredItem. Never playable. */

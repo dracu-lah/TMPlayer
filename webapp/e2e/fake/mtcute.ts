@@ -5,10 +5,12 @@
 // `signedout`, `revoked` (Telegram says the session ended), `slow` (lists answer after 3 s),
 // `password` (signed out, the QR code is taken at once and the account asks its two-step password),
 // `huge` (a very large account for e2e/scale.spec.ts, described below the dialogs),
+// `forums` (three forum chats with topics, for e2e/search-topics.spec.ts, described below the dialogs),
 // `hinted` (Test Shows is named for a language: "Test Shows Malayalam", for the chat language hints of e2e/posters.spec.ts).
 // Read live, so a test can change them while the page runs (the cookie is read again): `stall` (a
 // file read answers nothing until the flag goes), `late` (it answers after 6 s), `flood:N` (file reads are told to wait N seconds, from the first one), `linkdown` (the line to
-// Telegram reports `connecting`, and nothing is answered).
+// Telegram reports `connecting`, and nothing is answered), `topicflood` (the first ask for Language Club's topics is told to wait 2 s),
+// `topicsrefuse` (every ask for topics is refused), `topicslow` (an ask for topics answers after 1.5 s).
 
 // Read synchronously (a worker may): a top-level await would hold back the worker's message
 // handler, and the page's first call would be lost.
@@ -118,12 +120,14 @@ interface Opts {
     withheld?: boolean
     /** What Telegram says the file is (a document's mime type), else it is told from the name. */
     mime?: string
+    /** The forum topic it was posted in (0 or none: no topic). */
+    topic?: number
 }
 
 let n = 0
 function msg(chat: Peer, name: string, o: Opts = {}) {
     n++
-    return build(n, chat, name, o, new Date(Date.UTC(2026, 9, 1) + n * 3600_000), `thumb${n}`, `file${n}`)
+    return Object.assign(build(n, chat, name, o, new Date(Date.UTC(2026, 9, 1) + n * 3600_000), `thumb${n}`, `file${n}`), { topic: o.topic ?? 0 })
 }
 /** One message as the app reads it; `thumbId` and `fileId` are Telegram's unique ids, one per message. */
 function build(id: number, chat: Peer, name: string, o: Opts, date: Date, thumbId: string, fileId: string) {
@@ -253,6 +257,48 @@ if (flags.has('crosscopies')) messages.get(quiet.id)!.push(msg(quiet, 'Big.Buck.
 const dialogs: Peer[] = [me, clips, shows, locked, quiet, copies]
 if (!flags.has('huge')) for (let i = 0; i < 1500; i++) dialogs.push(peer(-5000 - i, `Group ${i}`, 'chat'))
 dialogs.push(lighthouse)
+
+// `forums`: three groups with topics turned on, among the first chats of the list (/chat/-1010 to -1012), for the search by topic name.
+// Course Hub has a topic of two videos ("☕ Café Lessons"), one with none ("Lessons archive", closed), one of files only,
+// a pinned General and one with no title; Language Club has two small topics; Outside Forum is for the added-chats test.
+interface FakeTopic {
+    id: number
+    title: string
+    pinned?: boolean
+    closed?: boolean
+}
+const topicsOf = new Map<number, FakeTopic[]>()
+if (flags.has('forums')) {
+    const hub = peer(-1010, 'Course Hub', 'chat', { isForum: true })
+    const club = peer(-1011, 'Language Club', 'chat', { isForum: true })
+    const outside = peer(-1012, 'Outside Forum', 'chat', { isForum: true })
+    messages.set(hub.id, [
+        msg(hub, 'Cafe.Lesson.One.mp4', { file: 'h264-aac.mp4', video: true, topic: 2 }),
+        msg(hub, 'Cafe.Lesson.Two.mp4', { file: 'h264-aac.mp4', video: true, topic: 2 }),
+        msg(hub, 'General.Chat.Clip.mp4', { file: 'h264-aac.mp4', video: true, topic: 1 }),
+        msg(hub, 'readme.pdf', { size: 2000, topic: 4 }),
+    ])
+    messages.set(club.id, [msg(club, 'Week.One.mp4', { file: 'h264-aac.mp4', video: true, topic: 1 }), msg(club, 'Week.Two.mp4', { file: 'h264-aac.mp4', video: true, topic: 2 })])
+    messages.set(outside.id, [msg(outside, 'Outside.Clip.mp4', { file: 'h264-aac.mp4', video: true, topic: 1 })])
+    topicsOf.set(hub.id, [
+        { id: 1, title: 'General', pinned: true },
+        { id: 2, title: '☕ Café Lessons' },
+        { id: 3, title: 'Lessons archive', closed: true },
+        { id: 4, title: 'Lessons notes (PDF)' },
+        { id: 5, title: '' },
+    ])
+    topicsOf.set(club.id, [
+        { id: 1, title: 'Lessons week 1' },
+        { id: 2, title: 'Lessons week 2' },
+    ])
+    topicsOf.set(outside.id, [{ id: 1, title: 'Lessons outside' }])
+    // Among the first chats (the head of the list is what a search by topic name reads when the whole list is not there).
+    dialogs.splice(6, 0, hub, club, outside)
+}
+/** Telegram's own matching of a topic's name: lower case, no accents, the words inside it. */
+const fold = (text: string) => text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+/** Group ids whose topics were asked once already (the `topicflood` case answers a flood wait the first time only). */
+const floodedOnce = new Set<number>()
 // Telegram's archive: two chats of its own, listed only when the archive is asked for.
 const archive: Peer[] = [peer(-7001, 'Archived Reels', 'chat', { chatType: 'channel' }), peer(-7002, 'Old Group', 'chat')]
 
@@ -408,8 +454,26 @@ export class TelegramClient {
         if (q._ === 'messages.viewSponsoredMessage' || q._ === 'messages.clickSponsoredMessage') return true
         throw rpcError('METHOD_NOT_FAKED')
     }
-    async searchMessages(p: { chatId: number | 'self'; query?: string; filter?: { _: string }; offset?: number; limit: number }) {
+    async getForumTopics(chatId: number, p?: { query?: string; limit?: number }) {
+        const now = await live()
+        calls.push(`getForumTopics ${chatId} ${p?.query ?? ''} ${p?.limit ?? 0}`)
+        await delay(now.has('topicslow') ? 1500 : 30)
+        if (now.has('topicsrefuse')) throw rpcError('CHANNEL_PRIVATE')
+        if (now.has('topicflood') && chatId === -1011 && !floodedOnce.has(chatId)) {
+            floodedOnce.add(chatId)
+            throw Object.assign(rpcError('FLOOD_WAIT_2', 420), { seconds: 2 })
+        }
+        const q = fold(p?.query ?? '')
+        const found = (topicsOf.get(chatId) ?? []).filter((t) => fold(t.title).includes(q)).slice(0, p?.limit ?? 100)
+        return found.map((t) => ({ id: t.id, title: t.title, titleMissing: !t.title, isPinned: !!t.pinned, isClosed: !!t.closed }))
+    }
+    async getForumTopicsById(chatId: number, ids: number[]) {
+        calls.push(`getForumTopicsById ${chatId} ${ids.join(',')}`)
+        return (topicsOf.get(chatId) ?? []).filter((t) => ids.includes(t.id)).map((t) => ({ id: t.id, title: t.title, titleMissing: !t.title, isPinned: !!t.pinned, isClosed: !!t.closed }))
+    }
+    async searchMessages(p: { chatId: number | 'self'; query?: string; filter?: { _: string }; offset?: number; limit: number; threadId?: number }) {
         calls.push(`searchMessages ${p.chatId} ${p.filter?._ ?? ''} ${p.offset ?? 0}`)
+        if (p.threadId) calls.push(`thread ${p.chatId} ${p.threadId}`)
         await delay(flags.has('slow') ? 3000 : 50)
         // Saved Messages: the sync file, found by its caption.
         if (p.chatId === 'self') return (await cloud.all(me)).filter((m) => m.text.includes(p.query ?? '')).slice(0, p.limit)
@@ -424,7 +488,7 @@ export class TelegramClient {
             const next = from + p.limit < places.length ? from + p.limit : undefined
             return Object.assign(places.slice(from, from + p.limit).map((k) => hugeMsg(chat, k)), { total: places.length, next })
         }
-        const all = (messages.get(p.chatId) ?? []).filter((m) => m.isVideo === wantVideo).sort((a, b) => b.id - a.id)
+        const all = (messages.get(p.chatId) ?? []).filter((m) => m.isVideo === wantVideo && (!p.threadId || m.topic === p.threadId)).sort((a, b) => b.id - a.id)
         const from = p.offset ?? 0
         const page = Object.assign(all.slice(from, from + p.limit), { total: all.length, next: from + p.limit < all.length ? from + p.limit : undefined })
         return page

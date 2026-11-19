@@ -19,6 +19,7 @@ import { playRandomOf } from './randomPlay'
 import { ensureTouches } from './touches'
 import { SortMenu } from './SortMenu'
 import { stableCards, tileCard, VideoList, type CardData } from './VideoList'
+import './topics.css'
 import type { ChatPage, ChatView, RpcError, Tile } from '../tg/types'
 
 /** Pages in a row that brought no new card before the list stops paging by itself and offers a button. */
@@ -31,8 +32,13 @@ const IDLE_PAGES = 3
  */
 export function Chat() {
     const params = useParams<{ chatId: string }>()
-    const [search, setSearch] = useSearchParams<{ q?: string }>()
+    const [search, setSearch] = useSearchParams<{ q?: string; topic?: string }>()
     const chatId = () => Number(params.chatId)
+    // Opened on one topic of a forum chat (a "Chat > Topic" row of Search, `?topic=`): only that topic's videos, read through the topic itself.
+    const topic = () => {
+        const n = Number(search.topic)
+        return Number.isSafeInteger(n) && n > 0 ? n : 0
+    }
     const [page, setPage] = createSignal<ChatPage | null>(null)
     const [error, setError] = createSignal<unknown>(null)
     const [busy, setBusy] = createSignal<'open' | 'more' | 'refresh' | 'view' | null>(null)
@@ -66,6 +72,7 @@ export function Chat() {
         watched: progress()?.watched ?? [],
         started: progress()?.started ?? [],
         query: search.q?.trim() ?? '',
+        ...(topic() ? { topic: topic() } : {}),
         filter: filterPaused() ? 'All' : pref().filter,
         facets: filterPaused() ? '' : pref().facets,
         ...(lastPlayedSort() && touchVer() > 0 ? { touches: touchVer() } : {}),
@@ -120,6 +127,17 @@ export function Chat() {
                     run('open')
                 })
         }),
+    )
+    // Another topic, or every topic again: that grid is read afresh (the old one is not shown under the new name).
+    createEffect(
+        on(topic, () => {
+            setPage(null)
+            setError(null)
+            setAutoPages(0)
+            setIdlePages(0)
+            setMoreFailed(false)
+            run('open')
+        }, { defer: true }),
     )
     // A page lost with the connection loads once it is back.
     onBackOnline(() => {
@@ -218,7 +236,7 @@ export function Chat() {
     // The videos on screen, so "Choose the right poster" can offer a pick to the others of its title.
     createEffect(() => {
         const p = page()
-        if (p && !view().query) notePool(chatId(), p.tiles.map((tile) => tile.item))
+        if (p && !view().query && !topic()) notePool(chatId(), p.tiles.map((tile) => tile.item))
     })
     const empty = () => {
         const p = page()
@@ -226,12 +244,14 @@ export function Chat() {
         // Every loaded video screened out by the filters has its own empty state, with Clear filter.
         if (state() === 'hides-all') return null
         // Words: Telegram's search of the chat said nothing yet; Keep looking reads its pages on.
-        if (view().query) return busy() ? t('browse.searching') : t('browse.no_match', { query: view().query })
+        if (view().query) return busy() ? t('browse.searching') : topic() ? t('grid.topic_no_match', { topic: topicLabel(), query: view().query }) : t('browse.no_match', { query: view().query })
         if (!p.done) return null
         // Videos left out by the floor are said by the end row, with the way to show them.
         if (p.hiddenBySize) return null
-        return t('browse.no_playable_videos')
+        return topic() ? t('grid.topic_empty', { topic: topicLabel() }) : t('browse.no_playable_videos')
     }
+    const topicLabel = () => page()?.topic?.name?.trim() || t('grid.topic_untitled')
+    const allTopics = () => setSearch({ topic: undefined }, { replace: true })
 
     let debounce = 0
     let typing = false
@@ -400,6 +420,12 @@ export function Chat() {
                         ref={(el) => queueMicrotask(() => !search.q && el.focus())}
                     />
                 </label>
+            </Show>
+            <Show when={topic()}>
+                <div class="topic-chip-row">
+                    <span class="topic-chip" role="status">{page() ? topicLabel() : t('browse.finding_videos')}</span>
+                    <button class="link" type="button" onClick={allTopics}>{t('grid.topics_all')}</button>
+                </div>
             </Show>
             <Show when={refreshWait() != null}>
                 <p class="notice" role="status">{t('chats.refresh_wait', { seconds: refreshWait()! })}</p>
