@@ -39,6 +39,11 @@ suspend fun forgetAccount(context: Context, settings: SettingsStore, watchedStor
     // And what was kept to help with a bug report: the playback trace and its marks, the last
     // Playback test, the app log and a report waiting to be shared. They hold what was watched.
     withContext(Dispatchers.IO) { runCatching { DiagnosticFiles.forget(context) } }
+    // The online subtitles picked for this account's videos, and their kept copies (HX25).
+    withContext(Dispatchers.IO) {
+        runCatching { com.tmplayer.online.OnlineSubtitles.current?.picks?.clear() }
+        com.tmplayer.online.SubtitlePicks.wipe(java.io.File(context.filesDir, "online/picks.json"))
+    }
 }
 
 /**

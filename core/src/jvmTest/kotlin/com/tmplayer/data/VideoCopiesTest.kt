@@ -275,11 +275,12 @@ class VideoCopiesTest {
 
     @Test
     fun `the page's quality badge names the copy as the copy line does`() {
-        // The name says 1080p while Telegram states 1280 x 720: the badge followed the size and
-        // said 720p over a copy line of "1080p  ·  HEVC" (Mi TV, 2026-10-23).
+        // The name says 1080p while Telegram states 1280 x 720: the stated size decides (HX38,
+        // 2026-10-31), one answer for the badge, the copies list and the order.
         val copy = video(1, 70, "Night Train 2019 1080p WEBRip x265.mkv", width = 1280, height = 720)
-        assertEquals("1080p", VideoCopies.qualityLabel(copy))
+        assertEquals("720p", VideoCopies.qualityLabel(copy))
         assertEquals(copy.copyQuality(), VideoCopies.qualityLabel(copy))
+        assertEquals("720p", GlobalSearch.qualityOf(copy))
         // Only the stated size: it decides, a scope 4K film included.
         assertEquals("720p", VideoCopies.qualityLabel(video(1, 71, "Night Train.mkv", width = 1280, height = 720)))
         assertEquals("4K", VideoCopies.qualityLabel(video(1, 72, "Night Train.mkv", width = 3840, height = 1600)))

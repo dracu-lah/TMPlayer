@@ -210,6 +210,8 @@ class App : Application() {
             store = OnlineSubtitlesStore(java.io.File(filesDir, "online/account.properties")),
             cache = SubtitleCache(java.io.File(cacheDir, "online-subtitles")),
             appVersion = BuildConfig.VERSION_NAME,
+            // The picks are small and kept under files, not cache: the system may clear a cache (HX25).
+            picks = com.tmplayer.online.SubtitlePicks(java.io.File(filesDir, "online/picks.json")),
         ).also { online -> backgroundScope.launch { runCatching { online.cache.prune() } } }
         // Sized against this device's heap before anything is cached. A stick and a phone are an
         // order of magnitude apart, and one fixed figure is wrong for both.

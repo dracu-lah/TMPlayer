@@ -993,8 +993,8 @@ internal fun MediaTile(
             // A poster leads with the film's year and leaves the quality to the chip on its art.
             if (poster) item.parsedName.year?.let { append(it).append("  ·  ") }
             if (!poster && item.durationSec > 0) append(MediaMapper.formatDuration(item.durationSec)).append("  ·  ")
-            append(if (item.versions.size > 1) s.detailVersions(item.versions.size) else com.tmplayer.data.SplitPieces.sizeFact(item, MediaMapper.formatSize(item.sizeBytes)))
-            if (!poster) item.qualityTags.firstOrNull()?.let { append("  ·  ").append(it) }
+            append(if (com.tmplayer.data.VideoCopies.versionCount(item) > 1) s.detailVersions(com.tmplayer.data.VideoCopies.versionCount(item)) else com.tmplayer.data.SplitPieces.sizeFact(item, MediaMapper.formatSize(item.sizeBytes)))
+            if (!poster) com.tmplayer.data.QualityRead.of(item)?.let { append("  ·  ").append(it) }
             if (WatchedWords.showsWatched(point?.fraction, finished)) append("  ·  ").append(s.watchedBadge)
         },
     )

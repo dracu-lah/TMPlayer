@@ -68,6 +68,7 @@ object ChatSnapshot {
                 parts[5].split(",").mapNotNull { it.toIntOrNull() }
             }
             val title = parts.last().takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            com.tmplayer.online.ChatLanguageHints.note(id, title)
             ChatSummary(
                 id = id,
                 title = title,

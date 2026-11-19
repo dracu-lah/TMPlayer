@@ -1264,7 +1264,7 @@ private fun telegramFacts(chat: String, item: MediaItem): String {
     return remember(chat, item, s) {
         listOfNotNull(
             chat.ifBlank { null },
-            item.qualityTags.firstOrNull(),
+            com.tmplayer.data.QualityRead.of(item),
             item.sizeBytes.takeIf { it > 0 }?.let { s.formatter.size(it) },
         ).joinToString("  ·  ")
     }

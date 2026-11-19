@@ -326,7 +326,12 @@ data class MediaItem(
      */
     val metaQuery: com.tmplayer.online.MetaQuery?
         get() = read(metaQueryRead) {
-            com.tmplayer.online.MetaQuery.of(nameForParsing, caption).also { metaQueryRead = it ?: NotFound }
+            val asked = com.tmplayer.online.MetaQuery.of(nameForParsing, caption)
+                ?.withHints(com.tmplayer.online.ChatLanguageHints.of(chatId))
+            // Kept whether or not the chat is known: Saved Messages and chats past the registry's bound ask without
+            // hints, and the chat list is read (cold start snapshot first) before a chat's videos are.
+            metaQueryRead = asked ?: NotFound
+            asked
         }
 
     /** [MediaName.tileTitle] of the file's name, read once: search screens every item by it per letter. */
