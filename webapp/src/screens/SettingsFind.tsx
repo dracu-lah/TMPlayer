@@ -3,7 +3,7 @@
 // page draws and where; this file is the box, the results and the focus that follows a result.
 import { createEffect, createResource, createSignal, For, on, onCleanup, Show } from 'solid-js'
 import { A, useLocation, useNavigate, useParams } from '@solidjs/router'
-import { Cancel01Icon, CheckmarkCircle02Icon, Search01Icon, StarIcon } from '@hugeicons/core-free-icons'
+import { ArrowRight01Icon, Cancel01Icon, CheckmarkCircle02Icon, Search01Icon, StarIcon } from '@hugeicons/core-free-icons'
 import { catalogUrl, language, t } from '../i18n'
 import { api } from '../tg/rpc'
 import { form } from '../form'
@@ -273,12 +273,12 @@ export function useRowTarget() {
 // What's new
 
 /**
- * "What's new" (the apps' sheet, one for this build): its row, and the sheet it opens with the
- * highlights in the shown language. The rules say the version and the lines; the row is left out
- * when they do not come (the worker is not answering), and Changelog stays.
+ * What the apps' "What's new" sheet and Changelog row say for this build, from the rules (the
+ * version, the address and the lines in the shown language). One resource for both rows. When the
+ * worker does not answer, the What's new row stays, saying Try again, and a press asks again.
  */
-export function WhatsNewRow(props: { variant: 'row' | 'tv'; rowIcon: IconData }) {
-    const [news] = createResource(language, async (tag) => {
+function useNews() {
+    const [news, { refetch }] = createResource(language, async (tag) => {
         try {
             return await api.whatsNew(tag, catalogUrl(tag))
         } catch (e) {
@@ -286,35 +286,69 @@ export function WhatsNewRow(props: { variant: 'row' | 'tv'; rowIcon: IconData })
             return null
         }
     })
+    return { news, retry: () => void refetch() }
+}
+
+/**
+ * About's two rows from the rules (What's new and Changelog) and the sheet What's new opens: a row
+ * in a phone's or a desktop's list, a button and a link in the TV's panel.
+ */
+export function AboutNews(props: { variant: 'row' | 'tv'; icon: IconData; changelogIcon: IconData }) {
+    const { news, retry } = useNews()
     let dialog!: HTMLDialogElement
+    const failed = () => news.state === 'ready' && news() === null
     const open = () => {
+        if (failed()) return retry()
+        if (!news()) return
         if (typeof dialog.showModal === 'function') {
             if (!dialog.open) dialog.showModal()
         } else dialog.setAttribute('open', '')
     }
     const close = () => (typeof dialog.close === 'function' ? dialog.close() : dialog.removeAttribute('open'))
+    const detail = () => (failed() ? t('common.try_again') : news() ? t('settings.whats_new_detail', { version: news()!.version }) : '')
     return (
-        <Show when={news()}>
-            {(n) => (
-                <>
-                    <Show
-                        when={props.variant === 'row'}
-                        fallback={
-                            <button id={rowDomId('whats_new')} class="outline-button" style={{ 'align-self': 'start' }} type="button" onClick={open}>
-                                {t('settings.whats_new')}
-                            </button>
-                        }
-                    >
-                        <button id={rowDomId('whats_new')} type="button" class="set-row" onClick={open}>
+        <>
+            <Show
+                when={props.variant === 'row'}
+                fallback={
+                    <>
+                        <button id={rowDomId('whats_new')} class="outline-button" style={{ 'align-self': 'start' }} type="button" aria-busy={news.loading} onClick={open}>
+                            {failed() ? t('common.try_again') : t('settings.whats_new')}
+                        </button>
+                        <Show when={news()}>
+                            {(n) => <a class="link" id={rowDomId('changelog')} href={n().changelog} target="_blank" rel="noopener">{t('settings.changelog')}</a>}
+                        </Show>
+                    </>
+                }
+            >
+                <button id={rowDomId('whats_new')} type="button" class="set-row" aria-busy={news.loading} onClick={open}>
+                    <span class="set-icon">
+                        <Icon icon={props.icon} size={22} />
+                    </span>
+                    <span class="set-text">
+                        <span class="set-title">{t('settings.whats_new')}</span>
+                        <Show when={detail()}>
+                            <span class="set-sub" classList={{ 'caution-text': failed() }} role={failed() ? 'alert' : undefined}>{detail()}</span>
+                        </Show>
+                    </span>
+                </button>
+                <Show when={news()}>
+                    {(n) => (
+                        <a class="set-row" id={rowDomId('changelog')} href={n().changelog} target="_blank" rel="noopener">
                             <span class="set-icon">
-                                <Icon icon={props.rowIcon} size={22} />
+                                <Icon icon={props.changelogIcon} size={22} />
                             </span>
                             <span class="set-text">
-                                <span class="set-title">{t('settings.whats_new')}</span>
-                                <span class="set-sub">{t('settings.whats_new_detail', { version: n().version })}</span>
+                                <span class="set-title">{t('settings.changelog')}</span>
+                                <span class="set-sub">{t('settings.changelog_detail')}</span>
                             </span>
-                        </button>
-                    </Show>
+                            <Icon icon={ArrowRight01Icon} size={20} class="set-chevron" />
+                        </a>
+                    )}
+                </Show>
+            </Show>
+            <Show when={news()}>
+                {(n) => (
                     <dialog class="confirm whatsnew" ref={dialog} aria-labelledby="whatsnew-title" onClick={(e) => { if (e.target === dialog) close() }}>
                         <h2 id="whatsnew-title">{t('whatsnew.title', { version: n().version })}</h2>
                         <p class="muted">{t('whatsnew.subtitle')}</p>
@@ -333,8 +367,8 @@ export function WhatsNewRow(props: { variant: 'row' | 'tv'; rowIcon: IconData })
                             <button class="primary" type="button" onClick={close}>{t('common.close')}</button>
                         </div>
                     </dialog>
-                </>
-            )}
-        </Show>
+                )}
+            </Show>
+        </>
     )
 }

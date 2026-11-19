@@ -32,7 +32,7 @@ import {
     FavouriteIcon,
 } from '@hugeicons/core-free-icons'
 import { OLD_PAGES, pageFor, type PageId, type RowContext } from '../ui/settingsMap'
-import { rowDomId, SettingsSearch, showingResults, useRowTarget, WhatsNewRow } from './SettingsFind'
+import { rowDomId, SettingsSearch, showingResults, useRowTarget, AboutNews } from './SettingsFind'
 import { addedIds, addedMode, homeChatRows, namedLists, settings, setSetting, starredIds, storageWorks, type Theme } from '../store'
 import { editorRows, encodeOrder, moveKey, parseOrder, type OrderEntry } from '../ui/homeOrder'
 import { back, me, signOut } from '../session'
@@ -61,8 +61,6 @@ const LAYOUTS: Layout[] = ['desktop', 'tv']
 /** The build's own notices: the TV build's (under /tv/) also name core-js. */
 const LICENCES = `${import.meta.env.BASE_URL}licenses.txt`
 // The same UPI details the apps and the site carry (ui About.kt, site/src/lib/support.ts).
-/** Where the full changelog is (core's WhatsNew.CHANGELOG, as the apps' Changelog row opens it). */
-const CHANGELOG = 'https://tmplayer.org/changelog/'
 const UPI_ID = 'nevilnicks4321@okaxis'
 const UPI_LINK = `upi://pay?pa=${UPI_ID}&pn=TMPlayer&cu=INR&tn=${encodeURIComponent('TMPlayer support')}`
 
@@ -789,11 +787,7 @@ function About() {
     return (
         <>
         <div class="set-card">
-            <WhatsNewRow variant="row" rowIcon={StarIcon} />
-            <a class="set-row" id={rowDomId('changelog')} href={CHANGELOG} target="_blank" rel="noopener">
-                <RowBody icon={Clock01Icon} title={t('settings.changelog')} subtitle={t('settings.changelog_detail')} />
-                <Icon icon={ArrowRight01Icon} size={20} class="set-chevron" />
-            </a>
+            <AboutNews variant="row" icon={StarIcon} changelogIcon={Clock01Icon} />
         </div>
         <Feedback />
         <div class="set-card">
@@ -1149,8 +1143,7 @@ function TvSettings() {
                 <p class="muted small">{t('about.licence_line')}</p>
                 <p class="muted small">{t('about.notices_detail')}</p>
                 <a class="link" id={rowDomId('notices')} href={LICENCES} target="_blank" rel="noopener">{t('about.read')}</a>
-                <WhatsNewRow variant="tv" rowIcon={StarIcon} />
-                <a class="link" id={rowDomId('changelog')} href={CHANGELOG} target="_blank" rel="noopener">{t('settings.changelog')}</a>
+                <AboutNews variant="tv" icon={StarIcon} changelogIcon={Clock01Icon} />
             </div>
         </section>
     )

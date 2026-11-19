@@ -74,8 +74,22 @@ test.describe('on a phone', () => {
     test('a row a phone does not have is not found: Layout', async ({ page }) => {
         await page.goto('/settings')
         await box(page).fill('layout')
-        await expect(page.locator('.set-find-none, .set-results').first()).toBeVisible()
-        await expect(results(page).filter({ hasText: /^Layout/ })).toHaveCount(0)
+        // The search ends in the no match line (nothing else on a phone answers "layout"), never in a Layout row.
+        await expect(page.getByRole('status').filter({ hasText: 'Nothing in Settings matches layout' })).toBeVisible()
+        await expect(results(page)).toHaveCount(0)
+    })
+
+    test('an old page address naming a row on another page settles on that page and row, once', async ({ page }) => {
+        const moves: string[] = []
+        page.on('framenavigated', (f) => f === page.mainFrame() && moves.push(f.url()))
+        await page.goto('/settings/library#resume_sync')
+        await expect(page).toHaveURL(/\/settings\/privacy#resume_sync$/)
+        await expect.poll(() => focusedId(page)).toBe('row-resume_sync')
+        // No loop: it stays put, and the address changed by history only a few times (the redirect, then the page).
+        await page.waitForTimeout(800)
+        await expect(page).toHaveURL(/\/settings\/privacy#resume_sync$/)
+        expect(moves.length).toBeLessThan(6)
+        expect(await page.evaluate(() => history.length)).toBeLessThan(5)
     })
 
     test('the words people type find a row: log out finds Sign out, and the list stays on screen to press it', async ({ page }) => {
@@ -181,9 +195,13 @@ test.describe('on a desktop', () => {
 
     test('/ puts the keyboard in the box, as on the other pages', async ({ page }) => {
         await page.goto('/settings')
-        await page.locator('body').click({ position: { x: 5, y: 5 } })
-        await page.keyboard.press('/')
-        await expect(box(page)).toBeFocused()
+        await expect(box(page)).toBeVisible()
+        // The window's keys are installed a moment after the page is drawn: asked again until they answer.
+        await expect(async () => {
+            await page.locator('body').click({ position: { x: 5, y: 5 } })
+            await page.keyboard.press('/')
+            await expect(box(page)).toBeFocused({ timeout: 1000 })
+        }).toPass()
     })
 
     test('Layout is a desktop row and is found, and the clear button empties the box and returns to it', async ({ page }) => {
