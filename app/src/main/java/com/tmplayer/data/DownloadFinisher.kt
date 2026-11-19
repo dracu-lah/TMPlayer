@@ -1,8 +1,12 @@
 package com.tmplayer.data
 
 import com.tmplayer.i18n.L
+import com.tmplayer.platform.JobFailures
+import com.tmplayer.platform.Logger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import java.io.File
+import java.io.FileNotFoundException
 import java.io.IOException
 
 /**
@@ -74,6 +78,22 @@ class DownloadFinisher(
         request: DownloadRequest,
         onHeld: () -> Unit = {},
         onProgress: (done: Long, total: Long) -> Unit = { _, _ -> },
+    ): Outcome = try {
+        finishUnsafe(request, onHeld, onProgress)
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (failure: Throwable) {
+        // HX69: this used to catch IOException only, so a SecurityException from a revoked folder,
+        // an IllegalStateException from a provider or an OutOfMemoryError from a copy went on to
+        // the service's scope and ended the process. Every failure now ends as a row that says
+        // what happened, with the file still whole in the cache for Try again.
+        failed(request, failure)
+    }
+
+    private suspend fun finishUnsafe(
+        request: DownloadRequest,
+        onHeld: () -> Unit,
+        onProgress: (done: Long, total: Long) -> Unit,
     ): Outcome {
         val fileId = request.fileId
         if (isPlaying(fileId)) {
@@ -95,20 +115,15 @@ class DownloadFinisher(
         val source = File(path)
         val name = DownloadFiles.safeName(request.title, request.fileName.ifBlank { source.name })
         tree()?.let { picked -> return finishIntoTree(request, fileId, source, name, picked, onProgress) }
-        val target = try {
-            DownloadFiles.moveIntoDownloads(source, downloadsDir(), name) { done, total ->
-                OfflineDownloads.moving(fileId, movedBytes = done)
-                onProgress(done, total)
-            }
-        } catch (failure: IOException) {
-            return Outcome.Failed(MOVE_FAILED)
+        val target = DownloadFiles.moveIntoDownloads(source, downloadsDir(), name) { done, total ->
+            OfflineDownloads.moving(fileId, movedBytes = done)
+            onProgress(done, total)
         }
 
         // Recorded at the size it landed at, which is what the file is checked against later:
         // the size a message advertises can be an estimate.
-        val item = request.item().copy(sizeBytes = target.length())
-        settings.noteDownload(item, request.chatTitle, target.absolutePath)
-        com.tmplayer.data.SupportReminder.downloadFinished()
+        record(request.item().copy(sizeBytes = target.length()), request, target.absolutePath)
+        runCatching { SupportReminder.downloadFinished() }
         // Played before it was downloaded: the cache's record of it would have the next play
         // delete a file that is no longer the cache's.
         runCatching { settings.forgetCachedVideo(request.chatId, request.messageId) }
@@ -117,6 +132,47 @@ class DownloadFinisher(
         // asked first everywhere.
         runCatching { td.deleteFile(fileId) }
         return Outcome.Moved(target)
+    }
+
+    /** Writes the download's record, once more if the store fails the first time. */
+    private suspend fun record(item: MediaItem, request: DownloadRequest, path: String) {
+        try {
+            settings.noteDownload(item, request.chatTitle, path)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (first: Exception) {
+            delay(pollMs)
+            settings.noteDownload(item, request.chatTitle, path)
+        }
+    }
+
+    /**
+     * The row's sentence for [failure], and the log of it. The move that failed has already taken
+     * its own part file away ([DownloadFiles.moveIntoDownloads], [DownloadTree.put]), so what is
+     * left is the whole file in the cache and a card that offers Try again.
+     *
+     * @param sizeBytes the size the picked folder was asked to take, 0 when not a folder copy.
+     * @param label the picked folder's name, for the full-drive sentence.
+     */
+    private fun failed(request: DownloadRequest, failure: Throwable, sizeBytes: Long = 0L, label: String? = null): Outcome.Failed {
+        val chain = generateSequence(failure) { it.cause }.take(8).toList()
+        val reason = when {
+            failure is OutOfMemoryError -> MOVE_FAILED_MEMORY
+            chain.any { it is SecurityException } -> MOVE_FAILED_PERMISSION
+            chain.any { it is IOException && DownloadRelocation.isNoSpace(it) } ->
+                if (label != null) L.storageAndroidNoSpace(label, StorageRelocationPlan.size(sizeBytes)) else L.errorsNoSpace
+            failure is FileNotFoundException && label == null -> NOT_FOUND
+            failure is IOException -> MOVE_FAILED
+            else -> MOVE_FAILED_UNEXPECTED
+        }
+        if (failure !is IOException) {
+            // Not a disk or folder refusing, so a bug or a device quirk: kept for Send logs and,
+            // when the viewer allows it, reported. Nothing here ends the process.
+            JobFailures.handle("DownloadFinisher", failure)
+        } else {
+            runCatching { Logger.w(TAG, "Could not finish ${request.fileId}: ${failure.message}", failure) }
+        }
+        return Outcome.Failed(reason)
     }
 
     /**
@@ -143,11 +199,15 @@ class DownloadFinisher(
                 OfflineDownloads.moving(fileId, movedBytes = done)
                 onProgress(done, total)
             }
-        } catch (failure: IOException) {
-            return Outcome.Failed(if (DownloadRelocation.isNoSpace(failure)) L.storageAndroidNoSpace(picked.label, StorageRelocationPlan.size(size)) else MOVE_FAILED)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Throwable) {
+            // A source that vanished mid copy is the file missing, not the folder.
+            if (failure is FileNotFoundException && !source.exists()) return Outcome.Failed(NOT_FOUND)
+            return failed(request, failure, sizeBytes = size, label = runCatching { picked.label }.getOrDefault(""))
         }
-        settings.noteDownload(request.item().copy(sizeBytes = size), request.chatTitle, uri)
-        com.tmplayer.data.SupportReminder.downloadFinished()
+        record(request.item().copy(sizeBytes = size), request, uri)
+        runCatching { SupportReminder.downloadFinished() }
         runCatching { settings.forgetCachedVideo(request.chatId, request.messageId) }
         runCatching { td.deleteFile(fileId) }
         runCatching { source.delete() }
@@ -160,5 +220,9 @@ class DownloadFinisher(
 
         val NOT_FOUND: String get() = L.downloadsFinishedFileMissing
         val MOVE_FAILED: String get() = L.downloadsMoveFailed
+        val MOVE_FAILED_MEMORY: String get() = L.downloadsMoveFailedMemory
+        val MOVE_FAILED_PERMISSION: String get() = L.downloadsMoveFailedPermission
+        val MOVE_FAILED_UNEXPECTED: String get() = L.downloadsMoveFailedUnexpected
+        private const val TAG = "DownloadFinisher"
     }
 }

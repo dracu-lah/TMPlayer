@@ -1,5 +1,6 @@
 package com.tmplayer.data
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -10,6 +11,8 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
+import java.io.FileNotFoundException
+import java.io.IOException
 
 /**
  * The last stage of a download: what moves where, in what order, and what waits for the player.
@@ -133,5 +136,161 @@ class DownloadFinisherTest {
 
         assertEquals("Same name.mkv", a.file.name)
         assertEquals("Same name (2).mkv", b.file.name)
+    }
+
+    // ---- HX69: every failure ends as a row, never as a crash ---------------------------------------
+
+    /** A picked folder whose copy throws [failure] after "writing" a part file it cleans up itself. */
+    private fun folderThatFails(failure: () -> Throwable, free: Long? = null) = object : DownloadFinisher.TreeTarget {
+        override val label = "Movies"
+        override fun freeBytes(): Long? = free
+        override suspend fun put(source: File, name: String, onProgress: (Long, Long) -> Unit): String {
+            onProgress(10, source.length())
+            throw failure()
+        }
+    }
+
+    private fun finishInto(fileId: Int, target: DownloadFinisher.TreeTarget): Pair<DownloadFinisher.Outcome, File> {
+        val source = cached(fileId)
+        val td = FakeTdFiles(paths = mutableMapOf(fileId to source.path))
+        val outcome = runBlocking {
+            DownloadFinisher(settings, { downloads }, td, { td.paths[it] }, { false }, tree = { target }).finish(request(fileId))
+        }
+        // Whatever the failure, the whole file is where it was, TDLib still holds it and nothing is recorded.
+        assertTrue(source.isFile)
+        assertEquals(64L, source.length())
+        assertNull(runBlocking { settings.downloadRecord(-100L, fileId.toLong()) })
+        assertTrue(td.deleted.isEmpty())
+        return outcome to source
+    }
+
+    @Test
+    fun `a folder permission taken back is a failed row that says so`() {
+        val (outcome, _) = finishInto(10, folderThatFails({ SecurityException("grant revoked") }))
+        assertEquals(DownloadFinisher.Outcome.Failed(DownloadFinisher.MOVE_FAILED_PERMISSION), outcome)
+    }
+
+    @Test
+    fun `a security exception inside an IOException still counts as the permission`() {
+        val (outcome, _) = finishInto(11, folderThatFails({ IOException("Folder permission lost", SecurityException("x")) }))
+        assertEquals(DownloadFinisher.Outcome.Failed(DownloadFinisher.MOVE_FAILED_PERMISSION), outcome)
+    }
+
+    @Test
+    fun `an IllegalStateException from a provider is contained and logged, not thrown`() {
+        val before = com.tmplayer.platform.JobFailures.count
+        val (outcome, _) = finishInto(12, folderThatFails({ IllegalStateException("provider died") }))
+        assertEquals(DownloadFinisher.Outcome.Failed(DownloadFinisher.MOVE_FAILED_UNEXPECTED), outcome)
+        assertEquals(before + 1, com.tmplayer.platform.JobFailures.count)
+    }
+
+    @Test
+    fun `running out of memory is a failed row, not a dead process`() {
+        val (outcome, _) = finishInto(13, folderThatFails({ OutOfMemoryError("Map failed") }))
+        assertEquals(DownloadFinisher.Outcome.Failed(DownloadFinisher.MOVE_FAILED_MEMORY), outcome)
+    }
+
+    @Test
+    fun `a full drive in the picked folder names the folder`() {
+        val (outcome, _) = finishInto(14, folderThatFails({ IOException("write failed: ENOSPC (No space left on device)") }))
+        val reason = (outcome as DownloadFinisher.Outcome.Failed).reason
+        assertTrue(reason, reason.contains("Movies"))
+    }
+
+    @Test
+    fun `a folder with too little room is refused before anything is copied`() {
+        var copied = false
+        val folder = object : DownloadFinisher.TreeTarget {
+            override val label = "Movies"
+            override fun freeBytes(): Long? = 10L
+            override suspend fun put(source: File, name: String, onProgress: (Long, Long) -> Unit): String {
+                copied = true
+                return "content://x"
+            }
+        }
+        val (outcome, _) = finishInto(15, folder)
+        assertTrue(outcome is DownloadFinisher.Outcome.Failed)
+        assertFalse(copied)
+    }
+
+    @Test
+    fun `a folder that cannot even say its free space or name still ends in a failure`() {
+        val folder = object : DownloadFinisher.TreeTarget {
+            override val label: String get() = throw IllegalStateException("no label")
+            override fun freeBytes(): Long? = throw SecurityException("no access")
+            override suspend fun put(source: File, name: String, onProgress: (Long, Long) -> Unit): String =
+                throw IOException("Folder not reachable")
+        }
+        val (outcome, _) = finishInto(16, folder)
+        assertEquals(DownloadFinisher.Outcome.Failed(DownloadFinisher.MOVE_FAILED), outcome)
+    }
+
+    @Test
+    fun `a file that vanished during the copy is the file missing, not the folder`() {
+        val source = cached(17)
+        val td = FakeTdFiles(paths = mutableMapOf(17 to source.path))
+        val folder = object : DownloadFinisher.TreeTarget {
+            override val label = "Movies"
+            override fun freeBytes(): Long? = null
+            override suspend fun put(source: File, name: String, onProgress: (Long, Long) -> Unit): String {
+                source.delete()
+                throw FileNotFoundException("gone")
+            }
+        }
+        val outcome = runBlocking {
+            DownloadFinisher(settings, { downloads }, td, { td.paths[it] }, { false }, tree = { folder }).finish(request(17))
+        }
+        assertEquals(DownloadFinisher.Outcome.Failed(DownloadFinisher.NOT_FOUND), outcome)
+        assertNull(runBlocking { settings.downloadRecord(-100L, 17L) })
+    }
+
+    @Test
+    fun `a cancel is not a failure and goes on to whoever cancelled`() {
+        val source = cached(18)
+        val td = FakeTdFiles(paths = mutableMapOf(18 to source.path))
+        try {
+            runBlocking {
+                DownloadFinisher(
+                    settings, { downloads }, td, { td.paths[it] }, { false },
+                    tree = { folderThatFails({ CancellationException("cancelled") }) },
+                ).finish(request(18))
+            }
+            org.junit.Assert.fail("expected the cancellation")
+        } catch (_: CancellationException) {
+        }
+        assertTrue(source.isFile)
+    }
+
+    @Test
+    fun `a Downloads folder that cannot be reached is a failed row on every path`() = runBlocking {
+        val source = cached(19)
+        val td = FakeTdFiles(paths = mutableMapOf(19 to source.path))
+        val revoked = DownloadFinisher(settings, { throw SecurityException("storage revoked") }, td, { td.paths[it] }, { false })
+        assertEquals(DownloadFinisher.Outcome.Failed(DownloadFinisher.MOVE_FAILED_PERMISSION), revoked.finish(request(19)))
+
+        val broken = DownloadFinisher(settings, { throw IllegalStateException("no storage") }, td, { td.paths[it] }, { false })
+        assertEquals(DownloadFinisher.Outcome.Failed(DownloadFinisher.MOVE_FAILED_UNEXPECTED), broken.finish(request(19)))
+        assertTrue(source.isFile)
+        assertNull(settings.downloadRecord(-100L, 19L))
+    }
+
+    @Test
+    fun `TDLib throwing while asked whether the file may be kept is a failed row`() = runBlocking {
+        val source = cached(20)
+        val td = FakeTdFiles(paths = mutableMapOf(20 to source.path))
+        val outcome = DownloadFinisher(
+            settings, { downloads }, td, { td.paths[it] }, { false },
+            maySave = { _, _ -> throw IllegalStateException("td closed") },
+        ).finish(request(20))
+        assertEquals(DownloadFinisher.Outcome.Failed(DownloadFinisher.MOVE_FAILED_UNEXPECTED), outcome)
+        assertTrue(source.isFile)
+    }
+
+    @Test
+    fun `a cached file that is gone from disk fails as missing and creates nothing`() = runBlocking {
+        val td = FakeTdFiles(paths = mutableMapOf(21 to File(cache, "nothing.mkv").path))
+        val outcome = DownloadFinisher(settings, { downloads }, td, { td.paths[it] }, { false }).finish(request(21))
+        assertEquals(DownloadFinisher.Outcome.Failed(DownloadFinisher.NOT_FOUND), outcome)
+        assertFalse(downloads.exists() && downloads.list().orEmpty().isNotEmpty())
     }
 }
