@@ -20,9 +20,9 @@ function form(layout: 'phone' | 'desktop', width: number, height: number) {
     }
 }
 // The flows that must hold in every form (session 22).
-const FORM_SPECS = /(library|extras|pages|detail|a11y|titlelogo|choose-chats|sync|ux-audit)\.spec\.ts/
+const FORM_SPECS = /(library|extras|pages|detail|a11y|titlelogo|choose-chats|sync|ux-audit|confirm)\.spec\.ts/
 // What an iPhone in Safari runs: the player and its neighbours, plus every flow that must hold in every form.
-const IPHONE_SPECS = /(player|autoplay|posters|app|library|pages|extras|detail|a11y|titlelogo|choose-chats|sync|ux-audit)\.spec\.ts/
+const IPHONE_SPECS = /(player|autoplay|posters|app|library|pages|extras|detail|a11y|titlelogo|choose-chats|sync|ux-audit|confirm)\.spec\.ts/
 
 export default defineConfig({
     testDir: 'e2e',

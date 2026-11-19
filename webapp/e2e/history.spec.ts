@@ -2,7 +2,7 @@
 import { expect, test } from '@playwright/test'
 import { noSizeFloor, openClips, openDetail } from './helpers'
 
-test('Watch later: Clear Watch later takes the list at once, and Undo puts it back', async ({ page }) => {
+test('Watch later: Clear Watch later takes the list after its question, and Undo puts it back', async ({ page }) => {
     await noSizeFloor(page)
     await openClips(page)
     await openDetail(page, 'Native Clip')
@@ -11,6 +11,8 @@ test('Watch later: Clear Watch later takes the list at once, and Undo puts it ba
     const card = page.locator('.card').filter({ hasText: 'Native Clip' })
     await expect(card).toHaveCount(1)
     await page.getByRole('button', { name: 'Clear Watch later' }).click()
+    // The list asks first (HX59, confirm.spec.ts); the answer takes it.
+    await page.getByRole('dialog', { name: 'Clear Watch later?' }).getByRole('button', { name: 'Clear Watch later' }).click()
     await expect(page.locator('.empty-state')).toBeVisible()
     await expect(page.getByText('Watch later cleared')).toBeVisible()
     await page.getByRole('button', { name: 'Undo' }).click()

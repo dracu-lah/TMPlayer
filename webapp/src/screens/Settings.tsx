@@ -34,6 +34,7 @@ import { back, me, signOut } from '../session'
 import { api } from '../tg/rpc'
 import { t } from '../i18n'
 import { clearHistoryWithUndo } from '../clearHistory'
+import { askConfirm } from '../ui/Confirm'
 import { size } from './VideoList'
 import { form, layout, layoutFixed, setLayout, type Layout } from '../form'
 import { Icon, type IconData } from '../ui/Icon'
@@ -569,9 +570,6 @@ function Library() {
  */
 function Privacy() {
     let enable!: HTMLDialogElement
-    let erase!: HTMLDialogElement
-    let replace!: HTMLDialogElement
-    const [deleting, setDeleting] = createSignal(false)
     const say = (text: string) => showToast({ text })
     const change = (on: boolean) => (on ? enable.showModal() : void setSyncOn(false))
     const turnOn = () => {
@@ -579,12 +577,24 @@ function Privacy() {
         void setSyncOn(true)
         say(t('settings.resume_sync_started'))
     }
+    // Turning off and deleting the file asks first (HX59), and holds its buttons while the file is taken out.
     const erased = async () => {
-        setDeleting(true)
-        const gone = await turnOffAndDelete()
-        setDeleting(false)
-        erase.close()
-        say(gone ? t('settings.resume_sync_deleted') : t('settings.resume_sync_delete_failed'))
+        let gone = false
+        const yes = await askConfirm({
+            title: t('settings.resume_sync_delete_title'),
+            message: t('settings.resume_sync_delete_message'),
+            confirm: t('settings.resume_sync_delete'),
+            run: async () => (gone = await turnOffAndDelete()),
+        })
+        if (yes) say(gone ? t('settings.resume_sync_deleted') : t('settings.resume_sync_delete_failed'))
+    }
+    const replaced = async () => {
+        const yes = await askConfirm({
+            title: t('settings.resume_sync_replace_title'),
+            message: t('settings.resume_sync_replace_message'),
+            confirm: t('settings.resume_sync_replace'),
+        })
+        if (yes) void syncNow({ replace: true })
     }
     const unreadable = () => syncStatus()?.kind === 'unreadable'
     return (
@@ -599,13 +609,13 @@ function Privacy() {
                                 when={unreadable()}
                                 fallback={<button type="button" class="outline-button" disabled={syncRunning()} onClick={() => void syncNow()}>{t('settings.resume_sync_now')}</button>}
                             >
-                                <button type="button" class="outline-button" disabled={syncRunning()} onClick={() => replace.showModal()}>{t('settings.resume_sync_replace')}</button>
+                                <button type="button" class="outline-button" disabled={syncRunning()} onClick={() => void replaced()}>{t('settings.resume_sync_replace')}</button>
                             </Show>
                         </div>
                     </div>
                 </Show>
                 <Show when={syncOn() || syncHasFile()}>
-                    <button type="button" class="set-row" onClick={() => erase.showModal()}>
+                    <button type="button" class="set-row" onClick={() => void erased()}>
                         <RowBody icon={Delete02Icon} title={t('settings.resume_sync_delete')} subtitle={t('settings.resume_sync_delete_detail')} />
                     </button>
                 </Show>
@@ -619,31 +629,6 @@ function Privacy() {
                 <div class="confirm-buttons">
                     <button class="link" type="button" onClick={() => enable.close()}>{t('common.cancel')}</button>
                     <button class="primary" type="button" onClick={turnOn}>{t('syncplace.card_yes')}</button>
-                </div>
-            </dialog>
-            <dialog class="confirm" ref={erase} aria-labelledby="sync-delete-title">
-                <h2 id="sync-delete-title">{t('settings.resume_sync_delete_title')}</h2>
-                <p class="muted">{t('settings.resume_sync_delete_message')}</p>
-                <div class="confirm-buttons">
-                    <button class="link" type="button" disabled={deleting()} onClick={() => erase.close()}>{t('common.cancel')}</button>
-                    <button class="primary danger" type="button" disabled={deleting()} onClick={() => void erased()}>{t('settings.resume_sync_delete')}</button>
-                </div>
-            </dialog>
-            <dialog class="confirm" ref={replace} aria-labelledby="sync-replace-title">
-                <h2 id="sync-replace-title">{t('settings.resume_sync_replace_title')}</h2>
-                <p class="muted">{t('settings.resume_sync_replace_message')}</p>
-                <div class="confirm-buttons">
-                    <button class="link" type="button" onClick={() => replace.close()}>{t('common.cancel')}</button>
-                    <button
-                        class="primary danger"
-                        type="button"
-                        onClick={() => {
-                            replace.close()
-                            void syncNow({ replace: true })
-                        }}
-                    >
-                        {t('settings.resume_sync_replace')}
-                    </button>
                 </div>
             </dialog>
         </>
@@ -830,6 +815,15 @@ function StorageBlock() {
     onMount(() => void checkKept())
     // Thumbnails and posters only: the sign in, settings, places and watched stay.
     const clear = async () => {
+        if (clearing()) return
+        const held = (sizes()?.thumbs ?? 0) + (sizes()?.posters ?? 0)
+        const yes = await askConfirm({
+            title: t('settings.clear_pictures_title'),
+            message: t('settings.clear_pictures_message', { size: size(held) }),
+            detail: t('settings.clear_pictures_untouched'),
+            confirm: t('web.storage_clear_cache'),
+        })
+        if (!yes) return
         setClearing(true)
         try {
             await clearCaches()
@@ -873,28 +867,20 @@ function StorageBlock() {
 
 /** Sign out at the end of the list: a quiet outlined row with the danger colour in its words only, and a question first that names what goes with it. */
 function SignOut() {
-    let dialog!: HTMLDialogElement
-    const [leaving, setLeaving] = createSignal(false)
-    const confirm = async () => {
-        setLeaving(true)
-        await signOut()
-    }
+    const ask = () =>
+        void askConfirm({
+            title: t('settings.sign_out_title'),
+            message: t('settings.sign_out_message'),
+            confirm: t('settings.sign_out_confirm'),
+            busy: t('settings.signing_out'),
+            run: signOut,
+        })
     return (
         <>
-            <button class="danger-button set-signout" type="button" onClick={() => dialog.showModal()}>
+            <button class="danger-button set-signout" type="button" onClick={ask}>
                 <Icon icon={Logout05Icon} size={20} />
                 {t('settings.sign_out')}
             </button>
-            <dialog class="confirm" ref={dialog} aria-labelledby="sign-out-title">
-                <h2 id="sign-out-title">{t('settings.sign_out_title')}</h2>
-                <p class="muted">{t('settings.sign_out_message')}</p>
-                <div class="confirm-buttons">
-                    <button class="link" type="button" disabled={leaving()} onClick={() => dialog.close()}>{t('common.cancel')}</button>
-                    <button class="primary danger" type="button" disabled={leaving()} onClick={confirm}>
-                        {leaving() ? t('settings.signing_out') : t('settings.sign_out_confirm')}
-                    </button>
-                </div>
-            </dialog>
         </>
     )
 }
