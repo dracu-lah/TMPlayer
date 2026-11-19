@@ -115,31 +115,41 @@ export async function takeRestore(item: Ref): Promise<{ found: Restored; wanted:
 
 const quietly = (work: Promise<void>) => void work.catch(() => {})
 
+/**
+ * Looks the video's keys up, then runs `job` with them, unless a wipe (sign out, a session that ended, MSone
+ * stopping) happened since the viewer acted: the lookup goes through the worker, so a wipe can land while it is
+ * pending, and the store's own generation check only starts when the write is queued, after that wait.
+ */
+function afterKeys<T>(item: Ref, job: (keys: string[]) => Promise<T>): Promise<void> {
+    const seen = wipes
+    return pickKeys(item).then((k) => (seen === wipes ? job(k).then(() => {}) : undefined))
+}
+
 /** An online subtitle was picked for the video: kept with its file. */
 export function picked(item: Ref, hit: Hit, file: File) {
     chose(item)
-    quietly(pickKeys(item).then((k) => rememberPick(k, hit, file)))
+    quietly(afterKeys(item, (k) => rememberPick(k, hit, file)))
 }
 
 /** A restored subtitle that had to be downloaded again, laid and still wanted: kept again so the next opening finds its own copy. Not a choice. */
 export function keepRestored(item: Ref, hit: Hit, file: File) {
-    quietly(pickKeys(item).then((k) => rememberPick(k, hit, file)))
+    quietly(afterKeys(item, (k) => rememberPick(k, hit, file)))
 }
 
 /** The viewer turned subtitles off. */
 export function choseOff(item: Ref) {
     chose(item)
-    quietly(pickKeys(item).then(rememberOff))
+    quietly(afterKeys(item, rememberOff))
 }
 
 /** The viewer chose the online track again: an Off kept for the video no longer stands. */
 export function choseOnline(item: Ref) {
     chose(item)
-    quietly(pickKeys(item).then(clearOff))
+    quietly(afterKeys(item, clearOff))
 }
 
 /** Any other explicit choice (an embedded track, a file of their own, one from the chat): the pick no longer stands. */
 export function choseOther(item: Ref) {
     chose(item)
-    quietly(pickKeys(item).then(forgetPick))
+    quietly(afterKeys(item, forgetPick))
 }
