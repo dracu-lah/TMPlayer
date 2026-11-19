@@ -129,6 +129,7 @@ private val DECODE_MEMORY = stringPreferencesKey("decode_memory")
 
 /** Title reports sent, asked about and waiting for a connection (N1): see [TitleLedger]. Device only, not backed up. */
 private val TITLE_LEDGER = stringPreferencesKey("title_ledger")
+private val FEEDBACK_DRAFT = stringPreferencesKey("feedback_draft")
 
 /** The kinds of picture ([DecodeMemory.keyOf]) whose "may stutter" question the viewer turned off. */
 private val HEAVY_ASK_SKIP = stringPreferencesKey("heavy_ask_skip")
@@ -2965,6 +2966,15 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
         // Read and written inside one edit, so a send finishing while a queue is added to loses neither.
         override suspend fun update(change: (TitleLedger) -> TitleLedger) {
             prefs.edit { it[TITLE_LEDGER] = change(TitleLedger.decode(it[TITLE_LEDGER])).encode() }
+        }
+    }
+
+    /** The "Report a problem" or "Request a feature" being written or waiting to go (HX64), on this device only. */
+    val feedbackDraft: FeedbackDraftStore = object : FeedbackDraftStore {
+        override suspend fun read(): FeedbackDraft? = FeedbackDraft.decode(prefs.data.first()[FEEDBACK_DRAFT])
+
+        override suspend fun write(draft: FeedbackDraft?) {
+            prefs.edit { if (draft == null) it.remove(FEEDBACK_DRAFT) else it[FEEDBACK_DRAFT] = draft.encode() }
         }
     }
 

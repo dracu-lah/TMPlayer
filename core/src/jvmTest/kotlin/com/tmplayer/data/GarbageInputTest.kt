@@ -556,6 +556,17 @@ class GarbageInputTest {
                 for (status in listOf(-1, 0, 200, 201, 429, 500)) TitleUpload.outcome(status, text, text)
                 LogUpload.titlesUrl(text)
             }
+            survive("FeedbackReport.parse", text) { FeedbackReport.parse(text)?.let { FeedbackReport.parse(it.toJson()) } }
+            survive("FeedbackDraft.decode", text) { FeedbackDraft.decode(text)?.let { FeedbackDraft.decode(it.encode()) } }
+            survive("FeedbackUpload.outcome", text) {
+                for (status in listOf(-1, 0, 200, 201, 429, 500)) FeedbackUpload.outcome(status, text, text)
+                LogUpload.feedbackUrl(text)
+            }
+            survive("FeedbackReport.of", text) {
+                val facts = Feedback.Facts(text, Feedback.Platform.Other, text, text)
+                FeedbackReport.of("0".repeat(32), FeedbackReport.Kind.Problem, text, text, text, facts)?.let { FeedbackReport.parse(it.toJson()) }
+                FeedbackReport.problem(text, text)
+            }
             survive("TitleReport.of", text) {
                 TitleReport.of(text, text, text, includeChat = true)?.let { TitleReport.parse(it.toJson()) }
                 TitleReport.scrub(text)

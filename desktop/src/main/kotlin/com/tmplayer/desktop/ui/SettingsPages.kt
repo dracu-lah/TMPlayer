@@ -632,7 +632,7 @@ internal fun AboutRows(state: ShellState, version: String, onShowAbout: () -> Un
     val supportCounters by settings.supportCounters.collectAsState(initial = SupportReminder.Counters())
     var supporting by remember { mutableStateOf(false) }
     var whatsNew by remember { mutableStateOf(false) }
-    var reporting by remember { mutableStateOf(false) }
+    var reporting by remember { mutableStateOf<com.tmplayer.data.FeedbackReport.Kind?>(null) }
 
     state.extras.updates?.let { updates ->
         Group(s.settingsVersion)
@@ -767,7 +767,14 @@ internal fun AboutRows(state: ShellState, version: String, onShowAbout: () -> Un
     Action(s.settingsChangelog, s.settingsChangelogDetail, TmIcons.List, end = RowEnd.External) {
         OpenExternal.browse(WhatsNew.CHANGELOG)
     }
-    Action(s.settingsReportProblem, s.settingsReportProblemDetail, TmIcons.Bug) { reporting = true }
+    val inbox = com.tmplayer.data.FeedbackReports.available
+    Action(s.settingsReportProblem, if (inbox) s.settingsReportProblemDetailInbox else s.settingsReportProblemDetail, TmIcons.Bug) {
+        reporting = com.tmplayer.data.FeedbackReport.Kind.Problem
+    }
+    // HX64: an idea, written here with the inbox, else on GitHub's feature request page.
+    Action(s.settingsRequestFeature, s.settingsRequestFeatureDetail, TmIcons.Send) {
+        reporting = com.tmplayer.data.FeedbackReport.Kind.Feature
+    }
     // The logs to attach to that report (CP59), scrubbed of names and ids before they are written.
     Action(s.logsSave, s.logsSaveDetail, TmIcons.Logs, end = RowEnd.None) {
         scope.launch {
@@ -817,7 +824,7 @@ internal fun AboutRows(state: ShellState, version: String, onShowAbout: () -> Un
 
     if (supporting) SupportPopup(onClose = { supporting = false }, onStarred = { Background.scope.launch { runCatching { settings.markSupportStarred() } } })
     if (whatsNew) WhatsNewPopup(onClose = { whatsNew = false })
-    if (reporting) FeedbackPopup(onClose = { reporting = false })
+    reporting?.let { kind -> FeedbackPopup(onClose = { reporting = null }, kind = kind) }
 }
 
 /**

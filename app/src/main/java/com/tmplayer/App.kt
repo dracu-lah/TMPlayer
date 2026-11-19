@@ -197,6 +197,12 @@ class App : Application() {
         // build. The pairs that waited for a connection are tried once, a minute after a normal start.
         com.tmplayer.data.TitleReports.install(SettingsStore(this).titleLedger, BuildConfig.LOG_UPLOAD_URL)
         if (!safe) com.tmplayer.data.TitleReports.flushSoon()
+        // "Report a problem" and "Request a feature" written in the app (HX64), to the same inbox,
+        // with the scrubbed log bundle when the viewer ticks it. A report that waited is tried once.
+        com.tmplayer.data.FeedbackReports.install(SettingsStore(this).feedbackDraft, BuildConfig.LOG_UPLOAD_URL) {
+            com.tmplayer.ui.settings.logBundle(this).text
+        }
+        if (!safe) com.tmplayer.data.FeedbackReports.flushSoon()
         // "Ask when the app opens": the app is opened again once its last activity has left the
         // screen. Counted across activities, so the player starting in front of the browse screen
         // (and the browse screen stopping behind it) does not count as leaving.

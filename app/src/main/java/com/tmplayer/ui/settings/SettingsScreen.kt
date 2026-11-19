@@ -438,7 +438,7 @@ fun SettingsScreen(
     // Playback's Advanced group, collapsed until asked for (PR5).
     var playbackAdvancedOpen by rememberSaveable { mutableStateOf(false) }
     var whatsNew by remember { mutableStateOf(false) }
-    var reporting by remember { mutableStateOf(false) }
+    var reporting by remember { mutableStateOf<com.tmplayer.data.FeedbackReport.Kind?>(null) }
     var onlineDialog by remember { mutableStateOf<OnlineDialog?>(null) }
     var editingTmdbKey by remember { mutableStateOf(false) }
     var editingOmdbKey by remember { mutableStateOf(false) }
@@ -2059,9 +2059,18 @@ fun SettingsScreen(
                 item {
                     ActionRow(
                         title = s.settingsReportProblem,
-                        subtitle = s.settingsReportProblemDetail,
+                        subtitle = if (com.tmplayer.data.FeedbackReports.available) s.settingsReportProblemDetailInbox else s.settingsReportProblemDetail,
                         icon = TmIcons.Bug,
-                        onClick = { reporting = true },
+                        onClick = { reporting = com.tmplayer.data.FeedbackReport.Kind.Problem },
+                    )
+                }
+                // HX64: an idea, written here with the inbox, else on the feature request page.
+                item {
+                    ActionRow(
+                        title = s.settingsRequestFeature,
+                        subtitle = s.settingsRequestFeatureDetail,
+                        icon = TmIcons.Send,
+                        onClick = { reporting = com.tmplayer.data.FeedbackReport.Kind.Feature },
                     )
                 }
                 // The logs to attach to that report (CP59), scrubbed of names and ids before they are written.
@@ -2484,7 +2493,7 @@ fun SettingsScreen(
             },
         )
     }
-    if (reporting) FeedbackDialog(onClose = { reporting = false })
+    reporting?.let { kind -> FeedbackDialog(onClose = { reporting = null }, kind = kind) }
     onlineDialog?.let { OnlineSubtitlesDialog(it, onClose = { onlineDialog = null }) }
     if (editingTmdbKey) MetadataKeyDialog(onClose = { editingTmdbKey = false })
     if (editingOmdbKey) OmdbKeyDialog(onClose = { editingOmdbKey = false })

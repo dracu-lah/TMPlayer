@@ -10,7 +10,8 @@ import kotlinx.coroutines.coroutineScope
 
 /**
  * Posts one text to the log inbox (`workers/log-inbox`) after the viewer said yes: a report
- * ([send], [LogUpload] says how the answer reads) or a title report ([sendTitle], [TitleUpload]).
+ * ([send], [LogUpload] says how the answer reads), a title report ([sendTitle], [TitleUpload]) or
+ * feedback ([sendFeedback], [FeedbackUpload]).
  * One request, nothing kept: no cookies, no redirects followed (a captive portal's answer is a
  * failure, not a code), no retry on its own, and the connection is closed the moment the viewer
  * cancels. The phone and the desktop share it.
@@ -47,6 +48,16 @@ object LogUploader {
         if (text.encodeToByteArray().size > TitleUpload.MAX_BYTES) return TitleUpload.Outcome.Failed(413)
         return when (val got = exchange(url, text)) {
             is Exchange.Answer -> TitleUpload.outcome(got.status, got.body, got.retryAfter)
+            Exchange.NoConnection -> TitleUpload.Outcome.NoConnection
+            is Exchange.Failed -> TitleUpload.Outcome.Failed(got.status)
+        }
+    }
+
+    /** One feedback report (the JSON of a [FeedbackReport]) to [url] (see [LogUpload.feedbackUrl]). Never throws except for cancellation. */
+    suspend fun sendFeedback(url: String, text: String): TitleUpload.Outcome {
+        if (text.encodeToByteArray().size > FeedbackUpload.MAX_BYTES) return TitleUpload.Outcome.Failed(413)
+        return when (val got = exchange(url, text)) {
+            is Exchange.Answer -> FeedbackUpload.outcome(got.status, got.body, got.retryAfter)
             Exchange.NoConnection -> TitleUpload.Outcome.NoConnection
             is Exchange.Failed -> TitleUpload.Outcome.Failed(got.status)
         }

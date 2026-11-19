@@ -153,6 +153,12 @@ fun main(args: Array<String>) {
         // "Wrong title?" (N1): the process's sender, none without an inbox address in the build.
         com.tmplayer.data.TitleReports.install(settings.titleLedger, BuildInfo.LOG_UPLOAD_URL)
         com.tmplayer.data.TitleReports.flushSoon()
+        // "Report a problem" and "Request a feature" written in the app (HX64), to the same inbox,
+        // with the scrubbed log bundle when the viewer ticks it. A report that waited is tried once.
+        com.tmplayer.data.FeedbackReports.install(settings.feedbackDraft, BuildInfo.LOG_UPLOAD_URL) {
+            com.tmplayer.desktop.ui.SendLogs.bundleText()
+        }
+        com.tmplayer.data.FeedbackReports.flushSoon()
         OnlineMetadata.current = desktopOnlineMetadata()
         // The intros the viewer marked in the player, kept here and sent nowhere.
         com.tmplayer.online.UserSkipMarks.open(com.tmplayer.online.FileSkipMarks(java.io.File(DesktopPaths.dataDir, "skip-marks.json")))

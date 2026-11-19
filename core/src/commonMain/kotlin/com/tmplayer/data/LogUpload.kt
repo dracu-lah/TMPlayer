@@ -40,6 +40,12 @@ object LogUpload {
         return "$base/v1/titles"
     }
 
+    /**
+     * The inbox's address for feedback (HX64): `https://host/v1/report` gives
+     * `https://host/v1/feedback`, or null where there is no inbox.
+     */
+    fun feedbackUrl(url: String?): String? = titlesUrl(url)?.removeSuffix("/v1/titles")?.let { "$it/v1/feedback" }
+
     /** The code in the inbox's answer, or null when there is not exactly a well formed one. */
     fun parseCode(body: String?): String? {
         if (body == null) return null
