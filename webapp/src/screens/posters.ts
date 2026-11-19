@@ -145,6 +145,12 @@ export interface Extras {
     seasonList?: { number: number; episodes: number; airDate: string | null }[]
     next?: { season: number; episode: number; airDate: string } | null
     episode?: { name: string; overview: string; still: string | null }
+    /** The TMDB episode group whose split `seasonList` and `next` follow (a show TMDB lists as one season), with TMDB's own beside it. */
+    seasonGroup?: string | null
+    listedSeasons?: { number: number; episodes: number; airDate: string | null }[]
+    listedNext?: { season: number; episode: number; airDate: string } | null
+    /** The answer was made knowing the show's episode groups; one kept before lacks it and is asked again. */
+    groupsRead?: boolean
 }
 
 let pausedUntil = 0
@@ -172,6 +178,10 @@ function fresh(url: string, body: { match?: boolean; found?: boolean }, saved: n
     // and an extras answer kept before the title logo.
     if (body.match && url.startsWith('/tmdb/poster') && !('overview' in body)) return false
     if (body.found && url.startsWith('/tmdb/extras') && !('logo' in body)) return false
+    // A show TMDB lists as one season, kept before the season split (its episode groups were not read), is asked again: only
+    // such a show can have a split. AniList's answer carries no groups.
+    const lone = (body as { seasonList?: unknown[] }).seasonList?.length === 1
+    if (body.found && lone && url.startsWith('/tmdb/extras') && !/[?&]a=1(&|$)/.test(url) && !('groupsRead' in body)) return false
     return Date.now() - saved < (body.match || body.found ? FOUND_TTL : MISS_TTL)
 }
 

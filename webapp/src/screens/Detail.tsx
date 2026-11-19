@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createResource, createSignal, For, Match, onCleanup, onMount, Show, Switch, type JSX } from 'solid-js'
+import { createEffect, createMemo, createResource, createSignal, For, Match, onCleanup, onMount, Show, Switch, untrack, type JSX } from 'solid-js'
 import { A, useLocation, useNavigate, useParams } from '@solidjs/router'
 import { ArrowLeft02Icon, Cancel01Icon, ClapperboardIcon, Clock01Icon, FilterHorizontalIcon, LeftToRightListBulletIcon, Link04Icon, ListVideoIcon, PlayIcon, RepeatIcon, Search01Icon, Tick02Icon, Unlink04Icon } from '@hugeicons/core-free-icons'
 import { api, errorText } from '../tg/rpc'
@@ -8,7 +8,10 @@ import { dropResume, getResume, laterIds, namedLists, progress as readProgress, 
 import { openListPicker } from './Lists'
 import { chatGone, forgetGone } from '../goneVideos'
 import { showChoices, type MarkChoice } from './showMarks'
-import { agrees, hasGaps, rows as guideRows, seasons as guideSeasons, type HeldSeason, type Row as GuideRow, type SeasonStop } from './seriesGuide'
+import { agrees, counted, hasGaps, numbering, rekey, rows as guideRows, seasons as guideSeasons, seasonsFor, type HeldSeason, type ProviderEpisode, type Row as GuideRow, type SeasonStop } from './seriesGuide'
+import { loadSeason } from './seasonFetch'
+import { placeholder } from '../animeGuide'
+import './series.css'
 import { scrollBehavior } from '../ui/motion'
 import { Icon, type IconData } from '../ui/Icon'
 import { arrowKeys } from '../ui/arrows'
@@ -149,6 +152,11 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
         if (f?.source !== 'anilist' || f.kind !== 'show' || !f.id) return
         onCleanup(followAnimeGuide(f.id, setAnimeGuide))
     })
+    // The TMDB show the series page asks its episodes of: not AniList's (its guide is the anime one above), not a film.
+    const tmdbShow = () => {
+        const f = found()
+        return f?.match && f.kind === 'show' && f.source !== 'anilist' && f.id && /^\d{1,9}$/.test(f.id) ? f.id : null
+    }
     const episodeAt = () => {
         const m = props.info?.episode?.code ? /^S(\d+)E(\d+)/i.exec(props.info.episode.code) : null
         return m ? { season: Number(m[1]), episode: Number(m[2]) } : null
@@ -430,7 +438,7 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
                 <div class="detail-side">{aboutSection()}</div>
                 </div>
                 <Show when={props.info?.seasons.length}>
-                    <Episodes info={props.info!} current={item} extras={extras()} />
+                    <Episodes info={props.info!} current={item} extras={extras()} tmdbId={tmdbShow()} />
                 </Show>
                 <Show when={!props.info?.seasons.length && props.info?.more.length}>
                     <More info={props.info!} />
@@ -667,7 +675,7 @@ function saveOnlyMine(on: boolean): void {
  * the whole show, and Mark episodes, whose card lists the season's and the show's lines with how
  * many episodes each changes, so picking one is the confirmation.
  */
-function Episodes(props: { info: WatchInfo; current: VideoItem; extras: Extras | null }) {
+function Episodes(props: { info: WatchInfo; current: VideoItem; extras: Extras | null; tmdbId: string | null }) {
     const progress = useProgress()
     const navigate = useNavigate()
     const seasonOf = () => props.info.seasons.find((s) => s.episodes.some((e) => e.item.messageId === props.current.messageId))?.number ?? props.info.seasons[0]?.number
@@ -679,8 +687,10 @@ function Episodes(props: { info: WatchInfo; current: VideoItem; extras: Extras |
     const heldSeasons = createMemo((): HeldSeason[] =>
         props.info.seasons.map((s) => ({ number: s.number, numbers: s.episodes.map((e) => numberOf(e.code)), covered: s.covered ?? [], packed: props.info.packs.some((p) => p.season === s.number) })),
     )
-    const listed = () => props.extras?.seasonList ?? []
-    const next = () => props.extras?.next ?? null
+    // The numbering the chat follows: TMDB's season split (S02E01) or TMDB's own (S01E26), as the apps decide it.
+    const numb = createMemo(() => numbering(heldSeasons(), props.extras))
+    const listed = () => numb().seasons
+    const next = () => numb().next
     const full = createMemo((): SeasonStop[] | null => {
         if (!listed().length && !next()) return null
         return agrees(heldSeasons(), listed()) ? guideSeasons(heldSeasons(), listed(), next(), today) : null
@@ -697,10 +707,33 @@ function Episodes(props: { info: WatchInfo; current: VideoItem; extras: Extras |
     // The whole-season files of the season shown, after its episodes (a pack of several seasons sits under its first).
     const packsHere = () => props.info.packs.filter((p) => p.season === shown())
     const packName = (p: { season: number; seasonEnd: number | null }) => (p.seasonEnd ? t('series.pack_span', { first: p.season, last: p.seasonEnd }) : t('series.pack_whole'))
+    // TMDB's episodes of the season shown, one by one (names, stills, days, lengths): the split's own season, or TMDB's, or
+    // for a chat counting straight through the TMDB seasons its numbers fall in, put under the chat's numbers. Never throws:
+    // no list (no key, offline, nothing known) leaves the page as the counts and the chat's names make it.
+    const [provided] = createResource(
+        // Only for a match the chat agrees with, or a season it counts straight through (S02E13 for TMDB's second season's first):
+        // a wrong match would name its files wrongly.
+        () => (props.tmdbId && shown() > 0 && (full() || counted(shown(), heldSeasons().find((h) => h.number === shown())?.numbers ?? [], listed())) ?`${props.tmdbId}|${shown()}|${numb().split ? (props.extras?.seasonGroup ?? '') : ''}|${listed().length}` : null),
+        async (key): Promise<ProviderEpisode[] | null> => {
+            try {
+                const [id, s, group] = key.split('|')
+                const n = Number(s)
+                const mine = untrack(heldSeasons).find((h) => h.number === n)?.numbers ?? []
+                const layout = untrack(listed)
+                const lists = new Map<number, ProviderEpisode[]>()
+                await Promise.all(seasonsFor(n, mine, layout).map(async (sn) => void lists.set(sn, (await loadSeason(id, sn, group || null)) ?? [])))
+                return rekey(n, mine, layout, lists)
+            } catch {
+                return null
+            }
+        },
+    )
+    const listedEpisodes = (): ProviderEpisode[] | null => (provided.state === 'ready' ? provided() ?? null : null)
+    const meta = createMemo(() => new Map((listedEpisodes() ?? []).map((e) => [e.number, e])))
     const lines = createMemo((): GuideRow[] => {
         const n = shown()
         if (!guide()) return (season()?.episodes ?? []).map((e) => ({ kind: 'have' as const, number: numberOf(e.code) }))
-        return guideRows(n, heldSeasons(), listed().find((s) => s.number === n), next(), today)
+        return guideRows(n, heldSeasons(), listed().find((s) => s.number === n), next(), today, listedEpisodes())
     })
     const [gap, setGap] = createSignal<{ number: number; state: 'missing' | 'upcoming'; airDate: string | null } | null>(null)
     let gapCard!: HTMLDialogElement
@@ -708,6 +741,7 @@ function Episodes(props: { info: WatchInfo; current: VideoItem; extras: Extras |
     const find = (words: string) => navigate(`/search?q=${encodeURIComponent(words)}`)
     const day = (iso: string) => new Date(iso).toLocaleDateString('en', { day: 'numeric', month: 'short', year: 'numeric' })
     const seasonName = (n: number) => (n === 0 ? t('series.specials') : t('series.season', { number: n }))
+    const spokenUpcoming = (n: number, airDate: string | null) => t('series.gap_spoken_upcoming', { number: n, date: airDate ? day(airDate) : t('detail.upcoming') })
     const [seen] = createResource(watchedTick, async () => new Set((await watchedList()).map((w) => `${w.chatId}:${w.messageId}`)))
     const watchedSet = () => seen.latest ?? new Set<string>()
     const seasons = () => props.info.seasons.map((s) => ({ number: s.number, episodes: s.episodes.map((e) => e.item) }))
@@ -844,20 +878,29 @@ function Episodes(props: { info: WatchInfo; current: VideoItem; extras: Extras |
                             when={line.kind === 'have'}
                             fallback={
                                 <li>
-                                    <button
-                                        type="button"
-                                        class="episode gap"
-                                        onClick={() => {
-                                            if (line.kind !== 'gap') return
-                                            setGap({ number: line.number, state: line.state, airDate: line.airDate })
-                                            gapCard.showModal()
-                                        }}
+                                    <Show
+                                        when={line.kind === 'gap' && line.state === 'missing'}
+                                        fallback={
+                                            // Not aired yet: nothing to do with it, so no control and no focus; read as one line.
+                                            <div class="episode gap upcoming" role="group" aria-label={spokenUpcoming(line.number, line.kind === 'gap' ? line.airDate : null)}>
+                                                <GapBody number={line.number} season={shown()} state="upcoming" airDate={line.kind === 'gap' ? line.airDate : null} meta={meta().get(line.number)} day={day} />
+                                            </div>
+                                        }
                                     >
-                                        <span class="episode-code">{code(line.number)}</span>
-                                        <span class="episode-name">
-                                            {line.kind === 'gap' && line.state === 'upcoming' ? (line.airDate ? t('detail.airs_on', { date: day(line.airDate) }) : t('detail.upcoming')) : t('series.not_in_chats')}
-                                        </span>
-                                    </button>
+                                        {/* Missing: a dimmed row that wakes up on focus and keeps "Find in other chats" on a press. */}
+                                        <button
+                                            type="button"
+                                            class="episode gap"
+                                            aria-label={t('series.gap_spoken_missing', { number: line.number })}
+                                            onClick={() => {
+                                                if (line.kind !== 'gap') return
+                                                setGap({ number: line.number, state: line.state, airDate: line.airDate })
+                                                gapCard.showModal()
+                                            }}
+                                        >
+                                            <GapBody number={line.number} season={shown()} state="missing" airDate={line.kind === 'gap' ? line.airDate : null} meta={meta().get(line.number)} day={day} />
+                                        </button>
+                                    </Show>
                                 </li>
                             }
                         >
@@ -868,7 +911,10 @@ function Episodes(props: { info: WatchInfo; current: VideoItem; extras: Extras |
                                         <li>
                                             <A class="episode" classList={{ playing: here() }} href={watchPath(e.item)} state={{ video: e.item }} aria-current={here() ? 'true' : undefined}>
                                                 <span class="episode-code">{e.code}</span>
-                                                <span class="episode-name">{e.name ?? shortLength(e.item.duration)}</span>
+                                                <span class="episode-text">
+                                                    <span class="episode-name">{titled(meta().get(line.number), line.number) || (e.name ?? shortLength(e.item.duration))}</span>
+                                                    <Show when={heldFacts(e.item, meta().get(line.number), day)}>{(facts) => <span class="episode-facts">{facts()}</span>}</Show>
+                                                </span>
                                                 <Show when={watchedSet().has(`${e.item.chatId}:${e.item.messageId}`)}>
                                                     <span class="episode-watched" role="img" aria-label={t('detail.watched_line')}>
                                                         <Icon icon={Tick02Icon} size={16} />
@@ -897,6 +943,73 @@ function Episodes(props: { info: WatchInfo; current: VideoItem; extras: Extras |
                 </For>
             </ol>
         </section>
+    )
+}
+
+/** TMDB's name for an episode, or '' where it has none or only numbers it ("Episode 32" is no name in season 2). */
+function titled(meta: ProviderEpisode | undefined, number: number): string {
+    return meta?.name && !placeholder(meta.name, number) ? meta.name : ''
+}
+
+/** What a held episode says under its name: TMDB's running time (else the file's), its day, the file's size last. */
+function heldFacts(item: VideoItem, meta: ProviderEpisode | undefined, day: (iso: string) => string): string {
+    if (!meta) return ''
+    return [meta.runtime ? shortLength(meta.runtime * 60) : shortLength(item.duration), meta.airDate ? day(meta.airDate) : '', size(item.size)].filter(Boolean).join(dot)
+}
+
+/** The picture of an episode the chat lacks: TMDB's still once the row is near the screen (a long season loads only what is seen), else its number. */
+function Still(props: { path: string | null; number: number }) {
+    const [src, setSrc] = createSignal<string | null>(null)
+    let box!: HTMLSpanElement
+    onMount(() => {
+        const path = props.path
+        if (!path) return
+        const load = () => void loadFile(path, 'w185').then(setSrc, () => {})
+        if (typeof IntersectionObserver === 'undefined') return load()
+        const seen = new IntersectionObserver((hits) => {
+            if (!hits.some((h) => h.isIntersecting)) return
+            seen.disconnect()
+            load()
+        }, { rootMargin: '300px' })
+        seen.observe(box)
+        onCleanup(() => seen.disconnect())
+    })
+    return (
+        <span class="episode-still" ref={box} aria-hidden="true">
+            <span class="episode-still-number">{props.number}</span>
+            <Show when={src()}>
+                <img src={src()!} alt="" decoding="async" />
+            </Show>
+        </span>
+    )
+}
+
+/**
+ * An episode TMDB lists and no chat holds, laid out as a held one and dimmed: its still (else its number), its code and a
+ * small tag saying why it does not play, its name, length and day, and a line or two of its words.
+ */
+function GapBody(props: { number: number; season: number; state: 'missing' | 'upcoming'; airDate: string | null; meta: ProviderEpisode | undefined; day: (iso: string) => string }) {
+    const name = () => titled(props.meta, props.number) || t('series.episode', { number: props.number })
+    const tag = () => (props.state === 'upcoming' ? (props.airDate ? t('detail.airs_on', { date: props.day(props.airDate) }) : t('detail.upcoming')) : t('series.gap_not_in_chat'))
+    // An upcoming one says its day in the tag already.
+    const facts = () => [props.meta?.runtime && props.meta.runtime <= 1440 ? shortLength(props.meta.runtime * 60) : '', props.state === 'missing' && props.airDate ? props.day(props.airDate) : ''].filter(Boolean).join(dot)
+    return (
+        <>
+            <Still path={props.meta?.still ?? null} number={props.number} />
+            <span class="episode-text">
+                <span class="gap-head">
+                    <span class="episode-code">{t('series.episode_short', { season: props.season, episode: props.number })}</span>
+                    <span class="gap-tag">{tag()}</span>
+                </span>
+                <span class="episode-name">{name()}</span>
+                <Show when={facts()}>
+                    <span class="episode-facts">{facts()}</span>
+                </Show>
+                <Show when={props.meta?.overview}>
+                    <span class="episode-overview">{props.meta!.overview}</span>
+                </Show>
+            </span>
+        </>
     )
 }
 
