@@ -191,13 +191,16 @@ object SelfInstaller {
     private suspend fun sessionInstall(context: Context, file: File, silent: Boolean, foreground: Boolean, settings: SettingsStore): Result {
         // The update's own baseline profile goes in with it, so Android compiles it as it installs
         // (HX73). Read once, off the main thread; none in the APK and the install is as before.
-        val profile = withContext(Dispatchers.IO) { UpdateDexMetadata.of(file) }
+        var profile = withContext(Dispatchers.IO) { UpdateDexMetadata.of(file) }
         var outcome = commit(context, file, silent, foreground, profile, onRefused = { refused(settings) })
-        // A failure the profile may have caused is tried once more without it: a profile Android
-        // could not use must never be what keeps an update out.
-        if (profile != null && UpdateDexMetadata.retryWithout(outcome.step)) {
+        // A failure the profile may have caused is tried once more without it, and every later
+        // session of this install goes without it too: a profile Android could not use must never
+        // be what keeps an update out.
+        val after = UpdateDexMetadata.next(profile, outcome.step)
+        if (after !== profile) {
             Logger.w(TAG, "Install with the profile failed (${outcome.message}), trying without it")
-            outcome = commit(context, file, silent, foreground, profile = null, onRefused = { refused(settings) })
+            profile = after
+            outcome = commit(context, file, silent, foreground, profile, onRefused = { refused(settings) })
         }
         if (SessionSteps.remembersRefusal(outcome.step)) refused(settings)
         if (SessionSteps.next(outcome.step, foreground) == SessionSteps.Next.AskInstead) {

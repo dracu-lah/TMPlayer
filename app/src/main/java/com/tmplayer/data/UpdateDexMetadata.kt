@@ -59,4 +59,11 @@ object UpdateDexMetadata {
      * conflict, no room or an APK this device cannot run: the profile changes none of those.
      */
     fun retryWithout(step: SessionSteps.Step): Boolean = step == SessionSteps.Step.Failed
+
+    /**
+     * The profile the install's next session carries after one carrying [profile] ended in [step]:
+     * none once a session with it failed ([retryWithout]), for the retry and for the question that
+     * may follow it, else the same.
+     */
+    fun next(profile: ByteArray?, step: SessionSteps.Step): ByteArray? = if (profile != null && retryWithout(step)) null else profile
 }

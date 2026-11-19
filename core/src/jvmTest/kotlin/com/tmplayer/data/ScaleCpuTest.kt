@@ -141,9 +141,17 @@ class ScaleCpuTest {
         val few = names(4)
         val many = names(32)
         repeat(3) { few.forEach { MediaName.parse(it, maxYear = 2027) }; many.forEach { MediaName.parse(it, maxYear = 2027) } }
-        val fewMs = timed { repeat(3) { few.forEach { MediaName.parse(it, maxYear = 2027) } } }.coerceAtLeast(1)
-        val manyMs = timed { repeat(3) { many.forEach { MediaName.parse(it, maxYear = 2027) } } }
-        report("MediaName.parse, 6,000 names: 4 soft tags $fewMs ms, 32 soft tags $manyMs ms")
+        // This thread's CPU time, not the wall clock, and the best of five rounds each: a loaded
+        // machine (a build beside the tests) stretches the wall clock of one side more than the other.
+        val cpu = java.lang.management.ManagementFactory.getThreadMXBean()
+        fun cpuMs(names: List<String>): Long = (1..5).minOf {
+            val start = cpu.currentThreadCpuTime
+            names.forEach { MediaName.parse(it, maxYear = 2027) }
+            (cpu.currentThreadCpuTime - start) / 1_000_000
+        }
+        val fewMs = cpuMs(few).coerceAtLeast(1)
+        val manyMs = cpuMs(many)
+        report("MediaName.parse, 2,000 names, best of five, CPU: 4 soft tags $fewMs ms, 32 soft tags $manyMs ms")
         assertTrue("names read in time growing faster than their tags: $fewMs ms against $manyMs ms", manyMs < fewMs * 12)
         assertTrue(many.all { MediaName.parse(it, maxYear = 2027).title.startsWith("Harbour Notes") })
     }
