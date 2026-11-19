@@ -266,8 +266,8 @@ export const api = {
     },
 
     /** The Add chats picker's rough video count for each listed chat, three at a time (see library.ts videoCounts). */
-    async videoCounts(_: Ctx, chatIds: number[]): Promise<Record<number, number>> {
-        return videoCounts(tg, chatIds)
+    async videoCounts(ctx: Ctx, chatIds: number[]): Promise<Record<number, number>> {
+        return videoCounts(tg, chatIds, ctx.signal)
     },
 
     /** A chat's grid as the app arranges it (see library.ts for the modes). */

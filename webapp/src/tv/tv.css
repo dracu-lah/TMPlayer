@@ -241,6 +241,27 @@ html[data-form=tv] .icon-button:hover { background: none; }
 html[data-form=tv][data-tv-keys] .icon-button:focus, html[data-form=tv][data-tv-keys] .round-button:focus { outline: none; background: var(--focus-fill); color: var(--on-focus-fill); transform: scale(var(--focus-scale)); }
 html[data-form=tv][data-tv-keys] .star.on:focus { color: var(--on-focus-fill); }
 
+/*
+ * The Add chats picker on a TV (WB22). The remote moves by where things stand, so what the viewer reaches by
+ * Down has to start where the ticks do: Select all and the way to count more come first in their lines, then the
+ * filters. The chips, the tick and the foot are sized in dp like the rest, and Done sits clear of the rows.
+ */
+html[data-form=tv] .picker-actions { gap: calc(var(--dp) * 10); margin-bottom: calc(var(--dp) * 6); }
+html[data-form=tv] .picker-actions > .link { order: -1; margin-inline-start: 0; }
+html[data-form=tv] .picker-scopes { gap: calc(var(--dp) * 6); }
+html[data-form=tv] .picker-scopes .history-tab { font-size: calc(var(--dp) * 12); line-height: calc(var(--dp) * 18); padding: calc(var(--dp) * 4) calc(var(--dp) * 12); }
+html[data-form=tv][data-tv-keys] .picker-scopes .history-tab:focus { outline: none; background: var(--focus-fill); color: var(--on-focus-fill); border-color: transparent; transform: scale(var(--focus-scale)); }
+html[data-form=tv] .picker-count-more { gap: calc(var(--dp) * 4) calc(var(--dp) * 12); margin-bottom: calc(var(--dp) * 6); }
+html[data-form=tv] .picker-count-more > .link { order: -1; }
+html[data-form=tv] input.chat-tick { width: calc(var(--dp) * 14); height: calc(var(--dp) * 14); }
+html[data-form=tv] .pick-chat { gap: calc(var(--dp) * 12); padding: calc(var(--dp) * 4) calc(var(--dp) * 8); }
+html[data-form=tv][data-tv-keys] .pick-chat:has(.chat-tick:focus) { background: var(--focus-fill); color: var(--on-focus-fill); }
+html[data-form=tv][data-tv-keys] .pick-chat:has(.chat-tick:focus) .muted { color: inherit; }
+html[data-form=tv][data-tv-keys] .pick-chat .chat-tick:focus { outline: none; }
+html[data-form=tv] .select-bar.picker-bar { width: auto; min-width: calc(var(--dp) * 280); max-width: calc(100vw - var(--tv-safe-h) * 2); bottom: calc(var(--dp) * 24); gap: calc(var(--dp) * 12); padding: calc(var(--dp) * 4) calc(var(--dp) * 4) calc(var(--dp) * 4) calc(var(--dp) * 14); border-radius: calc(var(--dp) * 16); }
+html[data-form=tv] .picker-bar .select-count { font-size: calc(var(--dp) * 12); white-space: nowrap; }
+html[data-form=tv] .picker-bar button.primary { padding: calc(var(--dp) * 8) calc(var(--dp) * 16); font-size: calc(var(--dp) * 14); }
+
 /* ---- A page's own bar (a chat's): Back, the title and its buttons ---- */
 html[data-form=tv] .page-bar { gap: calc(var(--dp) * 12); margin: 0 0 calc(var(--dp) * 16); min-height: calc(var(--dp) * 48); }
 html[data-form=tv] .round-button { width: calc(var(--dp) * 44); height: calc(var(--dp) * 44); box-shadow: none; transition: transform var(--fast) var(--ease); }

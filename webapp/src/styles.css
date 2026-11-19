@@ -858,6 +858,8 @@ input.chat-tick[type=checkbox] { flex: none; width: 22px; height: 22px; margin: 
 .picker-band { margin: 16px 0 4px; padding: 0 8px; font-size: 14px; line-height: 20px; font-weight: 500; color: var(--muted); }
 .picker-blurb { margin: 0 0 16px; }
 .picker-note { margin: 0 0 8px; padding: 0 8px; }
+.picker-count-more { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 16px; margin: 0 0 8px; padding: 0 8px; }
+.picker-count-more > .link { flex: none; }
 .picker-gone-head { margin: 24px 0 8px; font-size: 14px; color: var(--muted); }
 .picker-gone-row { display: flex; align-items: center; gap: 16px; padding: 8px; }
 .picker-gone-row .chat-name { flex: 1; }
