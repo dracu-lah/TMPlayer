@@ -618,9 +618,14 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             processBits = if (android.os.Process.is64Bit()) 64 else 32,
         )
         val mime = format?.sampleMimeType
+        val context = applicationContext
         // The codec list is read on the report's own thread: Media3's cache, but never the main thread's job.
         Thread {
-            runCatching { com.tmplayer.data.CrashReports.reportStutter(facts.copy(hwDecoders = HardwareDecoders.listed(mime))) }
+            runCatching {
+                // How the chip fits the picture (HX71): a hardware stutter past its rated frame rate says so.
+                val fit = format?.let { HardwareDecoders.fitOf(context, it).name.lowercase() } ?: com.tmplayer.data.StutterReport.UNKNOWN
+                com.tmplayer.data.CrashReports.reportStutter(facts.copy(hwDecoders = HardwareDecoders.listed(mime), hwFit = fit))
+            }
         }.start()
     }
 
@@ -4496,8 +4501,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 out: ArrayList<Renderer>,
             ) {
                 val built = ArrayList<Renderer>()
+                // Hardware decoders listed first, so a picture let through past the chip's rated
+                // frame rate opens the chip, not the system's software decoder (HX71).
                 super.buildVideoRenderers(
-                    context, extensionRendererMode, mediaCodecSelector, enableDecoderFallback,
+                    context, extensionRendererMode, HardwareFirstCodecSelector(mediaCodecSelector), enableDecoderFallback,
                     eventHandler, eventListener, allowedVideoJoiningTimeMs, built,
                 )
                 built.mapTo(out) {

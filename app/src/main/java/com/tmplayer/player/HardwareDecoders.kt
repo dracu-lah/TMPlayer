@@ -18,16 +18,20 @@ import com.tmplayer.data.TelegramQuality
 @UnstableApi
 object HardwareDecoders {
 
-    fun has(context: Context, format: Format): Boolean = runCatching {
-        val mime = format.sampleMimeType ?: return false
-        // The level the picture's size needs, as the player's renderer asks ([CodecLevel]): a
-        // 1080p file stamped level 5.1 plays on a level 4.1 chip, so it is not software here.
-        val relaxed = CodecLevel.relaxed(format)
-        MediaCodecUtil.getDecoderInfos(mime, false, false).any { info ->
-            info.hardwareAccelerated && !info.softwareOnly &&
-                (info.isFormatSupported(context, format) || (relaxed != null && info.isFormatSupported(context, relaxed)))
-        }
-    }.getOrDefault(false)
+    fun has(context: Context, format: Format): Boolean = fitOf(context, format) != CodecLevel.Fit.NONE
+
+    /**
+     * How the device's best hardware decoder fits [format], asked as the player's renderer asks
+     * ([LenientCapabilities]): a 1080p file stamped level 5.1 plays on a level 4.1 chip, and 4K at
+     * 60 frames on a chip rated for 30 there plays on the chip, so neither is software here.
+     * [CodecLevel.Fit.NONE] when no hardware decoder takes it or the list cannot be read.
+     */
+    fun fitOf(context: Context, format: Format): CodecLevel.Fit = runCatching {
+        val mime = format.sampleMimeType ?: return CodecLevel.Fit.NONE
+        val hardware = MediaCodecUtil.getDecoderInfos(mime, false, false).filter { it.hardwareAccelerated && !it.softwareOnly }
+        if (hardware.isEmpty()) return CodecLevel.Fit.NONE
+        CodecLevel.fit(format) { asked -> hardware.any { it.isFormatSupported(context, asked) } }
+    }.getOrDefault(CodecLevel.Fit.NONE)
 
     /** [has] for one of Telegram's copies, from its codec's name and its size. */
     fun has(context: Context, copy: TelegramQuality): Boolean {
