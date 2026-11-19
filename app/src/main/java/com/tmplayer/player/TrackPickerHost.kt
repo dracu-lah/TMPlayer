@@ -32,8 +32,12 @@ interface TrackPickerHost {
     /** [hit], downloaded as [file], was picked for this video: remembered, so it comes back by itself (HX25). */
     fun onlineSubtitlePicked(hit: com.tmplayer.online.SubtitleHit, file: File) = Unit
 
-    /** A subtitle track, or Off, was chosen in the list: Off is remembered for the video, a track ends an Off. */
-    fun subtitleChoiceMade(off: Boolean) = Unit
+    /**
+     * A subtitle track, or Off, was chosen in the list: Off is remembered for the video; an embedded
+     * track ends whatever was remembered (the latest choice wins); a side file ([external], loaded
+     * online or from the phone) only ends an Off.
+     */
+    fun subtitleChoiceMade(off: Boolean, external: Boolean = false) = Unit
 
     /**
      * The way on when the online search found nothing: pick a subtitle file from the device.

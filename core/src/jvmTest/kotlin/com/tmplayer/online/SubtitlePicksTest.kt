@@ -198,4 +198,28 @@ class SubtitlePicksTest {
         assertTrue("took ${(System.nanoTime() - started) / 1_000_000} ms", (System.nanoTime() - started) / 1_000_000 < 20_000)
         assertTrue(stateFile.length() < 4L * 1024 * 1024)
     }
+
+    @Test
+    fun aPickRecalledNowIsTheLastToGoWhenTheListIsFull() {
+        val small = SubtitlePicks(File(dir, "recency.json"), maxEntries = 3)
+        small.rememberOff(listOf("a"))
+        small.rememberOff(listOf("b"))
+        small.rememberOff(listOf("c"))
+        assertNotNull(small.recall(listOf("a")))
+        small.rememberOff(listOf("d"))
+        assertNotNull("a was used last, b is the oldest used", small.recall(listOf("a")))
+        assertNull(small.recall(listOf("b")))
+    }
+
+    @Test
+    fun anotherChoiceForgetsThePick() = runBlocking {
+        val o = OnlineSubtitles(
+            apiKey = "k", store = OnlineSubtitlesStore(File(dir, "account2.properties")), cache = SubtitleCache(File(dir, "cache2")),
+            appVersion = "1.0.0", http = HttpTransport { error("no network") }, picks = picks,
+        )
+        val keys = listOf("msg:1:10")
+        o.rememberPick(keys, hit, downloaded())
+        o.forgetPick(keys)
+        assertEquals(OnlineSubtitles.Restored.None, o.restorePick(keys, null, allowDownload = false))
+    }
 }

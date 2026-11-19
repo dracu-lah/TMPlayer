@@ -420,7 +420,10 @@ class TrackPickerFragment : Fragment() {
                     .setOverrideForType(TrackSelectionOverride(option.group.mediaTrackGroup, option.trackIndex))
             }
             player.trackSelectionParameters = builder.build()
-            if (trackType == C.TRACK_TYPE_TEXT) host?.subtitleChoiceMade(option.group == null)
+            if (trackType == C.TRACK_TYPE_TEXT) {
+                val format = option.group?.getTrackFormat(option.trackIndex)
+                host?.subtitleChoiceMade(option.group == null, external = format?.id?.contains("external-") == true)
+            }
         }
         close()
     }

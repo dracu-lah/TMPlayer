@@ -1359,7 +1359,7 @@ fun PlayerScreen(
         // HX25: Off is remembered for the video; a track chosen again ends an Off.
         if (type == TrackType.Subtitle) OnlineSubtitles.current?.let { online ->
             val keys = com.tmplayer.online.SubtitlePicks.keysOf(current.item)
-            if (track == null) online.rememberOff(keys) else online.clearOff(keys)
+            if (track == null) online.rememberOff(keys) else online.forgetPick(keys)
         }
         val audio = type == TrackType.Audio
         showFlash(
@@ -1711,6 +1711,7 @@ fun PlayerScreen(
     fun loadSubtitle(path: String) {
         if (phase != Phase.Playing) return
         val name = java.io.File(path).name
+        OnlineSubtitles.current?.forgetPick(com.tmplayer.online.SubtitlePicks.keysOf(current.item))
         if (engine.addSubtitle(path)) showFlash(Flash.Kind.Text, L.playerSubtitlesTrack(name)) else showFlash(Flash.Kind.Text, L.playerSubtitleLoadFailed(name))
     }
 
@@ -2141,6 +2142,7 @@ fun PlayerScreen(
                                     val file = kotlinx.coroutines.withContext(Dispatchers.IO) {
                                         com.tmplayer.data.ChatSubtitleLoad.write(java.io.File(com.tmplayer.desktop.DesktopPaths.cacheDir, "chat-subtitles"), here.chatId, action.hit, loaded)
                                     }
+                                    if (file != null) OnlineSubtitles.current?.forgetPick(com.tmplayer.online.SubtitlePicks.keysOf(here))
                                     if (file != null && engine.addSubtitle(file.absolutePath)) showFlash(Flash.Kind.Text, L.tracksFileLoaded(loaded.label))
                                     else showFlash(Flash.Kind.Text, L.playerSubtitleLoadFailed(loaded.label))
                                 }

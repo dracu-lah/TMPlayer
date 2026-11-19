@@ -151,4 +151,15 @@ class RecommendedCopyTest {
         val millis = (System.nanoTime() - started) / 1_000_000
         assertTrue("took $millis ms", millis < 10_000)
     }
+
+    @Test
+    fun theVersionCountIsLinearForHundredsOfCopies() {
+        val copies = (0 until 600).map { n -> video(1 + n % 7L, 1000L + n, "Film.2022.${n % 50}.mkv", fileId = n % 300 + 1, size = (n % 300 + 1).toLong() shl 20) }
+        val started = System.nanoTime()
+        val film = copies.first().copy(versions = copies)
+        val count = VideoCopies.versionCount(film)
+        val millis = (System.nanoTime() - started) / 1_000_000
+        assertEquals(300, count)
+        assertTrue("took $millis ms", millis < 2_000)
+    }
 }

@@ -48,10 +48,28 @@ object VideoCopies {
         copies: List<MediaItem>,
         allowed: Set<Long>? = ChatGate.browsing.value,
     ): List<Pair<MediaItem, List<MediaItem>>> {
+        // One pass with a lookup per way two posts can be one file ([sameFile]), not every copy against every group.
         val groups = mutableListOf<MutableList<MediaItem>>()
+        val byId = HashMap<String, MutableList<Int>>()
+        val byFile = HashMap<Int, MutableList<Int>>()
+        val byName = HashMap<String, MutableList<Int>>()
         for (copy in visible(copies, allowed)) {
-            val same = groups.firstOrNull { group -> group.any { sameFile(it, copy) } }
-            if (same != null) same += copy else groups += mutableListOf(copy)
+            val nameKey = if (copy.fileName.isNotBlank() && copy.sizeBytes > 0) "${copy.sizeBytes}:${copy.fileName}" else null
+            val found = listOfNotNull(
+                byId[copy.id],
+                if (copy.fileId > 0) byFile[copy.fileId] else null,
+                nameKey?.let { byName[it] },
+            ).flatten().minOrNull()
+            val index = if (found != null) {
+                groups[found] += copy
+                found
+            } else {
+                groups += mutableListOf(copy)
+                groups.size - 1
+            }
+            byId.getOrPut(copy.id) { mutableListOf() } += index
+            if (copy.fileId > 0) byFile.getOrPut(copy.fileId) { mutableListOf() } += index
+            nameKey?.let { byName.getOrPut(it) { mutableListOf() } += index }
         }
         return groups.map { it.first() to it.toList() }
     }

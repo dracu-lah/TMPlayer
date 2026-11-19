@@ -2,6 +2,7 @@ package com.tmplayer.online
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** Real release names as the chats post them, read into the question TMDB is asked, and the pick among its answers. */
@@ -152,6 +153,46 @@ class MetaPickTest {
         assertEquals(true, com.tmplayer.online.ChatLanguageHints.knows(8L))
         com.tmplayer.online.ChatLanguageHints.note(7L, "Renamed")
         assertEquals(emptyList<String>(), com.tmplayer.online.ChatLanguageHints.of(7L))
+        com.tmplayer.online.ChatLanguageHints.clear()
+    }
+
+    @Test
+    fun aHintIsBelowEveryOtherStepAndOnlyBreaksAnExactTie() {
+        // A near-year candidate with the exact words must beat a hinted candidate with no year at all.
+        val q = of("Bigg Boss 2018 S08E50.mkv").withHints(listOf("ml"))
+        val nearYear = MetaCandidate("near", listOf("Bigg Boss"), 2017, "", null, null, originalLanguage = "ta")
+        val hintedNoYear = MetaCandidate("hinted", listOf("Bigg Boss"), null, "", null, null, originalLanguage = "ml")
+        assertEquals("near", MetaPick.best(q, listOf(hintedNoYear, nearYear), show = true)?.id)
+        assertTrue(MetaPick.score(q, nearYear) > MetaPick.score(q, hintedNoYear))
+        // Between equals it still decides.
+        val a = MetaCandidate("a", listOf("Bigg Boss"), 2018, "", null, null, originalLanguage = "ta")
+        val b = MetaCandidate("b", listOf("Bigg Boss"), 2018, "", null, null, originalLanguage = "ml")
+        assertEquals("b", MetaPick.best(q, listOf(a, b), show = true)?.id)
+    }
+
+    @Test
+    fun theRegistryIsSafeUnderConcurrentWritersAndScalesTo5000Chats() {
+        com.tmplayer.online.ChatLanguageHints.clear()
+        val started = System.nanoTime()
+        val threads = (0 until 8).map { t ->
+            Thread { for (n in 0 until 600) com.tmplayer.online.ChatLanguageHints.note((t * 600 + n).toLong(), if (n % 3 == 0) "Malayalam Chat $n" else "Chat $n") }
+        }
+        threads.forEach { it.start() }
+        threads.forEach { it.join() }
+        val millis = (System.nanoTime() - started) / 1_000_000
+        // 4,800 chats over 64 shards of 128: every one is known and none was lost to a race.
+        var known = 0
+        var withHint = 0
+        for (id in 0L until 4_800L) {
+            if (com.tmplayer.online.ChatLanguageHints.knows(id)) known++
+            if (com.tmplayer.online.ChatLanguageHints.of(id) == listOf("ml")) withHint++
+        }
+        assertEquals(4_800, known)
+        assertEquals(1_600, withHint)
+        assertTrue("took $millis ms", millis < 5_000)
+        // Past the bound a chat is just not noted and asks without hints; nothing throws.
+        for (id in 10_000L until 20_000L) com.tmplayer.online.ChatLanguageHints.note(id, "Tamil $id")
+        assertTrue(com.tmplayer.online.ChatLanguageHints.of(1L).isEmpty() || com.tmplayer.online.ChatLanguageHints.knows(1L))
         com.tmplayer.online.ChatLanguageHints.clear()
     }
 }

@@ -349,6 +349,11 @@ class OnlineSubtitles(
         runCatching { picks?.rememberOff(keys) }
     }
 
+    /** The viewer chose another subtitle (an embedded track, a file of their own): whatever was remembered for the video no longer stands. */
+    fun forgetPick(keys: List<String>) {
+        runCatching { picks?.forget(keys) }
+    }
+
     /** The viewer chose a track again: an "Off" kept for the video no longer stands. */
     fun clearOff(keys: List<String>) {
         runCatching { picks?.clearOff(keys) }

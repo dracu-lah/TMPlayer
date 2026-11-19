@@ -314,7 +314,11 @@ object MetaPick {
             .maxWithOrNull(compareBy<IndexedValue<MetaCandidate>> { score(query, it.value) }.thenByDescending { it.index })
             ?.value
 
-    /** Higher is closer. The weights keep the order above: words, then year, then language. */
+    /**
+     * Higher is closer. The weights keep the order above: words, then year, then language. The
+     * chat's hint is a tie break only: it is 1 and every other step is 2 or more, so it decides
+     * only between candidates equal on words, year and language.
+     */
     fun score(query: MetaQuery, candidate: MetaCandidate): Int {
         val target = MetaMatch.normalise(query.title)
         var score = 0
@@ -333,10 +337,10 @@ object MetaPick {
         return score
     }
 
-    private const val EXACT_WORDS = 8
-    private const val SAME_YEAR = 4
-    private const val NEAR_YEAR = 1
-    private const val LANGUAGE = 2
+    private const val EXACT_WORDS = 16
+    private const val SAME_YEAR = 8
+    private const val NEAR_YEAR = 2
+    private const val LANGUAGE = 4
     private const val HINT = 1
 }
 

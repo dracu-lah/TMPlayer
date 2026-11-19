@@ -328,8 +328,9 @@ data class MediaItem(
         get() = read(metaQueryRead) {
             val asked = com.tmplayer.online.MetaQuery.of(nameForParsing, caption)
                 ?.withHints(com.tmplayer.online.ChatLanguageHints.of(chatId))
-            // Until the chat's title has been read the question may still gain hints: not kept yet.
-            if (com.tmplayer.online.ChatLanguageHints.knows(chatId)) metaQueryRead = asked ?: NotFound
+            // Kept whether or not the chat is known: Saved Messages and chats past the registry's bound ask without
+            // hints, and the chat list is read (cold start snapshot first) before a chat's videos are.
+            metaQueryRead = asked ?: NotFound
             asked
         }
 

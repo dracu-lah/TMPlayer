@@ -42,6 +42,10 @@ class SubtitlePicks(
         for (key in keys) {
             val entry = all[key] ?: continue
             val kept = entry.kept?.let { File(keptDir, it) }?.takeIf { runCatching { it.isFile && it.length() > 0 }.getOrDefault(false) }
+            // Used now: the last to go when the list is full (kept in memory, written with the next change).
+            all.remove(key)
+            entry.at = now()
+            all[key] = entry
             return Pick(entry.hit, kept, entry.at)
         }
         return null

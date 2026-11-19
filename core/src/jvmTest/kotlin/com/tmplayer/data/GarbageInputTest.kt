@@ -531,6 +531,14 @@ class GarbageInputTest {
                     f.delete()
                 }
             }
+            survive("QualityRead", text) {
+                val item = com.tmplayer.data.MediaItem(
+                    chatId = 1, messageId = 1, fileId = 1, title = text, sizeBytes = 1, durationSec = 1, mimeType = text,
+                    thumbnailFileId = 0, miniThumbnail = null, date = 1, fileName = text, width = text.length, height = -text.length,
+                )
+                QualityRead.of(item); QualityRead.named(item); QualityRead.mismatch(item); QualityRead.lowGrade(item)
+                QualityRead.rank(text); VideoCopies.heightOf(item); VideoCopies.versionCount(item.copy(versions = listOf(item, item)))
+            }
             survive("MediaName.languageHints", text) { MediaName.languageHints(text); com.tmplayer.online.ChatLanguageHints.note(1L, text) }
             survive("MediaName.pack", text) { MediaName.parse(text).let { it.pack; it.packSeason } }
             survive("MetaLinks.read", text) { com.tmplayer.online.MetaLinks.read(text, text, null) }

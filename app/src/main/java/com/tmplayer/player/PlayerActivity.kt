@@ -403,7 +403,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     private var trickplaySpansWanted = true
 
     /** Subtitle files loaded from the phone; a field because its picker registers before start. */
-    private val subtitleFiles = SubtitleFiles(this, { player }, { showGestureFeedback(it) })
+    private val subtitleFiles = SubtitleFiles(this, { player }, { showGestureFeedback(it) }).also { files ->
+        // A file of the viewer's own, or one from the chat, replaces any online pick remembered for this video (HX25).
+        files.onViewerChose = { OnlineSubtitles.current?.forgetPick(com.tmplayer.online.SubtitlePicks.keysOf(currentItem())) }
+    }
     private val chatSubtitleLoader = ChatSubtitleLoader(subtitleFiles)
 
     /** The viewer's Downmix to stereo answer, or null for the device default. See [AudioDownmix.wanted]. */
@@ -6832,10 +6835,14 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         OnlineSubtitles.current?.rememberPick(com.tmplayer.online.SubtitlePicks.keysOf(currentItem()), hit, file)
     }
 
-    override fun subtitleChoiceMade(off: Boolean) {
+    override fun subtitleChoiceMade(off: Boolean, external: Boolean) {
         val online = OnlineSubtitles.current ?: return
         val keys = com.tmplayer.online.SubtitlePicks.keysOf(currentItem())
-        if (off) online.rememberOff(keys) else online.clearOff(keys)
+        when {
+            off -> online.rememberOff(keys)
+            external -> online.clearOff(keys)
+            else -> online.forgetPick(keys)
+        }
     }
 
     /** "In this chat" (EG-F48): the subtitle files posted next to this video, from one search, kept for the video. */
