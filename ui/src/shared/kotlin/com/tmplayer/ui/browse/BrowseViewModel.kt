@@ -90,6 +90,13 @@ class ChatListViewModel(
     private val _state = MutableStateFlow<UiState<BrowseData>>(UiState.Loading(LOADING_CHATS))
     val state: StateFlow<UiState<BrowseData>> = _state.asStateFlow()
 
+    // Above the init block, which paints the remembered list through publish() before the
+    // properties declared under it exist (the desktop's immediate main dispatcher crashed on that once).
+    private val _folderStatus = MutableStateFlow(FolderStatus())
+
+    /** How reading the folders' members is going, for the picker's folder filters (HX29). */
+    val folderStatus: StateFlow<FolderStatus> = _folderStatus.asStateFlow()
+
     /**
      * True once the store has said there is no list from an earlier launch, which makes this the
      * first sync on this device: the slow one, worth a line explaining that it is only slow once.
@@ -509,10 +516,6 @@ class ChatListViewModel(
      * once they have been asked for.
      */
     private var foldersWanted = false
-    private val _folderStatus = MutableStateFlow(FolderStatus())
-
-    /** How reading the folders' members is going, for the picker's folder filters. */
-    val folderStatus: StateFlow<FolderStatus> = _folderStatus.asStateFlow()
 
     /** The picker is open: reads the folders' members, once, unless they are already read. */
     fun wantFolders() {
