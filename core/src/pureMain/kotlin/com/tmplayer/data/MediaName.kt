@@ -451,6 +451,21 @@ object MediaName {
     }
 
     /**
+     * The languages a chat's own words name (its title: "Malayalam Movies HD"), ISO 639-1, as a
+     * hint for which of two titles of one name is meant ([com.tmplayer.online.MetaQuery.hints]).
+     * Only the full language names count and a word at the very start does too, unlike
+     * [languages]: a chat is named for what it holds, and "Mal" or "Hin" inside one is not a
+     * language. Any text is safe; one over 300 characters is read to its first 300.
+     */
+    fun languageHints(text: String): List<String> {
+        if (text.isBlank()) return emptyList()
+        return HINT_LANGUAGE.findAll(text.take(300))
+            .mapNotNull { LANGUAGE_CODES[it.value.lowercase()] }
+            .distinct()
+            .toList()
+    }
+
+    /**
      * The file that carries on from [current], out of everything posted in the same chat.
      *
      * Matching is by title and by number rather than by position in the list, because a chat is in
@@ -988,6 +1003,11 @@ object MediaName {
     )
 
     private val LANGUAGE = Regex("""\b(""" + LANGUAGE_CODES.keys.joinToString("|") + """)\b""", RegexOption.IGNORE_CASE)
+
+    private val HINT_LANGUAGE = Regex(
+        """\b(""" + LANGUAGE_CODES.keys.filter { it.length >= 5 && it != "japan" }.joinToString("|") + """)\b""",
+        RegexOption.IGNORE_CASE,
+    )
 
     /** The short forms of the languages channels write after a title: "Night Train Mal". */
     private val SHORT_LANGUAGE_WORDS = setOf("mal", "tam", "tel", "hin", "eng")

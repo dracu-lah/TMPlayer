@@ -326,7 +326,11 @@ data class MediaItem(
      */
     val metaQuery: com.tmplayer.online.MetaQuery?
         get() = read(metaQueryRead) {
-            com.tmplayer.online.MetaQuery.of(nameForParsing, caption).also { metaQueryRead = it ?: NotFound }
+            val asked = com.tmplayer.online.MetaQuery.of(nameForParsing, caption)
+                ?.withHints(com.tmplayer.online.ChatLanguageHints.of(chatId))
+            // Until the chat's title has been read the question may still gain hints: not kept yet.
+            if (com.tmplayer.online.ChatLanguageHints.knows(chatId)) metaQueryRead = asked ?: NotFound
+            asked
         }
 
     /** [MediaName.tileTitle] of the file's name, read once: search screens every item by it per letter. */

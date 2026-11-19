@@ -522,6 +522,7 @@ class GarbageInputTest {
             survive("Decimal.parse", text) { Decimal.parse(text) }
             survive("MediaName.parse", text) { MediaName.parse(text); MediaName.parse(text, text) }
             survive("MediaName.spellingKey", text) { MediaName.spellingKey(text) }
+            survive("MediaName.languageHints", text) { MediaName.languageHints(text); com.tmplayer.online.ChatLanguageHints.note(1L, text) }
             survive("MediaName.pack", text) { MediaName.parse(text).let { it.pack; it.packSeason } }
             survive("MetaLinks.read", text) { com.tmplayer.online.MetaLinks.read(text, text, null) }
             survive("MetaQuery.of link", text) {

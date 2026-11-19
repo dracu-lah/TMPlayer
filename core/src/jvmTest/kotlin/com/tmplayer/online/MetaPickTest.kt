@@ -88,4 +88,70 @@ class MetaPickTest {
         val tamil = MetaCandidate("880780", listOf("Idiot", "\u0b87\u0b9f\u0bbf\u0baf\u0b9f\u0bcd"), 2022, "", null, null, originalLanguage = "ta")
         assertEquals("880780", MetaPick.best(q, listOf(czech, tamil), show = false)?.id)
     }
+
+    private fun biggBoss() = listOf(
+        MetaCandidate("tamil", listOf("Bigg Boss"), 2017, "", null, null, originalLanguage = "ta"),
+        MetaCandidate("malayalam", listOf("Bigg Boss"), 2018, "", null, null, originalLanguage = "ml"),
+        MetaCandidate("telugu", listOf("Bigg Boss"), 2017, "", null, null, originalLanguage = "te"),
+        MetaCandidate("kannada", listOf("Bigg Boss"), 2013, "", null, null, originalLanguage = "kn"),
+    )
+
+    /** HX24: the Malayalam "Bigg Boss" of a chat named for Malayalam showed TMDB's first, the Tamil one. */
+    @Test
+    fun theChatsLanguageBreaksATieBetweenShowsOfOneName() {
+        val q = of("Bigg Boss S08E50.mkv")
+        assertEquals("tamil", MetaPick.best(q, biggBoss(), show = true)?.id)
+        val hinted = q.withHints(com.tmplayer.data.MediaName.languageHints("Deonnn Malayalam Shows"))
+        assertEquals(listOf("ml"), hinted.hints)
+        assertEquals("malayalam", MetaPick.best(hinted, biggBoss(), show = true)?.id)
+    }
+
+    @Test
+    fun aHintNeverOutweighsTheFilesOwnLanguageOrTheYear() {
+        val ownWords = of("Bigg Boss S08E50 Telugu.mkv").withHints(listOf("ml"))
+        assertEquals("telugu", MetaPick.best(ownWords, biggBoss(), show = true)?.id)
+        val byYear = of("Bigg Boss 2017 S08E50.mkv").withHints(listOf("ml"))
+        assertEquals("tamil", MetaPick.best(byYear, biggBoss(), show = true)?.id)
+    }
+
+    @Test
+    fun aHintIsNeverAReasonToAccept() {
+        val q = of("Coast walk day 2 2023.mp4").withHints(listOf("ta"))
+        assertNull(MetaPick.best(q, listOf(candidate("x", "Coastal Walks", 2023, "ta")), show = false))
+        // A chat that names a language no candidate has changes nothing.
+        val q2 = of("Bigg Boss S08E50.mkv").withHints(listOf("fr"))
+        assertEquals("tamil", MetaPick.best(q2, biggBoss(), show = true)?.id)
+    }
+
+    @Test
+    fun hintsAreInTheCacheKeyOnlyWhenThereAreSome() {
+        val q = of("Bigg Boss S08E50.mkv")
+        assertEquals(q.cacheKey("en"), q.withHints(emptyList()).cacheKey("en"))
+        org.junit.Assert.assertNotEquals(q.cacheKey("en"), q.withHints(listOf("ml")).cacheKey("en"))
+    }
+
+    @Test
+    fun languageHintsReadAChatTitle() {
+        val h = com.tmplayer.data.MediaName::languageHints
+        assertEquals(listOf("ml"), h("Malayalam Movies HD"))
+        assertEquals(listOf("ta", "te"), h("Tamil Telugu Latest"))
+        assertEquals(emptyList<String>(), h("Cinema_paradasio"))
+        // Short forms inside a chat title are not languages.
+        assertEquals(emptyList<String>(), h("Mal Tam Hin Eng"))
+        assertEquals(emptyList<String>(), h(""))
+    }
+
+    @Test
+    fun theChatRegistryHandsHintsToAnItemsQuery() {
+        com.tmplayer.online.ChatLanguageHints.clear()
+        assertEquals(false, com.tmplayer.online.ChatLanguageHints.knows(7L))
+        com.tmplayer.online.ChatLanguageHints.note(7L, "Malayalam Shows")
+        com.tmplayer.online.ChatLanguageHints.note(8L, "Plain chat")
+        assertEquals(listOf("ml"), com.tmplayer.online.ChatLanguageHints.of(7L))
+        assertEquals(emptyList<String>(), com.tmplayer.online.ChatLanguageHints.of(8L))
+        assertEquals(true, com.tmplayer.online.ChatLanguageHints.knows(8L))
+        com.tmplayer.online.ChatLanguageHints.note(7L, "Renamed")
+        assertEquals(emptyList<String>(), com.tmplayer.online.ChatLanguageHints.of(7L))
+        com.tmplayer.online.ChatLanguageHints.clear()
+    }
 }

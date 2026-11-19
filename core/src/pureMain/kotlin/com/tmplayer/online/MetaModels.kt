@@ -48,7 +48,17 @@ data class MetaQuery(
      * the link, unless the file's own year or episode contradicts it ([OnlineMetadata]).
      */
     val fromLink: Boolean = false,
+    /**
+     * The languages the chat's own title names ([ChatLanguageHints]), ISO 639-1: a weaker hint than
+     * [languages], for the same case (two shows called "Bigg Boss" in Tamil and Malayalam, the
+     * chat named "Malayalam ..."). Never a reason to accept a title, only to prefer one; part of
+     * [cacheKey] when not empty, so a chat with no such word keeps the keys it had.
+     */
+    val hints: List<String> = emptyList(),
 ) {
+    /** The same question with the chat's language [hints] ([ChatLanguageHints.of]); this one when there are none. */
+    fun withHints(hints: List<String>): MetaQuery = if (hints.isEmpty() || hints == this.hints) this else copy(hints = hints)
+
     /** True when an episode's own name and words are wanted, not only the show's. */
     val wantsEpisode: Boolean get() = kind == MetaKind.Show && episode != null
 
@@ -73,6 +83,7 @@ data class MetaQuery(
         languages.takeIf { it.isNotEmpty() }?.sorted()?.joinToString("-"),
         imdbId?.let { "imdb:$it" },
         if (fromLink) "link" else null,
+        hints.takeIf { it.isNotEmpty() }?.sorted()?.joinToString("-", prefix = "hint:"),
     ).joinToString("|")
 
     companion object {
@@ -314,7 +325,11 @@ object MetaPick {
             if (wanted == year) score += SAME_YEAR else if (kotlin.math.abs(wanted - year) <= 1) score += NEAR_YEAR
         }
         val original = candidate.originalLanguage.lowercase()
-        if (original.isNotEmpty() && original in query.languages) score += LANGUAGE
+        if (original.isNotEmpty()) {
+            if (original in query.languages) score += LANGUAGE
+            // The chat's language never outweighs the file's own words or the year.
+            if (original in query.hints) score += HINT
+        }
         return score
     }
 
@@ -322,6 +337,7 @@ object MetaPick {
     private const val SAME_YEAR = 4
     private const val NEAR_YEAR = 1
     private const val LANGUAGE = 2
+    private const val HINT = 1
 }
 
 /** What is known of a title's logo: its address, or null for a title that has none. */
