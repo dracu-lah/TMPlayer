@@ -11,6 +11,7 @@ import type { MediaFile } from '../stream/reader'
 import { canvasPixels, chooseFrame, DecodeGauge, FrameRing, MasterClock, refilled, ringFrames, SoundTimeline, starved } from './canvasclock'
 import { startDrawing, type Drawing } from './canvasdraw'
 import { cueOverlay } from './cueoverlay'
+import { boostLevel, limiterBetween } from './boost'
 import { codecName, Unplayable, type Engine, type EngineEvents, type SoundTrack } from './engines'
 import { AV_PKT_FLAG_KEY, debug, phone, readHeader, toSeconds, type Header, type LibavSound, type Picture } from './libav'
 import { downmix, soundPlanes, yuvPlanes, type Planes } from './libavplanes'
@@ -142,6 +143,9 @@ export class CanvasEngine implements Engine {
     private dropped = 0
     private heavyCodec: string
     private volume = 1
+    /** Volume boost, 1 (off) to 2: a multiplier on the gain, set through the element's `tmBoost`. */
+    private boost = 1
+    private limiter: ReturnType<typeof limiterBetween> | null = null
     private muted = false
     private rate = 1
 
@@ -172,7 +176,11 @@ export class CanvasEngine implements Engine {
         this.silent = !ctx || !this.sound
         this.useContextClock = !this.silent
         this.gain = ctx ? ctx.createGain() : null
-        this.gain?.connect(ctx!.destination)
+        // Volume boost (boost.ts) lifts this gain above 1; the limiter behind it is only in the path then.
+        if (ctx && this.gain) {
+            this.limiter = limiterBetween(ctx, this.gain, ctx.destination)
+            this.limiter.set(false)
+        }
         // 4:2:0 frames of this size: one picture's bytes, for the ring's budget.
         const frameBytes = Math.max(1, Math.round(h.pic.width * h.pic.height * 1.5))
         this.ring = new FrameRing<Shown>(ringFrames(frameBytes), 10 * 2 ** 20)
@@ -267,9 +275,10 @@ export class CanvasEngine implements Engine {
         const video = this.video
         this.volume = video.volume
         this.muted = video.muted
+        this.boost = boostLevel()
         this.paused = true
         this.startAt = start
-        if (this.gain) this.gain.gain.value = this.muted ? 0 : this.volume
+        this.applyVolume()
         // The audio context starts held: the clock runs it.
         this.ctx?.suspend().catch(() => {})
         video.after(this.canvas)
@@ -286,7 +295,7 @@ export class CanvasEngine implements Engine {
     private mirrorStyle() {
         const from = this.video.style
         const to = this.canvas.style
-        for (const p of ['position', 'left', 'top', 'width', 'height', 'objectFit', 'filter'] as const) {
+        for (const p of ['position', 'left', 'top', 'width', 'height', 'objectFit', 'filter', 'transform'] as const) {
             const v = from[p]
             if (to[p] !== v) to[p] = v
         }
@@ -328,6 +337,14 @@ export class CanvasEngine implements Engine {
                 get: () => defaultRate,
                 set: (r: number) => {
                     if (r > 0) defaultRate = r
+                },
+            },
+            tmBoost: {
+                configurable: true,
+                writable: true,
+                value: (level: number) => {
+                    self.boost = Math.max(1, Math.min(2, Number(level) || 1))
+                    self.applyVolume()
                 },
             },
             volume: {
@@ -376,7 +393,8 @@ export class CanvasEngine implements Engine {
     }
 
     private applyVolume() {
-        if (this.gain) this.gain.gain.value = this.muted ? 0 : this.volume
+        if (this.gain) this.gain.gain.value = this.muted ? 0 : this.volume * this.boost
+        this.limiter?.set(this.boost > 1)
     }
 
     async setAudio(track: SoundTrack): Promise<boolean> {
