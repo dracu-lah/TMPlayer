@@ -291,13 +291,16 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
     // Not for a chat that restricts saving, nor a video played from pieces. `linkShown` is the link, when the browser refused the clipboard.
     const askLink = (chatId: number, messageId: number) => call('messageLink', [chatId, messageId])
     const [linkShown, setLinkShown] = createSignal('')
+    // Telegram says this video may not be passed on now (the chat became protected, or the message destroys itself): the entry goes.
+    const [linkBlocked, setLinkBlocked] = createSignal(false)
     let linkAsked: string | null = null
     createEffect(() => {
         if (sheet() !== 'more' || !linkOffered(c.item)) return
         const key = `${c.item.chatId}:${c.item.messageId}`
         if (linkAsked !== key) {
             linkAsked = key
-            void linkOf(c.item, askLink)
+            setLinkBlocked(false)
+            void linkOf(c.item, askLink).then((a) => linkAsked === key && setLinkBlocked(!('link' in a) && a.none === 'protected'))
         }
     })
     let linkBusy = false
@@ -311,7 +314,10 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
             if (out.done === 'shown') {
                 setLinkShown(out.link)
                 setSheet('link')
-            } else flash(out.done === 'copied' ? t('common.link_copied') : out.why === 'gone' ? t('link.not_found') : t('share.no_message_links'))
+            } else {
+                if (out.done === 'none' && out.why === 'protected') setLinkBlocked(true)
+                flash(out.done === 'copied' ? t('common.link_copied') : out.why === 'gone' ? t('link.not_found') : t('share.no_message_links'))
+            }
         } finally {
             linkBusy = false
         }
@@ -2167,7 +2173,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                             <Entry text={t('player.reset_zoom')} trailing={`${percent(zoom())}%`} onClick={() => (setSheet(null), resetZoom())} />
                         </Show>
                         <Entry text={t('player.subtitle_style_and_timing')} onClick={() => setSheet('timing')} />
-                        <Show when={linkOffered(c.item)}>
+                        <Show when={linkOffered(c.item) && !linkBlocked()}>
                             <Entry text={t('player.copy_link_at_time')} onClick={copyLinkAtTime} />
                         </Show>
                         <Entry text={t('player.load_subtitle_file')} onClick={() => (setSheet(null), c.loadSubtitleFile())} />

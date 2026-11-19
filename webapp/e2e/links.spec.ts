@@ -114,6 +114,15 @@ test('a message that is gone (Telegram says it no longer exists): the menu says 
     await expect(openRow(page)).toHaveCount(0)
 })
 
+test('a chat that became protected after the card was stored: Telegram says so when the menu opens, and the link entries go', async ({ page, context }) => {
+    await fakeCase(context, 'links', 'linksprot')
+    await menuFor(page, LINK_ROOM, 'Plain Clip')
+    await expect(menu(page).getByRole('button', { name: 'Play' })).toBeVisible()
+    await expect(copyRow(page)).toHaveCount(0)
+    await expect(openRow(page)).toHaveCount(0)
+    expect(await copied(page)).toEqual([])
+})
+
 test('a browser that refuses the clipboard shows the link, selected, to copy by hand', async ({ page }, info) => {
     await menuFor(page, LINK_ROOM, 'Plain Clip')
     // The stub has already been installed as allowing; replace it with one that refuses.
@@ -197,6 +206,14 @@ test.describe('in the player', () => {
         await expect(sheet.locator('input')).toBeFocused()
         await shot(page, info, 'player-by-hand')
         await page.keyboard.press('Escape')
+    })
+
+    test('a chat that became protected after the card was stored: the entry goes once Telegram has been asked', async ({ page, context }) => {
+        await fakeCase(context, 'links', 'linksprot')
+        await play(page, LINK_ROOM, 'Plain Clip')
+        await openMore(page)
+        await expect(page.getByRole('menuitem', { name: 'Playback details' })).toBeVisible()
+        await expect(page.getByRole('menuitem', { name: 'Copy link at this time' })).toHaveCount(0)
     })
 
     test('no entry for a chat that restricts saving', async ({ page }) => {

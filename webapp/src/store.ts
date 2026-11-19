@@ -13,6 +13,7 @@ import * as Lists from './ui/lists'
 import { cleanPref, isDefault, type ChatPref } from './ui/filterPref'
 import { resolveSpeed, sanitiseBoost, speedTarget, speedToKeep, type SpeedScopes } from './player/extras'
 import { tdlibMessageId } from './sync/format'
+import { forgetLinks } from './ui/tgLinks'
 
 export type Theme = 'system' | 'dark' | 'light' | 'black'
 
@@ -1161,6 +1162,8 @@ export function syncPutPick(chatId: number, messageId: number, pick: Pick | null
 /** Sign out: settings, positions, watched, stars, thumbnails and posters go; the theme falls back to the system's. */
 export async function clearAll() {
     memory.clear()
+    // The message links asked for are the account's (U9): none stays for the next one.
+    forgetLinks()
     seqs.clear()
     try {
         localStorage.removeItem(JOURNAL)

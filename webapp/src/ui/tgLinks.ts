@@ -90,7 +90,7 @@ export function linkOf(item: Pick<VideoItem, 'chatId' | 'messageId'>, ask: Asker
     const run = ask(item.chatId, item.messageId).then(
         (answer) => {
             const ok = isLinkAnswer(answer) ? answer : { none: 'nolink' as const }
-            if (!('link' in ok) && asked.get(key) === run) asked.delete(key)
+            if ((!('link' in ok) || ok.partial) && asked.get(key) === run) asked.delete(key)
             return ok
         },
         () => {
@@ -107,7 +107,7 @@ export function linkOf(item: Pick<VideoItem, 'chatId' | 'messageId'>, ask: Asker
 function isLinkAnswer(a: unknown): a is LinkAnswer {
     if (typeof a !== 'object' || a === null) return false
     const o = a as Record<string, unknown>
-    return isTgLink(o.link) || o.none === 'gone' || o.none === 'nolink'
+    return isTgLink(o.link) || o.none === 'gone' || o.none === 'nolink' || o.none === 'protected'
 }
 
 /** Forgets what was asked (a test, or a signed out page). */
@@ -121,7 +121,7 @@ export type CopyOutcome =
     /** The browser refused: the page shows the link to copy by hand. */
     | { done: 'shown'; link: string }
     /** No link: the message is gone, or the chat has none. */
-    | { done: 'none'; why: 'gone' | 'nolink' }
+    | { done: 'none'; why: 'gone' | 'nolink' | 'protected' }
 
 /** Copy the link, at `startSec` when above 0. Never throws. */
 export async function copyLink(item: Pick<VideoItem, 'chatId' | 'messageId'>, startSec: number, ask: Asker, write: (text: string) => Promise<boolean> = copyText): Promise<CopyOutcome> {

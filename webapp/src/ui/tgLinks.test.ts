@@ -100,6 +100,26 @@ test('a failed asking, or a gone answer, is asked again next time', async () => 
     assert.equal(n, 3)
 })
 
+test('a partial link (a lookup failed) is not kept: the next ask goes to Telegram again; a protected answer is understood and not kept', async () => {
+    let n = 0
+    const ask: Asker = async () => (++n === 1 ? { link: 'https://t.me/c/1234567890/42', partial: true } : n === 2 ? { none: 'protected' } : { link: 'https://t.me/club/42' })
+    assert.deepEqual(await linkOf(item, ask), { link: 'https://t.me/c/1234567890/42', partial: true })
+    assert.deepEqual(await linkOf(item, ask), { none: 'protected' })
+    assert.deepEqual(await linkOf(item, ask), { link: 'https://t.me/club/42' })
+    assert.deepEqual(await linkOf(item, ask), { link: 'https://t.me/club/42' })
+    assert.equal(n, 3)
+    forgetLinks()
+    assert.deepEqual(await copyLink(item, 0, async () => ({ none: 'protected' }), async () => true), { done: 'none', why: 'protected' })
+})
+
+test('forgetting the links (sign out, delete your data) makes the next ask go to Telegram', async () => {
+    const { ask, calls } = answers({ link: 'https://t.me/clap_films/42' })
+    await linkOf(item, ask)
+    forgetLinks()
+    await linkOf(item, ask)
+    assert.equal(calls.length, 2)
+})
+
 test('an answer that is not one (wrong type, another site) is no link', async () => {
     for (const bad of [null, 'https://t.me/a/1', { link: 'https://evil.com/a' }, { link: 5 }, { none: 'other' }, {}]) {
         forgetLinks()

@@ -260,7 +260,7 @@ dialogs.push(lighthouse)
 
 // `links` (WB16, Telegram links): chats with ids as real Telegram ones are (-100 and a number), which the fake's small ids are not.
 // Link Room is public (@linkroom) with a plain video and one in a forum topic (9); Back Room is a private channel with no
-// username; Sealed Room restricts saving. `linksgone`: Telegram answers that Link Room's messages no longer exist.
+// username; Sealed Room restricts saving. `linksgone`: Telegram answers that Link Room's messages no longer exist. `linksprot`: its messages now say they restrict saving.
 // Made last, so no other id moves.
 const linkRoom = peer(-1001234567890, 'Link Room', 'chat', { chatType: 'channel', username: 'linkroom' })
 const backRoom = peer(-1009876543210, 'Back Room', 'chat', { chatType: 'channel' })
@@ -560,6 +560,8 @@ export class TelegramClient {
         }
         if (!peers.has(chatId)) throw rpcError('PEER_ID_INVALID')
         if (flags.has('linksgone') && chatId === linkRoom.id) return [ids].flat().map(() => null)
+        // `linksprot`: the chat became protected after the lists were read: Telegram's message now says so, the stored cards do not.
+        if (flags.has('linksprot') && chatId === linkRoom.id) return [ids].flat().map((id) => { const m = (messages.get(chatId) ?? []).find((x) => x.id === id); return m ? { ...m, raw: { ...m.raw, noforwards: true } } : null })
         if (hugeCount(chatId) > 0) return [ids].flat().map((id) => (id >= 1 && id <= hugeCount(chatId) ? hugeMsg(peers.get(chatId)!, id - 1) : null))
         return [ids].flat().map((id) => (messages.get(chatId) ?? []).find((m) => m.id === id) ?? null)
     }

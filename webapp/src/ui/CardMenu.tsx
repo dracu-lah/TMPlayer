@@ -113,13 +113,20 @@ export function CardMenu() {
     // undefined: not here yet; null: none to give. `manual` is the link shown for copying by hand when the browser refused the clipboard.
     const [link, setLink] = createSignal<string | null | undefined>(undefined)
     const [manual, setManual] = createSignal<string | null>(null)
+    // Telegram says this video may not be passed on now (the chat became protected, or the message destroys itself): no link entries.
+    const [blocked, setBlocked] = createSignal(false)
     let copying = false
     createEffect(
         on(target, (now) => {
             setLink(undefined)
             setManual(null)
+            setBlocked(false)
             if (!now || !linkOffered(now.item)) return
-            void linkOf(now.item, api.messageLink).then((a) => target() === now && setLink('link' in a ? a.link : null))
+            void linkOf(now.item, api.messageLink).then((a) => {
+                if (target() !== now) return
+                setLink('link' in a ? a.link : null)
+                setBlocked(!('link' in a) && a.none === 'protected')
+            })
         }),
     )
     createEffect(() => {
@@ -228,7 +235,7 @@ export function CardMenu() {
                             </span>
                         </button>
                         {/* The apps' Copy link: not for a chat that restricts saving, nor a video played from pieces. */}
-                        <Show when={linkOffered(now().item)}>
+                        <Show when={linkOffered(now().item) && !blocked()}>
                             <button class="menu-row" type="button" onClick={copy}>
                                 <Icon icon={Copy01Icon} size={22} />
                                 <span>
