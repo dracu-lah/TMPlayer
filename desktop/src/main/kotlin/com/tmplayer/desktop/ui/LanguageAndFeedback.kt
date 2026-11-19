@@ -37,6 +37,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.unit.dp
 import com.tmplayer.data.Feedback
+import com.tmplayer.data.FeedbackReport
+import com.tmplayer.data.FeedbackReports
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.WhatsNew
 import com.tmplayer.desktop.BuildInfo
@@ -48,6 +50,7 @@ import com.tmplayer.i18n.LanguageNotice
 import com.tmplayer.i18n.Translator
 import com.tmplayer.platform.Background
 import com.tmplayer.ui.auth.QrCode
+import com.tmplayer.ui.components.FeedbackHost
 import com.tmplayer.ui.components.TmAlertDialog
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.i18n.rememberLanguageNotice
@@ -147,35 +150,48 @@ private fun linuxPrettyName(): String? {
 }
 
 /**
- * "Report a problem" on the desktop: the prefilled bug report in the browser, an email instead
- * for somebody without a GitHub account, and the same report as a QR code for filing it from a
- * phone.
+ * "Report a problem" and "Request a feature" on the desktop. With the build's inbox (HX64) the
+ * report is written here, shown word for word and sent ([FeedbackHost]), with GitHub and e-mail
+ * kept as the ways round. Without one (forks, CI): the prefilled GitHub page in the browser, an
+ * email instead for somebody without a GitHub account, and the same page as a QR code for filing
+ * it from a phone.
  */
 @Composable
-fun FeedbackPopup(onClose: () -> Unit) {
+fun FeedbackPopup(onClose: () -> Unit, kind: FeedbackReport.Kind = FeedbackReport.Kind.Problem) {
     val s = LocalStrings.current
     val facts = remember { desktopFeedbackFacts() }
-    val issue = remember(facts) { Feedback.issueUrl(facts) }
+    val feature = kind == FeedbackReport.Kind.Feature
+    val issue = remember(facts, feature) { if (feature) Feedback.featureUrl(facts) else Feedback.issueUrl(facts) }
+    if (FeedbackReports.available) {
+        FeedbackHost(
+            kind = kind,
+            facts = facts,
+            onDone = onClose,
+            onGithub = { OpenExternal.browse(issue) },
+            onEmail = { OpenExternal.mail(Feedback.mailto(facts, feature)) },
+        )
+        return
+    }
     val bitmap by produceState<ImageBitmap?>(initialValue = null, key1 = issue) {
         value = withContext(Dispatchers.Default) { QrCode.render(issue, 400) }
     }
     TmAlertDialog(
         onDismissRequest = onClose,
         icon = { Icon(TmIcons.Bug, contentDescription = null, tint = Tone.accent) },
-        title = { Text(s.feedbackTitle) },
+        title = { Text(if (feature) s.feedbackFeatureTitle else s.feedbackTitle) },
         text = {
             Row(Modifier.widthIn(max = 640.dp), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(s.feedbackBodyDesktop, style = MaterialTheme.typography.bodyMedium)
+                    Text(if (feature) s.feedbackFeatureBodyDesktop else s.feedbackBodyDesktop, style = MaterialTheme.typography.bodyMedium)
                     Button(onClick = { OpenExternal.browse(issue); onClose() }) { Text(s.feedbackOpenGithub) }
-                    OutlinedButton(onClick = { OpenExternal.mail(Feedback.mailto(facts)); onClose() }) { Text(s.feedbackEmail) }
+                    OutlinedButton(onClick = { OpenExternal.mail(Feedback.mailto(facts, feature)); onClose() }) { Text(s.feedbackEmail) }
                     Text(s.feedbackEmailDetail(Feedback.EMAIL), style = MaterialTheme.typography.bodySmall, color = Tone.muted)
                 }
                 Box(
                     Modifier.size(180.dp).clip(RoundedCornerShape(Corner.Large)).background(Color.White),
                     contentAlignment = Alignment.Center,
                 ) {
-                    bitmap?.let { Image(it, contentDescription = s.feedbackQr, modifier = Modifier.fillMaxSize().padding(8.dp)) }
+                    bitmap?.let { Image(it, contentDescription = if (feature) s.feedbackFeatureQr else s.feedbackQr, modifier = Modifier.fillMaxSize().padding(8.dp)) }
                 }
             }
         },

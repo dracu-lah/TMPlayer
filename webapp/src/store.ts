@@ -8,8 +8,13 @@ import type { Sort, VideoItem } from './tg/types'
 import { clearIndex, POSTERS as POSTER_CACHE, THUMBS, touch } from './cacheBounds'
 import { cleanHome } from './ui/homeSettings'
 import { decodePick, encodePick, type Pick } from './pick'
+import { admit, cleanTitle } from './rename'
 import * as Lists from './ui/lists'
+import { cleanPref, isDefault, type ChatPref } from './ui/filterPref'
+import { resolveSpeed, sanitiseBoost, speedTarget, speedToKeep, type SpeedScopes } from './player/extras'
 import { tdlibMessageId } from './sync/format'
+import { forgetLinks } from './ui/tgLinks'
+import { clearLogs } from './logs'
 
 export type Theme = 'system' | 'dark' | 'light' | 'black'
 
@@ -149,14 +154,16 @@ async function read<T>(key: string): Promise<T | undefined> {
 
 /**
  * Resume across devices (sync/): what is taken off Watched, Watch later and the picks is noted with
- * the time (`xw:`, `xl:`, `xfix:`, named by the apps' `<chat>_<message>` with the message's id as
- * TDLib has it), so the sync file can say it was taken off and another device does not bring it
- * back. Written for the viewer's own removals only: `quiet` is for what a sync itself applies.
+ * the time (`xw:`, `xl:`, `xfix:`, and `xtitle:` for a rename reset, named by the apps' `<chat>_<message>`
+ * with the message's id as TDLib has it), so the sync file can say it was taken off and another
+ * device does not bring it back. Written for the viewer's own removals only: `quiet` is for what a
+ * sync itself applies.
  */
-const TOMB = /^(watched|later|fix):(-?\d+):(\d+)$/
+const TOMBS = { watched: 'xw', later: 'xl', fix: 'xfix', title: 'xtitle' } as const
+const TOMB = /^(watched|later|fix|title):(-?\d+):(\d+)$/
 function tombOf(key: string): string | null {
     const m = TOMB.exec(key)
-    return m ? `${m[1] === 'watched' ? 'xw' : m[1] === 'later' ? 'xl' : 'xfix'}:${m[2]}_${tdlibMessageId(Number(m[3]))}` : null
+    return m ? `${TOMBS[m[1] as keyof typeof TOMBS]}:${m[2]}_${tdlibMessageId(Number(m[3]))}` : null
 }
 
 /** Called when a list the sync file holds changed (a place, a mark, Watch later, a star, a pick); sync/index.ts pushes soon after. */
@@ -164,7 +171,7 @@ let listsChanged: (() => void) | null = null
 export function onListsChanged(fn: () => void) {
     listsChanged = fn
 }
-const SYNCED = /^(resume|watched|later|star|fix):/
+const SYNCED = /^(resume|watched|later|star|fix|title):/
 
 function write(key: string, value: unknown) {
     // A line put (back) is newer than any removal of it: an Undo must not be taken off again by a sync.
@@ -195,6 +202,37 @@ function removeRaw(key: string) {
 
 /** The player's own notes (bookmarks, its switches) go through the same storage, so signing out clears them too. */
 export { read as kvRead, write as kvWrite, remove as kvRemove }
+
+// Speed per series, chat and topic (SettingsStore.openingSpeed and rememberSpeed): a speed belongs to
+// what the video is part of. Read and written only as numbers; anything else stored is as if none was.
+const speedKey = (scope: string) => `speed:${scope}`
+
+/** The speed a video opens at: the one kept for its series, else for its chat, else 1x. */
+export async function openingSpeed(scopes: SpeedScopes): Promise<number> {
+    const [series, chat] = await Promise.all([scopes.series ? read<unknown>(speedKey(scopes.series)) : undefined, scopes.chat ? read<unknown>(speedKey(scopes.chat)) : undefined])
+    return resolveSpeed(series, chat)
+}
+
+/** Remembers a speed the viewer picked for the narrowest place the video belongs to; 1x forgets it there and in the chat under it. */
+export function rememberSpeed(scopes: SpeedScopes, value: number) {
+    const keep = speedToKeep(value)
+    if (keep === null) {
+        for (const scope of [scopes.series, scopes.chat]) if (scope) remove(speedKey(scope), true)
+        return
+    }
+    const target = speedTarget(scopes)
+    if (target) write(speedKey(target), keep)
+}
+
+/** Volume boost, kept for every video until it is turned off (the apps' volume_boost); 1 is off. */
+const BOOST_KEY = 'player:boost'
+export async function readBoost(): Promise<number> {
+    return sanitiseBoost(await read<unknown>(BOOST_KEY))
+}
+export function writeBoost(level: number) {
+    if (level > 1) write(BOOST_KEY, level)
+    else remove(BOOST_KEY, true)
+}
 
 async function all<T>(prefix: string): Promise<T[]> {
     return [...(await allEntries<T>(prefix)).values()]
@@ -261,6 +299,8 @@ export async function loadSettings() {
     setLaterIds(new Set(later.map(laterId)))
     await loadLists()
     await loadPicks()
+    await loadTitles()
+    await loadCopies()
     applyTheme(settings().theme)
 }
 
@@ -351,6 +391,22 @@ export async function watchedList(): Promise<{ chatId: number; messageId: number
             return { chatId, messageId, time: typeof time === 'number' ? time : 0 }
         })
         .sort((a, b) => b.time - a.time)
+}
+
+/**
+ * When each video was last watched or left part way, for the Last played order: ids and times in
+ * milliseconds, newest first, at most 20,000 (a chat's order reads what has loaded of it).
+ */
+export async function touches(): Promise<{ ids: string[]; times: number[] }> {
+    const [left, done] = await Promise.all([resumes(), watchedList()])
+    const at = new Map<string, number>()
+    for (const r of left) at.set(id(r.chatId, r.messageId), r.time)
+    for (const w of done) {
+        const key = id(w.chatId, w.messageId)
+        at.set(key, Math.max(at.get(key) ?? 0, w.time))
+    }
+    const newest = [...at].sort((a, b) => b[1] - a[1]).slice(0, 20_000)
+    return { ids: newest.map(([k]) => k), times: newest.map(([, t]) => t) }
 }
 
 /** Marks a video watched (its place forgotten, as finishing it does) or not watched. */
@@ -587,6 +643,20 @@ export async function starred(): Promise<number[]> {
     return (await all<{ chatId: number; time: number }>('star:')).sort((a, b) => a.time - b.time).map((s) => s.chatId)
 }
 
+// A chat's filters (U6): the Show filter and the line of the others, kept for each chat on this device.
+
+/** One chat's filters; nothing stored is the default. A stored value that does not hold up is the default (ui/videoFilter.ts). */
+export async function chatPref(chatId: number): Promise<ChatPref> {
+    return cleanPref(await read<unknown>(`view:${chatId}`))
+}
+
+/** Remembers a chat's filters; the default is no entry at all, so the store holds only chats that are filtered. */
+export function setChatPref(chatId: number, pref: ChatPref) {
+    const next = cleanPref(pref)
+    if (isDefault(next)) remove(`view:${chatId}`, true)
+    else write(`view:${chatId}`, next)
+}
+
 // The chats the viewer added (HX27, the apps' AddedChats)
 
 /**
@@ -710,6 +780,149 @@ async function loadPicks() {
     setPicks(found)
 }
 
+// "Rename": the title a viewer gave a video (the apps' VideoCorrection.title), one stored line per
+// file (`title:<chat>:<message>` = the cleaned title, `titleat:<chat>:<message>` = when). The sync
+// file carries it as the `title=` line of that video's correction. What is stored is outside data:
+// read back through `cleanTitle`, the keys checked, the count bounded.
+
+const [titles, setTitles] = createSignal<ReadonlyMap<string, string>>(new Map())
+export { titles }
+
+/** The most renames kept (a viewer renames a handful; anything past this is not theirs). */
+export const TITLES_MAX = 5_000
+
+/** The title the viewer gave a video, or undefined for none. Reactive: a rename redraws what read it. */
+export const titleOf = (chatId: number, messageId: number): string | undefined => titles().get(id(chatId, messageId))
+
+/**
+ * Gives each of `videos` (the video and its copies) the title `title`, or takes the rename off with
+ * null (or a title with nothing in it): the file name reads again. The same title again changes
+ * nothing, not even the time the sync file sees.
+ */
+export function setTitle(videos: readonly { chatId: number; messageId: number }[], title: string | null) {
+    const clean = cleanTitle(title)
+    let next: ReadonlyMap<string, string> = titles()
+    const now = Date.now()
+    let changed = false
+    for (const v of videos) {
+        const key = id(v.chatId, v.messageId)
+        if (clean) {
+            if (next.get(key) === clean) continue
+            const put = admit(next, key, clean, TITLES_MAX)
+            next = put.next
+            // Full: the oldest rename goes, here only (the sync file keeps its own newest 1,000).
+            if (put.evicted) forgetTitle(put.evicted)
+            write(`title:${key}`, clean)
+            write(`titleat:${key}`, now)
+        } else if (next.has(key)) {
+            const left = new Map(next)
+            left.delete(key)
+            next = left
+            remove(`titleat:${key}`, true)
+            remove(`title:${key}`)
+        } else continue
+        changed = true
+    }
+    if (changed) setTitles(next)
+}
+
+/** A rename dropped to make room: no removal is noted, it is not the viewer's act. */
+function forgetTitle(key: string) {
+    remove(`title:${key}`, true)
+    remove(`titleat:${key}`, true)
+}
+
+async function loadTitles() {
+    const [stored, times] = await Promise.all([allEntries<unknown>('title:'), allEntries<number>('titleat:')])
+    const found: [string, string, number][] = []
+    for (const [k, v] of stored) {
+        const key = k.slice('title:'.length)
+        const title = cleanTitle(v)
+        const at = times.get(`titleat:${key}`)
+        if (title && VIDEO_KEY.test(key)) found.push([key, title, typeof at === 'number' && Number.isFinite(at) ? at : 0])
+    }
+    // Oldest first, so a full store drops the oldest; a stored pile past the cap keeps the newest.
+    found.sort((x, y) => x[2] - y[2])
+    setTitles(new Map(found.slice(-TITLES_MAX).map(([key, title]) => [key, title])))
+}
+
+// The copies of a video (HX38), on this device only: the files kept apart from the copies they were
+// grouped with ("Not the same video", `apart:<chat>:<message>`), the copy the viewer chose for a
+// video in its list of copies (`chose:<chat>:<message>`, the time), and the quality they usually
+// play (`copyhabit`, QualityHabit's line). The worker groups and picks by them (copies.ts).
+
+const [apartIds, setApartIds] = createSignal<ReadonlySet<string>>(new Set())
+const [chosenCopies, setChosenCopies] = createSignal<readonly string[]>([])
+const [copyHabit, setCopyHabitSignal] = createSignal<string | null>(null)
+export { apartIds, chosenCopies, copyHabit }
+
+/** The most choices kept; the oldest goes first. */
+export const CHOSEN_MAX = 2_000
+/** The most files kept apart (a viewer splits a handful; anything past this is not theirs). */
+export const APART_MAX = 5_000
+const VIDEO_KEY = /^-?\d{1,20}:\d{1,12}$/
+const HABIT_LINE = /^[\d:,]{1,400}$/
+
+/** "Not the same video" (on) for one file, or "Group with its copies again" (off). */
+export function setApart(chatId: number, messageId: number, on: boolean) {
+    const key = id(chatId, messageId)
+    const next = new Set(apartIds())
+    if (on) {
+        if (next.size >= APART_MAX && !next.has(key)) return
+        next.add(key)
+        write(`apart:${key}`, Date.now())
+    } else {
+        if (!next.delete(key)) return
+        remove(`apart:${key}`)
+    }
+    setApartIds(next)
+}
+
+/**
+ * The viewer chose `chosen` in a list of `among` (its copies): it is the one their cards of the
+ * video play from now on, whatever is recommended. A choice made before among them is forgotten.
+ */
+export function chooseCopy(chosen: { chatId: number; messageId: number }, among: readonly { chatId: number; messageId: number }[]) {
+    const key = id(chosen.chatId, chosen.messageId)
+    const others = new Set(among.map((c) => id(c.chatId, c.messageId)))
+    others.add(key)
+    const kept = chosenCopies().filter((k) => !others.has(k))
+    for (const k of chosenCopies()) if (others.has(k)) remove(`chose:${k}`)
+    const next = [key, ...kept]
+    for (const k of next.splice(CHOSEN_MAX)) remove(`chose:${k}`)
+    write(`chose:${key}`, Date.now())
+    setChosenCopies(next)
+}
+
+/** The quality line (QualityHabit) once a play is noted in it by the worker. */
+export function setCopyHabit(line: string) {
+    if (!HABIT_LINE.test(line)) return
+    setCopyHabitSignal(line)
+    write('copyhabit', line)
+}
+
+async function loadCopies() {
+    const [apart, chose, habit] = await Promise.all([allEntries<unknown>('apart:'), allEntries<unknown>('chose:'), read<unknown>('copyhabit')])
+    const keyOf = (k: string, prefix: string) => {
+        const key = k.slice(prefix.length)
+        return VIDEO_KEY.test(key) ? key : null
+    }
+    const ids = new Set<string>()
+    for (const [k, at] of apart) {
+        const key = keyOf(k, 'apart:')
+        if (key && typeof at === 'number' && ids.size < APART_MAX) ids.add(key)
+    }
+    const chosen: [string, number][] = []
+    for (const [k, at] of chose) {
+        const key = keyOf(k, 'chose:')
+        if (key && typeof at === 'number' && Number.isFinite(at)) chosen.push([key, at])
+    }
+    chosen.sort((a, b) => b[1] - a[1])
+    setApartIds(ids)
+    setChosenCopies(chosen.slice(0, CHOSEN_MAX).map(([k]) => k))
+    setCopyHabitSignal(typeof habit === 'string' && HABIT_LINE.test(habit) ? habit : null)
+}
+
 // Thumbnails
 
 /** The Cache API's store for poster answers and pictures (screens/posters.ts). */
@@ -826,6 +1039,52 @@ export async function syncPicks(): Promise<{ chatId: number; messageId: number; 
     return out
 }
 
+/** The renames as stored with when each was last changed (1 for one stored with no time): the sync file's `title=` lines. */
+export async function syncTitles(): Promise<{ chatId: number; messageId: number; title: string; at: number }[]> {
+    const [stored, times] = await Promise.all([allEntries<unknown>('title:'), allEntries<number>('titleat:')])
+    const out: { chatId: number; messageId: number; title: string; at: number }[] = []
+    for (const [k, value] of stored) {
+        const key = k.slice('title:'.length)
+        const title = cleanTitle(value)
+        if (!title || !VIDEO_KEY.test(key) || out.length >= TITLES_MAX) continue
+        const [chatId, messageId] = key.split(':').map(Number)
+        const at = times.get(`titleat:${key}`)
+        out.push({ chatId, messageId, title, at: typeof at === 'number' && at > 0 ? at : 1 })
+    }
+    return out
+}
+
+/** The renames the viewer reset, by the apps' key, newer than `since` (older ones are swept). */
+export async function syncTitleTombs(since: number): Promise<{ key: string; at: number }[]> {
+    const out: { key: string; at: number }[] = []
+    for (const [k, at] of await allEntries<number>('xtitle:')) {
+        if (typeof at !== 'number' || at < since) removeRaw(k)
+        else out.push({ key: k.slice('xtitle:'.length), at })
+    }
+    return out
+}
+
+/** A rename from the file (null: none), with the time the file gave it. Quiet: no removal is noted for what the file took off. */
+export function syncPutTitle(chatId: number, messageId: number, title: string | null, at: number) {
+    const key = id(chatId, messageId)
+    const clean = cleanTitle(title)
+    let next: ReadonlyMap<string, string> = titles()
+    if (clean) {
+        const put = admit(next, key, clean, TITLES_MAX)
+        next = put.next
+        if (put.evicted) forgetTitle(put.evicted)
+        write(`title:${key}`, clean)
+        write(`titleat:${key}`, at)
+    } else if (next.has(key)) {
+        const left = new Map(next)
+        left.delete(key)
+        next = left
+        remove(`title:${key}`, true)
+        remove(`titleat:${key}`, true)
+    } else return
+    setTitles(next)
+}
+
 /** The starred chats with when each was starred. */
 export async function syncStars(): Promise<{ chatId: number; time: number }[]> {
     return (await all<{ chatId: number; time: number }>('star:')).filter((s) => Number.isSafeInteger(s?.chatId))
@@ -904,7 +1163,11 @@ export function syncPutPick(chatId: number, messageId: number, pick: Pick | null
 /** Sign out: settings, positions, watched, stars, thumbnails and posters go; the theme falls back to the system's. */
 export async function clearAll() {
     memory.clear()
+    // The message links asked for are the account's (U9): none stays for the next one.
+    forgetLinks()
     seqs.clear()
+    // The page's log, the names it remembered to take out of it and the crash note are the account's too (WB18).
+    clearLogs()
     try {
         localStorage.removeItem(JOURNAL)
         localStorage.removeItem(LAST_KEY)
@@ -918,6 +1181,10 @@ export async function clearAll() {
     setLaterIds(new Set<string>())
     setListsDoc(Lists.emptyLists())
     setPicks(new Map())
+    setTitles(new Map())
+    setApartIds(new Set<string>())
+    setChosenCopies([])
+    setCopyHabitSignal(null)
     // The added chats are the account's, not the device's, so signing out leaves none of them
     // behind and the next account is asked for itself (as the apps' clearEverything does).
     setAddedIdsSignal(new Set<number>())

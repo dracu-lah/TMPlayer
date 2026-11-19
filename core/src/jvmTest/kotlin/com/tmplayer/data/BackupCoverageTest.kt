@@ -75,6 +75,9 @@ class BackupCoverageTest {
         // Title reports (N1): which pairs this device sent or was asked about, and the few waiting
         // for a connection. File names the viewer agreed to send from this device, never carried to another.
         "title_ledger",
+        // A problem report or feature request being written or waiting to go (HX64): words typed
+        // on this device, perhaps a way to reply, never carried to another.
+        "feedback_draft",
         // Records of files on this device's disk, and what Telegram said about them.
         "cached_video", "cached_video_ids", "wc_", "dl_", "duration_", "meta_",
         // Android's chosen downloads folder (HX26): a path on this device's disk (an SD card or a

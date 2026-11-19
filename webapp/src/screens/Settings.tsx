@@ -6,6 +6,10 @@ import {
     ArrowLeft02Icon,
     ArrowRight01Icon,
     ArrowUp01Icon,
+    Bug01Icon,
+    Copy01Icon,
+    Idea01Icon,
+    Mail01Icon,
     ClapperboardIcon,
     CloudSyncIcon,
     LockKeyholeIcon,
@@ -32,8 +36,11 @@ import { addedIds, addedMode, homeChatRows, namedLists, settings, setSetting, st
 import { editorRows, encodeOrder, moveKey, parseOrder, type OrderEntry } from '../ui/homeOrder'
 import { back, me, signOut } from '../session'
 import { api } from '../tg/rpc'
-import { t } from '../i18n'
+import { browserLanguage, language, languageChoice, languageFailed, languageLoading, languageName, retryLanguage, setLanguage, t } from '../i18n'
+import { LANGUAGES } from '../ui/language'
+import './language.css'
 import { clearHistoryWithUndo } from '../clearHistory'
+import { askConfirm } from '../ui/Confirm'
 import { size } from './VideoList'
 import { form, layout, layoutFixed, setLayout, type Layout } from '../form'
 import { Icon, type IconData } from '../ui/Icon'
@@ -45,6 +52,8 @@ import { msoneOn, stateLine } from '../msoneFlag'
 import { health, knownHealth, type Health } from '../player/msone'
 import { setSyncOn, statusLine, syncHasFile, syncNow, syncOn, syncRunning, syncStatus, turnOffAndDelete } from '../sync'
 import { showToast } from '../ui/Toast'
+import { copyText, EMAIL, featureUrl, inboxUrl, issueUrl, mailto } from '../ui/feedback'
+import { feedbackFacts, openFeedback } from '../ui/FeedbackForm'
 
 const THEMES: Theme[] = ['system', 'dark', 'light', 'black']
 const LAYOUTS: Layout[] = ['desktop', 'tv']
@@ -62,7 +71,7 @@ const PAGES: { id: PageId; icon: IconData; title: () => string; summary: () => s
         id: 'appearance',
         icon: PaintBoardIcon,
         title: () => t('settings.appearance'),
-        summary: () => (form() === 'phone' || layoutFixed() ? t(`theme.${settings().theme}`) : `${t(`theme.${settings().theme}`)}${dot}${t(`settings.layout_${layout()}`)}`),
+        summary: () => [t(`theme.${settings().theme}`), form() === 'phone' || layoutFixed() ? '' : t(`settings.layout_${layout()}`), languageName(language())].filter(Boolean).join(dot),
     },
     { id: 'home', icon: Home03Icon, title: () => t('settings.page_home'), summary: () => t('settings.page_home_rows_summary') },
     { id: 'playback', icon: PlayIcon, title: () => t('settings.playback'), summary: () => t('settings.resume_rewind') },
@@ -293,7 +302,53 @@ function Appearance() {
                 </div>
                 </Show>
             </div>
+            <div class="set-card set-blocks">
+                <LanguageBlock />
+            </div>
         </>
+    )
+}
+
+/**
+ * Language (WB12): Automatic, which follows the browser, and the apps' 22 languages by their own
+ * names. A press switches at once and in place, so a video playing in the other tab of the layout
+ * plays on. Buttons, not radios: the arrow keys and the TV remote walk the list without switching
+ * language at every step.
+ */
+function LanguageBlock() {
+    const detail = () => (languageChoice() ? languageName(language()) : t('settings.language_detail_system', { language: languageName(browserLanguage()) }))
+    return (
+        <div class="set-block">
+            <h3 class="set-block-title" id="language-label">{t('settings.language')}</h3>
+            <p class="muted small">{detail()}</p>
+            <div class="lang-list" role="group" aria-labelledby="language-label">
+                <button type="button" class="lang-option" aria-pressed={languageChoice() === ''} onClick={() => void setLanguage('')}>
+                    <span>
+                        {t('settings.language_automatic')}
+                        <span class="lang-sub" lang={browserLanguage()} dir="auto">{languageName(browserLanguage())}</span>
+                    </span>
+                </button>
+                <For each={LANGUAGES}>
+                    {(l) => (
+                        <button type="button" class="lang-option" aria-pressed={languageChoice() === l.tag} onClick={() => void setLanguage(l.tag)}>
+                            <span lang={l.tag} dir="auto">{l.name}</span>
+                        </button>
+                    )}
+                </For>
+            </div>
+            <Show when={languageLoading()}>
+                {(tag) => <p class="muted small lang-state" role="status">{t('web.language_loading', { language: languageName(tag()) })}</p>}
+            </Show>
+            <Show when={languageFailed()}>
+                {(tag) => (
+                    <p class="small caution-text lang-state" role="alert">
+                        {t('web.language_failed', { language: languageName(tag()) })}
+                        <button class="link" type="button" onClick={() => void retryLanguage()}>{t('common.try_again')}</button>
+                    </p>
+                )}
+            </Show>
+            <p class="muted small">{t('language.picker_note')}</p>
+        </div>
     )
 }
 
@@ -569,9 +624,6 @@ function Library() {
  */
 function Privacy() {
     let enable!: HTMLDialogElement
-    let erase!: HTMLDialogElement
-    let replace!: HTMLDialogElement
-    const [deleting, setDeleting] = createSignal(false)
     const say = (text: string) => showToast({ text })
     const change = (on: boolean) => (on ? enable.showModal() : void setSyncOn(false))
     const turnOn = () => {
@@ -579,12 +631,24 @@ function Privacy() {
         void setSyncOn(true)
         say(t('settings.resume_sync_started'))
     }
+    // Turning off and deleting the file asks first (HX59), and holds its buttons while the file is taken out.
     const erased = async () => {
-        setDeleting(true)
-        const gone = await turnOffAndDelete()
-        setDeleting(false)
-        erase.close()
-        say(gone ? t('settings.resume_sync_deleted') : t('settings.resume_sync_delete_failed'))
+        let gone = false
+        const yes = await askConfirm({
+            title: t('settings.resume_sync_delete_title'),
+            message: t('settings.resume_sync_delete_message'),
+            confirm: t('settings.resume_sync_delete'),
+            run: async () => (gone = await turnOffAndDelete()),
+        })
+        if (yes) say(gone ? t('settings.resume_sync_deleted') : t('settings.resume_sync_delete_failed'))
+    }
+    const replaced = async () => {
+        const yes = await askConfirm({
+            title: t('settings.resume_sync_replace_title'),
+            message: t('settings.resume_sync_replace_message'),
+            confirm: t('settings.resume_sync_replace'),
+        })
+        if (yes) void syncNow({ replace: true })
     }
     const unreadable = () => syncStatus()?.kind === 'unreadable'
     return (
@@ -599,13 +663,13 @@ function Privacy() {
                                 when={unreadable()}
                                 fallback={<button type="button" class="outline-button" disabled={syncRunning()} onClick={() => void syncNow()}>{t('settings.resume_sync_now')}</button>}
                             >
-                                <button type="button" class="outline-button" disabled={syncRunning()} onClick={() => replace.showModal()}>{t('settings.resume_sync_replace')}</button>
+                                <button type="button" class="outline-button" disabled={syncRunning()} onClick={() => void replaced()}>{t('settings.resume_sync_replace')}</button>
                             </Show>
                         </div>
                     </div>
                 </Show>
                 <Show when={syncOn() || syncHasFile()}>
-                    <button type="button" class="set-row" onClick={() => erase.showModal()}>
+                    <button type="button" class="set-row" onClick={() => void erased()}>
                         <RowBody icon={Delete02Icon} title={t('settings.resume_sync_delete')} subtitle={t('settings.resume_sync_delete_detail')} />
                     </button>
                 </Show>
@@ -619,31 +683,6 @@ function Privacy() {
                 <div class="confirm-buttons">
                     <button class="link" type="button" onClick={() => enable.close()}>{t('common.cancel')}</button>
                     <button class="primary" type="button" onClick={turnOn}>{t('syncplace.card_yes')}</button>
-                </div>
-            </dialog>
-            <dialog class="confirm" ref={erase} aria-labelledby="sync-delete-title">
-                <h2 id="sync-delete-title">{t('settings.resume_sync_delete_title')}</h2>
-                <p class="muted">{t('settings.resume_sync_delete_message')}</p>
-                <div class="confirm-buttons">
-                    <button class="link" type="button" disabled={deleting()} onClick={() => erase.close()}>{t('common.cancel')}</button>
-                    <button class="primary danger" type="button" disabled={deleting()} onClick={() => void erased()}>{t('settings.resume_sync_delete')}</button>
-                </div>
-            </dialog>
-            <dialog class="confirm" ref={replace} aria-labelledby="sync-replace-title">
-                <h2 id="sync-replace-title">{t('settings.resume_sync_replace_title')}</h2>
-                <p class="muted">{t('settings.resume_sync_replace_message')}</p>
-                <div class="confirm-buttons">
-                    <button class="link" type="button" onClick={() => replace.close()}>{t('common.cancel')}</button>
-                    <button
-                        class="primary danger"
-                        type="button"
-                        onClick={() => {
-                            replace.close()
-                            void syncNow({ replace: true })
-                        }}
-                    >
-                        {t('settings.resume_sync_replace')}
-                    </button>
                 </div>
             </dialog>
         </>
@@ -661,8 +700,67 @@ function StoragePage() {
     )
 }
 
+/**
+ * Report a problem and Request a feature (WB11, HX64). With the build's inbox address, each opens
+ * the form in the page (ui/FeedbackForm.tsx) over the draft kept on this device; without one, each
+ * is a link to GitHub's prefilled page, so the rows work before the inbox is deployed and in a
+ * fork. An e-mail row and Copy details stay for a viewer with neither GitHub nor the form. Nothing
+ * here sends anything: the form's own confirm step does, and shows what goes first.
+ */
+function Feedback() {
+    const facts = createMemo(() => feedbackFacts())
+    const form_ = () => inboxUrl() !== null
+    const copy = async () => {
+        try {
+            await navigator.clipboard.writeText(copyText(facts()))
+            showToast({ text: t('player.details_copied') })
+        } catch {
+            // No clipboard: the facts are in the row under its title.
+        }
+    }
+    return (
+        <div class="set-card" data-feedback-rows>
+            <Show
+                when={form_()}
+                fallback={
+                    <>
+                        <a class="set-row" href={issueUrl(facts())} target="_blank" rel="noopener">
+                            <RowBody icon={Bug01Icon} title={t('settings.report_problem')} subtitle={t('settings.report_problem_detail')} />
+                            <Icon icon={ArrowRight01Icon} size={20} class="set-chevron" />
+                        </a>
+                        <a class="set-row" href={featureUrl()} target="_blank" rel="noopener">
+                            <RowBody icon={Idea01Icon} title={t('web.request_feature')} subtitle={t('web.request_feature_detail')} />
+                            <Icon icon={ArrowRight01Icon} size={20} class="set-chevron" />
+                        </a>
+                    </>
+                }
+            >
+                <button type="button" class="set-row" onClick={(e) => openFeedback('problem', e.currentTarget)}>
+                    <RowBody icon={Bug01Icon} title={t('settings.report_problem')} subtitle={t('settings.report_problem_detail_inbox')} />
+                    <Icon icon={ArrowRight01Icon} size={20} class="set-chevron" />
+                </button>
+                <button type="button" class="set-row" onClick={(e) => openFeedback('feature', e.currentTarget)}>
+                    <RowBody icon={Idea01Icon} title={t('web.request_feature')} subtitle={t('settings.request_feature_detail')} />
+                    <Icon icon={ArrowRight01Icon} size={20} class="set-chevron" />
+                </button>
+            </Show>
+            <a class="set-row" href={mailto(facts(), 'problem')}>
+                <RowBody icon={Mail01Icon} title={t('feedback.email')} subtitle={t('feedback.email_detail', { email: EMAIL })} />
+                <Icon icon={ArrowRight01Icon} size={20} class="set-chevron" />
+            </a>
+            <Show when={typeof navigator !== 'undefined' && !!navigator.clipboard?.writeText}>
+                <button type="button" class="set-row" onClick={() => void copy()}>
+                    <RowBody icon={Copy01Icon} title={t('player.copy_details')} subtitle={copyText(facts()).split('\n').slice(1).join(', ')} />
+                </button>
+            </Show>
+        </div>
+    )
+}
+
 function About() {
     return (
+        <>
+        <Feedback />
         <div class="set-card">
             <a class="set-row" href={LICENCES} target="_blank" rel="noopener">
                 <RowBody icon={File01Icon} title={t('about.notices_title')} subtitle={t('about.notices_detail')} />
@@ -677,6 +775,7 @@ function About() {
                 <a class="link" href={LICENCES} target="_blank" rel="noopener">{t('about.read')}</a>
             </div>
         </div>
+        </>
     )
 }
 
@@ -830,6 +929,15 @@ function StorageBlock() {
     onMount(() => void checkKept())
     // Thumbnails and posters only: the sign in, settings, places and watched stay.
     const clear = async () => {
+        if (clearing()) return
+        const held = (sizes()?.thumbs ?? 0) + (sizes()?.posters ?? 0)
+        const yes = await askConfirm({
+            title: t('settings.clear_pictures_title'),
+            message: t('settings.clear_pictures_message', { size: size(held) }),
+            detail: t('settings.clear_pictures_untouched'),
+            confirm: t('web.storage_clear_cache'),
+        })
+        if (!yes) return
         setClearing(true)
         try {
             await clearCaches()
@@ -873,28 +981,20 @@ function StorageBlock() {
 
 /** Sign out at the end of the list: a quiet outlined row with the danger colour in its words only, and a question first that names what goes with it. */
 function SignOut() {
-    let dialog!: HTMLDialogElement
-    const [leaving, setLeaving] = createSignal(false)
-    const confirm = async () => {
-        setLeaving(true)
-        await signOut()
-    }
+    const ask = () =>
+        void askConfirm({
+            title: t('settings.sign_out_title'),
+            message: t('settings.sign_out_message'),
+            confirm: t('settings.sign_out_confirm'),
+            busy: t('settings.signing_out'),
+            run: signOut,
+        })
     return (
         <>
-            <button class="danger-button set-signout" type="button" onClick={() => dialog.showModal()}>
+            <button class="danger-button set-signout" type="button" onClick={ask}>
                 <Icon icon={Logout05Icon} size={20} />
                 {t('settings.sign_out')}
             </button>
-            <dialog class="confirm" ref={dialog} aria-labelledby="sign-out-title">
-                <h2 id="sign-out-title">{t('settings.sign_out_title')}</h2>
-                <p class="muted">{t('settings.sign_out_message')}</p>
-                <div class="confirm-buttons">
-                    <button class="link" type="button" disabled={leaving()} onClick={() => dialog.close()}>{t('common.cancel')}</button>
-                    <button class="primary danger" type="button" disabled={leaving()} onClick={confirm}>
-                        {leaving() ? t('settings.signing_out') : t('settings.sign_out_confirm')}
-                    </button>
-                </div>
-            </dialog>
         </>
     )
 }
@@ -930,6 +1030,9 @@ function TvSettings() {
                     <p class="muted small">{t('settings.layout_detail_desktop')}</p>
                 </TvPanel>
             </Show>
+            <div class="panel">
+                <LanguageBlock />
+            </div>
             <TvSwitch id="carousel" title={t('settings.home_carousel')} on={settings().carousel} onText={t('settings.home_carousel_on')} offText={t('settings.home_carousel_off')} onPick={(on) => setSetting('carousel', on)} />
             <TvSwitch id="home-continue" title={t('settings.home_continue')} on={settings().homeContinue} onText={t('settings.home_continue_on')} offText={t('settings.home_continue_off')} onPick={(on) => setSetting('homeContinue', on)} />
             <TvSwitch id="home-recent" title={t('settings.home_recent')} on={settings().homeRecent} onText={t('settings.home_recent_on')} offText={t('settings.home_recent_off')} onPick={(on) => setSetting('homeRecent', on)} />
@@ -997,6 +1100,15 @@ function TvSettings() {
                 <a class="link" href="https://tmplayer.org/legal" target="_blank" rel="noopener">{t('login.legal')}</a>
                 <SignOut />
             </div>
+            <TvPanel title={t('feedback.title')} id="feedback-label">
+                <p class="muted small">{t('feedback.tv_phone_hint')}</p>
+                <button class="outline-button" style={{ 'align-self': 'start' }} type="button" onClick={(e) => openFeedback('problem', e.currentTarget)}>
+                    {t('settings.report_problem')}
+                </button>
+                <button class="outline-button" style={{ 'align-self': 'start' }} type="button" onClick={(e) => openFeedback('feature', e.currentTarget)}>
+                    {t('web.request_feature')}
+                </button>
+            </TvPanel>
             <div class="panel">
                 <h2 class="panel-title">{t('about.notices_title')}</h2>
                 <p class="muted small">{t('about.licence_line')}</p>

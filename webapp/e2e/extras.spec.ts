@@ -271,3 +271,172 @@ test('More opens the side panel on one click, its pages inside it, and a ratio s
     await expect.poll(async () => (await shape()).fit).toBe('contain')
     expect(await page.locator('video').evaluate((v: HTMLVideoElement) => v.style.width)).toBe('')
 })
+
+// WB15: Rotate picture, Volume boost and the speed kept per show and chat.
+
+const panelOf = (page: Page) => page.locator(test.info().project.name.startsWith('phone') ? '.pc-sheet' : '.pc-panel')
+const radio = (page: Page, name: string | RegExp) => page.getByRole(test.info().project.name.startsWith('phone') ? 'radio' : 'menuitemradio', { name, exact: typeof name === 'string' })
+
+test('Rotate picture turns the picture a quarter at a time inside its box, and the next video starts upright', async ({ page }) => {
+    await lighthouse(page)
+    await openMore(page)
+    await panelOf(page).getByRole('menuitem', { name: /^Rotate picture/ }).click()
+    await expect(panelOf(page)).toContainText('Turns the video inside the screen')
+    await keep(page, 'rotate-page')
+    const state = () =>
+        page.locator('video').evaluate((v: HTMLVideoElement) => {
+            const stage = v.parentElement!.getBoundingClientRect()
+            const r = v.getBoundingClientRect()
+            return {
+                transform: v.style.transform,
+                turn: v.closest('.player')!.getAttribute('data-turn'),
+                w: v.offsetWidth,
+                h: v.offsetHeight,
+                sw: stage.width,
+                sh: stage.height,
+                inside: r.left >= stage.left - 1 && r.right <= stage.right + 1 && r.top >= stage.top - 1 && r.bottom <= stage.bottom + 1,
+            }
+        })
+    await radio(page, /^A quarter turn clockwise/).click()
+    await expect.poll(async () => (await state()).transform).toBe('rotate(90deg)')
+    const s = await state()
+    expect(s.turn).toBe('90')
+    // Sideways: the box trades the stage's width and height, so the turned box lands on the stage exactly.
+    expect(Math.abs(s.w - s.sh)).toBeLessThan(2)
+    expect(Math.abs(s.h - s.sw)).toBeLessThan(2)
+    expect(s.inside).toBe(true)
+    await keep(page, 'rotate-90')
+    // Upside down keeps the box and turns it; the panel stays open on the desktop, the phone's sheet closed.
+    if (test.info().project.name.startsWith('phone')) {
+        await openMore(page)
+        await panelOf(page).getByRole('menuitem', { name: /^Rotate picture/ }).click()
+    }
+    await radio(page, /^Upside down/).click()
+    await expect.poll(async () => (await state()).transform).toBe('rotate(180deg)')
+    const u = await state()
+    expect(Math.abs(u.w - u.sw)).toBeLessThan(2)
+    expect(u.inside).toBe(true)
+    // The subtitles stay upright: while turned they are drawn in their own layer, the element's cue box is hidden.
+    await expect(page.locator('.movi-cues')).toHaveCount(1)
+    if (test.info().project.name.startsWith('phone')) {
+        await openMore(page)
+        await panelOf(page).getByRole('menuitem', { name: /^Rotate picture/ }).click()
+    }
+    await radio(page, 'Not rotated').click()
+    await expect.poll(async () => (await state()).transform).toBe('')
+    expect((await state()).turn).toBeNull()
+    await expect(page.locator('.movi-cues')).toHaveCount(0)
+    // Turned again and left: a new player starts upright.
+    if (test.info().project.name.startsWith('phone')) {
+        await openMore(page)
+        await panelOf(page).getByRole('menuitem', { name: /^Rotate picture/ }).click()
+    }
+    await radio(page, /^Upside down/).click()
+    await expect.poll(async () => (await state()).transform).toBe('rotate(180deg)')
+    await page.goto('/chat/-1006')
+    await openCard(page, 'Lighthouse')
+    await playsPast(page, 0.3)
+    expect((await state()).transform).toBe('')
+})
+
+test('Volume boost lifts the sound through the page\'s own graph and is kept for the next video', async ({ page }) => {
+    await lighthouse(page)
+    await openMore(page)
+    await panelOf(page).getByRole('menuitem', { name: /^Volume boost/ }).click()
+    await expect(panelOf(page)).toContainText('up to 200%')
+    await keep(page, 'boost-page')
+    await radio(page, '150%').click()
+    const path = () => page.locator('video').evaluate((v: HTMLVideoElement) => ({ level: v.dataset.boost, path: v.dataset.boostPath, time: v.currentTime }))
+    await expect.poll(async () => (await path()).path).toBe('element')
+    expect((await path()).level).toBe('1.5')
+    // Playing on through the graph: a context that did not run would have gone silent while the clock went on, so this checks the route only.
+    const at = (await path()).time
+    await expect.poll(async () => (await path()).time, { timeout: 8000 }).toBeGreaterThan(at + 0.3)
+    await page.waitForTimeout(600)
+    // Kept: the next video says where it stands, and opens with the level set.
+    await page.goto('/chat/-1006')
+    await openCard(page, 'Lighthouse')
+    await playsPast(page, 0.3)
+    await openMore(page)
+    await expect(panelOf(page).getByRole('menuitem', { name: /^Volume boost/ })).toContainText('150%')
+    await expect.poll(async () => (await path()).level, { timeout: 8000 }).toBe('1.5')
+    // Off again.
+    await panelOf(page).getByRole('menuitem', { name: /^Volume boost/ }).click()
+    await radio(page, 'Volume boost off').click()
+    await expect.poll(async () => (await path()).level).toBe('1')
+})
+
+test('on an iPhone the Volume boost entry says why it does nothing there, and Rotate picture stays', async ({ page }) => {
+    await page.addInitScript(() => Object.defineProperty(navigator, 'userAgent', { get: () => 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1' }))
+    await lighthouse(page)
+    await openMore(page)
+    // The iPhone user agent also gives the phone's layout.
+    const menu = page.locator('.pc-sheet, .pc-panel')
+    await expect(menu.getByRole('menuitem', { name: /^Rotate picture/ })).toBeVisible()
+    await menu.getByRole('menuitem', { name: /^Volume boost/ }).click()
+    await expect(menu).toContainText('not available in Safari on iPhone')
+    await expect(menu.getByRole('radio')).toHaveCount(0)
+})
+
+test('Shift+R turns the picture a quarter, the zoom and the turn share one transform, and Alt+0 puts the zoom back without undoing the turn', async ({ page }) => {
+    await lighthouse(page)
+    const tf = () => page.locator('video').evaluate((v: HTMLVideoElement) => ({ transform: v.style.transform, cues: v.parentElement!.querySelectorAll('.movi-cues').length, zoomed: v.closest('.player')!.classList.contains('pc-zoomed') }))
+    await page.keyboard.press('Shift+R')
+    await expect.poll(async () => (await tf()).transform).toBe('rotate(90deg)')
+    await expect(page.locator('.pc-note')).toContainText('Picture rotated 90')
+    // Zoomed over the turn: both in the one string, the turn kept, one cue layer for the two.
+    await page.keyboard.press('Alt+Equal')
+    await page.keyboard.press('Alt+Equal')
+    await expect.poll(async () => (await tf()).transform).toMatch(/^translate\(.*\) scale\([\d.]+\) rotate\(90deg\)$/)
+    expect((await tf()).zoomed).toBe(true)
+    expect((await tf()).cues).toBe(1)
+    // Zoom reset: the turn stays.
+    await page.keyboard.press('Alt+Digit0')
+    await expect.poll(async () => (await tf()).transform).toBe('rotate(90deg)')
+    expect((await tf()).zoomed).toBe(false)
+    // A turn after a zoom starts the zoom again, and the last of four quarters is upright with no transform left over.
+    await page.keyboard.press('Alt+Equal')
+    await page.keyboard.press('Shift+R')
+    await expect.poll(async () => (await tf()).transform).toBe('rotate(180deg)')
+    await page.keyboard.press('Shift+R')
+    await page.keyboard.press('Shift+R')
+    await expect.poll(async () => (await tf()).transform).toBe('')
+    expect((await tf()).cues).toBe(0)
+    // Shift+R is on the key sheet.
+    await page.keyboard.press('?')
+    await expect(page.locator('.pc-shortcuts')).toContainText('Shift+R')
+})
+
+test('a speed is kept for the show, else the chat, and 1x forgets it', async ({ page }) => {
+    // Opens four videos in a row: longer than one.
+    test.setTimeout(90_000)
+    const rate = () => page.locator('video').first().evaluate((v: HTMLVideoElement) => v.playbackRate)
+    await lighthouse(page)
+    expect(await rate()).toBe(1)
+    await page.keyboard.press(']')
+    await expect.poll(rate).toBe(1.25)
+    // Written to the store, which saves after a moment.
+    await page.waitForTimeout(600)
+    // The same show opens at it again, once the show is read; another chat's video stays at 1x.
+    await page.goto('/chat/-1006')
+    await openCard(page, 'Lighthouse')
+    await playsPast(page, 0.3)
+    await expect.poll(rate).toBe(1.25)
+    await page.goto('/chat/-1001')
+    await openCard(page, 'Native Clip')
+    await playsPast(page, 0.3)
+    expect(await rate()).toBe(1)
+    // 1x on the show forgets it: the next one opens at 1x too.
+    await page.goto('/chat/-1006')
+    await openCard(page, 'Lighthouse')
+    await playsPast(page, 0.3)
+    await expect.poll(rate).toBe(1.25)
+    await page.keyboard.press('Backspace')
+    await expect.poll(rate).toBe(1)
+    await page.waitForTimeout(600)
+    await page.goto('/chat/-1006')
+    await openCard(page, 'Lighthouse')
+    await playsPast(page, 0.3)
+    await page.waitForTimeout(500)
+    expect(await rate()).toBe(1)
+})

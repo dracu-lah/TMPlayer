@@ -1,0 +1,17 @@
+/* Rotate picture (player/Chrome.tsx, extras.ts turnFrame): the video turns by an inline transform with its box
+   resized; the canvas engines' pictures follow. Chrome sets data-turn and the custom properties on the player. */
+
+/* movi's canvas is placed by this sheet (it ignores the element's style): a sideways turn trades the stage's
+   width and height, centred, so the turned canvas fills the stage. */
+.player[data-turn] .movi-canvas { transform: rotate(var(--turn)); }
+.player[data-turn="90"] .movi-canvas,
+.player[data-turn="270"] .movi-canvas {
+  inset: auto !important;
+  left: calc((var(--stage-w) - var(--stage-h)) / 2) !important;
+  top: calc((var(--stage-h) - var(--stage-w)) / 2) !important;
+  width: var(--stage-h) !important;
+  height: var(--stage-w) !important;
+}
+
+/* The element's own cue box turns with it: it is hidden while turned, and the cues are drawn upright over the stage. */
+.player[data-turn] video::cue { color: transparent; background: transparent; text-shadow: none; }

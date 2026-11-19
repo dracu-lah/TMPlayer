@@ -152,6 +152,9 @@ internal suspend fun signOut(
     // The bookmarks go with it, for the same reason.
     bookmarks?.let { runCatching { it.clear() } }
     runCatching { com.tmplayer.data.SavedMessagesBackup.forgetFiles() }
+    // The online subtitles picked for this account's videos, and their kept copies (HX25).
+    runCatching { com.tmplayer.online.OnlineSubtitles.current?.picks?.clear() }
+    com.tmplayer.online.SubtitlePicks.wipe(java.io.File(com.tmplayer.desktop.DesktopPaths.dataDir, "online-subtitle-picks.json"))
 }
 
 /** How long signing out waits for the video cache to be cleared before logging out regardless. */

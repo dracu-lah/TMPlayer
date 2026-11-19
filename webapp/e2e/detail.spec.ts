@@ -2,7 +2,7 @@
 // projects' own), and its Watch later and Watched marks, which are written in the background.
 import { readFileSync } from 'node:fs'
 import { expect, test, type Page } from '@playwright/test'
-import { noSizeFloor, playsPast } from './helpers'
+import { fakeCase, mockSplitShow, noSizeFloor, playsPast } from './helpers'
 
 const PICTURE = readFileSync(new URL('./media/thumb.jpg', import.meta.url))
 
@@ -121,6 +121,84 @@ test('an anime show lists the episodes its chat lacks from the guide, names the 
     await expect(page.locator('.season-chip')).toHaveCount(1)
 })
 
+// WB19: a show TMDB lists as one season that an episode group splits (Blue Box, 25 + 12), over the chat's three episodes.
+const SPLIT_SHOTS = new URL('../../design/web-gaps/WB19/', import.meta.url)
+
+test('a split show lists TMDB\'s seasons with names, days and lengths: a missing row keeps Find, an upcoming one is no control', async ({ page }, info) => {
+    const asked: string[] = []
+    await mockSplitShow(page, asked, PICTURE)
+    await page.goto('/chat/-1002')
+    await page.locator('.card', { hasText: 'Harbour Notes' }).first().click()
+    await expect(page).toHaveURL(/\/video\//)
+    // The split's seasons, not TMDB's one of 37.
+    await expect(page.locator('.season-chip')).toHaveCount(2)
+    await expect(page.locator('.season-chip').nth(0)).toContainText('25 episodes')
+    await expect(page.locator('.season-chip').nth(1)).toContainText('Not in your chats yet')
+    await expect(page.locator('.episode')).toHaveCount(25)
+    expect(asked[0]).toContain('s=1')
+    expect(asked[0]).toContain('g=seasons001')
+    // A held episode: TMDB's name, then its length, day and the file's size last.
+    const held = page.locator('.episode:not(.gap)').first()
+    await expect(held.locator('.episode-name')).toHaveText('The 1th Tide')
+    await expect(held.locator('.episode-facts')).toHaveText(/^24m {2}·.*2024.* {2}·.* MB$/)
+    // A missing one is dimmed but a control, with its still, name, length and words; Find in other chats stays.
+    const missing = page.locator('button.episode.gap').first()
+    await expect(missing).toHaveAccessibleName('Episode 4, not in this chat')
+    await expect(missing.locator('.episode-name')).toHaveText('The 4th Tide')
+    await expect(missing.locator('.gap-tag')).toHaveText('Not in this chat')
+    await expect(missing.locator('.episode-overview')).toContainText('1x4')
+    // Its still loads once the row is near the screen (a long season loads only what is seen).
+    await missing.scrollIntoViewIfNeeded()
+    await expect(missing.locator('.episode-still img')).toBeVisible()
+    await expect(page.locator('.episode.gap').last().locator('.episode-still img')).toHaveCount(0)
+    await expect(page.locator('button.episode.gap')).toHaveCount(20)
+    // The two not aired: no control, no focus, read as one line.
+    const upcoming = page.locator('.episode.gap.upcoming')
+    await expect(upcoming).toHaveCount(2)
+    await expect(upcoming.first()).toHaveAttribute('aria-label', /Episode 24, airs .*2099/)
+    expect(await upcoming.first().evaluate((el) => el.tagName + el.hasAttribute('tabindex'))).toBe('DIVfalse')
+    await page.locator('.season-tabs').evaluate((el) => el.scrollIntoView())
+    if (process.env.WB_SHOTS) await page.screenshot({ path: new URL(`${info.project.name}-season1.png`, SPLIT_SHOTS).pathname })
+    // A press on a missing row asks where to find it.
+    await missing.scrollIntoViewIfNeeded()
+    await missing.click()
+    await expect(page.locator('dialog[open]')).toContainText('S01E04 is not in your chats yet.')
+    await page.locator('dialog[open] .menu-row', { hasText: 'Find in other chats' }).click()
+    // Search opens with the words of the missing episode (WB21: the first visit of a load no longer drops them).
+    await expect(page).toHaveURL(/\/search/)
+    await expect(page.locator('.search-field input')).not.toHaveValue('')
+    await page.goBack()
+    // Season 2 comes from the split too: its seventh, untitled at TMDB ("Episode 32"), is "Episode 7".
+    await page.locator('.season-chip').nth(1).click()
+    await expect(page.locator('.episode')).toHaveCount(12)
+    expect(asked.some((q) => q.includes('s=2') && q.includes('g=seasons001'))).toBe(true)
+    await expect(page.locator('.episode.gap').nth(0).locator('.episode-name')).toHaveText('The 26th Tide')
+    await expect(page.locator('.episode.gap').nth(6).locator('.episode-name')).toHaveText('Episode 7')
+    await expect(page.locator('.episode.gap.upcoming')).toHaveCount(2)
+    if (process.env.WB_SHOTS) {
+        await page.locator('.season-tabs').evaluate((el) => el.scrollIntoView())
+        await page.screenshot({ path: new URL(`${info.project.name}-season2.png`, SPLIT_SHOTS).pathname })
+    }
+})
+
+test('a show with no TMDB lists (worker down) is the chat\'s own episodes, as before', async ({ page }) => {
+    await page.route('**/tmdb/**', (route) => {
+        const url = new URL(route.request().url())
+        if (url.pathname === '/tmdb/poster') return route.fulfill({ json: { match: true, id: '207347', kind: 'show', title: 'Harbour Notes', year: 2024, poster: null, backdrop: null, overview: '' } })
+        if (url.pathname === '/tmdb/extras')
+            return route.fulfill({ json: { found: true, genres: [], runtime: 24, seasons: 1, rating: null, certification: null, directors: [], creators: [], cast: [], trailer: null, ended: false, imdb: null, logo: null, seasonList: [{ number: 1, episodes: 5, airDate: '2024-10-03' }], next: null, groupsRead: true } })
+        if (url.pathname === '/tmdb/season') return route.fulfill({ status: 503, json: { error: 'unavailable' } })
+        return route.fulfill({ status: 404, body: '' })
+    })
+    await page.goto('/chat/-1002')
+    await page.locator('.card', { hasText: 'Harbour Notes' }).first().click()
+    // Counts alone: three held, two missing by number, and the held ones keep the chat's own names.
+    await expect(page.locator('.episode')).toHaveCount(5)
+    await expect(page.locator('button.episode.gap')).toHaveCount(2)
+    await expect(page.locator('button.episode.gap').first().locator('.episode-name')).toHaveText('Episode 4')
+    await expect(page.locator('.episode:not(.gap) .episode-facts')).toHaveCount(0)
+})
+
 test('a wide desktop page is one centred column with equal gutters: the words and About stand side by side, the episodes under both', async ({ page }) => {
     await mockTmdb(page)
     await page.setViewportSize({ width: 1920, height: 1000 })
@@ -143,4 +221,170 @@ test('a wide desktop page is one centred column with equal gutters: the words an
     // The file name has room: its value is not squeezed into a narrow column.
     const value = await box('.detail-about dd')
     expect(value.width).toBeGreaterThan(200)
+})
+
+// HX38 on the web (WB3): Big.Buck.Bunny posted three times in Test Copies (fake/mtcute.ts), as a
+// 2160p HEVC, a 1080p x264 and a 720p x264. The card's badge, its count and the copy Play opens are
+// one answer, the copies list puts that copy first with "Best for this device", and a phone or a
+// browser without HEVC never leads with the 4K HEVC (decision D5).
+
+/** The copy this browser and form recommend: a phone is capped at 1080p, a browser without HEVC passes the HEVC copy over. */
+async function recommended(page: Page): Promise<{ height: '4K' | '1080p'; message: number; hevc: boolean; device: string }> {
+    const { hevc, form } = await page.evaluate(() => {
+        const ms = (globalThis as { ManagedMediaSource?: typeof MediaSource }).ManagedMediaSource ?? globalThis.MediaSource
+        const ask = (m: string) => !!ms?.isTypeSupported?.(m) || document.createElement('video').canPlayType(m) !== ''
+        return { hevc: ask('video/mp4; codecs="hvc1.1.6.L93.B0"') || ask('video/mp4; codecs="hev1.1.6.L93.B0"'), form: document.documentElement.dataset.form }
+    })
+    const device = form === 'tv' ? 'TV' : form === 'phone' ? 'phone' : 'computer'
+    return form !== 'phone' && hevc ? { height: '4K', message: 25, hevc, device } : { height: '1080p', message: 26, hevc, device }
+}
+
+const shotsDir = new URL('../../design/web-gaps/WB3/', import.meta.url)
+
+test('a video posted three times: the card badges and opens the recommended copy, its page lists it first, the count is the list', async ({ page }, info) => {
+    await mockTmdb(page)
+    await page.goto('/chat/-1005')
+    const card = page.locator('.card').filter({ hasText: 'Big Buck Bunny' }).first()
+    await expect(card).toBeVisible()
+    const best = await recommended(page)
+    await expect(card).toContainText('3 versions')
+    await expect(card.locator('.card-format')).toHaveText(best.height)
+    await expect(card).toHaveAttribute('href', new RegExp(`/video/-1005/${best.message}$`))
+    await card.click()
+    await expect(page).toHaveURL(new RegExp(`/video/-1005/${best.message}$`))
+    const summary = page.locator('.detail-copy-summary')
+    await expect(summary).toContainText(best.height)
+    await expect(summary).toContainText('3 versions')
+    await summary.click()
+    const options = page.getByRole('option')
+    await expect(options).toHaveCount(3)
+    await expect(options.nth(0)).toContainText(best.height)
+    await expect(options.nth(0)).toHaveAttribute('aria-selected', 'true')
+    await expect(options.nth(0).locator('.detail-copy-best')).toHaveText('Best for this device')
+    await expect(page.locator('.detail-copy-best')).toHaveCount(1)
+    const hevcRow = options.filter({ hasText: '4K' })
+    if (!best.hevc) {
+        await expect(options.nth(2)).toContainText('4K')
+        await expect(hevcRow).toContainText(`May stutter on this ${best.device}`)
+        await expect(options.nth(0)).toContainText(`Smooth on this ${best.device}`)
+    } else {
+        await expect(page.getByText(/May stutter/)).toHaveCount(0)
+    }
+    if (process.env.WB_SHOTS) {
+        await options.nth(0).scrollIntoViewIfNeeded()
+        await page.screenshot({ path: new URL(`${info.project.name}.png`, shotsDir).pathname })
+    }
+    // Play opens the copy the card badged.
+    await page.locator('.detail-play').click()
+    await expect(page).toHaveURL(new RegExp(`/watch/-1005/${best.message}$`))
+})
+
+test("the viewer's own pick persists over the recommendation: the card plays it, after a reload too", async ({ page }) => {
+    await mockTmdb(page)
+    await page.goto('/video/-1005/26')
+    await page.locator('.detail-copy-summary').click()
+    await page.getByRole('option').filter({ hasText: '720p' }).click()
+    await expect(page).toHaveURL(/\/video\/-1005\/27$/)
+    // The page turned to the copy chosen, and the focus is back on the copies line (the keyboard and the remote go on from it).
+    await expect(page.locator('.detail-copy-summary')).toContainText('720p')
+    await expect(page.locator('.detail-copy-summary')).toBeFocused()
+    await page.goto('/chat/-1005')
+    const card = page.locator('.card').filter({ hasText: 'Big Buck Bunny' }).first()
+    await expect(card).toHaveAttribute('href', /\/video\/-1005\/27$/)
+    await expect(card.locator('.card-format')).toHaveText('720p')
+    await page.reload()
+    await expect(page.locator('.card').filter({ hasText: 'Big Buck Bunny' }).first()).toHaveAttribute('href', /\/video\/-1005\/27$/)
+})
+
+test('Not the same video splits the file from its copies, and Group with its copies again puts it back', async ({ page }) => {
+    await mockTmdb(page)
+    await page.goto('/video/-1005/27')
+    await expect(page.locator('.detail-copy-summary')).toContainText('3 versions')
+    await page.getByRole('button', { name: /Not the same video/ }).click()
+    await expect(page.locator('.detail-versions')).toHaveCount(0)
+    const again = page.getByRole('button', { name: 'Group with its copies again' })
+    await expect(again).toBeFocused()
+    await page.goto('/chat/-1005')
+    const cards = page.locator('.card').filter({ hasText: 'Big Buck Bunny' })
+    await expect(cards).toHaveCount(2)
+    await expect(cards.filter({ hasText: '2 versions' })).toHaveCount(1)
+    // Kept apart after a reload, then grouped again from its page.
+    await page.goto('/video/-1005/27')
+    await page.getByRole('button', { name: 'Group with its copies again' }).click()
+    await expect(page.locator('.detail-copy-summary')).toContainText('3 versions')
+    await expect(page.getByRole('button', { name: /Not the same video/ })).toBeFocused()
+    await page.goto('/chat/-1005')
+    await expect(page.locator('.card').filter({ hasText: 'Big Buck Bunny' })).toHaveCount(1)
+})
+
+test('a card menu splits a grouped video and offers Group again on the file kept apart', async ({ page }) => {
+    const touch = await page.evaluate(() => matchMedia('(pointer: coarse)').matches)
+    test.skip(touch, 'the right click opens the menu here; a long press on a phone is the same menu (CardMenu.tsx)')
+    await mockTmdb(page)
+    await page.goto('/chat/-1005')
+    const card = page.locator('.card').filter({ hasText: 'Big Buck Bunny' }).first()
+    await card.click({ button: 'right' })
+    await page.getByRole('button', { name: /Not the same video/ }).click()
+    await expect(page.locator('.card').filter({ hasText: 'Big Buck Bunny' })).toHaveCount(2)
+    const alone = page.locator('.card').filter({ hasText: 'Big Buck Bunny' }).filter({ hasNotText: 'versions' })
+    await alone.click({ button: 'right' })
+    await expect(page.getByRole('button', { name: /Not the same video/ })).toHaveCount(0)
+    await page.getByRole('button', { name: 'Group with its copies again' }).click()
+    await expect(page.locator('.card').filter({ hasText: 'Big Buck Bunny' })).toHaveCount(1)
+})
+
+test.describe('on the TV', () => {
+    test.use({ viewport: { width: 1920, height: 1080 } })
+    test('the copies line is reached with the remote, and the focus comes back to it after a pick', async ({ page }, info) => {
+        test.skip(info.project.name !== 'chromium', 'the TV layout is one form: run once')
+        await page.addInitScript(() => localStorage.setItem('tmplayer-layout', 'tv'))
+        await mockTmdb(page)
+        await page.goto('/video/-1005/26')
+        await expect(page.locator('html')).toHaveAttribute('data-form', 'tv')
+        const summary = page.locator('.detail-copy-summary')
+        await expect(summary).toBeVisible()
+        await page.keyboard.press('ArrowDown')
+        for (let i = 0; i < 8 && !(await summary.evaluate((el) => el === document.activeElement)); i++) await page.keyboard.press('ArrowDown')
+        await expect(summary).toBeFocused()
+        await page.keyboard.press('Enter')
+        const options = page.getByRole('option')
+        await expect(options).toHaveCount(3)
+        await expect(options.nth(0).locator('.detail-copy-best')).toHaveText('Best for this device')
+        await expect(options.nth(2)).toContainText('May stutter on this TV')
+        if (process.env.WB_SHOTS) await page.screenshot({ path: new URL('tv-1920.png', shotsDir).pathname })
+        for (let i = 0; i < 4 && !(await options.nth(1).evaluate((el) => el === document.activeElement)); i++) await page.keyboard.press('ArrowDown')
+        await expect(options.nth(1)).toBeFocused()
+        await page.keyboard.press('Enter')
+        await expect(page).toHaveURL(/\/video\/-1005\/27$/)
+        await expect(page.locator('.detail-copy-summary')).toBeFocused()
+    })
+})
+
+test('a card that folds copies from two chats (Search) says the count its page lists, one row per file from both chats', async ({ page, context }) => {
+    await fakeCase(context, 'crosscopies')
+    await mockTmdb(page)
+    await page.goto('/search')
+    const field = page.getByRole('searchbox')
+    await expect(field).toBeVisible()
+    await field.fill('Bunny')
+    await field.press('Enter')
+    const card = page.locator('.card').filter({ hasText: 'Big Buck Bunny' }).filter({ hasText: 'versions' }).first()
+    await expect(card).toContainText('4 versions')
+    await card.click()
+    await expect(page).toHaveURL(/\/video\//)
+    await expect(page.locator('.detail-copy-summary')).toContainText('4 versions')
+    await page.locator('.detail-copy-summary').click()
+    await expect(page.getByRole('option')).toHaveCount(4)
+    await expect(page.getByRole('option').filter({ hasText: 'DVD' })).toHaveCount(1)
+})
+
+test('choosing the copy already shown pins it over the recommendation for its cards', async ({ page }) => {
+    await mockTmdb(page)
+    await page.goto('/video/-1005/27')
+    await page.locator('.detail-copy-summary').click()
+    await page.getByRole('option', { selected: true }).click()
+    await expect(page).toHaveURL(/\/video\/-1005\/27$/)
+    await expect(page.locator('.detail-copy-summary')).toBeFocused()
+    await page.goto('/chat/-1005')
+    await expect(page.locator('.card').filter({ hasText: 'Big Buck Bunny' }).first()).toHaveAttribute('href', /\/video\/-1005\/27$/)
 })

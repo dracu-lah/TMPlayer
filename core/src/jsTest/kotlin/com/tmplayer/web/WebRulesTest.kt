@@ -535,4 +535,391 @@ class WebRulesTest {
         hits.forEach { isPlain(it) }
         assertEquals(0, chatSubtitles("", null, 0.0, 0.0, null, 0.0, emptyArray(), emptyArray()).size)
     }
+
+    // ---- WB1: what the web gaps plan reads from the rules ------------------------------------------
+
+    /** [video] as the page would hold it with the size Telegram states for it (the raw message has none here). */
+    private fun stated(video: Video, width: Int, height: Int): Video {
+        val o: dynamic = js("Object.assign({}, video)")
+        o.width = width.toDouble()
+        o.height = height.toDouble()
+        return o.unsafeCast<Video>()
+    }
+
+    private fun films(vararg names: String): Array<Video> =
+        screen(names.mapIndexed { i, name -> raw(i + 1, name, size = (10 - i) * 300 * mb) }.toTypedArray()).videos
+
+    @Test
+    fun `one quality read: the stated size beats the name, a cam is low grade`() {
+        val v = films("Clap.2022.720p.WEBRip.mkv", "Clap.2022.HDCAM.mkv", "clap.mkv")
+        val mislabelled = qualityRead(stated(v[0], 1920, 1080))
+        assertEquals("1080p", mislabelled.label)
+        assertEquals(1080, mislabelled.height)
+        assertTrue(mislabelled.mismatch)
+        assertFalse(mislabelled.lowGrade)
+        isPlain(mislabelled)
+        val named = qualityRead(v[0])
+        assertEquals("720p", named.label)
+        assertFalse(named.mismatch)
+        assertTrue(qualityRead(v[1]).lowGrade)
+        assertNull(qualityRead(v[2]).label)
+        assertNull(qualityRead(v[2]).height)
+    }
+
+    @Test
+    fun `the recommended copy leads: not a cam, smooth here, the picture the device suits`() {
+        val v = films("Clap.2022.2160p.mkv", "Clap.2022.1080p.mkv", "Clap.2022.720p.mkv", "Clap.2022.1080p.HDCAM.mkv")
+        try {
+            setCopyDevice("phone")
+            // A phone shows 1080p in full: the 4K copy stays listed, after the ones that fit; the cam is last.
+            assertContentEquals(arrayOf(v[1].id, v[2].id, v[0].id, v[3].id), copyOrder(v, null, emptyArray()))
+            assertEquals(v[1].id, bestCopy(v, emptyArray()))
+            setCopyDevice("computer")
+            assertEquals(v[0].id, copyOrder(v, null, emptyArray())[0])
+            // A copy this browser cannot play natively gives way while another can.
+            assertEquals(v[1].id, copyOrder(v, null, arrayOf(v[0].id))[0])
+            assertEquals(v[1].id, bestCopy(v, arrayOf(v[0].id)))
+            // Not a known device word: nothing changes.
+            setCopyDevice("fridge")
+            assertEquals(v[0].id, bestCopy(v, emptyArray()))
+        } finally {
+            setCopyDevice("phone")
+        }
+    }
+
+    @Test
+    fun `the copy Play opens follows the viewer's pick, what they started, their language and their habit`() {
+        val v = films("Clap.2022.2160p.mkv", "Clap.2022.1080p.Tamil.mkv", "Clap.2022.720p.Hindi.mkv")
+        try {
+            setCopyDevice("computer")
+            assertEquals(v[2].id, pickCopy(v, v[2].id, emptyArray(), null, "ta", emptyArray()))
+            assertEquals(v[2].id, pickCopy(v, null, arrayOf(v[2].id), null, "ta", emptyArray()))
+            assertEquals(v[1].id, pickCopy(v, null, emptyArray(), null, "ta", emptyArray()))
+            val habit = habitNoted(habitNoted(null, 720), 720)
+            assertEquals("720:2", habit)
+            assertEquals(v[2].id, pickCopy(v, null, emptyArray(), habit, null, emptyArray()))
+            assertEquals(v[0].id, pickCopy(v, null, emptyArray(), null, null, emptyArray()))
+            assertNull(pickCopy(emptyArray(), null, emptyArray(), null, null, emptyArray()))
+            // Garbage habit lines count for nothing; a height that is not one is not noted.
+            assertEquals("", habitNoted("not,a:habit", null))
+            assertEquals("", habitNoted(null, 0))
+        } finally {
+            setCopyDevice("phone")
+        }
+    }
+
+    @Test
+    fun `the version count folds the same file posted twice and handles 600 copies`() {
+        val v = screen(
+            arrayOf(
+                raw(1, "Clap.2022.1080p.mkv", size = 800 * mb),
+                raw(2, "Clap.2022.1080p.mkv", size = 800 * mb),
+                raw(3, "Clap.2022.720p.mkv", size = 400 * mb),
+            ),
+        ).videos
+        assertEquals(2, versionCount(v))
+        assertEquals(1, versionCount(arrayOf(v[0])))
+        assertEquals(1, versionCount(emptyArray()))
+        val many = screen(Array(600) { raw(it + 1, "Clap.2022.copy$it.mkv", size = (100 + it) * mb) }).videos
+        assertEquals(600, versionCount(many))
+        // The tile of a film says the same number as the page.
+        val tile = shelf(v, "Newest", 0.0, 1e12, emptyArray(), emptyArray()).tiles.single()
+        assertEquals(2, tile.versions)
+        assertEquals(1, shelf(films("Harbour.Notes.S01E01.mkv", "Harbour.Notes.S01E02.mkv"), "Newest", 0.0, 1e12, emptyArray(), emptyArray()).tiles.single().versions)
+    }
+
+    @Test
+    fun `a chat named for a language gives the poster question its hint, and a rename replaces it`() {
+        val film = films("Clap.2022.1080p.mkv")[0]
+        try {
+            assertEquals(0, posterAsk(film)!!.hints.size)
+            noteChat(-1001234567890.0, "Malayalam Movies HD")
+            assertContentEquals(arrayOf("ml"), posterAsk(film)!!.hints)
+            isPlain(posterAsk(film)!!)
+            noteChat(-1001234567890.0, "Weekend films")
+            assertEquals(0, posterAsk(film)!!.hints.size)
+            noteChat(-1001234567890.0, "Tamil Hindi Shows")
+            forgetChats()
+            assertEquals(0, posterAsk(film)!!.hints.size)
+        } finally {
+            forgetChats()
+        }
+        assertContentEquals(arrayOf("ta", "hi"), chatLanguages("Tamil and Hindi shows"))
+        assertEquals(0, chatLanguages("").size)
+        assertEquals(0, chatLanguages("x".repeat(100_000)).size)
+    }
+
+    @Test
+    fun `corrections are read, edited and fed to the grouping`() {
+        assertEquals("separate", correctionSet(null, "separate", "1"))
+        assertEquals("", correctionSet("separate", "separate", "0"))
+        val renamed = correctionSet("separate", "title", "  Night Train (2019)  ")
+        assertEquals("separate\ntitle=Night Train (2019)", renamed)
+        assertEquals("Night Train (2019)", correctionRead(renamed).title)
+        assertTrue(correctionRead(renamed).separate)
+        assertEquals("separate", correctionSet(renamed, "title", "   "))
+        assertEquals(120, correctionRead(correctionSet(null, "title", "x".repeat(500))).title!!.length)
+        // A pick lifts "wrong", turning "wrong" on drops the pick, a bad pick line is no pick.
+        val picked = correctionSet("wrong", "pick", "film:123")
+        assertEquals("film:123", correctionRead(picked).pick)
+        assertFalse(correctionRead(picked).wrong)
+        assertNull(correctionRead(correctionSet(picked, "wrong", "1")).pick)
+        assertNull(correctionRead(correctionSet(null, "pick", "film:abc")).pick)
+        assertNull(correctionRead(correctionSet(null, "pick", "film:0")).pick)
+        assertEquals("", correctionSet(null, "nonsense", "1"))
+        assertNull(correctionRead("\u0000garbage\n=\ntmdb=film:99999999999").pick)
+        isPlain(correctionRead(picked))
+
+        val v = films("Clap.2022.1080p.mkv", "Clap.2022.720p.mkv")
+        try {
+            assertEquals(1, shelf(v, "Newest", 0.0, 1e12, emptyArray(), emptyArray()).tiles.size)
+            setCorrections(arrayOf(v[1].id, "not:a:key"), arrayOf("separate", ""))
+            assertEquals(2, shelf(v, "Newest", 0.0, 1e12, emptyArray(), emptyArray()).tiles.size)
+        } finally {
+            setCorrections(emptyArray(), emptyArray())
+        }
+        assertEquals(1, shelf(v, "Newest", 0.0, 1e12, emptyArray(), emptyArray()).tiles.size)
+    }
+
+    @Test
+    fun `the sort menu's filters are one line that is read and edited a part at a time`() {
+        val line = facetsWith(facetsWith(facetsWith(null, "length", "short"), "picture", "1080"), "hdr", "1")
+        assertEquals("len=short;pic=1080;hdr=1", line)
+        val f = facetsRead(line)
+        assertEquals("short", f.length)
+        assertEquals("1080", f.picture)
+        assertTrue(f.hdr)
+        assertEquals(3, f.count)
+        isPlain(f)
+        assertEquals("len=short;pic=1080", facetsWith(line, "hdr", "0"))
+        assertEquals("", facetsWith(line, "clear", null))
+        assertEquals("lang=ml", facetsWith(null, "language", "ML"))
+        assertEquals("", facetsWith(null, "language", "malayalam1"))
+        assertEquals("", facetsWith(null, "length", "forever"))
+        assertEquals(0, facetsRead("len=;;;pic=??;lang=%%;add=never;=").count)
+        assertEquals(0, facetsRead(null).count)
+        assertContentEquals(arrayOf("All", "Unwatched", "InProgress", "Watched", "OnDevice", "Shows", "Singles", "HighDefinition"), videoFilters())
+        assertEquals("Newest", videoSorts()[0])
+    }
+
+    @Test
+    fun `a chat's view applies the filters, counts what they hide and offers the languages`() {
+        val v = screen(
+            arrayOf(
+                raw(1, "Clap.2022.1080p.Tamil.mkv", size = 800 * mb),
+                raw(2, "Rain.2021.720p.Hindi.mkv", size = 500 * mb),
+                raw(3, "Dawn.2020.mkv", size = 600 * mb),
+                raw(4, "Harbour.Notes.S01E01.1080p.mkv", size = 400 * mb),
+                raw(5, "Harbour.Notes.S01E02.1080p.mkv", size = 410 * mb),
+            ),
+        ).videos
+        val none = emptyArray<String>()
+        val all = shelfView(v, "Newest", "All", null, 0.0, 1e12, none, none, none, emptyArray(), 1_700_100_000.0)
+        assertEquals(4, all.tiles.size)
+        assertEquals(4, all.total)
+        assertEquals(0, all.hiddenByFilter)
+        assertContentEquals(arrayOf("hi", "ta"), all.languages)
+        isPlain(all)
+        // 1080p and up: Dawn names no picture, so it is kept and counted as unknown, after the matches.
+        val sharp = shelfView(v, "Newest", "All", "pic=1080", 0.0, 1e12, none, none, none, emptyArray(), 1_700_100_000.0)
+        assertEquals(3, sharp.tiles.size)
+        assertEquals(1, sharp.unknown)
+        assertEquals(1, sharp.hiddenByFilter)
+        // Shows, singles, watched and unwatched.
+        assertEquals(1, shelfView(v, "Newest", "Shows", null, 0.0, 1e12, none, none, none, emptyArray(), 0.0).tiles.size)
+        assertEquals(3, shelfView(v, "Newest", "Singles", null, 0.0, 1e12, none, none, none, emptyArray(), 0.0).tiles.size)
+        val seen = shelfView(v, "Newest", "Watched", null, 0.0, 1e12, arrayOf(v[0].id), none, none, emptyArray(), 0.0)
+        assertEquals(listOf(v[0].id), seen.tiles.map { it.video!!.id })
+        assertEquals(3, shelfView(v, "Newest", "Unwatched", null, 0.0, 1e12, arrayOf(v[0].id), none, none, emptyArray(), 0.0).tiles.size)
+        // An unknown filter name is All; the Language group keeps the picked language offered.
+        assertEquals(4, shelfView(v, "Newest", "Nonsense", null, 0.0, 1e12, none, none, none, emptyArray(), 0.0).tiles.size)
+        assertEquals(1, shelfView(v, "Newest", "All", "lang=ta", 0.0, 1e12, none, none, none, emptyArray(), 0.0).tiles.size)
+        // Last played: the one touched most recently first, never played last.
+        val played = shelfView(v, "LastPlayed", "All", null, 0.0, 1e12, none, none, arrayOf(v[1].id, v[0].id), arrayOf(50.0, 90.0), 0.0)
+        assertEquals(v[0].id, played.tiles[0].video!!.id)
+        assertEquals(v[1].id, played.tiles[1].video!!.id)
+        // Garbage in: mismatched arrays and an empty chat never throw.
+        assertEquals(0, shelfView(emptyArray(), "Name", "All", "x=y", 0.0, 1e12, none, none, arrayOf("a"), emptyArray(), Double.NaN).tiles.size)
+    }
+
+    @Test
+    fun `play random never repeats and prefers what is unwatched`() {
+        val v = films("A.2020.mkv", "B.2021.mkv", "C.2022.mkv")
+        val none = emptyArray<String>()
+        assertNull(playRandom(emptyArray(), none, null))
+        assertEquals(v[0].id, playRandom(arrayOf(v[0]), arrayOf(v[0].id), v[0].id))
+        repeat(40) {
+            assertTrue(playRandom(v, arrayOf(v[0].id), null) != v[0].id)
+            assertTrue(playRandom(v, none, v[1].id) != v[1].id)
+        }
+        // Only the last is unwatched: a watched one beats a repeat.
+        repeat(20) { assertTrue(playRandom(v, arrayOf(v[0].id, v[1].id), v[2].id) != v[2].id) }
+    }
+
+    @Test
+    fun `a speed belongs to the series, else the chat, and 1x forgets`() {
+        val v = screen(arrayOf(raw(1, "Harbour.Notes.S01E01.mkv"), raw(2, "Clap.2022.mkv"))).videos
+        val episode = speedScopes(v[0])
+        assertEquals("series:Harbour Notes", episode.series)
+        assertEquals("chat:-1001234567890", episode.chat)
+        assertEquals(episode.series, episode.target)
+        assertContentEquals(arrayOf("series:Harbour Notes", "chat:-1001234567890"), episode.all)
+        isPlain(episode)
+        val film = speedScopes(v[1])
+        assertNull(film.series)
+        assertEquals(film.chat, film.target)
+        assertEquals("speed_series:harbournotes", speedStoreKey("series:Harbour Notes"))
+        assertEquals("speed_chat:-1001234567890:34", speedStoreKey("chat:-1001234567890:34"))
+        assertEquals(80 + "speed_".length, speedStoreKey("a".repeat(500)).length)
+        assertEquals(1.5, speedResolve(null, 1.5, 2.0), 0.0001)
+        assertEquals(2.0, speedResolve(null, null, 2.0), 0.0001)
+        assertEquals(1.25, speedResolve(1.25, 1.5, 2.0), 0.0001)
+        assertEquals(1.0, speedResolve(Double.NaN, -3.0, null), 0.0001)
+        for (exact in listOf(0.7, 0.9, 1.1, 1.25, 2.5)) {
+            assertEquals(exact, speedKeep(exact))
+            assertEquals(exact, speedResolve(exact, null, null))
+        }
+        assertNull(speedKeep(1.0))
+        assertNull(speedKeep(Double.NaN))
+        assertEquals(1.75, speedKeep(1.7500001)!!, 0.0001)
+        assertEquals(4.0, speedKeep(900.0)!!, 0.0001)
+    }
+
+    @Test
+    fun `settings rows and the search come from the apps' map`() {
+        val phone = settingsRows("phone")
+        assertTrue(phone.size > 60)
+        assertTrue(phone.all { it.title.isNotBlank() && it.groupTitle.isNotBlank() })
+        assertTrue(phone.any { it.id == "subtitle_style" && it.group == "Subtitles" })
+        // A television has no box and a phone no mouse rows.
+        assertTrue(settingsRows("desktop").any { it.id == "wheel_seeks" })
+        assertTrue(phone.none { it.id == "wheel_seeks" })
+        isPlain(phone[0])
+        assertTrue("subtitle_style" in settingsSearch("subtitle", "phone", null))
+        assertTrue("subtitle_style" !in settingsSearch("subtitle", "phone", arrayOf("autoplay")))
+        assertEquals(listOf("autoplay"), settingsSearch("next episode", "phone", arrayOf("autoplay", "theme")).toList())
+        assertEquals(0, settingsSearch("   ", "phone", null).size)
+        assertEquals(0, settingsSearch("zzzzqqq", "desktop", null).size)
+        assertTrue(settingsSearch("wallpapr colours bigg ".repeat(5000), "desktop", null).isEmpty())
+        assertTrue(settingsSearch("Subtitles", "weird form", null).isNotEmpty())
+    }
+
+    @Test
+    fun `a post link is the one Telegram copies, with its topic and time`() {
+        assertEquals("https://t.me/clap_films/42", tgPostLink("clap_films", -1001234567890.0, 0.0, 42.0, 0.0))
+        assertEquals("https://t.me/clap_films/42", tgPostLink("@clap_films", 5.0, 0.0, 42.0, Double.NaN))
+        assertEquals("https://t.me/clap_films/7/42?t=90", tgPostLink("clap_films", -1001234567890.0, 7.0, 42.0, 90.0))
+        assertEquals("https://t.me/c/1234567890/42", tgPostLink(null, -1001234567890.0, 0.0, 42.0, 0.0))
+        assertEquals("https://t.me/c/1234567890/7/42?t=3", tgPostLink("  ", -1001234567890.0, 7.0, 42.0, 3.9))
+        // A person, a small group, no message, garbage.
+        assertNull(tgPostLink(null, 777.0, 0.0, 42.0, 0.0))
+        assertNull(tgPostLink(null, -4242.0, 0.0, 42.0, 0.0))
+        assertNull(tgPostLink(null, -1_000_000_000_000.0, 0.0, 42.0, 0.0))
+        assertNull(tgPostLink("clap_films", -1001234567890.0, 0.0, 0.0, 0.0))
+        assertNull(tgPostLink(null, Double.NaN, 0.0, 42.0, 0.0))
+    }
+
+    @Test
+    fun `subtitle picks are filed under the post and the video itself`() {
+        val v = screen(arrayOf(raw(9, "Clap.2022.1080p.mkv"), raw(10, "Clap.2022.720p.mkv"))).videos
+        val a = subtitlePickKeys(v[0])
+        val b = subtitlePickKeys(v[1])
+        assertEquals("msg:-1001234567890:9", a[0])
+        assertEquals(2, a.size)
+        // Another copy of the same video finds the pick by the second key.
+        assertEquals(a[1], b[1])
+    }
+
+    @Test
+    fun `a stutter is the apps' definition, and garbage is no evidence`() {
+        assertEquals("slow", stutterSymptom(0.5, 0.0, 300.0, 0.0, false))
+        assertEquals("dropped", stutterSymptom(1.0, 60.0, 300.0, 0.0, false))
+        assertEquals("underruns", stutterSymptom(1.0, 0.0, 300.0, 3.0, false))
+        assertEquals("late", stutterSymptom(1.0, 12.0, 300.0, 0.0, true))
+        assertNull(stutterSymptom(1.0, 0.0, 300.0, 0.0, true))
+        assertNull(stutterSymptom(1.0, 5.0, 300.0, 0.0, false))
+        assertNull(stutterSymptom(Double.NaN, Double.NaN, Double.POSITIVE_INFINITY, -4.0, false))
+        assertEquals("dropped", stutterSymptom(1.0, 1e300, 0.0, 0.0, false))
+        assertEquals(2000.0, stutterSettleMs(), 0.0)
+        assertEquals(12000.0, stutterWindowMs(), 0.0)
+    }
+
+    @Test
+    fun `the languages the apps ship, and which one a browser gets`() {
+        val all = languageList()
+        assertEquals(22, all.size)
+        assertEquals("en", all[0].tag)
+        assertTrue(all.single { it.tag == "ar" }.rtl)
+        assertTrue(all.none { it.tag == "de" && it.rtl })
+        isPlain(all[0])
+        assertEquals("ar", languageResolve("", arrayOf("ar-SA", "en")))
+        assertEquals("de", languageResolve("de", arrayOf("ar")))
+        assertEquals("en", languageResolve(null, emptyArray()))
+        assertEquals("en", languageResolve("xx-garbage", arrayOf("")))
+    }
+    private fun topic(id: Int, name: String, pinned: Boolean = false, closed: Boolean = false, hasVideos: Boolean = true): WebTopic {
+        val o: dynamic = js("({})")
+        o.id = id.toDouble()
+        o.name = name
+        o.pinned = pinned
+        o.closed = closed
+        o.hasVideos = hasVideos
+        return o.unsafeCast<WebTopic>()
+    }
+
+    private fun forum(id: Int, title: String, archived: Boolean = false): WebTopicChat {
+        val o: dynamic = js("({})")
+        o.id = id.toDouble()
+        o.title = title
+        o.archived = archived
+        return o.unsafeCast<WebTopicChat>()
+    }
+
+    @Test
+    fun `topics are found by name inside the apps' budget`() {
+        val budget = topicBudget()
+        assertEquals(12.0, budget.chats)
+        assertEquals(3.0, budget.atOnce)
+        assertEquals(30.0, budget.maxHits)
+        isPlain(budget)
+        // Accents and emoji fold, a word one letter out lands, and every word has to.
+        assertTrue(topicScore("☕ Café talks", "cafe") > 0)
+        assertTrue(topicScore("Season 2", "season 7") == 0.0)
+        assertEquals(0.0, topicScore("Season 2", "   "))
+        assertEquals(0.0, topicScore("Season 2", "🙂"))
+        val hits = topicHits(5.0, "Course", arrayOf(topic(1, "Season 2"), topic(2, "Season 7", closed = true), topic(2, "Season 7"), topic(3, "Chat")), "season", false)
+        // A topic listed twice is one hit, and a topic whose name does not answer is none.
+        assertEquals(2, hits.size)
+        isPlain(hits[0])
+        // Telegram's own match is kept when our folding misses it, at the lowest score.
+        val kept = topicHits(5.0, "Course", arrayOf(topic(9, "Qwerty")), "zzz", true)
+        assertEquals(1.0, kept.single().score)
+        assertEquals(0, topicHits(5.0, "Course", arrayOf(topic(9, "Qwerty")), "zzz", false).size)
+        // Best first: a topic with videos over one with none, pinned, open, then the chat list's order.
+        val ranked = topicRank(
+            arrayOf(
+                topicHits(6.0, "B", arrayOf(topic(1, "Lessons", hasVideos = false)), "lessons", false)[0],
+                topicHits(5.0, "A", arrayOf(topic(1, "Lessons", closed = true)), "lessons", false)[0],
+                topicHits(7.0, "C", arrayOf(topic(1, "Lessons", pinned = true)), "lessons", false)[0],
+                topicHits(8.0, "D", arrayOf(topic(1, "Lessons")), "lessons", false)[0],
+            ),
+            arrayOf(8.0, 7.0, 6.0, 5.0),
+        )
+        assertContentEquals(arrayOf(7.0, 8.0, 5.0, 6.0), ranked.map { it.chatId }.toTypedArray())
+        assertFalse(ranked.last().hasVideos)
+        // 100 hits are cut to the budget's thirty.
+        val many = (1..100).flatMap { topicHits(it.toDouble(), "G$it", arrayOf(topic(1, "Lessons")), "lessons", false).toList() }
+        assertEquals(30, topicRank(many.toTypedArray(), emptyArray()).size)
+    }
+
+    @Test
+    fun `topic candidates are the added groups, the named ones first, and at most twelve`() {
+        val chats = arrayOf(forum(1, "Music"), forum(2, "Course Lessons"), forum(3, "Old", archived = true), forum(4, "Other"))
+        assertContentEquals(arrayOf(2.0, 1.0, 4.0), topicCandidates(chats, "course lessons", arrayOf(1.0, 2.0, 4.0), false))
+        assertContentEquals(arrayOf(2.0, 1.0, 3.0, 4.0), topicCandidates(chats, "course", null, true))
+        assertContentEquals(arrayOf(1.0, 2.0, 4.0), topicCandidates(chats, "x", null, false))
+        assertEquals(0, topicCandidates(chats, "x", emptyArray(), true).size)
+        val big = Array(3000) { forum(it + 1, "Group $it") }
+        assertEquals(12, topicCandidates(big, "x", null, true).size)
+    }
 }

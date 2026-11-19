@@ -144,3 +144,25 @@ Written 2026-11-18. Status: plan, nothing built yet.
   Decisions taken by default: sibling fallback needs 3 files, nightly stays 02:17 UTC, Windows VM
   parked, the next beta is the first to use `release-local.sh`. Open: push (the user), the nightly's
   first real run on GitHub, one real `release-local.sh` run, the WebKit `chats.spec.ts:42` flake.
+- 2026-11-18 paused. Pushed up to e674f78; six later local commits: the names dump (debug and
+  preview builds only, `docs/BUILDING.md` "Names dump"), three parser fixes found in 6,028 real names
+  (audio layout glued to x265 read as S1E265, a bare `-SP` read as a special, a size cut short after a
+  dash read as episode one), and the leftovers filter. Open: run the dump with `--ez all true` (58
+  chats, it stalled on "page failed (wda)" retries after chat 1), the test build `com.tmplayer.test`
+  is still installed and signed in on the POCO, the full `:core:jvmTest :ui:jvmTest` run after the
+  last parser fixes, the unfolded film copies without a year (same film, different quality, no year in
+  the name), and the push (user).
+- 2026-11-19: the all-chats names dump ran (59 chats, 33,909 videos, 885 leftovers; files in
+  `private/name-survey/dump-2026-11-19-all/`). Full `:core:jvmTest :ui:jvmTest` pass on the parser fixes.
+  Found, left as is: files named only `S1E01 [BDRip ...]` or `S01 EP01 720p` make a show called
+  "bdrip" or "720p"; blanking that title turns 18 grouped episodes into 18 loose files (tried, reverted),
+  so a better fix needs the chat's name. Yearless film copies show as unfolded in the dump only because
+  the dump records length 0 and `SameVideo` needs a length for a film with no year. Open: the push (user).
+
+
+- 2026-11-19 WB24: `webkit-iphone` (iPhone 13) joins `--all` / `CI_LOCAL_FULL=1` beside `webkit`, and
+  its spec list (`IPHONE_SPECS` in `webapp/playwright.config.ts`) is the player specs plus FORM_SPECS
+  (detail, a11y, titlelogo, choose-chats, sync, ux-audit). Run once alone in the Playwright image:
+  142 listed, 70 passed, 72 skipped (the specs skip forms they do not cover), 0 failed. Cold, the
+  install took about 4 min and the run 2.3 min. The GitHub `webapp.yml` matrix still lists only
+  chromium and webkit (add `webkit-iphone` there when the user wants it in CI).

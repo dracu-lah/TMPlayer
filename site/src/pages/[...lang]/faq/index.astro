@@ -41,6 +41,7 @@ type Question =
 const groups: { id: string; title: string; questions: Question[] }[] = [
   {
     id: 'faq-devices', title: 'faq.group_devices', questions: [
+      { q: 'faq.player_q', a: 'faq.player_a', href: l('/alternatives/') },
       { ld: 'Can I download Telegram on my TV?', more: { k: 'guide_no_casting.the_ways_to_get_telegram', href: l('/guides/telegram-on-tv-without-casting/') } },
       { ld: 'Can I watch Telegram videos on Android TV?', more: { k: 'guide_no_casting.install_the_apk_and_sign__a1', href: l('/guides/telegram-videos-on-android-tv/') } },
       { ld: 'Is there a Telegram app for Fire TV Stick?', more: { k: 'guide_no_casting.install_it_with_the_downloader__a1', href: l('/guides/telegram-videos-on-fire-tv/') } },

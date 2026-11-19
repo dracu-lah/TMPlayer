@@ -2807,7 +2807,7 @@ private fun MetaLine(
         val year = if (poster) item.parsedName.year else null
         val duration = s.formatter.duration(item.durationSec.toLong())
         // A tile standing for several copies says how many rather than one copy's size.
-        val size = if (item.versions.size > 1) s.detailVersions(item.versions.size) else com.tmplayer.data.SplitPieces.sizeFact(item, s.formatter.size(item.sizeBytes))
+        val size = if (com.tmplayer.data.VideoCopies.versionCount(item) > 1) s.detailVersions(com.tmplayer.data.VideoCopies.versionCount(item)) else com.tmplayer.data.SplitPieces.sizeFact(item, s.formatter.size(item.sizeBytes))
         val resume = watched
             ?.takeIf { it.positionMs > 0 }
             ?.let { s.gridStoppedAt(s.formatter.clock(it.positionMs)) }
@@ -2818,7 +2818,7 @@ private fun MetaLine(
             duration.ifEmpty { null }?.takeIf { !poster },
             size.ifEmpty { null },
             // On a video's card the quality is here rather than a second badge on the picture.
-            item.qualityTags.firstOrNull()?.takeIf { !poster },
+            com.tmplayer.data.QualityRead.of(item)?.takeIf { !poster },
             resume,
         ).joinToString("  ·  ")
     }

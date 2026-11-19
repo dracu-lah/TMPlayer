@@ -1,7 +1,7 @@
 // The one-tap Choose chats button in the header of Chats, in the phone and desktop layouts (the
 // TV's is walked in tv.spec.ts). Home has none: it is on Chats and in Settings. It goes where the
 // Settings row goes, /added-chats.
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 
 test('Home has no Choose chats button', async ({ page }) => {
     await page.goto('/')
@@ -59,3 +59,42 @@ for (const [name, path] of [['Chats', '/chats']] as const) {
         })
     })
 }
+
+// The picker by keyboard (WB22): Tab reaches the search, every filter, Select all, then the rows' ticks and stars in
+// order, Space ticks, and a search that matches nothing says so instead of leaving a blank page.
+test.describe('the picker by keyboard', () => {
+    const activeName = (page: Page) =>
+        page.evaluate(() => {
+            const a = document.activeElement as HTMLElement | null
+            return a ? (a.getAttribute('aria-label') ?? a.textContent?.trim() ?? a.tagName) : ''
+        })
+
+    test('Tab walks the search, the filters, Select all, a row and its star; Space ticks; the count follows', async ({ page }) => {
+        await page.goto('/added-chats')
+        await expect(page.getByRole('checkbox', { name: 'Test Clips' })).toBeVisible()
+        await page.getByRole('searchbox', { name: 'Search chats' }).focus()
+        const seen: string[] = []
+        for (let i = 0; i < 9; i++) {
+            await page.keyboard.press('Tab')
+            seen.push(await activeName(page))
+        }
+        expect(seen.slice(0, 6)).toEqual(['All', 'Archived', 'Channels', 'Groups', 'People', 'Select all'])
+        // Then the first row: its tick, and its star.
+        expect(seen[6]).toBe('Saved Messages')
+        expect(seen[7]).toMatch(/favourites/)
+        await page.getByRole('checkbox', { name: 'Test Clips' }).focus()
+        await page.keyboard.press('Space')
+        await expect(page.getByRole('checkbox', { name: 'Test Clips' })).toBeChecked()
+        await expect(page.locator('.select-count')).toHaveText('1 chat chosen')
+        expect(await page.getByRole('checkbox', { name: 'Test Clips' }).evaluate((el) => getComputedStyle(el).outlineStyle)).not.toBe('none')
+    })
+
+    test('a search that matches no chat says so, and Select all has nothing to act on', async ({ page }) => {
+        await page.goto('/added-chats')
+        await expect(page.getByRole('checkbox', { name: 'Test Clips' })).toBeVisible()
+        await page.getByRole('searchbox', { name: 'Search chats' }).fill('zzzz nothing')
+        await expect(page.getByText('No chat matches "zzzz nothing".')).toBeVisible()
+        await expect(page.getByRole('button', { name: 'Select all' })).toBeDisabled()
+        await expect(page.getByRole('checkbox')).toHaveCount(0)
+    })
+})

@@ -13,14 +13,9 @@ import kotlin.random.Random
 object PlayRandom {
 
     /**
-     * One of [items], or null for an empty list (the menu entry is then left out).
-     *
-     * - Unwatched videos are the pool while there is any ([watched] says which are not); once
-     *   everything is watched, the whole list is.
-     * - [last], the id of the video this list played before, is left out of the pool when anything
-     *   else is in it, and when only it is left in the unwatched pool, a watched video is chosen
-     *   rather than a repeat. A list of one video has nothing else to offer, so it plays that one.
-     * - [id] must be stable and unique within [items].
+     * One of [items], or null for an empty list (the menu entry is then left out): unwatched first,
+     * never [last] again while anything else is left. The rule is [RandomPick]'s, which the web
+     * player runs too.
      */
     fun <T> pick(
         items: List<T>,
@@ -28,18 +23,7 @@ object PlayRandom {
         watched: (T) -> Boolean,
         last: String? = null,
         random: Random = Random.Default,
-    ): T? {
-        if (items.isEmpty()) return null
-        val unwatched = items.filter { !watched(it) }
-        val preferred = unwatched.ifEmpty { items }
-        val fresh = preferred.filter { id(it) != last }
-        val pool = when {
-            fresh.isNotEmpty() -> fresh
-            // Only the last one is left among the unwatched: another, watched, video beats a repeat.
-            else -> items.filter { id(it) != last }.ifEmpty { items }
-        }
-        return pool[random.nextInt(pool.size)]
-    }
+    ): T? = RandomPick.pick(items, id, watched, last, random)
 
     /**
      * What each list played last, by the list's own key (a chat and topic, Downloads), for this run

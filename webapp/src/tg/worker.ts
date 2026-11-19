@@ -2,15 +2,18 @@
 // main thread. The page talks to it through `api` below by message (./rpc.ts), and never loads
 // mtcute itself.
 import { BaseTelegramClient, SentCode as MtSentCode, TelegramClient, User, type Message, type tl } from '@mtcute/web'
-import { rules } from '../rules'
+import { rules, type Video } from '../rules'
+import { holdTouches } from './touchCache'
 import { cryptoProvider } from './crypto'
 import { findChatSubtitles, forgetChatSubtitles } from './chatsubs'
-import { homePage } from './home'
-import { archivedList, chatList, chatPage, forgetAll, joinedFor, listTiles, rankChats, recentPage, searchAll, videoCounts, watchInfo } from './library'
+import { homePage, rowShown } from './home'
+import { archivedList, chatList, chatPage, forgetAll, joinedFor, listTiles, rankChats, recentPage, searchAll, setCopyContext, topicSources, videoCounts, watchInfo } from './library'
+import { messageLink, telegramLook, type LinkAnswer } from './links'
+import { findTopics, keepWhole, keptTopics, telegramTopics, topicWords } from './topics'
 import { clickSponsored, reportSponsored, viewSponsored } from './sponsored'
 import { deleteEverything, deleteMessages, readFiles, writeFile, type FoundFile } from './syncfile'
 import { chatProtects, files, itemOf, rawOf, thumbnails, toItem } from './media'
-import type { ChatInfo, ChatItem, ChatPage, ChatSubtitle, ChatsEvent, ChatView, Country, Found, HomePage, HomeView, ListView, Me, RecentPage, QrEvent, RpcError, SentCode, SponsoredReport, Tile, VideoItem, WatchInfo } from './types'
+import type { ChatInfo, ChatItem, ChatPage, ChatSubtitle, ChatsEvent, ChatView, Country, Found, HomePage, HomeView, ListView, Me, RecentPage, QrEvent, RpcError, SentCode, SponsoredReport, Tile, TopicsFound, VideoItem, WatchInfo } from './types'
 
 // `VITE_TG_TEST=1 pnpm dev` signs in on Telegram's test servers (numbers 99966XYYYY, the code
 // is X five times), with its own storage, to try the sign in steps without a real account.
@@ -40,6 +43,8 @@ const base = new BaseTelegramClient({
     },
 })
 const tg = new TelegramClient({ client: base })
+// The line to Telegram as mtcute reports it, for the page's "Can't reach Telegram" banner (net.ts).
+base.onConnectionState.add((link) => postMessage({ link }))
 
 /** How long a sign out waits for Telegram before forgetting the account on this device anyway. */
 const LOG_OUT_WAIT_MS = 5_000
@@ -261,8 +266,8 @@ export const api = {
     },
 
     /** The Add chats picker's rough video count for each listed chat, three at a time (see library.ts videoCounts). */
-    async videoCounts(_: Ctx, chatIds: number[]): Promise<Record<number, number>> {
-        return videoCounts(tg, chatIds)
+    async videoCounts(ctx: Ctx, chatIds: number[]): Promise<Record<number, number>> {
+        return videoCounts(tg, chatIds, ctx.signal)
     },
 
     /** A chat's grid as the app arranges it (see library.ts for the modes). */
@@ -275,6 +280,26 @@ export const api = {
         return searchAll(tg, query, view, everyChat)
     },
 
+    /**
+     * Topics whose names answer `query` ("Chat > Topic", U14), among the forum chats of `added` (null: every chat),
+     * inside the apps' budget (topics.ts). Groups answer one by one as `TopicsFound` events; aborting the call
+     * (a new letter, leaving the page) stops the asking. Answers are kept two minutes.
+     */
+    async topics(ctx: Ctx, query: string, added: number[] | null): Promise<TopicsFound> {
+        const words = topicWords(query)
+        if (!words) return { hits: [], asked: 0, refused: 0, partial: false, searching: false }
+        const chats = Array.isArray(added) ? added.filter((id) => Number.isSafeInteger(id)).slice(0, 20_000) : null
+        const key = `${chats ? [...chats].sort((a, b) => a - b).join() : '*'}\n${words.toLowerCase()}`
+        const kept = keptTopics(key)
+        if (kept) return kept
+        const [r, sources] = await Promise.all([rules(), topicSources(tg, chats, ctx.signal)])
+        ctx.signal.throwIfAborted()
+        const found = await findTopics({ rules: r, ask: telegramTopics(tg), ...sources, added: chats, includeArchived: true, query: words, signal: ctx.signal, onPartial: (f) => ctx.emit(f) })
+        // A search in which a group was skipped (a flood wait past thirty seconds, a refusal) is not kept: asking again asks again.
+        keepWhole(key, found)
+        return found
+    },
+
     /** Recently added's See all, read on a page at a time (see library.ts recentPage for the modes). */
     async recent(ctx: Ctx, view: ListView, mode: 'open' | 'more' | 'view'): Promise<RecentPage> {
         return recentPage(tg, view, mode, ctx.signal)
@@ -283,6 +308,11 @@ export const api = {
     /** Home's rows as the app builds them; Home so far arrives as `HomePage` events while the chats answer. */
     async home(ctx: Ctx, view: HomeView): Promise<HomePage> {
         return homePage(tg, view, ctx.signal, (page) => ctx.emit(page))
+    },
+
+    /** A Home row stayed on screen or left it (HX54): the open Home reads it, or drops its read that has not started. */
+    async homeRow(_: Ctx, chatId: number, on: boolean): Promise<void> {
+        rowShown(chatId, on)
     },
 
     /** A sponsored message was on screen: Telegram counts it once. */
@@ -310,6 +340,33 @@ export const api = {
     /** "You'll see videos from 50 MB upwards." */
     async sizeRange(_: Ctx, minBytes: number, maxBytes: number): Promise<string> {
         return (await rules()).sizeRange(minBytes, maxBytes)
+    },
+
+    /** The Last played order's times (ids and milliseconds), held under `version`; a chat view or the watch page names the version instead of posting them. */
+    async setTouches(_: Ctx, version: number, ids: string[], times: number[]): Promise<boolean> {
+        return holdTouches(version, ids, times)
+    },
+
+    /** A chat's stored filter line as the Sort menu's chips read it (U6): each part the rules cannot read is that filter off. */
+    async facets(_: Ctx, line: string): Promise<{ length: string; picture: string; hdr: boolean; subtitles: boolean; language: string | null; added: string; count: number }> {
+        const f = (await rules()).facetsRead(line.slice(0, 200))
+        return { length: f.length, picture: f.picture, hdr: f.hdr, subtitles: f.subtitles, language: f.language ?? null, added: f.added, count: f.count }
+    },
+
+    /** `line` with one filter changed, as the line the page stores ("clear" drops them all). */
+    async facetsWith(_: Ctx, line: string, field: string, value: string | null): Promise<string> {
+        return (await rules()).facetsWith(line.slice(0, 200), field, value)
+    },
+
+    /**
+     * Which of the loaded videos "Play random" plays (U16, the apps' rule): an unwatched one while
+     * any is left, never `last` again while another is there. `ids` are the videos on screen, so a
+     * chat of 20,000 costs nothing extra; null for none.
+     */
+    async randomPick(_: Ctx, ids: string[], watched: string[], last: string | null): Promise<string | null> {
+        // The rule reads a video's id and nothing else of it.
+        const videos = ids.slice(0, 50_000).map((id) => ({ id }) as Video)
+        return (await rules()).playRandom(videos, watched.slice(0, 200_000), last) ?? null
     },
 
     /** Settings' rewind choices in milliseconds, 0 for off, and the default. */
@@ -355,6 +412,11 @@ export const api = {
         return info
     },
 
+    /** The link to a video's message (WB16, the apps' Copy link): public or private form, its forum topic between; or why there is none. */
+    async messageLink(_: Ctx, chatId: number, messageId: number): Promise<LinkAnswer> {
+        return messageLink(telegramLook(tg), await rules(), chatId, messageId)
+    },
+
     /** A named list's cards (HX43), grouped as a chat's grid, from the videos the page keeps. */
     async listTiles(_: Ctx, lines: { item: VideoItem; show?: string }[]): Promise<Tile[]> {
         return listTiles(lines)
@@ -383,6 +445,15 @@ export const api = {
         return deleteEverything(tg, known)
     },
 
+    /** What the page says of the viewer's copies (HX38): the device, what the browser cannot play natively, "Not the same video", the copies chosen. */
+    async copyContext(_: Ctx, context: unknown): Promise<void> {
+        await setCopyContext(context)
+    },
+    /** The quality line (QualityHabit) with one more play at `height` noted: what the page keeps as the quality usually played. */
+    async habitNoted(_: Ctx, habit: string | null, height: number | null): Promise<string> {
+        const h = typeof height === 'number' && Number.isSafeInteger(height) && height > 0 && height <= 8_640 ? height : null
+        return (await rules()).habitNoted(typeof habit === 'string' ? habit.slice(0, 400) : null, h)
+    },
     /** One message's video, for a watch page opened by its address. Null when it is gone or not a video. */
     async video(_: Ctx, chatId: number, messageId: number): Promise<VideoItem | null> {
         const [msg] = await tg.getMessages(chatId, messageId)
@@ -410,6 +481,34 @@ export const api = {
         return findChatSubtitles(tg, chatId, messageId, fileName, caption, preferred)
     },
 
+    /**
+     * The keys a video's remembered online subtitle is filed under, most exact first (HX25, core's
+     * SubtitlePickKeys): this post, then the video itself (a film's title and year, a show's episode),
+     * so a re-post or another copy finds the pick. The page keeps the picks; the rule is core's.
+     */
+    async subtitlePickKeys(_: Ctx, chatId: number, messageId: number, title: string, fileName: string): Promise<string[]> {
+        const r = await rules()
+        return r.subtitlePickKeys({
+            id: `${chatId}:${messageId}`,
+            chatId,
+            messageId,
+            title: String(title).slice(0, 500),
+            fileName: String(fileName).slice(0, 500),
+            caption: '',
+            mimeType: 'video/mp4',
+            size: 0,
+            duration: 0,
+            width: 0,
+            height: 0,
+            date: 0,
+            topicId: 0,
+            albumId: null,
+            albumPhoto: false,
+            canBeSaved: true,
+            round: false,
+        })
+    },
+
     /** A listed file that is no longer there: the next lookup of this video asks again. */
     async chatSubtitlesForget(_: Ctx, chatId: number, messageId: number): Promise<void> {
         forgetChatSubtitles(chatId, messageId)
@@ -423,6 +522,11 @@ export const api = {
     async resumeKept(_: Ctx, savedMs: number | null, positionMs: number, rewindMs: number | null): Promise<number> {
         const r = await rules()
         return r.resumeKept(savedMs, positionMs, r.rewindSetting(rewindMs))
+    },
+
+    /** Retry on the banner: the connections to Telegram are opened again, as when the browser says it is back online. */
+    async reconnect(_: Ctx): Promise<void> {
+        base.mt.network.notifyNetworkChanged(true)
     },
 
     /** Whether this worker knows where a file is (a page reloaded on a list item's state may outlive it). */
@@ -449,7 +553,9 @@ export const api = {
                     // (idle for a while, a link that dropped without saying so) answers nothing and nothing
                     // fails, so the read hung for good ('This video hasn't started', Reload the same) until
                     // the page was closed. Timed out, the reader's own retries ask again over a fresh send.
-                    { dcId: f.dcId, kind: 'download', abortSignal: ctx.signal, floodSleepThreshold: 30, timeout: CHUNK_TIMEOUT_MS },
+                    // floodSleepThreshold 0: mtcute never sleeps through a flood wait of any length here. The error
+                    // reaches the reader, which waits it out while the other reads go on, and the page says how long.
+                    { dcId: f.dcId, kind: 'download', abortSignal: ctx.signal, floodSleepThreshold: 0, timeout: CHUNK_TIMEOUT_MS },
                 )
                 if (res._ !== 'upload.file') throw new Error('Telegram sent a CDN redirect, which browsers cannot follow.')
                 const want = Math.min(limit, f.size - offset)

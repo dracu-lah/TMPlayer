@@ -1,15 +1,15 @@
-import { createEffect, createResource, createSignal, onCleanup, onMount, Show } from 'solid-js'
+import { createEffect, createResource, createSignal, onCleanup, Show, useContext } from 'solid-js'
 import { A, useNavigate } from '@solidjs/router'
 import { PlayCircleIcon, PlayIcon } from '@hugeicons/core-free-icons'
 import { Icon } from '../ui/Icon'
 import { resumes, settings, watchedTick } from '../store'
-import { loadThumb } from './thumbs'
+import { AskGate, useCardThumb } from './cardAsk'
 import { coverBackground } from './cover'
 import { isPromoCover, useObservedCovers } from './promo'
 import { askOf, keptRating, loadBackdrop, loadPoster, posterSizeFor } from './posters'
 import { TmdbMark } from '../ui/TmdbMark'
 import { warmDataCentres, warmFile } from '../stream/reader'
-import { t } from '../i18n'
+import { formatNumber, t } from '../i18n'
 import { form } from '../form'
 import { cardLayout, VirtualGrid } from '../ui/VirtualGrid'
 import { stableCards } from './stableCards'
@@ -20,8 +20,8 @@ import type { SponsoredItem, Tile, VideoItem } from '../tg/types'
 import type { PosterAsk } from '../rules'
 
 export function size(bytes: number): string {
-    if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(1)} GB`
-    return `${Math.max(1, Math.round(bytes / 1e6))} MB`
+    if (bytes >= 1e9) return t('format.size_gb', { size: formatNumber(bytes / 1e9, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) })
+    return t('format.size_mb', { size: formatNumber(Math.max(1, Math.round(bytes / 1e6))) })
 }
 
 export function length(s: number): string {
@@ -70,22 +70,10 @@ const cardPath = (v: VideoItem, direct?: boolean) => (direct ? watchPath(v) : de
 function CardArt(props: { thumb: string | null; cover?: string | null; title: string; poster: PosterAsk | null; tile?: string; progress?: number; onPlay?: (e: MouseEvent) => void }) {
     let el!: HTMLDivElement
     const [src, setSrc] = createSignal<string | null>(null)
-    const [seen, setSeen] = createSignal(false)
     const [picture, setPicture] = createSignal<string | null>(null)
-    let gone = false
-    onCleanup(() => (gone = true))
-    onMount(() => {
-        const io = new IntersectionObserver((entries) => {
-            if (!entries.some((e) => e.isIntersecting)) return
-            io.disconnect()
-            setSeen(true)
-            const thumb = props.thumb
-            // Not fetched when it is an uploader's advert (promo.ts): the cover gradient stands in.
-            if (thumb && !isPromoCover(props.cover)) againOnce(() => loadThumb(thumb), (url) => !gone && setSrc(url), () => gone)
-        })
-        io.observe(el)
-        onCleanup(() => io.disconnect())
-    })
+    // Asked once the card is on screen (and its Home row has stayed there), taken back when it leaves (HX54).
+    // Not asked when it is an uploader's advert (promo.ts): the cover gradient stands in.
+    const { seen } = useCardThumb({ el: () => el, thumb: () => props.thumb, skip: () => isPromoCover(props.cover), open: useContext(AskGate), onUrl: setSrc })
     createEffect(() => {
         const ask = props.poster
         if (!seen() || !ask || !settings().posters) return void setPicture(null)
@@ -165,6 +153,10 @@ export interface CardData {
     title: string
     item: VideoItem
     facts: string
+    /** How many versions the card stands for (HX38): the same count its page lists. */
+    versions?: number
+    /** A show's tile: its menu has no Rename (a title belongs to one video, renamed from its own page). */
+    show?: boolean
 }
 
 const dot = '  ·  '
@@ -184,11 +176,12 @@ export function tileCard(tile: Tile, showChat = false): CardData {
                   showChat ? v.chat : '',
                   tile.parts > 1 ? t('grid.parts_count', { count: tile.parts }) : size(v.size),
                   length(v.duration),
-                  tile.copies ? t('search.copies', { count: tile.copies + 1 }) : '',
+                  // One count with the page's list of copies (VideoCopies.versionCount): the same file posted twice counts once.
+                  tile.versions > 1 ? t('detail.versions', { count: tile.versions }) : '',
               ]
                   .filter(Boolean)
                   .join(dot)
-    return { key: tile.key, title: tile.title, item: v, facts }
+    return { key: tile.key, title: tile.title, item: v, facts, versions: tile.kind === 'file' ? tile.versions : 1, ...(tile.kind === 'show' ? { show: true } : {}) }
 }
 
 /** Where each video was left, for the line on its card. */
@@ -209,10 +202,10 @@ const intent = (v: VideoItem) => {
 }
 
 /** What every card's link does: warm the file on intent, keep the video it stands for for the page it opens. */
-function cardLink(item: VideoItem, direct?: boolean, replace?: boolean, history?: boolean) {
+function cardLink(item: VideoItem, direct?: boolean, replace?: boolean, history?: boolean, versions?: number, shown?: string | null) {
     return {
         // The right click and long press menu on every card; a TV remote has no pointer, and its hold of OK opens the card's own page.
-        ...(form() !== 'tv' ? cardMenu(item, !!history) : {}),
+        ...(form() !== 'tv' ? cardMenu(item, !!history, versions ?? 1, shown) : {}),
         href: cardPath(item, direct),
         state: { video: item },
         replace,
@@ -234,7 +227,7 @@ export function Card(props: { card: CardData; progress?: number; replace?: boole
         navigate(watchPath(props.card.item), { state: { video: props.card.item } })
     }
     return (
-        <A class="card" {...cardLink(props.card.item, props.direct, props.replace, props.history)}>
+        <A class="card" {...cardLink(props.card.item, props.direct, props.replace, props.history, props.card.versions, props.card.show ? null : props.card.title)}>
             <CardArt thumb={props.card.item.thumb} cover={props.card.item.cover} title={props.card.title} poster={askOf(props.card.item)} tile={props.card.item.tile} progress={props.progress} onPlay={play} />
             {/* Under the card, as the apps write it (two lines kept, so the facts line up along a row). */}
             <div class="card-name">{props.card.title}</div>
@@ -267,18 +260,8 @@ export function useLeft(): (v: VideoItem) => Left | undefined {
 export function ContinueCard(props: { item: VideoItem; left?: Left }) {
     let el!: HTMLDivElement
     const [src, setSrc] = createSignal<string | null>(null)
-    const [seen, setSeen] = createSignal(false)
     const [wide, setWide] = createSignal<string | null>(null)
-    onMount(() => {
-        const io = new IntersectionObserver((entries) => {
-            if (!entries.some((e) => e.isIntersecting)) return
-            io.disconnect()
-            setSeen(true)
-            if (props.item.thumb && !isPromoCover(props.item.cover)) loadThumb(props.item.thumb).then(setSrc, () => {})
-        })
-        io.observe(el)
-        onCleanup(() => io.disconnect())
-    })
+    const { seen } = useCardThumb({ el: () => el, thumb: () => props.item.thumb, skip: () => isPromoCover(props.item.cover), open: useContext(AskGate), onUrl: setSrc })
     // The title's own wide picture where TMDB has one (OnlineArt), the video's frame until then.
     createEffect(() => {
         const ask = askOf(props.item)
@@ -292,7 +275,7 @@ export function ContinueCard(props: { item: VideoItem; left?: Left }) {
     })
     const facts = () => [props.item.chat, size(props.item.size)].filter(Boolean).join(dot)
     return (
-        <A class="card continue-card" {...cardLink(props.item, true, false, form() !== 'tv')}>
+        <A class="card continue-card" {...cardLink(props.item, true, false, form() !== 'tv', undefined, props.item.name.includes(dot) ? null : props.item.name)}>
             <div class="continue-art" ref={el} style={isPromoCover(props.item.cover) ? { background: coverBackground(props.item.title) } : undefined}>
                 <Show when={src() && !isPromoCover(props.item.cover)}>
                     <img class="continue-img" src={src()!} alt="" decoding="async" />

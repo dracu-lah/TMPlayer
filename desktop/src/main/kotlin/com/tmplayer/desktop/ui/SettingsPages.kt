@@ -367,6 +367,15 @@ internal fun LibraryRows(state: ShellState, chatList: List<com.tmplayer.data.Cha
     val watchedList by state.watched.history.collectAsState(initial = emptyList())
     var confirm by remember { mutableStateOf<Confirm?>(null) }
     val undoToast = com.tmplayer.ui.components.rememberActionToast()
+    val historyCards = historyCardCount(state)
+    val clearHistory = rememberClearAllConfirm(
+        count = historyCards,
+        title = s.browseClearHistoryTitle,
+        message = s.browseClearHistoryMessage(historyCards),
+        detail = s.browseClearHistoryDetail,
+    ) {
+        runHistoryEdit(scope, state, undoToast, toast, { s.browseHistoryCleared }, s.browseUndo) { st, w -> com.tmplayer.data.HistoryEdits.clear(st, w) }
+    }
 
     // What opens first, in the same card as which videos show, as on the phone and the TV.
     val lastChatTitle = remember(chatList, lastChatId) { chatList.firstOrNull { it.id == lastChatId }?.title }
@@ -422,11 +431,9 @@ internal fun LibraryRows(state: ShellState, chatList: List<com.tmplayer.data.Cha
         }
     }
     // One Clear history, as History's own: Continue watching and Watched together, Watch later
-    // kept, done at once and said with Undo.
+    // kept, asked first (HX59) and said with Undo.
     if (history.isNotEmpty() || watchedList.isNotEmpty()) {
-        Action(s.browseClearHistory, s.browseClearHistoryDetail, TmIcons.Close, end = RowEnd.None) {
-            runHistoryEdit(scope, state, undoToast, toast, { s.browseHistoryCleared }, s.browseUndo) { st, w -> com.tmplayer.data.HistoryEdits.clear(st, w) }
-        }
+        Action(s.browseClearHistory, s.browseClearHistoryDetail, TmIcons.Close, end = RowEnd.None, onClick = clearHistory)
     }
 
     OnlineMetadataGroup(Modifier.jumpTarget(jumps.getValue(SetupStep.Posters)))
@@ -632,7 +639,7 @@ internal fun AboutRows(state: ShellState, version: String, onShowAbout: () -> Un
     val supportCounters by settings.supportCounters.collectAsState(initial = SupportReminder.Counters())
     var supporting by remember { mutableStateOf(false) }
     var whatsNew by remember { mutableStateOf(false) }
-    var reporting by remember { mutableStateOf(false) }
+    var reporting by remember { mutableStateOf<com.tmplayer.data.FeedbackReport.Kind?>(null) }
 
     state.extras.updates?.let { updates ->
         Group(s.settingsVersion)
@@ -767,7 +774,14 @@ internal fun AboutRows(state: ShellState, version: String, onShowAbout: () -> Un
     Action(s.settingsChangelog, s.settingsChangelogDetail, TmIcons.List, end = RowEnd.External) {
         OpenExternal.browse(WhatsNew.CHANGELOG)
     }
-    Action(s.settingsReportProblem, s.settingsReportProblemDetail, TmIcons.Bug) { reporting = true }
+    val inbox = com.tmplayer.data.FeedbackReports.available
+    Action(s.settingsReportProblem, if (inbox) s.settingsReportProblemDetailInbox else s.settingsReportProblemDetail, TmIcons.Bug) {
+        reporting = com.tmplayer.data.FeedbackReport.Kind.Problem
+    }
+    // HX64: an idea, written here with the inbox, else on GitHub's feature request page.
+    Action(s.settingsRequestFeature, s.settingsRequestFeatureDetail, TmIcons.Send) {
+        reporting = com.tmplayer.data.FeedbackReport.Kind.Feature
+    }
     // The logs to attach to that report (CP59), scrubbed of names and ids before they are written.
     Action(s.logsSave, s.logsSaveDetail, TmIcons.Logs, end = RowEnd.None) {
         scope.launch {
@@ -817,7 +831,7 @@ internal fun AboutRows(state: ShellState, version: String, onShowAbout: () -> Un
 
     if (supporting) SupportPopup(onClose = { supporting = false }, onStarred = { Background.scope.launch { runCatching { settings.markSupportStarred() } } })
     if (whatsNew) WhatsNewPopup(onClose = { whatsNew = false })
-    if (reporting) FeedbackPopup(onClose = { reporting = false })
+    reporting?.let { kind -> FeedbackPopup(onClose = { reporting = null }, kind = kind) }
 }
 
 /**

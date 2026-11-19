@@ -3,7 +3,7 @@
 // The worker is mocked here (its own rules are tested in tmdb/*.test.ts).
 import { readFileSync } from 'node:fs'
 import { expect, test, type Page } from '@playwright/test'
-import { noSizeFloor } from './helpers'
+import { fakeCase, noSizeFloor } from './helpers'
 
 const PICTURE = readFileSync(new URL('./media/thumb.jpg', import.meta.url))
 
@@ -129,4 +129,22 @@ test('the Settings switch turns lookups off at once, and stays off after a reloa
     await page.waitForTimeout(500)
     expect(seen.asks).toHaveLength(asked)
     await expect(page.locator('.card-poster')).toHaveCount(0)
+})
+
+test('a chat that names no language sends no h=, so its keys stay as they were', async ({ page }) => {
+    const seen = await mockTmdb(page, FOUND)
+    await openShows(page)
+    await expect(page.locator('.card-poster')).toHaveCount(1)
+    expect(seen.asks[0].has('h')).toBe(false)
+})
+
+test('the chat title names a language: the question carries it as h= (HX24)', async ({ page, context }) => {
+    // The rules read "Malayalam" in "Test Shows Malayalam" (ChatLanguageHints), noted as the chat list is read.
+    await fakeCase(context, 'hinted')
+    const seen = await mockTmdb(page, FOUND)
+    await openShows(page)
+    await expect(page.locator('.card-poster')).toHaveCount(1)
+    expect(seen.asks[0].get('h')).toBe('ml')
+    expect(seen.asks[0].get('t')).toBe('Harbour Notes')
+    expect(seen.others).toEqual([])
 })

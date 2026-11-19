@@ -1,0 +1,26 @@
+/* Settings > Language (WB12): Automatic and the 22 languages by their own names, as buttons in a
+   grid that takes as many columns as fit (two on a phone, four on the TV), the chosen one ticked as
+   the segmented choices are. Long names (Español (Latinoamérica)) wrap inside their button. Each
+   name sits in the page's direction and reads in its own (dir=auto on the name). */
+.lang-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: 8px; }
+.lang-option {
+  display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 12px; border-radius: var(--r-m);
+  border: 1px solid var(--line); background: none; color: var(--fg); font: inherit; text-align: start; cursor: pointer;
+  transition: background var(--fast), border-color var(--fast);
+}
+.lang-option > span { min-width: 0; overflow-wrap: anywhere; }
+.lang-option .lang-sub { display: block; font-size: 12px; line-height: 16px; color: var(--muted); }
+.lang-option[aria-pressed=true] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 22%, var(--surface-high)); }
+.lang-option[aria-pressed=true]::before {
+  content: ''; width: 18px; height: 18px; background: currentColor; flex: none;
+  -webkit-mask: var(--tick) center / contain no-repeat; mask: var(--tick) center / contain no-repeat;
+}
+.lang-option:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+@media (hover: hover) { .lang-option:hover { border-color: var(--muted); } }
+.lang-state { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin: 0; }
+
+html[data-form=tv] .lang-list { grid-template-columns: repeat(4, 1fr); gap: calc(var(--dp) * 8); }
+html[data-form=tv] .lang-option { min-height: calc(var(--dp) * 44); padding: calc(var(--dp) * 8) calc(var(--dp) * 12); font-size: calc(var(--dp) * 14); transition: background-color var(--fast), color var(--fast), transform var(--fast) var(--ease); }
+html[data-form=tv] .lang-option .lang-sub { font-size: calc(var(--dp) * 12); line-height: calc(var(--dp) * 16); }
+html[data-form=tv][data-tv-keys] .lang-option:focus { outline: none; background: var(--focus-fill); color: var(--on-focus-fill); border-color: var(--focus-fill); transform: scale(var(--focus-scale)); }
+html[data-form=tv][data-tv-keys] .lang-option:focus .lang-sub { color: inherit; }

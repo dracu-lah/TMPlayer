@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Debug only: the names dump (com.tmplayer.dev.NameDumpReceiver, compiled from src/dev into the
+  debug and preview builds alone). The preview build's manifest holds the same entry. Exported so
+  adb can reach it, and guarded by DUMP, which the adb shell holds and no ordinary app does.
+  See docs/BUILDING.md, "Names dump".
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <receiver
+            android:name="com.tmplayer.dev.NameDumpReceiver"
+            android:exported="true"
+            android:permission="android.permission.DUMP">
+            <intent-filter>
+                <action android:name="com.tmplayer.DUMP_NAMES" />
+            </intent-filter>
+        </receiver>
+        <!-- Holds the dump in the foreground so the process is not frozen; only the receiver starts it. -->
+        <service
+            android:name="com.tmplayer.dev.NameDumpService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+    </application>
+</manifest>

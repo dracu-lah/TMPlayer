@@ -403,7 +403,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     private var trickplaySpansWanted = true
 
     /** Subtitle files loaded from the phone; a field because its picker registers before start. */
-    private val subtitleFiles = SubtitleFiles(this, { player }, { showGestureFeedback(it) })
+    private val subtitleFiles = SubtitleFiles(this, { player }, { showGestureFeedback(it) }).also { files ->
+        // A file of the viewer's own, or one from the chat, replaces any online pick remembered for this video (HX25).
+        files.onViewerChose = { OnlineSubtitles.current?.forgetPick(com.tmplayer.online.SubtitlePicks.keysOf(currentItem())) }
+    }
     private val chatSubtitleLoader = ChatSubtitleLoader(subtitleFiles)
 
     /** The viewer's Downmix to stereo answer, or null for the device default. See [AudioDownmix.wanted]. */
@@ -618,9 +621,14 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             processBits = if (android.os.Process.is64Bit()) 64 else 32,
         )
         val mime = format?.sampleMimeType
+        val context = applicationContext
         // The codec list is read on the report's own thread: Media3's cache, but never the main thread's job.
         Thread {
-            runCatching { com.tmplayer.data.CrashReports.reportStutter(facts.copy(hwDecoders = HardwareDecoders.listed(mime))) }
+            runCatching {
+                // How the chip fits the picture (HX71): a hardware stutter past its rated frame rate says so.
+                val fit = format?.let { HardwareDecoders.fitOf(context, it).name.lowercase() } ?: com.tmplayer.data.StutterReport.UNKNOWN
+                com.tmplayer.data.CrashReports.reportStutter(facts.copy(hwDecoders = HardwareDecoders.listed(mime), hwFit = fit))
+            }
         }.start()
     }
 
@@ -654,6 +662,51 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     /** What a tap or Up does on the chip: the metered question's yes, or "Not this one, try the next". */
     private var suggestAction: (() -> Unit)? = null
 
+    /** The video's remembered online subtitle has been looked for (HX25): once per video. */
+    private var pickRestored = false
+
+    /**
+     * HX25: the online subtitle picked for this video before comes back by itself, before the
+     * preferred language's own pick and the "find subtitles for me" search, and "Off" does too.
+     * The kept file is used first (a download costs nothing); only when it is gone is it fetched
+     * again, quietly, unless the line is metered or the kids lock is on, when it waits for the
+     * viewer. ExoPlayer only, like the other online subtitles.
+     */
+    private fun restoreRememberedSubtitle(current: Tracks) {
+        if (pickRestored || current.groups.isEmpty()) return
+        val online = OnlineSubtitles.current ?: return
+        if (online.picks == null || player == null || !hasMessage()) return
+        pickRestored = true
+        val keys = com.tmplayer.online.SubtitlePicks.keysOf(currentItem())
+        lifecycleScope.launch {
+            try {
+                var found = online.restorePick(keys, null, allowDownload = false)
+                if (found is OnlineSubtitles.Restored.Missing && !onMeteredLine() && com.tmplayer.data.ChatGate.allowed.value == null && online.inBuild) {
+                    found = online.restorePick(keys, onlineTarget(), allowDownload = true)
+                }
+                if (isFinishing || isDestroyed) return@launch
+                val exo = player ?: return@launch
+                when (found) {
+                    OnlineSubtitles.Restored.None -> Unit
+                    OnlineSubtitles.Restored.Off -> {
+                        suggestHandled = true
+                        exo.trackSelectionParameters = exo.trackSelectionParameters.buildUpon()
+                            .clearOverridesOfType(C.TRACK_TYPE_TEXT).setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build()
+                    }
+                    is OnlineSubtitles.Restored.Ready -> {
+                        suggestHandled = true
+                        subtitleFiles.attachFile(found.file, found.label)
+                    }
+                    is OnlineSubtitles.Restored.Missing -> found.notice?.let { suggestNote(com.tmplayer.online.OnlineWords.notice(it)) }
+                }
+            } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                com.tmplayer.platform.JobFailures.handle("restoreSubtitle", e)
+            }
+        }
+    }
+
     private val suggestStart = Runnable { maybeSuggestSubtitles() }
     private val suggestExpiry = Runnable {
         // A question left unanswered is not asked again for this video.
@@ -669,6 +722,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         suggestChip?.hide()
         suggestAction = null
         suggestHandled = false
+        pickRestored = false
         suggestMeteredOk = false
         suggestBusy = false
         suggestHits = emptyList()
@@ -805,6 +859,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             is com.tmplayer.online.DownloadResult.Done -> {
                 if (isFinishing || isDestroyed || player == null) return
                 subtitleFiles.attachFile(done.file, done.label)
+                online.rememberPick(com.tmplayer.online.SubtitlePicks.keysOf(currentItem()), hit, done.file)
                 suggestCurrent = hit
                 val source = com.tmplayer.online.SubtitleSuggestion.sourceOf(hit)
                 val name = OnlineSubtitles.languageName(hit.language)
@@ -2056,8 +2111,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             onLock = ::lockScreen,
             // Back and forward beside play (R5): ten seconds each way, the figure on the button.
             onSeekButton = { forward -> jumpFromRemote(forward, fixedStepMs = Skip.BUTTON_MS) },
-            // The words under the six icons for the first openings of the player, then icons only.
-            showLabels = ControlLabels.takeSession(this),
+            // Icons only (user, 2026-11-19): the words under the six icons ([ControlLabels]) are not
+            // shown on any opening; [showLabels] stays at its default, false.
             onBack = ::finish,
             onMore = ::showOverflow,
             onRemainingToggled = { remaining ->
@@ -4496,8 +4551,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 out: ArrayList<Renderer>,
             ) {
                 val built = ArrayList<Renderer>()
+                // Hardware decoders listed first, so a picture let through past the chip's rated
+                // frame rate opens the chip, not the system's software decoder (HX71).
                 super.buildVideoRenderers(
-                    context, extensionRendererMode, mediaCodecSelector, enableDecoderFallback,
+                    context, extensionRendererMode, HardwareFirstCodecSelector(mediaCodecSelector), enableDecoderFallback,
                     eventHandler, eventListener, allowedVideoJoiningTimeMs, built,
                 )
                 built.mapTo(out) {
@@ -5179,6 +5236,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             if (checkSoftwareDecode(tracks)) return
             restoreResumeTracks(tracks)
             applySettingsSubtitles(tracks)
+            restoreRememberedSubtitle(tracks)
             rememberTracks(tracks)
             subtitleFiles.onTracksChanged(tracks)
         }
@@ -6779,6 +6837,20 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     }
 
     override fun attachOnlineSubtitle(file: File, label: String) = subtitleFiles.attachFile(file, label)
+
+    override fun onlineSubtitlePicked(hit: com.tmplayer.online.SubtitleHit, file: File) {
+        OnlineSubtitles.current?.rememberPick(com.tmplayer.online.SubtitlePicks.keysOf(currentItem()), hit, file)
+    }
+
+    override fun subtitleChoiceMade(off: Boolean, external: Boolean) {
+        val online = OnlineSubtitles.current ?: return
+        val keys = com.tmplayer.online.SubtitlePicks.keysOf(currentItem())
+        when {
+            off -> online.rememberOff(keys)
+            external -> online.clearOff(keys)
+            else -> online.forgetPick(keys)
+        }
+    }
 
     /** "In this chat" (EG-F48): the subtitle files posted next to this video, from one search, kept for the video. */
     override suspend fun chatSubtitles(): List<ChatSubtitles.Hit> {

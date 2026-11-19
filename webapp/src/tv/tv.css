@@ -127,8 +127,29 @@ html[data-form=tv] .page .page-title.home-title { position: absolute; width: 1px
 .tv-hero-title {
   font-size: calc(var(--dp) * 28); line-height: calc(var(--dp) * 36); font-weight: 600;
   overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  /* TitleArt's box on a TV (TV_LOGO_MAX_WIDTH, TV_LOGO_MAX_HEIGHT): a very wide or tall logo keeps its shape inside it. */
+  --logo-w: calc(var(--dp) * 340); --logo-h: calc(var(--dp) * 56);
 }
-.tv-hero-facts { color: var(--muted); font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 20); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* While a logo is coming or drawn the heading is its slot: a row whose foot the logo sits on, at the column's start. */
+.tv-hero-title.title-logo-slot { display: flex; align-items: flex-end; -webkit-line-clamp: unset; }
+.tv-hero-title .title-logo { object-position: left bottom; }
+/*
+ * The logo shaped placeholder pulses only while the carousel is in sight (.in-sight, an
+ * IntersectionObserver's word) and motion is allowed, and never longer than the logo's 2.5 s
+ * ceiling; scrolled away under the rows, or on an engine with no observer, it stands still.
+ */
+.tv-hero-title .title-logo-skeleton { border-radius: calc(var(--dp) * 8); animation: none; }
+.tv-hero.in-sight .tv-hero-title .title-logo-skeleton { animation: waiting 1.2s ease-in-out infinite alternate; }
+@media (prefers-reduced-motion: reduce) { .tv-hero.in-sight .tv-hero-title .title-logo-skeleton { animation: none; } }
+/* A near black logo would sink into the dark page: a soft light edge lifts it. The light theme draws it as it is. */
+html[data-form=tv]:not([data-theme=light]) .tv-hero-title .title-logo.dark {
+  filter: drop-shadow(0 0 calc(var(--dp) * 1) rgba(255, 255, 255, .55)) drop-shadow(0 0 calc(var(--dp) * 8) rgba(255, 255, 255, .3));
+}
+/* The facts in the page's ink (FeaturedInfo), the score under them with its site's mark (MetaScoresRow at 24 dp, TMDB's at 11/16 of it). */
+.tv-hero-facts { color: var(--fg); font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 20); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tv-hero-score { display: flex; align-items: center; height: calc(var(--dp) * 20); gap: calc(var(--dp) * 6); font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 20); font-weight: 500; }
+.tv-hero-score .tmdb-mark { flex: none; height: calc(var(--dp) * 16.5); width: calc(var(--dp) * 16.5 * 7.698); }
+.tv-hero-site { color: var(--muted); font-weight: 600; }
 .tv-hero-actions { position: absolute; left: calc(var(--tv-safe-h) + var(--dp) * 10); bottom: calc(var(--dp) * 24); display: flex; align-items: center; gap: calc(var(--dp) * 12); }
 /* Play and Details (HeroPill, TvDetailsPill): the same bright pill, the text colour as its fill and the
    page's ground as its ink, both 52 dp tall so the two share one top, foot and middle. Under the remote
@@ -153,12 +174,18 @@ html[data-tv-keys] .tv-hero-play:focus, html[data-tv-keys] .tv-hero-pill:focus {
 .tv-hero-dots { position: absolute; right: var(--tv-end); bottom: calc(var(--dp) * 24); height: calc(var(--dp) * 52); display: flex; align-items: center; gap: calc(var(--dp) * 6); }
 .tv-hero-dots span { width: calc(var(--dp) * 6); height: calc(var(--dp) * 6); border-radius: 999px; background: color-mix(in srgb, var(--fg) 35%, transparent); transition: width var(--fast); }
 .tv-hero-dots span.on { width: calc(var(--dp) * 18); background: var(--fg); }
-/* While Recently added is asked for: the same size, still (nothing animates while waiting on a TV). */
-.tv-hero-wait { position: absolute; left: calc(var(--tv-safe-h) + var(--dp) * 10); bottom: calc(var(--dp) * 24); display: flex; flex-direction: column; gap: calc(var(--dp) * 10); }
-.tv-hero-wait span { display: block; border-radius: calc(var(--dp) * 8); background: var(--surface-high); }
-.tv-hero-wait span:nth-child(1) { width: calc(var(--dp) * 280); height: calc(var(--dp) * 28); }
-.tv-hero-wait span:nth-child(2) { width: calc(var(--dp) * 180); height: calc(var(--dp) * 14); }
-.tv-hero-wait span:nth-child(3) { width: calc(var(--dp) * 160); height: calc(var(--dp) * 52); margin-top: calc(var(--dp) * 6); border-radius: 999px; }
+/*
+ * While Recently added is asked for: the page's own shapes where they will stand, so nothing jumps
+ * when it comes: the logo's placeholder on the title's foot, the facts line, Play and Details.
+ * Still (nothing animates while waiting on a TV, however long the chats take).
+ */
+.tv-hero-wait { position: absolute; left: calc(var(--tv-safe-h) + var(--dp) * 10); bottom: calc(var(--dp) * 24); display: flex; flex-direction: column; align-items: flex-start; }
+.tv-hero-wait i { display: block; border-radius: calc(var(--dp) * 8); background: var(--surface-high); }
+.tv-hero-wait-logo { width: calc(var(--dp) * 224); height: calc(var(--dp) * 35); }
+.tv-hero-wait-facts { width: calc(var(--dp) * 200); height: calc(var(--dp) * 14); margin-top: calc(var(--dp) * 11); }
+.tv-hero-wait-pills { display: flex; gap: calc(var(--dp) * 12); margin-top: calc(var(--dp) * 17); }
+.tv-hero-wait-pills i { width: calc(var(--dp) * 160); height: calc(var(--dp) * 52); border-radius: 999px; }
+.tv-hero-wait-pills i + i { width: calc(var(--dp) * 132); }
 
 /* ---- Titles and rows ---- */
 html[data-form=tv] .page-title { font-size: calc(var(--dp) * 24); line-height: calc(var(--dp) * 32); font-weight: 600; margin: 0 0 calc(var(--dp) * 16); }
@@ -213,6 +240,27 @@ html[data-form=tv] .icon-button .icon, html[data-form=tv] .round-button .icon { 
 html[data-form=tv] .icon-button:hover { background: none; }
 html[data-form=tv][data-tv-keys] .icon-button:focus, html[data-form=tv][data-tv-keys] .round-button:focus { outline: none; background: var(--focus-fill); color: var(--on-focus-fill); transform: scale(var(--focus-scale)); }
 html[data-form=tv][data-tv-keys] .star.on:focus { color: var(--on-focus-fill); }
+
+/*
+ * The Add chats picker on a TV (WB22). The remote moves by where things stand, so what the viewer reaches by
+ * Down has to start where the ticks do: Select all and the way to count more come first in their lines, then the
+ * filters. The chips, the tick and the foot are sized in dp like the rest, and Done sits clear of the rows.
+ */
+html[data-form=tv] .picker-actions { gap: calc(var(--dp) * 10); margin-bottom: calc(var(--dp) * 6); }
+html[data-form=tv] .picker-actions > .link { order: -1; margin-inline-start: 0; }
+html[data-form=tv] .picker-scopes { gap: calc(var(--dp) * 6); }
+html[data-form=tv] .picker-scopes .history-tab { font-size: calc(var(--dp) * 12); line-height: calc(var(--dp) * 18); padding: calc(var(--dp) * 4) calc(var(--dp) * 12); }
+html[data-form=tv][data-tv-keys] .picker-scopes .history-tab:focus { outline: none; background: var(--focus-fill); color: var(--on-focus-fill); border-color: transparent; transform: scale(var(--focus-scale)); }
+html[data-form=tv] .picker-count-more { gap: calc(var(--dp) * 4) calc(var(--dp) * 12); margin-bottom: calc(var(--dp) * 6); }
+html[data-form=tv] .picker-count-more > .link { order: -1; }
+html[data-form=tv] input.chat-tick { width: calc(var(--dp) * 14); height: calc(var(--dp) * 14); }
+html[data-form=tv] .pick-chat { gap: calc(var(--dp) * 12); padding: calc(var(--dp) * 4) calc(var(--dp) * 8); }
+html[data-form=tv][data-tv-keys] .pick-chat:has(.chat-tick:focus) { background: var(--focus-fill); color: var(--on-focus-fill); }
+html[data-form=tv][data-tv-keys] .pick-chat:has(.chat-tick:focus) .muted { color: inherit; }
+html[data-form=tv][data-tv-keys] .pick-chat .chat-tick:focus { outline: none; }
+html[data-form=tv] .select-bar.picker-bar { width: auto; min-width: calc(var(--dp) * 280); max-width: calc(100vw - var(--tv-safe-h) * 2); bottom: calc(var(--dp) * 24); gap: calc(var(--dp) * 12); padding: calc(var(--dp) * 4) calc(var(--dp) * 4) calc(var(--dp) * 4) calc(var(--dp) * 14); border-radius: calc(var(--dp) * 16); }
+html[data-form=tv] .picker-bar .select-count { font-size: calc(var(--dp) * 12); white-space: nowrap; }
+html[data-form=tv] .picker-bar button.primary { padding: calc(var(--dp) * 8) calc(var(--dp) * 16); font-size: calc(var(--dp) * 14); }
 
 /* ---- A page's own bar (a chat's): Back, the title and its buttons ---- */
 html[data-form=tv] .page-bar { gap: calc(var(--dp) * 12); margin: 0 0 calc(var(--dp) * 16); min-height: calc(var(--dp) * 48); }

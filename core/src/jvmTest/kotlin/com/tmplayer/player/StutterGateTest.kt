@@ -353,6 +353,32 @@ class StutterGateTest {
     }
 
     @Test
+    fun `a hardware stutter past the chip's rated frame rate is still sent and says so`() {
+        // HX71: 4K 10-bit HEVC at 60 frames now goes to a phone chip rated for fewer frames there.
+        // The gate must not hide it, and the report must tell it from a hardware mystery.
+        val file = Files.createTempDirectory("gate").toFile().resolve("stutter.json")
+        val sent = mutableListOf<SentryEvent>()
+        val reporter = StutterReporter({ true }, StutterLimits(file) { 5L }, sent::add)
+        val past = facts(speed = 100, dropped = 120, frames = 678, fps = 60f, profile = "hvc1.2.4.L153.90", model = "V2270A")
+            .copy(bitDepth = 10, width = 3840, height = 1604, decoder = "c2.mtk.hevc.decoder", hwFit = "rate")
+        assertTrue(reporter.report(past))
+        assertEquals("rate", sent.single().tags?.get("hw_fit"))
+        assertEquals("hardware", sent.single().tags?.get("decoder_type"))
+        // Nothing dropped, nothing slow: no report, however the chip fit it.
+        assertFalse(reporter.report(past.copy(dropped = 0, model = "RMX3710")))
+        assertEquals(1, sent.size)
+        // Only the fixed words ride; anything else, and nothing known, is unknown.
+        for (word in listOf("rated", "level", "rate", "none")) {
+            assertEquals(word, StutterReport.tagsOf(facts().copy(hwFit = word.uppercase()))["hw_fit"])
+        }
+        for (dirty in listOf("", "fast", "/sdcard/Secret.mkv", "rate ", "\u0000")) {
+            assertEquals("unknown", StutterReport.tagsOf(facts().copy(hwFit = dirty))["hw_fit"], dirty)
+        }
+        assertEquals("unknown", StutterReport.tagsOf(facts())["hw_fit"])
+        assertEquals(StutterReport.ALLOWED_TAGS, StutterReport.scrub(sent.single()).tags!!.keys)
+    }
+
+    @Test
     fun `a policy, a cause or a bit count outside its words is unknown`() {
         for (dirty in listOf("Decoder policy: fallback on", "/sdcard/Secret.mkv", "x".repeat(65), "a b", "\u0000", "ASYNC_ON")) {
             assertEquals("unknown", StutterReport.tagsOf(facts().copy(policy = dirty))["policy"], dirty)

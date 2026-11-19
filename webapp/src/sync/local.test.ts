@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import { apply, decode, emptyDoc, encode, keyOf, mergeCounting, tdlibMessageId, type SyncDoc } from './format.ts'
-import { applyLocal, collect, nextBase, noBase, withPick, withoutPick, type Lists, type Writer } from './local.ts'
+import { applyLocal, collect, nextBase, noBase, withLines, withPick, withoutPick, type Lists, type Writer } from './local.ts'
 
 const CHAT = -1001234567890
 const NOW = 1_800_000_000_000
@@ -29,6 +29,7 @@ function recorder() {
         putStar: (c) => log.push(`star ${c}`),
         dropStar: (c) => log.push(`unstar ${c}`),
         putPick: (c, m, p, at) => log.push(`pick ${c}:${m} ${p ? `${p.kind}:${p.id}` : 'none'} @${at}`),
+        putTitle: (c, m, title, at) => log.push(`title ${c}:${m} ${title ?? 'none'} @${at}`),
     }
     return { log, writer }
 }
@@ -86,6 +87,86 @@ test('a poster pick keeps the rename and "not the same video" the apps put on th
     assert.equal(withPick(undefined, 'tmdb=film:1'), 'tmdb=film:1')
     assert.equal(withPick('wrong', 'tmdb=film:1'), 'tmdb=film:1', 'a pick lifts a wrong match')
     assert.equal(withoutPick('wrong\ntmdb=film:1'), 'wrong')
+})
+
+test('a rename is the title line of the video\'s correction, joined to the pick and "not the same video" the file holds, cut to the file\'s 60', () => {
+    const msg = tdlibMessageId(6)
+    const key = keyOf(CHAT, msg)
+    // Alone: a correction with the title line, at the time it was set.
+    const alone = collect(lists({ titles: [{ chatId: CHAT, messageId: 6, title: '  Night Lantern (2022)  ', at: NOW - 5 }] }), noBase(), emptyDoc(1), 1, NOW, 'web')
+    assert.deepEqual(alone.corrections.map((c) => [c.chat, c.msg, c.text, c.at]), [[CHAT, msg, 'title=Night Lantern (2022)', NOW - 5]])
+    // Beside what the apps put on the video: the pick and the split stay, the title is the web's.
+    const remote = emptyDoc(1)
+    remote.corrections.push({ chat: CHAT, msg, text: 'separate\ntmdb=show:123\ntitle=Phone name', at: 5 })
+    const joined = collect(lists({ titles: [{ chatId: CHAT, messageId: 6, title: 'Web name', at: NOW }] }), noBase(), remote, 1, NOW, 'web')
+    assert.deepEqual(joined.corrections.map((c) => [c.text, c.at]), [['separate\ntmdb=show:123\ntitle=Web name', NOW]])
+    // A pick and a rename together are one correction at the newer time.
+    const both = collect(lists({ picks: [{ chatId: CHAT, messageId: 6, text: 'tmdb=film:9', at: NOW - 9 }], titles: [{ chatId: CHAT, messageId: 6, title: 'Web name', at: NOW - 3 }] }), noBase(), emptyDoc(1), 1, NOW, 'web')
+    assert.deepEqual(both.corrections.map((c) => [c.text, c.at]), [['tmdb=film:9\ntitle=Web name', NOW - 3]])
+    // The file carries 60 characters, never half an emoji; the page keeps its 120.
+    const long = collect(lists({ titles: [{ chatId: CHAT, messageId: 6, title: `${'a'.repeat(59)}😀 tail`, at: NOW }] }), noBase(), emptyDoc(1), 1, NOW, 'web')
+    assert.equal(long.corrections[0].text, `title=${'a'.repeat(59)}😀`)
+    // Resetting the rename leaves the pick and the split; with nothing else it is a removal.
+    const reset = collect(lists({ titleTombs: [{ key, at: NOW - 10 }] }), noBase(), remote, 1, NOW, 'web')
+    assert.deepEqual(reset.corrections.map((c) => [c.text, c.at]), [['separate\ntmdb=show:123', NOW - 10]])
+    const bare = emptyDoc(1)
+    bare.corrections.push({ chat: CHAT, msg, text: 'title=Phone name', at: 5 })
+    const gone = collect(lists({ titleTombs: [{ key, at: NOW - 10 }] }), noBase(), bare, 1, NOW, 'web')
+    assert.deepEqual(gone.removed.map((r) => [r.list, r.key]), [['correction', key]])
+    assert.deepEqual(gone.corrections, [])
+    // A reset older than 90 days or with a bad key says nothing; a pick taken off leaves the rename.
+    const stale = collect(lists({ titleTombs: [{ key, at: NOW - 91 * 24 * 3_600_000 }, { key: 'garbage', at: NOW }] }), noBase(), remote, 1, NOW, 'web')
+    assert.deepEqual([stale.corrections, stale.removed], [[], []])
+    const unpicked = collect(lists({ tombs: [{ list: 'correction', key, at: NOW - 10 }], titles: [{ chatId: CHAT, messageId: 6, title: 'Web name', at: NOW - 20 }] }), noBase(), remote, 1, NOW, 'web')
+    assert.deepEqual(unpicked.corrections.map((c) => c.text), ['separate\ntitle=Web name'])
+    assert.equal(withLines('separate\ntitle=A', { title: null }), 'separate')
+    // A line this web does not know (a newer app's) is kept verbatim beside a pick or a rename, and never makes a correction empty.
+    const newer = emptyDoc(1)
+    newer.corrections.push({ chat: CHAT, msg, text: 'separate\nyear=2019\ntitle=Phone name\nfuture-flag', at: 5 })
+    const kept = collect(lists({ titles: [{ chatId: CHAT, messageId: 6, title: 'Web name', at: NOW }] }), noBase(), newer, 1, NOW, 'web')
+    assert.deepEqual(kept.corrections.map((c) => c.text), ['separate\ntitle=Web name\nyear=2019\nfuture-flag'])
+    const picked2 = collect(lists({ picks: [{ chatId: CHAT, messageId: 6, text: 'tmdb=film:9', at: NOW }] }), noBase(), newer, 1, NOW, 'web')
+    assert.deepEqual(picked2.corrections.map((c) => c.text), ['separate\ntmdb=film:9\ntitle=Phone name\nyear=2019\nfuture-flag'])
+    const onlyUnknown = emptyDoc(1)
+    onlyUnknown.corrections.push({ chat: CHAT, msg, text: 'year=2019\ntitle=Phone name', at: 5 })
+    const left = collect(lists({ titleTombs: [{ key, at: NOW - 10 }] }), noBase(), onlyUnknown, 1, NOW, 'web')
+    assert.deepEqual(left.corrections.map((c) => c.text), ['year=2019'])
+    assert.deepEqual(left.removed, [], 'unknown lines left: no removal of the whole correction')
+    // A hostile pile of unknown lines is carried only so far.
+    const pile = emptyDoc(1)
+    pile.corrections.push({ chat: CHAT, msg, text: `separate\n${Array.from({ length: 50 }, (_, i) => `x${i}=${'y'.repeat(500)}`).join('\n')}`, at: 5 })
+    const bounded = collect(lists({ titles: [{ chatId: CHAT, messageId: 6, title: 'T', at: NOW }] }), noBase(), pile, 1, NOW, 'web')
+    assert.ok(bounded.corrections[0].text.length < 1_000)
+    assert.equal(withLines('tmdb=film:1\ntitle=A', { title: undefined }), 'tmdb=film:1\ntitle=A')
+})
+
+test('a rename comes in from the apps\' file, a reset or a removal there takes it off, and the newer side wins both ways', async () => {
+    const remote = await coreFile()
+    const now = remote.updatedAt + 1_000
+    // The core fixture carries "Night Lantern (2022)" as a rename on video 6.
+    const local = collect(lists(), noBase(), remote, 777, now, 'web')
+    const a = apply(local, mergeCounting(remote, local, now).doc)
+    const { log, writer } = recorder()
+    await applyLocal(a, writer)
+    assert.deepEqual(log.filter((l) => l.startsWith('title')), [`title ${CHAT}:6 Night Lantern (2022) @${remote.corrections[0].at}`])
+    // The web renamed it later: its title wins and the pick the file holds stays on the line.
+    const newer = collect(lists({ titles: [{ chatId: CHAT, messageId: 6, title: 'Lantern', at: remote.corrections[0].at + 10 }] }), noBase(), remote, 777, now, 'web')
+    const merged = mergeCounting(remote, newer, now).doc
+    assert.equal(merged.corrections.find((c) => c.msg === tdlibMessageId(6))?.text, 'tmdb=show:123\ntitle=Lantern')
+    assert.deepEqual(apply(newer, merged).correctionsIn, [])
+    // The apps reset the rename later than the web set it: the web's title goes, the pick stays.
+    const web = collect(lists({ titles: [{ chatId: CHAT, messageId: 6, title: 'Lantern', at: now - 5_000 }] }), noBase(), emptyDoc(777), 777, now, 'web')
+    const phone = emptyDoc(777)
+    phone.corrections.push({ chat: CHAT, msg: tdlibMessageId(6), text: 'tmdb=show:123', at: now - 4_000 })
+    const taken = recorder()
+    await applyLocal(apply(web, mergeCounting(phone, web, now).doc), taken.writer)
+    assert.deepEqual(taken.log.filter((l) => /^(pick|title)/.test(l)), [`pick ${CHAT}:6 show:123 @${now - 4_000}`, `title ${CHAT}:6 none @${now - 4_000}`])
+    // The apps removed the whole correction later than the web wrote it: both lines go.
+    const removedOnPhone = emptyDoc(777)
+    removedOnPhone.removed.push({ list: 'correction', key: keyOf(CHAT, tdlibMessageId(6)), at: now - 3_000 })
+    const out = recorder()
+    await applyLocal(apply(web, mergeCounting(removedOnPhone, web, now).doc), out.writer)
+    assert.deepEqual(out.log.filter((l) => /^(pick|title)/.test(l)), [`pick ${CHAT}:6 none @0`, `title ${CHAT}:6 none @0`])
 })
 
 test('an apps\' file written into a web with nothing: places, marks and lines in the web\'s ids, the show line, bookmarks and lists left alone', async () => {

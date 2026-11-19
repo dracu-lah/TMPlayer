@@ -1,0 +1,69 @@
+/* The report form (ui/FeedbackForm.tsx) on the page's .confirm look: a window on the desktop, a full
+   screen sheet on a phone, a form with a QR code beside it on the TV. */
+.confirm.feedback { width: min(520px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: hidden; }
+.feedback h2 { overflow-wrap: anywhere; }
+.fb-layout { display: flex; gap: 24px; flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.fb-main { display: flex; flex-direction: column; gap: 16px; flex: 1; min-width: 0; }
+.fb-main p { margin: 0; overflow-wrap: anywhere; }
+.fb-kind { grid-template-columns: repeat(2, 1fr); }
+.fb-field { display: flex; flex-direction: column; gap: 6px; }
+.fb-field > label { font-size: 14px; line-height: 20px; font-weight: 500; }
+.fb-field p { margin: 0; }
+/* The message field takes the page's text field look (styles.css styles inputs only); 16 px keeps iOS from zooming in. */
+.feedback textarea {
+  font: inherit; font-size: 16px; line-height: 24px; color: var(--fg); background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r-m); padding: 11px 14px; width: 100%; min-height: 144px; max-height: 40dvh; resize: vertical; outline: none;
+}
+.feedback textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.feedback [aria-invalid=true] { border-color: var(--error); }
+.feedback [aria-invalid=true]:focus { box-shadow: 0 0 0 1px var(--error); }
+.feedback .confirm-buttons { flex: none; flex-wrap: wrap; }
+.feedback .confirm-buttons button.link { min-height: 44px; }
+/* What goes, word for word: a list of label and value. */
+.fb-review { margin: 0; display: flex; flex-direction: column; gap: 12px; }
+.fb-line { display: flex; flex-direction: column; gap: 2px; }
+.fb-line dt { font-size: 12px; line-height: 16px; color: var(--muted); }
+.fb-line dd { margin: 0; overflow-wrap: anywhere; }
+.fb-long { white-space: pre-wrap; max-height: 30dvh; overflow-y: auto; border: 1px solid var(--line); border-radius: var(--r-m); padding: 8px 12px; }
+.fb-busy { display: flex; align-items: center; gap: 12px; }
+.fb-spinner { width: 24px; height: 24px; border-radius: 50%; border: 3px solid var(--line); border-top-color: var(--accent); animation: fb-spin 900ms linear infinite; }
+@keyframes fb-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .fb-spinner { animation-duration: 3s; } }
+/* FB-7K3Q-M4XP: large and monospace, so it can be read out across the room. */
+.fb-code { font: 700 32px/40px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: 2px; text-align: center; color: var(--accent); user-select: all; overflow-wrap: anywhere; }
+.fb-ways { display: flex; flex-direction: column; gap: 4px; border-top: 1px solid var(--line); padding-top: 12px; }
+.fb-ways-title { font-size: 12px; line-height: 16px; font-weight: 500; color: var(--muted); margin: 0; }
+.fb-ways-row { display: flex; flex-wrap: wrap; gap: 4px 20px; }
+.fb-ways-row .link { min-height: 44px; display: inline-flex; align-items: center; padding-block: 0; }
+.fb-qr { flex: none; display: flex; flex-direction: column; align-items: center; gap: 8px; width: 200px; }
+.fb-qr-code { width: 200px; height: 200px; border-radius: var(--r-m); overflow: hidden; background: #fff; }
+.fb-qr-code svg { display: block; width: 100%; height: 100%; }
+.fb-qr p { margin: 0; text-align: center; }
+
+/* A phone: the whole screen, the buttons kept in view under the scrolling fields. */
+:root[data-form="phone"] .feedback {
+  width: 100%; max-width: none; height: 100dvh; max-height: none; margin: 0; border: 0; border-radius: 0;
+  padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+}
+:root[data-form="phone"] .feedback[open] { display: flex; }
+:root[data-form="phone"] .fb-layout { flex: 1; overflow-y: auto; overscroll-behavior: contain; }
+@media (max-width: 359px) { .feedback .confirm-buttons { flex-direction: column-reverse; align-items: stretch; } }
+
+/* The TV: bigger type, the QR code beside the form, the remote's focus on the buttons and fields. */
+html[data-form=tv] .confirm.feedback { width: min(calc(var(--dp) * 760), 92vw); max-height: 94vh; gap: calc(var(--dp) * 12); padding: calc(var(--dp) * 20) calc(var(--dp) * 24); }
+html[data-form=tv] .fb-intro { display: none; }
+html[data-form=tv] .feedback h2 { font-size: calc(var(--dp) * 22); line-height: calc(var(--dp) * 28); }
+html[data-form=tv] .fb-layout { gap: calc(var(--dp) * 32); }
+html[data-form=tv] .fb-main { gap: calc(var(--dp) * 12); font-size: calc(var(--dp) * 16); line-height: calc(var(--dp) * 24); }
+html[data-form=tv] .fb-field > label { font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 20); }
+html[data-form=tv] .feedback textarea { font-size: calc(var(--dp) * 16); line-height: calc(var(--dp) * 24); min-height: calc(var(--dp) * 72); padding: calc(var(--dp) * 10) calc(var(--dp) * 14); border-radius: calc(var(--dp) * 12); }
+html[data-form=tv] .fb-qr { width: calc(var(--dp) * 220); gap: calc(var(--dp) * 8); }
+html[data-form=tv] .fb-qr-code { width: calc(var(--dp) * 220); height: calc(var(--dp) * 220); border-radius: calc(var(--dp) * 12); }
+html[data-form=tv] .fb-code { font-size: calc(var(--dp) * 36); line-height: calc(var(--dp) * 44); }
+html[data-form=tv] .fb-ways-row .link { min-height: calc(var(--dp) * 40); }
+html[data-form=tv] .fb-line dt { font-size: calc(var(--dp) * 12); line-height: calc(var(--dp) * 16); }
+/* Left aligned, so Down from the fields (which fill the left of the window) reaches the buttons by the remote's geometry. */
+html[data-form=tv] .feedback .confirm-buttons { justify-content: flex-start; }
+/* A field the remote has stopped on but not opened yet (read only until OK) reads as waiting. */
+html[data-form=tv][data-tv-keys] .feedback textarea[data-tv-locked]:focus,
+html[data-form=tv][data-tv-keys] .feedback input[data-tv-locked]:focus { background: var(--focus-fill); color: var(--on-focus-fill); border-color: transparent; box-shadow: none; }

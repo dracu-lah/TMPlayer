@@ -11,10 +11,12 @@ import com.tmplayer.data.Archives
 import com.tmplayer.data.ChatKind
 import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.ContentProtection
+import com.tmplayer.data.DeviceForm
 import com.tmplayer.data.EpisodeNeighbours
 import com.tmplayer.data.EpisodeTag
 import com.tmplayer.data.FormatFacts
 import com.tmplayer.data.Fuzzy
+import com.tmplayer.data.GlobalSearch
 import com.tmplayer.data.HomeLayout
 import com.tmplayer.data.HomeOrder
 import com.tmplayer.data.HomeRow
@@ -24,21 +26,45 @@ import com.tmplayer.data.MediaFacts
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.MediaName
 import com.tmplayer.data.MediaText
+import com.tmplayer.data.PosterPick
+import com.tmplayer.data.QualityHabit
+import com.tmplayer.data.QualityRead
+import com.tmplayer.data.RandomPick
 import com.tmplayer.data.ResumeRecord
 import com.tmplayer.data.ResumeRewind
 import com.tmplayer.data.Series
 import com.tmplayer.data.EpisodeGuide
 import com.tmplayer.data.SeriesShelf
+import com.tmplayer.data.SettingsGroup
+import com.tmplayer.data.SettingsMap
+import com.tmplayer.data.SettingsSearch
 import com.tmplayer.data.copyQuality
+import com.tmplayer.data.ForumTopicSummary
 import com.tmplayer.data.ShelfEntry
 import com.tmplayer.data.SizeFilter
 import com.tmplayer.data.SplitPieces
+import com.tmplayer.data.StoredKeys
+import com.tmplayer.data.TgLink
+import com.tmplayer.data.TopicHit
+import com.tmplayer.data.TopicSearch
 import com.tmplayer.data.VideoCopies
+import com.tmplayer.data.VideoCorrection
+import com.tmplayer.data.VideoCorrections
+import com.tmplayer.data.VideoFacets
+import com.tmplayer.data.VideoFaceting
+import com.tmplayer.data.VideoFilter
+import com.tmplayer.data.VideoFiltering
 import com.tmplayer.data.VideoSort
 import com.tmplayer.data.VideoSorting
 import com.tmplayer.i18n.L
+import com.tmplayer.i18n.Languages
 import com.tmplayer.i18n.Translator
+import com.tmplayer.online.ChatLanguageHints
 import com.tmplayer.online.MetaKind
+import com.tmplayer.online.SubtitlePickKeys
+import com.tmplayer.player.PlaybackWatch
+import com.tmplayer.player.SpeedMemory
+import kotlin.math.roundToInt
 
 // The app's own rules for the web player (webapp/, CP104), exported as one ES module that runs in
 // the page's Telegram worker: what counts as a video and what it is called, how a chat's videos
@@ -133,6 +159,8 @@ interface ShelfTile {
     val title: String
     val video: Video?
     val copies: Array<String>
+    /** How many versions the card says (HX38, [VideoCopies.versionCount]): the same file posted twice counts once; 1 for a show. */
+    val versions: Int
     val parts: Array<String>
     val pieces: Array<String>
     /**
@@ -232,6 +260,11 @@ interface PosterAsk {
     val anime: Boolean
     /** ISO 639-1 codes, a hint for which of two titles of one name is meant. */
     val languages: Array<String>
+    /**
+     * The languages the chat's own title names (HX24, [noteChat] first), ISO 639-1: a weaker hint
+     * than [languages], for the same case, never a reason to accept a title. Empty for most chats.
+     */
+    val hints: Array<String>
     /**
      * "S01E02" when the video is one episode of a show (not an extra), else null: a lone episode
      * on Home's carousel stands for its show and its Play names the episode (HomeFeatured.loneEpisode).
@@ -355,16 +388,88 @@ fun shelf(
     started: Array<String>,
 ): Shelf {
     val split = SizeFilter.split(videos.map(::toItem), minBytes.toLong(), maxBytes.toLong()) { it.sizeBytes }
+    val sorted = sortedEntries(split.kept, sort, watched, started, emptyArray(), emptyArray())
+    return plain("tiles" to sorted.map(::tile).toTypedArray(), "hiddenBySize" to split.hidden)
+}
+
+/** [items] arranged into shows, copies and pieces, in [sort]'s order, with where the viewer is with each video. */
+private fun sortedEntries(
+    items: List<MediaItem>,
+    sort: String,
+    watched: Array<String>,
+    started: Array<String>,
+    touched: Array<String>,
+    touchedAt: Array<Double>,
+): List<ShelfEntry> {
     val done = watched.toHashSet()
     val going = started.toHashSet()
-    val sorted = VideoSorting.sort(SeriesShelf.arrange(split.kept), VideoSort.decode(sort), progress = { item ->
+    val last = HashMap<String, Long>()
+    for (i in 0 until minOf(touched.size, touchedAt.size)) last[touched[i]] = touchedAt[i].toLong()
+    return VideoSorting.sort(SeriesShelf.arrange(items), VideoSort.decode(sort), progress = { item ->
         when (item.id) {
             in done -> VideoSorting.Progress.Watched
             in going -> VideoSorting.Progress.InProgress
             else -> VideoSorting.Progress.Untouched
         }
-    }, locale = L.messages.locale)
-    return plain("tiles" to sorted.map(::tile).toTypedArray(), "hiddenBySize" to split.hidden)
+    }, locale = L.messages.locale, lastPlayed = { last[it.id] })
+}
+
+/**
+ * A chat's listing with the Sort menu's whole Show and filter side (U6, [VideoFilter] and
+ * [VideoFacets], the one pipeline the apps' grids run): size limits, then arranged, sorted
+ * ([sort] also takes "LastPlayed", from [touched] and [touchedAt], when each video was last
+ * watched), then screened by [filter] ("All", "Unwatched", "InProgress", "Watched", "OnDevice",
+ * "Shows", "Singles", "HighDefinition"; anything else is "All") and by [facets], the encoded line
+ * ([facetsWith]) the page keeps per chat. Like every order but Newest it works on the videos
+ * loaded so far.
+ */
+fun shelfView(
+    videos: Array<Video>,
+    sort: String,
+    filter: String,
+    facets: String?,
+    minBytes: Double,
+    maxBytes: Double,
+    watched: Array<String>,
+    started: Array<String>,
+    touched: Array<String>,
+    touchedAt: Array<Double>,
+    nowSec: Double,
+): ShelfView {
+    val split = SizeFilter.split(videos.map(::toItem), minBytes.toLong(), maxBytes.toLong()) { it.sizeBytes }
+    val led = sortedEntries(split.kept, sort, watched, started, touched, touchedAt)
+    val done = watched.toHashSet()
+    val going = started.toHashSet()
+    val progress: (MediaItem) -> VideoSorting.Progress = { item ->
+        when (item.id) {
+            in done -> VideoSorting.Progress.Watched
+            in going -> VideoSorting.Progress.InProgress
+            else -> VideoSorting.Progress.Untouched
+        }
+    }
+    val parsed = VideoFacets.decode(facets)
+    val faceted = VideoFaceting.screen(VideoFiltering.filter(led, VideoFilter.decode(filter), progress), parsed, nowSec.toLong())
+    return plain(
+        "tiles" to faceted.shown.map(::tile).toTypedArray(),
+        "hiddenBySize" to split.hidden,
+        "total" to led.size,
+        "hiddenByFilter" to (led.size - faceted.shown.size),
+        "unknown" to faceted.unknown,
+        "languages" to VideoFaceting.languagesIn(led, keep = parsed.language).toTypedArray(),
+    )
+}
+
+/** A chat's listing after [shelfView]: the tiles shown, and what the filters left out or could not judge. */
+interface ShelfView {
+    val tiles: Array<ShelfTile>
+    val hiddenBySize: Int
+    /** Entries before the filters, so "N hidden by your filter" is [hiddenByFilter]. */
+    val total: Int
+    val hiddenByFilter: Int
+    /** Entries listed after the matches because nothing states their length or picture ([VideoFaceting.Screened.unknown]). */
+    val unknown: Int
+    /** The audio languages the loaded names state, most common first, for the Language group; the picked one is always in. */
+    val languages: Array<String>
 }
 
 /** The episodes either side of [current] among [videos], the chat's, as the player steps them. */
@@ -409,6 +514,7 @@ fun posterAsk(video: Video): PosterAsk? {
         "series" to item.parsedName.isSeries,
         "anime" to query.anime,
         "languages" to query.languages.toTypedArray(),
+        "hints" to query.hints.toTypedArray(),
         "episode" to SeriesShelf.episodeOf(item).takeIf { it.isEpisode && it.extra == null && it.title.isNotBlank() }?.let { name ->
             name.episode?.let { "S${(name.season ?: 1).toString().padStart(2, '0')}E${it.toString().padStart(2, '0')}" }
         },
@@ -820,6 +926,7 @@ private fun tile(entry: ShelfEntry): ShelfTile = when (entry) {
             "title" to SeriesShelf.tileTitle(item),
             "video" to toWeb(item),
             "copies" to ids(item.versions),
+            "versions" to VideoCopies.versionCount(item, null),
             "parts" to ids(item.parts),
             "pieces" to ids(item.pieces),
             "piecesTotal" to (report?.total ?: 0),
@@ -838,6 +945,7 @@ private fun show(key: String, series: Series): ShelfTile = plain(
     "title" to series.title,
     "video" to toWeb(series.cover),
     "copies" to emptyArray<String>(),
+    "versions" to 1,
     "parts" to emptyArray<String>(),
     "pieces" to emptyArray<String>(),
     "piecesTotal" to 0,
@@ -946,6 +1054,494 @@ fun chatSubtitles(
         )
     }.toTypedArray()
 }
+
+// ---- one quality read, recommended copy first, versions (HX38) ----------------------------------
+
+/** What picture a copy is, read one way for the badge, the list and the order ([QualityRead]). */
+interface WebQuality {
+    /** "4K", "1080p", "720p", "SD", or null when neither the stated size nor the name says. */
+    val label: String?
+    /** The picture's height as the copies list reads it (2160 for 4K), or null. */
+    val height: Int?
+    /** The name says one picture over a file stated as another: the size is right, the flag says the name was not. */
+    val mismatch: Boolean
+    /** A cam, a telesync or a pre-DVD rip by its name: never recommended where a better copy exists. */
+    val lowGrade: Boolean
+}
+
+fun qualityRead(video: Video): WebQuality {
+    val item = toItem(video)
+    return plain(
+        "label" to QualityRead.of(item),
+        "height" to VideoCopies.heightOf(item),
+        "mismatch" to QualityRead.mismatch(item),
+        "lowGrade" to QualityRead.lowGrade(item),
+    )
+}
+
+/**
+ * The kind of device the copies are recommended for: "phone" (a screen that shows 1080p in full,
+ * so a 4K copy is offered but does not lead), "tv" or "computer". Anything else is left as it was.
+ */
+fun setCopyDevice(device: String) {
+    if (device == "phone" || device == "tv" || device == "computer") VideoCopies.deviceWord = device
+}
+
+/**
+ * [copies] in the order a list of copies shows them, recommended first ([GlobalSearch.copyOrder]),
+ * as ids: not a cam, one this browser plays smoothly (the ids of [slow] are the copies it cannot
+ * play natively, which the page knows and the rules do not), the viewer's audio [language]
+ * ("ta"), the picture the device suits, the newest.
+ */
+fun copyOrder(copies: Array<Video>, language: String?, slow: Array<String>): Array<String> {
+    val tooSlow = slow.toHashSet()
+    return GlobalSearch.copyOrder(copies.map(::toItem), language, { it.id in tooSlow }).map { it.id }.toTypedArray()
+}
+
+/** The copy nothing else settles (no pick, nothing started, no habit): [VideoCopies.bestForDevice], its id or null when no copy states its picture. */
+fun bestCopy(copies: Array<Video>, slow: Array<String>): String? {
+    val tooSlow = slow.toHashSet()
+    return VideoCopies.bestForDevice(copies.map(::toItem), { it.id in tooSlow })?.id
+}
+
+/**
+ * The copy Play opens ([VideoCopies.pick]): the one the viewer [chosen] for this video, else the
+ * one they [started], else the audio [language], else the picture nearest what they usually play
+ * ([habit], from [habitNoted]), else the best for the device. [slow] as for [copyOrder]; the
+ * viewer's own pick stands whatever it is.
+ */
+fun pickCopy(
+    copies: Array<Video>,
+    chosen: String?,
+    started: Array<String>,
+    habit: String?,
+    language: String?,
+    slow: Array<String>,
+): String? {
+    val going = started.toHashSet()
+    val tooSlow = slow.toHashSet()
+    return VideoCopies.pick(
+        copies.map(::toItem),
+        chosen = chosen,
+        started = { it.id in going },
+        habit = QualityHabit.decode(habit),
+        language = language,
+        tooSlow = { it.id in tooSlow },
+    )?.id
+}
+
+/** The habit line ("1080:12,720:3") with one more play at [height] noted; what the page stores as the usual quality. */
+fun habitNoted(habit: String?, height: Int?): String = QualityHabit.decode(habit).noted(height).encode()
+
+/**
+ * How many versions a card says for [copies] of one video: the distinct files, 1 for one copy
+ * ([VideoCopies.versionCount]). The null gate is on purpose: GlobalSearch.fileCount and
+ * VideoCopies.oneOfEachFile use the default ChatGate.browsing and must not be exported to JS, or
+ * ChatGate and its coroutines return to the worker (+100 KB gzip).
+ */
+fun versionCount(copies: Array<Video>): Int =
+    if (copies.size < 2) 1 else VideoCopies.distinctFiles(copies.map(::toItem), null).size.coerceAtLeast(1)
+
+// ---- the chat's language as a hint for the poster lookup (HX24) -----------------------------------
+
+/** Notes [title] as chat [chatId]'s name: [posterAsk] then carries its language words as `hints`. A rename replaces the note. */
+fun noteChat(chatId: Double, title: String) = ChatLanguageHints.note(chatId.toLong(), title)
+
+/** The language words in a chat's title ("Malayalam Movies HD" gives "ml"), ISO 639-1. */
+fun chatLanguages(title: String): Array<String> = MediaName.languageHints(title).toTypedArray()
+
+/** Forgets every chat's title (signing out). */
+fun forgetChats() = ChatLanguageHints.clear()
+
+// ---- what the viewer corrected by hand: not the same video, a rename, a poster pick -----------------
+
+/** One video's correction as [correctionRead] reads the stored lines. */
+interface WebCorrection {
+    /** "Not the same video": never folded with another file. */
+    val separate: Boolean
+    /** "Wrong match": no poster or overview from the providers. */
+    val wrong: Boolean
+    /** The viewer's own title, or null. */
+    val title: String?
+    /** The picked TMDB title as "film:123" or "show:5", or null. */
+    val pick: String?
+}
+
+/** A correction's stored lines (`separate`, `wrong`, `tmdb=film:123`, `title=...`) read; garbage reads as no correction. */
+fun correctionRead(text: String?): WebCorrection {
+    val c = VideoCorrection.decode(text)
+    return plain(
+        "separate" to c.separate,
+        "wrong" to c.wrongMatch,
+        "title" to c.title,
+        "pick" to c.pick?.let { (if (it.show) "show" else "film") + ":" + it.tmdbId },
+    )
+}
+
+private val PICK_LINE = Regex("""^(film|show):(\d{1,9})$""")
+
+/**
+ * [text]'s correction with one [field] changed, as the stored lines ("" when nothing is left to
+ * keep): "separate" and "wrong" on for [value] "1", off otherwise; "title" to [value] (blank or
+ * null removes it, cut to [VideoCorrections.TITLE_MAX]); "pick" to "film:123" or "show:5" (anything
+ * else removes it; a pick lifts "wrong", turning "wrong" on drops the pick); "resetMatch" drops
+ * both. Other fields change nothing.
+ */
+fun correctionSet(text: String?, field: String, value: String?): String {
+    val c = VideoCorrection.decode(text)
+    val next = when (field) {
+        "separate" -> c.copy(separate = value == "1")
+        "wrong" -> c.withWrongMatch(value == "1")
+        "title" -> c.copy(title = value?.trim()?.take(VideoCorrections.TITLE_MAX)?.trim()?.ifEmpty { null })
+        "pick" -> c.withPick(
+            PICK_LINE.matchEntire(value.orEmpty().trim())?.let { found ->
+                val id = found.groupValues[2].toIntOrNull()?.takeIf { it > 0 } ?: return@let null
+                PosterPick(id, show = found.groupValues[1] == "show")
+            },
+        )
+        "resetMatch" -> c.resetMatch()
+        else -> c
+    }
+    return next.encode()
+}
+
+/**
+ * Hands the corrections on this device to the grouping: [ids] are "chatId:messageId", [texts] the
+ * stored lines. [shelf], [shelfView] and the rest group by them from here on ("Not the same
+ * video" splits a wrong group, a rename names it). Replaces what was set before.
+ */
+fun setCorrections(ids: Array<String>, texts: Array<String>) {
+    val all = HashMap<String, VideoCorrection>()
+    for (i in 0 until minOf(ids.size, texts.size)) {
+        val correction = VideoCorrection.decode(texts[i])
+        if (!correction.isEmpty) all[ids[i]] = correction
+    }
+    VideoCorrections.set(all)
+}
+
+// ---- the Sort menu's filters, "Play random" (U6, U16) -------------------------------------------------
+
+/** The Sort menu's filters by what a video is ([VideoFacets]), as the page draws their chips. */
+interface WebFacets {
+    /** "any", "short" (under 20 minutes) or "long" (an hour or more). */
+    val length: String
+    /** "any", "4k", "1080" or "720": at least that sharp. */
+    val picture: String
+    val hdr: Boolean
+    val subtitles: Boolean
+    /** An ISO 639-1 code, or null for any language. */
+    val language: String?
+    /** "any", "week", "month" or "year". */
+    val added: String
+    /** How many filters are on, for the Sort button's badge. */
+    val count: Int
+}
+
+/** The filters in a chat's stored line ("len=short;pic=1080;hdr=1"); each unreadable part is that filter off, never the whole line lost. */
+fun facetsRead(line: String?): WebFacets {
+    val f = VideoFacets.decode(line)
+    return plain(
+        "length" to f.length.code,
+        "picture" to f.picture.code,
+        "hdr" to f.hdr,
+        "subtitles" to f.subtitles,
+        "language" to f.language,
+        "added" to f.added.code,
+        "count" to f.count,
+    )
+}
+
+/**
+ * [line] with one filter changed, as the stored line: [field] "length", "picture", "added" take a
+ * code of [facetsRead] (an unknown one is off), "hdr" and "subtitles" take "1" for on, "language"
+ * takes a code or null for any. "clear" drops every filter.
+ */
+fun facetsWith(line: String?, field: String, value: String?): String {
+    val f = VideoFacets.decode(line)
+    val next = when (field) {
+        "length" -> f.copy(length = VideoFacets.Length.entries.firstOrNull { it.code == value } ?: VideoFacets.Length.Any)
+        "picture" -> f.copy(picture = VideoFacets.Picture.entries.firstOrNull { it.code == value } ?: VideoFacets.Picture.Any)
+        "added" -> f.copy(added = VideoFacets.Added.entries.firstOrNull { it.code == value } ?: VideoFacets.Added.Any)
+        "hdr" -> f.copy(hdr = value == "1")
+        "subtitles" -> f.copy(subtitles = value == "1")
+        "language" -> f.copy(language = value?.lowercase()?.takeIf { it.length in 2..3 && it.all { c -> c in 'a'..'z' } })
+        "clear" -> VideoFacets.NONE
+        else -> f
+    }
+    return next.encode()
+}
+
+/** The Show filters in the order the menu lists them; "HighDefinition" only where it is already picked ([VideoFilter]). */
+fun videoFilters(): Array<String> = VideoFilter.entries.map { it.name }.toTypedArray()
+
+/** The orders in the order the menu lists them ([VideoSort]). */
+fun videoSorts(): Array<String> = VideoSort.entries.map { it.name }.toTypedArray()
+
+/**
+ * Which of [videos] "Play random" plays (U16, [RandomPick]): unwatched while any is left ([watched]
+ * are ids), never [last] again while anything else is, null for an empty list. Returns an id.
+ */
+fun playRandom(videos: Array<Video>, watched: Array<String>, last: String?): String? {
+    val done = watched.toHashSet()
+    return RandomPick.pick(videos.toList(), { it.id }, { it.id in done }, last)?.id
+}
+
+// ---- speed, per series, chat and topic (CP48) ------------------------------------------------------
+
+/** Where one video's speed is remembered ([SpeedMemory.Scopes]): [series] for a show or a course, [chat] for the chat or topic. */
+interface WebSpeedScopes {
+    val series: String?
+    val chat: String?
+    /** Where a newly picked speed is written: the narrowest place the video belongs to. */
+    val target: String?
+    /** Every scope the video reads from, narrowest first, which choosing 1x forgets. */
+    val all: Array<String>
+}
+
+fun speedScopes(video: Video): WebSpeedScopes {
+    val item = toItem(video)
+    val key = MediaName.parse(item.title).title.ifBlank { item.title }
+    val scopes = SpeedMemory.scopesOf(item, key)
+    return plain(
+        "series" to scopes.series,
+        "chat" to scopes.chat,
+        "target" to scopes.target,
+        "all" to scopes.all.toTypedArray(),
+    )
+}
+
+/** The name a scope's speed is stored under (the apps' `speed_...`). */
+fun speedStoreKey(scope: String): String = StoredKeys.speed(scope)
+
+/** The speed to open at: [file], else [series], else [chat], else 1 ([SpeedMemory.resolve]); a value that cannot be a speed is passed over. */
+fun speedResolve(file: Double?, series: Double?, chat: Double?): Double =
+    twoDecimals(SpeedMemory.resolve(file?.toFloat(), series?.toFloat(), chat?.toFloat()))
+
+/** What to store for a picked [value]: the speed kept to two decimals within what a player can do, or null for 1x (written as nothing). */
+fun speedKeep(value: Double): Double? = SpeedMemory.toKeep(value.toFloat())?.let(::twoDecimals)
+
+/** A speed the rules hold as a Float, as the exact two decimal number the page compares and stores (1.1f would widen to 1.100000023841858). */
+private fun twoDecimals(speed: Float): Double = (speed.toDouble() * 100).roundToInt() / 100.0
+
+// ---- Settings' map and its search (U20) --------------------------------------------------------------
+
+/** One row of Settings as the map lists it, in the provided catalog's words. [id] is the same on every form. */
+interface WebSettingsRow {
+    val id: String
+    /** The page it lives on ([SettingsGroup]'s name: "Playback", "Subtitles", "Storage", ...). */
+    val group: String
+    val groupTitle: String
+    val groupSummary: String
+    val title: String
+    /** The lines it can show under it. */
+    val details: Array<String>
+    /** What it needs before it is drawn ([com.tmplayer.data.SettingsNeed]'s name), or null. */
+    val need: String?
+}
+
+private fun formOf(name: String): DeviceForm = when (name) {
+    "phone" -> DeviceForm.Phone
+    "tv" -> DeviceForm.Tv
+    else -> DeviceForm.Desktop
+}
+
+private fun settingsText(form: DeviceForm): (String) -> String = { key ->
+    val word = form.name.lowercase()
+    L.messages.format(key, mapOf("device" to word, "form" to word))
+}
+
+/** The rows [form] ("phone", "tv" or "desktop") has, by page in the order the list shows them, in the provided catalog's words. */
+fun settingsRows(form: String): Array<WebSettingsRow> {
+    val on = formOf(form)
+    val text = settingsText(on)
+    return SettingsMap.on(on).map { row ->
+        plain<WebSettingsRow>(
+            "id" to row.id,
+            "group" to row.group.name,
+            "groupTitle" to runCatching { text(row.group.title) }.getOrDefault(""),
+            "groupSummary" to runCatching { text(row.group.summary) }.getOrDefault(""),
+            "title" to runCatching { text(row.titleOn(on)) }.getOrDefault(""),
+            "details" to row.details.mapNotNull { runCatching { text(it) }.getOrNull()?.takeIf(String::isNotBlank) }.toTypedArray(),
+            "need" to row.need?.name,
+        )
+    }.toTypedArray()
+}
+
+/**
+ * The ids of the rows [form] has that answer [query], best first, at most [SettingsSearch.MAX_HITS]
+ * (every word typed found in a row's title, its lines, its page or the other words people type for
+ * it; nothing for a blank query). [only] limits the search to the rows a page actually draws.
+ */
+fun settingsSearch(query: String, form: String, only: Array<String>?): Array<String> {
+    val on = formOf(form)
+    val allowed = only?.toHashSet()
+    val rows = SettingsMap.on(on).filter { allowed == null || it.id in allowed }
+    return SettingsSearch.match(query.take(SETTINGS_QUERY_MAX), rows, on, settingsText(on)).map { it.row.id }.toTypedArray()
+}
+
+private const val SETTINGS_QUERY_MAX = 80
+
+// ---- Search by topic name (U14) ---------------------------------------------------------------------
+
+/** What one search by topic name may ask of Telegram ([TopicSearch]'s budget), so the worker holds to the apps' numbers. */
+interface WebTopicBudget {
+    /** Groups with topics asked per search, at most. */
+    val chats: Double
+    /** Of those, asked at the same time. */
+    val atOnce: Double
+    /** Topics read per group. */
+    val topicsPerChat: Double
+    /** Hits listed at most. */
+    val maxHits: Double
+}
+
+fun topicBudget(): WebTopicBudget = plain(
+    "chats" to TopicSearch.CHATS_PER_SEARCH.toDouble(),
+    "atOnce" to TopicSearch.AT_ONCE.toDouble(),
+    "topicsPerChat" to TopicSearch.TOPICS_PER_CHAT.toDouble(),
+    "maxHits" to TopicSearch.MAX_HITS.toDouble(),
+)
+
+/** A group with topics turned on, as the chat list knows it. */
+interface WebTopicChat {
+    val id: Double
+    val title: String
+    val archived: Boolean
+}
+
+/**
+ * The groups worth asking for [query] ([TopicSearch.candidates]), best first, at most the budget's:
+ * only [chats] (the page passes the groups with topics), only the [added] ones (null: every chat),
+ * those whose own title answers the words first. Archived ones only with [includeArchived].
+ */
+fun topicCandidates(chats: Array<WebTopicChat>, query: String, added: Array<Double>?, includeArchived: Boolean): Array<Double> {
+    val allowed = added?.map { it.toLong() }?.toHashSet()
+    val summaries = chats.map {
+        ChatSummary(id = it.id.toLong(), title = it.title, miniThumbnail = null, photoFileId = 0, kind = ChatKind.Group, isArchived = it.archived)
+    }
+    return TopicSearch.candidates(summaries, query, { allowed == null || it in allowed }, { true }, includeArchived)
+        .take(TopicSearch.CHATS_PER_SEARCH).map { it.id.toDouble() }.toTypedArray()
+}
+
+/** One topic of a group, as Telegram listed it. */
+interface WebTopic {
+    val id: Double
+    val name: String
+    val pinned: Boolean
+    val closed: Boolean
+    val hasVideos: Boolean
+}
+
+/** A topic that answers the words, listed as "Chat > Topic". */
+interface WebTopicHit {
+    val chatId: Double
+    val chatTitle: String
+    val topicId: Double
+    val name: String
+    val pinned: Boolean
+    val closed: Boolean
+    val hasVideos: Boolean
+    val score: Double
+}
+
+private fun hitOf(h: TopicHit): WebTopicHit = plain(
+    "chatId" to h.chatId.toDouble(),
+    "chatTitle" to h.chatTitle,
+    "topicId" to h.topic.id.toDouble(),
+    "name" to h.topic.name,
+    "pinned" to h.topic.isPinned,
+    "closed" to h.topic.isClosed,
+    "hasVideos" to h.topic.hasVideos,
+    "score" to h.score.toDouble(),
+)
+
+private fun hitFrom(h: WebTopicHit) = TopicHit(
+    chatId = h.chatId.toLong(),
+    chatTitle = h.chatTitle,
+    topic = ForumTopicSummary(id = h.topicId.toInt(), name = h.name, isPinned = h.pinned, isClosed = h.closed, hasVideos = h.hasVideos),
+    score = h.score.toInt(),
+)
+
+/** How well a topic [name] answers [query] (every word must land, a typo forgiven), or 0. */
+fun topicScore(name: String, query: String): Double = TopicSearch.score(name, query).toDouble()
+
+/** The [topics] of one group that answer [query] ([TopicSearch.hits]); [fromTelegram] keeps one our folding misses at the lowest score. */
+fun topicHits(chatId: Double, chatTitle: String, topics: Array<WebTopic>, query: String, fromTelegram: Boolean): Array<WebTopicHit> =
+    TopicSearch.hits(
+        chatId.toLong(),
+        chatTitle,
+        topics.filter { it.id.isFinite() }.map { ForumTopicSummary(id = it.id.toInt(), name = it.name, isPinned = it.pinned, isClosed = it.closed, hasVideos = it.hasVideos) },
+        query,
+        fromTelegram,
+    ).map(::hitOf).toTypedArray()
+
+/** [hits] best first, one per chat and topic, at most the budget's ([TopicSearch.rank]); [chatOrder] is the chat list's order, by id. */
+fun topicRank(hits: Array<WebTopicHit>, chatOrder: Array<Double>): Array<WebTopicHit> {
+    val order = HashMap<Long, Int>()
+    chatOrder.forEachIndexed { i, id -> order.getOrPut(id.toLong()) { i } }
+    return TopicSearch.rank(hits.map(::hitFrom), order).map(::hitOf).toTypedArray()
+}
+
+// ---- Telegram links (U9) -----------------------------------------------------------------------------
+
+/**
+ * The link to a post as Telegram's apps copy it ([TgLink.Post]): `t.me/<username>/<id>` for a
+ * public chat, `t.me/c/<id>/<id>` for a private channel or supergroup (its Bot API id, -100...,
+ * with the prefix off), with a forum [topicId] between and `?t=` for [startSec] when it is above 0.
+ * Null for a chat that has neither (a person, a small group), or an id that cannot be one.
+ */
+fun tgPostLink(username: String?, chatId: Double, topicId: Double, messageId: Double, startSec: Double): String? {
+    val message = messageId.takeIf { it.isFinite() && it >= 1 }?.toLong() ?: return null
+    val topic = topicId.takeIf { it.isFinite() && it >= 1 }?.toLong() ?: 0L
+    val start = startSec.takeIf { it.isFinite() && it >= 1 }?.toInt() ?: 0
+    val name = username?.trim()?.removePrefix("@")?.takeIf { it.isNotEmpty() }
+    if (name != null) return TgLink.Post(name, null, message, topic, start).url
+    val chat = chatId.takeIf { it.isFinite() }?.toLong() ?: return null
+    if (chat >= CHANNEL_ID_BASE) return null
+    return TgLink.Post(null, CHANNEL_ID_BASE - chat, message, topic, start).url
+}
+
+/** A Bot API id of -100 and the channel's own number: the base to take it from. */
+private const val CHANNEL_ID_BASE = -1_000_000_000_000L
+
+// ---- the rest the later tasks read ------------------------------------------------------------------------
+
+/** The keys a video's remembered online subtitle is filed under, most exact first (HX25, [SubtitlePickKeys]). */
+fun subtitlePickKeys(video: Video): Array<String> = SubtitlePickKeys.of(toItem(video)).toTypedArray()
+
+/**
+ * The one definition of a real stutter ([PlaybackWatch.symptomOf]): "slow", "dropped", "underruns",
+ * "late", or null when nothing the viewer would see happened. [speed] is the position's pace against
+ * the speed asked for (1 is on time). Garbage in reads as no evidence.
+ */
+fun stutterSymptom(speed: Double, dropped: Double, frames: Double, underruns: Double, late: Boolean): String? =
+    PlaybackWatch.symptomOf(speed, intOf(dropped), intOf(frames), intOf(underruns), late)
+
+/** How long after a start, seek or interruption playback is not read (the decoder is warming up), in milliseconds. */
+fun stutterSettleMs(): Double = PlaybackWatch.SETTLE_MS.toDouble()
+
+/** How long a stutter watch counts playing time before it answers, in milliseconds. */
+fun stutterWindowMs(): Double = PlaybackWatch.WINDOW_MS.toDouble()
+
+private fun intOf(value: Double): Int = if (value.isFinite()) value.coerceIn(0.0, 2_000_000_000.0).toInt() else 0
+
+/** One language the apps ship a catalog for. */
+interface WebLanguage {
+    val tag: String
+    /** The language's own name ("Deutsch"). */
+    val name: String
+    val rtl: Boolean
+}
+
+/** The languages the apps ship, English first. */
+fun languageList(): Array<WebLanguage> =
+    Languages.all.map { plain<WebLanguage>("tag" to it.tag, "name" to it.name, "rtl" to it.rtl) }.toTypedArray()
+
+/** The catalog to use for the viewer's [saved] choice ("" or null follows [system], the browser's languages): a shipped tag, English as the last resort. */
+fun languageResolve(saved: String?, system: Array<String>): String = Languages.resolve(saved, system.toList())
+
+/** Makes [tag], a shipped catalog [provideCatalog] was given, the language the rules speak (plurals, numbers, names). */
+fun useLanguage(tag: String) = Translator.use(tag)
 
 /** A plain JS object of [fields], typed as the exported interface it stands for. */
 private fun <T> plain(vararg fields: Pair<String, Any?>): T {

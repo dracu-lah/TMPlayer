@@ -150,6 +150,11 @@ class NameStylesTest {
         Show("Ep.%E - Harbour Notes.mkv"),
         Show("#%E Harbour Notes.mkv", siblings = true),
         Show("%E Harbour Notes.mkv", siblings = true),
+        // Spanish soap channels: "Capítulo 80", with or without the accent, a "Final" or a handle after it.
+        Show("Harbour Notes Capítulo %e.mp4"),
+        Show("Harbour Notes Capitulo %e Final.mp4"),
+        Show("Harbour Notes Capitulo %e @Channel_Name.mp4"),
+        Show("Harbour Notes Episodio %e.mp4"),
     )
 
     private val films: List<Film> = listOf(
@@ -189,6 +194,15 @@ class NameStylesTest {
         Film("Harbour Run (2019) IMAX 2160p.mkv"),
         Film("Harbour Run 2019 DVDRip XviD-GROUP.avi"),
         Film("Harbour Run 2019 480p HEVC 300MB.mkv"),
+        // Found in real chats: an audio layout glued to the codec, a group's "-SP", a size after a dash.
+        Film("Harbour.Run.1995.1080p.10bit.BluRay.ENG.DDP5.1x265.HEVC.ESub.mkv", year = 1995),
+        Film("Harbour.Run.1981.DUAL.1080p.BD-Rip.DDP5.1.10bit.AV1.-.SP.mkv", year = 1981),
+        Film("Harbour.Run.2013.BluRay.1080p.10bit.Malayalam.DD5.1.x265.mkv", year = 2013),
+        Film("[MM] Harbour Run (2023) Malayalam HDRip - 720p - (DD5.1 - 1.4GB).mkv", year = 2023),
+        Film("[GKL] - Harbour Run (2024) Malayalam HQ HDRip - 1.4GB.mkv", year = 2024),
+        Film("[GKL] - Harbour Run (2024) Malayalam HQ HDRip - 700MB.mkv", year = 2024),
+        Film("[GKL]  - Harbour Run (2024) Malayalam HQ HDRip - 1.mkv", year = 2024),
+        Film("[GKL]  - Harbour Run (2024) Malayalam HQ HDRip - 7.mkv", year = 2024),
         Film("Harbour Run (2019) 720p WEBRip x264 AAC [Hindi + English] ESub.mkv"),
         Film("Harbour Run 2019 WEB-DL 1080p x264 Hindi DD 5.1 Eng DD 5.1 ESubs.mkv"),
         // Titles that carry digits, which are not episodes.
@@ -251,6 +265,9 @@ class NameStylesTest {
             listOf("Harbour Notes Season 1.mkv", "Harbour Notes Season 2.mkv", "Harbour Notes Season 3.mkv"),
             listOf("Harbour Run 1080p.mkv", "Harbour Run 720p.mkv", "Harbour Run 480p.mkv"),
             listOf("Harbour Run DD5.1.mkv", "Harbour Run DD2.0.mkv", "Harbour Run H.264.mkv"),
+            listOf("[GKL] - Harbour Run (2024) Malayalam HQ HDRip - 1.4GB.mkv", "[GKL] - Harbour Run (2024) Malayalam HQ HDRip - 700MB.mkv"),
+            listOf("[GKL]  - Harbour Run (2024) Malayalam HQ HDRip - 1.mkv", "[GKL]  - Harbour Run (2024) Malayalam HQ HDRip - 7.mkv"),
+            listOf("Harbour.Run.1995.1080p.BluRay.DDP5.1x265.mkv", "Harbour.Run.1996.1080p.BluRay.DDP5.1x265.mkv", "Harbour.Run.1997.1080p.BluRay.DDP5.1x265.mkv"),
         )
         val bad = sets.filter { names -> SeriesShelf.arrange(names.map { video(it) }).any { it is ShelfEntry.Show } }
         assertTrue("grouped as a show: $bad", bad.isEmpty())

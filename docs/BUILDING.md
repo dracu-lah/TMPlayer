@@ -175,6 +175,33 @@ Cheap, low-spec Android TV is the target: a Mi TV Stick with 1 GB RAM, 8 GB stor
 If it is smooth there, it is smooth everywhere. An Android TV emulator (API 28 or newer, x86_64,
 1 GB RAM profile) is the reference environment.
 
+### Names dump (debug and preview builds)
+
+How the videos in your chats are really named, and how the shelf groups them, in one command
+instead of scrolling. Only the `debug` and `preview` builds have it (`app/src/dev`, declared in
+`app/src/debug` and `app/src/preview`); a release compiles none of it. Sign in on the build first.
+The dump runs in a foreground service (a "Dumping video names" notification), so the app may be
+out of sight and the screen off; if logcat says the service was refused, open the app and keep it
+open, since Android freezes a background app.
+
+```sh
+adb -s d3f7da23 shell am broadcast -n com.tmplayer.test/com.tmplayer.dev.NameDumpReceiver -a com.tmplayer.DUMP_NAMES
+adb -s d3f7da23 logcat -s TMDump        # progress, counts only; "done:" when finished
+adb -s d3f7da23 pull /sdcard/Android/data/com.tmplayer.test/files/dump/ <dir>
+```
+
+- No extras: the chats added in the app (every channel and group when nothing was picked).
+- `--ez all true`: every channel and group of the chat list, at most 60; never People or Saved Messages.
+- `--es chats "Title A,Title B"`: chats whose title contains one of these, any case.
+- `--ei cap 3000`: videos read per chat (default 3000), paged like the chat screen, FLOOD_WAIT waited out.
+
+The debug build is `com.tmplayer` instead of `com.tmplayer.test` in both paths. `dump/` holds
+`names.jsonl` (one video per line: chat, kind, file name, caption's first line, size, length,
+date, the parsed name and the shelf: `show:<key>` with `showSeason`/`showEpisode`,
+`film-copy-group` or `file`), `summary.txt` (per chat counts, then LEFTOVERS: files whose name
+holds a 1 to 3 digit number that is not a resolution, year or codec, the likely missed episodes)
+and `done` (`ok ...` or `failed: ...`). Every file is written whole and then renamed into place.
+
 ## Toolchain notes
 
 These version constraints are not free choices, and changing them breaks the build. The whole

@@ -19,9 +19,15 @@ import { applyDelay, look, placeCues, lookVars, setLook, setSubDelay } from './c
 import { readLook } from './keep'
 import { loadThumb } from '../screens/thumbs'
 import { readSubtitle, SUBTITLE_EXTENSIONS, SubtitleError } from './subtitles'
-import { api } from '../tg/rpc'
-import { t } from '../i18n'
+import { choseOther, warmRestore } from './subpick-use'
+import { api, clearFlood, floodLeft, link } from '../tg/rpc'
+import { online } from '../net'
+import { StallWatch, stallWhy } from './openStall'
+import { t, waitPhrase } from '../i18n'
 import { routeCrashes } from '../crash'
+import { buildBundle, log, rememberNames, sizeText, suppliedParts, supply, type Bundle, type BundleFacts } from '../logs'
+import { deviceLines } from './stutter'
+import { watchStutter, type StutterWatch } from './stutter-watch'
 import { form } from '../form'
 import { Icon } from '../ui/Icon'
 import { dropResume, getResume, isWatched, saveResume as storeResume, setWatched, settings } from '../store'
@@ -42,8 +48,6 @@ interface Source {
 
 /** Seconds before the end at which the next episode is fetched ahead and its card comes up. */
 const NEXT_AHEAD = 30
-/** Waiting this long with nothing arriving says so, as the app's OpeningStall. */
-const STALL_MS = 15_000
 /** An LG or Samsung TV, whose own player may be given the file (tvnative.ts). */
 const onTv = TV_BROWSER.test(navigator.userAgent)
 /** How long the picture has to move on after a failure nobody caught, before the player says it broke. */
@@ -58,9 +62,6 @@ const timing =
               ;((window as unknown as { playerTimes?: { label: string; ms: number }[] }).playerTimes ??= []).push({ label, ms })
           }
         : () => {}
-
-/** The speed last chosen in this tab: the next episode (or any video opened after) plays at it too. */
-let chosenRate = 1
 
 /** Only one tab plays at a time: a tab that starts playing tells the others, which pause. */
 const tabs = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('tmplayer-player') : null
@@ -98,6 +99,8 @@ export function Player(props: {
     let subtitleInput!: HTMLInputElement
     const [ready, setReady] = createSignal(false)
     const item = props.item
+    // HX25: the remembered online subtitle is looked for while the video opens, so it is in before the first frame.
+    void warmRestore(item)
     const copies = playableCopies(item.copies)
     const mounted = performance.now()
     let loadStarted = 0
@@ -131,6 +134,10 @@ export function Player(props: {
     const [sampled, setSampled] = createSignal<[number, number]>([0, 0])
     const readout = () => `${t('player.details_buffered')}: ${t('player.seek_seconds', { seconds: Math.round(sampled()[0]) })}  ·  ${speedText(Math.max(0, sampled()[1]))}`
     const [stall, setStall] = createSignal<'start' | 'mid' | 'offline' | null>(null)
+    /** Bytes a second of a line that keeps sending too slowly to start yet (the loader shows it); 0 when none is. */
+    const [trickle, setTrickle] = createSignal(0)
+    /** Seconds Telegram asked a file read to wait, kept up to date while the sheet is up. */
+    const [flood, setFlood] = createSignal(0)
     /** Where the video was resumed from (seconds), for the Start over offer. */
     const [resumedAt, setResumedAt] = createSignal<number | null>(null)
     /** The opening loader's stage (loader.tsx); null once the first frame is in, which ends it for good. */
@@ -249,12 +256,72 @@ export function Player(props: {
         return j
     }
 
+    // Report stutter and the playback watch (WB18): read every 2 s while the video plays and never otherwise. Not on a TV:
+    // nothing there can receive a mark (no clipboard to paste from, and the upload is not on yet), so it does not spend its small CPU on one.
+    let stutterWatch: StutterWatch | null = null
+    onMount(() => {
+        if (form() !== 'tv') stutterWatch = watchStutter(video, () => engine, () => stall() !== null)
+    })
+    onCleanup(() => stutterWatch?.stop())
+    const stutter = { supported: () => stutterWatch?.supported() ?? false, press: () => stutterWatch?.press() ?? 'kept', restart: () => stutterWatch?.restart() }
+    // A stall that clears with no media event of its own (the bytes came, the clock moves): the watch follows it.
+    createEffect(() => {
+        stall()
+        stutterWatch?.refresh()
+    })
+    // What the log may take out as written, and what it says of this video: the engine and the format in plain words, never a name.
+    rememberNames([item.title, item.name, item.chat, item.fileName])
+    createEffect(() => rememberNames([props.info?.title, props.info?.episode?.show, props.info?.episode?.name]))
+    createEffect(() => {
+        const line = formatLine(facts())
+        if (line) log('I', 'player', `format ${line}`)
+    })
+    createEffect(() => {
+        const s = stall()
+        if (s) log('W', 'player', `stalled, ${s}`)
+    })
+    createEffect(() => {
+        if (error() || needsApp()) log('E', 'player', `blocked: ${needsApp() ? `needs the app, ${needsApp()!.kind}` : 'could not play'}`)
+    })
+    /**
+     * The logs this device holds, scrubbed, for Copy details: the facts, the marks and the page's own log. Built in one go
+     * with no wait, so a press can copy it inside the click (iPhone Safari refuses a copy that follows an await). Nothing leaves until the viewer presses it.
+     */
+    let factsHere: BundleFacts | null = null
+    let factsAsked = false
+    const logBundle = (): Bundle => {
+        // The browser's line comes from the feedback form's code, loaded once when the sheet first asks; until then a plain one.
+        if (!factsAsked) {
+            factsAsked = true
+            void Promise.all([import('../ui/feedback'), import('../install')]).then(
+                ([{ webFacts }, { installed }]) => void (factsHere = webFacts(navigator.userAgent, document.documentElement.lang || navigator.language || 'en', installed())),
+                () => {},
+            )
+        }
+        const line = formatLine(facts())
+        supply('device', () => [...deviceLines({ video }), ...(line ? [`Format: ${line}`] : []), ...(item.dc ? [`Datacenter: DC ${item.dc}`] : [])])
+        return buildBundle(factsHere ?? { version: 'web', platform: 'Web', device: 'a browser', language: document.documentElement.lang || 'en' }, suppliedParts())
+    }
+    const logsSize = () => sizeText(logBundle().bytes)
+    const logsText = () => logBundle().text
+    /** The text goes to the clipboard in the click itself; false when the browser refuses (the sheet then shows it selected). */
+    const copyLogs = (): Promise<boolean> => {
+        try {
+            return navigator.clipboard.writeText(logsText()).then(() => true, () => false)
+        } catch {
+            return Promise.resolve(false)
+        }
+    }
+
     /** Opens `src` at `at` seconds; `play` starts it once it can. */
     const load = async (src: Source, at: number, play: boolean) => {
         const gen = ++generation
         openingAt = at
         moviTried = ''
         loadStarted = performance.now()
+        watch.reset(loadStarted)
+        stutter.restart()
+        setTrickle(0)
         framed = false
         retryOnline = false
         // A new source resets the element's speed; the one chosen carries over.
@@ -603,6 +670,8 @@ export function Player(props: {
     const loadSubtitle = async (picked: File) => {
         try {
             await addSubtitle(picked)
+            // A file of their own is an explicit choice: the remembered online subtitle no longer stands (HX25).
+            choseOther(item)
         } catch (e) {
             setNotice(e instanceof SubtitleError && e.why === 'vobsub' ? t('web.needs_app_picture_subtitles') : t('player.subtitle_load_failed', { file: picked.name }))
         }
@@ -666,12 +735,29 @@ export function Player(props: {
     let lastTime = -1
     let stuckSince = 0
     let everPlayed = false
+    let wasHidden = false
+    /** Counts the bytes that arrive while the video waits: 10 s with none is the stall sheet (U1), see openStall.ts. */
+    const watch = new StallWatch()
+    /** The page is back in view (also from a frozen tab, which ran no timer meanwhile): what arrived is not a speed and the wait counts afresh. */
+    const countAfresh = () => {
+        const now = performance.now()
+        lastReceived = file?.received ?? 0
+        stuckSince = now
+        watch.reset(now, lastReceived)
+    }
+    const onShown = () => (document.hidden ? void (wasHidden = true) : countAfresh())
     const sample = () => {
-        if (document.hidden) return
+        if (document.hidden) return void (wasHidden = true)
         if (!video.paused) refreshKept()
         const f = file
         setLoaded(f && f.loaded < 0.999 ? f.loaded : null)
+        const now = performance.now()
         const received = f?.received ?? 0
+        // Back from the background: what arrived meanwhile is not a speed, and the wait counts afresh.
+        if (wasHidden) {
+            wasHidden = false
+            countAfresh()
+        }
         const rate = received - lastReceived
         lastReceived = received
         const b = video.buffered
@@ -681,12 +767,19 @@ export function Player(props: {
         // Waiting to play with the clock not moving: say so after a while, as the app does.
         // Before the first frame the element is paused with nothing in it: that is waiting too.
         const waiting = (!everPlayed || !video.paused) && video.readyState < 3
-        if (video.currentTime !== lastTime || !waiting || error() || needsApp()) {
+        const moved = video.currentTime !== lastTime
+        // A read ends a chunk at a time, so what is asked of Telegram stretches the wait; a flood wait or no line is the cause already, and is not.
+        const known = floodLeft() > 0 || (navigator.onLine && link() !== null && link() !== 'connected' && link() !== 'updating')
+        const phase = watch.tick(now, { waiting: waiting && !error() && !needsApp(), moved, received, local: !f || f.loaded >= 0.999, transcode: !!probed?.transcode, pending: known ? 0 : (f?.pending ?? 0) })
+        // Bytes still arriving, only too slowly: the loader shows the speed, and Telegram is not blamed.
+        setTrickle(phase === 'trickle' && !stall() ? Math.max(1, Math.round(watch.speed(now))) : 0)
+        setFlood(floodLeft())
+        if (moved || !waiting || error() || needsApp()) {
             lastTime = video.currentTime
-            stuckSince = performance.now()
+            stuckSince = now
             if (stall()) setStall(null)
-        } else if (!navigator.onLine && performance.now() - stuckSince > 2000) setStall('offline')
-        else if (performance.now() - stuckSince > (probed?.transcode ? STALL_MS * 3 : STALL_MS) && !stall()) setStall(everPlayed ? 'mid' : 'start')
+        } else if (!navigator.onLine && now - stuckSince > 2000) setStall('offline')
+        else if (phase === 'stalled' && !stall()) setStall(everPlayed ? 'mid' : 'start')
     }
 
     // Hidden (another app, a closed tab, a reload): the place is saved now, not at the next 10 s.
@@ -724,6 +817,7 @@ export function Player(props: {
     /** Closed while the saved place was still being read: nothing may start after that. */
     let closed = false
     onMount(async () => {
+        clearFlood()
         setSubDelay(0)
         readLook().then(setLook, () => {})
         isWatched(item.chatId, item.messageId).then(setWatchedNow, () => {})
@@ -731,13 +825,14 @@ export function Player(props: {
         savedMs = left > 0 ? left * 1000 : null
         const at = left > 0 ? (await api.resumeStart(left * 1000, rewindMs()).catch(() => left * 1000)) / 1000 : 0
         if (closed) return
-        video.playbackRate = chosenRate
         if (at > 0) setResumedAt(at)
         load(source(), at, true)
         startTicks()
         window.addEventListener('offline', onOffline)
         window.addEventListener('online', onOnline)
         document.addEventListener('visibilitychange', onHidden)
+        document.addEventListener('visibilitychange', onShown)
+        window.addEventListener('pageshow', onShown)
         window.addEventListener('pagehide', onLeave)
         tabs?.addEventListener('message', onOtherTab)
         container.focus({ preventScroll: true })
@@ -805,6 +900,8 @@ export function Player(props: {
         window.removeEventListener('offline', onOffline)
         window.removeEventListener('online', onOnline)
         document.removeEventListener('visibilitychange', onHidden)
+        document.removeEventListener('visibilitychange', onShown)
+        window.removeEventListener('pageshow', onShown)
         window.removeEventListener('pagehide', onLeave)
         tabs?.removeEventListener('message', onOtherTab)
         generation++
@@ -830,6 +927,16 @@ export function Player(props: {
     const blocked = () => !!(needsApp() || error() || (stall() && stall() !== 'offline'))
     const sheetTitle = () => (props.info?.episode ? `${props.info.title} ${props.info.episode.code}` : (props.info?.title ?? item.title))
     const lighter = () => (needsApp() ? copies[0] : copies[copies.length - 1])
+    /** Why nothing arrives: Telegram asked to wait (and for how long), no line to Telegram, or it has not started sending. */
+    const why = () => stallWhy(flood(), online(), link())
+    // The wait in steps of 5 s past 10, so the sheet's alert is not read out every second.
+    const floodWait = () => waitPhrase(flood() > 10 ? Math.ceil(flood() / 5) * 5 : flood())
+    const stallBody = () => {
+        const w = why()
+        if (w === 'flood') return t('player.stalled_flood_wait', { wait: floodWait() })
+        if (w === 'noline') return t('player.stalled_no_line_plain')
+        return stall() === 'start' ? t('player.stalled_slow') : t('player.stalled_mid_slow')
+    }
 
     return (
         <video-player class="player-root">
@@ -879,7 +986,6 @@ export function Player(props: {
                     }}
                     onTimeUpdate={onTime}
                     // A held finger plays at double speed for a moment: that is not a speed chosen.
-                    onRateChange={() => video.playbackRate !== 2 && (chosenRate = video.playbackRate)}
                     onSeeking={() => framed && (seekStarted = performance.now())}
                     onSeeked={() => {
                         if (seekStarted) timing('seek, until the frame', seekStarted)
@@ -911,6 +1017,10 @@ export function Player(props: {
                             qualityLabel,
                             readout,
                             details,
+                            stutter: () => (stutter.supported() ? { press: stutter.press as () => 'kept' | 'already' } : null),
+                            logsSize,
+                            logsText,
+                            copyLogs,
                             loadSubtitleFile: () => subtitleInput.click(),
                             addSubtitle,
                             frames,
@@ -943,7 +1053,7 @@ export function Player(props: {
                 </Show>
 
                 <Show when={opening() !== null && !blocked()}>
-                    <OpeningLoader item={item} info={props.info} at={resumedAt() ?? 0} stage={opening()!} converting={converting()} onClose={close} />
+                    <OpeningLoader item={item} info={props.info} at={resumedAt() ?? 0} stage={opening()!} converting={converting()} rate={trickle() ? speedText(trickle()) : undefined} offline={stall() === 'offline'} onClose={close} />
                 </Show>
 
                 <Show when={blocked()}>
@@ -951,7 +1061,7 @@ export function Player(props: {
                         item={item}
                         title={sheetTitle()}
                         heading={needsApp() ? t('web.needs_app_title') : error() ? t('player.cant_play') : stall() === 'start' ? t('player.stalled_title') : t('player.stalled_mid_title')}
-                        body={needsApp() ? whyText(needsApp()!) : (error() ?? (stall() === 'start' ? t('player.stalled_slow') : t('player.stalled_mid_slow')))}
+                        body={needsApp() ? whyText(needsApp()!) : (error() ?? stallBody())}
                         note={needsApp() ? t('web.app_body') : undefined}
                         warning={!!error() || !!needsApp()}
                         format={failedLine()}
@@ -968,7 +1078,8 @@ export function Player(props: {
                                 {t('web.needs_app_get')}
                             </a>
                         </Show>
-                        <Show when={copies.length && source().height === 0}>
+                        {/* A lighter copy helps a slow Telegram, not a flood wait or a blocked line (the apps' StalledSheet). */}
+                        <Show when={copies.length && source().height === 0 && (needsApp() || error() || why() === 'slow')}>
                             <button
                                 type="button"
                                 class="pc-sheet-button"

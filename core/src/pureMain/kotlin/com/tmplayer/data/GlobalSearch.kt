@@ -1,6 +1,10 @@
 package com.tmplayer.data
 
 
+import com.tmplayer.online.ChatLanguageHints
+import com.tmplayer.online.MetaKind
+import com.tmplayer.online.MetaQuery
+import com.tmplayer.online.PosterChoice
 import com.tmplayer.platform.currentYear
 
 /**
@@ -200,6 +204,12 @@ data class ResultGroup(
     /** The best picture any copy has, as [MediaFacts] names it, or null when none says. */
     val bestQuality: String? get() = copies.mapNotNull(GlobalSearch::qualityOf).maxByOrNull(GlobalSearch::qualityRank)
 
+    /**
+     * The recommended copy's own picture ([QualityRead]), the one the card's badge names: it is the
+     * copy a tap plays, so the badge and Play never disagree. [bestQuality] is the best any copy has.
+     */
+    val leadQuality: String? get() = GlobalSearch.qualityOf(lead)
+
     /** The smallest and the largest copy, in bytes, leaving out copies of unknown size. */
     val sizeRange: LongRange? get() {
         val sizes = copies.map { it.sizeBytes }.filter { it > 0 }
@@ -210,6 +220,38 @@ data class ResultGroup(
 
     /** The lead with every copy as its [MediaItem.versions], for the detail page's copies list. */
     fun asItem(): MediaItem = if (copies.size < 2) lead else lead.copy(versions = copies).keptReads(lead)
+}
+
+/**
+ * A film or show TMDB knows that the search answers (HX41), with the viewer's copies of it: the
+ * cards of the search whose videos are this title, each led by its recommended copy (HX38), so
+ * the title's own Play opens what the card would. Copies come only from the chats the search
+ * read (the added chats, or every chat after "Search my other chats"): nothing is fetched from
+ * anywhere else.
+ *
+ * [maybe] holds cards that carry this title's name and nothing that tells it from another title
+ * of that name (no year, no language): listed as "might be", never counted as a copy.
+ */
+@androidx.compose.runtime.Immutable
+data class TitleHit(
+    val title: PosterChoice,
+    val groups: List<ResultGroup> = emptyList(),
+    val maybe: List<ResultGroup> = emptyList(),
+) {
+    /** At least one card is surely this title. */
+    val inChats: Boolean get() = groups.isNotEmpty()
+
+    /** Nothing in the chats read carries this title, even maybe: "Not in your chats". */
+    val notInChats: Boolean get() = groups.isEmpty() && maybe.isEmpty()
+
+    /** The card a press on the title opens: the best of its cards, whose lead is the recommended copy. */
+    val best: ResultGroup? get() = groups.firstOrNull() ?: maybe.firstOrNull()
+
+    /** The files the title's cards hold, the same file posted twice counted once ([ResultGroup.fileCount]). */
+    val fileCount: Int get() = groups.sumOf { it.fileCount }
+
+    /** The chats those files are in. */
+    val chatCount: Int get() = groups.flatMap { it.chatIds }.distinct().size
 }
 
 /**
@@ -497,24 +539,45 @@ object GlobalSearch {
     fun titleOf(group: ResultGroup): String = group.show?.takeIf { group.isShow } ?: SeriesShelf.tileTitle(group.asItem())
 
     /**
-     * On this device first, then the copy whose name carries the viewer's preferred audio
-     * [language] (EG-F5: "Hindi" in the name of a Hindi copy), then the best picture, then the
-     * newest. A copy whose name names no language ranks between one that names the language and
-     * one that names only others: it may well be in it. [language] null leaves this step out.
+     * The recommended copy first (HX38), in this order: on this device; not a cam, a telesync or a
+     * pre-DVD rip ([QualityRead.lowGrade]); one this device plays smoothly ([tooSlow], the
+     * decode judge); the copy whose name carries the viewer's preferred audio [language]
+     * (EG-F5: "Hindi" in the name of a Hindi copy; a copy that names no language ranks between
+     * one that names it and one that names only others, since it may well be in it); the best
+     * picture the device suits ([cap]: the tallest at or under it, then the lowest above it, so a
+     * 4K copy stays selectable but does not lead on a phone or a 1 GB stick); the newest. The
+     * picture is [QualityRead]'s, the stated size before the name. [language] null leaves the
+     * language step out. Two copies equal on everything keep the newer.
      */
-    fun copyOrder(copies: List<MediaItem>, language: String? = null): List<MediaItem> {
+    fun copyOrder(
+        copies: List<MediaItem>,
+        language: String? = null,
+        tooSlow: (MediaItem) -> Boolean = VideoCopies.tooSlowHere,
+        cap: Int = VideoCopies.heightCap(VideoCopies.deviceWord),
+    ): List<MediaItem> {
         if (copies.size < 2) return copies.toList()
-        // Each copy's quality and language read once, not on every comparison of the sort.
-        return copies.map { Triple(it, qualityOf(it)?.let(::qualityRank) ?: 0, languageTier(it, language)) }
-            .sortedWith(
-                compareByDescending<Triple<MediaItem, Int, Int>> { it.first.onDevice }
-                    .thenByDescending { it.third }
-                    .thenByDescending { it.second }
-                    .thenByDescending { it.first.date }
-                    .thenByDescending { it.first.messageId },
-            )
-            .map { it.first }
+        // Each copy's picture, grade and language read once, not on every comparison of the sort.
+        class Keyed(val item: MediaItem, val fit: Int, val language: Int, val smooth: Boolean, val grade: Boolean)
+        return copies.map { copy ->
+            val height = VideoCopies.heightOf(copy)
+            val fit = when {
+                height == null -> UNKNOWN_FIT
+                height <= cap -> height
+                else -> -height
+            }
+            Keyed(copy, fit, languageTier(copy, language), !tooSlow(copy), !QualityRead.lowGrade(copy))
+        }.sortedWith(
+            compareByDescending<Keyed> { it.item.onDevice }
+                .thenByDescending { it.grade }
+                .thenByDescending { it.smooth }
+                .thenByDescending { it.language }
+                .thenByDescending { it.fit }
+                .thenByDescending { it.item.date }
+                .thenByDescending { it.item.messageId },
+        ).map { it.item }
     }
+
+    private const val UNKNOWN_FIT = -1_000_000
 
     /** 2 when the name carries [language], 1 when it names no language, 0 when it names only others or none is wanted. */
     private fun languageTier(item: MediaItem, language: String?): Int {
@@ -541,19 +604,10 @@ object GlobalSearch {
         return Tally(videos, chats.size)
     }
 
-    /** "4K", "1080p", "720p", "SD", or null when neither the name nor the stated size says. */
-    fun qualityOf(item: MediaItem): String? =
-        // The file name's tags are read once per item ([MediaItem.qualityTags]).
-        (if (item.fileName.isBlank()) MediaText.qualityTags(item.title) else item.qualityTags).firstOrNull()
-            ?: MediaFacts.resolutionOf(item.width, item.height)
+    /** "4K", "1080p", "720p", "SD", or null when neither the stated size nor the name says: see [QualityRead]. */
+    fun qualityOf(item: MediaItem): String? = QualityRead.of(item)
 
-    fun qualityRank(quality: String): Int = when (quality.uppercase()) {
-        "4K" -> 4
-        "1080P" -> 3
-        "720P" -> 2
-        "SD" -> 1
-        else -> 0
-    }
+    fun qualityRank(quality: String): Int = QualityRead.rank(quality)
 
     /**
      * [groups] screened by the client side filters and by a quality the query named: each card
@@ -655,6 +709,144 @@ object GlobalSearch {
     /** Whether the first answer should ask for another page before it is shown as finished. */
     fun wantsMore(groups: Int, pagesAsked: Int, done: Boolean): Boolean =
         !done && groups < FIRST_GROUPS && pagesAsked < FIRST_PAGES
+
+    // ---- any film or show (HX41) ----------------------------------------------------------------
+
+    /** Titles listed above the cards: a screenful on a remote. */
+    const val TITLES_SHOWN = 6
+
+    /** Cards read per title search, and copies per card read for languages: a bound on a huge answer. */
+    private const val TITLE_GROUPS = MAX_GROUPS
+    private const val TITLE_COPIES = 40
+
+    /** The longest name compared: longer than any real title. */
+    private const val TITLE_NAME_MAX = 200
+
+    /**
+     * What TMDB is asked for [query] (HX41): its title words, with a year at the end taken as the
+     * year ("night train 2019"), except where no film has that year yet ("Blade Runner 2049"
+     * stays whole). A year alone is a title ("1917"). Null when there is no title to look up: an
+     * empty query, a quality alone, a single letter.
+     */
+    fun titleQuery(query: SearchQuery, maxYear: Int = currentYear() + 1): MetaQuery? {
+        if (query.isEmpty || query.filterOnly) return null
+        // The words as typed, not folded: TMDB is asked "Blade Runner", not "blade runner".
+        val words = query.text.split(' ').filter { it.isNotEmpty() && SearchQuery.qualityOfToken(it) == null }
+        if (words.isEmpty()) return null
+        val year = words.lastOrNull()?.takeIf { words.size > 1 && it.length == 4 }?.toIntOrNull()?.takeIf { it in 1880..maxYear }
+        val title = (if (year != null) words.dropLast(1) else words).joinToString(" ").trim()
+        if (title.isEmpty() || title.length > MAX_QUERY || !searchable(title)) return null
+        return MetaQuery(title = title, year = year, kind = MetaKind.Film)
+    }
+
+    /**
+     * The titles TMDB gave for [query] ([choices], in its ranked order), each with the cards of
+     * [groups] that are copies of it, in the cards' own order:
+     *
+     * - A card is a title's when its lead was matched online to that very title ([online]), or
+     *   when its name is the title's (or the original title's) and nothing disagrees: a film's
+     *   year within one of the title's, a show's year no earlier than its first season, a show's
+     *   episodes never a film's copies, a trailer never a copy.
+     * - Two titles of one name (a film with a common name, a remake): the year decides, then the
+     *   languages the copies' names list or their chats' names give (HX24), and a card neither
+     *   decides is "might be" under both, never a copy of one at a guess.
+     * - Order: the title the words name exactly, then one that starts with them, then one holding
+     *   every word, then the year the words give, then titles with copies ahead of titles with
+     *   none, then TMDB's own order. A title with no copies whose name does not hold the words
+     *   is left out: TMDB's looser matches are noise when the viewer has nothing of them.
+     *
+     * At most [limit]. Pure, and cheap on a huge answer: [TITLE_GROUPS] cards, each card's name
+     * read once, [TITLE_COPIES] copies of a card read for languages.
+     */
+    fun titles(
+        choices: List<PosterChoice>,
+        groups: List<ResultGroup>,
+        query: SearchQuery,
+        online: (MediaItem) -> String? = SameTitle::onlineKey,
+        chatLanguages: (Long) -> List<String> = ChatLanguageHints::of,
+        limit: Int = TITLES_SHOWN,
+    ): List<TitleHit> {
+        val asked = titleQuery(query) ?: return emptyList()
+        val titles = choices.filter { it.tmdbId > 0 && it.title.isNotBlank() }.distinctBy { it.onlineKey }
+        if (titles.isEmpty()) return emptyList()
+        val names = titles.map { t -> listOf(titleKey(t.title), titleKey(t.originalTitle)).filter { it.isNotEmpty() }.toSet() }
+        val byOnline = HashMap<String, Int>().apply { titles.forEachIndexed { i, t -> put(t.onlineKey, i) } }
+        val sure = Array(titles.size) { ArrayList<ResultGroup>() }
+        val maybe = Array(titles.size) { ArrayList<ResultGroup>() }
+        for (group in groups.asSequence().take(TITLE_GROUPS)) {
+            if (group.extra || group.copies.isEmpty()) continue
+            val matched = runCatching { online(group.lead) }.getOrNull()?.let { byOnline[it] }
+            if (matched != null) {
+                sure[matched] += group
+                continue
+            }
+            val name = SeriesShelf.episodeOf(group.lead)
+            val key = titleKey(group.show ?: name.title.ifBlank { titleOf(group) })
+            if (key.isEmpty()) continue
+            val isShow = group.show != null || name.episode != null
+            val year = name.year
+            var fits = titles.indices.filter { i -> titles[i].show == isShow && key in names[i] && yearFits(titles[i], year, isShow) }
+            if (fits.isEmpty()) continue
+            if (fits.size > 1 && year != null && !isShow) {
+                fits.filter { titles[it].year == year }.takeIf { it.isNotEmpty() }?.let { fits = it }
+            }
+            if (fits.size > 1) {
+                val copies = group.copies.take(TITLE_COPIES)
+                val languages = copies.flatMapTo(HashSet()) { VideoCopies.languagesOf(it) }
+                copies.map { it.chatId }.distinct().forEach { languages += chatLanguages(it) }
+                fits.filter { titles[it].originalLanguage.isNotEmpty() && titles[it].originalLanguage in languages }
+                    .takeIf { it.size == 1 }?.let { fits = it }
+            }
+            if (fits.size == 1) sure[fits[0]] += group else fits.forEach { maybe[it] += group }
+        }
+        val wanted = titleKey(asked.title)
+        val wantedWords = wanted.split(' ').filter { it.isNotEmpty() }
+        class Scored(val hit: TitleHit, val relevance: Int, val year: Boolean, val presence: Int, val order: Int)
+        return titles.indices.map { i ->
+            val keys = names[i]
+            val relevance = when {
+                wanted in keys -> 3
+                keys.any { it.startsWith(wanted) } -> 2
+                keys.any { k -> k.split(' ').let { words -> wantedWords.all { it in words } } } -> 1
+                else -> 0
+            }
+            val hit = TitleHit(titles[i], sure[i].toList(), maybe[i].toList())
+            val presence = when {
+                hit.inChats -> 2
+                hit.notInChats -> 0
+                else -> 1
+            }
+            Scored(hit, relevance, asked.year != null && titles[i].year == asked.year, presence, i)
+        }
+            .filter { it.relevance > 0 || it.presence > 0 }
+            .sortedWith(
+                compareByDescending<Scored> { it.relevance }
+                    .thenByDescending { it.year }
+                    .thenByDescending { it.presence }
+                    .thenBy { it.order },
+            )
+            .take(limit.coerceAtLeast(0))
+            .map { it.hit }
+    }
+
+    /**
+     * Whether the search says "Not in your chats" (HX41): TMDB named the title the words ask for
+     * and nothing the viewer has carries it. False with no titles at all (lookups off, no key,
+     * offline): then the cards speak for themselves.
+     */
+    fun notInChats(hits: List<TitleHit>): Boolean = hits.firstOrNull()?.notInChats == true
+
+    /** A name as titles are compared: [Fuzzy.normalize]d, a leading "the" dropped. */
+    internal fun titleKey(name: String): String {
+        if (name.isBlank()) return ""
+        return Fuzzy.normalize(name.take(TITLE_NAME_MAX)).removePrefix("the ").trim()
+    }
+
+    private fun yearFits(title: PosterChoice, year: Int?, isShow: Boolean): Boolean {
+        val known = title.year ?: return true
+        if (year == null) return true
+        return if (isShow) year >= known - 1 else kotlin.math.abs(year - known) <= 1
+    }
 
     private fun isCjk(c: Char): Boolean {
         // The Unicode blocks: CJK Unified Ideographs and Extension A, Hiragana, Katakana, Hangul.

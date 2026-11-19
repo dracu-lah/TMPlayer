@@ -1,11 +1,11 @@
 // The viewer's own lists behind the "You" menu: Favourites (the starred chats) and History, with
 // the app's tabs (Recent, Continue, Watch later, Watched), each day under its own heading.
 import { createEffect, createMemo, createResource, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, type JSX } from 'solid-js'
-import { A, useParams } from '@solidjs/router'
+import { A, useNavigate, useParams } from '@solidjs/router'
 import { CheckmarkCircle02Icon, Clock01Icon, History, LeftToRightListBulletIcon, PlayIcon, StarIcon, Tick02Icon } from '@hugeicons/core-free-icons'
-import { api, call } from '../tg/rpc'
-import { t } from '../i18n'
-import { laterIds, laterKey, laterList, resumes, starredIds, watchedList, watchedTick } from '../store'
+import { api, call, errorText } from '../tg/rpc'
+import { formatDate, t } from '../i18n'
+import { laterIds, laterKey, laterList, resumes, starredIds, watchedIds, watchedList, watchedTick } from '../store'
 import { Icon, type IconData } from '../ui/Icon'
 import { useObservedCovers } from './promo'
 import { Card, ContinueCard, useLeft, useProgress, videoCard } from './VideoList'
@@ -14,7 +14,11 @@ import { form } from '../form'
 import { clearHistoryWithUndo } from '../clearHistory'
 import { historyId, removeLaterWithUndo, removeWithUndo } from '../historyEdits'
 import { prune, range, toggleAll } from '../ui/selection'
+import { askConfirm, confirmOpen } from '../ui/Confirm'
 import { chatGone, forgetGone } from '../goneVideos'
+import { showToast } from '../ui/Toast'
+import { randomScope } from '../ui/videoFilter'
+import { playRandomOf } from './randomPlay'
 import type { VideoItem } from '../tg/types'
 
 /** How many videos a tab asks Telegram about at most: the ones further back wait for their own page. */
@@ -88,6 +92,7 @@ async function lookUp(list: { chatId: number; messageId: number; time: number }[
 /** History, at `/history[/continue|/later|/watched]`. */
 export function HistoryPage() {
     const params = useParams<{ tab?: string }>()
+    const navigate = useNavigate()
     const tab = (): Tab => (['continue', 'later', 'watched'].includes(params.tab ?? '') ? (params.tab as Tab) : 'recent')
     const meta = () => TABS.find((x) => x.tab === tab())!
     const [entries] = createResource(
@@ -114,7 +119,6 @@ export function HistoryPage() {
     const [selecting, setSelecting] = createSignal(false)
     const [picked, setPicked] = createSignal<ReadonlySet<string>>(new Set())
     let anchor: string | null = null
-    let confirmDialog!: HTMLDialogElement
     const order = createMemo(() => (entries.latest ?? []).map((e) => e.key))
     const tv = () => form() === 'tv'
     const desktop = () => form() === 'desktop'
@@ -151,12 +155,43 @@ export function HistoryPage() {
         tick(id, shift)
     }
     // A TV remote cannot reach the toast's Undo, so it is asked first; the phone and the desktop remove at once.
-    const remove = () => (tv() ? confirmDialog.showModal() : void doRemove())
+    const remove = () => (tv() ? void askRemove() : void doRemove())
+    const askRemove = async () => {
+        const count = picked().size
+        const yes = await askConfirm({
+            title: t('browse.remove_selected_title', { count }),
+            message: later() ? t('browse.remove_selected_later_message', { count }) : t('browse.remove_selected_message', { count }),
+            detail: t('browse.remove_selected_detail'),
+            confirm: t('browse.remove_count', { count }),
+            // Nothing ticked any more (the cards went, the tab changed): the question has no subject.
+            closeWhen: () => picked().size === 0,
+        })
+        if (yes) void doRemove()
+    }
+    // Clear Watch later takes the whole list, so it asks first (HX59); Undo still follows.
+    const clearLater = async () => {
+        const count = laterIds().size
+        if (!count) return
+        const yes = await askConfirm({
+            title: t('browse.clear_watch_later_title'),
+            message: t('browse.clear_watch_later_message', { count }),
+            detail: t('browse.clear_watch_later_detail'),
+            confirm: t('browse.clear_watch_later'),
+            closeWhen: () => laterIds().size === 0,
+        })
+        if (yes) void removeLaterWithUndo(null)
+    }
+    const playRandom = async () => {
+        const items = (entries.latest ?? []).map((e) => e.item)
+        if (!items.length) return
+        const done = await watchedIds().catch(() => [] as string[])
+        await playRandomOf({ scope: randomScope('later', 'all'), items, watched: done, verify: true, open: (path, item) => navigate(path, { state: { video: item } }) }).catch((e) => showToast({ text: errorText(e) }))
+    }
     onMount(() => {
         const keys = (e: KeyboardEvent) => {
             if (form() !== 'desktop') return
             const inField = e.target instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) && (e.target as HTMLInputElement).type !== 'checkbox'
-            if (inField || confirmDialog.open) return
+            if (inField || confirmOpen()) return
             // Ctrl+A ticks every card, starting select mode when it is not on yet; the rest only act in it.
             if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
                 if (!order().length) return
@@ -177,12 +212,18 @@ export function HistoryPage() {
     return (
         <>
             <PageHead title={t('browse.tab_history_heading')} blurb={meta().blurb()} />
-            {/* One click, no question, and the toast offers Undo for 8 s: Clear history takes Continue watching and Watched and keeps Watch later; on Watch later, Clear Watch later takes that list alone. */}
+            {/* A question first (HX59), then the toast offers Undo for 8 s: Clear history takes Continue watching and Watched and keeps Watch later; on Watch later, Clear Watch later takes that list alone. */}
             <Show when={days().length}>
                 <div class="history-actions">
                     <button class="link" type="button" onClick={() => (selecting() ? leave() : setSelecting(true))}>
                         {selecting() ? t('common.cancel') : t('browse.select')}
                     </button>
+                    {/* Play random over Watch later (U16): unwatched first, never the one it played last; a video gone from its chat is let go and another rolled. */}
+                    <Show when={later() && !selecting()}>
+                        <button class="link" type="button" onClick={() => void playRandom()}>
+                            {t('grid.play_random')}
+                        </button>
+                    </Show>
                     <Show when={!selecting()}>
                         <Show
                             when={later()}
@@ -192,7 +233,7 @@ export function HistoryPage() {
                                 </button>
                             }
                         >
-                            <button class="link" type="button" onClick={() => void removeLaterWithUndo(null)}>
+                            <button class="link" type="button" onClick={() => void clearLater()}>
                                 {t('browse.clear_watch_later')}
                             </button>
                         </Show>
@@ -292,24 +333,6 @@ export function HistoryPage() {
                     </button>
                 </div>
             </Show>
-            <dialog class="confirm" ref={confirmDialog} aria-labelledby="remove-title">
-                <h2 id="remove-title">{t('browse.remove_selected_title', { count: picked().size })}</h2>
-                <p>{later() ? t('browse.remove_selected_later_message', { count: picked().size }) : t('browse.remove_selected_message', { count: picked().size })}</p>
-                <p class="muted">{t('browse.remove_selected_detail')}</p>
-                <div class="confirm-buttons">
-                    <button class="link" type="button" onClick={() => confirmDialog.close()}>{t('common.cancel')}</button>
-                    <button
-                        class="primary danger"
-                        type="button"
-                        onClick={() => {
-                            confirmDialog.close()
-                            void doRemove()
-                        }}
-                    >
-                        {t('browse.remove_count', { count: picked().size })}
-                    </button>
-                </div>
-            </dialog>
         </>
     )
 }
@@ -323,7 +346,7 @@ function byDay(entries: Entry[]): { label: string; entries: Entry[] }[] {
         const day = new Date(e.time)
         day.setHours(0, 0, 0, 0)
         const ago = Math.round((today.getTime() - day.getTime()) / 86_400_000)
-        const label = !e.time ? '' : ago <= 0 ? t('watched.today') : ago === 1 ? t('watched.yesterday') : day.toLocaleDateString('en', { day: 'numeric', month: 'long' })
+        const label = !e.time ? '' : ago <= 0 ? t('watched.today') : ago === 1 ? t('watched.yesterday') : formatDate(day, { day: 'numeric', month: 'long' })
         const last = out[out.length - 1]
         if (last && last.label === label) last.entries.push(e)
         else out.push({ label, entries: [e] })
