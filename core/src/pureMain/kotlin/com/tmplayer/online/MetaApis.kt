@@ -394,6 +394,15 @@ class TmdbApi(
         )
     }
 
+    /**
+     * Where a film or show can be streamed, rented or bought in [region] (HX41): TMDB's
+     * `watch/providers`, data from JustWatch, read by [WatchOfferRules]. One call, names only.
+     */
+    suspend fun watchProviders(key: String, film: Boolean, id: String, region: String): MetaReply<WatchOffers> =
+        get(key, if (film) "movie/${enc(id)}/watch/providers" else "tv/${enc(id)}/watch/providers", "") { json ->
+            WatchOfferRules.read(json, region)
+        }
+
     private suspend fun <T> get(key: String, path: String, params: String, read: (JSONObject) -> T): MetaReply<T> {
         limiter.acquire()
         val bearer = key.length > 40

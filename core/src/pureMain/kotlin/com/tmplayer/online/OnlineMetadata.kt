@@ -276,6 +276,42 @@ class OnlineMetadata(
         return PosterChoices.Found(choices)
     }
 
+    private val watchMemory = LruMap<String, WhereToWatch>(CHOICES_MEMORY_ENTRIES)
+
+    /**
+     * Where [choice] can be watched legally in the viewer's region (HX41's "Where to watch"): one
+     * TMDB call through the same rate limiter, asked only when the viewer opens the sheet, kept in
+     * memory for this run. Names of services only, no links. Never throws.
+     */
+    suspend fun whereToWatch(choice: PosterChoice): WhereToWatch {
+        val s = store.now
+        if (!s.enabled) return WhereToWatch.Off
+        if (!tmdbUsable(s)) return WhereToWatch.NoKey
+        if (choice.tmdbId <= 0) return WhereToWatch.Unavailable
+        val region = region()
+        val key = "${choice.onlineKey}|$region"
+        locksLock.locked { watchMemory[key] }?.let { return it }
+        if (paused(MetaProvider.Tmdb)) return WhereToWatch.Unavailable
+        val apiKey = activeKey(s)
+        return try {
+            val reply = retrying { tmdb.watchProviders(apiKey, !choice.show, choice.tmdbId.toString(), region) }
+            val problem = trouble(MetaProvider.Tmdb, reply, apiKey)
+            val answer = when {
+                problem == null -> (reply as MetaReply.Ok).value.let { if (it.isEmpty) WhereToWatch.NoneHere(it.region) else WhereToWatch.Found(it) }
+                // A 404 is TMDB saying it has no such title: nothing listed, said plainly.
+                problem === Outcome.Nothing -> WhereToWatch.NoneHere(region.uppercase())
+                !tmdbUsable(store.now) -> WhereToWatch.NoKey
+                else -> WhereToWatch.Unavailable
+            }
+            if (answer is WhereToWatch.Found || answer is WhereToWatch.NoneHere) locksLock.locked { watchMemory[key] = answer }
+            answer
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            WhereToWatch.Unavailable
+        }
+    }
+
     private fun remembered(key: String): MetaResult? {
         memory[key]?.let { return it }
         val stored = cache.answer(key) ?: return null
