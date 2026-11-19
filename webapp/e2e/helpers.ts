@@ -60,5 +60,19 @@ export async function openCard(page: Page, name: string) {
 export const choice = (page: Page, name: string) =>
     page.getByRole('menuitemradio', { name }).or(page.getByRole('radio', { name, exact: true })).first()
 
+/**
+ * The raw calls the fake Telegram has answered so far (fake/mtcute.ts `calls`: `searchMessages <chat> <filter> <offset>`,
+ * `searchGlobal <filter> <offset>`, `iterDialogs <archived> <limit>`, `getMessages <chat>`, `getFullChat <chat>`, the
+ * sync file's `sendMedia` and `editMessage`), read from the Telegram worker, which holds them. Empty before the worker starts.
+ */
+export async function workerCalls(page: Page): Promise<string[]> {
+    const worker = page.workers().find((w) => /tg\/worker/.test(w.url()))
+    if (!worker) return []
+    return worker.evaluate(() => [...((globalThis as { fakeCalls?: string[] }).fakeCalls ?? [])])
+}
+
+/** How many of the calls so far start with `kind`. */
+export const countCalls = (calls: string[], kind: string) => calls.filter((c) => c === kind || c.startsWith(`${kind} `)).length
+
 /** The form this project runs in: its name says (`phone-390`, `desktop-1280`, `webkit-iphone`); the rest are auto-detected desktops. */
 export const isPhoneProject = (name: string) => name.startsWith('phone') || name.includes('iphone')
