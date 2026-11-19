@@ -44,7 +44,7 @@ function failureLine(f: Failure): string | null {
  * The track's name, as the apps write it: "Malayalam · MSone" (online.track_label). A browser
  * without Intl.DisplayNames (the TV build's oldest engines) gets "Subtitles by MSone".
  */
-function trackLabel(): string {
+export function trackLabel(): string {
     try {
         const language = new Intl.DisplayNames(['en'], { type: 'language' }).of('ml')
         if (language && language !== 'ml') return t('online.track_label', { language, provider: 'MSone' })
@@ -61,7 +61,7 @@ function facts(hit: Hit): string {
 export function MsoneSheet(props: {
     target: MsoneTarget
     /** Lays the file over the video; throws when it cannot be read. */
-    onLoad: (file: File, as: { label: string; language: string }) => Promise<void>
+    onLoad: (file: File, as: { label: string; language: string }, hit: Hit) => Promise<void>
     onPickFile: () => void
     onClose: () => void
 }) {
@@ -138,7 +138,7 @@ export function MsoneSheet(props: {
                 return
             }
             try {
-                await props.onLoad(r.file, { label: trackLabel(), language: 'ml' })
+                await props.onLoad(r.file, { label: trackLabel(), language: 'ml' }, hit)
             } catch {
                 if (!closed) setHitFailure({ id: hit.id, failure: { kind: 'unreadable' } })
                 return

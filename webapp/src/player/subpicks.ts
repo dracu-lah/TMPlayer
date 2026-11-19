@@ -8,6 +8,7 @@
 // window, a full disk) means the pick is asked for again, nothing more. No page code (no strings, no
 // Solid), so `node --test` reads it as it is.
 import { createStore, delMany, get, keys as storeKeys, set, type UseStore } from 'idb-keyval'
+import { PICKS_DB } from './subpicks-db.ts'
 import { FILE_MAX, onForgotten, parseHit, type Hit, type KeepStore } from './msone.ts'
 
 /** As core's SubtitlePicks.MAX_ENTRIES. */
@@ -40,7 +41,7 @@ const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'obj
 
 function idbStore(): KeepStore {
     let db: UseStore | null = null
-    const store = () => (db ??= createStore('tmplayer-subpicks', 'kv'))
+    const store = () => (db ??= createStore(PICKS_DB, 'kv'))
     return {
         get: (key) => get(key, store()),
         set: (key, value) => set(key, value, store()),

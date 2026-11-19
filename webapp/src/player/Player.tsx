@@ -19,6 +19,7 @@ import { applyDelay, look, placeCues, lookVars, setLook, setSubDelay } from './c
 import { readLook } from './keep'
 import { loadThumb } from '../screens/thumbs'
 import { readSubtitle, SUBTITLE_EXTENSIONS, SubtitleError } from './subtitles'
+import { choseOther, warmRestore } from './subpick-use'
 import { api } from '../tg/rpc'
 import { t } from '../i18n'
 import { routeCrashes } from '../crash'
@@ -98,6 +99,8 @@ export function Player(props: {
     let subtitleInput!: HTMLInputElement
     const [ready, setReady] = createSignal(false)
     const item = props.item
+    // HX25: the remembered online subtitle is looked for while the video opens, so it is in before the first frame.
+    void warmRestore(item)
     const copies = playableCopies(item.copies)
     const mounted = performance.now()
     let loadStarted = 0
@@ -603,6 +606,8 @@ export function Player(props: {
     const loadSubtitle = async (picked: File) => {
         try {
             await addSubtitle(picked)
+            // A file of their own is an explicit choice: the remembered online subtitle no longer stands (HX25).
+            choseOther(item)
         } catch (e) {
             setNotice(e instanceof SubtitleError && e.why === 'vobsub' ? t('web.needs_app_picture_subtitles') : t('player.subtitle_load_failed', { file: picked.name }))
         }

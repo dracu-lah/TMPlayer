@@ -62,8 +62,9 @@ import { loadThumb } from '../screens/thumbs'
 import { chapterAt, chapterMarks, chapterNext, chapterPrevious, isGeneric, skipSegments, type Chapter, type SkipSegment } from './chapters'
 import { applyDelay, look, setLook, setSubDelay, subDelay } from './cues'
 import { BookmarksSheet, delayText, SIZES, TimingSheet } from './extra-sheets'
-import { MsoneSheet, type MsoneTarget } from './msone-sheet'
+import { MsoneSheet, trackLabel as onlineLabel, type MsoneTarget } from './msone-sheet'
 import { episodeOf } from './msone'
+import * as subpick from './subpick-use'
 import { mergeSkips } from './skipOnline'
 import { answer, askOf, loadAnimeSkips } from '../screens/posters'
 import { settings } from '../store'
@@ -293,6 +294,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
             const own = episodeOf(c.item.fileName ?? '') ?? (info()?.episode ? episodeOf(info()!.episode!.code) : null)
             const file = await readChatSubtitle(sub, own)
             await c.addSubtitle(file, { label: sub.name.replace(/\.[^.]+$/, ''), language: sub.language ?? '' })
+            subpick.choseOther(c.item)
             setSheet(null)
         } catch (e) {
             if (e instanceof ChatSubtitleError) {
@@ -431,9 +433,21 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         v.volume = Math.max(0, Math.min(1, x))
         v.muted = v.volume === 0
     }
+    // The online subtitle laid over this video (picked from MSone, or brought back by itself): the one track the
+    // remembered pick is about. Choosing it again ends an Off; Off is remembered; any other track ends the pick (HX25).
+    let onlineTrack: TextTrack | null = null
+    const layOnline = async (file: File, as: { label: string; language: string }) => {
+        const before = new Set(Array.from(v.textTracks))
+        await c.addSubtitle(file, as)
+        onlineTrack = Array.from(v.textTracks).find((tt) => !before.has(tt)) ?? null
+        readSubs()
+    }
     const pickSub = (track: TextTrack | null) => {
         for (const tt of subs()) tt.mode = tt === track ? 'showing' : 'disabled'
         readSubs()
+        if (!track) subpick.choseOff(c.item)
+        else if (track === onlineTrack) subpick.choseOnline(c.item)
+        else subpick.choseOther(c.item)
         flash(track ? t('player.subtitles_track', { track: subLabel(track, subs().indexOf(track)) }) : t('player.subtitles_off'))
     }
     const subLabel = (tt: TextTrack, i: number) => tt.label || (tt.language ? tt.language.toUpperCase() : t('player.track_number', { number: i + 1 }))
@@ -442,6 +456,28 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         const at = list.indexOf(subOn())
         pickSub(list[(at + (back ? -1 : 1) + list.length) % list.length])
     }
+    // HX25, the start: the online subtitle picked for this video before comes back by itself (its own copy, the MSone
+    // cache's file, or one download when nothing forbids it), and so does Off. The lookup began when the player opened
+    // (Player's warmRestore), so the track is usually in before the first frame, and always before the viewer can enter
+    // the iPhone's own full screen. A subtitle the viewer chose meanwhile is never replaced; nothing here shows an error.
+    let leaving = false
+    onCleanup(() => (leaving = true))
+    onMount(() => {
+        void subpick.takeRestore(c.item).then(async (found) => {
+            const showing = () => Array.from(v.textTracks).some((tt) => (tt.kind === 'subtitles' || tt.kind === 'captions') && tt.mode === 'showing')
+            if (leaving || showing()) return
+            if (found.kind === 'ready') {
+                try {
+                    await layOnline(found.file, { label: onlineLabel(), language: 'ml' })
+                    if (onlineTrack) flash(t('player.subtitles_track', { track: subLabel(onlineTrack, subs().indexOf(onlineTrack)) }))
+                } catch {
+                    // A copy that does not read is no pick: the viewer is simply asked again, no error card.
+                    subpick.choseOther(c.item)
+                }
+            }
+            // Off needs nothing laid: no subtitle shows by itself, and none is laid.
+        })
+    })
     const cycleAudio = (back = false) => {
         const list = c.audios()
         if (list.length < 2 || !c.canSwitchAudio()) return
@@ -2110,7 +2146,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                     </Picker>
                 </Match>
                 <Match when={sheet() === 'msone'}>
-                    <MsoneSheet target={msoneTarget(c.item, info())} onLoad={c.addSubtitle} onPickFile={() => (setSheet(null), c.loadSubtitleFile())} onClose={() => setSheet(null)} />
+                    <MsoneSheet target={msoneTarget(c.item, info())} onLoad={async (file, as, hit) => (await layOnline(file, as), subpick.picked(c.item, hit, file))} onPickFile={() => (setSheet(null), c.loadSubtitleFile())} onClose={() => setSheet(null)} />
                 </Match>
                 <Match when={sheet() === 'audio'}>
                     <Picker title={t('player.audio')} phone={phone()} panel={inPanel()} anchor={anchor()} root={c.root} onClose={() => setSheet(null)} onBack={panelBack('more')}>
