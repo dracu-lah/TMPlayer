@@ -810,7 +810,7 @@ private fun ShelfCell(
 private fun telegramFacts(chatTitle: String, item: MediaItem): String =
     listOfNotNull(
         chatTitle.ifBlank { null },
-        item.qualityTags.firstOrNull(),
+        com.tmplayer.data.QualityRead.of(item),
         item.sizeBytes.takeIf { it > 0 }?.let { MediaMapper.formatSize(it) },
     ).joinToString("  ·  ")
 

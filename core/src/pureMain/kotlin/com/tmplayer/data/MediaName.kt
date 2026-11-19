@@ -747,7 +747,7 @@ object MediaName {
             }
             .replace(SITE, " ")
             // Whatever the signature was attached with, once it is gone.
-            .trimStart { it.isWhitespace() || it in TRIM_CHARS }
+            .trimStart { it.isWhitespace() || it in TRIM_CHARS || it == '*' }
             .replace(LEADING_RELEASE_TAG, "")
     }
 
@@ -843,7 +843,10 @@ object MediaName {
 
     private fun clean(raw: String): String =
         // An unterminated "(" is what is left when the title is cut at a bracketed year.
-        collapsedSpaces(raw.trim { it.isWhitespace() || it in TRIM_CHARS }).trim()
+        collapsedSpaces(raw.trim { it.isWhitespace() || it in TRIM_CHARS })
+            // A leading star is decoration ("*SAW X"); a leading # can be a real title ("#Alive") and stays.
+            .trimStart { it == '*' || it.isWhitespace() }
+            .trim()
 
     /**
      * [text] with each run of dots and underscores a space and each run of whitespace one space,

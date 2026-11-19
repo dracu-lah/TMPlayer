@@ -200,6 +200,12 @@ data class ResultGroup(
     /** The best picture any copy has, as [MediaFacts] names it, or null when none says. */
     val bestQuality: String? get() = copies.mapNotNull(GlobalSearch::qualityOf).maxByOrNull(GlobalSearch::qualityRank)
 
+    /**
+     * The recommended copy's own picture ([QualityRead]), the one the card's badge names: it is the
+     * copy a tap plays, so the badge and Play never disagree. [bestQuality] is the best any copy has.
+     */
+    val leadQuality: String? get() = GlobalSearch.qualityOf(lead)
+
     /** The smallest and the largest copy, in bytes, leaving out copies of unknown size. */
     val sizeRange: LongRange? get() {
         val sizes = copies.map { it.sizeBytes }.filter { it > 0 }
@@ -497,24 +503,45 @@ object GlobalSearch {
     fun titleOf(group: ResultGroup): String = group.show?.takeIf { group.isShow } ?: SeriesShelf.tileTitle(group.asItem())
 
     /**
-     * On this device first, then the copy whose name carries the viewer's preferred audio
-     * [language] (EG-F5: "Hindi" in the name of a Hindi copy), then the best picture, then the
-     * newest. A copy whose name names no language ranks between one that names the language and
-     * one that names only others: it may well be in it. [language] null leaves this step out.
+     * The recommended copy first (HX38), in this order: on this device; not a cam, a telesync or a
+     * pre-DVD rip ([QualityRead.lowGrade]); one this device plays smoothly ([tooSlow], the
+     * decode judge); the copy whose name carries the viewer's preferred audio [language]
+     * (EG-F5: "Hindi" in the name of a Hindi copy; a copy that names no language ranks between
+     * one that names it and one that names only others, since it may well be in it); the best
+     * picture the device suits ([cap]: the tallest at or under it, then the lowest above it, so a
+     * 4K copy stays selectable but does not lead on a phone or a 1 GB stick); the newest. The
+     * picture is [QualityRead]'s, the stated size before the name. [language] null leaves the
+     * language step out. Two copies equal on everything keep the newer.
      */
-    fun copyOrder(copies: List<MediaItem>, language: String? = null): List<MediaItem> {
+    fun copyOrder(
+        copies: List<MediaItem>,
+        language: String? = null,
+        tooSlow: (MediaItem) -> Boolean = VideoCopies.tooSlowHere,
+        cap: Int = VideoCopies.heightCap(VideoCopies.deviceWord),
+    ): List<MediaItem> {
         if (copies.size < 2) return copies.toList()
-        // Each copy's quality and language read once, not on every comparison of the sort.
-        return copies.map { Triple(it, qualityOf(it)?.let(::qualityRank) ?: 0, languageTier(it, language)) }
-            .sortedWith(
-                compareByDescending<Triple<MediaItem, Int, Int>> { it.first.onDevice }
-                    .thenByDescending { it.third }
-                    .thenByDescending { it.second }
-                    .thenByDescending { it.first.date }
-                    .thenByDescending { it.first.messageId },
-            )
-            .map { it.first }
+        // Each copy's picture, grade and language read once, not on every comparison of the sort.
+        class Keyed(val item: MediaItem, val fit: Int, val language: Int, val smooth: Boolean, val grade: Boolean)
+        return copies.map { copy ->
+            val height = VideoCopies.heightOf(copy)
+            val fit = when {
+                height == null -> UNKNOWN_FIT
+                height <= cap -> height
+                else -> -height
+            }
+            Keyed(copy, fit, languageTier(copy, language), !tooSlow(copy), !QualityRead.lowGrade(copy))
+        }.sortedWith(
+            compareByDescending<Keyed> { it.item.onDevice }
+                .thenByDescending { it.grade }
+                .thenByDescending { it.smooth }
+                .thenByDescending { it.language }
+                .thenByDescending { it.fit }
+                .thenByDescending { it.item.date }
+                .thenByDescending { it.item.messageId },
+        ).map { it.item }
     }
+
+    private const val UNKNOWN_FIT = -1_000_000
 
     /** 2 when the name carries [language], 1 when it names no language, 0 when it names only others or none is wanted. */
     private fun languageTier(item: MediaItem, language: String?): Int {
@@ -541,19 +568,10 @@ object GlobalSearch {
         return Tally(videos, chats.size)
     }
 
-    /** "4K", "1080p", "720p", "SD", or null when neither the name nor the stated size says. */
-    fun qualityOf(item: MediaItem): String? =
-        // The file name's tags are read once per item ([MediaItem.qualityTags]).
-        (if (item.fileName.isBlank()) MediaText.qualityTags(item.title) else item.qualityTags).firstOrNull()
-            ?: MediaFacts.resolutionOf(item.width, item.height)
+    /** "4K", "1080p", "720p", "SD", or null when neither the stated size nor the name says: see [QualityRead]. */
+    fun qualityOf(item: MediaItem): String? = QualityRead.of(item)
 
-    fun qualityRank(quality: String): Int = when (quality.uppercase()) {
-        "4K" -> 4
-        "1080P" -> 3
-        "720P" -> 2
-        "SD" -> 1
-        else -> 0
-    }
+    fun qualityRank(quality: String): Int = QualityRead.rank(quality)
 
     /**
      * [groups] screened by the client side filters and by a quality the query named: each card

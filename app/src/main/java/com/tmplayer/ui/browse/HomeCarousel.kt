@@ -435,10 +435,10 @@ internal fun featuredFacts(pick: FeaturedPick, title: String, chat: String, s: c
     val year = name.year?.takeIf { series == null && it.toString() !in title }?.toString()
     val which = when {
         series != null -> series.seasons.maxOfOrNull { it.number }?.takeIf { it > 0 }?.let { s.seriesSeason(it) }
-        item.versions.size > 1 -> s.detailVersions(item.versions.size)
+        com.tmplayer.data.VideoCopies.versionCount(item) > 1 -> s.detailVersions(com.tmplayer.data.VideoCopies.versionCount(item))
         else -> null
     }
-    return listOfNotNull(year, which, item.qualityTags.firstOrNull(), chat.ifBlank { null }).joinToString(SEPARATOR)
+    return listOfNotNull(year, which, com.tmplayer.data.QualityRead.of(item), chat.ifBlank { null }).joinToString(SEPARATOR)
 }
 
 /** The carousel's frame while the starred chats are still being asked: the same size, shimmering. */

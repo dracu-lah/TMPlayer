@@ -148,8 +148,9 @@ class GlobalSearchTest {
             q("night train"),
         )
         val card = groups.single()
-        assertEquals(listOf(12L, 11L, 10L), card.copies.map { it.messageId })
-        assertEquals(listOf(3L, 2L, 1L), card.chatIds)
+        // On this device first, then the picture a phone suits (up to 1080p); the 4K stays selectable after (HX38).
+        assertEquals(listOf(12L, 10L, 11L), card.copies.map { it.messageId })
+        assertEquals(listOf(3L, 1L, 2L), card.chatIds)
         assertEquals("4K", card.bestQuality)
         assertEquals(3, card.asItem().versions.size)
     }

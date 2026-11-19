@@ -162,7 +162,7 @@ fun resultFacts(group: ResultGroup): String {
     val episodes = if (group.isShow) L.searchEpisodes(group.episodeCount) else null
     val duration = group.lead.durationSec.takeIf { it > 0 && !group.isShow }?.let(MediaMapper::formatDuration)
     val size = group.sizeRange?.let { range -> L.messages.formatter.sizeSpan(range.first, range.last).ifEmpty { null } }
-    return listOfNotNull(year, episodes, group.bestQuality, duration, size).joinToString("  ·  ")
+    return listOfNotNull(year, episodes, if (group.isShow) group.bestQuality else group.leadQuality, duration, size).joinToString("  ·  ")
 }
 
 /**

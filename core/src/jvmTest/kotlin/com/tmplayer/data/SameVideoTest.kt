@@ -273,7 +273,8 @@ class SameVideoTest {
         val copy = video("Night Lantern (2022) 1080p.mkv", date = 2)
         val ep2 = video("Harbour.Notes.S01E02.mkv", date = 1)
         val folded = SeriesShelf.foldFilmCopies(listOf(trailer, ep1, film, copy, ep2), emptyMap())
-        assertEquals(listOf(ep1.id, film.id, trailer.id, ep2.id), folded.map { it.id })
+        // The recommended copy (the 1080p) leads the tile, which still sits where the newest copy was (HX38).
+        assertEquals(listOf(ep1.id, copy.id, trailer.id, ep2.id), folded.map { it.id })
         assertEquals(2, folded[1].versions.size)
     }
 
