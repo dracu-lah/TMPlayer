@@ -341,7 +341,7 @@ export function createHandler(deps: Deps) {
 
     /** What the cache files an answer under: the cleaned title, as MetaQuery.cacheKey does, never the raw one. */
     function cacheRequest(origin: string, ask: Ask): Request {
-        const q = new URLSearchParams({ k: ask.kind, t: normalise(ask.title), y: String(ask.year ?? ''), id: String(ask.tmdbId ?? ''), s: ask.series ? '1' : '0', l: ask.languages.join(','), p: ask.picked ? '1' : '0', ...(ask.hints?.length ? { h: [...ask.hints].sort().join(',') } : {}), ...(ask.imdbId ? { i: ask.imdbId } : {}), ...(ask.anime ? { a: '1' } : {}) })
+        const q = new URLSearchParams({ k: ask.kind, t: normalise(ask.title), y: String(ask.year ?? ''), id: String(ask.tmdbId ?? ''), s: ask.series ? '1' : '0', l: ask.languages.join(','), p: ask.picked ? '1' : '0', ...(ask.hints?.length && ask.tmdbId === null ? { h: [...ask.hints].sort().join(',') } : {}), ...(ask.imdbId ? { i: ask.imdbId } : {}), ...(ask.anime ? { a: '1' } : {}) })
         return new Request(`${origin}/tmdb/poster?${q}`)
     }
 

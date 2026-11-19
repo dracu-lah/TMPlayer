@@ -147,7 +147,8 @@ const HINTS_RAW = 32
 export function parseHints(raw: string | null | undefined): string[] {
     if (!raw) return []
     const out: string[] = []
-    for (const code of raw.slice(0, HINTS_RAW).split(',')) {
+    for (const part of raw.slice(0, HINTS_RAW).split(',')) {
+        const code = part.toLowerCase()
         if (/^[a-z]{2}$/.test(code) && !out.includes(code)) out.push(code)
         if (out.length === MAX_HINTS) break
     }

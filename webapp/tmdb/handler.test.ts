@@ -344,7 +344,7 @@ test('h= breaks a tie between shows of one name toward the chat language', async
 })
 
 test('garbage and huge h= are ignored, not an error', async () => {
-    for (const h of ['', 'zzz', '%00', 'ml%2Cta%2Cte%2Chi%2Ckn', 'x'.repeat(50_000), '../..', 'ML']) {
+    for (const h of ['', 'zzz', '%00', 'ml%2Cta%2Cte%2Chi%2Ckn', 'x'.repeat(50_000), '../..']) {
         const r = await get(createHandler(mock(biggAnswer).deps), `/tmdb/poster?k=show&t=Bigg+Boss&s=1&h=${h}`)
         assert.equal(r.status, 200, h)
     }
@@ -367,4 +367,21 @@ test('the cache key holds hints only when there are some, and a renamed chat ask
     assert.equal(hinted.headers.get('x-poster-cache'), 'miss')
     assert.equal((await get(handle, '/tmdb/poster?k=show&t=Bigg+Boss&s=1&h=ml')).headers.get('x-poster-cache'), 'hit')
     assert.equal((await get(handle, '/tmdb/poster?k=show&t=Bigg+Boss&s=1&h=ta')).headers.get('x-poster-cache'), 'miss', 'another chat name is another key')
+})
+
+test('one set of hints is one key: order and case do not matter, an invalid h is no hint, and a pick by id has none', async () => {
+    const m = mock(biggAnswer)
+    const handle = createHandler(m.deps)
+    assert.equal((await get(handle, '/tmdb/poster?k=show&t=Bigg+Boss&s=1&h=ta,ml')).headers.get('x-poster-cache'), 'miss')
+    assert.equal((await get(handle, '/tmdb/poster?k=show&t=Bigg+Boss&s=1&h=ml,ta')).headers.get('x-poster-cache'), 'hit')
+    assert.equal((await get(handle, '/tmdb/poster?k=show&t=Bigg+Boss&s=1&h=ML,TA')).headers.get('x-poster-cache'), 'hit')
+    assert.equal(m.cache.size, 1)
+    const plain = createHandler(mock(biggAnswer).deps)
+    await get(plain, '/tmdb/poster?k=show&t=Bigg+Boss&s=1')
+    assert.equal((await get(plain, '/tmdb/poster?k=show&t=Bigg+Boss&s=1&h=zzz,%00')).headers.get('x-poster-cache'), 'hit', 'an invalid h is the key with no hint')
+    // A pick by id names its title: hints never split its key.
+    const tv = { id: 2, name: 'Bigg Boss', original_name: 'Bigg Boss', first_air_date: '2018-01-10', poster_path: '/s2abcdefgh.jpg', original_language: 'ml' }
+    const picked = createHandler(mock((u) => (u.pathname.includes('/tv/') ? j(tv) : j({}, 404))).deps)
+    await get(picked, '/tmdb/poster?k=show&t=Bigg+Boss&id=2&p=1')
+    assert.equal((await get(picked, '/tmdb/poster?k=show&t=Bigg+Boss&id=2&p=1&h=ml')).headers.get('x-poster-cache'), 'hit')
 })
