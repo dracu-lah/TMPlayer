@@ -96,6 +96,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -554,6 +555,10 @@ fun AddChatsScreen(
 
     val tick = rememberToggleTick()
     val compact = form != DeviceForm.Phone
+    // A phone on its side is about 400 dp high: the header, the foot and one row filled it, so Back
+    // sits beside the title and the words under it give way (HX56); the search stays.
+    val windowHeight = LocalWindowInfo.current.containerSize.height
+    val shortWindow = windowHeight in 1 until with(LocalDensity.current) { 480.dp.roundToPx() }
 
     val outer = when (form) {
         DeviceForm.Tv -> Modifier.padding(horizontal = Tv.SafeH, vertical = Tv.SafeV)
@@ -628,7 +633,7 @@ fun AddChatsScreen(
                     // beside the title, which leaves more of it for the rows.
                     val headingText = if (required) s.setupWhichTitle else s.pickerChooseChats
                     val blurbText = if (required) s.setupWhichBody else s.pickerBlurbOnly
-                    if (compact) {
+                    if (compact || shortWindow) {
                         item(key = "title") {
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -640,7 +645,7 @@ fun AddChatsScreen(
                                         modifier = Modifier.semantics { heading() },
                                     )
                                 }
-                                Text(blurbText, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
+                                if (!shortWindow) Text(blurbText, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
                             }
                         }
                     } else {
@@ -1002,25 +1007,34 @@ fun AddChatsScreen(
             } else {
                 Column(Modifier.fillMaxWidth()) {
                     failure()
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(top = 8.dp, bottom = if (form == DeviceForm.Phone) 12.dp else 0.dp)
-                            .groupedCard(GroupPlace.Alone)
-                            .onFocusChanged { inFoot = it.hasFocus }
-                            .padding(start = ROW_INSET, end = 10.dp, top = 10.dp, bottom = 10.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
+                    val totalWords: @Composable (Modifier) -> Unit = { m ->
                         Text(
                             totalLine(chosen, s),
                             style = MaterialTheme.typography.bodyMedium,
                             color = Tone.text,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f),
+                            modifier = m,
                         )
-                        doneButton()
+                    }
+                    val card = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp, bottom = if (form == DeviceForm.Phone) 12.dp else 0.dp)
+                        .groupedCard(GroupPlace.Alone)
+                        .onFocusChanged { inFoot = it.hasFocus }
+                        .padding(start = ROW_INSET, end = 10.dp, top = 10.dp, bottom = 10.dp)
+                    // At a large system font the button takes the whole card and left the count no
+                    // width at all (HX56): the count goes over the button then.
+                    if (LocalDensity.current.fontScale >= LARGE_FONT) {
+                        Column(card, verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.End) {
+                            totalWords(Modifier.fillMaxWidth())
+                            doneButton()
+                        }
+                    } else {
+                        Row(card, horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            totalWords(Modifier.weight(1f))
+                            doneButton()
+                        }
                     }
                     if (showHint) {
                         Box(Modifier.fillMaxWidth().padding(bottom = if (form == DeviceForm.Phone) 8.dp else 0.dp), contentAlignment = Alignment.Center) { escape() }
@@ -1552,6 +1566,9 @@ private fun scopeLabel(scope: ChatPicking.Scope, s: com.tmplayer.i18n.Messages):
     ChatPicking.Scope.Groups -> s.browseFilterGroups
     ChatPicking.Scope.People -> s.browseFilterPeople
 }
+
+/** The system font size from which the foot stacks its count over Done. */
+private const val LARGE_FONT = 1.3f
 
 /** A folder's chip or rail words: its title, or "Folder 3" when Telegram gave it none. */
 private fun folderLabel(folder: ChatFolderSummary, s: com.tmplayer.i18n.Messages): String =
