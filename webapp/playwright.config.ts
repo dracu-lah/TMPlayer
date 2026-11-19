@@ -20,7 +20,7 @@ function form(layout: 'phone' | 'desktop', width: number, height: number) {
     }
 }
 // The flows that must hold in every form (session 22).
-const FORM_SPECS = /(library|extras|pages|detail|a11y|titlelogo|choose-chats|sync|ux-audit)\.spec\.ts/
+const FORM_SPECS = /(library|extras|pages|detail|a11y|titlelogo|choose-chats|sync|ux-audit|confirm)\.spec\.ts/
 
 export default defineConfig({
     testDir: 'e2e',
@@ -39,7 +39,7 @@ export default defineConfig({
         // Safari on a Mac (a desktop), and an iPhone: the whole suite in the first, the flows that must hold on a phone in the second.
         // WebKit's page.route misses what the page's service worker answers, so a mocked TMDB would never be seen: the worker is blocked there.
         { name: 'webkit', use: { ...devices['Desktop Safari'], serviceWorkers: 'block' } },
-        { name: 'webkit-iphone', testMatch: /(player|autoplay|posters|app|library|pages|extras)\.spec\.ts/, use: { ...devices['iPhone 13'], serviceWorkers: 'block' } },
+        { name: 'webkit-iphone', testMatch: /(player|autoplay|posters|app|library|pages|extras|confirm)\.spec\.ts/, use: { ...devices['iPhone 13'], serviceWorkers: 'block' } },
         { name: 'phone-390', testMatch: FORM_SPECS, use: form('phone', 390, 844) },
         { name: 'phone-412', testMatch: FORM_SPECS, use: form('phone', 412, 915) },
         { name: 'desktop-1280', testMatch: FORM_SPECS, use: form('desktop', 1280, 800) },

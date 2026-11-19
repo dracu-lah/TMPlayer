@@ -522,6 +522,10 @@ for (const size of [
             for (let i = 0; i < 4 && (await on()) !== 'history-label'; i++) await press(page, 'ArrowUp')
             expect(await on()).toBe('history-label')
             await press(page, 'Enter')
+            // Clear history asks first (HX59): the question opens on Cancel, Right reaches the red button.
+            await expect(page.locator('dialog[open]')).toHaveCount(1)
+            await press(page, 'ArrowRight')
+            await press(page, 'Enter')
             await expect(page.locator('.toast button')).toBeVisible()
             // The toast never takes the remote.
             expect(await on()).toBe('history-label')
