@@ -147,6 +147,17 @@ for (const size of [
             const slot = (await title(page).boundingBox())!
             expect(slot.height).toBeGreaterThanOrEqual(56 * dp(size) - 1)
             await shot(page, 'loading', size)
+            // The score's line holds its place while the extras are on their way.
+            await expect(page.locator('.tv-hero-score.empty')).toHaveCount(1)
+            // Where a part stands inside the carousel, so the page's own scroll does not count.
+            const within = (sel: string) =>
+                page.locator(sel).evaluate((el) => {
+                    const r = el.getBoundingClientRect()
+                    const h = el.closest('.tv-hero')!.getBoundingClientRect()
+                    return { top: r.top - h.top, bottom: r.bottom - h.top }
+                })
+            const factsAt = await within('.tv-hero-facts')
+            const titleAt = await within('.tv-hero h2.tv-hero-title')
             // The remote walks up to Play, as before the logo (tv.spec's alignment walk).
             for (let i = 0; i < 4 && !(await focused(page)).startsWith('tv-hero-play|'); i++) await press(page, 'ArrowUp')
             expect(await focused(page)).toContain('tv-hero-play|/watch/')
@@ -163,6 +174,10 @@ for (const size of [
             expect(box.height).toBeLessThanOrEqual(56 * dp(size) + 1)
             // The apps' facts line: the kind, the year, two genres, a show's seasons.
             const facts = page.locator('.tv-hero-facts')
+            // Nothing above the score moved when it came: the facts and the logo's foot stand where they stood.
+            await expect(page.locator('.tv-hero-score:not(.empty)')).toBeVisible()
+            expect(Math.abs((await within('.tv-hero-facts')).top - factsAt.top)).toBeLessThan(1)
+            expect(Math.abs((await within('.tv-hero h2.tv-hero-title')).bottom - titleAt.bottom)).toBeLessThan(1)
             await expect(facts).toHaveText('Series  ·  2019  ·  Drama, Mystery  ·  2 seasons')
             const score = page.locator('.tv-hero-score')
             await expect(score).toHaveAttribute('aria-label', 'TMDB 7.4 out of 10')
@@ -286,6 +301,8 @@ for (const size of [
             await page.goto('/')
             const skeleton = title(page).locator('.title-logo-skeleton')
             await expect(skeleton).toBeVisible()
+            // The remote's first card scrolls the carousel up under the bar, which no longer counts as in sight: back to the top.
+            await page.evaluate(() => window.scrollTo(0, 0))
             await expect(page.locator('.tv-hero')).toHaveClass(/\bin-sight\b/)
             expect(await skeleton.evaluate((el) => getComputedStyle(el).animationName)).toBe('waiting')
             await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))

@@ -225,10 +225,16 @@ export function TvHero(props: { rows: HomeRow[] | undefined }) {
     const [inSight, setInSight] = createSignal(true)
     const observe = (el: HTMLElement) => {
         if (!watched) return
-        const io = new IntersectionObserver((seen) => {
-            const last = seen[seen.length - 1]
-            if (last) setInSight(last.isIntersecting)
-        })
+        // The strip under the fixed bar is not in sight: the bar's own height is taken off the top
+        // (its 87 dp where it is not drawn yet).
+        const bar = document.querySelector('.tv-bar')?.getBoundingClientRect().height || 87 * Math.min(innerWidth / 960, innerHeight / 540)
+        const io = new IntersectionObserver(
+            (seen) => {
+                const last = seen[seen.length - 1]
+                if (last) setInSight(last.isIntersecting)
+            },
+            { rootMargin: `-${Math.round(bar)}px 0px 0px 0px` },
+        )
         io.observe(el)
         onCleanup(() => io.disconnect())
     }
@@ -437,16 +443,25 @@ function TvHeroWords(props: { tile: Tile; title: string }) {
         <div class="tv-hero-text">
             <TitleLogo level={2} class="tv-hero-title" name={props.title} extras={extras()} pending={pending()} />
             <p class="tv-hero-facts">{facts()}</p>
-            <Show when={score()}>
-                {(value) => (
-                    <p class="tv-hero-score" role="img" aria-label={t('metadata.score_out_of_ten', { site: site(), score: value() })}>
-                        <Show when={site() === 'TMDB'} fallback={<span class="tv-hero-site">{site()}</span>}>
-                            <TmdbMark height={14} />
-                        </Show>
-                        <span>{value().toFixed(1)}</span>
-                    </p>
-                )}
-            </Show>
+            {/* The score's line is always there, empty until the extras come, so the logo and facts above it never jump. */}
+            <p
+                class="tv-hero-score"
+                classList={{ empty: !score() }}
+                role={score() ? 'img' : undefined}
+                aria-hidden={score() ? undefined : 'true'}
+                aria-label={score() ? t('metadata.score_out_of_ten', { site: site(), score: score()! }) : undefined}
+            >
+                <Show when={score()}>
+                    {(value) => (
+                        <>
+                            <Show when={site() === 'TMDB'} fallback={<span class="tv-hero-site">{site()}</span>}>
+                                <TmdbMark height={14} />
+                            </Show>
+                            <span>{value().toFixed(1)}</span>
+                        </>
+                    )}
+                </Show>
+            </p>
         </div>
     )
 }

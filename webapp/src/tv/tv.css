@@ -147,7 +147,7 @@ html[data-form=tv]:not([data-theme=light]) .tv-hero-title .title-logo.dark {
 }
 /* The facts in the page's ink (FeaturedInfo), the score under them with its site's mark (MetaScoresRow at 24 dp, TMDB's at 11/16 of it). */
 .tv-hero-facts { color: var(--fg); font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 20); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tv-hero-score { display: flex; align-items: center; gap: calc(var(--dp) * 6); font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 20); font-weight: 500; }
+.tv-hero-score { display: flex; align-items: center; height: calc(var(--dp) * 20); gap: calc(var(--dp) * 6); font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 20); font-weight: 500; }
 .tv-hero-score .tmdb-mark { flex: none; height: calc(var(--dp) * 16.5); width: calc(var(--dp) * 16.5 * 7.698); }
 .tv-hero-site { color: var(--muted); font-weight: 600; }
 .tv-hero-actions { position: absolute; left: calc(var(--tv-safe-h) + var(--dp) * 10); bottom: calc(var(--dp) * 24); display: flex; align-items: center; gap: calc(var(--dp) * 12); }
