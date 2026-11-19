@@ -373,9 +373,15 @@ object SeriesShelf {
         // sequel under a longer name has episodes of its own and stays apart.
         val numbersOf = strict.filterNotNull().groupBy { it.key }
             .mapValues { (_, files) -> files.mapTo(HashSet()) { (it.name.season ?: 1) to it.episode } }
+        val filesOf = strict.filterNotNull().groupBy { it.key }
         val alias = showKeys.associateWith { key ->
             val mine = numbersOf[key].orEmpty()
-            showKeys.filter { other -> other != key && key.startsWith("$other ") && other.split(' ').size >= 2 }
+            // Episode numbers alone prove nothing: every show has an S01E01. "Ben 10", "Ben 10 Alien
+            // Force" and "Ben 10 Omniverse" overlap on most numbers and are three shows.
+            showKeys.filter { other ->
+                other != key && key.startsWith("$other ") && other.split(' ').size >= 2 &&
+                    !areDifferentShows(filesOf[key].orEmpty(), filesOf[other].orEmpty())
+            }
                 .maxByOrNull { it.length }
                 ?.takeIf { other -> mine.count { it in numbersOf[other].orEmpty() } * 2 >= mine.size }
                 ?: key
@@ -671,6 +677,40 @@ object SeriesShelf {
         val number = name.episode ?: return null
         if (key.isEmpty()) return null
         return Found(item, key, name, number, alternatesOf(item, key))
+    }
+
+    /**
+     * Whether two sets of files, whose titles one starts with the other, are shown to be two shows
+     * rather than one season uploaded twice. Two things show it: each side names one year of its
+     * own and the years differ ("Ben 10 (2005)", "Ben 10 Omniverse (2012)"), or files of the same
+     * season and episode carry different episode names ("Dogged Pursuit" against "Darkstar
+     * Rising") for most of the pairs that name one. Silence proves nothing either way: files with
+     * no year and no episode name stay as the overlap of their numbers says.
+     */
+    private fun areDifferentShows(a: List<Found>, b: List<Found>): Boolean {
+        val yearsA = a.mapNotNullTo(HashSet()) { it.name.year }
+        val yearsB = b.mapNotNullTo(HashSet()) { it.name.year }
+        if (yearsA.size == 1 && yearsB.size == 1 && yearsA != yearsB) return true
+        val namesB = HashMap<Pair<Int, Int>, MutableList<String>>()
+        for (file in b) episodeNameKey(file)?.let { namesB.getOrPut((file.name.season ?: 1) to file.episode) { ArrayList() } += it }
+        if (namesB.isEmpty()) return false
+        var compared = 0
+        var conflicts = 0
+        for (file in a) {
+            val mine = episodeNameKey(file) ?: continue
+            val theirs = namesB[(file.name.season ?: 1) to file.episode] ?: continue
+            compared++
+            if (theirs.none { it == mine || it.contains(mine) || mine.contains(it) }) conflicts++
+        }
+        return compared >= MIN_EPISODES && conflicts * 2 > compared
+    }
+
+    /** The key of the episode's own name in [file]'s name or caption, null where it has none. */
+    private fun episodeNameKey(file: Found): String? {
+        val caption = file.item.caption.lineSequence().map { it.trim() }.firstOrNull { it.isNotEmpty() }
+        val name = listOfNotNull(file.item.nameForParsing.ifBlank { null }, caption)
+            .firstNotNullOfOrNull { MediaName.episodeName(it) } ?: return null
+        return keyOf(name).ifEmpty { null }
     }
 
     /**

@@ -164,6 +164,27 @@ class CaptionsAndLessonsTest {
     }
 
     @Test
+    fun `shows whose names start alike and whose numbers overlap stay apart by year`() {
+        // The real shape of one chat: every show has an S01E01, so numbers alone folded all four into "Ben 10".
+        val classic = (1..13).map { video("Ben 10 (2005) - S01E%02d - Classic ${it} [480p x264 AAC].mp4".format(it)) }
+        val force = (1..13).map { video("Ben_10_Alien_Force_2008_S01E%02d_Force_${it}_480p_x264_AAC.mp4".format(it)) }
+        val omni = (1..10).map { video("Ben_10_Omniverse_2012_S01E%02d_Omni_${it}_404p_WEB_DL.mp4".format(it)) }
+        val shows = SeriesShelf.arrange(classic + force + omni).filterIsInstance<ShelfEntry.Show>()
+        assertEquals(listOf(13, 13, 10), shows.map { it.series.episodeCount }.sortedDescending())
+    }
+
+    @Test
+    fun `shows with no year stay apart where the same episode number has different names`() {
+        val first = listOf("Dogged Pursuit", "Handle With Care", "Radio Dazed").mapIndexed { i, name ->
+            video("Harbour_Notes_S01E0${i + 1}_${name.replace(' ', '_')}_480p.mp4")
+        }
+        val sequel = listOf("Darkstar Rising", "Alone Together", "Good Copy").mapIndexed { i, name ->
+            video("Harbour_Notes_Deep_Water_S01E0${i + 1}_${name.replace(' ', '_')}_480p.mp4")
+        }
+        assertEquals(2, SeriesShelf.arrange(first + sequel).filterIsInstance<ShelfEntry.Show>().size)
+    }
+
+    @Test
     fun `copies of a lone episode fold into one tile`() {
         val items = listOf(
             video("Loki (2023) S02E05 [ ScienceFiction ] 720p.mkv"),
