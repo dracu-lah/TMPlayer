@@ -58,6 +58,7 @@ function device(c: ReturnType<typeof cloud>, clock: { t: number }, over: { accou
         putStar: (c2, t) => void lists.stars.push({ chatId: c2, time: t }),
         dropStar: (c2) => void (lists.stars = lists.stars.filter((x) => x.chatId !== c2)),
         putPick: () => {},
+        putTitle: () => {},
     }
     const deps = (): Deps => ({
         now: () => clock.t,

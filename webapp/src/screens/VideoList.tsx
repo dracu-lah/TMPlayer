@@ -9,7 +9,7 @@ import { isPromoCover, useObservedCovers } from './promo'
 import { askOf, keptRating, loadBackdrop, loadPoster, posterSizeFor } from './posters'
 import { TmdbMark } from '../ui/TmdbMark'
 import { warmDataCentres, warmFile } from '../stream/reader'
-import { t } from '../i18n'
+import { formatNumber, t } from '../i18n'
 import { form } from '../form'
 import { cardLayout, VirtualGrid } from '../ui/VirtualGrid'
 import { stableCards } from './stableCards'
@@ -20,8 +20,8 @@ import type { SponsoredItem, Tile, VideoItem } from '../tg/types'
 import type { PosterAsk } from '../rules'
 
 export function size(bytes: number): string {
-    if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(1)} GB`
-    return `${Math.max(1, Math.round(bytes / 1e6))} MB`
+    if (bytes >= 1e9) return t('format.size_gb', { size: formatNumber(bytes / 1e9, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) })
+    return t('format.size_mb', { size: formatNumber(Math.max(1, Math.round(bytes / 1e6))) })
 }
 
 export function length(s: number): string {
@@ -155,6 +155,8 @@ export interface CardData {
     facts: string
     /** How many versions the card stands for (HX38): the same count its page lists. */
     versions?: number
+    /** A show's tile: its menu has no Rename (a title belongs to one video, renamed from its own page). */
+    show?: boolean
 }
 
 const dot = '  ·  '
@@ -179,7 +181,7 @@ export function tileCard(tile: Tile, showChat = false): CardData {
               ]
                   .filter(Boolean)
                   .join(dot)
-    return { key: tile.key, title: tile.title, item: v, facts, versions: tile.kind === 'file' ? tile.versions : 1 }
+    return { key: tile.key, title: tile.title, item: v, facts, versions: tile.kind === 'file' ? tile.versions : 1, ...(tile.kind === 'show' ? { show: true } : {}) }
 }
 
 /** Where each video was left, for the line on its card. */
@@ -200,10 +202,10 @@ const intent = (v: VideoItem) => {
 }
 
 /** What every card's link does: warm the file on intent, keep the video it stands for for the page it opens. */
-function cardLink(item: VideoItem, direct?: boolean, replace?: boolean, history?: boolean, versions?: number) {
+function cardLink(item: VideoItem, direct?: boolean, replace?: boolean, history?: boolean, versions?: number, shown?: string | null) {
     return {
         // The right click and long press menu on every card; a TV remote has no pointer, and its hold of OK opens the card's own page.
-        ...(form() !== 'tv' ? cardMenu(item, !!history, versions ?? 1) : {}),
+        ...(form() !== 'tv' ? cardMenu(item, !!history, versions ?? 1, shown) : {}),
         href: cardPath(item, direct),
         state: { video: item },
         replace,
@@ -225,7 +227,7 @@ export function Card(props: { card: CardData; progress?: number; replace?: boole
         navigate(watchPath(props.card.item), { state: { video: props.card.item } })
     }
     return (
-        <A class="card" {...cardLink(props.card.item, props.direct, props.replace, props.history, props.card.versions)}>
+        <A class="card" {...cardLink(props.card.item, props.direct, props.replace, props.history, props.card.versions, props.card.show ? null : props.card.title)}>
             <CardArt thumb={props.card.item.thumb} cover={props.card.item.cover} title={props.card.title} poster={askOf(props.card.item)} tile={props.card.item.tile} progress={props.progress} onPlay={play} />
             {/* Under the card, as the apps write it (two lines kept, so the facts line up along a row). */}
             <div class="card-name">{props.card.title}</div>
@@ -273,7 +275,7 @@ export function ContinueCard(props: { item: VideoItem; left?: Left }) {
     })
     const facts = () => [props.item.chat, size(props.item.size)].filter(Boolean).join(dot)
     return (
-        <A class="card continue-card" {...cardLink(props.item, true, false, form() !== 'tv')}>
+        <A class="card continue-card" {...cardLink(props.item, true, false, form() !== 'tv', undefined, props.item.name.includes(dot) ? null : props.item.name)}>
             <div class="continue-art" ref={el} style={isPromoCover(props.item.cover) ? { background: coverBackground(props.item.title) } : undefined}>
                 <Show when={src() && !isPromoCover(props.item.cover)}>
                     <img class="continue-img" src={src()!} alt="" decoding="async" />

@@ -722,6 +722,8 @@ export const PAGE_STRINGS = [
     'settings.language',
     'settings.language_automatic',
     'settings.language_detail_system',
+    'web.language_failed',
+    'web.language_loading',
     // WB13 The Sort menu: orders, the Show filters and the filters by what a video is (U6), Play random (U16).
     'grid.filter_added_label',
     'grid.filter_added_month',
@@ -760,11 +762,15 @@ export const PAGE_STRINGS = [
     'grid.sort_loaded_note',
     // WB14 Rename a video (the apps' rename sheet).
     'grid.rename',
+    'grid.rename_copies_failed',
     'grid.rename_detail',
     'grid.rename_hint',
     'grid.rename_reset',
     'grid.rename_save',
     'grid.rename_title',
+    // WB28 reads these when the title report has its inbox: the hook is ready and hidden (ui/RenameSheet.tsx).
+    'titles.menu',
+    'titles.menu_detail',
     // WB15 Volume boost and Rotate picture (GitHub #33, #34).
     'player.label_rotate',
     'player.rotate_picture',

@@ -27,6 +27,11 @@
   </style>
   <script>try{var t=localStorage.getItem('tmplayer-theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
   <script>
+    // The language the page was last shown in (src/i18n.ts keeps it under tmplayer-language-shown), on <html lang dir> before
+    // the first paint, so a right to left language never flashes left to right. i18n.ts settles it before the app renders.
+    (function(){try{var l=localStorage.getItem('tmplayer-language-shown'),d=document.documentElement;if(l&&'%LANGUAGE_TAGS%'.indexOf(l)>=0){d.lang=l;d.dir='%RTL_TAGS%'.indexOf(l)>=0?'rtl':'ltr'}}catch(e){}})()
+  </script>
+  <script>
     // The layout (phone, desktop or TV) before the first paint: the same rules as src/form.ts, whose Settings choice is kept under tmplayer-layout.
     // ?tv=1 or ?tv=0 in the address (the TV wrappers, a link) is that choice made too: TV or Desktop, kept as Settings keeps it,
     // and Settings leaves its Layout out for the rest of the tab's life (tmplayer-layout-fixed), as the address decides it.

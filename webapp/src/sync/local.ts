@@ -7,13 +7,14 @@
 // - A place has no title here (Continue watching reads its video from Telegram): the title the
 //   file already holds for that video is kept, else "Video". The apps read the video from
 //   Telegram too and take its own title, so the placeholder is never what a person sees.
-// - Watch later lines for a whole show, bookmarks, the named lists and every correction but a
-//   poster pick are the apps' own: they travel through the file untouched (a merge never drops an
-//   entry for being absent) and the web neither shows nor changes them.
+// - Watch later lines for a whole show, bookmarks, the named lists and every correction line but a
+//   poster pick and a rename are the apps' own: they travel through the file untouched (a merge
+//   never drops an entry for being absent) and the web neither shows nor changes them.
 // - A removal is told from what this device noted when the viewer took the entry off (store.ts
-//   `xw:`, `xl:`, `xfix:`), except places and favourite chats, which are told from what the last
+//   `xw:`, `xl:`, `xfix:`, `xtitle:`), except places and favourite chats, which are told from what the last
 //   sync left, as the apps do.
 import { decodePick, type Pick } from '../pick.ts'
+import { cleanTitle, titleLine, titleOf } from '../rename.ts'
 import {
     REMOVAL_DAYS,
     TITLE_MAX,
@@ -49,8 +50,12 @@ export interface Lists {
     later: { chatId: number; messageId: number; time: number; title: string; size: number; duration: number }[]
     stars: { chatId: number; time: number }[]
     picks: { chatId: number; messageId: number; text: string; at: number }[]
+    /** The titles the viewer gave (a rename, with when it was set): the other line of a correction the web writes. */
+    titles?: { chatId: number; messageId: number; title: string; at: number }[]
     /** What the viewer took off, by the apps' key. */
     tombs: { list: 'watched' | 'later' | 'correction'; key: string; at: number }[]
+    /** The renames the viewer reset (Use the file name), by the apps' key, with when. */
+    titleTombs?: { key: string; at: number }[]
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -58,14 +63,33 @@ const PLACEHOLDER = 'Video'
 
 const cut = (title: string) => title.trim().slice(0, TITLE_MAX).trim()
 
-/** VideoCorrection.encode's lines of `text`, with the pick line set to `pick` (null: none), a pick lifting a "wrong match" as the apps' withPick does. */
-export function withPick(text: string | undefined, pick: string | null): string {
-    const lines = (text ?? '').split('\n')
+const PICK_LINE = /^tmdb=(film|show):\d{1,9}$/
+/** The lines VideoCorrection.encode writes: everything else on a correction is another version's. */
+const KNOWN_LINE = /^(separate|wrong|title=.*|tmdb=(film|show):\d{1,9})$/
+/** How much of another version's lines is carried along (the file's own limit for a correction is 1,000 characters). */
+const UNKNOWN_LINES = 8
+const UNKNOWN_CHARS = 120
+
+/**
+ * VideoCorrection.encode's lines of `text` with the lines `change` sets: `pick` (a `tmdb=` line, null
+ * for none, undefined to keep the one the file has) and `title` (a rename, the same three ways). A
+ * pick lifts a "wrong match" as the apps' withPick does. A line it does not know (a newer app's, such
+ * as `year=2019`) is kept verbatim after the others: core's decode and encode would drop it, but the
+ * web has no reason to, and it never makes a correction look empty. "" when nothing is left.
+ */
+export function withLines(text: string | undefined, change: { pick?: string | null; title?: string | null }): string {
+    const lines = (text ?? '').split(/\r\n|\r|\n/)
     const separate = lines.includes('separate')
+    const kept = lines.map((l) => l.trim()).find((l) => PICK_LINE.test(l)) ?? null
+    const pick = change.pick === undefined ? kept : change.pick
     const wrong = lines.includes('wrong') && !pick
-    const title = lines.find((l) => l.startsWith('title='))
-    return [separate ? 'separate' : null, wrong ? 'wrong' : null, pick, title ?? null].filter((l): l is string => !!l).join('\n')
+    const title = change.title === undefined ? titleOf(text, TITLE_MAX) : change.title
+    const unknown = lines.filter((l) => l.trim() && !KNOWN_LINE.test(l.trim())).slice(0, UNKNOWN_LINES).map((l) => l.slice(0, UNKNOWN_CHARS))
+    return [separate ? 'separate' : null, wrong ? 'wrong' : null, pick, title ? titleLine(title) : null, ...unknown].filter((l): l is string => !!l).join('\n')
 }
+
+/** `text` with the pick line set to `pick` (null: none), the rename and the rest kept. */
+export const withPick = (text: string | undefined, pick: string | null): string => withLines(text, { pick })
 
 /** The correction's lines without its pick: what is left of a correction once the pick is taken off. */
 export const withoutPick = (text: string) => withPick(text, null)
@@ -122,31 +146,52 @@ export function collect(lists: Lists, base: Base, remote: SyncDoc, account: numb
     for (const key of base.resumeKeys) if (!held.has(key)) removed.push({ list: 'resume', key, at: now })
     for (const id of base.favourites) if (!starred.has(id)) removed.push({ list: 'favourite', key: String(id), at: now })
 
-    // Poster picks are the corrections the web has: a pick joined to the other lines the file holds for that video.
+    // Poster picks and renames are the corrections the web has: each joined to the other lines the file holds for that video.
     const others = new Map(remote.corrections.map((c) => [keyOf(c.chat, c.msg), c] as const))
-    const picked = new Set<string>()
+    // What this device says of a video's correction: a line to set, null to take it off, absent to leave the file's.
+    const says = new Map<string, { pick?: string | null; title?: string | null; at: number }>()
+    const slot = (key: string) => {
+        let s = says.get(key)
+        if (!s) says.set(key, (s = { at: 0 }))
+        return s
+    }
     for (const p of lists.picks) {
-        const msg = tdlibMessageId(p.messageId)
-        const key = keyOf(p.chatId, msg)
-        const pickLine = p.text.split('\n').map((l) => l.trim()).find((l) => /^tmdb=(film|show):\d{1,9}$/.test(l))
+        const pickLine = p.text.split('\n').map((l) => l.trim()).find((l) => PICK_LINE.test(l))
         if (!pickLine) continue
-        picked.add(key)
-        doc.corrections.push({ chat: p.chatId, msg, text: withPick(others.get(key)?.text, pickLine), at: p.at } satisfies CorrectionRec)
+        const s = slot(keyOf(p.chatId, tdlibMessageId(p.messageId)))
+        s.pick = pickLine
+        s.at = Math.max(s.at, p.at)
+    }
+    for (const t of lists.titles ?? []) {
+        const title = cleanTitle(t.title, TITLE_MAX)
+        if (!title) continue
+        const s = slot(keyOf(t.chatId, tdlibMessageId(t.messageId)))
+        s.title = title
+        s.at = Math.max(s.at, t.at)
     }
     const oldest = now - REMOVAL_DAYS * DAY_MS
     for (const t of lists.tombs) {
         if (t.at < oldest || !validKey(t.list, t.key)) continue
-        if (t.list === 'correction') {
-            // A pick taken off leaves the rename and "Not the same video" the apps' correction also holds.
-            const [chat, msg] = t.key.split('_').map(Number)
-            const rest = withoutPick(others.get(t.key)?.text ?? '')
-            if (rest && !picked.has(t.key)) {
-                doc.corrections.push({ chat, msg, text: rest, at: t.at })
-                continue
-            }
-            if (picked.has(t.key)) continue
+        if (t.list !== 'correction') {
+            removed.push({ list: t.list, key: t.key, at: t.at })
+            continue
         }
-        removed.push({ list: t.list, key: t.key, at: t.at })
+        // A pick taken off leaves the rename and "Not the same video" the apps' correction also holds.
+        const s = slot(t.key)
+        if (s.pick === undefined) ((s.pick = null), (s.at = Math.max(s.at, t.at)))
+    }
+    for (const t of lists.titleTombs ?? []) {
+        if (t.at < oldest || !validKey('correction', t.key)) continue
+        // A rename reset leaves the pick and the rest likewise.
+        const s = slot(t.key)
+        if (s.title === undefined) ((s.title = null), (s.at = Math.max(s.at, t.at)))
+    }
+    for (const [key, s] of says) {
+        const [chat, msg] = key.split('_').map(Number)
+        const text = withLines(others.get(key)?.text, s)
+        // With nothing else on the correction, taking the pick or the rename off is a removal.
+        if (text) doc.corrections.push({ chat, msg, text, at: s.at } satisfies CorrectionRec)
+        else removed.push({ list: 'correction', key, at: s.at })
     }
     doc.removed = removed
     return doc
@@ -165,6 +210,8 @@ export interface Writer {
     putStar(chatId: number, time: number): void
     dropStar(chatId: number): void
     putPick(chatId: number, messageId: number, pick: Pick | null, at: number): void
+    /** The video's rename from the file (null: none, the file name reads again), cleaned already. */
+    putTitle(chatId: number, messageId: number, title: string | null, at: number): void
 }
 
 export interface Applied {
@@ -236,6 +283,7 @@ export async function applyLocal(apply: SyncApply, writer: Writer, budget = LATE
         const messageId = webMessageId(c.msg)
         if (messageId === null) continue
         writer.putPick(c.chat, messageId, decodePick(c.text), c.at)
+        writer.putTitle(c.chat, messageId, titleOf(c.text), c.at)
         changes++
     }
     for (const key of apply.correctionsOut.keys()) {
@@ -243,6 +291,7 @@ export async function applyLocal(apply: SyncApply, writer: Writer, budget = LATE
         const messageId = webMessageId(msg)
         if (messageId === null) continue
         writer.putPick(chat, messageId, null, 0)
+        writer.putTitle(chat, messageId, null, 0)
         changes++
     }
     return { changes, resumed, left }

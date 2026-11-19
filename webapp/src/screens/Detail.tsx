@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createResource, createSignal, For, Match, onCleanup, onMount, Show, Switch, untrack, type JSX } from 'solid-js'
 import { A, useLocation, useNavigate, useParams } from '@solidjs/router'
-import { ArrowLeft02Icon, Cancel01Icon, ClapperboardIcon, Clock01Icon, FilterHorizontalIcon, LeftToRightListBulletIcon, Link04Icon, ListVideoIcon, PlayIcon, RepeatIcon, Search01Icon, Tick02Icon, Unlink04Icon } from '@hugeicons/core-free-icons'
+import { ArrowLeft02Icon, Cancel01Icon, ClapperboardIcon, Clock01Icon, Edit02Icon, FilterHorizontalIcon, InformationCircleIcon, LeftToRightListBulletIcon, Link04Icon, ListVideoIcon, PlayIcon, RepeatIcon, Search01Icon, Tick02Icon, Unlink04Icon } from '@hugeicons/core-free-icons'
 import { api, errorText } from '../tg/rpc'
 import { back } from '../session'
 import { t } from '../i18n'
@@ -21,6 +21,7 @@ import { TitleLogo } from '../ui/TitleLogo'
 import { openTrailer } from '../ui/TrailerSheet'
 import { inApp, isValidKey, watchUrl } from '../ui/trailer'
 import { openPosterPicker } from '../ui/PosterPicker'
+import { canReportTitle, openRename, reportTitle } from '../ui/renameTarget'
 import { initialOf } from '../ui/initial'
 import { StarButton } from './Chats'
 import { loadThumb } from './thumbs'
@@ -28,7 +29,7 @@ import { answer, askOf, followAnimeGuide, loadBackdropLightFirst, loadExtras, lo
 import { coverBackground } from './cover'
 import { Card, clock, detailPath, shortLength, size, tileCard, useProgress, watchPath } from './VideoList'
 import { warmFile } from '../stream/reader'
-import { chooseCopyOf, copiesTick, isApart, keepApart } from '../copies'
+import { chooseCopyOf, copiesTick, isApart, keepApart, renamedTitle } from '../copies'
 import './versions.css'
 import type { ChatView, CopyRef, VideoItem, WatchInfo } from '../tg/types'
 
@@ -205,7 +206,10 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
         if (kind() === undefined || kind() !== null || failed()) return null
         return askOf(item) ? 'nothing' : 'unread'
     }
-    const title = () => found()?.title || props.info?.title || item.title
+    // The viewer's own title (Rename) leads; TMDB's, then the name the worker reads, follow.
+    const title = () => renamedTitle(item) || found()?.title || props.info?.title || item.title
+    // Every copy of this video: a rename is written to all of them, so it holds whichever one a card shows.
+    const copyItems = () => props.info?.group.length ? props.info.group : (props.info?.copies.map((c) => c.item) ?? [])
     const ep = () => props.info?.episode ?? null
     const episodeName = () => extras()?.episode?.name || ep()?.name || ''
     const resolution = () => props.info?.quality ?? (props.info?.height ? `${props.info.height}p` : '')
@@ -323,8 +327,8 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
                         level={1}
                         class="detail-title"
                         name={title()}
-                        extras={extras()}
-                        pending={!!(settings().posters && askOf(item)) && (!props.infoSettled || meta.loading)}
+                        extras={renamedTitle(item) ? null : extras()}
+                        pending={!renamedTitle(item) && !!(settings().posters && askOf(item)) && (!props.infoSettled || meta.loading)}
                     />
                     <p class="detail-facts">
                         <For each={facts()}>
@@ -384,6 +388,11 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
                         {/* Beside the other repairs a wrong poster is fixed by: TMDB's titles for this name, one chosen. */}
                         <Show when={settings().posters}>
                             <Round icon={Search01Icon} label={t('poster.round')} onClick={() => openPosterPicker(item, props.info?.seasons.flatMap((s) => s.episodes.map((e) => e.item)) ?? [])} />
+                        </Show>
+                        {/* Rename: the title the viewer wants to see (the apps' Rename), kept for every copy and carried by the sync file. Wrong title? (WB28) shows only once its inbox is registered. */}
+                        <Round icon={Edit02Icon} label={t('grid.rename')} popup onClick={() => openRename(item, props.info?.title || item.title, copyItems())} />
+                        <Show when={canReportTitle()}>
+                            <Round icon={InformationCircleIcon} label={t('titles.menu')} popup onClick={() => reportTitle(item, props.info?.title || item.title, copyItems())} />
                         </Show>
                         {/* A trailer plays in YouTube's own player in a sheet, which loads only after this press (ui/TrailerSheet.tsx); with Play trailers in TMPlayer off it is a link to YouTube in another tab. A key that is not a YouTube id is never offered. */}
                         <Show when={isValidKey(extras()?.trailer) ? extras()!.trailer! : undefined} keyed>
