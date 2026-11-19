@@ -3,7 +3,7 @@
 // metadata, garbage and huge answers.
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { agrees, hasGaps, rows, seasons, type HeldSeason, type ListedSeason } from './seriesGuide.ts'
+import { agrees, counted, hasGaps, numbering, place, readSeason, rekey, rows, seasons, seasonsFor, type HeldSeason, type ListedSeason, type ProviderEpisode } from './seriesGuide.ts'
 
 const today = '2026-11-16'
 const range = (a: number, b: number) => Array.from({ length: b - a + 1 }, (_, i) => a + i)
@@ -94,4 +94,97 @@ test('a season held only as a whole-season file is held, and lists no gap', () =
     assert.deepEqual(rows(2, [held(1, [1, 2]), packOnly], listed(2), null, today), [])
     // A season with episodes and a pack keeps its own gaps.
     assert.deepEqual(states(rows(1, [{ number: 1, numbers: [1], packed: true }], listed(1, 3), null, today)), ['have', 'missing', 'missing'])
+})
+
+// ---- the season split and a chat counting straight through (the apps' EpisodeGuide.numbering, EpisodeNumbering) ----
+
+const blue = (n: number) => ({ number: n, episodes: n === 1 ? 25 : 12, airDate: n === 1 ? '2024-10-03' : '2026-10-02' })
+const facts = { seasonList: [blue(1), blue(2)], next: { season: 2, episode: 8, airDate: '2026-11-20' }, seasonGroup: 'seasons001', listedSeasons: [{ number: 1, episodes: 37, airDate: '2024-10-03' }], listedNext: { season: 1, episode: 33, airDate: '2026-11-20' } }
+
+test('a chat numbered S02E01 follows the split, one numbered S01E26 follows TMDB\'s own, a show without a split has one numbering', () => {
+    const split = numbering([held(1, range(1, 25)), held(2, range(1, 5))], facts)
+    assert.ok(split.split)
+    assert.deepEqual(split.seasons.map((s) => s.episodes), [25, 12])
+    assert.deepEqual(split.next, facts.next)
+    const through = numbering([held(1, range(1, 30))], facts)
+    assert.ok(!through.split)
+    assert.deepEqual(through.seasons.map((s) => s.episodes), [37])
+    assert.deepEqual(through.next, facts.listedNext)
+    // Disagrees with both: the split stands (nothing is called missing then).
+    assert.ok(numbering([held(1, range(1, 60))], facts).split)
+    const plain = numbering([held(1, [1])], { seasonList: [listed(1)], next: null })
+    assert.deepEqual([plain.split, plain.seasons.length], [false, 1])
+    assert.deepEqual(numbering([held(1, [1])], null), { seasons: [], next: null, split: false })
+})
+
+const stand = [listed(1, 12), listed(2, 12), listed(3, 12)]
+
+test('a season counted straight through is placed by TMDB\'s season sizes', () => {
+    const second = range(13, 24)
+    assert.ok(counted(2, second, stand))
+    assert.ok(!counted(1, range(1, 12), stand))
+    assert.ok(!counted(2, range(1, 12), stand))
+    assert.ok(!counted(0, [30], stand), 'specials never')
+    assert.ok(!counted(9, [30], stand), 'a season TMDB does not list')
+    assert.ok(!counted(2, [1, 2, 3, 4, 5, 6, 7, 13], stand), 'one stray number past its end')
+    assert.deepEqual(place(2, 13, second, stand), [2, 1])
+    assert.deepEqual(place(2, 24, second, stand), [2, 12])
+    assert.deepEqual(place(2, 5, range(1, 5), stand), [2, 5], 'not counted: as written')
+    assert.deepEqual(place(2, 40, second, stand), null)
+    assert.deepEqual(place(2, 0, second, stand), null)
+    assert.deepEqual(seasonsFor(2, second, stand), [2])
+    assert.deepEqual(seasonsFor(1, range(1, 30), stand), [1, 2, 3])
+    assert.deepEqual(seasonsFor(2, range(1, 5), stand), [2])
+})
+
+test('TMDB\'s lists are put under the chat\'s numbers, and an uncounted season answers its own list', () => {
+    const ep = (number: number, name: string): ProviderEpisode => ({ number, name, overview: '', still: null, airDate: null, runtime: null })
+    const lists = new Map([[2, [ep(1, 'One'), ep(2, 'Two')]], [1, [ep(11, 'Eleven'), ep(12, 'Twelve')]]])
+    const out = rekey(2, [13, 14, 99], stand, lists)
+    assert.deepEqual(out.map((e) => [e.number, e.name]), [[13, 'One'], [14, 'Two']])
+    assert.deepEqual(rekey(2, [1, 2], stand, lists).map((e) => [e.number, e.name]), [[1, 'One'], [2, 'Two']])
+    assert.deepEqual(rekey(5, [1], stand, lists), [])
+})
+
+test('the page asks at most twelve of TMDB\'s seasons for one chat season, and garbage layouts stay bounded', () => {
+    const many = range(1, 200).map((n) => listed(n, 1))
+    assert.ok(seasonsFor(150, range(1, 300), many).length <= 12)
+    assert.ok(seasonsFor(1, [Number.MAX_SAFE_INTEGER, 1e9, -5, 0.5], many).length <= 12)
+    const odd = [null, 'x', { number: 1, episodes: Number.MAX_SAFE_INTEGER, airDate: null }, { number: Number.NaN, episodes: 5, airDate: null }] as never
+    assert.equal(counted(1, [1, 2], odd), false)
+    assert.deepEqual(place(1, 5, [5], odd), [1, 5])
+})
+
+test('with TMDB\'s episode list the gaps follow it and its days: aired is missing, not yet aired is upcoming', () => {
+    const ep = (number: number, airDate: string | null): ProviderEpisode => ({ number, name: `E${number}`, overview: '', still: null, airDate, runtime: 24 })
+    const provider = [ep(1, '2026-10-01'), ep(2, '2026-10-08'), ep(3, '2026-12-01'), ep(4, null)]
+    const r = rows(2, [held(2, [1])], listed(2, 4, '2026-10-01'), null, today, provider)
+    assert.deepEqual(states(r), ['have', 'missing', 'upcoming', 'upcoming'])
+    assert.equal((r[2] as { airDate: string | null }).airDate, '2026-12-01')
+    // A list longer than the count wins; a chat past the list keeps its own numbering.
+    assert.equal(rows(2, [held(2, [1])], listed(2, 2, '2026-10-01'), null, today, provider).length, 4)
+    assert.deepEqual(states(rows(2, [held(2, [1, 9])], listed(2, 4), null, today, provider)), ['have', 'have'])
+    // Empty or garbage lists fall back to the count.
+    assert.equal(rows(1, [held(1, [1])], listed(1, 3), null, today, []).length, 3)
+    assert.equal(rows(1, [held(1, [1])], listed(1, 3), null, today, [null, 7, { number: -1 }] as never).length, 3)
+})
+
+test('the worker\'s season answer is read field by field: garbage and huge answers keep only the sane episodes', () => {
+    const good = { number: 3, name: ' Third ', overview: 'Words', still: '/still0003abc.jpg', airDate: '2026-10-02', runtime: 24 }
+    const read = readSeason({ found: true, episodes: [good, null, 7, 'x', { number: 0 }, { number: 1.5 }, { number: 99999 }, { number: 4, name: 7, still: '/../x.jpg', airDate: 'soon', runtime: 1e9 }] })!
+    assert.deepEqual(read.map((e) => e.number), [3, 4])
+    assert.equal(read[0].name, 'Third')
+    assert.deepEqual([read[1].name, read[1].still, read[1].airDate, read[1].runtime], ['', null, null, null])
+    for (const bad of [null, 7, 'x', {}, { found: false }, { found: true }, { found: true, episodes: 'no' }]) assert.equal(readSeason(bad), null)
+    const huge = readSeason({ found: true, episodes: Array.from({ length: 10_000 }, (_, i) => ({ number: i + 1, name: 'x'.repeat(5000) })) })!
+    assert.ok(huge.length <= 3000)
+    assert.ok(huge.every((e) => e.name.length <= 400))
+})
+
+test('a thousand-episode season with a thousand-episode list stays cheap', () => {
+    const provider = range(1, 1000).map((n): ProviderEpisode => ({ number: n, name: `E${n}`, overview: '', still: null, airDate: '2000-01-01', runtime: 24 }))
+    const started = performance.now()
+    const r = rows(1, [held(1, [1, 2, 3])], listed(1, 1000, '2000-01-01'), null, today, provider)
+    assert.equal(r.length, 1000)
+    assert.ok(performance.now() - started < 500)
 })
