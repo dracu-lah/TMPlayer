@@ -38,6 +38,7 @@ import com.tmplayer.data.SeriesShelf
 import com.tmplayer.data.SettingsGroup
 import com.tmplayer.data.SettingsMap
 import com.tmplayer.data.SettingsSearch
+import com.tmplayer.data.ReleaseHighlights
 import com.tmplayer.data.copyQuality
 import com.tmplayer.data.ForumTopicSummary
 import com.tmplayer.data.ShelfEntry
@@ -1380,6 +1381,19 @@ fun settingsSearch(query: String, form: String, only: Array<String>?): Array<Str
 }
 
 private const val SETTINGS_QUERY_MAX = 80
+
+/** What the apps' "What's new" sheet says: the release its highlights describe, the full changelog's address and the lines in the language the rules speak. */
+interface WebWhatsNew {
+    val version: String
+    val changelog: String
+    val highlights: Array<String>
+}
+
+fun whatsNew(): WebWhatsNew = plain(
+    "version" to ReleaseHighlights.VERSION,
+    "changelog" to ReleaseHighlights.CHANGELOG,
+    "highlights" to ReleaseHighlights.highlights.toTypedArray(),
+)
 
 // ---- Search by topic name (U14) ---------------------------------------------------------------------
 
