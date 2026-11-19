@@ -9,7 +9,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import com.tmplayer.data.ClearAllConfirm
-import com.tmplayer.data.HomeRows
 import com.tmplayer.ui.i18n.LocalStrings
 
 /**
@@ -56,6 +55,6 @@ internal fun historyCardCount(state: ShellState): Int {
     val continuing by state.settings.continueWatching.collectAsState(initial = emptyList())
     val watched by state.watched.history.collectAsState(initial = emptyList())
     return remember(continuing, watched) {
-        ClearAllConfirm.historyCards(HomeRows.foldCopies(continuing).size, HomeRows.foldWatched(watched).size)
+        ClearAllConfirm.historyCards(continuing, watched)
     }
 }

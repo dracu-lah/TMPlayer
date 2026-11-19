@@ -40,4 +40,26 @@ class ClearAllConfirmTest {
         assertEquals(4, ClearAllConfirm.historyCards(-1, 4))
         assertEquals(0, ClearAllConfirm.historyCards(0, 0))
     }
+
+    private fun resume(messageId: Long, fileName: String, updatedAt: Long) = ResumeRecord(
+        chatId = 1, messageId = messageId, fileId = messageId.toInt(), title = fileName, chatTitle = "Chat", sizeBytes = 1000,
+        durationSec = 60, positionMs = 1000, durationMs = 60_000, updatedAt = updatedAt, fileName = fileName,
+    )
+
+    private fun watched(messageId: Long, fileName: String, at: Long) = WatchedRecord(
+        chatId = 1, messageId = messageId, fileId = messageId.toInt(), title = fileName, chatTitle = "Chat", sizeBytes = 1000,
+        durationSec = 60, watchedAt = at, manual = true, fileName = fileName,
+    )
+
+    @Test
+    fun `copies of one video count once, in the raw lists and in lists already folded`() {
+        val hd = "Loki.S02E05.1080p.WEB.x265.mkv"
+        val sd = "Loki.S02E05.720p.WEB.x264.mkv"
+        val continuing = listOf(resume(1, hd, 20), resume(2, sd, 10), resume(3, "Other.Show.S01E01.mkv", 5))
+        val seen = listOf(watched(4, hd, 20), watched(5, sd, 10))
+        // 2 Continue cards and 1 Watched card, not 3 and 2.
+        assertEquals(3, ClearAllConfirm.historyCards(continuing, seen))
+        assertEquals(3, ClearAllConfirm.historyCards(HomeRows.foldCopies(continuing), HomeRows.foldWatched(seen)))
+        assertEquals(0, ClearAllConfirm.historyCards(emptyList(), emptyList()))
+    }
 }

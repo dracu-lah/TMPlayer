@@ -526,11 +526,12 @@ internal fun BrowseScreen(
     }
     // Clear history and Clear Watch later are asked first on a phone too (HX59): a wrong press on
     // a clear-all must not be the only guard. Undo still follows the answer.
+    val historyCards = com.tmplayer.data.ClearAllConfirm.historyCards(continuing, watchedHistory)
     val askClearHistory = com.tmplayer.ui.components.rememberClearAllConfirm(
         // The cards both lists show, copies of one video folded into one.
-        count = com.tmplayer.data.ClearAllConfirm.historyCards(continuing.size, watchedHistory.size),
+        count = historyCards,
         title = s.browseClearHistoryTitle,
-        message = s.browseClearHistoryMessage(com.tmplayer.data.ClearAllConfirm.historyCards(continuing.size, watchedHistory.size)),
+        message = s.browseClearHistoryMessage(historyCards),
         detail = s.browseClearHistoryDetail,
         onClear = clearShown,
     )

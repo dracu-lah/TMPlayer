@@ -25,6 +25,14 @@ object ClearAllConfirm {
     /** What the question counts for Clear history: the cards both lists show, copies folded. */
     fun historyCards(continuing: Int, watched: Int): Int = continuing.coerceAtLeast(0) + watched.coerceAtLeast(0)
 
+    /**
+     * What Clear history counts, the same on every screen (Settings, History, desktop): the cards
+     * Continue watching and Watched show, copies of one video folded into one ([HomeRows.foldCopies],
+     * [HomeRows.foldWatched]). Folding twice changes nothing, so lists already folded may be passed.
+     */
+    fun historyCards(continuing: List<ResumeRecord>, watched: List<WatchedRecord>): Int =
+        HomeRows.foldCopies(continuing).size + HomeRows.foldWatched(watched).size
+
     /** Whether the answer clears: the list is read again then, never the count it had when asked. */
     fun confirmClears(countNow: Int): Boolean = needed(countNow)
 }
