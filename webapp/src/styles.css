@@ -1258,6 +1258,11 @@ button.primary.danger:disabled { opacity: .4; }
 .card { -webkit-touch-callout: none; }
 .card-menu .menu-row { display: flex; gap: 16px; align-items: center; background: none; border: 0; color: inherit; text-align: start; padding: 8px 0; font-size: 16px; width: 100%; }
 .card-menu .menu-row small { display: block; color: var(--muted, inherit); opacity: .7; font-size: 13px; }
+.card-menu a.menu-row { text-decoration: none; box-sizing: border-box; }
+/* The link to copy by hand (ui/tgLinks.ts), when the browser refused the clipboard: one line, selected, scrolls sideways. */
+.link-field { box-sizing: border-box; width: 100%; margin: 4px 0 8px; padding: 10px 12px; font: inherit; font-size: 14px; color: inherit; background: var(--surface-high); border: 1px solid var(--line); border-radius: var(--r-md, 12px); text-overflow: ellipsis; }
+.link-sheet .link-field { width: calc(100% - 32px); margin: 16px; }
+.link-field:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; }
 
 /* Choose the right poster (ui/PosterPicker.tsx): the titles TMDB has for a name, one to press. */
 .poster-picker { width: min(520px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); }

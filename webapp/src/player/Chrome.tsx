@@ -62,7 +62,8 @@ import { coverBackground } from '../screens/cover'
 import { loadThumb } from '../screens/thumbs'
 import { chapterAt, chapterMarks, chapterNext, chapterPrevious, isGeneric, skipSegments, type Chapter, type SkipSegment } from './chapters'
 import { applyDelay, look, setLook, setSubDelay, subDelay } from './cues'
-import { BookmarksSheet, delayText, SIZES, TimingSheet } from './extra-sheets'
+import { BookmarksSheet, delayText, LinkSheet, SIZES, TimingSheet } from './extra-sheets'
+import { copyLink, linkOf, linkOffered } from '../ui/tgLinks'
 import { MsoneSheet, trackLabel as onlineLabel, type MsoneTarget } from './msone-sheet'
 import { episodeOf } from './msone'
 import * as subpick from './subpick-use'
@@ -190,7 +191,7 @@ export interface Ctl {
     markWatched: (on: boolean) => void
 }
 
-type Sheet = 'subtitles' | 'audio' | 'speed' | 'copies' | 'episodes' | 'more' | 'shape' | 'details' | 'options' | 'sleep' | 'bookmarks' | 'timing' | 'shortcuts' | 'still' | 'msone' | 'chatsubs' | 'goto' | 'rotate' | 'boost' | null
+type Sheet = 'subtitles' | 'audio' | 'speed' | 'copies' | 'episodes' | 'more' | 'shape' | 'details' | 'options' | 'sleep' | 'bookmarks' | 'timing' | 'shortcuts' | 'still' | 'msone' | 'chatsubs' | 'goto' | 'rotate' | 'boost' | 'link' | null
 
 /** A file name the three systems all take: no path or reserved characters, not too long. */
 function shotName(title: string, at: number): string {
@@ -286,6 +287,35 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         const wanted = [navigator.language.slice(0, 2).toLowerCase(), 'en']
         call('chatSubtitles', [c.item.chatId, c.item.messageId, c.item.fileName || c.item.title, '', wanted]).then(setChatSubs, () => {})
     })
+    // Copy link at this time (the apps' CopyLinkAtTime): the link is asked as More options opens, so the tap that copies it has it.
+    // Not for a chat that restricts saving, nor a video played from pieces. `linkShown` is the link, when the browser refused the clipboard.
+    const askLink = (chatId: number, messageId: number) => call('messageLink', [chatId, messageId])
+    const [linkShown, setLinkShown] = createSignal('')
+    let linkAsked: string | null = null
+    createEffect(() => {
+        if (sheet() !== 'more' || !linkOffered(c.item)) return
+        const key = `${c.item.chatId}:${c.item.messageId}`
+        if (linkAsked !== key) {
+            linkAsked = key
+            void linkOf(c.item, askLink)
+        }
+    })
+    let linkBusy = false
+    const copyLinkAtTime = async () => {
+        if (linkBusy || !linkOffered(c.item)) return
+        linkBusy = true
+        const at = Math.floor(v.currentTime)
+        setSheet(null)
+        try {
+            const out = await copyLink(c.item, at, askLink)
+            if (out.done === 'shown') {
+                setLinkShown(out.link)
+                setSheet('link')
+            } else flash(out.done === 'copied' ? t('common.link_copied') : out.why === 'gone' ? t('link.not_found') : t('share.no_message_links'))
+        } finally {
+            linkBusy = false
+        }
+    }
     /** The listed file read and laid over the video, or the sentence saying why not (a gone file leaves the list). */
     const pickChat = async (sub: ChatSubtitle) => {
         if (chatBusy()) return
@@ -2137,6 +2167,9 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                             <Entry text={t('player.reset_zoom')} trailing={`${percent(zoom())}%`} onClick={() => (setSheet(null), resetZoom())} />
                         </Show>
                         <Entry text={t('player.subtitle_style_and_timing')} onClick={() => setSheet('timing')} />
+                        <Show when={linkOffered(c.item)}>
+                            <Entry text={t('player.copy_link_at_time')} onClick={copyLinkAtTime} />
+                        </Show>
                         <Entry text={t('player.load_subtitle_file')} onClick={() => (setSheet(null), c.loadSubtitleFile())} />
                         <hr />
                         <Entry icon={CheckmarkCircle02Icon} text={c.watched() ? t('player.mark_unwatched') : t('player.mark_watched')} onClick={() => (setSheet(null), toggleWatched())} />
@@ -2194,6 +2227,9 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                 </Match>
                 <Match when={sheet() === 'timing'}>
                     <TimingSheet delay={subDelay} onDelay={setDelay} look={look} onLook={changeLook} onClose={() => setSheet(null)} />
+                </Match>
+                <Match when={sheet() === 'link'}>
+                    <LinkSheet link={linkShown()} onClose={() => setSheet(null)} />
                 </Match>
                 <Match when={sheet() === 'shortcuts'}>
                     <ShortcutsSheet mac={MAC} onClose={() => setSheet(null)} />

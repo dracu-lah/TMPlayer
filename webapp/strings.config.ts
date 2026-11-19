@@ -786,7 +786,10 @@ export const PAGE_STRINGS = [
     'player.volume_boost_on_detail',
     'web.volume_boost_not_here',
     // WB16 Telegram links (U9).
+    'grid.copy_link',
     'grid.copy_link_detail',
+    'link.not_found',
+    'share.no_message_links',
     'link.open_in_telegram',
     'player.copy_link_at_time',
     // WB17 Say why a video is not starting (U1), Can't reach Telegram (U2).

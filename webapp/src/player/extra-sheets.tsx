@@ -104,6 +104,24 @@ function Row<T extends string | number>(props: { label: string; values: T[]; cur
     )
 }
 
+/** The link to copy by hand, when the browser refused the clipboard (Copy link at this time): one field, selected, ready for the long press or Ctrl+C. */
+export function LinkSheet(props: { link: string; onClose: () => void }) {
+    return (
+        <PhoneSheet title={t('player.copy_link_at_time')} onClose={props.onClose} class="link-sheet">
+            <input
+                ref={(el) => setTimeout(() => (el.focus({ preventScroll: true }), el.select()), 0)}
+                class="link-field"
+                type="text"
+                readonly
+                dir="ltr"
+                value={props.link}
+                aria-label={t('common.copy_link')}
+                onFocus={(e) => e.currentTarget.select()}
+            />
+        </PhoneSheet>
+    )
+}
+
 export function TimingSheet(props: {
     delay: () => number
     onDelay: (d: number) => void
