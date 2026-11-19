@@ -10,6 +10,7 @@ import { legacyCss } from './legacy-css'
 import { coreJs, notices } from './notices.config'
 import { createHandler } from './tmdb/handler.ts'
 import { PAGE_STRINGS } from './strings.config'
+import { LANGUAGES } from './src/ui/language'
 
 // The app's own api_id and hash: from the environment in CI, else from the repo's local.properties
 // (the same secrets the Gradle builds read). Never a sample one.
@@ -27,6 +28,22 @@ function secret(name: string): string {
 }
 
 const CATALOG = new URL('../core/src/commonMain/resources/i18n/en.json', import.meta.url)
+const catalogOf = (tag: string) => new URL(`../core/src/commonMain/resources/i18n/${tag}.json`, import.meta.url)
+
+/** The PAGE_STRINGS sections and lines of one catalog; [missing] hears each entry it lacks. */
+function pick(all: Record<string, unknown>, missing: (entry: string) => void): Record<string, Record<string, unknown>> {
+    const out: Record<string, Record<string, unknown>> = {}
+    for (const entry of PAGE_STRINGS) {
+        const [section, key] = entry.split('.')
+        const from = all[section]
+        if (typeof from !== 'object' || from === null || (key && (from as Record<string, unknown>)[key] === undefined)) {
+            missing(entry)
+            continue
+        }
+        out[section] = key ? { ...out[section], [key]: (from as Record<string, unknown>)[key] } : (from as Record<string, unknown>)
+    }
+    return out
+}
 
 function pageStrings(): Plugin {
     const id = 'virtual:strings'
@@ -36,15 +53,62 @@ function pageStrings(): Plugin {
         load(source) {
             if (source !== `\0${id}`) return null
             this.addWatchFile(CATALOG.pathname)
-            const all = JSON.parse(readFileSync(CATALOG, 'utf8'))
-            const out: Record<string, Record<string, unknown>> = {}
-            for (const entry of PAGE_STRINGS) {
-                const [section, key] = entry.split('.')
-                const from = all[section]
-                if (from === undefined || (key && from[key] === undefined)) this.error(`en.json has no ${entry}`)
-                out[section] = key ? { ...out[section], [key]: from[key] } : from
-            }
+            const out = pick(JSON.parse(readFileSync(CATALOG, 'utf8')), (entry) => this.error(`en.json has no ${entry}`))
             return `export default ${JSON.stringify(out)}`
+        },
+    }
+}
+
+/**
+ * The other 21 catalogs' page strings (WB12), each its own hashed `assets/strings-<tag>-<hash>.json`
+ * that src/i18n.ts fetches only for the language shown, after the first paint's code: the first
+ * load carries English alone. A line a catalog lacks is left out, and the page shows English for
+ * it. `virtual:catalogs` maps each tag to its file's address; `pnpm dev` serves them from memory.
+ */
+function pageCatalogs(): Plugin {
+    const id = 'virtual:catalogs'
+    let serving = false
+    const tags = LANGUAGES.map((l) => l.tag).filter((tag) => tag !== 'en')
+    const json = (tag: string): string => {
+        let all: Record<string, unknown> = {}
+        try {
+            const parsed = JSON.parse(readFileSync(catalogOf(tag), 'utf8'))
+            if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) all = parsed
+        } catch (e) {
+            // The user's catalog, half written: that language shows in English until it is whole again.
+            console.warn(`[strings] ${tag}.json does not read (${String(e)}): the page shows English for it`)
+        }
+        return JSON.stringify(pick(all, () => {}))
+    }
+    const fileOf = (tag: string, text: string) => `assets/strings-${tag}-${createHash('sha256').update(text).digest('hex').slice(0, 8)}.json`
+    return {
+        name: 'tmplayer-page-catalogs',
+        configResolved: (config) => void (serving = config.command === 'serve'),
+        resolveId: (source) => (source === id ? `\0${id}` : null),
+        load(source) {
+            if (source !== `\0${id}`) return null
+            const urls: Record<string, string> = {}
+            for (const tag of tags) {
+                this.addWatchFile(catalogOf(tag).pathname)
+                if (serving) {
+                    urls[tag] = `__strings/${tag}.json`
+                    continue
+                }
+                const text = json(tag)
+                const fileName = fileOf(tag, text)
+                this.emitFile({ type: 'asset', fileName, source: text })
+                urls[tag] = fileName
+            }
+            return `const base = import.meta.env.BASE_URL\nexport default {${tags.map((tag) => `${JSON.stringify(tag)}: base + ${JSON.stringify(urls[tag])}`).join(', ')}}`
+        },
+        configureServer(server) {
+            server.middlewares.use((req, res, next) => {
+                const m = /\/__strings\/([\w-]+)\.json(?:\?|$)/.exec(req.url ?? '')
+                if (!m || !tags.includes(m[1])) return next()
+                res.setHeader('Content-Type', 'application/json')
+                res.setHeader('Cache-Control', 'no-store')
+                res.end(json(m[1]))
+            })
         },
     }
 }
@@ -60,6 +124,8 @@ function tooOldStrings(): Plugin {
                 .replace('%TOO_OLD_TITLE%', escape(web.too_old_title))
                 .replace('%TOO_OLD_BODY%', escape(web.too_old_body))
                 .replace('%APP_GET%', escape(web.app_get))
+                .replace("'%RTL_TAGS%'", JSON.stringify(LANGUAGES.filter((l) => l.rtl).map((l) => l.tag)))
+                .replace("'%LANGUAGE_TAGS%'", JSON.stringify(LANGUAGES.map((l) => l.tag)))
         },
     }
 }
@@ -116,9 +182,10 @@ function needsApiId(): Plugin {
  * Built files the service worker leaves for later, fetched (and then kept) only for the videos that
  * need them: the sound decoders, movi-player (player-*, about 10 MB), hevc.js (hevc-*) and the
  * subtitle fonts but Malayalam's (subfont-*, for a script the system has no font for), which MSone's
- * subtitles need offline.
+ * subtitles need offline. And the 21 languages' page strings (strings-*): only the one shown is
+ * fetched, and kept from then on.
  */
-const NOT_IN_SHELL = /^mediabunny-(ac3|aac-encoder|dts)-|^player-|^hevc-|^subfont-(?!ml-)|\.map$/
+const NOT_IN_SHELL = /^mediabunny-(ac3|aac-encoder|dts)-|^player-|^hevc-|^subfont-(?!ml-)|^strings-|\.map$/
 
 /**
  * Writes the built file list and a version made from it into dist/sw.js, which keeps them for
@@ -251,7 +318,7 @@ export default defineConfig(({ mode }) => {
     tvBuild = tv
     return {
         base: tv ? TV_BASE : '/',
-        plugins: [solid(), pageStrings(), tooOldStrings(), needsApiId(), tmdbProxy(), ...licences.page, tv ? tvLegacy() : offlineShell()],
+        plugins: [solid(), pageStrings(), pageCatalogs(), tooOldStrings(), needsApiId(), tmdbProxy(), ...licences.page, tv ? tvLegacy() : offlineShell()],
         define: {
             __TG_API_ID__: JSON.stringify(Number(secret('TG_API_ID')) || 0),
             __TG_API_HASH__: JSON.stringify(secret('TG_API_HASH')),
