@@ -8,7 +8,7 @@
 import { createRoot, createSignal } from 'solid-js'
 import { api, errorText } from '../tg/rpc'
 import { me } from '../session'
-import { t } from '../i18n'
+import { language, t } from '../i18n'
 import { REMOVAL_DAYS } from './format'
 import { freshState, parseState, runSync, type Deps, type Outcome, type State } from './run'
 import type { Lists, Writer } from './local'
@@ -318,7 +318,7 @@ export const keepPlaceYes = () => setSyncOn(true)
 
 // ---- the Settings row's words (SyncStatus.text) -------------------------------------------------
 
-const when = (at: number) => new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(at)
+const when = (at: number) => new Intl.DateTimeFormat(language(), { dateStyle: 'medium', timeStyle: 'short' }).format(at)
 
 /** The status line under the switch. */
 export function statusLine(): string {
