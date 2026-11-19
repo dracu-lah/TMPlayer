@@ -7,6 +7,7 @@ import { t } from '../i18n'
 import { progress as readProgress, settings } from '../store'
 import { chatGone, forgetGone } from '../goneVideos'
 import { watchPath } from './VideoList'
+import { ensureTouches } from './touches'
 import { warmFile } from '../stream/reader'
 import { looksSplit } from '../stream/joined'
 import { readChatOrder } from '../player/keep'
@@ -57,6 +58,9 @@ export function Watch() {
     const [progress] = createResource(readProgress)
     // "After a video that is not an episode": the chat's next video in the grid's order (EG-F30).
     const [chatOrder] = createResource(() => readChatOrder().catch(() => false))
+    // The Last played order needs the times the worker holds, so Next and autoplay run in the grid's order; a failed send is no times.
+    const lastPlayed = () => settings().sort === 'LastPlayed'
+    const [touchVer] = createResource(lastPlayed, (on) => (on ? ensureTouches().catch(() => 0) : 0))
     const view = (): ChatView => ({
         chatOrder: chatOrder() ?? false,
         sort: settings().sort,
@@ -65,10 +69,11 @@ export function Watch() {
         watched: progress()?.watched ?? [],
         started: progress()?.started ?? [],
         query: '',
+        ...(lastPlayed() && (touchVer() ?? 0) > 0 ? { touches: touchVer() } : {}),
     })
     // The episodes and the next one wait for the chat's videos; the player does not wait for them.
     const [info] = createResource(
-        () => (progress.state === 'ready' && chatOrder.state === 'ready' ? { ...ids(), view: view() } : null),
+        () => (progress.state === 'ready' && chatOrder.state === 'ready' && (!lastPlayed() || touchVer.state === 'ready') ? { ...ids(), view: view() } : null),
         ({ chatId, messageId, view }) => api.watch(chatId, messageId, view).catch((e) => (console.warn('[watch]', e), null)),
     )
     // A play noted in the quality the viewer usually plays (QualityHabit), once per video opened: a

@@ -1,11 +1,11 @@
 // The viewer's own lists behind the "You" menu: Favourites (the starred chats) and History, with
 // the app's tabs (Recent, Continue, Watch later, Watched), each day under its own heading.
 import { createEffect, createMemo, createResource, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, type JSX } from 'solid-js'
-import { A, useParams } from '@solidjs/router'
+import { A, useNavigate, useParams } from '@solidjs/router'
 import { CheckmarkCircle02Icon, Clock01Icon, History, LeftToRightListBulletIcon, PlayIcon, StarIcon, Tick02Icon } from '@hugeicons/core-free-icons'
-import { api, call } from '../tg/rpc'
+import { api, call, errorText } from '../tg/rpc'
 import { t } from '../i18n'
-import { laterIds, laterKey, laterList, resumes, starredIds, watchedList, watchedTick } from '../store'
+import { laterIds, laterKey, laterList, resumes, starredIds, watchedIds, watchedList, watchedTick } from '../store'
 import { Icon, type IconData } from '../ui/Icon'
 import { useObservedCovers } from './promo'
 import { Card, ContinueCard, useLeft, useProgress, videoCard } from './VideoList'
@@ -16,6 +16,9 @@ import { historyId, removeLaterWithUndo, removeWithUndo } from '../historyEdits'
 import { prune, range, toggleAll } from '../ui/selection'
 import { askConfirm, confirmOpen } from '../ui/Confirm'
 import { chatGone, forgetGone } from '../goneVideos'
+import { showToast } from '../ui/Toast'
+import { randomScope } from '../ui/videoFilter'
+import { playRandomOf } from './randomPlay'
 import type { VideoItem } from '../tg/types'
 
 /** How many videos a tab asks Telegram about at most: the ones further back wait for their own page. */
@@ -89,6 +92,7 @@ async function lookUp(list: { chatId: number; messageId: number; time: number }[
 /** History, at `/history[/continue|/later|/watched]`. */
 export function HistoryPage() {
     const params = useParams<{ tab?: string }>()
+    const navigate = useNavigate()
     const tab = (): Tab => (['continue', 'later', 'watched'].includes(params.tab ?? '') ? (params.tab as Tab) : 'recent')
     const meta = () => TABS.find((x) => x.tab === tab())!
     const [entries] = createResource(
@@ -177,6 +181,12 @@ export function HistoryPage() {
         })
         if (yes) void removeLaterWithUndo(null)
     }
+    const playRandom = async () => {
+        const items = (entries.latest ?? []).map((e) => e.item)
+        if (!items.length) return
+        const done = await watchedIds().catch(() => [] as string[])
+        await playRandomOf({ scope: randomScope('later', 'all'), items, watched: done, verify: true, open: (path, item) => navigate(path, { state: { video: item } }) }).catch((e) => showToast({ text: errorText(e) }))
+    }
     onMount(() => {
         const keys = (e: KeyboardEvent) => {
             if (form() !== 'desktop') return
@@ -208,6 +218,12 @@ export function HistoryPage() {
                     <button class="link" type="button" onClick={() => (selecting() ? leave() : setSelecting(true))}>
                         {selecting() ? t('common.cancel') : t('browse.select')}
                     </button>
+                    {/* Play random over Watch later (U16): unwatched first, never the one it played last; a video gone from its chat is let go and another rolled. */}
+                    <Show when={later() && !selecting()}>
+                        <button class="link" type="button" onClick={() => void playRandom()}>
+                            {t('grid.play_random')}
+                        </button>
+                    </Show>
                     <Show when={!selecting()}>
                         <Show
                             when={later()}

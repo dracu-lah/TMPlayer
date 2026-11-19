@@ -169,3 +169,41 @@ export async function storeFeedback(bucket: Bucket, text: string): Promise<Feedb
     return { status: 503, error: 'unavailable' }
   }
 }
+
+/** The web app's origin: the one page besides the apps that writes to /v1/feedback (WB11). */
+export const WEB_ORIGINS: readonly string[] = ['https://web.tmplayer.org']
+
+/**
+ * What a browser needs to read the answer of a feedback post from the web app: the origin's own
+ * address echoed back (never `*`), and the one header the app reads. A request from any other
+ * origin gets no allow header, so a page elsewhere cannot read the answer. `Vary: Origin` is on every
+ * answer, so a cache never hands one origin's answer to another. The apps send no Origin.
+ */
+export function corsHeaders(origin: string | null): Record<string, string> {
+  if (origin === null || !WEB_ORIGINS.includes(origin)) return { Vary: 'Origin' }
+  return {
+    'Access-Control-Allow-Origin': origin,
+    'Access-Control-Expose-Headers': 'Retry-After',
+    Vary: 'Origin',
+  }
+}
+
+/** The answer to a browser's preflight for /v1/feedback (the post is plain text, so a browser rarely asks). */
+export function preflight(origin: string | null): Response {
+  const headers = corsHeaders(origin)
+  if (!('Access-Control-Allow-Origin' in headers)) return new Response(null, { status: 403, headers })
+  return new Response(null, {
+    status: 204,
+    headers: { ...headers, 'Access-Control-Allow-Methods': 'POST', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Max-Age': '600' },
+  })
+}
+
+/** [response] with the CORS headers of [request]'s origin added (Vary on every one). */
+export function withCors(request: Request, response: Response): Response {
+  const headers = new Headers(response.headers)
+  for (const [k, v] of Object.entries(corsHeaders(request.headers.get('Origin')))) {
+    if (k === 'Vary') headers.append(k, v)
+    else headers.set(k, v)
+  }
+  return new Response(response.body, { status: response.status, headers })
+}
