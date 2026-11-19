@@ -3,7 +3,8 @@
 // account, a few chats, and the small files in e2e/media served as Telegram's file chunks.
 // A test picks a case with the `e2e` cookie, which /__e2e/flags hands back to the worker:
 // `signedout`, `revoked` (Telegram says the session ended), `slow` (lists answer after 3 s),
-// `password` (signed out, the QR code is taken at once and the account asks its two-step password).
+// `password` (signed out, the QR code is taken at once and the account asks its two-step password),
+// `huge` (a very large account for e2e/scale.spec.ts, described below the dialogs).
 
 // Read synchronously (a worker may): a top-level await would hold back the worker's message
 // handler, and the page's first call would be lost.
@@ -92,13 +93,17 @@ interface Opts {
 
 let n = 0
 function msg(chat: Peer, name: string, o: Opts = {}) {
-    const id = ++n
+    n++
+    return build(n, chat, name, o, new Date(Date.UTC(2026, 9, 1) + n * 3600_000), `thumb${n}`, `file${n}`)
+}
+/** One message as the app reads it; `thumbId` and `fileId` are Telegram's unique ids, one per message. */
+function build(id: number, chat: Peer, name: string, o: Opts, date: Date, thumbId: string, fileId: string) {
     const size = o.file ? sizes[o.file] : (o.size ?? 0)
-    const thumb = { uniqueFileId: `thumb${id}`, url: THUMB }
+    const thumb = { uniqueFileId: thumbId, url: THUMB }
     return {
         id,
         chat,
-        date: new Date(Date.UTC(2026, 9, 1) + id * 3600_000),
+        date,
         text: '',
         groupedId: null,
         media: {
@@ -108,7 +113,7 @@ function msg(chat: Peer, name: string, o: Opts = {}) {
             // `big`: every video says 1.5 GB, past the carousel's 400 MB floor (its bytes stay the real file's).
             // `mid`: every video says 100 MB, over Home's 50 MB floor and under the carousel's 400 MB.
             fileSize: flags.has('big') && o.file ? 1_500_000_000 : flags.has('mid') && o.file ? 100_000_000 : size,
-            uniqueFileId: `file${id}`,
+            uniqueFileId: fileId,
             location: { _: 'fake', file: o.file ?? null },
             dcId: 2,
             duration: o.video ? (o.duration ?? 4) : 0,
@@ -213,10 +218,79 @@ if (flags.has('oldformats')) {
 }
 
 const dialogs: Peer[] = [me, clips, shows, locked, quiet, copies]
-for (let i = 0; i < 1500; i++) dialogs.push(peer(-5000 - i, `Group ${i}`, 'chat'))
+if (!flags.has('huge')) for (let i = 0; i < 1500; i++) dialogs.push(peer(-5000 - i, `Group ${i}`, 'chat'))
 dialogs.push(lighthouse)
 // Telegram's archive: two chats of its own, listed only when the archive is asked for.
 const archive: Peer[] = [peer(-7001, 'Archived Reels', 'chat', { chatType: 'channel' }), peer(-7002, 'Old Group', 'chat')]
+
+// `huge`: the account of e2e/scale.spec.ts (AGENTS.md, "Scale"), built only on that flag so the other tests pay nothing.
+// 3,000 chats in the list (`Scale Chat 0000`, no real titles), 300 more in the archive and 100,000 videos in all:
+// 100 in each of the first 800 chats, and 20,000 in Deep Room (/chat/-1009), the one long history. Every video says
+// 120 MB (450 MB for each fifth), so Home's and the carousel's size floors let them in; none has bytes, so none plays.
+// A video's message id is its place in its chat (1 is the oldest), its date follows the place, so the newest across
+// chats is the highest place. The messages are made when a page asks for them, never all held at once. The web app
+// reads no Telegram folders, so there are none here.
+const HUGE = flags.has('huge')
+const HUGE_CHATS = 3000
+const HUGE_ARCHIVED = 300
+const HUGE_SHOWS = 800
+const HUGE_EACH = 100
+const HUGE_DEEP = 20_000
+const hugeId = (slot: number) => -2_000_000 - slot
+const deepRoom: Peer = HUGE
+    ? peer(-1009, 'Deep Room', 'chat', { chatType: 'channel', about: 'One long history for the scale test.', members: 90000 })
+    : ({ id: -1009 } as Peer)
+/** The videos of a chat of the huge account; 0 for every other chat. */
+const hugeCount = (id: number) => (!HUGE ? 0 : id === deepRoom.id ? HUGE_DEEP : id <= hugeId(0) && id > hugeId(HUGE_SHOWS) ? HUGE_EACH : 0)
+const hugeSlot = (id: number) => (id === deepRoom.id ? HUGE_CHATS : hugeId(0) - id)
+const pad = (v: number, w: number) => String(v).padStart(w, '0')
+/** The name of the video at place `k` (0 is the oldest) of the chat of slot `slot`. */
+function hugeName(slot: number, k: number): string {
+    if (slot === HUGE_CHATS) return `Deep Reel ${pad(k + 1, 5)}.mp4`
+    return `Scale Show ${pad(slot, 4)} S0${1 + (Math.floor(k / 20) % 5)}E${pad((k % 20) + 1, 2)} 1080p.mkv`
+}
+/** One number that orders the account's videos by date: place first, chat second. */
+const hugeKey = (slot: number, k: number) => k * 4000 + slot
+const hugeMsg = (chat: Peer, k: number) => {
+    const slot = hugeSlot(chat.id)
+    // Seconds from 2020 by key: the newest of the account is far older than the small chats' (2026), which sort first.
+    return build(k + 1, chat, hugeName(slot, k), { video: true, size: k % 5 === 0 ? 450_000_000 : 120_000_000, duration: 5400 }, new Date(Date.UTC(2020, 0, 1) + hugeKey(slot, k) * 1000), `h${slot}_${k}`, `f${slot}_${k}`)
+}
+if (HUGE) {
+    for (let i = 0; i < HUGE_CHATS; i++) dialogs.push(peer(hugeId(i), `Scale Chat ${pad(i, 4)}`, 'chat', { chatType: i % 3 === 0 ? 'channel' : 'supergroup' }))
+    for (let i = 0; i < HUGE_ARCHIVED; i++) archive.push(peer(hugeId(HUGE_CHATS + 1 + i), `Scale Archive ${pad(i, 3)}`, 'chat', { chatType: i % 2 ? 'channel' : 'supergroup' }))
+    // Deep Room is the third chat of the list, after the two pinned ones.
+    dialogs.splice(2, 0, deepRoom)
+}
+/** The keys (hugeKey) of every video of the account, newest first. */
+let hugeOrder: Int32Array | null = null
+function hugeKeys(): Int32Array {
+    if (hugeOrder) return hugeOrder
+    const keys = new Int32Array(HUGE_SHOWS * HUGE_EACH + HUGE_DEEP)
+    let at = 0
+    for (let s = 0; s < HUGE_SHOWS; s++) for (let k = 0; k < HUGE_EACH; k++) keys[at++] = hugeKey(s, k)
+    for (let k = 0; k < HUGE_DEEP; k++) keys[at++] = hugeKey(HUGE_CHATS, k)
+    return (hugeOrder = keys.sort().reverse())
+}
+const hugeFound = new Map<string, number[]>()
+/** The keys of the videos of the account whose name has `query` (lower case), newest first. */
+function hugeAcross(query: string): ArrayLike<number> {
+    if (!query) return hugeKeys()
+    let found = hugeFound.get(query)
+    if (!found) {
+        found = Array.from(hugeKeys()).filter((key) => hugeName(key % 4000, Math.floor(key / 4000)).toLowerCase().includes(query))
+        hugeFound.set(query, found)
+    }
+    return found
+}
+const hugePeerOfSlot = (slot: number) => peers.get(slot === HUGE_CHATS ? deepRoom.id : hugeId(slot))!
+/** The places (0 is the oldest) of the videos of one chat whose name has `query`, newest first. */
+function hugeIn(chat: Peer, query: string): number[] {
+    const slot = hugeSlot(chat.id)
+    const out: number[] = []
+    for (let k = hugeCount(chat.id) - 1; k >= 0; k--) if (!query || hugeName(slot, k).toLowerCase().includes(query)) out.push(k)
+    return out
+}
 
 let globalFailsLeft = 2
 
@@ -249,6 +323,7 @@ export class TelegramClient {
         return { _: 'inputPeerChannel', channelId: id, accessHash: 0 }
     }
     async getFullChat(id: number) {
+        calls.push(`getFullChat ${id}`)
         const p = peers.get(id)
         if (!p) throw rpcError('PEER_ID_INVALID')
         if (flags.has('infofail')) throw rpcError('CHANNEL_PRIVATE')
@@ -284,12 +359,21 @@ export class TelegramClient {
         throw rpcError('METHOD_NOT_FAKED')
     }
     async searchMessages(p: { chatId: number | 'self'; query?: string; filter?: { _: string }; offset?: number; limit: number }) {
+        calls.push(`searchMessages ${p.chatId} ${p.filter?._ ?? ''} ${p.offset ?? 0}`)
         await delay(flags.has('slow') ? 3000 : 50)
         // Saved Messages: the sync file, found by its caption.
         if (p.chatId === 'self') return (await cloud.all(me)).filter((m) => m.text.includes(p.query ?? '')).slice(0, p.limit)
         if (!p.filter) throw rpcError('FILTER_MISSING')
         if (!peers.has(p.chatId)) throw rpcError('PEER_ID_INVALID')
         const wantVideo = p.filter._ === 'inputMessagesFilterVideo'
+        if (hugeCount(p.chatId) > 0) {
+            // The account of the scale test: a page of the chat's places, newest first, made now.
+            const chat = peers.get(p.chatId)!
+            const places = wantVideo ? hugeIn(chat, p.query?.toLowerCase() ?? '') : []
+            const from = p.offset ?? 0
+            const next = from + p.limit < places.length ? from + p.limit : undefined
+            return Object.assign(places.slice(from, from + p.limit).map((k) => hugeMsg(chat, k)), { total: places.length, next })
+        }
         const all = (messages.get(p.chatId) ?? []).filter((m) => m.isVideo === wantVideo).sort((a, b) => b.id - a.id)
         const from = p.offset ?? 0
         const page = Object.assign(all.slice(from, from + p.limit), { total: all.length, next: from + p.limit < all.length ? from + p.limit : undefined })
@@ -307,9 +391,17 @@ export class TelegramClient {
             .flat()
             .filter((m) => m.isVideo === wantVideo && m.media.fileName.toLowerCase().includes(q))
             .sort((a, b) => b.date.getTime() - a.date.getTime())
+        // The scale test's videos follow the small chats', all older: a page is cut across both.
+        const far = HUGE && wantVideo ? hugeAcross(q) : []
+        const total = all.length + far.length
         const from = p.offset?.rate ?? 0
-        const next = from + p.limit < all.length ? { rate: from + p.limit, id: from + p.limit, peer: { _: 'inputPeerEmpty' } } : undefined
-        return Object.assign(all.slice(from, from + p.limit), { next })
+        const next = from + p.limit < total ? { rate: from + p.limit, id: from + p.limit, peer: { _: 'inputPeerEmpty' } } : undefined
+        const page: unknown[] = all.slice(from, from + p.limit)
+        for (let i = Math.max(from - all.length, 0); page.length < p.limit && i < far.length; i++) {
+            const key = far[i]
+            page.push(hugeMsg(hugePeerOfSlot(key % 4000), Math.floor(key / 4000)))
+        }
+        return Object.assign(page, { next })
     }
     async getHistory(_: 'self', p?: { limit?: number }) {
         return (await cloud.all(me)).slice(0, p?.limit ?? 100)
@@ -331,16 +423,19 @@ export class TelegramClient {
         await cloud.remove(ids)
     }
     async getMessages(chatId: number | 'self', ids: number | number[]) {
+        calls.push(`getMessages ${chatId}`)
         if (chatId === 'self') {
             const all = await cloud.all(me)
             return [ids].flat().map((id) => all.find((m) => m.id === id) ?? null)
         }
         if (!peers.has(chatId)) throw rpcError('PEER_ID_INVALID')
+        if (hugeCount(chatId) > 0) return [ids].flat().map((id) => (id >= 1 && id <= hugeCount(chatId) ? hugeMsg(peers.get(chatId)!, id - 1) : null))
         return [ids].flat().map((id) => (messages.get(chatId) ?? []).find((m) => m.id === id) ?? null)
     }
     async *iterDialogs(p?: { archived?: string; limit?: number }) {
         const list = p?.archived === 'only' ? archive : dialogs
         const limit = Math.min(list.length, p?.limit ?? Infinity)
+        calls.push(`iterDialogs ${p?.archived ?? 'include'} ${limit}`)
         for (let i = 0; i < limit; i++) {
             if (i % 100 === 0) await delay(20)
             yield { peer: list[i], isPinned: p?.archived !== 'only' && i < 2 }
