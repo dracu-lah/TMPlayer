@@ -1,7 +1,7 @@
 // `node --test src/player/openStall.test.ts` (pnpm test:player): why a video is not starting, on a clock the test drives.
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { DECODE_STALL_MS, floodSeconds, STALL_MS, StallWatch, stallWhy, TRICKLE_MS, type Sample } from './openStall.ts'
+import { DECODE_STALL_MS, STALL_MS, StallWatch, stallWhy, TRICKLE_MS, type Sample } from './openStall.ts'
 
 const waiting = (over: Partial<Sample> = {}): Sample => ({ waiting: true, moved: false, received: 0, local: false, transcode: false, ...over })
 
@@ -99,23 +99,4 @@ test('the reason: a flood wait first, then no line, else Telegram is slow', () =
     assert.equal(stallWhy(0, true, null), 'slow')
     // The device offline is the offline line's, not a blocked network.
     assert.equal(stallWhy(0, false, 'offline'), 'slow')
-})
-
-test('a flood wait is read from an error and nothing else is', () => {
-    assert.equal(floodSeconds({ message: 'FLOOD_WAIT_12 (a wait of 12 seconds is required)' }), 12)
-    assert.equal(floodSeconds({ text: 'FLOOD_PREMIUM_WAIT_30', message: 'x' }), 30)
-    assert.equal(floodSeconds({ text: 'FLOOD_WAIT_%d', message: 'x', seconds: 7 }), 7)
-    assert.equal(floodSeconds({ message: 'timeout' }), 0)
-    assert.equal(floodSeconds(null), 0)
-    assert.equal(floodSeconds(undefined), 0)
-})
-
-test('garbage in a flood error gives 0 or a bounded number', () => {
-    const bad = [NaN, -5, 0, Infinity, '9', {}, [], null, 1e12, 0.2] as unknown[]
-    for (const seconds of bad) {
-        const n = floodSeconds({ message: 'FLOOD_WAIT_x', seconds: seconds as number })
-        assert.ok(Number.isInteger(n) && n >= 0 && n <= 86_400, String(seconds))
-    }
-    assert.equal(floodSeconds({ message: 'FLOOD_WAIT_99999999999' }), 86_400)
-    assert.equal(floodSeconds({ message: 'FLOOD_WAIT_', text: 5 as unknown as string }), 0)
 })

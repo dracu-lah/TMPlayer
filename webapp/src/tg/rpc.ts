@@ -5,7 +5,7 @@ import type { Api, Ctx } from './worker'
 import type { RpcError } from './types'
 import { failure } from '../errors'
 import { showCrashCard } from '../crash'
-import { floodSeconds } from '../player/openStall'
+import { floodSeconds } from './flood'
 
 type Out =
     | { id: number; value: unknown }
