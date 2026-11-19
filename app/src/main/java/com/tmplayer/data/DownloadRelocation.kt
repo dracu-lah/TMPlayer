@@ -313,7 +313,7 @@ object DownloadRelocation {
         }
         val into = dir ?: throw IOException("No folder to move into")
         return when (video) {
-            is LocalVideo.OnDisk -> DownloadFiles.moveIntoDownloads(video.file, into, video.file.name, onProgress).absolutePath
+            is LocalVideo.OnDisk -> DownloadFiles.moveIntoDownloads(video.file, into, video.file.name, onProgress = onProgress).absolutePath
             is LocalVideo.InTree -> {
                 val moved = DownloadTree.pull(video, into, video.name(), onProgress)
                 letGo(video)
