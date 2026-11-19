@@ -111,6 +111,39 @@ time prompt (a dialog, closes itself); full screen (Esc leaves it, never the vid
 which stops the video, saves the place and returns to the page that opened it (2026-11-16: the desktop's in-app
 mini bar is gone; the phone follows with T12).
 
+## Web app (web.tmplayer.org): the window
+
+Owned by `webapp/src/ui/shellKeys.ts` (the chord table, tested in `shellKeys.test.ts`, walked by
+`e2e/shell-keys.spec.ts`) and the arrows by `webapp/src/ui/VirtualGrid.tsx`. Command is Ctrl, or Cmd on
+a Mac, iPhone and iPad (a phone or tablet with a keyboard gets the same keys). The TV skin
+(`data-form="tv"`) and the player keep their own keys and ignore these. A dialog (the confirm, a
+card's menu, a sheet) is its own layer: nothing here answers while one is open.
+
+| Key | Does | Notes |
+| --- | --- | --- |
+| Command+K | Search across every chat; again goes back | works inside a text field |
+| Command+F, `/` | Focus the page's search box (a chat's opens first) | on a page with no search box the browser keeps Find; `/` is not taken inside a text field |
+| Command+Shift+A | Choose chats | |
+| Command+J | Downloads (the Get the app card); again goes back | |
+| Command+1, Command+2 | Home, Chats | a browser window keeps Cmd or Ctrl and a digit for its tabs; the keys work in the installed app (PWA) and where the browser lets the page have them |
+| Command+, | Settings | |
+| Arrows, Home, End, PageUp, PageDown | Move through a grid or list of cards or chats | no wrap; Left and Right go on to the next row, Up and Down keep the column, Home and End go to the row's ends, Ctrl+Home and Ctrl+End to the first and last; a 3,000 chat list scrolls to the item and takes the keyboard when it is drawn |
+| Menu key, Shift+F10 | The focused card's menu | |
+| Enter | Open the card | |
+| Ctrl+A, Shift+click, Ctrl+click | Select all, a range, toggle | History's select mode and Choose chats only: no other grid has an action to run on a selection (the web keeps no downloads) |
+| Tab, Shift+Tab | Next, previous control | |
+
+Never taken (the browser's own, or the system's): Cmd or Ctrl with W, T, N, Q, R, L, P, S, C, V, X, Z, Y,
+A (except Shift+A above), H, D, plus F5, F11 and Alt+Left. The page never reads them, so they keep
+working in every browser.
+
+### Esc, in order (web)
+
+1. A dialog (the shared confirm, a card's menu, a sheet), which closes alone.
+2. A menu over the page (the You menu, a sort menu), which gives the keyboard back to its button.
+3. A search box with words: clears them; empty, it leaves the page (Search, a chat's search).
+4. History's select mode (clears the ticks and leaves it). A video's page has no Esc: its Close button and the browser's Back go up a level (left to the video page's owner, WB3).
+
 ## Big screen on a computer (remote, `--tv` or Layout: TV)
 
 | Key | Does |
