@@ -299,6 +299,8 @@ function hugeIn(chat: Peer, query: string): number[] {
 
 let globalFailsLeft = 2
 
+/** The thumbnails fetched (their ids), readable in the worker as `fakeThumbs`. */
+const thumbFetches: string[] = []
 /** The raw calls made, readable in the worker as `fakeCalls`. */
 const calls: string[] = []
 
@@ -446,9 +448,13 @@ export class TelegramClient {
             yield { peer: list[i], isPinned: p?.archived !== 'only' && i < 2 }
         }
     }
-    async downloadAsBuffer(t: { url: string; bytes?: Uint8Array }) {
+    async downloadAsBuffer(t: { url: string; bytes?: Uint8Array; uniqueFileId?: string }) {
+        // A thumbnail fetch (e2e/home-defer.spec.ts counts them); `slowthumbs` answers after 150 ms, so a queue forms.
+        thumbFetches.push(t.uniqueFileId ?? t.url)
+        if (flags.has('slowthumbs')) await delay(150)
         if (t.bytes) return t.bytes
         return new Uint8Array(await (await fetch(t.url)).arrayBuffer())
     }
 }
 ;(globalThis as { fakeCalls?: string[] }).fakeCalls = calls
+;(globalThis as { fakeThumbs?: string[] }).fakeThumbs = thumbFetches

@@ -1,7 +1,7 @@
-import { createEffect, createMemo, createResource, createSignal, For, Index, lazy, Match, on, onCleanup, Show, Switch } from 'solid-js'
+import { createEffect, createMemo, createResource, createSignal, For, Index, lazy, Match, on, onCleanup, onMount, Show, Switch } from 'solid-js'
 import { A } from '@solidjs/router'
 import { ArrowLeft01Icon, ArrowRight01Icon, UserAdd01Icon } from '@hugeicons/core-free-icons'
-import { call, errorText } from '../tg/rpc'
+import { api, call, errorText, onWorkerRestart } from '../tg/rpc'
 import { online, onBackOnline } from '../net'
 import { t } from '../i18n'
 import { addedIds, addedMode, addedView, namedLists, progress, rememberHomeChats, resumes, settings, starredIds, watchedTick } from '../store'
@@ -11,10 +11,12 @@ import { forgetGone } from '../goneVideos'
 import { scrollBehavior } from '../ui/motion'
 import { Icon } from '../ui/Icon'
 import { KeepPlaceCard } from './KeepPlaceCard'
+import { AskGate } from './cardAsk'
+import { createDwell } from '../ui/dwell'
 import { useObservedCovers } from './promo'
-import { Card, ContinueCard, tileCard, useLeft, useProgress, useWarmDataCentres, videoCard, type CardData } from './VideoList'
+import { Card, ContinueCard, tileCard, useLeft, useProgress, useWarmDataCentres, videoCard, stableCards, type CardData } from './VideoList'
 import { form } from '../form'
-import type { HomePage, HomeRow, HomeView } from '../tg/types'
+import type { HomePage, HomeRow, HomeView, Tile } from '../tg/types'
 
 /** The TV layout's carousel, in the TV chunk (plan 8.5). */
 const TvHero = lazy(() => import('../tv').then((m) => ({ default: m.TvHero })))
@@ -61,6 +63,13 @@ export function Home() {
     createEffect(on(() => [settings().sizeMin, settings().sizeMax, [...starredIds()].join(), watchedTick(), copiesTick(), addedMode(), [...(addedIds() ?? [])].join(), JSON.stringify(homeLayout())], load))
     // Lost on the way: asked again once the connection is back.
     onBackOnline(() => (error() || !last()?.settled) && load())
+    // The Telegram worker was replaced: it knows no row is on screen and its Home call is gone. Rows on screen say so again, and Home is asked for again.
+    onCleanup(
+        onWorkerRestart(() => {
+            rowDwell.reset()
+            void load()
+        }),
+    )
 
     const page = () => last()
     // Every row off in Settings > Home: Home says so and leads there, rather than standing blank.
@@ -75,6 +84,9 @@ export function Home() {
         const byKey = new Map(all.map((r) => [r.key, r]))
         return arrangeOrder(all.map((r) => r.key), parseOrder(settings().homeOrder)).flatMap((k) => byKey.get(k) ?? [])
     })
+    // Row keys and rows apart: the list of keys is the same while the rows' answers change under them.
+    const rowKeys = createMemo(() => rows().map((r) => r.key))
+    const rowByKey = createMemo(() => new Map(rows().map((r) => [r.key, r])))
     const firstRun = () => !allOff() && page()?.settled && !page()!.rows.length && !listRows().length
     return (
         <>
@@ -125,30 +137,35 @@ export function Home() {
                     <A class="primary-link" href="/settings/home">{t('home.open_settings')}</A>
                 </div>
             </Show>
-            <For each={rows()}>
-                {(row) => (
-                    <Switch>
-                        {/* Recently added kept for the carousel alone: its row is off. */}
-                        <Match when={row.kind === 'recent' && !row.asRow}>{null}</Match>
-                        <Match when={row.kind === 'recent' && row.noneChosen}>
-                            <section class="home-row" aria-labelledby={`row-${row.key}`}>
-                                <div class="row-head">
-                                    <h2 class="row-title" id={`row-${row.key}`}>{t('home.row_recent_all')}</h2>
-                                </div>
-                                <div class="notice home-none-chosen">
-                                    <p>{t('home.none_added')}</p>
-                                    <A class="outline-button" href="/added-chats" data-tv-first>
-                                        <Icon icon={UserAdd01Icon} size={18} />
-                                        {t('picker.choose_chats')}
-                                    </A>
-                                </div>
-                            </section>
-                        </Match>
-                        <Match when={true}>
-                            <Row row={row} selfId={page()?.selfId ?? null} />
-                        </Match>
-                    </Switch>
-                )}
+            {/* Keyed by the row's key: a page of answers makes new row objects, and a row drawn again would lose its cards, strip position and place in line. */}
+            <For each={rowKeys()}>
+                {(key, index) => {
+                    let last: HomeRow
+                    const row = () => (last = rowByKey().get(key) ?? last)
+                    return (
+                        <Switch>
+                            {/* Recently added kept for the carousel alone: its row is off. */}
+                            <Match when={row().kind === 'recent' && !row().asRow}>{null}</Match>
+                            <Match when={row().kind === 'recent' && row().noneChosen}>
+                                <section class="home-row" aria-labelledby={`row-${key}`}>
+                                    <div class="row-head">
+                                        <h2 class="row-title" id={`row-${key}`}>{t('home.row_recent_all')}</h2>
+                                    </div>
+                                    <div class="notice home-none-chosen">
+                                        <p>{t('home.none_added')}</p>
+                                        <A class="outline-button" href="/added-chats" data-tv-first>
+                                            <Icon icon={UserAdd01Icon} size={18} />
+                                            {t('picker.choose_chats')}
+                                        </A>
+                                    </div>
+                                </section>
+                            </Match>
+                            <Match when={true}>
+                                <Row row={row()} index={index()} selfId={page()?.selfId ?? null} />
+                            </Match>
+                        </Switch>
+                    )
+                }}
             </For>
             {/* The one question about keeping the place on every device: after a Home that has rows, never over a first run or an empty page. */}
             <KeepPlaceCard eligible={!!page()?.settled && rows().length > 0 && !firstRun() && !allOff()} />
@@ -199,19 +216,64 @@ function seeAllOf(row: HomeRow): string | null {
     return null
 }
 
-function cardsOf(row: HomeRow): CardData[] {
-    if (row.kind === 'continue') return row.tiles.map((tile) => videoCard(tile.item))
-    return row.tiles.map((tile) => tileCard(tile, row.kind === 'recent' || row.kind === 'list'))
+/** A row's cards, the same objects for a tile that did not change, so a page of answers does not draw every card again. */
+function useRowCards(row: () => HomeRow): () => CardData[] {
+    const make = stableCards((tile: Tile) => (row().kind === 'continue' ? videoCard(tile.item) : tileCard(tile, row().kind === 'recent' || row().kind === 'list')))
+    return createMemo(() => make(row().tiles))
 }
 
+/** A row has to stay on screen this long before it asks for anything (the apps' ROW_DWELL_MS, HX54). */
+const ROW_DWELL_MS = 250
+/** Rows from the top that ask at once, as the worker reads its first rows without waiting (HomeViewModel.EAGER_CHATS). */
+const EAGER_ROWS = 8
+
+/** What the worker is told about a chat row: stayed on screen, or gone for good (a read not begun is then dropped). */
+function tellWorker(key: string, on: boolean) {
+    if (!key.startsWith('chat:')) return
+    const id = Number(key.slice(5))
+    if (Number.isSafeInteger(id)) api.homeRow(id, on).catch(() => {})
+}
+
+/**
+ * Keyed by row, not by the component: Home draws its rows again as each page of answers lands, and a
+ * row drawn anew a moment after it was drawn is the same row (ui/dwell.ts).
+ */
+const rowDwell = createDwell({ ms: ROW_DWELL_MS, grace: 600, confirm: (k) => tellWorker(k, true), release: (k) => tellWorker(k, false) })
+
 /** One row: its heading (a starred chat's opens the chat), and its cards in a strip that scrolls sideways. */
-function Row(props: { row: HomeRow; selfId: number | null }) {
+function Row(props: { row: HomeRow; index: number; selfId: number | null }) {
     let strip: HTMLUListElement | undefined
+    let section!: HTMLElement
+    // A row asks for its content only after it has stayed on screen (HX54). Its cards ask for their
+    // pictures once it has; the first rows, and the rows that are not a chat's, need no such wait.
+    const dwellKey = props.row.kind === 'chat' && props.row.chatId != null ? `chat:${props.row.chatId}` : props.row.key
+    const [stayed, setStayed] = createSignal(rowDwell.confirmed(dwellKey))
+    const asks = () => stayed() || props.row.kind !== 'chat' || props.index < EAGER_ROWS
+    const enter = () => rowDwell.enter(dwellKey, () => setStayed(true))
+    const leave = () => {
+        rowDwell.leave(dwellKey)
+        setStayed(false)
+    }
+    const noObserver = typeof IntersectionObserver === 'undefined'
+    onMount(() => {
+        if (noObserver) {
+            // An old engine without an observer: the row asks when it is focused or pointed at (the TV's remote, a mouse), the first ones at once.
+            if (props.index < 2) enter()
+            return
+        }
+        const io = new IntersectionObserver((entries) => {
+            const last = entries[entries.length - 1]
+            if (last) last.isIntersecting ? enter() : leave()
+        })
+        io.observe(section)
+        onCleanup(() => io.disconnect())
+    })
+    onCleanup(() => rowDwell.leave(dwellKey))
     const [atStart, setAtStart] = createSignal(true)
     const [atEnd, setAtEnd] = createSignal(false)
     const progressOf = useProgress()
     const leftOf = useLeft()
-    const cards = () => cardsOf(props.row)
+    const cards = useRowCards(() => props.row)
     useWarmDataCentres(() => cards().map((c) => c.item))
     useObservedCovers(() => cards().map((c) => c.item))
     const edges = () => {
@@ -226,7 +288,8 @@ function Row(props: { row: HomeRow; selfId: number | null }) {
     // Recently added's page says "in starred chats" as the row does, from its first frame.
     const seeAllState = () => (props.row.kind === 'recent' ? { starredOnly: props.row.starredOnly } : undefined)
     return (
-        <section class="home-row" aria-labelledby={id}>
+        // Focus counts as on screen: the TV's remote moves it row to row, and a browser without an observer asks on it.
+        <section class="home-row" aria-labelledby={id} ref={section} onFocusIn={enter} onPointerEnter={() => noObserver && enter()}>
             <div class="row-head">
                 <h2 class="row-title" id={id}>
                     <Show when={props.row.kind === 'chat' && props.row.chatId != null} fallback={rowTitle(props.row, props.selfId)}>
@@ -248,25 +311,27 @@ function Row(props: { row: HomeRow; selfId: number | null }) {
                     <A class="link see-all" href={seeAll()!} state={seeAllState()}>{t('home.see_all')}</A>
                 </Show>
             </div>
-            <Show when={props.row.loaded} fallback={<Strip continues={props.row.kind === 'continue' && form() !== 'tv'} />}>
-                <ul class="strip" classList={{ continues: props.row.kind === 'continue' && form() !== 'tv' }} ref={strip} onScroll={edges}>
-                    <For each={cards()}>
-                        {(c) => (
+            <AskGate.Provider value={asks}>
+                <Show when={props.row.loaded} fallback={<Strip continues={props.row.kind === 'continue' && form() !== 'tv'} />}>
+                    <ul class="strip" classList={{ continues: props.row.kind === 'continue' && form() !== 'tv' }} ref={strip} onScroll={edges}>
+                        <For each={cards()}>
+                            {(c) => (
+                                <li>
+                                    {/* Continue watching: a landscape card with how long is left, which plays at once. */}
+                                    <Show when={props.row.kind === 'continue' && form() !== 'tv'} fallback={<Card card={c} progress={progressOf(c.item)} direct={props.row.kind === 'continue'} />}>
+                                        <ContinueCard item={c.item} left={leftOf(c.item)} />
+                                    </Show>
+                                </li>
+                            )}
+                        </For>
+                        <Show when={form() === 'tv' && seeAll()}>
                             <li>
-                                {/* Continue watching: a landscape card with how long is left, which plays at once. */}
-                                <Show when={props.row.kind === 'continue' && form() !== 'tv'} fallback={<Card card={c} progress={progressOf(c.item)} direct={props.row.kind === 'continue'} />}>
-                                    <ContinueCard item={c.item} left={leftOf(c.item)} />
-                                </Show>
+                                <SeeAllCard href={seeAll()!} state={seeAllState()} />
                             </li>
-                        )}
-                    </For>
-                    <Show when={form() === 'tv' && seeAll()}>
-                        <li>
-                            <SeeAllCard href={seeAll()!} state={seeAllState()} />
-                        </li>
-                    </Show>
-                </ul>
-            </Show>
+                        </Show>
+                    </ul>
+                </Show>
+            </AskGate.Provider>
         </section>
     )
 }

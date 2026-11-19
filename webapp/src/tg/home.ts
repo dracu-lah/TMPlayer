@@ -5,6 +5,7 @@
 // a moment after they stop arriving, as the app builds it (ROWS_SETTLE_MS).
 import type { Message, TelegramClient } from '@mtcute/web'
 import { rules, type Video, type WebResume } from '../rules'
+import { addCapped } from '../ui/cappedSet'
 import { across, chatItem, chatList, knownChats, lookup, newestOf, rememberHomeChats, tilesOf } from './library'
 import { chatProtects, itemOf, rawOf } from './media'
 import type { ChatItem, HomePage, HomeRow, HomeView, Tile, VideoItem } from './types'
@@ -22,11 +23,40 @@ const RESUMES_READ = 20
 const LIST_ENOUGH = 300
 /** Added chats Recently added waits on, read at once (HomeRows.CHOSEN_WAIT); the rest count through the search across chats. */
 const CHOSEN_WAIT = 8
+/**
+ * Chat rows read at once, from the top, without waiting to be seen (HomeViewModel.EAGER_CHATS): what fills
+ * the first screens. The others are read once their row has stayed on screen (HX54, `rowShown`).
+ */
+const EAGER_ROWS = 8
+/** Rows kept as on screen at once: a screen shows a handful, so more is garbage; past it the oldest is let go. */
+const SHOWN_MAX = 120
 /** Every row on: Home as it was before Settings > Home. */
 const ALL_ON: HomeView['layout'] = { carousel: true, continueWatching: true, recentlyAdded: true, starredRows: true, order: '' }
 
 /** Telegram's answer for a chat this account can no longer read: its videos are gone for it. */
 const chatGone = (e: unknown) => /^(CHANNEL_PRIVATE|CHAT_FORBIDDEN|USER_BANNED_IN_CHANNEL|PEER_ID_INVALID|CHANNEL_INVALID|CHAT_ID_INVALID)/.test(String((e as { text?: string })?.text ?? ''))
+
+/** The chats whose rows are on screen now (HX54), kept here so a Home asked again starts from them. */
+const shown = new Set<number>()
+/** What the running Home does when a row comes or goes: read it, or drop its read that has not started. */
+let running: { wake(): void; unask(chatId: number): void } | null = null
+
+/**
+ * The page says a chat's row has stayed on screen (`on`) or has left it. A row that arrives is read
+ * by the Home that is running; one that leaves before its read began is never read. Anything but a
+ * whole number and a boolean is ignored (the page is not trusted with more than that).
+ */
+export function rowShown(chatId: unknown, on: unknown) {
+    if (typeof chatId !== 'number' || !Number.isSafeInteger(chatId) || typeof on !== 'boolean') return
+    if (on) {
+        // Past the cap the oldest goes: the newest rows are the ones on screen, and none is refused.
+        addCapped(shown, chatId, SHOWN_MAX)
+        running?.wake()
+    } else {
+        shown.delete(chatId)
+        running?.unask(chatId)
+    }
+}
 
 export async function homePage(tg: TelegramClient, view: HomeView, signal: AbortSignal, emit: (page: HomePage) => void): Promise<HomePage> {
     const r = await rules()
@@ -62,6 +92,8 @@ export async function homePage(tg: TelegramClient, view: HomeView, signal: Abort
 
     // Home's chats, read a few at a time.
     const asked = new Set<number>()
+    // Some chat rows are waiting to be seen: the call then stays open for them (see the end).
+    let deferred = false
     const queue: number[] = []
     const loads: Promise<void>[] = []
     let active = 0
@@ -102,7 +134,12 @@ export async function homePage(tg: TelegramClient, view: HomeView, signal: Abort
         const picked = plan.picked
         // Chosen chats past the first few are not read one by one: the search across chats counts them.
         const chosenLate = new Set((plan.recentFrom ?? []).slice(CHOSEN_WAIT))
-        const reads = picked.filter((id) => !chosenLate.has(id))
+        // A chat row below the first screens waits until it has stayed on screen (HX54): a hard scroll over
+        // forty rows is not forty reads. What Recently added or the carousel needs is read at once.
+        const needed = new Set(plan.recentFrom ?? [])
+        const wanted = picked.filter((id) => !chosenLate.has(id))
+        const reads = wanted.filter((id, i) => i < EAGER_ROWS || needed.has(id) || shown.has(id) || asked.has(id))
+        deferred = reads.length < wanted.length
         for (const id of reads) {
             if (asked.has(id)) continue
             asked.add(id)
@@ -235,6 +272,22 @@ export async function homePage(tg: TelegramClient, view: HomeView, signal: Abort
         enough()
     }
 
+    const mine = {
+        // A row came on screen: build again, which asks for it.
+        wake: () => {
+            if (signal.aborted || finished) return
+            build()
+            schedule()
+        },
+        // A row left before its read began: it is not read.
+        unask: (id: number) => {
+            const at = queue.indexOf(id)
+            if (at < 0) return
+            queue.splice(at, 1)
+            asked.delete(id)
+        },
+    }
+    running = mine
     try {
         const first = Promise.all([readResumes(), readEarly()]).then(schedule)
         // The rest of the list goes on loading behind Home, for the Chats page; Home waits for
@@ -249,9 +302,15 @@ export async function homePage(tg: TelegramClient, view: HomeView, signal: Abort
             await Promise.all(loads)
             if (asked.size === before && !queue.length) break
         }
-        return build()
+        const last = build()
+        if (!deferred) return last
+        // Rows below the first screens are read when they are seen: this Home stays open for them, sending each
+        // page as it fills, until the page asks again or leaves (the call is aborted then).
+        emit(last)
+        return await new Promise<HomePage>((_, reject) => signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')), { once: true }))
     } finally {
         finished = true
         clearTimeout(timer)
+        if (running === mine) running = null
     }
 }

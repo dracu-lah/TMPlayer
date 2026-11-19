@@ -1,9 +1,9 @@
-import { createEffect, createResource, createSignal, onCleanup, onMount, Show } from 'solid-js'
+import { createEffect, createResource, createSignal, onCleanup, Show, useContext } from 'solid-js'
 import { A, useNavigate } from '@solidjs/router'
 import { PlayCircleIcon, PlayIcon } from '@hugeicons/core-free-icons'
 import { Icon } from '../ui/Icon'
 import { resumes, settings, watchedTick } from '../store'
-import { loadThumb } from './thumbs'
+import { AskGate, useCardThumb } from './cardAsk'
 import { coverBackground } from './cover'
 import { isPromoCover, useObservedCovers } from './promo'
 import { askOf, keptRating, loadBackdrop, loadPoster, posterSizeFor } from './posters'
@@ -70,22 +70,10 @@ const cardPath = (v: VideoItem, direct?: boolean) => (direct ? watchPath(v) : de
 function CardArt(props: { thumb: string | null; cover?: string | null; title: string; poster: PosterAsk | null; tile?: string; progress?: number; onPlay?: (e: MouseEvent) => void }) {
     let el!: HTMLDivElement
     const [src, setSrc] = createSignal<string | null>(null)
-    const [seen, setSeen] = createSignal(false)
     const [picture, setPicture] = createSignal<string | null>(null)
-    let gone = false
-    onCleanup(() => (gone = true))
-    onMount(() => {
-        const io = new IntersectionObserver((entries) => {
-            if (!entries.some((e) => e.isIntersecting)) return
-            io.disconnect()
-            setSeen(true)
-            const thumb = props.thumb
-            // Not fetched when it is an uploader's advert (promo.ts): the cover gradient stands in.
-            if (thumb && !isPromoCover(props.cover)) againOnce(() => loadThumb(thumb), (url) => !gone && setSrc(url), () => gone)
-        })
-        io.observe(el)
-        onCleanup(() => io.disconnect())
-    })
+    // Asked once the card is on screen (and its Home row has stayed there), taken back when it leaves (HX54).
+    // Not asked when it is an uploader's advert (promo.ts): the cover gradient stands in.
+    const { seen } = useCardThumb({ el: () => el, thumb: () => props.thumb, skip: () => isPromoCover(props.cover), open: useContext(AskGate), onUrl: setSrc })
     createEffect(() => {
         const ask = props.poster
         if (!seen() || !ask || !settings().posters) return void setPicture(null)
@@ -270,18 +258,8 @@ export function useLeft(): (v: VideoItem) => Left | undefined {
 export function ContinueCard(props: { item: VideoItem; left?: Left }) {
     let el!: HTMLDivElement
     const [src, setSrc] = createSignal<string | null>(null)
-    const [seen, setSeen] = createSignal(false)
     const [wide, setWide] = createSignal<string | null>(null)
-    onMount(() => {
-        const io = new IntersectionObserver((entries) => {
-            if (!entries.some((e) => e.isIntersecting)) return
-            io.disconnect()
-            setSeen(true)
-            if (props.item.thumb && !isPromoCover(props.item.cover)) loadThumb(props.item.thumb).then(setSrc, () => {})
-        })
-        io.observe(el)
-        onCleanup(() => io.disconnect())
-    })
+    const { seen } = useCardThumb({ el: () => el, thumb: () => props.item.thumb, skip: () => isPromoCover(props.item.cover), open: useContext(AskGate), onUrl: setSrc })
     // The title's own wide picture where TMDB has one (OnlineArt), the video's frame until then.
     createEffect(() => {
         const ask = askOf(props.item)
