@@ -165,6 +165,8 @@ export interface CardData {
     title: string
     item: VideoItem
     facts: string
+    /** How many versions the card stands for (HX38): the same count its page lists. */
+    versions?: number
 }
 
 const dot = '  ·  '
@@ -184,11 +186,12 @@ export function tileCard(tile: Tile, showChat = false): CardData {
                   showChat ? v.chat : '',
                   tile.parts > 1 ? t('grid.parts_count', { count: tile.parts }) : size(v.size),
                   length(v.duration),
-                  tile.copies ? t('search.copies', { count: tile.copies + 1 }) : '',
+                  // One count with the page's list of copies (VideoCopies.versionCount): the same file posted twice counts once.
+                  tile.versions > 1 ? t('detail.versions', { count: tile.versions }) : '',
               ]
                   .filter(Boolean)
                   .join(dot)
-    return { key: tile.key, title: tile.title, item: v, facts }
+    return { key: tile.key, title: tile.title, item: v, facts, versions: tile.kind === 'file' ? tile.versions : 1 }
 }
 
 /** Where each video was left, for the line on its card. */
@@ -209,10 +212,10 @@ const intent = (v: VideoItem) => {
 }
 
 /** What every card's link does: warm the file on intent, keep the video it stands for for the page it opens. */
-function cardLink(item: VideoItem, direct?: boolean, replace?: boolean, history?: boolean) {
+function cardLink(item: VideoItem, direct?: boolean, replace?: boolean, history?: boolean, versions?: number) {
     return {
         // The right click and long press menu on every card; a TV remote has no pointer, and its hold of OK opens the card's own page.
-        ...(form() !== 'tv' ? cardMenu(item, !!history) : {}),
+        ...(form() !== 'tv' ? cardMenu(item, !!history, versions ?? 1) : {}),
         href: cardPath(item, direct),
         state: { video: item },
         replace,
@@ -234,7 +237,7 @@ export function Card(props: { card: CardData; progress?: number; replace?: boole
         navigate(watchPath(props.card.item), { state: { video: props.card.item } })
     }
     return (
-        <A class="card" {...cardLink(props.card.item, props.direct, props.replace, props.history)}>
+        <A class="card" {...cardLink(props.card.item, props.direct, props.replace, props.history, props.card.versions)}>
             <CardArt thumb={props.card.item.thumb} cover={props.card.item.cover} title={props.card.title} poster={askOf(props.card.item)} tile={props.card.item.tile} progress={props.progress} onPlay={play} />
             {/* Under the card, as the apps write it (two lines kept, so the facts line up along a row). */}
             <div class="card-name">{props.card.title}</div>
