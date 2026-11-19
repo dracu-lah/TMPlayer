@@ -15,6 +15,7 @@ import com.tmplayer.data.MediaCursors
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.MediaPage
 import com.tmplayer.data.SeriesShelf
+import com.tmplayer.data.TdlError
 import com.tmplayer.data.ShelfEntry
 import com.tmplayer.data.Td
 import com.tmplayer.data.runCatchingCancellable
@@ -172,7 +173,7 @@ class NameDumpReceiver : BroadcastReceiver() {
                         continue
                     }
                     failures += 1
-                    Log.w(TAG, "page failed (${e.javaClass.simpleName}), try $failures")
+                    Log.w(TAG, "page failed (${(e as? TdlError)?.let { "TDLib ${it.code}: ${it.message.take(120)}" } ?: e.javaClass.simpleName}), try $failures")
                     if (failures >= MAX_FAILURES) return null
                     delay(2_000L * failures)
                 }
