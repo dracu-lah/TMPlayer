@@ -8,6 +8,7 @@ import { cryptoProvider } from './crypto'
 import { findChatSubtitles, forgetChatSubtitles } from './chatsubs'
 import { homePage, rowShown } from './home'
 import { archivedList, chatList, chatPage, forgetAll, joinedFor, listTiles, rankChats, recentPage, searchAll, setCopyContext, topicSources, videoCounts, watchInfo } from './library'
+import { messageLink, telegramLook, type LinkAnswer } from './links'
 import { findTopics, keepWhole, keptTopics, telegramTopics, topicWords } from './topics'
 import { clickSponsored, reportSponsored, viewSponsored } from './sponsored'
 import { deleteEverything, deleteMessages, readFiles, writeFile, type FoundFile } from './syncfile'
@@ -309,8 +310,8 @@ export const api = {
     },
 
     /** The Add chats picker's rough video count for each listed chat, three at a time (see library.ts videoCounts). */
-    async videoCounts(_: Ctx, chatIds: number[]): Promise<Record<number, number>> {
-        return videoCounts(tg, chatIds)
+    async videoCounts(ctx: Ctx, chatIds: number[]): Promise<Record<number, number>> {
+        return videoCounts(tg, chatIds, ctx.signal)
     },
 
     /** A chat's grid as the app arranges it (see library.ts for the modes). */
@@ -471,6 +472,11 @@ export const api = {
         }
         if (info.username) info.link = `https://t.me/${info.username}`
         return info
+    },
+
+    /** The link to a video's message (WB16, the apps' Copy link): public or private form, its forum topic between; or why there is none. */
+    async messageLink(_: Ctx, chatId: number, messageId: number): Promise<LinkAnswer> {
+        return messageLink(telegramLook(tg), await rules(), chatId, messageId)
     },
 
     /** A named list's cards (HX43), grouped as a chat's grid, from the videos the page keeps. */

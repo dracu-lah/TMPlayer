@@ -163,19 +163,84 @@ for (const form of FORMS) {
             // How far the background count has gone by now depends on timing: the test below holds it to a budget.
         })
 
-        // FINDING (2026-11-19, WB23): AddChats.tsx counts "the rest of the account, channels first" behind the picker (T5), three
-        // chats at a time with no cap: on 3,000 chats (1,000 channels) that is 2,000 reads while the viewer only looks, about
-        // 1,200 in the first 10 s of idle. It stops when the picker closes, but it is not a budget (AGENTS.md "Scale": calls
-        // have a budget). `test.fail` keeps the run green while the picker is as it is and goes red when it is fixed, so the
-        // line is then taken out and the budget below stands.
-        test('the picker keeps its background count of chats within a budget', async ({ page }) => {
-            test.fail(true, 'finding: the picker counts every channel of the account behind the list, without a cap')
+        // WB22 (2026-11-20): the picker's counts have a budget (ui/pickCount.ts). WB23 found about 1,750 searchMessages in 15 s on
+        // this account (every channel counted behind the list, no cap). Now the head start and the rows the viewer stays on are
+        // counted (150 chats at most, two calls each) and the rest only when they ask to look in more chats (100 at a time).
+        test('the picker keeps its background count of chats within a budget, and counts more only when asked', async ({ page }) => {
             await page.goto('/added-chats')
             await expect(page.locator('.chat-tick').first()).toBeVisible({ timeout: 20_000 })
             await page.waitForTimeout(15_000)
             const calls = await workerCalls(page)
             note({ type: 'picker calls after 15 s', description: summary(calls) })
             expect(countCalls(calls, 'searchMessages')).toBeLessThanOrEqual(400)
+            await page.screenshot({ path: test.info().outputPath(`picker-${form.name}.png`) })
+            // Scrolling through a few hundred rows counts only what the viewer stays on, inside the visit's budget.
+            for (let i = 0; i < 12; i++) {
+                await page.evaluate(() => window.scrollBy(0, innerHeight * 2))
+                await page.waitForTimeout(500)
+            }
+            await page.waitForTimeout(3000)
+            const scrolled = countCalls(await workerCalls(page), 'searchMessages')
+            note({ type: 'picker searchMessages after scrolling', description: String(scrolled) })
+            expect(scrolled).toBeLessThanOrEqual(2 * 150 + 10)
+            // The way to count more is on the page once the budget is spent; it counts a hundred more chats, then offers again.
+            await page.evaluate(() => window.scrollTo(0, 0))
+            const more = page.getByRole('button', { name: 'Look in more chats' })
+            await expect(more).toBeVisible()
+            await expect(page.getByText(/Looked for videos in \d+ of 3\d{3} chats so far/)).toBeVisible()
+            await page.screenshot({ path: test.info().outputPath(`picker-more-${form.name}.png`) })
+            await more.click()
+            await expect.poll(async () => countCalls(await workerCalls(page), 'searchMessages'), { timeout: 30_000 }).toBeGreaterThanOrEqual(scrolled + 150)
+            await page.waitForTimeout(3000)
+            const after = countCalls(await workerCalls(page), 'searchMessages')
+            note({ type: 'picker searchMessages after look in more', description: String(after) })
+            expect(after).toBeLessThanOrEqual(scrolled + 2 * 100 + 10)
+            await expect(more).toBeVisible()
+        })
+
+        test('three chats that always fail to count are asked twice at most and do not hold the picker to its budget', async ({ context, page }) => {
+            await fakeCase(context, 'huge', 'countfail')
+            await page.goto('/added-chats')
+            await expect(page.locator('.chat-tick').first()).toBeVisible({ timeout: 20_000 })
+            await page.waitForTimeout(6000)
+            const more = page.getByRole('button', { name: 'Look in more chats' })
+            // The budget is spent by scrolling through the rows, then more is asked for, so the scan reaches the failing channels.
+            for (let i = 0; i < 12; i++) {
+                await page.evaluate(() => window.scrollBy(0, innerHeight * 2))
+                await page.waitForTimeout(400)
+            }
+            await page.evaluate(() => window.scrollTo(0, 0))
+            await expect(more).toBeVisible({ timeout: 20_000 })
+            await more.click()
+            await page.waitForTimeout(12_000)
+            const calls = await workerCalls(page)
+            const failing = [66, 69, 72].map((slot) => calls.filter((c) => c.startsWith(`searchMessages -${2_000_000 + slot} `)).length)
+            note({ type: 'asks of the three failing chats', description: failing.join(', ') })
+            // Two filters per ask, one ask and one retry at most.
+            for (const n of failing) expect(n).toBeLessThanOrEqual(4)
+            expect(failing.reduce((a, b) => a + b, 0)).toBeGreaterThan(0)
+            expect(countCalls(calls, 'searchMessages')).toBeLessThanOrEqual(2 * (150 + 100) + 20)
+            // And it stops by itself: nothing more is asked once the step is spent.
+            const settled = countCalls(await workerCalls(page), 'searchMessages')
+            await page.waitForTimeout(6000)
+            expect(countCalls(await workerCalls(page), 'searchMessages')).toBe(settled)
+        })
+
+        test('the picker stops counting for the visit when Telegram refuses, and says so', async ({ context, page }) => {
+            await fakeCase(context, 'huge', 'countflood')
+            await page.goto('/added-chats')
+            await expect(page.locator('.chat-tick').first()).toBeVisible({ timeout: 20_000 })
+            await expect(page.getByText(/asked TMPlayer to slow down/)).toBeVisible({ timeout: 20_000 })
+            await page.waitForTimeout(1000)
+            const first = countCalls(await workerCalls(page), 'searchMessages')
+            await page.waitForTimeout(4000)
+            // A few calls were in flight when the refusal came; none after it.
+            expect(countCalls(await workerCalls(page), 'searchMessages')).toBe(first)
+            expect(first).toBeLessThan(40)
+            await expect(page.getByRole('button', { name: 'Look in more chats' })).toHaveCount(0)
+            // The list still works: a chat can be ticked.
+            await page.locator('.chat-tick').nth(2).check()
+            await expect(page.getByText(/1 chat chosen/)).toBeVisible()
         })
 
         test('Deep Room (20,000 videos) shows its first page within 3 s, pages only what is shown, draws a bounded page, keeps its caches in their caps and is quiet when idle', async ({ page }) => {

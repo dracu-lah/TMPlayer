@@ -3,9 +3,9 @@
 // from history, which the toast's Undo takes back; on a card of a video posted more than once, Not
 // the same video (and Group with its copies again on a file kept apart, HX38). One menu for the whole page. The browser's own
 // right click menu is turned off page wide (blockBrowserMenu) so a right click feels like the app's.
-import { createEffect, createSignal, Show } from 'solid-js'
+import { createEffect, createSignal, on, Show } from 'solid-js'
 import { useNavigate } from '@solidjs/router'
-import { Clock01Icon, Delete02Icon, Edit02Icon, InformationCircleIcon, LeftToRightListBulletIcon, Link04Icon, PlayIcon, Search01Icon, Tick02Icon, Unlink04Icon } from '@hugeicons/core-free-icons'
+import { Clock01Icon, Copy01Icon, Delete02Icon, Edit02Icon, InformationCircleIcon, LeftToRightListBulletIcon, Link04Icon, PlayIcon, Search01Icon, TelegramIcon, Tick02Icon, Unlink04Icon } from '@hugeicons/core-free-icons'
 import { t } from '../i18n'
 import { historyId, removeWithUndo } from '../historyEdits'
 import { laterIds, settings, setLater, setWatched, watchedIds, watchedTick } from '../store'
@@ -13,6 +13,8 @@ import { Icon } from './Icon'
 import { openPosterPicker } from './PosterPicker'
 import { canReportTitle, openRename, reportTitle } from './renameTarget'
 import { RenameSheet } from './RenameSheet'
+import { showToast } from './Toast'
+import { copyLink, isTgLink, linkOf, linkOffered } from './tgLinks'
 import { api } from '../tg/rpc'
 import { openListPicker } from '../screens/Lists'
 import { isApart, keepApart } from '../copies'
@@ -107,6 +109,44 @@ export function CardMenu() {
         })
     })
     const close = () => setTarget(null)
+    // The video's Telegram link, asked as the menu opens so the tap that copies it has it already (a browser lets a page copy only in the tap).
+    // undefined: not here yet; null: none to give. `manual` is the link shown for copying by hand when the browser refused the clipboard.
+    const [link, setLink] = createSignal<string | null | undefined>(undefined)
+    const [manual, setManual] = createSignal<string | null>(null)
+    // Telegram says this video may not be passed on now (the chat became protected, or the message destroys itself): no link entries.
+    const [blocked, setBlocked] = createSignal(false)
+    let copying = false
+    createEffect(
+        on(target, (now) => {
+            setLink(undefined)
+            setManual(null)
+            setBlocked(false)
+            if (!now || !linkOffered(now.item)) return
+            void linkOf(now.item, api.messageLink).then((a) => {
+                if (target() !== now) return
+                setLink('link' in a ? a.link : null)
+                setBlocked(!('link' in a) && a.none === 'protected')
+            })
+        }),
+    )
+    createEffect(() => {
+        const text = manual()
+        if (text) queueMicrotask(() => dialog.querySelector<HTMLInputElement>('input.link-field')?.select())
+    })
+    const copy = async () => {
+        const now = target()
+        if (!now || copying) return
+        copying = true
+        try {
+            const out = await copyLink(now.item, 0, api.messageLink)
+            if (target() !== now) return
+            if (out.done === 'shown') return void setManual(out.link)
+            close()
+            showToast({ text: out.done === 'copied' ? t('common.link_copied') : out.why === 'gone' ? t('link.not_found') : t('share.no_message_links') })
+        } finally {
+            copying = false
+        }
+    }
     const go = (path: string) => {
         const now = target()
         close()
@@ -194,6 +234,27 @@ export function CardMenu() {
                                 <small>{t('poster.choose_detail')}</small>
                             </span>
                         </button>
+                        {/* The apps' Copy link: not for a chat that restricts saving, nor a video played from pieces. */}
+                        <Show when={linkOffered(now().item) && !blocked()}>
+                            <button class="menu-row" type="button" onClick={copy}>
+                                <Icon icon={Copy01Icon} size={22} />
+                                <span>
+                                    {t('grid.copy_link')}
+                                    <small>{t('grid.copy_link_detail')}</small>
+                                </span>
+                            </button>
+                            <Show when={manual()}>
+                                {(text) => <input class="link-field" type="text" readonly dir="ltr" value={text()} aria-label={t('grid.copy_link')} onFocus={(e) => e.currentTarget.select()} />}
+                            </Show>
+                            <Show when={isTgLink(link()) && link()}>
+                                {(href) => (
+                                    <a class="menu-row" href={href()} target="_blank" rel="noopener noreferrer" onClick={close}>
+                                        <Icon icon={TelegramIcon} size={22} />
+                                        <span>{t('link.open_in_telegram')}</span>
+                                    </a>
+                                )}
+                            </Show>
+                        </Show>
                         {/* Repairs, last as in the apps' menu: a wrong group split, and put back. */}
                         <Show when={isApart(now().item)}>
                             <button class="menu-row" type="button" onClick={() => apart(false)}>

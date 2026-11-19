@@ -10,7 +10,7 @@
 // Read live, so a test can change them while the page runs (the cookie is read again): `stall` (a
 // file read answers nothing until the flag goes), `late` (it answers after 6 s), `flood:N` (file reads are told to wait N seconds, from the first one), `linkdown` (the line to
 // Telegram reports `connecting`, and nothing is answered), `topicflood` (the first ask for Language Club's topics is told to wait 2 s),
-// `topicsrefuse` (every ask for topics is refused), `topicslow` (an ask for topics answers after 1.5 s).
+// `countflood` (the Add chats picker's counts are told to wait 15 minutes after twenty), `countfail` (three channels of the huge account always refuse a count),`topicsrefuse` (every ask for topics is refused), `topicslow` (an ask for topics answers after 1.5 s).
 
 // Read synchronously (a worker may): a top-level await would hold back the worker's message
 // handler, and the page's first call would be lost.
@@ -258,6 +258,22 @@ const dialogs: Peer[] = [me, clips, shows, locked, quiet, copies]
 if (!flags.has('huge')) for (let i = 0; i < 1500; i++) dialogs.push(peer(-5000 - i, `Group ${i}`, 'chat'))
 dialogs.push(lighthouse)
 
+// `links` (WB16, Telegram links): chats with ids as real Telegram ones are (-100 and a number), which the fake's small ids are not.
+// Link Room is public (@linkroom) with a plain video and one in a forum topic (9); Back Room is a private channel with no
+// username; Sealed Room restricts saving. `linksgone`: Telegram answers that Link Room's messages no longer exist. `linksprot`: its messages now say they restrict saving.
+// Made last, so no other id moves.
+const linkRoom = peer(-1001234567890, 'Link Room', 'chat', { chatType: 'channel', username: 'linkroom' })
+const backRoom = peer(-1009876543210, 'Back Room', 'chat', { chatType: 'channel' })
+const sealedRoom = peer(-1005555555555, 'Sealed Room', 'chat', { chatType: 'channel', raw: { noforwards: true } })
+if (flags.has('links')) {
+    const inTopic = msg(linkRoom, 'Topic.Clip.mp4', { file: 'h264-aac.mp4', video: true })
+    Object.assign(inTopic.raw, { replyTo: { _: 'messageReplyHeader', forumTopic: true, replyToTopId: 9, replyToMsgId: 9 } })
+    messages.set(linkRoom.id, [msg(linkRoom, 'Plain.Clip.mp4', { file: 'h264-aac.mp4', video: true }), inTopic])
+    messages.set(backRoom.id, [msg(backRoom, 'Back.Clip.mp4', { file: 'h264-aac.mp4', video: true })])
+    messages.set(sealedRoom.id, [msg(sealedRoom, 'Sealed.Clip.mp4', { file: 'h264-aac.mp4', video: true })])
+    dialogs.splice(1, 0, linkRoom, backRoom, sealedRoom)
+}
+
 // `forums`: three groups with topics turned on, among the first chats of the list (/chat/-1010 to -1012), for the search by topic name.
 // Course Hub has a topic of two videos ("☕ Café Lessons"), one with none ("Lessons archive", closed), one of files only,
 // a pinned General and one with no title; Language Club has two small topics; Outside Forum is for the added-chats test.
@@ -297,6 +313,8 @@ if (flags.has('forums')) {
 }
 /** Telegram's own matching of a topic's name: lower case, no accents, the words inside it. */
 const fold = (text: string) => text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+/** The picker's counts asked so far (the `countflood` case refuses after twenty). */
+let countsAsked = 0
 /** Group ids whose topics were asked once already (the `topicflood` case answers a flood wait the first time only). */
 const floodedOnce = new Set<number>()
 // Telegram's archive: two chats of its own, listed only when the archive is asked for.
@@ -475,6 +493,10 @@ export class TelegramClient {
         calls.push(`searchMessages ${p.chatId} ${p.filter?._ ?? ''} ${p.offset ?? 0}`)
         if (p.threadId) calls.push(`thread ${p.chatId} ${p.threadId}`)
         await delay(flags.has('slow') ? 3000 : 50)
+        // `countflood`: after twenty single-message counts (the Add chats picker's) Telegram asks it to wait a quarter of an hour.
+        if (flags.has('countflood') && p.limit === 1 && p.chatId !== 'self' && ++countsAsked > 20) throw Object.assign(rpcError('FLOOD_WAIT_900', 420), { seconds: 900 })
+        // `countfail`: three channels of the huge account (slots 66, 69, 72) always refuse a count with a plain error (a private channel).
+        if (flags.has('countfail') && p.limit === 1 && [66, 69, 72].some((slot) => p.chatId === hugeId(slot))) throw rpcError('CHANNEL_PRIVATE')
         // Saved Messages: the sync file, found by its caption.
         if (p.chatId === 'self') return (await cloud.all(me)).filter((m) => m.text.includes(p.query ?? '')).slice(0, p.limit)
         if (!p.filter) throw rpcError('FILTER_MISSING')
@@ -543,6 +565,9 @@ export class TelegramClient {
             return [ids].flat().map((id) => all.find((m) => m.id === id) ?? null)
         }
         if (!peers.has(chatId)) throw rpcError('PEER_ID_INVALID')
+        if (flags.has('linksgone') && chatId === linkRoom.id) return [ids].flat().map(() => null)
+        // `linksprot`: the chat became protected after the lists were read: Telegram's message now says so, the stored cards do not.
+        if (flags.has('linksprot') && chatId === linkRoom.id) return [ids].flat().map((id) => { const m = (messages.get(chatId) ?? []).find((x) => x.id === id); return m ? { ...m, raw: { ...m.raw, noforwards: true } } : null })
         if (hugeCount(chatId) > 0) return [ids].flat().map((id) => (id >= 1 && id <= hugeCount(chatId) ? hugeMsg(peers.get(chatId)!, id - 1) : null))
         return [ids].flat().map((id) => (messages.get(chatId) ?? []).find((m) => m.id === id) ?? null)
     }

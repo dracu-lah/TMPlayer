@@ -62,7 +62,8 @@ import { coverBackground } from '../screens/cover'
 import { loadThumb } from '../screens/thumbs'
 import { chapterAt, chapterMarks, chapterNext, chapterPrevious, isGeneric, skipSegments, type Chapter, type SkipSegment } from './chapters'
 import { applyDelay, look, setLook, setSubDelay, subDelay } from './cues'
-import { BookmarksSheet, delayText, SIZES, TimingSheet } from './extra-sheets'
+import { BookmarksSheet, delayText, LinkSheet, SIZES, TimingSheet } from './extra-sheets'
+import { copyLink, linkOf, linkOffered } from '../ui/tgLinks'
 import { MsoneSheet, trackLabel as onlineLabel, type MsoneTarget } from './msone-sheet'
 import { episodeOf } from './msone'
 import * as subpick from './subpick-use'
@@ -170,6 +171,14 @@ export interface Ctl {
     qualityLabel: (height: number) => string
     readout: () => string
     details: () => string
+    /** Report stutter (WB18): null when this browser has no frame counters, so the line is not offered. */
+    stutter: () => { press: () => 'kept' | 'already' } | null
+    /** What the page's logs weigh, scrubbed, for the line under Copy details. */
+    logsSize: () => string
+    /** The scrubbed logs as text, for the selected copy a browser that refuses the clipboard gets. */
+    logsText: () => string
+    /** Copy details with the logs, written to the clipboard inside the press itself; false when the browser refused. */
+    copyLogs: () => Promise<boolean>
     loadSubtitleFile: () => void
     /** Lays a subtitle file over the video and shows it; throws when the file cannot be read. */
     addSubtitle: (file: File, as?: { label: string; language: string }) => Promise<void>
@@ -190,7 +199,7 @@ export interface Ctl {
     markWatched: (on: boolean) => void
 }
 
-type Sheet = 'subtitles' | 'audio' | 'speed' | 'copies' | 'episodes' | 'more' | 'shape' | 'details' | 'options' | 'sleep' | 'bookmarks' | 'timing' | 'shortcuts' | 'still' | 'msone' | 'chatsubs' | 'goto' | 'rotate' | 'boost' | null
+type Sheet = 'subtitles' | 'audio' | 'speed' | 'copies' | 'episodes' | 'more' | 'shape' | 'details' | 'options' | 'sleep' | 'bookmarks' | 'timing' | 'shortcuts' | 'still' | 'msone' | 'chatsubs' | 'goto' | 'rotate' | 'boost' | 'link' | null
 
 /** A file name the three systems all take: no path or reserved characters, not too long. */
 function shotName(title: string, at: number): string {
@@ -273,6 +282,28 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
     // ---- showing and hiding ------------------------------------------------------------------
     const [visible, setVisible] = createSignal(variant() !== 'tv')
     const [sheet, setSheet] = createSignal<Sheet>(null)
+    // Playback details (WB18): what Report stutter and Copy details just did, and what the logs weigh.
+    const [detailsNote, setDetailsNote] = createSignal('')
+    const [logsSize, setLogsSize] = createSignal<string | null>(null)
+    /** The text a browser that would not copy gets to select and copy itself. */
+    const [copyFallback, setCopyFallback] = createSignal<string | null>(null)
+    createEffect(() => {
+        if (sheet() !== 'details') return
+        setDetailsNote('')
+        setCopyFallback(null)
+        try {
+            setLogsSize(untrack(() => c.logsSize()))
+        } catch {
+            setLogsSize(null)
+        }
+        // The remote and the keyboard come into the sheet on its close button, so OK still closes it as before.
+        queueMicrotask(() => c.root.querySelector<HTMLElement>('.pc-details .pc-btn')?.focus({ preventScroll: true }))
+    })
+    const copyDetails = () =>
+        void c.copyLogs().then((ok) => {
+            setCopyFallback(ok ? null : c.logsText())
+            setDetailsNote(ok ? t('player.details_copied') : t('web.copy_failed'))
+        })
     // The subtitle files posted in this video's chat (EG-F48): looked for once, when the Subtitles
     // picker (or More options, which leads to it) first opens. One search, answered best first; the
     // entry shows only when there are some, and a failure just leaves it out.
@@ -286,6 +317,41 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         const wanted = [navigator.language.slice(0, 2).toLowerCase(), 'en']
         call('chatSubtitles', [c.item.chatId, c.item.messageId, c.item.fileName || c.item.title, '', wanted]).then(setChatSubs, () => {})
     })
+    // Copy link at this time (the apps' CopyLinkAtTime): the link is asked as More options opens, so the tap that copies it has it.
+    // Not for a chat that restricts saving, nor a video played from pieces. `linkShown` is the link, when the browser refused the clipboard.
+    const askLink = (chatId: number, messageId: number) => call('messageLink', [chatId, messageId])
+    const [linkShown, setLinkShown] = createSignal('')
+    // Telegram says this video may not be passed on now (the chat became protected, or the message destroys itself): the entry goes.
+    const [linkBlocked, setLinkBlocked] = createSignal(false)
+    let linkAsked: string | null = null
+    createEffect(() => {
+        if (sheet() !== 'more' || !linkOffered(c.item)) return
+        const key = `${c.item.chatId}:${c.item.messageId}`
+        if (linkAsked !== key) {
+            linkAsked = key
+            setLinkBlocked(false)
+            void linkOf(c.item, askLink).then((a) => linkAsked === key && setLinkBlocked(!('link' in a) && a.none === 'protected'))
+        }
+    })
+    let linkBusy = false
+    const copyLinkAtTime = async () => {
+        if (linkBusy || !linkOffered(c.item)) return
+        linkBusy = true
+        const at = Math.floor(v.currentTime)
+        setSheet(null)
+        try {
+            const out = await copyLink(c.item, at, askLink)
+            if (out.done === 'shown') {
+                setLinkShown(out.link)
+                setSheet('link')
+            } else {
+                if (out.done === 'none' && out.why === 'protected') setLinkBlocked(true)
+                flash(out.done === 'copied' ? t('common.link_copied') : out.why === 'gone' ? t('link.not_found') : t('share.no_message_links'))
+            }
+        } finally {
+            linkBusy = false
+        }
+    }
     /** The listed file read and laid over the video, or the sentence saying why not (a gone file leaves the list). */
     const pickChat = async (sub: ChatSubtitle) => {
         if (chatBusy()) return
@@ -1280,8 +1346,11 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
             return true
         }
         if (sheet()) {
-            if (key === 'back' || (sheet() === 'details' && key === 'ok')) setSheet(null)
+            // Playback details holds buttons now (Report stutter, Copy details): OK presses the one the remote is on, and closes the sheet from anywhere else.
+            const onDetailsButton = sheet() === 'details' && !!active?.closest('.pc-details-btn')
+            if (key === 'back' || (sheet() === 'details' && key === 'ok' && !onDetailsButton)) setSheet(null)
             else if (key === 'ok') return 'native'
+            else if (arrow && sheet() === 'details') walk(c.root.querySelector('.pc-details'), key, active)
             else if (arrow && ['episodes', 'timing', 'bookmarks', 'still', 'msone'].includes(sheet()!)) walk(c.root.querySelector('.pc-sheet, .pc-still'), key, active)
             return true
         }
@@ -2137,6 +2206,9 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                             <Entry text={t('player.reset_zoom')} trailing={`${percent(zoom())}%`} onClick={() => (setSheet(null), resetZoom())} />
                         </Show>
                         <Entry text={t('player.subtitle_style_and_timing')} onClick={() => setSheet('timing')} />
+                        <Show when={linkOffered(c.item) && !linkBlocked()}>
+                            <Entry text={t('player.copy_link_at_time')} onClick={copyLinkAtTime} />
+                        </Show>
                         <Entry text={t('player.load_subtitle_file')} onClick={() => (setSheet(null), c.loadSubtitleFile())} />
                         <hr />
                         <Entry icon={CheckmarkCircle02Icon} text={c.watched() ? t('player.mark_unwatched') : t('player.mark_watched')} onClick={() => (setSheet(null), toggleWatched())} />
@@ -2194,6 +2266,9 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                 </Match>
                 <Match when={sheet() === 'timing'}>
                     <TimingSheet delay={subDelay} onDelay={setDelay} look={look} onLook={changeLook} onClose={() => setSheet(null)} />
+                </Match>
+                <Match when={sheet() === 'link'}>
+                    <LinkSheet link={linkShown()} onClose={() => setSheet(null)} />
                 </Match>
                 <Match when={sheet() === 'shortcuts'}>
                     <ShortcutsSheet mac={MAC} onClose={() => setSheet(null)} />
@@ -2351,6 +2426,35 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                         <p>{t('player.details_speed', { speed: speedLabel(rate()) })}</p>
                         <Show when={c.item.dc}>
                             <p>{t('player.details_datacenter', { number: c.item.dc! })}</p>
+                        </Show>
+                        <div class="pc-details-actions">
+                            <Show when={c.stutter()}>
+                                <button type="button" class="pc-details-btn" onClick={() => setDetailsNote(c.stutter()!.press() === 'already' ? t('player.stutter_marked_already') : t('web.stutter_marked'))}>
+                                    {t('player.report_stutter')}
+                                </button>
+                            </Show>
+                            <Show when={!tv()}>
+                                <button type="button" class="pc-details-btn" onClick={copyDetails}>
+                                    {t('player.copy_details')}
+                                </button>
+                            </Show>
+                        </div>
+                        <Show when={c.stutter()}>
+                            <p class="pc-details-hint">{t('web.report_stutter_detail')}</p>
+                        </Show>
+                        <Show when={logsSize() && !tv()}>
+                            <p class="pc-details-hint">{t('feedback.logs_size', { size: logsSize()! })}</p>
+                        </Show>
+                        <p class="pc-details-note" role="status" aria-live="polite">{detailsNote()}</p>
+                        <Show when={copyFallback()}>
+                            <textarea
+                                class="pc-details-copy"
+                                readonly
+                                rows="6"
+                                aria-label={t('player.copy_details')}
+                                value={copyFallback()!}
+                                ref={(el) => queueMicrotask(() => (el.focus({ preventScroll: true }), el.select()))}
+                            />
                         </Show>
                     </div>
                 </Match>

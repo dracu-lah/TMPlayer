@@ -278,6 +278,9 @@ export const PAGE_STRINGS = [
     'picker.choose_chats',
     'picker.confirm_body',
     'picker.confirm_title',
+    'picker.count_more',
+    'picker.count_refused',
+    'picker.counted_some',
     'picker.discard_body',
     'picker.discard_title',
     'picker.discard_yes',
@@ -788,7 +791,10 @@ export const PAGE_STRINGS = [
     'player.volume_boost_on_detail',
     'web.volume_boost_not_here',
     // WB16 Telegram links (U9).
+    'grid.copy_link',
     'grid.copy_link_detail',
+    'link.not_found',
+    'share.no_message_links',
     'link.open_in_telegram',
     'player.copy_link_at_time',
     // WB17 Say why a video is not starting (U1), Can't reach Telegram (U2).
@@ -799,9 +805,11 @@ export const PAGE_STRINGS = [
     'state.connecting_still_trying',
     // WB18 Report stutter.
     'player.report_stutter',
-    'player.report_stutter_detail',
-    'player.stutter_marked',
     'player.stutter_marked_already',
+    'web.copy_failed',
+    'web.copy_refused',
+    'web.report_stutter_detail',
+    'web.stutter_marked',
     // WB19 Series page: gap rows, episode rows, missing episodes.
     'detail.missing_badge',
     'detail.missing_count',

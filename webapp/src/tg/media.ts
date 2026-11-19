@@ -133,6 +133,13 @@ export function itemOf(
     }
 }
 
+/** The forum topic a message was posted in, 0 for a chat with no topics or a message in General. */
+export function topicOf(msg: Message): number {
+    const raw = msg.raw._ === 'message' ? msg.raw : null
+    const reply = raw?.replyTo?._ === 'messageReplyHeader' ? raw.replyTo : null
+    return reply?.forumTopic ? (reply.replyToTopId ?? reply.replyToMsgId ?? 0) : 0
+}
+
 /**
  * A message as the app's rules read one (WebRules' RawVideo), or null when it holds no video or
  * file. `chatProtected` is the chat's "restrict saving content".
@@ -142,7 +149,6 @@ export function rawOf(msg: Message, chatProtected: boolean): RawVideo | null {
     if (!m || (m.type !== 'video' && m.type !== 'document')) return null
     const raw = msg.raw._ === 'message' ? msg.raw : null
     const media = raw?.media?._ === 'messageMediaDocument' ? raw.media : null
-    const reply = raw?.replyTo?._ === 'messageReplyHeader' ? raw.replyTo : null
     return {
         chatId: msg.chat.id,
         messageId: msg.id,
@@ -155,7 +161,7 @@ export function rawOf(msg: Message, chatProtected: boolean): RawVideo | null {
         width: m.type === 'video' ? m.width : 0,
         height: m.type === 'video' ? m.height : 0,
         date: Math.floor(msg.date.getTime() / 1000),
-        topicId: reply?.forumTopic ? (reply.replyToTopId ?? reply.replyToMsgId ?? 0) : 0,
+        topicId: topicOf(msg),
         albumId: msg.groupedId ? msg.groupedId.toString() : null,
         canBeSaved: !chatProtected && !raw?.noforwards,
         selfDestructs: !!media?.ttlSeconds,
