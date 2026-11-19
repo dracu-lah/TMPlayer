@@ -68,6 +68,7 @@ object DownloadFiles {
         src: File,
         downloadsDir: File,
         name: String,
+        transfer: Transfer = Transfer.Native,
         onProgress: (done: Long, total: Long) -> Unit = { _, _ -> },
     ): File = withContext(Dispatchers.IO) {
         if (!src.isFile) throw FileNotFoundException("Nothing to move at ${src.absolutePath}")
@@ -90,7 +91,7 @@ object DownloadFiles {
 
         val part = File(downloadsDir, target.name + PART_SUFFIX)
         try {
-            copyInChunks(src, part, total, onProgress)
+            copyInChunks(src, part, total, transfer, onProgress)
             if (part.length() != total) {
                 throw IOException("Copied ${part.length()} of $total bytes of ${src.name}")
             }
@@ -108,7 +109,35 @@ object DownloadFiles {
         target
     }
 
-    private suspend fun copyInChunks(src: File, part: File, total: Long, onProgress: (Long, Long) -> Unit) {
+    /**
+     * How one chunk goes from the source to the part file. [Native] is `transferTo`, which on a
+     * phone with little address space left can fail to map the file ("Map failed", or an
+     * [OutOfMemoryError] straight out of it); the copy then carries on from where it stopped with
+     * a small heap buffer, which is slower and cannot fail that way. A seam so a test can force it.
+     */
+    fun interface Transfer {
+        fun send(input: FileChannel, position: Long, count: Long, output: FileChannel): Long
+
+        companion object {
+            val Native = Transfer { input, position, count, output -> input.transferTo(position, count, output) }
+        }
+    }
+
+    /** The heap buffer of the fallback copy: small enough for any heap a phone gives an app. */
+    private const val FALLBACK_BUFFER_BYTES = 256 * 1024
+
+    private fun isMapFailure(failure: Throwable): Boolean =
+        failure is OutOfMemoryError ||
+            (failure is IOException && generateSequence<Throwable>(failure) { it.cause }
+                .any { it is OutOfMemoryError || it.message?.contains("Map failed", ignoreCase = true) == true })
+
+    private suspend fun copyInChunks(
+        src: File,
+        part: File,
+        total: Long,
+        transfer: Transfer,
+        onProgress: (Long, Long) -> Unit,
+    ) {
         FileChannel.open(src.toPath(), StandardOpenOption.READ).use { input ->
             FileChannel.open(
                 part.toPath(),
@@ -118,9 +147,23 @@ object DownloadFiles {
             ).use { output ->
                 var position = 0L
                 var stalls = 0
+                var buffered = false
                 while (position < total) {
                     currentCoroutineContext().ensureActive()
-                    val sent = input.transferTo(position, minOf(CHUNK_BYTES, total - position), output)
+                    val sent = if (buffered) {
+                        copyBuffered(input, output, position, minOf(CHUNK_BYTES, total - position))
+                    } else {
+                        try {
+                            transfer.send(input, position, minOf(CHUNK_BYTES, total - position), output)
+                        } catch (failure: Throwable) {
+                            if (!isMapFailure(failure)) throw failure
+                            Logger.w(TAG, "transferTo could not map ${src.name}, copying through a buffer", failure)
+                            buffered = true
+                            // Whatever the failed call wrote before it stopped is in place: carry on from there.
+                            position = output.position()
+                            continue
+                        }
+                    }
                     if (sent <= 0) {
                         // transferTo may legitimately return nothing once; a file that keeps
                         // returning nothing has shrunk under the copy, and looping on it would hang.
@@ -134,6 +177,23 @@ object DownloadFiles {
                 output.force(true)
             }
         }
+    }
+
+    /** Copies up to [count] bytes from [position] through a small heap buffer; the bytes copied. */
+    private suspend fun copyBuffered(input: FileChannel, output: FileChannel, position: Long, count: Long): Long {
+        val buffer = java.nio.ByteBuffer.allocate(FALLBACK_BUFFER_BYTES)
+        var done = 0L
+        while (done < count) {
+            currentCoroutineContext().ensureActive()
+            buffer.clear()
+            buffer.limit(minOf(buffer.capacity().toLong(), count - done).toInt())
+            val read = input.read(buffer, position + done)
+            if (read <= 0) break
+            buffer.flip()
+            while (buffer.hasRemaining()) output.write(buffer)
+            done += read
+        }
+        return done
     }
 
     /** Renames within one directory, atomically where the file system allows it. */
