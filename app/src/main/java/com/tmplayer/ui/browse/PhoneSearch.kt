@@ -83,6 +83,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
@@ -169,6 +170,11 @@ internal fun PhoneSearchScreen(
     onRetry: () -> Unit,
     /** "Search my other chats" (HX62): the same words over the chats that were not added, once. */
     onSearchOthers: () -> Unit = {},
+    /** "Where to watch" for a title not in the viewer's chats (HX41), and its close. */
+    onWhereToWatch: (com.tmplayer.online.PosterChoice) -> Unit = {},
+    onCloseWhereToWatch: () -> Unit = {},
+    /** The titles' own Try again ([GlobalSearchViewModel.retryTitles]). */
+    onRetryTitles: () -> Unit = {},
     onRemoveRecent: (String) -> Unit,
     /** Clears them all and hands back what was there, for the Undo. */
     onClearRecent: () -> List<String>,
@@ -284,6 +290,8 @@ internal fun PhoneSearchScreen(
                         onRetryMore = onRetryMore,
                         onClearFilters = { onFilters(SearchFilters()) },
                         onSearchOthers = onSearchOthers,
+                        onWhereToWatch = { keyboard?.hide(); onWhereToWatch(it) },
+                        onRetryTitles = onRetryTitles,
                         onAddChats = { keyboard?.hide(); onClose(); com.tmplayer.ui.browse.AddChatsRequest.ask() },
                         onSearchWord = { word -> onText(TextFieldValue(word, TextRange(word.length))); onSubmit() },
                     )
@@ -291,6 +299,16 @@ internal fun PhoneSearchScreen(
             }
             // A long run of results is one hold away from its end.
             FastScroller(listState)
+            }
+            state.watching?.let { (title, answer) ->
+                WhereToWatchDialog(
+                    title = title,
+                    answer = answer,
+                    canSearchOthers = state.canSearchOthers,
+                    onSearchOthers = onSearchOthers,
+                    onRetry = { onWhereToWatch(title) },
+                    onClose = onCloseWhereToWatch,
+                )
             }
 
             // The filters once there is something to filter, or a filter is on.
@@ -547,6 +565,8 @@ private fun androidx.compose.foundation.lazy.LazyListScope.results(
     onSearchOthers: () -> Unit,
     onAddChats: () -> Unit,
     onSearchWord: (String) -> Unit,
+    onWhereToWatch: (com.tmplayer.online.PosterChoice) -> Unit = {},
+    onRetryTitles: () -> Unit = {},
 ) {
     if (chatMatches.isNotEmpty()) {
         item(key = "chats-h") { Heading(LocalStrings.current.searchChatsHeading) }
@@ -570,6 +590,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.results(
         }
     }
     topicResults(state, allTopics, onShowAllTopics, briefs, onOpenTopic, onRetryTopics)
+    titleResults(state, briefs, onOpenGroup, onWhereToWatch, onRetryTitles)
     item(key = "videos-h") { Heading(LocalStrings.current.searchVideosHeading) }
     searchStatus(state)?.let { status ->
         item(key = "status") {
@@ -691,6 +712,46 @@ private fun androidx.compose.foundation.lazy.LazyListScope.results(
                 TmSecondaryButton(onClick = onRetryMore) { Text(LocalStrings.current.commonTryAgain) }
             }
         }
+    }
+}
+
+/**
+ * The Titles group (HX41): the films and shows TMDB names for the words, each with the copies the
+ * viewer has. A tap on one with copies opens its best card, whose lead is the recommended copy;
+ * one "Not in your chats" says so and offers Where to watch, whose sheet also holds the one-off
+ * search of the other chats. Nothing shows with lookups off or no key: the videos are the answer.
+ */
+private fun androidx.compose.foundation.lazy.LazyListScope.titleResults(
+    state: GlobalSearchState,
+    briefs: Map<Long, ChatBrief>,
+    onOpenGroup: (ResultGroup) -> Unit,
+    onWhereToWatch: (com.tmplayer.online.PosterChoice) -> Unit,
+    onRetryTitles: () -> Unit,
+) {
+    val hits = state.titleHits
+    if (hits.isEmpty() && state.titleLookup != TitleLookup.Unavailable) return
+    item(key = "titles-h") { Heading(LocalStrings.current.searchTitlesHeading) }
+    if (state.titleLookup == TitleLookup.Unavailable) {
+        item(key = "titles-failed") {
+            Note(LocalStrings.current.searchTitlesUnavailable) {
+                TmSecondaryButton(onClick = onRetryTitles) { Text(LocalStrings.current.searchTitlesRetry) }
+            }
+        }
+    }
+    items(hits, key = { "title-${it.title.onlineKey}" }) { hit ->
+        val best = hit.best
+        SearchTitleCard(
+            hit = hit,
+            chats = briefs,
+            modifier = Modifier
+                .padding(horizontal = 8.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .clickable { if (best != null) onOpenGroup(best) else onWhereToWatch(hit.title) }
+                .testTag("title-${hit.title.onlineKey}"),
+            trailing = if (!hit.notInChats) null else {
+                { TextButton(onClick = { onWhereToWatch(hit.title) }) { Text(LocalStrings.current.searchWhereToWatch) } }
+            },
+        )
     }
 }
 
