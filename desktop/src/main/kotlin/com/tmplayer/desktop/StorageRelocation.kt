@@ -185,9 +185,19 @@ class StorageRelocation(
     /** The move written down and waiting, for the Settings row; null when none. */
     fun pending(): StorageRelocationPlan.Pending? = StorageRelocationPlan.Pending.decode(prefs.now.storageRootPending)
 
-    /** Stops waiting for a move that cannot finish (its drive is not there): downloads stay where they are. */
-    fun forgetPending() {
-        prefs.update { it.copy(storageRootPending = "") }
+    /**
+     * Stops waiting for a move that cannot finish (its drive is not there). Downloads stay where
+     * they are and keep playing. The storage location goes back to the default folders, which
+     * are what this run uses anyway, so it no longer points at a drive that is not there; and the
+     * old cache the move would have deleted goes now, unless it is one of the folders in use.
+     * Nothing else is removed.
+     */
+    suspend fun forgetPending() = lock.withLock {
+        val pending = StorageRelocationPlan.Pending.decode(prefs.now.storageRootPending)
+        prefs.update { it.copy(storageRoot = "", storageRootPending = "") }
+        if (pending != null && pending.oldCache.isNotBlank()) {
+            withContext(NonCancellable) { deleteOldCache(File(pending.oldCache), layout(null)) }
+        }
     }
 
     /**
@@ -273,8 +283,22 @@ class StorageRelocation(
         val to = layout(root)
         withContext(NonCancellable) {
             prepare(root, to)
+            sweepPartFiles(to)
             deleteOldCache(File(pending.oldCache), to)
             finish(pending, root, to)
+        }
+    }
+
+    /**
+     * Half copies a kill left in the new Downloads folder: `<name>.part` for a download of ours
+     * that has not landed yet. Only those names; anything else in the folder is not ours to touch.
+     */
+    private suspend fun sweepPartFiles(to: StorageLayout) = withContext(Dispatchers.IO) {
+        val records = runCatching { settings.downloadsNow() }.getOrDefault(emptyList())
+        StorageRelocationPlan.toMove(records, to.downloadsDir).forEach { record ->
+            val name = File(record.localPath.orEmpty()).name
+            val ours = setOf(name, DownloadFiles.freeName(to.downloadsDir, name).name)
+            for (candidate in ours) runCatching { Files.deleteIfExists(File(to.downloadsDir, candidate + DownloadFiles.PART_SUFFIX).toPath()) }
         }
     }
 
@@ -334,7 +358,7 @@ class StorageRelocation(
 
     private fun isLink(file: File): Boolean = runCatching { Files.isSymbolicLink(file.toPath()) }.getOrDefault(false)
 
-    private fun reasonOf(e: IOException, target: File): Reason {
+    private fun reasonOf(e: Throwable, target: File): Reason {
         val text = generateSequence<Throwable>(e) { it.cause }.mapNotNull { it.message }.joinToString(" ")
         return when {
             text.contains("used by another", ignoreCase = true) || text.contains("access is denied", ignoreCase = true) ||
@@ -345,7 +369,17 @@ class StorageRelocation(
     }
 
     private suspend fun finish(pending: StorageRelocationPlan.Pending?, root: File?, to: StorageLayout): Outcome {
-        val records = runCatching { settings.downloadsNow() }.getOrDefault(emptyList())
+        var records = runCatching { settings.downloadsNow() }.getOrDefault(emptyList())
+        // A file that landed in the new folder with its record not written (a kill, a failed write):
+        // point the record at it before anything else, or it would be taken for a missing file.
+        val adopted = StorageRelocationPlan.adoptable(records, to.downloadsDir)
+        if (adopted.isNotEmpty()) {
+            adopted.forEach { (record, file) ->
+                runCatching { settings.setDownloadPath(record.chatId, record.messageId, file.absolutePath) }
+                    .onFailure { Logger.w(TAG, "Could not record ${file.name}", it) }
+            }
+            records = runCatching { settings.downloadsNow() }.getOrDefault(records)
+        }
         val wanted = pending?.moveDownloads ?: true
         val candidates = if (wanted) StorageRelocationPlan.toMove(records, to.downloadsDir) else emptyList()
         val links = candidates.filter { isLink(File(it.localPath.orEmpty())) }
@@ -379,23 +413,47 @@ class StorageRelocation(
                 val size = src.length().coerceAtLeast(0)
                 val job = Job()
                 copying = job
+                // The name the mover will give the file, so a move that landed can be found even if
+                // Cancel is heard on the way back from the mover.
+                val expected = DownloadFiles.freeName(to.downloadsDir, src.name)
+                var recorded = false
+                var landed = false
+                // The record is written as part of the move, under NonCancellable, once the file has
+                // landed: a Cancel then can no longer leave a file in the new folder that the index
+                // does not know.
+                suspend fun record(target: File) = withContext(NonCancellable) {
+                    settings.setDownloadPath(record.chatId, record.messageId, target.absolutePath)
+                    recorded = true
+                }
                 try {
-                    val target = withContext(job) {
-                        mover(src, to.downloadsDir, src.name) { landed, _ ->
+                    withContext(job) {
+                        val target = mover(src, to.downloadsDir, src.name) { landed, _ ->
                             _moving.value = Moving(before + landed, total)
                             note.progress(id, before + landed, total, null)
                         }
+                        landed = true
+                        record(target)
                     }
-                    settings.setDownloadPath(record.chatId, record.messageId, target.absolutePath)
                     moved++
                 } catch (e: CancellationException) {
                     if (!cancelled) throw e
+                    // Heard after the file landed but before it was recorded: finish the record.
+                    if (!recorded && !src.exists() && expected.isFile) {
+                        runCatching { record(expected) }
+                    }
+                    if (recorded) moved++
                     stop = Stop.Cancelled
-                } catch (e: IOException) {
+                } catch (e: Exception) {
                     // Typically Windows: "The process cannot access the file" while a player elsewhere
                     // has it. The record still points at the old place, which still plays.
                     Logger.w(TAG, "Could not move ${src.name}", e)
                     when {
+                        // The file landed but its record could not be written (the settings store failed):
+                        // it is found and recorded at the next move or launch, which the note kept says.
+                        landed && !recorded -> {
+                            failed += src.name
+                            reasons[src.name] = Reason.Other
+                        }
                         // A full disk fails every later file the same slow way: stop and say how much more.
                         StorageRelocationPlan.isNoSpace(e) -> {
                             val remaining = total - before

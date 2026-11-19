@@ -182,6 +182,19 @@ object StorageRelocationPlan {
         }
     }
 
+    /**
+     * Records whose file is gone from the path they name but is there, under the same name, in
+     * [downloadsDir]: a move that landed the file and was cut off before the record was written
+     * (a kill, a failed settings write). Each comes with the file to point the record at.
+     */
+    fun adoptable(records: List<ResumeRecord>, downloadsDir: File, exists: (File) -> Boolean = File::isFile): List<Pair<ResumeRecord, File>> =
+        records.mapNotNull { record ->
+            val old = File(record.localPath ?: return@mapNotNull null)
+            if (exists(old)) return@mapNotNull null
+            val found = File(downloadsDir, old.name)
+            if (exists(found)) record to found else null
+        }
+
     /** Records that name a file of their own that is no longer on the disk, so a move cannot carry them. */
     fun missing(records: List<ResumeRecord>, exists: (File) -> Boolean = File::exists): List<ResumeRecord> =
         records.filter { record -> record.localPath?.let { !exists(File(it)) } == true }

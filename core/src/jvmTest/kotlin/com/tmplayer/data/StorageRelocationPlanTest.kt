@@ -169,6 +169,16 @@ class StorageRelocationPlanTest {
     }
 
     @Test
+    fun `a record whose file is gone but sits by name in the new folder is adoptable`() {
+        fun record(id: Long, path: String?) = ResumeRecord(1, id, id.toInt(), "v$id", "c", 1, 1, 0, 0, 0, path)
+        val records = listOf(record(1, "/old/a.mkv"), record(2, "/old/b.mkv"), record(3, null))
+        val there = setOf("/new/a.mkv", "/old/b.mkv")
+        val found = StorageRelocationPlan.adoptable(records, File("/new")) { it.path in there }
+        assertEquals(listOf(1L), found.map { it.first.messageId })
+        assertEquals(File("/new/a.mkv"), found.single().second)
+    }
+
+    @Test
     fun `room for the downloads needs the gigabyte spare, and nothing to move always fits`() {
         assertTrue(StorageRelocationPlan.fits(0, 0))
         assertTrue(StorageRelocationPlan.fits(10 * gb, 11 * gb))

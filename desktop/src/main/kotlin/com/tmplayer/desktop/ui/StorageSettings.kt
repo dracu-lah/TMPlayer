@@ -283,8 +283,10 @@ internal fun StorageGroup(state: ShellState, jumps: Map<com.tmplayer.ui.onboardi
             onDismiss = { dialog = null },
             onConfirm = {
                 dialog = null
-                DesktopStorage.relocation.forgetPending()
-                refresh++
+                scope.launch {
+                    DesktopStorage.relocation.forgetPending()
+                    refresh++
+                }
             },
         )
         is StorageDialog.Report -> TmAlertDialog(

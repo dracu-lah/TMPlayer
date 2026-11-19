@@ -310,6 +310,109 @@ class StorageRelocationEdgeTest {
     }
 
     @Test
+    fun `Cancel heard after a file landed still records it, so no file is orphaned in the new folder`() = runBlocking {
+        val a = download(1)
+        download(2)
+        lateinit var r: StorageRelocation
+        r = relocationWith(mover = { src, dir, name, progress ->
+            // The move completes, then Cancel arrives before the mover has returned.
+            val target = DownloadFiles.moveIntoDownloads(src, dir, name, progress)
+            r.cancel()
+            target
+        })
+        val outcome = r.move(newRoot)
+        assertEquals(StorageRelocation.Stop.Cancelled, outcome.stop)
+        assertEquals(1, outcome.moved)
+        val landed = layout(newRoot).downloadsDir.list()!!.single()
+        val record = listOf(1L, 2L).map { settings.downloadRecord(-100, it)!!.localPath }
+        assertEquals(1, record.count { it == File(layout(newRoot).downloadsDir, landed).absolutePath })
+        assertEquals(1, listOf(a, File(defaults.downloadsDir, "Episode 2.mkv")).count { !it.exists() })
+    }
+
+    @Test
+    fun `Cancel that surfaces as a cancelled return after the file landed is recorded from where it landed`() = runBlocking {
+        val a = download(1)
+        lateinit var r: StorageRelocation
+        r = relocationWith(mover = { src, dir, name, progress ->
+            DownloadFiles.moveIntoDownloads(src, dir, name, progress)
+            r.cancel()
+            throw kotlinx.coroutines.CancellationException("cancelled on the way back")
+        })
+        val outcome = r.move(newRoot)
+        assertEquals(StorageRelocation.Stop.Cancelled, outcome.stop)
+        assertEquals(1, outcome.moved)
+        assertFalse(a.exists())
+        assertEquals(File(layout(newRoot).downloadsDir, a.name).absolutePath, settings.downloadRecord(-100, 1)!!.localPath)
+    }
+
+    @Test
+    fun `any failure of the mover, not only an IO one, is reported for that file and does not escape`() = runBlocking {
+        val kept = download(1)
+        val outcome = relocationWith(mover = { _, _, _, _ -> throw IllegalStateException("odd") }).move(newRoot)
+        assertEquals(listOf("Episode 1.mkv"), outcome.failed)
+        assertTrue(kept.isFile)
+        assertTrue(prefs.now.storageRootPending.isNotBlank())
+    }
+
+    @Test
+    fun `a file that landed with no record is found by name and recorded at the next finish`() = runBlocking {
+        val a = download(1)
+        val target = layout(newRoot).downloadsDir.apply { mkdirs() }
+        val landed = File(target, a.name)
+        a.renameTo(landed)
+        val pending = StorageRelocationPlan.Pending(newRoot.path, defaults.cacheDir.path, defaults.downloadsDir.path)
+        prefs.update { it.copy(storageRoot = newRoot.path, storageRootPending = pending.encode()) }
+        val outcome = relocationWith().resumePending()!!
+        assertEquals(0, outcome.failed.size)
+        assertEquals(landed.absolutePath, settings.downloadRecord(-100, 1)!!.localPath)
+        assertTrue(landed.isFile)
+    }
+
+    @Test
+    fun `a half copy a kill left is swept at resume, and only the names of our downloads`() = runBlocking {
+        download(1)
+        val target = layout(newRoot).downloadsDir.apply { mkdirs() }
+        val ours = File(target, "Episode 1.mkv.part").apply { writeText("half") }
+        val theirs = File(target, "something-else.mkv.part").apply { writeText("not ours") }
+        val pending = StorageRelocationPlan.Pending(newRoot.path, defaults.cacheDir.path, defaults.downloadsDir.path)
+        prefs.update { it.copy(storageRoot = newRoot.path, storageRootPending = pending.encode()) }
+        val outcome = relocationWith().resumePending()!!
+        assertEquals(1, outcome.moved)
+        assertFalse(ours.exists())
+        assertTrue(theirs.exists())
+        assertEquals(setOf("Episode 1.mkv", "something-else.mkv.part"), target.list()!!.toSet())
+    }
+
+    @Test
+    fun `forgetting a move resets the location to the default folders and removes the old cache`() = runBlocking {
+        val oldRoot = File(tmp, "oldroot")
+        val oldCache = File(oldRoot, "TMPlayer/cache").apply { mkdirs() }
+        File(oldCache, "junk").writeText("x")
+        val kept = download(1)
+        val pending = StorageRelocationPlan.Pending(File(tmp, "gone").path, oldCache.path, defaults.downloadsDir.path)
+        prefs.update { it.copy(storageRoot = File(tmp, "gone").path, storageRootPending = pending.encode()) }
+        defaults.cacheDir.mkdirs()
+        val r = relocationWith(usable = { false })
+        r.forgetPending()
+        assertEquals("", prefs.now.storageRoot)
+        assertNull(r.pending())
+        assertFalse(oldCache.exists())
+        // The cache in use and the downloads are not touched.
+        assertTrue(defaults.cacheDir.isDirectory)
+        assertTrue(kept.isFile)
+    }
+
+    @Test
+    fun `forgetting never deletes the cache that is in use`() = runBlocking {
+        defaults.cacheDir.mkdirs()
+        File(defaults.cacheDir, "live").writeText("x")
+        val pending = StorageRelocationPlan.Pending(File(tmp, "gone").path, defaults.cacheDir.path, defaults.downloadsDir.path)
+        prefs.update { it.copy(storageRoot = File(tmp, "gone").path, storageRootPending = pending.encode()) }
+        relocationWith(usable = { false }).forgetPending()
+        assertTrue(File(defaults.cacheDir, "live").isFile)
+    }
+
+    @Test
     fun `a move that was not to carry the downloads does not carry them when finished at launch either`() = runBlocking {
         val kept = download(1)
         val pending = StorageRelocationPlan.Pending(newRoot.path, defaults.cacheDir.path, defaults.downloadsDir.path, moveDownloads = false)
