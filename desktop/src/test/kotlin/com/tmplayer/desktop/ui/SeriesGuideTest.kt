@@ -143,13 +143,13 @@ class SeriesGuideTest {
     }
 
     @Test
-    fun `seasons the chat lacks are listed, quiet, and a missing episode is a dimmed card with a tag, not a control`() = runComposeUiTest {
+    fun `seasons the chat lacks are listed, quiet, and a missing episode is a dimmed card with a tag that opens Find in other chats`() = runComposeUiTest {
         install(fourSeasons)
         val series = show(
             "Harbour.Lights.S01E01.mkv", "Harbour.Lights.S01E03.mkv", "Harbour.Lights.S02E01.mkv", "Harbour.Lights.S02E02.mkv",
             "Harbour.Lights.S00E01.mkv",
         )
-        panel(series)
+        panel(series, onFind = {})
         // Every season the metadata knows, in the picker, specials last, the season never aired with its day.
         untilText("Season 3")
         onNodeWithText("Season 4").assertExists()
@@ -161,12 +161,13 @@ class SeriesGuideTest {
         onNode(hasScrollToIndexAction()).performScrollToIndex(3)
         untilText("Second tide")
         onNodeWithText("Play S01E02").assertDoesNotExist()
-        // One line for a screen reader, and nothing to press: not a button, not focusable.
+        // One line for a screen reader; a missing episode is the one dimmed card with something to press:
+        // "Find in other chats" (an upcoming one, below, is no control).
         val gap = onNode(hasContentDescription("Episode 2, not in this chat"))
         gap.assertExists()
-        gap.assertHasNoClickAction()
-        assertTrue(gap.fetchSemanticsNode().config.getOrNull(SemanticsProperties.Focused) == null)
-        assertTrue(gap.fetchSemanticsNode().config.getOrNull(SemanticsProperties.Role) == null)
+        assertTrue(gap.fetchSemanticsNode().config.getOrNull(SemanticsProperties.Role) == androidx.compose.ui.semantics.Role.Button)
+        gap.performClick()
+        untilText("Find in other chats")
         // The words under the dimmed card.
         onNodeWithText("The fog comes in.").assertExists()
         assertTrue(onAllNodesWithText("Not in this chat").fetchSemanticsNodes().isNotEmpty())
@@ -189,6 +190,8 @@ class SeriesGuideTest {
         waitUntil(timeoutMillis = 8_000) { onAllNodes(hasContentDescription("Episode 3, airs ", substring = true)).fetchSemanticsNodes().isNotEmpty() }
         onAllNodesWithText("Not in this chat").assertCountEquals(0)
         onNodeWithText("Airs Feb 8, 2099", substring = true).assertExists()
+        // Nothing to press on a day not yet come.
+        onNode(hasContentDescription("Episode 3, airs ", substring = true)).assertHasNoClickAction()
     }
 
     @Test

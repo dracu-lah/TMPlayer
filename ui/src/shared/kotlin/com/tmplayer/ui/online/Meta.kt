@@ -248,23 +248,25 @@ fun rememberSeasonEpisodes(
      */
     held: Set<Int> = emptySet(),
     layout: List<MetaSeason> = emptyList(),
+    /** Whether the chat follows TMDB's season split ([EpisodeGuide.numbering]); false asks for TMDB's own seasons. */
+    split: Boolean = true,
 ): List<MetaEpisode>? {
     val online = OnlineMetadata.current ?: return null
     if (meta == null || meta.kind != MetaKind.Show) return null
     val straight = remember(season, held, layout) { EpisodeNumbering.counted(season, held, layout) }
     if (!straight) {
-        val listed by produceState(online.peekSeason(meta, season), meta, season) {
+        val listed by produceState(online.peekSeason(meta, season, split), meta, season, split) {
             // Asked again for each season: the value held from the last one is another season's list.
-            value = online.peekSeason(meta, season) ?: withContext(Dispatchers.IO) { online.season(meta, season) }
+            value = online.peekSeason(meta, season, split) ?: withContext(Dispatchers.IO) { online.season(meta, season, split) }
         }
         return listed
     }
     // Counted straight through: the provider's seasons the numbers fall in (a few at most), put under the chat's numbers.
-    val placed by produceState<List<MetaEpisode>?>(null, meta, season, held, layout) {
+    val placed by produceState<List<MetaEpisode>?>(null, meta, season, held, layout, split) {
         val seasons = EpisodeNumbering.seasonsFor(season, held, layout)
         val lists = HashMap<Int, List<MetaEpisode>>()
         for (n in seasons) {
-            val list = online.peekSeason(meta, n) ?: withContext(Dispatchers.IO) { online.season(meta, n) } ?: continue
+            val list = online.peekSeason(meta, n, split) ?: withContext(Dispatchers.IO) { online.season(meta, n, split) } ?: continue
             lists[n] = list
             // Each season's names show as soon as it is in, not after the last.
             value = EpisodeNumbering.rekey(season, held, layout, lists)

@@ -932,8 +932,10 @@ fun SeriesPanel(
     val bothDownloads = downloads && SeasonDownload.unwatchedDiffers(shown, watch.finished)
 
     // The provider's names under the chat's numbers, where the chat counts straight through (issue 31).
-    val names = rememberSeasonEpisodes(meta, shown.number, remember(shown) { SeriesGuideRows.numbers(shown) }, extras?.seasonList.orEmpty())
+    val numbering = remember(series, extras) { EpisodeGuide.numbering(series, extras) }
+    val names = rememberSeasonEpisodes(meta, shown.number, remember(shown) { SeriesGuideRows.numbers(shown) }, numbering.seasons, numbering.split)
     val rows = remember(series, shown, guide, names, extras, today) { SeriesGuideRows.rows(series, shown, guide, names, extras, today) }
+    val gapPrompt = remember(series.key) { GapPrompt() }
     // The first frame waits a moment for what the caches hold, so a show seen before is drawn
     // whole at once; what is still coming after that has its place held (DetailSlots.kt).
     val namesSettled = meta == null || meta.kind != com.tmplayer.online.MetaKind.Show || names != null
@@ -1365,9 +1367,18 @@ fun SeriesPanel(
         val rowCard: @Composable (EpisodeGuide.Row, Modifier) -> Unit = { row, cardModifier ->
             when (row) {
                 is EpisodeGuide.Row.Have -> episodeCard(row.episode, cardModifier)
-                // Not a control: no click, no focus, so a remote's Up and Down pass over it.
+                // A missing episode answers a press with "Find in other chats"; an upcoming one is no
+                // control (no click, no focus), so a remote's Up and Down pass over it.
                 is EpisodeGuide.Row.Gap -> androidx.compose.runtime.key(row.key) {
-                    GapRow(row.episode, large = large, modifier = cardModifier)
+                    val gapFocus = remember { FocusRequester() }
+                    val missing = row.episode.state == EpisodeGuide.State.Missing
+                    GapRow(
+                        row.episode,
+                        large = large,
+                        modifier = cardModifier,
+                        onClick = if (missing) ({ gapPrompt.show(row.episode) { runCatching { gapFocus.requestFocus() } } }) else null,
+                        focusRequester = gapFocus,
+                    )
                 }
                 is EpisodeGuide.Row.Pack -> androidx.compose.runtime.key(row.key) {
                     val packFocus = remember { FocusRequester() }
@@ -1505,6 +1516,7 @@ fun SeriesPanel(
             PageBackBand(list, meta?.title?.takeIf { it.isNotBlank() } ?: series.title, back, barInsets, Modifier.align(Alignment.TopStart))
         }
     }
+    GapPromptHost(gapPrompt, series.title, onFindElsewhere)
     if (showActions != null && marking.value) {
         ShowMenu(series, watch, showActions, onDismiss = { marking.value = false }, season = shown, marksOnly = true)
     }

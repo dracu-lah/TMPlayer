@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import com.tmplayer.ui.theme.collectIsFocusVisibleAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,7 +22,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,6 +57,7 @@ import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.collectIsFocusVisibleAsState
 import com.tmplayer.ui.theme.focusRing
+import kotlinx.coroutines.delay
 
 /*
  * T9: the series page lists every season and episode the metadata knows, laid over the videos the
@@ -74,9 +79,10 @@ internal object SeriesGuideRows {
      */
     fun full(series: Series, meta: MetaInfo?, extras: MetaExtras?, today: String): List<EpisodeGuide.Season>? {
         if (meta?.kind != MetaKind.Show || extras == null) return null
-        if (extras.seasonList.isEmpty() && extras.nextEpisode == null) return null
-        if (!EpisodeGuide.agrees(series, extras.seasonList)) return null
-        return EpisodeGuide.seasons(series, extras.seasonList, extras.nextEpisode, today).takeIf { it.isNotEmpty() }
+        val numbering = EpisodeGuide.numbering(series, extras)
+        if (numbering.seasons.isEmpty() && numbering.next == null) return null
+        if (!EpisodeGuide.agrees(series, numbering.seasons)) return null
+        return EpisodeGuide.seasons(series, numbering.seasons, numbering.next, today).takeIf { it.isNotEmpty() }
     }
 
     /** The seasons the chats hold alone, as picker entries. */
@@ -118,8 +124,9 @@ internal object SeriesGuideRows {
             val packs = series.packs.filter { it.season == shown.number }
             return if (packs.isEmpty()) have else have + packs.map { EpisodeGuide.Row.Pack(it, shown.episodes.lastOrNull()?.episode ?: 0) }
         }
-        val info = extras?.seasonList?.firstOrNull { it.number == shown.number }
-        return EpisodeGuide.rows(shown.number, series, listed, today, info, extras?.nextEpisode)
+        val numbering = EpisodeGuide.numbering(series, extras)
+        val info = numbering.seasons.firstOrNull { it.number == shown.number }
+        return EpisodeGuide.rows(shown.number, series, listed, today, info, numbering.next)
     }
 }
 
@@ -146,6 +153,9 @@ fun GapRow(
     episode: EpisodeGuide.Episode,
     large: Boolean,
     modifier: Modifier = Modifier,
+    /** A missing episode opens "Find in other chats"; an upcoming one has nothing to do and is no control. */
+    onClick: (() -> Unit)? = null,
+    focusRequester: FocusRequester? = null,
 ) {
     val s = LocalStrings.current
     val tv = !isTouch()
@@ -164,14 +174,35 @@ fun GapRow(
         airs.takeIf { !upcoming },
     ).joinToString("  ·  ")
     val overview = meta?.overview?.trim()?.takeIf { it.isNotEmpty() }
+    val interactions = remember { MutableInteractionSource() }
+    val focused by interactions.collectIsFocusVisibleAsState()
+    // Dimmed like the rest of the page's gaps; only a row with something to do (a missing episode:
+    // "Find in other chats") is a control, and wakes up while it holds the remote's focus.
+    val control = onClick != null
     Row(
         modifier
             .fillMaxWidth()
-            .alpha(GAP_ALPHA)
+            .alpha(if (focused) 1f else GAP_ALPHA)
             .clip(shape)
-            .background(Tone.surface)
-            .border(1.dp, Tone.outline, shape)
-            .semantics(mergeDescendants = true) { contentDescription = spoken }
+            .background(if (focused) Tone.focusFill else Tone.surface)
+            .border(1.dp, if (focused) Color.Transparent else Tone.outline, shape)
+            .then(if (control) Modifier.focusRing(focused, shape) else Modifier)
+            .then(if (control && focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .semantics(mergeDescendants = true) {
+                contentDescription = spoken
+                if (control) role = Role.Button
+            }
+            .then(
+                if (onClick != null) {
+                    Modifier.clickable(
+                        interactionSource = interactions,
+                        indication = if (tv) null else androidx.compose.foundation.LocalIndication.current,
+                        onClick = onClick,
+                    )
+                } else {
+                    Modifier
+                },
+            )
             .padding(if (tv || large) 12.dp else 8.dp),
         horizontalArrangement = Arrangement.spacedBy(if (large) 20.dp else if (tv) 16.dp else 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -349,3 +380,75 @@ internal fun SeasonGapNote(number: Int, showTitle: String, state: EpisodeGuide.S
         }
     }
 }
+
+/**
+ * What a pressed gap says: what the episode is, that it is not in the chats (or when it airs), and
+ * for a missing one a single way on, "Find in other chats", which searches the show and its code.
+ * Back or Close leaves everything as it was.
+ */
+@Composable
+internal fun GapCard(
+    episode: EpisodeGuide.Episode,
+    showTitle: String,
+    onFind: ((String) -> Unit)?,
+    onDismiss: () -> Unit,
+) {
+    val s = LocalStrings.current
+    val title = listOfNotNull(episode.code, episode.meta?.name?.trim()?.takeIf { it.isNotEmpty() }).joinToString("  ")
+    val lines = buildList {
+        if (episode.state == EpisodeGuide.State.Missing && onFind != null) {
+            // An anime counted straight through is named "Show - 123", not "S01E123": ask for its number.
+            val code = if (episode.meta?.source.isNullOrBlank()) episode.code else episode.number.toString()
+            add(MenuLine(s.seriesFindElsewhere, TmIcons.Search, null) { onDismiss(); onFind(findQuery(showTitle, code)) })
+        }
+    }
+    val body = when (episode.state) {
+        EpisodeGuide.State.Upcoming -> episode.airDate?.let { s.detailAirsOn(day(it, s)) } ?: s.detailUpcoming
+        else -> s.seriesGapMissing(episode.code)
+    }
+    // Whose words the title is, where the episode's list is merged from several sites (an anime's).
+    val source = episode.meta?.source?.takeIf { it.isNotBlank() }?.let { com.tmplayer.online.MetaWords.creditFrom(it) }
+    MenuCard(title = title, subtitle = listOfNotNull(showTitle, source).joinToString("  ·  "), lines = lines, empty = body, onDismiss = onDismiss, cancel = s.commonClose)
+}
+
+/**
+ * Which gap is open on the page, and where the focus goes back to when its card closes (a remote
+ * leaves the card on the row it opened it from). One per page.
+ */
+internal class GapPrompt {
+    var open by mutableStateOf<EpisodeGuide.Episode?>(null)
+    private var refocus: (() -> Unit)? = null
+
+    fun show(episode: EpisodeGuide.Episode, back: () -> Unit) {
+        refocus = back
+        open = episode
+    }
+
+    fun close() {
+        open = null
+    }
+
+    fun refocusNow() {
+        refocus?.invoke()
+    }
+}
+
+/** The card for [prompt]'s open gap, and the focus back on its row after it closes. */
+@Composable
+internal fun GapPromptHost(prompt: GapPrompt, showTitle: String, onFind: ((String) -> Unit)?) {
+    val episode = prompt.open
+    if (episode != null) GapCard(episode, showTitle, onFind) { prompt.close() }
+    var wasOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(episode == null, wasOpen) {
+        if (episode != null) {
+            wasOpen = true
+        } else if (wasOpen) {
+            wasOpen = false
+            // The dialog's window gives the focus back a frame or two after it closes.
+            delay(FOCUS_BACK_MS)
+            prompt.refocusNow()
+        }
+    }
+}
+
+private const val FOCUS_BACK_MS = 80L
