@@ -1018,9 +1018,6 @@ function TvSettings() {
                     onPick={(v) => setSetting('theme', v)}
                 />
             </TvPanel>
-            <div class="panel">
-                <LanguageBlock />
-            </div>
             <Show when={!layoutFixed()}>
                 <TvPanel title={t('settings.layout')} id="layout-label">
                     <Choices
@@ -1033,6 +1030,9 @@ function TvSettings() {
                     <p class="muted small">{t('settings.layout_detail_desktop')}</p>
                 </TvPanel>
             </Show>
+            <div class="panel">
+                <LanguageBlock />
+            </div>
             <TvSwitch id="carousel" title={t('settings.home_carousel')} on={settings().carousel} onText={t('settings.home_carousel_on')} offText={t('settings.home_carousel_off')} onPick={(on) => setSetting('carousel', on)} />
             <TvSwitch id="home-continue" title={t('settings.home_continue')} on={settings().homeContinue} onText={t('settings.home_continue_on')} offText={t('settings.home_continue_off')} onPick={(on) => setSetting('homeContinue', on)} />
             <TvSwitch id="home-recent" title={t('settings.home_recent')} on={settings().homeRecent} onText={t('settings.home_recent_on')} offText={t('settings.home_recent_off')} onPick={(on) => setSetting('homeRecent', on)} />
