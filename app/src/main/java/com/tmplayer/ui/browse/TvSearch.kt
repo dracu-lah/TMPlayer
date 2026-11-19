@@ -137,9 +137,25 @@ internal fun TvSearchScreen(
     onOpenTopic: (com.tmplayer.data.TopicHit) -> Unit = {},
     /** The topics' own Try again ([GlobalSearchViewModel.retryTopics]). */
     onRetryTopics: () -> Unit = {},
+    /** "Where to watch" for a title not in the viewer's chats (HX41), its close, and the titles' Try again. */
+    onWhereToWatch: (com.tmplayer.online.PosterChoice) -> Unit = {},
+    onCloseWhereToWatch: () -> Unit = {},
+    onRetryTitles: () -> Unit = {},
 ) {
     val s = LocalStrings.current
     val reduced = rememberReducedMotion() || Motion.reduced
+    // The title pill Where to watch was opened from, which the remote goes back to when it closes.
+    val titleFocus = remember { HashMap<String, FocusRequester>() }
+    var watchFrom by remember { mutableStateOf<String?>(null) }
+    val watchOpen = state.watching != null
+    LaunchedEffect(watchOpen) {
+        val from = watchFrom
+        if (!watchOpen && from != null) {
+            withFrameNanos { }
+            runCatching { titleFocus[from]?.requestFocus() }
+            watchFrom = null
+        }
+    }
     var keyboardRequests by remember { mutableIntStateOf(0) }
     val voice = rememberVoiceSearch(
         s.browseVoicePromptChat,
@@ -332,6 +348,46 @@ internal fun TvSearchScreen(
                     }
                 }
 
+                // Any film or show the words name (HX41): one row of pills, each a title and what
+                // the viewer has of it. OK on one with copies opens its best card; on one not in the
+                // chats, Where to watch, whose panel also holds the search of the other chats.
+                val titleHits = state.titleHits
+                if (text.isNotBlank() && (titleHits.isNotEmpty() || state.titleLookup == TitleLookup.Unavailable)) {
+                    item(span = full, key = "titles") {
+                        Column(Modifier.bleedEnd(Tv.SafeH), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(s.searchTitlesHeading, style = MaterialTheme.typography.titleSmall, color = Tone.muted)
+                            if (state.titleLookup == TitleLookup.Unavailable) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Text(s.searchTitlesUnavailable, style = MaterialTheme.typography.bodyLarge, color = Tone.muted, modifier = Modifier.weight(1f, fill = false))
+                                    TvPill(s.searchTitlesRetry, TmIcons.Refresh, onClick = onRetryTitles)
+                                }
+                            }
+                            if (titleHits.isNotEmpty()) {
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(end = Tv.SafeH)) {
+                                    items(titleHits, key = { it.title.onlineKey }) { hit ->
+                                        val key = hit.title.onlineKey
+                                        val focus = titleFocus.getOrPut(key) { FocusRequester() }
+                                        TvPill(
+                                            "${titleName(hit.title)}, ${titleHitStatus(hit)}",
+                                            if (hit.notInChats) TmIcons.SearchRemove else TmIcons.Play,
+                                            plain = hit.notInChats,
+                                            modifier = Modifier.focusRequester(focus).testTag("title-$key"),
+                                        ) {
+                                            val best = hit.best
+                                            if (best != null) {
+                                                onOpenGroup(best)
+                                            } else {
+                                                watchFrom = key
+                                                onWhereToWatch(hit.title)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 searchStatus(state)?.let { status ->
                     item(span = full, key = "status") {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -441,6 +497,33 @@ internal fun TvSearchScreen(
         // A fixed height, so the list above never moves as the remote does.
         DetailsStrip(focusedGroup?.takeIf { g -> shown.any { it.key == g.key } }, briefs)
     }
+    }
+    // Where to watch (HX41), in the television's own panel: focus starts on Close, and the other
+    // button is the honest way on: search the chats not added this once, else choose more chats,
+    // or try again when TMDB could not be reached.
+    state.watching?.let { (title, answer) ->
+        val retry = answer == com.tmplayer.online.WhereToWatch.Unavailable
+        com.tmplayer.ui.components.TvConfirm(
+            title = s.searchWhereToWatch,
+            message = titleName(title),
+            confirmLabel = when {
+                retry -> s.commonTryAgain
+                state.canSearchOthers -> s.searchOtherChats
+                else -> s.pickerAddMore
+            },
+            onConfirm = {
+                when {
+                    retry -> onWhereToWatch(title)
+                    state.canSearchOthers -> { onCloseWhereToWatch(); onSearchOthers() }
+                    else -> { onCloseWhereToWatch(); onAddChats() }
+                }
+            },
+            onDismiss = onCloseWhereToWatch,
+            cancelLabel = s.commonClose,
+            destructive = false,
+            icon = TmIcons.Info,
+            extra = { WhereToWatchLines(answer) },
+        )
     }
 }
 
@@ -776,6 +859,9 @@ internal fun TvSearchPage(
             }
         },
         onRetryTopics = search::retryTopics,
+        onWhereToWatch = search::openWhereToWatch,
+        onCloseWhereToWatch = search::closeWhereToWatch,
+        onRetryTitles = search::retryTitles,
     )
     opened?.let { (series, chatTitle) ->
         SeriesOpened(

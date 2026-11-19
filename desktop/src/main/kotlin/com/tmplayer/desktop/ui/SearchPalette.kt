@@ -159,6 +159,14 @@ private sealed interface PaletteRow {
         override val key get() = "v-${group.key}"
     }
 
+    /**
+     * A film or show TMDB named for the words (HX41): Enter opens its best card (Ctrl+Enter plays
+     * it), or, for one not in the viewer's chats, Where to watch.
+     */
+    data class Title(val hit: com.tmplayer.data.TitleHit) : PaletteRow {
+        override val key get() = "ti-${hit.title.onlineKey}"
+    }
+
     data class Skeleton(val index: Int) : PaletteRow {
         override val key get() = "s-$index"
         override val pickable get() = false
@@ -358,6 +366,7 @@ internal fun BoxScope.SearchPalette(
             }
             is PaletteRow.MoreTopics -> allTopics = true
             is PaletteRow.Video -> openVideo(row.group, play)
+            is PaletteRow.Title -> row.hit.best?.let { openVideo(it, play) } ?: search.openWhereToWatch(row.hit.title)
             is PaletteRow.Action -> row.run()
             is PaletteRow.Link -> {
                 close()
@@ -498,6 +507,20 @@ internal fun BoxScope.SearchPalette(
             }
         }
     }
+    // Where to watch (HX41) over the palette: Esc or Close goes back to the field, words kept.
+    ui.watching?.let { (title, answer) ->
+        com.tmplayer.ui.browse.WhereToWatchDialog(
+            title = title,
+            answer = answer,
+            canSearchOthers = ui.canSearchOthers,
+            onSearchOthers = search::searchOtherChats,
+            onRetry = { search.openWhereToWatch(title) },
+            onClose = {
+                search.closeWhereToWatch()
+                runCatching { field.requestFocus() }
+            },
+        )
+    }
 }
 
 /** The list for what is on screen now; see [SearchPalette]. */
@@ -547,6 +570,16 @@ private fun buildRows(
         if (shownTopics.size < ui.topics.size) add(PaletteRow.MoreTopics(ui.topics.size))
         ui.topicsError?.let { add(PaletteRow.TopicsFailed(s.searchTopicsFailed(it))) }
         if (ui.topicsPartial && !ui.topicsSearching) add(PaletteRow.Note(s.searchTopicsPartial(com.tmplayer.data.TopicSearch.CHATS_PER_SEARCH)))
+    }
+    // Any film or show the words name (HX41), with what the viewer has of each.
+    val titles = ui.titleHits
+    if (titles.isNotEmpty() || ui.titleLookup == com.tmplayer.ui.browse.TitleLookup.Unavailable) {
+        add(PaletteRow.Heading(s.searchTitlesHeading))
+        titles.forEach { add(PaletteRow.Title(it)) }
+        if (ui.titleLookup == com.tmplayer.ui.browse.TitleLookup.Unavailable) {
+            add(PaletteRow.Note(s.searchTitlesUnavailable))
+            add(PaletteRow.Action(s.searchTitlesRetry) { search.retryTitles() })
+        }
     }
     val videos = ui.shown
     if (videos.isNotEmpty() || ui.searching) add(PaletteRow.Heading(s.searchVideosHeading))
@@ -629,6 +662,13 @@ private fun PaletteLine(
             highlighted = selected,
             modifier = pickable,
             posterWidth = 52.dp,
+        )
+        is PaletteRow.Title -> com.tmplayer.ui.browse.SearchTitleCard(
+            hit = row.hit,
+            chats = ui.chats,
+            highlighted = selected,
+            modifier = pickable,
+            posterWidth = 40.dp,
         )
         is PaletteRow.Skeleton -> SearchResultSkeleton(posterWidth = 52.dp)
         is PaletteRow.Note -> Row(
