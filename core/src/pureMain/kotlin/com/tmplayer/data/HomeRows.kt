@@ -168,6 +168,13 @@ object HomeRows {
      */
     const val CHOSEN_WAIT = 8
 
+    /**
+     * Tiles one chat may put in the Recently added row while other chats have videos too, so a
+     * chat that posted a season at once does not fill the row (HX66). When fewer chats than that
+     * have videos the row is still filled from the newest left over. See all is not capped.
+     */
+    const val RECENT_PER_CHAT = 3
+
     /** Starred chats it takes for Recently added: one alone already has a row of its own. */
     const val RECENT_MIN_STARRED = 2
 
@@ -346,7 +353,7 @@ object HomeRows {
                 // fetch, and a starred chat's fetch fills in whatever the search did not reach.
                 val pool = recent.filter { it.chatId in starredIds } + starredIds.flatMap { loaded[it].orEmpty() }
                 // A copy, so the rows below still show these videos in their own chats.
-                val entries = row(pool, HashSet(inContinue), shownCopies, inContinue)
+                val entries = row(pool, HashSet(inContinue), shownCopies, inContinue, perChat = RECENT_PER_CHAT)
                 if (entries.isNotEmpty()) {
                     add(HomeRow.Recent(entries, loaded = true, starredOnly = starredOnly, chatIds = homeOrder, asRow = asRow))
                 } else if (chatsPending || (if (recentFrom == null) starredIds.any { it !in loaded } else homeOrder.take(CHOSEN_WAIT).any { it !in loaded })) {
@@ -439,10 +446,47 @@ object HomeRows {
         seen: MutableSet<String>,
         continuing: Set<String> = emptySet(),
         inProgress: Set<String> = emptySet(),
+        perChat: Int = Int.MAX_VALUE,
     ): List<ShelfEntry> {
-        val entries = arranged(items, seen, continuing, inProgress).take(LIMIT)
+        val all = arranged(items, seen, continuing, inProgress)
+        val entries = if (perChat >= LIMIT) all.take(LIMIT) else spread(all, perChat)
         markSeen(entries, seen)
         return entries
+    }
+
+    /**
+     * [LIMIT] tiles of [entries] (newest first) with at most [perChat] from one chat, then, only
+     * when that leaves the row short, one more per chat at a time. Still newest first.
+     * Linear in [entries]; the chat of a show is the chat of its newest upload.
+     */
+    private fun spread(entries: List<ShelfEntry>, perChat: Int): List<ShelfEntry> {
+        if (entries.size <= perChat.coerceAtLeast(1)) return entries.take(LIMIT)
+        val chats = LongArray(entries.size) { i ->
+            when (val e = entries[i]) {
+                is ShelfEntry.File -> e.item.chatId
+                is ShelfEntry.Show -> e.series.cover.chatId
+            }
+        }
+        val taken = HashMap<Long, Int>()
+        val chosen = BooleanArray(entries.size)
+        var count = 0
+        // Each round lets every chat have one more tile than the round before, so a short row is
+        // topped up evenly across the chats that have more, not from the newest chat alone.
+        var cap = perChat.coerceAtLeast(1)
+        while (count < LIMIT && cap <= LIMIT) {
+            for (i in entries.indices) {
+                if (count >= LIMIT) break
+                if (chosen[i]) continue
+                val n = taken[chats[i]] ?: 0
+                if (n < cap) {
+                    taken[chats[i]] = n + 1
+                    chosen[i] = true
+                    count++
+                }
+            }
+            cap++
+        }
+        return entries.filterIndexed { i, _ -> chosen[i] }
     }
 
     private fun markSeen(entries: List<ShelfEntry>, seen: MutableSet<String>) {

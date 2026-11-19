@@ -213,7 +213,7 @@ internal fun PhoneBrowse(
     }
 
     // The Chats half of the Home and Chats pager: the page itself, or the chip it was left on.
-    val chatsSection = if (tab.onChatsPage) tab else chatsPageOf(lastChats, sections)
+    val chatsSection = if (tab.onChatsPage) tab else chatsPageOf(lastChats)
     // The pager while it is on screen, for the bar's highlight to follow a swipe.
     val pagerRef = remember { mutableStateOf<PagerState?>(null) }
     val barPosition: (() -> Float)? = if (swipePage(tab) != null) {
@@ -241,7 +241,7 @@ internal fun PhoneBrowse(
             downloadCount = downloadCount,
             updateVersion = updateVersion,
             onHome = { onPickTab(BrowseSection.of(BrowseTab.Home)) },
-            onChats = { onPickTab(chatsPageOf(lastChats, sections)) },
+            onChats = { onPickTab(chatsPageOf(lastChats)) },
             onSearch = openSearch,
             onSettings = onOpenSettings,
             onFavourites = { onPickTab(BrowseSection.of(BrowseTab.Favorites)) },
@@ -287,6 +287,9 @@ internal fun PhoneBrowse(
                 onRetryMore = search::retryMore,
                 onRetry = search::retry,
                 onSearchOthers = search::searchOtherChats,
+                onWhereToWatch = search::openWhereToWatch,
+                onCloseWhereToWatch = search::closeWhereToWatch,
+                onRetryTitles = search::retryTitles,
                 onRemoveRecent = { entry -> scope.launch { settings.removeRecentSearch(entry) } },
                 onClearRecent = {
                     val before = recent
@@ -378,16 +381,16 @@ internal fun swipePage(section: BrowseSection): Int? = when {
     else -> null
 }
 
-/** What page [page] of the pager shows: Home, or [chats], the chip the Chats page was left on. */
+/** What page [page] of the pager shows: Home, or [chats], the Chats page. */
 internal fun swipeSection(page: Int, chats: BrowseSection): BrowseSection =
     if (page == CHATS_PAGE) chats else BrowseSection.of(BrowseTab.Home)
 
 /**
- * The Chats page to come back to: the chip it was left on ([lastChats], written down by
- * [BrowseSection.encode]) when that folder is still there, else All chats.
+ * The Chats page to come back to: always Chats (a folder page an older build saved decodes to it,
+ * since folders filter Add chats now, HX29).
  */
-internal fun chatsPageOf(lastChats: String, sections: List<BrowseSection>): BrowseSection =
-    BrowseSection.decode(lastChats)?.takeIf { it.isChats || (it.onChatsPage && it in sections) } ?: BrowseSection.of(BrowseTab.Chats)
+internal fun chatsPageOf(lastChats: String): BrowseSection =
+    BrowseSection.decode(lastChats)?.takeIf { it.isChats } ?: BrowseSection.of(BrowseTab.Chats)
 
 /**
  * Home and Chats side by side: a swipe from Home towards the end goes to Chats, and back the other

@@ -2,7 +2,7 @@
 // `pnpm test:tmdb` (node's own runner).
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { accepts, best, normalise, overlap, trusted, type Ask, type Candidate } from './match.ts'
+import { accepts, best, normalise, overlap, parseHints, trusted, type Ask, type Candidate } from './match.ts'
 
 const ask = (title: string, year: number | null, over: Partial<Ask> = {}): Ask => ({ title, year, kind: 'film', tmdbId: null, series: false, languages: [], ...over })
 const cand = (id: string, title: string, year: number | null, language = ''): Candidate => ({ id, names: [title, title], year, poster: `/${id}.jpg`, originalLanguage: language })
@@ -57,4 +57,45 @@ test('trusted: the year within one, a later season, or a show for a file with an
     assert.ok(trusted(ask('Loki', 2023, { kind: 'show', series: true }), { kind: 'show', year: 2021 }))
     assert.ok(trusted(ask('Panchayat', null, { kind: 'show', series: true }), { kind: 'show', year: 2020 }))
     assert.ok(!trusted(ask('Scam 1992', null, { kind: 'film' }), { kind: 'show', year: 2020 }), 'a show found for a name with no episode needs its year')
+})
+
+// HX24: the cases of MetaPickTest's four Bigg Boss lines, the same names and years.
+const biggBoss = () => [
+    cand('tamil', 'Bigg Boss', 2017, 'ta'),
+    cand('malayalam', 'Bigg Boss', 2018, 'ml'),
+    cand('telugu', 'Bigg Boss', 2017, 'te'),
+    cand('kannada', 'Bigg Boss', 2013, 'kn'),
+]
+
+test('the chat language breaks a tie between shows of one name', () => {
+    const q = ask('Bigg Boss', null, { kind: 'show', series: true })
+    assert.equal(best(q, biggBoss(), true)?.id, 'tamil')
+    assert.equal(best({ ...q, hints: ['ml'] }, biggBoss(), true)?.id, 'malayalam')
+})
+
+test('a hint never outweighs the file own language or the year', () => {
+    const ownWords = ask('Bigg Boss', null, { kind: 'show', series: true, languages: ['te'], hints: ['ml'] })
+    assert.equal(best(ownWords, biggBoss(), true)?.id, 'telugu')
+    const byYear = ask('Bigg Boss', 2017, { kind: 'show', series: true, hints: ['ml'] })
+    assert.equal(best(byYear, biggBoss(), true)?.id, 'tamil')
+})
+
+test('a hint is never a reason to accept a title', () => {
+    const q = ask('Coast walk day 2', 2023, { hints: ['ta'] })
+    assert.equal(best(q, [cand('x', 'Coastal Walks', 2023, 'ta')], false), null)
+    // A chat that names a language no candidate has changes nothing.
+    const none = ask('Bigg Boss', null, { kind: 'show', series: true, hints: ['fr'] })
+    assert.equal(best(none, biggBoss(), true)?.id, 'tamil')
+})
+
+test('parseHints keeps up to four ISO 639-1 codes and drops the rest', () => {
+    assert.deepEqual(parseHints('ml'), ['ml'])
+    assert.deepEqual(parseHints('ml,ta,ml,te,hi,kn'), ['ml', 'ta', 'te', 'hi'])
+    assert.deepEqual(parseHints(null), [])
+    assert.deepEqual(parseHints(''), [])
+    assert.deepEqual(parseHints('mal,m1,,../x,%00,\u0d2e'), [])
+    assert.deepEqual(parseHints('ML'), parseHints('ml'))
+    assert.deepEqual(parseHints('ml,ta'), ['ml', 'ta'])
+    assert.deepEqual(parseHints('x'.repeat(100_000)), [])
+    assert.deepEqual(parseHints(',,,,ta,,'), ['ta'])
 })

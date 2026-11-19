@@ -89,6 +89,7 @@ class ChatRepository(private val td: TdlClient) {
         val position = chat.positions.firstOrNull {
             it.list is ChatListMain || it.list is ChatListArchive
         }
+        if (!saved) com.tmplayer.online.ChatLanguageHints.note(chat.id, chat.title)
         return ChatSummary(
             id = chat.id,
             title = if (saved) L.chatsSavedMessages else chat.title.ifBlank { L.chatsUntitled(chat.id.toString()) },

@@ -774,7 +774,14 @@ fun ContinuePage(state: ShellState, tabs: @Composable () -> Unit = {}) {
             com.tmplayer.data.HistoryEdits.removeContinueCards(st, w, cards)
         }
     }
-    val clearAll: () -> Unit = {
+    val historyCards = historyCardCount(state)
+    // Asked first (HX59); Undo still follows the answer.
+    val clearAll = rememberClearAllConfirm(
+        count = historyCards,
+        title = s.browseClearHistoryTitle,
+        message = s.browseClearHistoryMessage(historyCards),
+        detail = s.browseClearHistoryDetail,
+    ) {
         runHistoryEdit(scope, state, undoToast, toast, { s.browseHistoryCleared }, s.browseUndo) { st, w -> com.tmplayer.data.HistoryEdits.clear(st, w) }
     }
     // The cards in the grid's order (the day headings' order), by the id a poster is ticked by.
@@ -993,8 +1000,8 @@ internal fun MediaTile(
             // A poster leads with the film's year and leaves the quality to the chip on its art.
             if (poster) item.parsedName.year?.let { append(it).append("  ·  ") }
             if (!poster && item.durationSec > 0) append(MediaMapper.formatDuration(item.durationSec)).append("  ·  ")
-            append(if (item.versions.size > 1) s.detailVersions(item.versions.size) else com.tmplayer.data.SplitPieces.sizeFact(item, MediaMapper.formatSize(item.sizeBytes)))
-            if (!poster) item.qualityTags.firstOrNull()?.let { append("  ·  ").append(it) }
+            append(if (com.tmplayer.data.VideoCopies.versionCount(item) > 1) s.detailVersions(com.tmplayer.data.VideoCopies.versionCount(item)) else com.tmplayer.data.SplitPieces.sizeFact(item, MediaMapper.formatSize(item.sizeBytes)))
+            if (!poster) com.tmplayer.data.QualityRead.of(item)?.let { append("  ·  ").append(it) }
             if (WatchedWords.showsWatched(point?.fraction, finished)) append("  ·  ").append(s.watchedBadge)
         },
     )

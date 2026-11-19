@@ -97,6 +97,8 @@ export default defineConfig((env) =>
     mergeConfig(base(env), {
         root: fileURLToPath(new URL('..', import.meta.url)),
         plugins: [testServer],
+        // MSone is offered only in a build with the gateway key; its answers are the tests' own (e2e/subpicks.spec.ts).
+        define: { __MSONE_GATEWAY_KEY__: JSON.stringify('e2e-key') },
         resolve: { alias: { '@mtcute/web': fileURLToPath(new URL('./fake/mtcute.ts', import.meta.url)) } },
         // No error overlay: a page of a test is never covered by Vite's, whatever the server logs.
         server: { port: Number(process.env.E2E_PORT) || 8097, strictPort: true, host: '127.0.0.1', hmr: { overlay: false } },

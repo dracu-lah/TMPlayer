@@ -189,11 +189,23 @@ object SelfInstaller {
 
     @RequiresApi(Build.VERSION_CODES.S)
     private suspend fun sessionInstall(context: Context, file: File, silent: Boolean, foreground: Boolean, settings: SettingsStore): Result {
-        var outcome = commit(context, file, silent, foreground, onRefused = { refused(settings) })
+        // The update's own baseline profile goes in with it, so Android compiles it as it installs
+        // (HX73). Read once, off the main thread; none in the APK and the install is as before.
+        var profile = withContext(Dispatchers.IO) { UpdateDexMetadata.of(file) }
+        var outcome = commit(context, file, silent, foreground, profile, onRefused = { refused(settings) })
+        // A failure the profile may have caused is tried once more without it, and every later
+        // session of this install goes without it too: a profile Android could not use must never
+        // be what keeps an update out.
+        val after = UpdateDexMetadata.next(profile, outcome.step)
+        if (after !== profile) {
+            Logger.w(TAG, "Install with the profile failed (${outcome.message}), trying without it")
+            profile = after
+            outcome = commit(context, file, silent, foreground, profile, onRefused = { refused(settings) })
+        }
         if (SessionSteps.remembersRefusal(outcome.step)) refused(settings)
         if (SessionSteps.next(outcome.step, foreground) == SessionSteps.Next.AskInstead) {
             Logger.w(TAG, "Silent update refused (${outcome.message}), asking instead")
-            outcome = commit(context, file, silent = false, foreground = true, onRefused = {})
+            outcome = commit(context, file, silent = false, foreground = true, profile, onRefused = {})
         }
         // The session was killed under it (some vendors' builds do): the system installer's screen
         // is what is left.
@@ -228,6 +240,8 @@ object SelfInstaller {
         file: File,
         silent: Boolean,
         foreground: Boolean,
+        /** The update's dex metadata ([UpdateDexMetadata]), written beside the APK; null for none. */
+        profile: ByteArray?,
         onRefused: suspend () -> Unit,
     ): Outcome {
         val installer = context.packageManager.packageInstaller
@@ -261,6 +275,12 @@ object SelfInstaller {
                     session.openWrite("base.apk", 0, file.length()).use { out ->
                         file.inputStream().use { it.copyTo(out) }
                         session.fsync(out)
+                    }
+                    if (profile != null) {
+                        session.openWrite(UpdateDexMetadata.SESSION_NAME, 0, profile.size.toLong()).use { out ->
+                            out.write(profile)
+                            session.fsync(out)
+                        }
                     }
                 }
             }

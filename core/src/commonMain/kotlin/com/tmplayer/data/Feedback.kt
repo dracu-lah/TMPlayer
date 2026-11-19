@@ -18,6 +18,7 @@ object Feedback {
 
     const val ISSUES = "https://github.com/dracu-lah/TMPlayer/issues/new"
     const val TEMPLATE = "bug_report.yml"
+    const val FEATURE_TEMPLATE = "feature_request.yml"
     const val EMAIL = "hello@tmplayer.org"
 
     /** The bug template's dropdown options. */
@@ -58,16 +59,35 @@ object Feedback {
         return ISSUES + "?" + params.joinToString("&") { (k, v) -> "$k=${encode(v)}" }
     }
 
-    /** The same facts as an email, for somebody without a GitHub account. */
-    fun mailto(facts: Facts): String {
-        val subject = "TMPlayer ${facts.version}: a problem"
+    /**
+     * The new feature request page (HX64), with the platform ticked: the template asks only where
+     * it is needed, so nothing about the device goes in.
+     */
+    fun featureUrl(facts: Facts): String {
+        val where = when (facts.platform) {
+            Platform.AndroidTv, Platform.FireTv -> "TV (Android TV, Google TV, Fire TV)"
+            Platform.Phone -> "Phone or tablet"
+            Platform.Windows -> "Windows"
+            Platform.Linux -> "Linux"
+            Platform.Other -> ""
+        }
+        val params = buildList {
+            add("template" to FEATURE_TEMPLATE)
+            if (where.isNotEmpty()) add("platform" to where)
+        }
+        return ISSUES + "?" + params.joinToString("&") { (k, v) -> "$k=${encode(v)}" }
+    }
+
+    /** The same facts as an email, for somebody without a GitHub account. [feature] for an idea rather than a problem. */
+    fun mailto(facts: Facts, feature: Boolean = false): String {
+        val subject = if (feature) "TMPlayer ${facts.version}: a feature idea" else "TMPlayer ${facts.version}: a problem"
         val body = buildString {
             appendLine("Platform: ${facts.platform.option.ifEmpty { "other" }}")
             appendLine("App version: ${facts.version}")
             appendLine("Device: ${facts.device}")
             appendLine("App language: ${facts.language}")
             appendLine()
-            appendLine("What happened:")
+            appendLine(if (feature) "What I would like TMPlayer to do:" else "What happened:")
             appendLine()
         }
         return "mailto:$EMAIL?subject=${encode(subject)}&body=${encode(body)}"

@@ -376,7 +376,6 @@ class PromoCaptureActivity : ComponentActivity() {
                             onOpenChat = { screen = "media" },
                             onOpenSettings = { screen = "settings" },
                             onOpenDownloads = { screen = "downloads" },
-                            folders = if (intent.getBooleanExtra("folders", false) || groupsDemo) PROMO_FOLDERS else emptyList(),
                             home = intent.getStringExtra("variant") ?: "rows",
                             section = intent.getStringExtra("section"),
                         )
@@ -384,9 +383,6 @@ class PromoCaptureActivity : ComponentActivity() {
                             onOpenChat = { screen = "media" },
                             onOpenSettings = { screen = "settings" },
                             onOpenDownloads = { screen = "downloads" },
-                            // `--ez folders true` adds two Telegram folders, so the sidebar shows
-                            // its Folders group; `--es update 9.9.9` adds the amber Update row.
-                            folders = if (intent.getBooleanExtra("folders", false) || groupsDemo) PROMO_FOLDERS else emptyList(),
                             updateVersion = intent.getStringExtra("update"),
                             // `--es section saved|favorites|history` opens on that sidebar entry.
                             section = intent.getStringExtra("section"),
@@ -543,7 +539,6 @@ private fun PromoChatsScreen(
     onOpenSettings: () -> Unit = {},
     onOpenDownloads: () -> Unit = {},
     state: UiState<BrowseData>? = null,
-    folders: List<ChatFolderSummary> = emptyList(),
     updateVersion: String? = null,
     /** Null for the chat list; otherwise Home, in the named variant (see the "home" screen). */
     home: String? = null,
@@ -605,7 +600,6 @@ private fun PromoChatsScreen(
         onToggleFavorite = {},
         picked = picked,
         onPickTab = { picked = it },
-        folders = folders,
         updateVersion = updateVersion,
         videoSearch = promoVideoSearch(),
     )

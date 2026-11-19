@@ -1,22 +1,26 @@
 // The menu a video card opens on a long press (touch) or a right click: the actions the apps' hold
 // menu has (Play, Details, Watched, Watch later) and, on a Continue watching or Watched card, Remove
-// from history, which the toast's Undo takes back. One menu for the whole page. The browser's own
+// from history, which the toast's Undo takes back; on a card of a video posted more than once, Not
+// the same video (and Group with its copies again on a file kept apart, HX38). One menu for the whole page. The browser's own
 // right click menu is turned off page wide (blockBrowserMenu) so a right click feels like the app's.
 import { createEffect, createSignal, Show } from 'solid-js'
 import { useNavigate } from '@solidjs/router'
-import { Clock01Icon, Delete02Icon, InformationCircleIcon, LeftToRightListBulletIcon, PlayIcon, Search01Icon, Tick02Icon } from '@hugeicons/core-free-icons'
+import { Clock01Icon, Delete02Icon, InformationCircleIcon, LeftToRightListBulletIcon, Link04Icon, PlayIcon, Search01Icon, Tick02Icon, Unlink04Icon } from '@hugeicons/core-free-icons'
 import { t } from '../i18n'
 import { historyId, removeWithUndo } from '../historyEdits'
 import { laterIds, setLater, setWatched, watchedIds, watchedTick } from '../store'
 import { Icon } from './Icon'
 import { openPosterPicker } from './PosterPicker'
 import { openListPicker } from '../screens/Lists'
+import { isApart, keepApart } from '../copies'
 import type { VideoItem } from '../tg/types'
 
 interface Target {
     item: VideoItem
     /** A history card: Remove from history is offered too. */
     history: boolean
+    /** How many versions the card stands for: from two, Not the same video is offered. */
+    versions: number
 }
 
 const [target, setTarget] = createSignal<Target | null>(null)
@@ -28,13 +32,13 @@ const SLOP = 10
  * Handlers for a card's link. A long press with a finger or a right click opens the menu; the click
  * that follows a long press is swallowed so the card does not also open.
  */
-export function cardMenu(item: VideoItem, history = false) {
+export function cardMenu(item: VideoItem, history = false, versions = 1) {
     let timer = 0
     let x = 0
     let y = 0
     let held = false
     const stop = () => clearTimeout(timer)
-    const open = () => setTarget({ item, history })
+    const open = () => setTarget({ item, history, versions })
     return {
         'on:contextmenu': (e: MouseEvent) => {
             e.preventDefault()
@@ -123,6 +127,11 @@ export function CardMenu() {
         close()
         if (now) openPosterPicker(now.item)
     }
+    const apart = (on: boolean) => {
+        const now = target()
+        close()
+        if (now) keepApart(now.item, on)
+    }
     const remove = () => {
         const now = target()
         close()
@@ -164,6 +173,22 @@ export function CardMenu() {
                                 <small>{t('poster.choose_detail')}</small>
                             </span>
                         </button>
+                        {/* Repairs, last as in the apps' menu: a wrong group split, and put back. */}
+                        <Show when={isApart(now().item)}>
+                            <button class="menu-row" type="button" onClick={() => apart(false)}>
+                                <Icon icon={Link04Icon} size={22} />
+                                <span>{t('grid.same_video_again')}</span>
+                            </button>
+                        </Show>
+                        <Show when={!isApart(now().item) && now().versions > 1}>
+                            <button class="menu-row" type="button" onClick={() => apart(true)}>
+                                <Icon icon={Unlink04Icon} size={22} />
+                                <span>
+                                    {t('grid.not_same_video')}
+                                    <small>{t('grid.not_same_video_detail')}</small>
+                                </span>
+                            </button>
+                        </Show>
                         <Show when={now().history}>
                             <button class="menu-row" type="button" onClick={remove}>
                                 <Icon icon={Delete02Icon} size={22} />

@@ -172,6 +172,8 @@ export interface Tile {
     episodes: number
     /** Other copies of the same video, parts it was cut into, and raw pieces that play as one. */
     copies: number
+    /** How many versions the card says (VideoCopies.versionCount: the same file posted twice counts once); 1 for a show or a single file. */
+    versions: number
     parts: number
     pieces: number
     /** "Trailer", "Sample"... for an extra. */
@@ -400,9 +402,14 @@ export interface WatchInfo {
     chatTitle: string
     /** The chat restricts saving content. */
     protected: boolean
-    /** What the file is badged with ("1080p", "4K"), from its name and size; null when neither says. */
+    /** What the file is badged with ("1080p", "4K"), from its stated size else its name (QualityRead); null when neither says. */
     quality: string | null
-    /** Every copy of this video in the chat (this one among them, best first) when there is more than one file of it. */
+    /** The picture's height that badge reads (2160 for 4K), for the quality the viewer usually plays; null when nothing says. */
+    qualityHeight?: number | null
+    /**
+     * Every copy of this video in the chat when there is more than one file of it, this one among
+     * them, in the order the list shows them: recommended first (HX38). Its length is "N versions".
+     */
     copies: CopyRef[]
     /** The caption as an overview, its file facts and lines repeating the name taken off (MediaText.overviewOf); null when nothing is left. */
     overview: string | null
@@ -417,4 +424,12 @@ export interface CopyRef {
     /** Seconds since 1970. */
     date: number
     chat: string
+    /** "Best for this device" (VideoCopies.bestForDevice), only where the copies differ in picture. */
+    best?: boolean
+    /** "May stutter on this computer" for a copy this browser cannot play natively; "Smooth" beside one that may. */
+    fit?: 'smooth' | 'stutter' | null
+    /** The viewer started this copy. */
+    started?: boolean
+    /** Its name says another picture than the size Telegram states (the size heads the row). */
+    mismatch?: boolean
 }

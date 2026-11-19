@@ -6,7 +6,7 @@ import { rules } from '../rules'
 import { cryptoProvider } from './crypto'
 import { findChatSubtitles, forgetChatSubtitles } from './chatsubs'
 import { homePage } from './home'
-import { archivedList, chatList, chatPage, forgetAll, joinedFor, listTiles, rankChats, recentPage, searchAll, videoCounts, watchInfo } from './library'
+import { archivedList, chatList, chatPage, forgetAll, joinedFor, listTiles, rankChats, recentPage, searchAll, setCopyContext, videoCounts, watchInfo } from './library'
 import { clickSponsored, reportSponsored, viewSponsored } from './sponsored'
 import { deleteEverything, deleteMessages, readFiles, writeFile, type FoundFile } from './syncfile'
 import { chatProtects, files, itemOf, rawOf, thumbnails, toItem } from './media'
@@ -383,6 +383,15 @@ export const api = {
         return deleteEverything(tg, known)
     },
 
+    /** What the page says of the viewer's copies (HX38): the device, what the browser cannot play natively, "Not the same video", the copies chosen. */
+    async copyContext(_: Ctx, context: unknown): Promise<void> {
+        await setCopyContext(context)
+    },
+    /** The quality line (QualityHabit) with one more play at `height` noted: what the page keeps as the quality usually played. */
+    async habitNoted(_: Ctx, habit: string | null, height: number | null): Promise<string> {
+        const h = typeof height === 'number' && Number.isSafeInteger(height) && height > 0 && height <= 8_640 ? height : null
+        return (await rules()).habitNoted(typeof habit === 'string' ? habit.slice(0, 400) : null, h)
+    },
     /** One message's video, for a watch page opened by its address. Null when it is gone or not a video. */
     async video(_: Ctx, chatId: number, messageId: number): Promise<VideoItem | null> {
         const [msg] = await tg.getMessages(chatId, messageId)
@@ -408,6 +417,34 @@ export const api = {
     /** The subtitle files posted next to a video, best first (the apps' ChatSubtitles), from one search of its chat. */
     async chatSubtitles(_: Ctx, chatId: number, messageId: number, fileName: string, caption: string, preferred: string[]): Promise<ChatSubtitle[]> {
         return findChatSubtitles(tg, chatId, messageId, fileName, caption, preferred)
+    },
+
+    /**
+     * The keys a video's remembered online subtitle is filed under, most exact first (HX25, core's
+     * SubtitlePickKeys): this post, then the video itself (a film's title and year, a show's episode),
+     * so a re-post or another copy finds the pick. The page keeps the picks; the rule is core's.
+     */
+    async subtitlePickKeys(_: Ctx, chatId: number, messageId: number, title: string, fileName: string): Promise<string[]> {
+        const r = await rules()
+        return r.subtitlePickKeys({
+            id: `${chatId}:${messageId}`,
+            chatId,
+            messageId,
+            title: String(title).slice(0, 500),
+            fileName: String(fileName).slice(0, 500),
+            caption: '',
+            mimeType: 'video/mp4',
+            size: 0,
+            duration: 0,
+            width: 0,
+            height: 0,
+            date: 0,
+            topicId: 0,
+            albumId: null,
+            albumPhoto: false,
+            canBeSaved: true,
+            round: false,
+        })
     },
 
     /** A listed file that is no longer there: the next lookup of this video asks again. */

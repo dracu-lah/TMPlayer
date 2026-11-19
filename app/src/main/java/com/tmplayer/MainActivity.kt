@@ -164,6 +164,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import androidx.compose.runtime.snapshotFlow
 import com.tmplayer.data.guardedLifecycleScope as lifecycleScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -918,7 +919,18 @@ private fun Root() {
         ) { forgotten -> withContext(Dispatchers.Main) { toast(com.tmplayer.data.GoneVideos.message(forgotten)) } }
     }
 
-    val chatsState by chatsViewModel.state.collectAsStateWithLifecycle()
+    // Held as a State and read only where it is used (the browser, the effects below, Home's rows),
+    // never in this body: a busy account changes the chat list on every post (an unread count, a
+    // reorder), and each read here recomposed the whole shell, two thousand lines of it, on the
+    // main thread of a weak TV box until the input wait ran out (HX81, Sentry 161627449).
+    val chatsState = chatsViewModel.state.collectAsStateWithLifecycle()
+    val chatList = remember {
+        derivedStateOf(androidx.compose.runtime.referentialEqualityPolicy()) {
+            (chatsState.value as? UiState.Content)?.value?.chats.orEmpty()
+        }
+    }
+    // Whether the list is still arriving, the one thing the launch's jumps wait on.
+    val chatsLoading by remember { derivedStateOf { chatsState.value is UiState.Loading } }
     // Home's rows, fetched a row at a time as they come on screen, with the size limits a chat's
     // grid uses.
     val homeViewModel: HomeViewModel = viewModel(
@@ -972,7 +984,6 @@ private fun Root() {
         }
     }
     val accountHeader by chatsViewModel.accountHeader.collectAsStateWithLifecycle()
-    val chats = (chatsState as? UiState.Content)?.value?.chats.orEmpty()
 
     // A sign in screen arms the setup that follows it (CP67, see Setup).
     LaunchedEffect(auth) {
@@ -1189,11 +1200,6 @@ private fun Root() {
     // The phone's one floating bar, shared by every page it is on.
     val touchChrome = remember { TouchChrome() }
 
-    // The account's Telegram folders, which become destinations of their own. Collected here
-    // rather than inside the chat list's own state because they arrive on TDLib's schedule, not
-    // with the chat list, and the rail has to be able to draw before either has turned up.
-    val folders by Td.folders.collectAsStateWithLifecycle()
-
     // Whether a video is currently being got ready to play. Not saveable: a process death in the
     // middle of it means nothing is being prepared any more, and restoring true would leave every
     // video on the screen refusing to open.
@@ -1400,7 +1406,7 @@ private fun Root() {
      * from. [orList] is the old way, for when the chat cannot be found yet.
      */
     fun openSavedMessages(orList: () -> Unit) {
-        chats.firstOrNull { it.kind == com.tmplayer.data.ChatKind.Saved }?.let { openChat(it); return }
+        chatList.value.firstOrNull { it.kind == com.tmplayer.data.ChatKind.Saved }?.let { openChat(it); return }
         scope.launch { com.tmplayer.data.savedMessagesNow()?.let { openChat(it) } ?: orList() }
     }
     val savedSection = BrowseSection.of(BrowseTab.Saved)
@@ -1781,40 +1787,43 @@ private fun Root() {
 
         // A chat restored from the saved state carries only what could be written down, so its
         // blurred preview is missing until the real row turns up, when it is swapped back in.
-        LaunchedEffect(chats, screen) {
+        LaunchedEffect(screen) {
             val open = screen as? Screen.Media ?: return@LaunchedEffect
             if (open.chat.miniThumbnail != null) return@LaunchedEffect
-            chats.firstOrNull { it.id == open.chat.id }
-                ?.takeIf { it.miniThumbnail != null }
-                ?.let { screen = Screen.Media(it) }
+            // Followed here rather than keyed on, so a new list wakes this effect and not the shell.
+            snapshotFlow { chatList.value }.collect { chats ->
+                chats.firstOrNull { it.id == open.chat.id }
+                    ?.takeIf { it.miniThumbnail != null }
+                    ?.let { screen = Screen.Media(it) }
+            }
         }
 
         // Straight back into whatever was being watched last. Not routed through openChat: this
         // is not the viewer picking a chat, and rewriting the record it just read would be noise.
-        LaunchedEffect(chatsState, autoOpened) {
+        LaunchedEffect(chatsLoading, autoOpened) {
             if (autoOpened) {
                 autoOpenDecided = true
                 return@LaunchedEffect
             }
             // The chat list is still arriving, and which chat is in it is the whole question.
-            if (chatsState is UiState.Loading) return@LaunchedEffect
+            if (chatsLoading) return@LaunchedEffect
 
             autoOpened = true
             val target = settings.autoOpenTarget()
-            chats.firstOrNull { it.id == target }?.let { screen = Screen.Media(it) }
+            chatList.value.firstOrNull { it.id == target }?.let { screen = Screen.Media(it) }
             autoOpenDecided = true
         }
 
         // A new videos notification pressed: the chat it named, once the list has it, in place of
         // whatever the launch would have opened. A chat the kids lock hides is not in the list.
         val requestedChat by MainActivity.requestedChat.collectAsStateWithLifecycle()
-        LaunchedEffect(requestedChat, chatsState) {
+        LaunchedEffect(requestedChat, chatsLoading) {
             val wanted = requestedChat ?: return@LaunchedEffect
             if (wanted == 0L) {
                 screen = Screen.Chats
             } else {
-                if (chatsState is UiState.Loading) return@LaunchedEffect
-                chats.firstOrNull { it.id == wanted }?.let { screen = Screen.Media(it) }
+                if (chatsLoading) return@LaunchedEffect
+                chatList.value.firstOrNull { it.id == wanted }?.let { screen = Screen.Media(it) }
             }
             autoOpened = true
             autoOpenDecided = true
@@ -1831,21 +1840,24 @@ private fun Root() {
         // not repeat that chat's own row as a row of its own would.
         // Null until the setting is read, so no row that is off is fetched for the first frame.
         val homeLayout by remember { settings.homeLayout }.collectAsStateWithLifecycle(initialValue = null)
-        val homeRows = rememberHomeRows(
-            homeViewModel, chats, favorites, continueWatching, watchLater, watchedVideos.values,
-            recentMinStarred = 1,
+        // Worked out in a scope of their own (ShellHomeRows): each answer of a chat Home reads, and
+        // each change to the chat list, recomposes that and the browser's Home, not the shell.
+        val homeRows = remember { mutableStateOf(homeViewModel.lastRows, androidx.compose.runtime.referentialEqualityPolicy()) }
+        val tvChannelsOn by settings.tvChannels.collectAsStateWithLifecycle(initialValue = null)
+        ShellHomeRows(
+            model = homeViewModel,
+            chats = chatList,
+            favourites = favorites,
+            continueWatching = continueWatching,
+            watchLater = watchLater,
+            watched = watchedVideos.values,
             layout = homeLayout,
             lists = namedLists.orEmpty(),
-        )
-        val tvChannelsOn by settings.tvChannels.collectAsStateWithLifecycle(initialValue = null)
-        TvHomeChannels(
-            model = homeViewModel,
-            rows = homeRows,
-            chats = chats,
             watchProgress = watchProgress,
             signedIn = auth is AuthState.Ready,
             // Safe mode leaves the channels as they are: null is "not known yet", which does nothing.
-            enabled = if (com.tmplayer.data.SafeMode.active) null else tvChannelsOn,
+            channelsOn = if (com.tmplayer.data.SafeMode.active) null else tvChannelsOn,
+            into = homeRows,
         )
         // A show's card on the home screen: Home, where its page opens over the rows (HomePane
         // reads the ask). Given up after a minute, so a show that never turns up in the rows does
@@ -1954,7 +1966,7 @@ private fun Root() {
                 BrowseScreen(
                     // Held on its own loading state until the jump has been decided, so the
                     // launch looks like one screen loading rather than two screens fighting.
-                    state = if (autoOpenDecided) chatsState else UiState.Loading(),
+                    state = if (autoOpenDecided) chatsState.value else UiState.Loading(),
                     account = accountHeader,
                     favorites = favorites,
                     continueWatching = continueWatching,
@@ -2035,8 +2047,7 @@ private fun Root() {
                         if (section == savedSection) openSavedMessages { pickedTabKey = BrowseSection.encode(section) }
                         else pickedTabKey = BrowseSection.encode(section)
                     },
-                    folders = folders,
-                    homeRows = homeRows,
+                    homeRows = homeRows.value,
                     homeRowsReady = homeViewModel.rowsSettled,
                     homeLayout = homeLayout ?: com.tmplayer.data.HomeLayout(),
                     onOpenHomeSettings = {
@@ -2052,11 +2063,18 @@ private fun Root() {
                             is HomeRow.Continue, is HomeRow.WatchLater, is HomeRow.Listed, is HomeRow.NewEpisodes -> Unit
                         }
                     },
+                    onHomeRowSeen = { row ->
+                        when (row) {
+                            is HomeRow.Chat -> homeViewModel.rowShown(row.chatId)
+                            is HomeRow.Recent -> homeViewModel.requestRecent()
+                            is HomeRow.Continue, is HomeRow.WatchLater, is HomeRow.Listed, is HomeRow.NewEpisodes -> Unit
+                        }
+                    },
+                    onHomeRowLeft = { row -> if (row is HomeRow.Chat) homeViewModel.rowGone(row.chatId) },
                     onHomeArtWanted = homeViewModel::requestArt,
                     homeFeedOf = homeViewModel::seeAll,
                     chatPaging = chatsViewModel.paging.collectAsStateWithLifecycle().value,
                     onMoreChats = chatsViewModel::loadMoreChats,
-                    onRetryFolders = chatsViewModel::retryFolders,
                     onHomeLaterArtWanted = homeViewModel::requestArt,
                     onPlayMedia = { item, chatTitle -> play(item, chatTitle = chatTitle) },
                     homeRefreshing = homeViewModel.refreshing.collectAsStateWithLifecycle().value,
@@ -2181,7 +2199,7 @@ private fun Root() {
                     return@screens
                 }
                 SettingsScreen(
-                    chats = chats,
+                    chats = chatList.value,
                     account = accountHeader,
                     onLoggedOut = {
                         settingsPage = null
@@ -2238,8 +2256,12 @@ private fun Root() {
         val tourOffer = SettingsStore.tipsDue(tourState) && inShell &&
             screen is Screen.Chats && !showUpdate && noticeLanguage == null && !pickingLanguage &&
             !whatsNew.showing && supportRung == 0 && !crashPending
+        // On the phone and the tablet the card stands in the floating bar's banner slot, just
+        // above the bar, rather than in a row under it; the connection notice goes first and the
+        // card comes when it is gone. The television keeps its slim row at the foot.
+        val tipAboveBar = tourOffer && !FormFactor.isTv(context)
         com.tmplayer.ui.settings.TourOfferFrame(
-            offer = tourOffer,
+            offer = tourOffer && !tipAboveBar,
             hintUp = tvHintUp && FormFactor.isTv(context) && inShell && screen is Screen.Chats,
             card = { cardModifier ->
                 TipsCard(
@@ -2294,14 +2316,25 @@ private fun Root() {
                     pageKey = TouchScreens.key(screen),
                     // The connection notice stands above the bar, never over it, and the pages make
                     // room for it (R4, 9.1): Offline is a card with Try again and Downloads.
-                    bannerShown = connectionNotice != ConnectionNotice.Hidden && auth is AuthState.Ready,
+                    bannerShown = (connectionNotice != ConnectionNotice.Hidden && auth is AuthState.Ready) || tipAboveBar,
                     banner = {
-                        if (connectionNotice == ConnectionNotice.Offline) {
-                            com.tmplayer.ui.connect.OfflineBanner(
-                                onOpenDownloads = openDownloads.takeIf { screen !is Screen.Downloads },
+                        // The notice first; the card only while it is really due, so the banner's fade-out
+                        // after a notice clears never draws the card (or hands the remote to it).
+                        if (auth is AuthState.Ready && connectionNotice != ConnectionNotice.Hidden) {
+                            if (connectionNotice == ConnectionNotice.Offline) {
+                                com.tmplayer.ui.connect.OfflineBanner(
+                                    onOpenDownloads = openDownloads.takeIf { screen !is Screen.Downloads },
+                                )
+                            } else {
+                                ConnectionStatus(notice = connectionNotice)
+                            }
+                        } else if (tipAboveBar) {
+                            TipsCard(
+                                onShow = { scope.launch { runCatching { settings.openTour() } } },
+                                // One tap, one answer: the card does not come back (the tour stays in Settings).
+                                onDismiss = { scope.launch { runCatching { settings.markTourDone() } } },
+                                modifier = Modifier.fillMaxWidth(),
                             )
-                        } else {
-                            ConnectionStatus(notice = connectionNotice)
                         }
                     },
                 ) {
@@ -2582,6 +2615,36 @@ private fun Root() {
         }
         com.tmplayer.ui.connect.ProxyScreenHost()
     }
+}
+
+/**
+ * Home's rows for the shell, and the TV home screen channels that follow them, in a restart scope
+ * of their own. What they read changes often: every chat Home reads answers in turn, Recently
+ * added, new episodes and the chat list itself, which a busy account changes on every post. Read
+ * in [Root]'s body each of those recomposed the whole shell on the main thread (HX81). Here a
+ * change recomposes this and, through [into], only what draws the rows. [into] takes the rows
+ * after this composition is applied, so the browser's Home gets them a frame later; they are
+ * worked out off the main thread and arrive whenever they are ready anyway.
+ */
+@Composable
+internal fun ShellHomeRows(
+    model: HomeViewModel,
+    chats: androidx.compose.runtime.State<List<ChatSummary>>,
+    favourites: Set<Long>,
+    continueWatching: List<ResumeRecord>,
+    watchLater: List<com.tmplayer.data.WatchLaterRecord>,
+    watched: Collection<WatchedRecord>,
+    layout: com.tmplayer.data.HomeLayout?,
+    lists: List<com.tmplayer.data.VisibleList>,
+    watchProgress: Map<String, com.tmplayer.data.WatchPoint>,
+    signedIn: Boolean,
+    channelsOn: Boolean?,
+    into: androidx.compose.runtime.MutableState<List<HomeRow>>,
+) {
+    val list = chats.value
+    val rows = rememberHomeRows(model, list, favourites, continueWatching, watchLater, watched, recentMinStarred = 1, layout = layout, lists = lists)
+    androidx.compose.runtime.SideEffect { into.value = rows }
+    TvHomeChannels(model = model, rows = rows, chats = list, watchProgress = watchProgress, signedIn = signedIn, enabled = channelsOn)
 }
 
 /** The connection banner's width on a TV, clear of the bar's tabs at the start. */

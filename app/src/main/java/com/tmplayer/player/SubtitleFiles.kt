@@ -55,6 +55,9 @@ class SubtitleFiles(
      */
     var onCastFile: ((file: File, mimeType: String, label: String) -> Boolean)? = null
 
+    /** Told when the viewer chose a file of their own or one from the chat, not an online one: any remembered online pick ends (HX25). */
+    var onViewerChose: (() -> Unit)? = null
+
     /** Told of each file put over the video (loaded from the phone or fetched online), for its handover to another player. */
     var onAttached: ((File) -> Unit)? = null
 
@@ -130,6 +133,7 @@ class SubtitleFiles(
         }
         val mime = ExternalSubtitle.mimeTypeOf(extension) ?: return false
         val file = ChatSubtitleLoad.write(File(activity.cacheDir, "subtitles"), chatId, hit, loaded, text, extension) ?: return false
+        runCatching { onViewerChose?.invoke() }
         attach(Copy.Done(file, mime), loaded.label, handover)
         return true
     }
@@ -148,7 +152,10 @@ class SubtitleFiles(
             when (copied) {
                 null -> say(L.tracksFileUnreadable(name))
                 is Copy.Refused -> say(copied.reason)
-                is Copy.Done -> attach(copied, name)
+                is Copy.Done -> {
+                    runCatching { onViewerChose?.invoke() }
+                    attach(copied, name)
+                }
             }
         }
     }

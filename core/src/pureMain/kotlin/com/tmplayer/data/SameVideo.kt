@@ -134,7 +134,8 @@ object SameVideo {
             if (home != null) home += candidate else clusters += mutableListOf(candidate)
         }
         return clusters.map { cluster ->
-            val leads = cluster.map { if (it.split) it.lead.copy(parts = it.members).keptReads(it.lead) else it.lead }
+            // The recommended copy first, not the newest: the card's badge, its count and the copy Play opens are its (HX38).
+            val leads = GlobalSearch.copyOrder(cluster.map { if (it.split) it.lead.copy(parts = it.members).keptReads(it.lead) else it.lead })
             val lead = if (leads.size > 1) leads.first().copy(versions = leads).keptReads(leads.first()) else leads.first()
             Video(cluster.flatMap { it.members }, lead)
         }

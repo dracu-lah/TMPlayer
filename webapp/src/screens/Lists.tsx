@@ -10,6 +10,7 @@ import { t } from '../i18n'
 import { addToList, createList, deleteList, namedLists, removeFromList, renameList, setListHome } from '../store'
 import { Icon } from '../ui/Icon'
 import { showToast } from '../ui/Toast'
+import { askConfirm } from '../ui/Confirm'
 import { cleanName, lineKey, MAX_LISTS, NAME_MAX, type AddResult } from '../ui/lists'
 import { Card, tileCard, useProgress } from './VideoList'
 import type { Tile, VideoItem } from '../tg/types'
@@ -139,7 +140,6 @@ export function ListsPage() {
     )
     const progress = useProgress()
     let renaming!: HTMLDialogElement
-    let deleting!: HTMLDialogElement
     let making!: HTMLDialogElement
     const [name, setName] = createSignal('')
     createEffect(on(() => shown()?.info.id, (id) => id && id !== params.id && navigate(`/lists/${id}`, { replace: true }), { defer: true }))
@@ -150,6 +150,21 @@ export function ListsPage() {
         if (tile.kind !== 'show') return [`${tile.item.chatId}:${tile.item.messageId}`]
         const show = tile.title.trim().toLowerCase()
         return list.lines.filter((l) => l.item.chatId === tile.item.chatId && (l.show === show || (!l.show && (l.item.name ?? '').toLowerCase().includes(show)))).map(lineKey)
+    }
+    // A list goes from every device that syncs, so it asks first (HX59); the list going away by itself closes the question.
+    const askDelete = async () => {
+        const list = shown()
+        if (!list) return
+        const gone = list.info
+        const yes = await askConfirm({
+            title: t('lists.delete_title', { list: gone.name }),
+            message: t('lists.delete_message', { count: list.lines.length }),
+            confirm: t('common.delete'),
+            closeWhen: () => !namedLists().some((l) => l.info.id === gone.id),
+        })
+        if (!yes) return
+        deleteList(gone.id)
+        showToast({ text: t('lists.deleted', { list: gone.name }) })
     }
     const remove = (tile: Tile) => {
         const list = shown()
@@ -185,7 +200,7 @@ export function ListsPage() {
                                 <input type="checkbox" checked={list().info.home} onChange={(e) => setListHome(list().info.id, e.currentTarget.checked)} />
                                 <span>{t('lists.on_home')}</span>
                             </label>
-                            <button class="outline-button" type="button" onClick={() => deleting.showModal()}>
+                            <button class="outline-button" type="button" onClick={() => void askDelete()}>
                                 <Icon icon={Delete02Icon} size={18} />
                                 {t('lists.delete')}
                             </button>
@@ -202,25 +217,6 @@ export function ListsPage() {
                                 </For>
                             </div>
                         </Show>
-                        <dialog class="confirm" ref={deleting} aria-labelledby="list-delete-title" onClick={(e) => e.target === deleting && deleting.close()}>
-                            <h2 id="list-delete-title">{t('lists.delete_title', { list: list().info.name })}</h2>
-                            <p>{t('lists.delete_message', { count: list().lines.length })}</p>
-                            <div class="confirm-buttons">
-                                <button class="link" type="button" onClick={() => deleting.close()}>{t('common.cancel')}</button>
-                                <button
-                                    class="primary danger"
-                                    type="button"
-                                    onClick={() => {
-                                        const gone = list().info
-                                        deleting.close()
-                                        deleteList(gone.id)
-                                        showToast({ text: t('lists.deleted', { list: gone.name }) })
-                                    }}
-                                >
-                                    {t('common.delete')}
-                                </button>
-                            </div>
-                        </dialog>
                         <NameDialog
                             ref={(d) => (renaming = d)}
                             title={t('lists.rename')}

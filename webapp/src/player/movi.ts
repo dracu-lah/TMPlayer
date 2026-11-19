@@ -7,6 +7,7 @@ import type { MoviPlayer, PlayerState, SourceAdapter, AudioTrack } from 'movi-pl
 import type { MediaFile } from '../stream/reader'
 import { cueOverlay } from './cueoverlay'
 import { boostLevel } from './boost'
+import { moviVolume } from './extras'
 import { Unplayable, type Engine, type EngineEvents, type SoundTrack } from './engines'
 
 const debug = location.hostname === 'localhost' || location.hostname === '127.0.0.1'
@@ -229,7 +230,7 @@ function takeOver(video: HTMLVideoElement, player: MoviPlayer, events: EngineEve
         try {
             player.setStableAudio(boost > 1)
         } catch {}
-        player.setVolume(level >= 0.999 && boost > 1 ? boost : level)
+        player.setVolume(moviVolume(level, boost))
     }
     if (boost > 1) lift()
 
@@ -295,8 +296,8 @@ function takeOver(video: HTMLVideoElement, player: MoviPlayer, events: EngineEve
                 fire('volumechange')
             },
         },
-        // Volume boost (boost.ts): movi's own gain takes 0 to 2, and its stable audio is a limiter. The boost applies at
-        // the full player volume; under it the sound follows movi's own curve, so the two never multiply.
+        // Volume boost (boost.ts): movi's own gain takes 0 to 2, and its stable audio is a limiter. The level the
+        // controls set times the boost, held to movi's 2, so the boost rises with the volume and never jumps.
         tmBoost: {
             configurable: true,
             writable: true,

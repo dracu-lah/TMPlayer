@@ -43,6 +43,16 @@ export function askOf(item: { chatId: number; messageId: number; poster: PosterA
     return pick ? withPick(item.poster, pick, item.title) : item.poster
 }
 
+/**
+ * The chat language hints as `h=`: ISO 639-1 codes only, the first four, sorted so one set is one key.
+ * The rules hand them over; a pick (asked by id) and old kept asks have none. Null for none.
+ */
+export function hintsParam(hints: readonly string[] | null | undefined): string | null {
+    if (!Array.isArray(hints)) return null
+    const codes = [...new Set(hints.filter((h): h is string => typeof h === 'string' && /^[a-z]{2}$/.test(h)))].slice(0, 4).sort()
+    return codes.length ? codes.join(',') : null
+}
+
 /** The question as the worker takes it. */
 function query(a: PickedAsk): string {
     const q = new URLSearchParams({ k: a.kind, t: a.title })
@@ -53,6 +63,9 @@ function query(a: PickedAsk): string {
     if (a.series) q.set('s', '1')
     if (a.anime) q.set('a', '1')
     if (a.languages.length) q.set('l', a.languages.join(','))
+    // The chat title's languages (HX24): sent only when there are some, so the keys of chats with none stay as they were.
+    const hints = hintsParam(a.hints)
+    if (hints) q.set('h', hints)
     return q.toString()
 }
 

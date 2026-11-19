@@ -1,5 +1,6 @@
 package com.tmplayer.desktop.ui
 
+import com.tmplayer.ui.browse.chipLabel
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -127,46 +128,6 @@ class BrowseRenderTest {
         save("sidebar-watch-folded.png", render(dark = true, folders = folders) {})
         com.tmplayer.ui.browse.NavGroupState.toggle(com.tmplayer.ui.browse.NavGroup.Watch)
         shell.chatFilter = com.tmplayer.ui.browse.ChatFilter.All
-    }
-
-    /**
-     * The Chats page's chips as Telegram's folder tab bar has them: All chats where Telegram puts
-     * it, each folder with its icon, then the filters no folder already is; a folder's page, with
-     * Chats lit in the side bar, in dark and light.
-     */
-    @Test
-    fun folderChips() {
-        val folders = listOf(
-            com.tmplayer.data.ChatFolderSummary(3, "Films", icon = "Custom"),
-            com.tmplayer.data.ChatFolderSummary(5, "Unread", icon = "Unread"),
-            com.tmplayer.data.ChatFolderSummary(7, "Family", icon = "Private"),
-        )
-        val chats = listOf(
-            chat(2, "Film Club", ChatKind.Channel, 12, 0xFFE5484D.toInt()),
-            chat(3, "Documentaries in 4K", ChatKind.Channel, 0, 0xFF46A758.toInt()),
-        )
-        val films = com.tmplayer.ui.browse.BrowseSection.Folder(3, "Films")
-        val chips = com.tmplayer.ui.browse.chatPageChips(folders)
-        assertTrue(chips.count { it.label == "Unread" } == 1)
-        shell.showChats(films)
-        try {
-            for (dark in listOf(true, false)) {
-                val theme = if (dark) "dark" else "light"
-                save("folder-chips-$theme.png", render(dark = dark, folders = folders) {
-                    Column(Modifier.fillMaxSize()) {
-                        PageHeader(films.heading, films.blurb)
-                        ChoiceChips(
-                            chips.map { chip ->
-                                Choice(chip.label, chip.label, chip.icon, selected = chip.label == "Films") {}
-                            },
-                        )
-                        chats.forEach { ChatRow(it, favourite = false, onOpen = {}, onStar = {}) }
-                    }
-                })
-            }
-        } finally {
-            shell.showChats(com.tmplayer.ui.browse.BrowseSection.of(com.tmplayer.ui.browse.BrowseTab.Chats))
-        }
     }
 
     @Test
@@ -688,7 +649,7 @@ class BrowseRenderTest {
             com.tmplayer.data.ChatFolderSummary(3, "Films", icon = "Custom"),
             com.tmplayer.data.ChatFolderSummary(7, "Family", icon = "Private"),
         )
-        val chips = com.tmplayer.ui.browse.chatPageChips(folders)
+        val chips = com.tmplayer.ui.browse.ChatFilter.entries
         val items = releaseItems()
         val film = chat(2, "Film Club", ChatKind.Channel, 0, 0xFFE5484D.toInt())
         settings.addRecentSearch("harbour lights")
@@ -744,7 +705,7 @@ class BrowseRenderTest {
                 save("parity-chats-$theme.png", frame(dark, account) {
                     Column(Modifier.fillMaxSize()) {
                         PageHeader(com.tmplayer.ui.browse.BrowseTab.Chats.heading)
-                        ChoiceChips(chips.map { chip -> Choice(chip.label, chip.label, chip.icon, selected = chip == chips.first()) {} })
+                        ChoiceChips(chips.map { chip -> Choice(chip.name, chip.chipLabel, chip.icon, selected = chip == chips.first()) {} })
                         chats.forEach { ChatRow(it, favourite = it.id == 2L, onOpen = {}, onStar = {}) }
                     }
                 })

@@ -2,7 +2,8 @@
 // cases core's tests hold. `node --test "src/player/*.test.ts"` (pnpm test:player).
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { BOOSTS, nextTurn, normaliseTurn, resolveSpeed, sanitiseBoost, seriesKeyOf, sidewaysTurn, speedScopes, speedTarget, speedToKeep, turnFrame } from './extras.ts'
+import { NONE, transformOf } from './zoom.ts'
+import { BOOSTS, moviVolume, nextTurn, pictureTransform, turnedPictureSize, normaliseTurn, resolveSpeed, sanitiseBoost, seriesKeyOf, sidewaysTurn, speedScopes, speedTarget, speedToKeep, turnFrame } from './extras.ts'
 
 test('a turn is one of the four quarters, whatever it is given', () => {
     assert.deepEqual([0, 90, 180, 270, 360, -90, 450, 44, 45, 46, -1].map(normaliseTurn), [0, 90, 180, 270, 0, 270, 90, 0, 90, 90, 0])
@@ -68,3 +69,44 @@ test('a boost is one of the offered levels, else off', () => {
     for (const bad of [3, 0, -2, 1.3, NaN, Infinity, '2', null, undefined, {}]) assert.equal(sanitiseBoost(bad), 1)
     assert.equal(Math.max(...BOOSTS), 2)
 })
+
+test('the turn and the zoom are one transform: the zoom in the stage, then the turn about the centre, and neither erases the other', () => {
+    const zoom = { scale: 2, panX: 10, panY: -4 }
+    assert.equal(pictureTransform(0, NONE), '')
+    assert.equal(pictureTransform(90, NONE), 'rotate(90deg)')
+    assert.equal(pictureTransform(0, zoom), 'translate(10px, -4px) scale(2)')
+    assert.equal(pictureTransform(270, zoom), 'translate(10px, -4px) scale(2) rotate(270deg)')
+    // The same answer as the pieces alone: the zoom part is zoom.ts's own, the turn is the normalised quarter.
+    assert.equal(pictureTransform(-90, zoom), `${transformOf(zoom)} rotate(270deg)`)
+    assert.equal(pictureTransform(NaN, zoom), transformOf(zoom))
+    // Zoomed back to 100 per cent a turned picture keeps its turn.
+    assert.equal(pictureTransform(180, NONE), 'rotate(180deg)')
+})
+
+test('the zoom reaches a turned picture by its size on the screen, not the file\'s', () => {
+    // A 1920x1080 file on a 1280x720 stage: fitted it fills the stage.
+    assert.deepEqual(turnedPictureSize(1280, 720, 1920, 1080, 'fit', 0), { width: 1280, height: 720 })
+    assert.deepEqual(turnedPictureSize(1280, 720, 1920, 1080, 'fit', 180), { width: 1280, height: 720 })
+    // Turned a quarter it is laid out in the traded 720x1280 frame (720x405 there), which is 405 wide and 720 tall on the screen.
+    assert.deepEqual(turnedPictureSize(1280, 720, 1920, 1080, 'fit', 90), { width: 405, height: 720 })
+    assert.deepEqual(turnedPictureSize(1280, 720, 1920, 1080, 'fit', 270), { width: 405, height: 720 })
+    assert.equal(turnedPictureSize(0, 720, 1920, 1080, 'fit', 90), null)
+    // A phone upright, 390x700: the turned picture fills its width (693x390 in the traded frame).
+    assert.deepEqual(turnedPictureSize(390, 700, 1920, 1080, 'fit', 90), { width: 390, height: 693 })
+    // A fixed ratio is a box in the traded frame too: 4:3 in 720x1280 is 720x540, 540 wide and 720 tall turned.
+    assert.deepEqual(turnedPictureSize(1280, 720, 1920, 1080, '4:3', 90), { width: 540, height: 720 })
+})
+
+test('movi takes the volume times the boost, rising with the volume and capped at its own 2', () => {
+    assert.equal(moviVolume(1, 1), 1)
+    assert.equal(moviVolume(1, 1.5), 1.5)
+    assert.equal(moviVolume(1, 2), 2)
+    // Under full volume the boost still lifts, in step: no jump to 2x at 100 per cent.
+    assert.equal(moviVolume(0.5, 1.5), 0.75)
+    assert.ok(moviVolume(0.99, 2) < moviVolume(1, 2))
+    assert.ok(moviVolume(0.9, 2) > moviVolume(0.9, 1))
+    assert.equal(moviVolume(0, 2), 0)
+    assert.equal(moviVolume(1, 9), 2)
+    assert.equal(moviVolume(1, 0.2), 1)
+}
+)

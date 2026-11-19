@@ -25,10 +25,17 @@ data class TmdbFound(val id: String, val film: Boolean)
 
 data class TmdbShowGuide(val seasons: List<MetaSeason>, val groups: List<TmdbEpisodeGroup>)
 
-/** One TMDB episode group: its id, its type (2 is "Absolute order") and how many episodes it holds. */
-data class TmdbEpisodeGroup(val id: String, val type: Int, val episodeCount: Int) {
+/**
+ * One TMDB episode group: its id, its type (2 is "Absolute order"), how many episodes it holds, its
+ * name ("Seasons", "Cours (Path)") and how many groups (seasons, cours, discs) it splits them into.
+ * The name and the group count are empty in a guide kept before they were read.
+ */
+data class TmdbEpisodeGroup(val id: String, val type: Int, val episodeCount: Int, val name: String = "", val groupCount: Int = 0) {
     val absolute: Boolean get() = type == 2
 }
+
+/** A title's [MetaExtras] and, for a show, the episode groups TMDB lists for it. */
+data class TmdbExtras(val extras: MetaExtras, val groups: List<TmdbEpisodeGroup>)
 
 /** What AniList knows of one run's episodes: its count, the next to air, and the streaming list (T11). */
 data class AniListRun(
@@ -217,15 +224,20 @@ class TmdbApi(
                     airDate = s.optString("air_date").ifBlank { null },
                 )
             }
-            val groups = objects(json.optJSONObject("episode_groups")?.optJSONArray("results")).mapNotNull { g ->
-                TmdbEpisodeGroup(
-                    id = g.optString("id").takeIf { it.isNotBlank() } ?: return@mapNotNull null,
-                    type = g.optInt("type"),
-                    episodeCount = g.optInt("episode_count"),
-                )
-            }
-            TmdbShowGuide(seasons, groups)
+            TmdbShowGuide(seasons, episodeGroups(json))
         }
+
+    /** The `episode_groups` appended to a show's page: the groups with an id, the rest skipped. */
+    private fun episodeGroups(json: JSONObject): List<TmdbEpisodeGroup> =
+        objects(json.optJSONObject("episode_groups")?.optJSONArray("results")).asSequence().mapNotNull { g ->
+            TmdbEpisodeGroup(
+                id = g.optString("id").trim().takeIf { it.isNotBlank() && it.length <= MAX_GROUP_ID } ?: return@mapNotNull null,
+                type = g.optInt("type"),
+                episodeCount = g.optInt("episode_count"),
+                name = g.optString("name").trim().take(MAX_GROUP_NAME),
+                groupCount = g.optInt("group_count"),
+            )
+        }.take(MAX_GROUPS).toList()
 
     /**
      * One episode group (the "Absolute order" one): its groups in order, each with its episodes,
@@ -272,12 +284,28 @@ class TmdbApi(
      * videos, age ratings and recommendations appended (and similar titles, for when nobody has
      * recommended any). Videos in the UI language and English, and those with no language.
      */
-    suspend fun extras(key: String, film: Boolean, id: String, language: String, region: String): MetaReply<MetaExtras> {
-        val append = if (film) "credits,videos,release_dates,recommendations,similar" else "aggregate_credits,videos,content_ratings,recommendations,similar,external_ids"
+    suspend fun extras(key: String, film: Boolean, id: String, language: String, region: String): MetaReply<MetaExtras> =
+        when (val reply = extrasAndGroups(key, film, id, language, region)) {
+            is MetaReply.Ok -> MetaReply.Ok(reply.value.extras)
+            MetaReply.Refused -> MetaReply.Refused
+            is MetaReply.Throttled -> reply
+            is MetaReply.Failed -> reply
+        }
+
+    /**
+     * [extras], and for a show its episode groups, appended to the same call: a show TMDB lists as
+     * one season may split it in a group ([SeasonSplit]), and this says so without a second call.
+     */
+    suspend fun extrasAndGroups(key: String, film: Boolean, id: String, language: String, region: String): MetaReply<TmdbExtras> {
+        val append = if (film) {
+            "credits,videos,release_dates,recommendations,similar"
+        } else {
+            "aggregate_credits,videos,content_ratings,recommendations,similar,external_ids,episode_groups"
+        }
         val ui = language.substringBefore('-').lowercase()
         val videoLanguages = listOf(ui, "en", "null").distinct().joinToString(",")
         return get(key, if (film) "movie/$id" else "tv/$id", "language=$language&include_video_language=$videoLanguages&append_to_response=$append") { json ->
-            tmdbExtras(json, film, language, region)
+            TmdbExtras(tmdbExtras(json, film, language, region), if (film) emptyList() else episodeGroups(json))
         }
     }
 
@@ -366,6 +394,15 @@ class TmdbApi(
         )
     }
 
+    /**
+     * Where a film or show can be streamed, rented or bought in [region] (HX41): TMDB's
+     * `watch/providers`, data from JustWatch, read by [WatchOfferRules]. One call, names only.
+     */
+    suspend fun watchProviders(key: String, film: Boolean, id: String, region: String): MetaReply<WatchOffers> =
+        get(key, if (film) "movie/${enc(id)}/watch/providers" else "tv/${enc(id)}/watch/providers", "") { json ->
+            WatchOfferRules.read(json, region)
+        }
+
     private suspend fun <T> get(key: String, path: String, params: String, read: (JSONObject) -> T): MetaReply<T> {
         limiter.acquire()
         val bearer = key.length > 40
@@ -431,6 +468,11 @@ class TmdbApi(
 
         /** How many `append_to_response` pieces TMDB takes in one call. */
         const val APPEND_LIMIT = 20
+
+        /** More episode groups than any show has, and the longest id and name kept of one. */
+        const val MAX_GROUPS = 100
+        const val MAX_GROUP_ID = 64
+        const val MAX_GROUP_NAME = 200
     }
 }
 

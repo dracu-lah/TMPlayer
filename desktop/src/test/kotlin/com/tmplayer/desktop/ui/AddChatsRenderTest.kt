@@ -123,6 +123,106 @@ class AddChatsRenderTest {
         model.stop()
     }
 
+    /**
+     * Telegram's folders are filter chips right after All (HX29): a click narrows the list to the
+     * folder's chats, "Add these" takes that folder only, a large one asks first, and a folder
+     * that could not be read says so with Try again.
+     */
+    @Test
+    fun `folder chips narrow the list and Add these takes that folder only`() = runComposeUiTest {
+        val model = AddChatsViewModel(write = {})
+        val inFolders = withFolders()
+        setContent {
+            TmMaterialTheme(dark = true) {
+                Box(Modifier.size(1280.dp, 900.dp)) {
+                    AddChatsScreen(chats = inFolders, listComplete = true, starred = emptySet(), model = model, onClose = {}, folders = FOLDERS)
+                }
+            }
+        }
+        waitForIdle()
+        onNode(hasText("Films") and hasClickAction()).assertExists()
+        onNode(hasText("Family") and hasClickAction()).assertExists()
+        // Telegram's own Channels folder is the Channels chip already: one of them, not two.
+        onAllNodes(hasText("Channels") and hasClickAction()).assertCountEquals(1)
+        onNode(hasText("Films") and hasClickAction()).performClick()
+        waitForIdle()
+        assertEquals(7, model.state.value.folder)
+        onNode(hasText("Harbour Notes") and hasClickAction()).assertExists()
+        onNode(hasText("Lantern Club") and hasClickAction()).assertDoesNotExist()
+        onNode(hasText("Add these 3 chats") and hasClickAction()).performClick()
+        waitForIdle()
+        assertEquals(setOf(201L, 203L, 204L), model.state.value.ticked)
+        onNode(hasText("Family") and hasClickAction()).performClick()
+        waitForIdle()
+        // Mira is in both folders and ticked already: she is not asked twice, and Films' other chats stay.
+        onNode(hasText("Add these 81 chats") and hasClickAction()).assertExists()
+        onNode(hasText("All") and hasClickAction()).performClick()
+        waitForIdle()
+        assertEquals(null, model.state.value.folder)
+        assertEquals(setOf(201L, 203L, 204L), model.state.value.ticked)
+        model.stop()
+    }
+
+    @Test
+    fun `a large folder asks before it is ticked`() = runComposeUiTest {
+        val model = AddChatsViewModel(write = {})
+        setContent {
+            TmMaterialTheme(dark = true) {
+                Box(Modifier.size(1280.dp, 900.dp)) {
+                    AddChatsScreen(chats = withFolders(), listComplete = true, starred = emptySet(), model = model, onClose = {}, folders = FOLDERS)
+                }
+            }
+        }
+        waitForIdle()
+        onNode(hasText("Family") and hasClickAction()).performClick()
+        waitForIdle()
+        onNode(hasText("Add these 81 chats") and hasClickAction()).performClick()
+        waitForIdle()
+        onNode(hasText("Select 81 chats?")).assertExists()
+        assertTrue("nothing ticked before the answer", model.state.value.ticked.isEmpty())
+        onNode(hasText("Select") and hasClickAction()).performClick()
+        waitForIdle()
+        assertEquals(81, model.state.value.ticked.size)
+        model.stop()
+    }
+
+    @Test
+    fun `a folder that could not be read is not empty, and Try again reads it again`() = runComposeUiTest {
+        val model = AddChatsViewModel(write = {})
+        var retried = 0
+        setContent {
+            TmMaterialTheme(dark = true) {
+                Box(Modifier.size(1280.dp, 900.dp)) {
+                    AddChatsScreen(
+                        chats = CHATS, listComplete = true, starred = emptySet(), model = model, onClose = {},
+                        folders = FOLDERS,
+                        folderStatus = com.tmplayer.ui.browse.FolderStatus(failed = setOf(7)),
+                        onRetryFolders = { retried++ },
+                    )
+                }
+            }
+        }
+        waitForIdle()
+        onNode(hasText("Films") and hasClickAction()).performClick()
+        waitForIdle()
+        onNode(hasText("This folder could not be read from Telegram. It is not empty.")).assertExists()
+        onNode(hasText("Try again") and hasClickAction()).performClick()
+        assertEquals(1, retried)
+        model.stop()
+    }
+
+    @Test
+    fun `the folder chips are drawn in both themes`() {
+        for (dark in listOf(true, false)) {
+            val model = AddChatsViewModel()
+            model.folder(7)
+            shot("add-chats-folder-${theme(dark)}", 1366, 900, dark, model) {
+                AddChatsScreen(chats = withFolders(), listComplete = true, starred = emptySet(), model = model, onClose = {}, folders = FOLDERS)
+            }
+            model.stop()
+        }
+    }
+
     /** A save that fails says so with Try again rather than sitting on the press for ever. */
     @Test
     fun `a failed save shows the error and Try again`() = runComposeUiTest {
@@ -251,7 +351,22 @@ class AddChatsRenderTest {
 
     private fun theme(dark: Boolean) = if (dark) "dark" else "light"
 
+    /** Films holds three chats, Family eighty one (Mira is in both), and the rest are in none. */
+    private fun withFolders(): List<ChatSummary> = CHATS.map { chat ->
+        when (chat.id) {
+            201L, 203L -> chat.copy(folderIds = listOf(7))
+            204L -> chat.copy(folderIds = listOf(7, 8))
+            else -> if (chat.id in 2_001L..2_080L) chat.copy(folderIds = listOf(8)) else chat
+        }
+    }
+
     private companion object {
+        val FOLDERS = listOf(
+            com.tmplayer.data.ChatFolderSummary(7, "Films", icon = "Custom"),
+            com.tmplayer.data.ChatFolderSummary(8, "Family", icon = "Custom"),
+            com.tmplayer.data.ChatFolderSummary(9, "Channels", icon = "Channels"),
+        )
+
         fun chat(id: Long, title: String, kind: ChatKind = ChatKind.Channel, archived: Boolean = false) =
             ChatSummary(id, title, miniThumbnail = null, photoFileId = 0, kind = kind, isArchived = archived)
 

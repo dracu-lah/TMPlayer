@@ -112,6 +112,18 @@ internal class HomeFetches(
         launch(key, entry, wait, before)
     }
 
+    /**
+     * Takes back [key]'s fetch while it is only waiting (queued behind the budget or in its pause):
+     * a row scrolled off screen is not worth a place. Nothing running, answered or retried is touched.
+     * A later [ask] queues it afresh.
+     */
+    fun withdraw(key: String) {
+        val entry = entries[key] ?: return
+        val job = entry.job ?: return
+        if (entry.running || entry.answeredAt >= 0 || entry.tries > 0 || entry.again) return
+        job.cancel()
+    }
+
     /** Takes [key] as answered without asking: a row drawn from a cache written moments ago. */
     fun answered(key: String) {
         val entry = entries.getOrPut(key) { Entry() }

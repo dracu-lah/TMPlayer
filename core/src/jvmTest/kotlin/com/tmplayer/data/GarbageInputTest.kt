@@ -103,6 +103,8 @@ class GarbageInputTest {
         "{\"results\":\"x\"}", "{\"results\":[1,null,{\"id\":\"x\",\"title\":{},\"release_date\":5}]}",
         "{\"id\":{},\"name\":[],\"first_air_date\":\"20\",\"poster_path\":7,\"vote_average\":\"high\"}",
         "{\"episodes\":[{\"episode_number\":\"one\",\"air_date\":null}]}", "{\"seasons\":5}",
+        "{\"seasons\":[{\"season_number\":1,\"episode_count\":1e999}],\"episode_groups\":{\"results\":[null,{\"id\":5,\"type\":\"x\",\"group_count\":1e999,\"episode_count\":-1,\"name\":{}},{\"id\":\"\"}]}}",
+        "{\"groups\":[{\"order\":\"x\",\"episodes\":[{\"season_number\":\"1\",\"episode_number\":1e20},null]},null,{\"episodes\":{}},{\"order\":-1,\"episodes\":[{\"season_number\":1,\"episode_number\":1}]}]}",
         "{\"data\":{\"Page\":{\"media\":[null,{\"id\":\"q\",\"title\":null}]}}}", "{\"data\":null}",
         "{\"Response\":\"False\",\"Error\":7}", "{\"Ratings\":[{\"Source\":null,\"Value\":\"%\"}]}",
         "{\"results\":{\"bindings\":[{\"x\":{}}]}}",
@@ -517,11 +519,45 @@ class GarbageInputTest {
                 val copies = listOf(copy(1, text), copy(2, "$text Hindi"), copy(3, "Tamil $text"))
                 GlobalSearch.copyOrder(copies, "hi"); GlobalSearch.copyOrder(copies, text); GlobalSearch.tally(emptyList())
             }
+            // HX41: TMDB titles holding garbage, against copies named by it, never throw.
+            survive("GlobalSearch.titles", text) {
+                fun copy(id: Long, name: String) = MediaItem(
+                    chatId = id, messageId = id, fileId = id.toInt(), title = name, sizeBytes = 1, durationSec = 1, mimeType = "video/mp4",
+                    thumbnailFileId = 0, miniThumbnail = null, date = 1, fileName = name,
+                )
+                val query = GlobalSearch.parse("night $text")
+                val groups = GlobalSearch.merge(emptyList(), listOf(copy(1, text), copy(2, "$text S01E02"), copy(3, "$text 2019")), query, SearchSort.BestMatch, SearchIdentity.Default)
+                val choices = listOf(
+                    com.tmplayer.online.PosterChoice(1, false, text, 2019, text, text, text, text),
+                    com.tmplayer.online.PosterChoice(2, true, "night $text", null, "", "", null),
+                    com.tmplayer.online.PosterChoice(-1, true, text, Int.MIN_VALUE, "", "", null),
+                )
+                GlobalSearch.titles(choices, groups, query, { text }, { listOf(text) })
+                GlobalSearch.titleQuery(query)
+            }
             survive("ByteRange.parse", text) { ByteRange.parse(text, 1_000); ByteRange.parse("bytes=$text", 0) }
             survive("PostStart.parse", text) { PostStart.parse(text) }
             survive("Decimal.parse", text) { Decimal.parse(text) }
             survive("MediaName.parse", text) { MediaName.parse(text); MediaName.parse(text, text) }
             survive("MediaName.spellingKey", text) { MediaName.spellingKey(text) }
+            survive("SubtitlePicks.load", text) {
+                val f = java.io.File.createTempFile("picks", ".json")
+                try {
+                    f.writeText(text)
+                    com.tmplayer.online.SubtitlePicks(f).recall(listOf("a", "msg:1:1"))
+                } finally {
+                    f.delete()
+                }
+            }
+            survive("QualityRead", text) {
+                val item = com.tmplayer.data.MediaItem(
+                    chatId = 1, messageId = 1, fileId = 1, title = text, sizeBytes = 1, durationSec = 1, mimeType = text,
+                    thumbnailFileId = 0, miniThumbnail = null, date = 1, fileName = text, width = text.length, height = -text.length,
+                )
+                QualityRead.of(item); QualityRead.named(item); QualityRead.mismatch(item); QualityRead.lowGrade(item)
+                QualityRead.rank(text); VideoCopies.heightOf(item); VideoCopies.versionCount(item.copy(versions = listOf(item, item)))
+            }
+            survive("MediaName.languageHints", text) { MediaName.languageHints(text); com.tmplayer.online.ChatLanguageHints.note(1L, text) }
             survive("MediaName.pack", text) { MediaName.parse(text).let { it.pack; it.packSeason } }
             survive("MetaLinks.read", text) { com.tmplayer.online.MetaLinks.read(text, text, null) }
             survive("MetaQuery.of link", text) {
@@ -535,6 +571,17 @@ class GarbageInputTest {
             survive("TitleUpload.outcome", text) {
                 for (status in listOf(-1, 0, 200, 201, 429, 500)) TitleUpload.outcome(status, text, text)
                 LogUpload.titlesUrl(text)
+            }
+            survive("FeedbackReport.parse", text) { FeedbackReport.parse(text)?.let { FeedbackReport.parse(it.toJson()) } }
+            survive("FeedbackDraft.decode", text) { FeedbackDraft.decode(text)?.let { FeedbackDraft.decode(it.encode()) } }
+            survive("FeedbackUpload.outcome", text) {
+                for (status in listOf(-1, 0, 200, 201, 429, 500)) FeedbackUpload.outcome(status, text, text)
+                LogUpload.feedbackUrl(text)
+            }
+            survive("FeedbackReport.of", text) {
+                val facts = Feedback.Facts(text, Feedback.Platform.Other, text, text)
+                FeedbackReport.of("0".repeat(32), FeedbackReport.Kind.Problem, text, text, text, facts)?.let { FeedbackReport.parse(it.toJson()) }
+                FeedbackReport.problem(text, text)
             }
             survive("TitleReport.of", text) {
                 TitleReport.of(text, text, text, includeChat = true)?.let { TitleReport.parse(it.toJson()) }
@@ -897,6 +944,9 @@ class GarbageInputTest {
                     tmdb.season("k", "1", 1, "en")
                     tmdb.extras("k", true, "1", "en", "GB")
                     tmdb.extras("k", false, "1", "en", "GB")
+                    // HX41: where to watch, for a film and a show, in a region and in nonsense.
+                    tmdb.watchProviders("k", true, "1", "GB")
+                    tmdb.watchProviders("k", false, "1", "\u0000??")
                 }
             }
             val maze = TvMazeApi(http, limiter, "t")
@@ -913,6 +963,21 @@ class GarbageInputTest {
                     tmdb.showGuide("k", "1", "en")
                     tmdb.episodeGroup("k", "g", "en")
                     tmdb.seasons("k", "1", listOf(1, 2, 3), "en")
+                }
+            }
+            // A one-season show's split by its episode group: whatever came back is chosen from and built, never thrown on.
+            survive("SeasonSplit", shown) {
+                runBlocking {
+                    val got = (tmdb.extrasAndGroups("k", false, "1", "en", "GB") as? com.tmplayer.online.MetaReply.Ok)?.value
+                    val listed = got?.extras?.seasonList.orEmpty().ifEmpty { listOf(com.tmplayer.online.MetaSeason(1, 37)) }
+                    val groups = got?.groups.orEmpty() + listOf(com.tmplayer.online.TmdbEpisodeGroup("g", 6, 37, "Seasons", 2))
+                    val episodes = (tmdb.episodeGroup("k", "g", "en") as? com.tmplayer.online.MetaReply.Ok)?.value.orEmpty()
+                    com.tmplayer.online.SeasonSplit.choose(listed, groups)
+                    val kept = com.tmplayer.online.SeasonSplit.read(com.tmplayer.online.SeasonSplit.store(episodes)).orEmpty()
+                    com.tmplayer.online.SeasonSplit.build("g", kept, listed)?.let { split ->
+                        split.next(com.tmplayer.online.MetaAiring(1, Int.MAX_VALUE, "x"))
+                        split.applyTo(got?.extras ?: com.tmplayer.online.MetaExtras())
+                    }
                 }
             }
             survive("KitsuApi", shown) { runBlocking { val kitsu = com.tmplayer.online.KitsuApi(http, limiter, "t"); kitsu.idFor("1"); kitsu.episodes("1", 0) } }

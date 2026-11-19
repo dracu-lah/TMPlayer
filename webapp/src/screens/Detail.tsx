@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createResource, createSignal, For, Match, onCleanup, onMount, Show, Switch, type JSX } from 'solid-js'
 import { A, useLocation, useNavigate, useParams } from '@solidjs/router'
-import { ArrowLeft02Icon, Cancel01Icon, ClapperboardIcon, Clock01Icon, FilterHorizontalIcon, LeftToRightListBulletIcon, ListVideoIcon, PlayIcon, RepeatIcon, Search01Icon, Tick02Icon } from '@hugeicons/core-free-icons'
+import { ArrowLeft02Icon, Cancel01Icon, ClapperboardIcon, Clock01Icon, FilterHorizontalIcon, LeftToRightListBulletIcon, Link04Icon, ListVideoIcon, PlayIcon, RepeatIcon, Search01Icon, Tick02Icon, Unlink04Icon } from '@hugeicons/core-free-icons'
 import { api, errorText } from '../tg/rpc'
 import { back } from '../session'
 import { t } from '../i18n'
@@ -25,6 +25,8 @@ import { answer, askOf, followAnimeGuide, loadBackdropLightFirst, loadExtras, lo
 import { coverBackground } from './cover'
 import { Card, clock, detailPath, shortLength, size, tileCard, useProgress, watchPath } from './VideoList'
 import { warmFile } from '../stream/reader'
+import { chooseCopyOf, copiesTick, isApart, keepApart } from '../copies'
+import './versions.css'
 import type { ChatView, CopyRef, VideoItem, WatchInfo } from '../tg/types'
 
 const dot = '  ·  '
@@ -68,8 +70,9 @@ export function Detail() {
         started: seen()?.started ?? [],
         query: '',
     })
+    // Asked again when a file is kept apart or a copy chosen (HX38), once the worker has it.
     const [info] = createResource(
-        () => (seen.state === 'ready' ? { ...ids(), view: view() } : null),
+        () => (seen.state === 'ready' ? { ...ids(), view: view(), tick: copiesTick() } : null),
         ({ chatId, messageId, view }) => api.watch(chatId, messageId, view).catch((e) => (console.warn('[detail]', e), null)),
     )
     const close = () => back(navigate)
@@ -403,6 +406,9 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
                 <Show when={(props.info?.copies.length ?? 0) > 1}>
                     <Versions item={item} info={props.info!} />
                 </Show>
+                <Show when={props.info}>
+                    <CopyRepair item={item} grouped={(props.info?.copies.length ?? 0) > 1} />
+                </Show>
                 <Show when={props.info?.protected || !item.canBeSaved}>
                     <p class="notice muted small">{t('detail.protected')}</p>
                 </Show>
@@ -460,30 +466,66 @@ function Round(props: { icon: IconData; label: string; on?: boolean; onClick?: (
     )
 }
 
+/** Rows of a long copies list shown at once; More shows the next as many. */
+const COPY_PAGE = 50
+
 /**
  * The copies of this video the chat holds (the apps' Versions): one quiet line naming the copy this
  * page is about ("1080p · H.264 · Blu-ray · 885 MB · from Film Club") with Change at its end, and
- * under it, once Change is pressed, every copy as a row of its own to choose from. Choosing one turns
- * the page to that copy, so Play and the facts speak of it.
+ * under it, once Change is pressed, every copy as a row of its own to choose from, recommended
+ * first with "Best for this device" (HX38: one this browser plays natively, a phone's 1080p before
+ * 4K), the count the card says. Choosing one remembers it for the video (its cards play it from
+ * then on) and turns the page to that copy, so Play and the facts speak of it; the remote and the
+ * keyboard land back on this line.
  */
 function Versions(props: { item: VideoItem; info: WatchInfo }) {
     const navigate = useNavigate()
+    const location = useLocation<{ video?: VideoItem; versions?: boolean }>()
     const [open, setOpen] = createSignal(false)
-    const here = () => props.info.copies.find((c) => c.item.messageId === props.item.messageId && c.item.chatId === props.item.chatId)
+    const [shown, setShown] = createSignal(COPY_PAGE)
+    let summaryButton: HTMLButtonElement | undefined
+    let list: HTMLUListElement | undefined
+    const isHere = (c: CopyRef) => c.item.messageId === props.item.messageId && c.item.chatId === props.item.chatId
+    const here = () => props.info.copies.find(isHere)
     const heading = (c: CopyRef) => (c.facts.length ? c.facts.join(dot) : size(c.item.size))
     const summary = () => {
         const c = here()
         return c ? [heading(c), c.facts.length ? size(c.item.size) : '', t('detail.copy_from', { chat: c.chat })].filter(Boolean).join(dot) : ''
     }
+    const device = () => (form() === 'tv' ? 'tv' : form() === 'phone' ? 'phone' : 'computer')
+    // CopyRef.date is in seconds.
+    const datesDiffer = () => new Set(props.info.copies.map((c) => Math.floor(c.date / 86_400))).size > 1
+    const detail = (c: CopyRef) =>
+        [
+            c.fit === 'stutter' ? t('detail.copy_may_stutter', { device: device() }) : c.fit === 'smooth' ? t('detail.copy_smooth', { device: device() }) : '',
+            c.facts.length ? size(c.item.size) : '',
+            shortLength(c.item.duration),
+            datesDiffer() ? t('detail.copy_posted', { date: new Date(c.item.date).toLocaleDateString('en', { day: 'numeric', month: 'short', year: 'numeric' }) }) : '',
+            c.started ? t('detail.copy_started') : '',
+        ]
+            .filter(Boolean)
+            .join(dot)
     const pick = (c: CopyRef) => {
         setOpen(false)
-        if (c === here()) return
-        navigate(detailPath(c.item), { replace: true, state: { video: c.item } })
+        // Chosen even when it is the copy shown: the viewer pins it over the recommendation for its cards.
+        chooseCopyOf(c.item, props.info.copies.map((x) => x.item))
+        if (isHere(c)) return void summaryButton?.focus()
+        navigate(detailPath(c.item), { replace: true, state: { video: c.item, versions: true } })
     }
-    const datesDiffer = () => new Set(props.info.copies.map((c) => Math.floor(c.date / 86_400_000))).size > 1
+    const more = () => {
+        const from = shown()
+        setShown(from + COPY_PAGE)
+        // The first row the press brought in takes the focus, so the remote and the keys go on from there.
+        queueMicrotask(() => list?.querySelectorAll<HTMLElement>('[role=option]')[from]?.focus())
+    }
+    // Back from a choice (the page turned to the copy chosen): the focus is on this line again, not on Play.
+    onMount(() => {
+        if (!location.state?.versions) return
+        requestAnimationFrame(() => summaryButton?.focus())
+    })
     return (
         <section class="detail-versions" aria-label={t('detail.copies_title')}>
-            <button type="button" class="detail-copy-summary" aria-expanded={open()} onClick={() => setOpen(!open())}>
+            <button type="button" class="detail-copy-summary" ref={summaryButton} aria-expanded={open()} onClick={() => setOpen(!open())}>
                 <span class="detail-copy-text">
                     <span class="detail-copy-line">{summary()}</span>
                     <span class="muted small">{t('detail.versions', { count: props.info.copies.length })}</span>
@@ -491,19 +533,22 @@ function Versions(props: { item: VideoItem; info: WatchInfo }) {
                 <span class="detail-copy-change">{open() ? t('detail.copy_done') : t('detail.copy_change')}</span>
             </button>
             <Show when={open()}>
-                <ul class="detail-copy-list" role="listbox" aria-label={t('detail.copies_title')} onKeyDown={(e) => form() !== 'tv' && arrowKeys(e, e.currentTarget, '[role=option]', { vertical: true })}>
-                    <For each={props.info.copies}>
+                <ul class="detail-copy-list" ref={list} role="listbox" aria-label={t('detail.copies_title')} onKeyDown={(e) => form() !== 'tv' && arrowKeys(e, e.currentTarget, '[role=option]', { vertical: true })}>
+                    <For each={props.info.copies.slice(0, shown())}>
                         {(c) => (
                             <li role="presentation">
-                                <button type="button" role="option" class="detail-copy" aria-selected={c === here()} onClick={() => pick(c)}>
+                                <button type="button" role="option" class="detail-copy" aria-selected={isHere(c)} onClick={() => pick(c)}>
                                     <span class="detail-copy-text">
-                                        <span class="detail-copy-line">{heading(c)}</span>
-                                        <span class="muted small">
-                                            {[c.facts.length ? size(c.item.size) : '', shortLength(c.item.duration), datesDiffer() ? new Date(c.item.date).toLocaleDateString('en', { day: 'numeric', month: 'short', year: 'numeric' }) : ''].filter(Boolean).join(dot)}
+                                        <span class="detail-copy-line">
+                                            <span>{heading(c)}</span>
+                                            <Show when={c.best}>
+                                                <span class="detail-copy-best">{t('detail.copy_best')}</span>
+                                            </Show>
                                         </span>
+                                        <span class="muted small" classList={{ 'detail-copy-stutter': c.fit === 'stutter' }}>{detail(c)}</span>
                                         <span class="muted small detail-copy-file">{c.fileName}</span>
                                     </span>
-                                    <Show when={c === here()}>
+                                    <Show when={isHere(c)}>
                                         <Icon icon={Tick02Icon} size={22} />
                                     </Show>
                                 </button>
@@ -511,8 +556,52 @@ function Versions(props: { item: VideoItem; info: WatchInfo }) {
                         )}
                     </For>
                 </ul>
+                <Show when={props.info.copies.length > shown()}>
+                    <button type="button" class="link detail-copy-more" onClick={more}>
+                        {`${t('common.more')}${dot}${props.info.copies.length - shown()}`}
+                    </button>
+                </Show>
             </Show>
         </section>
+    )
+}
+
+/**
+ * "Not the same video" under the copies (the apps' repair, last on the page): this file stands
+ * apart from the copies it was grouped with, its own card and page from then on; on a file kept
+ * apart, "Group with its copies again". Nothing is lost either way, so it asks nothing; the focus
+ * stays on the line, which turns into the other once the page has read again.
+ */
+function CopyRepair(props: { item: VideoItem; grouped: boolean }) {
+    let wrap: HTMLDivElement | undefined
+    const apart = () => isApart(props.item)
+    const press = (on: boolean) => {
+        keepApart(props.item, on)
+        const refocus = (tries: number) => {
+            const next = wrap?.querySelector<HTMLButtonElement>('button')
+            if (next && next.dataset.on !== String(on)) return next.focus()
+            if (tries > 0) setTimeout(() => refocus(tries - 1), 100)
+        }
+        queueMicrotask(() => refocus(30))
+    }
+    return (
+        <div class="detail-copy-repair" ref={wrap}>
+            <Show when={apart()}>
+                <button type="button" class="detail-copy-repair-button" data-on="false" onClick={() => press(false)}>
+                    <Icon icon={Link04Icon} size={20} />
+                    <span>{t('grid.same_video_again')}</span>
+                </button>
+            </Show>
+            <Show when={!apart() && props.grouped}>
+                <button type="button" class="detail-copy-repair-button" data-on="true" onClick={() => press(true)}>
+                    <Icon icon={Unlink04Icon} size={20} />
+                    <span class="detail-copy-text">
+                        <span>{t('grid.not_same_video')}</span>
+                        <span class="muted small">{t('grid.not_same_video_detail')}</span>
+                    </span>
+                </button>
+            </Show>
+        </div>
     )
 }
 

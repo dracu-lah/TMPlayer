@@ -12,6 +12,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -270,6 +272,29 @@ object Thumbnails {
         )
     }
 
+    /**
+     * Runs [block] holding one of [gate]'s places. [onCancelled] runs only if the caller is
+     * cancelled once [block] has started, never while it still waits for a place: a card that
+     * left the screen before its download was asked for has nothing to withdraw, and withdrawing
+     * the file would stop another card's live download of the same picture.
+     */
+    internal suspend fun <T> inSlot(gate: Semaphore, onCancelled: () -> Unit, block: suspend () -> T): T {
+        var started = false
+        try {
+            return gate.withPermit {
+                started = true
+                block()
+            }
+        } catch (cancellation: CancellationException) {
+            if (started) onCancelled()
+            throw cancellation
+        }
+    }
+
+    private val downloads by lazy {
+        Semaphore(if (com.tmplayer.ui.theme.Motion.television) DOWNLOADS_AT_ONCE_TV else DOWNLOADS_AT_ONCE)
+    }
+
     private suspend fun downloadThumbnail(fileId: Int): String? {
         val td = Td.awaitAuthorizedSession().client
         val file = td.getFile(fileId).valueOrNull ?: return null
@@ -289,6 +314,11 @@ object Thumbnails {
         // [DOWNLOAD_TIMEOUT_MS] with the card blank.
         var failed = false
         val done = try {
+            // A hard scroll puts hundreds of cards on screen for a moment: only a few downloads
+            // are asked of TDLib at once (HX54), the rest wait here and are dropped, unasked,
+            // when their card has gone, instead of queueing behind Home's own reads. The wait is
+            // not part of the timeout below.
+            inSlot(downloads, onCancelled = { Td.cancelDownloadInBackground(fileId) }) {
             withTimeoutOrNull(DOWNLOAD_TIMEOUT_MS) {
                 coroutineScope {
                     val completion = async(start = CoroutineStart.UNDISPATCHED) {
@@ -319,8 +349,8 @@ object Thumbnails {
                     }
                 }
             }
+            }
         } catch (cancellation: CancellationException) {
-            Td.cancelDownloadInBackground(fileId)
             throw cancellation
         }
         if (failed) return null
@@ -363,6 +393,10 @@ object Thumbnails {
     private const val DECODE_PARALLELISM = 3
     private const val DECODE_PARALLELISM_TV = 2
     private const val DOWNLOAD_TIMEOUT_MS = 20_000L
+
+    /** Thumbnail downloads asked of TDLib at once; four on a television, whose stick has four weak cores. */
+    private const val DOWNLOADS_AT_ONCE = 8
+    private const val DOWNLOADS_AT_ONCE_TV = 4
 }
 
 /**

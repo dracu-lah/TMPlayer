@@ -2,6 +2,8 @@
 // A-B repeat (AbLoop), the way back from a long jump (SeekUndo), when to ask "Still watching?"
 // (StillWatching), the sleep timer's choices (SleepTimer) and the slowed scrub (FineScrub). Times are seconds here where
 // the Kotlin keeps milliseconds. Nothing here touches the page.
+import { pictureSize, type Shape } from './shape.ts'
+import { transformOf, type Zoom } from './zoom.ts'
 
 // ---- A-B repeat ----------------------------------------------------------------------------
 
@@ -169,6 +171,28 @@ export function turnFrame(stageW: number, stageH: number, degrees: number): { le
     return { left: (stageW - stageH) / 2, top: (stageH - stageW) / 2, width: stageH, height: stageW }
 }
 
+/**
+ * The ONE transform a picture wears: the free zoom (zoom.ts transformOf, in the stage's pixels) over
+ * the turn, which is applied first and about the box's centre. Zoom and rotate both write the same
+ * style property, so neither may write it alone: translate and scale of the zoom, then the rotation.
+ */
+export function pictureTransform(degrees: number, z: Zoom): string {
+    const turn = normaliseTurn(degrees)
+    return [transformOf(z), turn ? `rotate(${turn}deg)` : ''].filter(Boolean).join(' ')
+}
+
+/**
+ * The picture's size on the screen at 100 per cent zoom, for the zoom's reach: the shape lays the
+ * picture out in the turn's frame (the stage, or for a sideways turn the stage traded), and the
+ * turn then swaps its width and height on the screen.
+ */
+export function turnedPictureSize(stageW: number, stageH: number, frameW: number, frameH: number, shape: Shape, degrees: number): { width: number; height: number } | null {
+    const f = turnFrame(stageW, stageH, degrees)
+    const pic = pictureSize(f.width, f.height, frameW, frameH, shape)
+    if (!pic) return null
+    return sidewaysTurn(degrees) ? { width: pic.height, height: pic.width } : pic
+}
+
 // ---- speed, per series, chat and topic -------------------------------------------------------
 
 /** PlaybackSpeed.MIN and MAX. */
@@ -219,6 +243,10 @@ export const speedTarget = (s: SpeedScopes) => s.series ?? s.chat
 
 /** The levels the boost picker offers: 100% is off, 200% the most. A gain over the file's own level. */
 export const BOOSTS = [1, 1.25, 1.5, 1.75, 2]
+
+/** movi's own gain takes 0 to 2 (above 1 linearly): the level the controls set times the boost, held to that, as the native and canvas engines multiply. */
+export const MOVI_MAX_VOLUME = 2
+export const moviVolume = (level: number, boost: number): number => Math.min(MOVI_MAX_VOLUME, Math.max(0, level * Math.max(1, boost)))
 
 /** A stored or typed boost as one of [BOOSTS]: anything else (a damaged setting) is off, so a bad value never blasts a video. */
 export function sanitiseBoost(value: unknown): number {

@@ -1,5 +1,6 @@
 package com.tmplayer.desktop.promo
 
+import com.tmplayer.ui.browse.chipLabel
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -185,7 +186,7 @@ class PromoShots {
             val list = rememberLazyListState()
             val nav = rememberKeyboardNav(remember(list) { ListSurface(list) })
             val section = shell.chatSection
-            val chips = remember { com.tmplayer.ui.browse.chatPageChips(emptyList()) }
+            val chips = remember { com.tmplayer.ui.browse.ChatFilter.entries }
             Column(Modifier.fillMaxSize()) {
                 PageHeader(
                     title = section.heading,
@@ -203,7 +204,7 @@ class PromoShots {
                     buildList {
                         val sort = shell.chatSort
                         add(Choice("sort", sort.label, sort.icon, selected = false) {})
-                        chips.forEach { chip -> add(Choice(chip.label, chip.label, chip.icon, selected = chip == chips.first()) {}) }
+                        chips.forEach { chip -> add(Choice(chip.name, chip.chipLabel, chip.icon, selected = chip == chips.first()) {}) }
                     },
                 )
                 // Every account has Saved Messages, and the app lists it first; the quick tour's

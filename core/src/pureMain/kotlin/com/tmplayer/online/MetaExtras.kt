@@ -95,6 +95,16 @@ data class MetaExtras(
     val scoresAt: Long = 0,
     /** OMDb itself answered (not only Wikidata), so the page has IMDb's score if OMDb has one. */
     val scoresFromOmdb: Boolean = false,
+    /**
+     * The TMDB episode group whose split [seasonList] and [nextEpisode] follow ([SeasonSplit]): a
+     * show TMDB lists as one season that the group splits into several. Null for every other title.
+     */
+    val seasonGroup: String? = null,
+    /** TMDB's own seasons and next episode, kept beside a [seasonGroup] split for a chat numbered TMDB's way. */
+    val listedSeasons: List<MetaSeason> = emptyList(),
+    val listedNext: MetaAiring? = null,
+    /** The answer came with the show's episode groups, so a split was looked for; false in one kept from before. */
+    val groupsRead: Boolean = false,
 ) {
     val isEmpty: Boolean
         get() = genres.isEmpty() && runtimeMin == null && seasons == null && rating == null && certification == null &&
@@ -115,12 +125,14 @@ data class MetaExtras(
             "similar",
             JSONArray(similar.map { JSONObject().put("provider", it.provider.name).put("kind", it.kind.name).put("id", it.id).put("title", it.title) }),
         )
-        .put("seasonList", JSONArray(seasonList.map { JSONObject().put("number", it.number).put("episodes", it.episodeCount).put("airDate", it.airDate.orEmpty()) }))
+        .put("seasonList", seasonsJson(seasonList))
         .apply {
-            nextEpisode?.let {
-                put("next", JSONObject().put("season", it.season).put("episode", it.episode).put("airDate", it.airDate).put("name", it.name))
-            }
+            nextEpisode?.let { put("next", airingJson(it)) }
+            listedNext?.let { put("listedNext", airingJson(it)) }
+            if (listedSeasons.isNotEmpty()) put("listedSeasons", seasonsJson(listedSeasons))
         }
+        .put("seasonGroup", seasonGroup.orEmpty())
+        .put("groupsRead", groupsRead)
         .put("ended", ended)
         .put("imdb", imdbId.orEmpty())
         .put("tvdb", tvdbId.orEmpty())
@@ -131,6 +143,12 @@ data class MetaExtras(
         .put("scoresFromOmdb", scoresFromOmdb)
 
     companion object {
+        private fun seasonsJson(list: List<MetaSeason>) =
+            JSONArray(list.map { JSONObject().put("number", it.number).put("episodes", it.episodeCount).put("airDate", it.airDate.orEmpty()) })
+
+        private fun airingJson(it: MetaAiring) =
+            JSONObject().put("season", it.season).put("episode", it.episode).put("airDate", it.airDate).put("name", it.name)
+
         fun fromJson(json: JSONObject): MetaExtras? = runCatching {
             fun strings(name: String): List<String> {
                 val list = json.optJSONArray(name) ?: return emptyList()
@@ -140,6 +158,11 @@ data class MetaExtras(
                 val list = json.optJSONArray(name) ?: return emptyList()
                 return (0 until list.length()).mapNotNull { list.optJSONObject(it) }
             }
+            fun seasons(name: String) =
+                objects(name).map { MetaSeason(it.optInt("number"), it.optInt("episodes"), it.optString("airDate").ifBlank { null }) }.filter { it.number > 0 }
+            fun airing(name: String) = json.optJSONObject(name)?.let {
+                MetaAiring(it.optInt("season"), it.optInt("episode"), it.optString("airDate"), it.optString("name"))
+            }?.takeIf { it.airDate.isNotBlank() && it.season > 0 }
             MetaExtras(
                 genres = strings("genres"),
                 runtimeMin = json.optInt("runtime").takeIf { it > 0 },
@@ -155,11 +178,8 @@ data class MetaExtras(
                         MetaRef(MetaProvider.valueOf(it.getString("provider")), MetaKind.valueOf(it.getString("kind")), it.getString("id"), it.optString("title"))
                     }.getOrNull()
                 },
-                seasonList = objects("seasonList").map { MetaSeason(it.optInt("number"), it.optInt("episodes"), it.optString("airDate").ifBlank { null }) }
-                    .filter { it.number > 0 },
-                nextEpisode = json.optJSONObject("next")?.let {
-                    MetaAiring(it.optInt("season"), it.optInt("episode"), it.optString("airDate"), it.optString("name"))
-                }?.takeIf { it.airDate.isNotBlank() && it.season > 0 },
+                seasonList = seasons("seasonList"),
+                nextEpisode = airing("next"),
                 ended = json.optBoolean("ended"),
                 imdbId = json.optString("imdb").ifBlank { null },
                 tvdbId = json.optString("tvdb").ifBlank { null },
@@ -168,6 +188,10 @@ data class MetaExtras(
                 scoresAsked = json.optBoolean("scoresAsked"),
                 scoresAt = json.optLong("scoresAt"),
                 scoresFromOmdb = json.optBoolean("scoresFromOmdb"),
+                seasonGroup = json.optString("seasonGroup").ifBlank { null },
+                listedSeasons = seasons("listedSeasons"),
+                listedNext = airing("listedNext"),
+                groupsRead = json.optBoolean("groupsRead"),
             )
         }.getOrNull()
     }

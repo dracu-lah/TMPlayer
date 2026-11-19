@@ -366,14 +366,45 @@ test('Volume boost lifts the sound through the page\'s own graph and is kept for
     await expect.poll(async () => (await path()).level).toBe('1')
 })
 
-test('Volume boost is left out on an iPhone, where a page cannot carry it, and Rotate picture stays', async ({ page }) => {
+test('on an iPhone the Volume boost entry says why it does nothing there, and Rotate picture stays', async ({ page }) => {
     await page.addInitScript(() => Object.defineProperty(navigator, 'userAgent', { get: () => 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1' }))
     await lighthouse(page)
     await openMore(page)
     // The iPhone user agent also gives the phone's layout.
     const menu = page.locator('.pc-sheet, .pc-panel')
     await expect(menu.getByRole('menuitem', { name: /^Rotate picture/ })).toBeVisible()
-    await expect(menu.getByRole('menuitem', { name: /^Volume boost/ })).toHaveCount(0)
+    await menu.getByRole('menuitem', { name: /^Volume boost/ }).click()
+    await expect(menu).toContainText('not available in Safari on iPhone')
+    await expect(menu.getByRole('radio')).toHaveCount(0)
+})
+
+test('Shift+R turns the picture a quarter, the zoom and the turn share one transform, and Alt+0 puts the zoom back without undoing the turn', async ({ page }) => {
+    await lighthouse(page)
+    const tf = () => page.locator('video').evaluate((v: HTMLVideoElement) => ({ transform: v.style.transform, cues: v.parentElement!.querySelectorAll('.movi-cues').length, zoomed: v.closest('.player')!.classList.contains('pc-zoomed') }))
+    await page.keyboard.press('Shift+R')
+    await expect.poll(async () => (await tf()).transform).toBe('rotate(90deg)')
+    await expect(page.locator('.pc-note')).toContainText('Picture rotated 90')
+    // Zoomed over the turn: both in the one string, the turn kept, one cue layer for the two.
+    await page.keyboard.press('Alt+Equal')
+    await page.keyboard.press('Alt+Equal')
+    await expect.poll(async () => (await tf()).transform).toMatch(/^translate\(.*\) scale\([\d.]+\) rotate\(90deg\)$/)
+    expect((await tf()).zoomed).toBe(true)
+    expect((await tf()).cues).toBe(1)
+    // Zoom reset: the turn stays.
+    await page.keyboard.press('Alt+Digit0')
+    await expect.poll(async () => (await tf()).transform).toBe('rotate(90deg)')
+    expect((await tf()).zoomed).toBe(false)
+    // A turn after a zoom starts the zoom again, and the last of four quarters is upright with no transform left over.
+    await page.keyboard.press('Alt+Equal')
+    await page.keyboard.press('Shift+R')
+    await expect.poll(async () => (await tf()).transform).toBe('rotate(180deg)')
+    await page.keyboard.press('Shift+R')
+    await page.keyboard.press('Shift+R')
+    await expect.poll(async () => (await tf()).transform).toBe('')
+    expect((await tf()).cues).toBe(0)
+    // Shift+R is on the key sheet.
+    await page.keyboard.press('?')
+    await expect(page.locator('.pc-shortcuts')).toContainText('Shift+R')
 })
 
 test('a speed is kept for the show, else the chat, and 1x forgets it', async ({ page }) => {

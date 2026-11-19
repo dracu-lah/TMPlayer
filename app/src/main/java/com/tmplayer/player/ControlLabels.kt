@@ -4,6 +4,9 @@ import android.content.Context
 import android.content.SharedPreferences
 
 /**
+ * OFF since 2026-11-19 (user: icons only): nothing in the app calls [takeSession] and the player
+ * passes no `showLabels`, so these words never show. The machinery stays for a later, opt-in use.
+ *
  * The words under the player's six icons (Subtitles, Sound, Speed, Fit, Rotate, Lock), for the first
  * [SESSIONS] times the player is opened and then icons only, remembered (R5, Raju step 6.2). Someone
  * who has never used a video app cannot tell a speed dial from a lock; someone who has used the
