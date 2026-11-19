@@ -664,7 +664,8 @@ private fun EpisodeLine(
                     meta,
                     style = if (large) MaterialTheme.typography.labelLarge else MaterialTheme.typography.labelMedium,
                     color = if (stopped != null || finished) Tone.accent else Tone.muted,
-                    maxLines = 1,
+                    // On the show page the size is last: it wraps rather than being cut off.
+                    maxLines = if (airDate != null) 2 else 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }

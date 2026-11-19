@@ -142,7 +142,7 @@ fun seasonName(number: Int, s: Messages): String = if (number == 0) s.seriesSpec
  * "Episode 7, not in this chat".
  */
 @Composable
-internal fun GapRow(
+fun GapRow(
     episode: EpisodeGuide.Episode,
     large: Boolean,
     modifier: Modifier = Modifier,
