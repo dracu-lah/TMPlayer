@@ -519,6 +519,22 @@ class GarbageInputTest {
                 val copies = listOf(copy(1, text), copy(2, "$text Hindi"), copy(3, "Tamil $text"))
                 GlobalSearch.copyOrder(copies, "hi"); GlobalSearch.copyOrder(copies, text); GlobalSearch.tally(emptyList())
             }
+            // HX41: TMDB titles holding garbage, against copies named by it, never throw.
+            survive("GlobalSearch.titles", text) {
+                fun copy(id: Long, name: String) = MediaItem(
+                    chatId = id, messageId = id, fileId = id.toInt(), title = name, sizeBytes = 1, durationSec = 1, mimeType = "video/mp4",
+                    thumbnailFileId = 0, miniThumbnail = null, date = 1, fileName = name,
+                )
+                val query = GlobalSearch.parse("night $text")
+                val groups = GlobalSearch.merge(emptyList(), listOf(copy(1, text), copy(2, "$text S01E02"), copy(3, "$text 2019")), query, SearchSort.BestMatch, SearchIdentity.Default)
+                val choices = listOf(
+                    com.tmplayer.online.PosterChoice(1, false, text, 2019, text, text, text, text),
+                    com.tmplayer.online.PosterChoice(2, true, "night $text", null, "", "", null),
+                    com.tmplayer.online.PosterChoice(-1, true, text, Int.MIN_VALUE, "", "", null),
+                )
+                GlobalSearch.titles(choices, groups, query, { text }, { listOf(text) })
+                GlobalSearch.titleQuery(query)
+            }
             survive("ByteRange.parse", text) { ByteRange.parse(text, 1_000); ByteRange.parse("bytes=$text", 0) }
             survive("PostStart.parse", text) { PostStart.parse(text) }
             survive("Decimal.parse", text) { Decimal.parse(text) }
@@ -928,6 +944,9 @@ class GarbageInputTest {
                     tmdb.season("k", "1", 1, "en")
                     tmdb.extras("k", true, "1", "en", "GB")
                     tmdb.extras("k", false, "1", "en", "GB")
+                    // HX41: where to watch, for a film and a show, in a region and in nonsense.
+                    tmdb.watchProviders("k", true, "1", "GB")
+                    tmdb.watchProviders("k", false, "1", "\u0000??")
                 }
             }
             val maze = TvMazeApi(http, limiter, "t")
