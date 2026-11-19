@@ -188,3 +188,16 @@ test('a thousand-episode season with a thousand-episode list stays cheap', () =>
     assert.equal(r.length, 1000)
     assert.ok(performance.now() - started < 500)
 })
+
+test('3,000 episodes counted straight through are placed in one pass, not one pass per number', () => {
+    const layout = range(1, 20).map((n) => listed(n, 150))
+    const numbers = range(1, 3000)
+    const lists = new Map(range(1, 20).map((s) => [s, range(1, 150).map((n): ProviderEpisode => ({ number: n, name: `E${s}x${n}`, overview: '', still: null, airDate: null, runtime: null }))]))
+    const started = performance.now()
+    const seasons = seasonsFor(1, numbers, layout)
+    const out = rekey(1, numbers, layout, lists)
+    assert.ok(seasons.length <= 12)
+    assert.equal(out.length, 3000)
+    assert.equal(out[2999].name, 'E20x150')
+    assert.ok(performance.now() - started < 300, `took ${performance.now() - started} ms`)
+})

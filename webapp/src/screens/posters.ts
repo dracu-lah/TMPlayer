@@ -5,6 +5,7 @@ import type { PosterAsk } from '../rules'
 import { episodeFor, overlay, readAnswer, type Guide } from '../animeGuide'
 import { readSkips } from '../player/skipOnline'
 import type { SkipSegment } from '../player/chapters'
+import { fresh, storable } from './answerRules'
 
 // Posters, as the apps show them: TMDB's poster for a video's cleaned title (the question the app's
 // rules ask, tg/media.ts `poster`), looked up by the /tmdb worker (tmdb/handler.ts), which holds
@@ -16,9 +17,6 @@ import type { SkipSegment } from '../player/chapters'
 // The detail page asks for more of the same title (overview, genres, cast, trailer: MetaInfo and
 // MetaExtras), by the id the poster answer gave, and under the same rules.
 
-const DAY = 24 * 60 * 60 * 1000
-const FOUND_TTL = 60 * DAY
-const MISS_TTL = 7 * DAY
 /** MetaApis.POSTER_SIZE: the size a card draws; a small card takes the lighter w185. */
 export type PosterSize = 'w185' | 'w342'
 /** The wide picture: w300 to show at once on the carousel and a video's page, w780 to replace it. */
@@ -172,19 +170,6 @@ function ask<T extends { match?: boolean; found?: boolean }>(url: string): Promi
     return p
 }
 
-/** Whether a kept answer still stands: within its time, and not from before a field the page needs. */
-function fresh(url: string, body: { match?: boolean; found?: boolean }, saved: number): boolean {
-    // A poster answer kept before the overview and the wide picture were added is asked again,
-    // and an extras answer kept before the title logo.
-    if (body.match && url.startsWith('/tmdb/poster') && !('overview' in body)) return false
-    if (body.found && url.startsWith('/tmdb/extras') && !('logo' in body)) return false
-    // A show TMDB lists as one season, kept before the season split (its episode groups were not read), is asked again: only
-    // such a show can have a split. AniList's answer carries no groups.
-    const lone = (body as { seasonList?: unknown[] }).seasonList?.length === 1
-    if (body.found && lone && url.startsWith('/tmdb/extras') && !/[?&]a=1(&|$)/.test(url) && !('groupsRead' in body)) return false
-    return Date.now() - saved < (body.match || body.found ? FOUND_TTL : MISS_TTL)
-}
-
 /** The answer at `url` only if the Cache API holds a fresh one: never the network. */
 async function kept<T extends { match?: boolean; found?: boolean }>(url: string): Promise<T | null> {
     const cache = await open()
@@ -219,6 +204,8 @@ async function fetchAnswer<T extends { match?: boolean; found?: boolean }>(url: 
     if (!response.ok) throw new Error(`posters ${response.status}`)
     const text = await response.text()
     const body = JSON.parse(text) as T
+    // An answer the worker marks no-store is a stopgap (a split it could not read): shown, never kept.
+    if (!storable(response.headers.get('cache-control'))) return body
     cache?.put(url, new Response(text, { headers: { 'Content-Type': 'application/json', 'x-saved': String(Date.now()) } })).then(() => touch(POSTERS, url, text.length), () => {})
     return body
 }

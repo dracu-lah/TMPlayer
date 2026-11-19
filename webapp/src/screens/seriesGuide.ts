@@ -208,41 +208,51 @@ function counts(layout: readonly ListedSeason[]): ListedSeason[] {
 }
 
 /**
- * Whether the chat's `numbers` of `season` are counted straight through rather than from one (S02E13
- * for TMDB's second season's first): at least half of them lie past TMDB's count for that season. A
- * season TMDB does not list, the specials, and one with a single stray number past its end are not.
+ * What a chat season's numbers need once per call: whether they are counted straight through (S02E13
+ * for TMDB's second season's first: at least half lie past TMDB's count for that season; a season TMDB
+ * does not list, the specials, and one stray number past its end are not) and TMDB's layout in order.
  */
-export function counted(season: number, numbers: Iterable<number>, layout: readonly ListedSeason[]): boolean {
+function placer(season: number, numbers: Iterable<number>, layout: readonly ListedSeason[]) {
     const list = [...numbers]
-    if (season < 1 || !list.length) return false
-    const own = counts(layout).find((s) => s.number === season)
-    if (!own) return false
-    const past = list.filter((n) => n > own.episodes).length
-    return past > 0 && past * 2 >= list.length
+    const all = counts(layout)
+    const own = all.find((s) => s.number === season)
+    const past = own ? list.filter((n) => n > own.episodes).length : 0
+    const through = season >= 1 && list.length > 0 && !!own && past > 0 && past * 2 >= list.length
+    return {
+        list,
+        through,
+        /** TMDB's season and episode for `number` (counted straight through), null past every season. */
+        at(number: number): [number, number] | null {
+            if (!Number.isInteger(number) || number < 1 || number > MAX_NUMBER) return null
+            if (!through) return [season, number]
+            if (own && number <= own.episodes) return [season, number]
+            let before = 0
+            for (const s of all) {
+                if (number <= before + s.episodes) return [s.number, number - before]
+                before += s.episodes
+            }
+            return null
+        },
+    }
+}
+
+/** Whether the chat's `numbers` of `season` are counted straight through rather than from one (see placer). */
+export function counted(season: number, numbers: Iterable<number>, layout: readonly ListedSeason[]): boolean {
+    return placer(season, numbers, layout).through
 }
 
 /** TMDB's season and episode for episode `number` of the chat's `season`; null past every season TMDB lists (EpisodeNumbering.place). */
 export function place(season: number, number: number, numbers: Iterable<number>, layout: readonly ListedSeason[]): [number, number] | null {
-    if (!Number.isInteger(number) || number < 1 || number > MAX_NUMBER) return null
-    if (!counted(season, numbers, layout)) return [season, number]
-    const all = counts(layout)
-    const own = all.find((s) => s.number === season)
-    if (own && number <= own.episodes) return [season, number]
-    let before = 0
-    for (const s of all) {
-        if (number <= before + s.episodes) return [s.number, number - before]
-        before += s.episodes
-    }
-    return null
+    return placer(season, numbers, layout).at(number)
 }
 
 /** The TMDB seasons whose lists name the chat's `numbers` of `season`, in order, at most MAX_PLACED_SEASONS: just `season` unless it is counted straight through. */
 export function seasonsFor(season: number, numbers: Iterable<number>, layout: readonly ListedSeason[]): number[] {
-    const list = [...numbers]
-    if (!counted(season, list, layout)) return [season]
+    const p = placer(season, numbers, layout)
+    if (!p.through) return [season]
     const out: number[] = []
-    for (const n of [...list].sort((a, b) => a - b)) {
-        const at = place(season, n, list, layout)
+    for (const n of [...p.list].sort((a, b) => a - b)) {
+        const at = p.at(n)
         if (at && !out.includes(at[0])) out.push(at[0])
         if (out.length >= MAX_PLACED_SEASONS) break
     }
@@ -255,13 +265,13 @@ export function seasonsFor(season: number, numbers: Iterable<number>, layout: re
  * that is not counted straight through answers its own list as it is (EpisodeNumbering.rekey).
  */
 export function rekey(season: number, numbers: Iterable<number>, layout: readonly ListedSeason[], lists: ReadonlyMap<number, readonly ProviderEpisode[]>): ProviderEpisode[] {
-    const list = [...numbers]
-    if (!counted(season, list, layout)) return [...(lists.get(season) ?? [])]
+    const p = placer(season, numbers, layout)
+    if (!p.through) return [...(lists.get(season) ?? [])]
     const byPlace = new Map<string, ProviderEpisode>()
     for (const [s, eps] of lists) for (const e of eps) byPlace.set(`${s}:${e.number}`, e)
     const out: ProviderEpisode[] = []
-    for (const n of [...new Set(list)].sort((a, b) => a - b)) {
-        const at = place(season, n, list, layout)
+    for (const n of [...new Set(p.list)].sort((a, b) => a - b)) {
+        const at = p.at(n)
         const e = at && byPlace.get(`${at[0]}:${at[1]}`)
         if (e) out.push({ ...e, number: n })
     }

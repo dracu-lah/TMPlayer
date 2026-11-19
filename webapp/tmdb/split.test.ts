@@ -25,7 +25,7 @@ function mock(answer: (url: URL) => Response) {
 }
 
 const j = (body: unknown, status = 200, headers: Record<string, string> = {}) => new Response(JSON.stringify(body), { status, headers })
-const get = (handle: ReturnType<typeof createHandler>, path: string, env: { TMDB_API_KEY?: string } = { TMDB_API_KEY: KEY }) => handle(new Request(ORIGIN + path), env)
+const get = (handle: ReturnType<typeof createHandler>, path: string, env: { TMDB_API_KEY?: string } = { TMDB_API_KEY: KEY }, headers: Record<string, string> = {}) => handle(new Request(ORIGIN + path, { headers }), env)
 
 const blueBox = (group: () => Response = () => j(SEASONS_GROUP)) => (u: URL) => {
     if (u.pathname.includes('/tv/episode_group/')) return group()
@@ -74,6 +74,8 @@ test("a group that cannot be read leaves TMDB's own seasons, and nothing is kept
         assert.deepEqual(numbers(body.seasonList), [[1, 37]])
         assert.equal(body.seasonGroup, null)
         assert.equal(r.headers.get('cache-control'), 'no-store')
+        // It did not know the groups: no `groupsRead`, so no page takes it for a settled answer.
+        assert.equal('groupsRead' in body, false)
         assert.equal(m.cache.size, 0)
     }
 })
@@ -131,4 +133,53 @@ test('/tmdb/season refuses nonsense, says so when TMDB is down and keeps nothing
     const gone = mock((u) => (u.pathname.includes('/tv/episode_group/') ? j({}, 500) : j({}, 404)))
     assert.equal((await get(createHandler(gone.deps), '/tmdb/season?id=207347&s=2&g=seasons001')).status, 503)
     assert.equal(gone.cache.size, 0)
+})
+
+test("a group's season is one cache entry whatever show id is passed with it, and TMDB's own seasons stay within 60", async () => {
+    const m = mock(blueBox())
+    const handle = createHandler(m.deps)
+    await get(handle, '/tmdb/season?id=1&s=2&g=seasons001')
+    const calls = m.calls.length
+    for (const id of [2, 3, 999]) assert.equal((await get(handle, `/tmdb/season?id=${id}&s=2&g=seasons001`)).headers.get('x-poster-cache'), 'hit')
+    assert.equal(m.calls.length, calls)
+    assert.equal(m.cache.size, 2, 'the season and the group part')
+    assert.equal((await get(handle, '/tmdb/season?id=207347&s=61')).status, 400)
+    assert.equal((await get(handle, '/tmdb/season?id=207347&s=60')).status, 200)
+})
+
+test('a group TMDB lacks is remembered: its other seasons ask nothing, and "not found" is kept for an hour', async () => {
+    const m = mock((u) => (u.pathname.includes('/tv/episode_group/') ? j({}, 404) : j({}, 404)))
+    const handle = createHandler(m.deps)
+    const first = await get(handle, '/tmdb/season?id=1&s=1&g=randomgroup1')
+    assert.deepEqual(await first.json(), { found: false })
+    assert.match(first.headers.get('cache-control')!, /s-maxage=3600$/)
+    const calls = m.calls.length
+    for (const s of [2, 3, 4]) assert.deepEqual(await (await get(handle, `/tmdb/season?id=1&s=${s}&g=randomgroup1`)).json(), { found: false })
+    assert.equal(m.calls.length, calls, 'the missing group was asked once')
+    const own = await get(handle, '/tmdb/season?id=1&s=1')
+    assert.deepEqual(await own.json(), { found: false })
+    assert.match(own.headers.get('cache-control')!, /s-maxage=3600$/)
+})
+
+test('a visitor has a minute budget of uncached asks; kept answers are free, another visitor is not held back', async () => {
+    const m = mock(blueBox())
+    const handle = createHandler(m.deps)
+    const ask = (n: number, ip: string) => get(handle, `/tmdb/season?id=${n}&s=1`, { TMDB_API_KEY: KEY }, { 'cf-connecting-ip': ip })
+    for (let n = 1; n <= 30; n++) assert.equal((await ask(n, '1.1.1.1')).status, 200)
+    const over = await ask(31, '1.1.1.1')
+    assert.equal(over.status, 429)
+    assert.ok(Number(over.headers.get('retry-after')) >= 1)
+    assert.equal(over.headers.get('cache-control'), 'no-store')
+    assert.equal((await ask(1, '1.1.1.1')).status, 200, 'a kept answer costs nothing')
+    assert.equal((await ask(32, '2.2.2.2')).status, 200)
+    // The minute passes.
+    m.clock.t += 61_000
+    assert.equal((await ask(33, '1.1.1.1')).status, 200)
+})
+
+test('everyone together has a budget too: many visitors cannot spend the key', async () => {
+    const handle = createHandler(mock(blueBox()).deps)
+    let refused = 0
+    for (let n = 1; n <= 150; n++) if ((await get(handle, `/tmdb/season?id=${n}&s=1`, { TMDB_API_KEY: KEY }, { 'cf-connecting-ip': `9.9.${n}.1` })).status === 429) refused++
+    assert.equal(refused, 30)
 })
