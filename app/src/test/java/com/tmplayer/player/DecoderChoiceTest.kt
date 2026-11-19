@@ -91,10 +91,17 @@ class DecoderChoiceTest {
 
     private enum class Side { DEVICE, FFMPEG, NONE }
 
-    /** The side Media3's track selector gives [format] to, the device's renderer first as the app builds them. */
+    /**
+     * The side Media3's track selector gives [format] to, the device's renderer first as the app
+     * builds them: [lenient] is the player as built now (hardware first list, lenient renderer),
+     * otherwise Media3's plain renderer as before HX71.
+     */
     private fun choice(device: Device, format: Format, lenient: Boolean = true): Side {
-        val renderer = MediaCodecVideoRenderer(context, device)
-        val hardware = if (lenient) LevelLenientVideoRenderer(renderer).capabilities else renderer.capabilities
+        val hardware = if (lenient) {
+            LevelLenientVideoRenderer(MediaCodecVideoRenderer(context, HardwareFirstCodecSelector(device))).capabilities
+        } else {
+            MediaCodecVideoRenderer(context, device).capabilities
+        }
         val selector = DefaultTrackSelector(context)
         selector.init(
             object : TrackSelector.InvalidationListener {
@@ -183,6 +190,64 @@ class DecoderChoiceTest {
         assertEquals(Side.FFMPEG, choice(softwareOnly, vivo))
         // 8K is past any phone chip's rating, and no rate is forgiven there.
         assertEquals(Side.FFMPEG, choice(phone, hevc("hvc1.2.4.L183.90", 7680, 4320, 30f)))
+    }
+
+    /** Media3's renderer with the list it opens decoders from, in order, for [format]: the first is the one opened. */
+    private class Opening(context: android.content.Context, private val selector: MediaCodecSelector) : MediaCodecVideoRenderer(context, selector) {
+        fun order(format: Format): List<String> = getDecoderInfos(selector, format, false).map { it.name }
+    }
+
+    /** What the player builds: hardware decoders listed first ([HardwareFirstCodecSelector]). */
+    private fun opened(device: Device, format: Format): String? = Opening(context, HardwareFirstCodecSelector(device)).order(format).firstOrNull()
+
+    private fun hardwareAnswer(device: Device, format: Format): Int =
+        RendererCapabilities.getHardwareAccelerationSupport(
+            LevelLenientVideoRenderer(MediaCodecVideoRenderer(context, HardwareFirstCodecSelector(device))).capabilities.supportsFormat(format),
+        )
+
+    @Test
+    fun aPictureLetThroughPastTheRatingOpensTheChip() {
+        // A device that lists Google's software decoder first, rated below the picture as well.
+        val softwareListedFirst = Device(
+            listOf(
+                codec("c2.android.hevc.decoder", MimeTypes.VIDEO_H265, listOf(main10 to CodecProfileLevel.HEVCMainTierLevel51), 4096, 2304, uhd30 / 2, hardware = false),
+                codec("c2.mtk.hevc.decoder", MimeTypes.VIDEO_H265, listOf(main10 to CodecProfileLevel.HEVCMainTierLevel51), 4096, 2176, uhd30),
+            ),
+        )
+        assertEquals(Side.DEVICE, choice(softwareListedFirst, vivo))
+        // Before: the software decoder answered first, past its own rating too, so FFmpeg got it.
+        assertEquals(Side.FFMPEG, choice(softwareListedFirst, vivo, lenient = false))
+        assertEquals("the chip said yes, so the chip opens", "c2.mtk.hevc.decoder", opened(softwareListedFirst, vivo))
+        assertEquals("without the hardware first list Media3 opened the software one", "c2.android.hevc.decoder", Opening(context, softwareListedFirst).order(vivo).firstOrNull())
+        assertEquals(RendererCapabilities.HARDWARE_ACCELERATION_SUPPORTED, hardwareAnswer(softwareListedFirst, vivo))
+        assertEquals("c2.mtk.hevc.decoder", opened(phone, vivo))
+    }
+
+    @Test
+    fun eightBit4k60OnAChipRatedFor30() {
+        val uhd8 = hevc("hvc1.1.6.L153.90", 3840, 2160, 60f)
+        // Only the chip: it takes the picture past its rating, as before HX71 for nothing else.
+        val hardwareOnly = Device(listOf(codec("c2.mtk.hevc.decoder", MimeTypes.VIDEO_H265, listOf(main to CodecProfileLevel.HEVCMainTierLevel51), 4096, 2176, uhd30)))
+        assertEquals(Side.DEVICE, choice(hardwareOnly, uhd8))
+        assertEquals("c2.mtk.hevc.decoder", opened(hardwareOnly, uhd8))
+        // A system software decoder rated for 60 there takes the real format, so Media3's answer
+        // to the selector comes from it (in software) and the rate-free ask is never made. Media3
+        // then orders the list it opens from by profile and level alone, which both take, so the
+        // chip, listed first, is what opens: playback never lands on the slower software decoder.
+        val fasterSoftware = Device(
+            listOf(
+                codec("c2.mtk.hevc.decoder", MimeTypes.VIDEO_H265, listOf(main to CodecProfileLevel.HEVCMainTierLevel51), 4096, 2176, uhd30),
+                codec("c2.android.hevc.decoder", MimeTypes.VIDEO_H265, listOf(main to CodecProfileLevel.HEVCMainTierLevel52), 4096, 2304, uhd30 * 3, hardware = false),
+            ),
+        )
+        assertEquals(Side.DEVICE, choice(fasterSoftware, uhd8))
+        assertEquals(Side.DEVICE, choice(fasterSoftware, uhd8, lenient = false))
+        assertEquals(RendererCapabilities.HARDWARE_ACCELERATION_NOT_SUPPORTED, hardwareAnswer(fasterSoftware, uhd8))
+        assertEquals("c2.mtk.hevc.decoder", opened(fasterSoftware, uhd8))
+        // The same with the software decoder listed first by the device.
+        val fasterSoftwareFirst = Device(fasterSoftware.getDecoderInfos(MimeTypes.VIDEO_H265, false, false).reversed())
+        assertEquals("c2.android.hevc.decoder", Opening(context, fasterSoftwareFirst).order(uhd8).firstOrNull())
+        assertEquals("c2.mtk.hevc.decoder", opened(fasterSoftwareFirst, uhd8))
     }
 
     @Test

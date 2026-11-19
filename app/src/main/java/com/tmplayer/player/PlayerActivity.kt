@@ -4501,8 +4501,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 out: ArrayList<Renderer>,
             ) {
                 val built = ArrayList<Renderer>()
+                // Hardware decoders listed first, so a picture let through past the chip's rated
+                // frame rate opens the chip, not the system's software decoder (HX71).
                 super.buildVideoRenderers(
-                    context, extensionRendererMode, mediaCodecSelector, enableDecoderFallback,
+                    context, extensionRendererMode, HardwareFirstCodecSelector(mediaCodecSelector), enableDecoderFallback,
                     eventHandler, eventListener, allowedVideoJoiningTimeMs, built,
                 )
                 built.mapTo(out) {

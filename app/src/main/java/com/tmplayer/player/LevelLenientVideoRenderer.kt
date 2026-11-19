@@ -7,6 +7,8 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ForwardingRenderer
 import androidx.media3.exoplayer.Renderer
 import androidx.media3.exoplayer.RendererCapabilities
+import androidx.media3.exoplayer.mediacodec.MediaCodecInfo
+import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 
 /**
  * The device's video renderer, trusting the picture's size over the level and frame rate its file
@@ -60,6 +62,28 @@ class LenientCapabilities(private val inner: RendererCapabilities) : RendererCap
         // software decoder is slower than FFmpeg's threads, so it never takes the picture this way.
         val hardware = RendererCapabilities.getHardwareAccelerationSupport(again) == RendererCapabilities.HARDWARE_ACCELERATION_SUPPORTED
         return if (RendererCapabilities.getFormatSupport(again) == C.FORMAT_HANDLED && hardware) again else support
+    }
+}
+
+/**
+ * [base]'s decoders for a picture with the hardware ones ahead of the software ones, each group in
+ * its own order; the sound's lists are left as they are. Media3 opens the first decoder that takes
+ * the real format, and when none does (the picture [LenientCapabilities] let through past a chip's
+ * rated frame rate) the first listed: without this, a device that lists the system's software
+ * decoder first would open that one although the chip is what said yes.
+ */
+@UnstableApi
+class HardwareFirstCodecSelector(private val base: MediaCodecSelector) : MediaCodecSelector {
+
+    override fun getDecoderInfos(
+        mimeType: String,
+        requiresSecureDecoder: Boolean,
+        requiresTunnelingDecoder: Boolean,
+    ): List<MediaCodecInfo> {
+        val all = base.getDecoderInfos(mimeType, requiresSecureDecoder, requiresTunnelingDecoder)
+        if (!MimeTypes.isVideo(mimeType)) return all
+        val (hardware, software) = all.partition { it.hardwareAccelerated && !it.softwareOnly }
+        return hardware + software
     }
 }
 
