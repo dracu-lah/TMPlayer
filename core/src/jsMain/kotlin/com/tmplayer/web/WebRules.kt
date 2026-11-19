@@ -922,7 +922,7 @@ private fun tile(entry: ShelfEntry): ShelfTile = when (entry) {
             "title" to SeriesShelf.tileTitle(item),
             "video" to toWeb(item),
             "copies" to ids(item.versions),
-            "versions" to VideoCopies.versionCount(item),
+            "versions" to VideoCopies.versionCount(item, null),
             "parts" to ids(item.parts),
             "pieces" to ids(item.pieces),
             "piecesTotal" to (report?.total ?: 0),

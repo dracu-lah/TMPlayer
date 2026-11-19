@@ -77,10 +77,11 @@ object VideoCopies {
     /**
      * How many versions a card or a page says a film has: the distinct files among [MediaItem.versions]
      * (the same file posted twice counts once), the one count every surface shares (HX38). 1 for a
-     * film with no folded copies.
+     * film with no folded copies. [allowed] as for [distinctFiles]; the web player, which has no
+     * kids lock, passes null and so never starts the gate's flows.
      */
-    fun versionCount(item: MediaItem): Int =
-        if (item.versions.size < 2) 1 else distinctFiles(item.versions).size.coerceAtLeast(1)
+    fun versionCount(item: MediaItem, allowed: Set<Long>? = ChatGate.browsing.value): Int =
+        if (item.versions.size < 2) 1 else distinctFiles(item.versions, allowed).size.coerceAtLeast(1)
 
     /** [distinctFiles], one item per file: the one [playing] where it is among a file's posts. */
     fun oneOfEachFile(
