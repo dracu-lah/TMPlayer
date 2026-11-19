@@ -159,3 +159,10 @@ Written 2026-11-18. Status: plan, nothing built yet.
   so a better fix needs the chat's name. Yearless film copies show as unfolded in the dump only because
   the dump records length 0 and `SameVideo` needs a length for a film with no year. Open: the push (user).
 
+
+- 2026-11-19 WB24: `webkit-iphone` (iPhone 13) joins `--all` / `CI_LOCAL_FULL=1` beside `webkit`, and
+  its spec list (`IPHONE_SPECS` in `webapp/playwright.config.ts`) is the player specs plus FORM_SPECS
+  (detail, a11y, titlelogo, choose-chats, sync, ux-audit). Run once alone in the Playwright image:
+  142 listed, 70 passed, 72 skipped (the specs skip forms they do not cover), 0 failed. Cold, the
+  install took about 4 min and the run 2.3 min. The GitHub `webapp.yml` matrix still lists only
+  chromium and webkit (add `webkit-iphone` there when the user wants it in CI).
