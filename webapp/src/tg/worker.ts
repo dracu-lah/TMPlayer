@@ -41,6 +41,8 @@ const base = new BaseTelegramClient({
     },
 })
 const tg = new TelegramClient({ client: base })
+// The line to Telegram as mtcute reports it, for the page's "Can't reach Telegram" banner (net.ts).
+base.onConnectionState.add((link) => postMessage({ link }))
 
 /** How long a sign out waits for Telegram before forgetting the account on this device anyway. */
 const LOG_OUT_WAIT_MS = 5_000
@@ -495,6 +497,11 @@ export const api = {
         return r.resumeKept(savedMs, positionMs, r.rewindSetting(rewindMs))
     },
 
+    /** Retry on the banner: the connections to Telegram are opened again, as when the browser says it is back online. */
+    async reconnect(_: Ctx): Promise<void> {
+        base.mt.network.notifyNetworkChanged(true)
+    },
+
     /** Whether this worker knows where a file is (a page reloaded on a list item's state may outlive it). */
     async known(_: Ctx, key: string): Promise<boolean> {
         return files.has(key)
@@ -519,7 +526,9 @@ export const api = {
                     // (idle for a while, a link that dropped without saying so) answers nothing and nothing
                     // fails, so the read hung for good ('This video hasn't started', Reload the same) until
                     // the page was closed. Timed out, the reader's own retries ask again over a fresh send.
-                    { dcId: f.dcId, kind: 'download', abortSignal: ctx.signal, floodSleepThreshold: 30, timeout: CHUNK_TIMEOUT_MS },
+                    // floodSleepThreshold 0: mtcute never sleeps through a flood wait of any length here. The error
+                    // reaches the reader, which waits it out while the other reads go on, and the page says how long.
+                    { dcId: f.dcId, kind: 'download', abortSignal: ctx.signal, floodSleepThreshold: 0, timeout: CHUNK_TIMEOUT_MS },
                 )
                 if (res._ !== 'upload.file') throw new Error('Telegram sent a CDN redirect, which browsers cannot follow.')
                 const want = Math.min(limit, f.size - offset)

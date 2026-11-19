@@ -6,6 +6,9 @@
 // `password` (signed out, the QR code is taken at once and the account asks its two-step password),
 // `huge` (a very large account for e2e/scale.spec.ts, described below the dialogs),
 // `hinted` (Test Shows is named for a language: "Test Shows Malayalam", for the chat language hints of e2e/posters.spec.ts).
+// Read live, so a test can change them while the page runs (the cookie is read again): `stall` (a
+// file read answers nothing until the flag goes), `late` (it answers after 6 s), `flood:N` (file reads are told to wait N seconds, from the first one), `linkdown` (the line to
+// Telegram reports `connecting`, and nothing is answered).
 
 // Read synchronously (a worker may): a top-level await would hold back the worker's message
 // handler, and the page's first call would be lost.
@@ -42,8 +45,33 @@ export class SentCode {}
 export class WebCryptoProvider {
     constructor(_?: unknown) {}
 }
+/** The flags as they are now: the cookie is read again, so a test turns a case on and off while the page runs. */
+async function live(): Promise<Set<string>> {
+    const text = await (await fetch('/__e2e/flags', { cache: 'no-store' })).text()
+    return new Set(text.split(',').filter(Boolean))
+}
+/** When the fake flood wait ends (ms, real time): it starts at the first read after `flood:N` is set. */
+let floodEnds = 0
+
 export class BaseTelegramClient {
-    constructor(_: unknown) {}
+    private listeners: ((state: string) => void)[] = []
+    private state = ''
+    /** mtcute's emitter: the worker adds a listener and gets each change of the line. */
+    onConnectionState = { add: (fn: (state: string) => void) => void this.listeners.push(fn) }
+    /** Retries since the line was told to come back, readable as `fakeCalls`. */
+    mt = { network: { notifyNetworkChanged: (up: boolean) => void calls.push(`notifyNetworkChanged ${up}`) } }
+    constructor(_: unknown) {
+        // The line follows the `linkdown` flag, polled twice a second like a socket that notices late.
+        const follow = async () => {
+            const next = (await live().catch(() => new Set<string>())).has('linkdown') ? 'connecting' : 'connected'
+            if (next !== this.state) {
+                this.state = next
+                for (const fn of this.listeners) fn(next)
+            }
+        }
+        setInterval(follow, 500)
+        void follow()
+    }
 }
 export class Photo {
     constructor(public raw: unknown) {}
@@ -350,6 +378,21 @@ export class TelegramClient {
         if (q._ === 'upload.getFile') {
             const file = q.location?.file
             if (!file) throw rpcError('FILE_REFERENCE_INVALID')
+            const now = await live()
+            // A read that Telegram never answers while the flag is on (up to 90 s), then served as usual.
+            for (let waited = 0; (now.has('stall') || now.has('linkdown')) && waited < 90_000; waited += 200) {
+                await delay(200)
+                const again = await live()
+                now.clear()
+                again.forEach((f) => now.add(f))
+            }
+            if (now.has('late')) await delay(6000)
+            const flood = [...now].find((f) => f.startsWith('flood:'))
+            if (flood) {
+                if (!floodEnds) floodEnds = Date.now() + Number(flood.slice(6)) * 1000
+                const left = Math.ceil((floodEnds - Date.now()) / 1000)
+                if (left > 0) throw Object.assign(rpcError(`FLOOD_WAIT_${left}`, 420), { seconds: left })
+            } else floodEnds = 0
             const end = Math.min(q.offset! + q.limit!, sizes[file]) - 1
             const res = await fetch(`/__e2e/media/${file}`, { headers: { Range: `bytes=${q.offset}-${end}` } })
             return { _: 'upload.file', bytes: new Uint8Array(await res.arrayBuffer()) }
