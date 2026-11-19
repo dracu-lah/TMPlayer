@@ -1,7 +1,7 @@
-import { createEffect, createMemo, createResource, createSignal, For, Index, lazy, Match, on, onCleanup, Show, Switch } from 'solid-js'
+import { createEffect, createMemo, createResource, createSignal, For, Index, lazy, Match, on, onCleanup, onMount, Show, Switch } from 'solid-js'
 import { A } from '@solidjs/router'
 import { ArrowLeft01Icon, ArrowRight01Icon, UserAdd01Icon } from '@hugeicons/core-free-icons'
-import { call, errorText } from '../tg/rpc'
+import { api, call, errorText } from '../tg/rpc'
 import { online, onBackOnline } from '../net'
 import { t } from '../i18n'
 import { addedIds, addedMode, addedView, namedLists, progress, rememberHomeChats, resumes, settings, starredIds, watchedTick } from '../store'
@@ -11,6 +11,8 @@ import { forgetGone } from '../goneVideos'
 import { scrollBehavior } from '../ui/motion'
 import { Icon } from '../ui/Icon'
 import { KeepPlaceCard } from './KeepPlaceCard'
+import { AskGate } from './cardAsk'
+import { createDwell } from '../ui/dwell'
 import { useObservedCovers } from './promo'
 import { Card, ContinueCard, tileCard, useLeft, useProgress, useWarmDataCentres, videoCard, type CardData } from './VideoList'
 import { form } from '../form'
@@ -126,7 +128,7 @@ export function Home() {
                 </div>
             </Show>
             <For each={rows()}>
-                {(row) => (
+                {(row, index) => (
                     <Switch>
                         {/* Recently added kept for the carousel alone: its row is off. */}
                         <Match when={row.kind === 'recent' && !row.asRow}>{null}</Match>
@@ -145,7 +147,7 @@ export function Home() {
                             </section>
                         </Match>
                         <Match when={true}>
-                            <Row row={row} selfId={page()?.selfId ?? null} />
+                            <Row row={row} index={index()} selfId={page()?.selfId ?? null} />
                         </Match>
                     </Switch>
                 )}
@@ -204,9 +206,53 @@ function cardsOf(row: HomeRow): CardData[] {
     return row.tiles.map((tile) => tileCard(tile, row.kind === 'recent' || row.kind === 'list'))
 }
 
+/** A row has to stay on screen this long before it asks for anything (the apps' ROW_DWELL_MS, HX54). */
+const ROW_DWELL_MS = 250
+/** Rows from the top that ask at once, as the worker reads its first rows without waiting (HomeViewModel.EAGER_CHATS). */
+const EAGER_ROWS = 8
+
+/** What the worker is told about a chat row: stayed on screen, or gone for good (a read not begun is then dropped). */
+function tellWorker(key: string, on: boolean) {
+    if (!key.startsWith('chat:')) return
+    const id = Number(key.slice(5))
+    if (Number.isSafeInteger(id)) api.homeRow(id, on).catch(() => {})
+}
+
+/**
+ * Keyed by row, not by the component: Home draws its rows again as each page of answers lands, and a
+ * row drawn anew a moment after it was drawn is the same row (ui/dwell.ts).
+ */
+const rowDwell = createDwell({ ms: ROW_DWELL_MS, grace: 600, confirm: (k) => tellWorker(k, true), release: (k) => tellWorker(k, false) })
+
 /** One row: its heading (a starred chat's opens the chat), and its cards in a strip that scrolls sideways. */
-function Row(props: { row: HomeRow; selfId: number | null }) {
+function Row(props: { row: HomeRow; index: number; selfId: number | null }) {
     let strip: HTMLUListElement | undefined
+    let section!: HTMLElement
+    // A row asks for its content only after it has stayed on screen (HX54). Its cards ask for their
+    // pictures once it has; the first rows, and the rows that are not a chat's, need no such wait.
+    const dwellKey = props.row.kind === 'chat' && props.row.chatId != null ? `chat:${props.row.chatId}` : props.row.key
+    const [stayed, setStayed] = createSignal(rowDwell.confirmed(dwellKey))
+    const asks = () => stayed() || props.row.kind !== 'chat' || props.index < EAGER_ROWS
+    const enter = () => rowDwell.enter(dwellKey, () => setStayed(true))
+    const leave = () => {
+        rowDwell.leave(dwellKey)
+        setStayed(false)
+    }
+    const noObserver = typeof IntersectionObserver === 'undefined'
+    onMount(() => {
+        if (noObserver) {
+            // An old engine without an observer: the row asks when it is focused or pointed at (the TV's remote, a mouse), the first ones at once.
+            if (props.index < 2) enter()
+            return
+        }
+        const io = new IntersectionObserver((entries) => {
+            const last = entries[entries.length - 1]
+            if (last) last.isIntersecting ? enter() : leave()
+        })
+        io.observe(section)
+        onCleanup(() => io.disconnect())
+    })
+    onCleanup(() => rowDwell.leave(dwellKey))
     const [atStart, setAtStart] = createSignal(true)
     const [atEnd, setAtEnd] = createSignal(false)
     const progressOf = useProgress()
@@ -226,7 +272,8 @@ function Row(props: { row: HomeRow; selfId: number | null }) {
     // Recently added's page says "in starred chats" as the row does, from its first frame.
     const seeAllState = () => (props.row.kind === 'recent' ? { starredOnly: props.row.starredOnly } : undefined)
     return (
-        <section class="home-row" aria-labelledby={id}>
+        // Focus counts as on screen: the TV's remote moves it row to row, and a browser without an observer asks on it.
+        <section class="home-row" aria-labelledby={id} ref={section} onFocusIn={enter} onPointerEnter={() => noObserver && enter()}>
             <div class="row-head">
                 <h2 class="row-title" id={id}>
                     <Show when={props.row.kind === 'chat' && props.row.chatId != null} fallback={rowTitle(props.row, props.selfId)}>
@@ -248,25 +295,27 @@ function Row(props: { row: HomeRow; selfId: number | null }) {
                     <A class="link see-all" href={seeAll()!} state={seeAllState()}>{t('home.see_all')}</A>
                 </Show>
             </div>
-            <Show when={props.row.loaded} fallback={<Strip continues={props.row.kind === 'continue' && form() !== 'tv'} />}>
-                <ul class="strip" classList={{ continues: props.row.kind === 'continue' && form() !== 'tv' }} ref={strip} onScroll={edges}>
-                    <For each={cards()}>
-                        {(c) => (
+            <AskGate.Provider value={asks}>
+                <Show when={props.row.loaded} fallback={<Strip continues={props.row.kind === 'continue' && form() !== 'tv'} />}>
+                    <ul class="strip" classList={{ continues: props.row.kind === 'continue' && form() !== 'tv' }} ref={strip} onScroll={edges}>
+                        <For each={cards()}>
+                            {(c) => (
+                                <li>
+                                    {/* Continue watching: a landscape card with how long is left, which plays at once. */}
+                                    <Show when={props.row.kind === 'continue' && form() !== 'tv'} fallback={<Card card={c} progress={progressOf(c.item)} direct={props.row.kind === 'continue'} />}>
+                                        <ContinueCard item={c.item} left={leftOf(c.item)} />
+                                    </Show>
+                                </li>
+                            )}
+                        </For>
+                        <Show when={form() === 'tv' && seeAll()}>
                             <li>
-                                {/* Continue watching: a landscape card with how long is left, which plays at once. */}
-                                <Show when={props.row.kind === 'continue' && form() !== 'tv'} fallback={<Card card={c} progress={progressOf(c.item)} direct={props.row.kind === 'continue'} />}>
-                                    <ContinueCard item={c.item} left={leftOf(c.item)} />
-                                </Show>
+                                <SeeAllCard href={seeAll()!} state={seeAllState()} />
                             </li>
-                        )}
-                    </For>
-                    <Show when={form() === 'tv' && seeAll()}>
-                        <li>
-                            <SeeAllCard href={seeAll()!} state={seeAllState()} />
-                        </li>
-                    </Show>
-                </ul>
-            </Show>
+                        </Show>
+                    </ul>
+                </Show>
+            </AskGate.Provider>
         </section>
     )
 }
