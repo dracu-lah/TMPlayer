@@ -152,3 +152,10 @@ Written 2026-11-18. Status: plan, nothing built yet.
   is still installed and signed in on the POCO, the full `:core:jvmTest :ui:jvmTest` run after the
   last parser fixes, the unfolded film copies without a year (same film, different quality, no year in
   the name), and the push (user).
+- 2026-11-19: the all-chats names dump ran (59 chats, 33,909 videos, 885 leftovers; files in
+  `private/name-survey/dump-2026-11-19-all/`). Full `:core:jvmTest :ui:jvmTest` pass on the parser fixes.
+  Found, left as is: files named only `S1E01 [BDRip ...]` or `S01 EP01 720p` make a show called
+  "bdrip" or "720p"; blanking that title turns 18 grouped episodes into 18 loose files (tried, reverted),
+  so a better fix needs the chat's name. Yearless film copies show as unfolded in the dump only because
+  the dump records length 0 and `SameVideo` needs a length for a film with no year. Open: the push (user).
+
