@@ -38,6 +38,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 // The viewer's named lists (HX43) on every Compose platform: the picker a video's or a show's menu
@@ -85,31 +86,72 @@ fun ListPickerDialog(
     val all by remember(lists) { lists.visible }.collectAsState(initial = null)
     val say by rememberUpdatedState(onMessage)
     val shown = all ?: return
+    val actions = remember(lists, s, record) { ListPickerActions(lists, s, record) { line -> say(line) } }
     ListPickerMenu(
         record = record,
         lists = shown,
-        onPick = { list, inIt ->
-            listWrite(say, s) {
-                if (inIt) {
+        onPick = { list, _ -> actions.toggle(list) },
+        onNew = { name -> actions.create(name, shown.size) },
+        onDismiss = onDismiss,
+    )
+}
+
+/**
+ * The two writes of "Add to a list" for [record], shared by the card menu's picker and the
+ * player's More options page so both say the same lines: [pick] puts the line in a list, or takes
+ * it out of one that has it (no confirm: nothing is lost, the line goes back with one more press),
+ * [create] makes a list of the name and puts the line in it.
+ */
+class ListPickerActions(
+    private val lists: ListsStore,
+    private val s: Messages,
+    private val record: WatchLaterRecord,
+    private val say: (String) -> Unit,
+) {
+    /** [inIt]: the line is in [list] now, so this press takes it out. */
+    fun pick(list: VisibleList, inIt: Boolean) {
+        listWrite(say, s) {
+            if (inIt) {
+                lists.remove(list.info.id, setOf(record.id))
+                s.listsRemoved(record.title, list.info.name)
+            } else {
+                addedLine(s, record, list.info.name, lists.add(list.info.id, record))
+            }
+        }
+    }
+
+    private val writing = kotlinx.coroutines.sync.Mutex()
+
+    /**
+     * A press that decides add or remove from the lists as they are when it runs, not as the screen
+     * last drew them: two quick presses before the screen catches up add, then remove, instead of
+     * adding twice. Writes of one picker take turns.
+     */
+    fun toggle(list: VisibleList) {
+        listWrite(say, s) {
+            writing.withLock {
+                val now = lists.now().entries.any { it.listId == list.info.id && it.record.id == record.id }
+                if (now) {
                     lists.remove(list.info.id, setOf(record.id))
                     s.listsRemoved(record.title, list.info.name)
                 } else {
                     addedLine(s, record, list.info.name, lists.add(list.info.id, record))
                 }
             }
-        },
-        onNew = { name ->
-            listWrite(say, s) {
-                val made = lists.create(name)
-                when {
-                    made != null -> addedLine(s, record, made.name, lists.add(made.id, record))
-                    shown.size >= NamedListRules.MAX_LISTS -> s.listsTooMany(NamedListRules.MAX_LISTS)
-                    else -> s.listsNameEmpty
-                }
+        }
+    }
+
+    /** [known]: how many lists the picker showed, to tell a full house from an empty name. */
+    fun create(name: String, known: Int) {
+        listWrite(say, s) {
+            val made = lists.create(name)
+            when {
+                made != null -> addedLine(s, record, made.name, lists.add(made.id, record))
+                known >= NamedListRules.MAX_LISTS -> s.listsTooMany(NamedListRules.MAX_LISTS)
+                else -> s.listsNameEmpty
             }
-        },
-        onDismiss = onDismiss,
-    )
+        }
+    }
 }
 
 /**

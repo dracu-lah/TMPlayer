@@ -7708,6 +7708,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             removeIntroMark = skipCtl.canMark && skipCtl.hasOwnMark,
             rotatePicture = stereoOffered(),
             playerVolume = !castUp(),
+            addToList = hasMessage(),
         )
         override fun zoomDetail(): String? =
             zoom.takeIf { it.zoomed }?.let { L.messages.formatter.scalePercent(it.percent) }
@@ -7729,6 +7730,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             removeIntroMark = skipCtl.canMark && skipCtl.hasOwnMark,
             rotatePicture = stereoOffered(),
             playerVolume = !castUp(),
+            addToList = hasMessage(),
         )
         override fun shape() = videoScale
         override fun speed() = playbackSpeed
@@ -7754,6 +7756,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         override fun watched() = onWatchedList
         override fun engineNow(): String? = if (vlcEngine != null) L.settingsEngineVlc else L.settingsEngineExoplayer
         override fun bookmarks() = if (hasMessage()) bookmarkActions() else null
+        override fun addToList() = listTarget()
         override fun playbackDetails() = this@PlayerActivity.playbackDetails()
         override fun onPhoneEntry(entry: PhoneMenuEntry) = onPhoneMenuEntry(entry)
         override fun onTvEntry(entry: PlayerMenuEntry) = onTvMenuEntry(entry)
@@ -7771,6 +7774,19 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 if (anchor != null) anchor.requestFocus() else controls?.focusRow()
             }
         }
+    }
+
+    /**
+     * What the More options' "Add to a list" page (HX43) works on: this video as the card menu
+     * would keep it (a video from a message, saving restricted or not, played whole or from
+     * pieces), taken now so the page keeps naming the one it was opened for, and the viewer's
+     * lists. Null for a file with no message, which a list cannot point at. A write says its
+     * line over the picture ([showGestureFeedback]).
+     */
+    private fun listTarget(): PlayerListTarget? {
+        if (!hasMessage()) return null
+        val record = com.tmplayer.data.WatchLaterRecord.of(currentItem(), chatTitle, System.currentTimeMillis())
+        return PlayerListTarget(record, watchedStore.lists) { line -> showGestureFeedback(line) }
     }
 
     /** What a line of the phone's panel does; its pages (shape, speed, 3D...) open in the panel. */
@@ -7803,6 +7819,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             PhoneMenuEntry.PictureShape, PhoneMenuEntry.Stereo, PhoneMenuEntry.Speed, PhoneMenuEntry.SleepTimer,
             PhoneMenuEntry.RotatePicture, PhoneMenuEntry.PlayerVolume,
             PhoneMenuEntry.AddBookmark, PhoneMenuEntry.Bookmarks, PhoneMenuEntry.PlaybackDetails,
+            PhoneMenuEntry.AddToList,
             -> Unit
         }
     }
@@ -7837,7 +7854,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             PlayerMenuEntry.RemoveIntroMark -> removeIntroMark()
             // Pages of the panel itself, opened there.
             PlayerMenuEntry.SleepTimer, PlayerMenuEntry.RemoteKeys, PlayerMenuEntry.Speed, PlayerMenuEntry.PictureShape,
-            PlayerMenuEntry.RotatePicture, PlayerMenuEntry.PlayerVolume,
+            PlayerMenuEntry.RotatePicture, PlayerMenuEntry.PlayerVolume, PlayerMenuEntry.AddToList,
             -> Unit
         }
     }

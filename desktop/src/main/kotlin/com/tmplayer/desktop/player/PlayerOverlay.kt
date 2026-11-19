@@ -211,6 +211,9 @@ internal sealed interface MenuAction {
     data object Shortcuts : MenuAction
     data object ToggleWatched : MenuAction
 
+    /** "Add to a list" (HX43): the player opens the lists' picker over the picture. */
+    data object AddToList : MenuAction
+
     /** The subtitle menu's "Search online", in a build with the OpenSubtitles key. */
     data object SearchOnline : MenuAction
 
@@ -431,6 +434,8 @@ internal fun BoxScope.PlayerOverlay(
     savable: Boolean = true,
     /** "Mark as watched" or "Mark as unwatched" for the menu, or null to leave the line out. */
     watchedLabel: String? = null,
+    /** Whether the menu offers "Add to a list": a video from a message, with the lists' store at hand. */
+    addToList: Boolean = false,
     /** A running sleep timer as the menu reads it ("25 minutes left"), or null for none. */
     sleepTimer: String? = null,
     /** The A-B repeat as marked so far, drawn on the timebar and named above it; null for none. */
@@ -559,14 +564,14 @@ internal fun BoxScope.PlayerOverlay(
                             Box {
                                 OverlayButton(TmIcons.Subtitles, s.playerSubtitlesHint, onClick = { onOpenMenu(MenuAt(MenuPage.Subtitles, MenuAt.Anchor.Subtitles)) })
                                 if (menu?.anchor == MenuAt.Anchor.Subtitles) {
-                                    PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, sleepTimer, bookmarks, loop, onOpenMenu, onCloseMenu, onMenuAction, repeatVideo = repeatVideo, markIntro = markIntro)
+                                    PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, sleepTimer, bookmarks, loop, onOpenMenu, onCloseMenu, onMenuAction, repeatVideo = repeatVideo, markIntro = markIntro, addToList = addToList)
                                 }
                             }
                         }
                         Box {
                             OverlayButton(TmIcons.Audio, s.playerAudioHint, onClick = { onOpenMenu(MenuAt(MenuPage.Audio, MenuAt.Anchor.Audio)) })
                             if (menu?.anchor == MenuAt.Anchor.Audio) {
-                                PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, sleepTimer, bookmarks, loop, onOpenMenu, onCloseMenu, onMenuAction, repeatVideo = repeatVideo, markIntro = markIntro)
+                                PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, sleepTimer, bookmarks, loop, onOpenMenu, onCloseMenu, onMenuAction, repeatVideo = repeatVideo, markIntro = markIntro, addToList = addToList)
                             }
                         }
                         Box {
@@ -585,7 +590,7 @@ internal fun BoxScope.PlayerOverlay(
                                 ) { Text(speedLabel, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium) }
                             }
                             if (menu?.anchor == MenuAt.Anchor.Speed) {
-                                PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, sleepTimer, bookmarks, loop, onOpenMenu, onCloseMenu, onMenuAction, repeatVideo = repeatVideo, markIntro = markIntro)
+                                PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, sleepTimer, bookmarks, loop, onOpenMenu, onCloseMenu, onMenuAction, repeatVideo = repeatVideo, markIntro = markIntro, addToList = addToList)
                             }
                         }
                         // A click steps the shape through all eight, as W does; the panel has its page of them.
@@ -615,7 +620,7 @@ internal fun BoxScope.PlayerOverlay(
         PlayerMenu(
             open, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable,
             watchedLabel, sleepTimer, bookmarks, loop, onOpenMenu, onCloseMenu, onMenuAction,
-            panel = true, subtitles = subtitlesButton, firstFocus = firstFocus, repeatVideo = repeatVideo, markIntro = markIntro,
+            panel = true, subtitles = subtitlesButton, firstFocus = firstFocus, repeatVideo = repeatVideo, markIntro = markIntro, addToList = addToList,
         )
     }
 }
@@ -1017,6 +1022,8 @@ internal fun PlayerMenu(
     /** Whether Repeat this video is on, or null where the menu has no such line. */
     repeatVideo: Boolean? = null,
     markIntro: String? = null,
+    /** Whether "Add to a list" is offered (a video from a message). */
+    addToList: Boolean = false,
 ) {
     val s = LocalStrings.current
     val copies = LocalPlayerCopies.current
@@ -1118,7 +1125,7 @@ internal fun PlayerMenu(
                 ) { onAction(MenuAction.RotatePicture) }
                 Entry(s.playerStereo, trailing = stereoSummary(status.stereo)) { page(MenuPage.Stereo) }
                 Entry(s.playerSubtitleStyleAndTiming) { page(MenuPage.SubtitleStyle) }
-                if (fromTelegram || watchedLabel != null) HorizontalDivider()
+                if (fromTelegram || watchedLabel != null || addToList) HorizontalDivider()
                 if (fromTelegram) {
                     Entry(s.commonCopyLink) { pick(MenuAction.CopyLink) }
                     if (savable) {
@@ -1127,6 +1134,8 @@ internal fun PlayerMenu(
                     }
                 }
                 if (watchedLabel != null) Entry(watchedLabel) { pick(MenuAction.ToggleWatched) }
+                // A list keeps a name, never a copy: a chat that restricts saving may be in one too.
+                if (addToList) Entry(s.listsAddTo, detail = s.listsAddToDetail, icon = TmIcons.List) { pick(MenuAction.AddToList) }
                 if (bookmarks != null) {
                     HorizontalDivider()
                     Entry(s.playerAddBookmark, trailing = "B") { pick(MenuAction.AddBookmark) }
