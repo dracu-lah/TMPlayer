@@ -1,0 +1,30 @@
+/* Topics (WB21): the "Chat > Topic" rows over a search's videos, and the chip a chat holds when it is opened on one. */
+.topic-hits { margin: 12px 0 16px; max-width: 720px; }
+.topic-hits-title { font-size: 22px; line-height: 28px; font-weight: 400; margin: 8px 0 8px; }
+.topic-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.topic-row {
+  display: flex; flex-direction: column; justify-content: center; gap: 2px; min-height: 48px; padding: 8px 12px; margin: 0 -12px;
+  border-radius: var(--r-m); color: inherit; text-decoration: none; transition: background var(--fast);
+}
+.topic-row:hover { background: var(--surface); }
+.topic-row:active { background: var(--surface-high); }
+.topic-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.topic-label { font-size: 16px; line-height: 24px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topic-facts { font-size: 12px; line-height: 16px; color: var(--muted); }
+/* A topic that holds no videos stays listed, quieter, and answers hover and focus at full strength. */
+.topic-row.dim .topic-label { color: var(--muted); }
+.topic-row.dim:hover .topic-label, .topic-row.dim:focus-visible .topic-label { color: var(--fg); }
+
+/* The chat opened on one topic: its name and the way back to every topic. */
+.topic-chip-row { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; margin: 0 0 12px; }
+.topic-chip {
+  font-size: 14px; line-height: 20px; padding: 4px 12px; border-radius: 999px; max-width: 100%;
+  background: var(--accent-container); color: var(--on-accent-container); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+html[data-form=tv] .topic-hits { max-width: calc(var(--dp) * 960); }
+html[data-form=tv] .topic-hits-title { font-size: calc(var(--dp) * 22); line-height: calc(var(--dp) * 28); margin: calc(var(--dp) * 12) 0 calc(var(--dp) * 12); }
+html[data-form=tv] .topic-row { min-height: calc(var(--dp) * 56); padding: calc(var(--dp) * 8) calc(var(--dp) * 16); margin: 0 calc(var(--dp) * -16); }
+html[data-form=tv] .topic-label { font-size: calc(var(--dp) * 18); line-height: calc(var(--dp) * 26); }
+html[data-form=tv] .topic-facts { font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 20); }
+html[data-form=tv] .topic-chip { font-size: calc(var(--dp) * 16); line-height: calc(var(--dp) * 22); padding: calc(var(--dp) * 4) calc(var(--dp) * 14); }

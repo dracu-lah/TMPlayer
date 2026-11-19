@@ -38,6 +38,10 @@ export type WebFacets = Plain<core.WebFacets>
 export type WebSpeedScopes = Plain<core.WebSpeedScopes>
 export type WebSettingsRow = Plain<core.WebSettingsRow>
 export type WebLanguage = Plain<core.WebLanguage>
+export type WebTopicBudget = Plain<core.WebTopicBudget>
+export type WebTopicChat = Plain<core.WebTopicChat>
+export type WebTopic = Plain<core.WebTopic>
+export type WebTopicHit = Plain<core.WebTopicHit>
 
 let loading: Promise<Rules> | null = null
 
