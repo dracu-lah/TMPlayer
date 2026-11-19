@@ -1,8 +1,9 @@
 import { createEffect, createSignal, For, on, onCleanup, onMount, Show } from 'solid-js'
 import { A, useNavigate } from '@solidjs/router'
-import { ArrowLeft01Icon, ArrowRight01Icon, InformationCircleIcon, PlayIcon } from '@hugeicons/core-free-icons'
+import { ArrowLeft01Icon, ArrowRight01Icon, InformationCircleIcon, PauseIcon, PlayIcon } from '@hugeicons/core-free-icons'
 import { t } from '../i18n'
 import { Icon } from '../ui/Icon'
+import { form } from '../form'
 import { answer, askOf, loadBackdropLightFirst, loadExtras, loadLogo, type Answer, type Extras } from './posters'
 import { settings } from '../store'
 import { TitleLogo } from '../ui/TitleLogo'
@@ -27,16 +28,19 @@ const FADE_MS = 520
 
 /** The page that was up when Home was left, so a Back to Home lands on it (the apps keep the page's key). */
 let lastKey: string | null = null
+/** The viewer stopped the carousel with its Pause button: it stays still for the rest of the session (WCAG 2.2.2). */
+const [stopped, setStopped] = createSignal(false)
 
 /**
  * Home's carousel on a phone and a desktop (FeaturedCarousel): the newest five in Recently added,
  * one picture across the top of Home with the name (its logo where TMDB has one), a line of facts,
- * the overview, Play (or Resume) as the bright pill with Details beside it, and the page dots with
- * an arrow either side. One picture cross-fades under the pages and the words cross-fade in place.
- * The arrows show while the pointer is over the carousel, the keyboard is in it, and for a while
- * after a touch; Tab reaches the carousel (a ring round it), Left and Right turn the page, Enter
- * opens its details and Space plays it. A drag, a swipe and a touchpad's sideways scroll turn one
- * page a gesture. It moves on by itself only while the tab is in sight, the pointer and the
+ * the overview, Play (or Resume) as the bright pill with Details beside it, and the page dots. One
+ * picture cross-fades under the pages and the words cross-fade in place. On a phone the dots have
+ * an arrow either side, shown while the keyboard is in the carousel and for a while after a touch.
+ * The desktop has no arrows (HX65, decision D1, as the desktop app): its pages turn by the clickable
+ * dots, Left and Right, a drag, a swipe and a touchpad's sideways scroll. Tab reaches the carousel
+ * (a ring round it), Left and Right turn the page, Enter opens its details and Space plays it. A
+ * drag, a swipe and a touchpad's sideways scroll turn one page a gesture. It moves on by itself only while the tab is in sight, the pointer and the
  * keyboard are elsewhere, nothing is held or touched, motion is allowed and the page was touched
  * in the last minute, so a Home left open stops drawing. Its height is held from the first frame
  * (the skeleton is as tall), so the rows under it never move when it fills.
@@ -85,11 +89,19 @@ export function Hero(props: { rows: HomeRow[] | undefined }) {
         document.removeEventListener('visibilitychange', onVisible)
         for (const e of ['pointerdown', 'keydown', 'wheel', 'touchstart'] as const) removeEventListener(e, touched)
     })
-    const still = matchMedia('(prefers-reduced-motion: reduce)').matches
+    // Reduced motion is read live: a change in the system's setting takes effect without a reload.
+    const motion = matchMedia('(prefers-reduced-motion: reduce)')
+    const [reduced, setReduced] = createSignal(motion.matches)
+    const onMotion = () => setReduced(motion.matches)
+    motion.addEventListener?.('change', onMotion)
+    onCleanup(() => motion.removeEventListener?.('change', onMotion))
+    const still = () => reduced()
+    // The desktop turns pages by its dots, keys, drag and swipe, with no arrow buttons (D1); the phone keeps them.
+    const arrows = () => form() !== 'desktop'
     const paused = () => over() || within() || held() || touchShown()
     createEffect(() => {
         const n = picks()?.length ?? 0
-        if (n < 2 || still || paused() || !seen() || !awake()) return
+        if (n < 2 || still() || stopped() || paused() || !seen() || !awake()) return
         index()
         const timer = window.setTimeout(() => {
             if (performance.now() - lastTouch() > IDLE_MS) return setAwake(false)
@@ -100,6 +112,7 @@ export function Hero(props: { rows: HomeRow[] | undefined }) {
     // A touch shows the arrows for a while.
     let touchTimer = 0
     const touchArrows = () => {
+        if (!arrows()) return
         setTouchShown(true)
         clearTimeout(touchTimer)
         touchTimer = window.setTimeout(() => setTouchShown(false), TOUCH_ARROWS_MS)
@@ -116,7 +129,7 @@ export function Hero(props: { rows: HomeRow[] | undefined }) {
             if (layers().at(-1)?.key === tile.key) return
             setLayers([...layers().slice(-1), { key: tile.key, tile }])
             clearTimeout(settle)
-            settle = window.setTimeout(() => setLayers((l) => l.slice(-1)), still ? 0 : FADE_MS)
+            settle = window.setTimeout(() => setLayers((l) => l.slice(-1)), still() ? 0 : FADE_MS)
         }),
     )
     onCleanup(() => clearTimeout(settle))
@@ -183,7 +196,16 @@ export function Hero(props: { rows: HomeRow[] | undefined }) {
     const up = (e: PointerEvent) => {
         setHeld(false)
         const dx = e.clientX - startX
-        if (e.type === 'pointerup' && Math.abs(dx) > 48 && Math.abs(dx) > Math.abs(e.clientY - startY) * 1.5) go(index() + (dx < 0 ? 1 : -1))
+        if (e.type === 'pointerup' && Math.abs(dx) > 48 && Math.abs(dx) > Math.abs(e.clientY - startY) * 1.5) {
+            go(index() + (dx < 0 ? 1 : -1))
+            // A drag that began and ended on Play or Details turned the page: the click that follows is not a press.
+            const swallow = (c: Event) => {
+                c.preventDefault()
+                c.stopPropagation()
+            }
+            section.addEventListener('click', swallow, { capture: true, once: true })
+            setTimeout(() => section.removeEventListener('click', swallow, true), 100)
+        }
     }
 
     // Left and Right turn the page once the carousel has the keyboard, wherever in it; Enter on the
@@ -211,7 +233,7 @@ export function Hero(props: { rows: HomeRow[] | undefined }) {
                 tabindex="0"
                 aria-roledescription="carousel"
                 aria-label={t('home.row_recent')}
-                data-arrows={(over() || within() || touchShown()) && (picks()?.length ?? 0) > 1 ? '' : undefined}
+                data-arrows={arrows() && (over() || within() || touchShown()) && (picks()?.length ?? 0) > 1 ? '' : undefined}
                 onPointerEnter={(e) => e.pointerType === 'mouse' && setOver(true)}
                 onPointerLeave={(e) => {
                     setOver(false)
@@ -245,11 +267,23 @@ export function Hero(props: { rows: HomeRow[] | undefined }) {
                     </For>
                     <Show when={(picks()?.length ?? 0) > 1}>
                         <div class="hero-nav">
-                            <span class="hero-arrow-slot">
-                                <button type="button" class="round-button hero-arrow" tabindex="-1" aria-label={t('home.row_scroll_back')} title={t('home.row_scroll_back')} onClick={() => go(index() - 1)}>
-                                    <Icon icon={ArrowLeft01Icon} size={22} />
-                                </button>
-                            </span>
+                            <Show when={arrows()}>
+                                <span class="hero-arrow-slot">
+                                    <button type="button" class="round-button hero-arrow" tabindex="-1" aria-label={t('home.row_scroll_back')} title={t('home.row_scroll_back')} onClick={() => go(index() - 1)}>
+                                        <Icon icon={ArrowLeft01Icon} size={22} />
+                                    </button>
+                                </span>
+                            </Show>
+                            <button
+                                type="button"
+                                class="hero-pause"
+                                aria-pressed={stopped()}
+                                aria-label={stopped() ? t('home.featured_resume') : t('home.featured_pause')}
+                                title={stopped() ? t('home.featured_resume') : t('home.featured_pause')}
+                                onClick={() => setStopped(!stopped())}
+                            >
+                                <Icon icon={stopped() ? PlayIcon : PauseIcon} size={16} />
+                            </button>
                             <div class="hero-dots" role="tablist" aria-label={t('home.featured_page', { index: index() + 1, count: picks()!.length })}>
                                 <For each={picks()!}>
                                     {(_, i) => (
@@ -264,11 +298,13 @@ export function Hero(props: { rows: HomeRow[] | undefined }) {
                                     )}
                                 </For>
                             </div>
-                            <span class="hero-arrow-slot">
-                                <button type="button" class="round-button hero-arrow" tabindex="-1" aria-label={t('home.row_scroll_on')} title={t('home.row_scroll_on')} onClick={() => go(index() + 1)}>
-                                    <Icon icon={ArrowRight01Icon} size={22} />
-                                </button>
-                            </span>
+                            <Show when={arrows()}>
+                                <span class="hero-arrow-slot">
+                                    <button type="button" class="round-button hero-arrow" tabindex="-1" aria-label={t('home.row_scroll_on')} title={t('home.row_scroll_on')} onClick={() => go(index() + 1)}>
+                                        <Icon icon={ArrowRight01Icon} size={22} />
+                                    </button>
+                                </span>
+                            </Show>
                         </div>
                     </Show>
                 </Show>
@@ -361,11 +397,11 @@ function HeroWords(props: { tile: Tile; leaving: boolean; swapping: boolean; pro
                 <p class="hero-overview">{overview()}</p>
             </Show>
             <div class="hero-actions">
-                <A class="hero-play" href={watchPath(props.tile.item)} state={{ video: props.tile.item }}>
+                <A class="hero-play" draggable={false} href={watchPath(props.tile.item)} state={{ video: props.tile.item }}>
                     <Icon icon={PlayIcon} size={22} />
                     {pagePlayLabel(props.tile, resumed())}
                 </A>
-                <A class="hero-info" href={detailPath(props.tile.item)} state={{ video: props.tile.item }} aria-label={t('detail.open_details')} title={t('detail.open_details')}>
+                <A class="hero-info" draggable={false} href={detailPath(props.tile.item)} state={{ video: props.tile.item }} aria-label={t('detail.open_details')} title={t('detail.open_details')}>
                     <Icon icon={InformationCircleIcon} size={22} />
                 </A>
             </div>

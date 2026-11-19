@@ -107,7 +107,7 @@ test('a touchpad swipe across the carousel turns one page and never goes Back', 
     expect(cancelled).toBe(true)
 })
 
-test('the carousel has its facts and overview, arrows that show on hover, and keys: Left and Right turn, Enter opens the details', async ({ page, context }) => {
+test('the carousel has its facts and overview, dots on a desktop (no arrow buttons) and arrows on a phone, and keys: Left and Right turn, Enter opens the details', async ({ page, context }) => {
     await fakeCase(context, 'big')
     await mockTmdb(page, null)
     await noSizeFloor(page)
@@ -121,26 +121,30 @@ test('the carousel has its facts and overview, arrows that show on hover, and ke
     await expect(words.locator('.hero-facts')).toContainText('2019')
     await expect(words.locator('.hero-facts')).toContainText('Drama, Mystery')
     await expect(words.locator('.hero-overview')).toContainText('A harbour town keeps its notes.')
-    // The arrows keep their places hidden and come with the pointer.
+    const desktop = (await page.evaluate(() => document.documentElement.dataset.form)) === 'desktop'
     const next = hero.getByRole('button', { name: 'Scroll on' })
-    await expect(next).toBeHidden()
-    const mobile = test.info().project.name.startsWith('phone')
-    if (!mobile) {
+    let start = 0
+    if (desktop) {
+        // HX65 (D1): no arrow buttons on the desktop at all, not even on hover; the dots turn the pages.
         await hero.hover()
-        await expect(next).toBeVisible()
-        await next.click()
+        await expect(next).toHaveCount(0)
+        await expect(hero.getByRole('button', { name: 'Scroll back' })).toHaveCount(0)
+        await dots.nth(1).click()
         await expect(dots.nth(1)).toHaveAttribute('aria-selected', 'true')
         await page.mouse.move(5, 5)
+        start = 1
+    } else {
+        // The phone keeps its arrows: hidden until a touch or the keyboard brings them.
+        await expect(next).toBeHidden()
     }
     // The carousel takes the keyboard: Tab reaches it (not its arrows), the arrow keys turn the page.
     await hero.focus()
     await expect(hero).toBeFocused()
-    const start = mobile ? 0 : 1
     await page.keyboard.press('ArrowRight')
     await expect(dots.nth(start + 1)).toHaveAttribute('aria-selected', 'true')
     await page.keyboard.press('ArrowLeft')
     await expect(dots.nth(start)).toHaveAttribute('aria-selected', 'true')
-    expect(await hero.getByRole('button', { name: 'Scroll on' }).getAttribute('tabindex')).toBe('-1')
+    if (!desktop) expect(await next.getAttribute('tabindex')).toBe('-1')
     await page.keyboard.press('Enter')
     await expect(page).toHaveURL(/\/video\//)
 })

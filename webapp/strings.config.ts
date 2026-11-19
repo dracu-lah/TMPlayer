@@ -175,6 +175,8 @@ export const PAGE_STRINGS = [
     'grid.sort_year',
     'home.featured_film',
     'home.featured_page',
+    'home.featured_pause',
+    'home.featured_resume',
     'home.featured_series',
     'home.first_body',
     'home.first_more',
