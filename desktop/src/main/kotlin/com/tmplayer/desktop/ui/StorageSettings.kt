@@ -46,6 +46,9 @@ import com.tmplayer.desktop.DesktopPaths
 import com.tmplayer.desktop.DesktopSettings
 import com.tmplayer.desktop.DesktopStorage
 import com.tmplayer.desktop.DownloadIndex
+import com.tmplayer.desktop.StorageRelocation
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import com.tmplayer.desktop.os.FolderPicker
 import com.tmplayer.ui.components.jumpTarget
 import com.tmplayer.ui.components.rememberToast
@@ -139,36 +142,45 @@ internal fun StorageGroup(state: ShellState, jumps: Map<com.tmplayer.ui.onboardi
 
     val root = desktop.storageRoot.takeIf { it.isNotBlank() }?.let(::File)
     val idle = busy == null && moving == null
-    Setting(
-        s.storageLocation,
-        when {
-            moving != null -> s.storageMovingProgress(StorageRelocationPlan.size(moving!!.doneBytes), StorageRelocationPlan.size(moving!!.totalBytes))
-            busy != null -> busy!!
-            root != null && DesktopPaths.unusableRoot?.path == root.path -> s.storageLocationUnavailable(StorageRelocationPlan.appFolder(root).path)
-            root != null -> StorageRelocationPlan.appFolder(root).path
-            else -> s.storageDefaultFolders(DesktopPaths.layout(null).downloadsDir.path)
+    // What is left to do: downloads outside the Downloads folder (a stop, a cancel, a move made
+    // without them), and a move that waits for a drive that is not there.
+    var outside by remember { mutableStateOf(0 to 0L) }
+    var waitingFor by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(refresh, desktop.storageRoot, moving == null) {
+        outside = runCatching { DesktopStorage.relocation.outside() }.getOrDefault(0 to 0L)
+        waitingFor = DesktopStorage.relocation.pending()?.root?.takeIf { it.isNotBlank() }?.let(::File)
+            ?.takeIf { DesktopPaths.unusableRoot?.path == it.path }?.let { StorageRelocationPlan.appFolder(it).path }
+    }
+    StorageLocationRow(
+        StorageLocationState(
+            detail = when {
+                moving != null -> moving?.let { s.storageMovingProgress(StorageRelocationPlan.size(it.doneBytes), StorageRelocationPlan.size(it.totalBytes)) }.orEmpty()
+                busy != null -> busy.orEmpty()
+                waitingFor != null -> s.storageAndroidWaiting(waitingFor.orEmpty())
+                root != null && DesktopPaths.unusableRoot?.path == root.path -> s.storageLocationUnavailable(StorageRelocationPlan.appFolder(root).path)
+                root != null -> StorageRelocationPlan.appFolder(root).path
+                else -> s.storageDefaultFolders(DesktopPaths.layout(null).downloadsDir.path)
+            },
+            progress = moving?.let { m -> if (m.totalBytes > 0) (m.doneBytes.toFloat() / m.totalBytes).coerceIn(0f, 1f) else 0f },
+            canChange = idle,
+            canReset = idle && root != null,
+            moving = moving != null,
+            waiting = waitingFor != null && idle,
+            leftoverDetail = outside.takeIf { it.first > 0 && idle && waitingFor == null }
+                ?.let { s.storageMoveLeftover(it.first, StorageRelocationPlan.size(it.second)) },
+        ),
+        onChange = {
+            scope.launch {
+                val picked = FolderPicker.pick(s.storagePickTitle, root ?: DesktopPaths.downloadsDir.parentFile)
+                    ?: return@launch
+                dialog = check(state, picked)
+            }
         },
-        icon = TmIcons.Folder,
-    ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            RowButton(s.commonChange, enabled = idle) {
-                scope.launch {
-                    val picked = FolderPicker.pick(s.storagePickTitle, root ?: DesktopPaths.downloadsDir.parentFile)
-                        ?: return@launch
-                    dialog = check(state, picked)
-                }
-            }
-            if (root != null) {
-                RowButton(s.commonReset, enabled = idle) { scope.launch { dialog = check(state, null) } }
-            }
-        }
-    }
-    moving?.let { m ->
-        LinearProgressIndicator(
-            progress = { if (m.totalBytes > 0) (m.doneBytes.toFloat() / m.totalBytes).coerceIn(0f, 1f) else 0f },
-            modifier = Modifier.fillMaxWidth(),
-        )
-    }
+        onReset = { scope.launch { dialog = check(state, null) } },
+        onCancel = { DesktopStorage.relocation.cancel() },
+        onForget = { dialog = StorageDialog.Forget(waitingFor.orEmpty()) },
+        onMoveRest = { scope.launch { dialog = checkRest(state) } },
+    )
 
     val limitGb = desktop.cacheLimitBytes / GB
     Setting(
@@ -229,29 +241,61 @@ internal fun StorageGroup(state: ShellState, jumps: Map<com.tmplayer.ui.onboardi
             text = { Text(d.reason) },
             confirmButton = { TextButton(onClick = { dialog = null }) { Text(s.commonOk) } },
         )
-        is StorageDialog.Confirm -> ConfirmDialog(
-            title = d.title,
-            message = d.body,
-            detail = d.warning,
-            confirmLabel = if (d.adopt) s.storageAdopt else s.storageMove,
+        is StorageDialog.Confirm -> MoveConfirm(d, onDismiss = { dialog = null }) { alsoMove ->
+            dialog = null
+            busy = s.storageRestarting
+            scope.launch {
+                val outcome = runCatching { DesktopStorage.relocation.move(d.root, alsoMove) }
+                busy = null
+                refresh++
+                outcome.onSuccess { announce(it, toast) { report -> dialog = StorageDialog.Report(report) } }
+                    .onFailure { dialog = StorageDialog.Refused(s.storageMoveStopped(it.message.orEmpty())) }
+                if (d.adopt && outcome.isSuccess) {
+                    val found = DownloadIndex.scan(settings)
+                    if (found.isNotEmpty()) {
+                        toast(s.storageAdoptFound(found.size))
+                    }
+                }
+            }
+        }
+        is StorageDialog.MoveRest -> ConfirmDialog(
+            title = s.storageMoveRestTitle(d.folder),
+            message = s.storageMoveDownloads(d.count, StorageRelocationPlan.size(d.bytes), d.folder),
+            detail = s.storageMoveBody,
+            confirmLabel = s.storageMove,
             destructive = false,
             onDismiss = { dialog = null },
             onConfirm = {
                 dialog = null
-                busy = s.storageRestarting
                 scope.launch {
-                    val outcome = runCatching { DesktopStorage.relocation.move(d.root) }
-                    busy = null
+                    val outcome = runCatching { DesktopStorage.relocation.moveRemaining() }
                     refresh++
-                    outcome.onSuccess { toast(it.message) }.onFailure { toast(s.storageMoveStopped(it.message.orEmpty())) }
-                    if (d.adopt && outcome.isSuccess) {
-                        val found = DownloadIndex.scan(settings)
-                        if (found.isNotEmpty()) {
-                            toast(s.storageAdoptFound(found.size))
-                        }
-                    }
+                    outcome.onSuccess { announce(it, toast) { report -> dialog = StorageDialog.Report(report) } }
+                        .onFailure { dialog = StorageDialog.Refused(s.storageMoveStopped(it.message.orEmpty())) }
                 }
             },
+        )
+        is StorageDialog.Forget -> ConfirmDialog(
+            title = s.storageAndroidForgetTitle(d.folder),
+            message = s.storageAndroidForgetBody(d.folder),
+            confirmLabel = s.storageAndroidForget,
+            destructive = false,
+            onDismiss = { dialog = null },
+            onConfirm = {
+                dialog = null
+                DesktopStorage.relocation.forgetPending()
+                refresh++
+            },
+        )
+        is StorageDialog.Report -> TmAlertDialog(
+            onDismissRequest = { dialog = null },
+            title = { Text(s.storageReportTitle) },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    d.lines.forEach { Text(it) }
+                }
+            },
+            confirmButton = { TextButton(onClick = { dialog = null }) { Text(s.commonOk) } },
         )
         StorageDialog.RemoveAfterWatching -> ConfirmDialog(
             title = s.confirmRemoveAfterWatchingTitle,
@@ -326,8 +370,136 @@ private fun SettingsFreeUpReview(
 /** The dialogs the Storage group can raise. */
 internal sealed interface StorageDialog {
     data class Refused(val reason: String) : StorageDialog
-    data class Confirm(val root: File?, val title: String, val body: String, val warning: String?, val adopt: Boolean) : StorageDialog
+
+    /**
+     * The question before a move. The words of the body follow the tick ([alsoMove] in
+     * [MoveConfirm]), so the inputs to them are kept, not the sentence.
+     *
+     * @param canAlsoMove whether the downloads fit on the new drive with a gigabyte to spare.
+     * @param freeLine the new drive's free space, as the viewer reads it.
+     */
+    data class Confirm(
+        val root: File?,
+        val where: String,
+        val newDownloads: String,
+        val newCache: String,
+        val downloadCount: Int,
+        val downloadsBytes: Long,
+        val cacheBytes: Long,
+        val warning: String?,
+        val adopt: Boolean,
+        val canAlsoMove: Boolean,
+        val freeLine: String,
+    ) : StorageDialog
+
+    /** Move the downloads that sit outside the Downloads folder now. */
+    data class MoveRest(val count: Int, val bytes: Long, val folder: String) : StorageDialog
+
+    /** Stop waiting for a move whose drive is not there. */
+    data class Forget(val folder: String) : StorageDialog
+
+    /** What a move did, when the toast would say too little. */
+    data class Report(val lines: List<String>) : StorageDialog
+
     data object RemoveAfterWatching : StorageDialog
+}
+
+/** The Storage location row as it reads and what it offers. */
+internal data class StorageLocationState(
+    val detail: String,
+    /** The move's progress, 0 to 1, or null when none runs. */
+    val progress: Float?,
+    val canChange: Boolean,
+    val canReset: Boolean,
+    val moving: Boolean,
+    /** A move waits for a drive that is not connected. */
+    val waiting: Boolean,
+    /** Downloads outside the Downloads folder, said once, or null when there are none. */
+    val leftoverDetail: String?,
+)
+
+/**
+ * The Storage location row, the move's progress with its Cancel, the row that waits for a drive
+ * with Forget the move, and the row for downloads left behind with Move. Stateless, so a test or a
+ * screenshot can set it to any state.
+ */
+@Composable
+internal fun StorageLocationRow(
+    state: StorageLocationState,
+    onChange: () -> Unit,
+    onReset: () -> Unit,
+    onCancel: () -> Unit,
+    onForget: () -> Unit,
+    onMoveRest: () -> Unit,
+) {
+    val s = LocalStrings.current
+    Setting(s.storageLocation, state.detail, icon = TmIcons.Folder) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (state.moving) {
+                RowButton(s.commonCancel, onClick = onCancel)
+            } else {
+                RowButton(s.commonChange, enabled = state.canChange, onClick = onChange)
+                if (state.canReset) RowButton(s.commonReset, onClick = onReset)
+                if (state.waiting) RowButton(s.storageAndroidForget, onClick = onForget)
+            }
+        }
+    }
+    state.progress?.let { p ->
+        LinearProgressIndicator(progress = { p }, modifier = Modifier.fillMaxWidth())
+    }
+    state.leftoverDetail?.let { detail ->
+        Setting(s.storageMoveLeftoverTitle, detail, icon = TmIcons.Download) {
+            RowButton(s.storageMove, onClick = onMoveRest)
+        }
+    }
+}
+
+/**
+ * The question before a move, with the tick that decides whether the downloads go too. Off, so a
+ * large copy that deletes the originals is never a default; not offered when they do not fit.
+ */
+@Composable
+internal fun MoveConfirm(d: StorageDialog.Confirm, onDismiss: () -> Unit, onConfirm: (alsoMove: Boolean) -> Unit) {
+    val s = LocalStrings.current
+    var also by remember { mutableStateOf(false) }
+    val (title, body) = StorageRelocationPlan.confirmText(
+        where = d.where,
+        newDownloads = d.newDownloads,
+        newCache = d.newCache,
+        downloadCount = d.downloadCount,
+        downloadsBytes = d.downloadsBytes,
+        cacheBytes = d.cacheBytes,
+        adopt = d.adopt,
+        moveDownloads = also && d.canAlsoMove,
+    )
+    ConfirmDialog(
+        title = title,
+        message = body,
+        detail = d.warning,
+        confirmLabel = if (d.adopt) s.storageAdopt else s.storageMove,
+        destructive = false,
+        onDismiss = onDismiss,
+        onConfirm = { onConfirm(also && d.canAlsoMove) },
+        extra = {
+            if (d.downloadCount > 0) {
+                if (d.canAlsoMove) {
+                    CheckRow(also, { also = it }, s.storageAndroidMoveLabel(d.downloadCount, StorageRelocationPlan.size(d.downloadsBytes)))
+                } else {
+                    Text(
+                        s.storageAndroidMoveTooSmall(d.downloadCount, StorageRelocationPlan.size(d.downloadsBytes)),
+                        color = Tone.muted,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+            Text(d.freeLine, color = Tone.muted, style = MaterialTheme.typography.bodySmall)
+        },
+    )
+}
+
+/** The toast for a clean move, the report for one that stopped or left something. */
+private fun announce(outcome: StorageRelocation.Outcome, toast: (String) -> Unit, report: (List<String>) -> Unit) {
+    if (outcome.needsReport) report(outcome.report()) else toast(outcome.message)
 }
 
 private fun setLimit(state: ShellState, bytes: Long) {
@@ -339,9 +511,11 @@ private fun setLimit(state: ShellState, bytes: Long) {
     }
 }
 
+
 /**
  * Checks a picked folder (null: back to the default folders) and words the answer: a refusal, or
- * the confirm dialog for the move.
+ * the confirm dialog for the move. The folder has to fit and be usable; whether the downloads fit
+ * too only decides if the tick that carries them is offered.
  */
 private suspend fun check(state: ShellState, picked: File?): StorageDialog = withContext(Dispatchers.IO) {
     val settings = state.settings
@@ -350,8 +524,10 @@ private suspend fun check(state: ShellState, picked: File?): StorageDialog = wit
     val records = runCatching { settings.downloadsNow() }.getOrDefault(emptyList())
     val target = DesktopPaths.layout(picked)
     val moving = StorageRelocationPlan.toMove(records, target.downloadsDir)
-    val downloadsBytes = moving.sumOf { File(it.localPath!!).length() }
+    val downloadsBytes = moving.sumOf { File(it.localPath.orEmpty()).length() }
+    val crossingBytes = bytesAcrossDrives(moving, target.downloadsDir)
     val cacheBytes = runCatching { Td.storageUsedBytes() }.getOrDefault(0L)
+    val free = DiskInfo.of(picked ?: target.downloadsDir)
 
     var adopt = false
     var warning: String? = null
@@ -360,7 +536,8 @@ private suspend fun check(state: ShellState, picked: File?): StorageDialog = wit
             candidate = inspect(picked),
             currentFolders = listOf(current.cacheDir, current.downloadsDir),
             currentRoot = currentRoot,
-            downloadsBytes = if (sameDrive(current.downloadsDir, picked)) 0 else downloadsBytes,
+            downloadsBytes = 0,
+            pathLimit = if (isWindows) WINDOWS_PATH_LIMIT else 0,
         )
         when (verdict) {
             is StorageRelocationPlan.Verdict.Refused -> return@withContext StorageDialog.Refused(verdict.reason)
@@ -369,30 +546,68 @@ private suspend fun check(state: ShellState, picked: File?): StorageDialog = wit
                 warning = verdict.warning
             }
         }
-    } else {
-        val free = DiskInfo.of(target.downloadsDir).freeBytes
-        if (free in 1 until downloadsBytes + StorageRelocationPlan.SPARE_BYTES && !sameDrive(current.downloadsDir, target.downloadsDir)) {
-            return@withContext StorageDialog.Refused(
-                L.storageDefaultDriveTooSmall(
-                    StorageRelocationPlan.size(free),
-                    StorageRelocationPlan.size(downloadsBytes + StorageRelocationPlan.SPARE_BYTES),
-                ),
-            )
-        }
+    } else if (free.freeBytes in 1 until StorageRelocationPlan.SPARE_BYTES) {
+        return@withContext StorageDialog.Refused(
+            L.storageDefaultDriveTooSmall(
+                StorageRelocationPlan.size(free.freeBytes),
+                StorageRelocationPlan.size(StorageRelocationPlan.SPARE_BYTES),
+            ),
+        )
     }
-    val (title, body) = StorageRelocationPlan.confirmText(
+    StorageDialog.Confirm(
+        root = picked,
         where = picked?.path ?: L.storageTheDefaultFolders,
         newDownloads = target.downloadsDir.path,
         newCache = target.cacheDir.path,
         downloadCount = moving.size,
         downloadsBytes = downloadsBytes,
         cacheBytes = cacheBytes,
+        warning = warning,
         adopt = adopt,
+        canAlsoMove = StorageRelocationPlan.fits(crossingBytes, free.freeBytes),
+        freeLine = L.storageDriveFree(
+            StorageRelocationPlan.size(free.freeBytes),
+            StorageRelocationPlan.size(free.totalBytes),
+            picked?.path ?: target.downloadsDir.path,
+        ),
     )
-    StorageDialog.Confirm(picked, title, body, warning, adopt)
 }
 
-private fun sameDrive(a: File, b: File) = com.tmplayer.data.DownloadFiles.sameStore(a, b)
+/** The question for moving the downloads that sit outside the Downloads folder, or why it cannot be asked. */
+private suspend fun checkRest(state: ShellState): StorageDialog = withContext(Dispatchers.IO) {
+    val target = DesktopPaths.layout(DesktopStorage.relocation.currentRoot())
+    val records = runCatching { state.settings.downloadsNow() }.getOrDefault(emptyList())
+    val moving = StorageRelocationPlan.toMove(records, target.downloadsDir)
+    if (moving.isEmpty()) return@withContext StorageDialog.Report(listOf(L.storageMoveNoDownloads(target.downloadsDir.path)))
+    val bytes = moving.sumOf { File(it.localPath.orEmpty()).length() }
+    val crossing = bytesAcrossDrives(moving, target.downloadsDir)
+    val free = DiskInfo.of(target.downloadsDir).freeBytes
+    if (!StorageRelocationPlan.fits(crossing, free)) {
+        return@withContext StorageDialog.Refused(
+            L.storageDriveTooSmall(StorageRelocationPlan.size(free), StorageRelocationPlan.size(crossing + StorageRelocationPlan.SPARE_BYTES)),
+        )
+    }
+    StorageDialog.MoveRest(moving.size, bytes, target.downloadsDir.path)
+}
+
+/**
+ * What of [moving] has to be copied to [downloadsDir] rather than renamed: the files on another
+ * drive. Asked once per folder, not per file, so a long list stays quick.
+ */
+private fun bytesAcrossDrives(moving: List<com.tmplayer.data.ResumeRecord>, downloadsDir: File): Long {
+    val sameStore = HashMap<File?, Boolean>()
+    return moving.sumOf { record ->
+        val file = File(record.localPath.orEmpty())
+        val same = sameStore.getOrPut(file.absoluteFile.parentFile) { com.tmplayer.data.DownloadFiles.sameStore(file, downloadsDir) }
+        if (same) 0L else file.length()
+    }
+}
+
+private val isWindows = System.getProperty("os.name").orEmpty().startsWith("Windows", ignoreCase = true)
+
+/** Windows keeps a path to 259 characters unless its long path option is on, which TMPlayer cannot count on. */
+private const val WINDOWS_PATH_LIMIT = 259
+
 
 /** What the disk says about a picked folder, without leaving anything behind in it. */
 private fun inspect(root: File): StorageRelocationPlan.Candidate {
