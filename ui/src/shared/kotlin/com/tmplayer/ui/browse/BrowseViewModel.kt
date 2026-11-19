@@ -94,6 +94,9 @@ class ChatListViewModel(
     // properties declared under it exist (the desktop's immediate main dispatcher crashed on that once).
     private val _folderStatus = MutableStateFlow(FolderStatus())
 
+    /** When the folders' members are read (HX29); declared here for the same reason. */
+    private val folderReads = FolderReads()
+
     /** How reading the folders' members is going, for the picker's folder filters (HX29). */
     val folderStatus: StateFlow<FolderStatus> = _folderStatus.asStateFlow()
 
@@ -515,12 +518,21 @@ class ChatListViewModel(
      * account, so nothing reads them ahead of it, and a list read later keeps them current only
      * once they have been asked for.
      */
-    private var foldersWanted = false
+    private fun folderIds(): List<Int> = Td.folders.value.map { it.id }
 
-    /** The picker is open: reads the folders' members, once, unless they are already read. */
+    /**
+     * The picker is open: reads the folders' members unless they are already read, and again when
+     * a folder has appeared since (an unread folder is loading, never an empty one).
+     */
     fun wantFolders() {
-        foldersWanted = true
-        if (membership == null && Td.folders.value.isNotEmpty()) retryFolders()
+        folderReads.want()
+        if (folderReads.readOnWant(folderIds())) retryFolders() else publish()
+    }
+
+    /** The picker left: loads stop reading the folders, and a read in flight is cancelled. */
+    fun unwantFolders() {
+        folderReads.unwant()
+        foldersJob?.cancel()
     }
 
     /** Reads the folders' members again, from the picker's Try again (HX32). */
@@ -550,6 +562,7 @@ class ChatListViewModel(
     }
 
     private suspend fun readFolders(repository: ChatRepository, session: com.tmplayer.data.TdSession) {
+        val asked = folderIds()
         val found = try {
             repository.folderMembership()
         } catch (cancelled: CancellationException) {
@@ -566,10 +579,15 @@ class ChatListViewModel(
         }
         foldersGaveUp = false
         membership = found
-        val current = chats ?: return
-        val next = com.tmplayer.data.ChatListLoad.withFolders(current, found)
-        if (next != current) chats = next
+        folderReads.markRead(asked)
+        val current = chats
+        if (current != null) {
+            val next = com.tmplayer.data.ChatListLoad.withFolders(current, found)
+            if (next != current) chats = next
+        }
         publish()
+        // A folder appeared while this read ran: it is read too, as long as the picker is open.
+        if (folderReads.readOnWant(folderIds())) readFolders(repository, session)
     }
 
     /**
@@ -674,7 +692,7 @@ class ChatListViewModel(
                     failure = L.chatsSomeNotLoaded.takeIf { sync.partial },
                     partial = sync.partial,
                 )
-                if (session.isCurrent() && foldersWanted) fillFolders(repository, session)
+                if (session.isCurrent() && folderReads.readAfterLoad(folderIds())) fillFolders(repository, session)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Throwable) {
@@ -704,7 +722,7 @@ class ChatListViewModel(
         foldersJob?.cancel()
         membership = null
         foldersGaveUp = false
-        foldersWanted = false
+        folderReads.reset()
         _folderStatus.value = FolderStatus()
         pendingNewChats.clear()
         account = null
@@ -747,7 +765,7 @@ class ChatListViewModel(
     }
 
     /** Whether the folders' members are still on their way: a folder may not call itself empty yet. */
-    private fun foldersPending(): Boolean = membership == null && !foldersGaveUp && Td.folders.value.isNotEmpty()
+    private fun foldersPending(): Boolean = !foldersGaveUp && folderReads.unread(folderIds())
 
     /** The folders that could not be read: the failed ones of the last read, or all of them when it never happened. */
     private fun foldersFailed(): Set<Int> = membership?.failed

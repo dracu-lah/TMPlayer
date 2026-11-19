@@ -1671,7 +1671,11 @@ fun AddChatsFed(
     val folderStatus by chatsViewModel.folderStatus.collectAsState()
     // The folders' members are read now, with the picker open, and not before (HX29); folders that
     // arrive after it opened are read when they do.
-    LaunchedEffect(folders.isNotEmpty()) { if (folders.isNotEmpty()) chatsViewModel.wantFolders() }
+    // Keyed on the folders themselves: one that appears later is unread until it is read, never empty.
+    val folderKey = folders.map { it.id }
+    LaunchedEffect(folderKey) { if (folderKey.isNotEmpty()) chatsViewModel.wantFolders() }
+    // Leaving the picker stops the reads: the Chats list never reads the folders by itself.
+    DisposableEffect(chatsViewModel) { onDispose { chatsViewModel.unwantFolders() } }
     AddChatsScreen(
         chats = chats,
         listComplete = listComplete(everything, connected, refreshing, paging),
