@@ -68,7 +68,7 @@ class StorageRelocationEdgeTest {
         usable: (File) -> Boolean = { true },
         sameDrive: (File, File) -> Boolean = { _, _ -> false },
         mover: suspend (File, File, String, (Long, Long) -> Unit) -> File =
-            { src, dir, name, progress -> DownloadFiles.moveIntoDownloads(src, dir, name, progress) },
+            { src, dir, name, progress -> DownloadFiles.moveIntoDownloads(src, dir, name, onProgress = progress) },
         host: StorageRelocation.Host = this.host,
     ) = StorageRelocation(settings, prefs, host, ::layout, { notifier }, freeSpace = { free }, usable = usable, sameDrive = sameDrive, mover = mover)
 
@@ -114,7 +114,7 @@ class StorageRelocationEdgeTest {
         val r = relocationWith(mover = { src, dir, name, progress ->
             attempts++
             if (attempts == 2) throw IOException("No space left on device")
-            DownloadFiles.moveIntoDownloads(src, dir, name, progress)
+            DownloadFiles.moveIntoDownloads(src, dir, name, onProgress = progress)
         })
         val outcome = r.move(newRoot)
         // 8000 bytes were still to go when the second file hit the wall, and the fake says there is room for none.
@@ -142,7 +142,7 @@ class StorageRelocationEdgeTest {
         r = relocationWith(mover = { src, dir, name, progress ->
             attempts++
             if (attempts == 1) {
-                DownloadFiles.moveIntoDownloads(src, dir, name, progress)
+                DownloadFiles.moveIntoDownloads(src, dir, name, onProgress = progress)
             } else {
                 val part = File(dir, "$name.part").apply { writeText("half") }
                 try {
@@ -238,7 +238,7 @@ class StorageRelocationEdgeTest {
                 src.delete()
                 throw FileNotFoundException("Nothing to move at ${src.path}")
             }
-            DownloadFiles.moveIntoDownloads(src, dir, name, progress)
+            DownloadFiles.moveIntoDownloads(src, dir, name, onProgress = progress)
         })
         val outcome = r.move(newRoot)
         assertEquals(1, outcome.moved)
@@ -261,7 +261,7 @@ class StorageRelocationEdgeTest {
         val r = relocationWith(mover = { src, dir, name, progress ->
             attempts++
             if (attempts == 1) {
-                DownloadFiles.moveIntoDownloads(src, dir, name, progress)
+                DownloadFiles.moveIntoDownloads(src, dir, name, onProgress = progress)
             } else {
                 // The drive is pulled: its folders go with it.
                 File(newRoot, "TMPlayer").deleteRecursively()
@@ -283,7 +283,7 @@ class StorageRelocationEdgeTest {
         download(2)
         val r = relocationWith(mover = { src, dir, name, progress ->
             if (src.name == "Episode 1.mkv") throw IOException("The process cannot access the file because it is being used by another process")
-            DownloadFiles.moveIntoDownloads(src, dir, name, progress)
+            DownloadFiles.moveIntoDownloads(src, dir, name, onProgress = progress)
         })
         val outcome = r.move(newRoot)
         assertEquals(listOf("Episode 1.mkv"), outcome.failed)
@@ -316,7 +316,7 @@ class StorageRelocationEdgeTest {
         lateinit var r: StorageRelocation
         r = relocationWith(mover = { src, dir, name, progress ->
             // The move completes, then Cancel arrives before the mover has returned.
-            val target = DownloadFiles.moveIntoDownloads(src, dir, name, progress)
+            val target = DownloadFiles.moveIntoDownloads(src, dir, name, onProgress = progress)
             r.cancel()
             target
         })
@@ -334,7 +334,7 @@ class StorageRelocationEdgeTest {
         val a = download(1)
         lateinit var r: StorageRelocation
         r = relocationWith(mover = { src, dir, name, progress ->
-            DownloadFiles.moveIntoDownloads(src, dir, name, progress)
+            DownloadFiles.moveIntoDownloads(src, dir, name, onProgress = progress)
             r.cancel()
             throw kotlinx.coroutines.CancellationException("cancelled on the way back")
         })

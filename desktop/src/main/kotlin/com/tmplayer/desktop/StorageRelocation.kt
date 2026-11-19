@@ -66,7 +66,7 @@ class StorageRelocation(
     private val usable: (File) -> Boolean = StorageRootCheck::usable,
     private val sameDrive: (File, File) -> Boolean = DownloadFiles::sameStore,
     private val mover: suspend (File, File, String, (Long, Long) -> Unit) -> File =
-        { src, dir, name, progress -> DownloadFiles.moveIntoDownloads(src, dir, name, progress) },
+        { src, dir, name, progress -> DownloadFiles.moveIntoDownloads(src, dir, name, onProgress = progress) },
 ) {
     /** The running app, as a move needs it. */
     interface Host {
