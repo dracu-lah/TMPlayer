@@ -1,4 +1,4 @@
-import { createEffect, createSignal, For, onCleanup, Show } from 'solid-js'
+import { createEffect, createSignal, Index, onCleanup, Show } from 'solid-js'
 import { A } from '@solidjs/router'
 import { call, errorText } from '../tg/rpc'
 import { onBackOnline } from '../net'
@@ -87,20 +87,21 @@ export function SearchTopics(props: { words: string | undefined; everyChat: bool
                     </Show>
                 </Show>
                 <ul class="topic-list">
-                    <For each={hits()}>
-                        {(hit) => (
+                    {/* By place, not by object: the answer that follows the first partial one updates the rows in place, so a focused row keeps the focus. */}
+                    <Index each={hits()}>
+                        {(item) => (
                             <li>
-                                <A class="topic-row" classList={{ dim: !hit.hasVideos }} href={`/chat/${hit.chatId}?topic=${hit.topicId}`}>
-                                    <span class="topic-label">{t('search.topic_row', { chat: hit.chatTitle, topic: topicName(hit) })}</span>
-                                    <Show when={!hit.hasVideos || hit.closed || hit.pinned}>
+                                <A class="topic-row" classList={{ dim: !item().hasVideos }} href={`/chat/${item().chatId}?topic=${item().topicId}`}>
+                                    <span class="topic-label">{t('search.topic_row', { chat: item().chatTitle, topic: topicName(item()) })}</span>
+                                    <Show when={!item().hasVideos || item().closed || item().pinned}>
                                         <span class="topic-facts">
-                                            {[!hit.hasVideos && t('search.topic_no_videos'), hit.closed && t('grid.topic_closed'), hit.pinned && t('grid.topic_pinned')].filter(Boolean).join(' · ')}
+                                            {[!item().hasVideos && t('search.topic_no_videos'), item().closed && t('grid.topic_closed'), item().pinned && t('grid.topic_pinned')].filter(Boolean).join(' · ')}
                                         </span>
                                     </Show>
                                 </A>
                             </li>
                         )}
-                    </For>
+                    </Index>
                 </ul>
             </section>
         </Show>

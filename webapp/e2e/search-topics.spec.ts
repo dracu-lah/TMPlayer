@@ -183,6 +183,18 @@ test('keyboard: Tab from the field reaches the first topic, Enter opens it', asy
     await expect(page).toHaveURL(/\/chat\/-1011\?topic=/)
 })
 
+test('a topic row that has the focus keeps it when the last answer replaces the first', async ({ page, context }) => {
+    await fakeCase(context, 'forums', 'topicslow')
+    await noSizeFloor(page)
+    await page.goto('/search')
+    await field(page).fill('week')
+    await expect(rows(page)).toHaveCount(2)
+    await page.locator('.topic-row').first().focus()
+    // The answer lands in two steps (a group, then the counts): the section is busy until the second.
+    await expect(page.locator('.topic-hits')).toHaveAttribute('aria-busy', 'false')
+    await expect(page.locator('.topic-row').first()).toBeFocused()
+})
+
 test.describe('on the TV', () => {
     test.skip(({ browserName }) => browserName !== 'chromium', 'the TV walk runs in Chromium')
     test.use({ viewport: { width: 1920, height: 1080 } })
