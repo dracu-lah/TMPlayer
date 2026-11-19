@@ -65,7 +65,7 @@ private val WATCH_TABS = listOf(BrowseTab.Home, BrowseTab.History, BrowseTab.Fav
 
 /**
  * Which group a section sits in. Every section is in Watch now: Chats is a top-level entry beside
- * Home, and a folder is a chip on its page ([chatPageChips]), so the sidebar has no Telegram group
+ * Home, and a folder is a filter of Add chats (HX29), so the sidebar has no Telegram group
  * and no Folders group to fold. [NavGroup.Chats] and [NavGroup.Folders] stay for the headings'
  * words and for a saved fold state, and [navGroups] never fills them.
  */

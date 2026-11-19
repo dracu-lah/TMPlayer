@@ -104,7 +104,6 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.tmplayer.data.Account
-import com.tmplayer.data.ChatFolderSummary
 import com.tmplayer.data.ChatKind
 import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.FormFactor
@@ -269,8 +268,6 @@ internal fun BrowseScreen(
     launchChatId: Long = 0L,
     picked: BrowseSection? = null,
     onPickTab: (BrowseSection) -> Unit = {},
-    /** The viewer's Telegram folders, which become rail items of their own. Empty until TDLib says. */
-    folders: List<ChatFolderSummary> = emptyList(),
     /** The newer version on GitHub, if there is one. Shown on the rail, in amber. */
     updateVersion: String? = null,
     onUpdate: () -> Unit = {},
@@ -288,8 +285,6 @@ internal fun BrowseScreen(
     chatPaging: com.tmplayer.ui.browse.ChatPaging = com.tmplayer.ui.browse.ChatPaging(),
     /** Reads the chat list's next chats, as its end comes near. */
     onMoreChats: () -> Unit = {},
-    /** Reads the folders' members again, from a folder page that could not be read (HX32). */
-    onRetryFolders: () -> Unit = {},
     /** A row came on screen without its videos: fetch them. */
     onHomeRowShown: (HomeRow) -> Unit = {},
     /** A row came on screen while scrolling (after a short stay) and left again (HX54). */
@@ -324,36 +319,16 @@ internal fun BrowseScreen(
     // empty. Those are read from disk after the first frame, so the tab settles once they arrive;
     // an explicit pick always wins. [picked] is hoisted rather than remembered here because
     // opening a chat swaps this screen out of the composition.
-    val groupsContext = LocalContext.current
-    val groupsSettings = remember(groupsContext) { SettingsStore(groupsContext) }
-    val sections = remember(folders) { browseSections(folders) }
-    // Where Telegram puts "All chats" among the folder chips.
-    val mainListPosition by com.tmplayer.data.Td.mainListPosition.collectAsState()
-    // "Only my folders" is retired: somebody who had it on lands once on their first folder's chip.
-    LaunchedEffect(folders.isNotEmpty()) {
-        val first = folders.firstOrNull() ?: return@LaunchedEffect
-        if (runCatching { groupsSettings.takeOnlyFolders() }.getOrDefault(false)) {
-            onPickTab(BrowseSection.Folder(first.id, first.title))
-        }
-    }
+    val sections = remember { browseSections() }
     // How many chats have something unread in them, not how many messages are unread across them:
     // the badge sits beside "Chats", whose Unread chip lists those chats.
     val allChats = (state as? UiState.Content)?.value?.chats
     val unreadChats = remember(allChats) {
         allChats.orEmpty().count { it.unreadCount > 0 && !it.isArchived }
     }
-    // The saved section is matched back against the live folder list, so the rail never highlights
-    // a folder deleted elsewhere and the heading never keeps a stale name.
-    val tab = picked?.let { chosen ->
-        when (chosen) {
-            is BrowseSection.Tab -> chosen
-            is BrowseSection.Folder -> sections.filterIsInstance<BrowseSection.Folder>()
-                .firstOrNull { it.id == chosen.id }
-                ?: chosen.takeIf { folders.isEmpty() }
-        }
     // Home is the first destination on every device: it leads with what is half watched, so it
     // is never a worse landing than Continue watching was, and it is never empty for long.
-    } ?: BrowseSection.of(BrowseTab.Home)
+    val tab = picked ?: BrowseSection.of(BrowseTab.Home)
     var query by remember { mutableStateOf("") }
     // What the viewer held OK on. Only ever one at a time, so two nullable slots cover both lists.
     var chatMenu by remember { mutableStateOf<ChatSummary?>(null) }
@@ -573,9 +548,8 @@ internal fun BrowseScreen(
     // while the carousel is on screen.
     val tvPlayFocus = remember { FocusRequester() }
     val listMayTakeFocus: () -> Boolean = { !chipsFocused && !tvBarHasFocus }
-    // The Chats page's chips: the order, Telegram's own filters, then each folder, which is where
-    // the folders went when they left the sidebar. A folder chip is a section of its own, so the
-    // folder picked is remembered the way the page is.
+    // The Chats page's chips: the order, then TMPlayer's own filters. Telegram's folders are not
+    // here: they filter Add chats now (HX29), and this page lists the chats that were chosen.
     val chatChips: @Composable (BrowseSection) -> Unit = { section ->
         ChipRow(
             insets = insets,
@@ -592,20 +566,13 @@ internal fun BrowseScreen(
                         ) { pickSort(chatSort.toggled) },
                     )
                 }
-                chatPageChips(folders, mainListPosition).forEach { chip ->
-                    when (chip) {
-                        is ChatPageChip.Filter -> add(
-                            ChipSpec(chip.filter.name, chip.label, chip.icon, selected = chip.isSelected(section, chatFilter)) {
-                                pickFilter(chip.filter)
-                                onPickTab(BrowseSection.of(BrowseTab.Chats))
-                            },
-                        )
-                        is ChatPageChip.Folder -> add(
-                            ChipSpec("folder-${chip.folder.id}", chip.label, chip.icon, selected = chip.isSelected(section, chatFilter)) {
-                                onPickTab(chip.folder)
-                            },
-                        )
-                    }
+                ChatFilter.entries.forEach { filter ->
+                    add(
+                        ChipSpec(filter.name, filter.chipLabel, filter.icon, selected = section.isChats && filter == chatFilter) {
+                            pickFilter(filter)
+                            onPickTab(BrowseSection.of(BrowseTab.Chats))
+                        },
+                    )
                 }
             },
         )
@@ -885,8 +852,6 @@ internal fun BrowseScreen(
                                 tab,
                                 query,
                                 chatFilter,
-                                folderRead = (tab as? BrowseSection.Folder)?.let { data.folderRead(it.id) } ?: com.tmplayer.ui.browse.FolderRead.Loaded,
-                                onRetryFolders = onRetryFolders,
                                 onGoToChats = goToChats,
                             )
                         } else {
@@ -3145,10 +3110,6 @@ private fun EmptyTab(
     query: String,
     filter: ChatFilter = ChatFilter.All,
     history: HistoryTab? = null,
-    /** Whether the folder's members are known (HX32): only a read folder may call itself empty. */
-    folderRead: com.tmplayer.ui.browse.FolderRead = com.tmplayer.ui.browse.FolderRead.Loaded,
-    /** Reads the folders again, offered when the folder could not be read. */
-    onRetryFolders: () -> Unit = {},
     /**
      * Back to every chat, with Telegram's filters cleared: the way on from a tab that fills from
      * the chats (Favourites, Unread, Archived, the History tabs), which on a television saves a
@@ -3157,15 +3118,9 @@ private fun EmptyTab(
     onGoToChats: (() -> Unit)? = null,
 ) {
     val s = LocalStrings.current
-    // Each empty tab says what to do about it, in its own words. A folder is the one section this
-    // app has no way to fill from here: folders are made and edited in Telegram itself, so the
-    // message says where to go rather than offering something to press.
+    // Each empty tab says what to do about it, in its own words.
     val message = when {
         query.isNotBlank() -> s.browseEmptyNoMatch(query)
-        tab is BrowseSection.Folder && folderRead == com.tmplayer.ui.browse.FolderRead.Loading -> s.browseFolderLoading
-        tab is BrowseSection.Folder && folderRead == com.tmplayer.ui.browse.FolderRead.NotLoaded -> s.browseFolderNotLoaded
-        tab is BrowseSection.Folder ->
-            s.browseEmptyFolder
         history == HistoryTab.Continue ->
             s.browseEmptyContinue
         history == HistoryTab.Watched ->
@@ -3182,15 +3137,13 @@ private fun EmptyTab(
     }
     // A search that came back empty is a different situation from a tab with nothing in it yet, so
     // the glyph follows whichever one the viewer is looking at, drawn for the empty page where the
-    // tab's own icon would say less (an open folder, a ticked bubble for nothing unread).
+    // tab's own icon would say less (a ticked bubble for nothing unread).
     val icon = emptyTabIcon(tab, query, filter, history)
-    // One decision for the three platforms (emptyTabNext): Search all chats for a search, Try again
-    // for a folder that could not be read, Go to Chats for every other tab that fills from them.
-    when (com.tmplayer.ui.browse.emptyTabNext(tab, query, filter, history, folderRead)) {
+    // One decision for the three platforms (emptyTabNext): Search all chats for a search, Go to
+    // Chats for every other tab that fills from them.
+    when (com.tmplayer.ui.browse.emptyTabNext(tab, query, filter, history)) {
         com.tmplayer.ui.browse.EmptyTabNext.SearchAllChats ->
             BigEmpty(message, icon = icon, actionLabel = s.searchAllChats, onAction = { SearchRequest.ask(query) })
-        com.tmplayer.ui.browse.EmptyTabNext.ReadFoldersAgain ->
-            BigEmpty(message, icon = icon, actionLabel = s.commonTryAgain, onAction = onRetryFolders)
         com.tmplayer.ui.browse.EmptyTabNext.GoToChats ->
             BigEmpty(message, icon = icon, actionLabel = onGoToChats?.let { s.browseGoToChats }, onAction = onGoToChats)
         com.tmplayer.ui.browse.EmptyTabNext.None -> BigEmpty(message, icon = icon)
