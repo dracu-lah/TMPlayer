@@ -1,0 +1,13 @@
+/* The free zoom (PZ1, Chrome.tsx): the enlarged picture is clipped to the player, the <video>'s own
+ * cue box is hidden while it is (the cues are drawn in the .movi-cues layer outside the transform),
+ * and the zoom's figure sits at the top centre as PlayerFeedback's chip does. */
+.player.pc-zoomed { overflow: hidden; }
+.player.pc-zoomed video::cue { color: transparent; background: transparent; text-shadow: none; }
+.pc-zoom-chip {
+  position: absolute; z-index: 2; top: calc(84px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
+  min-height: 44px; padding: 0 20px; border: 0; border-radius: 22px; background: var(--chip); color: #fff;
+  font: inherit; font-size: 15px; line-height: 20px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap;
+  cursor: pointer; animation: note-in 120ms ease-out;
+}
+.pc-zoom-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .pc-zoom-chip { animation: none; } }
