@@ -1005,10 +1005,10 @@ private fun HomeBrand(modifier: Modifier = Modifier) {
 }
 
 /**
- * The lockup's size on Home: the bars' Small (26 dp, 18 sp) read smaller than the row headings
- * under it on a computer screen (user, 2026-11-01), so the name is a step above them here.
+ * The lockup's size on Home: the shared desktop token ([com.tmplayer.ui.components.BrandSize.Desktop]),
+ * a step above the bars' Small and under the 40 dp it was, which was too big (HX60).
  */
-private val HOME_BRAND = com.tmplayer.ui.components.BrandSize(40.dp, 28.sp, 14.dp)
+internal val HOME_BRAND = com.tmplayer.ui.components.BrandSize.Desktop
 
 /** Between two cards in a strip or a grid. */
 private val CARD_GAP = 16.dp
