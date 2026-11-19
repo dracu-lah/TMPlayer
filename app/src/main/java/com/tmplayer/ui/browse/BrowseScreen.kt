@@ -343,8 +343,6 @@ internal fun BrowseScreen(
     var laterShow by remember { mutableStateOf<Pair<com.tmplayer.data.Series, String>?>(null) }
     // A show card held on Home: its menu, with its chat's name (HX20).
     var heldShow by remember { mutableStateOf<Pair<com.tmplayer.data.Series, String>?>(null) }
-    var confirmClearHistory by remember { mutableStateOf(false) }
-    var confirmClearLater by remember { mutableStateOf(false) }
     // Remove from history on a Continue card, asked first under a remote only: a touch screen
     // gets Undo instead, which a remote cannot reach.
     var confirmForget by remember { mutableStateOf<ResumeRecord?>(null) }
@@ -504,13 +502,26 @@ internal fun BrowseScreen(
         }
         leaveSelecting()
     }
-    // One press with Undo on a touch screen; asked first under a remote.
+    // Clear history and Clear Watch later are asked first on a phone too (HX59): a wrong press on
+    // a clear-all must not be the only guard. Undo still follows the answer.
+    val historyCards = com.tmplayer.data.ClearAllConfirm.historyCards(continuing, watchedHistory)
+    val askClearHistory = com.tmplayer.ui.components.rememberClearAllConfirm(
+        // The cards both lists show, copies of one video folded into one.
+        count = historyCards,
+        title = s.browseClearHistoryTitle,
+        message = s.browseClearHistoryMessage(historyCards),
+        detail = s.browseClearHistoryDetail,
+        onClear = clearShown,
+    )
+    val askClearLater = com.tmplayer.ui.components.rememberClearAllConfirm(
+        count = watchLater.size,
+        title = s.browseClearWatchLaterTitle,
+        message = s.browseClearWatchLaterMessage(watchLater.size),
+        detail = s.browseClearWatchLaterDetail,
+        onClear = clearShown,
+    )
     val askClear: () -> Unit = {
-        when {
-            touchHere -> clearShown()
-            historyTab == HistoryTab.WatchLater -> confirmClearLater = true
-            else -> confirmClearHistory = true
-        }
+        if (historyTab == HistoryTab.WatchLater) askClearLater() else askClearHistory()
     }
     val askRemoveTicked: () -> Unit = {
         if (tickedShown.isNotEmpty()) {
@@ -1241,36 +1252,6 @@ internal fun BrowseScreen(
                 onClearFavorites()
             },
             onDismiss = { confirmClearFavorites = false },
-        )
-    }
-
-    // Only under a remote: a touch screen clears at once and offers Undo.
-    if (confirmClearHistory) {
-        TvConfirm(
-            title = s.browseClearHistoryTitle,
-            // The cards both lists show, copies of one video folded into one.
-            message = s.browseClearHistoryMessage(continuing.size + watchedHistory.size),
-            detail = s.browseClearHistoryDetail,
-            confirmLabel = s.commonClear,
-            onConfirm = {
-                confirmClearHistory = false
-                clearShown()
-            },
-            onDismiss = { confirmClearHistory = false },
-        )
-    }
-
-    if (confirmClearLater) {
-        TvConfirm(
-            title = s.browseClearWatchLaterTitle,
-            message = s.browseClearWatchLaterMessage(watchLater.size),
-            detail = s.browseClearWatchLaterDetail,
-            confirmLabel = s.commonClear,
-            onConfirm = {
-                confirmClearLater = false
-                clearShown()
-            },
-            onDismiss = { confirmClearLater = false },
         )
     }
 

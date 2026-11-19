@@ -4,7 +4,8 @@
 // A test picks a case with the `e2e` cookie, which /__e2e/flags hands back to the worker:
 // `signedout`, `revoked` (Telegram says the session ended), `slow` (lists answer after 3 s),
 // `password` (signed out, the QR code is taken at once and the account asks its two-step password),
-// `huge` (a very large account for e2e/scale.spec.ts, described below the dialogs).
+// `huge` (a very large account for e2e/scale.spec.ts, described below the dialogs),
+// `hinted` (Test Shows is named for a language: "Test Shows Malayalam", for the chat language hints of e2e/posters.spec.ts).
 
 // Read synchronously (a worker may): a top-level await would hold back the worker's message
 // handler, and the page's first call would be lost.
@@ -137,7 +138,7 @@ type Msg = ReturnType<typeof msg>
 
 const me = peer(1, 'Dana Test', 'user', { isSelf: true })
 const clips = peer(-1001, 'Test Clips', 'chat', { chatType: 'channel', username: 'testclips', about: 'Short clips for trying the player: every container and codec the web player knows.', members: 12400 })
-const shows = peer(-1002, 'Test Shows', 'chat')
+const shows = peer(-1002, flags.has('hinted') ? 'Test Shows Malayalam' : 'Test Shows', 'chat')
 const locked = peer(-1003, 'Locked Room', 'chat', { chatType: 'channel', raw: { noforwards: true } })
 const quiet = peer(-1004, 'Quiet Room', 'chat')
 const copies = peer(-1005, 'Test Copies', 'chat', { chatType: 'channel' })

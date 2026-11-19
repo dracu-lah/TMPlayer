@@ -774,7 +774,14 @@ fun ContinuePage(state: ShellState, tabs: @Composable () -> Unit = {}) {
             com.tmplayer.data.HistoryEdits.removeContinueCards(st, w, cards)
         }
     }
-    val clearAll: () -> Unit = {
+    val historyCards = historyCardCount(state)
+    // Asked first (HX59); Undo still follows the answer.
+    val clearAll = rememberClearAllConfirm(
+        count = historyCards,
+        title = s.browseClearHistoryTitle,
+        message = s.browseClearHistoryMessage(historyCards),
+        detail = s.browseClearHistoryDetail,
+    ) {
         runHistoryEdit(scope, state, undoToast, toast, { s.browseHistoryCleared }, s.browseUndo) { st, w -> com.tmplayer.data.HistoryEdits.clear(st, w) }
     }
     // The cards in the grid's order (the day headings' order), by the id a poster is ticked by.
