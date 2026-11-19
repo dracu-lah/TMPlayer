@@ -1,7 +1,6 @@
 package com.tmplayer.online
 
 import com.tmplayer.data.MediaItem
-import com.tmplayer.data.SeriesShelf
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -190,16 +189,9 @@ class SubtitlePicks(
         const val MAX_ENTRIES = 400
         private const val MAX_FILE_BYTES = 4L * 1024 * 1024
         private const val MAX_STATE_BYTES = 4L * 1024 * 1024
-        private const val MAX_KEY = 400
+        private const val MAX_KEY = SubtitlePickKeys.MAX_KEY
 
-        /**
-         * The keys a video is remembered under, most exact first: this post, then the video itself
-         * ([SeriesShelf.sameVideoKey]: a film's title and year, a show's episode), so another copy
-         * or a re-post of it finds the pick. A video that names nothing has the post alone.
-         */
-        fun keysOf(item: MediaItem): List<String> = listOfNotNull(
-            "msg:${item.chatId}:${item.messageId}".takeIf { item.messageId != 0L },
-            runCatching { SeriesShelf.sameVideoKey(item) }.getOrNull()?.takeIf { it.isNotBlank() }?.let { "video:$it".take(MAX_KEY) },
-        )
+        /** The keys a video is remembered under, most exact first: see [SubtitlePickKeys.of], which the web player files its picks by too. */
+        fun keysOf(item: MediaItem): List<String> = SubtitlePickKeys.of(item)
     }
 }
