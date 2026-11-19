@@ -1,0 +1,27 @@
+/* The Sort menu's filter chips (U6): the groups Show, Length, Picture, With, Language and Added as pills that wrap. */
+.sort-menu { max-height: min(78vh, 640px); overflow-y: auto; overscroll-behavior: contain; min-width: 280px; max-width: min(92vw, 360px); }
+.sort-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 8px 8px; }
+.pop-menu .sort-chips .sort-chip {
+  min-height: 36px; padding: 0 14px; border: 1px solid var(--line); border-radius: 999px;
+  justify-content: center; font-size: 14px; line-height: 20px; white-space: nowrap;
+}
+.pop-menu .sort-chips .sort-chip.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent, #fff); font-weight: 500; }
+.pop-menu .sort-chips .sort-chip.on:hover, .pop-menu .sort-chips .sort-chip.on:focus-visible { background: var(--accent); }
+.pop-menu .sort-clear { color: var(--accent); }
+/* The Sort button says a filter is on with a dot on its glyph. */
+.sort-on { position: relative; }
+.sort-dot { position: absolute; top: 2px; inset-inline-end: -4px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+.sort-on .nav-glyph { position: relative; }
+.chat-bar .sort-menu { max-height: min(70vh, 560px); }
+
+/* The note above a filtered grid: how many videos the filter hides, Show them, Clear filter. */
+.filter-note { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 12px; }
+.filter-note p { margin: 0; }
+.filter-empty { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 24px 0; text-align: center; }
+.filter-empty p { margin: 0; }
+
+html[data-form=tv] .sort-menu { max-height: min(calc(var(--dp) * 520), calc(100vh - var(--dp) * 170)); min-width: calc(var(--dp) * 320); max-width: calc(var(--dp) * 420); }
+html[data-form=tv] .sort-chips { gap: calc(var(--dp) * 6); padding: calc(var(--dp) * 2) calc(var(--dp) * 8) calc(var(--dp) * 8); }
+html[data-form=tv] .pop-menu .sort-chips .sort-chip { min-height: calc(var(--dp) * 36); padding: 0 calc(var(--dp) * 14); font-size: calc(var(--dp) * 14); border-radius: 999px; }
+html[data-form=tv] .sort-dot { width: calc(var(--dp) * 8); height: calc(var(--dp) * 8); }
+html[data-form=tv][data-tv-keys] .pop-menu .sort-chips .sort-chip:focus { background: var(--focus-fill); border-color: var(--focus-fill); color: var(--on-focus-fill); }

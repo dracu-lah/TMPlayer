@@ -4,14 +4,16 @@
 // (a show is one card), in the order added, each with Remove from list under it.
 import { createEffect, createResource, createSignal, For, on, Show } from 'solid-js'
 import { A, useNavigate, useParams } from '@solidjs/router'
-import { Add01Icon, CheckmarkCircle02Icon, Delete02Icon, LeftToRightListBulletIcon } from '@hugeicons/core-free-icons'
-import { call } from '../tg/rpc'
+import { Add01Icon, CheckmarkCircle02Icon, Delete02Icon, LeftToRightListBulletIcon, ShuffleIcon } from '@hugeicons/core-free-icons'
+import { call, errorText } from '../tg/rpc'
 import { t } from '../i18n'
-import { addToList, createList, deleteList, namedLists, removeFromList, renameList, setListHome } from '../store'
+import { addToList, createList, deleteList, namedLists, removeFromList, renameList, setListHome, watchedIds } from '../store'
 import { Icon } from '../ui/Icon'
 import { showToast } from '../ui/Toast'
 import { askConfirm } from '../ui/Confirm'
 import { cleanName, lineKey, MAX_LISTS, NAME_MAX, type AddResult } from '../ui/lists'
+import { randomScope } from '../ui/videoFilter'
+import { playRandomOf } from './randomPlay'
 import { Card, tileCard, useProgress } from './VideoList'
 import type { Tile, VideoItem } from '../tg/types'
 
@@ -151,6 +153,12 @@ export function ListsPage() {
         const show = tile.title.trim().toLowerCase()
         return list.lines.filter((l) => l.item.chatId === tile.item.chatId && (l.show === show || (!l.show && (l.item.name ?? '').toLowerCase().includes(show)))).map(lineKey)
     }
+    const playRandom = async (listId: string) => {
+        const items = (tiles.latest ?? []).map((tile) => tile.item)
+        if (!items.length) return
+        const done = await watchedIds().catch(() => [] as string[])
+        await playRandomOf({ scope: randomScope('list', listId), items, watched: done, verify: true, open: (path, item) => navigate(path, { state: { video: item } }) }).catch((e) => showToast({ text: errorText(e) }))
+    }
     // A list goes from every device that syncs, so it asks first (HX59); the list going away by itself closes the question.
     const askDelete = async () => {
         const list = shown()
@@ -195,6 +203,13 @@ export function ListsPage() {
                 {(list) => (
                     <>
                         <div class="list-actions">
+                            {/* Play random (U16): one of the list's cards, unwatched first, never the one played last; a video gone from its chat is let go and another rolled. */}
+                            <Show when={(tiles.latest ?? []).length}>
+                                <button class="outline-button" type="button" onClick={() => void playRandom(list().info.id)}>
+                                    <Icon icon={ShuffleIcon} size={18} />
+                                    {t('grid.play_random')}
+                                </button>
+                            </Show>
                             <button class="outline-button" type="button" onClick={() => (setName(list().info.name), renaming.showModal())}>{t('lists.rename')}</button>
                             <label class="switch-row">
                                 <input type="checkbox" checked={list().info.home} onChange={(e) => setListHome(list().info.id, e.currentTarget.checked)} />

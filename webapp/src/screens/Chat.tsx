@@ -1,31 +1,25 @@
 import { createEffect, createMemo, createResource, createSignal, For, on, onCleanup, Show } from 'solid-js'
-import { A, useParams, useSearchParams } from '@solidjs/router'
-import { Cancel01Icon, InformationCircleIcon, RefreshIcon, Search01Icon, Sorting01Icon, StarIcon, Tick02Icon } from '@hugeicons/core-free-icons'
+import { A, useNavigate, useParams, useSearchParams } from '@solidjs/router'
+import { Cancel01Icon, InformationCircleIcon, RefreshIcon, Search01Icon, StarIcon } from '@hugeicons/core-free-icons'
 import { api, call, errorText } from '../tg/rpc'
 import { onBackOnline } from '../net'
 import { t } from '../i18n'
-import { progress as readProgress, settings, setSetting, setStarred, starredIds } from '../store'
+import { chatPref, progress as readProgress, setChatPref, settings, setSetting, setStarred, starredIds } from '../store'
 import { copiesTick } from '../copies'
 import { form } from '../form'
-import { arrowKeys } from '../ui/arrows'
 import { Icon } from '../ui/Icon'
 import { PageBar } from '../ui/PageBar'
 import { notePool } from '../ui/PosterPicker'
+import { showToast } from '../ui/Toast'
+import { AUTO_PAGES, AUTO_TOTAL, cleanFacets, filterLabel, filterState, filtersOn, NO_FACETS, NO_PREF, randomScope, wantsMore, type ChatFilter, type ChatPref, type Facets } from '../ui/videoFilter'
 import { ChatPicture } from './ChatPicture'
 import { chatName, StarButton } from './Chats'
 import { sizeLimits } from './sizes'
+import { playRandomOf } from './randomPlay'
+import { ensureTouches } from './touches'
+import { SortMenu } from './SortMenu'
 import { stableCards, tileCard, VideoList, type CardData } from './VideoList'
-import type { ChatPage, ChatView, RpcError, Sort, Tile } from '../tg/types'
-
-const SORTS: { value: Sort; key: Parameters<typeof t>[0] }[] = [
-    { value: 'Newest', key: 'grid.sort_newest' },
-    { value: 'Oldest', key: 'grid.sort_oldest' },
-    { value: 'Name', key: 'grid.sort_name' },
-    { value: 'Year', key: 'grid.sort_year' },
-    { value: 'Size', key: 'grid.sort_size' },
-    { value: 'Longest', key: 'grid.sort_longest' },
-    { value: 'Unwatched', key: 'grid.sort_unwatched' },
-]
+import type { ChatPage, ChatView, RpcError, Tile } from '../tg/types'
 
 /** Pages in a row that brought no new card before the list stops paging by itself and offers a button. */
 const IDLE_PAGES = 3
@@ -46,9 +40,25 @@ export function Chat() {
     const [refreshWait, setRefreshWait] = createSignal<number | null>(null)
     const [idlePages, setIdlePages] = createSignal(0)
     const [searching, setSearching] = createSignal(!!search.q)
+    const navigate = useNavigate()
     const [progress] = createResource(readProgress)
     // "Show them" on the end row lists the small videos for this visit; the saved switch is not changed (R1).
     const [showAll, setShowAll] = createSignal(false)
+    // The chat's filters (U6), kept for this chat; "Show them" on the filter note lists every video for this visit, Filter again puts them back.
+    const [pref, setPref] = createSignal<ChatPref>(NO_PREF)
+    const [filterPaused, setFilterPaused] = createSignal(false)
+    // Pages the grid asked for by itself while a filter left it short; Keep looking asks again.
+    const [autoPages, setAutoPages] = createSignal(0)
+    const [facets] = createResource(() => pref().facets, (line) => (line ? api.facets(line) : Promise.resolve(NO_FACETS)))
+    const facetsNow = (): Facets => (pref().facets ? (facets.latest ?? NO_FACETS) : NO_FACETS)
+    // Pages asked for by itself in this whole visit, however the filters change: a total budget (AUTO_TOTAL), then only Keep looking reads on.
+    const [autoTotal, setAutoTotal] = createSignal(0)
+    // The Last played order's times: 0 while they are being sent to the worker, -1 where that failed (the order then has none), else their version.
+    const lastPlayedSort = () => settings().sort === 'LastPlayed'
+    const [touchVer, setTouchVer] = createSignal(0)
+    const sendTouches = () => ensureTouches().then(setTouchVer, () => setTouchVer(-1))
+    // Choosing the order sends the times once; until they are there the grid keeps the order it had (no flash of the wrong one).
+    createEffect(on(lastPlayedSort, (now) => now && (setTouchVer(0), void sendTouches())))
     const view = (): ChatView => ({
         sort: settings().sort,
         minBytes: showAll() ? 0 : settings().sizeMin,
@@ -56,6 +66,9 @@ export function Chat() {
         watched: progress()?.watched ?? [],
         started: progress()?.started ?? [],
         query: search.q?.trim() ?? '',
+        filter: filterPaused() ? 'All' : pref().filter,
+        facets: filterPaused() ? '' : pref().facets,
+        ...(lastPlayedSort() && touchVer() > 0 ? { touches: touchVer() } : {}),
     })
 
     let seq = 0
@@ -85,13 +98,27 @@ export function Chat() {
 
     // A new chat (the address changed under the same page) starts afresh.
     createEffect(
-        on(chatId, () => {
+        on(chatId, (id) => {
             setPage(null)
             setError(null)
             setShowAll(false)
+            setFilterPaused(false)
+            setAutoPages(0)
+            setAutoTotal(0)
             setIdlePages(0)
             setMoreFailed(false)
-            run('open')
+            // The chat's own filters are read first, so its first page is already screened (no flash of every video).
+            setPref(NO_PREF)
+            void chatPref(id)
+                .catch(() => NO_PREF)
+                .then(async (p) => {
+                    if (id !== chatId()) return
+                    setPref(p)
+                    // Last played: the first page waits for the times, so it is drawn once, in its order.
+                    if (lastPlayedSort()) await sendTouches()
+                    if (id !== chatId()) return
+                    run('open')
+                })
         }),
     )
     // A page lost with the connection loads once it is back.
@@ -101,13 +128,80 @@ export function Chat() {
         else if (moreFailed()) run('more')
     })
     // Another order, size limits or words, or a file kept apart or a copy chosen (HX38): the same videos arranged again, in the worker.
-    createEffect(on(() => [JSON.stringify(view()), copiesTick()], () => page() && run('view'), { defer: true }))
+    // Not while the Last played times are on their way: the grid keeps its order until they are there.
+    createEffect(on(() => [JSON.stringify(view()), copiesTick()], () => page() && !(lastPlayedSort() && touchVer() === 0) && run('view'), { defer: true }))
 
     // Scrolling to the foot always asks for the next page (infinite scroll, no More button).
     const atEnd = (auto = false) => {
         const p = page()
         if (!p || p.done || busy() || moreFailed() || (auto && idlePages() >= IDLE_PAGES)) return
         run('more')
+    }
+
+    // The chat's filters (U6). Each pick is kept for the chat at once; the grid is arranged again by the view effect above.
+    const changePref = (next: ChatPref) => {
+        setPref(next)
+        setFilterPaused(false)
+        setAutoPages(0)
+        setIdlePages(0)
+        setChatPref(chatId(), next)
+    }
+    const pickFilter = (f: ChatFilter) => changePref({ ...pref(), filter: f })
+    // One change at a time, each read from the line the one before left: two quick presses never overwrite each other.
+    let facetQueue: Promise<void> = Promise.resolve()
+    const pickFacet = (field: 'length' | 'picture' | 'added' | 'hdr' | 'subtitles' | 'language', value: string | null) => {
+        const id = chatId()
+        facetQueue = facetQueue
+            .then(async () => {
+                const line = cleanFacets(await api.facetsWith(pref().facets, field, value))
+                if (id === chatId()) changePref({ ...pref(), facets: line })
+            })
+            .catch(() => {})
+    }
+    const clearFilter = () => changePref(NO_PREF)
+    const filterCount = () => filtersOn(pref(), facetsNow().count)
+    const state = () =>
+        filterState({
+            on: filterCount(),
+            query: !!view().query,
+            showAll: filterPaused(),
+            shown: page()?.tiles.length ?? 0,
+            total: page()?.total ?? 0,
+            hidden: page()?.hiddenByFilter ?? 0,
+        })
+    // A filter that leaves the grid too short to scroll reads a few more pages by itself, then offers Keep looking (20,000 videos are never read for one filter).
+    createEffect(() => {
+        const p = page()
+        if (!p) return
+        if (wantsMore({ state: state(), shown: p.tiles.length, done: p.done, busy: !!busy(), failed: moreFailed(), auto: autoPages(), total: autoTotal() })) {
+            setAutoPages(autoPages() + 1)
+            setAutoTotal(autoTotal() + 1)
+            run('more')
+        }
+    })
+    const keepLookingFilter = () => (state() === 'hides-all' || state() === 'hides-some') && !!page() && !page()!.done && !busy() && !moreFailed() && (autoPages() >= AUTO_PAGES || autoTotal() >= AUTO_TOTAL)
+    // The visit's budget of pages read by itself is spent: said, with Keep looking as the way on (one page a press).
+    const budgetSpent = () => keepLookingFilter() && autoTotal() >= AUTO_TOTAL
+    const keepLooking = () => {
+        setIdlePages(0)
+        run('more')
+    }
+    const why = () =>
+        filterLabel(pref(), facetsNow(), (key) => t(key as Parameters<typeof t>[0])) ?? ''
+    // Play random (U16): one of the videos on screen, unwatched first, never the one this chat played last. Nothing more is loaded for it.
+    const playRandom = async () => {
+        const shown = page()?.tiles ?? []
+        if (!shown.length) return
+        try {
+            await playRandomOf({
+                scope: randomScope('chat', chatId()),
+                items: shown.map((tile) => tile.item),
+                watched: progress()?.watched ?? [],
+                open: (path, item) => navigate(path, { state: { video: item } }),
+            })
+        } catch (e) {
+            showToast({ text: errorText(e) })
+        }
     }
 
     let waitTimer = 0
@@ -129,6 +223,8 @@ export function Chat() {
     const empty = () => {
         const p = page()
         if (!p || p.tiles.length) return null
+        // Every loaded video screened out by the filters has its own empty state, with Clear filter.
+        if (state() === 'hides-all') return null
         // Words: Telegram's search of the chat said nothing yet; Keep looking reads its pages on.
         if (view().query) return busy() ? t('browse.searching') : t('browse.no_match', { query: view().query })
         if (!p.done) return null
@@ -192,6 +288,14 @@ export function Chat() {
             onHideSmall={sizeLimits() ? setHideSmall : undefined}
             customRange={custom() ? range.latest : undefined}
             onReset={resetLimits}
+            filter={pref().filter}
+            facets={facetsNow()}
+            languages={page()?.languages ?? []}
+            filtersOn={filterCount()}
+            onFilter={pickFilter}
+            onFacet={pickFacet}
+            onClear={clearFilter}
+            onRandom={page()?.tiles.length ? () => void playRandom() : undefined}
         />
     )
     const SearchCell = () => (
@@ -315,6 +419,47 @@ export function Chat() {
             <Show when={page()?.selfDestructing}>
                 <p class="notice muted small">{t('grid.self_destructing_hidden', { count: page()!.selfDestructing })}</p>
             </Show>
+            {/* The chat's filters in force (U6): what they hide, with Show them, Keep looking and Clear filter; every video hidden gets the empty state in the grid's place. */}
+            <Show when={state() === 'shown-all' || state() === 'hides-some' || ((page()?.unknown ?? 0) > 0 && state() === 'on')}>
+                <div class="filter-note" role="status">
+                    <p class="muted">
+                        {state() === 'shown-all'
+                            ? t('grid.filter_paused')
+                            : [
+                                  (page()?.hiddenByFilter ?? 0) > 0 ? t('grid.filter_hidden', { count: page()!.hiddenByFilter }) : '',
+                                  (page()?.unknown ?? 0) > 0 ? t('grid.filter_unknown', { count: page()!.unknown }) : '',
+                              ]
+                                  .filter(Boolean)
+                                  .join('. ')}
+                    </p>
+                    <Show when={state() === 'shown-all'}>
+                        <button class="outline-button" type="button" onClick={() => (setFilterPaused(false), setAutoPages(0))}>{t('grid.filter_again')}</button>
+                    </Show>
+                    <Show when={state() !== 'shown-all' && (page()?.hiddenByFilter ?? 0) > 0}>
+                        <button class="outline-button" type="button" onClick={() => setFilterPaused(true)}>{t('grid.filter_show_them')}</button>
+                    </Show>
+                    <Show when={keepLookingFilter()}>
+                        <button class="outline-button" type="button" onClick={keepLooking}>{t('common.keep_looking')}</button>
+                    </Show>
+                    <button class="outline-button" type="button" onClick={clearFilter}>{t('grid.filter_clear')}</button>
+                </div>
+            </Show>
+            <Show when={state() === 'hides-all'}>
+                <div class="filter-empty">
+                    <p class="muted">{t('grid.filter_hides_all', { count: page()!.total, filter: why() })}</p>
+                    <button class="primary" type="button" onClick={clearFilter} data-tv-first>{t('grid.filter_clear')}</button>
+                    <Show when={keepLookingFilter()}>
+                        <button class="outline-button" type="button" onClick={keepLooking}>{t('common.keep_looking')}</button>
+                    </Show>
+                </div>
+            </Show>
+            <Show when={budgetSpent()}>
+                <p class="muted small">{t('grid.filter_budget', { count: page()!.loaded })}</p>
+            </Show>
+            {/* Every order but Newest sorts what has loaded so far, while older pages remain: said once (the apps' note). */}
+            <Show when={settings().sort !== 'Newest' && !view().query && page() && !page()!.done && page()!.loaded > 0}>
+                <p class="muted small">{t('grid.sort_loaded_note', { count: page()!.loaded })}</p>
+            </Show>
             <Show when={empty()}>
                 <p class="muted">{empty()}</p>
             </Show>
@@ -359,111 +504,5 @@ export function Chat() {
                 </details>
             </Show>
         </>
-    )
-}
-
-/** Sort videos by: the app's seven orders in one list, the chosen one ticked. Kept for every chat. */
-function SortMenu(props: {
-    cell?: boolean
-    /** The "Hide small clips" switch: on or off now, its words, and what turning it does; undefined until the limits are known. */
-    hideSmall: boolean
-    clipLabel?: string
-    onHideSmall?: (on: boolean) => void
-    /** A floor chosen before the switch, as a sentence, with a Reset. */
-    customRange?: string
-    onReset: () => void
-}) {
-    const [open, setOpen] = createSignal(false)
-    let box!: HTMLDivElement
-    let trigger!: HTMLButtonElement
-    // Escape or a pick puts the keyboard back on the button that opened the menu, not on a line that is gone.
-    const shut = () => (setOpen(false), trigger.focus({ preventScroll: true }))
-    const close = (e: Event) => {
-        if (e instanceof KeyboardEvent) {
-            if (e.key === 'Escape') shut()
-        } else if (!box.contains(e.target as Node)) setOpen(false)
-    }
-    createEffect(() => {
-        if (!open()) return
-        // The keyboard starts on the first line (a ring shows only where it came by keys).
-        queueMicrotask(() => box.querySelector<HTMLElement>('[role^=menuitem]')?.focus({ preventScroll: true }))
-        document.addEventListener('pointerdown', close)
-        document.addEventListener('keydown', close)
-        onCleanup(() => {
-            document.removeEventListener('pointerdown', close)
-            document.removeEventListener('keydown', close)
-        })
-    })
-    return (
-        <div class="menu-box" ref={box}>
-            <button
-                ref={trigger}
-                class={props.cell ? 'nav-cell' : 'round-button'}
-                type="button"
-                aria-haspopup="menu"
-                aria-expanded={open()}
-                aria-label={t('grid.sort_label')}
-                title={t('grid.sort_label')}
-                onClick={() => setOpen(!open())}
-            >
-                <Show when={props.cell} fallback={<Icon icon={Sorting01Icon} size={22} />}>
-                    <span class="nav-glyph"><Icon icon={Sorting01Icon} size={22} /></span>
-                    <span class="nav-label">{t('grid.sort')}</span>
-                </Show>
-            </button>
-            <Show when={open()}>
-                <div
-                    class="pop-menu"
-                    role="menu"
-                    aria-label={t('grid.sort_label')}
-                    onKeyDown={(e) => {
-                        if (e.key === 'Tab') shut()
-                        else if (form() !== 'tv') arrowKeys(e, e.currentTarget, '[role^=menuitem]', { vertical: true })
-                    }}
-                >
-                    <p class="pop-title">{t('grid.sort_label')}</p>
-                    <For each={SORTS}>
-                        {(s) => (
-                            <button
-                                type="button"
-                                role="menuitemradio"
-                                aria-checked={settings().sort === s.value}
-                                classList={{ on: settings().sort === s.value }}
-                                onClick={() => {
-                                    setSetting('sort', s.value)
-                                    shut()
-                                }}
-                            >
-                                <span>{t(s.key)}</span>
-                                <Show when={settings().sort === s.value}>
-                                    <Icon icon={Tick02Icon} size={20} />
-                                </Show>
-                            </button>
-                        )}
-                    </For>
-                    <Show when={props.onHideSmall}>
-                        <p class="pop-title">{t('grid.filter_size_label')}</p>
-                        {/* Stays open when pressed, so the grid is seen to change behind it. */}
-                        <button
-                            type="button"
-                            role="menuitemcheckbox"
-                            aria-checked={props.hideSmall}
-                            classList={{ on: props.hideSmall }}
-                            onClick={() => props.onHideSmall!(!props.hideSmall)}
-                        >
-                            <span>{t('grid.hide_small_clips', { size: props.clipLabel ?? '' })}</span>
-                            <Show when={props.hideSmall}>
-                                <Icon icon={Tick02Icon} size={20} />
-                            </Show>
-                        </button>
-                        <Show when={props.customRange}>
-                            <button type="button" role="menuitem" class="on" onClick={() => { props.onReset(); shut() }}>
-                                <span>{t('grid.size_limit_on', { range: props.customRange! })}</span>
-                            </button>
-                        </Show>
-                    </Show>
-                </div>
-            </Show>
-        </div>
     )
 }
