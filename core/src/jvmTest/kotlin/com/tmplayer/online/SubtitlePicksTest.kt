@@ -105,6 +105,26 @@ class SubtitlePicksTest {
     }
 
     @Test
+    fun signOutLeavesNoPicksAndNoCopies() {
+        picks.remember(listOf("msg:1:10"), hit, downloaded())
+        picks.rememberOff(listOf("msg:1:11"))
+        assertTrue(stateFile.isFile)
+        assertEquals(1, File(dir, "picked-subtitles").listFiles().orEmpty().size)
+        // Through the live object.
+        picks.clear()
+        assertNull(picks.recall(listOf("msg:1:10")))
+        assertFalse(stateFile.exists())
+        assertFalse(File(dir, "picked-subtitles").exists())
+        // By path alone, when no object is alive.
+        val other = SubtitlePicks(File(dir, "other.json"))
+        other.remember(listOf("msg:2:2"), hit, downloaded("dl3.srt"))
+        SubtitlePicks.wipe(File(dir, "other.json"))
+        assertFalse(File(dir, "other.json").exists())
+        assertFalse(File(dir, "picked-subtitles").exists())
+        assertNull(SubtitlePicks(File(dir, "other.json")).recall(listOf("msg:2:2")))
+    }
+
+    @Test
     fun noKeysRemembersNothing() {
         picks.remember(emptyList(), hit, downloaded())
         picks.rememberOff(emptyList())

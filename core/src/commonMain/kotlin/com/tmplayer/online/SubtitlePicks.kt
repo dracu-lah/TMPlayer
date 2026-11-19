@@ -172,6 +172,17 @@ class SubtitlePicks(
         MessageDigest.getInstance("SHA-256").digest(text.toByteArray()).joinToString("") { "%02x".format(it) }
 
     companion object {
+        /**
+         * Deletes the picks' state file and the copies kept beside it by path, for a sign out
+         * where no [SubtitlePicks] is alive (a build without the feature, a failed start). The
+         * copies' folder is the one a [SubtitlePicks] on [stateFile] uses by default.
+         */
+        fun wipe(stateFile: File) {
+            runCatching { stateFile.delete() }
+            runCatching { File(stateFile.absolutePath + ".tmp").delete() }
+            runCatching { File(stateFile.absoluteFile.parentFile ?: return, "picked-subtitles").deleteRecursively() }
+        }
+
         const val MAX_ENTRIES = 400
         private const val MAX_FILE_BYTES = 4L * 1024 * 1024
         private const val MAX_STATE_BYTES = 4L * 1024 * 1024
