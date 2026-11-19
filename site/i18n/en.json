@@ -195,6 +195,8 @@
     "neither_the_app_talks_3701": "Neither. The app talks to Telegram directly through Telegram's official library. No media or account data passes through any TMPlayer server.",
     "do_trailers_play_inside_94f1": "Do trailers play inside TMPlayer? What does YouTube see?",
     "yes_in_youtube_s_b51a": "Yes, in YouTube's own player, on the web app, Android phones, tablets and TVs, iPhone and iPad, and the desktop app. Nothing from Google loads until you open a trailer, and TMPlayer sends no ids of yours and no file names. YouTube sees what any embedded player sees: your IP address and the trailer's video id, and it sets its own cookies. Settings, Home and library, Play trailers in TMPlayer turns it off, and any failure opens YouTube instead. On Windows, macOS and Linux the desktop app first asks once to download a browser component (130 to 158 MB, 305 to 455 MB on disk).",
+    "is_there_a_video_bf17": "Is there a video player for Telegram? What does TMPlayer add?",
+    "telegram_s_own_apps_20af": "Telegram's own apps play the videos in your chats. TMPlayer is a free, unofficial Telegram video player, a Telegram Media Player for the videos you already have in your own chats. It plays a video while it downloads, plays MKV with its subtitles and every audio track, remembers where you stopped, groups episodes into shows, has a layout made for a TV remote, and on Android hands a video to VLC or MX Player. It runs on Android phones, Android TV, Google TV and Fire TV, on Windows 10 and 11, on 64-bit Linux and, as a preview, on a Mac with Apple Silicon.",
     "which_file_do_i_ec0b": "Which file do I download?",
     "android_tv_or_phone_780c": "Android TV or phone: the universal APK. Windows: one line in PowerShell, or the MSI installer. Mac with Apple Silicon: the DMG. Linux: the AppImage, or the PKGBUILD on Arch. The download page shows yours first.",
     "is_there_a_windows_b2c9": "Is there a Windows, macOS or Linux version?",
@@ -670,7 +672,7 @@
     "pick_h": "Which device are you installing on?",
     "time_note": "About five minutes, with only the remote.",
     "launcher_by_hand": "Make the launcher by hand",
-    "how_to_install_tmplayer_on": "How to install TMPlayer on Android TV, Windows, macOS, Linux",
+    "how_to_install_tmplayer_on": "Install TMPlayer: Telegram Media Player for Android, TV, PC",
     "how_to_install": "{a1}{span1}How to install",
     "how_to_install__a1": "Home",
     "how_to_install_it": "How to install it, {em1}",
@@ -839,7 +841,7 @@
     "still_stuck_with_your_device": "Still stuck? {a1} with your device, its version and what the screen said.",
     "still_stuck_with_your_device__a1": "Open an issue",
     "if_these_steps_got_your": "If these steps got your videos on screen, a star helps the next person.",
-    "description": "Install TMPlayer: Downloader and the remote on Android TV, the APK on a phone, one PowerShell line on Windows, the DMG on a Mac, the AppImage on Linux.",
+    "description": "Install the free TMPlayer Telegram video player: the APK on a phone, Downloader on Android TV and Fire TV, one PowerShell line on Windows, the DMG on a Mac, the AppImage on Linux.",
     "pick_a_chat_and_press": "Pick a chat and press play"
   },
   "android_tv": {
@@ -896,8 +898,8 @@
     "stereo_body": "Side by side and top and bottom videos as anaglyph for coloured glasses, in 2D with one eye, or both eyes for a 3D TV or a VR headset."
   },
   "android": {
-    "title": "TMPlayer: Telegram video player for Android phones",
-    "description": "A free, unofficial Telegram video player for Android phones: stream videos without downloading them first, with MKV, subtitles, casting and picture in picture.",
+    "title": "Telegram Media Player for Android phones | TMPlayer",
+    "description": "TMPlayer is a free, unofficial Telegram video player for Android phones: it plays the videos in your chats while they download, with MKV, subtitles, casting and picture in picture.",
     "heading": "A Telegram video player {em1}",
     "heading__em1": "for Android phones",
     "lede": "TMPlayer plays the videos already in your own Telegram chats on an Android phone or tablet, the moment you press play, while they are still arriving. Free, open source and unofficial.",
@@ -1063,6 +1065,9 @@
     "trailers_q": "Do trailers play inside TMPlayer? What does YouTube see?",
     "trailers_a": "Yes, in YouTube's own player, on the web app, Android phones, tablets and TVs, iPhone and iPad, and the desktop app. Nothing from Google loads until you open a trailer, and TMPlayer sends no ids of yours and no file names. YouTube sees what any embedded player sees: your IP address and the trailer's video id, and it sets its own cookies. Settings, Home and library, Play trailers in TMPlayer turns it off, and any failure opens YouTube instead. On Windows, macOS and Linux the desktop app first asks once to download a browser component (130 to 158 MB, 305 to 455 MB on disk). {a1}.",
     "trailers_a__a1": "What the privacy page says",
+    "player_q": "Is there a video player for Telegram? What does TMPlayer add?",
+    "player_a": "Telegram's own apps play the videos in your chats. TMPlayer is a free, unofficial Telegram video player, a Telegram Media Player for the videos you already have in your own chats. It plays a video while it downloads, plays MKV with its subtitles and every audio track, remembers where you stopped, groups episodes into shows, has a layout made for a TV remote, and on Android hands a video to VLC or MX Player. It runs on Android phones, Android TV, Google TV and Fire TV, on Windows 10 and 11, on 64-bit Linux and, as a preview, on a Mac with Apple Silicon. {a1}.",
+    "player_a__a1": "Other Telegram players are compared, with the source of each fact, on the alternatives page",
     "which_file_do_i_download": "Which file do I download?",
     "which_file_answer": "Android TV or phone: the universal APK. Windows: one line in PowerShell, or the MSI installer. Mac with Apple Silicon: the DMG. Linux: the AppImage, or the PKGBUILD on Arch. {a1} shows yours first.",
     "which_file_answer__a1": "The download page",
@@ -1270,7 +1275,7 @@
     "how_to_watch_telegram_videos_2": "How to watch Telegram videos on Android TV"
   },
   "guide_fire_tv": {
-    "how_to_watch_telegram_videos": "How to watch Telegram videos on Fire TV | TMPlayer",
+    "how_to_watch_telegram_videos": "Telegram Media Player for Fire TV Stick: install TMPlayer",
     "how_to_watch": "How to watch Telegram videos {em1}",
     "how_to_watch__em1": "on Fire TV",
     "amazon_s_store_has_no": "Amazon's store has no Telegram app for Fire TV. TMPlayer is a free, unofficial player that signs in to your own account and plays the videos in your chats, driven by the Fire TV remote.",
@@ -1309,7 +1314,7 @@
     "stuck_on_a_step_lists": "Stuck on a step? {a1} lists the usual causes. On Android TV or Google TV instead? {a2}.",
     "stuck_on_a_step_lists__a1": "If it goes wrong",
     "stuck_on_a_step_lists__a2": "Read the Android TV guide",
-    "step_by_step_install_tmplayer": "Step by step: install TMPlayer on a Fire TV Stick or Cube with the Downloader app, sign in with a QR code, play your Telegram videos, and fix a stuck install.",
+    "step_by_step_install_tmplayer": "There is no Telegram app for Fire TV. Install the free TMPlayer video player on a Fire TV Stick or Cube with Downloader, sign in with a QR code and play your chats' videos.",
     "how_to_watch_telegram_videos_2": "How to watch Telegram videos on Fire TV"
   },
   "guide_no_casting": {
@@ -1528,8 +1533,8 @@
     "more__a2": "The questions"
   },
   "desktop": {
-    "title": "TMPlayer: Telegram video player for Windows PC, Mac, Linux",
-    "description": "A free, unofficial Telegram video player for Windows, Mac and Linux: sign in with a QR code, play your chats' videos through mpv as they download, or cast them.",
+    "title": "Telegram Media Player for Windows PC, Mac, Linux | TMPlayer",
+    "description": "TMPlayer is a free, unofficial Telegram video player for Windows, Mac and Linux: sign in with a QR code, play your chats' videos through mpv as they download, or cast them.",
     "a_telegram_video_player": "A Telegram video player {em1}",
     "a_telegram_video_player__em1": "for Windows, Mac and Linux",
     "lede": "TMPlayer is a free, open source and unofficial Telegram media player. On a computer it signs in to your own account, shows the videos in your chats as posters and plays them while they download.",
@@ -1992,7 +1997,7 @@
     }
   },
   "guide_external": {
-    "title": "External player for Telegram videos, and VLC | TMPlayer",
+    "title": "External player for Telegram videos: TMPlayer or VLC",
     "social_title": "An external player for Telegram videos, and VLC",
     "description": "TMPlayer is an external player for Telegram videos, with subtitles, audio tracks and resume. On Android it also hands a video to VLC or MX Player.",
     "crumb": "External player",

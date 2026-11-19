@@ -6,6 +6,14 @@ export const faqLd = {
   "mainEntity": [
     {
       "@type": "Question",
+      "name": "Is there a video player for Telegram? What does TMPlayer add?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Telegram's own apps play the videos in your chats. TMPlayer is a free, unofficial Telegram video player, a Telegram Media Player for the videos you already have in your own chats. It plays a video while it downloads, plays MKV with its subtitles and every audio track, remembers where you stopped, groups episodes into shows, has a layout made for a TV remote, and on Android hands a video to VLC or MX Player. It runs on Android phones, Android TV, Google TV and Fire TV, on Windows 10 and 11, on 64-bit Linux and, as a preview, on a Mac with Apple Silicon."
+      }
+    },
+    {
+      "@type": "Question",
       "name": "Can I download Telegram on my TV?",
       "acceptedAnswer": {
         "@type": "Answer",
