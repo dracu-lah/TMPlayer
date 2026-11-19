@@ -38,6 +38,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 // The viewer's named lists (HX43) on every Compose platform: the picker a video's or a show's menu
@@ -89,7 +90,7 @@ fun ListPickerDialog(
     ListPickerMenu(
         record = record,
         lists = shown,
-        onPick = actions::pick,
+        onPick = { list, _ -> actions.toggle(list) },
         onNew = { name -> actions.create(name, shown.size) },
         onDismiss = onDismiss,
     )
@@ -115,6 +116,27 @@ class ListPickerActions(
                 s.listsRemoved(record.title, list.info.name)
             } else {
                 addedLine(s, record, list.info.name, lists.add(list.info.id, record))
+            }
+        }
+    }
+
+    private val writing = kotlinx.coroutines.sync.Mutex()
+
+    /**
+     * A press that decides add or remove from the lists as they are when it runs, not as the screen
+     * last drew them: two quick presses before the screen catches up add, then remove, instead of
+     * adding twice. Writes of one picker take turns.
+     */
+    fun toggle(list: VisibleList) {
+        listWrite(say, s) {
+            writing.withLock {
+                val now = lists.now().entries.any { it.listId == list.info.id && it.record.id == record.id }
+                if (now) {
+                    lists.remove(list.info.id, setOf(record.id))
+                    s.listsRemoved(record.title, list.info.name)
+                } else {
+                    addedLine(s, record, list.info.name, lists.add(list.info.id, record))
+                }
             }
         }
     }

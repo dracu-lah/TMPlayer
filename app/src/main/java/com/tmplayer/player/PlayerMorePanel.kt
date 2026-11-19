@@ -682,7 +682,7 @@ class PlayerMorePanel(
                 PlayerListsSheet(
                     record = target.record,
                     lists = all,
-                    onPick = actions::pick,
+                    onPick = { list, _ -> actions.toggle(list) },
                     onNew = { name -> actions.create(name, all?.size ?: 0) },
                     onBack = ::back,
                 )

@@ -98,6 +98,14 @@ class AddToListFocusTest {
         idle()
     }
 
+    /** Idles until [done], and stops there: a plain loop with a return, not repeat, which would run all its turns. */
+    private fun waitUntil(done: () -> Boolean) {
+        for (turn in 0 until 100) {
+            idle()
+            if (done()) return
+        }
+    }
+
     private fun waitFocused(matcher: androidx.compose.ui.test.SemanticsMatcher) {
         repeat(100) {
             idle()
@@ -138,19 +146,13 @@ class AddToListFocusTest {
 
         // OK puts the video in the list: the line becomes "Remove from list" and the page stays up.
         press(Key.DirectionCenter)
-        repeat(100) {
-            idle()
-            if (runCatching { rule.onNode(hasText(L.listsRemove)).assertExists() }.isSuccess) return@repeat
-        }
+        waitUntil { runCatching { rule.onNode(hasText(L.listsRemove)).assertExists() }.isSuccess }
         rule.onNode(hasText(L.listsRemove)).assertExists()
         rule.onNode(hasText("Weekend")).assertIsFocused()
         assertTrue(said.joinToString(), said.any { it.contains("Weekend") })
         // Pressing the ticked line takes it out again, the same way the card menu does.
         press(Key.DirectionCenter)
-        repeat(100) {
-            idle()
-            if (runCatching { rule.onNode(hasText(L.listsRemove)).assertDoesNotExist() }.isSuccess) return@repeat
-        }
+        waitUntil { runCatching { rule.onNode(hasText(L.listsRemove)).assertDoesNotExist() }.isSuccess }
         rule.onNode(hasText(L.listsRemove)).assertDoesNotExist()
 
         // Back closes the page only: the panel stays up on the same line and the player is not told to close.

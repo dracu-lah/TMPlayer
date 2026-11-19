@@ -100,4 +100,19 @@ class ListPickerActionsTest {
         until("told") { said.contains(L.messages.listsNameEmpty) }
         assertFalse(visible().isNotEmpty())
     }
+
+    @Test
+    fun `two quick toggles before the screen catches up add and then remove, never add twice`() {
+        runBlocking { lists.create("Weekend") }
+        val record = video()
+        val stale = visible().first()
+        val picker = actions(record)
+        // Both presses were made against the same drawn list, which did not have the video.
+        picker.toggle(stale)
+        picker.toggle(stale)
+        until("two lines said") { said.size == 2 }
+        assertEquals(L.messages.listsAdded(record.title, "Weekend"), said[0])
+        assertEquals(L.messages.listsRemoved(record.title, "Weekend"), said[1])
+        assertFalse(visible().first().ids.contains(record.id))
+    }
 }
