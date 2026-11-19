@@ -113,6 +113,7 @@ const KEEP_TOPIC_CHATS = 3
 export function forgetAll() {
     chats.clear()
     topicChats.clear()
+    topicHead = null
     forgetTopics()
     dialogs = null
     dialogsLoading = null
@@ -755,25 +756,43 @@ export function knownChats(): { chats: ChatItem[]; done: boolean } {
     return dialogs ? { chats: dialogs, done: true } : { chats: dialogsSoFar, done: false }
 }
 
-/** A search by topic name waits this long for the chat list when it must read it whole (every chat is searched). */
+/** A search by topic name waits this long for a chat list that is already being read (every chat is searched). */
 const TOPIC_LIST_WAIT_MS = 3_000
 /** Added chats the list has not reached whose peer is looked up (from the stored peers, no call) per search. */
 const TOPIC_PEER_CHECKS = 150
+/** The head of the chat list (the chats used most recently), read for a search by topic name when the whole list is not there: kept two minutes. */
+let topicHead: { at: number; chats: ChatItem[] } | null = null
 
 /**
  * The groups with topics a search by topic name may ask (U14), and the chat list's order for ties.
  * Telling a group with topics from one without is a read of what the chat list already holds (the
- * forum flag of the dialog), never a call: the added chats the list has not reached are looked up
- * among the stored peers, at most TOPIC_PEER_CHECKS. With every chat searched and the list not yet
- * read, it is read now (kept for the session) and waited for a few seconds, then the part that has
- * come is used.
+ * forum flag of the dialog), never a call per chat. Added chats the list has not reached are looked
+ * up among the stored peers, at most TOPIC_PEER_CHECKS. With every chat searched, the list is used
+ * as far as it has come (waiting a few seconds for one already being read); when none is being
+ * read, only its first page (the chats used most recently, one call) is read, so a search never
+ * starts the read of 3,000 chats.
  */
 export async function topicSources(tg: TelegramClient, added: readonly number[] | null): Promise<{ forums: ForumChat[]; order: number[] }> {
+    let head: ChatItem[] = []
     if (!added && !dialogs) {
-        const loading = chatList(tg, false, () => {}).catch(() => [] as ChatItem[])
-        await Promise.race([loading, new Promise((resolve) => setTimeout(resolve, TOPIC_LIST_WAIT_MS))])
+        if (dialogsLoading) {
+            await Promise.race([dialogsLoading.catch(() => []), new Promise((resolve) => setTimeout(resolve, TOPIC_LIST_WAIT_MS))])
+        } else if (dialogsSoFar.length === 0) {
+            if (!topicHead || Date.now() - topicHead.at > 120_000) {
+                const mine = epoch
+                const first: ChatItem[] = []
+                try {
+                    for await (const d of tg.iterDialogs({ archived: 'exclude', pinned: 'include', limit: PAGE })) first.push(chatItem(d.peer, d.isPinned))
+                } catch {
+                    // The chats read so far are used; none means no group is asked.
+                }
+                if (mine !== epoch) return { forums: [], order: [] }
+                topicHead = { at: Date.now(), chats: first }
+            }
+            head = topicHead.chats
+        }
     }
-    const known: ChatItem[] = [...(dialogs ?? dialogsSoFar), ...(archived ?? [])]
+    const known: ChatItem[] = [...(dialogs ?? dialogsSoFar), ...head, ...(archived ?? [])]
     const byId = new Map<number, ChatItem>()
     for (const c of known) if (!byId.has(c.id)) byId.set(c.id, c)
     if (added) {
