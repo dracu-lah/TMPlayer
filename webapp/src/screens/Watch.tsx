@@ -10,6 +10,7 @@ import { watchPath } from './VideoList'
 import { warmFile } from '../stream/reader'
 import { looksSplit } from '../stream/joined'
 import { readChatOrder } from '../player/keep'
+import { notePlayed } from '../copies'
 import type { ChatView, VideoItem } from '../tg/types'
 
 /** The player's code (the engines and the controls), also fetched while idle once signed in (App.tsx). */
@@ -70,6 +71,16 @@ export function Watch() {
         () => (progress.state === 'ready' && chatOrder.state === 'ready' ? { ...ids(), view: view() } : null),
         ({ chatId, messageId, view }) => api.watch(chatId, messageId, view).catch((e) => (console.warn('[watch]', e), null)),
     )
+    // A play noted in the quality the viewer usually plays (QualityHabit), once per video opened: a
+    // card of a video posted more than once then plays the copy nearest it (HX38).
+    let noted = ''
+    createEffect(() => {
+        const now = info()
+        const key = `${params.chatId}:${params.messageId}`
+        if (!now || noted === key) return
+        noted = key
+        notePlayed(now.qualityHeight)
+    })
     const close = () => back(navigate)
     const play = (next: VideoItem) => navigate(watchPath(next), { state: { video: next }, replace: true })
 
