@@ -6,6 +6,10 @@ import {
     ArrowLeft02Icon,
     ArrowRight01Icon,
     ArrowUp01Icon,
+    Bug01Icon,
+    Copy01Icon,
+    Idea01Icon,
+    Mail01Icon,
     ClapperboardIcon,
     CloudSyncIcon,
     LockKeyholeIcon,
@@ -46,6 +50,8 @@ import { msoneOn, stateLine } from '../msoneFlag'
 import { health, knownHealth, type Health } from '../player/msone'
 import { setSyncOn, statusLine, syncHasFile, syncNow, syncOn, syncRunning, syncStatus, turnOffAndDelete } from '../sync'
 import { showToast } from '../ui/Toast'
+import { copyText, EMAIL, featureUrl, inboxUrl, issueUrl, mailto } from '../ui/feedback'
+import { feedbackFacts, openFeedback } from '../ui/FeedbackForm'
 
 const THEMES: Theme[] = ['system', 'dark', 'light', 'black']
 const LAYOUTS: Layout[] = ['desktop', 'tv']
@@ -646,8 +652,67 @@ function StoragePage() {
     )
 }
 
+/**
+ * Report a problem and Request a feature (WB11, HX64). With the build's inbox address, each opens
+ * the form in the page (ui/FeedbackForm.tsx) over the draft kept on this device; without one, each
+ * is a link to GitHub's prefilled page, so the rows work before the inbox is deployed and in a
+ * fork. An e-mail row and Copy details stay for a viewer with neither GitHub nor the form. Nothing
+ * here sends anything: the form's own confirm step does, and shows what goes first.
+ */
+function Feedback() {
+    const facts = createMemo(() => feedbackFacts())
+    const form_ = () => inboxUrl() !== null
+    const copy = async () => {
+        try {
+            await navigator.clipboard.writeText(copyText(facts()))
+            showToast({ text: t('player.details_copied') })
+        } catch {
+            // No clipboard: the facts are in the row under its title.
+        }
+    }
+    return (
+        <div class="set-card" data-feedback-rows>
+            <Show
+                when={form_()}
+                fallback={
+                    <>
+                        <a class="set-row" href={issueUrl(facts())} target="_blank" rel="noopener">
+                            <RowBody icon={Bug01Icon} title={t('settings.report_problem')} subtitle={t('settings.report_problem_detail')} />
+                            <Icon icon={ArrowRight01Icon} size={20} class="set-chevron" />
+                        </a>
+                        <a class="set-row" href={featureUrl()} target="_blank" rel="noopener">
+                            <RowBody icon={Idea01Icon} title={t('web.request_feature')} subtitle={t('web.request_feature_detail')} />
+                            <Icon icon={ArrowRight01Icon} size={20} class="set-chevron" />
+                        </a>
+                    </>
+                }
+            >
+                <button type="button" class="set-row" onClick={(e) => openFeedback('problem', e.currentTarget)}>
+                    <RowBody icon={Bug01Icon} title={t('settings.report_problem')} subtitle={t('settings.report_problem_detail_inbox')} />
+                    <Icon icon={ArrowRight01Icon} size={20} class="set-chevron" />
+                </button>
+                <button type="button" class="set-row" onClick={(e) => openFeedback('feature', e.currentTarget)}>
+                    <RowBody icon={Idea01Icon} title={t('web.request_feature')} subtitle={t('settings.request_feature_detail')} />
+                    <Icon icon={ArrowRight01Icon} size={20} class="set-chevron" />
+                </button>
+            </Show>
+            <a class="set-row" href={mailto(facts(), 'problem')}>
+                <RowBody icon={Mail01Icon} title={t('feedback.email')} subtitle={t('feedback.email_detail', { email: EMAIL })} />
+                <Icon icon={ArrowRight01Icon} size={20} class="set-chevron" />
+            </a>
+            <Show when={typeof navigator !== 'undefined' && !!navigator.clipboard?.writeText}>
+                <button type="button" class="set-row" onClick={() => void copy()}>
+                    <RowBody icon={Copy01Icon} title={t('player.copy_details')} subtitle={copyText(facts()).split('\n').slice(1).join(', ')} />
+                </button>
+            </Show>
+        </div>
+    )
+}
+
 function About() {
     return (
+        <>
+        <Feedback />
         <div class="set-card">
             <a class="set-row" href={LICENCES} target="_blank" rel="noopener">
                 <RowBody icon={File01Icon} title={t('about.notices_title')} subtitle={t('about.notices_detail')} />
@@ -662,6 +727,7 @@ function About() {
                 <a class="link" href={LICENCES} target="_blank" rel="noopener">{t('about.read')}</a>
             </div>
         </div>
+        </>
     )
 }
 
@@ -983,6 +1049,15 @@ function TvSettings() {
                 <a class="link" href="https://tmplayer.org/legal" target="_blank" rel="noopener">{t('login.legal')}</a>
                 <SignOut />
             </div>
+            <TvPanel title={t('feedback.title')} id="feedback-label">
+                <p class="muted small">{t('feedback.tv_phone_hint')}</p>
+                <button class="outline-button" style={{ 'align-self': 'start' }} type="button" onClick={(e) => openFeedback('problem', e.currentTarget)}>
+                    {t('settings.report_problem')}
+                </button>
+                <button class="outline-button" style={{ 'align-self': 'start' }} type="button" onClick={(e) => openFeedback('feature', e.currentTarget)}>
+                    {t('web.request_feature')}
+                </button>
+            </TvPanel>
             <div class="panel">
                 <h2 class="panel-title">{t('about.notices_title')}</h2>
                 <p class="muted small">{t('about.licence_line')}</p>

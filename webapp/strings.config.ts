@@ -704,6 +704,8 @@ export const PAGE_STRINGS = [
     'feedback',
     'settings.report_problem',
     'settings.report_problem_detail',
+    'settings.report_problem_detail_inbox',
+    'settings.request_feature_detail',
     'web.request_feature',
     'web.request_feature_body',
     'web.request_feature_detail',

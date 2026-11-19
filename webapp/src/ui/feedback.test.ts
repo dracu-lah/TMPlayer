@@ -4,7 +4,10 @@
 // sends is what the Worker accepts. `node --test src/ui/feedback.test.ts`
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { parseFeedback } from '../../../workers/log-inbox/src/feedback.ts'
+// The inbox's own parser, loaded by address so the web app's type check does not read the Worker's sources.
+const { parseFeedback } = (await import(new URL('../../../workers/log-inbox/src/feedback.ts', import.meta.url).href)) as {
+    parseFeedback: (text: string) => { ok: true; feedback: { id: string; kind: string; message: string; contact: string | null; logs: string | null; facts: { device: string } } } | { ok: false; error: string }
+}
 import {
     DRAFT_KEY,
     FLUSH_DELAY_MS,
@@ -341,19 +344,19 @@ test('typing is kept 1.5 s after the last change: one wait, replaced by each cha
     timers.advance(1000)
     keep.change(draft({ message: 'ab' }))
     timers.advance(1000)
-    assert.equal(store.draft, null, 'the wait started again at the second change')
+    assert.equal((store as { draft: Draft | null }).draft, null, 'the wait started again at the second change')
     timers.advance(500)
-    assert.equal(store.draft?.message, 'ab')
+    assert.equal((store as { draft: Draft | null }).draft?.message, 'ab')
     assert.equal(keep.waiting, false)
     assert.equal(timers.jobs.size, 0)
     keep.change(draft({ message: 'abc' }))
     keep.now()
-    assert.equal(store.draft?.message, 'abc', 'closing writes at once')
+    assert.equal((store as { draft: Draft | null }).draft?.message, 'abc', 'closing writes at once')
     assert.equal(timers.jobs.size, 0)
     keep.change(draft({ message: 'zzz' }))
     keep.cancel()
     timers.advance(5000)
-    assert.equal(store.draft?.message, 'abc', 'a cancelled wait writes nothing')
+    assert.equal((store as { draft: Draft | null }).draft?.message, 'abc', 'a cancelled wait writes nothing')
 })
 
 // ---- Sending ----
