@@ -8,7 +8,7 @@ import type { Sort, VideoItem } from './tg/types'
 import { clearIndex, POSTERS as POSTER_CACHE, THUMBS, touch } from './cacheBounds'
 import { cleanHome } from './ui/homeSettings'
 import { decodePick, encodePick, type Pick } from './pick'
-import { cleanTitle } from './rename'
+import { admit, cleanTitle } from './rename'
 import * as Lists from './ui/lists'
 import { cleanPref, isDefault, type ChatPref } from './ui/filterPref'
 import { resolveSpeed, sanitiseBoost, speedTarget, speedToKeep, type SpeedScopes } from './player/extras'
@@ -799,17 +799,23 @@ export const titleOf = (chatId: number, messageId: number): string | undefined =
  */
 export function setTitle(videos: readonly { chatId: number; messageId: number }[], title: string | null) {
     const clean = cleanTitle(title)
-    const next = new Map(titles())
+    let next: ReadonlyMap<string, string> = titles()
     const now = Date.now()
     let changed = false
     for (const v of videos) {
         const key = id(v.chatId, v.messageId)
         if (clean) {
-            if (next.get(key) === clean || (next.size >= TITLES_MAX && !next.has(key))) continue
-            next.set(key, clean)
+            if (next.get(key) === clean) continue
+            const put = admit(next, key, clean, TITLES_MAX)
+            next = put.next
+            // Full: the oldest rename goes, here only (the sync file keeps its own newest 1,000).
+            if (put.evicted) forgetTitle(put.evicted)
             write(`title:${key}`, clean)
             write(`titleat:${key}`, now)
-        } else if (next.delete(key)) {
+        } else if (next.has(key)) {
+            const left = new Map(next)
+            left.delete(key)
+            next = left
             remove(`titleat:${key}`, true)
             remove(`title:${key}`)
         } else continue
@@ -818,15 +824,24 @@ export function setTitle(videos: readonly { chatId: number; messageId: number }[
     if (changed) setTitles(next)
 }
 
+/** A rename dropped to make room: no removal is noted, it is not the viewer's act. */
+function forgetTitle(key: string) {
+    remove(`title:${key}`, true)
+    remove(`titleat:${key}`, true)
+}
+
 async function loadTitles() {
-    const stored = await allEntries<unknown>('title:')
-    const found = new Map<string, string>()
+    const [stored, times] = await Promise.all([allEntries<unknown>('title:'), allEntries<number>('titleat:')])
+    const found: [string, string, number][] = []
     for (const [k, v] of stored) {
         const key = k.slice('title:'.length)
         const title = cleanTitle(v)
-        if (title && VIDEO_KEY.test(key) && found.size < TITLES_MAX) found.set(key, title)
+        const at = times.get(`titleat:${key}`)
+        if (title && VIDEO_KEY.test(key)) found.push([key, title, typeof at === 'number' && Number.isFinite(at) ? at : 0])
     }
-    setTitles(found)
+    // Oldest first, so a full store drops the oldest; a stored pile past the cap keeps the newest.
+    found.sort((x, y) => x[2] - y[2])
+    setTitles(new Map(found.slice(-TITLES_MAX).map(([key, title]) => [key, title])))
 }
 
 // The copies of a video (HX38), on this device only: the files kept apart from the copies they were
@@ -1051,13 +1066,17 @@ export async function syncTitleTombs(since: number): Promise<{ key: string; at: 
 export function syncPutTitle(chatId: number, messageId: number, title: string | null, at: number) {
     const key = id(chatId, messageId)
     const clean = cleanTitle(title)
-    const next = new Map(titles())
+    let next: ReadonlyMap<string, string> = titles()
     if (clean) {
-        if (next.size >= TITLES_MAX && !next.has(key)) return
-        next.set(key, clean)
+        const put = admit(next, key, clean, TITLES_MAX)
+        next = put.next
+        if (put.evicted) forgetTitle(put.evicted)
         write(`title:${key}`, clean)
         write(`titleat:${key}`, at)
-    } else if (next.delete(key)) {
+    } else if (next.has(key)) {
+        const left = new Map(next)
+        left.delete(key)
+        next = left
         remove(`title:${key}`, true)
         remove(`titleat:${key}`, true)
     } else return

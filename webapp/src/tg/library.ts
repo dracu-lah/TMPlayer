@@ -9,7 +9,7 @@ import { forgetChatTitles, noteChatTitle } from './hints'
 import { forgetSponsored, loadSponsored } from './sponsored'
 import { tally } from '../ui/searchTally'
 import { cleanContext, correctionLines, NO_COPY_CONTEXT, type CopyContext } from './copyFit'
-import { copyRows, playCopy } from './copyPick'
+import { copyRows, groupRefs, playCopy } from './copyPick'
 import { touchesFor } from './touchCache'
 import type { ChatItem, CopyRef, ChatPage, ChatView, Found, ListView, RecentPage, SponsoredItem, Tile, VideoItem, WatchInfo } from './types'
 
@@ -1238,6 +1238,7 @@ export async function watchInfo(tg: TelegramClient, chatId: number, messageId: n
         quality: read.label ?? null,
         qualityHeight: read.height ?? null,
         copies: copies.length > 1 ? copies : [],
+        group: copyVideos.length > 1 ? groupRefs(copyVideos) : [],
         overview: r.overviewOf(current) ?? null,
     }
     watchKept.set(id, { version: s.version, view: viewKey, info })

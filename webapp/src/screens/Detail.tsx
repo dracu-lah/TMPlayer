@@ -209,7 +209,7 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
     // The viewer's own title (Rename) leads; TMDB's, then the name the worker reads, follow.
     const title = () => renamedTitle(item) || found()?.title || props.info?.title || item.title
     // Every copy of this video: a rename is written to all of them, so it holds whichever one a card shows.
-    const copyItems = () => props.info?.copies.map((c) => c.item) ?? []
+    const copyItems = () => props.info?.group.length ? props.info.group : (props.info?.copies.map((c) => c.item) ?? [])
     const ep = () => props.info?.episode ?? null
     const episodeName = () => extras()?.episode?.name || ep()?.name || ''
     const resolution = () => props.info?.quality ?? (props.info?.height ? `${props.info.height}p` : '')

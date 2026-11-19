@@ -80,6 +80,12 @@ test('the field is cut at 120 characters, an empty one is no rename, Escape and 
     // An emoji and right to left text are kept whole.
     await field(page).fill('فيلم الليل 😀')
     await expect(field(page)).toHaveValue('فيلم الليل 😀')
+    // The count and the cap are in whole characters: 60 emoji are 60 of 120, and typing goes on.
+    await field(page).fill('😀'.repeat(60))
+    await expect(sheet(page).locator('.rename-count')).toHaveText('60 / 120')
+    await field(page).press('End')
+    await page.keyboard.type('abc')
+    await expect(sheet(page).locator('.rename-count')).toHaveText('63 / 120')
     // Escape closes with nothing saved and the focus back on the button.
     await page.keyboard.press('Escape')
     await expect(sheet(page)).toBeHidden()

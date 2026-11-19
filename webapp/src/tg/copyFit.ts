@@ -4,7 +4,7 @@
 // those kinds as "too slow", so a copy the browser can play leads the list and is the one Play opens.
 // Pure and outside data safe: names and types come from Telegram, the kinds from the page.
 
-import { cleanTitle } from '../rename.ts'
+import { cleanTitle, RENAME_MAX } from '../rename.ts'
 
 /** A kind of picture the name can name that some browsers cannot decode themselves. */
 export type PictureKind = 'hevc' | 'hevc10' | 'avc10' | 'av1' | 'vp9' | 'legacy'
@@ -42,7 +42,11 @@ export const NO_COPY_CONTEXT: CopyContext = { device: 'phone', slow: [], apart: 
 export function correctionLines(ctx: Pick<CopyContext, 'apart' | 'titles'>, set: (text: string | null, field: string, value: string | null) => string): { ids: string[]; texts: string[] } {
     const lines = new Map<string, string>()
     for (const key of ctx.apart) lines.set(key, 'separate')
-    for (const t of ctx.titles) lines.set(t.id, set(lines.get(t.id) ?? null, 'title', t.title))
+    for (const t of ctx.titles) {
+        const before = lines.get(t.id) ?? null
+        // The rules cut a title at 120 UTF-16 units; the page's cap is 120 whole characters, so a longer one is written as it is.
+        lines.set(t.id, t.title.length <= RENAME_MAX ? set(before, 'title', t.title) : [before, `title=${t.title}`].filter(Boolean).join('\n'))
+    }
     return { ids: [...lines.keys()], texts: [...lines.values()] }
 }
 

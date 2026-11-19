@@ -134,9 +134,8 @@ export function CardMenu() {
     }
     // A card stands for every copy of its video; Rename is written to all of them (the apps' filesOf), found out when the sheet opens.
     const copiesOf = (now: Target) => async () => {
-        if (now.versions < 2) return []
         const info = await api.watch(now.item.chatId, now.item.messageId, { sort: settings().sort, minBytes: settings().sizeMin, maxBytes: settings().sizeMax, watched: [], started: [], query: '' })
-        return info?.copies.map((c) => c.item) ?? []
+        return info?.group.length ? info.group : (info?.copies.map((c) => c.item) ?? [])
     }
     const rename = () => {
         const now = target()

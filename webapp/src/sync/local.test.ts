@@ -105,7 +105,7 @@ test('a rename is the title line of the video\'s correction, joined to the pick 
     assert.deepEqual(both.corrections.map((c) => [c.text, c.at]), [['tmdb=film:9\ntitle=Web name', NOW - 3]])
     // The file carries 60 characters, never half an emoji; the page keeps its 120.
     const long = collect(lists({ titles: [{ chatId: CHAT, messageId: 6, title: `${'a'.repeat(59)}😀 tail`, at: NOW }] }), noBase(), emptyDoc(1), 1, NOW, 'web')
-    assert.equal(long.corrections[0].text, `title=${'a'.repeat(59)}`)
+    assert.equal(long.corrections[0].text, `title=${'a'.repeat(59)}😀`)
     // Resetting the rename leaves the pick and the split; with nothing else it is a removal.
     const reset = collect(lists({ titleTombs: [{ key, at: NOW - 10 }] }), noBase(), remote, 1, NOW, 'web')
     assert.deepEqual(reset.corrections.map((c) => [c.text, c.at]), [['separate\ntmdb=show:123', NOW - 10]])
@@ -120,6 +120,23 @@ test('a rename is the title line of the video\'s correction, joined to the pick 
     const unpicked = collect(lists({ tombs: [{ list: 'correction', key, at: NOW - 10 }], titles: [{ chatId: CHAT, messageId: 6, title: 'Web name', at: NOW - 20 }] }), noBase(), remote, 1, NOW, 'web')
     assert.deepEqual(unpicked.corrections.map((c) => c.text), ['separate\ntitle=Web name'])
     assert.equal(withLines('separate\ntitle=A', { title: null }), 'separate')
+    // A line this web does not know (a newer app's) is kept verbatim beside a pick or a rename, and never makes a correction empty.
+    const newer = emptyDoc(1)
+    newer.corrections.push({ chat: CHAT, msg, text: 'separate\nyear=2019\ntitle=Phone name\nfuture-flag', at: 5 })
+    const kept = collect(lists({ titles: [{ chatId: CHAT, messageId: 6, title: 'Web name', at: NOW }] }), noBase(), newer, 1, NOW, 'web')
+    assert.deepEqual(kept.corrections.map((c) => c.text), ['separate\ntitle=Web name\nyear=2019\nfuture-flag'])
+    const picked2 = collect(lists({ picks: [{ chatId: CHAT, messageId: 6, text: 'tmdb=film:9', at: NOW }] }), noBase(), newer, 1, NOW, 'web')
+    assert.deepEqual(picked2.corrections.map((c) => c.text), ['separate\ntmdb=film:9\ntitle=Phone name\nyear=2019\nfuture-flag'])
+    const onlyUnknown = emptyDoc(1)
+    onlyUnknown.corrections.push({ chat: CHAT, msg, text: 'year=2019\ntitle=Phone name', at: 5 })
+    const left = collect(lists({ titleTombs: [{ key, at: NOW - 10 }] }), noBase(), onlyUnknown, 1, NOW, 'web')
+    assert.deepEqual(left.corrections.map((c) => c.text), ['year=2019'])
+    assert.deepEqual(left.removed, [], 'unknown lines left: no removal of the whole correction')
+    // A hostile pile of unknown lines is carried only so far.
+    const pile = emptyDoc(1)
+    pile.corrections.push({ chat: CHAT, msg, text: `separate\n${Array.from({ length: 50 }, (_, i) => `x${i}=${'y'.repeat(500)}`).join('\n')}`, at: 5 })
+    const bounded = collect(lists({ titles: [{ chatId: CHAT, messageId: 6, title: 'T', at: NOW }] }), noBase(), pile, 1, NOW, 'web')
+    assert.ok(bounded.corrections[0].text.length < 1_000)
     assert.equal(withLines('tmdb=film:1\ntitle=A', { title: undefined }), 'tmdb=film:1\ntitle=A')
 })
 

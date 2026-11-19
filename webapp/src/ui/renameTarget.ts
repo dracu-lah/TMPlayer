@@ -11,8 +11,8 @@ export interface Target {
     item: Ref
     /** The title shown now (what the file name reads as), the field's start when nothing was renamed. */
     shown: string
-    /** The video's other copies, as they are known or found out (a card knows only its own). */
-    copies: Promise<readonly Ref[]>
+    /** The video's other copies, as they are known or found out (a card knows only its own); the sheet runs the lookup and offers Try again when it fails. */
+    copies: readonly Ref[] | (() => Promise<readonly Ref[]>)
     /** Called once the title is saved (WB28's report, which asks for a rename first). */
     after?: () => void
     /** Where the focus was, to give it back. */
@@ -27,8 +27,7 @@ export { target as renameTarget, setTarget as setRenameTarget }
  * (an array, or a lookup started now and waited for at Save, briefly).
  */
 export function openRename(item: Ref, shown: string, copies: readonly Ref[] | (() => Promise<readonly Ref[]>) = [], after?: () => void) {
-    const found = typeof copies === 'function' ? copies().catch((): readonly Ref[] => []) : Promise.resolve(copies)
-    setTarget({ item, shown, copies: found, after, back: document.activeElement })
+    setTarget({ item, shown, copies, after, back: document.activeElement })
 }
 
 // "Wrong title?" (N1): the report is WB28's. Until its inbox exists nothing registers, so the entry stays hidden.

@@ -2,7 +2,7 @@
 // read from and written to a correction's lines, and what the sheet's Save does with the field.
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { cleanTitle, RENAME_MAX, titleLine, titleOf, saveOf, typed } from '../rename.ts'
+import { admit, cleanTitle, countOf, groupStep, RENAME_MAX, titleLine, titleOf, saveOf, typed } from '../rename.ts'
 
 test('a title is trimmed to one line; nothing left, or not a string, is no rename', () => {
     assert.equal(cleanTitle('  Night Train (2019)  '), 'Night Train (2019)')
@@ -13,11 +13,13 @@ test('a title is trimmed to one line; nothing left, or not a string, is no renam
 test('a title is cut at the apps\' 120 characters, never through an emoji, and a huge value is read only as far as it matters', () => {
     assert.equal(RENAME_MAX, 120)
     assert.equal(cleanTitle('a'.repeat(500)), 'a'.repeat(120))
-    // The emoji is two code units: at the limit it goes whole or not at all.
-    assert.equal(cleanTitle(`${'a'.repeat(119)}😀`), 'a'.repeat(119))
-    assert.equal(cleanTitle(`${'a'.repeat(118)}😀`), `${'a'.repeat(118)}😀`)
-    assert.equal(cleanTitle(`${'a'.repeat(119)} tail`), 'a'.repeat(119))
+    // The limit counts whole characters (code points): an emoji is one, and is never cut in half.
+    assert.equal(cleanTitle(`${'a'.repeat(119)}😀`), `${'a'.repeat(119)}😀`)
+    assert.equal(cleanTitle(`${'a'.repeat(119)}😀 tail`), `${'a'.repeat(119)}😀`)
+    assert.equal(cleanTitle(`${'a'.repeat(120)}😀`), 'a'.repeat(120))
+    assert.equal(cleanTitle('😀'.repeat(200)), '😀'.repeat(120), 'a title of emoji keeps all 120, not 60')
     assert.equal(cleanTitle('b'.repeat(5_000_000))?.length, 120)
+    assert.equal(cleanTitle('😀'.repeat(100), 60), '😀'.repeat(60))
     assert.equal(cleanTitle('x'.repeat(60), 60), 'x'.repeat(60))
     assert.equal(cleanTitle('x'.repeat(61), 60)?.length, 60)
 })
@@ -49,7 +51,12 @@ test('the field keeps typing natural: cut at the limit, breaks as spaces, the en
     assert.equal(typed('abc '), 'abc ')
     assert.equal(typed('a\nb'), 'a b')
     assert.equal(typed('a'.repeat(300)).length, 120)
-    assert.equal(typed(`${'a'.repeat(119)}😀`), 'a'.repeat(119))
+    assert.equal(typed(`${'a'.repeat(119)}😀😀`), `${'a'.repeat(119)}😀`)
+    // The count the sheet shows is the cap's: sixty emoji are 60 of 120 and typing goes on.
+    assert.equal(countOf('😀'.repeat(60)), 60)
+    assert.equal(typed('😀'.repeat(60) + 'abc'), '😀'.repeat(60) + 'abc')
+    assert.equal(countOf(typed('😀'.repeat(500))), 120)
+    assert.equal(countOf('a😀b'), 3)
     // Not renamed yet: the shown title is the start, so the same again or nothing is no save.
     assert.equal(saveOf('Night Train', 'Night Train', undefined), null)
     assert.equal(saveOf('  Night Train ', 'Night Train', undefined), null)
@@ -61,4 +68,30 @@ test('the field keeps typing natural: cut at the limit, breaks as spaces, the en
     assert.equal(saveOf('Night Train', 'Night Train', 'Mine'), 'save', 'the file name typed is a rename to it')
     assert.equal(saveOf('Mine 2', 'Night Train', 'Mine'), 'save')
     assert.equal(saveOf('  ', 'Night Train', 'Mine'), 'reset')
+})
+
+test('a full store drops the oldest rename to take the new one; the same key set again is the newest', () => {
+    let titles: Map<string, string> = new Map([['1:1', 'one'], ['1:2', 'two'], ['1:3', 'three']])
+    let put = admit(titles, '1:4', 'four', 3)
+    assert.deepEqual([...put.next], [['1:2', 'two'], ['1:3', 'three'], ['1:4', 'four']])
+    assert.equal(put.evicted, '1:1')
+    // Not full, or the key is already there: nothing goes, and the key moves to the newest place.
+    put = admit(titles, '1:2', 'two again', 3)
+    assert.equal(put.evicted, null)
+    assert.deepEqual([...put.next.keys()], ['1:1', '1:3', '1:2'])
+    assert.equal(admit(titles, '1:9', 'nine', 4).evicted, null)
+    // A long run of new renames never grows the store past its cap, and the newest 5,000 are what is left.
+    titles = new Map()
+    for (let i = 0; i < 5_050; i++) titles = admit(titles, `1:${i}`, `t${i}`, 5_000).next
+    assert.equal(titles.size, 5_000)
+    assert.equal(titles.has('1:49'), false)
+    assert.equal(titles.has('1:50'), true)
+    assert.equal(titles.get('1:5049'), 't5049')
+})
+
+test('Save with the other copies not found asks first and never saves part of a group without the viewer knowing', () => {
+    assert.equal(groupStep([], false), 'write', 'a video with no other copies')
+    assert.equal(groupStep([{}, {}], false), 'write')
+    assert.equal(groupStep(null, false), 'ask', 'the lookup failed: say so, offer Try again')
+    assert.equal(groupStep(null, true), 'write', 'the second Save is the yes to this copy only')
 })

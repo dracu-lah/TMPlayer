@@ -6,7 +6,7 @@
 // as `unknown` and cleaned: one line, no control or direction override characters, cut to the
 // apps' limit at a whole character, nothing left meaning "no rename".
 
-/** VideoCorrections.TITLE_MAX: the longest title a rename keeps. */
+/** VideoCorrections.TITLE_MAX: the longest title a rename keeps, in whole characters (code points). */
 export const RENAME_MAX = 120
 
 /** Line breaks and other control characters read as a space (VideoCorrection.encode does the same for a break). */
@@ -26,11 +26,18 @@ export function cleanTitle(raw: unknown, max = RENAME_MAX): string | null {
     return atMost(text, max).trim() || null
 }
 
-/** `text` cut to `max` characters, never through a surrogate pair (an emoji at the limit goes whole or not at all). */
-function atMost(text: string, max: number): string {
-    if (text.length <= max) return text
-    const last = text.charCodeAt(max - 1)
-    return text.slice(0, last >= 0xd800 && last <= 0xdbff ? max - 1 : max)
+/** `text` cut to `max` whole characters (code points: an emoji is one, never half of one). */
+export function atMost(text: string, max: number): string {
+    let end = 0
+    for (let n = 0; end < text.length && n < max; n++) end += (text.codePointAt(end) ?? 0) > 0xffff ? 2 : 1
+    return text.slice(0, end)
+}
+
+/** How many characters a title counts, as the sheet's count and the cap read them (code points). */
+export const countOf = (text: string): number => {
+    let n = 0
+    for (let i = 0; i < text.length; i += (text.codePointAt(i) ?? 0) > 0xffff ? 2 : 1) n++
+    return n
 }
 
 const LINE = /\r\n|\r|\n/
@@ -63,4 +70,31 @@ export function saveOf(field: string, shown: string, renamed: string | undefined
     const next = cleanTitle(field)
     if (renamed) return next === null ? 'reset' : next === cleanTitle(renamed) ? null : 'save'
     return next === null || next === cleanTitle(shown) ? null : 'save'
+}
+
+/**
+ * `titles` with `key` given `title`, made room for when the store is full: the oldest rename (the
+ * first in the map, which keeps its order oldest first) goes, never the one being set. `evicted` is
+ * the key that went, or null.
+ */
+export function admit(titles: ReadonlyMap<string, string>, key: string, title: string, max: number): { next: Map<string, string>; evicted: string | null } {
+    const next = new Map(titles)
+    // Set again, it is the newest.
+    next.delete(key)
+    let evicted: string | null = null
+    if (next.size >= max) {
+        evicted = next.keys().next().value ?? null
+        if (evicted !== null) next.delete(evicted)
+    }
+    next.set(key, title)
+    return { next, evicted }
+}
+
+/**
+ * What Save does once the video's other copies are looked for: `write` when they are found (an array)
+ * or the viewer already said "this copy only"; `ask` when they could not be found (null): the sheet
+ * says so and offers Try again, and a second Save renames the shown copy alone. Never a silent partial save.
+ */
+export function groupStep(found: readonly unknown[] | null, alone: boolean): 'write' | 'ask' {
+    return found !== null || alone ? 'write' : 'ask'
 }

@@ -7,12 +7,9 @@
 import { createEffect, createSignal, Show } from 'solid-js'
 import { t } from '../i18n'
 import { renamedTitle, renameVideo } from '../copies'
-import { cleanTitle, RENAME_MAX, saveOf, typed } from '../rename'
+import { cleanTitle, countOf, groupStep, RENAME_MAX, saveOf, typed } from '../rename'
 import { renameTarget as target, setRenameTarget as setTarget, type Ref } from './renameTarget'
 import './rename.css'
-
-/** How long Save waits for a card's copies before it saves what it has. */
-const COPIES_WAIT_MS = 1_500
 
 export function RenameSheet() {
     let dialog!: HTMLDialogElement
@@ -20,12 +17,15 @@ export function RenameSheet() {
     const [value, setValue] = createSignal('')
     // A second press while the first is written is the same press again.
     let done = false
+    let alone = false
 
     createEffect(() => {
         const now = target()
         if (now && !dialog.open) {
             done = false
+            alone = false
             setValue(renamedTitle(now.item) ?? now.shown)
+            find()
             dialog.showModal()
             field?.focus()
             field?.select()
@@ -42,13 +42,33 @@ export function RenameSheet() {
         const back = now?.back
         if (back instanceof HTMLElement && back.isConnected) queueMicrotask(() => back.focus())
     }
+    // The group of copies the rename is written to: found when the sheet opens (local data in the worker), waited for at Save, never given up on silently.
+    let group: Promise<readonly Ref[] | null> = Promise.resolve([])
+    const [lost, setLost] = createSignal(false)
+    const find = () => {
+        const now = target()
+        if (!now) return
+        setLost(false)
+        alone = false
+        const copies = now.copies
+        group = (typeof copies === 'function' ? copies() : Promise.resolve(copies)).then(
+            (refs) => refs,
+            () => (setLost(true), null),
+        )
+    }
+    // `alone` is the viewer's yes to "this copy only" once the others could not be found.
     const write = async (title: string | null) => {
         const now = target()
         if (!now || done) return
         done = true
-        // The copies a card does not know are looked up; a slow lookup saves what is known, never holds the sheet.
-        const others = await Promise.race([now.copies, new Promise<readonly Ref[]>((r) => setTimeout(() => r([]), COPIES_WAIT_MS))])
-        renameVideo(now.item, title, others)
+        const others = await group
+        if (groupStep(others, alone) === 'ask') {
+            // The others were not found: say so and keep the sheet; Save again renames this copy only, Try again looks once more.
+            alone = true
+            done = false
+            return
+        }
+        renameVideo(now.item, title, others ?? [])
         close()
         if (title) now.after?.()
     }
@@ -71,7 +91,6 @@ export function RenameSheet() {
                             ref={field}
                             type="text"
                             dir="auto"
-                            maxLength={RENAME_MAX}
                             autocomplete="off"
                             enterkeyhint="done"
                             spellcheck={false}
@@ -83,7 +102,13 @@ export function RenameSheet() {
                             }}
                         />
                     </label>
-                    <p class="rename-count muted small" aria-live="polite">{`${[...value()].length} / ${RENAME_MAX}`}</p>
+                    <Show when={lost()}>
+                        <p class="rename-lost error small" role="alert">
+                            {t('grid.rename_copies_failed')}{' '}
+                            <button class="link" type="button" onClick={find}>{t('common.try_again')}</button>
+                        </p>
+                    </Show>
+                    <p class="rename-count muted small" aria-live="polite">{`${countOf(value())} / ${RENAME_MAX}`}</p>
                     <div class="confirm-buttons rename-buttons">
                         <Show when={renamedTitle(target()!.item)}>
                             <button class="link rename-reset" type="button" onClick={() => void write(null)}>{t('grid.rename_reset')}</button>

@@ -64,11 +64,18 @@ const PLACEHOLDER = 'Video'
 const cut = (title: string) => title.trim().slice(0, TITLE_MAX).trim()
 
 const PICK_LINE = /^tmdb=(film|show):\d{1,9}$/
+/** The lines VideoCorrection.encode writes: everything else on a correction is another version's. */
+const KNOWN_LINE = /^(separate|wrong|title=.*|tmdb=(film|show):\d{1,9})$/
+/** How much of another version's lines is carried along (the file's own limit for a correction is 1,000 characters). */
+const UNKNOWN_LINES = 8
+const UNKNOWN_CHARS = 120
 
 /**
  * VideoCorrection.encode's lines of `text` with the lines `change` sets: `pick` (a `tmdb=` line, null
  * for none, undefined to keep the one the file has) and `title` (a rename, the same three ways). A
- * pick lifts a "wrong match" as the apps' withPick does. "" when nothing is left.
+ * pick lifts a "wrong match" as the apps' withPick does. A line it does not know (a newer app's, such
+ * as `year=2019`) is kept verbatim after the others: core's decode and encode would drop it, but the
+ * web has no reason to, and it never makes a correction look empty. "" when nothing is left.
  */
 export function withLines(text: string | undefined, change: { pick?: string | null; title?: string | null }): string {
     const lines = (text ?? '').split(/\r\n|\r|\n/)
@@ -77,7 +84,8 @@ export function withLines(text: string | undefined, change: { pick?: string | nu
     const pick = change.pick === undefined ? kept : change.pick
     const wrong = lines.includes('wrong') && !pick
     const title = change.title === undefined ? titleOf(text, TITLE_MAX) : change.title
-    return [separate ? 'separate' : null, wrong ? 'wrong' : null, pick, title ? titleLine(title) : null].filter((l): l is string => !!l).join('\n')
+    const unknown = lines.filter((l) => l.trim() && !KNOWN_LINE.test(l.trim())).slice(0, UNKNOWN_LINES).map((l) => l.slice(0, UNKNOWN_CHARS))
+    return [separate ? 'separate' : null, wrong ? 'wrong' : null, pick, title ? titleLine(title) : null, ...unknown].filter((l): l is string => !!l).join('\n')
 }
 
 /** `text` with the pick line set to `pick` (null: none), the rename and the rest kept. */

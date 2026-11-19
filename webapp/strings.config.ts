@@ -760,6 +760,7 @@ export const PAGE_STRINGS = [
     'grid.sort_loaded_note',
     // WB14 Rename a video (the apps' rename sheet).
     'grid.rename',
+    'grid.rename_copies_failed',
     'grid.rename_detail',
     'grid.rename_hint',
     'grid.rename_reset',
