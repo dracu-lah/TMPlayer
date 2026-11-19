@@ -169,6 +169,20 @@ class MediaNameTest {
     }
 
     /**
+     * Many soft words in a row (HX73: the tail after each is checked in one pass now): the title
+     * ends at the first that only tags follow, and a word of the title between two keeps the first.
+     */
+    @Test
+    fun `a run of soft tags ends the title at its first word`() {
+        assertEquals("Harbour Notes", parse("Harbour Notes Tamil Telugu Hindi Malayalam Kannada Dual Audio Complete Uncut 2022 HDRip.mkv").title)
+        assertEquals("Harbour Notes", parse("Harbour Notes Tamil Telugu Hindi Malayalam Kannada Dual Audio Complete Uncut.mkv").title)
+        assertEquals("Learn Tamil Fast", parse("Learn Tamil Fast 2022 1080p.mkv").title)
+        assertEquals("Tamil Telugu Story", parse("Tamil Telugu Story Hindi Kannada 2022 1080p.mkv").title)
+        assertEquals("Tales of Tamil", parse("Tales of Tamil Telugu 2022 1080p.mkv").title)
+        assertEquals("The Final Cut", parse("The Final Cut Extended 2004 720p.mkv").title)
+    }
+
+    /**
      * A marker at the very front cannot be a boundary because cutting there would leave no title.
      */
     @Test

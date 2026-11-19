@@ -473,6 +473,46 @@ dependencies {
     testImplementation(libs.json)
 }
 
+/**
+ * The baseline profile as dex metadata for Android 12 and later (`assets/updates/base.dm`), which
+ * the in-app updater writes beside the APK into its install session so Android compiles the app
+ * as it installs it (HX73). Taken from what AGP's compile<Variant>ArtProfile already makes for
+ * `adb install` (one `.dm` per profile format, mapped by API level), so it is the profile of this
+ * very APK's dex. A sideloaded install is otherwise compiled only by the idle job, which a TV that
+ * is never idle seldom runs, and an uncompiled Home cost three times the CPU on the Mi TV.
+ */
+abstract class UpdateDexMetadata : DefaultTask() {
+    @get:InputFiles
+    abstract val profiles: ConfigurableFileCollection
+
+    @get:OutputDirectory
+    abstract val output: DirectoryProperty
+
+    @TaskAction
+    fun pack() {
+        val out = output.get().asFile
+        out.deleteRecursively()
+        val map = profiles.asFileTree.matching { include("**/dex-metadata-map.properties") }.files.firstOrNull() ?: return
+        val levels = Properties().apply { map.inputStream().use { load(it) } }
+        // The format Android 12 (API 31) reads; its entry also covers every later level.
+        val entry = levels.getProperty("31") ?: return
+        val dm = File(map.parentFile, entry).takeIf { it.isFile } ?: return
+        dm.copyTo(File(out, "updates/base.dm"), overwrite = true)
+    }
+}
+
+androidComponents {
+    onVariants { variant ->
+        // Only the builds that have a baseline profile compiled and an updater to install with.
+        if (variant.buildType != "release" && variant.buildType != "preview") return@onVariants
+        val name = variant.name.replaceFirstChar { it.uppercase() }
+        val pack = tasks.register<UpdateDexMetadata>("pack${name}UpdateDexMetadata") {
+            profiles.from(tasks.matching { it.name == "compile${name}ArtProfile" })
+        }
+        variant.sources.assets?.addGeneratedSourceDirectory(pack, UpdateDexMetadata::output)
+    }
+}
+
 // The :core models that are immutable in fact though the compiler cannot see it; the file says which.
 composeCompiler {
     stabilityConfigurationFiles.add(rootProject.layout.projectDirectory.file("compose-stability.conf"))
