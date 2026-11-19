@@ -775,6 +775,10 @@ class WebRulesTest {
         assertEquals(2.0, speedResolve(null, null, 2.0), 0.0001)
         assertEquals(1.25, speedResolve(1.25, 1.5, 2.0), 0.0001)
         assertEquals(1.0, speedResolve(Double.NaN, -3.0, null), 0.0001)
+        for (exact in listOf(0.7, 0.9, 1.1, 1.25, 2.5)) {
+            assertEquals(exact, speedKeep(exact))
+            assertEquals(exact, speedResolve(exact, null, null))
+        }
         assertNull(speedKeep(1.0))
         assertNull(speedKeep(Double.NaN))
         assertEquals(1.75, speedKeep(1.7500001)!!, 0.0001)

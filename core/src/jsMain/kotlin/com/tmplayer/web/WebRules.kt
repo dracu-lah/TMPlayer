@@ -61,6 +61,7 @@ import com.tmplayer.online.MetaKind
 import com.tmplayer.online.SubtitlePickKeys
 import com.tmplayer.player.PlaybackWatch
 import com.tmplayer.player.SpeedMemory
+import kotlin.math.roundToInt
 
 // The app's own rules for the web player (webapp/, CP104), exported as one ES module that runs in
 // the page's Telegram worker: what counts as a video and what it is called, how a chat's videos
@@ -1129,7 +1130,12 @@ fun pickCopy(
 /** The habit line ("1080:12,720:3") with one more play at [height] noted; what the page stores as the usual quality. */
 fun habitNoted(habit: String?, height: Int?): String = QualityHabit.decode(habit).noted(height).encode()
 
-/** How many versions a card says for [copies] of one video: the distinct files, 1 for one copy ([VideoCopies.versionCount]). */
+/**
+ * How many versions a card says for [copies] of one video: the distinct files, 1 for one copy
+ * ([VideoCopies.versionCount]). The null gate is on purpose: GlobalSearch.fileCount and
+ * VideoCopies.oneOfEachFile use the default ChatGate.browsing and must not be exported to JS, or
+ * ChatGate and its coroutines return to the worker (+100 KB gzip).
+ */
 fun versionCount(copies: Array<Video>): Int =
     if (copies.size < 2) 1 else VideoCopies.distinctFiles(copies.map(::toItem), null).size.coerceAtLeast(1)
 
@@ -1306,10 +1312,13 @@ fun speedStoreKey(scope: String): String = StoredKeys.speed(scope)
 
 /** The speed to open at: [file], else [series], else [chat], else 1 ([SpeedMemory.resolve]); a value that cannot be a speed is passed over. */
 fun speedResolve(file: Double?, series: Double?, chat: Double?): Double =
-    SpeedMemory.resolve(file?.toFloat(), series?.toFloat(), chat?.toFloat()).toDouble()
+    twoDecimals(SpeedMemory.resolve(file?.toFloat(), series?.toFloat(), chat?.toFloat()))
 
 /** What to store for a picked [value]: the speed kept to two decimals within what a player can do, or null for 1x (written as nothing). */
-fun speedKeep(value: Double): Double? = SpeedMemory.toKeep(value.toFloat())?.toDouble()
+fun speedKeep(value: Double): Double? = SpeedMemory.toKeep(value.toFloat())?.let(::twoDecimals)
+
+/** A speed the rules hold as a Float, as the exact two decimal number the page compares and stores (1.1f would widen to 1.100000023841858). */
+private fun twoDecimals(speed: Float): Double = (speed.toDouble() * 100).roundToInt() / 100.0
 
 // ---- Settings' map and its search (U20) --------------------------------------------------------------
 
