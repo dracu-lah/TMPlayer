@@ -377,6 +377,8 @@ test('Volume boost is left out on an iPhone, where a page cannot carry it, and R
 })
 
 test('a speed is kept for the show, else the chat, and 1x forgets it', async ({ page }) => {
+    // Opens four videos in a row: longer than one.
+    test.setTimeout(90_000)
     const rate = () => page.locator('video').first().evaluate((v: HTMLVideoElement) => v.playbackRate)
     await lighthouse(page)
     expect(await rate()).toBe(1)
