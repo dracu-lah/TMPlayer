@@ -419,6 +419,34 @@ export const api = {
         return findChatSubtitles(tg, chatId, messageId, fileName, caption, preferred)
     },
 
+    /**
+     * The keys a video's remembered online subtitle is filed under, most exact first (HX25, core's
+     * SubtitlePickKeys): this post, then the video itself (a film's title and year, a show's episode),
+     * so a re-post or another copy finds the pick. The page keeps the picks; the rule is core's.
+     */
+    async subtitlePickKeys(_: Ctx, chatId: number, messageId: number, title: string, fileName: string): Promise<string[]> {
+        const r = await rules()
+        return r.subtitlePickKeys({
+            id: `${chatId}:${messageId}`,
+            chatId,
+            messageId,
+            title: String(title).slice(0, 500),
+            fileName: String(fileName).slice(0, 500),
+            caption: '',
+            mimeType: 'video/mp4',
+            size: 0,
+            duration: 0,
+            width: 0,
+            height: 0,
+            date: 0,
+            topicId: 0,
+            albumId: null,
+            albumPhoto: false,
+            canBeSaved: true,
+            round: false,
+        })
+    },
+
     /** A listed file that is no longer there: the next lookup of this video asks again. */
     async chatSubtitlesForget(_: Ctx, chatId: number, messageId: number): Promise<void> {
         forgetChatSubtitles(chatId, messageId)
