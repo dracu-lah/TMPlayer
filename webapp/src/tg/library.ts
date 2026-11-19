@@ -3,11 +3,13 @@
 // chat, the order, the size limits or the words change. The page asks again on every scroll and
 // gets the kept answer.
 import type { Message, Peer, TelegramClient } from '@mtcute/web'
-import { rules, type Shelf, type ShelfTile, type Video } from '../rules'
+import { rules, type Rules, type Shelf, type ShelfTile, type Video } from '../rules'
 import { chatProtects, itemOf, photosAmong, rawOf, thumbnails, videoId } from './media'
 import { forgetChatTitles, noteChatTitle } from './hints'
 import { forgetSponsored, loadSponsored } from './sponsored'
 import { tally } from '../ui/searchTally'
+import { cleanContext, NO_COPY_CONTEXT, type CopyContext } from './copyFit'
+import { copyRows, playCopy } from './copyPick'
 import type { ChatItem, CopyRef, ChatPage, ChatView, Found, ListView, RecentPage, SponsoredItem, Tile, VideoItem, WatchInfo } from './types'
 
 const PAGE = 100
@@ -31,6 +33,24 @@ const KEEP_CHATS = 6
  * view rather than asking the page again.
  */
 const addedSetOf = (view: Pick<ListView, 'added'>): Set<number> | null => (view.added ? new Set(view.added) : null)
+
+// What the page says of the viewer's copies (HX38, copyFit.ts): the device, the picture kinds the
+// browser cannot play natively, the files kept apart, the copies chosen, the usual quality. A change
+// bumps the epoch, so every kept arrangement and watch answer is built again with it.
+let copyCtx: CopyContext = NO_COPY_CONTEXT
+let copyEpoch = 0
+
+/** The page's copy context (copies.ts), cleaned: the device the copies suit, "Not the same video" and the rest. */
+export async function setCopyContext(raw: unknown): Promise<void> {
+    const r = await rules()
+    const next = cleanContext(raw)
+    if (JSON.stringify(next) === JSON.stringify(copyCtx)) return
+    copyCtx = next
+    r.setCopyDevice(next.device)
+    r.setCorrections(next.apart, next.apart.map(() => 'separate'))
+    copyEpoch++
+    watchKept.clear()
+}
 
 interface Feed {
     filter: typeof VIDEO_FILTER | typeof DOC_FILTER
@@ -94,6 +114,12 @@ export function forgetAll() {
     homeStates.clear()
     searches.clear()
     watchKept.clear()
+    // The files kept apart and the copies chosen were the account's: the next one starts with none (the device stays).
+    if (copyCtx.apart.length || copyCtx.chosen.length || copyCtx.habit) {
+        copyCtx = { ...copyCtx, apart: [], chosen: [], habit: null }
+        copyEpoch++
+        rulesNow?.setCorrections([], [])
+    }
     recentState = null
     homeChatsKnown = null
     videoCountCache.clear()
@@ -350,7 +376,13 @@ export function joinedItem(t: Pick<ShelfTile, 'pieces' | 'piecesTotal' | 'pieces
 }
 
 /** The page's cards for the rules' tiles, each playing an item `items` holds; a show plays its episode up next. */
-export function tilesOf(shelf: Pick<Shelf, 'tiles'>, items: Map<string, VideoItem>, view: Pick<ListView, 'watched' | 'started'>): Tile[] {
+export function tilesOf(
+    shelf: Pick<Shelf, 'tiles'>,
+    items: Map<string, VideoItem>,
+    view: Pick<ListView, 'watched' | 'started'>,
+    /** The rules and the videos the copies are read from, for the copy each card plays (HX38). */
+    copies?: { r: Rules; videoOf: (id: string) => Video | undefined },
+): Tile[] {
     const watched = new Set(view.watched)
     const started = new Set(view.started)
     const tiles: Tile[] = []
@@ -358,7 +390,10 @@ export function tilesOf(shelf: Pick<Shelf, 'tiles'>, items: Map<string, VideoIte
         const video = t.kind === 'show' ? upNext(t, watched, started) : t.video
         const lead = video && items.get(video.id)
         if (!lead) continue
-        const item = t.kind === 'show' ? lead : joinedItem(t, lead, items)
+        // A video posted more than once plays, and wears the badge of, the copy its page recommends
+        // (HX38): the viewer's choice, the one started, else the best this browser plays natively.
+        const played = t.kind === 'file' && t.copies.length > 1 && copies ? pickedItem(t, items, view.started, copies.r, copies.videoOf) : null
+        const item = t.kind === 'show' ? lead : (played ?? joinedItem(t, lead, items))
         tiles.push({
             key: t.key,
             kind: t.kind === 'show' ? 'show' : 'file',
@@ -367,6 +402,7 @@ export function tilesOf(shelf: Pick<Shelf, 'tiles'>, items: Map<string, VideoIte
             seasons: t.seasons.length,
             episodes: t.seasons.reduce((n, season) => n + season.episodes.length, 0),
             copies: Math.max(0, t.copies.length - 1),
+            versions: t.kind === 'show' ? 1 : Math.max(1, t.versions),
             parts: t.parts.length,
             pieces: t.pieces.length,
             extra: t.extra ?? null,
@@ -375,8 +411,27 @@ export function tilesOf(shelf: Pick<Shelf, 'tiles'>, items: Map<string, VideoIte
     return tiles
 }
 
+/** `videos` by id, the map made only when a card with copies first asks. */
+export function lookup(videos: Iterable<Video>): (id: string) => Video | undefined {
+    let byId: Map<string, Video> | null = null
+    return (id) => {
+        if (!byId) {
+            byId = new Map()
+            for (const v of videos) byId.set(v.id, v)
+        }
+        return byId.get(id)
+    }
+}
+
+/** The item of the copy `t` plays when it is not its lead; null to play the lead as it is. */
+function pickedItem(t: ShelfTile, items: Map<string, VideoItem>, started: readonly string[], r: Rules, videoOf: (id: string) => Video | undefined): VideoItem | null {
+    const copies = t.copies.flatMap((id) => videoOf(id) ?? [])
+    const id = playCopy(r, copies, copyCtx, started)
+    return id && id !== t.video?.id ? (items.get(id) ?? null) : null
+}
+
 function arrange(s: ChatState, view: ChatView): ChatPage {
-    const key = JSON.stringify(view)
+    const key = `${copyEpoch}|${JSON.stringify(view)}`
     if (s.kept && s.kept.version === s.version && s.kept.view === key) return s.kept.page
     const r = rulesNow!
     const query = view.query.trim()
@@ -384,7 +439,7 @@ function arrange(s: ChatState, view: ChatView): ChatPage {
     const videos = [...s.videos.values()]
     if (query) for (const [id, v] of s.hits) if (!s.videos.has(id)) videos.push(v)
     const shelf = r.shelf(videos, view.sort, view.minBytes, view.maxBytes, view.watched, view.started)
-    let tiles = tilesOf(shelf, s.items, view)
+    let tiles = tilesOf(shelf, s.items, view, { r, videoOf: (id) => s.videos.get(id) ?? s.hits.get(id) })
     if (query) {
         const texts = tiles.map((t) => {
             if (t.kind === 'show') return t.title
@@ -745,7 +800,7 @@ export async function listTiles(lines: { item: VideoItem; show?: string }[]): Pr
         const item = line.item
         if (!item || typeof item.chatId !== 'number' || typeof item.messageId !== 'number') return
         if (line.show) {
-            out.push({ at, tile: { key: `show-${item.chatId}-${line.show}`, kind: 'show', title: item.title, item, seasons: 0, episodes: 0, copies: 0, parts: 0, pieces: 0, extra: null } })
+            out.push({ at, tile: { key: `show-${item.chatId}-${line.show}`, kind: 'show', title: item.title, item, seasons: 0, episodes: 0, copies: 0, versions: 1, parts: 0, pieces: 0, extra: null } })
             return
         }
         const v = r.video({
@@ -771,7 +826,7 @@ export async function searchAll(tg: TelegramClient, query: string, view: ListVie
     const added = addedSetOf(view)
     const { videos, items } = await across(tg, query, added, everyChat)
     const shelf = r.shelf(videos, 'Newest', view.minBytes, view.maxBytes, view.watched, view.started)
-    const tiles = tilesOf(shelf, items, view)
+    const tiles = tilesOf(shelf, items, view, { r, videoOf: lookup(videos) })
     return { tiles, hiddenBySize: shelf.hiddenBySize, ...tally(tiles), addedOnly: !!added }
 }
 
@@ -971,7 +1026,7 @@ export async function recentPage(tg: TelegramClient, view: ListView, mode: 'open
     // The same floor as Home's row (SizeFilter.HOME_MIN), said on the page.
     const shelf = r.shelf(shown, 'Newest', r.sizeHomeMin(view.minBytes), view.maxBytes, view.watched, view.started)
     return {
-        tiles: tilesOf(shelf, st.items, view),
+        tiles: tilesOf(shelf, st.items, view, { r, videoOf: (id) => st.videos.get(id) }),
         hiddenBySize: shelf.hiddenBySize,
         done: recentDone(st),
         starredOnly: st.starredOnly,
@@ -1067,7 +1122,7 @@ export async function watchInfo(tg: TelegramClient, chatId: number, messageId: n
     const id = `${chatId}:${messageId}`
     const current = s.videos.get(id) ?? (await addMessage(tg, s, messageId))
     if (!current) return null
-    const viewKey = JSON.stringify(view)
+    const viewKey = `${copyEpoch}|${JSON.stringify(view)}`
     const kept = watchKept.get(id)
     if (kept && kept.version === s.version && kept.view === viewKey) return kept.info
     const steps = r.steps(current, [...s.videos.values()])
@@ -1095,6 +1150,8 @@ export async function watchInfo(tg: TelegramClient, chatId: number, messageId: n
             .tiles.filter((t) => videoId(t.item) !== id)
             .slice(0, 12)
     }
+    // One read of the picture for the badge, the copies list and the order (QualityRead, HX38).
+    const read = r.qualityRead(current)
     // Every copy of it in the chat, found by the shelf's own grouping (the size limits left open, as the apps' copy list ignores them).
     const wholeShelf = r.shelf([...s.videos.values()], 'Newest', 0, r.sizeLimits().ceiling, [], [])
     const copyIds = new Set<string>()
@@ -1103,29 +1160,11 @@ export async function watchInfo(tg: TelegramClient, chatId: number, messageId: n
             for (const season of t.seasons) for (const e of season.episodes) if (e.video.id === id || e.copies.includes(id)) e.copies.forEach((c) => copyIds.add(c))
         } else if (t.video?.id === id || t.copies.includes(id)) t.copies.forEach((c) => copyIds.add(c))
     }
-    // The same file posted twice (forwarded, or sent again: the same name and size) is one choice, the post this page is about standing for it.
-    const seenFile = new Map<string, string>()
-    for (const cid of copyIds) {
-        const v = s.videos.get(cid)
-        const key = v && v.fileName && v.size > 0 ? `${v.fileName}|${v.size}` : cid
-        if (!seenFile.has(key) || cid === id) seenFile.set(key, cid)
-    }
-    const distinct = new Set(seenFile.values())
-    const copies: CopyRef[] =
-        distinct.size > 1
-            ? [...distinct]
-                  .flatMap((cid) => {
-                      const v = s.videos.get(cid)
-                      const it = s.items.get(cid)
-                      if (!v || !it) return []
-                      const facts = r.copyFacts(v)
-                      // The quality heads the facts ("4K", "1080p"); a copy whose name states none (the size heads it) comes last, as the apps' picker has it.
-                      const height = facts[0] === '4K' ? 2160 : /^(\d+)p$/.test(facts[0] ?? '') ? parseInt(facts[0]) : 0
-                      return [{ item: it, facts, fileName: v.fileName, date: v.date, chat: s.title, height, size: v.size }]
-                  })
-                  .sort((a, b) => b.height - a.height || b.size - a.size)
-                  .map(({ height: _h, size: _s, ...copy }) => copy)
-            : []
+    // In the order the list shows them, recommended first, the same file posted twice once (copyPick.ts): its length is the count.
+    const copies: CopyRef[] = copyRows(r, [...copyIds].flatMap((cid) => s.videos.get(cid) ?? []), id, copyCtx, view.started).flatMap((row) => {
+        const it = s.items.get(row.video.id)
+        return it ? [{ item: it, facts: r.copyFacts(row.video), fileName: row.video.fileName, date: row.video.date, chat: s.title, best: row.best, fit: row.fit, started: row.started, mismatch: row.mismatch }] : []
+    })
     // After a video that is not an episode (the apps' ChatOrder): the chat's own list goes on, in the grid's sort.
     const around = view.chatOrder && !steps.next && !steps.previous && !seasons.length ? await chatOrderAround(tg, s, view, id) : null
     const info: WatchInfo = {
@@ -1143,8 +1182,9 @@ export async function watchInfo(tg: TelegramClient, chatId: number, messageId: n
         height: current.height,
         chatTitle: s.title,
         protected: s.protected,
-        quality: r.qualityLabel(current) ?? null,
-        copies,
+        quality: read.label ?? null,
+        qualityHeight: read.height ?? null,
+        copies: copies.length > 1 ? copies : [],
         overview: r.overviewOf(current) ?? null,
     }
     watchKept.set(id, { version: s.version, view: viewKey, info })

@@ -6,7 +6,7 @@ import { rules } from '../rules'
 import { cryptoProvider } from './crypto'
 import { findChatSubtitles, forgetChatSubtitles } from './chatsubs'
 import { homePage } from './home'
-import { archivedList, chatList, chatPage, forgetAll, joinedFor, listTiles, rankChats, recentPage, searchAll, videoCounts, watchInfo } from './library'
+import { archivedList, chatList, chatPage, forgetAll, joinedFor, listTiles, rankChats, recentPage, searchAll, setCopyContext, videoCounts, watchInfo } from './library'
 import { clickSponsored, reportSponsored, viewSponsored } from './sponsored'
 import { deleteEverything, deleteMessages, readFiles, writeFile, type FoundFile } from './syncfile'
 import { chatProtects, files, itemOf, rawOf, thumbnails, toItem } from './media'
@@ -383,6 +383,15 @@ export const api = {
         return deleteEverything(tg, known)
     },
 
+    /** What the page says of the viewer's copies (HX38): the device, what the browser cannot play natively, "Not the same video", the copies chosen. */
+    async copyContext(_: Ctx, context: unknown): Promise<void> {
+        await setCopyContext(context)
+    },
+    /** The quality line (QualityHabit) with one more play at `height` noted: what the page keeps as the quality usually played. */
+    async habitNoted(_: Ctx, habit: string | null, height: number | null): Promise<string> {
+        const h = typeof height === 'number' && Number.isSafeInteger(height) && height > 0 && height <= 8_640 ? height : null
+        return (await rules()).habitNoted(typeof habit === 'string' ? habit.slice(0, 400) : null, h)
+    },
     /** One message's video, for a watch page opened by its address. Null when it is gone or not a video. */
     async video(_: Ctx, chatId: number, messageId: number): Promise<VideoItem | null> {
         const [msg] = await tg.getMessages(chatId, messageId)
