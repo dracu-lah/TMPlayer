@@ -420,6 +420,7 @@ class TrackPickerFragment : Fragment() {
                     .setOverrideForType(TrackSelectionOverride(option.group.mediaTrackGroup, option.trackIndex))
             }
             player.trackSelectionParameters = builder.build()
+            if (trackType == C.TRACK_TYPE_TEXT) host?.subtitleChoiceMade(option.group == null)
         }
         close()
     }
@@ -511,6 +512,7 @@ class TrackPickerFragment : Fragment() {
                                 when (val done = online.download(hit, target)) {
                                     is DownloadResult.Done -> {
                                         host?.attachOnlineSubtitle(done.file, done.label)
+                                        host?.onlineSubtitlePicked(hit, done.file)
                                         close()
                                     }
                                     is DownloadResult.Failed -> override = done.notice

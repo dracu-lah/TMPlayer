@@ -50,6 +50,8 @@ class OnlineSubtitles(
     private val sleep: suspend (Long) -> Unit = { delay(it) },
     /** The build's key for TMPlayer's subtitle gateway; blank and MSone is not offered at all. */
     msoneKey: String = "",
+    /** Which subtitle was picked for which video (HX25); null where nothing is remembered (tests, a build without it). */
+    val picks: SubtitlePicks? = null,
 ) {
     private val userAgent = "TMPlayer v$appVersion"
     private val api = OpenSubtitlesApi(
@@ -318,6 +320,60 @@ class OnlineSubtitles(
             SubtitleProvider.OpenSubtitles -> downloadOpenSubtitles(hit)
             SubtitleProvider.Subdl -> downloadSubdl(hit, target)
             SubtitleProvider.Msone -> downloadMsone(hit, target)
+        }
+    }
+
+    /** What opening a video finds of its remembered subtitle ([restorePick]). */
+    sealed interface Restored {
+        /** Nothing is remembered for this video. */
+        data object None : Restored
+
+        /** The viewer turned subtitles off for this video. */
+        data object Off : Restored
+
+        /** The remembered subtitle, ready to lay over the video; [fromDevice] when no download was needed. */
+        data class Ready(val file: java.io.File, val label: String, val fromDevice: Boolean) : Restored
+
+        /** Remembered but not to be had now: [notice] says why when there is a sentence for it (null: not asked, offline mode). */
+        data class Missing(val hit: SubtitleHit, val notice: SubtitleNotice?) : Restored
+    }
+
+    /** Remembers [hit], downloaded as [file], for the video under [keys]; the file itself is kept apart from the cache. */
+    fun rememberPick(keys: List<String>, hit: SubtitleHit, file: java.io.File?) {
+        runCatching { picks?.remember(keys, hit, file) }
+            .onFailure { com.tmplayer.platform.Logger.w("OnlineSubtitles", "pick not kept: ${it.message}") }
+    }
+
+    /** Remembers that subtitles are off for the video under [keys]. */
+    fun rememberOff(keys: List<String>) {
+        runCatching { picks?.rememberOff(keys) }
+    }
+
+    /** The viewer chose a track again: an "Off" kept for the video no longer stands. */
+    fun clearOff(keys: List<String>) {
+        runCatching { picks?.clearOff(keys) }
+    }
+
+    /**
+     * The subtitle remembered for the video, in the order that spends least: the cache's file
+     * (the same download costs nothing), else the pick's own copy, else, when [allowDownload],
+     * the download again once (the quota and key rules are the ordinary ones, and a blocked
+     * download is [Restored.Missing] with its sentence rather than an attempt). Never throws.
+     */
+    suspend fun restorePick(keys: List<String>, target: SubtitleTarget? = null, allowDownload: Boolean = true): Restored {
+        val pick = runCatching { picks?.recall(keys) }.getOrNull() ?: return Restored.None
+        val hit = pick.hit ?: return Restored.Off
+        cache.file(hit.provider, hit.id)?.let { return Restored.Ready(it, label(hit), fromDevice = true) }
+        pick.kept?.let { return Restored.Ready(it, label(hit), fromDevice = true) }
+        if (!allowDownload) return Restored.Missing(hit, null)
+        blockedFor(hit)?.let { return Restored.Missing(hit, it) }
+        return when (val done = runCatching { download(hit, target) }.getOrNull()) {
+            is DownloadResult.Done -> {
+                rememberPick(keys, hit, done.file)
+                Restored.Ready(done.file, done.label, fromDevice = false)
+            }
+            is DownloadResult.Failed -> Restored.Missing(hit, done.notice)
+            null -> Restored.Missing(hit, SubtitleNotice.Offline)
         }
     }
 

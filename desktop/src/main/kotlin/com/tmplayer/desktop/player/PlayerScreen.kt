@@ -601,6 +601,42 @@ fun PlayerScreen(
     // The file's own chapters are the first and best source: free, exact, and offline.
     LaunchedEffect(skipCtl, status.chapters) { skipCtl.chapters(status.chapters) }
 
+    /**
+     * HX25: the online subtitle picked for this video before comes back by itself, and "Off" does
+     * too. The kept file first, a download again only when it is gone and nothing forbids it (the
+     * kids lock, a missing key, a spent allowance say so in one line instead).
+     */
+    fun restoreRememberedSubtitle(opened: MediaItem) {
+        val online = OnlineSubtitles.current ?: return
+        if (online.picks == null || !hasMessage(opened)) return
+        scope.launch {
+            try {
+                val keys = com.tmplayer.online.SubtitlePicks.keysOf(opened)
+                var found = online.restorePick(keys, null, allowDownload = false)
+                if (found is OnlineSubtitles.Restored.Missing && online.inBuild && com.tmplayer.data.ChatGate.allowed.value == null) {
+                    val target = SubtitleTarget(
+                        fileName = opened.fileName.ifBlank { opened.title },
+                        sizeBytes = opened.sizeBytes,
+                        caption = opened.caption.ifBlank { null },
+                        languages = OnlineSubtitles.languagesFor(null),
+                    )
+                    found = online.restorePick(keys, target, allowDownload = true)
+                }
+                when (found) {
+                    OnlineSubtitles.Restored.None -> Unit
+                    OnlineSubtitles.Restored.Off -> engine.selectTrack(TrackType.Subtitle, null)
+                    is OnlineSubtitles.Restored.Ready ->
+                        if (engine.addSubtitle(found.file.absolutePath)) showFlash(Flash.Kind.Text, L.tracksFileLoaded(found.label))
+                    is OnlineSubtitles.Restored.Missing -> found.notice?.let { showFlash(Flash.Kind.Text, com.tmplayer.online.OnlineWords.notice(it)) }
+                }
+            } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                com.tmplayer.platform.JobFailures.handle("restoreSubtitle", e)
+            }
+        }
+    }
+
     LaunchedEffect(current, attempt) {
         // No video engine: nothing to open, and Try again says the same until the app restarts.
         engineBlocked[0]?.let {
@@ -767,6 +803,7 @@ fun PlayerScreen(
         // Keep watching opens the file again, and a fresh open has no loop in mpv.
         abLoop?.takeIf { it.complete }?.let(engine::setAbLoop)
         phase = Phase.Playing
+        restoreRememberedSubtitle(item)
         // A video whose pieces stop at a gap says so as it starts.
         current.notice?.let { showFlash(Flash.Kind.Text, it) }
         // A file named as 3D says how to watch it, once, unless 3D is on already: never turned
@@ -1319,6 +1356,11 @@ fun PlayerScreen(
     fun selectTrack(type: TrackType, track: MediaTrack?) {
         engine.selectTrack(type, track?.id)
         rememberTracks(type, track)
+        // HX25: Off is remembered for the video; a track chosen again ends an Off.
+        if (type == TrackType.Subtitle) OnlineSubtitles.current?.let { online ->
+            val keys = com.tmplayer.online.SubtitlePicks.keysOf(current.item)
+            if (track == null) online.rememberOff(keys) else online.clearOff(keys)
+        }
         val audio = type == TrackType.Audio
         showFlash(
             Flash.Kind.Text,
@@ -2217,6 +2259,9 @@ fun PlayerScreen(
                     onClose = {
                         showOnline = false
                         refocus()
+                    },
+                    onPicked = { hit, file ->
+                        OnlineSubtitles.current?.rememberPick(com.tmplayer.online.SubtitlePicks.keysOf(item), hit, file)
                     },
                     onPickFile = {
                         showOnline = false

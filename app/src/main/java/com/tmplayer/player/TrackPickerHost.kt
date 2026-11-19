@@ -29,6 +29,12 @@ interface TrackPickerHost {
     /** Loads a downloaded online subtitle over the video, as a picked file would be. */
     fun attachOnlineSubtitle(file: File, label: String)
 
+    /** [hit], downloaded as [file], was picked for this video: remembered, so it comes back by itself (HX25). */
+    fun onlineSubtitlePicked(hit: com.tmplayer.online.SubtitleHit, file: File) = Unit
+
+    /** A subtitle track, or Off, was chosen in the list: Off is remembered for the video, a track ends an Off. */
+    fun subtitleChoiceMade(off: Boolean) = Unit
+
     /**
      * The way on when the online search found nothing: pick a subtitle file from the device.
      * Null where there is no picker (a television, the fixture).

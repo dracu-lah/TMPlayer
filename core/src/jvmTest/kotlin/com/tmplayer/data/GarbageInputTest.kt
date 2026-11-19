@@ -522,6 +522,15 @@ class GarbageInputTest {
             survive("Decimal.parse", text) { Decimal.parse(text) }
             survive("MediaName.parse", text) { MediaName.parse(text); MediaName.parse(text, text) }
             survive("MediaName.spellingKey", text) { MediaName.spellingKey(text) }
+            survive("SubtitlePicks.load", text) {
+                val f = java.io.File.createTempFile("picks", ".json")
+                try {
+                    f.writeText(text)
+                    com.tmplayer.online.SubtitlePicks(f).recall(listOf("a", "msg:1:1"))
+                } finally {
+                    f.delete()
+                }
+            }
             survive("MediaName.languageHints", text) { MediaName.languageHints(text); com.tmplayer.online.ChatLanguageHints.note(1L, text) }
             survive("MediaName.pack", text) { MediaName.parse(text).let { it.pack; it.packSeason } }
             survive("MetaLinks.read", text) { com.tmplayer.online.MetaLinks.read(text, text, null) }

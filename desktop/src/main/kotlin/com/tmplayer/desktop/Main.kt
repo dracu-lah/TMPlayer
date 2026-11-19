@@ -556,6 +556,7 @@ internal fun desktopOnlineSubtitles(): OnlineSubtitles = OnlineSubtitles(
     store = OnlineSubtitlesStore(java.io.File(DesktopPaths.dataDir, "online-subtitles.properties")),
     cache = SubtitleCache(java.io.File(DesktopPaths.cacheDir, "online-subtitles")),
     appVersion = BuildInfo.VERSION,
+    picks = com.tmplayer.online.SubtitlePicks(java.io.File(DesktopPaths.dataDir, "online-subtitle-picks.json")),
 ).also { online -> Background.scope.launch { runCatching { online.cache.prune() } } }
 
 /**

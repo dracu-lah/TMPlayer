@@ -67,6 +67,8 @@ internal fun BoxScope.OnlineSubtitlesPanel(
     target: suspend () -> SubtitleTarget?,
     onLoaded: (File, String) -> Unit,
     onClose: () -> Unit,
+    /** The hit that was downloaded and loaded, for the player to remember per video (HX25). */
+    onPicked: (com.tmplayer.online.SubtitleHit, File) -> Unit = { _, _ -> },
     onPickFile: () -> Unit = {},
     msone: Boolean = false,
     /** For the render test: a result to show without searching. */
@@ -165,6 +167,7 @@ internal fun BoxScope.OnlineSubtitlesPanel(
                                     when (val done = online.download(hit, wanted)) {
                                         is DownloadResult.Done -> {
                                             onLoaded(done.file, done.label)
+                                            onPicked(hit, done.file)
                                             onClose()
                                         }
                                         is DownloadResult.Failed -> notice = done.notice
