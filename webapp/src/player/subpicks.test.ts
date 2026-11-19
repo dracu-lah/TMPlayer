@@ -3,7 +3,8 @@
 import assert from 'node:assert/strict'
 import { test, beforeEach } from 'node:test'
 import { forgetKept, setKeepStore, type Hit, type KeepStore } from './msone.ts'
-import { clearOff, forgetPick, MAX_PICKS, pickCount, readState, recallPick, rememberOff, rememberPick, restorePick, setPickStore, wipePicks, type RestoreDeps } from './subpicks.ts'
+import { boundCopies, clearOff, forgetPick, MAX_COPY_BYTES, MAX_PICKS, pickCount, readState, recallPick, rememberOff, rememberPick, restorePick, setPickClock, setPickStore, wipePicks, type RestoreDeps } from './subpicks.ts'
+import { wipeAllPicks } from './subpicks-db.ts'
 
 const hit = (id: string): Hit => ({
     id, title: `Harbour Notes ${id}`, year: 2020, season: null, episode: null, translator: { name: 'Translator name', url: null },
@@ -26,7 +27,8 @@ let t = 1_800_000_000_000
 let fake = mapStore()
 beforeEach(() => {
     fake = mapStore()
-    setPickStore(fake.store, () => (t += 1000))
+    setPickStore(fake.store)
+    setPickClock(() => (t += 1000))
 })
 
 const KEYS = ['msg:5:77', 'video:harbour notes|2020']
@@ -217,6 +219,7 @@ test('two tabs: each change reads the state fresh, the newest write wins', async
 const deps = (over: Partial<RestoreDeps> = {}): RestoreDeps & { downloads: string[] } => {
     const downloads: string[] = []
     return {
+        stopped: () => false,
         cached: async () => null,
         mayDownload: () => true,
         download: async (h) => (downloads.push(h.id), srt('fresh.srt')),
@@ -239,7 +242,7 @@ test('opening a video: nothing, Off, the cache first, then the copy, then one do
     assert.deepEqual(d.downloads, [])
 })
 
-test('a copy that is gone downloads again once and keeps it; blocked, it asks again with no error', async () => {
+test('a copy that is gone downloads again once; the caller keeps it, and blocked it asks again with no error', async () => {
     await rememberPick(KEYS, hit('1'), null)
     const blocked = await restorePick(KEYS, deps({ mayDownload: () => false }))
     assert.equal(blocked.kind, 'missing')
@@ -251,9 +254,102 @@ test('a copy that is gone downloads again once and keeps it; blocked, it asks ag
     const ok = await restorePick(KEYS, d)
     assert.ok(ok.kind === 'ready' && !ok.fromDevice && ok.file.name === 'fresh.srt')
     assert.deepEqual(d.downloads, ['1'])
-    await new Promise((r) => setTimeout(r, 20))
+    // Restoring never files anything by itself: a viewer who chose Off meanwhile is not overruled (the caller decides).
+    assert.deepEqual(copies(), [])
+    await rememberPick(KEYS, ok.hit, ok.file)
     const again = deps()
     const second = await restorePick(KEYS, again)
     assert.ok(second.kind === 'ready' && second.fromDevice)
     assert.deepEqual(again.downloads, [])
+})
+
+test('MSone stopped: nothing of it is laid, not from the copy and not from the cache', async () => {
+    await rememberPick(KEYS, hit('1'), srt())
+    const stopped = deps({ stopped: () => true, cached: async () => srt('cache.srt') })
+    assert.deepEqual(await restorePick(KEYS, stopped), { kind: 'none' })
+    assert.deepEqual(stopped.downloads, [])
+})
+
+// ---- the review's findings ----
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+test('MSone stopping wipes the picks through the small module alone (no player chunk needed)', async () => {
+    setKeepStore(mapStore().store)
+    await rememberPick(KEYS, hit('1'), srt())
+    await forgetKept()
+    await sleep(30)
+    assert.deepEqual([...fake.map.keys()], [])
+})
+
+test('a recency that cannot be saved still gives the pick', async () => {
+    await rememberPick(KEYS, hit('1'), srt())
+    await rememberOff(['msg:9:9'])
+    fake.store.set = async () => {
+        throw new Error('QuotaExceededError')
+    }
+    const got = await recallPick(KEYS)
+    assert.ok(got && !got.off && got.hit.id === '1' && got.file)
+    assert.deepEqual(await recallPick(['msg:9:9']), { off: true })
+})
+
+test('a wipe drops the writes queued or running before it: the next account finds nothing', async () => {
+    const slow: KeepStore = {
+        ...fake.store,
+        set: async (k, v) => {
+            await sleep(40)
+            fake.map.set(k, v)
+        },
+    }
+    setPickStore(slow)
+    const writes = [rememberPick(KEYS, hit('1'), srt()), rememberOff(['msg:2:2']), rememberPick(['msg:3:3'], hit('2'), srt())]
+    await sleep(10)
+    await wipeAllPicks()
+    await Promise.all(writes)
+    await sleep(200)
+    assert.deepEqual([...fake.map.keys()], [])
+    // A write asked for after the wipe is the new account's own.
+    await rememberOff(['msg:4:4'])
+    assert.equal(await pickCount(), 1)
+})
+
+test('a job that timed out stops before its next write', { timeout: 15_000 }, async () => {
+    let first = true
+    const hangs: KeepStore = {
+        ...fake.store,
+        get: async (k) => {
+            if (first) {
+                first = false
+                await sleep(2600)
+            }
+            return fake.map.get(k)
+        },
+    }
+    setPickStore(hangs)
+    await rememberOff(KEYS)
+    await sleep(2800)
+    assert.equal(fake.map.has('state'), false, 'the late job wrote nothing after its time was up')
+    // The next change works.
+    await rememberOff(KEYS)
+    assert.equal(await pickCount(), 2)
+})
+
+test('the copies are held to 64 MB, the least recently used going first and their picks staying', async () => {
+    const MB4 = 4 * 1024 * 1024
+    for (let n = 1; n <= 17; n++) await rememberPick([`msg:1:${n}`], hit(String(n)), srt(`${n}.srt`, MB4))
+    assert.equal(MAX_COPY_BYTES, 64 * 1024 * 1024)
+    assert.equal(copies().length, 16)
+    const oldest = await recallPick(['msg:1:1'])
+    assert.ok(oldest && !oldest.off && oldest.hit.id === '1' && oldest.file === null, 'the oldest pick kept its hit, not its copy')
+    const newest = await recallPick(['msg:1:17'])
+    assert.ok(newest && !newest.off && newest.file?.size === MB4)
+})
+
+test('boundCopies counts a shared copy once and drops the longest unused', () => {
+    const e = (key: string, at: number, copy: string | null, size: number) => ({ key, at, hit: hit(copy ?? 'x'), copy, size })
+    const list = [e('a', 1, 'c1', 10), e('b', 2, 'c2', 10), e('c', 3, 'c1', 10)]
+    assert.equal(boundCopies(list, 20), list, 'two distinct copies of 10 fit in 20')
+    const out = boundCopies(list, 10)
+    // c2 was last used at 2, c1 at 3 (through key c): c2 goes.
+    assert.deepEqual(out.map((x) => x.copy), ['c1', null, 'c1'])
 })

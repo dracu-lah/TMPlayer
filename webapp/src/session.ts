@@ -36,6 +36,8 @@ export async function sessionEndedElsewhere() {
     setSessionEnded(true)
     await api.logOut().catch(() => {})
     await clearThumbs().catch(() => {})
+    // The remembered online subtitles belong to the account that ended, whoever signs in next (HX25).
+    await wipeAllPicks()
     setMe(null)
 }
 

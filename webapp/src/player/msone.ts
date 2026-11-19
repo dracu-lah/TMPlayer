@@ -8,6 +8,7 @@
 // does: a kept file loads again with no download (one MSone count per file per device), and while
 // MSone is paused the sheet can still list what is kept. `stopped` deletes all of it.
 import { createStore, delMany, get, keys as storeKeys, set, type UseStore } from 'idb-keyval'
+import { wipeAllPicks } from './subpicks-db.ts'
 
 export const GATEWAY = 'https://subs.tmplayer.org'
 
@@ -608,20 +609,11 @@ export async function keptHits(ask: Ask, where: { season: number | null; episode
     return hits.filter((h) => ix.files[fileKey(h, where)])
 }
 
-const forgottenListeners: Array<() => void> = []
-
-/** Runs `fn` whenever everything kept of MSone is deleted (the picks' own copies go with it: subpicks.ts). */
-export function onForgotten(fn: () => void) {
-    forgottenListeners.push(fn)
-}
-
-/** Deletes every kept MSone file and search (MSone stopped). */
+/** Deletes every kept MSone file and search, and the remembered subtitles of MSone (MSone stopped). */
 export function forgetKept(): Promise<void> {
-    for (const fn of forgottenListeners) {
-        try {
-            fn()
-        } catch {}
-    }
+    // Whoever calls this (the health check, Settings), the picks' own copies of MSone's files go with it: subpicks-db.ts is the
+    // small module the page already holds, so the wipe never waits for the player's chunk.
+    void wipeAllPicks()
     return write(async () => {
         index = { files: {}, searches: {} }
         const all = await store.keys()

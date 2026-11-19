@@ -463,12 +463,15 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
     let leaving = false
     onCleanup(() => (leaving = true))
     onMount(() => {
-        void subpick.takeRestore(c.item).then(async (found) => {
+        void subpick.takeRestore(c.item).then(async ({ found, wanted }) => {
             const showing = () => Array.from(v.textTracks).some((tt) => (tt.kind === 'subtitles' || tt.kind === 'captions') && tt.mode === 'showing')
-            if (leaving || showing()) return
+            // Whatever the viewer chose while this was looked for (Off, a track, a file, MSone's list) stands over it.
+            if (leaving || !wanted() || showing()) return
             if (found.kind === 'ready') {
                 try {
                     await layOnline(found.file, { label: onlineLabel(), language: 'ml' })
+                    if (!wanted()) return
+                    if (!found.fromDevice) subpick.keepRestored(c.item, found.hit, found.file)
                     if (onlineTrack) flash(t('player.subtitles_track', { track: subLabel(onlineTrack, subs().indexOf(onlineTrack)) }))
                 } catch {
                     // A copy that does not read is no pick: the viewer is simply asked again, no error card.

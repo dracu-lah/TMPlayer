@@ -11,9 +11,9 @@ const LABEL = 'Malayalam · MSone'
 
 /** MSone's gateway as a fake: healthy, one release, and a count of the downloads asked for. */
 async function gateway(page: Page) {
-    const seen = { downloads: 0 }
+    const seen = { downloads: 0, delayMs: 0 }
     const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': 'GET, OPTIONS' }
-    await page.route('https://subs.tmplayer.org/**', (route) => {
+    await page.route('https://subs.tmplayer.org/**', async (route) => {
         const url = new URL(route.request().url())
         if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors })
         if (url.pathname === '/health') return route.fulfill({ json: { ok: true, providers: { msone: { state: 'on', message: null } } }, headers: cors })
@@ -22,6 +22,7 @@ async function gateway(page: Page) {
         }
         if (url.pathname.startsWith('/msone/download/')) {
             seen.downloads++
+            if (seen.delayMs) await new Promise((r) => setTimeout(r, seen.delayMs))
             return route.fulfill({ body: SRT, headers: { ...cors, 'content-type': 'application/x-subrip', 'content-disposition': 'attachment; filename="Lighthouse.srt"' } })
         }
         return route.fulfill({ status: 404, headers: cors })
@@ -177,4 +178,26 @@ test('signing out wipes the picks and their copies', async ({ page }) => {
     await page.getByRole('button', { name: 'Sign out of Telegram' }).click()
     await page.getByRole('dialog', { name: 'Sign out of Telegram?' }).getByRole('button', { name: 'Sign out' }).click()
     await expect.poll(() => kept(page)).toBe(0)
+})
+
+test('Off chosen while the download is still coming stands: nothing is laid over it and nothing is filed again', async ({ page }) => {
+    const seen = await gateway(page)
+    await lighthouse(page)
+    await pickFromMsone(page)
+    await emptyDb(page, 'tmplayer-subpicks', 'copy|')
+    await emptyDb(page, 'tmplayer-msone')
+    seen.delayMs = 4000
+    const before = seen.downloads
+    await reopen(page)
+    // The download is on its way; the viewer turns subtitles off.
+    await expect.poll(() => seen.downloads).toBe(before + 1)
+    await subtitlesOff(page)
+    await page.waitForTimeout(4600)
+    expect(await tracks(page)).toEqual([])
+    // The next opening still finds Off, not the pick that was being fetched.
+    seen.delayMs = 0
+    await reopen(page)
+    await page.waitForTimeout(1200)
+    expect(await tracks(page)).toEqual([])
+    expect(seen.downloads).toBe(before + 1)
 })

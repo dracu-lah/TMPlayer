@@ -3,26 +3,26 @@
 // video has (core's SubtitlePickKeys, asked of the Telegram worker: this very post, and the video's own
 // identity, so a re-post or another copy finds it) and holds the hit (enough to fetch it again) and
 // a copy of the file itself in its own database, so the MSone cache's eviction (200 files or 20 MB)
-// cannot lose it. At most 400 picks, the oldest used first out; a record that is missing, cut short or
-// not what it should be is read as no picks at all, never as an error; a store that refuses (a private
-// window, a full disk) means the pick is asked for again, nothing more. No page code (no strings, no
-// Solid), so `node --test` reads it as it is.
-import { createStore, delMany, get, keys as storeKeys, set, type UseStore } from 'idb-keyval'
-import { PICKS_DB } from './subpicks-db.ts'
-import { FILE_MAX, onForgotten, parseHit, type Hit, type KeepStore } from './msone.ts'
+// cannot lose it. At most 400 picks and 64 MB of copies, the oldest used first out; a record that is
+// missing, cut short or not what it should be is read as no picks at all, never as an error; a store
+// that refuses (a private window, a full disk) means the pick is asked for again, nothing more. Every
+// change runs one at a time under subpicks-db.ts's lock and stops before a write once a wipe has come.
+// No page code (no strings, no Solid), so `node --test` reads it as it is.
+import { COPY, exclusive, pickStore, setPickStore, STATE, wipeAllPicks } from './subpicks-db.ts'
+import { FILE_MAX, parseHit, type Hit } from './msone.ts'
+
+export { setPickStore, wipeAllPicks as wipePicks }
 
 /** As core's SubtitlePicks.MAX_ENTRIES. */
 export const MAX_PICKS = 400
+/** All the copies together: the least recently used go first, their picks stay and download again when asked. */
+export const MAX_COPY_BYTES = 64 * 1024 * 1024
 /** As core's SubtitlePickKeys.MAX_KEY. */
 const MAX_KEY = 400
 /** A video has two keys (the post, the video itself); a caller passing more is not trusted. */
 const MAX_KEYS = 8
 /** The state record is a few tens of kilobytes; far more is not it. */
 const MAX_STATE_ENTRIES = MAX_PICKS * 2
-/** A store that does not answer (some private windows) is given up on rather than waited for. */
-const STORE_MS = 2000
-const STATE = 'state'
-const COPY = 'copy|'
 
 interface Entry {
     key: string
@@ -32,6 +32,8 @@ interface Entry {
     hit: Hit | null
     /** The id of the copy kept for the hit (its file is under `copy|<id>`), when one is. */
     copy: string | null
+    /** The copy's bytes, for the bound on all of them; 0 without a copy. */
+    size: number
 }
 
 /** What is remembered for a video: `off`, or the hit with its own copy when that is still kept. */
@@ -39,28 +41,13 @@ export type Pick = { off: true } | { off: false; hit: Hit; file: File | null }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 
-function idbStore(): KeepStore {
-    let db: UseStore | null = null
-    const store = () => (db ??= createStore(PICKS_DB, 'kv'))
-    return {
-        get: (key) => get(key, store()),
-        set: (key, value) => set(key, value, store()),
-        del: (keys) => delMany(keys, store()),
-        keys: async () => (await storeKeys(store())).filter((k): k is string => typeof k === 'string'),
-    }
-}
-
-let store: KeepStore = idbStore()
 let lastAt = 0
 let clock: () => number = Date.now
-let queue: Promise<unknown> = Promise.resolve()
 
-/** For the tests: the store to keep in (a Map, or one that fails) and a clock. */
-export function setPickStore(next: KeepStore, now: () => number = Date.now) {
-    store = next
+/** For the tests: a clock. */
+export function setPickClock(now: () => number) {
     clock = now
     lastAt = 0
-    queue = Promise.resolve()
 }
 
 /** Strictly increasing, so two picks in one millisecond keep their order. */
@@ -68,31 +55,6 @@ function stamp(): number {
     const now = clock()
     lastAt = Number.isFinite(now) && now > lastAt ? now : lastAt + 1
     return lastAt
-}
-
-/** `p`, or `fallback` when it fails or takes longer than the store is given. */
-async function guarded<T>(p: () => Promise<T>, fallback: T): Promise<T> {
-    let timer: ReturnType<typeof setTimeout> | undefined
-    try {
-        return await Promise.race([p(), new Promise<T>((resolve) => (timer = setTimeout(() => resolve(fallback), STORE_MS)))])
-    } catch {
-        return fallback
-    } finally {
-        clearTimeout(timer)
-    }
-}
-
-/**
- * One change at a time: after the ones before it in this tab, and (where the browser has Web Locks)
- * before another tab's, so a read, change and write is never torn. The newest write wins; the state
- * is read fresh each time, so no tab works from a stale copy.
- */
-function exclusive<T>(work: () => Promise<T>, fallback: T): Promise<T> {
-    const run = () => guarded(work, fallback)
-    const locks = (globalThis as { navigator?: { locks?: { request: <R>(name: string, fn: () => Promise<R>) => Promise<R> } } }).navigator?.locks
-    const next = queue.then(() => (locks ? locks.request('tmplayer-subpicks', run).catch(() => fallback) : run()))
-    queue = next.catch(() => {})
-    return next
 }
 
 function cleanKeys(keys: unknown): string[] {
@@ -112,13 +74,14 @@ export function readState(v: unknown): Entry[] {
         if (!key) continue
         const at = typeof raw.at === 'number' && Number.isFinite(raw.at) && raw.at >= 0 ? raw.at : 0
         if (raw.off === true) {
-            byKey.set(key, { key, at, hit: null, copy: null })
+            byKey.set(key, { key, at, hit: null, copy: null, size: 0 })
             continue
         }
         const hit = parseHit(raw.hit)
         if (!hit) continue
         const copy = typeof raw.copy === 'string' && raw.copy === hit.id ? raw.copy : null
-        byKey.set(key, { key, at, hit, copy })
+        const size = copy && typeof raw.size === 'number' && Number.isInteger(raw.size) && raw.size > 0 && raw.size <= FILE_MAX ? raw.size : 0
+        byKey.set(key, copy && size ? { key, at, hit, copy, size } : { key, at, hit, copy: null, size: 0 })
     }
     return [...byKey.values()].sort((a, b) => a.at - b.at).slice(-MAX_PICKS)
 }
@@ -126,21 +89,49 @@ export function readState(v: unknown): Entry[] {
 function writeState(entries: Entry[]): unknown {
     return {
         v: 1,
-        picks: entries.map((e) => (e.hit ? { key: e.key, at: e.at, hit: e.hit, ...(e.copy ? { copy: e.copy } : {}) } : { key: e.key, at: e.at, off: true })),
+        picks: entries.map((e) =>
+            e.hit ? { key: e.key, at: e.at, hit: e.hit, ...(e.copy ? { copy: e.copy, size: e.size } : {}) } : { key: e.key, at: e.at, off: true },
+        ),
     }
 }
 
 async function load(): Promise<Entry[]> {
-    return readState(await store.get(STATE))
+    return readState(await pickStore().get(STATE))
 }
 
-/** Saves the picks, and drops the copies nothing points to any more. */
-async function save(entries: Entry[]): Promise<void> {
-    await store.set(STATE, writeState(entries))
+/**
+ * Holds all the copies to [MAX_COPY_BYTES]: the copy used longest ago goes first (every pick that
+ * shares it loses it, and keeps its hit). A copy counts once however many picks share it.
+ */
+export function boundCopies(entries: Entry[], cap = MAX_COPY_BYTES): Entry[] {
+    const copies = new Map<string, { size: number; used: number }>()
+    for (const e of entries) {
+        if (!e.copy) continue
+        const known = copies.get(e.copy)
+        copies.set(e.copy, { size: Math.max(e.size, known?.size ?? 0), used: Math.max(e.at, known?.used ?? 0) })
+    }
+    let total = 0
+    for (const c of copies.values()) total += c.size
+    if (total <= cap) return entries
+    const gone = new Set<string>()
+    for (const [id, c] of [...copies].sort((a, b) => a[1].used - b[1].used)) {
+        if (total <= cap) break
+        gone.add(id)
+        total -= c.size
+    }
+    return entries.map((e) => (e.copy && gone.has(e.copy) ? { ...e, copy: null, size: 0 } : e))
+}
+
+/** Saves the picks (copies bounded), and drops the copies nothing points to any more; stops once `live()` says so. */
+async function save(entries: Entry[], live: () => boolean): Promise<void> {
+    const kept = boundCopies(entries)
+    if (!live()) return
+    await pickStore().set(STATE, writeState(kept))
     try {
-        const used = new Set(entries.flatMap((e) => (e.copy ? [COPY + e.copy] : [])))
-        const orphans = (await store.keys()).filter((k) => k.startsWith(COPY) && !used.has(k))
-        if (orphans.length) await store.del(orphans)
+        if (!live()) return
+        const used = new Set(kept.flatMap((e) => (e.copy ? [COPY + e.copy] : [])))
+        const orphans = (await pickStore().keys()).filter((k) => k.startsWith(COPY) && !used.has(k))
+        if (orphans.length && live()) await pickStore().del(orphans)
     } catch {}
 }
 
@@ -153,7 +144,7 @@ function put(entries: Entry[], entry: Entry): Entry[] {
 
 /** The kept copy of a hit as a File, or null when it is gone, cut short or not a subtitle's size. */
 async function readCopy(id: string): Promise<File | null> {
-    const v = await store.get(COPY + id)
+    const v = await pickStore().get(COPY + id)
     const name = isRecord(v) && typeof v.name === 'string' && v.name.trim() ? v.name.trim().slice(0, 200) : null
     const bytes = isRecord(v) && v.bytes instanceof Uint8Array && v.bytes.length > 0 && v.bytes.length <= FILE_MAX ? v.bytes : null
     return name && bytes ? new File([bytes as BlobPart], name) : null
@@ -161,18 +152,20 @@ async function readCopy(id: string): Promise<File | null> {
 
 /**
  * The pick for the first of `keys` that has one (the most exact key first), or null. Used now: the
- * last to go when the list is full, as core's recall.
+ * last to go when the list is full, as core's recall. A recency that cannot be saved (a full disk, a
+ * read-only database) never costs the pick itself.
  */
 export function recallPick(keys: string[]): Promise<Pick | null> {
     const wanted = cleanKeys(keys)
     if (!wanted.length) return Promise.resolve(null)
-    return exclusive(async () => {
+    return exclusive(async (live) => {
         const entries = await load()
         for (const key of wanted) {
             const entry = entries.find((e) => e.key === key)
             if (!entry) continue
-            const fresh = { ...entry, at: stamp() }
-            await save(put(entries, fresh))
+            try {
+                await save(put(entries, { ...entry, at: stamp() }), live)
+            } catch {}
             if (!entry.hit) return { off: true } as Pick
             const file = entry.copy ? await readCopy(entry.copy).catch(() => null) : null
             return { off: false, hit: entry.hit, file } as Pick
@@ -186,20 +179,24 @@ export function rememberPick(keys: string[], hit: Hit, file: File | null): Promi
     const wanted = cleanKeys(keys)
     const clean = parseHit(hit)
     if (!wanted.length || !clean) return Promise.resolve()
-    return exclusive(async () => {
+    return exclusive(async (live) => {
         let copy: string | null = null
+        let size = 0
         if (file && file.size > 0 && file.size <= FILE_MAX) {
             try {
                 const bytes = new Uint8Array(await file.arrayBuffer())
-                await store.set(COPY + clean.id, { name: file.name, bytes })
+                if (!live()) return
+                await pickStore().set(COPY + clean.id, { name: file.name, bytes })
                 copy = clean.id
+                size = bytes.length
             } catch {
                 // Not kept (a full disk): the pick still stands and is fetched again when needed.
             }
         }
+        if (!live()) return
         let entries = await load()
-        for (const key of wanted) entries = put(entries, { key, at: stamp(), hit: clean, copy })
-        await save(entries)
+        for (const key of wanted) entries = put(entries, { key, at: stamp(), hit: clean, copy, size })
+        await save(entries, live)
     }, undefined)
 }
 
@@ -207,10 +204,10 @@ export function rememberPick(keys: string[], hit: Hit, file: File | null): Promi
 export function rememberOff(keys: string[]): Promise<void> {
     const wanted = cleanKeys(keys)
     if (!wanted.length) return Promise.resolve()
-    return exclusive(async () => {
+    return exclusive(async (live) => {
         let entries = await load()
-        for (const key of wanted) entries = put(entries, { key, at: stamp(), hit: null, copy: null })
-        await save(entries)
+        for (const key of wanted) entries = put(entries, { key, at: stamp(), hit: null, copy: null, size: 0 })
+        await save(entries, live)
     }, undefined)
 }
 
@@ -218,10 +215,10 @@ export function rememberOff(keys: string[]): Promise<void> {
 export function clearOff(keys: string[]): Promise<void> {
     const wanted = cleanKeys(keys)
     if (!wanted.length) return Promise.resolve()
-    return exclusive(async () => {
+    return exclusive(async (live) => {
         const entries = await load()
         const rest = entries.filter((e) => !(wanted.includes(e.key) && e.hit === null))
-        if (rest.length !== entries.length) await save(rest)
+        if (rest.length !== entries.length) await save(rest, live)
     }, undefined)
 }
 
@@ -229,23 +226,12 @@ export function clearOff(keys: string[]): Promise<void> {
 export function forgetPick(keys: string[]): Promise<void> {
     const wanted = cleanKeys(keys)
     if (!wanted.length) return Promise.resolve()
-    return exclusive(async () => {
+    return exclusive(async (live) => {
         const entries = await load()
         const rest = entries.filter((e) => !wanted.includes(e.key))
-        if (rest.length !== entries.length) await save(rest)
+        if (rest.length !== entries.length) await save(rest, live)
     }, undefined)
 }
-
-/** Every pick and every copy kept with them: a sign out, or MSone stopping for good. */
-export function wipePicks(): Promise<void> {
-    return exclusive(async () => {
-        const all = await store.keys()
-        await store.del(all.filter((k) => k === STATE || k.startsWith(COPY)))
-    }, undefined)
-}
-
-// MSone stopped for good, at its request: nothing of its stays on the device, the picks' copies too.
-onForgotten(() => void wipePicks())
 
 /** How many picks are kept (the tests, Settings' storage breakdown). */
 export async function pickCount(): Promise<number> {
@@ -257,12 +243,18 @@ export async function pickCount(): Promise<number> {
 export type Restored =
     | { kind: 'none' }
     | { kind: 'off' }
-    /** The subtitle, ready to lay over the video; `fromDevice` when no download was needed. */
+    /**
+     * The subtitle, ready to lay over the video; `fromDevice` when no download was needed. A file
+     * downloaded again is not yet kept: the caller keeps it (rememberPick) once it has laid it, and
+     * only if the viewer has chosen nothing meanwhile.
+     */
     | { kind: 'ready'; file: File; hit: Hit; fromDevice: boolean }
     /** Remembered, but not to be had now (gone and not to be downloaded, or the download failed): the viewer is simply asked again, with no error. */
     | { kind: 'missing'; hit: Hit }
 
 export interface RestoreDeps {
+    /** MSone stopped for good: nothing of its is laid, kept copy or not. */
+    stopped: () => boolean
     /** The MSone cache's file for the hit (free), or null. */
     cached: (hit: Hit) => Promise<File | null>
     /** Whether a download may be started now: no metered line, no lock, the provider on. */
@@ -281,15 +273,14 @@ export async function restorePick(keys: string[], deps: RestoreDeps): Promise<Re
         if (!pick) return { kind: 'none' }
         if (pick.off) return { kind: 'off' }
         const { hit } = pick
+        // MSone stopped at its request: nothing of its is laid, even from a copy this device still holds.
+        if (deps.stopped()) return { kind: 'none' }
         const cached = await deps.cached(hit).catch(() => null)
         if (cached) return { kind: 'ready', file: cached, hit, fromDevice: true }
         if (pick.file) return { kind: 'ready', file: pick.file, hit, fromDevice: true }
         if (!deps.mayDownload()) return { kind: 'missing', hit }
         const file = await deps.download(hit).catch(() => null)
-        if (!file) return { kind: 'missing', hit }
-        // Kept again, so the next opening finds its own copy.
-        void rememberPick(keys, hit, file)
-        return { kind: 'ready', file, hit, fromDevice: false }
+        return file ? { kind: 'ready', file, hit, fromDevice: false } : { kind: 'missing', hit }
     } catch {
         return { kind: 'none' }
     }

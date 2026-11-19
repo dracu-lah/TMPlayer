@@ -7,6 +7,7 @@ import { call } from '../tg/rpc'
 import { msoneOn } from '../msoneFlag'
 import { download, fileKey, keptFile, knownHealth, type Hit } from './msone'
 import { clearOff, forgetPick, rememberOff, rememberPick, restorePick, type Restored } from './subpicks'
+import { onPicksWiped } from './subpicks-db'
 import type { VideoItem } from '../tg/types'
 
 type Ref = Pick<VideoItem, 'chatId' | 'messageId' | 'title' | 'fileName'>
@@ -46,19 +47,41 @@ export function mayDownload(): boolean {
 
 /** A lookup nobody took this long after it started is stale (the player never mounted its controls). */
 const STALE_MS = 30_000
-const started = new Map<string, { at: number; run: Promise<Restored> }>()
+interface Started {
+    at: number
+    run: Promise<Restored>
+    /** What counted the viewer's choices and the wipes when it began: a change since means the answer is no longer wanted. */
+    choices: number
+    wipes: number
+}
+const started = new Map<string, Started>()
+/** Per video: how many times the viewer has chosen a subtitle (any track, Off, an own file, a chat file, MSone's list) in this page. */
+const choices = new Map<string, number>()
+let wipes = 0
+// A sign out, a session that ended or MSone stopping: what is held in memory (a restored file included) goes with the store.
+onPicksWiped(() => {
+    wipes++
+    started.clear()
+    keys.clear()
+})
+
+const chose = (item: Ref) => {
+    const at = id(item)
+    choices.set(at, (choices.get(at) ?? 0) + 1)
+}
 
 /**
  * Starts looking for the video's remembered subtitle, so the answer is there when the controls
  * mount; asked twice for the same video it is one lookup. Never rejects.
  */
-export function warmRestore(item: Ref): Promise<Restored> {
+function warm(item: Ref): Started {
     const at = id(item)
     const known = started.get(at)
-    if (known && Date.now() - known.at < STALE_MS) return known.run
+    if (known && Date.now() - known.at < STALE_MS) return known
     const run = pickKeys(item)
         .then((list) =>
             restorePick(list, {
+                stopped: () => knownHealth().state === 'stopped',
                 cached: (hit) => keptFile(fileKey(hit)),
                 mayDownload,
                 download: async (hit) => {
@@ -68,37 +91,55 @@ export function warmRestore(item: Ref): Promise<Restored> {
             }),
         )
         .catch((): Restored => ({ kind: 'none' }))
+    const entry = { at: Date.now(), run, choices: choices.get(at) ?? 0, wipes }
     if (started.size >= MAX_REMEMBERED_ASKS) started.delete(started.keys().next().value as string)
-    started.set(at, { at: Date.now(), run })
-    return run
+    started.set(at, entry)
+    return entry
 }
 
-/** The answer once, then forgotten: the next opening of the video asks the store again. */
-export async function takeRestore(item: Ref): Promise<Restored> {
-    const run = warmRestore(item)
-    const answer = await run
-    if (started.get(id(item))?.run === run) started.delete(id(item))
-    return answer
+export function warmRestore(item: Ref): Promise<Restored> {
+    return warm(item).run
+}
+
+/**
+ * The answer once, then forgotten (the next opening of the video asks the store again), with `wanted()`:
+ * false once the viewer has chosen a subtitle since the lookup began (Off while a download was pending,
+ * say) or the picks were wiped. Then the file is neither laid nor kept.
+ */
+export async function takeRestore(item: Ref): Promise<{ found: Restored; wanted: () => boolean }> {
+    const entry = warm(item)
+    const found = await entry.run
+    if (started.get(id(item)) === entry) started.delete(id(item))
+    return { found, wanted: () => (choices.get(id(item)) ?? 0) === entry.choices && wipes === entry.wipes }
 }
 
 const quietly = (work: Promise<void>) => void work.catch(() => {})
 
 /** An online subtitle was picked for the video: kept with its file. */
 export function picked(item: Ref, hit: Hit, file: File) {
+    chose(item)
+    quietly(pickKeys(item).then((k) => rememberPick(k, hit, file)))
+}
+
+/** A restored subtitle that had to be downloaded again, laid and still wanted: kept again so the next opening finds its own copy. Not a choice. */
+export function keepRestored(item: Ref, hit: Hit, file: File) {
     quietly(pickKeys(item).then((k) => rememberPick(k, hit, file)))
 }
 
 /** The viewer turned subtitles off. */
 export function choseOff(item: Ref) {
+    chose(item)
     quietly(pickKeys(item).then(rememberOff))
 }
 
 /** The viewer chose the online track again: an Off kept for the video no longer stands. */
 export function choseOnline(item: Ref) {
+    chose(item)
     quietly(pickKeys(item).then(clearOff))
 }
 
 /** Any other explicit choice (an embedded track, a file of their own, one from the chat): the pick no longer stands. */
 export function choseOther(item: Ref) {
+    chose(item)
     quietly(pickKeys(item).then(forgetPick))
 }
