@@ -1,0 +1,46 @@
+// The link to a video's message in Telegram (WB16, the apps' U9 Copy link): `t.me/<name>/<id>` for a
+// public chat, `t.me/c/<id>/<id>` for a private channel or supergroup, a forum topic between, built
+// by core's rules (tgPostLink) from what Telegram says. This file is the asking: the chat's public
+// name and the message itself (which tells a message that is gone, and its topic). It takes its two
+// Telegram calls as plain functions, so `node --test` runs it against a fake account.
+import type { TelegramClient } from '@mtcute/web'
+import type { Rules } from '../rules'
+import { topicOf } from './media.ts'
+
+/** What the page gets: the link, or why there is none (a message gone, a chat that has no links to its messages). */
+export type LinkAnswer = { link: string } | { none: 'gone' | 'nolink' }
+
+/** A Bot API chat id of a channel or supergroup is -100 and its own number; a person and a small group have no message links. */
+const CHANNEL_BASE = -1_000_000_000_000
+
+export interface LinkLook {
+    /** The chat's public username, null for a private one. Throws when the chat is not known (left, never joined). */
+    username(chatId: number): Promise<string | null>
+    /** The message's forum topic (0 for none), or null when Telegram says there is no such message. Throws when Telegram cannot be asked. */
+    topic(chatId: number, messageId: number): Promise<number | null>
+}
+
+export async function messageLink(look: LinkLook, rules: Pick<Rules, 'tgPostLink'>, chatId: unknown, messageId: unknown): Promise<LinkAnswer> {
+    if (typeof chatId !== 'number' || typeof messageId !== 'number') return { none: 'nolink' }
+    if (!Number.isSafeInteger(chatId) || !Number.isSafeInteger(messageId) || messageId < 1) return { none: 'nolink' }
+    if (chatId >= CHANNEL_BASE) return { none: 'nolink' }
+    // Either call may fail (offline, a chat the viewer left): the link is still built from the ids, which is what Telegram's own apps do.
+    const [name, topic] = await Promise.all([look.username(chatId).catch(() => null), look.topic(chatId, messageId).catch(() => 0)])
+    if (topic === null) return { none: 'gone' }
+    const link = rules.tgPostLink(name, chatId, topic, messageId, 0)
+    return link ? { link } : { none: 'nolink' }
+}
+
+/** The two calls through mtcute. */
+export function telegramLook(tg: TelegramClient): LinkLook {
+    return {
+        async username(chatId) {
+            const peer = await tg.getPeer(chatId)
+            return peer.username ?? null
+        },
+        async topic(chatId, messageId) {
+            const [msg] = await tg.getMessages(chatId, messageId)
+            return msg ? topicOf(msg) : null
+        },
+    }
+}
