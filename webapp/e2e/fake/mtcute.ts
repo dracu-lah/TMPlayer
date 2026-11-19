@@ -258,6 +258,22 @@ const dialogs: Peer[] = [me, clips, shows, locked, quiet, copies]
 if (!flags.has('huge')) for (let i = 0; i < 1500; i++) dialogs.push(peer(-5000 - i, `Group ${i}`, 'chat'))
 dialogs.push(lighthouse)
 
+// `links` (WB16, Telegram links): chats with ids as real Telegram ones are (-100 and a number), which the fake's small ids are not.
+// Link Room is public (@linkroom) with a plain video and one in a forum topic (9); Back Room is a private channel with no
+// username; Sealed Room restricts saving. `linksgone`: Telegram answers that Link Room's messages no longer exist. `linksprot`: its messages now say they restrict saving.
+// Made last, so no other id moves.
+const linkRoom = peer(-1001234567890, 'Link Room', 'chat', { chatType: 'channel', username: 'linkroom' })
+const backRoom = peer(-1009876543210, 'Back Room', 'chat', { chatType: 'channel' })
+const sealedRoom = peer(-1005555555555, 'Sealed Room', 'chat', { chatType: 'channel', raw: { noforwards: true } })
+if (flags.has('links')) {
+    const inTopic = msg(linkRoom, 'Topic.Clip.mp4', { file: 'h264-aac.mp4', video: true })
+    Object.assign(inTopic.raw, { replyTo: { _: 'messageReplyHeader', forumTopic: true, replyToTopId: 9, replyToMsgId: 9 } })
+    messages.set(linkRoom.id, [msg(linkRoom, 'Plain.Clip.mp4', { file: 'h264-aac.mp4', video: true }), inTopic])
+    messages.set(backRoom.id, [msg(backRoom, 'Back.Clip.mp4', { file: 'h264-aac.mp4', video: true })])
+    messages.set(sealedRoom.id, [msg(sealedRoom, 'Sealed.Clip.mp4', { file: 'h264-aac.mp4', video: true })])
+    dialogs.splice(1, 0, linkRoom, backRoom, sealedRoom)
+}
+
 // `forums`: three groups with topics turned on, among the first chats of the list (/chat/-1010 to -1012), for the search by topic name.
 // Course Hub has a topic of two videos ("☕ Café Lessons"), one with none ("Lessons archive", closed), one of files only,
 // a pinned General and one with no title; Language Club has two small topics; Outside Forum is for the added-chats test.
@@ -543,6 +559,9 @@ export class TelegramClient {
             return [ids].flat().map((id) => all.find((m) => m.id === id) ?? null)
         }
         if (!peers.has(chatId)) throw rpcError('PEER_ID_INVALID')
+        if (flags.has('linksgone') && chatId === linkRoom.id) return [ids].flat().map(() => null)
+        // `linksprot`: the chat became protected after the lists were read: Telegram's message now says so, the stored cards do not.
+        if (flags.has('linksprot') && chatId === linkRoom.id) return [ids].flat().map((id) => { const m = (messages.get(chatId) ?? []).find((x) => x.id === id); return m ? { ...m, raw: { ...m.raw, noforwards: true } } : null })
         if (hugeCount(chatId) > 0) return [ids].flat().map((id) => (id >= 1 && id <= hugeCount(chatId) ? hugeMsg(peers.get(chatId)!, id - 1) : null))
         return [ids].flat().map((id) => (messages.get(chatId) ?? []).find((m) => m.id === id) ?? null)
     }
