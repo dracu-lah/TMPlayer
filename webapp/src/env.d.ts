@@ -19,3 +19,9 @@ declare module 'virtual:strings' {
     const strings: Whole & Parts
     export default strings
 }
+
+/** The other languages' page strings (vite.config.ts, pageCatalogs): each tag's file address, fetched by src/i18n.ts. */
+declare module 'virtual:catalogs' {
+    const urls: Record<string, string>
+    export default urls
+}

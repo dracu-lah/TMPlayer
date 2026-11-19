@@ -4,7 +4,7 @@ import { createEffect, createMemo, createResource, createSignal, For, Match, on,
 import { A, useNavigate, useParams } from '@solidjs/router'
 import { CheckmarkCircle02Icon, Clock01Icon, History, LeftToRightListBulletIcon, PlayIcon, StarIcon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { api, call, errorText } from '../tg/rpc'
-import { t } from '../i18n'
+import { formatDate, t } from '../i18n'
 import { laterIds, laterKey, laterList, resumes, starredIds, watchedIds, watchedList, watchedTick } from '../store'
 import { Icon, type IconData } from '../ui/Icon'
 import { useObservedCovers } from './promo'
@@ -346,7 +346,7 @@ function byDay(entries: Entry[]): { label: string; entries: Entry[] }[] {
         const day = new Date(e.time)
         day.setHours(0, 0, 0, 0)
         const ago = Math.round((today.getTime() - day.getTime()) / 86_400_000)
-        const label = !e.time ? '' : ago <= 0 ? t('watched.today') : ago === 1 ? t('watched.yesterday') : day.toLocaleDateString('en', { day: 'numeric', month: 'long' })
+        const label = !e.time ? '' : ago <= 0 ? t('watched.today') : ago === 1 ? t('watched.yesterday') : formatDate(day, { day: 'numeric', month: 'long' })
         const last = out[out.length - 1]
         if (last && last.label === label) last.entries.push(e)
         else out.push({ label, entries: [e] })
