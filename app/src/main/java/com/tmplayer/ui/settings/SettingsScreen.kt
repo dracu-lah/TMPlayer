@@ -373,7 +373,6 @@ fun SettingsScreen(
     val watchedStore = remember { WatchedStore(context) }
     val watchedList by watchedStore.history.collectAsStateWithLifecycle(initialValue = emptyList())
     val historyRemoval = com.tmplayer.ui.browse.rememberHistoryRemoval()
-    val touchHere = isTouch()
     // Only those the kids lock shows, as the Favourites tab counts them.
     val storedFavorites by settings.favorites.collectAsStateWithLifecycle(initialValue = emptySet())
     val allowedChats by com.tmplayer.data.ChatGate.browsing.collectAsStateWithLifecycle()
@@ -1512,20 +1511,14 @@ fun SettingsScreen(
                     }
                 }
                 // One Clear history, as History's own: Continue watching and Watched together, Watch
-                // later kept. At once with Undo on a touch screen, asked first under a remote.
+                // later kept. Asked first on every screen (HX59), then said with Undo.
                 if (history.isNotEmpty() || watchedList.isNotEmpty()) {
                     item {
                         ActionRow(
                             title = s.browseClearHistory,
                             subtitle = s.browseClearHistoryDetail,
                             icon = TmIcons.Close,
-                            onClick = {
-                                if (touchHere) {
-                                    historyRemoval.run({ s.browseHistoryCleared }) { st, w -> com.tmplayer.data.HistoryEdits.clear(st, w) }
-                                } else {
-                                    prompt = Prompt.ClearHistory
-                                }
-                            },
+                            onClick = { prompt = Prompt.ClearHistory },
                         )
                     }
                 }
@@ -2536,9 +2529,12 @@ fun SettingsScreen(
             confirmLabel = s.commonClear,
             onConfirm = {
                 prompt = null
-                historyRemoval.run({ s.browseHistoryCleared }) { st, w -> com.tmplayer.data.HistoryEdits.clear(st, w) }
-                // What was cleared lives on History, not here, so the line is the only sign.
-                toast(s.browseHistoryCleared)
+                // Emptied meanwhile (another device, the last card removed by hand): nothing to clear.
+                if (com.tmplayer.data.ClearAllConfirm.confirmClears(history.size + watchedList.size)) {
+                    historyRemoval.run({ s.browseHistoryCleared }) { st, w -> com.tmplayer.data.HistoryEdits.clear(st, w) }
+                    // What was cleared lives on History, not here, so the line is the only sign.
+                    toast(s.browseHistoryCleared)
+                }
             },
             onDismiss = { prompt = null },
         )
