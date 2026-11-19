@@ -1,0 +1,19 @@
+/* The copies of a video on its page (HX38): the recommended copy's tag, a copy that may stutter,
+   More for a long list, and Not the same video under them. The list itself is styles.css's. */
+.detail-copy-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.detail-copy-best {
+  font-size: 12px; line-height: 16px; font-weight: 600; padding: 2px 8px; border-radius: 999px;
+  color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  white-space: nowrap;
+}
+.detail-copy-stutter { color: var(--error); }
+.detail-copy-more { align-self: flex-start; padding: 8px 12px; }
+.detail-copy-repair { max-width: 640px; }
+:root[data-form="desktop"] .detail-copy-repair { max-width: none; }
+.detail-copy-repair:empty { display: none; }
+.detail-copy-repair-button {
+  display: flex; align-items: center; gap: 12px; width: 100%; text-align: start;
+  background: none; border: 0; border-radius: var(--r-m); padding: 10px 12px; color: inherit;
+}
+.detail-copy-repair-button:hover { background: var(--surface); }
+html[data-form=tv] .detail-copy-repair { max-width: calc(var(--dp) * 720); }
