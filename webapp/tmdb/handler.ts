@@ -49,7 +49,7 @@
 // that leaves for TMDB: no chat, file or account.
 import { extras, type Extras, type SeasonStop } from './extras.ts'
 import { mergeChoices } from './choices.ts'
-import { best, accepts, normalise, trusted, type Ask, type Candidate } from './match.ts'
+import { best, accepts, normalise, parseHints, trusted, type Ask, type Candidate } from './match.ts'
 import * as guide from '../src/animeGuide.ts'
 import * as src from './anime-sources.ts'
 import * as skipSrc from './skiptimes.ts'
@@ -329,18 +329,19 @@ export function createHandler(deps: Deps) {
         const id = num('id', 1, 999_999_999)
         if (Number.isNaN(year) || Number.isNaN(id)) return null
         const languages = (p.get('l') ?? '').split(',').filter((l) => /^[a-z]{2,3}$/.test(l)).slice(0, 8)
+        const hints = parseHints(p.get('h'))
         // A pick names its title by id; "picked" without one is no question.
         const picked = p.get('p') === '1'
         if (picked && id === null) return null
         const anime = p.get('a') === '1'
         const imdb = p.get('i')
         const imdbId = id === null && imdb && /^tt\d{7,9}$/.test(imdb) ? imdb : null
-        return { title, year, kind, tmdbId: id, series: p.get('s') === '1', languages, ...(imdbId ? { imdbId } : {}), ...(picked ? { picked } : {}), ...(anime ? { anime } : {}) }
+        return { title, year, kind, tmdbId: id, series: p.get('s') === '1', languages, ...(hints.length ? { hints } : {}), ...(imdbId ? { imdbId } : {}), ...(picked ? { picked } : {}), ...(anime ? { anime } : {}) }
     }
 
     /** What the cache files an answer under: the cleaned title, as MetaQuery.cacheKey does, never the raw one. */
     function cacheRequest(origin: string, ask: Ask): Request {
-        const q = new URLSearchParams({ k: ask.kind, t: normalise(ask.title), y: String(ask.year ?? ''), id: String(ask.tmdbId ?? ''), s: ask.series ? '1' : '0', l: ask.languages.join(','), p: ask.picked ? '1' : '0', ...(ask.imdbId ? { i: ask.imdbId } : {}), ...(ask.anime ? { a: '1' } : {}) })
+        const q = new URLSearchParams({ k: ask.kind, t: normalise(ask.title), y: String(ask.year ?? ''), id: String(ask.tmdbId ?? ''), s: ask.series ? '1' : '0', l: ask.languages.join(','), p: ask.picked ? '1' : '0', ...(ask.hints?.length ? { h: [...ask.hints].sort().join(',') } : {}), ...(ask.imdbId ? { i: ask.imdbId } : {}), ...(ask.anime ? { a: '1' } : {}) })
         return new Request(`${origin}/tmdb/poster?${q}`)
     }
 

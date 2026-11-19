@@ -323,3 +323,48 @@ test('an IMDb id TMDB does not know, or a malformed one, falls back to the title
     assert.equal(bad.status, 200)
     assert.equal(m.calls.filter((u) => u.pathname.includes('/find/')).length, 1)
 })
+
+// HX24: the chat's language hints (h=) reach the pick, and the cache key carries them only when present.
+const bigg = () => [
+    { ...show(1, 'Bigg Boss', 2017), original_language: 'ta' },
+    { ...show(2, 'Bigg Boss', 2018), original_language: 'ml' },
+    { ...show(3, 'Bigg Boss', 2017), original_language: 'te' },
+    { ...show(4, 'Bigg Boss', 2013), original_language: 'kn' },
+]
+const biggAnswer = (u: URL) => (u.pathname.endsWith('/search/tv') ? j({ results: bigg() }) : j({}, 500))
+
+test('h= breaks a tie between shows of one name toward the chat language', async () => {
+    const plain = await get(createHandler(mock(biggAnswer).deps), '/tmdb/poster?k=show&t=Bigg+Boss&s=1')
+    assert.equal(((await plain.json()) as { id: string }).id, '1')
+    const hinted = await get(createHandler(mock(biggAnswer).deps), '/tmdb/poster?k=show&t=Bigg+Boss&s=1&h=ml')
+    assert.equal(((await hinted.json()) as { id: string }).id, '2')
+    // The file's own language word outweighs the chat's.
+    const own = await get(createHandler(mock(biggAnswer).deps), '/tmdb/poster?k=show&t=Bigg+Boss&s=1&l=te&h=ml')
+    assert.equal(((await own.json()) as { id: string }).id, '3')
+})
+
+test('garbage and huge h= are ignored, not an error', async () => {
+    for (const h of ['', 'zzz', '%00', 'ml%2Cta%2Cte%2Chi%2Ckn', 'x'.repeat(50_000), '../..', 'ML']) {
+        const r = await get(createHandler(mock(biggAnswer).deps), `/tmdb/poster?k=show&t=Bigg+Boss&s=1&h=${h}`)
+        assert.equal(r.status, 200, h)
+    }
+    // Only the first four codes count: the fifth (kn) is dropped, the answer is the ml show.
+    const five = await get(createHandler(mock(biggAnswer).deps), '/tmdb/poster?k=show&t=Bigg+Boss&s=1&h=hi,hr,ml,fr,kn')
+    assert.equal(((await five.json()) as { id: string }).id, '2')
+    const none = await get(createHandler(mock(biggAnswer).deps), '/tmdb/poster?k=show&t=Bigg+Boss&s=1&h=kn')
+    assert.equal(((await none.json()) as { id: string }).id, '4')
+})
+
+test('the cache key holds hints only when there are some, and a renamed chat asks again', async () => {
+    const m = mock(biggAnswer)
+    const handle = createHandler(m.deps)
+    await get(handle, '/tmdb/poster?k=show&t=Bigg+Boss&s=1')
+    const plainKeys = [...m.cache.keys()]
+    assert.equal(plainKeys.length, 1)
+    assert.ok(!plainKeys[0].includes('h='), 'the old key is unchanged when no hint is sent')
+    assert.equal((await get(handle, '/tmdb/poster?k=show&t=Bigg+Boss&s=1&h=')).headers.get('x-poster-cache'), 'hit', 'an empty h is the old key')
+    const hinted = await get(handle, '/tmdb/poster?k=show&t=Bigg+Boss&s=1&h=ml')
+    assert.equal(hinted.headers.get('x-poster-cache'), 'miss')
+    assert.equal((await get(handle, '/tmdb/poster?k=show&t=Bigg+Boss&s=1&h=ml')).headers.get('x-poster-cache'), 'hit')
+    assert.equal((await get(handle, '/tmdb/poster?k=show&t=Bigg+Boss&s=1&h=ta')).headers.get('x-poster-cache'), 'miss', 'another chat name is another key')
+})

@@ -28,6 +28,12 @@ export interface Ask {
     /** The name says an episode (S01E02, an air date). */
     series: boolean
     languages: string[]
+    /**
+     * The languages the chat's own title names (ChatLanguageHints, HX24), ISO 639-1, at most 4: a
+     * weaker hint than `languages`, scored only between titles equal on words, year and language,
+     * never a reason to accept one. Absent or empty for most chats.
+     */
+    hints?: string[]
     /** An IMDb id (`tt0111161`) the post's own words give (MetaLinks), resolved through TMDB's `find`; null for none. */
     imdbId?: string | null
     /**
@@ -75,12 +81,15 @@ export function accepts(wanted: string, wantedYear: number | null, names: string
     return names.filter((n) => n.trim()).some((name) => normalise(name) === target || (yearAgrees && overlap(wanted, name) >= 0.6))
 }
 
-const EXACT_WORDS = 8
-const SAME_YEAR = 4
-const NEAR_YEAR = 1
-const LANGUAGE = 2
+// MetaPick's weights: the hint is 1 and every other step is 2 or more, so it decides only between
+// titles equal on words, year and language.
+const EXACT_WORDS = 16
+const SAME_YEAR = 8
+const NEAR_YEAR = 2
+const LANGUAGE = 4
+const HINT = 1
 
-/** Higher is closer: the same words, then the year, then the language the title was made in. */
+/** Higher is closer: the same words, then the year, then the language the file lists, then the chat's. */
 export function score(ask: Ask, c: Candidate): number {
     const target = normalise(ask.title)
     let s = 0
@@ -90,7 +99,10 @@ export function score(ask: Ask, c: Candidate): number {
         else if (Math.abs(ask.year - c.year) <= 1) s += NEAR_YEAR
     }
     const original = c.originalLanguage.toLowerCase()
-    if (original && ask.languages.includes(original)) s += LANGUAGE
+    if (original) {
+        if (ask.languages.includes(original)) s += LANGUAGE
+        if (ask.hints?.includes(original)) s += HINT
+    }
     return s
 }
 
@@ -122,4 +134,22 @@ export function trusted(ask: Ask, found: { kind: 'film' | 'show'; year: number |
         if (agrees || laterSeason) return true
     }
     return found.kind === 'show' && ask.series
+}
+
+const MAX_HINTS = 4
+const HINTS_RAW = 32
+
+/**
+ * The chat's language hints from the `h=` of a poster ask: ISO 639-1 codes (two lower case letters),
+ * the first four distinct ones. Anything else (garbage, three letter codes, a huge string) is dropped,
+ * and a string longer than a few codes is cut before it is read.
+ */
+export function parseHints(raw: string | null | undefined): string[] {
+    if (!raw) return []
+    const out: string[] = []
+    for (const code of raw.slice(0, HINTS_RAW).split(',')) {
+        if (/^[a-z]{2}$/.test(code) && !out.includes(code)) out.push(code)
+        if (out.length === MAX_HINTS) break
+    }
+    return out
 }
