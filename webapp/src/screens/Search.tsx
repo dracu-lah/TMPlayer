@@ -6,6 +6,7 @@ import { Cancel01Icon, Search01Icon } from '@hugeicons/core-free-icons'
 import { t } from '../i18n'
 import { addedIds, addedMode, addedView, progress, settings } from '../store'
 import { Icon } from '../ui/Icon'
+import { back } from '../session'
 import { keepsSearch } from '../ui/searchLifetime'
 import { tileCard, VideoList } from './VideoList'
 
@@ -67,7 +68,7 @@ export function Search() {
         if (e.key !== 'Escape') return
         e.preventDefault()
         if (text()) clear()
-        else if (window.history.length > 1) navigate(-1)
+        else back(navigate)
     }
     const onType = (v: string) => {
         setText(v)
