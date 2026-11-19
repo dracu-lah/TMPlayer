@@ -25,7 +25,7 @@ class SeasonSplitTest {
         if (n <= 25) LocalDate.of(2024, 10, 3).plusWeeks(n - 1L).toString() else LocalDate.of(2026, 10, 2).plusWeeks(n - 26L).toString()
 
     /** TMDB names episodes up to 31; 32 on are announced without a title yet. */
-    private fun name(n: Int): String = if (n <= 31) "Title $n" else ""
+    private fun name(n: Int): String = if (n <= 31) "The ${n}th Tide" else ""
 
     private fun page(seasons: String = """[{"season_number":0,"episode_count":2},{"season_number":1,"episode_count":37,"air_date":"2024-10-03"}]""", next: Int? = 33) =
         """{"id":207347,"genres":[{"name":"Animation"}],"number_of_seasons":1,"status":"Returning Series","seasons":$seasons,
@@ -143,12 +143,24 @@ class SeasonSplitTest {
     }
 
     @Test
+    fun anUntitledEpisodeKeepsNoPlaceholderCountedInTheShowsOwnNumbers() {
+        // TMDB titles an announced episode "Episode 32" (its place in the one-season count); in season 2 it is episode 7.
+        val episodes = (1..37).map {
+            AnimeEpisodes.GroupEpisode(if (it <= 25) 1 else 2, it, 1, it, AnimeEpisodes.Piece(0, if (it == 32) "Episode 32" else name(it), airDate = air(it)))
+        }
+        val split = SeasonSplit.build("seasons", episodes, oneSeason) ?: error("no split")
+        val seventh = split.episodes[2]?.firstOrNull { it.number == 7 } ?: error("no E7")
+        assertEquals("", seventh.name)
+        assertEquals("The 26th Tide", split.episodes[2]?.first()?.name)
+    }
+
+    @Test
     fun theSplitNumbersEachSeasonFromOneAndPlacesTheNextEpisode() {
         val episodes = (1..37).map { AnimeEpisodes.GroupEpisode(if (it <= 25) 1 else 2, it, 1, it, AnimeEpisodes.Piece(0, name(it), airDate = air(it))) }
         val split = SeasonSplit.build("seasons", episodes, oneSeason) ?: error("no split")
         assertEquals(listOf(MetaSeason(1, 25, "2024-10-03"), MetaSeason(2, 12, "2026-10-02")), split.seasons)
         assertEquals((1..12).toList(), split.episodes[2]?.map { it.number })
-        assertEquals("Title 26", split.episodes[2]?.first()?.name)
+        assertEquals("The 26th Tide", split.episodes[2]?.first()?.name)
         assertEquals(MetaAiring(2, 8, air(33)), split.next(MetaAiring(1, 33, air(33))))
         // An episode TMDB announced past the group's last counts on in the last season.
         assertEquals(MetaAiring(2, 13, "2027-01-01"), split.next(MetaAiring(1, 38, "2027-01-01")))
@@ -191,7 +203,7 @@ class SeasonSplitTest {
         assertEquals(EpisodeGuide.State.Missing, gaps.first().state)
         assertEquals(EpisodeGuide.State.Upcoming, gaps[1].state)
         // The ones in the chat carry their titles; the untitled gaps fall back to their number on the page.
-        assertEquals("Title 26", (rows.first() as EpisodeGuide.Row.Have).meta?.name)
+        assertEquals("The 26th Tide", (rows.first() as EpisodeGuide.Row.Have).meta?.name)
         assertEquals("", gaps.first().meta?.name)
         assertEquals(24, listed.first().runtimeMin)
         assertEquals("https://image.tmdb.org/t/p/w300/s26.jpg", listed.first().stillUrl)
@@ -218,7 +230,7 @@ class SeasonSplitTest {
         assertEquals(MetaAiring(1, 33, air(33), ""), numbering.next)
         val own = online.season(show, 1, split = false) ?: error("no season")
         assertEquals(37, own.size)
-        assertEquals("Title 31", own[30].name)
+        assertEquals("The 31th Tide", own[30].name)
     }
 
     @Test

@@ -73,7 +73,8 @@ object SeasonSplit {
                 MetaEpisode(
                     season = season,
                     number = i + 1,
-                    name = e.piece.name,
+                    // TMDB's "Episode 32" for an untitled one numbers it in the show's own count, not the season's.
+                    name = e.piece.name.takeUnless { EpisodeNames.placeholder(it, e.episode) }.orEmpty(),
                     overview = e.piece.overview,
                     stillUrl = e.piece.stillUrl,
                     airDate = e.piece.airDate,
