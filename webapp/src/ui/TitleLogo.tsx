@@ -6,6 +6,8 @@ import { loadLogo, type Extras } from '../screens/posters'
 const CEILING_MS = 2_500
 /** Above this mean luminance a logo is white or near it, and vanishes on a light page (BRIGHT_LOGO). */
 const BRIGHT = 0.72
+/** Below this one it is black or near it (a dark red, a navy), and sinks into a dark page. */
+const DARK = 0.15
 
 /**
  * A film's or show's name as its title logo from TMDB where it has one, the apps' TitleArt: a
@@ -13,12 +15,13 @@ const BRIGHT = 0.72
  * loaded, and the name in type once it is clear there is none (no match, TMDB has none, it would
  * not load) or after CEILING_MS. With `pending` false and no logo known (lookups off, no match)
  * the name is there at once and no placeholder is ever drawn. A white logo is set in the page's
- * ink on a light theme, as the apps do. The heading always reads out as the name.
+ * ink on a light theme, as the apps do; a near black one is marked `dark`, for a dark page to lift
+ * it off its ground (the TV carousel does). The heading always reads out as the name.
  */
 export function TitleLogo(props: { name: string; pending: boolean; extras: Extras | null | undefined; class: string; level: 1 | 2 }) {
     const [src, setSrc] = createSignal<string | null>(null)
     const [settled, setSettled] = createSignal(false)
-    const [bright, setBright] = createSignal(false)
+    const [tone, setTone] = createSignal<number | null>(null)
     const [late, setLate] = createSignal(false)
     const timer = setTimeout(() => setLate(true), CEILING_MS)
     onCleanup(() => clearTimeout(timer))
@@ -27,6 +30,7 @@ export function TitleLogo(props: { name: string; pending: boolean; extras: Extra
             () => props.extras?.logo ?? null,
             (path) => {
                 setSrc(null)
+                setTone(null)
                 setSettled(!path)
                 if (!path || !props.extras) return
                 let live = true
@@ -51,11 +55,11 @@ export function TitleLogo(props: { name: string; pending: boolean; extras: Extra
             >
                 <img
                     class="title-logo"
-                    classList={{ bright: bright() }}
+                    classList={{ bright: (tone() ?? 0) > BRIGHT, dark: (tone() ?? 1) < DARK }}
                     src={src()!}
                     alt=""
                     decoding="async"
-                    onLoad={(e) => setBright(isBright(e.currentTarget))}
+                    onLoad={(e) => setTone(luminance(e.currentTarget))}
                     onError={() => (setSrc(null), setSettled(true))}
                 />
             </Show>
@@ -63,8 +67,8 @@ export function TitleLogo(props: { name: string; pending: boolean; extras: Extra
     )
 }
 
-/** The mean luminance of a logo's solid pixels, sampled small: white or near it above BRIGHT. */
-function isBright(img: HTMLImageElement): boolean {
+/** The mean luminance of a logo's solid pixels, sampled small, 0 to 1; null when it cannot be read. */
+function luminance(img: HTMLImageElement): number | null {
     try {
         const w = 48
         const h = Math.max(1, Math.round((w * img.naturalHeight) / Math.max(1, img.naturalWidth)))
@@ -72,7 +76,7 @@ function isBright(img: HTMLImageElement): boolean {
         canvas.width = w
         canvas.height = h
         const g = canvas.getContext('2d', { willReadFrequently: true })
-        if (!g) return false
+        if (!g) return null
         g.drawImage(img, 0, 0, w, h)
         const px = g.getImageData(0, 0, w, h).data
         let sum = 0
@@ -83,8 +87,8 @@ function isBright(img: HTMLImageElement): boolean {
             sum += ((0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2]) / 255) * a
             weight += a
         }
-        return weight > 0 && sum / weight > BRIGHT
+        return weight > 0 ? sum / weight : null
     } catch {
-        return false
+        return null
     }
 }
