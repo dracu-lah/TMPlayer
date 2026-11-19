@@ -9,7 +9,7 @@
 // that open from their buttons) and `tv` (the Android TV player: no top bar, the title over the
 // bar, one play disc, a row of round buttons with More at its end, the time as a button, every
 // control reached with the remote's arrows and OK, see `tvKey`).
-import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, type JSX } from 'solid-js'
+import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, untrack, type JSX } from 'solid-js'
 import {
     Add01Icon,
     Bookmark02Icon,
@@ -50,7 +50,8 @@ import { t } from '../i18n'
 import { Choice, Entry, Panel, PhoneSheet, Picker, ShortcutsSheet, TimePrompt, variant, walk } from './sheets'
 import { nextShape, objectFit, pictureSize, ratioBox, ratioPath, shapeRatio, SHAPES, type Shape } from './shape'
 import { clampedTo, NONE as NO_ZOOM, panBy, percent, pinch as pinchZoom, settled, stepped, transformOf, wheelSteps, zoomed, type Frame, type Zoom } from './zoom'
-import { actionFor, FRAME } from './playerKeys'
+import { actionFor, FRAME, playerHearsKeys } from './playerKeys'
+import { confirmOpen } from '../ui/Confirm'
 import { cueOverlay, type CueOverlay } from './cueoverlay'
 import './zoom.css'
 import { remoteKey } from '../tv/remote'
@@ -479,9 +480,11 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         for (const p of ['position', 'left', 'top', 'width', 'height', 'object-fit'] as const) v.style.removeProperty(p)
     })
     const pickShape = (next: Shape) => {
-        // Another shape starts the zoom again from 100 per cent (PictureZoom: the shape sizes the picture it enlarges).
-        resetZoom()
+        // Another shape starts the zoom again from 100 per cent (PictureZoom: the shape sizes the picture
+        // it enlarges), quietly: the shape's own note says what happened.
+        resetZoom(true)
         setShape(next)
+        zoomFrameKept = null
         flash(t('player.picture_shape_now', { shape: shapeName(next) }))
     }
     const cycleShape = () => pickShape(nextShape(shape()))
@@ -499,22 +502,35 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
     /** Not on the TV (no fingers, no zoom keys), not while locked or a status sheet is up, not in the iPhone's own full screen. */
     const zoomAllowed = () => !tv() && !locked() && !c.blocked() && !(v as WebkitShown).webkitDisplayingFullscreen
     const engineCanvas = () => c.root.querySelector<HTMLCanvasElement>('canvas.sw-canvas, canvas.movi-canvas')
+    /**
+     * The stage and the picture's size in it, measured once and kept: a pinch's moves only write
+     * the transform, never read the layout back. Measured again after a resize, another shape,
+     * a new frame size or an engine's canvas coming or going.
+     */
+    let zoomFrameKept: Frame | null = null
     const zoomFrame = (): Frame => {
+        if (zoomFrameKept) return zoomFrameKept
         const w = c.root.clientWidth
         const h = c.root.clientHeight
         const cv = engineCanvas()
         const pic = pictureSize(w, h, v.videoWidth || cv?.width || w, v.videoHeight || cv?.height || h, shape())
-        return { viewWidth: w, viewHeight: h, pictureWidth: pic?.width ?? w, pictureHeight: pic?.height ?? h }
+        const frame = { viewWidth: w, viewHeight: h, pictureWidth: pic?.width ?? w, pictureHeight: pic?.height ?? h }
+        // A stage not laid out yet is measured again next time.
+        if (w > 0 && h > 0) zoomFrameKept = frame
+        return frame
     }
+    listen('resize', () => (zoomFrameKept = null))
     const showZoomChip = (live: boolean) => {
         clearTimeout(zoomChipTimer)
         setZoomChip(true)
         if (!live) zoomChipTimer = window.setTimeout(() => setZoomChip(false), ZOOM_MS)
     }
-    function resetZoom() {
+    /** Back to 100 per cent: with the figure saying so, or `quiet` (a new shape says it with its own note). */
+    function resetZoom(quiet = false) {
+        if (quiet) (clearTimeout(zoomChipTimer), setZoomChip(false))
         if (!zoomed(zoom())) return
         setZoom(NO_ZOOM)
-        showZoomChip(false)
+        if (!quiet) showZoomChip(false)
     }
     /** A key's or a wheel's steps, around a point of the stage (its centre for a key). */
     const zoomBy = (steps: number, x = c.root.clientWidth / 2, y = c.root.clientHeight / 2) => {
@@ -522,37 +538,64 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         setZoom((z) => stepped(z, steps, x, y, zoomFrame()))
         showZoomChip(false)
     }
-    createEffect(() => {
-        const tf = transformOf(zoom())
+    /** The transform on every picture there is now: the <video>, and an engine's canvas, however late it came. */
+    const applyZoom = (z: Zoom) => {
+        const tf = transformOf(z)
         for (const el of [v, engineCanvas()]) {
             if (!el) continue
-            el.style.transform = tf
+            if (el.style.transform !== tf) el.style.transform = tf
             el.style.transformOrigin = tf ? 'center center' : ''
         }
         c.root.classList.toggle('pc-zoomed', !!tf)
-    })
-    // A resized stage (a turned phone, a window, full screen) keeps the scale and pulls the pan back inside.
-    createEffect(on(stage, () => setZoom((z) => (zoomed(z) ? clampedTo(z, zoomFrame()) : z)), { defer: true }))
+    }
+    // The cues while zoomed: a layer of our own over the native picture, unless an engine draws its
+    // own (movi.ts, libavcanvas.ts), which wins whenever it comes, so the words are never drawn twice.
     let zoomCues: CueOverlay | null = null
-    createEffect(() => {
-        if (zoomed(zoom())) {
-            // A canvas engine draws its own layer already; the native picture needs one only while zoomed.
-            if (!zoomCues && !c.root.querySelector('.movi-cues')) (zoomCues = cueOverlay(v, () => v.currentTime)).draw()
-        } else if (zoomCues) {
+    let zoomCuesEl: Element | null = null
+    const engineCues = () => Array.from(c.root.querySelectorAll('.movi-cues')).some((el) => el !== zoomCuesEl)
+    const placeCues = (z: Zoom) => {
+        const want = zoomed(z) && !engineCues()
+        if (want && !zoomCues) {
+            const before = new Set(c.root.querySelectorAll('.movi-cues'))
+            zoomCues = cueOverlay(v, () => v.currentTime)
+            zoomCuesEl = Array.from(c.root.querySelectorAll('.movi-cues')).find((el) => !before.has(el)) ?? null
+            zoomCues.draw()
+        } else if (!want && zoomCues) {
             zoomCues.remove()
             zoomCues = null
+            zoomCuesEl = null
         }
+    }
+    createEffect(() => {
+        const z = zoom()
+        applyZoom(z)
+        placeCues(z)
     })
+    // An engine's canvas or cue layer added (or taken away) after the zoom was set: the transform
+    // and the cues follow it, and the picture is measured again.
+    if (typeof MutationObserver !== 'undefined') {
+        const engines = new MutationObserver(() => {
+            zoomFrameKept = null
+            const z = untrack(zoom)
+            applyZoom(z)
+            placeCues(z)
+        })
+        engines.observe(c.root, { childList: true })
+        onCleanup(() => engines.disconnect())
+    }
+    // A resized stage (a turned phone, a window, full screen) keeps the scale and pulls the pan back inside.
+    createEffect(on(stage, () => ((zoomFrameKept = null), setZoom((z) => (zoomed(z) ? clampedTo(z, zoomFrame()) : z))), { defer: true }))
     const redrawCues = () => zoomCues?.draw()
     listen('timeupdate', redrawCues)
     v.textTracks.addEventListener('change', redrawCues)
     // The iPhone's own full screen is the system's player: the page's transform does not reach it.
-    v.addEventListener('webkitbeginfullscreen', resetZoom)
+    const quietReset = () => resetZoom(true)
+    v.addEventListener('webkitbeginfullscreen', quietReset)
     onCleanup(() => {
         clearTimeout(zoomChipTimer)
         zoomCues?.remove()
         v.textTracks.removeEventListener('change', redrawCues)
-        v.removeEventListener('webkitbeginfullscreen', resetZoom)
+        v.removeEventListener('webkitbeginfullscreen', quietReset)
         c.root.classList.remove('pc-zoomed')
         for (const el of [v, engineCanvas()]) el?.style.removeProperty('transform')
         v.style.removeProperty('transform-origin')
@@ -1151,9 +1194,10 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
 
     // ---- keys (PlayerKeys.actionFor, the parts a browser can do) --------------------------
     const onKey = (e: KeyboardEvent) => {
-        if (e.defaultPrevented) return
         const target = e.target as HTMLElement | null
-        if (target && (target.isContentEditable || (target instanceof HTMLInputElement && target.type !== 'range') || target instanceof HTMLTextAreaElement)) return
+        const typing = !!target && (target.isContentEditable || (target instanceof HTMLInputElement && target.type !== 'range') || target instanceof HTMLTextAreaElement)
+        // A confirm question (ui/Confirm.tsx) has every key, Escape first: the player behind it stays.
+        if (!playerHearsKeys({ handled: e.defaultPrevented, typing, confirm: confirmOpen() })) return
         if (tv()) {
             const handled = tvKey(e)
             if (handled) {
@@ -1286,9 +1330,18 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         const w = c.root.clientWidth
         return x < w * SIDE ? 'left' : x > w * (1 - SIDE) ? 'right' : 'centre'
     }
-    const local = (e: { clientX: number; clientY: number }) => {
-        const r = c.root.getBoundingClientRect()
-        return { x: e.clientX - r.left, y: e.clientY - r.top }
+    /**
+     * Where a pointer is on the stage. The stage's place is read when a touch or press begins and
+     * kept for its moves (`fresh` reads it again), so a drag that writes the zoom's transform never
+     * makes the browser lay the page out again to answer a read.
+     */
+    let rootAt = { left: 0, top: 0 }
+    const local = (e: { clientX: number; clientY: number }, fresh = false) => {
+        if (fresh) {
+            const r = c.root.getBoundingClientRect()
+            rootAt = { left: r.left, top: r.top }
+        }
+        return { x: e.clientX - rootAt.left, y: e.clientY - rootAt.top }
     }
     const jump = (side: 'left' | 'right', x: number, y: number) => {
         seekBy(side === 'left' ? -10 : 10)
@@ -1309,7 +1362,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         if (e.ctrlKey) {
             e.preventDefault()
             if (locked() || c.blocked() || sheet()) return
-            const p = local(e)
+            const p = local(e, true)
             zoomBy(wheelSteps(e.deltaY, e.deltaMode), p.x, p.y)
             return
         }
@@ -1325,8 +1378,9 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
     }
     const onDown = (e: PointerEvent) => {
         if (locked() || e.button > 0) return
-        if (phone() && e.pointerType === 'touch') {
-            touches.set(e.pointerId, local(e))
+        // Any touch screen: a phone, an iPad, a touch laptop in the desktop form (the TV has no fingers).
+        if (e.pointerType === 'touch' && !tv()) {
+            touches.set(e.pointerId, local(e, true))
             if (touches.size === 2) {
                 clearTimeout(holdTimer)
                 clearTimeout(tapTimer)
@@ -1341,7 +1395,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
             }
             if (touches.size > 2 || pinch) return
         }
-        const p = local(e)
+        const p = local(e, true)
         down = { ...p, at: performance.now(), id: e.pointerId, time: v.currentTime, vol: v.volume, bright: brightness() }
         mode = 'tap'
         clearTimeout(holdTimer)

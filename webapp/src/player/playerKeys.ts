@@ -73,6 +73,13 @@ export const FRAME = 1 / 30
 
 const DIGIT_CODE = /^(?:Digit|Numpad)([0-9])$/
 
+/**
+ * Whether the player hears a key at all: not one a control already took (`handled`), not one
+ * typed into a field, and nothing while a confirm question is up, so its Escape answers it and
+ * never closes the player behind.
+ */
+export const playerHearsKeys = (s: { handled: boolean; typing: boolean; confirm: boolean }) => !s.handled && !s.typing && !s.confirm
+
 /** What a key does in the player, or null for a key it leaves to the page and the browser. */
 export function actionFor(p: Press, ctx: KeyContext): Action | null {
     const { key, code = '' } = p

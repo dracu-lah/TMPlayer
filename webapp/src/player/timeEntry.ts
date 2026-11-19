@@ -48,6 +48,8 @@ function amount(t: string, durationMs: number): number | null {
     if (t.endsWith('%')) {
         if (durationMs <= 0) return null
         const raw = t.slice(0, -1).trim().replace(',', '.')
+        // Stricter than core on purpose: Kotlin's toDoubleOrNull also takes 1e2, NaN and Infinity
+        // (NaN% lands at 0 there); here only digits with an optional fraction are a percentage.
         if (!/^\d+(\.\d+)?$/.test(raw)) return null
         const number = Number(raw)
         if (number < 0 || number > 100) return null
@@ -61,7 +63,9 @@ function amount(t: string, durationMs: number): number | null {
         const [h, m, s] = (numbers.length === 3 ? numbers : [0, ...numbers]) as number[]
         if (s >= 60) return null
         if (numbers.length === 3 && m >= 60) return null
-        return ((h * 60 + m) * 60 + s) * 1000
+        // A huge hour field: each part fits, the milliseconds would not.
+        const ms = ((h * 60 + m) * 60 + s) * 1000
+        return Number.isSafeInteger(ms) ? ms : null
     }
     if (/^\d+$/.test(t)) {
         const n = whole(t)

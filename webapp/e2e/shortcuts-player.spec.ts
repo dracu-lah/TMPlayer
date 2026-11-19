@@ -58,9 +58,47 @@ test.describe('the keyboard', () => {
         // The page's own zoom was not touched.
         expect(await page.evaluate(() => window.visualViewport?.scale ?? 1)).toBe(1)
         await shots(page, 'zoom')
-        // A new picture shape starts the zoom again.
+        // A new picture shape starts the zoom again, quietly: the shape's note shows, the zoom's figure goes.
         await page.keyboard.press('w')
         expect(await scale(page)).toBe(1)
+        await expect(page.locator('.pc-zoom-chip')).toHaveCount(0)
+        await expect(page.locator('.pc-note')).toContainText('Picture shape')
+    })
+
+    test("an engine's canvas that comes after the zoom wears it, and an engine's own cue layer replaces the zoom's", async ({ page }) => {
+        await openPaused(page)
+        await page.keyboard.press('Alt+Equal')
+        await expect(page.locator('.player.pc-zoomed .movi-cues')).toHaveCount(1)
+        // What movi.ts and libavcanvas.ts do when they take over: a canvas beside the video, then their cue layer.
+        await page.locator('video').first().evaluate((v) => {
+            const c = document.createElement('canvas')
+            c.className = 'sw-canvas'
+            v.after(c)
+            const cues = document.createElement('div')
+            cues.className = 'movi-cues engine'
+            v.parentElement!.append(cues)
+        })
+        await expect.poll(() => page.locator('canvas.sw-canvas').evaluate((c: HTMLCanvasElement) => c.style.transform)).toContain('scale(1.18')
+        await expect(page.locator('.movi-cues')).toHaveCount(1)
+        await expect(page.locator('.movi-cues.engine')).toHaveCount(1)
+        await page.keyboard.press('Alt+Digit0')
+        expect(await page.locator('canvas.sw-canvas').evaluate((c: HTMLCanvasElement) => c.style.transform)).toBe('')
+    })
+
+    test('a touch screen in the desktop form pinches too', async ({ page }) => {
+        await openPaused(page)
+        const box = (await page.locator('.pc-picture').boundingBox())!
+        const cx = box.width / 2
+        const cy = box.height / 2
+        await fingers(page, [
+            { type: 'down', id: 1, x: cx - 50, y: cy },
+            { type: 'down', id: 2, x: cx + 50, y: cy },
+            { type: 'move', id: 2, x: cx + 150, y: cy },
+            { type: 'up', id: 1, x: cx - 50, y: cy },
+            { type: 'up', id: 2, x: cx + 150, y: cy },
+        ])
+        expect(await scale(page)).toBeCloseTo(2, 2)
+        await expect(page.locator('.pc-zoom-chip')).toHaveText('Zoom 200%')
     })
 
     test('Cmd or Ctrl+G goes to a typed time, says so when the text is no time in the video, and Escape gives the keyboard back', async ({ page }) => {

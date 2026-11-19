@@ -81,4 +81,8 @@ test('garbage never throws and never points outside the video', () => {
         assert.ok(got === null || (Number.isFinite(got) && got >= 0 && got <= hourAndHalf), `${JSON.stringify(text)} gave ${got}`)
     }
     assert.equal(parseTime(undefined as unknown as string, hourAndHalf), null)
+    // A huge hour field with no length to refuse it: null, never an unsafe number of milliseconds.
+    assert.equal(parseTime('9007199254740:00:00', 0), null)
+    assert.equal(parseTime('NaN%', hourAndHalf), null)
+    assert.equal(parseTime('1e2%', hourAndHalf), null)
 })

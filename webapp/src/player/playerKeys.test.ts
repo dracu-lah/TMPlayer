@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
-import { actionFor, sheetGroups, type KeyContext, type Press } from './playerKeys.ts'
+import { actionFor, playerHearsKeys, sheetGroups, type Action, type KeyContext, type Press } from './playerKeys.ts'
 import { PAGE_STRINGS } from '../../strings.config.ts'
 
 const pc: KeyContext = { mac: false, chapters: false, paused: false, speedNormal: true, fullscreen: false, skipShown: false }
@@ -92,6 +92,14 @@ test('frame steps only while paused, G only while a skip is offered', () => {
     assert.deepEqual(act({ key: 'g' }, { skipShown: true }), { do: 'skip' })
 })
 
+test('a confirm question, a field being typed in or a control that took the key: the player hears nothing', () => {
+    assert.equal(playerHearsKeys({ handled: false, typing: false, confirm: false }), true)
+    // Escape answers the question; it never reaches the player's Back behind it.
+    assert.equal(playerHearsKeys({ handled: false, typing: false, confirm: true }), false)
+    assert.equal(playerHearsKeys({ handled: false, typing: true, confirm: false }), false)
+    assert.equal(playerHearsKeys({ handled: true, typing: false, confirm: false }), false)
+})
+
 test('Escape leaves full screen first, then the player', () => {
     assert.deepEqual(act({ key: 'Escape' }, { fullscreen: true }), { do: 'exitFullscreen' })
     assert.deepEqual(act({ key: 'Escape' }), { do: 'back' })
@@ -103,15 +111,53 @@ const has = (k: string) => typeof catalog[k.split('.')[0]]?.[k.slice(k.indexOf('
 const onPage = (k: string) => (PAGE_STRINGS as readonly string[]).includes(k) || (PAGE_STRINGS as readonly string[]).includes(k.split('.')[0])
 
 for (const isMac of [false, true]) {
-    test(`every line of the sheet is a key the player answers (${isMac ? 'Mac' : 'Windows and Linux'})`, () => {
-        const ctx: KeyContext = { ...pc, mac: isMac, paused: true, skipShown: true, speedNormal: false }
+    test(`every line of the sheet does what it says (${isMac ? 'Mac' : 'Windows and Linux'})`, () => {
+        // Paused (frame steps), a skip offered (G), chapters in the file (the command arrows), speed normal (Backspace is Back).
+        const ctx: KeyContext = { ...pc, mac: isMac, paused: true, skipShown: true, chapters: true }
+        // Each line's presses, in order, and what each must do.
+        const does: Record<string, Action[]> = {
+            'keys.row_play_pause': [{ do: 'togglePlay' }, { do: 'togglePlay' }],
+            'keys.row_seek_5s': [{ do: 'seek', by: -5 }, { do: 'seek', by: 5 }],
+            'keys.row_seek_10s': [{ do: 'seek', by: -10 }, { do: 'seek', by: 10 }],
+            'keys.row_seek_1min': [{ do: 'seek', by: -60 }, { do: 'seek', by: 60 }],
+            'keys.row_speed': [{ do: 'speed', up: true }, { do: 'speed', up: false }, { do: 'speedReset' }],
+            'keys.row_episodes': [{ do: 'episode', next: true }, { do: 'episode', next: false }],
+            'player.skip_intro': [{ do: 'skip' }],
+            'keys.row_jump': [{ do: 'jump', tenth: 0 }, { do: 'jump', tenth: 9 }],
+            'player.go_to_time': [{ do: 'goToTime' }],
+            'keys.row_undo_seek': [{ do: 'undoSeek' }],
+            'keys.row_start_end': [{ do: 'jump', tenth: 0 }, { do: 'end' }],
+            'keys.row_volume': [{ do: 'volume', by: 0.05 }, { do: 'volume', by: -0.05 }],
+            'keys.row_mute': [{ do: 'mute' }],
+            'keys.row_subtitles': [{ do: 'subtitles', back: false }, { do: 'subtitles', back: true }, { do: 'subtitlesToggle' }],
+            'keys.row_audio': [{ do: 'audio', back: false }, { do: 'audio', back: true }],
+            'keys.row_subtitle_delay': [{ do: 'subtitleDelay', by: -0.1 }, { do: 'subtitleDelay', by: 0.1 }],
+            'keys.row_subtitle_size': [{ do: 'subtitleSize', by: -1 }, { do: 'subtitleSize', by: 1 }],
+            'keys.row_fullscreen': [{ do: 'fullscreen' }],
+            'player.picture_shape': [{ do: 'shape' }],
+            'keys.row_zoom': [{ do: 'zoom', steps: 1 }, { do: 'zoom', steps: -1 }, { do: 'zoomReset' }],
+            'player.picture_in_picture': [{ do: 'pip' }],
+            'keys.row_screenshot': [{ do: 'screenshot', subtitles: true }, { do: 'screenshot', subtitles: false }],
+            'keys.row_back': [{ do: 'back' }, { do: 'back' }],
+            'keys.row_this_sheet': [{ do: 'sheet' }],
+            'keys.row_seek_5min': [isMac ? { do: 'seek', by: -300 } : { do: 'seek', by: 300 }],
+            'keys.row_chapter': [{ do: 'chapter', forward: false }, { do: 'chapter', forward: true }],
+            'keys.row_frame_step': [{ do: 'frame', forward: false }, { do: 'frame', forward: true }],
+            'keys.row_ab_repeat': [{ do: 'repeat' }],
+            'keys.row_bookmark': [{ do: 'bookmark' }],
+            'keys.row_wheel_seek': [],
+            'keys.row_details': [{ do: 'details' }],
+        }
+        // The speed line's Backspace is the reset: it is read with the speed changed.
+        const changed: Partial<KeyContext> = { speedNormal: false }
         const groups = sheetGroups(isMac)
         assert.equal(groups.length, 4)
-        for (const g of groups) {
-            for (const row of g.rows) {
-                for (const p of row.presses) assert.notEqual(actionFor(p, ctx), null, `${row.what}: ${JSON.stringify(p)}`)
-                assert.ok(row.keys || row.text, `${row.what} names its keys`)
-            }
+        const rows = groups.flatMap((g) => g.rows)
+        assert.deepEqual(rows.map((r) => r.what).sort(), Object.keys(does).sort(), 'every line has its answers, and no more')
+        for (const row of rows) {
+            const at = { ...ctx, ...(row.what === 'keys.row_speed' ? changed : {}) }
+            assert.deepEqual(row.presses.map((p) => actionFor(p, at)), does[row.what], row.what)
+            assert.ok(row.keys || row.text, `${row.what} names its keys`)
         }
         // The wheel seek is the one line with no key: the wheel is read by the picture, not here.
         const keyless = groups.flatMap((g) => g.rows).filter((r) => !r.presses.length).map((r) => r.what)

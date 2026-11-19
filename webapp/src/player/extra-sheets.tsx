@@ -1,9 +1,8 @@
 // The sheets behind the player's menu that are more than a list of choices: bookmarks (the app's
-// PlayerBookmarkSheets), subtitle style and timing (the "Subtitle style and timing" page), the
-// desktop's "?" key sheet (ShortcutSheet) and "Still watching?". The picker, menu and sheet
-// frames are sheets.tsx's.
+// PlayerBookmarkSheets) and subtitle style and timing (the "Subtitle style and timing" page). The
+// "?" key sheet is sheets.tsx's (ShortcutsSheet), as are the picker, menu and sheet frames.
 import { createSignal, For, Show } from 'solid-js'
-import { Add01Icon, Cancel01Icon, Delete02Icon, MinusSignIcon, PencilEdit02Icon } from '@hugeicons/core-free-icons'
+import { Add01Icon, Delete02Icon, MinusSignIcon, PencilEdit02Icon } from '@hugeicons/core-free-icons'
 import { Icon } from '../ui/Icon'
 import { t } from '../i18n'
 import { PhoneSheet } from './sheets'
@@ -153,92 +152,4 @@ const previewSize = { small: 15, medium: 18, large: 22, extra_large: 26 }
 function previewStyle(l: SubtitleLook) {
     const edge = l.edge === 'outline' ? '0 0 3px #000, 0 0 3px #000, 1px 1px 2px #000, -1px -1px 2px #000' : l.edge === 'shadow' ? '2px 2px 4px rgba(0,0,0,.9)' : 'none'
     return { 'font-size': `${previewSize[l.size]}px`, color: COLOUR_HEX[l.colour], background: `rgba(0,0,0,${l.box / 100})`, 'text-shadow': edge }
-}
-
-/** PlayerKeys.sheetGroups, for the keys this page answers. */
-export function ShortcutsSheet(props: { mac: boolean; onClose: () => void }) {
-    const cmd = t(props.mac ? 'keys.cmd' : 'keys.ctrl')
-    const groups: [string, [string, string][]][] = [
-        [
-            t('keys.group_playback'),
-            [
-                [t('keys.row_play_pause'), t('keys.space_k')],
-                [t('keys.row_seek_5s'), t('keys.left_right')],
-                [t('keys.row_seek_10s'), 'J, L'],
-                [t('keys.row_seek_1min'), t('keys.shift_left_right')],
-                [t('keys.row_speed'), t('keys.speed_keys')],
-                [t('keys.row_episodes'), t('keys.episodes_keys')],
-                [t('player.skip_intro'), 'G'],
-                [t('keys.row_jump'), t('keys.digits')],
-                [t('keys.row_undo_seek'), t('keys.shift_backspace')],
-                [t('keys.row_start_end'), t('keys.home_end')],
-            ],
-        ],
-        [
-            t('keys.group_audio_subtitles'),
-            [
-                [t('keys.row_volume'), t('keys.volume_wheel')],
-                [t('keys.row_mute'), 'M'],
-                [t('keys.row_subtitles'), t('keys.subtitles_keys')],
-                [t('keys.row_audio'), t('keys.audio_keys')],
-                [t('keys.row_subtitle_delay'), 'Z, X'],
-                [t('keys.row_subtitle_size'), t('keys.subtitle_size_keys')],
-            ],
-        ],
-        [
-            t('keys.group_window'),
-            [
-                [t('keys.row_fullscreen'), t('keys.fullscreen_keys')],
-                [t('player.picture_shape'), 'W'],
-                [t('keys.row_back'), t('keys.back_keys')],
-                [t('keys.row_this_sheet'), '?'],
-            ],
-        ],
-        [
-            t('keys.group_other'),
-            [
-                [t('keys.row_seek_5min'), t(props.mac ? 'keys.seek_5min_mac' : 'keys.seek_5min')],
-                [t('keys.row_chapter'), t('keys.chapter', { cmd })],
-                [t('keys.row_frame_step'), t('keys.comma_period')],
-                [t('keys.row_ab_repeat'), 'R'],
-                [t('keys.row_bookmark'), 'B'],
-                [t('keys.row_wheel_seek'), t('keys.shift_wheel')],
-                [t('keys.row_details'), 'I'],
-            ],
-        ],
-    ]
-    return (
-        <div class="pc-sheet-scrim shortcuts" onClick={(e) => e.target === e.currentTarget && props.onClose()}>
-            <div
-                class="pc-sheet pc-shortcuts"
-                role="dialog"
-                aria-label={t('player.shortcuts')}
-                ref={(el) => queueMicrotask(() => el.querySelector<HTMLElement>('.pc-sheet-close')?.focus({ preventScroll: true }))}
-            >
-                <div class="pc-sheet-head">
-                    <div><h2>{t('player.shortcuts')}</h2></div>
-                    <button type="button" class="pc-sheet-close" aria-label={t('common.close')} onClick={props.onClose}>
-                        <Icon icon={Cancel01Icon} size={24} />
-                    </button>
-                </div>
-                <div class="pc-shortcuts-body">
-                    <For each={groups}>
-                        {([name, rows]) => (
-                            <section>
-                                <h3>{name}</h3>
-                                <For each={rows}>
-                                    {([what, keys]) => (
-                                        <div class="pc-key-row">
-                                            <span>{what}</span>
-                                            <kbd>{keys}</kbd>
-                                        </div>
-                                    )}
-                                </For>
-                            </section>
-                        )}
-                    </For>
-                </div>
-            </div>
-        </div>
-    )
 }
