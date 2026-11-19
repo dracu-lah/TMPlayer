@@ -2,7 +2,7 @@
 // main thread. The page talks to it through `api` below by message (./rpc.ts), and never loads
 // mtcute itself.
 import { BaseTelegramClient, SentCode as MtSentCode, TelegramClient, User, type Message, type tl } from '@mtcute/web'
-import { rules } from '../rules'
+import { rules, type Video } from '../rules'
 import { cryptoProvider } from './crypto'
 import { findChatSubtitles, forgetChatSubtitles } from './chatsubs'
 import { homePage, rowShown } from './home'
@@ -315,6 +315,28 @@ export const api = {
     /** "You'll see videos from 50 MB upwards." */
     async sizeRange(_: Ctx, minBytes: number, maxBytes: number): Promise<string> {
         return (await rules()).sizeRange(minBytes, maxBytes)
+    },
+
+    /** A chat's stored filter line as the Sort menu's chips read it (U6): each part the rules cannot read is that filter off. */
+    async facets(_: Ctx, line: string): Promise<{ length: string; picture: string; hdr: boolean; subtitles: boolean; language: string | null; added: string; count: number }> {
+        const f = (await rules()).facetsRead(line.slice(0, 200))
+        return { length: f.length, picture: f.picture, hdr: f.hdr, subtitles: f.subtitles, language: f.language ?? null, added: f.added, count: f.count }
+    },
+
+    /** `line` with one filter changed, as the line the page stores ("clear" drops them all). */
+    async facetsWith(_: Ctx, line: string, field: string, value: string | null): Promise<string> {
+        return (await rules()).facetsWith(line.slice(0, 200), field, value)
+    },
+
+    /**
+     * Which of the loaded videos "Play random" plays (U16, the apps' rule): an unwatched one while
+     * any is left, never `last` again while another is there. `ids` are the videos on screen, so a
+     * chat of 20,000 costs nothing extra; null for none.
+     */
+    async randomPick(_: Ctx, ids: string[], watched: string[], last: string | null): Promise<string | null> {
+        // The rule reads a video's id and nothing else of it.
+        const videos = ids.slice(0, 50_000).map((id) => ({ id }) as Video)
+        return (await rules()).playRandom(videos, watched.slice(0, 200_000), last) ?? null
     },
 
     /** Settings' rewind choices in milliseconds, 0 for off, and the default. */

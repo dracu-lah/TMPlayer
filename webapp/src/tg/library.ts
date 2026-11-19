@@ -465,7 +465,20 @@ function arrange(s: ChatState, view: ChatView): ChatPage {
     // Under words, what Telegram's search found beyond the loaded pages is listed with them.
     const videos = [...s.videos.values()]
     if (query) for (const [id, v] of s.hits) if (!s.videos.has(id)) videos.push(v)
-    const shelf = r.shelf(videos, view.sort, view.minBytes, view.maxBytes, view.watched, view.started)
+    // Words list what Telegram found, whatever the chat's filters say: a filter would hide the very thing looked for.
+    const shelf = r.shelfView(
+        videos,
+        view.sort,
+        query ? 'All' : (view.filter ?? 'All'),
+        query ? null : (view.facets ?? '').slice(0, 200),
+        view.minBytes,
+        view.maxBytes,
+        view.watched,
+        view.started,
+        view.touched?.slice(0, 20_000) ?? [],
+        view.touchedAt?.slice(0, 20_000) ?? [],
+        Math.floor(Date.now() / 1000),
+    )
     let tiles = tilesOf(shelf, s.items, view, { r, videoOf: (id) => s.videos.get(id) ?? s.hits.get(id) })
     if (query) {
         const texts = tiles.map((t) => {
@@ -482,6 +495,10 @@ function arrange(s: ChatState, view: ChatView): ChatPage {
         photo: s.photo,
         tiles,
         hiddenBySize: shelf.hiddenBySize,
+        total: shelf.total,
+        hiddenByFilter: shelf.hiddenByFilter,
+        unknown: shelf.unknown,
+        languages: shelf.languages.slice(0, 40),
         loaded: s.videos.size,
         done: query ? searchDone(s, query) : done(s),
         archives: [...s.archives.entries()].sort((a, b) => b[0] - a[0]).map(([, name]) => name),

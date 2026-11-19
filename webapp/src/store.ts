@@ -9,6 +9,7 @@ import { clearIndex, POSTERS as POSTER_CACHE, THUMBS, touch } from './cacheBound
 import { cleanHome } from './ui/homeSettings'
 import { decodePick, encodePick, type Pick } from './pick'
 import * as Lists from './ui/lists'
+import { cleanPref, isDefault, type ChatPref } from './ui/videoFilter'
 import { resolveSpeed, sanitiseBoost, speedTarget, speedToKeep, type SpeedScopes } from './player/extras'
 import { tdlibMessageId } from './sync/format'
 
@@ -386,6 +387,22 @@ export async function watchedList(): Promise<{ chatId: number; messageId: number
         .sort((a, b) => b.time - a.time)
 }
 
+/**
+ * When each video was last watched or left part way, for the Last played order: ids and times in
+ * milliseconds, newest first, at most 20,000 (a chat's order reads what has loaded of it).
+ */
+export async function touches(): Promise<{ ids: string[]; times: number[] }> {
+    const [left, done] = await Promise.all([resumes(), watchedList()])
+    const at = new Map<string, number>()
+    for (const r of left) at.set(id(r.chatId, r.messageId), r.time)
+    for (const w of done) {
+        const key = id(w.chatId, w.messageId)
+        at.set(key, Math.max(at.get(key) ?? 0, w.time))
+    }
+    const newest = [...at].sort((a, b) => b[1] - a[1]).slice(0, 20_000)
+    return { ids: newest.map(([k]) => k), times: newest.map(([, t]) => t) }
+}
+
 /** Marks a video watched (its place forgotten, as finishing it does) or not watched. */
 export function setWatched(chatId: number, messageId: number, on: boolean) {
     const key = id(chatId, messageId)
@@ -618,6 +635,20 @@ export function rememberHomeChats(rows: readonly HomeChatRow[]) {
 
 export async function starred(): Promise<number[]> {
     return (await all<{ chatId: number; time: number }>('star:')).sort((a, b) => a.time - b.time).map((s) => s.chatId)
+}
+
+// A chat's filters (U6): the Show filter and the line of the others, kept for each chat on this device.
+
+/** One chat's filters; nothing stored is the default. A stored value that does not hold up is the default (ui/videoFilter.ts). */
+export async function chatPref(chatId: number): Promise<ChatPref> {
+    return cleanPref(await read<unknown>(`view:${chatId}`))
+}
+
+/** Remembers a chat's filters; the default is no entry at all, so the store holds only chats that are filtered. */
+export function setChatPref(chatId: number, pref: ChatPref) {
+    const next = cleanPref(pref)
+    if (isDefault(next)) remove(`view:${chatId}`, true)
+    else write(`view:${chatId}`, next)
 }
 
 // The chats the viewer added (HX27, the apps' AddedChats)

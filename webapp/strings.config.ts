@@ -732,6 +732,7 @@ export const PAGE_STRINGS = [
     'grid.filter_length_long',
     'grid.filter_length_short',
     'grid.filter_on',
+    'grid.filter_paused',
     'grid.filter_picture_4k',
     'grid.filter_picture_720',
     'grid.filter_picture_label',

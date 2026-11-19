@@ -141,7 +141,7 @@ export interface ChatsEvent {
 }
 
 /** Video sort orders, as the app's VideoSort names them. */
-export type Sort = 'Newest' | 'Oldest' | 'Name' | 'Year' | 'Size' | 'Longest' | 'Unwatched'
+export type Sort = 'Newest' | 'Oldest' | 'Name' | 'Year' | 'Size' | 'Longest' | 'LastPlayed' | 'Unwatched'
 
 /** How a chat's grid is asked for: the app's order, size limits and progress, and words to look for. */
 export interface ChatView {
@@ -152,6 +152,15 @@ export interface ChatView {
     watched: string[]
     started: string[]
     query: string
+    /**
+     * The chat's Show filter and the line of its other filters (ui/videoFilter.ts), as the worker's
+     * rules read them. Absent or "All" and "": every video shows.
+     */
+    filter?: string
+    facets?: string
+    /** For the Last played order: when each video was last watched, ids with their times (milliseconds). */
+    touched?: string[]
+    touchedAt?: number[]
     /**
      * After a video that is not an episode, the chat's own next one in this order (the app's
      * ChatOrder): the watch page's Next and autoplay follow the grid's sort. Off or absent: it stops.
@@ -188,6 +197,13 @@ export interface ChatPage {
     tiles: Tile[]
     /** Videos the size limits left out of `tiles`. */
     hiddenBySize: number
+    /** Cards before the chat's filters, of the videos loaded so far; `hiddenByFilter` of them are screened out. */
+    total: number
+    hiddenByFilter: number
+    /** Cards kept after the matches because nothing states their length or picture size. */
+    unknown: number
+    /** The audio languages the loaded names state, most common first (the Language chips). */
+    languages: string[]
     /** Videos loaded so far, before the limits. */
     loaded: number
     /** Every video in the chat is loaded. */
