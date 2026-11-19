@@ -857,4 +857,69 @@ class WebRulesTest {
         assertEquals("en", languageResolve(null, emptyArray()))
         assertEquals("en", languageResolve("xx-garbage", arrayOf("")))
     }
+    private fun topic(id: Int, name: String, pinned: Boolean = false, closed: Boolean = false, hasVideos: Boolean = true): WebTopic {
+        val o: dynamic = js("({})")
+        o.id = id.toDouble()
+        o.name = name
+        o.pinned = pinned
+        o.closed = closed
+        o.hasVideos = hasVideos
+        return o.unsafeCast<WebTopic>()
+    }
+
+    private fun forum(id: Int, title: String, archived: Boolean = false): WebTopicChat {
+        val o: dynamic = js("({})")
+        o.id = id.toDouble()
+        o.title = title
+        o.archived = archived
+        return o.unsafeCast<WebTopicChat>()
+    }
+
+    @Test
+    fun `topics are found by name inside the apps' budget`() {
+        val budget = topicBudget()
+        assertEquals(12.0, budget.chats)
+        assertEquals(3.0, budget.atOnce)
+        assertEquals(30.0, budget.maxHits)
+        isPlain(budget)
+        // Accents and emoji fold, a word one letter out lands, and every word has to.
+        assertTrue(topicScore("☕ Café talks", "cafe") > 0)
+        assertTrue(topicScore("Season 2", "season 7") == 0.0)
+        assertEquals(0.0, topicScore("Season 2", "   "))
+        assertEquals(0.0, topicScore("Season 2", "🙂"))
+        val hits = topicHits(5.0, "Course", arrayOf(topic(1, "Season 2"), topic(2, "Season 7", closed = true), topic(2, "Season 7"), topic(3, "Chat")), "season", false)
+        // A topic listed twice is one hit, and a topic whose name does not answer is none.
+        assertEquals(2, hits.size)
+        isPlain(hits[0])
+        // Telegram's own match is kept when our folding misses it, at the lowest score.
+        val kept = topicHits(5.0, "Course", arrayOf(topic(9, "Qwerty")), "zzz", true)
+        assertEquals(1.0, kept.single().score)
+        assertEquals(0, topicHits(5.0, "Course", arrayOf(topic(9, "Qwerty")), "zzz", false).size)
+        // Best first: a topic with videos over one with none, pinned, open, then the chat list's order.
+        val ranked = topicRank(
+            arrayOf(
+                topicHits(6.0, "B", arrayOf(topic(1, "Lessons", hasVideos = false)), "lessons", false)[0],
+                topicHits(5.0, "A", arrayOf(topic(1, "Lessons", closed = true)), "lessons", false)[0],
+                topicHits(7.0, "C", arrayOf(topic(1, "Lessons", pinned = true)), "lessons", false)[0],
+                topicHits(8.0, "D", arrayOf(topic(1, "Lessons")), "lessons", false)[0],
+            ),
+            arrayOf(8.0, 7.0, 6.0, 5.0),
+        )
+        assertContentEquals(arrayOf(7.0, 8.0, 5.0, 6.0), ranked.map { it.chatId }.toTypedArray())
+        assertFalse(ranked.last().hasVideos)
+        // 100 hits are cut to the budget's thirty.
+        val many = (1..100).flatMap { topicHits(it.toDouble(), "G$it", arrayOf(topic(1, "Lessons")), "lessons", false).toList() }
+        assertEquals(30, topicRank(many.toTypedArray(), emptyArray()).size)
+    }
+
+    @Test
+    fun `topic candidates are the added groups, the named ones first, and at most twelve`() {
+        val chats = arrayOf(forum(1, "Music"), forum(2, "Course Lessons"), forum(3, "Old", archived = true), forum(4, "Other"))
+        assertContentEquals(arrayOf(2.0, 1.0, 4.0), topicCandidates(chats, "course lessons", arrayOf(1.0, 2.0, 4.0), false))
+        assertContentEquals(arrayOf(2.0, 1.0, 3.0, 4.0), topicCandidates(chats, "course", null, true))
+        assertContentEquals(arrayOf(1.0, 2.0, 4.0), topicCandidates(chats, "x", null, false))
+        assertEquals(0, topicCandidates(chats, "x", emptyArray(), true).size)
+        val big = Array(3000) { forum(it + 1, "Group $it") }
+        assertEquals(12, topicCandidates(big, "x", null, true).size)
+    }
 }
