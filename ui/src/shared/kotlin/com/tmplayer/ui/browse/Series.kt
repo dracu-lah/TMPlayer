@@ -442,6 +442,9 @@ fun EpisodeRow(
         large = large,
         holdOverview = showOverview && holdOverview,
         credit = guide?.source?.takeIf { it.isNotBlank() }?.let { com.tmplayer.online.MetaWords.creditFrom(it) },
+        // The provider's air date and running time, on the show's page only: the player's list keeps its facts.
+        airDate = guide?.airDate?.takeIf { showOverview },
+        runtimeMin = guide?.runtimeMin?.takeIf { showOverview },
     )
 }
 
@@ -547,6 +550,10 @@ private fun EpisodeLine(
     holdOverview: Boolean = false,
     /** "From Kitsu": whose words an anime's episode carries, on the line of the video's own facts. */
     credit: String? = null,
+    /** The provider's `yyyy-MM-dd` for the episode, written in the UI language in the line of facts. */
+    airDate: String? = null,
+    /** The provider's running time, for an episode whose file does not say how long it is. */
+    runtimeMin: Int? = null,
 ) {
     val s = LocalStrings.current
     val tv = !isTouch()
@@ -640,20 +647,25 @@ private fun EpisodeLine(
             // height when the provider's name arrives.
             val stopped = point?.takeIf { it.positionMs > 0 && !finished }
                 ?.let { s.seriesStoppedAt(StreamStats.formatClock(it.positionMs)) }
+            val aired = remember(airDate, s) { airDate?.let { day(it, s) } }
             val meta = listOfNotNull(
-                MediaMapper.formatDuration(item.durationSec).ifEmpty { null },
+                MediaMapper.formatDuration(item.durationSec).ifEmpty { null }
+                    ?: runtimeMin?.takeIf { it in 1..MAX_RUNTIME_MIN }?.let { MediaMapper.formatDuration(it * 60) }?.ifEmpty { null },
+                aired,
                 // Which of the episode's copies the card plays, where it has more than one.
                 item.takeIf { episode.copies.size > 1 && VideoCopies.heightOf(it) != null }?.copyQuality(),
-                MediaMapper.formatSize(item.sizeBytes).ifEmpty { null },
                 stopped ?: s.seriesWatchedLabel.takeIf { finished },
                 credit,
+                // The file's size is a detail, last in the line, never dropped.
+                MediaMapper.formatSize(item.sizeBytes).ifEmpty { null },
             ).joinToString("  ·  ")
             if (meta.isNotEmpty()) {
                 Text(
                     meta,
                     style = if (large) MaterialTheme.typography.labelLarge else MaterialTheme.typography.labelMedium,
                     color = if (stopped != null || finished) Tone.accent else Tone.muted,
-                    maxLines = 1,
+                    // On the show page the size is last: it wraps rather than being cut off.
+                    maxLines = if (airDate != null) 2 else 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
@@ -711,6 +723,8 @@ internal fun EpisodeStill(url: String?, modifier: Modifier = Modifier) {
     }
 }
 
+/** A running time past a day is garbage from outside, not a length. */
+private const val MAX_RUNTIME_MIN = 24 * 60
 private const val EPISODE_STILL_MIN_DECODE = 160
 private const val EPISODE_STILL_MAX_DECODE = 420
 private const val EPISODE_STILL_FADE_MS = 240
@@ -920,7 +934,6 @@ fun SeriesPanel(
     // The provider's names under the chat's numbers, where the chat counts straight through (issue 31).
     val names = rememberSeasonEpisodes(meta, shown.number, remember(shown) { SeriesGuideRows.numbers(shown) }, extras?.seasonList.orEmpty())
     val rows = remember(series, shown, guide, names, extras, today) { SeriesGuideRows.rows(series, shown, guide, names, extras, today) }
-    val gapPrompt = remember(series.key) { GapPrompt() }
     // The first frame waits a moment for what the caches hold, so a show seen before is drawn
     // whole at once; what is still coming after that has its place held (DetailSlots.kt).
     val namesSettled = meta == null || meta.kind != com.tmplayer.online.MetaKind.Show || names != null
@@ -1352,16 +1365,9 @@ fun SeriesPanel(
         val rowCard: @Composable (EpisodeGuide.Row, Modifier) -> Unit = { row, cardModifier ->
             when (row) {
                 is EpisodeGuide.Row.Have -> episodeCard(row.episode, cardModifier)
+                // Not a control: no click, no focus, so a remote's Up and Down pass over it.
                 is EpisodeGuide.Row.Gap -> androidx.compose.runtime.key(row.key) {
-                    val gapFocus = remember { FocusRequester() }
-                    GapRow(
-                        row.episode,
-                        large = large,
-                        onClick = { gapPrompt.show(row.episode) { runCatching { gapFocus.requestFocus() } } },
-                        modifier = cardModifier,
-                        focusRequester = gapFocus,
-                        art = meta?.let { it.backdropUrl ?: it.posterUrl },
-                    )
+                    GapRow(row.episode, large = large, modifier = cardModifier)
                 }
                 is EpisodeGuide.Row.Pack -> androidx.compose.runtime.key(row.key) {
                     val packFocus = remember { FocusRequester() }
@@ -1499,7 +1505,6 @@ fun SeriesPanel(
             PageBackBand(list, meta?.title?.takeIf { it.isNotBlank() } ?: series.title, back, barInsets, Modifier.align(Alignment.TopStart))
         }
     }
-    GapPromptHost(gapPrompt, series.title, onFindElsewhere)
     if (showActions != null && marking.value) {
         ShowMenu(series, watch, showActions, onDismiss = { marking.value = false }, season = shown, marksOnly = true)
     }

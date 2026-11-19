@@ -15,16 +15,14 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -34,10 +32,13 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.tmplayer.data.EpisodeGuide
+import com.tmplayer.data.MediaMapper
 import com.tmplayer.data.Series
 import com.tmplayer.data.SeriesSeason
 import com.tmplayer.i18n.Messages
@@ -52,7 +53,6 @@ import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.collectIsFocusVisibleAsState
 import com.tmplayer.ui.theme.focusRing
-import kotlinx.coroutines.delay
 
 /*
  * T9: the series page lists every season and episode the metadata knows, laid over the videos the
@@ -135,75 +135,122 @@ internal val EpisodeGuide.Row.number: Int
 fun seasonName(number: Int, s: Messages): String = if (number == 0) s.seriesSpecials else s.seriesSeason(number)
 
 /**
- * An episode the metadata lists and no chat holds: quiet, with its data title and a plain line
- * saying why it does not play. It is a control, not a decoration: pressed it says what it is
- * ([GapCard]); it never plays.
+ * An episode the metadata lists and no chat holds, laid out as the card of an episode the chat
+ * holds ([EpisodeRow]) and dimmed: its still (else its number), its data title, its air date, and a
+ * small tag saying why it does not play. It is not a control: no click, no focus (a remote's Up and
+ * Down move over it to the next episode that plays), and no Play. A screen reader reads one line,
+ * "Episode 7, not in this chat".
  */
 @Composable
-internal fun GapRow(
+fun GapRow(
     episode: EpisodeGuide.Episode,
     large: Boolean,
-    onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    focusRequester: FocusRequester? = null,
-    /** The show's own picture, drawn dim under the episode's number where the provider has no still for it. */
-    art: String? = null,
 ) {
     val s = LocalStrings.current
     val tv = !isTouch()
-    val interactions = remember { MutableInteractionSource() }
-    val focused by interactions.collectIsFocusVisibleAsState()
     val shape = RoundedCornerShape(Corner.Medium)
+    val meta = episode.meta
     // A placeholder the provider writes for an episode nobody has named ("Episode 5") is no name.
-    val name = episode.meta?.name?.trim()?.takeIf { it.isNotEmpty() && !com.tmplayer.online.EpisodeNames.placeholder(it, episode.number) }
+    val name = meta?.name?.trim()?.takeIf { it.isNotEmpty() && !com.tmplayer.online.EpisodeNames.placeholder(it, episode.number) }
         ?: s.seriesEpisode(episode.number)
-    val why = gapLine(episode, s)
-    val ink = if (focused) Tone.onFocusFill else Tone.text
+    val upcoming = episode.state == EpisodeGuide.State.Upcoming
+    val airs = remember(episode.airDate, s) { episode.airDate?.let { day(it, s) } }
+    val tag = if (upcoming) airs?.let { s.detailAirsOn(it) } ?: s.detailUpcoming else s.seriesGapNotInChat
+    val spoken = if (upcoming) s.seriesGapSpokenUpcoming(episode.number, airs ?: s.detailUpcoming) else s.seriesGapSpokenMissing(episode.number)
+    val facts = listOfNotNull(
+        meta?.runtimeMin?.takeIf { it in 1..GAP_MAX_RUNTIME_MIN }?.let { MediaMapper.formatDuration(it * 60).ifEmpty { null } },
+        // An upcoming one says its day in the tag already.
+        airs.takeIf { !upcoming },
+    ).joinToString("  ·  ")
+    val overview = meta?.overview?.trim()?.takeIf { it.isNotEmpty() }
     Row(
         modifier
             .fillMaxWidth()
-            .heightIn(min = if (tv || large) 72.dp else 64.dp)
-            .alpha(if (focused) 1f else QUIET)
+            .alpha(GAP_ALPHA)
             .clip(shape)
-            .background(if (focused) Tone.focusFill else Tone.surface)
-            .border(1.dp, if (focused) Color.Transparent else Tone.outline, shape)
-            .focusRing(focused, shape)
-            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-            .semantics(mergeDescendants = true) { role = Role.Button }
-            .clickable(
-                interactionSource = interactions,
-                indication = if (tv) null else androidx.compose.foundation.LocalIndication.current,
-                onClick = onClick,
-            )
-            .padding(horizontal = if (tv || large) 16.dp else 12.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(if (tv || large) 16.dp else 12.dp),
+            .background(Tone.surface)
+            .border(1.dp, Tone.outline, shape)
+            .semantics(mergeDescendants = true) { contentDescription = spoken }
+            .padding(if (tv || large) 12.dp else 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(if (large) 20.dp else if (tv) 16.dp else 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        GapPicture(episode.meta?.stillUrl, art, episode.number, large || tv)
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Box(
+            Modifier
+                .width(if (large) GAP_ART_LARGE else if (tv) GAP_ART_TV else GAP_ART_TOUCH)
+                .aspectRatio(16f / 9f)
+                .clip(RoundedCornerShape(Corner.Small))
+                .background(Tone.surfaceHigh),
+        ) {
             Text(
-                s.seriesEpisodeShort(episode.season, episode.number),
-                style = MaterialTheme.typography.labelMedium,
-                color = if (focused) ink else Tone.muted,
+                episode.number.toString(),
+                style = MaterialTheme.typography.titleMedium,
+                color = Tone.muted,
                 maxLines = 1,
+                modifier = Modifier.align(Alignment.Center),
             )
+            EpisodeStill(meta?.stillUrl, Modifier.fillMaxSize())
+        }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    s.seriesEpisodeShort(episode.season, episode.number),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Tone.muted,
+                    maxLines = 1,
+                )
+                Text(
+                    tag,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Tone.muted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(Tone.surfaceHigh)
+                        .padding(horizontal = 8.dp, vertical = 1.dp),
+                )
+            }
             Text(
                 name,
                 style = if (tv || large) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleSmall,
-                color = ink,
-                maxLines = 2,
+                color = Tone.text,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text(
-                why,
-                style = MaterialTheme.typography.bodySmall,
-                color = if (focused) ink else Tone.muted,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
+            if (facts.isNotEmpty()) {
+                Text(
+                    facts,
+                    style = if (large) MaterialTheme.typography.labelLarge else MaterialTheme.typography.labelMedium,
+                    color = Tone.muted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (overview != null) {
+                Text(
+                    overview,
+                    style = if (tv || large) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodySmall,
+                    color = Tone.muted,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
         }
     }
 }
+
+/** What the page dims an episode the chat lacks to (about 45%): text, still and card together. */
+internal const val GAP_ALPHA = 0.45f
+
+private const val GAP_MAX_RUNTIME_MIN = 24 * 60
+private val GAP_ART_TOUCH = 128.dp
+private val GAP_ART_TV = 176.dp
+private val GAP_ART_LARGE = 208.dp
 
 /**
  * A season, or several, posted as one file ([com.tmplayer.data.SeriesPack]): a card that plays the
@@ -272,72 +319,6 @@ internal fun PackRow(
 internal fun packTitle(pack: com.tmplayer.data.SeriesPack, s: Messages): String =
     pack.seasonEnd?.takeIf { it > pack.season }?.let { s.seriesPackSpan(pack.season, it) } ?: s.seriesPackWhole
 
-/**
- * The picture of an episode no chat holds (T11): the provider's still once it is decoded, and
- * until then, and for an episode it has none for, the show's own picture dimmed with the
- * episode's number over it, never an empty box. It holds its 16:9 place from the first frame, so
- * the still arriving, or the title, moves nothing.
- */
-@Composable
-private fun GapPicture(still: String?, art: String?, number: Int, wide: Boolean) {
-    Box(
-        Modifier
-            .width(if (wide) GAP_ART_WIDE else GAP_ART)
-            .aspectRatio(16f / 9f)
-            .clip(RoundedCornerShape(Corner.Small))
-            .background(Tone.surfaceHigh),
-    ) {
-        com.tmplayer.ui.online.MetaPicture(art, Modifier.fillMaxSize())
-        Box(Modifier.matchParentSize().background(Color.Black.copy(alpha = 0.6f)))
-        Text(
-            number.toString(),
-            style = MaterialTheme.typography.titleMedium,
-            color = Color.White,
-            maxLines = 1,
-            modifier = Modifier.align(Alignment.Center),
-        )
-        EpisodeStill(still, Modifier.fillMaxSize())
-    }
-}
-
-private val GAP_ART = 96.dp
-private val GAP_ART_WIDE = 128.dp
-
-private fun gapLine(episode: EpisodeGuide.Episode, s: Messages): String = when (episode.state) {
-    EpisodeGuide.State.Upcoming -> episode.airDate?.let { s.detailAirsOn(day(it, s)) } ?: s.detailUpcoming
-    else -> s.seriesNotInChats
-}
-
-/**
- * What a pressed gap says: what the episode is, that it is not in the chats (or when it airs), and
- * for a missing one a single way on, "Find in other chats", which searches the show and its code.
- * Back or Close leaves everything as it was.
- */
-@Composable
-internal fun GapCard(
-    episode: EpisodeGuide.Episode,
-    showTitle: String,
-    onFind: ((String) -> Unit)?,
-    onDismiss: () -> Unit,
-) {
-    val s = LocalStrings.current
-    val title = listOfNotNull(episode.code, episode.meta?.name?.trim()?.takeIf { it.isNotEmpty() }).joinToString("  ")
-    val lines = buildList {
-        if (episode.state == EpisodeGuide.State.Missing && onFind != null) {
-            // An anime counted straight through is named "Show - 123", not "S01E123": ask for its number.
-            val code = if (episode.meta?.source.isNullOrBlank()) episode.code else episode.number.toString()
-            add(MenuLine(s.seriesFindElsewhere, TmIcons.Search, null) { onDismiss(); onFind(findQuery(showTitle, code)) })
-        }
-    }
-    val body = when (episode.state) {
-        EpisodeGuide.State.Upcoming -> episode.airDate?.let { s.detailAirsOn(day(it, s)) } ?: s.detailUpcoming
-        else -> s.seriesGapMissing(episode.code)
-    }
-    // Whose words the title is, where the episode's list is merged from several sites (an anime's).
-    val source = episode.meta?.source?.takeIf { it.isNotBlank() }?.let { com.tmplayer.online.MetaWords.creditFrom(it) }
-    MenuCard(title = title, subtitle = listOfNotNull(showTitle, source).joinToString("  ·  "), lines = lines, empty = body, onDismiss = onDismiss, cancel = s.commonClose)
-}
-
 /** "Harbour Notes S02E04": the show and the code, as a file or a caption writes them. */
 internal fun findQuery(showTitle: String, code: String): String = "$showTitle $code".trim()
 
@@ -368,46 +349,3 @@ internal fun SeasonGapNote(number: Int, showTitle: String, state: EpisodeGuide.S
         }
     }
 }
-
-/**
- * Which gap is open on the page, and where the focus goes back to when its card closes (a remote
- * leaves the card on the row it opened it from). One per page.
- */
-internal class GapPrompt {
-    var open by mutableStateOf<EpisodeGuide.Episode?>(null)
-    private var refocus: (() -> Unit)? = null
-
-    fun show(episode: EpisodeGuide.Episode, back: () -> Unit) {
-        refocus = back
-        open = episode
-    }
-
-    fun close() {
-        open = null
-    }
-
-    fun refocusNow() {
-        refocus?.invoke()
-    }
-}
-
-/** The card for [prompt]'s open gap, and the focus back on its row after it closes. */
-@Composable
-internal fun GapPromptHost(prompt: GapPrompt, showTitle: String, onFind: ((String) -> Unit)?) {
-    val episode = prompt.open
-    if (episode != null) GapCard(episode, showTitle, onFind) { prompt.close() }
-    var wasOpen by remember { mutableStateOf(false) }
-    LaunchedEffect(episode == null, wasOpen) {
-        if (episode != null) {
-            wasOpen = true
-        } else if (wasOpen) {
-            wasOpen = false
-            // The dialog's window gives the focus back a frame or two after it closes.
-            delay(FOCUS_BACK_MS)
-            prompt.refocusNow()
-        }
-    }
-}
-
-private const val QUIET = 0.62f
-private const val FOCUS_BACK_MS = 80L
