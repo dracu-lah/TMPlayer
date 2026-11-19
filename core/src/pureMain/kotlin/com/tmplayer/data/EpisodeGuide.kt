@@ -3,6 +3,7 @@ package com.tmplayer.data
 import com.tmplayer.platform.sortedDistinct
 import com.tmplayer.online.MetaAiring
 import com.tmplayer.online.MetaEpisode
+import com.tmplayer.online.MetaExtras
 import com.tmplayer.online.MetaSeason
 
 /**
@@ -104,6 +105,27 @@ object EpisodeGuide {
             if (info == null || (info.episodeCount > 0 && (numbers.maxOrNull() ?: 0) > info.episodeCount)) off += numbers.size
         }
         return held == 0 || off * 2 <= held
+    }
+
+    /**
+     * The seasons and next episode to lay the chat over, and whether they are TMDB's season split
+     * ([com.tmplayer.online.SeasonSplit]): ask [com.tmplayer.online.OnlineMetadata.season] with
+     * the same [split], so the episodes are numbered the same way.
+     */
+    data class Numbering(val seasons: List<MetaSeason>, val next: MetaAiring?, val split: Boolean)
+
+    /**
+     * Which of the show's numberings the chat follows. A show TMDB lists as one season that its
+     * episode group splits in several has two: the split (S02E01, as most releases number it) and
+     * TMDB's own (S01E26, as a release counting straight through does). The split is taken unless
+     * the chat disagrees with it and agrees with TMDB's own; every other show has one numbering.
+     */
+    fun numbering(series: Series?, extras: MetaExtras?): Numbering {
+        if (extras == null) return Numbering(emptyList(), null, false)
+        val split = extras.seasonGroup != null && extras.listedSeasons.isNotEmpty()
+        val first = Numbering(extras.seasonList, extras.nextEpisode, split)
+        if (!split || agrees(series, extras.seasonList)) return first
+        return if (agrees(series, extras.listedSeasons)) Numbering(extras.listedSeasons, extras.listedNext, false) else first
     }
 
     private fun providerSeasons(listed: List<MetaSeason>): Map<Int, MetaSeason> =

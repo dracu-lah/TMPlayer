@@ -103,6 +103,8 @@ class GarbageInputTest {
         "{\"results\":\"x\"}", "{\"results\":[1,null,{\"id\":\"x\",\"title\":{},\"release_date\":5}]}",
         "{\"id\":{},\"name\":[],\"first_air_date\":\"20\",\"poster_path\":7,\"vote_average\":\"high\"}",
         "{\"episodes\":[{\"episode_number\":\"one\",\"air_date\":null}]}", "{\"seasons\":5}",
+        "{\"seasons\":[{\"season_number\":1,\"episode_count\":1e999}],\"episode_groups\":{\"results\":[null,{\"id\":5,\"type\":\"x\",\"group_count\":1e999,\"episode_count\":-1,\"name\":{}},{\"id\":\"\"}]}}",
+        "{\"groups\":[{\"order\":\"x\",\"episodes\":[{\"season_number\":\"1\",\"episode_number\":1e20},null]},null,{\"episodes\":{}},{\"order\":-1,\"episodes\":[{\"season_number\":1,\"episode_number\":1}]}]}",
         "{\"data\":{\"Page\":{\"media\":[null,{\"id\":\"q\",\"title\":null}]}}}", "{\"data\":null}",
         "{\"Response\":\"False\",\"Error\":7}", "{\"Ratings\":[{\"Source\":null,\"Value\":\"%\"}]}",
         "{\"results\":{\"bindings\":[{\"x\":{}}]}}",
@@ -913,6 +915,21 @@ class GarbageInputTest {
                     tmdb.showGuide("k", "1", "en")
                     tmdb.episodeGroup("k", "g", "en")
                     tmdb.seasons("k", "1", listOf(1, 2, 3), "en")
+                }
+            }
+            // A one-season show's split by its episode group: whatever came back is chosen from and built, never thrown on.
+            survive("SeasonSplit", shown) {
+                runBlocking {
+                    val got = (tmdb.extrasAndGroups("k", false, "1", "en", "GB") as? com.tmplayer.online.MetaReply.Ok)?.value
+                    val listed = got?.extras?.seasonList.orEmpty().ifEmpty { listOf(com.tmplayer.online.MetaSeason(1, 37)) }
+                    val groups = got?.groups.orEmpty() + listOf(com.tmplayer.online.TmdbEpisodeGroup("g", 6, 37, "Seasons", 2))
+                    val episodes = (tmdb.episodeGroup("k", "g", "en") as? com.tmplayer.online.MetaReply.Ok)?.value.orEmpty()
+                    com.tmplayer.online.SeasonSplit.choose(listed, groups)
+                    val kept = com.tmplayer.online.SeasonSplit.read(com.tmplayer.online.SeasonSplit.store(episodes)).orEmpty()
+                    com.tmplayer.online.SeasonSplit.build("g", kept, listed)?.let { split ->
+                        split.next(com.tmplayer.online.MetaAiring(1, Int.MAX_VALUE, "x"))
+                        split.applyTo(got?.extras ?: com.tmplayer.online.MetaExtras())
+                    }
                 }
             }
             survive("KitsuApi", shown) { runBlocking { val kitsu = com.tmplayer.online.KitsuApi(http, limiter, "t"); kitsu.idFor("1"); kitsu.episodes("1", 0) } }

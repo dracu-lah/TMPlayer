@@ -811,20 +811,43 @@ class OnlineMetadata(
         VideoIds(tmdb = info.id.takeIf { info.provider == MetaProvider.Tmdb && it.all(Char::isDigit) }, imdb = imdb)
     }.getOrDefault(VideoIds())
 
-    /** The provider's extras alone, from memory, the disk cache or the provider. */
+    /**
+     * The provider's extras alone, from memory, the disk cache or the provider. A TMDB show of one
+     * season kept from before its episode groups were read is asked once more, for its split
+     * ([SeasonSplit]); the scores it had are carried over, and while TMDB cannot be asked it stays.
+     */
     private suspend fun providerExtras(info: MetaInfo): MetaExtras? {
         if (!store.now.enabled) return null
         val lang = tmdbLanguage()
         val key = extrasKey(info, lang, region())
-        rememberedExtras(key, info)?.let { return it }
+        rememberedExtras(key, info)?.let { if (!wantsGroups(info, it)) return it }
         return lockFor(key).withLock {
-            rememberedExtras(key, info)?.let { return@withLock it }
-            val found = fetchExtras(info, lang) ?: return@withLock null
-            cache.putExtras(key, found)
-            extrasMemory[key] = found
+            val kept = rememberedExtras(key, info)
+            if (kept != null && !wantsGroups(info, kept)) return@withLock kept
+            val fetched = fetchExtras(info, lang) ?: return@withLock kept
+            val found = if (kept == null) {
+                fetched.extras
+            } else {
+                fetched.extras.copy(
+                    scores = MetaScore.merge(fetched.extras.scores, kept.scores.filter { it.source != ScoreSource.Tmdb }),
+                    scoresAsked = kept.scoresAsked,
+                    scoresAt = kept.scoresAt,
+                    scoresFromOmdb = kept.scoresFromOmdb,
+                )
+            }
+            // A split whose group could not be fetched is shown unsplit and not kept, so the next visit asks again.
+            if (fetched.keep) {
+                cache.putExtras(key, found)
+                extrasMemory[key] = found
+            }
             found
         }
     }
+
+    /** [extras] are a TMDB show's of one season kept from before the groups were read, so a split was never looked for. */
+    private fun wantsGroups(info: MetaInfo, extras: MetaExtras): Boolean =
+        info.provider == MetaProvider.Tmdb && info.kind == MetaKind.Show && !extras.groupsRead &&
+            extras.seasonList.count { it.number > 0 } == 1
 
     /**
      * The one score a card shows for [info] ([MetaScore.cardPick]), if this run has it: from the
@@ -984,27 +1007,119 @@ class OnlineMetadata(
 
     private fun nextDay(): Long = (now() / DAY_MS + 1) * DAY_MS
 
+    /** Extras as fetched, and whether they may be kept: not while a split's group could not be fetched. */
+    private class FetchedExtras(val extras: MetaExtras, val keep: Boolean = true)
+
     /** The provider's answer, an empty one for a 404, or null when it could not be asked. */
-    private suspend fun fetchExtras(info: MetaInfo, lang: String): MetaExtras? {
+    private suspend fun fetchExtras(info: MetaInfo, lang: String): FetchedExtras? {
         if (paused(info.provider)) return null
         val reply: MetaReply<MetaExtras>
-        var key: String? = null
         when (info.provider) {
             MetaProvider.Tmdb -> {
                 val s = store.now
                 if (!tmdbUsable(s)) return null
-                key = activeKey(s)
-                val k = key
-                reply = retrying { tmdb.extras(k, info.kind == MetaKind.Film, info.id, lang, region()) }
+                val k = activeKey(s)
+                val film = info.kind == MetaKind.Film
+                val both = retrying { tmdb.extrasAndGroups(k, film, info.id, lang, region()) }
+                return when (trouble(info.provider, both, k)) {
+                    null -> {
+                        val got = (both as MetaReply.Ok).value
+                        if (film) FetchedExtras(got.extras) else splitShow(info, k, lang, got)
+                    }
+                    Outcome.Nothing -> FetchedExtras(MetaExtras())
+                    else -> null
+                }
             }
             MetaProvider.TvMaze -> reply = retrying { tvmaze.extras(info.id) }
             MetaProvider.AniList -> reply = retrying { anilist.extras(info.id) }
         }
-        return when (trouble(info.provider, reply, key)) {
-            null -> (reply as MetaReply.Ok).value
-            Outcome.Nothing -> MetaExtras()
+        return when (trouble(info.provider, reply)) {
+            null -> FetchedExtras((reply as MetaReply.Ok).value)
+            Outcome.Nothing -> FetchedExtras(MetaExtras())
             else -> null
         }
+    }
+
+    /**
+     * A TMDB show's extras with its seasons split the way its episode group splits them, where it
+     * lists one season that a group splits in several ([SeasonSplit.choose]); unchanged otherwise.
+     * The group costs one call, only for such a show. A group that could not be fetched leaves the
+     * extras unsplit and not to be kept, so the next visit asks again.
+     */
+    private suspend fun splitShow(info: MetaInfo, key: String, lang: String, got: TmdbExtras): FetchedExtras {
+        val extras = got.extras.copy(groupsRead = true)
+        val group = SeasonSplit.choose(extras.seasonList, got.groups) ?: return FetchedExtras(extras)
+        return when (val load = loadSplit(info, key, group.id, lang, extras.seasonList)) {
+            is SplitLoad.Found -> FetchedExtras(load.split.applyTo(extras))
+            SplitLoad.None -> FetchedExtras(extras)
+            SplitLoad.Blocked -> FetchedExtras(extras, keep = false)
+        }
+    }
+
+    private sealed interface SplitLoad {
+        class Found(val split: SeasonSplit.Split) : SplitLoad
+        /** The group is gone (404) or splits nothing: TMDB's own seasons stand. */
+        data object None : SplitLoad
+        /** Throttled, refused, paused or offline: nothing learned, nothing kept. */
+        data object Blocked : SplitLoad
+    }
+
+    private fun splitKey(groupId: String, lang: String): String = listOf("split", groupId, lang).joinToString("|")
+
+    private fun splitSeasonKey(info: MetaInfo, groupId: String, season: Int, lang: String): String =
+        listOf("season", info.provider.name, info.id, "split", groupId, season, lang).joinToString("|")
+
+    /**
+     * The split [groupId] makes of [listed] (the show's own seasons): from the day's cache, else one
+     * call for the group, kept a day like a season. Each of its seasons goes into [seasonMemory]
+     * for [peekSeason]. A failed or throttled call is never kept.
+     */
+    private suspend fun loadSplit(info: MetaInfo, key: String?, groupId: String, lang: String, listed: List<MetaSeason>): SplitLoad {
+        val cacheKey = splitKey(groupId, lang)
+        val episodes = SeasonSplit.read(cache.season(cacheKey)) ?: run {
+            val k = key ?: store.now.takeIf { tmdbUsable(it) }?.let { activeKey(it) } ?: return SplitLoad.Blocked
+            if (paused(MetaProvider.Tmdb)) return SplitLoad.Blocked
+            val reply = retrying { tmdb.episodeGroup(k, groupId, lang) }
+            when (trouble(MetaProvider.Tmdb, reply, k)) {
+                null -> (reply as MetaReply.Ok).value.also { cache.putSeason(cacheKey, SeasonSplit.store(it)) }
+                // A 404 is an answer: kept as an empty group, so it is not asked again within the day.
+                Outcome.Nothing -> {
+                    cache.putSeason(cacheKey, SeasonSplit.store(emptyList()))
+                    return SplitLoad.None
+                }
+                else -> return SplitLoad.Blocked
+            }
+        }
+        val split = SeasonSplit.build(groupId, episodes, listed) ?: return SplitLoad.None
+        split.episodes.forEach { (n, list) -> seasonMemory[splitSeasonKey(info, groupId, n, lang)] = list }
+        return SplitLoad.Found(split)
+    }
+
+    /**
+     * [season] of the split [extras] name: from memory, else the group kept for the day, else one
+     * call. Empty when the group is gone or splits nothing now (the counts still stand), null
+     * when TMDB could not be asked: never TMDB's own season under the split's number.
+     */
+    private suspend fun splitSeason(info: MetaInfo, extras: MetaExtras, season: Int, lang: String): List<MetaEpisode>? {
+        val group = extras.seasonGroup ?: return null
+        val key = splitSeasonKey(info, group, season, lang)
+        seasonMemory[key]?.let { return it }
+        return lockFor(splitKey(group, lang)).withLock {
+            seasonMemory[key]?.let { return@withLock it }
+            when (val load = loadSplit(info, null, group, lang, extras.listedSeasons)) {
+                is SplitLoad.Found -> load.split.episodes[season].orEmpty()
+                SplitLoad.None -> emptyList()
+                SplitLoad.Blocked -> null
+            }
+        }
+    }
+
+    /** The group [info]'s kept extras split its seasons by, or null: memory only when [memoryOnly], else the disk too. */
+    private fun splitGroupOf(info: MetaInfo, lang: String, memoryOnly: Boolean): MetaExtras? {
+        if (info.provider != MetaProvider.Tmdb || info.kind != MetaKind.Show) return null
+        val key = extrasKey(info, lang, region())
+        val extras = if (memoryOnly) extrasMemory[key] else rememberedExtras(key, info)
+        return extras?.takeIf { it.seasonGroup != null }
     }
 
     // ---- a show's episode lists ----------------------------------------------------------------
@@ -1016,11 +1131,14 @@ class OnlineMetadata(
     private fun seasonKey(provider: MetaProvider, id: String, season: Int, lang: String): String =
         listOf("season", provider.name, id, season, lang).joinToString("|")
 
-    /** [season]'s list already in memory, for the first frame. */
-    fun peekSeason(info: MetaInfo, season: Int): List<MetaEpisode>? {
+    /** [season]'s list already in memory, for the first frame. [split] as in [season]. */
+    fun peekSeason(info: MetaInfo, season: Int, split: Boolean = true): List<MetaEpisode>? {
         if (!store.now.enabled || info.kind != MetaKind.Show) return null
         if (info.provider == MetaProvider.AniList) return peekAnimeGuide(info)?.let { AnimeEpisodes.seasonEpisodes(it, season) }
-        return seasonMemory[seasonKey(info, season, tmdbLanguage())]
+        val lang = tmdbLanguage()
+        val group = if (split) splitGroupOf(info, lang, memoryOnly = true)?.seasonGroup else null
+        if (group != null) return seasonMemory[splitSeasonKey(info, group, season, lang)]
+        return seasonMemory[seasonKey(info, season, lang)]
     }
 
     /**
@@ -1030,11 +1148,17 @@ class OnlineMetadata(
      * episodes, so an anime from it is answered by [animeGuide]: season 1 is the whole run counted
      * straight through. Null while off or when nobody could be asked; kept a day (see
      * [MetadataCache.season]).
+     *
+     * A TMDB show whose extras follow an episode group's split ([MetaExtras.seasonGroup]) answers
+     * in the split's numbering, the group's episodes numbered from one in each season; [split]
+     * false asks for TMDB's own season instead, for a chat numbered TMDB's way
+     * ([com.tmplayer.data.EpisodeGuide.numbering]).
      */
-    suspend fun season(info: MetaInfo, season: Int): List<MetaEpisode>? {
+    suspend fun season(info: MetaInfo, season: Int, split: Boolean = true): List<MetaEpisode>? {
         if (!store.now.enabled || info.kind != MetaKind.Show) return null
         if (info.provider == MetaProvider.AniList) return animeGuide(info)?.let { AnimeEpisodes.seasonEpisodes(it, season) }
         val lang = tmdbLanguage()
+        if (split) splitGroupOf(info, lang, memoryOnly = false)?.let { return splitSeason(info, it, season, lang) }
         val key = seasonKey(info, season, lang)
         seasonMemory[key]?.let { return it }
         return lockFor(key).withLock {
