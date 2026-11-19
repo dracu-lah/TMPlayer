@@ -396,6 +396,8 @@ export interface Engine {
     readonly detail: string
     /** Plays another sound track; false when this browser cannot play that one. */
     setAudio?(track: SoundTrack): Promise<boolean>
+    /** Frame counters for an engine that draws the picture itself (the element's own are empty then); see player/stutter.ts. */
+    quality?(): { dropped: number; total: number; underruns?: number }
     destroy(): void
 }
 

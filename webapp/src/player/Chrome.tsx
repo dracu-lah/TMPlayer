@@ -171,6 +171,14 @@ export interface Ctl {
     qualityLabel: (height: number) => string
     readout: () => string
     details: () => string
+    /** Report stutter (WB18): null when this browser has no frame counters, so the line is not offered. */
+    stutter: () => { press: () => 'kept' | 'already' } | null
+    /** What the page's logs weigh, scrubbed, for the line under Copy details. */
+    logsSize: () => string
+    /** The scrubbed logs as text, for the selected copy a browser that refuses the clipboard gets. */
+    logsText: () => string
+    /** Copy details with the logs, written to the clipboard inside the press itself; false when the browser refused. */
+    copyLogs: () => Promise<boolean>
     loadSubtitleFile: () => void
     /** Lays a subtitle file over the video and shows it; throws when the file cannot be read. */
     addSubtitle: (file: File, as?: { label: string; language: string }) => Promise<void>
@@ -274,6 +282,28 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
     // ---- showing and hiding ------------------------------------------------------------------
     const [visible, setVisible] = createSignal(variant() !== 'tv')
     const [sheet, setSheet] = createSignal<Sheet>(null)
+    // Playback details (WB18): what Report stutter and Copy details just did, and what the logs weigh.
+    const [detailsNote, setDetailsNote] = createSignal('')
+    const [logsSize, setLogsSize] = createSignal<string | null>(null)
+    /** The text a browser that would not copy gets to select and copy itself. */
+    const [copyFallback, setCopyFallback] = createSignal<string | null>(null)
+    createEffect(() => {
+        if (sheet() !== 'details') return
+        setDetailsNote('')
+        setCopyFallback(null)
+        try {
+            setLogsSize(untrack(() => c.logsSize()))
+        } catch {
+            setLogsSize(null)
+        }
+        // The remote and the keyboard come into the sheet on its close button, so OK still closes it as before.
+        queueMicrotask(() => c.root.querySelector<HTMLElement>('.pc-details .pc-btn')?.focus({ preventScroll: true }))
+    })
+    const copyDetails = () =>
+        void c.copyLogs().then((ok) => {
+            setCopyFallback(ok ? null : c.logsText())
+            setDetailsNote(ok ? t('player.details_copied') : t('web.copy_failed'))
+        })
     // The subtitle files posted in this video's chat (EG-F48): looked for once, when the Subtitles
     // picker (or More options, which leads to it) first opens. One search, answered best first; the
     // entry shows only when there are some, and a failure just leaves it out.
@@ -1316,8 +1346,11 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
             return true
         }
         if (sheet()) {
-            if (key === 'back' || (sheet() === 'details' && key === 'ok')) setSheet(null)
+            // Playback details holds buttons now (Report stutter, Copy details): OK presses the one the remote is on, and closes the sheet from anywhere else.
+            const onDetailsButton = sheet() === 'details' && !!active?.closest('.pc-details-btn')
+            if (key === 'back' || (sheet() === 'details' && key === 'ok' && !onDetailsButton)) setSheet(null)
             else if (key === 'ok') return 'native'
+            else if (arrow && sheet() === 'details') walk(c.root.querySelector('.pc-details'), key, active)
             else if (arrow && ['episodes', 'timing', 'bookmarks', 'still', 'msone'].includes(sheet()!)) walk(c.root.querySelector('.pc-sheet, .pc-still'), key, active)
             return true
         }
@@ -2393,6 +2426,35 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                         <p>{t('player.details_speed', { speed: speedLabel(rate()) })}</p>
                         <Show when={c.item.dc}>
                             <p>{t('player.details_datacenter', { number: c.item.dc! })}</p>
+                        </Show>
+                        <div class="pc-details-actions">
+                            <Show when={c.stutter()}>
+                                <button type="button" class="pc-details-btn" onClick={() => setDetailsNote(c.stutter()!.press() === 'already' ? t('player.stutter_marked_already') : t('web.stutter_marked'))}>
+                                    {t('player.report_stutter')}
+                                </button>
+                            </Show>
+                            <Show when={!tv()}>
+                                <button type="button" class="pc-details-btn" onClick={copyDetails}>
+                                    {t('player.copy_details')}
+                                </button>
+                            </Show>
+                        </div>
+                        <Show when={c.stutter()}>
+                            <p class="pc-details-hint">{t('web.report_stutter_detail')}</p>
+                        </Show>
+                        <Show when={logsSize() && !tv()}>
+                            <p class="pc-details-hint">{t('feedback.logs_size', { size: logsSize()! })}</p>
+                        </Show>
+                        <p class="pc-details-note" role="status" aria-live="polite">{detailsNote()}</p>
+                        <Show when={copyFallback()}>
+                            <textarea
+                                class="pc-details-copy"
+                                readonly
+                                rows="6"
+                                aria-label={t('player.copy_details')}
+                                value={copyFallback()!}
+                                ref={(el) => queueMicrotask(() => (el.focus({ preventScroll: true }), el.select()))}
+                            />
                         </Show>
                     </div>
                 </Match>

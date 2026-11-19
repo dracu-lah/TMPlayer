@@ -16,6 +16,7 @@ import { renderSVG } from 'uqr'
 import { t } from '../i18n'
 import { installed } from '../install'
 import { form } from '../form'
+import { sizeText } from '../logs'
 import { showToast } from './Toast'
 import { closeModal, holdClose, isOpen, openModal } from './confirmCore'
 import {
@@ -32,6 +33,7 @@ import {
     inboxUrl,
     issueUrl,
     localDraftStore,
+    logsFor,
     mailto,
     makeReport,
     messageLength,
@@ -402,12 +404,16 @@ function Line(props: { label: string; value: string; long?: boolean }) {
  */
 function Ways(props: { facts: Facts; kind: Kind; message: string; tv: boolean }) {
     const github = () => (props.kind === 'feature' ? featureUrl(props.message) : issueUrl(props.facts, props.message))
+    // The page's own log, scrubbed, goes with Copy details when it has something to say (WB18): the viewer pastes it
+    // into the issue or the mail. The line under the button says what it weighs; nothing is sent from here.
+    const logs = props.kind === 'problem' ? logsFor(props.facts) : null
     const copy = async () => {
         try {
-            await navigator.clipboard.writeText(copyText(props.facts))
+            await navigator.clipboard.writeText(copyText(props.facts, props.kind === 'problem'))
             showToast({ text: t('player.details_copied') })
         } catch {
-            // No clipboard: the facts are in the e-mail and the issue anyway.
+            // No clipboard, or the browser refused it: it says so, and the facts are in the e-mail and the issue anyway.
+            showToast({ text: t('web.copy_refused') })
         }
     }
     return (
@@ -422,6 +428,9 @@ function Ways(props: { facts: Facts; kind: Kind; message: string; tv: boolean })
                     </Show>
                 </div>
                 <p class="muted small">{t('feedback.email_detail', { email: EMAIL })}</p>
+                <Show when={logs && typeof navigator !== 'undefined' && !!navigator.clipboard?.writeText}>
+                    <p class="muted small">{t('feedback.logs_size', { size: sizeText(logs!.bytes) })}</p>
+                </Show>
             </Show>
         </div>
     )

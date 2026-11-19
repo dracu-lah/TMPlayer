@@ -14,6 +14,7 @@ import { cleanPref, isDefault, type ChatPref } from './ui/filterPref'
 import { resolveSpeed, sanitiseBoost, speedTarget, speedToKeep, type SpeedScopes } from './player/extras'
 import { tdlibMessageId } from './sync/format'
 import { forgetLinks } from './ui/tgLinks'
+import { clearLogs } from './logs'
 
 export type Theme = 'system' | 'dark' | 'light' | 'black'
 
@@ -1165,6 +1166,8 @@ export async function clearAll() {
     // The message links asked for are the account's (U9): none stays for the next one.
     forgetLinks()
     seqs.clear()
+    // The page's log, the names it remembered to take out of it and the crash note are the account's too (WB18).
+    clearLogs()
     try {
         localStorage.removeItem(JOURNAL)
         localStorage.removeItem(LAST_KEY)
