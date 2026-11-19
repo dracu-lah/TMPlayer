@@ -3,6 +3,6 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test test/inbox.test.ts"
+    "test": "node --test test/inbox.test.ts test/feedback.test.ts"
   }
 }

@@ -5,10 +5,11 @@
    short code (TMP-7K3Q) that the viewer says in the group or an issue.
 
    What this never does: log or store an address, a user agent or any header; accept more than
-   2 MB (2 KB for a title report, see titles.ts); accept anything but plain text that starts with the app's own header; keep a report past
+   2 MB (2 KB for a title report, see titles.ts, 16 KB for feedback, see feedback.ts); accept anything but plain text that starts with the app's own header; keep a report past
    30 days; list or serve a report to anyone (there is no read route; the developer reads them in
    the Cloudflare dashboard or with wrangler). */
 
+import { FEEDBACK_PATH, FEEDBACK_PREFIX, MAX_FEEDBACK_BYTES, storeFeedback } from './feedback.ts'
 import { MAX_TITLE_BYTES, TITLES_PATH, TITLE_PREFIX, storePair } from './titles.ts'
 
 export interface StoredObject {
@@ -130,12 +131,13 @@ async function addressKey(request: Request): Promise<string> {
 export async function handle(request: Request, env: Env, deps: Deps = realDeps): Promise<Response> {
   const url = new URL(request.url)
   const titles = url.pathname === TITLES_PATH
-  if (url.pathname !== '/v1/report' && !titles) return json(404, { error: 'not_found' })
+  const feedback = url.pathname === FEEDBACK_PATH
+  if (url.pathname !== '/v1/report' && !titles && !feedback) return json(404, { error: 'not_found' })
   if (request.method !== 'POST') return json(405, { error: 'method_not_allowed' }, { Allow: 'POST' })
   if (!isPlainText(request.headers.get('Content-Type'))) return json(415, { error: 'plain_text_only' })
 
-  // A title report is a pair of short lines, so its cap is tiny; a log report may be big.
-  const max = titles ? MAX_TITLE_BYTES : MAX_BYTES
+  // A title report is a pair of short lines and feedback a typed message, so their caps are small; a log report may be big.
+  const max = titles ? MAX_TITLE_BYTES : feedback ? MAX_FEEDBACK_BYTES : MAX_BYTES
   const declared = Number(request.headers.get('Content-Length'))
   if (Number.isFinite(declared) && declared > max) return json(413, { error: 'too_large', maxBytes: max })
 
@@ -162,6 +164,11 @@ export async function handle(request: Request, env: Env, deps: Deps = realDeps):
     if (stored.status === 400 || stored.status === 503) return json(stored.status, { error: stored.error })
     return json(stored.status, { code: stored.code, duplicate: stored.status === 200, keepDays: KEEP_DAYS })
   }
+  if (feedback) {
+    const stored = await storeFeedback(env.REPORTS, text)
+    if (stored.status === 400 || stored.status === 503) return json(stored.status, { error: stored.error })
+    return json(stored.status, { code: stored.code, duplicate: stored.status === 200, keepDays: KEEP_DAYS })
+  }
   if (!text.startsWith(HEADER)) return json(400, { error: 'not_a_report' })
 
   // A taken code is a precondition failure, so two reports can never share one even at the same moment.
@@ -180,11 +187,11 @@ export async function handle(request: Request, env: Env, deps: Deps = realDeps):
   return json(503, { error: 'unavailable' })
 }
 
-/** Deletes reports and title reports older than [KEEP_DAYS]; run daily, and the bucket's own lifecycle rules back it up. Returns how many went. */
+/** Deletes reports, title reports and feedback older than [KEEP_DAYS]; run daily, and the bucket's own lifecycle rules back it up. Returns how many went. */
 export async function sweep(bucket: Bucket, nowMs: number, pages = 20): Promise<number> {
   const cutoff = nowMs - KEEP_DAYS * DAY_MS
   let removed = 0
-  for (const prefix of [PREFIX, TITLE_PREFIX]) {
+  for (const prefix of [PREFIX, TITLE_PREFIX, FEEDBACK_PREFIX]) {
     let cursor: string | undefined
     for (let i = 0; i < pages; i++) {
       const page = await bucket.list({ prefix, cursor, limit: 1000 })

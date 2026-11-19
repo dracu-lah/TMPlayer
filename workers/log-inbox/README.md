@@ -47,6 +47,29 @@ The viewer saw exactly that pair, and ticked the box, before the app sent it.
 - Nothing else is kept: no address, user agent or header. 30 days, by the daily cron (`sweep`
   covers `reports/` and `titles/`) and by a second lifecycle rule (step 2 below).
 
+## Feedback ("Report a problem", "Request a feature", plan HX64)
+
+`POST /v1/feedback`, `Content-Type: text/plain`, at most 16 KB, the same rate limits. The body is
+the app's JSON for one message, which the viewer saw word for word before pressing Send:
+`{"v":1,"id":"<32 hex>","kind":"problem","message":"...","contact":"...","logs":"TMP-7K3Q","app":{"version":"...","platform":"...","device":"...","language":"..."}}`.
+
+- Needed: `v` 1, `id` (32 lower case hex digits, drawn once per draft), `kind` (`problem` or
+  `feature`) and `message` (1 to 4,000 characters once cleaned). `contact` is there only when the
+  viewer typed a way to reply, `logs` only when they ticked "Add my logs" (the code of the log
+  report the app sent to `/v1/report` just before). A `logs` value that is not a TMP code is dropped.
+- Control characters go, one line fields stay one line (so a field cannot forge a line of the
+  file), every field is capped, unknown fields are dropped. The message is kept as written: one
+  over the cap is refused (400 `message_too_long`), never cut.
+- Stored as `feedback/FB-XXXX-<id>.txt`, a short header (kind, version, platform, device, language,
+  logs code, reply contact) and then the message. The code comes from the id, so the same draft
+  sent twice (a double press, a retry after a lost connection, the app killed part way) is one
+  file: the second answers `200` with `duplicate:true`.
+- Answers `201 {"code":"FB-7K3Q","duplicate":false,"keepDays":30}`.
+- Nothing else is kept: no address, user agent or header. 30 days, by the daily cron (`sweep`
+  covers `feedback/` too) and by a third lifecycle rule (step 2 below).
+- To read them: `npx wrangler r2 object get tmplayer-log-inbox/feedback/<key> --remote`, or the
+  bucket's page in the dashboard (a prefix of `feedback/FB-7K3Q` finds the one a viewer quotes).
+
 ## Deploying (the maintainer, once)
 
 From this folder, with a Cloudflare login that may create R2 buckets. The deploy names
@@ -60,6 +83,7 @@ npx wrangler r2 bucket create tmplayer-log-inbox
 # 2. The 30 day lifecycle rule, as a second guard beside the daily cron
 npx wrangler r2 bucket lifecycle add tmplayer-log-inbox expire-30d reports/ --expire-days 30
 npx wrangler r2 bucket lifecycle add tmplayer-log-inbox expire-titles-30d titles/ --expire-days 30
+npx wrangler r2 bucket lifecycle add tmplayer-log-inbox expire-feedback-30d feedback/ --expire-days 30
 
 # 3. The worker
 npx wrangler deploy --config wrangler.jsonc
@@ -79,7 +103,9 @@ the bucket and no request appears in the worker's logs.
 Empty (the default, and what forks and CI build with) hides "Send to developer". The desktop reads the
 same two names for its own build (`desktop/build.gradle.kts`). The title reports go to the same host:
 `LogUpload.titlesUrl` turns `https://host/v1/report` into `https://host/v1/titles`, and an empty
-address hides "Wrong title?" and the question after a rename too.
+address hides "Wrong title?" and the question after a rename too. Feedback goes to the same host
+as well (`LogUpload.feedbackUrl`, `/v1/feedback`); a build with no address keeps only the GitHub
+and e-mail routes of "Report a problem".
 
 ## Tests
 
