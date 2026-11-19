@@ -28,6 +28,16 @@ export type PosterAsk = Plain<core.PosterAsk>
 export type SizeLimits = Plain<core.SizeLimits>
 export type WebResume = Plain<core.WebResume>
 export type WebHomeRow = Plain<core.WebHomeRow>
+// What the web gaps plan (WB2 to WB22) reads, so no page ports a rule by hand: copies and the one
+// quality read (HX38), the sort menu's filters (U6), corrections, speed scopes (CP48), Settings'
+// map (U20) and the languages (WB12).
+export type ShelfView = Plain<core.ShelfView>
+export type WebQuality = Plain<core.WebQuality>
+export type WebCorrection = Plain<core.WebCorrection>
+export type WebFacets = Plain<core.WebFacets>
+export type WebSpeedScopes = Plain<core.WebSpeedScopes>
+export type WebSettingsRow = Plain<core.WebSettingsRow>
+export type WebLanguage = Plain<core.WebLanguage>
 
 let loading: Promise<Rules> | null = null
 
