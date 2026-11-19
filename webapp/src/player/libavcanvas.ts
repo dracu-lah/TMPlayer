@@ -141,6 +141,9 @@ export class CanvasEngine implements Engine {
     private underruns: number[] = []
     private saidSlow = false
     private dropped = 0
+    /** Pictures drawn and sound underruns, in all: what the stutter watch reads (stutter.ts). */
+    private drawn = 0
+    private underrunTotal = 0
     private heavyCodec: string
     private volume = 1
     /** Volume boost, 1 (off) to 2: a multiplier on the gain, set through the element's `tmBoost`. */
@@ -194,6 +197,11 @@ export class CanvasEngine implements Engine {
     /** The picture codec in plain words. */
     get videoCodec() {
         return this.codecWords
+    }
+
+    /** The frame counters the stutter watch reads in place of the element's own (the canvas has none): drawn and dropped in all, and the sound's underruns. */
+    quality() {
+        return { dropped: this.dropped, total: this.drawn + this.dropped, underruns: this.underrunTotal }
     }
 
     /** What the tests (and a tester's console, `__canvas.stats()` on localhost) read: how the picture follows the clock. */
@@ -595,6 +603,7 @@ export class CanvasEngine implements Engine {
 
     private draw(f: Shown) {
         this.drawing.draw(f.planes, f.shownWidth)
+        this.drawn++
         this.lastShown = f.at
         this.shownSize = { width: f.shownWidth, height: f.planes.height }
         if (!this.shownOnce) {
@@ -628,6 +637,7 @@ export class CanvasEngine implements Engine {
         const now = performance.now()
         this.underruns = this.underruns.filter((t) => now - t < 30_000)
         this.underruns.push(now)
+        this.underrunTotal++
         if (this.underruns.length >= 3 && !this.saidSlow) {
             this.saidSlow = true
             this.ev.onSlow?.()

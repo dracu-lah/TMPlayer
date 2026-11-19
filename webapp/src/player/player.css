@@ -411,6 +411,12 @@
 }
 .pc-details-head { display: flex; align-items: center; justify-content: space-between; }
 .pc-details p { margin: 4px 8px 0 0; color: rgba(255,255,255,.85); overflow-wrap: anywhere; }
+.pc-details-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 8px 0 0; }
+.pc-details-btn { min-height: 40px; padding: 0 16px; border: 1px solid rgba(255,255,255,.28); border-radius: 999px; background: transparent; color: #fff; font: inherit; cursor: pointer; }
+.pc-details-btn:hover { background: rgba(255,255,255,.1); }
+.pc-details-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.pc-details .pc-details-hint { color: var(--muted); font-size: 12px; line-height: 16px; }
+.pc-details .pc-details-note:empty { display: none; }
 
 /* The lock: everything ignored but the pill, which a tap brings up at the foot. */
 .pc-shield { position: absolute; inset: 0; z-index: 5; }

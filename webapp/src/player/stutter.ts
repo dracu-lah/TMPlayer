@@ -10,6 +10,7 @@
 // What a reading holds is fixed words, an engine tag and bucketed counts, never a number the viewer
 // could be told by, and never a title, chat or file name: a [Reading] has no field that could carry
 // one. A browser has no sound underrun counter and no frame offsets, so those read as none.
+import { onClear, supply } from '../logs.ts'
 
 /** How long after a start, seek or interruption playback is not read (the decoder warms up). */
 export const SETTLE_MS = 2_000
@@ -288,12 +289,40 @@ export class StutterMarks {
     }
 }
 
+/** The marks of this tab, across videos. */
+export const sharedMarks = new StutterMarks()
+supply('marks', () => sharedMarks.reportLines())
+onClear(() => sharedMarks.clear())
+
+let engineNow = 'unknown'
+/** The engine playing now, for the device lines of Copy details. */
+export const noteEngine = (name: unknown) => {
+    engineNow = engineTag(name)
+}
+
+/** The device's facts in fixed words and buckets: nothing that names the viewer, a video or a chat. */
+export function deviceLines(env: { video?: object; nav?: { hardwareConcurrency?: unknown; deviceMemory?: unknown }; win?: object } = {}): string[] {
+    const nav = env.nav ?? (typeof navigator === 'undefined' ? {} : (navigator as { hardwareConcurrency?: unknown; deviceMemory?: unknown }))
+    const win = env.win ?? (typeof globalThis === 'undefined' ? {} : globalThis)
+    const cores = typeof nav.hardwareConcurrency === 'number' ? bucketOf(nav.hardwareConcurrency) : 'unknown'
+    const memory = typeof nav.deviceMemory === 'number' && [0.25, 0.5, 1, 2, 4, 8].includes(nav.deviceMemory) ? `${nav.deviceMemory} GB or so` : 'unknown'
+    const has = (k: string) => (k in win ? 'yes' : 'no')
+    return [
+        `Engine in use: ${engineNow}`,
+        `Frame counters: ${env.video && 'getVideoPlaybackQuality' in env.video ? 'yes' : 'no'}`,
+        `Media Source: ${has('MediaSource')}, managed: ${has('ManagedMediaSource')}, WebCodecs: ${has('VideoDecoder')}`,
+        `Processor threads: ${cores}, memory class: ${memory}`,
+    ]
+}
+
 // ---- The monitor the player owns -------------------------------------------------------------------------------------------------
 
 /** What the player reads off the video: frames shown and dropped in all, or null when the browser does not say. */
 export interface Quality {
     dropped: number
     total: number
+    /** Sound underruns so far, for an engine that counts them (the canvas engine). */
+    underruns?: number
 }
 
 /** The standard counters of a video element, or null: an old WebKit and some TV engines have none. */
@@ -318,8 +347,6 @@ export interface TickInput {
     rate: number
     engine: string
     quality: Quality | null
-    /** Sound underruns so far, for an engine that counts them (the canvas engine). */
-    underruns?: number
 }
 
 /**
@@ -329,16 +356,16 @@ export interface TickInput {
  */
 export class StutterMonitor {
     readonly watch = new PlaybackWatch()
-    readonly marks = new StutterMarks()
+    /** The marks outlive a video (they are the viewer's, kept for Copy details) and go with the logs. */
+    readonly marks = sharedMarks
     private readings: Reading[] = []
     private last: { at: number; position: number; dropped: number; total: number } | null = null
     private symptom: Symptom | null = null
     onAnswer: (answer: Answer, figures: Figures) => void = () => {}
 
-    /** A new video: everything starts again, the marks too (they are about this video). */
+    /** A new video: the watch and the readings start again. */
     restart() {
         this.watch.restart()
-        this.marks.clear()
         this.readings = []
         this.last = null
         this.symptom = null
@@ -358,7 +385,7 @@ export class StutterMonitor {
         if (!i.playing) return this.interrupted()
         const q = i.quality
         const positionMs = i.position * 1000
-        const answer = this.watch.sample(i.now, positionMs, true, q ? q.total - q.dropped : 0, q ? q.dropped : 0, i.underruns ?? 0, i.rate)
+        const answer = this.watch.sample(i.now, positionMs, true, q ? q.total - q.dropped : 0, q ? q.dropped : 0, q?.underruns ?? 0, i.rate)
         const prev = this.last
         let pace = -1
         let dropped = -1

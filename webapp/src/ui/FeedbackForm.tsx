@@ -16,6 +16,7 @@ import { renderSVG } from 'uqr'
 import { t } from '../i18n'
 import { installed } from '../install'
 import { form } from '../form'
+import { buildBundle, sizeText, suppliedParts } from '../logs'
 import { showToast } from './Toast'
 import { closeModal, holdClose, isOpen, openModal } from './confirmCore'
 import {
@@ -402,9 +403,21 @@ function Line(props: { label: string; value: string; long?: boolean }) {
  */
 function Ways(props: { facts: Facts; kind: Kind; message: string; tv: boolean }) {
     const github = () => (props.kind === 'feature' ? featureUrl(props.message) : issueUrl(props.facts, props.message))
+    // The page's own log, scrubbed, goes with Copy details when it has something to say (WB18): the viewer pastes it
+    // into the issue or the mail. The line under the button says what it weighs; nothing is sent from here.
+    const logs = () => {
+        if (props.kind !== 'problem') return null
+        try {
+            const b = buildBundle(props.facts, suppliedParts())
+            return b.parts.length > 0 ? b : null
+        } catch {
+            return null
+        }
+    }
+    const logsLine = logs() ? t('feedback.logs_size', { size: sizeText(logs()!.bytes) }) : ''
     const copy = async () => {
         try {
-            await navigator.clipboard.writeText(copyText(props.facts))
+            await navigator.clipboard.writeText(logs()?.text ?? copyText(props.facts))
             showToast({ text: t('player.details_copied') })
         } catch {
             // No clipboard: the facts are in the e-mail and the issue anyway.
@@ -422,6 +435,9 @@ function Ways(props: { facts: Facts; kind: Kind; message: string; tv: boolean })
                     </Show>
                 </div>
                 <p class="muted small">{t('feedback.email_detail', { email: EMAIL })}</p>
+                <Show when={logsLine && typeof navigator !== 'undefined' && !!navigator.clipboard?.writeText}>
+                    <p class="muted small">{logsLine}</p>
+                </Show>
             </Show>
         </div>
     )

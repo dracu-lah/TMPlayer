@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import * as core from '../rules/core/tmplayer-rules.mjs'
+import { clearLogs, suppliedParts } from '../logs.ts'
 import {
     DEBOUNCE_MS,
     MAX_MARKS,
@@ -12,6 +13,8 @@ import {
     StutterMonitor,
     WINDOW_MS,
     bucketOf,
+    deviceLines,
+    noteEngine,
     engineTag,
     paceWord,
     qualityOf,
@@ -203,7 +206,21 @@ test('the monitor: a clean video gives kept-up once, a slow one cannot keep up, 
     assert.match(lines[1], /watch said dropped/u)
     assert.ok(lines.some((l) => /dropped=10-19 of=20-49 pace=on-time engine=native speed=1x/u.test(l)), lines.join('\n'))
     mon.restart()
-    assert.equal(mon.marks.count, 0)
+    assert.equal(mon.marks.count, 1, 'marks outlive a video: they are the viewer\'s, for Copy details')
+    assert.match(suppliedParts().marks!.join('\n'), /1 moment\(s\) the viewer marked/u)
+    clearLogs()
+    assert.equal(mon.marks.count, 0, 'signing out clears them')
+    assert.deepEqual(suppliedParts().marks, [])
+})
+
+test('the device lines are fixed words and buckets, and a hostile navigator reads as unknown', () => {
+    noteEngine('libav')
+    const lines = deviceLines({ video: { getVideoPlaybackQuality() {} }, nav: { hardwareConcurrency: 8, deviceMemory: 4 }, win: { MediaSource: 1 } })
+    assert.deepEqual(lines, ['Engine in use: libav', 'Frame counters: yes', 'Media Source: yes, managed: no, WebCodecs: no', 'Processor threads: 5-9, memory class: 4 GB or so'])
+    noteEngine('Some Show.mkv')
+    const odd = deviceLines({ video: {}, nav: { hardwareConcurrency: 'many', deviceMemory: 3.7 }, win: {} })
+    assert.deepEqual(odd, ['Engine in use: unknown', 'Frame counters: no', 'Media Source: no, managed: no, WebCodecs: no', 'Processor threads: unknown, memory class: unknown'])
+    assert.doesNotThrow(() => deviceLines())
 })
 
 test('the monitor without frame counters still measures the pace, and pausing starts the settle again', () => {

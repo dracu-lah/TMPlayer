@@ -100,10 +100,23 @@ export function rememberNames(list: Iterable<unknown>): void {
     if (names.length > MAX_KNOWN) names.splice(0, names.length - MAX_KNOWN)
 }
 
+const clearers: (() => void)[] = []
+/** Somebody else's in-memory trace (the stutter marks) goes when the logs do. */
+export function onClear(fn: () => void): void {
+    clearers.push(fn)
+}
+
 /** Forgets the ring, the names and the earlier run's crash (sign out, Delete your data). */
 export function clearLogs(): void {
     ring = []
     names.length = 0
+    for (const fn of clearers) {
+        try {
+            fn()
+        } catch {
+            // One that cannot clear does not stop the rest.
+        }
+    }
     try {
         localStorage.removeItem(CRASH_KEY)
     } catch {
@@ -185,6 +198,26 @@ export interface BundleParts {
     marks?: string[]
     /** The earlier run's crash; [earlierCrash] when left out. */
     crash?: string[]
+}
+
+const suppliers: Partial<Record<'device' | 'marks', () => string[]>> = {}
+/** The player says where the device's facts and the marks come from, so Copy details on any screen can attach them. */
+export function supply(kind: 'device' | 'marks', fn: () => string[]): void {
+    suppliers[kind] = fn
+}
+
+/** What is supplied now: the parts [buildBundle] takes, each from its supplier, none that fails. */
+export function suppliedParts(): BundleParts {
+    const out: BundleParts = {}
+    for (const kind of ['device', 'marks'] as const) {
+        try {
+            const lines = suppliers[kind]?.()
+            if (Array.isArray(lines)) out[kind] = lines.filter((l) => typeof l === 'string')
+        } catch {
+            // A supplier that throws gives no part.
+        }
+    }
+    return out
 }
 
 export type PartKind = 'crash' | 'device' | 'marks' | 'log'

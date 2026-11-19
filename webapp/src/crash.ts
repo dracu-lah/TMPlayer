@@ -4,6 +4,7 @@
 // (and Close, since a stray failure in the background need not end what is on screen). Plain DOM,
 // so it shows even when the app's own rendering is what failed.
 import { t } from './i18n'
+import { buildBundle, hookConsole, noteCrash, suppliedParts } from './logs'
 
 /** Failures that are not the app breaking: a cancelled call, autoplay refused, the browser's own noise. */
 function harmless(reason: unknown, message: string): boolean {
@@ -63,10 +64,25 @@ export function showCrashCard() {
     close.className = 'link'
     close.textContent = label('common.close', 'Close')
     const row = document.createElement('div')
-    row.append(reload, close)
+    // Copy details (WB18): the scrubbed logs on the clipboard, only when pressed; nothing is sent anywhere.
+    const copy = document.createElement('button')
+    copy.className = 'link'
+    copy.textContent = label('player.copy_details', 'Copy details')
+    copy.onclick = async () => {
+        try {
+            const { webFacts } = await import('./ui/feedback')
+            await navigator.clipboard.writeText(buildBundle(webFacts(navigator.userAgent, document.documentElement.lang || navigator.language || 'en'), suppliedParts()).text)
+            copy.textContent = label('player.details_copied', 'Details copied')
+        } catch {
+            // No clipboard, or the page is too broken to build it: the button stays what it was.
+        }
+    }
+    row.append(reload)
+    if (typeof navigator !== 'undefined' && typeof navigator.clipboard?.writeText === 'function') row.append(copy)
+    row.append(close)
     box.append(text, row)
     cardKeys = (ev: KeyboardEvent) => {
-        const buttons = [reload, close]
+        const buttons = [...row.querySelectorAll('button')]
         const at = buttons.indexOf(document.activeElement as HTMLButtonElement)
         const typing = /^(INPUT|TEXTAREA)$/.test((document.activeElement as HTMLElement | null)?.tagName ?? '')
         // Back as the TV layout reads it: Backspace (outside a text field) and webOS's 461 too.
@@ -106,11 +122,14 @@ function label(key: Parameters<typeof t>[0], fallback: string): string {
 
 /** Installs the two listeners; called first thing in main.tsx. */
 export function watchCrashes() {
+    // What the page says (warnings and errors) is kept in a small ring in memory for Copy details; it is never sent.
+    hookConsole()
     window.addEventListener('keydown', (ev) => cardKeys?.(ev), true)
     window.addEventListener('error', (ev) => {
         const message = ev.message ?? ''
         if (harmless(ev.error, message)) return
         console.error('[crash] uncaught', ev.error ?? message)
+        noteCrash(ev.error ?? message)
         showCrashCard()
     })
     window.addEventListener('unhandledrejection', (ev) => {
@@ -118,6 +137,7 @@ export function watchCrashes() {
         const message = String((reason as { message?: string } | null)?.message ?? reason ?? '')
         if (harmless(reason, message)) return
         console.error('[crash] unhandled rejection', reason)
+        noteCrash(reason)
         showCrashCard()
     })
 }

@@ -793,9 +793,9 @@ export const PAGE_STRINGS = [
     'state.connecting_still_trying',
     // WB18 Report stutter.
     'player.report_stutter',
-    'player.report_stutter_detail',
-    'player.stutter_marked',
     'player.stutter_marked_already',
+    'web.report_stutter_detail',
+    'web.stutter_marked',
     // WB19 Series page: gap rows, episode rows, missing episodes.
     'detail.missing_badge',
     'detail.missing_count',

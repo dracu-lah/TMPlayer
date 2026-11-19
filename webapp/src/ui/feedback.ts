@@ -129,13 +129,18 @@ export interface Report {
     message: string
     contact: string | null
     facts: Facts
+    /** The code of a log report the viewer sent to the inbox just before (`TMP-7K3Q`), or null. Nothing sets it until the web uploads logs (WB28). */
+    logs: string | null
 }
+
+/** The inbox's log report code (workers/log-inbox LOG_CODE); anything else is dropped, as the Worker drops it. */
+const LOG_CODE = /^TMP-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$/u
 
 /**
  * The report, or null when [problem] says it cannot go or [id] is not one. Nothing typed is ever
  * cut: too long is null, never half.
  */
-export function makeReport(id: string, kind: Kind, message: string, contact: string | null, facts: Facts): Report | null {
+export function makeReport(id: string, kind: Kind, message: string, contact: string | null, facts: Facts, logs: string | null = null): Report | null {
     if (!ID.test(id)) return null
     if (problem(message, contact ?? '') !== null) return null
     return {
@@ -143,6 +148,7 @@ export function makeReport(id: string, kind: Kind, message: string, contact: str
         kind,
         message: cleanMessage(message),
         contact: cleanLine(contact ?? '') || null,
+        logs: typeof logs === 'string' && LOG_CODE.test(logs) ? logs : null,
         facts: {
             version: cut(cleanLine(facts.version), 40),
             platform: cut(cleanLine(facts.platform), 60),
@@ -156,6 +162,7 @@ export function makeReport(id: string, kind: Kind, message: string, contact: str
 export function toJson(r: Report): string {
     const o: Record<string, unknown> = { v: 1, id: r.id, kind: r.kind, message: r.message }
     if (r.contact !== null) o.contact = r.contact
+    if (r.logs !== null) o.logs = r.logs
     o.app = { version: r.facts.version, platform: r.facts.platform || 'other', device: r.facts.device, language: r.facts.language }
     return JSON.stringify(o)
 }
@@ -179,7 +186,7 @@ export function parseReport(text: unknown): Report | null {
         platform: fact('platform'),
         device: fact('device'),
         language: fact('language'),
-    })
+    }, typeof o.logs === 'string' ? o.logs : null)
 }
 
 /** The lines the confirm step shows, word for word what [toJson] holds, in the order the apps show them. */

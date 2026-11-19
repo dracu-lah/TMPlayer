@@ -538,3 +538,19 @@ test('a blank draft takes the kind it is opened for and starts with a fresh id',
     assert.notEqual(a.id, blankDraft('feature').id)
     assert.equal(a.message, '')
 })
+
+test('the logs code (WB18 hook): a TMP code from the inbox rides in the report, anything else is dropped, and the Worker reads it back', () => {
+    const r = makeReport(ID, 'problem', 'It stops.', null, FACTS, 'TMP-7K3Q')!
+    assert.equal(r.logs, 'TMP-7K3Q')
+    assert.match(toJson(r), /"message":"It stops\.","logs":"TMP-7K3Q","app"/)
+    const back = parseReport(toJson(r))
+    assert.equal(back?.logs, 'TMP-7K3Q')
+    const worker = parseFeedback(toJson(r))
+    assert.ok(worker.ok && worker.feedback.logs === 'TMP-7K3Q')
+    for (const bad of ['TMP-0I1L', 'tmp-7k3q', 'TMP-7K3Q ', 'FB-7K3Q-M4XP', '', 'TMP-7K3QX', '<script>']) {
+        assert.equal(makeReport(ID, 'problem', 'x', null, FACTS, bad)!.logs, null, bad)
+    }
+    assert.equal(makeReport(ID, 'problem', 'x', null, FACTS)!.logs, null)
+    assert.doesNotMatch(toJson(makeReport(ID, 'problem', 'x', null, FACTS)!), /logs/)
+    assert.equal(parseReport(toJson(r).replace('"logs":"TMP-7K3Q"', '"logs":5'))?.logs, null)
+})
