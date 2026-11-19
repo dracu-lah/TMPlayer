@@ -8,7 +8,7 @@ import { cryptoProvider } from './crypto'
 import { findChatSubtitles, forgetChatSubtitles } from './chatsubs'
 import { homePage, rowShown } from './home'
 import { archivedList, chatList, chatPage, forgetAll, joinedFor, listTiles, rankChats, recentPage, searchAll, setCopyContext, topicSources, videoCounts, watchInfo } from './library'
-import { findTopics, keepTopics, keptTopics, telegramTopics, topicWords } from './topics'
+import { findTopics, keepWhole, keptTopics, telegramTopics, topicWords } from './topics'
 import { clickSponsored, reportSponsored, viewSponsored } from './sponsored'
 import { deleteEverything, deleteMessages, readFiles, writeFile, type FoundFile } from './syncfile'
 import { chatProtects, files, itemOf, rawOf, thumbnails, toItem } from './media'
@@ -291,9 +291,11 @@ export const api = {
         const key = `${chats ? [...chats].sort((a, b) => a - b).join() : '*'}\n${words.toLowerCase()}`
         const kept = keptTopics(key)
         if (kept) return kept
-        const [r, sources] = await Promise.all([rules(), topicSources(tg, chats)])
+        const [r, sources] = await Promise.all([rules(), topicSources(tg, chats, ctx.signal)])
+        ctx.signal.throwIfAborted()
         const found = await findTopics({ rules: r, ask: telegramTopics(tg), ...sources, added: chats, includeArchived: true, query: words, signal: ctx.signal, onPartial: (f) => ctx.emit(f) })
-        keepTopics(key, found)
+        // A search in which a group was skipped (a flood wait past thirty seconds, a refusal) is not kept: asking again asks again.
+        keepWhole(key, found)
         return found
     },
 

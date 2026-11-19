@@ -772,7 +772,7 @@ let topicHead: { at: number; chats: ChatItem[] } | null = null
  * read, only its first page (the chats used most recently, one call) is read, so a search never
  * starts the read of 3,000 chats.
  */
-export async function topicSources(tg: TelegramClient, added: readonly number[] | null): Promise<{ forums: ForumChat[]; order: number[] }> {
+export async function topicSources(tg: TelegramClient, added: readonly number[] | null, signal?: AbortSignal): Promise<{ forums: ForumChat[]; order: number[] }> {
     let head: ChatItem[] = []
     if (!added && !dialogs) {
         if (dialogsLoading) {
@@ -782,11 +782,15 @@ export async function topicSources(tg: TelegramClient, added: readonly number[] 
                 const mine = epoch
                 const first: ChatItem[] = []
                 try {
-                    for await (const d of tg.iterDialogs({ archived: 'exclude', pinned: 'include', limit: PAGE })) first.push(chatItem(d.peer, d.isPinned))
+                    for await (const d of tg.iterDialogs({ archived: 'exclude', pinned: 'include', limit: PAGE })) {
+                        // A new letter gave the search up: the read stops with the page it is on, and the part read is not kept.
+                        if (signal?.aborted) break
+                        first.push(chatItem(d.peer, d.isPinned))
+                    }
                 } catch {
                     // The chats read so far are used; none means no group is asked.
                 }
-                if (mine !== epoch) return { forums: [], order: [] }
+                if (mine !== epoch || signal?.aborted) return { forums: [], order: [] }
                 topicHead = { at: Date.now(), chats: first }
             }
             head = topicHead.chats
@@ -798,6 +802,7 @@ export async function topicSources(tg: TelegramClient, added: readonly number[] 
     if (added) {
         const missing = added.filter((id) => !byId.has(id)).slice(0, TOPIC_PEER_CHECKS)
         for (let i = 0; i < missing.length; i += 6) {
+            if (signal?.aborted) return { forums: [], order: [] }
             await Promise.all(
                 missing.slice(i, i + 6).map(async (id) => {
                     try {

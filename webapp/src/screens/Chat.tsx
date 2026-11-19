@@ -236,7 +236,7 @@ export function Chat() {
     // The videos on screen, so "Choose the right poster" can offer a pick to the others of its title.
     createEffect(() => {
         const p = page()
-        if (p && !view().query) notePool(chatId(), p.tiles.map((tile) => tile.item))
+        if (p && !view().query && !topic()) notePool(chatId(), p.tiles.map((tile) => tile.item))
     })
     const empty = () => {
         const p = page()

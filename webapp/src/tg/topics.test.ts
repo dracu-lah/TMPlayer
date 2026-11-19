@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import * as core from '../rules/core/tmplayer-rules.mjs'
 import type { Rules } from '../rules'
-import { COUNTED_HITS, findTopics, keepTopics, keptTopics, forgetTopics, telegramTopics, topicWords, type ForumChat, type RawTopic, type TopicAsk } from './topics.ts'
+import { COUNTED_HITS, findTopics, keepTopics, keepWhole, keptTopics, forgetTopics, telegramTopics, topicWords, type ForumChat, type RawTopic, type TopicAsk } from './topics.ts'
 
 core.provideCatalog('en', readFileSync(new URL('../../../core/src/commonMain/resources/i18n/en.json', import.meta.url), 'utf8'))
 const rules = core as unknown as Rules
@@ -15,7 +15,7 @@ const forum = (id: number, title = `Group ${id}`, archived = false): ForumChat =
 const topic = (id: number, title: string, o: Partial<RawTopic> = {}): RawTopic => ({ id, title, pinned: false, closed: false, ...o })
 
 /** A fake account: topics per chat, the calls made, and how many were in flight at once. */
-function account(topics: Record<number, RawTopic[]>, o: { empty?: Set<string>; fail?: (chatId: number, n: number) => unknown; delay?: number } = {}) {
+function account(topics: Record<number, RawTopic[]>, o: { empty?: Set<string>; fail?: (chatId: number, n: number) => unknown; delay?: number; countFails?: unknown } = {}) {
     const calls: string[] = []
     const asks = new Map<number, number>()
     let inFlight = 0
@@ -38,6 +38,7 @@ function account(topics: Record<number, RawTopic[]>, o: { empty?: Set<string>; f
         },
         async hasVideos(chatId, topicId) {
             calls.push(`count ${chatId} ${topicId}`)
+            if (o.countFails) throw o.countFails
             return !o.empty?.has(`${chatId}:${topicId}`)
         },
     }
@@ -117,14 +118,19 @@ test('a new letter aborts the search: no group is asked after it', async () => {
     const forums = Array.from({ length: 12 }, (_, i) => forum(i + 1))
     const a = account(Object.fromEntries(forums.map((f) => [f.id, [topic(1, 'Lessons')]])), { delay: 20 })
     const controller = new AbortController()
-    const run = search(a, { forums, query: 'lessons', signal: controller.signal })
-    await new Promise((r) => setTimeout(r, 30))
+    let partialsAfter = 0
+    const run = findTopics({
+        rules, ask: a.ask, forums, order: forums.map((f) => f.id), added: null, includeArchived: true, query: 'lessons', signal: controller.signal, sleep: async () => {},
+        onPartial: () => controller.signal.aborted && partialsAfter++,
+    })
+    // The first three groups are in flight (20 ms each): abort while they are.
+    await new Promise((r) => setTimeout(r, 10))
+    assert.equal(a.calls.length, 3)
     controller.abort()
     await assert.rejects(run, (e: Error) => e.name === 'AbortError' || /abort/i.test(String(e)))
-    const seen = a.calls.length
-    await new Promise((r) => setTimeout(r, 80))
-    assert.equal(a.calls.length, seen, 'nothing asked after the abort')
-    assert.ok(seen < 12 + COUNTED_HITS)
+    await new Promise((r) => setTimeout(r, 120))
+    assert.equal(a.calls.length, 3, 'the three in flight finished, no other group and no count was asked after the abort')
+    assert.equal(partialsAfter, 0, 'an answer that lands after the abort is not sent on')
 })
 
 test('a flood wait is waited out by the call that got it, once, while the other groups go on', async () => {
@@ -196,10 +202,10 @@ test('the adapter reads Telegram\'s topics safely: no id, a repeat or a wrong ty
         },
     }
     const real = telegramTopics(tg as never)
-    const found = await real.topicsOf(1, 'x', 20)
+    const found = await real.topicsOf(1, 'x', 20, new AbortController().signal)
     assert.deepEqual(found.map((t) => [t.id, t.title, t.pinned]), [[5, 'Good', true], [6, '42', false], [7, '', false]])
-    assert.equal(await real.hasVideos(1, 5), true, 'files count when there is no video')
-    assert.equal(await real.hasVideos(1, 6), false)
+    assert.equal(await real.hasVideos(1, 5, new AbortController().signal), true, 'files count when there is no video')
+    assert.equal(await real.hasVideos(1, 6, new AbortController().signal), false)
 })
 
 test('answers are kept two minutes, for the same words and chats', () => {
@@ -212,4 +218,38 @@ test('answers are kept two minutes, for the same words and chats', () => {
     for (let i = 0; i < 100; i++) keepTopics(`k${i}`, found, 5)
     assert.equal(keptTopics('k0', 5), null, 'bounded')
     assert.equal(keptTopics('k99', 5), found)
+})
+
+test('counting stops for the rest of the search once Telegram refuses one count, and never waits a flood out', async () => {
+    forgetTopics()
+    const forums = [forum(1)]
+    const a = account({ 1: Array.from({ length: 20 }, (_, i) => topic(i + 1, `Lessons ${i}`)) }, { countFails: floodError(9) })
+    const slept: number[] = []
+    const found = await search(a, { forums, query: 'lessons', sleep: async (ms) => void slept.push(ms) })
+    // One count was refused by each lane at most (three side by side), then none more.
+    assert.ok(a.calls.filter((c) => c.startsWith('count ')).length <= 3, `counts asked: ${a.calls.filter((c) => c.startsWith('count ')).length}`)
+    assert.deepEqual(slept, [], 'a count is not waited out')
+    assert.equal(found.hits.length, 20)
+    assert.ok(found.hits.every((h) => h.hasVideos), 'unread topics are not dimmed')
+})
+
+test('a topic counted by one search is not counted by the next', async () => {
+    forgetTopics()
+    const forums = [forum(1)]
+    const first = account({ 1: [topic(1, 'Lessons a'), topic(2, 'Lessons b')] }, { empty: new Set(['1:2']) })
+    await search(first, { forums, query: 'lessons' })
+    assert.equal(first.calls.filter((c) => c.startsWith('count ')).length, 2, 'one count a topic')
+    const second = account({ 1: [topic(1, 'Lessons a'), topic(2, 'Lessons b')] }, { empty: new Set(['1:2']) })
+    const found = await search(second, { forums, query: 'lessons' })
+    assert.equal(second.calls.filter((c) => c.startsWith('count ')).length, 0)
+    assert.equal(found.hits.find((h) => h.topicId === 2)!.hasVideos, false, 'the remembered answer still dims it')
+})
+
+test('an answer with a skipped group is not kept', () => {
+    forgetTopics()
+    const whole = { hits: [], asked: 3, refused: 0, partial: false, searching: false }
+    assert.equal(keepWhole('whole', whole), true)
+    assert.equal(keptTopics('whole'), whole)
+    assert.equal(keepWhole('skipped', { ...whole, refused: 1 }), false)
+    assert.equal(keptTopics('skipped'), null)
 })

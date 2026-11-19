@@ -37,9 +37,9 @@ export interface RawTopic {
 /** What a search asks of Telegram; the real ones are `telegramTopics`, a test gives its own. */
 export interface TopicAsk {
     /** Telegram's topics of `chatId` whose names answer `query`, at most `limit`. Throws when refused. */
-    topicsOf(chatId: number, query: string, limit: number): Promise<RawTopic[]>
+    topicsOf(chatId: number, query: string, limit: number, signal: AbortSignal): Promise<RawTopic[]>
     /** Whether the topic holds a video or a file (a count, never the messages). Throws when refused. */
-    hasVideos(chatId: number, topicId: number): Promise<boolean>
+    hasVideos(chatId: number, topicId: number, signal: AbortSignal): Promise<boolean>
 }
 
 export interface TopicSearchInput {
@@ -109,6 +109,8 @@ export async function findTopics(input: TopicSearchInput): Promise<TopicsFound> 
             lastError = e
             return
         }
+        // Answered after the search was given up (a new letter): nothing of it is used.
+        signal.throwIfAborted()
         answered++
         const found = rules.topicHits(chatId, titles.get(chatId) ?? '', topics.slice(0, budget.topicsPerChat).map(toTopic), query, true)
         hits.push(...found.map(fromWeb))
@@ -120,25 +122,36 @@ export async function findTopics(input: TopicSearchInput): Promise<TopicsFound> 
         while (next < asking.length) {
             signal.throwIfAborted()
             await askOne(asking[next++])
+            signal.throwIfAborted()
         }
     })
     await Promise.all(lanes)
     signal.throwIfAborted()
     if (!answered && refused) throw lastError ?? new Error('topics')
-    // Which of the best hits hold videos: read after the ranking, a few at a time, never for the whole list.
+    // Which of the best hits hold videos: read after the topic calls, one call each (a second only when it found none),
+    // from what an earlier search already learned where there is such a thing, and never again once Telegram refuses a
+    // count: the rest of the search lists its topics as they are, not dimmed. A count is never waited out.
     const top = ranked()
     const toCount = top.slice(0, COUNTED_HITS)
     next = 0
+    let countsRefused = false
     await Promise.all(
         Array.from({ length: Math.min(budget.atOnce, toCount.length) }, async () => {
-            while (next < toCount.length) {
+            while (next < toCount.length && !countsRefused) {
                 signal.throwIfAborted()
                 const hit = toCount[next++]
+                const key = `${hit.chatId}:${hit.topicId}`
+                const known = counted.get(key)
+                if (known !== undefined) {
+                    hit.hasVideos = known
+                    continue
+                }
                 try {
-                    hit.hasVideos = await ask.hasVideos(hit.chatId, hit.topicId)
+                    hit.hasVideos = await ask.hasVideos(hit.chatId, hit.topicId, signal)
+                    if (!signal.aborted) rememberCount(key, hit.hasVideos)
                 } catch {
                     if (signal.aborted) return
-                    // Unread: the topic stays listed as it was, not dimmed.
+                    countsRefused = true
                 }
             }
         }),
@@ -151,7 +164,8 @@ export async function findTopics(input: TopicSearchInput): Promise<TopicsFound> 
 async function topicsWithFlood(ask: TopicAsk, chatId: number, query: string, limit: number, sleep: (ms: number, signal: AbortSignal) => Promise<void>, signal: AbortSignal): Promise<RawTopic[]> {
     for (let attempt = 0; ; attempt++) {
         try {
-            return await ask.topicsOf(chatId, query, limit)
+            signal.throwIfAborted()
+            return await ask.topicsOf(chatId, query, limit, signal)
         } catch (e) {
             const seconds = floodSeconds(e as { message?: string; text?: string; seconds?: number })
             if (!seconds || attempt > 0 || seconds > TOPIC_FLOOD_MAX_S) throw e
@@ -177,7 +191,9 @@ const fromWeb = (h: TopicHit): TopicHit => ({
 export function telegramTopics(tg: TelegramClient): TopicAsk {
     const filters = [{ _: 'inputMessagesFilterVideo' }, { _: 'inputMessagesFilterDocument' }] as const
     return {
-        async topicsOf(chatId, query, limit) {
+        async topicsOf(chatId, query, limit, signal) {
+            // mtcute takes no abort signal for these calls: a call already sent finishes, and nothing more is sent after the abort.
+            signal.throwIfAborted()
             const found = await tg.getForumTopics(chatId, { query, limit })
             const out: RawTopic[] = []
             const seen = new Set<number>()
@@ -189,14 +205,26 @@ export function telegramTopics(tg: TelegramClient): TopicAsk {
             }
             return out
         },
-        async hasVideos(chatId, topicId) {
+        async hasVideos(chatId, topicId, signal) {
+            signal.throwIfAborted()
             // A video count first; files only when it is none (a topic of PDFs is "no videos" once its files are named, which the grid does).
             const videos = await tg.searchMessages({ chatId, threadId: topicId, filter: filters[0], limit: 1 })
             if (videos.total > 0 || videos.length > 0) return true
+            signal.throwIfAborted()
             const files = await tg.searchMessages({ chatId, threadId: topicId, filter: filters[1], limit: 1 })
             return files.total > 0 || files.length > 0
         },
     }
+}
+
+/** Which topics were found to hold videos (or none), kept for the session so no search counts one twice; bounded. */
+const counted = new Map<string, boolean>()
+const COUNTED_MAX = 2000
+
+function rememberCount(key: string, has: boolean) {
+    counted.delete(key)
+    counted.set(key, has)
+    while (counted.size > COUNTED_MAX) counted.delete(counted.keys().next().value!)
 }
 
 // What the worker keeps: the last answers, so a Back to the same words lists them at once.
@@ -218,6 +246,14 @@ export function keepTopics(key: string, found: TopicsFound, now = Date.now()) {
     while (kept.size > KEEP_MAX) kept.delete(kept.keys().next().value!)
 }
 
+/** Keeps an answer in which every asked group answered; one with a skipped group (a flood wait past thirty seconds, a refusal) is not kept, so asking again asks again. Whether it was kept. */
+export function keepWhole(key: string, found: TopicsFound): boolean {
+    if (found.refused) return false
+    keepTopics(key, found)
+    return true
+}
+
 export function forgetTopics() {
     kept.clear()
+    counted.clear()
 }

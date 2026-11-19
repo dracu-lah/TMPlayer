@@ -79,8 +79,12 @@ export function SearchTopics(props: { words: string | undefined; everyChat: bool
                         <button class="link" type="button" onClick={() => setAgain(again() + 1)}>{t('common.try_again')}</button>
                     </div>
                 </Show>
-                <Show when={found()?.partial && found()!.asked && hits().length}>
-                    <p class="muted small">{t('search.topics_partial', { count: found()!.asked })}</p>
+                {/* Fewer groups than asked answered (one waited too long or refused): said as the apps say fewer groups, with the way to ask again. */}
+                <Show when={(found()?.partial || found()?.refused) && found()!.asked && hits().length}>
+                    <p class="muted small">{t('search.topics_partial', { count: Math.max(1, found()!.asked - (found()!.refused || 0)) })}</p>
+                    <Show when={found()!.refused && !busy()}>
+                        <button class="link" type="button" onClick={() => setAgain(again() + 1)}>{t('common.try_again')}</button>
+                    </Show>
                 </Show>
                 <ul class="topic-list">
                     <For each={hits()}>
