@@ -241,7 +241,6 @@ private sealed interface Prompt {
 
     /** "Get test versions" being switched on: pre-releases may have bugs, so it is asked first. Off is not asked. */
     data object TestVersions : Prompt
-    data object ClearHistory : Prompt
     data object ClearFavorites : Prompt
     data object SignOut : Prompt
 
@@ -373,7 +372,6 @@ fun SettingsScreen(
     val watchedStore = remember { WatchedStore(context) }
     val watchedList by watchedStore.history.collectAsStateWithLifecycle(initialValue = emptyList())
     val historyRemoval = com.tmplayer.ui.browse.rememberHistoryRemoval()
-    val touchHere = isTouch()
     // Only those the kids lock shows, as the Favourites tab counts them.
     val storedFavorites by settings.favorites.collectAsStateWithLifecycle(initialValue = emptySet())
     val allowedChats by com.tmplayer.data.ChatGate.browsing.collectAsStateWithLifecycle()
@@ -416,6 +414,18 @@ fun SettingsScreen(
     var pickingKidsChats by remember { mutableStateOf(false) }
 
     val toast = rememberToast()
+    // Clear history: the same question and count as History's own, closed by itself when the lists empty meanwhile.
+    val historyCards = com.tmplayer.data.ClearAllConfirm.historyCards(history, watchedList)
+    val askClearHistory = com.tmplayer.ui.components.rememberClearAllConfirm(
+        count = historyCards,
+        title = s.browseClearHistoryTitle,
+        message = s.browseClearHistoryMessage(historyCards),
+        detail = s.browseClearHistoryDetail,
+    ) {
+        historyRemoval.run({ s.browseHistoryCleared }) { st, w -> com.tmplayer.data.HistoryEdits.clear(st, w) }
+        // What was cleared lives on History, not here, so the line is the only sign.
+        toast(s.browseHistoryCleared)
+    }
     val updateState by Updates.state.collectAsStateWithLifecycle()
     val updateNotify by settings.updateNotify.collectAsStateWithLifecycle(initialValue = true)
     val updateTestVersions by settings.updateTestVersions.collectAsStateWithLifecycle(initialValue = false)
@@ -1512,20 +1522,14 @@ fun SettingsScreen(
                     }
                 }
                 // One Clear history, as History's own: Continue watching and Watched together, Watch
-                // later kept. At once with Undo on a touch screen, asked first under a remote.
+                // later kept. Asked first on every screen (HX59), then said with Undo.
                 if (history.isNotEmpty() || watchedList.isNotEmpty()) {
                     item {
                         ActionRow(
                             title = s.browseClearHistory,
                             subtitle = s.browseClearHistoryDetail,
                             icon = TmIcons.Close,
-                            onClick = {
-                                if (touchHere) {
-                                    historyRemoval.run({ s.browseHistoryCleared }) { st, w -> com.tmplayer.data.HistoryEdits.clear(st, w) }
-                                } else {
-                                    prompt = Prompt.ClearHistory
-                                }
-                            },
+                            onClick = askClearHistory,
                         )
                     }
                 }
@@ -2534,20 +2538,6 @@ fun SettingsScreen(
                     settings.setUpdateTestVersions(true)
                     Updates.testVersionsSwitched(on = true, skipped = settings.updatePrefs.skippedVersion())
                 }
-            },
-            onDismiss = { prompt = null },
-        )
-
-        Prompt.ClearHistory -> TvConfirm(
-            title = s.browseClearHistoryTitle,
-            message = s.browseClearHistoryMessage(history.size + watchedList.size),
-            detail = s.browseClearHistoryDetail,
-            confirmLabel = s.commonClear,
-            onConfirm = {
-                prompt = null
-                historyRemoval.run({ s.browseHistoryCleared }) { st, w -> com.tmplayer.data.HistoryEdits.clear(st, w) }
-                // What was cleared lives on History, not here, so the line is the only sign.
-                toast(s.browseHistoryCleared)
             },
             onDismiss = { prompt = null },
         )
