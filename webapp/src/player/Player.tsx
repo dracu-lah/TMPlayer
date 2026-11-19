@@ -20,8 +20,10 @@ import { readLook } from './keep'
 import { loadThumb } from '../screens/thumbs'
 import { readSubtitle, SUBTITLE_EXTENSIONS, SubtitleError } from './subtitles'
 import { choseOther, warmRestore } from './subpick-use'
-import { api } from '../tg/rpc'
-import { t } from '../i18n'
+import { api, floodLeft, link } from '../tg/rpc'
+import { online } from '../net'
+import { StallWatch, stallWhy } from './openStall'
+import { t, waitPhrase } from '../i18n'
 import { routeCrashes } from '../crash'
 import { form } from '../form'
 import { Icon } from '../ui/Icon'
@@ -43,8 +45,6 @@ interface Source {
 
 /** Seconds before the end at which the next episode is fetched ahead and its card comes up. */
 const NEXT_AHEAD = 30
-/** Waiting this long with nothing arriving says so, as the app's OpeningStall. */
-const STALL_MS = 15_000
 /** An LG or Samsung TV, whose own player may be given the file (tvnative.ts). */
 const onTv = TV_BROWSER.test(navigator.userAgent)
 /** How long the picture has to move on after a failure nobody caught, before the player says it broke. */
@@ -131,6 +131,10 @@ export function Player(props: {
     const [sampled, setSampled] = createSignal<[number, number]>([0, 0])
     const readout = () => `${t('player.details_buffered')}: ${t('player.seek_seconds', { seconds: Math.round(sampled()[0]) })}  ·  ${speedText(Math.max(0, sampled()[1]))}`
     const [stall, setStall] = createSignal<'start' | 'mid' | 'offline' | null>(null)
+    /** Bytes a second of a line that keeps sending too slowly to start yet (the loader shows it); 0 when none is. */
+    const [trickle, setTrickle] = createSignal(0)
+    /** Seconds Telegram asked a file read to wait, kept up to date while the sheet is up. */
+    const [flood, setFlood] = createSignal(0)
     /** Where the video was resumed from (seconds), for the Start over offer. */
     const [resumedAt, setResumedAt] = createSignal<number | null>(null)
     /** The opening loader's stage (loader.tsx); null once the first frame is in, which ends it for good. */
@@ -255,6 +259,8 @@ export function Player(props: {
         openingAt = at
         moviTried = ''
         loadStarted = performance.now()
+        watch.reset(loadStarted)
+        setTrickle(0)
         framed = false
         retryOnline = false
         // A new source resets the element's speed; the one chosen carries over.
@@ -668,12 +674,23 @@ export function Player(props: {
     let lastTime = -1
     let stuckSince = 0
     let everPlayed = false
+    let wasHidden = false
+    /** Counts the bytes that arrive while the video waits: 10 s with none is the stall sheet (U1), see openStall.ts. */
+    const watch = new StallWatch()
     const sample = () => {
-        if (document.hidden) return
+        if (document.hidden) return void (wasHidden = true)
         if (!video.paused) refreshKept()
         const f = file
         setLoaded(f && f.loaded < 0.999 ? f.loaded : null)
+        const now = performance.now()
         const received = f?.received ?? 0
+        // Back from the background: what arrived meanwhile is not a speed, and the wait counts afresh.
+        if (wasHidden) {
+            wasHidden = false
+            lastReceived = received
+            stuckSince = now
+            watch.reset(now, received)
+        }
         const rate = received - lastReceived
         lastReceived = received
         const b = video.buffered
@@ -683,12 +700,17 @@ export function Player(props: {
         // Waiting to play with the clock not moving: say so after a while, as the app does.
         // Before the first frame the element is paused with nothing in it: that is waiting too.
         const waiting = (!everPlayed || !video.paused) && video.readyState < 3
-        if (video.currentTime !== lastTime || !waiting || error() || needsApp()) {
+        const moved = video.currentTime !== lastTime
+        const phase = watch.tick(now, { waiting: waiting && !error() && !needsApp(), moved, received, local: !f || f.loaded >= 0.999, transcode: !!probed?.transcode })
+        // Bytes still arriving, only too slowly: the loader shows the speed, and Telegram is not blamed.
+        setTrickle(phase === 'trickle' && !stall() ? Math.max(1, Math.round(watch.speed(now))) : 0)
+        setFlood(floodLeft())
+        if (moved || !waiting || error() || needsApp()) {
             lastTime = video.currentTime
-            stuckSince = performance.now()
+            stuckSince = now
             if (stall()) setStall(null)
-        } else if (!navigator.onLine && performance.now() - stuckSince > 2000) setStall('offline')
-        else if (performance.now() - stuckSince > (probed?.transcode ? STALL_MS * 3 : STALL_MS) && !stall()) setStall(everPlayed ? 'mid' : 'start')
+        } else if (!navigator.onLine && now - stuckSince > 2000) setStall('offline')
+        else if (phase === 'stalled' && !stall()) setStall(everPlayed ? 'mid' : 'start')
     }
 
     // Hidden (another app, a closed tab, a reload): the place is saved now, not at the next 10 s.
@@ -831,6 +853,16 @@ export function Player(props: {
     const blocked = () => !!(needsApp() || error() || (stall() && stall() !== 'offline'))
     const sheetTitle = () => (props.info?.episode ? `${props.info.title} ${props.info.episode.code}` : (props.info?.title ?? item.title))
     const lighter = () => (needsApp() ? copies[0] : copies[copies.length - 1])
+    /** Why nothing arrives: Telegram asked to wait (and for how long), no line to Telegram, or it has not started sending. */
+    const why = () => stallWhy(flood(), online(), link())
+    // The wait in steps of 5 s past 10, so the sheet's alert is not read out every second.
+    const floodWait = () => waitPhrase(flood() > 10 ? Math.ceil(flood() / 5) * 5 : flood())
+    const stallBody = () => {
+        const w = why()
+        if (w === 'flood') return t('player.stalled_flood_wait', { wait: floodWait() })
+        if (w === 'noline') return t('player.stalled_no_line_plain')
+        return stall() === 'start' ? t('player.stalled_slow') : t('player.stalled_mid_slow')
+    }
 
     return (
         <video-player class="player-root">
@@ -943,7 +975,7 @@ export function Player(props: {
                 </Show>
 
                 <Show when={opening() !== null && !blocked()}>
-                    <OpeningLoader item={item} info={props.info} at={resumedAt() ?? 0} stage={opening()!} converting={converting()} onClose={close} />
+                    <OpeningLoader item={item} info={props.info} at={resumedAt() ?? 0} stage={opening()!} converting={converting()} rate={trickle() ? speedText(trickle()) : undefined} offline={stall() === 'offline'} onClose={close} />
                 </Show>
 
                 <Show when={blocked()}>
@@ -951,7 +983,7 @@ export function Player(props: {
                         item={item}
                         title={sheetTitle()}
                         heading={needsApp() ? t('web.needs_app_title') : error() ? t('player.cant_play') : stall() === 'start' ? t('player.stalled_title') : t('player.stalled_mid_title')}
-                        body={needsApp() ? whyText(needsApp()!) : (error() ?? (stall() === 'start' ? t('player.stalled_slow') : t('player.stalled_mid_slow')))}
+                        body={needsApp() ? whyText(needsApp()!) : (error() ?? stallBody())}
                         note={needsApp() ? t('web.app_body') : undefined}
                         warning={!!error() || !!needsApp()}
                         format={failedLine()}
@@ -968,7 +1000,8 @@ export function Player(props: {
                                 {t('web.needs_app_get')}
                             </a>
                         </Show>
-                        <Show when={copies.length && source().height === 0}>
+                        {/* A lighter copy helps a slow Telegram, not a flood wait or a blocked line (the apps' StalledSheet). */}
+                        <Show when={copies.length && source().height === 0 && (needsApp() || error() || why() === 'slow')}>
                             <button
                                 type="button"
                                 class="pc-sheet-button"

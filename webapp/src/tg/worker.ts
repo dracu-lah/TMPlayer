@@ -40,6 +40,8 @@ const base = new BaseTelegramClient({
     },
 })
 const tg = new TelegramClient({ client: base })
+// The line to Telegram as mtcute reports it, for the page's "Can't reach Telegram" banner (net.ts).
+base.onConnectionState.add((link) => postMessage({ link }))
 
 /** How long a sign out waits for Telegram before forgetting the account on this device anyway. */
 const LOG_OUT_WAIT_MS = 5_000
@@ -465,6 +467,11 @@ export const api = {
     async resumeKept(_: Ctx, savedMs: number | null, positionMs: number, rewindMs: number | null): Promise<number> {
         const r = await rules()
         return r.resumeKept(savedMs, positionMs, r.rewindSetting(rewindMs))
+    },
+
+    /** Retry on the banner: the connections to Telegram are opened again, as when the browser says it is back online. */
+    async reconnect(_: Ctx): Promise<void> {
+        base.mt.network.notifyNetworkChanged(true)
     },
 
     /** Whether this worker knows where a file is (a page reloaded on a list item's state may outlive it). */
