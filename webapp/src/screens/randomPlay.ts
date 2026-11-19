@@ -11,6 +11,8 @@ import type { VideoItem } from '../tg/types'
 
 const idOf = (v: Pick<VideoItem, 'chatId' | 'messageId'>) => `${v.chatId}:${v.messageId}`
 
+let running = false
+
 /** Rolls tried when the one picked turned out to be gone from its chat, before saying so. */
 const TRIES = 4
 
@@ -28,6 +30,9 @@ export async function playRandomOf(opts: {
     open: (path: string, item: VideoItem) => void
     verify?: boolean
 }): Promise<boolean> {
+    // A second press while the first is still asking (a double tap, Enter held) is the same press.
+    if (running) return false
+    running = true
     let pool = [...opts.items]
     const gone: { chatId: number; messageId: number }[] = []
     try {
@@ -51,6 +56,7 @@ export async function playRandomOf(opts: {
             return true
         }
     } finally {
+        running = false
         if (gone.length) void forgetGone(gone)
     }
     showToast({ text: t('web.gone_from_chat') })

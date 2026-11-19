@@ -3,9 +3,10 @@
 // which video is picked) are core's, run in the worker; this file only keeps what the page stores
 // clean, since a stored value is outside data, and decides which of the grid's notes to show.
 
-/** The Show group, in the order the menu lists it. The apps' On this device and 1080p and up are not here: the web keeps no copies, and HD is a picture chip. */
-export const FILTERS = ['All', 'Unwatched', 'InProgress', 'Watched', 'Shows', 'Singles'] as const
-export type ChatFilter = (typeof FILTERS)[number]
+import type { ChatFilter, ChatPref } from './filterPref.ts'
+
+// What is stored per chat (ChatPref, cleanPref, FILTERS) is in filterPref.ts, which the store reads at first load.
+export * from './filterPref.ts'
 
 /** The catalog key naming each Show filter. */
 export const FILTER_WORDS = {
@@ -16,50 +17,6 @@ export const FILTER_WORDS = {
     Shows: 'grid.filter_shows',
     Singles: 'grid.filter_singles',
 } as const satisfies Record<ChatFilter, string>
-
-/** What is kept for one chat: the Show filter and the line of the filters by what a video is. */
-export interface ChatPref {
-    filter: ChatFilter
-    facets: string
-}
-
-export const NO_PREF: ChatPref = { filter: 'All', facets: '' }
-
-/** Longest stored line: six parts of at most eleven characters each, with their separators. */
-const LINE_MAX = 80
-const PART = /^(?:(?:len|pic|add)=[a-z0-9]{1,6}|(?:hdr|sub)=1|lang=[a-z]{2,3})$/
-
-export function cleanFilter(raw: unknown): ChatFilter {
-    return FILTERS.find((f) => f === raw) ?? 'All'
-}
-
-/**
- * A stored line of facets kept only as far as it is well formed: parts of the shapes the rules
- * write, one of each kind, nothing else. What the rules cannot read they would drop anyway; this
- * keeps garbage (a megabyte, a script) from being stored or sent on.
- */
-export function cleanFacets(raw: unknown): string {
-    if (typeof raw !== 'string' || raw.length > 4 * LINE_MAX) return ''
-    const seen = new Set<string>()
-    const kept: string[] = []
-    for (const part of raw.split(';')) {
-        if (!PART.test(part)) continue
-        const key = part.slice(0, part.indexOf('='))
-        if (seen.has(key)) continue
-        seen.add(key)
-        kept.push(part)
-    }
-    return kept.join(';')
-}
-
-/** A chat's stored preference, or none where what was stored is not one. */
-export function cleanPref(raw: unknown): ChatPref {
-    if (!raw || typeof raw !== 'object') return NO_PREF
-    const o = raw as { filter?: unknown; facets?: unknown }
-    return { filter: cleanFilter(o.filter), facets: cleanFacets(o.facets) }
-}
-
-export const isDefault = (p: ChatPref) => p.filter === 'All' && p.facets === ''
 
 /** How many filters are on, for the Sort button's label: the Show filter counts as one. */
 export const filtersOn = (p: ChatPref, facetCount: number) => (p.filter === 'All' ? 0 : 1) + facetCount

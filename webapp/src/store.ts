@@ -9,7 +9,7 @@ import { clearIndex, POSTERS as POSTER_CACHE, THUMBS, touch } from './cacheBound
 import { cleanHome } from './ui/homeSettings'
 import { decodePick, encodePick, type Pick } from './pick'
 import * as Lists from './ui/lists'
-import { cleanPref, isDefault, type ChatPref } from './ui/videoFilter'
+import { cleanPref, isDefault, type ChatPref } from './ui/filterPref'
 import { resolveSpeed, sanitiseBoost, speedTarget, speedToKeep, type SpeedScopes } from './player/extras'
 import { tdlibMessageId } from './sync/format'
 
