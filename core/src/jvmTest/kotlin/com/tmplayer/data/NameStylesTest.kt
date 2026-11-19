@@ -150,6 +150,11 @@ class NameStylesTest {
         Show("Ep.%E - Harbour Notes.mkv"),
         Show("#%E Harbour Notes.mkv", siblings = true),
         Show("%E Harbour Notes.mkv", siblings = true),
+        // Spanish soap channels: "Capítulo 80", with or without the accent, a "Final" or a handle after it.
+        Show("Harbour Notes Capítulo %e.mp4"),
+        Show("Harbour Notes Capitulo %e Final.mp4"),
+        Show("Harbour Notes Capitulo %e @Channel_Name.mp4"),
+        Show("Harbour Notes Episodio %e.mp4"),
     )
 
     private val films: List<Film> = listOf(

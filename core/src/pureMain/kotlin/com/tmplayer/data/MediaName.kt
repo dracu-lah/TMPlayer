@@ -1067,8 +1067,9 @@ object MediaName {
     /**
      * The word has to be there. A bare "E04" is too easy to find inside a title, and guessing
      * wrong turns a standalone video into episode four of a series that does not exist.
+     * "Capítulo 80" and "Capitulo 80" (Spanish, the soap channels) and "Episodio 4" count as the word.
      */
-    private val EPISODE_ONLY = Regex("""\bep(?:isode|i|s)?[\s-]?(\d{1,3})\b""", RegexOption.IGNORE_CASE)
+    private val EPISODE_ONLY = Regex("""\b(?:ep(?:isode|isodio|i|s)?|cap[ií]tulo)[\s-]?(\d{1,3})\b""", RegexOption.IGNORE_CASE)
 
     /**
      * A combined range of episodes in one file, "EP(29-32)", "Ep 29-32": the first and the last
