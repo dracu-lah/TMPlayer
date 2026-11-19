@@ -179,6 +179,14 @@ fun HomePage(state: ShellState, chats: ChatListViewModel) {
                 is HomeRow.Continue, is HomeRow.WatchLater, is HomeRow.Listed, is HomeRow.NewEpisodes -> Unit
             }
         },
+        onRowSeen = { row ->
+            when (row) {
+                is HomeRow.Chat -> model.rowShown(row.chatId)
+                is HomeRow.Recent -> model.requestRecent()
+                is HomeRow.Continue, is HomeRow.WatchLater, is HomeRow.Listed, is HomeRow.NewEpisodes -> Unit
+            }
+        },
+        onRowLeft = { row -> if (row is HomeRow.Chat) model.rowGone(row.chatId) },
         onArtWanted = model::requestArt,
         onLaterArtWanted = model::requestArt,
         onRefresh = model::refreshInPlace,
@@ -221,6 +229,10 @@ internal fun HomeRowsView(
     layout: HomeLayout = HomeLayout(),
     /** Settings, on its Home page: from the all-off card and Recently added's "no chosen chats" line. */
     onOpenHomeSettings: () -> Unit = {},
+    /** A row came on screen while scrolling: asked for after a short stay ([HomeViewModel.rowShown]), so a flick past rows asks for none. */
+    onRowSeen: (HomeRow) -> Unit = onRowShown,
+    /** That row left the screen again: a fetch still queued for it is taken back ([HomeViewModel.rowGone]). */
+    onRowLeft: (HomeRow) -> Unit = {},
 ) {
     val s = LocalStrings.current
     var openSeries by remember { mutableStateOf<Series?>(null) }
@@ -411,7 +423,10 @@ internal fun HomeRowsView(
                     items(shownRows, key = { it.key }, contentType = { it::class }) { row ->
                         val loaded = row.isLoaded()
                         // Every time it comes on screen: a row a refresh passed by is asked again then.
-                        LaunchedEffect(row.key) { onRowShown(row) }
+                        androidx.compose.runtime.DisposableEffect(row.key) {
+                            onRowSeen(row)
+                            onDispose { onRowLeft(row) }
+                        }
                         Column {
                             RowHeading(
                                 title = row.title(s, titles),
