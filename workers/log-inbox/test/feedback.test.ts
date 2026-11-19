@@ -282,8 +282,16 @@ test('the web app can read the answer of a feedback post, and no other page can'
   assert.equal(refused.headers.get('Access-Control-Allow-Origin'), web)
   const elsewhere = await worker.fetch(new Request(`https://inbox.example${FEEDBACK_PATH}`, { method: 'POST', body: body({ id: 'f'.repeat(32) }), headers: { 'Content-Type': 'text/plain; charset=utf-8', Origin: 'https://evil.example' } }), e)
   assert.equal(elsewhere.headers.get('Access-Control-Allow-Origin'), null)
+  // Vary: Origin on every feedback answer, so a cache never hands one origin's answer to another.
+  assert.equal(elsewhere.headers.get('Vary'), 'Origin')
+  assert.equal(refused.headers.get('Vary'), 'Origin')
   const app = await worker.fetch(post(body({ id: 'e'.repeat(32) })), e)
   assert.equal(app.headers.get('Access-Control-Allow-Origin'), null, 'the apps send no Origin and need nothing')
+  assert.equal(app.headers.get('Vary'), 'Origin')
+  // The 404 and 405 answers of the path carry it too.
+  const wrong = await worker.fetch(new Request(`https://inbox.example${FEEDBACK_PATH}`, { method: 'GET' }), e)
+  assert.equal(wrong.status, 405)
+  assert.equal(wrong.headers.get('Vary'), 'Origin')
   // Log reports and title reports are not the web app's.
   const logs = await worker.fetch(new Request('https://inbox.example/v1/report', { method: 'POST', body: 'x', headers: { 'Content-Type': 'text/plain', Origin: web } }), e)
   assert.equal(logs.headers.get('Access-Control-Allow-Origin'), null)
@@ -296,5 +304,9 @@ test('a preflight from the web app is answered, from another page refused', asyn
   assert.equal(ok.status, 204)
   assert.equal(ok.headers.get('Access-Control-Allow-Origin'), 'https://web.tmplayer.org')
   assert.equal(ok.headers.get('Access-Control-Allow-Methods'), 'POST')
-  assert.equal((await ask('https://evil.example')).status, 403)
+  assert.equal(ok.headers.get('Vary'), 'Origin')
+  const refused = await ask('https://evil.example')
+  assert.equal(refused.status, 403)
+  assert.equal(refused.headers.get('Vary'), 'Origin')
+  assert.equal(refused.headers.get('Access-Control-Allow-Origin'), null)
 })
