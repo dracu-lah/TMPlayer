@@ -7,7 +7,7 @@
 // `huge` (a very large account for e2e/scale.spec.ts, described below the dialogs),
 // `hinted` (Test Shows is named for a language: "Test Shows Malayalam", for the chat language hints of e2e/posters.spec.ts).
 // Read live, so a test can change them while the page runs (the cookie is read again): `stall` (a
-// file read answers nothing until the flag goes), `flood:N` (file reads are told to wait N seconds, from the first one), `linkdown` (the line to
+// file read answers nothing until the flag goes), `late` (it answers after 6 s), `flood:N` (file reads are told to wait N seconds, from the first one), `linkdown` (the line to
 // Telegram reports `connecting`, and nothing is answered).
 
 // Read synchronously (a worker may): a top-level await would hold back the worker's message
@@ -386,6 +386,7 @@ export class TelegramClient {
                 now.clear()
                 again.forEach((f) => now.add(f))
             }
+            if (now.has('late')) await delay(6000)
             const flood = [...now].find((f) => f.startsWith('flood:'))
             if (flood) {
                 if (!floodEnds) floodEnds = Date.now() + Number(flood.slice(6)) * 1000

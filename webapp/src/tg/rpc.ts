@@ -5,7 +5,7 @@ import type { Api, Ctx } from './worker'
 import type { RpcError } from './types'
 import { failure } from '../errors'
 import { showCrashCard } from '../crash'
-import { floodSeconds } from './flood'
+import { createFloodClock, floodSeconds } from './flood'
 
 type Out =
     | { id: number; value: unknown }
@@ -86,13 +86,12 @@ export function onWorkerRestart(fn: () => void): () => void {
 const [link, setLink] = createSignal<string | null>(null)
 export { link }
 
-/** When the last flood wait on a file read ends (performance.now() ms), 0 when none is running. */
-let floodUntil = 0
-function noteFlood(seconds: number) {
-    if (seconds > 0) floodUntil = Math.max(floodUntil, performance.now() + seconds * 1000)
-}
+const flood = createFloodClock()
+const noteFlood = flood.note
 /** Seconds left of the flood wait Telegram asked a file read for; 0 when there is none. */
-export const floodLeft = () => Math.max(0, Math.ceil((floodUntil - performance.now()) / 1000))
+export const floodLeft = flood.left
+/** A new video opens: a wait that belonged to the last one is not told for it. */
+export const clearFlood = flood.clear
 
 let restarts: number[] = []
 const MAX_RESTARTS = 3

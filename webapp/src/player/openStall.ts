@@ -10,6 +10,10 @@ export const STALL_MS = 10_000
 export const DECODE_STALL_MS = 15_000
 /** Bytes arriving but nothing playing for this long: the loader shows the speed, and does not blame Telegram. */
 export const TRICKLE_MS = 5_000
+/** A read ends a whole 512 KiB chunk at a time, so a slow line shows no byte for as long as a chunk needs: the wait grows with what is asked, at this speed. */
+export const SLOW_FLOOR_BYTES_PER_S = 25_000
+/** The most that is added for the chunks asked of Telegram. */
+export const MAX_EXTRA_MS = 65_000
 /** A conversion on this device is slow by itself: its waits are three times as long. */
 export const TRANSCODE_FACTOR = 3
 
@@ -26,6 +30,13 @@ export interface Sample {
     local: boolean
     /** The picture is converted here. */
     transcode: boolean
+    /** Bytes asked of Telegram and not yet in: 0 when the cause is known (a flood wait, no line), so the wait is not stretched. */
+    pending?: number
+}
+
+/** How long a wait may go with no new bytes: STALL_MS, and the time the chunks asked for need at the slowest line worth waiting on. */
+export function stallWindow(pending: number): number {
+    return STALL_MS + Math.min(MAX_EXTRA_MS, Math.max(0, pending) / SLOW_FLOOR_BYTES_PER_S * 1000)
 }
 
 export class StallWatch {
@@ -57,7 +68,7 @@ export class StallWatch {
         this.bytes = s.received
         const scale = s.transcode ? TRANSCODE_FACTOR : 1
         if (s.local) return now - this.movedAt >= DECODE_STALL_MS * scale ? 'stalled' : 'ok'
-        if (now - this.bytesAt >= STALL_MS * scale) return 'stalled'
+        if (now - this.bytesAt >= stallWindow(s.pending ?? 0) * scale) return 'stalled'
         // Some bytes have come since the wait began (and the last one is under STALL_MS old): slow, not silent.
         return this.bytesAt > this.movedAt && now - this.movedAt >= TRICKLE_MS ? 'trickle' : 'ok'
     }

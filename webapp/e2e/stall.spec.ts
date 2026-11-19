@@ -36,7 +36,7 @@ async function prepare(page: Page, layout: string | null) {
 }
 
 /** Moves the page's clock on a second at a time until the stall sheet is up: the player starts reading at its own pace, so the 10 s are counted from there. */
-async function untilSheet(page: Page, upTo = 40_000) {
+async function untilSheet(page: Page, upTo = 80_000) {
     for (let spent = 0; spent < upTo && (await page.locator('.pc-status').count()) === 0; spent += 1000) {
         await page.clock.runFor(1000)
         await page.waitForTimeout(50)
@@ -64,6 +64,9 @@ for (const form of FORMS) {
             await expect(page.locator('.pc-loader')).toBeVisible()
             await page.clock.runFor(5_000)
             await expect(page.locator('.pc-status')).toHaveCount(0)
+            // A read of a chunk is out: a chunk ends at once or not at all, so 10 s is not yet enough to say so (about 31 s here, at 25 KB/s).
+            await page.clock.runFor(15_000)
+            await expect(page.locator('.pc-status')).toHaveCount(0)
             await untilSheet(page)
             const sheet = page.locator('.pc-status')
             await expect(sheet.getByRole('heading', { name: "This video hasn't started" })).toBeVisible()
@@ -76,6 +79,18 @@ for (const form of FORMS) {
             await sheet.getByRole('button', { name: 'Try again' }).click()
             await playsPast(page, 0.5)
             await expect(page.locator('.pc-status')).toHaveCount(0)
+        })
+
+        test('a chunk that comes late (a slow line) is not called a stall, and the video plays when it is in', async ({ page, context }) => {
+            await fakeCase(context, 'late')
+            await page.clock.install()
+            await prepare(page, form.layout)
+            await openClips(page)
+            await openCard(page, 'Native Clip')
+            // Past the 10 s that would have shown the sheet, while the read is still out (it answers after 6 s of real time).
+            await page.clock.runFor(14_000)
+            await expect(page.locator('.pc-status')).toHaveCount(0)
+            await playsPast(page, 0.5)
         })
 
         test('Telegram asking to wait is said with how long, and it carries on by itself', async ({ page, context }) => {

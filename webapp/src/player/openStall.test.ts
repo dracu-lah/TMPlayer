@@ -1,7 +1,7 @@
 // `node --test src/player/openStall.test.ts` (pnpm test:player): why a video is not starting, on a clock the test drives.
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { DECODE_STALL_MS, STALL_MS, StallWatch, stallWhy, TRICKLE_MS, type Sample } from './openStall.ts'
+import { DECODE_STALL_MS, MAX_EXTRA_MS, STALL_MS, StallWatch, stallWhy, stallWindow, TRICKLE_MS, type Sample } from './openStall.ts'
 
 const waiting = (over: Partial<Sample> = {}): Sample => ({ waiting: true, moved: false, received: 0, local: false, transcode: false, ...over })
 
@@ -99,4 +99,56 @@ test('the reason: a flood wait first, then no line, else Telegram is slow', () =
     assert.equal(stallWhy(0, true, null), 'slow')
     // The device offline is the offline line's, not a blocked network.
     assert.equal(stallWhy(0, false, 'offline'), 'slow')
+})
+
+const CHUNK = 512 * 1024
+
+/**
+ * A line of `rate` bytes a second shared by `inFlight` chunks: nothing arrives until they all end
+ * together (the worst case for a watch), and then the next ones are asked. Returns whether the
+ * sheet ever came in `seconds`.
+ */
+function stalledOn(rate: number, inFlight: number, seconds: number): boolean {
+    const w = new StallWatch()
+    w.reset(0)
+    const every = (inFlight * CHUNK) / rate
+    let received = 0
+    let next = every
+    for (let t = 1; t <= seconds; t++) {
+        if (t >= next) {
+            received += inFlight * CHUNK
+            next += every
+        }
+        if (w.tick(t * 1000, waiting({ received, pending: inFlight * CHUNK })) === 'stalled') return true
+    }
+    return false
+}
+
+test('a slow line that ends a chunk every so often is never called stalled: 30 and 80 KB/s, head and tail asked together, then four', () => {
+    for (const rate of [30_000, 80_000]) {
+        assert.equal(stalledOn(rate, 2, 400), false, `${rate} B/s, 2 in flight`)
+        assert.equal(stalledOn(rate, 4, 400), false, `${rate} B/s, 4 in flight`)
+    }
+})
+
+test('a line that sends nothing is called stalled once the chunks asked for would have come at 25 KB/s', () => {
+    const w = new StallWatch()
+    w.reset(0)
+    const window = stallWindow(2 * CHUNK)
+    assert.ok(window > STALL_MS && window <= STALL_MS + MAX_EXTRA_MS)
+    assert.equal(w.tick(window - 1000, waiting({ pending: 2 * CHUNK })), 'ok')
+    assert.equal(w.tick(window, waiting({ pending: 2 * CHUNK })), 'stalled')
+})
+
+test('with nothing asked, or the cause known (pending 0), it is still 10 s', () => {
+    assert.equal(stallWindow(0), STALL_MS)
+    assert.equal(stallWindow(-5), STALL_MS)
+    const w = new StallWatch()
+    w.reset(0)
+    assert.equal(w.tick(STALL_MS, waiting({ pending: 0 })), 'stalled')
+})
+
+test('what is asked stretches the wait by no more than the cap', () => {
+    assert.equal(stallWindow(1e12), STALL_MS + MAX_EXTRA_MS)
+    assert.equal(stallWindow(NaN) >= STALL_MS || Number.isNaN(stallWindow(NaN)), true)
 })

@@ -3,7 +3,7 @@
 // (the "Can't reach Telegram" banner, U2).
 import { createEffect, createSignal, onCleanup } from 'solid-js'
 import { api, link } from './tg/rpc'
-import { createReachWatch } from './ui/reach'
+import { createReachWatch, singleFlight } from './ui/reach'
 
 const [online, setOnline] = createSignal(navigator.onLine)
 window.addEventListener('online', () => setOnline(true))
@@ -47,7 +47,8 @@ export function watchReach(active: () => boolean) {
 }
 
 /** Retry on the banner: the connections open again and the 20 s count starts again. */
+const reconnect = singleFlight(() => api.reconnect())
 export function retryReach() {
     watch?.restart()
-    api.reconnect().catch(() => {})
+    reconnect()
 }

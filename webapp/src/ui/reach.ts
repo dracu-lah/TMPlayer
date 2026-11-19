@@ -51,3 +51,16 @@ export function createReachWatch(onChange: (shown: boolean) => void, timers: Tim
         stop,
     }
 }
+
+/** `fn` with one call in flight: a press while the last is still running does nothing (a Retry pressed ten times reconnects once). */
+export function singleFlight(fn: () => Promise<unknown>): () => void {
+    let running = false
+    return () => {
+        if (running) return
+        running = true
+        fn().then(
+            () => (running = false),
+            () => (running = false),
+        )
+    }
+}

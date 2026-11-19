@@ -1,7 +1,7 @@
 // `node --test src/tg/flood.test.ts` (pnpm test:tg): a flood wait read from an error, and garbage that is not one.
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { floodSeconds } from './flood.ts'
+import { createFloodClock, floodSeconds } from './flood.ts'
 
 test('a flood wait is read from an error and nothing else is', () => {
     assert.equal(floodSeconds({ message: 'FLOOD_WAIT_12 (a wait of 12 seconds is required)' }), 12)
@@ -20,4 +20,32 @@ test('garbage in a flood error gives 0 or a bounded number', () => {
     }
     assert.equal(floodSeconds({ message: 'FLOOD_WAIT_99999999999' }), 86_400)
     assert.equal(floodSeconds({ message: 'FLOOD_WAIT_', text: 5 as unknown as string }), 0)
+})
+
+test('the flood clock counts down, keeps the longest wait, and a new video clears it', () => {
+    let now = 1000
+    const c = createFloodClock(() => now)
+    assert.equal(c.left(), 0)
+    c.note(30)
+    assert.equal(c.left(), 30)
+    now += 12_400
+    assert.equal(c.left(), 18)
+    c.note(5)
+    assert.equal(c.left(), 18)
+    c.note(0)
+    c.note(-3)
+    c.note(NaN)
+    assert.equal(c.left(), 18)
+    c.clear()
+    assert.equal(c.left(), 0)
+    now += 60_000
+    assert.equal(c.left(), 0)
+})
+
+test('a short flood wait is named too: 5 and 30 seconds', () => {
+    for (const s of [5, 30]) {
+        const c = createFloodClock(() => 0)
+        c.note(floodSeconds({ message: `FLOOD_WAIT_${s}` }))
+        assert.equal(c.left(), s)
+    }
 })

@@ -20,7 +20,7 @@ import { readLook } from './keep'
 import { loadThumb } from '../screens/thumbs'
 import { readSubtitle, SUBTITLE_EXTENSIONS, SubtitleError } from './subtitles'
 import { choseOther, warmRestore } from './subpick-use'
-import { api, floodLeft, link } from '../tg/rpc'
+import { api, clearFlood, floodLeft, link } from '../tg/rpc'
 import { online } from '../net'
 import { StallWatch, stallWhy } from './openStall'
 import { t, waitPhrase } from '../i18n'
@@ -677,6 +677,14 @@ export function Player(props: {
     let wasHidden = false
     /** Counts the bytes that arrive while the video waits: 10 s with none is the stall sheet (U1), see openStall.ts. */
     const watch = new StallWatch()
+    /** The page is back in view (also from a frozen tab, which ran no timer meanwhile): what arrived is not a speed and the wait counts afresh. */
+    const countAfresh = () => {
+        const now = performance.now()
+        lastReceived = file?.received ?? 0
+        stuckSince = now
+        watch.reset(now, lastReceived)
+    }
+    const onShown = () => (document.hidden ? void (wasHidden = true) : countAfresh())
     const sample = () => {
         if (document.hidden) return void (wasHidden = true)
         if (!video.paused) refreshKept()
@@ -687,9 +695,7 @@ export function Player(props: {
         // Back from the background: what arrived meanwhile is not a speed, and the wait counts afresh.
         if (wasHidden) {
             wasHidden = false
-            lastReceived = received
-            stuckSince = now
-            watch.reset(now, received)
+            countAfresh()
         }
         const rate = received - lastReceived
         lastReceived = received
@@ -701,7 +707,9 @@ export function Player(props: {
         // Before the first frame the element is paused with nothing in it: that is waiting too.
         const waiting = (!everPlayed || !video.paused) && video.readyState < 3
         const moved = video.currentTime !== lastTime
-        const phase = watch.tick(now, { waiting: waiting && !error() && !needsApp(), moved, received, local: !f || f.loaded >= 0.999, transcode: !!probed?.transcode })
+        // A read ends a chunk at a time, so what is asked of Telegram stretches the wait; a flood wait or no line is the cause already, and is not.
+        const known = floodLeft() > 0 || (navigator.onLine && link() !== null && link() !== 'connected' && link() !== 'updating')
+        const phase = watch.tick(now, { waiting: waiting && !error() && !needsApp(), moved, received, local: !f || f.loaded >= 0.999, transcode: !!probed?.transcode, pending: known ? 0 : (f?.pending ?? 0) })
         // Bytes still arriving, only too slowly: the loader shows the speed, and Telegram is not blamed.
         setTrickle(phase === 'trickle' && !stall() ? Math.max(1, Math.round(watch.speed(now))) : 0)
         setFlood(floodLeft())
@@ -748,6 +756,7 @@ export function Player(props: {
     /** Closed while the saved place was still being read: nothing may start after that. */
     let closed = false
     onMount(async () => {
+        clearFlood()
         setSubDelay(0)
         readLook().then(setLook, () => {})
         isWatched(item.chatId, item.messageId).then(setWatchedNow, () => {})
@@ -761,6 +770,8 @@ export function Player(props: {
         window.addEventListener('offline', onOffline)
         window.addEventListener('online', onOnline)
         document.addEventListener('visibilitychange', onHidden)
+        document.addEventListener('visibilitychange', onShown)
+        window.addEventListener('pageshow', onShown)
         window.addEventListener('pagehide', onLeave)
         tabs?.addEventListener('message', onOtherTab)
         container.focus({ preventScroll: true })
@@ -828,6 +839,8 @@ export function Player(props: {
         window.removeEventListener('offline', onOffline)
         window.removeEventListener('online', onOnline)
         document.removeEventListener('visibilitychange', onHidden)
+        document.removeEventListener('visibilitychange', onShown)
+        window.removeEventListener('pageshow', onShown)
         window.removeEventListener('pagehide', onLeave)
         tabs?.removeEventListener('message', onOtherTab)
         generation++

@@ -1,7 +1,7 @@
 // `node --test src/ui/reach.test.ts` (pnpm test:ui): the banner's wait and its hysteresis, on a clock the test drives.
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { CLEAR_MS, createReachWatch, UNREACHABLE_MS, type Timers } from './reach.ts'
+import { CLEAR_MS, createReachWatch, singleFlight, UNREACHABLE_MS, type Timers } from './reach.ts'
 
 function rig() {
     let now = 0
@@ -108,4 +108,25 @@ test('Retry with the line up leaves nothing running', () => {
     r.watch.restart()
     assert.equal(r.pending(), 0)
     assert.deepEqual(r.log, [true, false])
+})
+
+test('a Retry pressed ten times reconnects once while it runs, and again after it ends', async () => {
+    let calls = 0
+    let finish!: () => void
+    const go = singleFlight(() => new Promise<void>((resolve) => ((calls++, (finish = resolve)))))
+    for (let i = 0; i < 10; i++) go()
+    assert.equal(calls, 1)
+    finish()
+    await new Promise((r) => setTimeout(r, 0))
+    go()
+    assert.equal(calls, 2)
+})
+
+test('a reconnect that fails does not block the next', async () => {
+    let calls = 0
+    const go = singleFlight(() => (calls++, Promise.reject(new Error('x'))))
+    go()
+    await new Promise((r) => setTimeout(r, 0))
+    go()
+    assert.equal(calls, 2)
 })
