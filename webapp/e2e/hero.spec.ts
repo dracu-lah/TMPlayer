@@ -170,6 +170,8 @@ async function expectInside(page: Page, what: string) {
         expect(b!.y + b!.height, `${what}: ${part} bottom on screen`).toBeLessThanOrEqual(viewport.height + 0.5)
         expect(b!.x, `${what}: ${part} start inside the frame`).toBeGreaterThanOrEqual(frame.x - 0.5)
         expect(b!.x + b!.width, `${what}: ${part} end inside the frame`).toBeLessThanOrEqual(frame.x + frame.width + 0.5)
+        // Buttons and words are not tight under the frame's foot.
+        expect(b!.y + b!.height, `${what}: ${part} has room under it`).toBeLessThanOrEqual(frame.y + frame.height - 8)
         // The brand over the picture is never covered by the words.
         expect(b!.y, `${what}: ${part} clear of the brand`).toBeGreaterThanOrEqual(title.y + title.height - 0.5)
     }
@@ -185,6 +187,12 @@ const SIZES: [number, number, number][] = [
     [1280, 800, 1.5],
     [1280, 800, 2],
     [1920, 1080, 2],
+    // A laptop's browser area (1366x768 screen minus the browser's chrome), a short wide window and a narrow tall one.
+    [1366, 650, 1],
+    [1366, 768, 1],
+    [1440, 700, 1],
+    [900, 900, 1],
+    [951, 700, 1],
 ]
 
 for (const [w, h, zoom] of SIZES) {
@@ -215,8 +223,75 @@ test('no logo: the name stands in its place and still fits; reduced motion draws
     await expectInside(page, 'no logo')
     // Reduced motion: the carousel does not turn by itself.
     const dots = page.locator('section.hero .hero-dots button')
-    await page.mouse.move(2, 2)
+    await page.mouse.move(640, 790)
     await page.waitForTimeout(8000)
     await expect(dots.nth(0)).toHaveAttribute('aria-selected', 'true')
     await shot(page, 'desktop-nologo-1280x800')
+    // The setting is read live: turned off while the page is open, the carousel turns on its own.
+    await page.emulateMedia({ reducedMotion: 'no-preference' })
+    await expect(dots.nth(1)).toHaveAttribute('aria-selected', 'true', { timeout: 12_000 })
+})
+
+test('a pause button stops the carousel for the session, is reached by the keyboard and says what it does', async ({ page, context }) => {
+    test.skip(test.info().project.name !== 'chromium', 'one project sets the window itself')
+    await fakeCase(context, 'big')
+    await page.setViewportSize({ width: 1280, height: 800 })
+    const hero = await openHome(page)
+    const pause = hero.getByRole('button', { name: 'Pause the carousel' })
+    await expect(pause).toBeVisible()
+    await expect(pause).toHaveAttribute('aria-pressed', 'false')
+    // Tab reaches it (the carousel, then the button).
+    await hero.focus()
+    for (let i = 0; i < 12 && !(await pause.evaluate((el) => el === document.activeElement)); i++) await page.keyboard.press('Tab')
+    await expect(pause).toBeFocused()
+    await page.keyboard.press('Enter')
+    const play = hero.getByRole('button', { name: 'Play the carousel' })
+    await expect(play).toHaveAttribute('aria-pressed', 'true')
+    // Stopped: left alone and away from it, no page turns.
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
+    await page.mouse.move(640, 790)
+    await page.waitForTimeout(8500)
+    await expect(hero.locator('.hero-dots button').nth(0)).toHaveAttribute('aria-selected', 'true')
+    // It holds when Home is left and come back to, and turns on again when asked.
+    await page.getByRole('link', { name: 'Chats' }).first().click()
+    await page.goBack()
+    await expect(hero.getByRole('button', { name: 'Play the carousel' })).toBeVisible()
+    await hero.getByRole('button', { name: 'Play the carousel' }).click()
+    await expect(hero.getByRole('button', { name: 'Pause the carousel' })).toBeVisible()
+})
+
+test('a drag that starts and ends on Play turns the page and does not press Play', async ({ page, context }) => {
+    test.skip(test.info().project.name !== 'chromium', 'one project sets the window itself')
+    await fakeCase(context, 'big')
+    await page.setViewportSize({ width: 1280, height: 800 })
+    const hero = await openHome(page)
+    await settled(page)
+    const url = page.url()
+    const play = (await hero.locator('.hero-text:not(.leaving) .hero-play').boundingBox())!
+    const y = play.y + play.height / 2
+    // Across Play, from its end to its start (over 48 px, to the left): the page turns on, the release lands on Play.
+    await page.mouse.move(play.x + play.width - 6, y)
+    await page.mouse.down()
+    await page.mouse.move(play.x + 6, y, { steps: 8 })
+    await page.mouse.up()
+    await page.waitForTimeout(600)
+    await expect(hero.locator('.hero-dots button').nth(1)).toHaveAttribute('aria-selected', 'true')
+    expect(page.url()).toBe(url)
+    // A plain press on Play still opens the video.
+    await page.waitForTimeout(300)
+    await hero.locator('.hero-text:not(.leaving) .hero-play').click()
+    await expect(page).toHaveURL(/\/watch\/|\/video\//)
+})
+
+test('a dot has a hit area of at least 24 px', async ({ page, context }) => {
+    test.skip(test.info().project.name === 'webkit', 'Chromium and the form projects')
+    await fakeCase(context, 'big')
+    const hero = await openHome(page)
+    const dot = hero.locator('.hero-dots button').nth(2)
+    const area = await dot.evaluate((el) => {
+        const r = getComputedStyle(el, '::after')
+        return { w: el.getBoundingClientRect().width + parseFloat(r.left) * -2, h: el.getBoundingClientRect().height + parseFloat(r.top) * -2 }
+    })
+    expect(area.w).toBeGreaterThanOrEqual(24)
+    expect(area.h).toBeGreaterThanOrEqual(24)
 })
