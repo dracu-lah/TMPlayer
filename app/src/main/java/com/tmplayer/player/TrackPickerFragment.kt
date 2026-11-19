@@ -46,6 +46,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -824,7 +825,21 @@ class TrackPickerFragment : Fragment() {
     /** [lines] one under another, each group after the first opened by its heading or a gap. */
     @Composable
     private fun LineRows(lines: List<Line>, firstFocus: FocusRequester, focusKey: Any?) {
+        // The first frame draws what fits on a screen, and the line the focus goes to, and the
+        // rest a frame later. The picker is composed as its fragment starts, inside the player's
+        // fragment transaction, and a file with fifty subtitle tracks laid out every name, tag and
+        // timing line in that one go on a TV stick's main thread (HX82, Sentry 161970443).
+        val count = lines.size
+        val whole = remember { mutableStateOf(count <= FIRST_FRAME_LINES) }
+        if (!whole.value) {
+            LaunchedEffect(Unit) {
+                withFrameNanos { }
+                whole.value = true
+            }
+        }
+        val shown = if (whole.value) count else firstFrameLines(count, indexOfKey(lines, focusKey))
         lines.forEachIndexed { index, line ->
+            if (index >= shown) return@forEachIndexed
             val heading = line.group.heading()
             // A column that starts on Timing (the right half of a landscape phone) still names it.
             if (index == 0 && heading != null) {
@@ -951,6 +966,17 @@ class TrackPickerFragment : Fragment() {
 
     companion object {
         private const val ARG_TRACK_TYPE = "track_type"
+
+        /** The lines the picker's first frame draws: more than a television or a phone shows at once. */
+        internal const val FIRST_FRAME_LINES = 12
+
+        /** How many of [count] lines the first frame draws: [FIRST_FRAME_LINES], or down to the focused one at [focusAt]. */
+        internal fun firstFrameLines(count: Int, focusAt: Int): Int = maxOf(FIRST_FRAME_LINES, focusAt + 1).coerceIn(0, maxOf(count, 0))
+
+        private fun indexOfKey(lines: List<Line>, key: Any?): Int {
+            for (i in lines.indices) if (lines[i].key == key) return i
+            return -1
+        }
 
         /** The room that opens a group without a heading: about what a heading's top takes. */
         private val GROUP_GAP = 8.dp
