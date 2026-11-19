@@ -2056,8 +2056,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             onLock = ::lockScreen,
             // Back and forward beside play (R5): ten seconds each way, the figure on the button.
             onSeekButton = { forward -> jumpFromRemote(forward, fixedStepMs = Skip.BUTTON_MS) },
-            // The words under the six icons for the first openings of the player, then icons only.
-            showLabels = ControlLabels.takeSession(this),
+            // Icons only (user, 2026-11-19): the words under the six icons ([ControlLabels]) are not
+            // shown on any opening; [showLabels] stays at its default, false.
             onBack = ::finish,
             onMore = ::showOverflow,
             onRemainingToggled = { remaining ->

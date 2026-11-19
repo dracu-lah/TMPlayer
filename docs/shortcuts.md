@@ -165,9 +165,9 @@ Gestures in the player (`PlayerGestures`), each with its visible twin:
 | Back gesture or button | Closes the topmost sheet, then the row (only when a sheet is open; else the video, paused or playing, and the sound stops with it: `BackStopsThePlayerTest`) | the bar's back arrow |
 | Lock | Everything but the unlock hold is ignored | the lock button |
 
-The six icons under the controls carry their word (Subtitles, Sound, Speed, the shape in force,
-Rotate, Lock) for the first three openings of the player, then icons only (`ControlLabels`); on a TV the
-focus tip that names a button is left out while the words show. The row remembers the last focused
+The six icons under the controls (Subtitles, Sound, Speed, the shape in force, Rotate, Lock) are icons
+only: the words under them (`ControlLabels`, first three openings) were turned off on 2026-11-19, and the
+name is a long press or TalkBack away. The row remembers the last focused
 button after a sheet closes (`PlayerControls.focusRow`, `TvRowFocusTest`). The desktop's tooltips with
 their keys are the `player.*_hint` strings on `OverlayButton`/`Tip` and were already in place.
 
