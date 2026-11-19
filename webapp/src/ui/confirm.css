@@ -1,0 +1,8 @@
+/* The shared question (Confirm.tsx) on top of the page's .confirm look: a touch sized Cancel and
+   button, stacked with the safe one last on a narrow phone, and the held state while work runs. */
+.confirm-ask p { margin: 0; }
+.confirm-ask .confirm-buttons button { min-height: 44px; padding-inline: 12px; }
+.confirm-ask button:disabled { opacity: .6; }
+@media (max-width: 359px) {
+  .confirm-ask .confirm-buttons { flex-direction: column-reverse; align-items: stretch; }
+}
