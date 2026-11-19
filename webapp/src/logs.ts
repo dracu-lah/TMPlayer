@@ -142,20 +142,43 @@ function replaceSpans(s: string, spans: Span[], placeholder: string): string {
 function takeOutNames(s: string, known: Known): string {
     if (isEmpty(known)) return s
     const lower = s.toLowerCase()
-    // A letter whose lower case is longer or shorter (a dotted capital I) would move every offset: this line is matched as written.
-    const hay = lower.length === s.length ? lower : s
+    // A letter whose lower case is longer (a dotted capital I) moves every later offset. Then the line is folded one
+    // character at a time and each folded position keeps the original span it came from, so a name is still found
+    // whatever its case and the whole original characters it touched go.
+    const fold = lower.length === s.length ? null : foldWithMap(s)
+    const hay = fold ? fold.hay : lower
     const n = hay.length
     const spans: Span[] = []
+    const add = (from: number, to: number) => spans.push(fold ? [fold.from[from], fold.to[to - 1]] : [from, to])
     const whole = (i: number, len: number) => !(i > 0 && WORD_CHAR.test(hay[i - 1])) && !(i + len < n && WORD_CHAR.test(hay[i + len]))
     for (let i = 0; i < n; i++) {
         if (known.long.size) {
             const candidates = known.long.get(hay.substr(i, 4))
-            if (candidates) for (const v of candidates) if (hay.startsWith(v, i)) spans.push([i, i + v.length])
+            if (candidates) for (const v of candidates) if (hay.startsWith(v, i)) add(i, i + v.length)
         }
-        if (known.three.size && known.three.has(hay.substr(i, 3)) && whole(i, 3)) spans.push([i, i + 3])
-        if (known.two.size && known.two.has(hay.substr(i, 2)) && whole(i, 2)) spans.push([i, i + 2])
+        if (known.three.size && known.three.has(hay.substr(i, 3)) && whole(i, 3)) add(i, i + 3)
+        if (known.two.size && known.two.has(hay.substr(i, 2)) && whole(i, 2)) add(i, i + 2)
     }
     return replaceSpans(s, spans, '[name]')
+}
+
+/** `s` lower-cased one code point at a time: the folded text, and for each folded unit where its original character starts and ends. */
+function foldWithMap(s: string): { hay: string; from: number[]; to: number[] } {
+    let hay = ''
+    const from: number[] = []
+    const to: number[] = []
+    for (let i = 0; i < s.length; ) {
+        const cp = s.codePointAt(i) as number
+        const ch = String.fromCodePoint(cp)
+        const lc = ch.toLowerCase()
+        for (let k = 0; k < lc.length; k++) {
+            from.push(i)
+            to.push(i + ch.length)
+        }
+        hay += lc
+        i += ch.length
+    }
+    return { hay, from, to }
 }
 
 /**

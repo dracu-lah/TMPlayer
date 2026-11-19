@@ -110,6 +110,15 @@ test('e-mail addresses in any alphabet go', () => {
     for (const notMail of ['a@b', '@home alone', 'at@', 'x @ y']) assert.equal(scrubLine(notMail), notMail, notMail)
 })
 
+test('a line with a letter whose lower case is longer (a dotted capital I) still loses a known name written in any case', () => {
+    const known = knownPatterns(['Blue Box'])
+    // U+0130 lower-cases to two units, which used to switch the whole line to a case-sensitive match.
+    assert.equal(scrubLine('\u0130stanbul: playing BLUE BOX now', known), '\u0130stanbul: playing [name] now')
+    assert.equal(scrubLine('BLUE BOX then \u0130 then blue box', known), '[name] then \u0130 then [name]')
+    // The original characters a name touched go whole, and nothing around them moves.
+    assert.equal(scrubLine('x \u0130Blue Boxy', known), 'x \u0130[name]y')
+})
+
 test('known names go word for word in every form a log line writes them: case, accents either way, URL encoded, dotted, underscored', () => {
     const known = knownPatterns(['Blue Box', 'Blue Box Season Two', 'Café Société', 'Ünïcode Show'])
     const lines: [string, string][] = [
