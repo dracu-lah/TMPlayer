@@ -176,7 +176,9 @@ test('the upload hook reads the inbox answer and nothing else, and sends only a 
     assert.equal(reportCode(201, '{"code":"TMP-7K3Q","keepDays":30}'), 'TMP-7K3Q')
     for (const [s, b] of [[200, '{"code":"TMP-7K3Q"}'], [201, '{"code":"TMP-0I1L"}'], [201, 'nope'], [201, null], [500, '{"code":"TMP-7K3Q"}']] as const) assert.equal(reportCode(s, b), null)
     assert.equal(reportUrl('https://logs.example.org/v1/feedback'), 'https://logs.example.org/v1/report')
-    for (const bad of [null, '', 'http://x.org/v1/feedback', 'https://x.org/other', 'not a url']) assert.equal(reportUrl(bad), null)
+    assert.equal(reportUrl('https://logs.example.org/v1/report'), 'https://logs.example.org/v1/report')
+    assert.equal(reportUrl('https://logs.example.org'), 'https://logs.example.org/v1/report')
+    for (const bad of [null, '', 'http://x.org/v1/feedback', 'not a url', 'https://', 'https://x .org']) assert.equal(reportUrl(bad), null)
     let sent: { url: string; init: RequestInit } | null = null
     const ok = (async (url: string, init: RequestInit) => {
         sent = { url, init }

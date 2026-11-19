@@ -11,6 +11,8 @@
 // four facts about the browser. Nothing here touches the DOM beyond `localStorage` (try/catch, so a
 // browser that refuses it still sends); the screen is ui/FeedbackForm.tsx.
 
+import { buildBundle, suppliedParts, type Bundle } from '../logs.ts'
+
 export const MAX_MESSAGE = 4000
 export const MAX_CONTACT = 120
 /** The inbox refuses a body over this; a stored or received report text over it is not ours. */
@@ -329,15 +331,35 @@ export function mailto(facts: Facts, kind: Kind, message = ''): string {
     return base + encode(kept === '' ? facing : `${facing}${kept}`)
 }
 
-/** What Copy details puts on the clipboard for a viewer with neither GitHub nor mail: the facts, nothing else. */
-export function copyText(facts: Facts): string {
-    return [
+/**
+ * The page's own log for a report (WB18): scrubbed, with the moments the viewer marked as stuttering and
+ * what stopped the page last time, or null when there is nothing to say. Built only when Copy details is
+ * pressed (or its size is shown); nothing is sent from here.
+ */
+export function logsFor(facts: Facts): Bundle | null {
+    try {
+        const b = buildBundle(facts, suppliedParts())
+        return b.parts.length > 0 ? b : null
+    } catch {
+        return null
+    }
+}
+
+/**
+ * What Copy details puts on the clipboard for a viewer with neither GitHub nor mail: the facts, and
+ * below them the scrubbed logs when [attach] and the page has any (names, file names, numbers and
+ * addresses taken out). Nothing else.
+ */
+export function copyText(facts: Facts, attach = true): string {
+    const base = [
         'TMPlayer web',
         `Platform: ${facts.platform || 'other'}`,
         `App version: ${facts.version}`,
         `Device: ${facts.device}`,
         `App language: ${facts.language}`,
     ].join('\n')
+    const logs = attach ? logsFor(facts) : null
+    return logs ? `${base}\n\n${logs.text}` : base
 }
 
 // ---- The inbox -----------------------------------------------------------------------------

@@ -297,17 +297,13 @@ export function reportCode(status: number, body: unknown): string | null {
     return REPORT_CODE.exec(body.slice(0, 4096))?.[1] ?? null
 }
 
-/** The log inbox's report route for the feedback address the build carries (`https://host/v1/feedback` gives `https://host/v1/report`), or null. */
-export function reportUrl(feedbackAddress: string | null): string | null {
-    if (!feedbackAddress) return null
-    try {
-        const u = new URL(feedbackAddress)
-        if (u.protocol !== 'https:') return null
-        u.pathname = u.pathname.replace(/\/v1\/feedback\/?$/u, '/v1/report')
-        return u.pathname.endsWith('/v1/report') ? u.toString() : null
-    } catch {
-        return null
-    }
+/** The log inbox's report route for the address the build carries (the apps' LOG_UPLOAD_URL, or its `/v1/feedback` or `/v1/report` form), or null. */
+export function reportUrl(address: string | null): string | null {
+    const u = (address ?? '').trim()
+    if (!u.startsWith('https://') || u.length <= 'https://'.length || /\s/u.test(u)) return null
+    const clean = u.split('?')[0].split('#')[0].replace(/\/+$/u, '')
+    const base = clean.endsWith('/v1/report') ? clean.slice(0, -'/v1/report'.length) : clean.endsWith('/v1/feedback') ? clean.slice(0, -'/v1/feedback'.length) : clean
+    return `${base}/v1/report`
 }
 
 /**

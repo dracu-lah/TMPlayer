@@ -554,3 +554,18 @@ test('the logs code (WB18 hook): a TMP code from the inbox rides in the report, 
     assert.doesNotMatch(toJson(makeReport(ID, 'problem', 'x', null, FACTS)!), /logs/)
     assert.equal(parseReport(toJson(r).replace('"logs":"TMP-7K3Q"', '"logs":5'))?.logs, null)
 })
+
+test('Copy details carries the scrubbed logs when the page has any, and only for a problem (attach false leaves them off)', async () => {
+    const { clearLogs, log, rememberNames } = await import('../logs.ts')
+    clearLogs()
+    const bare = copyText(FACTS)
+    assert.doesNotMatch(bare, /== /, 'an empty ring adds nothing')
+    rememberNames(['Blue Box'])
+    log('W', 'player', 'could not play Blue Box S01E02.mkv for me@example.org')
+    const text = copyText(FACTS)
+    assert.ok(text.startsWith(bare))
+    assert.match(text, /== Page log, kept in this tab only ==\n.* W player: could not play \[name\] \[file\] for \[email\]/u)
+    assert.doesNotMatch(text, /Blue Box|\.mkv|example\.org/u)
+    assert.equal(copyText(FACTS, false), bare)
+    clearLogs()
+})
