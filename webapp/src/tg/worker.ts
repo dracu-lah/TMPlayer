@@ -2,7 +2,7 @@
 // main thread. The page talks to it through `api` below by message (./rpc.ts), and never loads
 // mtcute itself.
 import { BaseTelegramClient, SentCode as MtSentCode, TelegramClient, User, type Message, type tl } from '@mtcute/web'
-import { rules, type Video } from '../rules'
+import { rules, type Rules, type Video } from '../rules'
 import { holdTouches } from './touchCache'
 import { cryptoProvider } from './crypto'
 import { findChatSubtitles, forgetChatSubtitles } from './chatsubs'
@@ -61,6 +61,50 @@ rules().then(
     },
     (e) => console.warn('[rules] not loaded', e),
 )
+
+/** Language catalogs handed to the rules, so each is fetched once. */
+const spoken = new Set<string>()
+
+/**
+ * Runs `run` with the rules speaking `tag`: the page's own catalog for that language (the hashed
+ * file `url` the page has already fetched, so it comes from the cache) laid over English, key by
+ * key. A tag or address that is not the page's own, or a catalog that does not come, leaves
+ * English. Nothing awaits between switching and switching back, so no other rule call ever runs
+ * in the other language.
+ */
+async function inLanguage<T>(tag: string, url: string | null, run: (r: Rules) => T): Promise<T> {
+    const r = await rules()
+    let use = 'en'
+    if (typeof tag === 'string' && /^[a-z]{2,3}(-[A-Za-z]{2,4})?$/.test(tag) && tag !== 'en' && typeof url === 'string' && sameOrigin(url)) {
+        try {
+            if (!spoken.has(tag)) {
+                const answer = await fetch(url)
+                if (answer.ok) {
+                    r.provideCatalog(tag, await answer.text())
+                    spoken.add(tag)
+                }
+            }
+            if (spoken.has(tag)) use = tag
+        } catch (e) {
+            console.warn('[rules] catalog', tag, e)
+        }
+    }
+    r.useLanguage(use)
+    try {
+        return run(r)
+    } finally {
+        r.useLanguage('en')
+    }
+}
+
+/** An address on this site: what the page hands over is never fetched from elsewhere. */
+function sameOrigin(url: string): boolean {
+    try {
+        return new URL(url, self.location.href).origin === self.location.origin
+    } catch {
+        return false
+    }
+}
 
 /** What a call gets besides its arguments: its abort signal, and a way to talk to the page while it runs. */
 export interface Ctx {
@@ -366,6 +410,24 @@ export const api = {
         // The rule reads a video's id and nothing else of it.
         const videos = ids.slice(0, 50_000).map((id) => ({ id }) as Video)
         return (await rules()).playRandom(videos, watched.slice(0, 200_000), last) ?? null
+    },
+
+    /**
+     * The ids of the rows the apps' Settings search finds for `query` among `only` (the rows this
+     * page draws), best first, in the language `tag` so a viewer searches in the words the page
+     * shows (U20, WB20).
+     */
+    async settingsSearch(_: Ctx, query: string, form: string, only: string[], tag: string, url: string | null): Promise<string[]> {
+        const ids = only.slice(0, 200).filter((id) => typeof id === 'string' && id.length < 64)
+        return inLanguage(tag, url, (r) => [...r.settingsSearch(String(query).slice(0, 200), form === 'phone' ? 'phone' : 'desktop', ids)])
+    },
+
+    /** What the apps' "What's new" sheet says, in the language `tag`. */
+    async whatsNew(_: Ctx, tag: string, url: string | null): Promise<{ version: string; changelog: string; highlights: string[] }> {
+        return inLanguage(tag, url, (r) => {
+            const n = r.whatsNew()
+            return { version: n.version, changelog: n.changelog, highlights: [...n.highlights] }
+        })
     },
 
     /** Settings' rewind choices in milliseconds, 0 for off, and the default. */

@@ -813,6 +813,9 @@ export const PAGE_STRINGS = [
     'series.gap_spoken_missing',
     'series.gap_spoken_upcoming',
     // WB20 Settings: the search box and What's new. Rows and their pages come from WebRules.settingsRows, in the worker.
+    // The words people type for Sign out, which the apps' search reads through the page's catalog (worker.ts inLanguage); What's new's sheet.
+    'settings.keywords_sign_out',
+    'whatsnew',
     'settings.changelog',
     'settings.changelog_detail',
     'settings.page_home_library',
