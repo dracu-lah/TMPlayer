@@ -337,8 +337,7 @@ private val SUBTITLE_MODE = stringPreferencesKey("subtitle_mode")
  * and "Kerala_Crime_Files" are the same show. Two shows would have to differ only in punctuation
  * to collide, and the cost of that is subtitles coming on a video early.
  */
-private fun seriesKey(series: String): String =
-    series.lowercase(java.util.Locale.ROOT).filter { it.isLetterOrDigit() }.take(48)
+private fun seriesKey(series: String): String = StoredKeys.series(series)
 
 private fun audioKey(series: String) = stringPreferencesKey("audio_$series")
 private fun textKey(series: String) = stringPreferencesKey("text_$series")
@@ -363,9 +362,7 @@ private fun attemptsOf(prefs: Preferences, now: Long): PinAttempts = PinAttempts
  * A speed remembered for a show, a course, a chat or a topic: see [SpeedMemory]. The scope keeps its
  * colons and a group's minus sign, so chat 12 topic 34 and chat 123 topic 4 never share a key.
  */
-private fun speedKey(scope: String) = floatPreferencesKey(
-    "speed_" + scope.lowercase(java.util.Locale.ROOT).filter { it.isLetterOrDigit() || it == ':' || it == '-' }.take(80),
-)
+private fun speedKey(scope: String) = floatPreferencesKey(StoredKeys.speed(scope))
 
 /** Where playback stopped, so the next launch can offer to continue. */
 private fun resumeKey(chatId: Long, messageId: Long) =
