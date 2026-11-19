@@ -8,7 +8,7 @@ import { chatProtects, itemOf, photosAmong, rawOf, thumbnails, videoId } from '.
 import { forgetChatTitles, noteChatTitle } from './hints'
 import { forgetSponsored, loadSponsored } from './sponsored'
 import { tally } from '../ui/searchTally'
-import { cleanContext, NO_COPY_CONTEXT, type CopyContext } from './copyFit'
+import { cleanContext, correctionLines, NO_COPY_CONTEXT, type CopyContext } from './copyFit'
 import { copyRows, playCopy } from './copyPick'
 import { touchesFor } from './touchCache'
 import type { ChatItem, CopyRef, ChatPage, ChatView, Found, ListView, RecentPage, SponsoredItem, Tile, VideoItem, WatchInfo } from './types'
@@ -48,7 +48,8 @@ export async function setCopyContext(raw: unknown): Promise<void> {
     if (JSON.stringify(next) === JSON.stringify(copyCtx)) return
     copyCtx = next
     r.setCopyDevice(next.device)
-    r.setCorrections(next.apart, next.apart.map(() => 'separate'))
+    const lines = correctionLines(next, r.correctionSet)
+    r.setCorrections(lines.ids, lines.texts)
     copyEpoch++
     watchKept.clear()
     // A file kept apart or grouped again: the cards remember their groups afresh.
@@ -119,8 +120,8 @@ export function forgetAll() {
     watchKept.clear()
     groups.clear()
     // The files kept apart and the copies chosen were the account's: the next one starts with none (the device stays).
-    if (copyCtx.apart.length || copyCtx.chosen.length || copyCtx.habit) {
-        copyCtx = { ...copyCtx, apart: [], chosen: [], habit: null }
+    if (copyCtx.apart.length || copyCtx.chosen.length || copyCtx.habit || copyCtx.titles.length) {
+        copyCtx = { ...copyCtx, apart: [], chosen: [], habit: null, titles: [] }
         copyEpoch++
         rulesNow?.setCorrections([], [])
     }

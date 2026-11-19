@@ -70,7 +70,7 @@ test('the context from the page is cleaned: garbage becomes nothing, never an er
         assert.ok(Array.isArray(c.slow) && Array.isArray(c.apart) && Array.isArray(c.chosen))
     }
     const c = cleanContext({ device: 'tv', slow: ['hevc', 'nope'], apart: ['-5:9', '-5:9', 'bad'], chosen: Array(9_000).fill('-5:1'), habit: '1080:3,720:1' })
-    assert.deepEqual(c, { device: 'tv', slow: ['hevc'], apart: ['-5:9'], chosen: ['-5:1'], habit: '1080:3,720:1' })
+    assert.deepEqual(c, { device: 'tv', slow: ['hevc'], apart: ['-5:9'], chosen: ['-5:1'], habit: '1080:3,720:1', titles: [] })
     assert.equal(cleanContext({ habit: 'x'.repeat(1_000) }).habit, null)
 })
 

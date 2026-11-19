@@ -6,7 +6,7 @@
 import { createEffect, createRoot, createSignal } from 'solid-js'
 import { api } from './tg/rpc'
 import { form } from './form'
-import { apartIds, chooseCopy, chosenCopies, copyHabit, setApart, setCopyHabit } from './store'
+import { apartIds, chooseCopy, chosenCopies, copyHabit, setApart, setCopyHabit, setTitle, titleOf, titles } from './store'
 import { deviceMoved, slowKinds, type CopyContext, type CopyDevice, type PictureKind } from './tg/copyFit'
 import type { VideoItem } from './tg/types'
 
@@ -35,7 +35,8 @@ const deviceOf = (): CopyDevice => (form() === 'tv' ? 'tv' : form() === 'phone' 
 
 /** What the worker is told now. */
 export function copyContextNow(): CopyContext {
-    return { device: deviceOf(), slow: browserSlow(), apart: [...apartIds()], chosen: [...chosenCopies()], habit: copyHabit() }
+    const named = [...titles()].map(([id, title]) => ({ id, title })).sort((a, b) => (a.id < b.id ? -1 : 1))
+    return { device: deviceOf(), slow: browserSlow(), apart: [...apartIds()], chosen: [...chosenCopies()], habit: copyHabit(), titles: named }
 }
 
 let sent: Promise<void> = Promise.resolve()
@@ -45,15 +46,31 @@ let sent: Promise<void> = Promise.resolve()
 // A change of the device kind (a window narrowed into the phone form, a rotation) arranges the
 // cards again once the worker has it, as a correction does: a phone's card no longer leads with 4K.
 let device: CopyDevice | null = null
+// A rename (made here, by the sync file, or in another tab) renames the cards and groups again, as a correction does.
+let renamed: string | null = null
 createRoot(() =>
     createEffect(() => {
         const ctx = copyContextNow()
         sent = api.copyContext(ctx).catch((e) => console.warn('[copies]', e))
         const moved = deviceMoved(device, ctx.device)
         device = ctx.device
-        if (moved) refreshed()
+        const names = JSON.stringify(ctx.titles)
+        const retitled = renamed !== null && renamed !== names
+        renamed = names
+        if (moved || retitled) refreshed()
     }),
 )
+
+/**
+ * Gives `item` (and its other copies, `copies`) the title `title`, or takes the rename off with null:
+ * the cards, the groups and the video's page read it at once. Cleaned and cut at the apps' limit.
+ */
+export function renameVideo(item: Pick<VideoItem, 'chatId' | 'messageId'>, title: string | null, copies: readonly Pick<VideoItem, 'chatId' | 'messageId'>[] = []) {
+    setTitle([item, ...copies], title)
+}
+
+/** The title the viewer gave `item`, or undefined. Reactive. */
+export const renamedTitle = (item: Pick<VideoItem, 'chatId' | 'messageId'>) => titleOf(item.chatId, item.messageId)
 
 /** Once the worker has the change just made, the lists read again. */
 function refreshed() {

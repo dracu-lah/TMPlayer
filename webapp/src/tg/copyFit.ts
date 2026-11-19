@@ -4,6 +4,8 @@
 // those kinds as "too slow", so a copy the browser can play leads the list and is the one Play opens.
 // Pure and outside data safe: names and types come from Telegram, the kinds from the page.
 
+import { cleanTitle } from '../rename.ts'
+
 /** A kind of picture the name can name that some browsers cannot decode themselves. */
 export type PictureKind = 'hevc' | 'hevc10' | 'avc10' | 'av1' | 'vp9' | 'legacy'
 
@@ -26,9 +28,23 @@ export interface CopyContext {
     chosen: string[]
     /** The habit line ("1080:12,720:3"), or null. */
     habit: string | null
+    /** The titles the viewer gave ("Rename", the apps' VideoCorrection.title) by "chatId:messageId", read by the grouping and every tile's title. */
+    titles: { id: string; title: string }[]
 }
 
-export const NO_COPY_CONTEXT: CopyContext = { device: 'phone', slow: [], apart: [], chosen: [], habit: null }
+export const NO_COPY_CONTEXT: CopyContext = { device: 'phone', slow: [], apart: [], chosen: [], habit: null, titles: [] }
+
+/**
+ * The corrections the rules group by (`setCorrections`: ids and stored lines) for a context: a file
+ * kept apart reads `separate`, a renamed one `title=...` (cut and cleaned by the rules' own
+ * `correctionSet`, so the worker and the apps read one title), both when both.
+ */
+export function correctionLines(ctx: Pick<CopyContext, 'apart' | 'titles'>, set: (text: string | null, field: string, value: string | null) => string): { ids: string[]; texts: string[] } {
+    const lines = new Map<string, string>()
+    for (const key of ctx.apart) lines.set(key, 'separate')
+    for (const t of ctx.titles) lines.set(t.id, set(lines.get(t.id) ?? null, 'title', t.title))
+    return { ids: [...lines.keys()], texts: [...lines.values()] }
+}
 
 const MAX_IDS = 5_000
 const ID = /^-?\d{1,20}:\d{1,12}$/
@@ -41,7 +57,19 @@ export function cleanContext(raw: unknown): CopyContext {
     const ids = (v: unknown) => (Array.isArray(v) ? [...new Set(v.slice(0, MAX_IDS).filter((x): x is string => typeof x === 'string' && ID.test(x)))] : [])
     const slow = Array.isArray(c.slow) ? PICTURE_KINDS.filter((k) => (c.slow as unknown[]).includes(k)) : []
     const habit = typeof c.habit === 'string' && HABIT.test(c.habit) && c.habit ? c.habit : null
-    return { device, slow, apart: ids(c.apart), chosen: ids(c.chosen), habit }
+    return { device, slow, apart: ids(c.apart), chosen: ids(c.chosen), habit, titles: renames(c.titles) }
+}
+
+/** The renames a context holds: each id checked, each title cleaned, the newest of an id kept, bounded. */
+function renames(v: unknown): CopyContext['titles'] {
+    if (!Array.isArray(v)) return []
+    const out = new Map<string, string>()
+    for (const e of v.slice(0, MAX_IDS)) {
+        const x = (e && typeof e === 'object' ? e : {}) as { id?: unknown; title?: unknown }
+        const title = cleanTitle(x.title)
+        if (typeof x.id === 'string' && ID.test(x.id) && title) out.set(x.id, title)
+    }
+    return [...out].map(([id, title]) => ({ id, title }))
 }
 
 const LEGACY_EXT = /\.(avi|divx|wmv|asf|flv|rm|rmvb|vob|mpe?g|3gp|ogm)$/i
