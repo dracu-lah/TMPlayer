@@ -39,7 +39,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -256,7 +255,9 @@ internal fun BoxScope.SearchPalette(
     val field = remember { FocusRequester() }
     var allChats by remember { mutableStateOf(false) }
     var allTopics by remember { mutableStateOf(false) }
-    var selected by remember { mutableIntStateOf(-1) }
+    // The highlighted line, by its key: rows that land above it (the titles answer after the
+    // videos, HX41) never move the highlight onto another line under Enter.
+    var selectedKey by remember { mutableStateOf<String?>(null) }
     // Which groups the search by topic name may ask, in the chat list's order (U14).
     LaunchedEffect(chats) { search.chatList = chats }
     val topicMemory = remember(state.settings) { state.settings.topicMemory() }
@@ -269,7 +270,7 @@ internal fun BoxScope.SearchPalette(
         search.type("")
         search.setFilters(com.tmplayer.data.SearchFilters())
         search.setSort(SearchSort.BestMatch)
-        selected = -1
+        selectedKey = null
         runCatching { field.requestFocus() }
     }
     BackHandler(enabled = true) { if (state.paletteQuery.text.isNotEmpty()) clearAll() else state.paletteOpen = false }
@@ -381,9 +382,11 @@ internal fun BoxScope.SearchPalette(
     }
 
     val pickable = rows.indices.filter { rows[it].pickable }
-    // The selection follows the list as it changes under it: the first line once results land.
+    val selected = rows.indexOfFirst { it.pickable && it.key == selectedKey }
+    // The selection stays on its line as the list changes around it, and goes to the first line
+    // only once its own line has gone (or nothing was picked yet).
     LaunchedEffect(rows) {
-        if (selected !in pickable) selected = pickable.firstOrNull() ?: -1
+        if (selected < 0) selectedKey = pickable.firstOrNull()?.let { rows[it].key }
     }
     val list = rememberLazyListState()
     LaunchedEffect(selected) {
@@ -399,7 +402,7 @@ internal fun BoxScope.SearchPalette(
     fun move(by: Int) {
         if (pickable.isEmpty()) return
         val at = pickable.indexOf(selected).takeIf { it >= 0 } ?: if (by > 0) -1 else pickable.size
-        selected = pickable[(at + by).coerceIn(0, pickable.lastIndex)]
+        selectedKey = rows[pickable[(at + by).coerceIn(0, pickable.lastIndex)]].key
     }
 
     Box(
@@ -487,7 +490,7 @@ internal fun BoxScope.SearchPalette(
                             ui = ui,
                             selected = index == selected,
                             progress = { watch.point(it)?.fraction },
-                            onHover = { if (row.pickable) selected = index },
+                            onHover = { if (row.pickable) selectedKey = row.key },
                             onClick = { pick(row) },
                             onRemove = (row as? PaletteRow.Recent)?.let { r -> { scope.launch { state.settings.removeRecentSearch(r.query) } } },
                             onRetry = search::retry,

@@ -117,7 +117,8 @@ class SearchTitlesDesktopTest {
         waitUntil(timeoutMillis = 5_000) { model.state.value.titleHits.isNotEmpty() && !model.state.value.busy }
         waitForIdle()
         onNodeWithText(L.searchNotInChats).assertExists()
-        // The title is the first line the arrows pick: Enter on the field opens it.
+        // Up to the first line, the title, then Enter on the field opens it.
+        repeat(6) { onNode(hasSetTextAction()).performKeyInput { pressKey(Key.DirectionUp) } }
         onNode(hasSetTextAction()).performKeyInput { pressKey(Key.Enter) }
         waitUntil(timeoutMillis = 5_000) { model.state.value.watching?.second != null }
         assertEquals(notIn, model.state.value.watching?.first)
@@ -128,6 +129,41 @@ class SearchTitlesDesktopTest {
         assertNull(model.state.value.watching)
         onNode(hasSetTextAction() and isFocused()).assertExists()
         assertEquals("night train home", shell.paletteQuery.text)
+    }
+
+    @Test
+    fun `titles landing above the videos leave the highlight on the video, so Enter opens what was highlighted`() = runComposeUiTest {
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val model = GlobalSearchViewModel(
+            VideoSearchSource { _, _, _ -> AllChatsPage(listOf(copy), AllChatsCursor(videoDone = true, documentDone = true)) },
+            known = { emptyList() },
+            settleMs = 0,
+            titleSource = object : TitleSource {
+                override suspend fun titles(query: MetaQuery): PosterChoices {
+                    gate.await()
+                    return PosterChoices.Found(listOf(notIn, inChats))
+                }
+                override suspend fun whereToWatch(title: PosterChoice) = offers
+            },
+        )
+        shell.paletteOpen = true
+        shell.paletteQuery = TextFieldValue("night train", TextRange(11))
+        shell.paletteSubmit = true
+        setContent { TmMaterialTheme(dark = true) { Box(Modifier.size(1000.dp, 700.dp)) { if (shell.paletteOpen) SearchPalette(shell, model, emptyList(), onOpenSeries = {}) } } }
+        waitUntil(timeoutMillis = 5_000) { model.state.value.groups.isNotEmpty() && !model.state.value.busy }
+        waitForIdle()
+        // Down to the video (the line under Add more chats); then TMDB answers and two titles land above it.
+        onNode(hasSetTextAction()).performKeyInput { pressKey(Key.DirectionDown) }
+        waitForIdle()
+        gate.complete(Unit)
+        waitUntil(timeoutMillis = 5_000) { model.state.value.titleHits.size == 2 }
+        waitForIdle()
+        onNode(hasSetTextAction()).performKeyInput { pressKey(Key.Enter) }
+        waitUntil(timeoutMillis = 5_000) { !shell.paletteOpen }
+        // The video opened, not the title that took its place in the list.
+        assertNull(model.state.value.watching)
+        assertEquals(copy.id, shell.detail?.item?.id)
+        shell.closeDetail()
     }
 
     private fun shot(dark: Boolean, page: @androidx.compose.runtime.Composable () -> Unit): ByteArray =

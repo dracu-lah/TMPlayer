@@ -18,6 +18,7 @@ import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
@@ -80,6 +81,7 @@ class SearchTitlesTvTest {
         ),
     )
     private val opened = mutableListOf<ResultGroup>()
+    private var retries = 0
 
     private fun show() {
         FormFactor.override(true)
@@ -105,6 +107,7 @@ class SearchTitlesTvTest {
                         onRetry = {},
                         onWhereToWatch = { current = current.copy(watching = it to null) },
                         onCloseWhereToWatch = { current = current.copy(watching = null) },
+                        onRetryTitles = { retries++; current = current.copy(titleLookup = TitleLookup.Looking) },
                     )
                 }
             }
@@ -164,5 +167,47 @@ class SearchTitlesTvTest {
         rule.mainClock.advanceTimeBy(500)
         rule.waitForIdle()
         rule.onNodeWithTag("title-${notIn.onlineKey}").assertIsFocused()
+    }
+
+    @Test
+    fun `Look up titles again keeps the remote on its pill while asking, then lands on the field or the first title`() {
+        current = current.copy(titles = emptyList(), titleLookup = TitleLookup.Unavailable)
+        show()
+        val pill = rule.onNodeWithTag("titles-retry")
+        pill.requestFocus()
+        rule.waitForIdle()
+        pill.performKeyInput { pressKey(Key.DirectionCenter) }
+        rule.waitForIdle()
+        assertEquals(1, retries)
+        // Asking: the row and the pill stay, with the remote on it.
+        rule.onNodeWithTag("titles-retry").assertIsFocused()
+        // TMDB answers with nothing: the row goes and the remote is on the field, not lost.
+        rule.runOnUiThread { current = current.copy(titleLookup = TitleLookup.Found) }
+        rule.waitForIdle()
+        rule.mainClock.advanceTimeBy(500)
+        rule.waitForIdle()
+        rule.onNodeWithText("night train").assertIsFocused()
+    }
+
+    @Test
+    fun `a retry that finds titles puts the remote on the first one, one that fails again on the pill`() {
+        current = current.copy(titles = emptyList(), titleLookup = TitleLookup.Unavailable)
+        show()
+        rule.onNodeWithTag("titles-retry").requestFocus()
+        rule.waitForIdle()
+        rule.onNodeWithTag("titles-retry").performKeyInput { pressKey(Key.DirectionCenter) }
+        rule.waitForIdle()
+        rule.runOnUiThread { current = current.copy(titleLookup = TitleLookup.Unavailable) }
+        rule.waitForIdle()
+        rule.mainClock.advanceTimeBy(500)
+        rule.onNodeWithTag("titles-retry").assertIsFocused()
+        rule.onNodeWithTag("titles-retry").performKeyInput { pressKey(Key.DirectionCenter) }
+        rule.waitForIdle()
+        rule.runOnUiThread { current = current.copy(titles = listOf(inChats, notIn), titleLookup = TitleLookup.Found) }
+        rule.waitForIdle()
+        rule.mainClock.advanceTimeBy(500)
+        rule.waitForIdle()
+        rule.onNodeWithTag("title-${inChats.onlineKey}").assertIsFocused()
+        assertEquals(2, retries)
     }
 }

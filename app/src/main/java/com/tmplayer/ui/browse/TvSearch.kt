@@ -164,6 +164,27 @@ internal fun TvSearchScreen(
     )
     val micFocus = remember { FocusRequester() }
     val fieldFocus = remember { FocusRequester() }
+    // "Look up titles again" pressed: its row stays while TMDB is asked, so the remote is not left
+    // on nothing, and once the answer is in the remote goes somewhere on purpose: the first title,
+    // the pill again if it failed again, else the field.
+    val titleRetryFocus = remember { FocusRequester() }
+    var titleRetrying by remember { mutableStateOf(false) }
+    val titlesNow = state.titleHits
+    LaunchedEffect(state.titleLookup, titlesNow.isEmpty()) {
+        if (!titleRetrying || state.titleLookup == TitleLookup.Looking) return@LaunchedEffect
+        titleRetrying = false
+        withFrameNanos { }
+        val first = titlesNow.firstOrNull()?.title?.onlineKey?.let { titleFocus[it] }
+        val landed = runCatching {
+            when {
+                state.titleLookup == TitleLookup.Unavailable -> titleRetryFocus.requestFocus()
+                first != null -> first.requestFocus()
+                else -> fieldFocus.requestFocus()
+            }
+        }.isSuccess
+        // A pill not laid out yet: the field, never nowhere.
+        if (!landed) runCatching { fieldFocus.requestFocus() }
+    }
     // Clear: the words, the filters and the sort go at once, and the remote returns to the field.
     val clear: () -> Unit = {
         onText("")
@@ -352,14 +373,24 @@ internal fun TvSearchScreen(
                 // the viewer has of it. OK on one with copies opens its best card; on one not in the
                 // chats, Where to watch, whose panel also holds the search of the other chats.
                 val titleHits = state.titleHits
-                if (text.isNotBlank() && (titleHits.isNotEmpty() || state.titleLookup == TitleLookup.Unavailable)) {
+                val retryRow = state.titleLookup == TitleLookup.Unavailable || (titleRetrying && state.titleLookup == TitleLookup.Looking)
+                if (text.isNotBlank() && (titleHits.isNotEmpty() || retryRow)) {
                     item(span = full, key = "titles") {
                         Column(Modifier.bleedEnd(Tv.SafeH), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(s.searchTitlesHeading, style = MaterialTheme.typography.titleSmall, color = Tone.muted)
-                            if (state.titleLookup == TitleLookup.Unavailable) {
+                            if (retryRow) {
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                     Text(s.searchTitlesUnavailable, style = MaterialTheme.typography.bodyLarge, color = Tone.muted, modifier = Modifier.weight(1f, fill = false))
-                                    TvPill(s.searchTitlesRetry, TmIcons.Refresh, onClick = onRetryTitles)
+                                    TvPill(
+                                        s.searchTitlesRetry,
+                                        TmIcons.Refresh,
+                                        modifier = Modifier.focusRequester(titleRetryFocus).testTag("titles-retry"),
+                                    ) {
+                                        if (!titleRetrying) {
+                                            titleRetrying = true
+                                            onRetryTitles()
+                                        }
+                                    }
                                 }
                             }
                             if (titleHits.isNotEmpty()) {
