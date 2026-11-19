@@ -136,6 +136,7 @@ g_web() {
       pnpm -C webapp install --frozen-lockfile --store-dir /root/.local/share/pnpm/store
       pnpm -C webapp check
       pnpm -C webapp test:tmdb
+      pnpm -C webapp test:screens
       pnpm -C webapp exec playwright test $projects
     " || rc=$?
   [ "$shots_clean" = 1 ] && git checkout -- design/web-sync

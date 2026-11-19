@@ -254,6 +254,10 @@ test('the extras: genres, length, rating, age rating, directors, cast in order, 
         next: null,
         imdb: 'tt1254207',
         logo: null,
+        seasonGroup: null,
+        listedSeasons: [],
+        listedNext: null,
+        groupsRead: true,
     })
     assert.match(m.calls[0].searchParams.get('append_to_response')!, /credits,videos,release_dates/)
     assert.match(r.headers.get('cache-control')!, new RegExp(`s-maxage=${FOUND_TTL}`))

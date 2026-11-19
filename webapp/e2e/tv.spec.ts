@@ -2,7 +2,7 @@
 // sizes: focus comes back to the item that was open after Back, after a menu and after a dialog.
 import { readFileSync } from 'node:fs'
 import { expect, test, type Page } from '@playwright/test'
-import { fakeCase } from './helpers'
+import { fakeCase, mockSplitShow } from './helpers'
 
 /** The layout set to TV and two chats starred, written where the app keeps them before it starts. */
 async function tv(page: Page) {
@@ -740,6 +740,44 @@ for (const size of [
             const fresh = await box(page, '.qr-actions > .qr-refresh')
             expect(Math.abs(phone.height - fresh.height)).toBeLessThan(1)
             expect(Math.abs(mid(phone) - mid(fresh))).toBeLessThan(1)
+        })
+
+        // WB19: the series page on the TV. A missing episode is a dimmed row the remote stops on (and that wakes up there), an
+        // upcoming one is no control, so Up and Down move over it to the next row that is.
+        test('Series page: the remote walks the held and missing episodes, wakes a dimmed row on focus and passes the ones not aired', async ({ page, context }) => {
+            await fakeCase(context)
+            await tv(page)
+            await mockSplitShow(page, [], readFileSync(new URL('./media/thumb.jpg', import.meta.url)))
+            await page.goto('/chat/-1002')
+            await expect(page.locator('html')).toHaveAttribute('data-form', 'tv')
+            await page.locator('.card', { hasText: 'Harbour Notes' }).first().click()
+            await expect(page.locator('.episode.gap')).toHaveCount(22)
+            await page.locator('.season-chip.on').focus()
+            // Three held episodes (links), then the missing ones (buttons) from the fourth.
+            await press(page, 'ArrowDown', 3)
+            expect(await focused(page)).toMatch(/^episode\|\/watch\//)
+            await press(page, 'ArrowDown')
+            expect(await focused(page)).toBe('episode|Episode 4, not in this chat')
+            // Dimmed at rest, awake on focus: the words are at full strength while the row holds the remote.
+            expect(await page.evaluate(() => getComputedStyle(document.activeElement!.querySelector('.episode-text')!).opacity)).toBe('1')
+            expect(await page.evaluate(() => getComputedStyle(document.querySelector('button.episode.gap:not(:focus) .episode-text')!).opacity)).toBe('0.45')
+            // To the twenty-third (the last aired), one more Down: never onto a row not aired.
+            await press(page, 'ArrowDown', 19)
+            expect(await focused(page)).toBe('episode|Episode 23, not in this chat')
+            await press(page, 'ArrowDown')
+            expect(await page.evaluate(() => !!document.activeElement?.closest('.upcoming'))).toBe(false)
+            await press(page, 'ArrowUp')
+            expect(await focused(page)).toBe('episode|Episode 23, not in this chat')
+            // OK on a missing row asks where to find it, Back closes the card and the remote is back on the row.
+            await press(page, 'Enter')
+            await expect(page.locator('dialog[open]')).toContainText('is not in your chats yet')
+            await press(page, 'Escape')
+            await expect(page.locator('dialog[open]')).toHaveCount(0)
+            expect(await focused(page)).toBe('episode|Episode 23, not in this chat')
+            if (process.env.WB_SHOTS) {
+                await page.evaluate(() => document.querySelector('.season-tabs')!.scrollIntoView())
+                await page.screenshot({ path: new URL(`../../design/web-gaps/WB19/tv-${size.width}.png`, import.meta.url).pathname })
+            }
         })
     })
 }

@@ -2,7 +2,7 @@
 // projects' own), and its Watch later and Watched marks, which are written in the background.
 import { readFileSync } from 'node:fs'
 import { expect, test, type Page } from '@playwright/test'
-import { fakeCase, noSizeFloor, playsPast } from './helpers'
+import { fakeCase, mockSplitShow, noSizeFloor, playsPast } from './helpers'
 
 const PICTURE = readFileSync(new URL('./media/thumb.jpg', import.meta.url))
 
@@ -119,6 +119,83 @@ test('an anime show lists the episodes its chat lacks from the guide, names the 
     await expect(page.locator('.episode.gap')).toHaveCount(9)
     expect(guideAsks).toEqual(['20', '20'])
     await expect(page.locator('.season-chip')).toHaveCount(1)
+})
+
+// WB19: a show TMDB lists as one season that an episode group splits (Blue Box, 25 + 12), over the chat's three episodes.
+const SPLIT_SHOTS = new URL('../../design/web-gaps/WB19/', import.meta.url)
+
+test('a split show lists TMDB\'s seasons with names, days and lengths: a missing row keeps Find, an upcoming one is no control', async ({ page }, info) => {
+    const asked: string[] = []
+    await mockSplitShow(page, asked, PICTURE)
+    await page.goto('/chat/-1002')
+    await page.locator('.card', { hasText: 'Harbour Notes' }).first().click()
+    await expect(page).toHaveURL(/\/video\//)
+    // The split's seasons, not TMDB's one of 37.
+    await expect(page.locator('.season-chip')).toHaveCount(2)
+    await expect(page.locator('.season-chip').nth(0)).toContainText('25 episodes')
+    await expect(page.locator('.season-chip').nth(1)).toContainText('Not in your chats yet')
+    await expect(page.locator('.episode')).toHaveCount(25)
+    expect(asked[0]).toContain('s=1')
+    expect(asked[0]).toContain('g=seasons001')
+    // A held episode: TMDB's name, then its length, day and the file's size last.
+    const held = page.locator('.episode:not(.gap)').first()
+    await expect(held.locator('.episode-name')).toHaveText('The 1th Tide')
+    await expect(held.locator('.episode-facts')).toHaveText(/^24m {2}·.*2024.* {2}·.* MB$/)
+    // A missing one is dimmed but a control, with its still, name, length and words; Find in other chats stays.
+    const missing = page.locator('button.episode.gap').first()
+    await expect(missing).toHaveAccessibleName('Episode 4, not in this chat')
+    await expect(missing.locator('.episode-name')).toHaveText('The 4th Tide')
+    await expect(missing.locator('.gap-tag')).toHaveText('Not in this chat')
+    await expect(missing.locator('.episode-overview')).toContainText('1x4')
+    // Its still loads once the row is near the screen (a long season loads only what is seen).
+    await missing.scrollIntoViewIfNeeded()
+    await expect(missing.locator('.episode-still img')).toBeVisible()
+    await expect(page.locator('.episode.gap').last().locator('.episode-still img')).toHaveCount(0)
+    await expect(page.locator('button.episode.gap')).toHaveCount(20)
+    // The two not aired: no control, no focus, read as one line.
+    const upcoming = page.locator('.episode.gap.upcoming')
+    await expect(upcoming).toHaveCount(2)
+    await expect(upcoming.first()).toHaveAttribute('aria-label', /Episode 24, airs .*2099/)
+    expect(await upcoming.first().evaluate((el) => el.tagName + el.hasAttribute('tabindex'))).toBe('DIVfalse')
+    await page.locator('.season-tabs').evaluate((el) => el.scrollIntoView())
+    if (process.env.WB_SHOTS) await page.screenshot({ path: new URL(`${info.project.name}-season1.png`, SPLIT_SHOTS).pathname })
+    // A press on a missing row asks where to find it.
+    await missing.scrollIntoViewIfNeeded()
+    await missing.click()
+    await expect(page.locator('dialog[open]')).toContainText('S01E04 is not in your chats yet.')
+    await page.locator('dialog[open] .menu-row', { hasText: 'Find in other chats' }).click()
+    // (Search drops a ?q= on the first visit of a page load as "stale", so the box is not asserted: Search.tsx is WB21's.)
+    await expect(page).toHaveURL(/\/search/)
+    await page.goBack()
+    // Season 2 comes from the split too: its seventh, untitled at TMDB ("Episode 32"), is "Episode 7".
+    await page.locator('.season-chip').nth(1).click()
+    await expect(page.locator('.episode')).toHaveCount(12)
+    expect(asked.some((q) => q.includes('s=2') && q.includes('g=seasons001'))).toBe(true)
+    await expect(page.locator('.episode.gap').nth(0).locator('.episode-name')).toHaveText('The 26th Tide')
+    await expect(page.locator('.episode.gap').nth(6).locator('.episode-name')).toHaveText('Episode 7')
+    await expect(page.locator('.episode.gap.upcoming')).toHaveCount(2)
+    if (process.env.WB_SHOTS) {
+        await page.locator('.season-tabs').evaluate((el) => el.scrollIntoView())
+        await page.screenshot({ path: new URL(`${info.project.name}-season2.png`, SPLIT_SHOTS).pathname })
+    }
+})
+
+test('a show with no TMDB lists (worker down) is the chat\'s own episodes, as before', async ({ page }) => {
+    await page.route('**/tmdb/**', (route) => {
+        const url = new URL(route.request().url())
+        if (url.pathname === '/tmdb/poster') return route.fulfill({ json: { match: true, id: '207347', kind: 'show', title: 'Harbour Notes', year: 2024, poster: null, backdrop: null, overview: '' } })
+        if (url.pathname === '/tmdb/extras')
+            return route.fulfill({ json: { found: true, genres: [], runtime: 24, seasons: 1, rating: null, certification: null, directors: [], creators: [], cast: [], trailer: null, ended: false, imdb: null, logo: null, seasonList: [{ number: 1, episodes: 5, airDate: '2024-10-03' }], next: null, groupsRead: true } })
+        if (url.pathname === '/tmdb/season') return route.fulfill({ status: 503, json: { error: 'unavailable' } })
+        return route.fulfill({ status: 404, body: '' })
+    })
+    await page.goto('/chat/-1002')
+    await page.locator('.card', { hasText: 'Harbour Notes' }).first().click()
+    // Counts alone: three held, two missing by number, and the held ones keep the chat's own names.
+    await expect(page.locator('.episode')).toHaveCount(5)
+    await expect(page.locator('button.episode.gap')).toHaveCount(2)
+    await expect(page.locator('button.episode.gap').first().locator('.episode-name')).toHaveText('Episode 4')
+    await expect(page.locator('.episode:not(.gap) .episode-facts')).toHaveCount(0)
 })
 
 test('a wide desktop page is one centred column with equal gutters: the words and About stand side by side, the episodes under both', async ({ page }) => {
