@@ -25,6 +25,7 @@ import {
     MAX_MESSAGE,
     blankDraft,
     cleanLine,
+    cut,
     copyText,
     edited,
     featureUrl,
@@ -283,7 +284,7 @@ function Window(props: { o: Open }) {
                                     autocapitalize="sentences"
                                     aria-invalid={messageBad()}
                                     aria-describedby="fb-count"
-                                    onInput={(e) => change({ message: e.currentTarget.value.slice(0, MAX_MESSAGE * 2) })}
+                                    onInput={(e) => change({ message: cut(e.currentTarget.value, MAX_MESSAGE * 2) })}
                                 />
                                 <p id="fb-count" classList={{ small: true, muted: !messageBad(), error: messageBad() }} role={messageBad() ? 'alert' : undefined}>
                                     {countLine()}
@@ -303,7 +304,7 @@ function Window(props: { o: Open }) {
                                     enterkeyhint="done"
                                     aria-invalid={contactBad()}
                                     aria-describedby="fb-contact-hint"
-                                    onInput={(e) => change({ contact: e.currentTarget.value.slice(0, MAX_CONTACT * 2) })}
+                                    onInput={(e) => change({ contact: cut(e.currentTarget.value, MAX_CONTACT * 2) })}
                                 />
                                 <p id="fb-contact-hint" classList={{ small: true, muted: !contactBad(), error: contactBad() }}>
                                     {contactBad() ? t('feedback.contact_too_long', { max: MAX_CONTACT }) : t('feedback.contact_hint')}

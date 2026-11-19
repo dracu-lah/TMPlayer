@@ -303,6 +303,26 @@ test.describe('the form', () => {
         await audit('Kept for later')
     })
 
+    test('half an emoji (a stored draft, a paste) never breaks the form or its links', async ({ page }) => {
+        await page.addInitScript(() => {
+            const half = String.fromCharCode(0xd83d)
+            localStorage.setItem('tmplayer-feedback', JSON.stringify({ kind: 'problem', message: `It stops ${half}`, contact: `me${half}`, id: '0123456789abcdef0123456789abcdef' }))
+        })
+        await about(page)
+        await page.getByRole('button', { name: /Report a problem/ }).click()
+        const ask = dialog(page)
+        await expect(ask.locator('textarea')).toBeVisible()
+        await expect(ask.getByRole('link', { name: 'Open on GitHub' })).toHaveAttribute('href', /what=It%20stops/)
+        // A pair cut in two by typing and a lone half pasted in: still no crash, the report is the clean text.
+        await ask.locator('textarea').evaluate((el: HTMLTextAreaElement) => {
+            el.value = `Stops ${String.fromCharCode(0xde00)} again`
+            el.dispatchEvent(new Event('input', { bubbles: true }))
+        })
+        await ask.getByRole('button', { name: 'Next' }).click()
+        await expect(ask.getByRole('heading', { name: 'Send this to the developer?' })).toBeVisible()
+        await expect(ask).toContainText('Stops  again')
+    })
+
     test('garbage in the stored draft opens a clean form, never a crash', async ({ page }) => {
         await page.addInitScript(() => localStorage.setItem('tmplayer-feedback', '{"kind":7,"message":{"a":1},"id":"x","pending":"[]"}'))
         await about(page)

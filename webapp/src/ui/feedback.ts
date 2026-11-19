@@ -46,7 +46,7 @@ const SPACES = /\s+/gu
 
 /** The message as the inbox keeps it: line breaks kept (two blank lines at most), no control characters, trimmed. */
 export function cleanMessage(text: string): string {
-    return text
+    return stripLone(text)
         .replace(/\r\n?/gu, '\n')
         .replace(CONTROL, '')
         .replace(/[ \t]+$/gmu, '')
@@ -56,7 +56,37 @@ export function cleanMessage(text: string): string {
 
 /** A one line field: no control characters, spaces tidied, trimmed. Not capped: see [problem]. */
 export function cleanLine(text: string): string {
-    return text.slice(0, MAX_JSON).replace(CONTROL, '').replace(SPACES, ' ').trim()
+    return stripLone(cut(text, MAX_JSON)).replace(CONTROL, '').replace(SPACES, ' ').trim()
+}
+
+/**
+ * [text] without a lone UTF-16 surrogate (half of an emoji, from a cut or a paste): encodeURIComponent
+ * throws on one, and JSON would carry a character that is not text. Whole pairs stay.
+ */
+export function stripLone(text: string): string {
+    let out = ''
+    for (let i = 0; i < text.length; i++) {
+        const c = text.charCodeAt(i)
+        if (c >= 0xd800 && c <= 0xdbff) {
+            const d = text.charCodeAt(i + 1)
+            if (d >= 0xdc00 && d <= 0xdfff) {
+                out += text[i] + text[i + 1]
+                i++
+            }
+        } else if (c < 0xdc00 || c > 0xdfff) {
+            out += text[i]
+        }
+    }
+    return out
+}
+
+/** The first [max] UTF-16 units of [text], never through a surrogate pair (the half pair left at the end is dropped). */
+export function cut(text: string, max: number): string {
+    if (text.length <= max) return text
+    let end = max
+    const last = text.charCodeAt(end - 1)
+    if (last >= 0xd800 && last <= 0xdbff) end--
+    return text.slice(0, end)
 }
 
 export type Problem = 'empty' | 'too_long' | 'contact_too_long'
@@ -114,10 +144,10 @@ export function makeReport(id: string, kind: Kind, message: string, contact: str
         message: cleanMessage(message),
         contact: cleanLine(contact ?? '') || null,
         facts: {
-            version: cleanLine(facts.version).slice(0, 40),
-            platform: cleanLine(facts.platform).slice(0, 60),
-            device: cleanLine(facts.device).slice(0, 160),
-            language: cleanLine(facts.language).slice(0, 20),
+            version: cut(cleanLine(facts.version), 40),
+            platform: cut(cleanLine(facts.platform), 60),
+            device: cut(cleanLine(facts.device), 160),
+            language: cut(cleanLine(facts.language), 20),
         },
     }
 }
@@ -204,15 +234,24 @@ export function browserLine(ua: string, installed = false): string {
 }
 
 export function webFacts(ua: string, language: string, installed = false): Facts {
-    return { version: 'web', platform: 'Web', device: browserLine(ua, installed), language: cleanLine(language).slice(0, 20) || 'en' }
+    return { version: 'web', platform: 'Web', device: browserLine(ua, installed), language: cut(cleanLine(language), 20) || 'en' }
 }
 
 // ---- GitHub and e-mail, the ways round ----------------------------------------------------------
 
-const encode = (v: string) => encodeURIComponent(v)
+const encode = (v: string) => encodeURIComponent(stripLone(v))
 
 /** The longest prefix of [text] (whole characters, never half a surrogate pair) whose address stays within [room] characters when encoded. */
 function fit(text: string, room: number): string {
+    try {
+        return fitUnsafe(text, room)
+    } catch {
+        // Nothing here may throw inside a reactive address: no typed words rather than a broken screen.
+        return ''
+    }
+}
+
+function fitUnsafe(text: string, room: number): string {
     if (room <= 0) return ''
     if (encode(text).length <= room) return text
     const chars = Array.from(text)
@@ -434,8 +473,8 @@ export function decodeDraft(text: unknown): Draft | null {
     const pending = typeof o.pending === 'string' && parseReport(o.pending)?.id === id ? o.pending : null
     return {
         kind: isKind(o.kind) ? o.kind : 'problem',
-        message: typeof o.message === 'string' ? o.message.slice(0, MAX_MESSAGE * 2) : '',
-        contact: typeof o.contact === 'string' ? o.contact.slice(0, MAX_CONTACT * 2) : '',
+        message: typeof o.message === 'string' ? stripLone(cut(o.message, MAX_MESSAGE * 2)) : '',
+        contact: typeof o.contact === 'string' ? stripLone(cut(o.contact, MAX_CONTACT * 2)) : '',
         id,
         pending,
     }

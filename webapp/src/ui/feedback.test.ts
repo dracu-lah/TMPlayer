@@ -21,7 +21,9 @@ import {
     aboutLine,
     blankDraft,
     browserLine,
+    cleanLine,
     cleanMessage,
+    cut,
     copyText,
     decodeDraft,
     edited,
@@ -42,6 +44,7 @@ import {
     problem,
     reviewLines,
     saver,
+    stripLone,
     send,
     sending,
     setFormOpen,
@@ -469,6 +472,64 @@ test('the background retry does nothing without a waiting report, while the form
     assert.equal(await flush(sent(), queued), true)
     assert.equal(queued.draft, null)
     assert.equal(FLUSH_DELAY_MS, 60_000)
+})
+
+// ---- Half of an emoji ----
+
+const HIGH = String.fromCharCode(0xd83d)
+const LOW = String.fromCharCode(0xde00)
+const GRIN = '\u{1F600}'
+
+test('a lone surrogate (a cut emoji, a paste) is dropped from the message and the lines, whole pairs stay', () => {
+    assert.equal(stripLone(`a${HIGH}b`), 'ab')
+    assert.equal(stripLone(`a${LOW}b`), 'ab')
+    assert.equal(stripLone(`${HIGH}${HIGH}${LOW}${LOW}`), `${HIGH}${LOW}`)
+    assert.equal(stripLone(GRIN), GRIN)
+    assert.equal(cleanMessage(`hi ${HIGH} there ${LOW}`), 'hi  there')
+    assert.equal(cleanLine(`me${LOW}@x`), 'me@x')
+    for (const text of [`x${HIGH}`, `${LOW}x`]) {
+        assert.doesNotThrow(() => encodeURIComponent(cleanMessage(text)))
+        assert.equal(JSON.parse(JSON.stringify(cleanMessage(text))), cleanMessage(text))
+    }
+})
+
+test('cut never ends half way through a pair', () => {
+    assert.equal(cut(`ab${GRIN}`, 3), 'ab')
+    assert.equal(cut(`ab${GRIN}`, 4), `ab${GRIN}`)
+    assert.equal(cut('abc', 10), 'abc')
+    assert.equal(cut(GRIN, 1), '')
+})
+
+test('the addresses never throw on lone surrogates or a cut emoji pair, at any length', () => {
+    const texts = [HIGH, LOW, `a${HIGH}${HIGH}b${LOW}`, `${'x'.repeat(MAX_URL)}${HIGH}`, GRIN.repeat(3000).slice(0, 5001), `${'é'.repeat(5000)}${LOW}`]
+    for (const text of texts) {
+        assert.doesNotThrow(() => issueUrl(FACTS, text))
+        assert.doesNotThrow(() => featureUrl(text))
+        assert.doesNotThrow(() => mailto(FACTS, 'problem', text))
+        assert.ok(issueUrl(FACTS, text).length <= MAX_URL)
+        assert.ok(mailto(FACTS, 'feature', text).length <= MAX_MAILTO)
+        assert.doesNotThrow(() => decodeURIComponent(issueUrl(FACTS, text).split('&what=')[1] ?? ''))
+    }
+})
+
+test('a report with half an emoji is built from the clean text and the inbox accepts it', () => {
+    const r = makeReport(ID, 'problem', `It stops ${HIGH}`, `me${LOW}`, FACTS)!
+    assert.equal(r.message, 'It stops')
+    assert.equal(r.contact, 'me')
+    assert.ok(parseFeedback(toJson(r)).ok)
+    assert.equal(makeReport(ID, 'problem', HIGH, null, FACTS), null, 'only half an emoji is nothing to send')
+})
+
+test('a stored draft with lone surrogates or a cut pair opens clean and never breaks a reopen', () => {
+    const stored = JSON.stringify({ kind: 'problem', message: `${'x'.repeat(MAX_MESSAGE * 2 - 1)}${GRIN}`, contact: `a${HIGH}`, id: ID })
+    const d = decodeDraft(stored)!
+    assert.equal(d.message.length, MAX_MESSAGE * 2 - 1)
+    assert.equal(d.contact, 'a')
+    assert.doesNotThrow(() => issueUrl(FACTS, d.message))
+    const raw = decodeDraft(JSON.stringify({ message: `x${HIGH}y`, contact: LOW, id: ID }))!
+    assert.equal(raw.message, 'xy')
+    assert.equal(raw.contact, '')
+    assert.deepEqual(decodeDraft(encodeDraft(raw)), raw)
 })
 
 test('a blank draft takes the kind it is opened for and starts with a fresh id', () => {
