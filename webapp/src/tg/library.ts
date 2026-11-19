@@ -5,6 +5,7 @@
 import type { Message, Peer, TelegramClient } from '@mtcute/web'
 import { rules, type Shelf, type ShelfTile, type Video } from '../rules'
 import { chatProtects, itemOf, photosAmong, rawOf, thumbnails, videoId } from './media'
+import { forgetChatTitles, noteChatTitle } from './hints'
 import { forgetSponsored, loadSponsored } from './sponsored'
 import { tally } from '../ui/searchTally'
 import type { ChatItem, CopyRef, ChatPage, ChatView, Found, ListView, RecentPage, SponsoredItem, Tile, VideoItem, WatchInfo } from './types'
@@ -97,12 +98,14 @@ export function forgetAll() {
     homeChatsKnown = null
     videoCountCache.clear()
     forgetSponsored()
+    forgetChatTitles()
 }
 
 async function openState(tg: TelegramClient, chatId: number): Promise<ChatState> {
     const peer = await tg.getPeer(chatId)
     const small = peer.photo?.small ?? null
     if (small) thumbnails.set(small.uniqueFileId, small)
+    noteChatTitle(chatId, peer.displayName)
     return {
         photo: small?.uniqueFileId ?? null,
         id: chatId,
@@ -485,6 +488,7 @@ export function chatItem(peer: Peer, pinned: boolean): ChatItem {
     const small = peer.photo?.small ?? null
     if (small) thumbnails.set(small.uniqueFileId, small)
     const self = peer.type === 'user' && peer.isSelf
+    noteChatTitle(peer.id, peer.displayName)
     return {
         id: peer.id,
         title: peer.displayName,
