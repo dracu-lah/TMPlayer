@@ -11,13 +11,13 @@ import { createEffect, createSignal, For, onCleanup, onMount, Show } from 'solid
 import { render } from 'solid-js/web'
 import { Add01Icon, Cancel01Icon, LockKeyholeIcon, Logout05Icon, UserGroupIcon, UserSwitchIcon } from '@hugeicons/core-free-icons'
 import * as B from './accountBook'
-import { activeId, book, closePicker, many, openPicker, photoOf, photosVersion, picker } from '../accounts'
+import { activeId, book, closePicker, closeTopLayer, many, openPicker, photoOf, photosVersion, picker } from '../accounts'
 import { addAccount, changePin, forgetVerified, pinOpened, pinsWork, pinVerified, removeAll, removeAllNeeds, removeProfile, renameProfile, signInAgain, signOutProfile, switchTo, tryPin } from '../accountFlows'
 import { me } from '../session'
 import { t } from '../i18n'
 import { form } from '../form'
 import { askConfirm } from './Confirm'
-import { closeModal, openModal } from './confirmCore'
+import { closeModal, holdClose, openModal } from './confirmCore'
 import { showToast } from './Toast'
 import { Icon } from './Icon'
 import { Initial } from './PageBar'
@@ -28,7 +28,7 @@ import './profiles.css'
 function nameOf(p: B.Profile): string {
     if (p.name) return p.name
     if (p.id === activeId && me()?.name) return me()!.name!
-    return t('accounts.unnamed', { number: book().profiles.findIndex((x) => x.id === p.id) + 1 })
+    return t('accounts.unnamed', { number: B.profileNumber(book(), p.id) })
 }
 
 type Sheet =
@@ -44,14 +44,24 @@ export function Profiles() {
     let row!: HTMLUListElement
     const from = document.activeElement as HTMLElement | null
     const tiles = () => [...row.querySelectorAll<HTMLButtonElement>('.profile-tile')]
-    let root!: HTMLDivElement
-    // Nothing behind it takes the keyboard or the screen reader (the bar, a notice): a focus group of its own.
+    let root!: HTMLDialogElement
+    // A modal dialog in the browser's top layer: nothing of the page stands above it, and nothing behind
+    // it takes the keyboard or the screen reader. Without one (an old browser) the page behind is inert.
     const held: Element[] = []
     onMount(() => {
-        for (const el of root.parentElement?.children ?? []) if (el !== root && !el.hasAttribute('inert')) (el.setAttribute('inert', ''), held.push(el))
+        closeTopLayer(root)
+        // At launch and when locked it cannot be closed without choosing: Escape and the TV's Back do nothing.
+        holdClose(root, () => picker() !== 'menu')
+        if (!openModal(root))
+            for (const el of root.parentElement?.children ?? []) if (el !== root && !el.hasAttribute('inert')) (el.setAttribute('inert', ''), held.push(el))
         queueMicrotask(() => tiles()[0]?.focus({ preventScroll: true }))
     })
-    onCleanup(() => held.forEach((el) => el.removeAttribute('inert')))
+    onCleanup(() => {
+        held.forEach((el) => el.removeAttribute('inert'))
+        try {
+            if (root.hasAttribute('open')) closeModal(root)
+        } catch {}
+    })
     // Back where the viewer was when it closes; a PIN entered for options counts no longer.
     onCleanup(() => {
         forgetVerified()
@@ -92,7 +102,7 @@ export function Profiles() {
     }
 
     const onKey = (e: KeyboardEvent) => {
-        if ((e.target as Element).closest?.('dialog')) return
+        if ((e.target as Element).closest?.('dialog:not(.profiles)')) return
         if (e.key === 'Escape' && picker() === 'menu') {
             e.preventDefault()
             closePicker()
@@ -100,7 +110,14 @@ export function Profiles() {
     }
 
     return (
-        <div class="profiles" ref={root} role="dialog" aria-modal="true" aria-labelledby="profiles-title" onKeyDown={onKey}>
+        <dialog
+            class="profiles"
+            ref={root}
+            aria-labelledby="profiles-title"
+            onKeyDown={onKey}
+            onCancel={(e) => picker() !== 'menu' && e.preventDefault()}
+            onClose={() => picker() === 'menu' && closePicker()}
+        >
             <Show when={picker() === 'menu'}>
                 <button class="round-button profiles-close" type="button" data-picker-close aria-label={t('accounts.close_picker')} title={t('accounts.close_picker')} onClick={closePicker}>
                     <Icon icon={Cancel01Icon} size={22} />
@@ -179,7 +196,7 @@ export function Profiles() {
                     )
                 }}
             </Show>
-        </div>
+        </dialog>
     )
 }
 
@@ -522,7 +539,7 @@ function askPin(p: B.Profile, name: string): Promise<boolean> {
 export function RemoveAllButton() {
     const start = async () => {
         try {
-            for (const p of removeAllNeeds()) if (!(await askPin(p, p.name || t('accounts.unnamed', { number: book().profiles.indexOf(p) + 1 })))) return
+            for (const p of removeAllNeeds()) if (!(await askPin(p, p.name || t('accounts.unnamed', { number: B.profileNumber(book(), p.id) })))) return
             await removeAll()
         } finally {
             // Cancelled or done: the PINs entered for it count for nothing after.

@@ -89,7 +89,8 @@ const reachOf = (el: Element | null) => (el && el !== document.body ? el.closest
 
 /** Where the remote may go now: inside an open dialog or menu if there is one, else the whole page. */
 function scope(): Element {
-    const modal = [...document.querySelectorAll('dialog[open]')].find((d) => {
+    // The topmost: the last opened is the last in the page's order (a PIN pad inside the picker, a question added to the body).
+    const modal = [...document.querySelectorAll('dialog[open]')].reverse().find((d) => {
         try {
             return d.matches(':modal')
         } catch {

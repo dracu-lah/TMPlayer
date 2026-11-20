@@ -4,7 +4,8 @@ import { A, Route, Router, useLocation, useNavigate } from '@solidjs/router'
 import { api, errorText, sessionHere, useHere } from './tg/rpc'
 import { online, unreachable, watchReach } from './net'
 import { back, entryState, me, sessionEndedElsewhere, setMe } from './session'
-import { picker } from './accounts'
+import { closeTopLayer, picker } from './accounts'
+import { holdClose, openModal } from './ui/confirmCore'
 import { afterSessionRead, attachSignedIn, cleanStaleProfiles, sessionUnreadable, showCarriedNotice } from './accountFlows'
 import { loadSubmaker } from './submakerBase'
 import { chatsGated as gated, loadSettings, setChatsGateWaived } from './store'
@@ -72,8 +73,15 @@ function loadProfiles() {
 
 /** What covers the page while the picker loads, or when it could not: nothing of the profile, and Try again. */
 function LockCover() {
+    // A modal dialog in the top layer too, closed by nothing: the picker takes its place, or a reload.
+    const open = (d: HTMLDialogElement) =>
+        queueMicrotask(() => {
+            closeTopLayer(d)
+            holdClose(d, () => true)
+            openModal(d)
+        })
     return (
-        <div class="lock-cover" role="dialog" aria-modal="true" aria-label={t('accounts.cover_loading')}>
+        <dialog class="lock-cover" ref={open} aria-label={t('accounts.cover_loading')} onCancel={(e) => e.preventDefault()}>
             <Show when={profilesFailed()} fallback={<div class="loader" role="progressbar" aria-label={t('accounts.cover_loading')} />}>
                 <p role="alert">{t('accounts.cover_failed')}</p>
                 {/* A reload starts on the picker again: nothing unlocked rides along. */}
@@ -81,7 +89,7 @@ function LockCover() {
                     {t('common.try_again')}
                 </button>
             </Show>
-        </div>
+        </dialog>
     )
 }
 
