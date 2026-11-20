@@ -117,8 +117,12 @@ private object TopMessages {
  * and a half seconds, a newer message replacing the one showing. Put once over the whole app.
  */
 @Composable
-fun BoxScope.TopMessageHost() {
+fun BoxScope.TopMessageHost(
+    /** True while nothing of the open profile may show (its PIN, the picker): a message waiting goes unseen. */
+    suppressed: Boolean = false,
+) {
     var shown by remember { mutableStateOf<TopMessage?>(null) }
+    LaunchedEffect(suppressed) { if (suppressed) shown = null }
     var serial by remember { mutableIntStateOf(0) }
     var last by remember { mutableStateOf(TopMessage("")) }
     val touch = isTouch()
@@ -142,7 +146,7 @@ fun BoxScope.TopMessageHost() {
     // and goes back up the way it came; with less motion asked for it only fades.
     val still = rememberLessMotion()
     AnimatedVisibility(
-        visible = shown != null,
+        visible = shown != null && !suppressed,
         // A television has no status bar but crops its edges: the pill keeps inside the overscan.
         modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding()
             .padding(top = if (isTouch()) 8.dp else com.tmplayer.ui.theme.Tv.SafeV, start = 24.dp, end = 24.dp),

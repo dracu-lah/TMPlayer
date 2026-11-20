@@ -760,6 +760,19 @@ fun ProfilesGate(flow: ProfileFlow?, signInStep: Boolean, content: @Composable (
     }
 }
 
+/**
+ * Whether the open profile's shell is what [ProfilesGate] draws now: not the picker, not a PIN.
+ * For what sits over the gate (the toasts, "Wrong title?"): drawn only while this is true.
+ */
+@Composable
+fun profileShellShown(flow: ProfileFlow?): Boolean {
+    if (flow == null) return true
+    val list by flow.switcher.profiles.collectAsState()
+    val unlockedId by ProfileUnlock.unlockedId.collectAsState()
+    val show = ProfilePicker.atLaunch(list) && (flow.asked || !flow.entered)
+    return !show && !ProfileUnlock.needsUnlock(list, unlockedId)
+}
+
 /** A checker that takes no PIN: where one is required and none is there, nothing gets through. */
 internal object RefusingChecker : PinChecker {
     override suspend fun waitUntil(): Long = 0L
