@@ -340,6 +340,9 @@ object ResumeSync {
             val changed = files.isEmpty() || unreadable || files.size > 1 || !sameLists(remote, encoded.doc)
             var wrote = false
             if (changed) {
+                // The channel is checked again right before the write: the reads and the merge took time,
+                // and nobody may have joined since. Not safe or not known: nothing is written.
+                if (inChannel) SyncDestinations.verifyBeforeWrite(settings, TdChannelProbe(td), chat)?.let { return Outcome.Failed(it) }
                 when (val write = write(td, chat, files.firstOrNull(), encoded.bytes, settings, pin = !inChannel)) {
                     WriteResult.Written -> wrote = true
                     WriteResult.WaitingForFile -> return Outcome.WaitingForFile

@@ -51,6 +51,12 @@ sealed class SyncChannelBlock(val code: String) {
     /** It has a public name (a t.me link), so anybody can join. */
     data object Public : SyncChannelBlock("public")
 
+    /**
+     * A discussion group is linked to it: everyone in that group can read the channel's posts, so
+     * a member count of 1 on the channel does not mean only the viewer can read the file.
+     */
+    data object LinkedGroup : SyncChannelBlock("linked")
+
     /** This account is not its owner (an admin or a member). */
     data object NotOwner : SyncChannelBlock("notowner")
 
@@ -73,6 +79,7 @@ sealed class SyncChannelBlock(val code: String) {
         Gone -> L.syncchannelBlockGone
         NotAChannel -> L.syncchannelBlockGroup
         Public -> L.syncchannelBlockPublic
+        LinkedGroup -> L.syncchannelBlockLinked
         NotOwner -> L.syncchannelBlockNotOwner
         OwnerLeft -> L.syncchannelBlockLeft
         is PostingBlocked -> L.syncchannelBlockPosting
@@ -90,6 +97,7 @@ sealed class SyncChannelBlock(val code: String) {
                 "gone" -> Gone
                 "group" -> NotAChannel
                 "public" -> Public
+                "linked" -> LinkedGroup
                 "notowner" -> NotOwner
                 "left" -> OwnerLeft
                 "posting" -> PostingBlocked(arg.toLongOrNull()?.coerceAtLeast(0L) ?: 0L)
@@ -107,6 +115,10 @@ data class ChannelFacts(
     val title: String,
     val isChannel: Boolean,
     val hasPublicName: Boolean,
+    /** A discussion group is linked to the channel (its posts are readable there). */
+    val hasLinkedChat: Boolean = false,
+    /** A forum or a broadcast group: never a place for the file. */
+    val isForum: Boolean = false,
     val role: Role,
     /** Telegram restricted the channel itself (a restriction reason is set). */
     val restricted: Boolean,
@@ -132,6 +144,47 @@ fun interface ChannelProbe {
     suspend fun facts(chatId: Long): ProbeAnswer
 }
 
+/** The part of the supergroup's full info the check needs; null when it could not be fetched. */
+data class FullInfoFacts(val memberCount: Int, val linkedChatId: Long)
+
+/** Joins what TDLib gives into one [ProbeAnswer]; pure, so a failed fetch is a tested case. */
+object ChannelFactsAssembler {
+
+    /**
+     * Fails closed: without the full info (the fetch failed) nothing is known about the linked
+     * group or the real member count, so the answer is [ProbeAnswer.Unreachable] and nothing is
+     * written until it is known. The count is the larger of the two Telegram gives.
+     */
+    fun assemble(
+        chatId: Long,
+        title: String,
+        isChannel: Boolean,
+        isForum: Boolean,
+        hasPublicName: Boolean,
+        role: ChannelFacts.Role,
+        restricted: Boolean,
+        groupMemberCount: Int,
+        groupHasLinkedChat: Boolean,
+        full: FullInfoFacts?,
+        failure: String,
+    ): ProbeAnswer {
+        if (full == null) return ProbeAnswer.Unreachable(failure)
+        return ProbeAnswer.Facts(
+            ChannelFacts(
+                chatId = chatId,
+                title = title,
+                isChannel = isChannel,
+                hasPublicName = hasPublicName,
+                hasLinkedChat = groupHasLinkedChat || full.linkedChatId != 0L,
+                isForum = isForum,
+                role = role,
+                restricted = restricted,
+                memberCount = maxOf(groupMemberCount, full.memberCount).coerceAtLeast(0),
+            ),
+        )
+    }
+}
+
 /** What [SyncChannelCheck.judge] decides. */
 sealed interface SyncJudgement {
     /** Safe to read and write: only the viewer is in it. */
@@ -152,11 +205,12 @@ object SyncChannelCheck {
         is ProbeAnswer.Facts -> {
             val f = answer.facts
             val block: SyncChannelBlock? = when {
-                !f.isChannel -> SyncChannelBlock.NotAChannel
+                !f.isChannel || f.isForum -> SyncChannelBlock.NotAChannel
                 f.role == ChannelFacts.Role.Outside -> SyncChannelBlock.Gone
                 f.role == ChannelFacts.Role.OwnerLeft -> SyncChannelBlock.OwnerLeft
                 f.role != ChannelFacts.Role.Owner -> SyncChannelBlock.NotOwner
                 f.hasPublicName -> SyncChannelBlock.Public
+                f.hasLinkedChat -> SyncChannelBlock.LinkedGroup
                 f.restricted -> SyncChannelBlock.PostingBlocked()
                 f.memberCount <= 0 -> SyncChannelBlock.CountUnknown
                 f.memberCount >= 2 -> SyncChannelBlock.MoreMembers(f.memberCount)
@@ -269,11 +323,27 @@ object SyncDestinations {
     suspend fun chatForBackup(settings: SettingsStore?, myId: Long, savedChat: Long, probe: ChannelProbe): Long {
         if (settings == null) return savedChat
         return when (val place = resolve(settings, myId, savedChat, probe)) {
-            is SyncPlace.Channel -> place.chatId
+            // Checked again at the moment of the write, as the sync does: a join since resolve is caught.
+            is SyncPlace.Channel -> if (verifyBeforeWrite(settings, probe, place.chatId) == null) place.chatId else savedChat
             is SyncPlace.SavedMessages -> place.chatId
             is SyncPlace.Unreachable -> savedChat
         }
     }
+
+    /**
+     * The check again, right before a write: the sync's reads and merge take time, and somebody
+     * can join in between. Null when the channel is still the viewer's alone; else the words for
+     * the viewer, with nothing written (a block is kept for the Settings page).
+     */
+    suspend fun verifyBeforeWrite(settings: SettingsStore, probe: ChannelProbe, chatId: Long): String? =
+        when (val judged = SyncChannelCheck.judge(probe.facts(chatId))) {
+            is SyncJudgement.Use -> null
+            is SyncJudgement.Blocked -> {
+                settings.setSyncChannelBlock(judged.block)
+                judged.block.words()
+            }
+            is SyncJudgement.Retry -> judged.reason
+        }
 
     /** A write to the channel was refused: Saved Messages for the next hour, the reason on the page. */
     suspend fun notePostingRefused(settings: SettingsStore, now: Long = System.currentTimeMillis()) {
@@ -320,6 +390,8 @@ object SyncDestinations {
                 val status = group.status
                 if (status !is ChatMemberStatusCreator || !status.isMember) continue
                 if (group.usernames?.activeUsernames?.isNotEmpty() == true || !group.usernames?.editableUsername.isNullOrBlank()) continue
+                // A linked discussion group can read the posts, a forum is not a channel: never offered.
+                if (group.hasLinkedChat || group.isForum || group.isBroadcastGroup) continue
                 found[chat.id] = ChannelOption(chat.id, chat.title)
             }
         }
@@ -410,24 +482,26 @@ class TdChannelProbe(private val td: TdlClient) : ChannelProbe {
                 ?: return ProbeAnswer.Unreachable(Failures.humanise((chat as TdlResult.Failure).message))
             val type = loaded.type as? ChatTypeSupergroup
                 ?: return ProbeAnswer.Facts(
-                    ChannelFacts(chatId, loaded.title, false, false, ChannelFacts.Role.Outside, false, 0),
+                    ChannelFacts(chatId, loaded.title, false, false, role = ChannelFacts.Role.Outside, restricted = false, memberCount = 0),
                 )
             val group = td.getSupergroup(type.supergroupId)
             val supergroup = (group as? TdlResult.Success)?.result
                 ?: return ProbeAnswer.Unreachable(Failures.humanise((group as TdlResult.Failure).message))
-            val full = td.getSupergroupFullInfo(type.supergroupId).valueOrNull
-            val count = maxOf(supergroup.memberCount, full?.memberCount ?: 0).coerceAtLeast(0)
+            val fullResult = td.getSupergroupFullInfo(type.supergroupId)
+            val full = (fullResult as? TdlResult.Success)?.result?.let { FullInfoFacts(it.memberCount, it.linkedChatId) }
             val names = supergroup.usernames
-            return ProbeAnswer.Facts(
-                ChannelFacts(
-                    chatId = chatId,
-                    title = loaded.title,
-                    isChannel = type.isChannel,
-                    hasPublicName = names?.activeUsernames?.isNotEmpty() == true || !names?.editableUsername.isNullOrBlank(),
-                    role = roleOf(supergroup.status),
-                    restricted = supergroup.restrictionInfo != null,
-                    memberCount = count,
-                ),
+            return ChannelFactsAssembler.assemble(
+                chatId = chatId,
+                title = loaded.title,
+                isChannel = type.isChannel,
+                isForum = supergroup.isForum || supergroup.isBroadcastGroup,
+                hasPublicName = names?.activeUsernames?.isNotEmpty() == true || !names?.editableUsername.isNullOrBlank(),
+                role = roleOf(supergroup.status),
+                restricted = supergroup.restrictionInfo != null,
+                groupMemberCount = supergroup.memberCount,
+                groupHasLinkedChat = supergroup.hasLinkedChat,
+                full = full,
+                failure = Failures.humanise((fullResult as? TdlResult.Failure)?.message),
             )
         } catch (e: CancellationException) {
             throw e

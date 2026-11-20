@@ -3652,6 +3652,7 @@
     "block_gone": "TMPlayer cannot find this channel any more: it was deleted, or you are no longer in it. The sync file stays in Saved Messages. Choose another channel, or go back to Saved Messages here.",
     "block_group": "This is a group, not a channel, so TMPlayer does not write there. The sync file stays in Saved Messages. Choose a private channel instead.",
     "block_left": "You left this channel, so TMPlayer does not write there. The sync file stays in Saved Messages. Join it again as its owner, or choose another channel.",
+    "block_linked": "A discussion group is linked to this channel, so everyone in that group can read what is posted there, even when you are the only member. TMPlayer does not write there. The sync file stays in Saved Messages. Unlink the group in Telegram, or choose another channel.",
     "block_members": "This channel now has {count, plural, one {# member} other {# members}}, not only you, so TMPlayer stopped writing there. The sync file stays in Saved Messages. What is already in the channel can be read by the others: delete it there in Telegram if you do not want that.",
     "block_not_owner": "You are not the owner of this channel, so TMPlayer does not write there. The sync file stays in Saved Messages. Choose a channel you own.",
     "block_posting": "Telegram does not let this account post in the channel right now (it is restricted, or the account is limited). The sync file stays in Saved Messages and the channel is tried again in an hour.",
