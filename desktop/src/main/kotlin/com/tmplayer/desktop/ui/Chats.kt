@@ -539,20 +539,6 @@ internal fun ChatRow(
             }
             Text(chat.kind.label, style = MaterialTheme.typography.bodySmall, color = Tone.muted)
         }
-        if (chat.unreadCount > 0) {
-            Box(
-                Modifier
-                    .clip(CircleShape)
-                    .background(if (chat.isMuted) Tone.surfaceHigh else Tone.accent)
-                    .padding(horizontal = 8.dp, vertical = 2.dp),
-            ) {
-                Text(
-                    if (chat.unreadCount > 999) "999+" else chat.unreadCount.toString(),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = if (chat.isMuted) Tone.muted else Tone.onAccent,
-                )
-            }
-        }
         TipIconButton(
             if (favourite) TmIcons.Star else TmIcons.StarOutline,
             if (favourite) s.chatsUnfavourite else s.chatsFavourite,

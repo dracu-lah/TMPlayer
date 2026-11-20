@@ -26,11 +26,11 @@ class NavGroupsTest {
     }
 
     @Test
-    fun `badges count favourites on Favourites and unread chats on Chats, nothing elsewhere`() {
-        assertEquals("3", navBadge(BrowseSection.of(BrowseTab.Favorites), favoriteCount = 3, unreadChats = 5))
-        assertEquals("5", navBadge(BrowseSection.of(BrowseTab.Chats), favoriteCount = 3, unreadChats = 5))
-        assertEquals(null, navBadge(BrowseSection.of(BrowseTab.Chats), favoriteCount = 3, unreadChats = 0))
-        assertEquals(null, navBadge(BrowseSection.of(BrowseTab.Saved), favoriteCount = 3, unreadChats = 5))
+    fun `the badge counts favourites on Favourites, and nothing elsewhere`() {
+        assertEquals("3", navBadge(BrowseSection.of(BrowseTab.Favorites), favoriteCount = 3))
+        // Chats never carries an unread count.
+        assertEquals(null, navBadge(BrowseSection.of(BrowseTab.Chats), favoriteCount = 3))
+        assertEquals(null, navBadge(BrowseSection.of(BrowseTab.Saved), favoriteCount = 3))
     }
 
     @Test

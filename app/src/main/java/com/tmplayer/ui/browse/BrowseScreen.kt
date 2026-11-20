@@ -320,12 +320,6 @@ internal fun BrowseScreen(
     // an explicit pick always wins. [picked] is hoisted rather than remembered here because
     // opening a chat swaps this screen out of the composition.
     val sections = remember { browseSections() }
-    // How many chats have something unread in them, not how many messages are unread across them:
-    // the badge sits beside "Chats", whose Unread chip lists those chats.
-    val allChats = (state as? UiState.Content)?.value?.chats
-    val unreadChats = remember(allChats) {
-        allChats.orEmpty().count { it.unreadCount > 0 && !it.isArchived }
-    }
     // Home is the first destination on every device: it leads with what is half watched, so it
     // is never a worse landing than Continue watching was, and it is never empty for long.
     val tab = picked ?: BrowseSection.of(BrowseTab.Home)
@@ -2737,7 +2731,6 @@ internal fun ChatTile(
                 modifier = Modifier.size(Avatar.Card).clip(CircleShape),
             )
             Spacer(Modifier.weight(1f))
-            UnreadBadge(chat, small = true)
             if (favorite) {
                 Spacer(Modifier.width(6.dp))
                 Icon(
@@ -2913,7 +2906,6 @@ private fun ChatRow(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            UnreadBadge(chat)
             ChatMarkers(chat, size = 20.dp)
             if (favorite) {
                 Icon(
@@ -2969,37 +2961,6 @@ private fun ChatMarkers(chat: ChatSummary, size: Dp) {
 }
 
 /**
- * The count of unread messages, drawn the way Telegram draws it.
- *
- * A muted chat keeps its count and loses its colour: it still says something arrived, without
- * asking to be looked at. Below one, nothing is drawn at all rather than a zero.
- */
-@Composable
-private fun UnreadBadge(chat: ChatSummary, small: Boolean = false) {
-    if (chat.unreadCount < 1) return
-    val fill = if (chat.isMuted) Tone.muted else Tone.accent
-    Text(
-        // Telegram's own ceiling. Past a few hundred the exact number stops meaning anything and
-        // starts widening the pill enough to eat the chat's name.
-        text = if (chat.unreadCount > UNREAD_CAP) "$UNREAD_CAP+" else chat.unreadCount.toString(),
-        style = if (small) {
-            MaterialTheme.typography.labelSmall
-        } else {
-            MaterialTheme.typography.labelLarge
-        },
-        color = Tone.readableOn(fill),
-        maxLines = 1,
-        modifier = Modifier
-            .clip(CircleShape)
-            .background(fill)
-            .padding(horizontal = if (small) 6.dp else 10.dp, vertical = if (small) 1.dp else 3.dp),
-    )
-}
-
-/** Telegram stops counting out loud here too. */
-private const val UNREAD_CAP = 999
-
-/**
  * The phone's chat row, which is Material's two-line list item and nothing more.
  *
  * [ListItem] handles the avatar gap, the two type styles and the scheme colours, in a light theme
@@ -3051,13 +3012,12 @@ private fun TouchChatRow(
                 modifier = Modifier.size(TOUCH_AVATAR).clip(CircleShape),
             )
         },
-        trailingContent = if (favorite || chat.unreadCount > 0 || chat.isPinned || chat.isMuted) {
+        trailingContent = if (favorite || chat.isPinned || chat.isMuted) {
             {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    UnreadBadge(chat)
                     ChatMarkers(chat, size = 16.dp)
                     if (favorite) {
                         // Starred a moment ago from the hold menu: the star pops in on a spring.

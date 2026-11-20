@@ -249,7 +249,6 @@ private fun TopicTab(
         add(name)
         if (topic?.isPinned == true) add(s.gridTopicPinned)
         if (topic?.isClosed == true) add(s.gridTopicClosed)
-        if ((topic?.unreadCount ?: 0) > 0) add(s.gridTopicUnread(topic!!.unreadCount))
     }.joinToString(", ")
     Row(
         modifier
@@ -285,22 +284,6 @@ private fun TopicTab(
         )
         if (topic?.isClosed == true) {
             Icon(TmIcons.Lock, contentDescription = null, tint = ink.copy(alpha = 0.7f), modifier = Modifier.size(glyph))
-        }
-        val unread = topic?.unreadCount ?: 0
-        if (unread > 0) {
-            Box(
-                Modifier
-                    .clip(CircleShape)
-                    .background(if (lit) Tone.onFocusFill.copy(alpha = 0.2f) else Tone.accent.copy(alpha = 0.22f))
-                    .padding(horizontal = 7.dp, vertical = 1.dp),
-            ) {
-                Text(
-                    if (unread > 999) "999+" else unread.toString(),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = ink,
-                    maxLines = 1,
-                )
-            }
         }
     }
 }

@@ -162,12 +162,11 @@ fun rememberNavGroups(current: NavGroup?): NavGroupsHolder {
 }
 
 /**
- * The count beside an entry, the same on every sidebar: how many chats are starred on Favourites,
- * and how many chats have something unread on Chats (the Unread chip's count, which used to sit on
- * an Unread entry of its own). Null where there is nothing worth a badge.
+ * The count beside an entry, the same on every sidebar: how many chats are starred on Favourites.
+ * Unread counts are never shown (TMPlayer lists videos, and a Telegram message count says nothing
+ * about them). Null where there is nothing worth a badge.
  */
-fun navBadge(section: BrowseSection, favoriteCount: Int, unreadChats: Int): String? = when {
+fun navBadge(section: BrowseSection, favoriteCount: Int): String? = when {
     section == BrowseSection.of(BrowseTab.Favorites) && favoriteCount > 0 -> favoriteCount.toString()
-    section == BrowseSection.of(BrowseTab.Chats) && unreadChats > 0 -> unreadChats.toString()
     else -> null
 }
