@@ -2593,7 +2593,7 @@
     "no_space_title": "Not enough space",
     "options": "Options for {name}",
     "pin_for": "Enter the PIN for {name}",
-    "pin_forgot": "Forgot this profile's PIN? Hold its picture (a long OK on a remote) and sign it out. Signing out is the only reset.",
+    "pin_forgot": "Forgot this profile's PIN? Only someone who knows it can sign it out here. Clearing TMPlayer's storage in the system settings removes every profile from this device.",
     "pin_new": "Choose a four-digit PIN for {name}",
     "reason_missing": "Its folder is gone from this device.",
     "reason_not_folder": "Something else is where its folder should be.",

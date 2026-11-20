@@ -119,11 +119,13 @@ fun WhoIsWatching(
     /** The tile to give the focus to, asked again each time [focusAsk] changes. */
     focusOn: String? = null,
     focusAsk: Int = 0,
+    /** Manage profiles: every press opens the options. Held by the caller, so a panel over the row keeps it. */
+    manage: Boolean = false,
+    onManageChange: (Boolean) -> Unit = {},
 ) {
     val s = LocalStrings.current
     val form = deviceForm()
     val tv = form == DeviceForm.Tv
-    var manage by rememberSaveable { mutableStateOf(false) }
     val requesters = remember { HashMap<String, FocusRequester>() }
     fun requester(id: String) = requesters.getOrPut(id) { FocusRequester() }
     val addFocus = remember { FocusRequester() }
@@ -231,7 +233,7 @@ fun WhoIsWatching(
                 label = if (manage) s.commonDone else s.profilesManage,
                 icon = if (manage) TmIcons.Check else TmIcons.Edit,
                 modifier = Modifier.padding(top = 8.dp).focusRequester(manageFocus),
-                onClick = { manage = !manage },
+                onClick = { onManageChange(!manage) },
             )
         }
     }

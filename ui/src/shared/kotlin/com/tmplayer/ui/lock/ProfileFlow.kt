@@ -30,6 +30,7 @@ import com.tmplayer.data.AppLockSettings
 import com.tmplayer.data.PickerModel
 import com.tmplayer.data.Profile
 import com.tmplayer.data.ProfilePicker
+import com.tmplayer.data.ProfileUnlock
 import com.tmplayer.data.ProfileState
 import com.tmplayer.data.ProfileTile
 import com.tmplayer.data.RemoveResult
@@ -119,10 +120,10 @@ class ProfileFlow(
     }
 
     /** What the app lock's PIN guards in the picker: what Settings would ask it for. */
-    enum class Guarded { SignOut, Remove, Add }
+    enum class Guarded { SignOut, Remove, Add, RemoveAll }
 
     /** What a profile's PIN is asked for. */
-    enum class PinWhy { Open, Rename, ChangePin, RemovePin }
+    enum class PinWhy { Open, Rename, ChangePin, RemovePin, SignOut, Remove, RemoveAll }
 
     /** A message with one way out, over whatever is on screen. */
     data class Notice(val title: String, val body: String)
@@ -154,12 +155,24 @@ class ProfileFlow(
     private var running: Job? = null
     private var listening = false
 
-    /**
-     * The profiles whose PIN was given in this process. Memory only, never saved: a process that
-     * died, or the app lock locking the app again ([lockAll]), asks every PIN again.
-     */
-    var unlocked: Set<String> by mutableStateOf(emptySet())
-        private set
+    init {
+        // Heard from the start, with or without a screen: switches and the app lock lock it.
+        ProfileUnlock.install()
+    }
+
+    /** The profile whose PIN was just given at the picker, until its switch has opened it. */
+    private var pinGiven: String? = null
+
+    /** The profile whose PIN the sign out gate took (or which needs none), the only one [confirmSignOut] acts on. */
+    private var signOutCleared: String? = null
+
+    /** Remove all accounts waiting on its PINs: the profiles still to ask, and what to run after. */
+    private class RemoveAllAsk(val deleteDownloads: Boolean, val done: (SignOutResult) -> Unit, val left: ArrayDeque<String>)
+
+    private var removeAllAsk: RemoveAllAsk? = null
+
+    /** Manage profiles is on: a press on a tile opens its options. */
+    var manage: Boolean by mutableStateOf(false)
 
     /** The app lock has a PIN: the picker's sign out, remove and add ask it first. */
     var appLockPin: Boolean by mutableStateOf(false)
@@ -169,24 +182,19 @@ class ProfileFlow(
 
     fun appLockChecker(): PinChecker? = platform.appLockChecker()
 
-    /** Every profile asks its PIN again: the app lock locked the app. */
-    fun lockAll() {
-        unlocked = emptySet()
-    }
-
-    /** [id]'s PIN was given at its pad. */
-    fun markUnlocked(id: String) {
-        unlocked = unlocked + id
-    }
-
     /**
-     * The open profile has a PIN that was not given in this process: nothing of it is drawn until
-     * it is, with one profile or several, after a launch, a switch, a sign out, a remove or an add.
+     * The open profile has a PIN that was not given in this process ([ProfileUnlock]): nothing of
+     * it is drawn until it is, with one profile or several, after a launch, a switch, a sign out, a
+     * remove, an add or a long absence.
      */
-    fun needsUnlock(list: AccountList): Boolean {
-        val active = list.active ?: return false
-        return active.pin != null && active.id !in unlocked
+    fun needsUnlock(list: AccountList): Boolean = ProfileUnlock.needsUnlock(list)
+
+    /** The open profile's PIN was given at the gate's pad. */
+    fun unlockOpen(id: String) {
+        if (switcher.profiles.value.activeId == id) ProfileUnlock.unlock(id)
     }
+
+    private fun hasPin(id: String): Boolean = switcher.profiles.value.byId(id)?.pin != null
 
     /** The picker's model now, for [ProfilePicker.model]. */
     fun model(list: AccountList, activeNeedsSignIn: Boolean): PickerModel =
@@ -242,6 +250,7 @@ class ProfileFlow(
 
     private fun enter() {
         stage = Stage.Picker
+        manage = false
         asked = false
         entered = true
     }
@@ -257,7 +266,8 @@ class ProfileFlow(
                 val reason = (state as? ProfileState.Recoverable)?.reason ?: ProfileState.Reason.FolderMissing
                 stage = Stage.Recoverable(tile.id, reason)
             }
-            ProfilePicker.needsPin(tile) && tile.id !in unlocked -> stage = Stage.Pin(tile.id, PinWhy.Open)
+            // Every time: a profile left and opened again from the picker asks again.
+            ProfilePicker.needsPin(tile) -> stage = Stage.Pin(tile.id, PinWhy.Open)
             else -> afterPin(tile.id)
         }
     }
@@ -266,6 +276,8 @@ class ProfileFlow(
     private fun afterPin(id: String) {
         val list = switcher.profiles.value
         if (list.activeId == id && list.switchingTo == null) {
+            if (pinGiven == id) ProfileUnlock.unlock(id)
+            pinGiven = null
             enter()
             return
         }
@@ -322,16 +334,32 @@ class ProfileFlow(
         stage = Stage.Pin(id, PinWhy.RemovePin)
     }
 
+    /**
+     * Sign out of [id]: a profile with a PIN that is not the open, unlocked one asks its PIN (a
+     * locked profile is never signed out by someone who has not unlocked it), then the app lock's.
+     */
     fun signOut(id: String) {
-        stage = if (appLockPin) Stage.AppPin(id, Guarded.SignOut) else Stage.ConfirmSignOut(id)
+        signOutCleared = null
+        stage = when {
+            hasPin(id) && !ProfileUnlock.isUnlocked(id) -> Stage.Pin(id, PinWhy.SignOut)
+            appLockPin -> Stage.AppPin(id, Guarded.SignOut)
+            else -> {
+                signOutCleared = id
+                Stage.ConfirmSignOut(id)
+            }
+        }
     }
 
     /** The app lock's PIN was given: what it guarded goes on. */
     fun appPinAccepted(id: String?, then: Guarded) {
         when (then) {
-            Guarded.SignOut -> stage = if (id != null) Stage.ConfirmSignOut(id) else Stage.Picker
-            Guarded.Remove -> if (id != null) removeNow(id) else back()
+            Guarded.SignOut -> {
+                signOutCleared = id
+                stage = if (id != null) Stage.ConfirmSignOut(id) else Stage.Picker
+            }
+            Guarded.Remove -> if (id == null) back() else if (needsOwnPinToRemove(id)) stage = Stage.Pin(id, PinWhy.Remove) else removeNow(id)
             Guarded.Add -> addChecked()
+            Guarded.RemoveAll -> nextRemoveAllPin()
         }
     }
 
@@ -339,8 +367,21 @@ class ProfileFlow(
     fun pinAccepted(id: String, why: PinWhy) {
         when (why) {
             PinWhy.Open -> {
-                markUnlocked(id)
+                pinGiven = id
                 afterPin(id)
+            }
+            PinWhy.SignOut -> {
+                if (appLockPin) {
+                    stage = Stage.AppPin(id, Guarded.SignOut)
+                } else {
+                    signOutCleared = id
+                    stage = Stage.ConfirmSignOut(id)
+                }
+            }
+            PinWhy.Remove -> removeNow(id)
+            PinWhy.RemoveAll -> {
+                removeAllAsk?.left?.remove(id)
+                nextRemoveAllPin()
             }
             PinWhy.Rename -> stage = Stage.Rename(id)
             PinWhy.ChangePin -> stage = Stage.ChoosePin(id)
@@ -355,7 +396,7 @@ class ProfileFlow(
         launch {
             if (switcher.setPin(id, pin)) {
                 // Whoever chose it knows it: the open profile does not lock them out at once.
-                markUnlocked(id)
+                if (switcher.profiles.value.activeId == id) ProfileUnlock.unlock(id)
                 platform.say(L.lockPinSetToast)
             }
             back(id)
@@ -420,8 +461,13 @@ class ProfileFlow(
         work(L.profilesSwitching(name = name)) {
             val left = switcher.profiles.value.active
             runCatching { platform.beforeSwitch() }.onFailure { Logger.w(TAG, "stopping before a switch failed", it) }
+            // Whatever opens next is locked until its own PIN is given (also heard from the switch itself).
+            ProfileUnlock.lock()
             when (val result = switcher.switchTo(id, signInAgain)) {
                 SwitchResult.Switched, SwitchResult.Already -> {
+                    // Its PIN was given at the picker for this very switch: open, and unlocked.
+                    if (pinGiven == id) ProfileUnlock.unlock(id)
+                    pinGiven = null
                     // Leaving a profile that never finished signing in is Add account given up:
                     // it goes, folders and all, so a half made profile never lingers as a tile.
                     if (left != null && left.id != id && left.adding && !left.signedIn) switcher.remove(left.id)
@@ -438,6 +484,7 @@ class ProfileFlow(
         stage = Stage.Picker
         work(L.profilesSwitching(name = L.profilesAdd)) {
             runCatching { platform.beforeSwitch() }.onFailure { Logger.w(TAG, "stopping before an add failed", it) }
+            ProfileUnlock.lock()
             when (val result = switcher.add()) {
                 is AddResult.Added -> enter()
                 AddResult.Full -> notice = Notice(L.profilesAdd, L.profilesLimit(count = com.tmplayer.data.AccountRules.MAX))
@@ -452,10 +499,17 @@ class ProfileFlow(
 
     /** Sign out of [id] only: its data goes, then the picker (two left or more), the one left, or the sign in. */
     fun confirmSignOut(id: String, deleteDownloads: Boolean) {
+        // Only past the gate in signOut: no caller skips a locked profile's PIN or the app lock's.
+        if (signOutCleared != id) {
+            signOut(id)
+            return
+        }
+        signOutCleared = null
         val name = nameOf(id)
         stage = Stage.Picker
         work(L.profilesSwitching(name = name)) {
             if (switcher.profiles.value.activeId != id) runCatching { platform.beforeSwitch() }
+            ProfileUnlock.lock()
             when (val result = switcher.signOutProfile(id) { profile, last -> platform.wipe(profile, last, deleteDownloads) }) {
                 is SignOutResult.SignedOut -> {
                     platform.say(if (result.partialWipe) L.profilesWipePartial else L.profilesSignedOut(name = name))
@@ -481,12 +535,18 @@ class ProfileFlow(
 
     /** Settings' sign out of the open profile, through the same switcher (its backup was asked before). */
     fun signOutOpen(deleteDownloads: Boolean, done: (SignOutResult) -> Unit = {}) {
+        // Settings is only ever drawn for an unlocked profile; anything else is refused.
+        if (needsUnlock(switcher.profiles.value)) {
+            done(SignOutResult.Unknown)
+            return
+        }
         confirmSignOutWith(switcher.profiles.value.activeId, deleteDownloads, done)
     }
 
     private fun confirmSignOutWith(id: String, deleteDownloads: Boolean, done: (SignOutResult) -> Unit) {
         val name = nameOf(id)
         work(L.profilesSwitching(name = name)) {
+            ProfileUnlock.lock()
             val result = switcher.signOutProfile(id) { profile, last -> platform.wipe(profile, last, deleteDownloads) }
             if (result is SignOutResult.SignedOut) {
                 if (result.partialWipe) platform.say(L.profilesWipePartial)
@@ -498,10 +558,49 @@ class ProfileFlow(
         }
     }
 
-    /** Settings' Remove all accounts: every profile signed out, one empty profile on the sign in. */
+    /**
+     * Settings' Remove all accounts: it wipes other people's profiles, so the app lock's PIN comes
+     * first, then the PIN of every profile that has one, each in turn, all before anything is
+     * wiped. A wrong PIN, a wait or Cancel at any of them wipes nothing.
+     */
     fun removeAll(deleteDownloads: Boolean, done: (SignOutResult) -> Unit = {}) {
+        if (status != null) return
+        val locked = switcher.profiles.value.profiles.filter { it.pin != null }.map { it.id }
+        removeAllAsk = RemoveAllAsk(deleteDownloads, done, ArrayDeque(locked))
+        asked = true
+        if (appLockPin) stage = Stage.AppPin(null, Guarded.RemoveAll) else nextRemoveAllPin()
+    }
+
+    private fun nextRemoveAllPin() {
+        val ask = removeAllAsk ?: return back()
+        val next = ask.left.firstOrNull()
+        if (next != null) {
+            stage = Stage.Pin(next, PinWhy.RemoveAll)
+            return
+        }
+        removeAllAsk = null
+        stage = Stage.Picker
+        removeAllNow(ask.deleteDownloads, ask.done)
+    }
+
+    /** A PIN pad's Cancel: Remove all accounts given up wipes nothing and goes back where it came from. */
+    fun cancelPin(id: String, why: PinWhy) {
+        if (why == PinWhy.RemoveAll) cancelRemoveAll() else back(id)
+    }
+
+    fun cancelAppPin(id: String?, then: Guarded) {
+        if (then == Guarded.RemoveAll) cancelRemoveAll() else back(id)
+    }
+
+    private fun cancelRemoveAll() {
+        removeAllAsk = null
+        close()
+    }
+
+    private fun removeAllNow(deleteDownloads: Boolean, done: (SignOutResult) -> Unit) {
         work(L.profilesRemoveAll) {
             runCatching { platform.beforeSwitch() }
+            ProfileUnlock.lock()
             val result = switcher.removeAll { profile, last -> platform.wipe(profile, last, deleteDownloads) }
             when {
                 result is SignOutResult.SignedOut && result.partialWipe -> platform.say(L.profilesWipePartial)
@@ -517,11 +616,22 @@ class ProfileFlow(
 
     /** A broken (or never signed in) sleeping profile's Remove, without reaching Telegram. */
     fun remove(id: String) {
-        if (appLockPin) {
-            stage = Stage.AppPin(id, Guarded.Remove)
-            return
+        stage = when {
+            appLockPin -> Stage.AppPin(id, Guarded.Remove)
+            needsOwnPinToRemove(id) -> Stage.Pin(id, PinWhy.Remove)
+            else -> {
+                removeNow(id)
+                stage
+            }
         }
-        removeNow(id)
+    }
+
+    /** A profile with a PIN whose folder is still there to read asks it before it goes. */
+    private fun needsOwnPinToRemove(id: String): Boolean {
+        val profile = switcher.profiles.value.byId(id) ?: return false
+        if (profile.pin == null) return false
+        val state = switcher.stateOf(profile)
+        return !(state is ProfileState.Recoverable && state.reason != ProfileState.Reason.ReadOnly)
     }
 
     private fun removeNow(id: String) {
@@ -561,13 +671,9 @@ fun ProfilesGate(flow: ProfileFlow?, signInStep: Boolean, content: @Composable (
     val list by flow.switcher.profiles.collectAsState()
     val appLock by flow.appLock.collectAsState(null)
     val appUnlocked by AppLockSession.unlocked.collectAsState()
+    // Read here only to draw: the locking itself happens in ProfileUnlock, with no screen needed.
+    val unlockedId by ProfileUnlock.unlockedId.collectAsState()
     LaunchedEffect(appLock?.pinSet) { flow.appLockPin = appLock?.pinSet == true }
-    // The app lock locking the app again (it was left) locks every profile again with it.
-    val wasAppUnlocked = remember { booleanArrayOf(false) }
-    LaunchedEffect(appUnlocked) {
-        if (wasAppUnlocked[0] && !appUnlocked) flow.lockAll()
-        wasAppUnlocked[0] = appUnlocked
-    }
     val several = ProfilePicker.atLaunch(list)
     val show = several && (flow.asked || !flow.entered)
     val lock = appLock
@@ -589,14 +695,14 @@ fun ProfilesGate(flow: ProfileFlow?, signInStep: Boolean, content: @Composable (
             show -> ProfileFlowScreen(flow, list, signInStep)
             // The open profile's PIN, not given in this process: nothing of it shows until it is.
             // Back offers the other profiles when there are some; with one it leaves the app.
-            flow.needsUnlock(list) -> key(list.activeId) {
+            ProfileUnlock.needsUnlock(list, unlockedId) -> key(list.activeId) {
                 val id = list.activeId
                 val checker = remember(id) { ProfilePinChecker(flow.switcher, id) }
                 PinPad(
                     checker = checker,
                     purpose = PinPurpose.Check,
                     title = L.profilesPinFor(name = flow.nameOf(id)),
-                    onDone = { flow.markUnlocked(id) },
+                    onDone = { flow.unlockOpen(id) },
                     onCancel = if (several) ({ flow.ask() }) else null,
                 )
             }
@@ -617,25 +723,40 @@ fun ProfilesGate(flow: ProfileFlow?, signInStep: Boolean, content: @Composable (
     }
 }
 
+/** A checker that takes no PIN: where one is required and none is there, nothing gets through. */
+private object RefusingChecker : PinChecker {
+    override suspend fun waitUntil(): Long = 0L
+    override suspend fun check(pin: String): com.tmplayer.data.PinCheck = com.tmplayer.data.PinCheck.Wrong(com.tmplayer.data.PinAttempts())
+    override fun freeLeft(attempts: com.tmplayer.data.PinAttempts): Int = 0
+}
+
 /** The picker and whichever panel is over it. */
 @Composable
 fun ProfileFlowScreen(flow: ProfileFlow, list: AccountList, signInStep: Boolean) {
     val model = remember(list, signInStep) { flow.model(list, signInStep) }
     // From the menu, Back returns to the open profile; at launch it is left to the platform.
     if (flow.asked && flow.entered) BackHandler(enabled = flow.stage == ProfileFlow.Stage.Picker) { flow.close() }
-    WhoIsWatching(
-        model = model,
-        onOpen = flow::open,
-        onAdd = flow::add,
-        onOptions = flow::options,
-        status = flow.status,
-        focusOn = flow.focusOn,
-        focusAsk = flow.focusAsk,
-    )
+    // The row only while nothing is over it: a panel or a pad over a row the remote could still
+    // reach let Down walk out of the panel onto a tile behind it. Closing one draws the row again
+    // with the focus on the tile it came from ([ProfileFlow.focusOn]).
+    if (flow.stage == ProfileFlow.Stage.Picker) {
+        WhoIsWatching(
+            model = model,
+            onOpen = flow::open,
+            onAdd = flow::add,
+            onOptions = flow::options,
+            status = flow.status,
+            focusOn = flow.focusOn,
+            focusAsk = flow.focusAsk,
+            manage = flow.manage,
+            onManageChange = { flow.manage = it },
+        )
+    }
     val tile = { id: String -> model.tiles.firstOrNull { it.id == id } }
     when (val stage = flow.stage) {
         ProfileFlow.Stage.Picker -> Unit
-        is ProfileFlow.Stage.Pin -> {
+        // Keyed on the stage: one profile's digits or wait never carry over to the next pad.
+        is ProfileFlow.Stage.Pin -> key(stage) {
             val name = flow.nameOf(stage.id)
             val checker = remember(stage.id) { ProfilePinChecker(flow.switcher, stage.id) }
             PinPad(
@@ -643,7 +764,7 @@ fun ProfileFlowScreen(flow: ProfileFlow, list: AccountList, signInStep: Boolean)
                 purpose = PinPurpose.Check,
                 title = L.profilesPinFor(name = name),
                 onDone = { flow.pinAccepted(stage.id, stage.why) },
-                onCancel = { flow.back(stage.id) },
+                onCancel = { flow.cancelPin(stage.id, stage.why) },
             )
         }
         is ProfileFlow.Stage.ChoosePin -> PinPad(
@@ -706,14 +827,15 @@ fun ProfileFlowScreen(flow: ProfileFlow, list: AccountList, signInStep: Boolean)
                 },
             )
         }
-        is ProfileFlow.Stage.AppPin -> {
-            val checker = remember(flow) { flow.appLockChecker() }
+        is ProfileFlow.Stage.AppPin -> key(stage) {
+            // No checker while the app lock says it has a PIN: refused, never let through.
+            val checker = remember(flow) { flow.appLockChecker() } ?: RefusingChecker
             PinPad(
                 checker = checker,
                 purpose = PinPurpose.Check,
                 title = L.lockEnterPin,
                 onDone = { flow.appPinAccepted(stage.id, stage.then) },
-                onCancel = { flow.back(stage.id) },
+                onCancel = { flow.cancelAppPin(stage.id, stage.then) },
             )
         }
         is ProfileFlow.Stage.Recoverable -> {
