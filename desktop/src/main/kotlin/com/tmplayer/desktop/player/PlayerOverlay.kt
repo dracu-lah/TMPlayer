@@ -1039,7 +1039,7 @@ internal fun PlayerMenu(
     fun page(to: MenuPage) = onOpenMenu(menu.copy(page = to))
 
     @Composable
-    fun Entry(text: String, checked: Boolean = false, trailing: String? = null, icon: ImageVector? = null, detail: String? = null, onClick: () -> Unit) {
+    fun Entry(text: String, checked: Boolean = false, trailing: String? = null, icon: ImageVector? = null, detail: String? = null, service: com.tmplayer.ui.components.Service? = null, onClick: () -> Unit) {
         DropdownMenuItem(
             // Two lines rather than an ellipsis: Material caps a menu item at 280 dp, which a
             // Malayalam or German line outgrows, and shrinking the type would go under the floor.
@@ -1063,9 +1063,10 @@ internal fun PlayerMenu(
                 }
                 ).then(if (checked) Modifier.semantics { selected = true } else Modifier),
             leadingIcon = {
-                Box(Modifier.size(18.dp)) {
+                Box(Modifier.size(if (service != null) 24.dp else 18.dp)) {
                     when {
                         checked -> Icon(TmIcons.Check, null, Modifier.size(18.dp))
+                        service != null -> com.tmplayer.ui.components.ServiceBadge(service, size = com.tmplayer.ui.components.ServiceBadgeSize.Line)
                         icon != null -> Icon(icon, null, Modifier.size(18.dp))
                     }
                 }
@@ -1190,9 +1191,9 @@ internal fun PlayerMenu(
                 Entry(s.commonOff, checked = list.none { it.selected }) { pick(MenuAction.Track(TrackType.Subtitle, null)) }
                 list.forEach { t -> Entry(t.label, checked = t.selected) { pick(MenuAction.Track(TrackType.Subtitle, t)) } }
                 if (LocalChatSubtitles.current.isNotEmpty()) Entry(s.tracksInChat, detail = s.tracksInChatDetail, icon = TmIcons.Folder) { page(MenuPage.ChatSubtitles) }
-                if (com.tmplayer.online.OnlineSubtitles.available) Entry(s.onlineSearchOnline) { pick(MenuAction.SearchOnline) }
-                if (com.tmplayer.online.OnlineSubtitles.current?.msoneShown == true) Entry(s.msoneSearch) { pick(MenuAction.SearchMsone) }
-                if (com.tmplayer.online.OnlineSubtitles.current?.submakerOn == true) Entry(s.submakerSearch) { pick(MenuAction.SearchSubMaker) }
+                if (com.tmplayer.online.OnlineSubtitles.available) Entry(s.onlineSearchOnline, service = com.tmplayer.ui.components.Service.OpenSubtitles) { pick(MenuAction.SearchOnline) }
+                if (com.tmplayer.online.OnlineSubtitles.current?.msoneShown == true) Entry(s.msoneSearch, service = com.tmplayer.ui.components.Service.MSone) { pick(MenuAction.SearchMsone) }
+                if (com.tmplayer.online.OnlineSubtitles.current?.submakerOn == true) Entry(s.submakerSearch, service = com.tmplayer.ui.components.Service.SubMaker) { pick(MenuAction.SearchSubMaker) }
                 Entry(s.playerLoadSubtitleFile) { pick(MenuAction.LoadSubtitleFile) }
                 HorizontalDivider()
                 Entry(s.playerSubtitleStyleAndTiming) { page(MenuPage.SubtitleStyle) }

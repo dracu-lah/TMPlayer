@@ -194,6 +194,7 @@ fun AboutScreen(onBack: () -> Unit) {
                         title = link.title,
                         subtitle = link.detail,
                         icon = iconFor(group.title),
+                        service = link.service,
                         onClick = { open(link) },
                     )
                 }

@@ -70,7 +70,7 @@ internal fun OnlineMetadataGroup(toggleModifier: Modifier = Modifier) {
         icon = TmIcons.Image,
     ) { online.setEnabled(it) }
     // A detail page's trailer in YouTube's embedded player here, or in the browser.
-    Toggle(s.metadataTrailersInApp, s.metadataTrailersInAppDetail, settings.trailersInApp, icon = TmIcons.Trailer) {
+    Toggle(s.metadataTrailersInApp, s.metadataTrailersInAppDetail, settings.trailersInApp, icon = TmIcons.Trailer, service = com.tmplayer.ui.components.Service.YouTube) {
         online.setTrailersInApp(it)
     }
     // The player's skip buttons: the online lists ride on lookups, but a file's chapters and the
@@ -98,12 +98,14 @@ internal fun OnlineMetadataGroup(toggleModifier: Modifier = Modifier) {
         MetaWords.key(state),
         TmIcons.Lock,
         titleColor = if (state == TmdbState.AppKey || state == TmdbState.OwnKey) Color.Unspecified else Tone.caution,
+        service = if (state == TmdbState.AppKey || state == TmdbState.OwnKey) com.tmplayer.ui.components.Service.Tmdb else null,
     ) { editingKey = true }
     Action(
         s.metadataOmdbKey,
         MetaWords.omdbKey(omdbState),
         TmIcons.Lock,
         titleColor = if (omdbState == OmdbState.OwnKeyRefused) Tone.caution else Color.Unspecified,
+        service = if (omdbState == OmdbState.OwnKeyRefused) null else com.tmplayer.ui.components.Service.Omdb,
     ) { editingOmdbKey = true }
     Action(
         s.metadataClearCache,

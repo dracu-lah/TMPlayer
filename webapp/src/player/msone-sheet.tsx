@@ -9,6 +9,7 @@ import { createSignal, For, Match, onCleanup, onMount, Show, Switch } from 'soli
 import { t } from '../i18n'
 import { stateLine } from '../msoneFlag'
 import { PhoneSheet, variant } from './sheets'
+import { ServiceBadge } from '../ui/ServiceBadge'
 import { download, health, keptHits, knownHealth, search, type Ask, type Failure, type Health, type Hit } from './msone'
 
 /** What the search asks about the video: its cleaned title and year, and the episode it is. */
@@ -201,6 +202,7 @@ export function MsoneSheet(props: {
     return (
         <PhoneSheet title={t('msone.title')} note={status().state === 'on' ? t('msone.state_on') : undefined} onClose={props.onClose} class="pc-msone-sheet">
             <div ref={box} class="pc-msone">
+                <ServiceBadge service="msone" size={24} name />
                 <Switch>
                     <Match when={phase() === 'checking' || phase() === 'searching'}>
                         <p class="pc-msone-wait" role="status">

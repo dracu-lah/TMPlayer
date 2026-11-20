@@ -192,6 +192,16 @@ internal fun OnlineMetaInvite(onAnswered: () -> Unit = {}) {
         destructive = false,
         icon = TmIcons.Image,
         focusConfirm = true,
+        // The three services that answer, as their tiles (HX93); drawn only, never a stop of their own.
+        extra = {
+            com.tmplayer.ui.components.ServiceBadgeRow(
+                listOf(
+                    com.tmplayer.ui.components.Service.Tmdb,
+                    com.tmplayer.ui.components.Service.TvMaze,
+                    com.tmplayer.ui.components.Service.AniList,
+                ),
+            )
+        },
     )
 }
 

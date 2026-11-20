@@ -57,6 +57,8 @@ fun TvConfirm(
     extra: (@Composable () -> Unit)? = null,
     /** Focus starts on confirm instead, for an invitation where the confirm is the safe press. */
     focusConfirm: Boolean = false,
+    /** The outside service the question is about (HX93): its badge replaces the icon, drawn only. */
+    service: Service? = null,
 ) {
     val cancelFocus = remember { FocusRequester() }
     val confirmFocus = remember { FocusRequester() }
@@ -71,15 +73,19 @@ fun TvConfirm(
             // No colours stated: the scheme already answers the container, the title, the body and
             // the error red a destructive press is entitled to.
             icon = {
-                M3Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = if (destructive) {
-                        M3MaterialTheme.colorScheme.error
-                    } else {
-                        M3MaterialTheme.colorScheme.primary
-                    },
-                )
+                if (service != null) {
+                    ServiceBadge(service, size = ServiceBadgeSize.Row)
+                } else {
+                    M3Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = if (destructive) {
+                            M3MaterialTheme.colorScheme.error
+                        } else {
+                            M3MaterialTheme.colorScheme.primary
+                        },
+                    )
+                }
             },
             title = { M3Text(title) },
             text = {
@@ -140,12 +146,16 @@ fun TvConfirm(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = if (destructive) Danger else Tone.accent,
-                    modifier = Modifier.size(28.dp),
-                )
+                if (service != null) {
+                    ServiceBadge(service, size = ServiceBadgeSize.Credit)
+                } else {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = if (destructive) Danger else Tone.accent,
+                        modifier = Modifier.size(28.dp),
+                    )
+                }
                 // A Material dialog's headline, as the pickers' (ChoiceSheet) is.
                 Text(title, style = MaterialTheme.typography.headlineSmall, color = Tone.text)
             }

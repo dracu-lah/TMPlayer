@@ -1579,7 +1579,18 @@ internal fun MetaInviteDialog(state: ShellState) {
         onDismissRequest = { answer(turnOn = false) },
         icon = { Icon(TmIcons.Image, contentDescription = null, tint = Tone.accent) },
         title = { Text(s.metadataInviteTitle) },
-        text = { Text(s.metadataInviteBody) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(s.metadataInviteBody)
+                com.tmplayer.ui.components.ServiceBadgeRow(
+                    listOf(
+                        com.tmplayer.ui.components.Service.Tmdb,
+                        com.tmplayer.ui.components.Service.TvMaze,
+                        com.tmplayer.ui.components.Service.AniList,
+                    ),
+                )
+            }
+        },
         confirmButton = { TextButton(onClick = { answer(turnOn = true) }) { Text(s.metadataInviteTurnOn) } },
         dismissButton = { TextButton(onClick = { answer(turnOn = false) }) { Text(s.metadataInviteNotNow) } },
     )

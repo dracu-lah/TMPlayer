@@ -3184,6 +3184,8 @@ internal fun ActionRow(
     modifier: Modifier = Modifier,
     /** Unspecified leaves the icon the colour of the rest of the row. */
     tint: Color = Color.Unspecified,
+    /** The service the row is about: its badge (HX93) takes the icon chip's place. */
+    service: com.tmplayer.ui.components.Service? = null,
     onClick: () -> Unit,
 ) {
     val iconTint = if (tint == Color.Unspecified) Tone.accent else tint
@@ -3196,9 +3198,9 @@ internal fun ActionRow(
         supporting = {
             M3Text(subtitle, maxLines = SUPPORTING_LINES, overflow = TextOverflow.Ellipsis)
         },
-        leading = { SettingIconChip(icon, tint = iconTint) },
+        leading = { SettingIconChip(icon, tint = iconTint, service = service) },
     ) { focused ->
-        SettingIconChip(icon, tint = iconTint, inverted = focused)
+        SettingIconChip(icon, tint = iconTint, inverted = focused, service = service)
         Spacer(Modifier.size(16.dp))
         Column(Modifier.weight(1f)) {
             Text(
@@ -3227,6 +3229,7 @@ internal fun ToggleRow(
     checked: Boolean,
     onToggle: () -> Unit,
     modifier: Modifier = Modifier,
+    service: com.tmplayer.ui.components.Service? = null,
 ) {
     // Every switch in Settings answers the thumb (a phone only; nothing on a television).
     val tick = com.tmplayer.ui.components.rememberToggleTick()
@@ -3243,14 +3246,14 @@ internal fun ToggleRow(
         onClick = toggle,
         headline = { M3Text(title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
         supporting = { M3Text(subtitle, maxLines = SUPPORTING_LINES, overflow = TextOverflow.Ellipsis) },
-        leading = { SettingIconChip(icon) },
+        leading = { SettingIconChip(icon, service = service) },
         // A real switch on a phone, not the drawn pill below: it can be dragged as well as
         // tapped, and TalkBack announces it as "switch, on" without being told.
         trailing = { M3Switch(checked = checked, onCheckedChange = { toggle() }) },
     ) { focused ->
         // A chip for the same reason ActionRow has one: the two kinds of row are stacked in one
         // column, and without it their titles would start at two different x positions.
-        SettingIconChip(icon, inverted = focused)
+        SettingIconChip(icon, inverted = focused, service = service)
         Spacer(Modifier.size(16.dp))
         Column(Modifier.weight(1f)) {
             Text(

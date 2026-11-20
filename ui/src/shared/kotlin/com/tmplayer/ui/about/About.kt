@@ -4,6 +4,7 @@ import com.tmplayer.data.SupportReminder
 import com.tmplayer.i18n.L
 import com.tmplayer.online.OnlineSubtitles
 import com.tmplayer.online.OnlineMetadata
+import com.tmplayer.ui.components.Service
 
 /**
  * What the About screen says, the same on phone, TV and desktop: the licence line, every link it
@@ -46,6 +47,7 @@ object About {
     const val ANILIST = "https://anilist.co"
     const val OMDB = "https://www.omdbapi.com"
     const val WIKIDATA = "https://www.wikidata.org"
+    const val SENTRY = "https://sentry.io"
 
     /**
      * The support page, tagged with the place the viewer came from (`card1`, `card2`, `card3`,
@@ -62,7 +64,7 @@ object About {
     val SUPPORT_NOTE: String get() = L.aboutSupportNote
 
     /** A link and the sentence under it. */
-    data class Link(val title: String, val detail: String, val url: String)
+    data class Link(val title: String, val detail: String, val url: String, val service: Service? = null)
 
     /**
      * A heading and the links under it. [note] is a line drawn under the heading, if any, and
@@ -151,14 +153,15 @@ object About {
             listOf(
                 Link(L.aboutPrivacy, L.aboutPrivacyDetail, PRIVACY),
                 Link(L.aboutLawfulUse, L.aboutLawfulUseDetail, LEGAL),
+                Link("Sentry", L.aboutSentryDetail, SENTRY, Service.Sentry),
             ),
         ),
         Group(
             L.aboutContact,
             listOf(
                 Link(L.aboutEmail, EMAIL, "mailto:$EMAIL"),
-                Link(L.aboutTelegramChannel, L.aboutTelegramChannelDetail, "https://t.me/tmplayerapp"),
-                Link(L.aboutTelegramGroup, L.aboutTelegramGroupDetail, "https://t.me/tmplayer_chat"),
+                Link(L.aboutTelegramChannel, L.aboutTelegramChannelDetail, "https://t.me/tmplayerapp", Service.Telegram),
+                Link(L.aboutTelegramGroup, L.aboutTelegramGroupDetail, "https://t.me/tmplayer_chat", Service.Telegram),
                 Link("GitHub Discussions", L.aboutDiscussionsDetail, "$SOURCE/discussions"),
                 // Moved here (and to Settings' language picker) from the tour's first page.
                 Link(L.onboardingHelpTranslate, L.onboardingHelpTranslateBody, com.tmplayer.ui.onboarding.Onboarding.TRANSLATE_URL),
@@ -168,8 +171,8 @@ object About {
             Group(
                 L.onlineAboutGroup,
                 listOf(
-                    Link("OpenSubtitles.com", L.onlineAboutDetail, OPENSUBTITLES),
-                    Link("SubDL", L.onlineAboutSubdlDetail, SUBDL),
+                    Link("OpenSubtitles.com", L.onlineAboutDetail, OPENSUBTITLES, Service.OpenSubtitles),
+                    Link("SubDL", L.onlineAboutSubdlDetail, SUBDL, Service.SubDl),
                 ),
             )
         } else {
@@ -179,11 +182,11 @@ object About {
             Group(
                 L.metadataAboutGroup,
                 listOf(
-                    Link("TMDB", L.metadataAboutTmdbDetail, TMDB),
-                    Link("TVmaze", L.metadataAboutTvmazeDetail, TVMAZE),
-                    Link("AniList", L.metadataAboutAnilistDetail, ANILIST),
-                    Link("OMDb", L.metadataAboutOmdbDetail, OMDB),
-                    Link("Wikidata", L.metadataAboutWikidataDetail, WIKIDATA),
+                    Link("TMDB", L.metadataAboutTmdbDetail, TMDB, Service.Tmdb),
+                    Link("TVmaze", L.metadataAboutTvmazeDetail, TVMAZE, Service.TvMaze),
+                    Link("AniList", L.metadataAboutAnilistDetail, ANILIST, Service.AniList),
+                    Link("OMDb", L.metadataAboutOmdbDetail, OMDB, Service.Omdb),
+                    Link("Wikidata", L.metadataAboutWikidataDetail, WIKIDATA, Service.Wikidata),
                 ),
                 note = L.metadataAboutNotice,
                 tmdbLogo = true,

@@ -66,13 +66,14 @@ internal fun OnlineSubtitlesGroup() {
         OnlineStatus.NotInBuild, OnlineStatus.Unavailable ->
             Setting(s.onlineTitle, OnlineWords.status(status), titleColor = Tone.muted, icon = TmIcons.Warning) {}
         OnlineStatus.SignedOut, is OnlineStatus.Expired, is OnlineStatus.FreeQuotaUsed ->
-            Action(s.onlineSignIn, OnlineWords.status(status), TmIcons.Account, value = s.onlineSignInButton) { signingIn = true }
+            Action(s.onlineSignIn, OnlineWords.status(status), TmIcons.Account, value = s.onlineSignInButton, service = com.tmplayer.ui.components.Service.OpenSubtitles) { signingIn = true }
         is OnlineStatus.SignedIn, is OnlineStatus.QuotaUsed -> Action(
             s.onlineSignedIn(account.username),
             OnlineWords.quota(status),
             TmIcons.Account,
             titleColor = if (status is OnlineStatus.QuotaUsed) Tone.caution else androidx.compose.ui.graphics.Color.Unspecified,
             value = s.onlineSignOut,
+            service = com.tmplayer.ui.components.Service.OpenSubtitles,
         ) { signingOut = true }
     }
     Toggle(
@@ -89,12 +90,14 @@ internal fun OnlineSubtitlesGroup() {
             else -> s.onlineSubdlSet
         },
         TmIcons.Lock,
+        service = com.tmplayer.ui.components.Service.SubDl,
     ) { editingKey = true }
     MsoneSetting()
     Action(
         s.submakerSettingsTitle,
         if (account.submakerBase.isBlank()) s.submakerSettingsNone else s.submakerSettingsSet,
         TmIcons.Lock,
+        service = com.tmplayer.ui.components.Service.SubMaker,
     ) { editingSubMaker = true }
     Action(
         s.onlineClearCache,
@@ -165,6 +168,7 @@ private fun MsoneSetting() {
         TmIcons.Language,
         titleColor = if (account.msoneState == com.tmplayer.online.MsoneState.On) androidx.compose.ui.graphics.Color.Unspecified else Tone.muted,
         value = s.msoneCheckAgain,
+        service = com.tmplayer.ui.components.Service.MSone,
         enabled = !checking,
     ) {
         checking = true

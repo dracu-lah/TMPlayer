@@ -320,6 +320,8 @@ fun TvChoiceRow(
     enabled: Boolean = true,
     /** Format pills under the words (a sound track's Atmos, 5.1): text only, not a stop of their own. */
     tags: List<com.tmplayer.data.FormatFacts.Tag> = emptyList(),
+    /** The service the line is about: its badge takes the icon's place and is never a focus stop. */
+    service: Service? = null,
     onClick: () -> Unit,
 ) {
     val interactions = remember { MutableInteractionSource() }
@@ -353,7 +355,9 @@ fun TvChoiceRow(
             selected == null -> icon
             else -> null
         }
-        if (mark != null) {
+        if (service != null && selected == null) {
+            ServiceBadge(service, modifier = faint, size = ServiceBadgeSize.Line)
+        } else if (mark != null) {
             val tint = if (focused || selected == null) ink else Tone.accent
             Icon(mark, contentDescription = null, tint = tint, modifier = faint.size(22.dp))
         } else {
@@ -449,12 +453,13 @@ fun ChoiceLine(
     icon: ImageVector? = null,
     enabled: Boolean = true,
     tags: List<com.tmplayer.data.FormatFacts.Tag> = emptyList(),
+    service: Service? = null,
     onClick: () -> Unit,
 ) {
     if (isTouch()) {
-        ChoiceRow(title, modifier.fillMaxWidth(), detail, selected, icon, enabled, tags, onClick)
+        ChoiceRow(title, modifier.fillMaxWidth(), detail, selected, icon, enabled, tags, service, onClick)
     } else {
-        TvChoiceRow(title, modifier, detail, selected = selected, icon = icon, enabled = enabled, tags = tags, onClick = onClick)
+        TvChoiceRow(title, modifier, detail, selected = selected, icon = icon, enabled = enabled, tags = tags, service = service, onClick = onClick)
     }
 }
 

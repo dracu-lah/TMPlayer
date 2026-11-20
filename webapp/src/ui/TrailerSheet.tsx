@@ -9,6 +9,7 @@
 import { createEffect, createSignal, on, onCleanup, Show } from 'solid-js'
 import { useLocation } from '@solidjs/router'
 import { t } from '../i18n'
+import { ServiceBadge } from './ServiceBadge'
 import { embedUrl, fallsBack, HOST, LOADING, next, parseWidgetMessage, READY_TIMEOUT_MS, timedOut, watchUrl, type State } from './trailer'
 
 interface Target {
@@ -89,6 +90,8 @@ export function TrailerSheet() {
                 {(now) => (
                     <div class="trailer-body">
                         <h2 id="trailer-title">{t('trailer.title')}</h2>
+                        {/* Where it plays: YouTube's tile and name, drawn only (aria-hidden tile, one name). */}
+                        <ServiceBadge service="youtube" name />
                         <Show
                             when={!fallsBack(state())}
                             fallback={

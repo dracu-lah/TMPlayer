@@ -5,6 +5,8 @@
 import { For, Show, createEffect, createSignal, on, onCleanup, onMount, type JSX } from 'solid-js'
 import { ArrowLeft02Icon, Cancel01Icon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { Icon, type IconData } from '../ui/Icon'
+import { ServiceBadge, BADGE_SIZE } from '../ui/ServiceBadge'
+import type { ServiceId } from '../ui/services'
 import { t } from '../i18n'
 import { form } from '../form'
 import { sheetGroups, type SheetRow } from './playerKeys'
@@ -128,11 +130,11 @@ export function menuKeys(e: KeyboardEvent, el: HTMLElement) {
 }
 
 /** One line of a desktop menu: an 18 px slot for the tick or an icon, the words (a quieter line under them if given), a quiet figure at the end. */
-export function Entry(props: { text: string; detail?: string; trailing?: string; icon?: IconData; checked?: boolean; disabled?: boolean; onClick: () => void }) {
+export function Entry(props: { text: string; detail?: string; trailing?: string; icon?: IconData; service?: ServiceId; checked?: boolean; disabled?: boolean; onClick: () => void }) {
     return (
         <button type="button" role={props.checked !== undefined ? 'menuitemradio' : 'menuitem'} aria-checked={props.checked} class="pc-entry" disabled={props.disabled} onClick={props.onClick}>
             <span class="pc-entry-lead">
-                <Show when={props.checked} fallback={props.icon ? <Icon icon={props.icon} size={18} /> : null}>
+                <Show when={props.checked} fallback={props.service ? <ServiceBadge service={props.service} size={BADGE_SIZE.line} /> : props.icon ? <Icon icon={props.icon} size={18} /> : null}>
                     <Icon icon={Tick02Icon} size={18} />
                 </Show>
             </span>
@@ -211,12 +213,16 @@ export function PhoneSheet(props: { title: string; note?: string; onClose: () =>
 }
 
 /** One line of a picker: ChoiceRow on a phone (radio, 56 px), Entry on the desktop. */
-export function Choice(props: { text: string; detail?: string; on?: boolean; icon?: IconData; phone: boolean; disabled?: boolean; onClick: () => void }) {
+export function Choice(props: { text: string; detail?: string; on?: boolean; icon?: IconData; service?: ServiceId; phone: boolean; disabled?: boolean; onClick: () => void }) {
     return (
-        <Show when={props.phone} fallback={<Entry text={props.text} detail={props.detail} checked={props.icon ? undefined : !!props.on} icon={props.icon} disabled={props.disabled} onClick={props.onClick} />}>
+        <Show when={props.phone} fallback={<Entry text={props.text} detail={props.detail} checked={props.icon ? undefined : !!props.on} icon={props.icon} service={props.service} disabled={props.disabled} onClick={props.onClick} />}>
             <button type="button" class="pc-choice" role={props.icon ? 'button' : 'radio'} aria-checked={props.icon ? undefined : !!props.on} disabled={props.disabled} onClick={props.onClick}>
                 <Show when={props.icon} fallback={<span class="pc-radio" />}>
-                    <span class="pc-choice-icon"><Icon icon={props.icon!} size={22} /></span>
+                    <span class="pc-choice-icon">
+                        <Show when={props.service} fallback={<Icon icon={props.icon!} size={22} />}>
+                            <ServiceBadge service={props.service!} size={BADGE_SIZE.line} />
+                        </Show>
+                    </span>
                 </Show>
                 <Show when={props.detail} fallback={<span>{props.text}</span>}>
                     <span class="pc-choice-text">
