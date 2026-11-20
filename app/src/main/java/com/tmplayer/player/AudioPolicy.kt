@@ -1,12 +1,15 @@
 package com.tmplayer.player
 
+import androidx.media3.common.C
 import androidx.media3.common.Format
+import androidx.media3.common.Tracks
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlaybackException
 import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.mediacodec.MediaCodecUtil
 import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.FfmpegLibrary
 
 /**
@@ -21,9 +24,9 @@ import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.FfmpegLibrary
  * ([com.tmplayer.data.RemedyMemory.learned]) and the next video of it starts in PCM at once, while a
  * refused PCM output (nothing FFmpeg could change) teaches nothing.
  *
- * A2 is passthrough off ([PcmOnlyOutputProvider]): the output takes PCM only, so the device's own
- * decoder (or FFmpeg's) decodes the track. It is the next step where FFmpeg has no decoder for the
- * format, and what Settings' Audio passthrough turned off asks for on every video.
+ * A2 is passthrough off ([PcmOnlyOutputProvider]): the output refuses Dolby and DTS, so the device's
+ * own decoder decodes the track. It is the next step only where FFmpeg has no decoder for the format
+ * and the device has one ([deviceDecodes]); with neither, the engine hop is next, never a silent track.
  */
 @UnstableApi
 object AudioPolicy {
@@ -65,6 +68,42 @@ object AudioPolicy {
     /** Whether [error] teaches the class to start its sound on the app's decoder: a refused bitstream FFmpeg turns into PCM. */
     fun teachesSoftware(error: PlaybackException, takes: Boolean): Boolean = takes && bitstream(refusedFormat(error))
 
+    /**
+     * Whether [format] is Dolby's or DTS's (AC-3, E-AC-3, AC-4, TrueHD, DTS and its kinds): what
+     * Audio passthrough is about. AAC or MP3 a receiver takes as it is are left alone.
+     */
+    fun dolbyOrDts(format: Format?): Boolean = format?.sampleMimeType in DOLBY_DTS
+
+    /** Whether one of this device's own decoders takes sound of [mime] (TV sticks often have none for TrueHD or DTS-HD). */
+    fun deviceDecodes(mime: String?): Boolean {
+        if (mime.isNullOrBlank() || !MimeTypes.isAudio(mime)) return false
+        return runCatching { MediaCodecUtil.getDecoderInfos(mime, false, false).isNotEmpty() }.getOrDefault(false)
+    }
+
+    /** Whether a decoder here, the device's or FFmpeg's, turns [format] into PCM. */
+    fun decodable(format: Format?): Boolean {
+        val mime = format?.sampleMimeType
+        return deviceDecodes(mime) || softwareTakes(mime)
+    }
+
+    /**
+     * Settings' Audio passthrough as the player applies it: the row is the television's, so on a
+     * phone or tablet (an HDMI, USB or Bluetooth output among them) a value restored from a TV's
+     * backup is not followed, and passthrough stays allowed there.
+     */
+    fun passthroughAllowed(stored: Boolean, television: Boolean): Boolean = stored || !television
+
+    /**
+     * True when [tracks] hold sound and none of it can play here: no track selected and none
+     * supported (a format with no decoder on the device and none in FFmpeg). Media3 raises no
+     * error for it; it plays the picture in silence, so the player says why.
+     */
+    fun soundUnplayable(tracks: Tracks): Boolean {
+        val sound = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
+        if (sound.isEmpty() || sound.any { it.isSelected }) return false
+        return sound.none { group -> (0 until group.length).any { group.isTrackSupported(it, true) } }
+    }
+
     /** Whether the app's FFmpeg decoder takes sound of [mime] on this device. */
     fun softwareTakes(mime: String?): Boolean {
         if (mime.isNullOrBlank() || !MimeTypes.isAudio(mime)) return false
@@ -72,4 +111,9 @@ object AudioPolicy {
     }
 
     private const val MAX_CAUSES = 6
+
+    private val DOLBY_DTS = setOf(
+        MimeTypes.AUDIO_AC3, MimeTypes.AUDIO_E_AC3, MimeTypes.AUDIO_E_AC3_JOC, MimeTypes.AUDIO_AC4, MimeTypes.AUDIO_TRUEHD,
+        MimeTypes.AUDIO_DTS, MimeTypes.AUDIO_DTS_HD, MimeTypes.AUDIO_DTS_EXPRESS, MimeTypes.AUDIO_DTS_X,
+    )
 }

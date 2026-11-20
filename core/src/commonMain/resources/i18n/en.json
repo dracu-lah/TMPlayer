@@ -2293,6 +2293,7 @@
     "no_next_episode": "No next episode",
     "no_other_audio": "No other audio",
     "no_previous_episode": "No previous episode",
+    "no_sound_here": "This device can't play this video's sound. The picture plays on; a different copy or another app may have sound.",
     "no_space": "Not enough space to play this. {size} more is needed on the drive that holds {folder}. Delete some downloads, or choose another storage location in Settings.",
     "no_subtitles": "No subtitles",
     "not_enough_room": "Not enough space for this video. It needs {size} more. Free up space and try again.",

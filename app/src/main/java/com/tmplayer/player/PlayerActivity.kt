@@ -1185,6 +1185,22 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         withTimeoutOrNull(OPENING_GATE_MS) { openedGate.await() }
     }
 
+    /** Whether this video already said its sound cannot play here ([soundUnplayable]). */
+    private var soundSaid = false
+
+    /**
+     * Says once per video, when its sound cannot play on this device (no decoder for it here and
+     * none in FFmpeg, also after a rebuild on another path): the picture goes on, and the line says
+     * why it is silent rather than leaving the viewer to guess. Not while casting or on VLC.
+     */
+    private fun soundUnplayable(tracks: Tracks) {
+        if (soundSaid || vlcEngine != null || !AudioPolicy.soundUnplayable(tracks)) return
+        soundSaid = true
+        val format = tracks.groups.firstOrNull { it.type == C.TRACK_TYPE_AUDIO }?.getTrackFormat(0)
+        Log.w("TMPlayer", "No decoder for the sound: ${format?.sampleMimeType} ${format?.codecs.orEmpty()}")
+        feedback?.message(L.playerNoSoundHere, holdMs = SEEK_NOTICE_MS)
+    }
+
     /** Whether this video's picture tracks were looked at yet ([pictureUnplayable]). */
     private var pictureChecked = false
 
@@ -2648,7 +2664,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             skipSilence = silenceRead.await()
             videoDecoder = decoderRead.await()
             tunneledMode = tunnelRead.await()
-            audioPassthrough = passthroughRead.await()
+            audioPassthrough = AudioPolicy.passthroughAllowed(passthroughRead.await(), FormFactor.isTv(this@PlayerActivity))
             statsOn = statsRead.await()
             subtitleStyle = styleRead.await()
             applySubtitleStyle()
@@ -5169,6 +5185,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         hideSkipPill()
         creditsSkipped = false
         pictureChecked = false
+        soundSaid = false
         hideNextUp()
         nextUpShown = false
         nextUpDismissed = false
@@ -5242,6 +5259,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             // The class is known now: its remedy plan, and a re-open on its path when it starts elsewhere (RL6).
             if (!tracks.isEmpty && vlcEngine == null) remedies.tracksKnown()
             if (pictureUnplayable(tracks)) return
+            soundUnplayable(tracks)
             if (checkSoftwareDecode(tracks)) return
             restoreResumeTracks(tracks)
             applySettingsSubtitles(tracks)

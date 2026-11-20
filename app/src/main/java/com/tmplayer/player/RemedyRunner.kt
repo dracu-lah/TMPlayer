@@ -61,6 +61,9 @@ class RemedyRunner(private val host: Host, private val clock: Clock) {
         /** The ladder's facts now, with [excluded] decoder names already left out. */
         fun facts(excluded: Set<String>): LadderFacts
 
+        /** Whether one of the device's own decoders takes sound of [mime]: passthrough off needs one (A2). */
+        fun deviceDecodesAudio(mime: String?): Boolean = AudioPolicy.deviceDecodes(mime)
+
         /** The class of what plays ([com.tmplayer.data.RemedyClassKey]), null while its formats are not known. */
         fun classKey(): String?
 
@@ -158,6 +161,9 @@ class RemedyRunner(private val host: Host, private val clock: Clock) {
     private val frozenWatch = FrozenOutputWatch()
     private var pictureSeen = false
     private var cleanMs = 0L
+
+    /** The picture played clean on a path that changed the sound while no sound played: not one to learn. */
+    private var silentWhileClean = false
     private var lastCleanMs = -1L
     private var proven = false
     /** Until then a proven path is watched again for a stall: the stretch after a seek. */
@@ -319,8 +325,10 @@ class RemedyRunner(private val host: Host, private val clock: Clock) {
         if (evidence == RemedyEvidence.AudioFailed) {
             // An output that refused plain PCM is not helped by FFmpeg's PCM.
             facts = facts.copy(audioSoftwareTakes = AudioPolicy.softwareHelps(error, facts.audioSoftwareTakes))
-            // Passthrough off (A2) helps only where the output refused a bitstream; a refused PCM output stays refused.
-            facts = facts.copy(passthrough = facts.passthrough && AudioPolicy.bitstream(AudioPolicy.refusedFormat(error)))
+            // Passthrough off (A2) helps only where the output refused Dolby or DTS and the device has its
+            // own decoder for it; with none the track would go silent, so the engine hop comes next instead.
+            val refused = AudioPolicy.refusedFormat(error)
+            facts = facts.copy(passthrough = facts.passthrough && AudioPolicy.dolbyOrDts(refused) && host.deviceDecodesAudio(refused?.sampleMimeType))
             // The output refused the bitstream: the next video of this class starts its sound in PCM (RL8).
             if (AudioPolicy.teachesSoftware(error, facts.audioSoftwareTakes)) {
                 memory = memory.learned(k, Remedy.AudioSoftware, host.today())
@@ -395,6 +403,8 @@ class RemedyRunner(private val host: Host, private val clock: Clock) {
         if (pictureSeen && frozenWatch.sample(now, s.positionMs, steady, s.rendered, s.dropped, s.skipped, s.speed)) {
             if (perform(l.onEvidence(RemedyEvidence.Frozen, host.facts(l.path.excluded), clock.now()), RemedyEvidence.Frozen, null)) return
         }
+        // A path that changed the sound is not learned while no sound plays (a track it left unsupported).
+        if (steady && !s.audioPlaying && l.path.soundChanged()) silentWhileClean = true
         countClean(l, steady, now)
         // The picture off on purpose (background audio): nothing to watch until it is back ([firstFrame]).
         if (s.playing && !s.hidden) startTicking()
@@ -413,6 +423,10 @@ class RemedyRunner(private val host: Host, private val clock: Clock) {
         if (!l.played(cleanMs)) return
         proven = true
         val k = key ?: return
+        if (silentWhileClean) {
+            host.log("Remedy: class $k played clean without sound on ${l.taken.joinToString(",") { it.code }}: not learned")
+            return
+        }
         memory = memory.worked(k, l.taken, host.today())
         host.saveMemory(memory)
         host.log("Remedy: class $k played ${RemedyLadder.WORKED_MS / 1000} s clean on ${l.taken.joinToString(",") { it.code }.ifEmpty { "default" }}")
@@ -558,10 +572,13 @@ class RemedyRunner(private val host: Host, private val clock: Clock) {
         frozenWatch.arm()
         pictureSeen = false
         cleanMs = 0L
+        silentWhileClean = false
         lastCleanMs = -1L
         proven = false
         seekWatchUntilMs = -1L
     }
+
+    private fun RemedyPath.soundChanged(): Boolean = passthroughOff || audioSoftware
 
     companion object {
         const val TICK_MS = 1_000L

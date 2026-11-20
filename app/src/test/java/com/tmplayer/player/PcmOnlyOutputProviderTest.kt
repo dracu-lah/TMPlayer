@@ -1,7 +1,10 @@
 package com.tmplayer.player
 
 import androidx.media3.common.Format
+import androidx.media3.common.C
 import androidx.media3.common.MimeTypes
+import androidx.media3.common.TrackGroup
+import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.audio.AudioOutput
 import androidx.media3.exoplayer.audio.AudioOutputProvider
@@ -49,10 +52,58 @@ class PcmOnlyOutputProviderTest {
     private fun support(provider: AudioOutputProvider, format: Format) =
         provider.getFormatSupport(AudioOutputProvider.FormatConfig.Builder(format).build()).supportLevel
 
+    private val aac: Format = Format.Builder().setSampleMimeType(MimeTypes.AUDIO_AAC).setChannelCount(2).setSampleRate(48_000).build()
+    private val trueHd: Format = Format.Builder().setSampleMimeType(MimeTypes.AUDIO_TRUEHD).setChannelCount(8).setSampleRate(48_000).build()
+
+    @Test
+    fun aDolbyOrDtsTrackNothingHereDecodesIsStillOfferedAsItIs() {
+        // TrueHD on a stick with no decoder for it, the device's or FFmpeg's: refusing it would only be silence.
+        val pcmOnly = PcmOnlyOutputProvider(TakesEverything()) { it.sampleMimeType != MimeTypes.AUDIO_TRUEHD }
+        assertEquals(AudioOutputProvider.FORMAT_SUPPORTED_DIRECTLY, support(pcmOnly, trueHd))
+        assertEquals(AudioOutputProvider.FORMAT_UNSUPPORTED, support(pcmOnly, ac3))
+        // A decoder check that throws refuses nothing.
+        assertEquals(AudioOutputProvider.FORMAT_SUPPORTED_DIRECTLY, support(PcmOnlyOutputProvider(TakesEverything()) { error("boom") }, ac3))
+    }
+
+    @Test
+    fun aacAndOtherNonDolbyFormatsAreLeftToTheOutput() {
+        val pcmOnly = PcmOnlyOutputProvider(TakesEverything()) { true }
+        assertEquals(AudioOutputProvider.FORMAT_SUPPORTED_DIRECTLY, support(pcmOnly, aac))
+        assertFalse(AudioPolicy.dolbyOrDts(aac))
+        assertTrue(AudioPolicy.dolbyOrDts(trueHd))
+        assertFalse(AudioPolicy.dolbyOrDts(null))
+    }
+
+    @Test
+    fun aTvsStoredOffIsNotFollowedOnAPhoneOrTablet() {
+        assertTrue(AudioPolicy.passthroughAllowed(stored = false, television = false))
+        assertFalse(AudioPolicy.passthroughAllowed(stored = false, television = true))
+        assertTrue(AudioPolicy.passthroughAllowed(stored = true, television = true))
+        assertTrue(AudioPolicy.passthroughAllowed(stored = true, television = false))
+    }
+
+    private fun tracks(vararg groups: Tracks.Group) = Tracks(com.google.common.collect.ImmutableList.copyOf(groups))
+
+    private fun soundGroup(format: Format, supported: Boolean, selected: Boolean) = Tracks.Group(
+        TrackGroup(format),
+        false,
+        intArrayOf(if (supported) C.FORMAT_HANDLED else C.FORMAT_UNSUPPORTED_SUBTYPE),
+        booleanArrayOf(selected),
+    )
+
+    @Test
+    fun soundThatCannotPlayIsSaidAndSoundThatCanIsNot() {
+        assertTrue(AudioPolicy.soundUnplayable(tracks(soundGroup(trueHd, supported = false, selected = false))))
+        assertFalse(AudioPolicy.soundUnplayable(tracks(soundGroup(trueHd, supported = false, selected = false), soundGroup(ac3, supported = true, selected = true))))
+        assertFalse(AudioPolicy.soundUnplayable(tracks(soundGroup(ac3, supported = true, selected = false))))
+        // A video with no sound at all is not silent by fault.
+        assertFalse(AudioPolicy.soundUnplayable(Tracks.EMPTY))
+    }
+
     @Test
     fun bitstreamsAreRefusedAndPcmGoesThrough() {
         val inner = TakesEverything()
-        val pcmOnly = PcmOnlyOutputProvider(inner)
+        val pcmOnly = PcmOnlyOutputProvider(inner) { true }
         for (format in listOf(EAC3, ac3, dts)) {
             assertEquals(format.sampleMimeType, AudioOutputProvider.FORMAT_UNSUPPORTED, support(pcmOnly, format))
             assertEquals(format.sampleMimeType, AudioOutputProvider.FORMAT_SUPPORTED_DIRECTLY, support(inner, format))
@@ -74,7 +125,7 @@ class PcmOnlyOutputProviderTest {
     fun mediaThreesSinkAsksTheOutputSoTheTrackIsDecodedInstead() {
         val context = RuntimeEnvironment.getApplication()
         val open = DefaultAudioSink.Builder(context).setAudioOutputProvider(TakesEverything()).build()
-        val pcmOnly = DefaultAudioSink.Builder(context).setAudioOutputProvider(PcmOnlyOutputProvider.of(TakesEverything(), passthroughOff = true)).build()
+        val pcmOnly = DefaultAudioSink.Builder(context).setAudioOutputProvider(PcmOnlyOutputProvider(TakesEverything()) { true }).build()
         assertEquals(AudioSink.SINK_FORMAT_SUPPORTED_DIRECTLY, open.getFormatSupport(EAC3))
         assertEquals(AudioSink.SINK_FORMAT_UNSUPPORTED, pcmOnly.getFormatSupport(EAC3))
         assertFalse(pcmOnly.supportsFormat(dts))

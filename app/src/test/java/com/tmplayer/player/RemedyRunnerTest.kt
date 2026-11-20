@@ -71,6 +71,10 @@ class RemedyRunnerTest {
         var softwareTakes = true
         var audioSoftwareTakes = true
         var passthrough = true
+        /** The device has its own decoder for the refused sound. */
+        var deviceDecodes = true
+        /** Sound reaches the output (false: the track was left unsupported and plays silent). */
+        var soundPlays = true
         var autoSwitch = true
         var engineInput: EngineInput? = null
         var engine = EngineDecision(PlayerEngine.ExoPlayer, EngineReason.Default)
@@ -106,7 +110,7 @@ class RemedyRunnerTest {
                 rendered = rendered,
                 dropped = 0,
                 skipped = 0,
-                audioPlaying = playing && ready,
+                audioPlaying = playing && ready && soundPlays,
                 pictureExpected = true,
                 hidden = hidden,
                 software = false,
@@ -123,6 +127,7 @@ class RemedyRunnerTest {
             autoSwitch = autoSwitch,
         )
 
+        override fun deviceDecodesAudio(mime: String?) = deviceDecodes
         override fun classKey() = key
         override fun failedRenderer(error: PlaybackException): RemedyRunner.FailedRenderer? {
             val format = (error as? ExoPlaybackException)?.rendererFormat ?: return null
@@ -481,6 +486,42 @@ class RemedyRunnerTest {
         assertFalse(hop.softwareVideo)
         assertTrue(hop.shortClass().endsWith("+pt_off"))
         assertEquals(listOf(com.tmplayer.i18n.L.playerRemedySoundAnotherWay), player.said)
+    }
+
+    @Test
+    fun withNoDecoderOnTheDeviceTheSoundGoesToTheOtherEngineNotSilence() {
+        player.audioSoftwareTakes = false
+        player.deviceDecodes = false
+        player.engineInput = EngineInput(choice = EngineChoice.Automatic, device = DeviceFacts(), vlcAvailable = true)
+        open()
+        // TrueHD refused by the output, no FFmpeg decoder, none on the device: PCM only would be silence.
+        assertTrue(runner.onPlayerError(refusedOutput(EAC3)))
+        assertTrue(player.reopened.none { it.passthroughOff })
+        assertEquals(listOf(PlayerEngine.Vlc), player.engines.map { it.engine })
+    }
+
+    @Test
+    fun aSoundPathThatPlaysSilentIsNeverLearnedAsWorking() {
+        player.audioSoftwareTakes = false
+        open()
+        assertTrue(runner.onPlayerError(refusedOutput(EAC3)))
+        assertTrue(player.reopened.single().passthroughOff)
+        // The rebuilt player shows the picture, but the track was left unsupported: no sound.
+        player.soundPlays = false
+        play()
+        clock.advance(RemedyLadder.WORKED_MS + 5_000)
+        val learned = player.saved?.records?.values?.flatMap { it.working }.orEmpty()
+        assertFalse("silent play must not teach the class: $learned", Remedy.PassthroughOff in learned)
+    }
+
+    @Test
+    fun aSoundPathWithSoundIsLearned() {
+        player.audioSoftwareTakes = false
+        open()
+        assertTrue(runner.onPlayerError(refusedOutput(EAC3)))
+        play()
+        clock.advance(RemedyLadder.WORKED_MS + 5_000)
+        assertTrue(player.saved!!.records.values.single().working.contains(Remedy.PassthroughOff))
     }
 
     @Test
