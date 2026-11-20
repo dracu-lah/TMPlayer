@@ -71,6 +71,12 @@ object ContinueWidget {
     /** Whether either lock hides what the widget would show. */
     fun lockedBy(lock: AppLockSettings): Boolean = lock.onOpen || lock.kids
 
+    /**
+     * [lockedBy], and the open profile's own PIN (HX88): [profileLocked] while it has one that was
+     * not given in this process, so a PIN locked profile's titles and posters never show.
+     */
+    fun lockedBy(lock: AppLockSettings, profileLocked: Boolean): Boolean = profileLocked || lockedBy(lock)
+
     /** The layout for a widget [widthDp] by [heightDp] (0 when the launcher did not say: the roomy one). */
     fun sizeFor(widthDp: Int, heightDp: Int): Size =
         if (heightDp in 1 until COMPACT_BELOW_DP || widthDp in 1 until NARROW_BELOW_DP) Size.Compact else Size.Regular
