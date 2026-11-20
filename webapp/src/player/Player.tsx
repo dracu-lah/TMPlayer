@@ -31,7 +31,7 @@ import { watchStutter, type StutterWatch } from './stutter-watch'
 import { form } from '../form'
 import { Icon } from '../ui/Icon'
 import { dropResume, getResume, isWatched, saveResume as storeResume, setWatched, settings } from '../store'
-import { beforeSwitch } from '../accounts'
+import { activeId, beforeSwitch } from '../accounts'
 import type { PieceSet, VideoCopy, VideoItem, WatchInfo } from '../tg/types'
 
 /** What plays: the posted file, or one of Telegram's lighter copies of it. */
@@ -374,7 +374,7 @@ export function Player(props: {
             if (way === 'native') {
                 // On the webOS .ipk the loopback bridge wins over the Service Worker address (tvservice.ts).
                 const bridged = tvServiceUrl(f.key, f.size, p.mime)
-                const url = bridged ?? `/stream/${encodeURIComponent(f.key)}?size=${f.size}&mime=${encodeURIComponent(p.mime.split(';')[0])}`
+                const url = bridged ?? `/stream/${encodeURIComponent(f.key)}?size=${f.size}&mime=${encodeURIComponent(p.mime.split(';')[0])}&p=${encodeURIComponent(activeId)}`
                 // Says which route fed the player, so a tester's screenshot tells R4 (bridge) from R3 (worker).
                 const how = bridged ? 'Played by the TV player through the TMPlayer service' : form() === 'tv' ? 'Played by the TV player through the Service Worker' : 'Played by the browser'
                 engine = nativeEngine(video, url, at, how)

@@ -136,14 +136,12 @@ async function stream(event, url) {
     }
     end = Math.min(end, size - 1, start + MAX_ANSWER - 1)
 
-    const client = await pickClient(event)
-    if (!client) return new Response(null, { status: 503 })
-    let answer
-    try {
-        answer = await ask(client, { type: 'read', key, start, end })
-    } catch {
-        return new Response(null, { status: 504 })
-    }
+    // The profile the page that asked runs (HX88): only a page of that profile answers, never another's.
+    const profile = url.searchParams.get('p')
+    const answer = await readFrom(event, { type: 'read', key, start, end, p: profile })
+    if (answer === 'none') return new Response(null, { status: 503 })
+    if (answer === 'timeout') return new Response(null, { status: 504 })
+    if (answer === 'other') return new Response(null, { status: 404 })
     if (answer.error) return new Response(null, { status: answer.error === 'gone' ? 410 : 502 })
     const bytes = answer.bytes
     return new Response(bytes, {
@@ -158,21 +156,46 @@ async function stream(event, url) {
     })
 }
 
-async function pickClient(event) {
+/**
+ * Asks the page that made the request; a request with no page of its own (some engines) goes to the
+ * windows, focused first, and only an answer from a page of the same profile counts: a page of
+ * another profile says 'other' and the next is asked. None of that profile: 'other' (a 404), never
+ * another profile's bytes. Before profiles a page answers without checking, as before.
+ */
+async function readFrom(event, message) {
+    const candidates = []
     if (event.clientId) {
         const client = await self.clients.get(event.clientId)
-        if (client) return client
+        if (client) candidates.push(client)
     }
-    const all = await self.clients.matchAll({ type: 'window' })
-    return all.find((c) => c.focused) || all[0] || null
+    if (!candidates.length) {
+        const all = await self.clients.matchAll({ type: 'window' })
+        candidates.push(...all.filter((c) => c.focused), ...all.filter((c) => !c.focused))
+    }
+    if (!candidates.length) return 'none'
+    let timedOut = false
+    for (const client of candidates) {
+        let answer
+        try {
+            answer = await ask(client, message)
+        } catch {
+            timedOut = true
+            continue
+        }
+        if (answer && answer.error === 'other') continue
+        return answer
+    }
+    return timedOut ? 'timeout' : 'other'
 }
 
 function ask(client, message) {
     return new Promise((resolve, reject) => {
         const channel = new MessageChannel()
-        const timer = setTimeout(() => reject(new Error('timeout')), READ_TIMEOUT)
+        const timer = setTimeout(() => (channel.port1.close(), reject(new Error('timeout'))), READ_TIMEOUT)
         channel.port1.onmessage = (ev) => {
             clearTimeout(timer)
+            // One answer per ask: the port is let go, so a page asked in turn leaves nothing open.
+            channel.port1.close()
             resolve(ev.data)
         }
         client.postMessage(message, [channel.port2])

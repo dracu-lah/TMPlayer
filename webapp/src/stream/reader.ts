@@ -1,4 +1,5 @@
 import { api, call } from '../tg/rpc'
+import { activeId } from '../accounts'
 import type { PieceSet } from '../tg/types'
 import { JoinedFile } from './joined'
 
@@ -394,10 +395,12 @@ export function workerAsked(key: string): boolean {
 export function serveStreams() {
     if (!('serviceWorker' in navigator)) return
     navigator.serviceWorker.addEventListener('message', async (ev: MessageEvent) => {
-        const msg = ev.data as { type?: string; key: string; start: number; end: number }
+        const msg = ev.data as { type?: string; key: string; start: number; end: number; p?: unknown }
         if (msg?.type !== 'read') return
         const port = ev.ports[0]
         if (!port || typeof msg.key !== 'string') return
+        // A read for another profile's page (HX88): this page says so and the Service Worker asks on.
+        if (typeof msg.p === 'string' && msg.p !== activeId) return port.postMessage({ error: 'other' })
         asked.add(msg.key)
         const file = streams.get(msg.key)
         if (!file) return port.postMessage({ error: 'gone' })
