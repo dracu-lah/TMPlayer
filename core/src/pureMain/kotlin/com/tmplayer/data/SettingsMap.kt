@@ -250,6 +250,11 @@ object SettingsMap {
         row("devices", lock, "settings.devices", PTD, listOf("settings.devices_detail"))
         row("resume_sync", lock, "syncplace.switch", PTD, onOff("syncplace.switch"))
         row("sync_place", lock, "syncchannel.row_title", PTD, listOf("syncchannel.row_detail"))
+        // The profiles (HX88): Add account while there is room, the other two with two profiles
+        // or more. The desktop draws them in phase B2.
+        row("switch_profile", lock, "profiles.switch_profile", PT, need = SettingsNeed.State)
+        row("add_account", lock, "profiles.add", PT, listOf("profiles.add_detail"))
+        row("remove_all_accounts", lock, "profiles.remove_all", PT, listOf("profiles.remove_all_detail"), SettingsNeed.State)
         row("sign_out", lock, "settings.sign_out", PTD, keywords = true)
 
         val h = SettingsGroup.Library
