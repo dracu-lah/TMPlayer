@@ -187,3 +187,48 @@ Phase B, per platform:
 - Sign out: call `AccountSwitcher.signOutProfile` with the platform's wipe instead of
   `forgetAccount` plus `Td.logOut()`, and the picker after it.
 - The picker, the PIN pad, Add account, Remove all accounts, the strings.
+
+## Phase B1: the shared screens and Android
+
+Shared (`ui/src/shared/.../ui/lock`, phone, tablet, TV, desktop and iOS alike):
+
+- `WhoIsWatching` draws the row; `ProfileFlow` (one per process, held by the platform) is every
+  press, PIN, panel and switch; `ProfilesGate` goes round the platform's shell: the picker at
+  launch with two profiles or more, the open profile's PIN when it was not given, then the shell
+  keyed on the open profile. With one profile and no PIN the gate draws the shell and nothing else.
+- A platform implements `ProfilePlatform` (playing, downloading, `beforeSwitch`, its `wipe`, `say`,
+  its app lock) and calls, at start: `Accounts.open`, `Td.start`, then `Accounts.storesRegistered()`
+  once `HomeCache.file`, `PageQueries.store` and the stores are made, and `ProfileUnlock.install()`;
+  `ProfileUnlock.onBackground()` when its last window leaves the screen and `onForeground()` when
+  one is back; `BeforeSwitch.add` from its player (save the place, close). Strings: the `profiles`
+  section of en.json.
+
+### The PIN rules
+
+- `ProfileUnlock` holds the one unlocked profile, in memory only: the open one, once its PIN was
+  given. A switch, sign out, remove or add locks it, so opening any profile with a PIN asks every
+  time; the app lock locking the app locks it; more than 60 s in the background locks it (a
+  rotation or a glance at another app does not); a process that died asks again.
+- Sign out of a profile with a PIN that is not the open, unlocked one asks its PIN, then the app
+  lock's when it has one. Remove asks the app lock's PIN and the profile's own (unless its folder
+  is gone). Add account asks the app lock's PIN. Remove all accounts asks the app lock's PIN and
+  then every profile's PIN in turn, before anything is wiped: a wrong PIN, a wait or Cancel wipes
+  nothing. The app lock's "ask when the app opens" comes before the picker.
+- Forgetting a profile's PIN has no way out in the app (only clearing TMPlayer's storage removes
+  every profile): the user's call, see the B1 report.
+
+### What shows a profile outside the app, and its lock rule
+
+Each reads `ProfileUnlock.hidden()` or `hiddenNow()`: true while the open profile has a PIN not
+given in this process.
+
+| Surface | Rule |
+| --- | --- |
+| Continue watching widget (phone) | the Locked tile (`ContinueWidget.lockedBy(lock, profileLocked)`) |
+| TV home channels (Android TV) | not published while hidden; cleared when the profile locks again |
+| TV Play next row | cleared when the profile locks again (`WatchNextPublisher.clearAll`) |
+| New video, episode and piece alerts | none posted for a hidden profile, nor for a sleeping one |
+| Download notifications | titles of the open profile's own downloads; a switch stops them (open) |
+| Player media session and picture in picture | the player closes before a switch (open: a locked state while playing in the background is not checked) |
+| Recents screenshot | not covered: the app lock's own rule applies (open) |
+| Share targets, shortcuts | none exist today |
