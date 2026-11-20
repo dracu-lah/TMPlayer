@@ -188,6 +188,26 @@ Phase B, per platform:
   `forgetAccount` plus `Td.logOut()`, and the picker after it.
 - The picker, the PIN pad, Add account, Remove all accounts, the strings.
 
+## Invariants (every platform, B2 included)
+
+1. One profile with no PIN behaves exactly as the version before: no picker, no wait, no extra
+   question, the same folders, keys, notifications and downloads. Every change is tested for it.
+2. Work takes its owner (`Accounts.stamp`) when it starts and keeps it: every store write runs as
+   `AccountOwner(owner)`, every Telegram call takes its client through `Td.sessionFor(owner)`.
+3. Before every write, delete, Telegram call and file removal of a job, the owner is checked
+   again (`OwnedSessions.mayAct`, false while a switch is under way too), also after any lookup
+   that suspends.
+4. Folders come from the owner's own folder name (`AccountDirs.pathsFor(base, owner)`), never
+   from `Td.paths` or whatever folder is current: in a switch the next profile's folder is pointed
+   at before the open profile changes.
+5. Nothing deletes because two snapshots of a profile's data differ: deletes follow events made
+   for that profile (`WatchedMarks`), and a switch, a sign out, a sync import, a restore and a
+   start delete nothing.
+6. A PIN profile's content never shows outside the app while it is hidden: every notification
+   goes through `ProfileNotifications`, the launcher through `OutsideWrites`, both policed by tests.
+7. A sign out discards what belongs to the session it ends (paused downloads, results in the
+   shade); nothing of an old TDLib database is resumed on a new one.
+
 ## Phase B1: the shared screens and Android
 
 Work that writes for its owner, not for whoever is open when it writes (each takes
