@@ -31,17 +31,61 @@ const delay = (ms: number) => new Promise((r) => setTimeout(r, ms))
 const rpcError = (text: string, code = 400) => Object.assign(new Error(text), { text, code })
 const THUMB = '/__e2e/media/thumb.jpg'
 
+/** The accounts the fake knows (HX88's profiles): 1 is the one every test starts signed in as. */
+const NAMES: Record<number, string> = { 1: 'Dana Test', 2: 'Robin Test', 3: 'Sam Test' }
+
 export class User {
     constructor(public raw: unknown) {}
     get id() {
-        return 1
+        const id = (this.raw as { id?: unknown } | null)?.id
+        return typeof id === 'number' ? id : 1
     }
     get displayName() {
-        return 'Dana Test'
+        return NAMES[this.id] ?? `User ${this.id}`
     }
     get username() {
-        return 'danatest'
+        return this.id === 1 ? 'danatest' : `user${this.id}`
     }
+    get photo() {
+        return null
+    }
+}
+
+/**
+ * The session, in an IndexedDB database named after the storage the worker was given, as mtcute's
+ * own is (`tmplayer`, `tmplayer-<folder>` for another profile), so the page's sign out and delete
+ * act on it the same way. The browser's own storage with nothing kept is signed in as account 1
+ * (unless `signedout`); another profile's starts signed out. `qr:N` (read live) signs the QR code
+ * in as account N.
+ */
+let storageName = 'tmplayer'
+type FakeSession = { id: number } | { out: true }
+function sessionDb(): Promise<IDBDatabase> {
+    return new Promise((resolve, reject) => {
+        const open = indexedDB.open(storageName, 1)
+        open.onupgradeneeded = () => open.result.createObjectStore('fake')
+        open.onsuccess = () => resolve(open.result)
+        open.onerror = () => reject(open.error)
+    })
+}
+async function sessionOp(write?: FakeSession): Promise<FakeSession | null> {
+    const db = await sessionDb()
+    try {
+        return await new Promise((resolve, reject) => {
+            const tx = db.transaction('fake', write ? 'readwrite' : 'readonly')
+            const req = write ? tx.objectStore('fake').put(write, 'self') : tx.objectStore('fake').get('self')
+            tx.oncomplete = () => resolve(write ?? ((req.result as FakeSession | undefined) ?? null))
+            tx.onerror = () => reject(tx.error)
+        })
+    } finally {
+        db.close()
+    }
+}
+async function signedInAs(): Promise<number | null> {
+    const s = await sessionOp().catch(() => null)
+    if (s && 'out' in s) return null
+    if (s) return s.id
+    return storageName === 'tmplayer' && !flags.has('signedout') ? 1 : null
 }
 export class SentCode {}
 export class WebCryptoProvider {
@@ -62,7 +106,9 @@ export class BaseTelegramClient {
     onConnectionState = { add: (fn: (state: string) => void) => void this.listeners.push(fn) }
     /** Retries since the line was told to come back, readable as `fakeCalls`. */
     mt = { network: { notifyNetworkChanged: (up: boolean) => void calls.push(`notifyNetworkChanged ${up}`) } }
-    constructor(_: unknown) {
+    constructor(options: unknown) {
+        const storage = (options as { storage?: unknown } | null)?.storage
+        if (typeof storage === 'string') storageName = storage
         // The line follows the `linkdown` flag, polled twice a second like a socket that notices late.
         const follow = async () => {
             const next = (await live().catch(() => new Set<string>())).has('linkdown') ? 'connecting' : 'connected'
@@ -397,12 +443,14 @@ const thumbFetches: string[] = []
 const calls: string[] = []
 
 export class TelegramClient {
-    storage = { self: { fetch: async () => (flags.has('signedout') ? null : { userId: 1 }) } }
+    storage = { self: { fetch: async () => ((id) => (id === null ? null : { userId: id }))(await signedInAs()) } }
     constructor(_: unknown) {}
     async prepare() {}
     async getMe() {
         if (flags.has('revoked')) throw rpcError('AUTH_KEY_UNREGISTERED', 401)
-        return new User({})
+        const id = await signedInAs()
+        if (id === null) throw rpcError('AUTH_KEY_UNREGISTERED', 401)
+        return new User({ id })
     }
     async getPasswordHint() {
         return flags.has('password') ? 'harbour' : null
@@ -413,11 +461,24 @@ export class TelegramClient {
         if (flags.has('password')) {
             await delay(50)
             await p.password()
+            await sessionOp({ id: 1 })
             return new User({})
         }
-        return new Promise<never>((_, reject) => p.abortSignal?.addEventListener('abort', () => reject(new Error('aborted'))))
+        // Scanned once a test sets `qr:N`: signed in as account N.
+        for (;;) {
+            if (p.abortSignal?.aborted) throw new Error('aborted')
+            const scanned = [...(await live().catch(() => new Set<string>()))].find((f) => /^qr:\d$/.test(f))
+            if (scanned) {
+                const id = Number(scanned.slice(3))
+                await sessionOp({ id })
+                return new User({ id })
+            }
+            await delay(200)
+        }
     }
-    async logOut() {}
+    async logOut() {
+        await sessionOp({ out: true }).catch(() => {})
+    }
     async resolvePeer(id: number) {
         return { _: 'inputPeerChannel', channelId: id, accessHash: 0 }
     }
