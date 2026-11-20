@@ -234,6 +234,7 @@ object Backups {
         "suggest_vlc" to Kind.BOOL,
         "frame_rate_matching" to Kind.BOOL,
         "tunneled_playback" to Kind.TEXT,
+        "audio_passthrough" to Kind.BOOL,
         "playback_stats" to Kind.BOOL,
         "video_scale" to Kind.TEXT,
         "volume_boost" to Kind.BOOL,

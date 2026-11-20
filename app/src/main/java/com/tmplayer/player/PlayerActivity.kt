@@ -903,6 +903,12 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     /** Settings, Playback, Advanced, Tunneled playback; read as the video opens. */
     private var tunneledMode = com.tmplayer.player.TunneledMode.Auto
 
+    /**
+     * Settings, Playback, Advanced, Audio passthrough (on by default); read as the video opens, so
+     * a change applies from the next video. Off builds the player's sound output PCM only (A2).
+     */
+    private var audioPassthrough = true
+
     /** Whether the player in hand was built with tunneling on, so an error under it can retry without. */
     private var tunnelingActive = false
 
@@ -1177,6 +1183,21 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     private suspend fun afterOpening() {
         if (!FormFactor.isTv(this)) return
         withTimeoutOrNull(OPENING_GATE_MS) { openedGate.await() }
+    }
+
+    /** Whether this video already said its sound cannot play here ([soundUnplayable]). */
+    private val soundNotice = SoundNotice()
+
+    /**
+     * Says once per video, when its sound cannot play on this device (no decoder for it here and
+     * none in FFmpeg, also after a rebuild on another path): the picture goes on, and the line says
+     * why it is silent rather than leaving the viewer to guess. Not while casting or on VLC.
+     */
+    private fun soundUnplayable(tracks: Tracks) {
+        if (!soundNotice.shouldSay(tracks, otherEngine = vlcEngine != null)) return
+        val format = tracks.groups.firstOrNull { it.type == C.TRACK_TYPE_AUDIO }?.getTrackFormat(0)
+        Log.w("TMPlayer", "No decoder for the sound: ${format?.sampleMimeType} ${format?.codecs.orEmpty()}")
+        feedback?.message(L.playerNoSoundHere, holdMs = SEEK_NOTICE_MS)
     }
 
     /** Whether this video's picture tracks were looked at yet ([pictureUnplayable]). */
@@ -2541,6 +2562,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             val silenceRead = async { runCatching { settings.skipSilenceNow() }.getOrDefault(false) }
             val decoderRead = async { runCatching { settings.videoDecoderNow() }.getOrDefault(com.tmplayer.data.VideoDecoder.Automatic) }
             val tunnelRead = async { runCatching { settings.tunneledModeNow() }.getOrDefault(com.tmplayer.player.TunneledMode.Auto) }
+            val passthroughRead = async { runCatching { settings.audioPassthroughNow() }.getOrDefault(true) }
             val statsRead = async { runCatching { settings.playbackStatsNow() }.getOrDefault(false) }
             val styleRead = async { runCatching { settings.subtitleStyleNow() }.getOrDefault(SubtitleStyle()) }
             // Only a video from a message has somewhere to keep an offset; a file opened from
@@ -2641,6 +2663,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             skipSilence = silenceRead.await()
             videoDecoder = decoderRead.await()
             tunneledMode = tunnelRead.await()
+            audioPassthrough = AudioPolicy.passthroughAllowed(passthroughRead.await(), FormFactor.isTv(this@PlayerActivity))
             statsOn = statsRead.await()
             subtitleStyle = styleRead.await()
             applySubtitleStyle()
@@ -4365,7 +4388,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         .build()
 
     /** The path the next player is built on ([DecoderPolicy]): the remedy ladder's, else the known device list's. */
-    private fun decoderPolicyForBuild(): DecoderPolicy = remedies.policyForBuild()
+    private fun decoderPolicyForBuild(): DecoderPolicy = remedies.policyForBuild().allowingPassthrough(audioPassthrough)
 
     /** The policy the player now playing was built on, for the stutter report's "why this decoder". */
     private var builtPolicy: DecoderPolicy? = null
@@ -4510,7 +4533,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                     .setEnableFloatOutput(enableFloatOutput)
                     .setEnableAudioOutputPlaybackParameters(enableAudioTrackPlaybackParams)
                     .setAudioProcessors(processors)
-                    .setAudioOutputProvider(output)
+                    // Passthrough off (A2, or Settings): the output takes PCM only.
+                    .setAudioOutputProvider(PcmOnlyOutputProvider.of(output, policy.passthroughOff))
                     .build()
             }
 
@@ -5160,6 +5184,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         hideSkipPill()
         creditsSkipped = false
         pictureChecked = false
+        soundNotice.newVideo()
         hideNextUp()
         nextUpShown = false
         nextUpDismissed = false
@@ -5233,6 +5258,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             // The class is known now: its remedy plan, and a re-open on its path when it starts elsewhere (RL6).
             if (!tracks.isEmpty && vlcEngine == null) remedies.tracksKnown()
             if (pictureUnplayable(tracks)) return
+            soundUnplayable(tracks)
             if (checkSoftwareDecode(tracks)) return
             restoreResumeTracks(tracks)
             applySettingsSubtitles(tracks)
@@ -9868,6 +9894,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         override fun facts(excluded: Set<String>) = RemedyFacts.ladder(
             player, watchDecoder, excluded, decoderPicked = videoDecoder != com.tmplayer.data.VideoDecoder.Automatic,
             tunneling = tunnelingActive, tunnelingPicked = tunneledMode != com.tmplayer.player.TunneledMode.Auto,
+            passthrough = builtPolicy?.passthroughOff == false,
         )
         override fun classKey() = RemedyFacts.classKey(player, mediaMime.ifBlank { mediaFileName })
         override fun failedRenderer(error: PlaybackException) = RemedyFacts.failedRenderer(player, error)

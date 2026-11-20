@@ -1356,11 +1356,13 @@ fun DownloadsScreen(
         ) { padding ->
             // A tablet: the phone's one page, under Material's bar.
             Column(Modifier.fillMaxSize().padding(padding)) {
-                Box(Modifier.fillMaxSize()) {
+                BoxWithConstraints(Modifier.fillMaxSize()) {
+                    // The cards stand in a centred column on a tablet or an open foldable (U17).
+                    val gutter = com.tmplayer.ui.components.largePaneGutter(maxWidth)
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = 24.dp + LocalBottomChrome.current),
+                        contentPadding = PaddingValues(start = gutter, end = gutter, bottom = 24.dp + LocalBottomChrome.current),
                         content = body,
                     )
                     ScrollToTop(listState)
@@ -2351,11 +2353,13 @@ private fun PhoneDownloads(
         ) { padding ->
             // One page, no tabs: the sections follow one another down the list.
             Column(Modifier.fillMaxSize().padding(padding)) {
-                Box(Modifier.fillMaxSize()) {
+                BoxWithConstraints(Modifier.fillMaxSize()) {
+                    // The cards stand in a centred column on a tablet or an open foldable (U17).
+                    val gutter = com.tmplayer.ui.components.largePaneGutter(maxWidth)
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = bottom),
+                        contentPadding = PaddingValues(start = gutter, end = gutter, bottom = bottom),
                         content = body,
                     )
                     ScrollToTop(listState)

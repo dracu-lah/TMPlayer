@@ -231,13 +231,15 @@ internal fun PhoneSearchScreen(
     val briefs = remember(state.chats, chats) { state.chats + chats.associate { it.id to ChatBrief.of(it) } }
     val titleOf: (Long) -> String = { id -> briefs[id]?.title.orEmpty() }
 
-    Box(Modifier.fillMaxSize().background(Tone.background)) {
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize().background(Tone.background)) {
+        // A tablet's or an open foldable's results and field stand in a centred column (U17); zero on a phone.
+        val gutter = com.tmplayer.ui.components.largePaneGutter(maxWidth)
         Column(Modifier.fillMaxSize().imePadding()) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 8.dp),
+                contentPadding = PaddingValues(start = gutter, end = gutter, bottom = 8.dp),
             ) {
                 item(key = "top") { Spacer(Modifier.windowInsetsPadding(WindowInsets.statusBars).height(8.dp)) }
                 if (query.isBlank()) {
@@ -313,11 +315,11 @@ internal fun PhoneSearchScreen(
 
             // The filters once there is something to filter, or a filter is on.
             if (query.isNotBlank() && (state.groups.isNotEmpty() || !state.filters.isDefault || state.sort != SearchSort.BestMatch)) {
-                FilterRow(state, onFilters = onFilters, onMore = { keyboard?.hide(); sheetOpen = true })
+                FilterRow(state, onFilters = onFilters, onMore = { keyboard?.hide(); sheetOpen = true }, gutter = gutter)
             }
 
             Row(
-                Modifier.fillMaxWidth().navigationBarsPadding().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = BAR_MARGIN),
+                Modifier.fillMaxWidth().navigationBarsPadding().padding(start = 16.dp + gutter, end = 16.dp + gutter, top = 8.dp, bottom = BAR_MARGIN),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 SearchField(
@@ -840,7 +842,7 @@ private fun TopicRow(hit: TopicHit, chat: ChatBrief?, onClick: () -> Unit) {
 /** The quick filters over the field: the kind of chat, and the rest behind Filters. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun FilterRow(state: GlobalSearchState, onFilters: (SearchFilters) -> Unit, onMore: () -> Unit) {
+private fun FilterRow(state: GlobalSearchState, onFilters: (SearchFilters) -> Unit, onMore: () -> Unit, gutter: androidx.compose.ui.unit.Dp = 0.dp) {
     val s = LocalStrings.current
     val extras = listOf(
         state.filters.quality != SearchQuality.Any,
@@ -849,7 +851,7 @@ private fun FilterRow(state: GlobalSearchState, onFilters: (SearchFilters) -> Un
         state.sort != SearchSort.BestMatch,
     ).count { it }
     LazyRow(
-        contentPadding = PaddingValues(horizontal = 16.dp),
+        contentPadding = PaddingValues(horizontal = 16.dp + gutter),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
     ) {

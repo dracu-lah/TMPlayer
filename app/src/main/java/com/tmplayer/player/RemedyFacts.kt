@@ -47,7 +47,9 @@ object RemedyFacts {
 
     /**
      * The ladder's facts for [exo] now: [decoderName] is the video decoder Media3 last started,
-     * [excluded] the names already left out, the rest the viewer's settings.
+     * [excluded] the names already left out, the rest the viewer's settings. [passthrough] is
+     * whether the player was built able to pass a bitstream through (Settings allows it and no
+     * hop turned it off); the runner narrows it to a refused bitstream when the sound fails.
      */
     fun ladder(
         exo: ExoPlayer?,
@@ -56,6 +58,7 @@ object RemedyFacts {
         decoderPicked: Boolean,
         tunneling: Boolean,
         tunnelingPicked: Boolean,
+        passthrough: Boolean = false,
     ): LadderFacts {
         val video = exo?.let { selected(it, C.TRACK_TYPE_VIDEO) }
         val audio = exo?.let { selected(it, C.TRACK_TYPE_AUDIO) }
@@ -73,7 +76,7 @@ object RemedyFacts {
             decoderPicked = decoderPicked,
             tunnelingPicked = tunnelingPicked,
             audioSoftwareTakes = AudioPolicy.softwareTakes(audio?.sampleMimeType),
-            passthrough = false,
+            passthrough = passthrough,
             autoSwitch = true,
         )
     }

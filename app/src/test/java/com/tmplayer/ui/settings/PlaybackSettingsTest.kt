@@ -19,6 +19,11 @@ import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.input.key.Key
 import com.tmplayer.data.FormFactor
 import com.tmplayer.data.SettingsStore
@@ -158,6 +163,75 @@ class PlaybackSettingsTest {
         rule.onNodeWithText("Playback stats overlay").assertIsDisplayed()
         rule.onNodeWithText("Match the video's frame rate").assertDoesNotExist()
         rule.onNodeWithText("Tunneled playback").assertDoesNotExist()
+        // A phone's output never passes a bitstream through: the switch would change nothing.
+        rule.onNodeWithText(L.settingsAudioPassthrough).assertDoesNotExist()
+    }
+
+    /** A window the remote works in, as on a television. */
+    private fun remoteWindow() {
+        val viewRoot = rule.activity.window.decorView.parent
+        org.robolectric.util.ReflectionHelpers.callInstanceMethod<Any>(
+            viewRoot, "ensureTouchMode",
+            org.robolectric.util.ReflectionHelpers.ClassParameter.from(Boolean::class.javaPrimitiveType, false),
+        )
+        org.robolectric.util.ReflectionHelpers.callInstanceMethod<Any>(
+            viewRoot, "windowFocusChanged",
+            org.robolectric.util.ReflectionHelpers.ClassParameter.from(Boolean::class.javaPrimitiveType, true),
+        )
+        rule.waitForIdle()
+    }
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w960dp-h540dp-land-television-night-xhdpi")
+    fun `audio passthrough is on by default, the remote reaches it between tunneled playback and the stats, and OK turns it off`() {
+        runBlocking { settings.setAudioPassthrough(true) }
+        show(touch = false)
+        remoteWindow()
+        rule.onNode(hasText("Advanced") and hasClickAction()).requestFocus()
+        rule.onNode(hasText("Advanced") and hasClickAction()).performKeyInput { pressKey(Key.DirectionCenter) }
+        rule.waitForIdle()
+        rule.onNodeWithText(L.settingsAudioPassthroughOn).assertIsDisplayed()
+        // Up from the stats overlay, the group's last row.
+        val stats = hasText("Playback stats overlay") and hasClickAction()
+        rule.onNode(stats).requestFocus()
+        rule.onNode(stats).performKeyInput { pressKey(Key.DirectionUp) }
+        rule.waitForIdle()
+        val row = hasText(L.settingsAudioPassthrough) and hasClickAction()
+        rule.onNode(row).assertIsFocused()
+        rule.onNode(row).performKeyInput { pressKey(Key.DirectionCenter) }
+        rule.waitForIdle()
+        rule.waitUntil(WRITE_MS) { !runBlocking { settings.audioPassthroughNow() } }
+        assertFalse(runBlocking { settings.audioPassthroughNow() })
+        rule.waitUntil(WRITE_MS) { rule.onAllNodesWithText(L.settingsAudioPassthroughOff).fetchSemanticsNodes().isNotEmpty() }
+        // The press leaves the remote where it was.
+        rule.onNode(row).assertIsFocused()
+        rule.onNode(row).performKeyInput { pressKey(Key.DirectionDown) }
+        rule.waitForIdle()
+        rule.onNode(hasText("Playback stats overlay") and hasClickAction()).assertIsFocused()
+    }
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w960dp-h540dp-land-television-night-mdpi")
+    fun `the television's Advanced rows render`() = renderAdvanced("settings-advanced-tv.png")
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w960dp-h540dp-land-television-night-mdpi", fontScale = 2.0f)
+    fun `the television's Advanced rows render at twice the font`() = renderAdvanced("settings-advanced-tv-font20.png")
+
+    /** The opened Advanced group, Audio passthrough off so its longer line shows, drawn to a PNG under `build/device-test/review/`. */
+    private fun renderAdvanced(out: String) {
+        runBlocking { settings.setAudioPassthrough(false) }
+        show(touch = false)
+        rule.onNodeWithText("Advanced").performClick()
+        rule.waitForIdle()
+        // At twice the font the group runs past the television's screen.
+        rule.onNode(hasScrollAction()).performScrollToNode(hasText(L.settingsAudioPassthrough))
+        rule.waitUntil(WRITE_MS) { rule.onAllNodesWithText(L.settingsAudioPassthroughOff).fetchSemanticsNodes().isNotEmpty() }
+        val bitmap = rule.onRoot().captureToImage().asAndroidBitmap()
+        val file = java.io.File("../build/device-test/review/$out").absoluteFile
+        file.parentFile?.mkdirs()
+        file.outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+        assertTrue(file.length() > 0)
     }
 
     @Test

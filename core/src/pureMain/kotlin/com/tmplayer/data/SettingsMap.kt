@@ -163,6 +163,8 @@ object SettingsMap {
         row("advanced", g, "settings.advanced", PT, listOf("settings.advanced_detail"))
         row("frame_rate_matching", g, "settings.frame_rate_matching", T, onOff("settings.frame_rate_matching"), SettingsNeed.Advanced)
         row("tunneled", g, "settings.tunneled", T, listOf("settings.tunneled_detail"), SettingsNeed.Advanced)
+        // A phone's output and the desktop's mpv never pass a bitstream through, so the row would change nothing there.
+        row("audio_passthrough", g, "settings.audio_passthrough", T, onOff("settings.audio_passthrough"), SettingsNeed.Advanced)
         row("playback_stats", g, "settings.playback_stats", PT, onOff("settings.playback_stats"), SettingsNeed.Advanced)
 
         // Touch only (a remote has a button for each), then the mouse where the phone has these: the player's
