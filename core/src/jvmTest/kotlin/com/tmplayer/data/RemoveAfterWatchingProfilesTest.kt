@@ -1,21 +1,33 @@
 package com.tmplayer.data
 
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
+import java.nio.file.Files
 
 /**
- * "Remove after watching" over a profile switch (HX88): the next profile's watched list is not
- * a list of newly watched videos, so a switch deletes nothing; a video marked after the switch,
- * in the profile now open, still goes.
+ * "Remove after watching" acts on marks made here and now, never on a change of the watched list
+ * (HX88): a sign out and a switch, a sync import, a restore from a backup and the app starting
+ * delete nothing; a mark the viewer makes deletes its download; a mark of a profile no longer open
+ * deletes nothing.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class RemoveAfterWatchingProfilesTest {
+
+    private val a = AccountStamp(1L, null)
+    private val b = AccountStamp(2L, "pbbbbb")
 
     private fun download(messageId: Long) = ResumeRecord(
         chatId = -100L, messageId = messageId, fileId = messageId.toInt(), title = "Ep $messageId",
@@ -23,45 +35,109 @@ class RemoveAfterWatchingProfilesTest {
         updatedAt = 0, localPath = "/dl/$messageId.mkv",
     )
 
-    private fun marks(vararg ids: Long) = ids.associate { id ->
-        val record = WatchedRecord(
-            chatId = -100L, messageId = id, fileId = id.toInt(), title = "Ep $id",
-            chatTitle = "Show", sizeBytes = 1_000, durationSec = 1_400, watchedAt = id, manual = true,
-        )
-        record.key to record
-    }
+    private fun record(id: Long) = WatchedRecord(
+        chatId = -100L, messageId = id, fileId = id.toInt(), title = "Ep $id",
+        chatTitle = "Show", sizeBytes = 1_000, durationSec = 1_400, watchedAt = id, manual = true,
+    )
 
-    @Test
-    fun `A watched 1, the switch to B who watched 1 and 2 deletes nothing, a new mark in B still goes`() = runTest {
-        val a = AccountStamp(1L, null)
-        val b = AccountStamp(2L, "pbbbbb")
-        var open = a
-        val watched = MutableStateFlow(marks(1))
-        val downloads = mutableListOf(download(1), download(2), download(3))
+    private fun key(id: Long) = record(id).key
+
+    private class Rig(var open: AccountStamp, downloads: List<ResumeRecord>) {
+        val events = MutableSharedFlow<WatchedMark>(extraBufferCapacity = 16)
+        val list = MutableStateFlow<Map<String, WatchedRecord>>(emptyMap())
+        var downloads = downloads.toMutableList()
         val deleted = mutableListOf<Long>()
         val watcher = RemoveAfterWatching(
             enabled = MutableStateFlow(true),
-            watched = watched,
-            downloads = { downloads.toList() },
+            watched = list,
+            downloads = { this.downloads.toList() },
             busy = { false },
             profile = { open },
+            marks = events,
             delete = { record ->
                 deleted += record.messageId
-                downloads -= record
+                this.downloads.remove(record)
                 true
             },
         )
-        val job = launch { watcher.run() }
+    }
+
+    @Test
+    fun `a sign out of A then the switch to B deletes none of B's downloads`() = runTest {
+        val rig = Rig(a, listOf(download(1), download(2), download(3)))
+        rig.list.value = mapOf(key(1) to record(1))
+        val job = launch { rig.watcher.run() }
         runCurrent()
-        // The switch: the stamp moves first, then B's list arrives.
-        open = b
-        watched.value = marks(1, 2)
+        // The sign out wipes A's list, the stamp moves, A's empty list is processed late, then B's.
+        rig.list.value = emptyMap()
+        rig.open = b
+        rig.list.value = emptyMap()
+        rig.list.value = mapOf(key(2) to record(2), key(3) to record(3))
         runCurrent()
-        assertTrue("B's watched videos are not newly watched: $deleted", deleted.isEmpty())
-        // B marks 3 watched: that one goes, as the setting asks.
-        watched.value = marks(1, 2, 3)
+        assertTrue("B's watched videos are not newly watched: ${rig.deleted}", rig.deleted.isEmpty())
+        // B marks 1 watched here: that one goes, as the setting asks.
+        rig.events.emit(WatchedMark(setOf(key(1)), b))
         runCurrent()
-        assertEquals(listOf(3L), deleted)
+        assertEquals(listOf(1L), rig.deleted)
         job.cancel()
+    }
+
+    @Test
+    fun `a mark of a profile no longer open deletes nothing`() = runTest {
+        val rig = Rig(b, listOf(download(1)))
+        val job = launch { rig.watcher.run() }
+        runCurrent()
+        rig.events.emit(WatchedMark(setOf(key(1)), a))
+        runCurrent()
+        assertTrue(rig.deleted.isEmpty())
+        job.cancel()
+    }
+
+    @Test
+    fun `the app starting with videos already watched deletes nothing`() = runTest {
+        val rig = Rig(a, listOf(download(1), download(2)))
+        rig.list.value = mapOf(key(1) to record(1), key(2) to record(2))
+        val job = launch { rig.watcher.run() }
+        runCurrent()
+        assertTrue(rig.deleted.isEmpty())
+        job.cancel()
+    }
+
+    /** A real watched store, and the first mark event it raises within [ms], or null. */
+    private fun store(): WatchedStore = WatchedStore(openSafeDataStore(File(Files.createTempDirectory("marks").toFile(), WatchedStore.FILE_NAME)))
+
+    private suspend fun firstMarkWithin(ms: Long, act: suspend () -> Unit): WatchedMark? {
+        var got: WatchedMark? = null
+        kotlinx.coroutines.coroutineScope {
+            val listen = launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) { got = WatchedMarks.events.first() }
+            act()
+            withTimeoutOrNull(ms) { listen.join() }
+            listen.cancel()
+        }
+        return got
+    }
+
+    @Test
+    fun `a sync import marking 200 videos watched raises no mark, so no download goes`() = runBlocking {
+        val watched = store()
+        val mark = firstMarkWithin(500L) { watched.applySync(SyncApply(watchedIn = (1L..200L).map(::record))) }
+        assertNull("another device's marks are not the viewer finishing a video here", mark)
+        assertEquals(200, watched.watched.first().size)
+    }
+
+    @Test
+    fun `a restore from a backup raises no mark`() = runBlocking {
+        val watched = store()
+        val mark = firstMarkWithin(500L) { watched.restoreEntries { mapOf("w_-100_7" to record(7).encode()) } }
+        assertNull(mark)
+    }
+
+    @Test
+    fun `the viewer's own mark raises one, for the open profile`() = runBlocking {
+        val watched = store()
+        val mark = firstMarkWithin(2_000L) { watched.markWatched(record(9)) }
+        assertNotNull(mark)
+        assertEquals(setOf(key(9)), mark!!.keys)
+        assertEquals(Accounts.stamp, mark.owner)
     }
 }

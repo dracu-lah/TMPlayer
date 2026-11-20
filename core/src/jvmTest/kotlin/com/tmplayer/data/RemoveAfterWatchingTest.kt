@@ -26,7 +26,7 @@ class RemoveAfterWatchingTest {
 
     private fun marks(vararg ids: Long) = ids.associate { mark(it).key to mark(it) }
 
-    /** A running watcher over fake flows, recording what it deleted. */
+    /** A running watcher over fake marks, recording what it deleted. */
     private class Rig(
         on: Boolean,
         initial: Map<String, WatchedRecord>,
@@ -35,13 +35,18 @@ class RemoveAfterWatchingTest {
         var busy: Set<Long> = emptySet(),
     ) {
         val enabled = MutableStateFlow(on)
-        val watched = MutableStateFlow(initial)
+        val owner = AccountStamp(1L, null)
+        val events = kotlinx.coroutines.flow.MutableSharedFlow<WatchedMark>(extraBufferCapacity = 16)
+
+        /** The watched list as the store would have it; a new mark in it is also an event, as the store raises one. */
+        val watched = WatchedList(initial) { fresh -> events.tryEmit(WatchedMark(fresh, owner)) }
         val deleted = mutableListOf<Long>()
         val watcher = RemoveAfterWatching(
             enabled = enabled,
-            watched = watched,
             downloads = { downloads },
             busy = { it.messageId in busy },
+            profile = { owner },
+            marks = events,
             delete = { record ->
                 if (deleteWorks) {
                     deleted += record.messageId
@@ -118,7 +123,7 @@ class RemoveAfterWatchingTest {
     }
 
     @Test
-    fun `a file that would not go is tried again on the next change`() = runTest {
+    fun `a file that would not go is tried again with the next mark`() = runTest {
         val rig = Rig(on = true, initial = emptyMap(), downloads = listOf(download(1), download(2)), deleteWorks = false)
         val job = launch { rig.watcher.run() }
         runCurrent()
@@ -144,4 +149,14 @@ class RemoveAfterWatchingTest {
         assertNull(DiskInfo.freeLabel(0))
         assertNull(DiskInfo.freeLabel(DiskInfo.EMPTY.freeBytes))
     }
+}
+
+/** A watched list whose new marks are told, as [WatchedStore.markWatched] raises them. */
+private class WatchedList(initial: Map<String, WatchedRecord>, private val marked: (Set<String>) -> Unit) {
+    var value: Map<String, WatchedRecord> = initial
+        set(next) {
+            val fresh = next.keys - field.keys
+            field = next
+            if (fresh.isNotEmpty()) marked(fresh)
+        }
 }

@@ -79,6 +79,9 @@ class WatchedStore(private val store: DataStore<Preferences>) {
             for (copy in copies) prefs.remove(WatchLaterStore.keyOf(copy.chatId, copy.messageId))
             evictOldest(prefs)
         }
+        // A mark made here, now, for the profile it was written for: what "Remove after
+        // watching" acts on, and nothing else is (HX88).
+        noteMarked(setOf(record.key))
         // The player saw it through to the end: a good moment, and a finished watch for the
         // support ladder. A manual mark is neither.
         if (!record.manual) SupportReminder.watchFinished(record.key)
@@ -106,7 +109,9 @@ class WatchedStore(private val store: DataStore<Preferences>) {
      */
     suspend fun markAllWatched(records: List<WatchedRecord>, copies: List<MediaItem> = emptyList()) {
         if (records.isEmpty()) return
+        val fresh = HashSet<String>()
         store.edit { prefs ->
+            fresh.clear()
             for (record in records) {
                 val key = keyOf(record.chatId, record.messageId)
                 val before = WatchedRecord.decode(record.key, prefs[key])
@@ -114,12 +119,24 @@ class WatchedStore(private val store: DataStore<Preferences>) {
                 if (before == null) {
                     prefs[key] = record.encode()
                     SyncRemovals.forgetWatched(prefs, record.key)
+                    fresh += record.key
                 }
                 prefs.remove(WatchLaterStore.keyOf(record.chatId, record.messageId))
             }
             for (copy in copies) prefs.remove(WatchLaterStore.keyOf(copy.chatId, copy.messageId))
             evictOldest(prefs)
         }
+        noteMarked(fresh)
+    }
+
+    /**
+     * Tells [WatchedMarks] of new marks, for the profile they were written for: the writing
+     * coroutine's owner, or the profile open now; none when that owner is no longer open (its
+     * write was dropped).
+     */
+    private suspend fun noteMarked(keys: Set<String>) {
+        val owner = kotlinx.coroutines.currentCoroutineContext()[AccountOwner]?.stamp ?: Accounts.stamp
+        if (owner == Accounts.stamp) WatchedMarks.marked(keys.toSet(), owner)
     }
 
     /** Empties the list. Keys are collected first: the map cannot be walked while it is written. */
