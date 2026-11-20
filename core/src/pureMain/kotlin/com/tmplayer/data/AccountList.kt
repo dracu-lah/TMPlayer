@@ -34,15 +34,16 @@ data class Profile(
 }
 
 /**
- * Every profile, the one open now ([activeId]), and while a switch is under way the one it left
- * ([switchingFrom]), which is what a process killed part way reopens. [trash] is the folders of
+ * Every profile, the one open now ([activeId]), and while a switch is under way the one it goes to
+ * ([switchingTo]). [activeId] only moves once the last client has closed, so a process killed part
+ * way reopens [activeId], the profile that was really open. [trash] is the folders of
  * removed profiles still to be deleted ("" for the platform's own), swept once TDLib's folders
  * are known.
  */
 data class AccountList(
     val profiles: List<Profile>,
     val activeId: String,
-    val switchingFrom: String? = null,
+    val switchingTo: String? = null,
     val trash: List<String> = emptyList(),
 ) {
     val active: Profile? get() = byId(activeId) ?: profiles.firstOrNull()
@@ -52,6 +53,12 @@ data class AccountList(
     fun replace(profile: Profile): AccountList =
         copy(profiles = profiles.map { if (it.id == profile.id) profile else it })
 }
+
+/**
+ * One profile's turn: its folder and how many switches came before it (`Accounts.stamp`). What
+ * keeps one profile's data is tagged with it and dropped once another profile is open.
+ */
+data class AccountStamp(val generation: Long, val folder: String?)
 
 /** The rules of the profile list, apart from any disk. */
 object AccountRules {
@@ -108,15 +115,12 @@ object AccountRules {
 
     /**
      * What a start finds after a process that stopped part way: a switch under way reopens the
-     * profile it left, and a profile still being added goes with its folder unless it is the only
+     * profile that was open ([AccountList.activeId] had not moved yet), and a profile still being added goes with its folder unless it is the only
      * one. Unchanged when there is nothing to do.
      */
     fun recovered(list: AccountList): AccountList {
         var out = list
-        val from = out.switchingFrom
-        if (from != null) {
-            out = out.copy(activeId = out.byId(from)?.id ?: out.activeId, switchingFrom = null)
-        }
+        if (out.switchingTo != null) out = out.copy(switchingTo = null)
         for (half in out.profiles.filter { it.adding }) {
             if (out.profiles.size <= 1) break
             out = removed(out, half, out.activeId.takeIf { it != half.id } ?: out.profiles.first { it.id != half.id }.id)
@@ -141,7 +145,7 @@ object AccountCodec {
     fun encode(list: AccountList): String = JSONObject()
         .put("v", VERSION)
         .put("active", list.activeId)
-        .put("switchingFrom", list.switchingFrom ?: JSONObject.NULL)
+        .put("switchingTo", list.switchingTo ?: JSONObject.NULL)
         .put("trash", JSONArray(list.trash))
         .put("profiles", JSONArray(list.profiles.map { p ->
             JSONObject()
@@ -174,12 +178,12 @@ object AccountCodec {
         }
         if (profiles.isEmpty()) return null
         val active = text(json, "active")?.takeIf { id -> profiles.any { it.id == id } } ?: profiles.first().id
-        val from = text(json, "switchingFrom")?.takeIf { id -> profiles.any { it.id == id } }
+        val to = text(json, "switchingTo")?.takeIf { id -> profiles.any { it.id == id } }
         val trashed = json.optJSONArray("trash")
         val trash = (0 until (trashed?.length() ?: 0)).mapNotNull { i ->
             (runCatching { trashed?.opt(i) }.getOrNull() as? String)?.takeIf { it.isEmpty() || AccountRules.validName(it) }
         }.filter { name -> profiles.none { (it.folder ?: "") == name } }.distinct().take(AccountRules.MAX * 4)
-        return AccountList(profiles, active, from, trash)
+        return AccountList(profiles, active, to, trash)
     }
 
     private fun profileOf(p: JSONObject): Profile? {

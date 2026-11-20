@@ -2,10 +2,17 @@ package com.tmplayer.data
 
 import com.tmplayer.platform.Logger
 import com.tmplayer.platform.Paths
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.io.File
+import kotlin.coroutines.AbstractCoroutineContextElement
+import kotlin.coroutines.CoroutineContext
 
 private const val TAG = "Accounts"
 
@@ -154,6 +161,8 @@ class AccountBook(
     private val store: AccountStore,
     now: Long = System.currentTimeMillis(),
     private val onChange: (AccountList) -> Unit = {},
+    /** Removes a removed profile's keys from every store; "" is the adopted profile's plain keys. */
+    private val purge: suspend (folder: String) -> Unit = {},
 ) {
     private val lock = Any()
     private val _list: MutableStateFlow<AccountList>
@@ -189,17 +198,39 @@ class AccountBook(
         after
     }
 
-    /** Deletes the folders in the trash over [base]'s folders, then forgets them. Never the active profile's. */
-    fun sweep(base: Paths) {
+    /** Takes the keys of the profile on [folder] out of every store ("" for the adopted profile's plain keys). */
+    suspend fun purgeKeys(folder: String) {
+        try {
+            purge(folder)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Logger.w(TAG, "a profile's keys could not be cleared", e)
+        }
+    }
+
+    /**
+     * Deletes the folders in the trash over [base]'s folders and the profile's keys in every store
+     * ([purge]), then forgets them. Never a folder in use: the open profile's, or the one a switch
+     * is opening.
+     */
+    suspend fun sweep(base: Paths) {
         val list = _list.value
-        val activeFolder = list.active?.folder ?: ""
-        val done = list.trash.filter { it != activeFolder }
+        val inUse = setOfNotNull(list.active?.folder ?: "", list.switchingTo?.let { id -> list.byId(id)?.folder ?: "" })
+        val done = list.trash.filter { it !in inUse }
         if (done.isEmpty()) return
         for (folder in done) {
             val profile = Profile(id = "trash", folder = folder.ifEmpty { null })
             AccountDirs.wipe(AccountDirs.pathsFor(base, profile))
-            runCatching { File(photoDir, "$folder.jpg").delete() }
-            Logger.i(TAG, "deleted the folders of a removed profile")
+            try {
+                purge(folder)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Logger.w(TAG, "a removed profile's keys could not be cleared", e)
+            }
+            runCatching { File(photoDir, "${folder.ifEmpty { AccountRules.ADOPTED_ID }}.jpg").delete() }
+            Logger.i(TAG, "deleted the folders and keys of a removed profile")
         }
         update { it.copy(trash = it.trash - done.toSet()) }
     }
@@ -218,7 +249,29 @@ object Accounts {
     /** The open profile's [Profile.folder], null for the platform's own folders. The stores' views follow it. */
     val activeFolder: StateFlow<String?> = folder.asStateFlow()
 
+    @Volatile
+    private var current = AccountStamp(0L, null)
+
+    /**
+     * The open profile and how many switches came before it. Whatever keeps one profile's data (a
+     * snapshot, a listing, an answer on its way) is tagged with the stamp it was made under, dropped
+     * once the stamp has changed, and written to the file of its own stamp ([scopedFile]), never to
+     * the one open at the moment of writing.
+     */
+    val stamp: AccountStamp get() = current
+
     private val listeners = ArrayList<() -> Unit>()
+    private val purgers = ArrayList<suspend (String) -> Unit>()
+
+    @Volatile
+    private var scope: CoroutineScope = newScope(current)
+
+    /**
+     * Where work of the open profile runs: cancelled on every switch, and carrying the profile's
+     * [AccountOwner], so a store refuses whatever such work still tries to write once another
+     * profile is open.
+     */
+    val profileScope: CoroutineScope get() = scope
 
     @Volatile
     var book: AccountBook? = null
@@ -226,15 +279,17 @@ object Accounts {
 
     /** Opens the list in [dir] (once; later calls return the same book). */
     fun open(dir: File): AccountBook = book ?: synchronized(this) {
-        book ?: AccountBook(AccountStore(File(dir, FILE_NAME)), onChange = ::publish).also { book = it }
+        book ?: AccountBook(AccountStore(File(dir, FILE_NAME)), onChange = ::publish, purge = ::purge).also { book = it }
     }
 
     /** The open profile, or the adopted one before [open]. */
     val active: Profile get() = book?.active ?: Profile(AccountRules.ADOPTED_ID, null)
 
-    /** [file] as the open profile keeps it: `home-cache.json` becomes `home-cache-<folder>.json`. */
-    fun scopedFile(file: File): File {
-        val name = folder.value ?: return file
+    /** [file] as the profile of [stamp] keeps it: `home-cache.json` becomes `home-cache-<folder>.json`. */
+    fun scopedFile(file: File, stamp: AccountStamp = current): File = scopedFile(file, stamp.folder)
+
+    fun scopedFile(file: File, folder: String?): File {
+        val name = folder ?: return file
         val stem = file.name.substringBeforeLast('.', file.name)
         val ext = file.name.substringAfterLast('.', "").let { if (it.isEmpty() || it == file.name) "" else ".$it" }
         return File(file.parentFile, "$stem-$name$ext")
@@ -245,17 +300,50 @@ object Accounts {
         synchronized(listeners) { listeners += block }
     }
 
+    /** A store that keeps account keys ([AccountScopedDataStore.purge]): cleared of each removed profile's. */
+    fun onPurge(block: suspend (folder: String) -> Unit) {
+        synchronized(purgers) { purgers += block }
+    }
+
+    private suspend fun purge(folder: String) {
+        for (each in synchronized(purgers) { purgers.toList() }) each(folder)
+    }
+
+    private fun newScope(stamp: AccountStamp) = CoroutineScope(SupervisorJob() + Dispatchers.Default + AccountOwner(stamp))
+
+    /** The stamp moves first, then the stores' folder, then the old profile's work is cancelled and the listeners hear it. */
     private fun publish(list: AccountList) {
         val next = list.active?.folder
-        if (folder.value == next) return
+        val before: CoroutineScope
+        synchronized(this) {
+            if (current.folder == next && folder.value == next) return
+            before = scope
+            current = AccountStamp(current.generation + 1, next)
+            scope = newScope(current)
+        }
         folder.value = next
+        before.cancel()
         val each = synchronized(listeners) { listeners.toList() }
         for (listener in each) runCatching(listener)
     }
 
-    /** For tests: forget the book and the folder. */
+    /** For tests: point the process at [book]'s open profile, as a switch would. */
     internal fun resetForTest(book: AccountBook? = null) {
         synchronized(this) { this.book = book }
-        folder.value = book?.active?.folder
+        publish(book?.list?.value ?: AccountRules.adopted(0L))
     }
+}
+
+/** Whether [this] is still the open profile's turn. */
+val AccountStamp.isCurrent: Boolean get() = Accounts.stamp == this
+
+/**
+ * The profile a coroutine works for ([Accounts.profileScope] carries it). A write to an account
+ * store from a coroutine whose owner is no longer the open profile is dropped
+ * ([AccountScopedDataStore]); one without an owner writes for the profile open when it asks.
+ */
+class AccountOwner(val stamp: AccountStamp) : AbstractCoroutineContextElement(Key) {
+    companion object Key : CoroutineContext.Key<AccountOwner>
+
+    override fun toString(): String = "AccountOwner(${stamp.generation})"
 }

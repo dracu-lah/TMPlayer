@@ -3591,7 +3591,7 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
          * Opens the store at [file]. Call once per process and share the result. The account's
          * keys are the open profile's ([AccountScopedDataStore], HX88).
          */
-        fun openDataStore(file: File): DataStore<Preferences> = AccountScopedDataStore(openSafeDataStore(file))
+        fun openDataStore(file: File): DataStore<Preferences> = AccountScopedDataStore.opened(openSafeDataStore(file))
 
         /** Whether launch should skip the chat list, given what is remembered and the setting. */
         fun autoOpenChatId(lastChatId: Long, enabled: Boolean): Long? =

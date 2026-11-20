@@ -472,10 +472,17 @@ object Td {
      * [restart] it never gives up on a client that is slow to close: the client loop opens the
      * next one only once the old one has said Closed, so two clients never hold one folder and a
      * weak TV never has two live. A client that could not start at all is tried again over [paths].
+     *
+     * [onClosed] runs once the old client has let go and before the next one exists: the moment
+     * the stores may become the next profile's, with nothing of the old one still running.
      */
-    internal suspend fun reopenFor(paths: Paths) {
+    internal suspend fun reopenFor(paths: Paths, onClosed: () -> Unit) {
         if (currentPaths == null) return
-        currentPaths = paths
+        val td = synchronized(nextClientLock) {
+            currentPaths = paths
+            beforeNextClient = onClosed
+            current
+        }
         _sessionEnded.value = false
         logOutAsked = false
         databaseAtStart = null
@@ -484,15 +491,26 @@ object Td {
             it.complete(Unit)
             return
         }
-        val td = current ?: return
-        gate.withLock { perform(td, AuthReducer.close()) }
+        if (td != null) gate.withLock { perform(td, AuthReducer.close()) }
     }
+
+    private val nextClientLock = Any()
+
+    /** What [reopenFor] asked to run between the old client's close and the next client. */
+    private var beforeNextClient: (() -> Unit)? = null
 
     private suspend fun clientLoop() = coroutineScope {
         while (isActive) {
             val closed = CompletableDeferred<Unit>()
-            val td = TdlClient.create()
-            current = td
+            // Run with the client made, under one lock, so a switch asked for meanwhile is either
+            // run here, before the next client exists, or finds this client to close.
+            val td = synchronized(nextClientLock) {
+                beforeNextClient?.let { hook ->
+                    beforeNextClient = null
+                    runCatching(hook).onFailure { e -> Logger.w(TAG, "switching the stores to the next profile failed", e) }
+                }
+                TdlClient.create().also { current = it }
+            }
             retiring = null
             _session.value = TdSession(td, generation.incrementAndGet())
             lastHandled = null

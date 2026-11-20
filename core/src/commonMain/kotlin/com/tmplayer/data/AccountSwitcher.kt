@@ -7,6 +7,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,29 +26,47 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.util.concurrent.atomic.AtomicLong
+import kotlin.coroutines.AbstractCoroutineContextElement
+import kotlin.coroutines.CoroutineContext
 
 private const val TAG = "AccountSwitcher"
 
-/** Who a profile signed in as, read once it is Ready. */
-data class SignedInAs(val telegramId: Long, val name: String, val photo: ByteArray?) {
-    override fun equals(other: Any?) = other is SignedInAs && other.telegramId == telegramId && other.name == name
-    override fun hashCode() = telegramId.hashCode() * 31 + name.hashCode()
+/**
+ * Who a profile signed in as, read once it is Ready: [profileId] is the profile that was open and
+ * [session] the client generation it came from. Either no longer matching means a switch came in
+ * between, and the answer is dropped ([AccountSwitcher.noteSignedIn]).
+ */
+data class SignedInAs(
+    val profileId: String,
+    val session: Long?,
+    val telegramId: Long,
+    val name: String,
+    val photo: ByteArray?,
+) {
+    override fun equals(other: Any?) = other is SignedInAs && other.profileId == profileId && other.session == session &&
+        other.telegramId == telegramId && other.name == name
+
+    override fun hashCode() = (profileId.hashCode() * 31 + telegramId.hashCode()) * 31 + name.hashCode()
 }
 
 /** The one live TDLib client, as [AccountSwitcher] drives it. [TdClientHost] in the app, a fake in tests. */
 interface ClientHost {
     /**
-     * Closes the live client and opens the next one over [paths]. True once the new one is open;
-     * false when the old one took longer than [timeoutMs] to close, in which case nothing else is
-     * opened yet and [awaitOpen] waits for the close to finish.
+     * Closes the live client and opens the next one over [paths]. [onClosed] runs once the old one
+     * has let go and before the next one exists. True once the new one is open; false when the old
+     * one took longer than [timeoutMs] to close, in which case nothing else is opened yet and
+     * [awaitOpen] waits for the close to finish.
      */
-    suspend fun reopen(paths: Paths, timeoutMs: Long): Boolean
+    suspend fun reopen(paths: Paths, timeoutMs: Long, onClosed: () -> Unit): Boolean
 
     /** Waits for the client the last [reopen] asked for. */
     suspend fun awaitOpen()
 
     /** Logs the live client out of Telegram. True once TDLib has let go and waits for a sign in again. */
     suspend fun endSession(timeoutMs: Long): Boolean
+
+    /** The live client's generation, or null between two clients. */
+    fun sessionNow(): Long?
 
     /** Each time the live client is signed in. */
     val signedIn: Flow<SignedInAs>
@@ -93,7 +112,7 @@ sealed interface AddResult {
 }
 
 sealed interface SignOutResult {
-    /** Signed out; [next] is the profile now open, or null when it was the last and the sign in shows. */
+    /** Signed out; [next] is the profile now open, or null when the sign in shows. */
     data class SignedOut(val next: Profile?) : SignOutResult
     data object Unknown : SignOutResult
     data object NotStarted : SignOutResult
@@ -116,6 +135,11 @@ sealed interface AccountEvent {
     data class SameAccount(val existing: Profile) : AccountEvent
 }
 
+/** Marks the platform's wipe, which runs under the switcher's lock and so must never call the switcher. */
+private class InsideSwitcher : AbstractCoroutineContextElement(Key) {
+    companion object Key : CoroutineContext.Key<InsideSwitcher>
+}
+
 /**
  * Switching, adding, signing out and removing profiles (HX88, docs/agents/multi-account.md).
  *
@@ -123,9 +147,12 @@ sealed interface AccountEvent {
  * leaves does not stop a switch half way). Switches that queue up behind one another keep only the
  * newest: the last switch asked for wins, and those in between never open a client.
  *
+ * The open profile ([AccountList.activeId], and with it every store's view and [Accounts.stamp])
+ * changes only between the old client's close and the next client, never while either runs.
+ *
  * [wipe] in [signOutProfile] and [removeAll] is the platform's sign out (its backup, its stores,
  * its downloads choice), run while the profile is the open one, so every store it touches is that
- * profile's.
+ * profile's. It runs under the lock: it must never call this switcher, and a call from it is refused.
  */
 class AccountSwitcher(
     private val book: AccountBook,
@@ -155,8 +182,16 @@ class AccountSwitcher(
         return AccountDirs.stateOf(AccountDirs.pathsFor(base, profile), profile)
     }
 
+    /** True, and logged, when called from inside a wipe: the lock is held and waiting for it would never end. */
+    private suspend fun reentered(): Boolean {
+        if (currentCoroutineContext()[InsideSwitcher] == null) return false
+        Logger.w(TAG, "the switcher was called from inside a sign out's wipe; refused")
+        return true
+    }
+
     /** Opens [id]'s client. With [signInAgain] a broken profile's folders are made afresh and the sign in opens. */
     suspend fun switchTo(id: String, signInAgain: Boolean = false): SwitchResult {
+        if (reentered()) return SwitchResult.Failed
         val ticket = asked.incrementAndGet()
         return withContext(NonCancellable) {
             mutex.withLock {
@@ -165,10 +200,14 @@ class AccountSwitcher(
         }
     }
 
+    /**
+     * [signInAgain] wipes the folders of a [ProfileState.Recoverable] profile; only ever true for
+     * the viewer's own Sign in again and for a profile being made, never for one picked by the code.
+     */
     private suspend fun switchLocked(id: String, signInAgain: Boolean): SwitchResult {
         val list = book.list.value
         val target = list.byId(id) ?: return SwitchResult.Unknown
-        if (list.activeId == id && list.switchingFrom == null) return SwitchResult.Already
+        if (list.activeId == id && list.switchingTo == null) return SwitchResult.Already
         val base = base() ?: return SwitchResult.NotStarted
         val paths = AccountDirs.pathsFor(base, target)
         val state = AccountDirs.stateOf(paths, target)
@@ -177,17 +216,19 @@ class AccountSwitcher(
             AccountDirs.wipe(paths)
         }
         if (!withContext(Dispatchers.IO) { AccountDirs.make(paths) }) return SwitchResult.Failed
-        // Written before the client is touched: a process killed from here on reopens the profile left.
-        book.update { it.copy(activeId = id, switchingFrom = it.switchingFrom ?: it.activeId) }
+        // Only where it is going: a process killed before the old client closes reopens activeId.
+        book.update { it.copy(switchingTo = id) }
         _state.value = SwitchState.Switching(id)
+        val flip = { book.update { l -> if (l.byId(id) == null) l.copy(switchingTo = null) else l.copy(activeId = id, switchingTo = null) } }
         try {
-            if (!host.reopen(paths, closeTimeoutMs)) {
+            if (!host.reopen(paths, closeTimeoutMs, onClosed = { flip() })) {
                 Logger.i(TAG, "the last client is slow to close; waiting for it before the next one opens")
                 _state.value = SwitchState.ClosingSlowly(id)
                 host.awaitOpen()
             }
-            book.update { it.copy(switchingFrom = null) }
         } finally {
+            // A host that never said so (an error part way) still leaves the list whole.
+            if (book.list.value.switchingTo == id) flip()
             _state.value = SwitchState.Idle
         }
         measureSleeping(base)
@@ -196,6 +237,7 @@ class AccountSwitcher(
 
     /** A new profile, opened at once on the sign in. Refused at [AccountRules.MAX] and without room. */
     suspend fun add(): AddResult {
+        if (reentered()) return AddResult.Failed
         asked.incrementAndGet()
         return withContext(NonCancellable) {
             mutex.withLock {
@@ -208,6 +250,7 @@ class AccountSwitcher(
                 val folder = AccountRules.newFolder(list)
                 val profile = Profile(id = folder, folder = folder, createdAt = clock(), adding = true)
                 book.update { it.copy(profiles = it.profiles + profile) }
+                // A new folder: wiping a half made one of the same name is what Sign in again is for.
                 when (switchLocked(profile.id, signInAgain = true)) {
                     SwitchResult.Switched -> AddResult.Added(profile)
                     else -> {
@@ -221,32 +264,48 @@ class AccountSwitcher(
     }
 
     /**
-     * Records who the open profile signed in as, and its small photo. The same Telegram account on
-     * a second profile is refused: this new session is logged out, its folders go, and the profile
-     * that already holds the account opens again ([AccountEvent.SameAccount]).
+     * Records who the open profile signed in as, and its small photo. An answer for another profile
+     * or another client than the live one is dropped. The same Telegram account on a second profile
+     * is refused: this new session is logged out, its folders go, and the profile that already
+     * holds the account opens again ([AccountEvent.SameAccount]).
      */
     suspend fun noteSignedIn(who: SignedInAs) {
-        if (who.telegramId == 0L) return
+        if (who.telegramId == 0L || reentered()) return
         withContext(NonCancellable) {
             mutex.withLock {
                 val list = book.list.value
                 val active = list.active ?: return@withLock
+                if (who.profileId != active.id || list.switchingTo != null || who.session != host.sessionNow()) {
+                    Logger.i(TAG, "who signed in arrived after a switch; dropped")
+                    return@withLock
+                }
                 val existing = AccountRules.sameTelegram(list, who.telegramId, active.id)
                 if (existing != null) {
-                    Logger.i(TAG, "a new profile signed in as an account another profile holds; refused")
-                    host.endSession(LOG_OUT_TIMEOUT_MS)
-                    switchLocked(existing.id, signInAgain = true)
-                    book.update { AccountRules.removed(it, active, existing.id) }
-                    base()?.let(book::sweep)
-                    _events.tryEmit(AccountEvent.SameAccount(existing))
+                    refuseSameAccount(active, existing)
                     return@withLock
                 }
                 val photo = who.photo?.let { bytes -> withContext(Dispatchers.IO) { keepPhoto(active, bytes) } } ?: active.photo
-                book.update {
-                    it.replace(active.copy(telegramId = who.telegramId, name = who.name.take(128), photo = photo, adding = false))
+                book.update { l ->
+                    val now = l.byId(active.id) ?: return@update l
+                    l.replace(now.copy(telegramId = who.telegramId, name = who.name.take(128), photo = photo, adding = false))
                 }
             }
         }
+    }
+
+    private suspend fun refuseSameAccount(active: Profile, existing: Profile) {
+        Logger.i(TAG, "a new profile signed in as an account another profile holds; refused")
+        host.endSession(LOG_OUT_TIMEOUT_MS)
+        val base = base()
+        // Never wiped: the existing profile is opened as it is, or not at all.
+        if (switchLocked(existing.id, signInAgain = false) == SwitchResult.Switched) {
+            book.update { AccountRules.removed(it, active, existing.id) }
+            base?.let { book.sweep(it) }
+        } else {
+            // The existing profile cannot be opened: this one stays open on its sign in, with nobody in it.
+            book.update { l -> l.byId(active.id)?.let { l.replace(it.copy(telegramId = 0L, name = "", photo = null)) } ?: l }
+        }
+        _events.tryEmit(AccountEvent.SameAccount(existing))
     }
 
     /** Listens for each sign in of the live client and records it ([noteSignedIn]). Call once per process. */
@@ -267,9 +326,11 @@ class AccountSwitcher(
     /**
      * Signs [id] out of Telegram and off this device. [wipe] runs with [id] open and is told whether
      * it is the last profile ([SettingsStore.clearEverything] then, [SettingsStore.clearAccountData]
-     * otherwise). Another profile opens after, or the sign in when it was the last.
+     * otherwise); it runs under this switcher's lock and must not call it. Another profile opens
+     * after, or the sign in when it was the last or no other one can be opened.
      */
     suspend fun signOutProfile(id: String, wipe: suspend (Profile, last: Boolean) -> Unit): SignOutResult {
+        if (reentered()) return SignOutResult.Unknown
         asked.incrementAndGet()
         return withContext(NonCancellable) { mutex.withLock { signOutLocked(id, wipe) } }
     }
@@ -279,11 +340,11 @@ class AccountSwitcher(
         val before = book.list.value
         val target = before.byId(id) ?: return SignOutResult.Unknown
         val previous = before.activeId
-        val others = before.profiles.filter { it.id != id }
         if (before.activeId != id) {
             when (switchLocked(id, signInAgain = false)) {
                 SwitchResult.Switched, SwitchResult.Already -> Unit
-                // Folders that cannot be opened have no session to end: the profile just goes.
+                // Folders that cannot be opened have no session to end: the profile just goes, and
+                // the live client, another profile's, never held them.
                 else -> {
                     book.update { AccountRules.removed(it, target, previous) }
                     book.sweep(base)
@@ -291,15 +352,29 @@ class AccountSwitcher(
                 }
             }
         }
-        runCatching { wipe(target, others.isEmpty()) }.onFailure { Logger.w(TAG, "the sign out's own clearing failed", it) }
+        val others = book.list.value.profiles.filter { it.id != id }
+        try {
+            withContext(InsideSwitcher()) { wipe(target, others.isEmpty()) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Logger.w(TAG, "the sign out's own clearing failed; the sweep clears the profile's keys", e)
+        }
         if (!host.endSession(LOG_OUT_TIMEOUT_MS)) Logger.w(TAG, "TDLib was slow to finish logging out")
-        if (others.isEmpty()) {
-            book.update { it.replace(target.copy(telegramId = 0L, name = "", photo = null, adding = false, pin = null, pinFailures = 0, pinWaitLeftMs = 0L, pinWaitStamp = 0L)) }
+        // The next profile, the one open before first; never wiped, since none of them asked to sign in again.
+        val candidates = others.sortedBy { if (it.id == previous) 0 else 1 }
+        val next = candidates.firstOrNull { switchLocked(it.id, signInAgain = false) == SwitchResult.Switched }
+        if (next == null) {
+            // The last profile, or none of the others can be opened: this one stays, empty, on the sign in.
+            book.update { l ->
+                l.byId(id)?.let {
+                    l.replace(it.copy(telegramId = 0L, name = "", photo = null, adding = false, pin = null, pinFailures = 0, pinWaitLeftMs = 0L, pinWaitStamp = 0L))
+                } ?: l
+            }
             target.photo?.let { runCatching { File(it).delete() } }
             return SignOutResult.SignedOut(null)
         }
-        val next = others.firstOrNull { it.id == previous } ?: others.first()
-        switchLocked(next.id, signInAgain = true)
+        // Only now that another client holds the live folders does this profile's go.
         book.update { AccountRules.removed(it, target, next.id) }
         book.sweep(base)
         measureSleeping(base)
@@ -307,15 +382,18 @@ class AccountSwitcher(
     }
 
     /** Forgets a sleeping profile without reaching Telegram: one whose folders are broken, or one never signed in. */
-    suspend fun remove(id: String): RemoveResult = withContext(NonCancellable) {
-        mutex.withLock {
-            val list = book.list.value
-            val target = list.byId(id) ?: return@withLock RemoveResult.Unknown
-            if (list.profiles.size <= 1) return@withLock RemoveResult.Last
-            if (list.activeId == id) return@withLock RemoveResult.Active
-            book.update { AccountRules.removed(it, target) }
-            base()?.let(book::sweep)
-            RemoveResult.Removed
+    suspend fun remove(id: String): RemoveResult {
+        if (reentered()) return RemoveResult.Unknown
+        return withContext(NonCancellable) {
+            mutex.withLock {
+                val list = book.list.value
+                val target = list.byId(id) ?: return@withLock RemoveResult.Unknown
+                if (list.profiles.size <= 1) return@withLock RemoveResult.Last
+                if (list.activeId == id || list.switchingTo == id) return@withLock RemoveResult.Active
+                book.update { AccountRules.removed(it, target) }
+                base()?.let { book.sweep(it) }
+                RemoveResult.Removed
+            }
         }
     }
 
@@ -324,21 +402,35 @@ class AccountSwitcher(
      * profile on the platform's own folders, on the normal sign in.
      */
     suspend fun removeAll(wipe: suspend (Profile, last: Boolean) -> Unit): SignOutResult {
+        if (reentered()) return SignOutResult.Unknown
         asked.incrementAndGet()
         return withContext(NonCancellable) {
             mutex.withLock {
                 val base = base() ?: return@withLock SignOutResult.NotStarted
                 val start = book.list.value
                 val order = start.profiles.filter { it.id != start.activeId } + listOfNotNull(start.active)
-                for (profile in order) signOutLocked(profile.id, wipe)
-                val left = book.list.value.active
-                if (left != null && !left.adopted) {
-                    // Back on the platform's own folders, as a fresh install would be.
+                for (profile in order) if (book.list.value.byId(profile.id) != null) signOutLocked(profile.id, wipe)
+                val left = book.list.value
+                val adoptedLeft = left.profiles.singleOrNull()?.adopted == true
+                if (!adoptedLeft) {
+                    // Back on the platform's own folders as a fresh install would be: whatever an
+                    // earlier adopted account left in them, and in the stores' plain keys, goes first.
                     val fresh = Profile(AccountRules.ADOPTED_ID, folder = null, createdAt = clock())
-                    book.update { AccountList(listOf(fresh), fresh.id, switchingFrom = left.id, trash = it.trash + (left.folder ?: "")) }
+                    withContext(Dispatchers.IO) { AccountDirs.wipe(base) }
+                    book.purgeKeys("")
                     withContext(Dispatchers.IO) { AccountDirs.make(base) }
-                    if (!host.reopen(base, closeTimeoutMs)) host.awaitOpen()
-                    book.update { it.copy(switchingFrom = null) }
+                    book.update {
+                        it.copy(
+                            profiles = it.profiles + fresh,
+                            switchingTo = fresh.id,
+                            trash = it.trash - "",
+                        )
+                    }
+                    val flip = {
+                        book.update { l -> AccountList(listOf(fresh), fresh.id, trash = (l.trash + l.profiles.filter { !it.adopted }.map { it.folder ?: "" }).distinct()) }
+                    }
+                    if (!host.reopen(base, closeTimeoutMs, onClosed = { flip() })) host.awaitOpen()
+                    if (book.list.value.switchingTo != null) flip()
                     book.sweep(base)
                 }
                 onSleepingBytes(0L)
@@ -350,16 +442,29 @@ class AccountSwitcher(
     /** Sets or clears ([pin] null) a profile's PIN. False when it is not 4 digits or the profile is gone. */
     suspend fun setPin(id: String, pin: String?): Boolean = withContext(Dispatchers.Default) {
         val profile = book.list.value.byId(id) ?: return@withContext false
-        val next = ProfilePin.set(profile, pin) ?: return@withContext false
-        book.update { it.replace(next) }
-        true
+        // Hashed outside the list's lock; only the PIN fields are written, onto the profile as it is then.
+        val made = ProfilePin.set(profile, pin) ?: return@withContext false
+        var done = false
+        book.update { l ->
+            val now = l.byId(id) ?: return@update l
+            done = true
+            l.replace(now.copy(pin = made.pin, pinFailures = 0, pinWaitLeftMs = 0L, pinWaitStamp = 0L))
+        }
+        done
     }
 
-    /** Checks a profile's PIN at the pad: five wrong and the pad waits 30 seconds ([ProfilePin]). */
+    /**
+     * Checks a profile's PIN at the pad: five wrong and the pad waits 30 seconds ([ProfilePin]).
+     * Checked and counted inside one change of the list, so two tries at once both count.
+     */
     suspend fun checkPin(id: String, pin: String, now: Long = PinClock.now()): PinCheck = withContext(Dispatchers.Default) {
-        val profile = book.list.value.byId(id) ?: return@withContext PinCheck.NoPin
-        val (next, check) = ProfilePin.check(profile, pin, now)
-        if (next != profile) book.update { list -> list.byId(id)?.let { list.replace(next) } ?: list }
+        var check: PinCheck = PinCheck.NoPin
+        book.update { l ->
+            val profile = l.byId(id) ?: return@update l
+            val (next, answer) = ProfilePin.check(profile, pin, now)
+            check = answer
+            if (next == profile) l else l.replace(next)
+        }
         check
     }
 
@@ -415,10 +520,10 @@ object TdClientHost : ClientHost {
     @Volatile
     private var before: Long? = null
 
-    override suspend fun reopen(paths: Paths, timeoutMs: Long): Boolean {
+    override suspend fun reopen(paths: Paths, timeoutMs: Long, onClosed: () -> Unit): Boolean {
         val carried = runCatching { Td.proxies() }.getOrDefault(emptyList())
         before = Td.sessionGeneration
-        Td.reopenFor(paths)
+        Td.reopenFor(paths, onClosed)
         val opened = withTimeoutOrNull(timeoutMs) { Td.awaitSessionAfter(before) } != null
         if (opened) carryProxies(carried)
         return opened
@@ -431,6 +536,8 @@ object TdClientHost : ClientHost {
         Td.logOut()
         return withTimeoutOrNull(timeoutMs) { Td.awaitSessionAfter(was) } != null
     }
+
+    override fun sessionNow(): Long? = Td.sessionGeneration
 
     override val signedIn: Flow<SignedInAs> = Td.auth
         .map { it is AuthState.Ready }
@@ -449,8 +556,10 @@ object TdClientHost : ClientHost {
         }
     }
 
+    /** Tagged with the profile open and the client generation as the session is taken, before anything slow. */
     private suspend fun readSignedIn(): SignedInAs? {
         val session = withTimeoutOrNull(READ_TIMEOUT_MS) { Td.awaitAuthorizedSession() } ?: return null
+        val profileId = Accounts.active.id
         val me = Td.me(session) ?: return null
         val id = Td.myId().takeIf { it != 0L } ?: return null
         val photo = me.photoFileId.takeIf { it > 0 }?.let { fileId ->
@@ -459,7 +568,7 @@ object TdClientHost : ClientHost {
                 (session.client.readFilePart(fileId, 0, 0) as? TdlResult.Success)?.result?.data
             }
         } ?: me.miniThumbnail
-        return SignedInAs(id, me.name, photo)
+        return SignedInAs(profileId, session.generation, id, me.name, photo)
     }
 
     private const val READ_TIMEOUT_MS = 15_000L

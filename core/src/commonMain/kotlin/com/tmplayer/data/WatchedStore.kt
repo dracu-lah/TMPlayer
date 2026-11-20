@@ -282,6 +282,6 @@ class WatchedStore(private val store: DataStore<Preferences>) {
 
         /** Opens the store at [file]. Call once per process and share the result. */
         fun openDataStore(file: File): DataStore<Preferences> =
-            AccountScopedDataStore(openSafeDataStore(file), isAccount = AccountScopedDataStore.ALL_ACCOUNT)
+            AccountScopedDataStore.opened(openSafeDataStore(file), AccountScopedDataStore.ALL_ACCOUNT)
     }
 }
