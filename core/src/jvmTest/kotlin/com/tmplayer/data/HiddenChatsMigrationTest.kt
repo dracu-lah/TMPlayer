@@ -56,10 +56,13 @@ class HiddenChatsMigrationTest {
     fun `removing a chat from its menu unticks it in the one list`() {
         val picked = AddedChoice(AddedMode.Picked, everything)
         assertEquals(setOf(1L, 3L), AddedChats.removing(picked, 2, emptyList()).ids)
-        // Every chat: the rest of the list becomes the pick, so only this one goes.
-        val fromAll = AddedChats.removing(AddedChoice(AddedMode.All), 2, everything)
-        assertEquals(AddedMode.Picked, fromAll.mode)
-        assertEquals(setOf(1L, 3L), fromAll.ids)
+        // The "All chats" switch is on (HX86): strictly every chat, so nothing is carved out of it.
+        val all = AddedChoice(AddedMode.All, listOf(AddedChat(1, "One")))
+        assertSame(all, AddedChats.removing(all, 2, everything))
+        // Every chat before the switch existed (nothing answered): the rest of the list becomes the pick.
+        val fromEvery = AddedChats.removing(AddedChoice(), 2, everything)
+        assertEquals(AddedMode.Picked, fromEvery.mode)
+        assertEquals(setOf(1L, 3L), fromEvery.ids)
         // No chat list to keep: left alone rather than emptying the library over one chat.
         assertEquals(AddedChoice(), AddedChats.removing(AddedChoice(), 2, emptyList()))
         assertEquals(AddedChoice(), AddedChats.removing(AddedChoice(), 2, listOf(AddedChat(2, "Two"))))
@@ -87,10 +90,11 @@ class HiddenChatsMigrationTest {
         assertEquals(setOf(1L), book.addedChats.first().ids)
         assertNull(DataStoreKeyValueStore(file).snapshot()[AddedChats.HIDDEN_KEY])
 
-        // Remove from TMPlayer, through the store, under every chat.
+        // Remove from TMPlayer, through the store, while "All chats" is on (HX86): nothing is carved out of it.
         store.keepAllChats()
         store.removeChat(1, everything)
-        assertEquals(setOf(2L, 3L), store.addedChats.first().ids)
+        assertEquals(AddedMode.All, store.addedChats.first().mode)
+        assertNull(store.addedChats.first().ids)
     }
 
     @Test

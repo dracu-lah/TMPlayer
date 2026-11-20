@@ -141,6 +141,17 @@ class SettingsBook(private val kv: KeyValueStore) : AllowedChatsSource, Correcti
         }
     }
 
+    /** As SettingsStore.turnOffAllChats. */
+    suspend fun turnOffAllChats(everything: List<ChatSummary>, listComplete: Boolean) {
+        kv.edit { e ->
+            val now = AddedChoice(AddedChats.modeOf(e[AddedChats.MODE_KEY] as? String), AddedChats.decode(e[AddedChats.KEY] as? String))
+            val next = AddedChats.turningOffAll(now, everything, listComplete)
+            if (next == now) return@edit
+            e[AddedChats.KEY] = AddedChats.encode(next.chats)
+            e[AddedChats.MODE_KEY] = AddedChats.MODE_PICKED
+        }
+    }
+
     /** As SettingsStore.migrateHiddenChats, for a browser profile that carried the setting over in a backup. */
     override suspend fun migrateHiddenChats(everything: List<AddedChat>) {
         kv.edit { e ->

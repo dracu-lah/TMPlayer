@@ -507,6 +507,21 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
     }
 
     /**
+     * Turns "All chats" off from a chat's menu (HX86), where Remove is not offered while it is on:
+     * the kept picks come back ([AddedChats.turningOffAll]). Nothing to do when the switch is off, so
+     * a second press, or the picker having turned it off meanwhile, writes nothing.
+     */
+    suspend fun turnOffAllChats(everything: List<ChatSummary>, listComplete: Boolean) {
+        prefs.edit { prefs ->
+            val now = AddedChoice(AddedChats.modeOf(prefs[ADDED_CHATS_MODE]), AddedChats.decode(prefs[ADDED_CHATS]))
+            val next = AddedChats.turningOffAll(now, everything, listComplete)
+            if (next == now) return@edit
+            prefs[ADDED_CHATS] = AddedChats.encode(next.chats)
+            prefs[ADDED_CHATS_MODE] = AddedChats.MODE_PICKED
+        }
+    }
+
+    /**
      * The one-time fold of the retired hidden chats into the added chats ([AddedChats.withoutHidden]),
      * then the old setting is deleted. Waits, with the setting kept, while the fold needs a chat
      * list and [everything] is empty. Text that does not parse counts as nothing hidden.

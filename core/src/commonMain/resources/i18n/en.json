@@ -258,6 +258,8 @@
     "tab_watched_blurb": "Videos you've finished",
     "tab_watched_heading": "Watched",
     "time_left": "{time} left",
+    "turn_off_all_chats": "Turn off All chats",
+    "turn_off_all_chats_detail": "All chats is on, so every chat is shown. Turn it off to remove this one. Your picks come back",
     "undo": "Undo",
     "videos_count": "{count, plural, one {# video} other {# videos}}",
     "voice_prompt_chat": "Say a chat name",

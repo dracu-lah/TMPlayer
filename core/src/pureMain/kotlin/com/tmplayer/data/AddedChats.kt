@@ -200,11 +200,37 @@ object AddedChats {
      * [everything] but this one, so the others stay exactly where they were rather than the app
      * still claiming to show every chat. With [everything] empty (no chat list to keep) the answer
      * is left alone: an empty pick would empty the whole library over one chat.
+     *
+     * Under [AddedMode.All] (the "All chats" switch, HX86) nothing changes: the viewer chose strictly
+     * every chat or their own picks, so a chat is never carved out of "all". The menu offers
+     * [turningOffAll] instead ([removable] says which of the two the menu shows).
      */
     fun removing(choice: AddedChoice, chatId: Long, everything: List<AddedChat>): AddedChoice = when {
+        choice.mode == AddedMode.All -> choice
         choice.mode == AddedMode.Picked -> choice.copy(chats = without(choice.chats, chatId))
         everything.none { it.id != chatId } -> choice
         else -> AddedChoice(AddedMode.Picked, everything.filter { it.id != chatId }.distinctBy { it.id })
+    }
+
+    /**
+     * Whether a chat's menu offers "Remove from TMPlayer" under [choice]. While "All chats" is on it
+     * does not: every chat is shown by choice, so the menu offers "Turn off All chats" in its place
+     * and Remove comes back once the viewer's own picks are.
+     */
+    fun removable(choice: AddedChoice): Boolean = choice.mode != AddedMode.All
+
+    /**
+     * The answer once the viewer turns "All chats" off from a chat's menu: the picks kept beside the
+     * switch come back, as when the picker's switch goes off ([ChatPicking.afterAllOff]): a chat the
+     * viewer has since left is dropped once [listComplete], and with nothing kept the answer is Saved
+     * Messages, never an empty set. [choice] unchanged when the switch is not on.
+     */
+    fun turningOffAll(choice: AddedChoice, everything: List<ChatSummary>, listComplete: Boolean): AddedChoice {
+        if (choice.mode != AddedMode.All) return choice
+        val titles = choice.chats.associate { it.id to it.title }
+        val byId = everything.associateBy { it.id }
+        val back = ChatPicking.afterAllOff(choice.chats.mapTo(LinkedHashSet()) { it.id }, everything, listComplete)
+        return AddedChoice(AddedMode.Picked, back.map { id -> AddedChat(id, byId[id]?.title ?: titles[id].orEmpty()) })
     }
 
     /**

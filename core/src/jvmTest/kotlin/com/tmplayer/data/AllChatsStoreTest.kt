@@ -49,6 +49,63 @@ class AllChatsStoreTest {
         assertEquals(AddedChoice(AddedMode.All, kept), settings.addedChats.first())
     }
 
+    private fun chat(id: Long, kind: ChatKind = ChatKind.Channel) = ChatSummary(
+        id = id,
+        title = "Chat $id",
+        miniThumbnail = null,
+        photoFileId = 0,
+        kind = kind,
+    )
+
+    private val account = listOf(chat(1, ChatKind.Saved), chat(-100L), chat(42L), chat(7L))
+
+    @Test
+    fun `a chat menu offers Remove only while the switch is off`() {
+        assertEquals(false, AddedChats.removable(AddedChoice(AddedMode.All, kept)))
+        assertEquals(true, AddedChats.removable(AddedChoice(AddedMode.Picked, kept)))
+        assertEquals(true, AddedChats.removable(AddedChoice()))
+    }
+
+    @Test
+    fun `removing a chat while the switch is on leaves the store as it was`() = runBlocking {
+        settings.setAddedChoice(AddedChoice(AddedMode.All, kept))
+        settings.removeChat(7L, account.map { AddedChat(it.id, it.title) })
+        assertEquals(AddedChoice(AddedMode.All, kept), settings.addedChats.first())
+    }
+
+    @Test
+    fun `turning the switch off from a chat menu brings the kept picks back and Remove returns`() = runBlocking {
+        settings.setAddedChoice(AddedChoice(AddedMode.All, kept))
+        settings.turnOffAllChats(account, listComplete = true)
+        val now = settings.addedChats.first()
+        assertEquals(AddedMode.Picked, now.mode)
+        // The kept picks, in their order, named as the live list names them.
+        assertEquals(listOf(-100L, 42L), now.chats.map { it.id })
+        assertEquals(true, AddedChats.removable(now))
+        // A second press, or the picker having turned it off already, writes nothing.
+        settings.turnOffAllChats(account, listComplete = true)
+        assertEquals(now, settings.addedChats.first())
+    }
+
+    @Test
+    fun `turning it off with nothing kept, or nothing left of it, never gives an empty set`() = runBlocking {
+        settings.setAddedChoice(AddedChoice(AddedMode.All, emptyList()))
+        settings.turnOffAllChats(account, listComplete = true)
+        assertEquals(setOf(1L), settings.addedChats.first().ids)
+        // A kept chat the viewer has since left is dropped once the list is whole, not before.
+        settings.setAddedChoice(AddedChoice(AddedMode.All, listOf(AddedChat(99L, "Left"))))
+        assertEquals(setOf(99L), AddedChats.turningOffAll(AddedChoice(AddedMode.All, listOf(AddedChat(99L, "Left"))), account, listComplete = false).ids)
+        settings.turnOffAllChats(account, listComplete = true)
+        assertEquals(setOf(1L), settings.addedChats.first().ids)
+    }
+
+    @Test
+    fun `turning it off when it is not on changes nothing`() {
+        val picked = AddedChoice(AddedMode.Picked, kept)
+        assertEquals(picked, AddedChats.turningOffAll(picked, account, listComplete = true))
+        assertEquals(AddedChoice(), AddedChats.turningOffAll(AddedChoice(), account, listComplete = true))
+    }
+
     @Test
     fun `a sign out wipes the switch and the kept ticks with the rest of the account`() = runBlocking {
         settings.setAddedChoice(AddedChoice(AddedMode.All, kept))
