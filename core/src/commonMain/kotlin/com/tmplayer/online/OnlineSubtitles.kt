@@ -63,6 +63,21 @@ class OnlineSubtitles(
     )
     private val subdl = SubdlApi(http, RateLimiter(200, now, sleep), userAgent)
     private val msone = MsoneApi(http, RateLimiter(500, now, sleep), userAgent, msoneKey)
+    private val submaker = SubMakerApi(http, RateLimiter(500, now, sleep), userAgent)
+
+    /** The SubMaker translations running now, one per language and video; see [SubMakerJobs]. */
+    val translations = SubMakerJobs(SubMakerTranslator(submaker, sleep), now = now)
+
+    init {
+        // The viewer's address is a secret: from the first moment it is kept out of logs and reports.
+        SubMakerSecret.register(store.now.submakerBase)
+    }
+
+    /** What the screens keep of one list answer, so reopening the picker does not ask again within [SUBMAKER_LIST_MS]. */
+    private class KeptList(val key: String, val at: Long, val hits: List<SubtitleHit>)
+
+    @Volatile
+    private var submakerKept: KeptList? = null
 
     /** Whether this build can reach MSone at all: it has the gateway's key. */
     val msoneInBuild: Boolean = msoneKey.isNotBlank()
@@ -153,6 +168,55 @@ class OnlineSubtitles(
         }
         store.update { it.copy(subdlKey = key.trim(), subdlRefused = false) }
         return null
+    }
+
+    // ---- SubMaker settings ------------------------------------------------------------------
+
+    /** Whether the viewer has set an address for their own SubMaker. */
+    val submakerOn: Boolean get() = store.now.submakerBase.isNotBlank()
+
+    /** What saving the viewer's SubMaker address came to. */
+    enum class SubMakerSet { Saved, Cleared, Invalid }
+
+    /**
+     * Keeps what the viewer pasted as their SubMaker address: a manifest address (`https://` or
+     * `stremio://`), stored as its base. Blank removes it. An address that is not one is
+     * [SubMakerSet.Invalid] and changes nothing. A changed address ends the translations running
+     * and forgets the list kept for the old one.
+     */
+    fun setSubMakerUrl(input: String): SubMakerSet {
+        if (input.isBlank()) {
+            applySubMaker("")
+            return SubMakerSet.Cleared
+        }
+        val base = SubMakerUrl.normalize(input) ?: return SubMakerSet.Invalid
+        applySubMaker(base)
+        return SubMakerSet.Saved
+    }
+
+    private fun applySubMaker(base: String) {
+        if (base == store.now.submakerBase) return
+        SubMakerSecret.register(base)
+        translations.cancelAll()
+        submakerKept = null
+        store.update { it.copy(submakerBase = base) }
+    }
+
+    /** Asks the addon's manifest whether the saved address is one that serves subtitles: null when it is, else why not. */
+    suspend fun checkSubMaker(): SubtitleNotice? {
+        val base = store.now.submakerBase.ifBlank { return SubtitleNotice.SubMakerOff }
+        return when (val answer = submaker.check(base)) {
+            is SubMakerApi.Answer.Ok -> if (answer.value) null else SubtitleNotice.SubMakerRejected
+            is SubMakerApi.Answer.Failed -> submakerNotice(answer.failure)
+        }
+    }
+
+    /** Whether the viewer already agreed to spend their AI quota on a translation into [language]. */
+    fun submakerAsked(language: String): Boolean = language.trim().lowercase(Locale.ROOT) in store.now.submakerAsked
+
+    fun markSubMakerAsked(language: String) {
+        val name = language.trim().lowercase(Locale.ROOT).take(60).takeIf { it.isNotEmpty() } ?: return
+        store.update { it.copy(submakerAsked = it.submakerAsked + name) }
     }
 
     /** What Settings says under "Online subtitles". */
@@ -320,6 +384,7 @@ class OnlineSubtitles(
             SubtitleProvider.OpenSubtitles -> downloadOpenSubtitles(hit)
             SubtitleProvider.Subdl -> downloadSubdl(hit, target)
             SubtitleProvider.Msone -> downloadMsone(hit, target)
+            SubtitleProvider.SubMaker -> downloadSubMaker(hit)
         }
     }
 
@@ -392,6 +457,9 @@ class OnlineSubtitles(
         if (hit.provider == SubtitleProvider.Msone) {
             return SubtitleNotice.MsoneOff(a.msoneState, a.msone.message)
                 .takeIf { a.msoneState != MsoneState.On && cache.file(hit.provider, hit.id) == null }
+        }
+        if (hit.provider == SubtitleProvider.SubMaker) {
+            return SubtitleNotice.SubMakerOff.takeIf { a.submakerBase.isBlank() && cache.file(hit.provider, hit.id) == null }
         }
         if (hit.provider != SubtitleProvider.OpenSubtitles || cache.file(hit.provider, hit.id) != null) return null
         if (keyRefused(a)) return SubtitleNotice.Unavailable
@@ -615,6 +683,115 @@ class OnlineSubtitles(
         }
     }
 
+    // ---- SubMaker --------------------------------------------------------------------------
+
+    /**
+     * What the viewer's own SubMaker lists for [target], found by its IMDb id: a movie as
+     * `movie/tt...`, an episode as `series/tt...:season:episode`. Ready subtitles come first, in
+     * the languages wanted, then the "Make <Language>" entries ([SubtitleHit.translateTo]), which
+     * are AI translations to run on the viewer's own key ([translate]). The answer is kept for a
+     * few minutes only and in memory: its addresses hold the viewer's secret.
+     */
+    suspend fun searchSubMaker(target: SubtitleTarget): SearchResult {
+        val base = store.now.submakerBase.ifBlank { return SearchResult(emptyList(), SubtitleNotice.SubMakerOff) }
+        val imdb = target.imdb?.trim()?.lowercase(Locale.ROOT)?.takeIf { SUBMAKER_IMDB.matches(it) }
+            ?: return SearchResult(emptyList(), SubtitleNotice.SubMakerNoId)
+        val parsed = MediaName.parse(target.fileName, target.caption)
+        val series = parsed.episode != null
+        val type = if (series) "series" else "movie"
+        val id = if (series) "$imdb:${parsed.season ?: 1}:${parsed.episode}" else imdb
+        val key = "$type/$id"
+        submakerKept?.takeIf { it.key == key && now() - it.at in 0 until SUBMAKER_LIST_MS }?.let { return SearchResult(it.hits, fromCache = true) }
+        return when (val answer = submaker.list(base, type, id)) {
+            is SubMakerApi.Answer.Failed -> SearchResult(emptyList(), submakerNotice(answer.failure))
+            is SubMakerApi.Answer.Ok -> {
+                val languages = target.languages.mapNotNull(::iso1).distinct().ifEmpty { listOf("en") }
+                val hits = rankSubMaker(answer.value.map(::submakerHit), languages)
+                if (hits.isNotEmpty()) submakerKept = KeptList(key, now(), hits)
+                SearchResult(hits, SubtitleNotice.SubMakerNoResults.takeIf { hits.isEmpty() })
+            }
+        }
+    }
+
+    private fun submakerHit(entry: SubMakerApi.Entry): SubtitleHit {
+        val make = entry.translateTo
+        return SubtitleHit(
+            provider = SubtitleProvider.SubMaker,
+            // The id keeps the file apart in the cache: the addon's own ids are not promised to be unique.
+            id = entry.id.take(100) + "|" + sha(entry.url).take(12),
+            language = if (make == null) entry.lang else "",
+            release = entry.label.ifBlank { entry.lang },
+            fileName = entry.label,
+            link = entry.url,
+            translateTo = make.orEmpty(),
+        )
+    }
+
+    /** Ready subtitles in the order of the languages wanted, then the translations to run, wanted languages first. */
+    private fun rankSubMaker(hits: List<SubtitleHit>, languages: List<String>): List<SubtitleHit> {
+        val order = languages.withIndex().associate { (i, code) -> code to i }
+        val names = languages.associateWith { Locale.forLanguageTag(it).getDisplayLanguage(Locale.ENGLISH).lowercase(Locale.ROOT) }
+        fun rank(hit: SubtitleHit): Int {
+            if (hit.translateTo.isEmpty()) return order[iso1(hit.language)] ?: order.size
+            val wanted = names.entries.firstOrNull { it.value == hit.translateTo.lowercase(Locale.ROOT) }?.key
+            return order.size + 1 + (wanted?.let { order[it] } ?: order.size)
+        }
+        return hits.sortedBy(::rank)
+    }
+
+    private suspend fun downloadSubMaker(hit: SubtitleHit): DownloadResult {
+        // A translation is a job, not a download: [translate] runs it.
+        if (hit.translateTo.isNotEmpty() || hit.link.isBlank()) return DownloadResult.Failed(SubtitleNotice.SubMakerOff)
+        if (store.now.submakerBase.isBlank()) return DownloadResult.Failed(SubtitleNotice.SubMakerOff)
+        return when (val answer = submaker.fetch(hit.link)) {
+            is SubMakerApi.Answer.Ok -> save(hit, SubtitleText.from(answer.value, hit.fileName.ifBlank { "subtitle.srt" }, language = hit.language))
+            is SubMakerApi.Answer.Failed -> DownloadResult.Failed(submakerNotice(answer.failure))
+        }
+    }
+
+    private fun submakerNotice(failure: SubMakerApi.Failure): SubtitleNotice = when (failure) {
+        is SubMakerApi.Failure.Busy -> SubtitleNotice.SubMakerBusy
+        SubMakerApi.Failure.Rejected -> SubtitleNotice.SubMakerRejected
+        SubMakerApi.Failure.Offline -> SubtitleNotice.Offline
+        SubMakerApi.Failure.Unreadable -> SubtitleNotice.Unreadable
+    }
+
+    /** The job key for a translation of [hit] on the video [video] (its hash or name). */
+    fun translationKey(video: String, hit: SubtitleHit): String = SubMakerJobs.keyOf(video, hit.translateTo)
+
+    /** The video part of every job key, for [SubMakerJobs.cancelVideo]. */
+    fun translationPrefix(video: String): String = SubMakerJobs.keyOf(video, "")
+
+    /**
+     * Runs the translation behind a "Make <Language>" [hit] as a background job (the player and the
+     * picker carry on) unless one runs for it already (false). A translation finished before for
+     * this very entry is laid over the video at once. [onTrack] is told of each file to load over
+     * the video, in place of the last one, [final] at the end; it may run on a background thread.
+     */
+    fun translate(video: String, hit: SubtitleHit, endMs: Long?, onTrack: (File, Boolean) -> Unit): Boolean {
+        if (hit.translateTo.isEmpty() || hit.link.isBlank() || store.now.submakerBase.isBlank()) return false
+        val key = translationKey(video, hit)
+        cache.file(hit.provider, hit.id)?.let {
+            translations.finished(key, SubMakerApi.cueCount(runCatching { it.readText() }.getOrDefault("")))
+            onTrack(it, true)
+            return true
+        }
+        return translations.start(
+            key = key,
+            url = hit.link,
+            endMs = endMs,
+            write = { srt, final ->
+                runCatching {
+                    // The half translation lives under its own name, so a stopped job never leaves it as the finished one.
+                    val file = cache.putFile(hit.provider, if (final) hit.id else hit.id + PART, SubtitleText.Text("srt", srt))
+                    if (final) cache.removeFile(hit.provider, hit.id + PART)
+                    file
+                }.onFailure { Logger.w(TAG, "translation not saved: ${it.javaClass.simpleName}") }.getOrNull()
+            },
+            onTrack = onTrack,
+        )
+    }
+
     // ---- shared ----------------------------------------------------------------------------
 
     /**
@@ -715,6 +892,9 @@ class OnlineSubtitles(
         return call()
     }
 
+    private fun sha(text: String): String = MessageDigest.getInstance("SHA-256")
+        .digest(text.toByteArray()).joinToString("") { "%02x".format(it) }
+
     private fun refuseKey() {
         Logger.w(TAG, "OpenSubtitles refused the app key; online subtitles are off until it changes")
         store.update { it.copy(rejectedKey = keyPrint, rejectedAt = now()) }
@@ -744,6 +924,11 @@ class OnlineSubtitles(
         const val MSONE_CHECK_MS = 6 * 60 * 60 * 1000L
         const val MSONE_FORCE_MS = 60 * 1000L
 
+        /** How long a SubMaker list is kept in memory, and the name of a half translation in the cache. */
+        private const val SUBMAKER_LIST_MS = 5 * 60 * 1000L
+        private const val PART = "~part"
+        private val SUBMAKER_IMDB = Regex("""tt\d{5,10}""")
+
         /** How long a refused key keeps the feature off before one more try. */
         const val REFUSED_RETRY_MS = SubtitleCache.DAY_MS
 
@@ -756,7 +941,7 @@ class OnlineSubtitles(
 
         /** The track name a downloaded subtitle gets: its language and where it came from. */
         fun label(hit: SubtitleHit): String =
-            L.onlineTrackLabel(languageName(hit.language), hit.provider.label)
+            L.onlineTrackLabel(hit.translateTo.ifEmpty { languageName(hit.language) }, hit.provider.label)
 
         fun languageName(code: String): String =
             Translator.messages.formatter.trackLanguage(code) ?: code.ifBlank { L.onlineUnknownLanguage }

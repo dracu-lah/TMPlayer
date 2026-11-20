@@ -25,6 +25,24 @@ object OnlineWords {
         SubtitleNotice.MsoneBusy -> L.msoneBusy
         SubtitleNotice.MsoneTooShort -> L.msoneTooShort
         SubtitleNotice.MsoneGone -> L.msoneGone
+        SubtitleNotice.SubMakerOff -> L.submakerOff
+        SubtitleNotice.SubMakerNoId -> L.submakerNoId
+        SubtitleNotice.SubMakerRejected -> L.submakerRejected
+        SubtitleNotice.SubMakerNoResults -> L.submakerNoResults
+        SubtitleNotice.SubMakerEmpty -> L.submakerEmpty
+        SubtitleNotice.SubMakerBusy -> L.submakerBusy
+    }
+
+    /** The row's title: the release, or for a "Make <Language>" entry the translation it offers. */
+    fun hitTitle(hit: SubtitleHit): String =
+        if (hit.translateTo.isNotEmpty()) L.submakerTranslateTo(hit.translateTo) else hit.release.ifBlank { hit.fileName }
+
+    /** The progress line of a SubMaker translation into [language]. */
+    fun translation(language: String, state: TranslationState): String = when (state) {
+        TranslationState.Waiting -> L.submakerProgressWaiting(language)
+        is TranslationState.Translating -> L.submakerProgress(language, state.lines)
+        is TranslationState.Done -> L.submakerDoneLine(language, state.lines)
+        is TranslationState.Failed -> L.submakerFailedLine(language, notice(state.notice))
     }
 
     /** The gateway's own words under ours, shown as is, or null. */
@@ -70,11 +88,15 @@ object OnlineWords {
 
     /** One line under a result: language, release, and the marks that tell results apart. */
     fun hitDetail(hit: SubtitleHit): String = buildList {
-        add(OnlineSubtitles.languageName(hit.language))
+        if (hit.translateTo.isEmpty()) add(OnlineSubtitles.languageName(hit.language))
         if (hit.provider == SubtitleProvider.Msone) {
             hit.featureYear?.let { add(it.toString()) }
             if (hit.translator.isNotEmpty()) add(L.msoneTranslator(hit.translator))
             add(L.msoneCredit)
+            return@buildList
+        }
+        if (hit.translateTo.isNotEmpty()) {
+            add(L.submakerTranslateDetail)
             return@buildList
         }
         if (hit.hashMatch) add(L.onlineHashMatch)

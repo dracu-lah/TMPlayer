@@ -1,6 +1,7 @@
 package com.tmplayer.data
 
 import com.tmplayer.online.MetaSettings
+import com.tmplayer.online.SubMakerSecret
 import com.tmplayer.platform.RotatingLog
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -134,7 +135,9 @@ class LogScrubber(known: Collection<String> = emptyList()) {
         // start at every character), so one 100,000 character line held a test for minutes and
         // could stall Send logs. A log line is never worth more than this; the rest is dropped,
         // which also keeps whatever it held out of the report.
-        var out = if (line.length > MAX_LINE) line.substring(0, MAX_LINE) + CUT else line
+        // The viewer's SubMaker address first, whole, before any cut could leave half of its token behind.
+        val clean = SubMakerSecret.scrub(line)
+        var out = if (clean.length > MAX_LINE) clean.substring(0, MAX_LINE) + CUT else clean
         for (name in names) out = name.replace(out, NAME)
         out = EMAIL.replace(out, "[email]")
         out = PATH_FILE.replace(out) { "${it.groupValues[1]}[file]" }

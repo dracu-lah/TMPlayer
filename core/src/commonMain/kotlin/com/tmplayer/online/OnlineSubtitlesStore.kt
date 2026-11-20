@@ -46,6 +46,13 @@ data class OnlineAccount(
     val msoneState: MsoneState = MsoneState.Unknown,
     val msoneMessage: String = "",
     val msoneCheckedAt: Long = 0,
+    /**
+     * The base of the viewer's own SubMaker install, which holds a secret token in its path: kept
+     * here like the other keys, never logged or shown (see [SubMakerSecret]). Blank: not set.
+     */
+    val submakerBase: String = "",
+    /** The languages the viewer agreed to spend their own AI quota on, by name, lower case. */
+    val submakerAsked: Set<String> = emptySet(),
 ) {
     val msone: MsoneStatus get() = MsoneStatus(msoneState, msoneMessage.ifBlank { null }, msoneCheckedAt)
 
@@ -102,6 +109,8 @@ class OnlineSubtitlesStore(private val file: File) {
             msoneState = MsoneState.of(s("msone_state")),
             msoneMessage = s("msone_message").take(500),
             msoneCheckedAt = l("msone_checked_at"),
+            submakerBase = SubMakerUrl.normalize(s("submaker_base")).orEmpty(),
+            submakerAsked = s("submaker_asked").split('|').map { it.trim() }.filter { it.isNotEmpty() }.take(200).toSet(),
         )
     }
 
@@ -126,6 +135,8 @@ class OnlineSubtitlesStore(private val file: File) {
         p["msone_state"] = a.msoneState.name
         p["msone_message"] = a.msoneMessage
         p["msone_checked_at"] = a.msoneCheckedAt.toString()
+        p["submaker_base"] = a.submakerBase
+        p["submaker_asked"] = a.submakerAsked.joinToString("|")
         runCatching {
             file.parentFile?.mkdirs()
             val temp = File(file.parentFile, file.name + ".tmp")
